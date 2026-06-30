@@ -22,6 +22,8 @@ internal object LiveTemplates {
                 kind = CompletionItemKind.SNIPPET,
                 detail = t.preview,
                 documentation = t.description,
+                // Sign convention (see ItemTierWeigher): positive keeps a not-yet-typed template below real
+                // symbols; a fully-typed key opts back into the symbol tier and tops.
                 sortPriority = if (t.key == prefix) -40 else 65,
                 caret = CaretAction.ExpandSnippet(t.expansion),
             )

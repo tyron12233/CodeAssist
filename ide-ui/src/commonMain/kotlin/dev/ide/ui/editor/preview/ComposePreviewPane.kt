@@ -40,9 +40,11 @@ import androidx.compose.ui.unit.dp
 import dev.ide.ui.ComposePreviewHost
 import dev.ide.ui.backend.IdeBackend
 import dev.ide.ui.backend.UiComposePreview
+import dev.ide.ui.components.CaDropdownMenu
 import dev.ide.ui.icons.CaIcons
 import dev.ide.ui.theme.Ca
 import kotlinx.coroutines.delay
+import kotlin.time.Duration.Companion.milliseconds
 
 /** Idle delay before the live buffer is re-interpreted, so a burst of typing settles into one re-composition. */
 private const val PREVIEW_DEBOUNCE_MS = 400L
@@ -79,7 +81,7 @@ fun ComposePreviewPane(
     var renderText by remember(path) { mutableStateOf(text) }
     LaunchedEffect(path, text, live) {
         if (!live) return@LaunchedEffect
-        delay(PREVIEW_DEBOUNCE_MS)
+        delay(PREVIEW_DEBOUNCE_MS.milliseconds)
         renderText = text
     }
     // The engine is "working" either while the host is actively lowering/interpreting the rendered buffer
@@ -91,13 +93,18 @@ fun ComposePreviewPane(
     // Detect the @Preview variants from the rendered buffer (so the list/selection track what's on screen,
     // and detection stops churning while paused).
     LaunchedEffect(path, renderText) {
-        previews = runCatching { backend.preview.composePreviews(path, renderText) }.getOrDefault(emptyList())
+        previews = runCatching {
+            backend.preview.composePreviews(
+                path, renderText
+            )
+        }.getOrDefault(emptyList())
     }
     // Variant selection: the editor gutter picks one (via [selected]); the in-pane selector can override it
     // (cleared whenever the gutter selection changes so a fresh gutter tap wins).
     var picked by remember(path) { mutableStateOf<String?>(null) }
     LaunchedEffect(selected) { picked = null }
-    val current = previews.firstOrNull { it.variantId == (picked ?: selected) } ?: previews.firstOrNull()
+    val current =
+        previews.firstOrNull { it.variantId == (picked ?: selected) } ?: previews.firstOrNull()
     val cfg = current?.config
 
     // A @Preview(device=...)/widthDp/heightDp sizes the card to that profile instead of the user's selection.
@@ -110,8 +117,8 @@ fun ComposePreviewPane(
     // still toggle Night afterward (until they switch variants).
     LaunchedEffect(current?.variantId) { cfg?.nightMode?.let { state.night = it } }
     // @Preview(showBackground=true, backgroundColor=...) paints the card; otherwise the surface's light/dark card.
-    val cardBg = cfg?.takeIf { it.showBackground && it.backgroundColor != null }?.let { Color(it.backgroundColor!!) }
-        ?: if (state.night) Color(0xFF161719) else Color.White
+    val cardBg = cfg?.takeIf { it.showBackground && it.backgroundColor != null }
+        ?.let { Color(it.backgroundColor!!) } ?: if (state.night) Color(0xFF161719) else Color.White
 
     PreviewSurface(
         modifier = modifier,
@@ -136,10 +143,13 @@ fun ComposePreviewPane(
                     )
                 } else {
                     Text(
-                        current.label, color = Ca.colors.textSecondary, style = Ca.type.caption, fontWeight = FontWeight.Medium,
-                        maxLines = 1, overflow = TextOverflow.Ellipsis,
-                        modifier = Modifier
-                            .weight(1f, fill = false)
+                        current.label,
+                        color = Ca.colors.textSecondary,
+                        style = Ca.type.caption,
+                        fontWeight = FontWeight.Medium,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier.weight(1f, fill = false)
                             .widthIn(max = if (compact) 96.dp else 168.dp)
                             .padding(horizontal = Ca.spacing.s1),
                     )
@@ -157,16 +167,42 @@ fun ComposePreviewPane(
                     when {
                         // Engine catching up to a fresh buffer (compiling/interpreting): a spinner, not a dot.
                         loading -> {
-                            CircularProgressIndicator(Modifier.size(9.dp), color = Ca.colors.warning, strokeWidth = 1.5.dp)
-                            if (!compact) Text("Loading", color = Ca.colors.warning, style = Ca.type.caption, fontWeight = FontWeight.SemiBold)
+                            CircularProgressIndicator(
+                                Modifier.size(9.dp), color = Ca.colors.warning, strokeWidth = 1.5.dp
+                            )
+                            if (!compact) Text(
+                                "Loading",
+                                color = Ca.colors.warning,
+                                style = Ca.type.caption,
+                                fontWeight = FontWeight.SemiBold
+                            )
                         }
+
                         live -> {
-                            Box(Modifier.size(if (compact) 7.dp else 6.dp).background(Ca.colors.run, RoundedCornerShape(Ca.radius.pill)))
-                            if (!compact) Text("Live", color = Ca.colors.run, style = Ca.type.caption, fontWeight = FontWeight.SemiBold)
+                            Box(
+                                Modifier.size(if (compact) 7.dp else 6.dp)
+                                    .background(Ca.colors.run, RoundedCornerShape(Ca.radius.pill))
+                            )
+                            if (!compact) Text(
+                                "Live",
+                                color = Ca.colors.run,
+                                style = Ca.type.caption,
+                                fontWeight = FontWeight.SemiBold
+                            )
                         }
+
                         else -> {
-                            Box(Modifier.size(if (compact) 7.dp else 6.dp).background(Ca.colors.textTertiary, RoundedCornerShape(Ca.radius.pill)))
-                            if (!compact) Text("Paused", color = Ca.colors.textTertiary, style = Ca.type.caption, fontWeight = FontWeight.SemiBold)
+                            Box(
+                                Modifier.size(if (compact) 7.dp else 6.dp).background(
+                                    Ca.colors.textTertiary, RoundedCornerShape(Ca.radius.pill)
+                                )
+                            )
+                            if (!compact) Text(
+                                "Paused",
+                                color = Ca.colors.textTertiary,
+                                style = Ca.type.caption,
+                                fontWeight = FontWeight.SemiBold
+                            )
                         }
                     }
                 }
@@ -188,7 +224,14 @@ fun ComposePreviewPane(
             }
             Divider()
             // Render the current buffer now (also the manual trigger while paused).
-            PillButton({ renderText = text; nonce++ }) { Icon(CaIcons.refresh, "Rebuild preview", Modifier.size(15.dp), tint = Ca.colors.textSecondary) }
+            PillButton({ renderText = text; nonce++ }) {
+                Icon(
+                    CaIcons.refresh,
+                    "Rebuild preview",
+                    Modifier.size(15.dp),
+                    tint = Ca.colors.textSecondary
+                )
+            }
         },
     ) { _, _, density ->
         val base = LocalDensity.current
@@ -206,20 +249,33 @@ fun ComposePreviewPane(
                     val fontScale = base.fontScale * (current.config.fontScale ?: 1f)
                     CompositionLocalProvider(LocalDensity provides Density(density, fontScale)) {
                         val preview = @Composable {
-                            host.Preview(path, current, renderText, state.night, { problems = it }, { busy = it }, contentMod)
+                            host.Preview(
+                                path,
+                                current,
+                                renderText,
+                                state.night,
+                                { problems = it },
+                                { busy = it },
+                                contentMod
+                            )
                         }
                         // @Preview(showSystemUi=true) frames the preview in a mock status + navigation bar (always
                         // fixed-size, never wrap), so the device chrome has a viewport to fill.
-                        if (current.config.showSystemUi) SystemUiChrome(state.night, Modifier.fillMaxSize(), preview)
+                        if (current.config.showSystemUi) SystemUiChrome(
+                            state.night, Modifier.fillMaxSize(), preview
+                        )
                         else preview()
                     }
                 }
+
                 else -> {
                     LaunchedEffect(Unit) { problems = emptyList(); busy = false }
                     Text(
                         if (current == null) "No @Preview found" else "Compose preview renders on device",
                         color = if (state.night) Color(0xFFA0A1AA) else Ca.colors.textTertiary,
-                        style = Ca.type.caption, textAlign = TextAlign.Center, modifier = Modifier.padding(20.dp),
+                        style = Ca.type.caption,
+                        textAlign = TextAlign.Center,
+                        modifier = Modifier.padding(20.dp),
                     )
                 }
             }
@@ -241,14 +297,26 @@ private fun RowScope.VariantSelector(
         PillButton({ open = true }) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Text(
-                    current.label, color = Ca.colors.textSecondary, style = Ca.type.caption, fontWeight = FontWeight.Medium,
-                    maxLines = 1, overflow = TextOverflow.Ellipsis,
-                    modifier = Modifier.widthIn(max = if (compact) 76.dp else 144.dp).padding(start = Ca.spacing.s1),
+                    current.label,
+                    color = Ca.colors.textSecondary,
+                    style = Ca.type.caption,
+                    fontWeight = FontWeight.Medium,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.widthIn(max = if (compact) 76.dp else 144.dp)
+                        .padding(start = Ca.spacing.s1),
                 )
-                Icon(CaIcons.chevronDown, "Choose preview", Modifier.size(13.dp).padding(start = 2.dp), tint = Ca.colors.textTertiary)
+                Icon(
+                    CaIcons.chevronDown,
+                    "Choose preview",
+                    Modifier.size(13.dp).padding(start = 2.dp),
+                    tint = Ca.colors.textTertiary
+                )
             }
         }
-        DropdownMenu(expanded = open, onDismissRequest = { open = false }) {
+        CaDropdownMenu(
+            expanded = open, onDismissRequest = { open = false },
+        ) {
             previews.forEach { p ->
                 DropdownMenuItem(
                     text = {

@@ -40,12 +40,13 @@ import dev.ide.ui.icons.TreeIcons
 import dev.ide.ui.icons.resolveTint
 import dev.ide.ui.theme.Ca
 
-/** The on-disk path a node's file operations act on: a file's own path, a package's deepest directory, or an
- *  Android `res/` folder. Null for nodes that aren't safe to move/rename/delete (modules, source roots). */
+/** The on-disk path a node's file operations act on: a file's own path, a package's deepest directory, or a
+ *  folder's directory (Android `res/` folder, build-output, or any plain directory). Null for nodes that
+ *  aren't safe to move/rename/delete (workspace, modules, source roots — those have their own management). */
 internal fun TreeNode.fileOpPath(): String? = when (kind) {
     NodeKind.File -> filePath
     NodeKind.Package -> packageSegments.lastOrNull()?.dirPath ?: sourceRootPath
-    NodeKind.Folder -> resDirPath
+    NodeKind.Folder -> resDirPath ?: dirPath
     else -> null
 }
 
@@ -115,7 +116,8 @@ private fun DeletePanel(node: TreeNode, onDismiss: () -> Unit, onConfirm: () -> 
     val isDir = node.kind != NodeKind.File
     DialogCard(if (isDir) "Delete '${node.name}' and its contents?" else "Delete '${node.name}'?") {
         Text(
-            if (isDir) "This permanently removes the folder and everything inside it." else "This permanently removes the file.",
+            if (isDir) "This permanently removes the folder and everything inside it. This can't be undone."
+            else "This permanently removes the file. This can't be undone.",
             color = Ca.colors.textSecondary, style = Ca.type.footnote,
         )
         Spacer12()

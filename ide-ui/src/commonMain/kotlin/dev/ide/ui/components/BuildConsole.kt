@@ -19,6 +19,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
@@ -42,6 +43,7 @@ import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.ClipEntry
 import androidx.compose.ui.platform.LocalClipboard
@@ -676,6 +678,21 @@ private fun LogList(items: List<LogDisplay>, running: Boolean, onToggle: (String
     LaunchedEffect(items.size, running) {
         if (running && items.isNotEmpty()) runCatching { listState.animateScrollToItem(items.lastIndex) }
     }
+    // Mobile hides the timestamp to reclaim width; drag the rows sideways to peek it (it snaps back).
+    // Desktop keeps it inline. See [PeekTimestampReveal].
+    PeekTimestampReveal(TimeSlotWidth, Modifier.fillMaxSize()) { reveal, slotPx ->
+        LogColumn(items, listState, onToggle, reveal, slotPx)
+    }
+}
+
+@Composable
+private fun LogColumn(
+    items: List<LogDisplay>,
+    listState: LazyListState,
+    onToggle: (String) -> Unit,
+    reveal: (() -> Float)?,
+    slotPx: Float,
+) {
     SelectionContainer {
         LazyColumn(state = listState, modifier = Modifier.fillMaxSize()) {
             itemsIndexed(items) { _, item ->
@@ -686,7 +703,13 @@ private fun LogList(items: List<LogDisplay>, running: Boolean, onToggle: (String
                         item.expanded
                     ) { onToggle(item.task) }
 
-                    is LogDisplay.Line -> LogLineRow(item.line, item.showTask, item.showTime)
+                    is LogDisplay.Line -> LogLineRow(
+                        item.line,
+                        item.showTask,
+                        item.showTime,
+                        reveal,
+                        slotPx
+                    )
                 }
             }
         }
@@ -719,8 +742,50 @@ private fun LogGroupHeader(task: String, count: Int, expanded: Boolean, onToggle
     }
 }
 
+/** Width reserved for the peek-on-drag timestamp gutter (mobile). */
+private val TimeSlotWidth = 84.dp
+
 @Composable
-private fun LogLineRow(line: BuildLogLine, showTask: Boolean, showTime: Boolean) {
+private fun LogLineRow(
+    line: BuildLogLine,
+    showTask: Boolean,
+    showTime: Boolean,
+    reveal: (() -> Float)?,
+    slotPx: Float,
+) {
+    if (reveal != null) {
+        // Mobile: the timestamp is parked off the left edge and slides in as the row is dragged right,
+        // so it costs no horizontal space at rest. [showTime] is moot here — the drag is the reveal.
+        Box(Modifier.fillMaxWidth().padding(start = 14.dp, top = 1.dp, bottom = 1.dp)) {
+            Row(
+                Modifier.fillMaxWidth().graphicsLayer { translationX = reveal() },
+                verticalAlignment = Alignment.Top,
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                if (showTask && !line.task.isNullOrEmpty()) Text(
+                    shortTask(line.task),
+                    color = Ca.colors.accent.copy(alpha = 0.85f),
+                    style = Ca.type.caption2,
+                    maxLines = 1,
+                )
+                Text(
+                    line.message,
+                    color = logColor(line.level, line.message),
+                    style = Ca.type.codeSmall,
+                    modifier = Modifier.weight(1f),
+                )
+            }
+            if (line.timeLabel.isNotEmpty()) Text(
+                line.timeLabel,
+                color = Ca.colors.textTertiary,
+                style = Ca.type.caption2,
+                maxLines = 1,
+                modifier = Modifier.align(Alignment.TopStart)
+                    .graphicsLayer { translationX = reveal() - slotPx },
+            )
+        }
+        return
+    }
     Row(
         Modifier.fillMaxWidth().padding(start = 14.dp, top = 1.dp, bottom = 1.dp),
         verticalAlignment = Alignment.Top,

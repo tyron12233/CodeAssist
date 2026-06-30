@@ -65,7 +65,9 @@ internal object PostfixTemplates {
                     kind = CompletionItemKind.SNIPPET,
                     detail = t.example,
                     documentation = t.description,
-                    // Exact key match floats to the top; otherwise rank just below real members.
+                    // Exact key match floats to the top; otherwise rank just below real members. The SIGN is
+                    // the signal the engine's tier weigher reads (positive = a not-yet-typed template, kept
+                    // under real symbols; the absolute numbers don't compete with the JDT member scale).
                     sortPriority = if (t.key == prefix) -50 else 60,
                     additionalEdits = edits,
                     caret = CaretAction.ExpandSnippet(spec.expansion),

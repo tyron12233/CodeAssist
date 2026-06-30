@@ -130,6 +130,34 @@ class CompletionEngineTest {
     }
 
     @Test
+    fun fallbackSnippetsRankBelowRealSymbolsAcrossScales() {
+        // The JDT scale: a real member scores ~500 (high number) while a not-yet-typed postfix template uses a
+        // small positive 60. Comparing sortPriority alone would float the snippet above the member (60 < 500);
+        // the tier weigher must keep the real symbol on top.
+        val member = CompletionItem("forEach", "forEach()", CompletionItemKind.METHOD, sortPriority = 500)
+        val postfix = CompletionItem("for", "for (...) {}", CompletionItemKind.SNIPPET, sortPriority = 60)
+        val word = CompletionItem("foo", "foo", CompletionItemKind.WORD, sortPriority = 1500)
+        val (engine, _) = engineWith(
+            CompletionContribution(contributor("a") { _, r -> r.addElement(postfix); r.addElement(word); r.addElement(member) }),
+        )
+        val labels = runBlocking { engine.complete(params()) }.items.map { it.label }
+        assertEquals(listOf("forEach", "for", "foo"), labels) // symbol, then fallback snippet, then buffer word
+    }
+
+    @Test
+    fun exactKeySnippetMayTopRealSymbols() {
+        // A fully-typed template key signals itself with a non-positive sortPriority and opts back into the
+        // symbol tier, so it can sort above a real member (the deliberate "you typed the whole thing" case).
+        val member = CompletionItem("variable", "variable", CompletionItemKind.FIELD, sortPriority = 1)
+        val exactPostfix = CompletionItem("var", "var x = ...", CompletionItemKind.SNIPPET, sortPriority = -50)
+        val (engine, _) = engineWith(
+            CompletionContribution(contributor("a") { _, r -> r.addElement(member); r.addElement(exactPostfix) }),
+        )
+        val labels = runBlocking { engine.complete(params()) }.items.map { it.label }
+        assertEquals(listOf("var", "variable"), labels)
+    }
+
+    @Test
     fun patternGatesContributors() {
         val onlyCalls = DomPatterns.call()
         val (engine, _) = engineWith(

@@ -64,6 +64,8 @@ class PostfixContributor(private val extensions: ExtensionRegistry) : Completion
                     kind = CompletionItemKind.SNIPPET,
                     detail = t.example,
                     documentation = t.description,
+                    // Sign convention (see ItemTierWeigher): a positive priority keeps a not-yet-typed template
+                    // below real symbols; a fully-typed key (-40) opts into the symbol tier and tops.
                     sortPriority = if (t.key == params.prefix) -40 else 65,
                     additionalEdits = listOf(deleteReceiver) + exp.edits,
                     caret = snippet?.let { CaretAction.ExpandSnippet(it) } ?: CaretAction.AtEnd,

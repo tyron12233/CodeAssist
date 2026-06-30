@@ -6,6 +6,7 @@ import dev.ide.lang.completion.COMPLETION_WEIGHER_EP
 import dev.ide.lang.completion.CompletionContribution
 import dev.ide.lang.completion.CompletionContributor
 import dev.ide.lang.completion.CompletionItem
+import dev.ide.lang.completion.CompletionItemKind
 import dev.ide.lang.completion.CompletionParams
 import dev.ide.lang.completion.CompletionResult
 import dev.ide.lang.completion.CompletionWeigher
@@ -80,9 +81,10 @@ class CompletionEngine(private val extensions: ExtensionRegistry) {
         /** Run order for the language backend's own contributor — early, so cross-cutting contributors can
          *  filter/decorate its items. */
         const val BACKEND_ORDER = 0
-        // The only built-in: honour the legacy `sortPriority` (lower number = earlier) so existing backend
-        // ranking is preserved. Plugins layer extra weighers on top via the EP.
-        val BUILT_IN_WEIGHERS = listOf(SortPriorityWeigher)
+        // Built-ins, dominant first: the structural tier ([ItemTierWeigher]) keeps real symbols above
+        // fallback snippets/words regardless of the backend's `sortPriority` scale, then [SortPriorityWeigher]
+        // honours the legacy `sortPriority` (lower = earlier) within a tier. Plugins layer more weighers via the EP.
+        val BUILT_IN_WEIGHERS = listOf(ItemTierWeigher, SortPriorityWeigher)
     }
 }
 
@@ -109,5 +111,34 @@ object SortPriorityWeigher : CompletionWeigher {
     override val id = "platform.sortPriority"
     override val order = 1000 // last tiebreaker — explicit weighers dominate
     override fun weigh(item: CompletionItem, params: CompletionParams): Double = -item.sortPriority.toDouble()
+}
+
+/**
+ * The structural ranking tier — the first built-in signal, so it dominates the raw [CompletionItem.sortPriority]
+ * numbers. Those numbers live on **incompatible per-backend scales** (the JDT ranker scores real members
+ * ~500–1000; the Kotlin backend 0–3), so comparing them directly across contributors is meaningless: a
+ * postfix/live template's small fixed priority (e.g. 60) would outrank a JDT member (500+) purely because
+ * `60 < 500`, floating snippets above real code. This weigher buckets items first, then lets the remaining
+ * weighers ([SortPriorityWeigher] last) order *within* a bucket — where each backend's own scale is consistent.
+ *
+ * Three tiers (higher ranks earlier):
+ *   - **2** real symbols, plus the keyword/snippet items a contributor deliberately boosted — an exact-key
+ *     match the user fully typed (`.var`) or a contextual literal (`true`/`false`). The signal is a
+ *     **non-positive** [CompletionItem.sortPriority] on a SNIPPET/KEYWORD item (the contributor convention).
+ *   - **1** fallback keyword / live / postfix-template suggestions not yet fully typed (a **positive**
+ *     [CompletionItem.sortPriority] on a SNIPPET/KEYWORD item) — kept below real symbols.
+ *   - **0** buffer/hippie words ([CompletionItemKind.WORD]) — no semantic backing, always last.
+ */
+object ItemTierWeigher : CompletionWeigher {
+    override val id = "platform.itemTier"
+    // Before SortPriorityWeigher (1000) so the tier dominates the legacy numbers; after explicit plugin
+    // weighers (default order 0) so a plugin can still override the structural order when it means to.
+    override val order = 100
+
+    override fun weigh(item: CompletionItem, params: CompletionParams): Double = when {
+        item.kind == CompletionItemKind.WORD -> 0.0
+        (item.kind == CompletionItemKind.SNIPPET || item.kind == CompletionItemKind.KEYWORD) && item.sortPriority > 0 -> 1.0
+        else -> 2.0
+    }
 }
 

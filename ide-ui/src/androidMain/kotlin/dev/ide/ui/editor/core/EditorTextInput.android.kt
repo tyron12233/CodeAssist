@@ -4,7 +4,6 @@ import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
 import android.graphics.Matrix
-import android.os.Build
 import android.text.InputType
 import android.view.View
 import android.view.inputmethod.BaseInputConnection
@@ -14,6 +13,8 @@ import android.view.inputmethod.ExtractedText
 import android.view.inputmethod.ExtractedTextRequest
 import android.view.inputmethod.InputConnection
 import android.view.inputmethod.InputMethodManager
+import android.view.inputmethod.SurroundingText
+import androidx.annotation.RequiresApi
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusEventModifierNode
 import androidx.compose.ui.focus.FocusState
@@ -181,27 +182,21 @@ private class EditorImeRequest(
     private val options: () -> EditorImeOptions,
 ) : PlatformTextInputMethodRequest {
     override fun createInputConnection(outAttributes: EditorInfo): InputConnection {
+        // "Raw code" mode = the suggestions setting is OFF. We DON'T use TYPE_TEXT_VARIATION_VISIBLE_PASSWORD
+        // (gave a password-style keyboard) or IME_FLAG_NO_PERSONALIZED_LEARNING (triggers Gboard's incognito
+        // UI). NO_SUGGESTIONS is still hinted for IMEs that honor it; the real defense against autocorrect/
+        // auto-space (which Gboard applies even with NO_SUGGESTIONS) is the input connection STARVING the IME
+        // of text context — see [EditorInputConnection]'s rawMode. Mirrors sora-editor's `disallowSuggestions`.
+        val rawMode = !options().softKeyboardSuggestions
         var inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_FLAG_MULTI_LINE
-        if (!options().softKeyboardSuggestions) {
-            // Code, not prose. NO_SUGGESTIONS alone is widely ignored for auto-space/autocorrect (Gboard
-            // still inserts a space after a typed `.`), so we also use the VISIBLE_PASSWORD variation, which
-            // keyboards honor as "raw text": no autocorrect, no auto-space, no predictive suggestions, no
-            // glide typing. (We still draw + measure the text ourselves, so nothing is actually obscured.)
-            inputType = inputType or
-                InputType.TYPE_TEXT_FLAG_NO_SUGGESTIONS or
-                InputType.TYPE_TEXT_VARIATION_VISIBLE_PASSWORD
-        }
+        if (rawMode) inputType = inputType or InputType.TYPE_TEXT_FLAG_NO_SUGGESTIONS
         outAttributes.inputType = inputType
         outAttributes.imeOptions = EditorInfo.IME_FLAG_NO_FULLSCREEN or
             EditorInfo.IME_FLAG_NO_EXTRACT_UI or
             EditorInfo.IME_ACTION_NONE
-        // Never fold code into the keyboard's personal dictionary, even when suggestions are on (API 26+).
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            outAttributes.imeOptions = outAttributes.imeOptions or EditorInfo.IME_FLAG_NO_PERSONALIZED_LEARNING
-        }
         outAttributes.initialSelStart = session.selection.min
         outAttributes.initialSelEnd = session.selection.max
-        return EditorInputConnection(session, view, bridge)
+        return EditorInputConnection(session, view, bridge, rawMode)
     }
 }
 
@@ -334,6 +329,13 @@ private class EditorInputConnection(
     private val session: EditorSession,
     private val view: View,
     private val bridge: EditorImeBridge,
+    /**
+     * Context-starvation mode (Settings → Editor → Keyboard suggestions OFF). The IME is handed NO text
+     * context — empty before/after/selected/surrounding/extracted text, composing rejected, and its
+     * `setSelection` ignored — so it can't run autocorrect / auto-space / suggestions over the buffer.
+     * Mirrors sora-editor's `disallowSuggestions`. A normal keyboard otherwise (suggestions on).
+     */
+    private val rawMode: Boolean,
 ) : BaseInputConnection(view, true) {
 
     private var batchDepth = 0
@@ -362,11 +364,19 @@ private class EditorInputConnection(
         // Composing text never spans a line break; refuse one and let the IME fall back to committing the text,
         // so the underlined composing region can't straddle two lines.
         if ('\n' in s) return false
+        if (rawMode) {
+            // No composing in raw mode → the IME has no word to autocorrect / auto-space. Commit the text
+            // directly and reject, which makes the keyboard fall back to per-character commitText.
+            session.imeFinishComposing()
+            if (s.isNotEmpty()) session.imeCommitText(s, newCursorPosition)
+            return false
+        }
         session.imeSetComposingText(s, newCursorPosition)
         return true
     }
 
     override fun setComposingRegion(start: Int, end: Int): Boolean {
+        if (rawMode) return false // never let a starved IME re-compose over existing text
         session.imeSetComposingRegion(start, end)
         return true
     }
@@ -406,13 +416,33 @@ private class EditorInputConnection(
         return true
     }
 
-    override fun getTextBeforeCursor(n: Int, flags: Int): CharSequence = session.imeTextBeforeCursor(n)
+    // The text-context queries: in rawMode they return EMPTY, starving the IME so it can't autocorrect/
+    // auto-space the surrounding code (Gboard does this even with NO_SUGGESTIONS). Sora's `disallowSuggestions`.
+    override fun getTextBeforeCursor(n: Int, flags: Int): CharSequence =
+        if (rawMode) "" else session.imeTextBeforeCursor(n)
 
-    override fun getTextAfterCursor(n: Int, flags: Int): CharSequence = session.imeTextAfterCursor(n)
+    override fun getTextAfterCursor(n: Int, flags: Int): CharSequence =
+        if (rawMode) "" else session.imeTextAfterCursor(n)
 
-    override fun getSelectedText(flags: Int): CharSequence? = session.selectedText()
+    override fun getSelectedText(flags: Int): CharSequence? =
+        if (rawMode) null else session.selectedText()
+
+    /** Half-open [beforeLength]/[afterLength] window of text around the selection (API 31+). Implemented
+     *  explicitly so monitoring IMEs do one read instead of three; empty in [rawMode]. */
+    @RequiresApi(31)
+    override fun getSurroundingText(beforeLength: Int, afterLength: Int, flags: Int): SurroundingText {
+        if (rawMode || beforeLength < 0 || afterLength < 0) return SurroundingText("", 0, 0, -1)
+        val before = session.imeTextBeforeCursor(beforeLength)
+        val selected = session.selectedText() ?: ""
+        val after = session.imeTextAfterCursor(afterLength)
+        return SurroundingText(
+            before + selected + after, before.length, before.length + selected.length,
+            session.selection.min - before.length,
+        )
+    }
 
     override fun setSelection(start: Int, end: Int): Boolean {
+        if (rawMode) return false // a starved IME thinks the field is empty — don't let it yank the caret
         session.imeSetSelection(start, end)
         return true
     }
@@ -451,8 +481,10 @@ private class EditorInputConnection(
     }
 
     // Hand the IME a real view of our buffer so it can mirror text + cursor continuously (and not drift after a
-    // smart edit). A MONITOR request arms per-edit `updateExtractedText` pushes via the bridge.
-    override fun getExtractedText(request: ExtractedTextRequest?, flags: Int): ExtractedText {
+    // smart edit). A MONITOR request arms per-edit `updateExtractedText` pushes via the bridge. In rawMode we
+    // return null (and never arm the monitor) so the IME can't mirror — its only window into our text is closed.
+    override fun getExtractedText(request: ExtractedTextRequest?, flags: Int): ExtractedText? {
+        if (rawMode) return null
         if (request != null && flags and InputConnection.GET_EXTRACTED_TEXT_MONITOR != 0) {
             bridge.monitorToken = request.token
         }

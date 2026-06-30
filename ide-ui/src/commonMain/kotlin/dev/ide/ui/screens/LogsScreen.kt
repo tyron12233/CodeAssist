@@ -30,6 +30,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.platform.LocalClipboardManager
@@ -38,6 +39,7 @@ import androidx.compose.ui.unit.dp
 import dev.ide.ui.backend.FileActions
 import dev.ide.ui.backend.IdeBackend
 import dev.ide.ui.backend.UiLogEntry
+import dev.ide.ui.components.PeekTimestampReveal
 import dev.ide.ui.icons.CaIcons
 import dev.ide.ui.theme.Ca
 import kotlinx.coroutines.delay
@@ -149,56 +151,78 @@ fun LogsScreen(
                 )
             }
         } else {
-            LazyColumn(Modifier.weight(1f).fillMaxWidth().padding(horizontal = 8.dp)) {
-                itemsIndexed(
-                    shown,
-                    key = { index, it -> "$index:${it.timestampMs}:${it.tag}:${it.message.hashCode()}" },
-                ) { _, it -> LogRow(it) }
+            PeekTimestampReveal(TimeSlotWidth, Modifier.weight(1f).fillMaxWidth()) { reveal, slotPx ->
+                LazyColumn(Modifier.fillMaxSize().padding(horizontal = 8.dp)) {
+                    itemsIndexed(
+                        shown,
+                        key = { index, it -> "$index:${it.timestampMs}:${it.tag}:${it.message.hashCode()}" },
+                    ) { _, it -> LogRow(it, reveal, slotPx) }
+                }
             }
         }
     }
 }
 
+/** Width reserved for the peek-on-drag timestamp gutter (mobile); sized for the `codeSmall` time label. */
+private val TimeSlotWidth = 96.dp
+
 @Composable
-private fun LogRow(entry: UiLogEntry) {
+private fun LogRow(entry: UiLogEntry, reveal: (() -> Float)?, slotPx: Float) {
     var expanded by remember(entry) { mutableStateOf(false) }
     val color = levelColor(entry.level)
     val hasTrace = entry.stackTrace != null
-    Column(
-        Modifier.fillMaxWidth()
-            .padding(vertical = 2.dp)
-            .let { if (hasTrace) it.clickable { expanded = !expanded } else it }
-            .padding(horizontal = 6.dp, vertical = 5.dp),
-    ) {
-        Row(verticalAlignment = Alignment.Top, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            Text(entry.timeLabel, color = Ca.colors.textTertiary, style = Ca.type.codeSmall)
-            LevelBadge(entry.level, color)
-            Column(Modifier.weight(1f)) {
-                Text(entry.message, color = Ca.colors.textPrimary, style = Ca.type.codeSmall)
-                Text(
-                    entry.tag,
-                    color = Ca.colors.textTertiary,
-                    style = Ca.type.caption2,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                )
+    Box(Modifier.fillMaxWidth()) {
+        Column(
+            Modifier.fillMaxWidth()
+                .padding(vertical = 2.dp)
+                .let { if (hasTrace) it.clickable { expanded = !expanded } else it }
+                .padding(horizontal = 6.dp, vertical = 5.dp)
+                .let { if (reveal != null) it.graphicsLayer { translationX = reveal() } else it },
+        ) {
+            Row(verticalAlignment = Alignment.Top, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                // Desktop shows the timestamp inline; on mobile it's the peek overlay below instead.
+                if (reveal == null) Text(entry.timeLabel, color = Ca.colors.textTertiary, style = Ca.type.codeSmall)
+                LevelBadge(entry.level, color)
+                Column(Modifier.weight(1f)) {
+                    Text(entry.message, color = Ca.colors.textPrimary, style = Ca.type.codeSmall)
+                    Text(
+                        entry.tag,
+                        color = Ca.colors.textTertiary,
+                        style = Ca.type.caption2,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                }
+                if (hasTrace) {
+                    Icon(
+                        if (expanded) CaIcons.chevronDown else CaIcons.chevronRight,
+                        null,
+                        Modifier.size(14.dp).padding(top = 2.dp),
+                        tint = Ca.colors.textTertiary,
+                    )
+                }
             }
-            if (hasTrace) {
-                Icon(
-                    if (expanded) CaIcons.chevronDown else CaIcons.chevronRight,
-                    null,
-                    Modifier.size(14.dp).padding(top = 2.dp),
-                    tint = Ca.colors.textTertiary,
+            if (expanded && entry.stackTrace != null) {
+                Text(
+                    entry.stackTrace,
+                    color = Ca.colors.textSecondary,
+                    style = Ca.type.codeSmall,
+                    modifier = Modifier.fillMaxWidth().padding(top = 6.dp, start = 4.dp)
+                        .background(Ca.colors.surface2, RoundedCornerShape(Ca.radius.sm)).padding(8.dp),
                 )
             }
         }
-        if (expanded && entry.stackTrace != null) {
+        // Mobile: the timestamp parked off the left edge (top/start matched to the row's first line above),
+        // sliding in as the row body is dragged right.
+        if (reveal != null && entry.timeLabel.isNotEmpty()) {
             Text(
-                entry.stackTrace,
-                color = Ca.colors.textSecondary,
+                entry.timeLabel,
+                color = Ca.colors.textTertiary,
                 style = Ca.type.codeSmall,
-                modifier = Modifier.fillMaxWidth().padding(top = 6.dp, start = 4.dp)
-                    .background(Ca.colors.surface2, RoundedCornerShape(Ca.radius.sm)).padding(8.dp),
+                maxLines = 1,
+                modifier = Modifier.align(Alignment.TopStart)
+                    .padding(top = 7.dp, start = 6.dp)
+                    .graphicsLayer { translationX = reveal() - slotPx },
             )
         }
     }

@@ -32,9 +32,11 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import dev.ide.ui.backend.GitStatus
 import dev.ide.ui.backend.NodeKind
 import dev.ide.ui.backend.PackageSegment
 import dev.ide.ui.backend.TreeNode
@@ -117,7 +119,21 @@ fun FileNavigator(
         mutableSetExpandedDefaults(root)
     }
     var sort by remember { mutableStateOf(TreeSort.Name) }
-    val ctx = FileRowActions(canModify, onRename, onMove, onCopy, onDelete, canReveal, onReveal, canImport, onImportInto, contextMenuFor, onContextAction, canExport, onExport)
+    val ctx = FileRowActions(
+        canModify,
+        onRename,
+        onMove,
+        onCopy,
+        onDelete,
+        canReveal,
+        onReveal,
+        canImport,
+        onImportInto,
+        contextMenuFor,
+        onContextAction,
+        canExport,
+        onExport
+    )
     Column(modifier) {
         // header — project identity + the IntelliJ-style scope dropdown, with import + an overflow ⋮ menu.
         Row(
@@ -127,11 +143,34 @@ fun FileNavigator(
         ) {
             ProjectTile(root.name, size = 32.dp, radius = Ca.radius.sm)
             Column(Modifier.weight(1f)) {
-                Text(root.name, color = Ca.colors.textPrimary, style = Ca.type.subhead, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                Text("$moduleCount ${if (moduleCount == 1) "module" else "modules"}", color = Ca.colors.textTertiary, style = Ca.type.caption2)
+                Text(
+                    root.name,
+                    color = Ca.colors.textPrimary,
+                    style = Ca.type.subhead,
+                    fontWeight = FontWeight.SemiBold,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+                Text(
+                    "$moduleCount ${if (moduleCount == 1) "module" else "modules"}",
+                    color = Ca.colors.textTertiary,
+                    style = Ca.type.caption2
+                )
             }
-            if (onOpenInFiles != null) IconButtonCa(CaIcons.folderOpen, "Open in file manager", onClick = onOpenInFiles, boxSize = 34, iconSize = 18)
-            if (canImport) IconButtonCa(CaIcons.download, "Import files", onClick = onImport, boxSize = 34, iconSize = 18)
+            if (onOpenInFiles != null) IconButtonCa(
+                CaIcons.folderOpen,
+                "Open in file manager",
+                onClick = onOpenInFiles,
+                boxSize = 34,
+                iconSize = 18
+            )
+            if (canImport) IconButtonCa(
+                CaIcons.download,
+                "Import files",
+                onClick = onImport,
+                boxSize = 34,
+                iconSize = 18
+            )
             val rootDir = root.dirPath
             HeaderOverflowMenu(
                 onNewFile = { rootDir?.let { onNewFile(it, emptyList()) } },
@@ -145,8 +184,30 @@ fun FileNavigator(
         // The scope selector (Project ⇄ All files) — a dropdown button, like IntelliJ's view chooser.
         ScopeDropdown(mode, onModeChange, Modifier.padding(start = 12.dp, bottom = 8.dp))
         Box(Modifier.fillMaxWidth().height(1.dp).background(Ca.colors.separator))
-        Column(Modifier.fillMaxWidth().weight(1f).verticalScroll(rememberScrollState()).padding(vertical = 6.dp)) {
-            root.children.sortedForTree(sort).forEach { TreeRow(it, 0, expanded, sort, activePath, onOpen, onNewFile, onNewFolder, onNewResource, onNewSource, onViewDependencies, onConfigureModule, onAddSourceRoot, canShare, onShare, ctx) }
+        Column(
+            Modifier.fillMaxWidth().weight(1f).verticalScroll(rememberScrollState())
+                .padding(vertical = 6.dp)
+        ) {
+            root.children.sortedForTree(sort).forEach {
+                TreeRow(
+                    it,
+                    0,
+                    expanded,
+                    sort,
+                    activePath,
+                    onOpen,
+                    onNewFile,
+                    onNewFolder,
+                    onNewResource,
+                    onNewSource,
+                    onViewDependencies,
+                    onConfigureModule,
+                    onAddSourceRoot,
+                    canShare,
+                    onShare,
+                    ctx
+                )
+            }
         }
     }
 }
@@ -156,7 +217,10 @@ private fun TreeNode.newTargetDir(): String? =
     dirPath ?: filePath?.substringBeforeLast('/')?.takeIf { it.isNotEmpty() && it != filePath }
 
 /** Recursively mark every node with children as expanded (the "Expand all" action). */
-private fun expandAll(root: TreeNode, expanded: androidx.compose.runtime.snapshots.SnapshotStateMap<String, Boolean>) {
+private fun expandAll(
+    root: TreeNode,
+    expanded: androidx.compose.runtime.snapshots.SnapshotStateMap<String, Boolean>
+) {
     fun walk(n: TreeNode) {
         if (n.children.isNotEmpty()) expanded[n.id] = true
         n.children.forEach(::walk)
@@ -174,7 +238,10 @@ private fun List<TreeNode>.sortedForTree(sort: TreeSort): List<TreeNode> = when 
     TreeSort.Type -> sortedWith(
         compareBy(
             { if (it.kind == NodeKind.File) 1 else 0 },
-            { if (it.kind == NodeKind.File) it.name.substringAfterLast('.', "").lowercase() else "" },
+            {
+                if (it.kind == NodeKind.File) it.name.substringAfterLast('.', "")
+                    .lowercase() else ""
+            },
             { it.name.lowercase() },
         ),
     )
@@ -206,7 +273,11 @@ private fun TreeViewMode.label(): String = when (this) {
 
 /** IntelliJ-style scope chooser: a small button showing the current view, opening a menu to switch. */
 @Composable
-private fun ScopeDropdown(mode: TreeViewMode, onModeChange: (TreeViewMode) -> Unit, modifier: Modifier = Modifier) {
+private fun ScopeDropdown(
+    mode: TreeViewMode,
+    onModeChange: (TreeViewMode) -> Unit,
+    modifier: Modifier = Modifier
+) {
     var open by remember { mutableStateOf(false) }
     val interaction = remember { MutableInteractionSource() }
     Box(modifier) {
@@ -218,8 +289,18 @@ private fun ScopeDropdown(mode: TreeViewMode, onModeChange: (TreeViewMode) -> Un
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(4.dp),
         ) {
-            Text(mode.label(), color = Ca.colors.textSecondary, style = Ca.type.footnote, fontWeight = FontWeight.Medium)
-            Icon(CaIcons.chevronDown, "Change view", Modifier.size(15.dp), tint = Ca.colors.textTertiary)
+            Text(
+                mode.label(),
+                color = Ca.colors.textSecondary,
+                style = Ca.type.footnote,
+                fontWeight = FontWeight.Medium
+            )
+            Icon(
+                CaIcons.chevronDown,
+                "Change view",
+                Modifier.size(15.dp),
+                tint = Ca.colors.textTertiary
+            )
         }
         CaDropdownMenu(expanded = open, onDismissRequest = { open = false }) {
             TreeViewMode.entries.forEach { m ->
@@ -241,16 +322,33 @@ private fun HeaderOverflowMenu(
 ) {
     var open by remember { mutableStateOf(false) }
     Box {
-        IconButtonCa(CaIcons.ellipsis, "More actions", onClick = { open = true }, boxSize = 34, iconSize = 18)
+        IconButtonCa(
+            CaIcons.ellipsis,
+            "More actions",
+            onClick = { open = true },
+            boxSize = 34,
+            iconSize = 18
+        )
         CaDropdownMenu(expanded = open, onDismissRequest = { open = false }) {
             FileActionItem(CaIcons.plus, "New file") { open = false; onNewFile() }
             FileActionItem(CaIcons.folder, "New folder") { open = false; onNewFolder() }
             FileActionItem(CaIcons.chevronDown, "Expand all") { open = false; onExpandAll() }
             FileActionItem(CaIcons.chevronUp, "Collapse all") { open = false; onCollapseAll() }
-            Box(Modifier.fillMaxWidth().height(1.dp).padding(vertical = 4.dp).background(Ca.colors.separator))
+            Box(
+                Modifier.fillMaxWidth().height(1.dp).padding(vertical = 4.dp)
+                    .background(Ca.colors.separator)
+            )
             MenuSectionLabel("Sort by")
-            CheckableMenuItem("Name", checked = sort == TreeSort.Name) { open = false; onSort(TreeSort.Name) }
-            CheckableMenuItem("Type", checked = sort == TreeSort.Type) { open = false; onSort(TreeSort.Type) }
+            CheckableMenuItem("Name", checked = sort == TreeSort.Name) {
+                open = false; onSort(
+                TreeSort.Name
+            )
+            }
+            CheckableMenuItem("Type", checked = sort == TreeSort.Type) {
+                open = false; onSort(
+                TreeSort.Type
+            )
+            }
         }
     }
 }
@@ -272,7 +370,14 @@ private fun MenuSectionLabel(text: String) {
 private fun CheckableMenuItem(label: String, checked: Boolean, onClick: () -> Unit) {
     DropdownMenuItem(
         text = { Text(label, color = Ca.colors.textPrimary, style = Ca.type.footnote) },
-        trailingIcon = { if (checked) Icon(CaIcons.check, null, Modifier.size(15.dp), tint = Ca.colors.accent) },
+        trailingIcon = {
+            if (checked) Icon(
+                CaIcons.check,
+                null,
+                Modifier.size(15.dp),
+                tint = Ca.colors.accent
+            )
+        },
         onClick = onClick,
     )
 }
@@ -281,7 +386,8 @@ private fun CheckableMenuItem(label: String, checked: Boolean, onClick: () -> Un
 private fun mutableSetExpandedDefaults(root: TreeNode): androidx.compose.runtime.snapshots.SnapshotStateMap<String, Boolean> {
     val map = androidx.compose.runtime.mutableStateMapOf<String, Boolean>()
     fun walk(n: TreeNode) {
-        if (n.kind == NodeKind.Module || n.kind == NodeKind.SourceRoot || n.kind == NodeKind.Workspace) map[n.id] = true
+        if (n.kind == NodeKind.Module || n.kind == NodeKind.SourceRoot || n.kind == NodeKind.Workspace) map[n.id] =
+            true
         n.children.forEach(::walk)
     }
     walk(root)
@@ -319,9 +425,10 @@ private fun TreeRow(
     val isSourceContext = targetDir != null && node.sourceRootPath != null
     // The "New ▸" submenu appears whenever there's anything to create here.
     val canNew = targetDir != null || canNewResource
-    // Long-press / right-click opens delete/rename/move/copy for files, packages, and res/ folders.
+    // Long-press / right-click opens delete/rename/move/copy for files, packages, and any directory
+    // (res/ folders, build output, and plain folders all resolve a path now).
     val canContext = ctx.enabled && node.fileOpPath() != null &&
-        (node.kind == NodeKind.File || node.kind == NodeKind.Package || node.kind == NodeKind.Folder)
+            (node.kind == NodeKind.File || node.kind == NodeKind.Package || node.kind == NodeKind.Folder)
     // The menu is the only touch path to these (the hover `+`/gear/layers are invisible on a phone): New
     // File/Folder for any dir, New resource for res/, module settings/deps, reveal, and the file ops.
     val canModuleMenu = node.kind == NodeKind.Module
@@ -330,153 +437,264 @@ private fun TreeRow(
     val canExportHere = ctx.canExport && node.kind == NodeKind.File && node.filePath != null
     // Import external file(s) from the system file manager into this row's directory (a file's parent dir).
     val canImportHere = ctx.canImport && targetDir != null
-    val hasMenu = canNew || canContext || canModuleMenu || canRevealHere || canImportHere || canExportHere
+    val hasMenu =
+        canNew || canContext || canModuleMenu || canRevealHere || canImportHere || canExportHere
     var menuOpen by remember { mutableStateOf(false) }
-    // The context menu is two-level: the root actions, and a "New ▸" page of context-aware create options.
-    var inNewPage by remember(menuOpen) { mutableStateOf(false) }
+    // The context menu is two-level: root actions plus flyout submenus (the "New ▸" create options and any
+    // plugin-contributed submenu). Only one flyout is open at a time — this holds its key (null = none).
+    var openSubmenu by remember(menuOpen) { mutableStateOf<String?>(null) }
     val interaction = remember { MutableInteractionSource() }
     val hovered by interaction.collectIsHoveredAsState()
 
     // Taller, finger-friendly rows on touch; denser on desktop where pointer precision is higher.
     val rowHeight = if (isMobilePlatform) 40.dp else 30.dp
     Box {
-    Row(
-        Modifier
-            .fillMaxWidth()
-            .height(rowHeight)
-            .background(if (isActive) Ca.colors.accentSoft else Color.Transparent)
-            .hoverable(interaction)
-            .combinedClickable(
-                onClick = {
-                    when {
-                        // A module.toml (filePath set + moduleConfigName) opens the Module Settings editor.
-                        node.filePath != null && node.moduleConfigName != null -> onConfigureModule(node)
-                        node.filePath != null -> onOpen(node)
-                        else -> expanded[node.id] = !isOpen
+        Row(
+            Modifier
+                .fillMaxWidth()
+                .height(rowHeight)
+                .background(if (isActive) Ca.colors.accentSoft else Color.Transparent)
+                .hoverable(interaction)
+                .combinedClickable(
+                    onClick = {
+                        when {
+                            // A module.toml (filePath set + moduleConfigName) opens the Module Settings editor.
+                            node.filePath != null && node.moduleConfigName != null -> onConfigureModule(
+                                node
+                            )
+
+                            node.filePath != null -> onOpen(node)
+                            else -> expanded[node.id] = !isOpen
+                        }
+                    },
+                    onLongClick = if (hasMenu) ({ menuOpen = true }) else null,
+                )
+                .secondaryClickable(enabled = hasMenu) { menuOpen = true }
+                .padding(start = (8 + depth * 16).dp, end = 8.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            if (isExpandable) {
+                Icon(
+                    if (isOpen) CaIcons.caretDown else CaIcons.caretRight,
+                    null,
+                    Modifier.size(14.dp),
+                    tint = Ca.colors.textTertiary,
+                )
+                Spacer(Modifier.width(4.dp))
+            } else {
+                Spacer(Modifier.width(18.dp))
+            }
+            NodeIcon(node, isOpen)
+            Spacer(Modifier.width(8.dp))
+            // A multi-segment row (a compacted package `com.example.compose`, or a source-root label
+            // `app/src/main/java`) renders as tappable segments so each middle level is its own New-target;
+            // otherwise only the deepest level is reachable. Package levels are real packages (typed-source ok);
+            // source-root ancestors are plain dirs (File/Directory only, since a class there is on no compile path).
+            val labelSegments = node.segmentsForLabel()
+            if (labelSegments.size > 1) {
+                SegmentedPathLabel(
+                    node = node,
+                    segments = labelSegments,
+                    separator = if (node.kind == NodeKind.Package) "." else "/",
+                    allowSource = node.kind == NodeKind.Package,
+                    onNewFile = onNewFile,
+                    onNewFolder = onNewFolder,
+                    onNewResource = onNewResource,
+                    onNewSource = onNewSource,
+                    modifier = Modifier.weight(1f),
+                )
+            } else {
+                Text(
+                    node.name,
+                    color = when {
+                        isActive -> Ca.colors.accent
+                        // Derived build output, IntelliJ-style: dimmed so it reads as generated, not source.
+                        node.styleHint == "excluded" -> Ca.colors.textTertiary
+                        else -> Ca.colors.textPrimary
+                    },
+                    style = Ca.type.footnote,
+                    fontWeight = if (isActive) FontWeight.SemiBold else FontWeight.Normal,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.weight(1f),
+                )
+            }
+            when {
+                node.kind == NodeKind.Module && hovered ->
+                    Row(
+                        horizontalArrangement = Arrangement.spacedBy(2.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        IconButtonCa(
+                            CaIcons.gear,
+                            "Settings of ${node.name}",
+                            onClick = { onConfigureModule(node) },
+                            boxSize = 22,
+                            iconSize = 14
+                        )
+                        IconButtonCa(
+                            CaIcons.layers,
+                            "Dependencies of ${node.name}",
+                            onClick = { onViewDependencies(node) },
+                            boxSize = 22,
+                            iconSize = 14
+                        )
                     }
-                },
-                onLongClick = if (hasMenu) ({ menuOpen = true }) else null,
-            )
-            .secondaryClickable(enabled = hasMenu) { menuOpen = true }
-            .padding(start = (8 + depth * 16).dp, end = 8.dp),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        if (isExpandable) {
-            Icon(
-                if (isOpen) CaIcons.caretDown else CaIcons.caretRight,
-                null,
-                Modifier.size(14.dp),
-                tint = Ca.colors.textTertiary,
-            )
-            Spacer(Modifier.width(4.dp))
-        } else {
-            Spacer(Modifier.width(18.dp))
+
+                canNew && hovered ->
+                    NewHoverButton(
+                        node,
+                        targetDir,
+                        isSourceContext,
+                        canNewResource,
+                        onNewFile,
+                        onNewFolder,
+                        onNewResource,
+                        onNewSource
+                    )
+                // Share is shown for the active file (touch path) or any file on hover (desktop).
+                node.filePath != null && canShare && (hovered || isActive) ->
+                    IconButtonCa(
+                        CaIcons.share,
+                        "Share ${node.name}",
+                        onClick = { onShare(node) },
+                        boxSize = 22,
+                        iconSize = 14
+                    )
+
+                node.gitStatus != null ->
+                    Box(
+                        Modifier.size(6.dp).background(
+                            gitColor(node.gitStatus),
+                            RoundedCornerShape(Ca.radius.pill)
+                        )
+                    )
+            }
+            // A visible overflow affordance on desktop hover — the file ops (rename/move/copy/delete/reveal)
+            // otherwise have no on-screen entry point there (touch reaches them via long-press).
+            if ((canContext || canRevealHere) && hovered)
+                IconButtonCa(
+                    CaIcons.ellipsis,
+                    "Actions for ${node.name}",
+                    onClick = { menuOpen = true },
+                    boxSize = 22,
+                    iconSize = 14
+                )
         }
-        NodeIcon(node, isOpen)
-        Spacer(Modifier.width(8.dp))
-        // A multi-segment row (a compacted package `com.example.compose`, or a source-root label
-        // `app/src/main/java`) renders as tappable segments so each middle level is its own New-target;
-        // otherwise only the deepest level is reachable. Package levels are real packages (typed-source ok);
-        // source-root ancestors are plain dirs (File/Directory only, since a class there is on no compile path).
-        val labelSegments = node.segmentsForLabel()
-        if (labelSegments.size > 1) {
-            SegmentedPathLabel(
-                node = node,
-                segments = labelSegments,
-                separator = if (node.kind == NodeKind.Package) "." else "/",
-                allowSource = node.kind == NodeKind.Package,
-                onNewFile = onNewFile,
-                onNewFolder = onNewFolder,
-                onNewResource = onNewResource,
-                onNewSource = onNewSource,
-                modifier = Modifier.weight(1f),
-            )
-        } else {
-            Text(
-                node.name,
-                color = when {
-                    isActive -> Ca.colors.accent
-                    // Derived build output, IntelliJ-style: dimmed so it reads as generated, not source.
-                    node.styleHint == "excluded" -> Ca.colors.textTertiary
-                    else -> Ca.colors.textPrimary
-                },
-                style = Ca.type.footnote,
-                fontWeight = if (isActive) FontWeight.SemiBold else FontWeight.Normal,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-                modifier = Modifier.weight(1f),
-            )
-        }
-        when {
-            node.kind == NodeKind.Module && hovered ->
-                Row(horizontalArrangement = Arrangement.spacedBy(2.dp), verticalAlignment = Alignment.CenterVertically) {
-                    IconButtonCa(CaIcons.gear, "Settings of ${node.name}", onClick = { onConfigureModule(node) }, boxSize = 22, iconSize = 14)
-                    IconButtonCa(CaIcons.layers, "Dependencies of ${node.name}", onClick = { onViewDependencies(node) }, boxSize = 22, iconSize = 14)
-                }
-            canNew && hovered ->
-                NewHoverButton(node, targetDir, isSourceContext, canNewResource, onNewFile, onNewFolder, onNewResource, onNewSource)
-            // Share is shown for the active file (touch path) or any file on hover (desktop).
-            node.filePath != null && canShare && (hovered || isActive) ->
-                IconButtonCa(CaIcons.share, "Share ${node.name}", onClick = { onShare(node) }, boxSize = 22, iconSize = 14)
-            node.gitStatus != null ->
-                Box(Modifier.size(6.dp).background(gitColor(node.gitStatus), RoundedCornerShape(Ca.radius.pill)))
-        }
-        // A visible overflow affordance on desktop hover — the file ops (rename/move/copy/delete/reveal)
-        // otherwise have no on-screen entry point there (touch reaches them via long-press).
-        if ((canContext || canRevealHere) && hovered)
-            IconButtonCa(CaIcons.ellipsis, "Actions for ${node.name}", onClick = { menuOpen = true }, boxSize = 22, iconSize = 14)
-    }
         if (hasMenu) CaDropdownMenu(
             expanded = menuOpen,
             onDismissRequest = { menuOpen = false },
         ) {
-            if (inNewPage) {
-                // The "New ▸" submenu page: context-aware create options, with a way back to the root menu.
-                FileActionItem(CaIcons.chevronLeft, "Back") { inNewPage = false }
+            if (canModuleMenu) {
+                FileActionItem(CaIcons.gear, "Module settings") {
+                    menuOpen = false; onConfigureModule(node)
+                }
+                FileActionItem(CaIcons.layers, "Dependencies") {
+                    menuOpen = false; onViewDependencies(node)
+                }
+                FileActionItem(CaIcons.plus, "Add source root") {
+                    menuOpen = false; onAddSourceRoot(
+                    node
+                )
+                }
+            }
+            if (canNew) CaSubmenuItem(
+                label = "New",
+                icon = CaIcons.plus,
+                expanded = openSubmenu == "new",
+                onExpandedChange = { openSubmenu = if (it) "new" else null },
+            ) {
+                NewActionItems(
+                    node,
+                    targetDir,
+                    isSourceContext,
+                    canNewResource,
+                    onNewFile,
+                    onNewFolder,
+                    onNewResource,
+                    onNewSource
+                ) { menuOpen = false }
+            }
+            if (canImportHere) targetDir?.let { dir ->
+                FileActionItem(CaIcons.download, "Import from file manager") {
+                    menuOpen = false; ctx.onImportInto(dir)
+                }
+            }
+            if (canExportHere) FileActionItem(CaIcons.save, "Export…") {
+                menuOpen = false; ctx.onExport(node)
+            }
+            if (canRevealHere) FileActionItem(CaIcons.share, "Reveal in file manager") {
+                menuOpen = false; ctx.onReveal(node)
+            }
+            if (canContext) {
+                FileActionItem(CaIcons.docText, "Rename") { menuOpen = false; ctx.onRename(node) }
+                FileActionItem(CaIcons.arrowRight, "Move") { menuOpen = false; ctx.onMove(node) }
+                FileActionItem(CaIcons.copy, "Copy") { menuOpen = false; ctx.onCopy(node) }
+                FileActionItem(CaIcons.close, "Delete", danger = true) {
+                    menuOpen = false; ctx.onDelete(node)
+                }
+            }
+            // Plugin-contributed file actions (the `fileContext` place). Resolved lazily when the menu
+            // opens; nothing renders until a plugin contributes.
+            val pluginItems = ctx.contextMenu(node).items
+            if (pluginItems.isNotEmpty()) {
                 MenuDivider()
-                NewActionItems(node, targetDir, isSourceContext, canNewResource, onNewFile, onNewFolder, onNewResource, onNewSource) { menuOpen = false }
-            } else {
-                if (canModuleMenu) {
-                    FileActionItem(CaIcons.gear, "Module settings") { menuOpen = false; onConfigureModule(node) }
-                    FileActionItem(CaIcons.layers, "Dependencies") { menuOpen = false; onViewDependencies(node) }
-                    FileActionItem(CaIcons.plus, "Add source root") { menuOpen = false; onAddSourceRoot(node) }
-                }
-                if (canNew) FileActionItem(CaIcons.plus, "New", trailing = CaIcons.caretRight) { inNewPage = true }
-                if (canImportHere) targetDir?.let { dir ->
-                    FileActionItem(CaIcons.download, "Import from file manager") { menuOpen = false; ctx.onImportInto(dir) }
-                }
-                if (canExportHere) FileActionItem(CaIcons.save, "Export…") { menuOpen = false; ctx.onExport(node) }
-                if (canRevealHere) FileActionItem(CaIcons.share, "Reveal in file manager") { menuOpen = false; ctx.onReveal(node) }
-                if (canContext) {
-                    FileActionItem(CaIcons.docText, "Rename") { menuOpen = false; ctx.onRename(node) }
-                    FileActionItem(CaIcons.arrowRight, "Move") { menuOpen = false; ctx.onMove(node) }
-                    FileActionItem(CaIcons.copy, "Copy") { menuOpen = false; ctx.onCopy(node) }
-                    FileActionItem(CaIcons.close, "Delete", danger = true) { menuOpen = false; ctx.onDelete(node) }
-                }
-                // Plugin-contributed file actions (the `fileContext` place). Resolved lazily when the menu
-                // opens; nothing renders until a plugin contributes.
-                val pluginItems = ctx.contextMenu(node).items
-                if (pluginItems.isNotEmpty()) {
-                    MenuDivider()
-                    PluginMenuItems(pluginItems) { id -> menuOpen = false; ctx.onContextAction(id, node) }
+                PluginMenuItems(pluginItems) { id ->
+                    menuOpen = false; ctx.onContextAction(
+                    id,
+                    node
+                )
                 }
             }
         }
     }
 
-    if (isOpen) node.children.sortedForTree(sort).forEach { TreeRow(it, depth + 1, expanded, sort, activePath, onOpen, onNewFile, onNewFolder, onNewResource, onNewSource, onViewDependencies, onConfigureModule, onAddSourceRoot, canShare, onShare, ctx) }
+    if (isOpen) node.children.sortedForTree(sort).forEach {
+        TreeRow(
+            it,
+            depth + 1,
+            expanded,
+            sort,
+            activePath,
+            onOpen,
+            onNewFile,
+            onNewFolder,
+            onNewResource,
+            onNewSource,
+            onViewDependencies,
+            onConfigureModule,
+            onAddSourceRoot,
+            canShare,
+            onShare,
+            ctx
+        )
+    }
 }
 
-/** Renders plugin-contributed [UiMenuNode]s in the file-tree dropdown. Submenus are flattened one level
- *  (the lightweight dropdown has no nested-page chrome of its own); separators map to dividers. */
+/** Renders plugin-contributed [UiMenuNode]s in the file-tree dropdown. A submenu opens as a native flyout
+ *  beside its row (recursing for arbitrary depth); separators map to dividers. Only one flyout at this level
+ *  is open at a time. */
 @Composable
 private fun PluginMenuItems(items: List<UiMenuNode>, onAction: (String) -> Unit) {
-    items.forEach { item ->
+    var openSubmenu by remember { mutableStateOf<String?>(null) }
+    items.forEachIndexed { i, item ->
         when (item) {
             is UiMenuNode.Item -> FileActionItem(actionIcon(item.action.iconId), item.action.text) {
                 if (item.action.enabled) onAction(item.action.id)
             }
-            is UiMenuNode.Submenu -> PluginMenuItems(item.items, onAction)
+
+            is UiMenuNode.Submenu -> {
+                val key = "$i:${item.text}"
+                CaSubmenuItem(
+                    label = item.text,
+                    icon = actionIcon(item.iconId),
+                    expanded = openSubmenu == key,
+                    onExpandedChange = { openSubmenu = if (it) key else null },
+                ) {
+                    PluginMenuItems(item.items, onAction)
+                }
+            }
+
             UiMenuNode.Separator -> MenuDivider()
         }
     }
@@ -484,17 +702,21 @@ private fun PluginMenuItems(items: List<UiMenuNode>, onAction: (String) -> Unit)
 
 @Composable
 private fun FileActionItem(
-    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    icon: ImageVector,
     label: String,
     danger: Boolean = false,
-    trailing: androidx.compose.ui.graphics.vector.ImageVector? = null,
     onClick: () -> Unit,
 ) {
     val tint = if (danger) Ca.colors.error else Ca.colors.textSecondary
     DropdownMenuItem(
-        text = { Text(label, color = if (danger) Ca.colors.error else Ca.colors.textPrimary, style = Ca.type.footnote) },
+        text = {
+            Text(
+                label,
+                color = if (danger) Ca.colors.error else Ca.colors.textPrimary,
+                style = Ca.type.footnote
+            )
+        },
         leadingIcon = { Icon(icon, null, Modifier.size(15.dp), tint = tint) },
-        trailingIcon = trailing?.let { { Icon(it, null, Modifier.size(15.dp), tint = Ca.colors.textTertiary) } },
         onClick = onClick,
     )
 }
@@ -502,7 +724,10 @@ private fun FileActionItem(
 /** A thin separator inside a dropdown menu. */
 @Composable
 private fun MenuDivider() {
-    Box(Modifier.fillMaxWidth().height(1.dp).padding(vertical = 4.dp).background(Ca.colors.separator))
+    Box(
+        Modifier.fillMaxWidth().height(1.dp).padding(vertical = 4.dp)
+            .background(Ca.colors.separator)
+    )
 }
 
 /** The context-aware create options, shared by the long-press "New ▸" page and the desktop hover `+` menu:
@@ -524,10 +749,25 @@ private fun NewActionItems(
     // plain folder / res context.
     val segs = node.packageSegments
     if (isSourceContext && targetDir != null) {
-        FileActionItem(CaIcons.code, "Java Class") { close(); onNewSource(targetDir, NewSourceLang.Java, segs) }
-        FileActionItem(CaIcons.code, "Kotlin File") { close(); onNewSource(targetDir, NewSourceLang.Kotlin, segs) }
+        FileActionItem(CaIcons.code, "Java Class") {
+            close(); onNewSource(
+            targetDir,
+            NewSourceLang.Java,
+            segs
+        )
+        }
+        FileActionItem(CaIcons.code, "Kotlin File") {
+            close(); onNewSource(
+            targetDir,
+            NewSourceLang.Kotlin,
+            segs
+        )
+        }
     }
-    if (canNewResource) FileActionItem(CaIcons.image, "Resource File") { close(); onNewResource(node) }
+    if (canNewResource) FileActionItem(
+        CaIcons.image,
+        "Resource File"
+    ) { close(); onNewResource(node) }
     if (targetDir != null) {
         FileActionItem(CaIcons.plus, "File") { close(); onNewFile(targetDir, segs) }
         FileActionItem(CaIcons.folder, "Directory") { close(); onNewFolder(targetDir, segs) }
@@ -551,7 +791,16 @@ private fun NewHoverButton(
     Box {
         IconButtonCa(CaIcons.plus, "New", onClick = { open = true }, boxSize = 22, iconSize = 14)
         CaDropdownMenu(expanded = open, onDismissRequest = { open = false }) {
-            NewActionItems(node, targetDir, isSourceContext, canNewResource, onNewFile, onNewFolder, onNewResource, onNewSource) { open = false }
+            NewActionItems(
+                node,
+                targetDir,
+                isSourceContext,
+                canNewResource,
+                onNewFile,
+                onNewFolder,
+                onNewResource,
+                onNewSource
+            ) { open = false }
         }
     }
 }
@@ -583,7 +832,13 @@ private fun SegmentedPathLabel(
             // packageName carries the cumulative level (`com.example` / `app/src`); show just this leaf.
             val leaf = seg.packageName.substringAfterLast('.').substringAfterLast('/')
             if (i == lastIndex) {
-                Text(leaf, color = Ca.colors.textPrimary, style = Ca.type.footnote, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                Text(
+                    leaf,
+                    color = Ca.colors.textPrimary,
+                    style = Ca.type.footnote,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
             } else {
                 var open by remember { mutableStateOf(false) }
                 Box {
@@ -599,7 +854,16 @@ private fun SegmentedPathLabel(
                     )
                     CaDropdownMenu(expanded = open, onDismissRequest = { open = false }) {
                         MenuSectionLabel("New in ${seg.packageName}")
-                        NewActionItems(node, seg.dirPath, isSourceContext = allowSource, canNewResource = false, onNewFile, onNewFolder, onNewResource, onNewSource) { open = false }
+                        NewActionItems(
+                            node,
+                            seg.dirPath,
+                            isSourceContext = allowSource,
+                            canNewResource = false,
+                            onNewFile,
+                            onNewFolder,
+                            onNewResource,
+                            onNewSource
+                        ) { open = false }
                     }
                 }
             }
@@ -639,15 +903,21 @@ private fun TreeNode.deriveDirSegments(): List<PackageSegment> {
 private fun NodeIcon(node: TreeNode, open: Boolean) {
     when (val ic = TreeIcons.resolve(node.iconId)) {
         is TreeIcon.Glyph -> Icon(ic.image, null, Modifier.size(17.dp), tint = resolveTint(ic.tint))
-        is TreeIcon.Folder -> Icon(if (open) ic.open else ic.closed, null, Modifier.size(17.dp), tint = resolveTint(ic.tint))
+        is TreeIcon.Folder -> Icon(
+            if (open) ic.open else ic.closed,
+            null,
+            Modifier.size(17.dp),
+            tint = resolveTint(ic.tint)
+        )
+
         is TreeIcon.Badge -> LetterBadge(ic.text, ic.color, 17)
     }
 }
 
 @Composable
-private fun gitColor(status: dev.ide.ui.backend.GitStatus): Color = when (status) {
-    dev.ide.ui.backend.GitStatus.Added -> Ca.colors.gitAdded
-    dev.ide.ui.backend.GitStatus.Modified -> Ca.colors.gitModified
-    dev.ide.ui.backend.GitStatus.Deleted -> Ca.colors.gitDeleted
-    dev.ide.ui.backend.GitStatus.Untracked -> Ca.colors.gitUntracked
+private fun gitColor(status: GitStatus): Color = when (status) {
+    GitStatus.Added -> Ca.colors.gitAdded
+    GitStatus.Modified -> Ca.colors.gitModified
+    GitStatus.Deleted -> Ca.colors.gitDeleted
+    GitStatus.Untracked -> Ca.colors.gitUntracked
 }

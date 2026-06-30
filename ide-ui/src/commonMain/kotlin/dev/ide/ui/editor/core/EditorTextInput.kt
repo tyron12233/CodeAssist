@@ -38,12 +38,13 @@ expect fun Modifier.editorTextInput(
 data class EditorImeOptions(
     /**
      * Allow the soft keyboard's autocorrect, predictive suggestions, glide typing, and auto-space-after-
-     * punctuation. **Off (the default)** marks the input field as raw code: a typed `.` doesn't get an
-     * auto-inserted space, identifiers aren't "corrected", and the suggestion strip is suppressed. On = a
-     * normal prose keyboard. Regardless of this flag the bridge never lets the keyboard learn the buffer's
-     * text (no personalized learning) and never auto-capitalizes.
+     * punctuation. **On (the default)** is a normal keyboard. Turning it OFF marks the input field as raw
+     * code (a `visible-password` input type): a typed `.` doesn't get an auto-inserted space, identifiers
+     * aren't "corrected", and the suggestion strip is suppressed (at the cost of a password-style keyboard
+     * on some IMEs). The bridge never requests no-personalized-learning (that triggers Gboard's incognito UI)
+     * and never auto-capitalizes.
      */
-    val softKeyboardSuggestions: Boolean = false,
+    val softKeyboardSuggestions: Boolean = true,
 )
 
 /**
