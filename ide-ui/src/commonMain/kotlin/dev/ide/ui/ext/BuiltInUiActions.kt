@@ -20,8 +20,8 @@ object BuiltInUiActions {
         val moreAndPalette = setOf(UiActionPlaces.MORE_MENU, palette)
 
         UiActionRegistry.register(
-            SimpleUiAction("ui.settings", "Open Settings", moreAndPalette, "Appearance · editor · completion · analysis · build", "gear", 10) {
-                it.navigate(UiDestinations.SETTINGS)
+            SimpleUiAction("ui.hub", "Settings & Tools", moreAndPalette, "Settings · code style · SDK manager · keystore manager", "gear", 10) {
+                it.navigate(UiDestinations.HUB)
             },
         )
         UiActionRegistry.register(
@@ -32,16 +32,6 @@ object BuiltInUiActions {
         UiActionRegistry.register(
             SimpleUiAction("ui.dependencies", "Manage dependencies", setOf(palette), iconId = "layers", order = 25) {
                 it.navigate(UiDestinations.DEPENDENCIES)
-            },
-        )
-        UiActionRegistry.register(
-            SimpleUiAction("ui.sdk", "SDK Manager", moreAndPalette, "Download Android SDK packages & JDK sources", "pkg", 30) {
-                it.navigate(UiDestinations.SDK)
-            },
-        )
-        UiActionRegistry.register(
-            SimpleUiAction("ui.keystores", "Keystore Manager", moreAndPalette, "Create/import signing keystores & assign them to builds", "key", 32) {
-                it.navigate(UiDestinations.KEYSTORES)
             },
         )
         UiActionRegistry.register(

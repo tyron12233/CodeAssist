@@ -64,7 +64,7 @@ internal fun openTreeFile(node: TreeNode, fileActions: FileActions, open: (Strin
 internal fun ExpandedLayout(
     state: IdeUiState,
     onToggleTheme: () -> Unit,
-    onOpenSettings: () -> Unit,
+    onOpenHub: () -> Unit,
     indexStatus: IndexUiStatus,
     buildState: BuildState,
     onNewFile: (String, List<PackageSegment>) -> Unit,
@@ -74,8 +74,6 @@ internal fun ExpandedLayout(
     onFileOp: (TreeNode, FileOpKind) -> Unit,
     onOpenDependencies: (String?) -> Unit,
     onOpenModuleConfig: (String?) -> Unit,
-    onOpenSdkManager: () -> Unit,
-    onOpenKeystoreManager: () -> Unit,
     onCloseProject: () -> Unit,
     fileActions: FileActions,
 ) {
@@ -87,8 +85,7 @@ internal fun ExpandedLayout(
                 selected = state.rail,
                 onSelect = state::selectRail,
                 projectInitial = project.name,
-                onSettings = onOpenSettings,
-                onOpenSdkManager = onOpenSdkManager,
+                onOpenHub = onOpenHub,
             )
             if (state.navOpen) {
                 GlassSurface(Modifier.width(300.dp).fillMaxHeight(), GlassMaterial.Regular) {
@@ -155,8 +152,8 @@ internal fun ExpandedLayout(
                 }
             }
         }
-        DestinationSheets(state, compact = false, onOpenModuleConfig, onToggleTheme, onOpenSettings, onOpenSdkManager, onOpenKeystoreManager, onCloseProject, fileActions)
-        PaletteOverlay(state, onToggleTheme, onOpenSettings, onOpenDependencies, onOpenSdkManager, onOpenKeystoreManager)
+        DestinationSheets(state, compact = false, onOpenModuleConfig, onToggleTheme, onOpenHub, onCloseProject, fileActions)
+        PaletteOverlay(state, onToggleTheme, onOpenHub, onOpenDependencies)
     }
 }
 
@@ -168,7 +165,7 @@ internal fun ExpandedLayout(
 internal fun CompactLayout(
     state: IdeUiState,
     onToggleTheme: () -> Unit,
-    onOpenSettings: () -> Unit,
+    onOpenHub: () -> Unit,
     indexStatus: IndexUiStatus,
     buildState: BuildState,
     onNewFile: (String, List<PackageSegment>) -> Unit,
@@ -178,8 +175,6 @@ internal fun CompactLayout(
     onFileOp: (TreeNode, FileOpKind) -> Unit,
     onOpenDependencies: (String?) -> Unit,
     onOpenModuleConfig: (String?) -> Unit,
-    onOpenSdkManager: () -> Unit,
-    onOpenKeystoreManager: () -> Unit,
     onCloseProject: () -> Unit,
     fileActions: FileActions,
 ) {
@@ -282,8 +277,8 @@ internal fun CompactLayout(
                 activeFilePath = state.active?.path,
             )
         }
-        DestinationSheets(state, compact = true, onOpenModuleConfig, onToggleTheme, onOpenSettings, onOpenSdkManager, onOpenKeystoreManager, onCloseProject, fileActions)
-        PaletteOverlay(state, onToggleTheme, onOpenSettings, onOpenDependencies, onOpenSdkManager, onOpenKeystoreManager)
+        DestinationSheets(state, compact = true, onOpenModuleConfig, onToggleTheme, onOpenHub, onCloseProject, fileActions)
+        PaletteOverlay(state, onToggleTheme, onOpenHub, onOpenDependencies)
     }
 }
 

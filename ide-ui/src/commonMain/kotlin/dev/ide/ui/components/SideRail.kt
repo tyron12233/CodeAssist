@@ -29,8 +29,7 @@ fun SideRail(
     selected: RailDestination,
     onSelect: (RailDestination) -> Unit,
     projectInitial: String,
-    onSettings: () -> Unit,
-    onOpenSdkManager: () -> Unit = {},
+    onOpenHub: () -> Unit,
 ) {
     GlassSurface(
         modifier = Modifier.width(76.dp).fillMaxHeight(),
@@ -50,8 +49,8 @@ fun SideRail(
             RailItem(CaIcons.ellipsis, "More", selected == RailDestination.More) { onSelect(RailDestination.More) }
 
             Box(Modifier.weight(1f))
-            RailItem(CaIcons.pkg, "SDK", false, onClick = onOpenSdkManager)
-            RailItem(CaIcons.gear, "Settings", false, onClick = onSettings)
+            // One entry to the Settings & Tools hub (global settings · code style · SDK & keystore managers).
+            RailItem(CaIcons.gear, "Settings & Tools", false, onClick = onOpenHub)
         }
     }
 }

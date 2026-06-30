@@ -87,8 +87,9 @@ object CaIcons {
     val terminal = build("terminal", roundRect(3.5f, 4.5f, 17f, 15f, 3f), s("M7 9l3 2.5L7 14M12.5 14.5h4"))
     val gear = build(
         "gear",
+        // A proper cog: a toothed ring (rounded tooth corners as small arcs) plus the hub circle.
+        s("M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"),
         circle(12f, 12f, 3f),
-        s("M12 3v2.5M12 18.5V21M5.6 5.6l1.8 1.8M16.6 16.6l1.8 1.8M3 12h2.5M18.5 12H21M5.6 18.4l1.8-1.8M16.6 7.4l1.8-1.8"),
     )
     val folder = build("folder", s("M3.5 7.5a2 2 0 0 1 2-2h3l2 2h6a2 2 0 0 1 2 2v7a2 2 0 0 1-2 2h-11a2 2 0 0 1-2-2z"))
     val folderOpen = build(
@@ -161,6 +162,15 @@ object CaIcons {
     val star = build(
         "star",
         s("M12 4 l2.35 4.76 5.25 .76 -3.8 3.7 .9 5.23 -4.7 -2.47 -4.7 2.47 .9 -5.23 -3.8 -3.7 5.25 -.76 z"),
+    )
+
+    /** A 2x2 rounded grid — the Projects Store / browse destination. */
+    val grid = build(
+        "grid",
+        roundRect(4f, 4f, 7f, 7f, 1.8f),
+        roundRect(13f, 4f, 7f, 7f, 1.8f),
+        roundRect(4f, 13f, 7f, 7f, 1.8f),
+        roundRect(13f, 13f, 7f, 7f, 1.8f),
     )
 
     // ---- file-tree node icons (resolved by TreeIcons) ----

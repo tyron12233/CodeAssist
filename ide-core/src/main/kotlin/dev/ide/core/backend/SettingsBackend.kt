@@ -4,6 +4,7 @@ import dev.ide.analysis.AnalyzerId
 import dev.ide.core.BackendContext
 import dev.ide.core.completion.CompletionOptions
 import dev.ide.core.settings.BuiltInSettingsPages
+import dev.ide.core.settings.CodeStyleSettings
 import dev.ide.core.settings.IdeSettings
 import dev.ide.core.settings.SettingsStore
 import dev.ide.lang.dom.Severity
@@ -13,6 +14,7 @@ import dev.ide.platform.settings.SettingsPage
 import dev.ide.platform.settings.SettingsScope
 import dev.ide.ui.backend.SettingsService
 import dev.ide.ui.backend.UiAccent
+import dev.ide.ui.backend.UiCodeStyle
 import dev.ide.ui.backend.UiInspection
 import dev.ide.ui.backend.UiSeverity
 import dev.ide.ui.backend.UiSettingControl
@@ -43,9 +45,15 @@ internal class SettingsBackend(private val ctx: BackendContext) : SettingsServic
     override fun settings(): UiSettings = settingsStore.load().toUi()
 
     override fun settingsPages(): List<UiSettingsPage> {
-        val svc = ctx.servicesOrNull ?: return emptyList()
-        val pages = (BuiltInSettingsPages.all(ctx.analyticsAvailable()) + svc.settingsPages()).sortedBy { it.order }
-        return pages.map { toUiPage(it) }
+        val svc = ctx.servicesOrNull
+        val builtIn = BuiltInSettingsPages.all(ctx.analyticsAvailable())
+        // With no project open (the picker's Settings & Tools hub) only the app-scoped built-in pages are
+        // available — the project-scoped built-ins (e.g. Build) and any plugin-contributed pages need an
+        // engine, so they're added only once a project is open. (The hub shows the app pages; the in-project
+        // Project Settings surface shows the project pages — see UiSettingsPage.scope.)
+        val pages = if (svc == null) builtIn.filter { it.scope != SettingsScope.PROJECT }
+        else builtIn + svc.settingsPages()
+        return pages.sortedBy { it.order }.map { toUiPage(it) }
     }
 
     override fun setSetting(pageId: String, key: String, value: String) {
@@ -69,6 +77,47 @@ internal class SettingsBackend(private val ctx: BackendContext) : SettingsServic
         val page = findPage(pageId) ?: return null
         return if (isBuiltIn(pageId)) null else page.onAction(key, scopedReader(page))
     }
+
+    override fun codeStyle(languageId: String): UiCodeStyle = settingsStore.loadCodeStyle(languageId).toUi()
+
+    override fun setCodeStyle(languageId: String, style: UiCodeStyle) {
+        settingsStore.saveCodeStyle(languageId, style.toSettings())
+    }
+
+    override suspend fun formatStylePreview(languageId: String, style: UiCodeStyle): String =
+        withContext(Dispatchers.Default) {
+            ctx.servicesOrNull?.formatStylePreview(languageId, style.toSettings().toFormatStyle()) ?: ""
+        }
+
+    private fun CodeStyleSettings.toUi() = UiCodeStyle(
+        preset = preset, indentSize = indentSize, continuationIndent = continuationIndent,
+        maxLineLength = maxLineLength, useTabs = useTabs, braceStyle = braceStyle,
+        spaceBeforeParens = spaceBeforeParens, spaceWithinParens = spaceWithinParens,
+        spaceAfterComma = spaceAfterComma, spaceAroundOperators = spaceAroundOperators,
+        spaceBeforeBrace = spaceBeforeBrace, blankLinesToKeep = blankLinesToKeep,
+        wrapMethodParameters = wrapMethodParameters, wrapMethodArguments = wrapMethodArguments,
+        wrapChainedCalls = wrapChainedCalls, wrapBinaryExpressions = wrapBinaryExpressions,
+        blankLinesAfterImports = blankLinesAfterImports, blankLinesBeforeMethod = blankLinesBeforeMethod,
+        blankLinesBeforeField = blankLinesBeforeField, blankLinesBeforeFirstMember = blankLinesBeforeFirstMember,
+        blankLinesBetweenTypes = blankLinesBetweenTypes, spaceBeforeSemicolon = spaceBeforeSemicolon,
+        spaceAroundLambdaArrow = spaceAroundLambdaArrow, spaceAroundTernary = spaceAroundTernary,
+        spaceAfterTypeCast = spaceAfterTypeCast, formatComments = formatComments, wrapComments = wrapComments,
+    )
+
+    private fun UiCodeStyle.toSettings() = CodeStyleSettings(
+        preset = preset, indentSize = indentSize, continuationIndent = continuationIndent,
+        maxLineLength = maxLineLength, useTabs = useTabs, braceStyle = braceStyle,
+        spaceBeforeParens = spaceBeforeParens, spaceWithinParens = spaceWithinParens,
+        spaceAfterComma = spaceAfterComma, spaceAroundOperators = spaceAroundOperators,
+        spaceBeforeBrace = spaceBeforeBrace, blankLinesToKeep = blankLinesToKeep,
+        wrapMethodParameters = wrapMethodParameters, wrapMethodArguments = wrapMethodArguments,
+        wrapChainedCalls = wrapChainedCalls, wrapBinaryExpressions = wrapBinaryExpressions,
+        blankLinesAfterImports = blankLinesAfterImports, blankLinesBeforeMethod = blankLinesBeforeMethod,
+        blankLinesBeforeField = blankLinesBeforeField, blankLinesBeforeFirstMember = blankLinesBeforeFirstMember,
+        blankLinesBetweenTypes = blankLinesBetweenTypes, spaceBeforeSemicolon = spaceBeforeSemicolon,
+        spaceAroundLambdaArrow = spaceAroundLambdaArrow, spaceAroundTernary = spaceAroundTernary,
+        spaceAfterTypeCast = spaceAfterTypeCast, formatComments = formatComments, wrapComments = wrapComments,
+    )
 
     override fun inspections(): List<UiInspection> {
         val svc = ctx.servicesOrNull ?: return emptyList()
@@ -141,14 +190,77 @@ internal class SettingsBackend(private val ctx: BackendContext) : SettingsServic
 
     private fun toUiPage(page: SettingsPage): UiSettingsPage {
         val project = page.scope == SettingsScope.PROJECT
+        val controls =
+            if (page.id == BuiltInSettingsPages.BUILD_RUNTIME) buildRuntimeControls()
+            else page.controls().map { toUiControl(page.id, it, project) }
         return UiSettingsPage(
             id = page.id,
             title = page.title,
             iconId = page.iconId,
             scope = if (project) "project" else "app",
-            controls = page.controls().map { toUiControl(page.id, it, project) },
+            controls = controls,
             inspectionsSection = BuiltInSettingsPages.isInspectionsPage(page),
         )
+    }
+
+    /**
+     * The Build Runtime page is rendered dynamically: the R8 forked-VM heap slider's MAX is this device's
+     * measured forked-VM ceiling (so the user can only scale DOWN from the real limit), the slider is HIDDEN
+     * in In-process mode (replaced by the app's memory limit in the mode description), and a warning shows if a
+     * saved value exceeds the device limit. The ceiling is read from [BuiltInSettingsPages.R8_CEILING_PREF]
+     * (measured once in the background by the host): null = not yet measured, 0 = forking unavailable here.
+     */
+    private val R8_MIN_MB = 768
+    private val FALLBACK_R8_MAX_MB = 2048 // slider max before the device limit has been measured
+
+    private fun buildRuntimeControls(): List<UiSettingControl> {
+        val pid = BuiltInSettingsPages.BUILD_RUNTIME
+        val appHeapMb = (Runtime.getRuntime().maxMemory() / (1024L * 1024L)).toInt()
+        val ceiling = ctx.manager?.preference(BuiltInSettingsPages.R8_CEILING_PREF)?.trim()?.toIntOrNull()
+        val mode = ctx.manager?.preference(settingKey(pid, BuiltInSettingsPages.R8_MODE)) ?: BuiltInSettingsPages.R8_MODE_DEFAULT
+        val sepOn = ctx.manager?.preference(settingKey(pid, BuiltInSettingsPages.SEPARATE_PROCESS))?.toBooleanStrictOrNull() ?: true
+
+        val out = ArrayList<UiSettingControl>()
+        out += UiSettingControl.Toggle(
+            BuiltInSettingsPages.SEPARATE_PROCESS, "Build in a separate process",
+            "Run builds and your program in an isolated process so an out-of-memory crash can't take down the IDE. Off = build in-process (uses less memory, no isolation). Takes effect the next time you open a project.",
+            sepOn, false, null,
+        )
+
+        val modeDesc = when {
+            mode == BuiltInSettingsPages.R8_MODE_INPROCESS ->
+                "R8 runs inside the IDE, capped at this app's memory limit (~$appHeapMb MB). Pick Forked VM to give R8 more by running it in a separate VM."
+            ceiling == 0 ->
+                "This device can't run R8 in a separate VM, so it runs in-process (~$appHeapMb MB). Large apps may run out of memory; there's nothing to tune here."
+            else ->
+                "Forked VM (default) runs R8 in a separate VM with more memory than this app's ~$appHeapMb MB limit, so large apps don't run out of memory; it falls back to in-process if the device can't. Android only."
+        }
+        out += UiSettingControl.Choice(
+            BuiltInSettingsPages.R8_MODE, "R8 execution", modeDesc, mode,
+            listOf(
+                UiSettingControl.Choice.Option(BuiltInSettingsPages.R8_MODE_FORKED, "Forked VM"),
+                UiSettingControl.Choice.Option(BuiltInSettingsPages.R8_MODE_INPROCESS, "In-process"),
+            ),
+            false, null,
+        )
+
+        // The heap slider applies only to the forked VM; hide it in In-process and when forking is unavailable.
+        if (mode != BuiltInSettingsPages.R8_MODE_INPROCESS && ceiling != 0) {
+            val max = (ceiling ?: FALLBACK_R8_MAX_MB).coerceAtLeast(R8_MIN_MB)
+            val saved = ctx.manager?.preference(settingKey(pid, BuiltInSettingsPages.R8_MAX_HEAP))?.trim()?.toIntOrNull()
+            // Default to the device limit (the max) so the user only ever scales DOWN; clamp the displayed value.
+            val value = (saved ?: max).coerceIn(R8_MIN_MB, max)
+            val limitNote = if (ceiling != null) "This device's limit is $ceiling MB." else "Measuring this device's limit…"
+            val warn = if (ceiling != null && saved != null && saved > ceiling)
+                " ⚠ Your saved value ($saved MB) is above the device limit; R8 will use $ceiling MB."
+            else ""
+            out += UiSettingControl.Slider(
+                BuiltInSettingsPages.R8_MAX_HEAP, "R8 forked-VM heap",
+                "Heap for R8's forked VM. $limitNote$warn",
+                value, R8_MIN_MB, max, 128, "MB", false, null,
+            )
+        }
+        return out
     }
 
     private fun toUiControl(pageId: String, c: SettingControl, project: Boolean): UiSettingControl {
@@ -197,6 +309,7 @@ internal class SettingsBackend(private val ctx: BackendContext) : SettingsServic
         twoAxisScroll = twoAxisScroll,
         pinchZoom = pinchZoom,
         softKeyboardSuggestions = softKeyboardSuggestions,
+        formatOnSave = formatOnSave,
     )
 
     private fun Severity.toUiSeverity(): UiSeverity = when (this) {

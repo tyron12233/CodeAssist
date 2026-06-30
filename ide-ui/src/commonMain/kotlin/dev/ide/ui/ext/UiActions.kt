@@ -44,6 +44,9 @@ interface UiActionHost {
 
 /** The built-in navigation destinations a [UiActionHost.navigate] understands. Open set. */
 object UiDestinations {
+    /** The Settings & Tools hub — the single entry to the global settings/tools (global settings, code style,
+     *  SDK manager, keystore manager). Also reachable from the project picker. */
+    const val HUB = "hub"
     const val SETTINGS = "settings"
     const val MODULES = "modules"
     const val SDK = "sdk"
@@ -51,6 +54,7 @@ object UiDestinations {
     const val LOGS = "logs"
     const val PROJECTS = "projects"
     const val DEPENDENCIES = "dependencies"
+    const val CODE_STYLE = "codeStyle"
 }
 
 /**

@@ -20,33 +20,33 @@ class KeystoreSigningTest {
     fun `create, assign to release, and read back`() {
         val dir = Files.createTempDirectory("ide-keystore-signing")
         IdeServices.bootstrapDemo(dir, sharedCachesRoot = dir).use { ide ->
-            val created = ide.createKeystore(
+            val created = ide.signing.createKeystore(
                 UiKeystoreSpec(name = "release", storePass = "android123", keyAlias = "upload", commonName = "Acme"),
             )
             assertTrue(created.success, created.message)
             val id = assertNotNull(created.keystoreId)
-            assertTrue(ide.keystores().any { it.id == id }, "the created keystore is listed")
+            assertTrue(ide.signing.keystores().any { it.id == id }, "the created keystore is listed")
 
             // The app's release build type starts on the debug default (no signingConfig).
-            val before = assertNotNull(ide.signingAssignments("app"))
+            val before = assertNotNull(ide.signing.signingAssignments("app"))
             assertNull(before.assignments.first { it.buildType == "release" }.keystoreId)
 
-            val result = ide.assignSigning("app", "release", id)
+            val result = ide.signing.assignSigning("app", "release", id)
             assertTrue(result.success, result.message)
 
-            val after = assertNotNull(ide.signingAssignments("app"))
+            val after = assertNotNull(ide.signing.signingAssignments("app"))
             assertEquals(id, after.assignments.first { it.buildType == "release" }.keystoreId)
             assertNull(after.assignments.first { it.buildType == "debug" }.keystoreId, "debug stays on the default")
 
             // Clearing the assignment falls back to the default.
-            assertTrue(ide.assignSigning("app", "release", null).success)
-            assertNull(assertNotNull(ide.signingAssignments("app")).assignments.first { it.buildType == "release" }.keystoreId)
+            assertTrue(ide.signing.assignSigning("app", "release", null).success)
+            assertNull(assertNotNull(ide.signing.signingAssignments("app")).assignments.first { it.buildType == "release" }.keystoreId)
 
             // A plain java-lib module has no Android signing.
-            assertNull(ide.signingAssignments("core"))
+            assertNull(ide.signing.signingAssignments("core"))
 
             // signableModules drives the Keystore Manager's "jump to signing" — only the android-app.
-            assertEquals(listOf("app"), ide.signableModules())
+            assertEquals(listOf("app"), ide.signing.signableModules())
         }
         dir.toFile().deleteRecursively()
     }

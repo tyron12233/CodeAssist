@@ -61,7 +61,7 @@ class MoreMenuActionTest {
         val host = RecordingHost(FakeBackend())
         val ids = UiActionRegistry.forPlace(UiActionPlaces.MORE_MENU, host).map { it.id }
         assertEquals(
-            listOf("ui.settings", "ui.modules", "ui.sdk", "ui.keystores", "ui.reindex", "ui.logs", "ui.toggleTheme", "ui.closeProject"),
+            listOf("ui.hub", "ui.projectSettings", "ui.modules", "ui.reindex", "ui.logs", "ui.toggleTheme", "ui.closeProject"),
             ids,
             "the More-menu built-ins resolve from the registry in their declared order",
         )
@@ -74,11 +74,11 @@ class MoreMenuActionTest {
         val host = RecordingHost(backend)
         val actions = UiActionRegistry.forPlace(UiActionPlaces.MORE_MENU, host).associateBy { it.id }
 
-        actions.getValue("ui.settings").perform(host)
+        actions.getValue("ui.hub").perform(host)
         actions.getValue("ui.toggleTheme").perform(host)
         actions.getValue("ui.reindex").perform(host)
 
-        assertEquals(listOf(UiDestinations.SETTINGS), host.navigated)
+        assertEquals(listOf(UiDestinations.HUB), host.navigated)
         assertTrue(host.themeToggled, "Toggle theme routes to host.toggleTheme()")
         assertTrue(backend.reindexed, "Re-index routes to backend.search.reindex()")
     }

@@ -60,7 +60,9 @@ fun KeystoreManagerScreen(
     onBack: () -> Unit,
     onCreate: () -> Unit,
     onImport: (path: String) -> Unit,
-    onManageSigning: () -> Unit,
+    /** Jump to a module's Signing tab to assign keystores to builds. Null when no project is open (the
+     *  manager is reachable from the project picker, where assignment doesn't apply) — the row is hidden. */
+    onManageSigning: (() -> Unit)? = null,
     fileActions: FileActions = FileActions.None,
 ) {
     val scope = rememberCoroutineScope()
@@ -107,15 +109,17 @@ fun KeystoreManagerScreen(
                         }
                     }
                 }
-                Spacer(Modifier.height(10.dp))
-                Row(
-                    Modifier.background(Ca.colors.accentSoft, RoundedCornerShape(Ca.radius.control))
-                        .clickable(remember { MutableInteractionSource() }, null, onClick = onManageSigning)
-                        .padding(horizontal = 14.dp, vertical = 9.dp),
-                    verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp),
-                ) {
-                    Icon(CaIcons.layers, null, Modifier.size(15.dp), tint = Ca.colors.accent)
-                    Text("Assign to a build (project signing)", style = Ca.type.footnote, fontWeight = FontWeight.SemiBold, color = Ca.colors.accent)
+                if (onManageSigning != null) {
+                    Spacer(Modifier.height(10.dp))
+                    Row(
+                        Modifier.background(Ca.colors.accentSoft, RoundedCornerShape(Ca.radius.control))
+                            .clickable(remember { MutableInteractionSource() }, null, onClick = onManageSigning)
+                            .padding(horizontal = 14.dp, vertical = 9.dp),
+                        verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp),
+                    ) {
+                        Icon(CaIcons.layers, null, Modifier.size(15.dp), tint = Ca.colors.accent)
+                        Text("Assign to a build (project signing)", style = Ca.type.footnote, fontWeight = FontWeight.SemiBold, color = Ca.colors.accent)
+                    }
                 }
             }
 

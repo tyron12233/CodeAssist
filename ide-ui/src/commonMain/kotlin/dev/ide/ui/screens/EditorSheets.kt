@@ -43,18 +43,17 @@ import dev.ide.ui.icons.actionIcon
 import dev.ide.ui.theme.Ca
 
 @Composable
-internal fun PaletteOverlay(state: IdeUiState, onToggleTheme: () -> Unit, onOpenSettings: () -> Unit, onOpenDependencies: (String?) -> Unit, onOpenSdkManager: () -> Unit, onOpenKeystoreManager: () -> Unit) {
+internal fun PaletteOverlay(state: IdeUiState, onToggleTheme: () -> Unit, onOpenHub: () -> Unit, onOpenDependencies: (String?) -> Unit) {
     // The palette's UI-navigation commands come from UiActionRegistry; this host bridges them to the app's
-    // navigation callbacks (the same pattern as the More menu).
+    // navigation callbacks (the same pattern as the More menu). Global settings + SDK/keystore managers all
+    // live behind the Settings & Tools hub now, so they route through one HUB destination.
     val paletteHost = object : UiActionHost {
         override val backend: IdeBackend = state.backend
         override fun navigate(destination: String) {
             state.paletteOpen = false
             when (destination) {
-                UiDestinations.SETTINGS -> onOpenSettings()
+                UiDestinations.HUB -> onOpenHub()
                 UiDestinations.DEPENDENCIES -> onOpenDependencies(null)
-                UiDestinations.SDK -> onOpenSdkManager()
-                UiDestinations.KEYSTORES -> onOpenKeystoreManager()
                 UiDestinations.LOGS -> state.logsOpen = true
             }
         }
@@ -86,9 +85,7 @@ internal fun DestinationSheets(
     compact: Boolean,
     onOpenModuleConfig: (String?) -> Unit,
     onToggleTheme: () -> Unit,
-    onOpenSettings: () -> Unit,
-    onOpenSdkManager: () -> Unit,
-    onOpenKeystoreManager: () -> Unit,
+    onOpenHub: () -> Unit,
     onCloseProject: () -> Unit,
     fileActions: FileActions,
 ) {
@@ -120,10 +117,8 @@ internal fun DestinationSheets(
                 override fun navigate(destination: String) {
                     state.sheetDest = null
                     when (destination) {
-                        UiDestinations.SETTINGS -> onOpenSettings()
+                        UiDestinations.HUB -> onOpenHub()
                         UiDestinations.MODULES -> onOpenModuleConfig(null)
-                        UiDestinations.SDK -> onOpenSdkManager()
-                        UiDestinations.KEYSTORES -> onOpenKeystoreManager()
                         UiDestinations.LOGS -> state.logsOpen = true
                         UiDestinations.PROJECTS -> onCloseProject()
                     }

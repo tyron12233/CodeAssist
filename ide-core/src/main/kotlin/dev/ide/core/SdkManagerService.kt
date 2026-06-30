@@ -4,6 +4,7 @@ import dev.ide.android.support.tools.AndroidSdk
 import dev.ide.android.support.tools.AndroidSdkInstaller
 import dev.ide.android.support.tools.HttpSdkNetFetcher
 import dev.ide.android.support.tools.SdkNetFetcher
+import dev.ide.platform.Disposable
 import dev.ide.ui.backend.UiJdkInfo
 import dev.ide.ui.backend.UiSdkDownload
 import dev.ide.ui.backend.UiSdkManagerState
@@ -33,14 +34,21 @@ import java.util.concurrent.ConcurrentHashMap
  * is closed — the UI observes the shared [state] (a per-item queue) exactly like the Dependencies screen
  * observes its resolve state. Interrupted downloads are resumable (a per-id archive cache + HTTP Range) and
  * interrupted installs are detectable (an `.installing` marker), so retrying repairs rather than restarts.
- * On a successful install the host's analyzers are invalidated so the new sources take effect.
+ * On a successful install the registered change listeners fire so the active engine's analyzers are
+ * invalidated and the new sources take effect.
+ *
+ * APPLICATION-scoped: one shared instance (its download queue + the resumable cache) serves every project,
+ * so the Settings & Tools hub can drive it from the project picker with no project open. Because the
+ * instance outlives any single engine, the per-engine "invalidate my analyzers" reaction is a [Disposable]
+ * change listener the active engine adds on open and drops on close (see [addChangeListener]) — not a
+ * constructor-captured callback bound to one engine. The owning [dev.ide.platform.ServiceContainer]
+ * (the application container) disposes it at app shutdown.
  */
 class SdkManagerService(
     private val workspaceRoot: Path,
-    private val onChanged: () -> Unit,
     private val fetcher: SdkNetFetcher = HttpSdkNetFetcher,
     sharedRoot: Path? = null,
-) {
+) : Disposable {
     // SDK sources, the JDK src.zip, and the resumable download cache are toolchain artifacts, not project
     // files, so they live under the shared root (the host's home dir) when one is supplied: installed once
     // and reused across every project. Without a shared root (e.g. the desktop demo) they fall back per-workspace.
@@ -56,6 +64,18 @@ class SdkManagerService(
 
     private val _state = MutableStateFlow(UiSdkManagerState())
     val state: StateFlow<UiSdkManagerState> = _state.asStateFlow()
+
+    /** Reactions to a successful install (e.g. the active engine re-attaching the new SDK sources to its
+     *  analyzers + index). Identity-keyed so each engine adds/removes its own lambda over its lifecycle. */
+    private val changeListeners = ConcurrentHashMap.newKeySet<() -> Unit>()
+
+    /** Subscribe [listener] to fire after a successful install. Returns a [Disposable] that unsubscribes it. */
+    fun addChangeListener(listener: () -> Unit): Disposable {
+        changeListeners.add(listener)
+        return Disposable { changeListeners.remove(listener) }
+    }
+
+    private fun notifyChanged() = changeListeners.forEach { runCatching { it() } }
 
     /** The src.zip from a previously downloaded JDK (for the analyzer to attach), or null. */
     fun jdkSourceOverride(): Path? = jdk.overrideSrcZip()
@@ -127,9 +147,64 @@ class SdkManagerService(
     /** Drop the finished (done/failed) entries from the queue. */
     fun clearSdkDownloads() = _state.update { it.copy(downloads = it.downloads.filterNot { d -> d.status == "DONE" || d.status == "FAILED" }).withAggregate() }
 
-    fun dispose() {
+    /** Status of the Android platform sources for inlay/completion docs, or null when there's no Android SDK.
+     *  APPLICATION-scoped (uses the shared [androidSdkRoot]), so the picker's hub reports it with no project. */
+    fun androidSourcesInfo(): AndroidSourcesInfo? {
+        val sdkRoot = AndroidSdk.findSdkRoot(workspaceRoot) ?: return null
+        val sdk = AndroidSdk.detect(sdkRoot) ?: return null
+        val platform = sdk.androidJar.parent?.fileName?.toString() ?: return null // android-NN
+        // Same-major sources count as installed: the editor resolves them by major API level, so an exact
+        // `sources/android-36` isn't required when `sources/android-36.1` is present (and vice-versa).
+        val installed = AndroidSdk.platformSourcesDir(sdkRoot, platform) != null
+        return AndroidSourcesInfo(platform, installed, downloadable = findSdkmanager(sdkRoot) != null)
+    }
+
+    /**
+     * Download the Android platform sources via `sdkmanager` (desktop only). Pipes license acceptance and
+     * bounds the run with a timeout so it cannot hang the IDE. On success the change listeners fire so the
+     * active engine re-attaches the new sources. Returns a human-readable status.
+     */
+    fun downloadAndroidSources(): String {
+        val sdkRoot = AndroidSdk.findSdkRoot(workspaceRoot) ?: return "No Android SDK found."
+        val sdk = AndroidSdk.detect(sdkRoot) ?: return "No installed Android platform."
+        val platform = sdk.androidJar.parent?.fileName?.toString() ?: return "Couldn't determine the platform."
+        if (AndroidSdk.platformSourcesDir(sdkRoot, platform) != null) return "Sources for $platform are already installed."
+        val sdkmanager = findSdkmanager(sdkRoot)
+            ?: return "sdkmanager not found — install the sources via Android Studio's SDK Manager (SDK Platforms → Sources for Android $platform)."
+        return runCatching {
+            val proc = ProcessBuilder(sdkmanager.toString(), "sources;$platform")
+                .directory(sdkRoot.toFile()).redirectErrorStream(true).start()
+            proc.outputStream.bufferedWriter().use { w -> repeat(50) { runCatching { w.write("y\n"); w.flush() } } }
+            val done = proc.waitFor(4, java.util.concurrent.TimeUnit.MINUTES)
+            if (!done) {
+                proc.destroyForcibly(); return "Timed out downloading sources for $platform."
+            }
+            if (proc.exitValue() == 0) {
+                notifyChanged() // pick up the freshly-installed sources (active engine re-attaches + reindexes)
+                "Installed sources for $platform."
+            } else "sdkmanager failed (exit ${proc.exitValue()}) installing sources for $platform."
+        }.getOrElse { "Couldn't run sdkmanager: ${it.message}" }
+    }
+
+    /** Locate `sdkmanager` under the SDK (cmdline-tools preferred, then legacy tools). */
+    private fun findSdkmanager(sdkRoot: Path): Path? {
+        val isWin = System.getProperty("os.name").orEmpty().lowercase().contains("win")
+        val exe = if (isWin) "sdkmanager.bat" else "sdkmanager"
+        val candidates = buildList {
+            add(sdkRoot.resolve("cmdline-tools").resolve("latest").resolve("bin").resolve(exe))
+            val cmdlineToolsDir = sdkRoot.resolve("cmdline-tools")
+            if (Files.isDirectory(cmdlineToolsDir)) {
+                Files.list(cmdlineToolsDir).use { s -> s.forEach { add(it.resolve("bin").resolve(exe)) } }
+            }
+            add(sdkRoot.resolve("tools").resolve("bin").resolve(exe))
+        }
+        return candidates.firstOrNull { Files.isRegularFile(it) }
+    }
+
+    override fun dispose() {
         scope.cancel()
         jobs.clear()
+        changeListeners.clear()
     }
 
     // ---- internals ----
@@ -151,7 +226,7 @@ class SdkManagerService(
             }
             when {
                 id in cancelled -> finish(id, "FAILED", "Cancelled")
-                err == null -> { finish(id, "DONE", "Installed"); onChanged() }
+                err == null -> { finish(id, "DONE", "Installed"); notifyChanged() }
                 else -> finish(id, "FAILED", err)
             }
         }

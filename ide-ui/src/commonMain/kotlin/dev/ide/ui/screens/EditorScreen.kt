@@ -56,11 +56,9 @@ internal val COMPACT_BREAKPOINT = 720.dp
 fun EditorScreen(
     state: IdeUiState,
     onToggleTheme: () -> Unit,
-    onOpenSettings: () -> Unit = {},
+    onOpenHub: () -> Unit = {},
     onOpenDependencies: (String?) -> Unit = {},
     onOpenModuleConfig: (String?) -> Unit = {},
-    onOpenSdkManager: () -> Unit = {},
-    onOpenKeystoreManager: () -> Unit = {},
     onCloseProject: () -> Unit = {},
     onOpenRun: () -> Unit = {},
     fileActions: FileActions = FileActions.None,
@@ -122,7 +120,7 @@ fun EditorScreen(
             if (maxWidth < COMPACT_BREAKPOINT) CompactLayout(
                 state,
                 onToggleTheme,
-                onOpenSettings,
+                onOpenHub,
                 indexStatus,
                 buildState,
                 onNewFile,
@@ -132,15 +130,13 @@ fun EditorScreen(
                 onFileOp,
                 onOpenDependencies,
                 onOpenModuleConfig,
-                onOpenSdkManager,
-                onOpenKeystoreManager,
                 onCloseProject,
                 fileActions
             )
             else ExpandedLayout(
                 state,
                 onToggleTheme,
-                onOpenSettings,
+                onOpenHub,
                 indexStatus,
                 buildState,
                 onNewFile,
@@ -150,8 +146,6 @@ fun EditorScreen(
                 onFileOp,
                 onOpenDependencies,
                 onOpenModuleConfig,
-                onOpenSdkManager,
-                onOpenKeystoreManager,
                 onCloseProject,
                 fileActions
             )

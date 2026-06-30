@@ -27,6 +27,26 @@ object BuiltInSettingsPages {
     /** Toggle key on the [BUILD_RUNTIME] page: route builds/runs through the isolated `:build` process. */
     const val SEPARATE_PROCESS = "separateProcess"
 
+    /** IntSlider key on the [BUILD_RUNTIME] page: the heap (MB) the on-device R8 (release/minify) pass runs
+     *  with in a forked VM — larger than the app's own heap cap. Read by `ForkedR8Shrinker` (:ide-android),
+     *  which steps down + warns in the build log if the device can't grant it. Android-only effect. */
+    const val R8_MAX_HEAP = "r8MaxHeapMb"
+    const val R8_MAX_HEAP_DEFAULT = 1536
+
+    /** Choice key on the [BUILD_RUNTIME] page: where the release/minify R8 pass runs. Read by
+     *  `ForkedR8Shrinker`. [R8_MODE_FORKED] (the default) runs R8 in a separate VM with more memory than the
+     *  app cap, falling back to in-process if the device can't; [R8_MODE_INPROCESS] always runs in-process. */
+    const val R8_MODE = "r8Mode"
+    const val R8_MODE_FORKED = "forked"
+    const val R8_MODE_INPROCESS = "inprocess"
+    const val R8_MODE_DEFAULT = R8_MODE_FORKED
+
+    /** App preference (NOT a user control): the largest heap (MB) a forked VM grants R8 on this device,
+     *  measured once per app version in the background (`0` = forking unavailable, absent = not yet measured).
+     *  The host (:ide-android) writes it; the settings UI reads it for the slider's MAX and the shrinker for
+     *  its default heap, so the user can only scale DOWN from the real device limit. */
+    const val R8_CEILING_PREF = "r8.detectedCeilingMb"
+
     // Keys the backend special-cases (routed to a non-generic-store effect).
     const val CONFLICT_POLICY = "conflictPolicy"
     const val ANALYTICS = "analytics"
@@ -41,7 +61,8 @@ object BuiltInSettingsPages {
 
     private val d = IdeSettings()
 
-    /** All built-in pages in display order. [analyticsAvailable] gates the analytics toggle on the Privacy page. */
+    /** All built-in pages in display order. [analyticsAvailable] gates the analytics toggle on the Privacy page.
+     *  Code Style is not here: it has its own dedicated screen (the formatting profiles are per-language). */
     fun all(analyticsAvailable: Boolean): List<SettingsPage> = listOf(
         appearance, editor, completion, analysis, build, buildRuntime, privacy(analyticsAvailable),
     )
@@ -88,7 +109,7 @@ object BuiltInSettingsPages {
             SettingControl.Toggle("wrapIndent", "Indent wrapped lines", "Align a wrapped line's continuation rows to its indentation (when word wrap is on)", default = d.wrapIndent),
             SettingControl.Toggle("twoAxisScroll", "Two-axis scrolling", "Drag in any direction to scroll both axes at once (touch)", default = d.twoAxisScroll, group = "Gestures"),
             SettingControl.Toggle("pinchZoom", "Pinch to zoom", "Pinch with two fingers to change the code font size", default = d.pinchZoom, group = "Gestures"),
-            SettingControl.Toggle("softKeyboardSuggestions", "Keyboard suggestions", "Let the soft keyboard autocorrect, suggest, and auto-space. Off (recommended for code) treats input as raw text, so a typed '.' doesn't get an auto-inserted space.", default = d.softKeyboardSuggestions, group = "Keyboard"),
+            SettingControl.Toggle("softKeyboardSuggestions", "Keyboard suggestions", "Let the soft keyboard autocorrect, suggest, and auto-space (a normal keyboard). Turn off for raw code input, so a typed '.' doesn't get an auto-inserted space, at the cost of the suggestion strip.", default = d.softKeyboardSuggestions, group = "Keyboard"),
         )
     }
 
@@ -132,6 +153,21 @@ object BuiltInSettingsPages {
                 SEPARATE_PROCESS, "Build in a separate process",
                 "Run builds and your program in an isolated process so an out-of-memory crash can't take down the IDE. Off = build in-process (uses less memory, no isolation). Takes effect the next time you open a project.",
                 default = true,
+            ),
+            // The Build Runtime page's R8 controls are rendered dynamically by SettingsBackend (the slider's
+            // max is this device's measured forked-VM limit, and it's hidden in In-process mode), so these
+            // static descriptors only supply keys / scope / defaults — their descriptions aren't shown.
+            SettingControl.Choice(
+                R8_MODE, "R8 execution", null,
+                default = R8_MODE_DEFAULT,
+                options = listOf(
+                    SettingControl.Choice.Option(R8_MODE_FORKED, "Forked VM"),
+                    SettingControl.Choice.Option(R8_MODE_INPROCESS, "In-process"),
+                ),
+            ),
+            SettingControl.IntSlider(
+                R8_MAX_HEAP, "R8 forked-VM heap", null,
+                default = R8_MAX_HEAP_DEFAULT, min = 768, max = 4096, step = 128, unit = "MB",
             ),
         )
     }

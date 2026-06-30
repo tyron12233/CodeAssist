@@ -60,7 +60,7 @@ class ExtRegistryTest {
         BuiltInUiActions.ensureRegistered()
         val ids = UiActionRegistry.forPlace(UiActionPlaces.COMMAND_PALETTE, RecordingHost(FakeBackend())).map { it.id }
         assertEquals(
-            listOf("ui.settings", "ui.dependencies", "ui.sdk", "ui.keystores", "ui.toggleTheme"),
+            listOf("ui.hub", "ui.projectSettings", "ui.dependencies", "ui.toggleTheme"),
             ids,
             "the palette's UI-navigation commands resolve from the registry, in order",
         )

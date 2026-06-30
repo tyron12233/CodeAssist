@@ -79,16 +79,34 @@ private const val ACTION_BACKUP = "backup"
  *
  * Appearance/editor changes are applied live by the host re-reading [IdeBackend.settings] on [onSettingsChanged].
  */
+/** Which settings pages a [SettingsScreen] shows. The page model is scope-tagged ("app" vs "project"): with no
+ *  project open the screen shows only the [Global] (app) pages; with a project open it shows [All], merging the
+ *  project-scoped pages in. */
+enum class SettingsView { All, Global }
+
 @Composable
 fun SettingsScreen(
     backend: IdeBackend,
     onBack: () -> Unit,
     onSettingsChanged: () -> Unit,
     onOpenLogs: () -> Unit,
+    view: SettingsView = SettingsView.All,
+    title: String = "Settings",
     codeFont: FontFamily = FontFamily.Monospace,
     fileActions: FileActions = FileActions.None,
 ) {
-    val pages = remember { backend.settings.settingsPages() }
+    // Bumped when a Choice/Toggle changes so pages re-fetch: some pages render conditionally on another
+    // control's value (e.g. Build Runtime hides the R8 heap slider in In-process mode). Sliders/text don't
+    // bump it, so a slider drag never triggers a costly per-step re-fetch.
+    var structuralRefresh by remember { mutableStateOf(0) }
+    val pages = remember(view, structuralRefresh) {
+        backend.settings.settingsPages().filter {
+            when (view) {
+                SettingsView.All -> true
+                SettingsView.Global -> it.scope == "app"
+            }
+        }
+    }
     // Local mirror of each control's value (keyed "pageId.controlKey"), seeded from the descriptors. Controls
     // read/write this for instant feedback; each write also persists through the backend.
     val values = remember {
@@ -115,7 +133,7 @@ fun SettingsScreen(
 
     Box(Modifier.fillMaxSize().background(Ca.colors.bg)) {
         Column(Modifier.fillMaxSize()) {
-            SettingsHeader(onBack)
+            SettingsHeader(onBack, title)
             Box(Modifier.fillMaxWidth().height(1.dp).background(Ca.colors.separator))
             if (pages.isEmpty()) {
                 Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
@@ -124,9 +142,9 @@ fun SettingsScreen(
             } else {
                 BoxWithConstraints(Modifier.fillMaxSize()) {
                     if (maxWidth >= WIDE_BREAKPOINT) {
-                        WideLayout(backend, pages, values, codeFont, onSet, onAction)
+                        WideLayout(backend, pages, values, codeFont, onSet, onAction) { structuralRefresh++ }
                     } else {
-                        NarrowLayout(backend, pages, values, codeFont, onSet, onAction)
+                        NarrowLayout(backend, pages, values, codeFont, onSet, onAction) { structuralRefresh++ }
                     }
                 }
             }
@@ -145,6 +163,7 @@ private fun WideLayout(
     codeFont: FontFamily,
     onSet: (String, String, String) -> Unit,
     onAction: (String, UiSettingControl.Action) -> Unit,
+    onStructuralChange: () -> Unit,
 ) {
     var selectedId by remember { mutableStateOf(pages.first().id) }
     val selected = pages.firstOrNull { it.id == selectedId } ?: pages.first()
@@ -163,7 +182,7 @@ private fun WideLayout(
         // Content
         Crossfade(targetState = selected.id, animationSpec = tween(Motion.FAST), label = "settingsPane", modifier = Modifier.weight(1f).fillMaxHeight()) { id ->
             val page = pages.firstOrNull { it.id == id } ?: return@Crossfade
-            PageContent(backend, page, values, codeFont, onSet, onAction)
+            PageContent(backend, page, values, codeFont, onSet, onAction, onStructuralChange)
         }
     }
 }
@@ -176,6 +195,7 @@ private fun NarrowLayout(
     codeFont: FontFamily,
     onSet: (String, String, String) -> Unit,
     onAction: (String, UiSettingControl.Action) -> Unit,
+    onStructuralChange: () -> Unit,
 ) {
     var openId by remember { mutableStateOf<String?>(null) }
     val open = openId?.let { id -> pages.firstOrNull { it.id == id } }
@@ -191,7 +211,7 @@ private fun NarrowLayout(
                 IconButtonCa(CaIcons.chevronLeft, "All settings", { openId = null })
                 Text(open.title, color = Ca.colors.textPrimary, style = Ca.type.headline, fontWeight = FontWeight.SemiBold)
             }
-            PageContent(backend, open, values, codeFont, onSet, onAction, Modifier.weight(1f))
+            PageContent(backend, open, values, codeFont, onSet, onAction, onStructuralChange, Modifier.weight(1f))
         }
     }
 }
@@ -206,6 +226,7 @@ private fun PageContent(
     codeFont: FontFamily,
     onSet: (String, String, String) -> Unit,
     onAction: (String, UiSettingControl.Action) -> Unit,
+    onStructuralChange: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val regular = page.controls.filter { !it.advanced }
@@ -217,16 +238,16 @@ private fun PageContent(
         groups.forEach { (groupTitle, controls) ->
             item(groupTitle ?: "_") {
                 SettingsCard(groupTitle) {
-                    controls.forEach { c -> ControlRow(page.id, c, values, codeFont, onSet, onAction) }
+                    controls.forEach { c -> ControlRow(page.id, c, values, codeFont, onSet, onAction, onStructuralChange) }
                     if (advanced.isNotEmpty() && groupTitle == groups.first().first) {
-                        AdvancedGroup { advanced.forEach { c -> ControlRow(page.id, c, values, codeFont, onSet, onAction) } }
+                        AdvancedGroup { advanced.forEach { c -> ControlRow(page.id, c, values, codeFont, onSet, onAction, onStructuralChange) } }
                     }
                 }
             }
         }
         // A page with ONLY advanced controls still surfaces them.
         if (regular.isEmpty() && advanced.isNotEmpty()) {
-            item("advancedOnly") { SettingsCard(null) { AdvancedGroup { advanced.forEach { c -> ControlRow(page.id, c, values, codeFont, onSet, onAction) } } } }
+            item("advancedOnly") { SettingsCard(null) { AdvancedGroup { advanced.forEach { c -> ControlRow(page.id, c, values, codeFont, onSet, onAction, onStructuralChange) } } } }
         }
         if (page.inspectionsSection) {
             item("inspections") { InspectionsCard(backend) }
@@ -242,17 +263,20 @@ private fun ControlRow(
     codeFont: FontFamily,
     onSet: (String, String, String) -> Unit,
     onAction: (String, UiSettingControl.Action) -> Unit,
+    onStructuralChange: () -> Unit,
 ) {
     val stored = values["$pageId.${c.key}"]
     when (c) {
+        // Toggle/Choice can change which controls a page shows (e.g. R8 mode hides the heap slider), so they
+        // also trigger a page re-fetch; Slider/Text don't (avoids a re-fetch on every slider step).
         is UiSettingControl.Toggle -> SettingsToggleRow(c.title, c.description, stored?.toBooleanStrictOrNull() ?: c.value) {
-            onSet(pageId, c.key, it.toString())
+            onSet(pageId, c.key, it.toString()); onStructuralChange()
         }
         is UiSettingControl.Slider -> SettingsSliderRow(c.title, c.description, stored?.toIntOrNull() ?: c.value, c.min, c.max, c.step, c.unit) {
             onSet(pageId, c.key, it.toString())
         }
         is UiSettingControl.Choice -> SettingsChoiceRow(c.title, c.description, stored ?: c.value, c.options.map { it.value to it.label }) {
-            onSet(pageId, c.key, it)
+            onSet(pageId, c.key, it); onStructuralChange()
         }
         is UiSettingControl.Text -> SettingsTextRow(c.title, c.description, stored ?: c.value, c.placeholder, codeFont) {
             onSet(pageId, c.key, it)
@@ -322,7 +346,7 @@ private fun SeverityChip(severity: UiSeverity, selected: Boolean, onClick: () ->
 // ---- chrome --------------------------------------------------------------------------------------
 
 @Composable
-private fun SettingsHeader(onBack: () -> Unit) {
+private fun SettingsHeader(onBack: () -> Unit, title: String) {
     GlassSurface(Modifier.fillMaxWidth(), GlassMaterial.Regular) {
         Row(
             Modifier.fillMaxWidth().height(56.dp).padding(horizontal = 10.dp),
@@ -330,7 +354,7 @@ private fun SettingsHeader(onBack: () -> Unit) {
         ) {
             IconButtonCa(CaIcons.chevronLeft, "Back", onBack)
             Icon(CaIcons.gear, null, Modifier.size(20.dp), tint = Ca.colors.accent)
-            Text("Settings", color = Ca.colors.textPrimary, style = Ca.type.headline, fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f))
+            Text(title, color = Ca.colors.textPrimary, style = Ca.type.headline, fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f))
         }
     }
 }
