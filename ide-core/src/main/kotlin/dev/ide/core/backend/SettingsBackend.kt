@@ -260,6 +260,40 @@ internal class SettingsBackend(private val ctx: BackendContext) : SettingsServic
                 value, R8_MIN_MB, max, 128, "MB", false, null,
             )
         }
+
+        // Debug-build dexing memory knobs (the R8 controls above govern the release/minify path). Both are
+        // advanced and Android-only, grouped apart so they don't read as part of R8.
+        val dexGroup = "Debug build (dexing)"
+        val forkable = mode != BuiltInSettingsPages.R8_MODE_INPROCESS && ceiling != 0
+        val offHeap = (ctx.manager?.preference(settingKey(pid, BuiltInSettingsPages.DEX_OFFHEAP_MB))?.trim()?.toIntOrNull()
+            ?: BuiltInSettingsPages.DEX_OFFHEAP_MB_DEFAULT).coerceIn(2, 64)
+        val offHeapDesc = if (forkable)
+            "On a clean build the dexer turns your whole project (and large libraries) into Dalvik bytecode — heavy work that normally runs inside the IDE. When one of those steps is at least this big, it's moved to the separate VM instead (the same one R8 uses), keeping it off the IDE's ~$appHeapMb MB heap. Lower = safer on low-memory devices but more short-lived VMs (slightly slower); higher = fewer VMs but more pressure on the IDE. Small edits always stay in-process."
+        else
+            "Moves large dexing steps off the IDE's heap into a separate VM on a clean build. Inactive while R8 execution is In-process (or the device can't fork a VM) — everything dexes in-process then."
+        out += UiSettingControl.Slider(
+            BuiltInSettingsPages.DEX_OFFHEAP_MB, "Off-heap dexing threshold",
+            offHeapDesc, offHeap, 2, 64, 2, "MB", true, dexGroup,
+        )
+
+        val mergeBatch = (ctx.manager?.preference(settingKey(pid, BuiltInSettingsPages.DEX_MERGE_BATCH))?.trim()?.toIntOrNull()
+            ?: BuiltInSettingsPages.DEX_MERGE_BATCH_DEFAULT).coerceIn(1000, 20000)
+        out += UiSettingControl.Slider(
+            BuiltInSettingsPages.DEX_MERGE_BATCH, "Dex merge batch size",
+            "On a very large app the final dexing step merges classes in batches so it doesn't need all of them in memory at once. Smaller batches keep that memory low (good for low-memory devices) but make the APK slightly larger (less shared compression across classes); larger batches pack tighter but need more memory per merge. Most apps never reach this — it only kicks in past a few thousand classes.",
+            mergeBatch, 1000, 20000, 1000, "classes", true, dexGroup,
+        )
+
+        val forkConc = (ctx.manager?.preference(settingKey(pid, BuiltInSettingsPages.DEX_FORK_CONCURRENCY))?.trim()?.toIntOrNull()
+            ?: BuiltInSettingsPages.DEX_FORK_CONCURRENCY_DEFAULT).coerceIn(0, 4)
+        val forkConcDesc = if (forkable)
+            "How many of these separate dexing VMs may run at once. The dex merge splits across a few of them, so several libraries dex in parallel instead of one at a time. 0 = automatic (chosen from your device's free memory and the VM heap above). Higher is faster on devices with plenty of RAM but commits more memory at once; lower (or 0) is safer on tight devices. Takes effect the next time the build starts."
+        else
+            "Caps how many separate dexing VMs run at once. Inactive while R8 execution is In-process (or the device can't fork a VM) — everything dexes in-process then."
+        out += UiSettingControl.Slider(
+            BuiltInSettingsPages.DEX_FORK_CONCURRENCY, "Max concurrent dex forks",
+            forkConcDesc, forkConc, 0, 4, 1, null, true, dexGroup,
+        )
         return out
     }
 

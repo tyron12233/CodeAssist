@@ -59,6 +59,8 @@ class ProjectManager private constructor(
     /** On-device live custom-view runtime (from :ide-android) so the layout preview renders live custom
      *  views in every opened project, not just the first-run demo. */
     private val customViewRuntime: dev.ide.preview.impl.CustomViewRuntime? = null,
+    /** On-device real-view layout renderer (from :ide-android): the layoutlib-on-device preview path. */
+    private val realViewRuntime: dev.ide.preview.impl.RealViewRuntime? = null,
     /** On-device Kotlin compiler-plugin loader (from :ide-android): D8-dex + DexClassLoader, so runtime
      *  (non-bundled) Kotlin compiler plugins can be applied on ART. Null on desktop (URLClassLoader default). */
     private val kotlinPluginLoader: dev.ide.lang.kotlin.compile.KotlinPluginLoader? = null,
@@ -141,13 +143,13 @@ class ProjectManager private constructor(
     fun create(templateId: String, args: Map<String, String>): IdeServices {
         val name = args[TemplateArgs.NAME]?.takeIf { it.isNotBlank() } ?: "Untitled"
         val dir = uniqueProjectDir(name)
-        return IdeServices.createProjectAt(dir, templateId, args, sdk(), languageLevel, androidTools, dexRunner, apkInstaller, customViewRuntime, kotlinPluginLoader = kotlinPluginLoader, sharedCachesRoot = homeDir, env = env)
+        return IdeServices.createProjectAt(dir, templateId, args, sdk(), languageLevel, androidTools, dexRunner, apkInstaller, customViewRuntime, realViewRuntime = realViewRuntime, kotlinPluginLoader = kotlinPluginLoader, sharedCachesRoot = homeDir, env = env)
     }
 
     /** Open the existing project at [rootPath]; returns the opened engine. [buildOnly] opens a headless
      *  build engine (the `:build` daemon) that skips the editor cold-start — see [IdeServices]. */
     fun open(rootPath: String, buildOnly: Boolean = false): IdeServices =
-        IdeServices.openAt(Paths.get(rootPath), sdk(), androidTools, dexRunner, apkInstaller, customViewRuntime, kotlinPluginLoader = kotlinPluginLoader, sharedCachesRoot = homeDir, env = env, buildOnly = buildOnly)
+        IdeServices.openAt(Paths.get(rootPath), sdk(), androidTools, dexRunner, apkInstaller, customViewRuntime, realViewRuntime = realViewRuntime, kotlinPluginLoader = kotlinPluginLoader, sharedCachesRoot = homeDir, env = env, buildOnly = buildOnly)
 
     /**
      * Permanently delete the project rooted at [rootPath] from disk. Guarded to a direct child of
@@ -348,6 +350,8 @@ class ProjectManager private constructor(
             apkInstaller: ApkInstaller? = null,
             /** The host's live custom-view runtime, so the layout preview renders custom views in every project. */
             customViewRuntime: dev.ide.preview.impl.CustomViewRuntime? = null,
+            /** The host's real-view layout renderer (layoutlib-on-device), so the preview can render real views. */
+            realViewRuntime: dev.ide.preview.impl.RealViewRuntime? = null,
             /** The host's ART Kotlin compiler-plugin loader (D8-dex + DexClassLoader), so runtime Kotlin
              *  compiler plugins can be applied on device. */
             kotlinPluginLoader: dev.ide.lang.kotlin.compile.KotlinPluginLoader? = null,
@@ -356,13 +360,16 @@ class ProjectManager private constructor(
             r8Shrinker: dev.ide.android.support.tools.Shrinker? = null,
             /** The host's forked-VM D8 dexer for the dex merge step (debug-path memory peak). Null → in-process. */
             r8MergeDexer: dev.ide.android.support.tools.Dexer? = null,
+            /** Max class-dex per merge batch on a large app (the "Dex merge batch size" setting); read per build. */
+            mergeChunkProvider: () -> Int = { dev.ide.core.settings.BuiltInSettingsPages.DEX_MERGE_BATCH_DEFAULT },
         ): ProjectManager {
 
 
             val sdk = SdkData("android", bootClasspath, buildToolsPath = null)
             // android.jar is the first boot entry; later entries (the desugar stubs) join the compile platform.
             val tools = AndroidDeviceTools(Paths.get(bootClasspath.first()), androidToolsDir, debugKeystore, deviceApiLevel,
-                desugarStubs = bootClasspath.drop(1).map { Paths.get(it) }, r8Shrinker = r8Shrinker, r8MergeDexer = r8MergeDexer)
+                desugarStubs = bootClasspath.drop(1).map { Paths.get(it) }, r8Shrinker = r8Shrinker, r8MergeDexer = r8MergeDexer,
+                mergeChunkProvider = mergeChunkProvider)
             return ProjectManager(
                 projectsRoot,
                 projectsRoot.parent ?: projectsRoot,
@@ -374,6 +381,7 @@ class ProjectManager private constructor(
                 dexRunner = dexRunner,
                 apkInstaller = apkInstaller,
                 customViewRuntime = customViewRuntime,
+                realViewRuntime = realViewRuntime,
                 kotlinPluginLoader = kotlinPluginLoader,
             )
         }

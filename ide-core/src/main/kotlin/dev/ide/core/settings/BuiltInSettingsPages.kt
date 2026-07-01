@@ -47,6 +47,25 @@ object BuiltInSettingsPages {
      *  its default heap, so the user can only scale DOWN from the real device limit. */
     const val R8_CEILING_PREF = "r8.detectedCeilingMb"
 
+    /** IntSlider key on [BUILD_RUNTIME]: input size (MB) at/above which an on-device debug-dex step (the
+     *  dexBuilder archive) runs in a separate VM instead of the app heap. Read by `ForkedD8Dexer` (:ide-android),
+     *  and only when R8 execution is Forked VM. Android-only. Lower = safer on small heaps but more VM spawns. */
+    const val DEX_OFFHEAP_MB = "dexOffHeapMb"
+    const val DEX_OFFHEAP_MB_DEFAULT = 8
+
+    /** IntSlider key on [BUILD_RUNTIME]: the most classes merged into Dalvik bytecode in one batch on a large
+     *  app (debug, native multidex). Read by `DexMergeTask` via the on-device `AndroidDeviceTools.mergeChunkProvider`.
+     *  Smaller = lower peak memory + slightly larger APK; larger = tighter packing + more memory. Android-only. */
+    const val DEX_MERGE_BATCH = "dexMergeBatch"
+    const val DEX_MERGE_BATCH_DEFAULT = 6000
+
+    /** IntSlider key on [BUILD_RUNTIME]: the most forked dexing VMs (the dex merge / off-heap archive) allowed
+     *  to run at once. `0` = auto (sized from available device RAM ÷ the forked-VM heap). Read by `ForkedD8Dexer`
+     *  (:ide-android), and only when R8 execution is Forked VM. Higher = faster merges on roomy devices but more
+     *  RAM committed at once; `0`/lower is safer on tight devices. Android-only. */
+    const val DEX_FORK_CONCURRENCY = "dexForkConcurrency"
+    const val DEX_FORK_CONCURRENCY_DEFAULT = 0
+
     // Keys the backend special-cases (routed to a non-generic-store effect).
     const val CONFLICT_POLICY = "conflictPolicy"
     const val ANALYTICS = "analytics"
@@ -168,6 +187,20 @@ object BuiltInSettingsPages {
             SettingControl.IntSlider(
                 R8_MAX_HEAP, "R8 forked-VM heap", null,
                 default = R8_MAX_HEAP_DEFAULT, min = 768, max = 4096, step = 128, unit = "MB",
+            ),
+            // Rendered dynamically by SettingsBackend (rich descriptions); these descriptors only carry the
+            // key / default / scope for the write path. Debug-build dexing memory knobs (R8 above = release).
+            SettingControl.IntSlider(
+                DEX_OFFHEAP_MB, "Off-heap dexing threshold", null,
+                default = DEX_OFFHEAP_MB_DEFAULT, min = 2, max = 64, step = 2, unit = "MB", advanced = true,
+            ),
+            SettingControl.IntSlider(
+                DEX_MERGE_BATCH, "Dex merge batch size", null,
+                default = DEX_MERGE_BATCH_DEFAULT, min = 1000, max = 20000, step = 1000, advanced = true,
+            ),
+            SettingControl.IntSlider(
+                DEX_FORK_CONCURRENCY, "Max concurrent dex forks", null,
+                default = DEX_FORK_CONCURRENCY_DEFAULT, min = 0, max = 4, step = 1, advanced = true,
             ),
         )
     }

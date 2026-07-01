@@ -33,15 +33,15 @@ internal class DependencyBackend(private val ctx: BackendContext) : DependencySe
         withContext(Dispatchers.IO) { ctx.services.dependencies.searchArtifacts(query, moduleName) }
 
     override suspend fun addDependency(
-        moduleName: String, coordinate: String, scope: String, exclusions: List<String>
+        moduleName: String, coordinate: String, scope: String, exclusions: List<String>, variant: String?
     ): UiAddResult = withContext(Dispatchers.IO) {
         ctx.services.dependencies.addDependency(
-            moduleName, coordinate, scope, exclusions
+            moduleName, coordinate, scope, exclusions, variant
         )
     }
 
-    override suspend fun addPlatform(moduleName: String, coordinate: String): UiAddResult =
-        withContext(Dispatchers.IO) { ctx.services.dependencies.addPlatform(moduleName, coordinate) }
+    override suspend fun addPlatform(moduleName: String, coordinate: String, variant: String?): UiAddResult =
+        withContext(Dispatchers.IO) { ctx.services.dependencies.addPlatform(moduleName, coordinate, variant) }
 
     override suspend fun addFirebase(moduleName: String, artifacts: List<String>): UiAddResult =
         withContext(Dispatchers.IO) { ctx.services.dependencies.addFirebase(moduleName, artifacts) }
@@ -62,14 +62,23 @@ internal class DependencyBackend(private val ctx: BackendContext) : DependencySe
         )
     }
 
+    override suspend fun availableVersions(moduleName: String, coordinate: String): List<String> =
+        withContext(Dispatchers.IO) { ctx.services.dependencies.availableVersions(moduleName, coordinate) }
+
+    override suspend fun updateDependency(
+        moduleName: String, coordinate: String, version: String, scope: String, exclusions: List<String>
+    ): UiAddResult = withContext(Dispatchers.IO) {
+        ctx.services.dependencies.updateDependency(moduleName, coordinate, version, scope, exclusions)
+    }
+
     override fun moduleDependencyTargets(moduleName: String): List<String> =
         ctx.services.dependencies.moduleDependencyTargets(moduleName)
 
     override suspend fun addModuleDependency(
-        moduleName: String, targetModule: String, scope: String
+        moduleName: String, targetModule: String, scope: String, variant: String?
     ): UiAddResult = withContext(Dispatchers.IO) {
         ctx.services.dependencies.addModuleDependency(
-            moduleName, targetModule, scope
+            moduleName, targetModule, scope, variant
         )
     }
 

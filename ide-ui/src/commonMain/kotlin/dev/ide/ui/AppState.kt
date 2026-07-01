@@ -293,6 +293,12 @@ class IdeUiState(val backend: IdeBackend, val composePreviewHost: ComposePreview
         refreshTree()
     }
 
+    /** Re-push every open buffer to the editor backend so it re-analyzes against the current classpath — used
+     *  after switching the active build variant (the engine has already invalidated the per-module analyzers). */
+    fun reanalyzeOpenFiles() {
+        for (f in openFiles) backend.editor.updateDocument(f.path, f.text)
+    }
+
     /** Create a new file through the backend, refresh the tree, and open it in the editor. */
     fun createFile(dirPath: String, fileName: String, content: String) {
         val path = backend.files.createFile(dirPath, fileName, content) ?: return

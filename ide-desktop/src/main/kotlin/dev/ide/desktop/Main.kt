@@ -8,8 +8,6 @@ import androidx.compose.ui.window.application
 import androidx.compose.ui.window.rememberWindowState
 import dev.ide.core.IdeServicesBackend
 import dev.ide.core.ProjectManager
-import dev.ide.platform.log.ConsoleLogSink
-import dev.ide.platform.log.Log
 import dev.ide.ui.CodeAssistApp
 import java.nio.file.Path
 
@@ -31,8 +29,6 @@ fun main(args: Array<String>) {
             ?: "${System.getProperty("user.home")}/.codeassist/projects",
     )
     val manager = ProjectManager.desktop(projectsRoot)
-
-    Log.addSink(ConsoleLogSink())
 
     // Start with no project open: the picker is shown (projectEpoch stays 0), and opening a project from it
     // creates that project's IdeServices on demand. The download cache is still shared across projects via

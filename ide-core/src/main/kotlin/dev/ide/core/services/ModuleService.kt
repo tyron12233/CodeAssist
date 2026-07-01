@@ -22,6 +22,7 @@ import dev.ide.ui.backend.UiModuleConfig
 import dev.ide.ui.backend.UiModuleConfigEdit
 import dev.ide.ui.backend.UiModuleRef
 import dev.ide.ui.backend.UiModuleTypeOption
+import dev.ide.ui.backend.UiRunConfig
 import dev.ide.ui.backend.UiSourceSetInfo
 import java.nio.file.Files
 import java.nio.file.Path
@@ -69,6 +70,14 @@ internal class ModuleService(private val ctx: EngineContext) {
                 titleCase(data.tomlTable),
                 data.values.map { (k, v) -> configFieldFor(k, v) })
         }
+        val runConfig = if (isConsoleRunModule(module)) {
+            val detected = MainClassDetection.detect(ctx, module).map { it.mainClass }
+            UiRunConfig(
+                mainClass = ctx.mainClassOverride(module) ?: "",
+                detectedMainClasses = detected,
+                autoDetected = detected.firstOrNull(),
+            )
+        } else null
         return UiModuleConfig(
             name = module.name,
             typeId = module.type.id,
@@ -80,6 +89,7 @@ internal class ModuleService(private val ctx: EngineContext) {
                 UiSourceSetInfo(ss.name, ss.scope.name, ss.contentRoots.map { it.dir.path })
             },
             facets = facets,
+            runConfig = runConfig,
         )
     }
 
@@ -111,6 +121,9 @@ internal class ModuleService(private val ctx: EngineContext) {
         } catch (e: Exception) {
             return UiConfigResult(false, "Update failed: ${e.message}")
         }
+        // The Run main-class override is a project preference (independent of the model transaction above);
+        // a non-null value sets it, blank clears it back to auto-detect.
+        edit.mainClass?.let { ctx.setMainClassOverride(module, it) }
         ctx.store.save()
         ctx.invalidateAnalyzers()       // language level + facets affect the compile classpath/source sets
         ctx.invalidateSyntheticClasses() // an Android facet change can move the R package

@@ -73,6 +73,7 @@ import dev.ide.ui.backend.UiMissingProguardFile
 import dev.ide.ui.backend.UiModuleConfig
 import dev.ide.ui.backend.UiModuleConfigEdit
 import dev.ide.ui.backend.UiModuleRef
+import dev.ide.ui.backend.UiRunConfig
 import dev.ide.ui.backend.UiSourceSetInfo
 import dev.ide.ui.components.AddSourceRootDialog
 import dev.ide.ui.components.AddSourceRootRequest
@@ -643,7 +644,9 @@ private fun ConfigForm(
     // Editable state, rebuilt whenever a fresh config is loaded (e.g. after a save).
     var level by remember(config) { mutableStateOf(config.languageLevel) }
     val forms = remember(config) { config.facets.map { it.toForm() } }
-    val dirty = level != config.languageLevel  // (facet edits always allow save; this just brightens the button)
+    val mainClass = remember(config) { mutableStateOf(config.runConfig?.mainClass ?: "") }
+    val dirty = level != config.languageLevel ||
+        (config.runConfig != null && mainClass.value.trim() != config.runConfig.mainClass)
 
     LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
         // ---- General ----
@@ -660,6 +663,11 @@ private fun ConfigForm(
                     config.languageLevels.forEach { lvl -> LevelChip(prettyLevel(lvl), lvl == level) { level = lvl } }
                 }
             }
+        }
+
+        // ---- Run configuration (console Java/Kotlin modules) ----
+        config.runConfig?.let { rc ->
+            item("run") { RunConfigCard(rc, mainClass, codeFont) }
         }
 
         // ---- Source sets (add / remove typed roots) ----
@@ -688,8 +696,57 @@ private fun ConfigForm(
                     onSave(UiModuleConfigEdit(
                         languageLevel = level,
                         facetValues = forms.associate { it.table to it.toValues() },
+                        mainClass = if (config.runConfig != null) mainClass.value.trim() else null,
                     ))
                 })
+            }
+        }
+    }
+}
+
+/**
+ * The console Run configuration for a Java/Kotlin module: which `main` class the Run button launches. A blank
+ * field means auto-detect (the placeholder shows what that resolves to); the entry points found in the module's
+ * sources are offered as one-tap chips, plus an "Auto-detect" chip that clears the override.
+ */
+@Composable
+private fun RunConfigCard(rc: UiRunConfig, mainClass: MutableState<String>, codeFont: FontFamily) {
+    SectionCard("Run") {
+        Text(
+            "The main class the Run button launches for this module. Leave blank to auto-detect.",
+            color = Ca.colors.textSecondary, style = Ca.type.caption,
+        )
+        Box(
+            Modifier.fillMaxWidth().background(Ca.colors.surface2, RoundedCornerShape(Ca.radius.control))
+                .border(1.dp, Ca.colors.hairline, RoundedCornerShape(Ca.radius.control))
+                .padding(horizontal = 12.dp, vertical = 10.dp),
+        ) {
+            if (mainClass.value.isEmpty()) {
+                Text(
+                    rc.autoDetected?.let { "$it  (auto-detected)" } ?: "e.g. com.example.Main",
+                    color = Ca.colors.textTertiary,
+                    style = Ca.type.footnote.copy(fontFamily = codeFont),
+                    maxLines = 1, overflow = TextOverflow.Ellipsis,
+                )
+            }
+            BasicTextField(
+                value = mainClass.value,
+                onValueChange = { mainClass.value = it },
+                singleLine = true,
+                textStyle = Ca.type.footnote.copy(color = Ca.colors.textPrimary, fontFamily = codeFont),
+                cursorBrush = SolidColor(Ca.colors.accent),
+                modifier = Modifier.fillMaxWidth(),
+            )
+        }
+        if (rc.detectedMainClasses.isNotEmpty()) {
+            Row(
+                Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
+                horizontalArrangement = Arrangement.spacedBy(6.dp),
+            ) {
+                LevelChip("Auto-detect", selected = mainClass.value.isBlank()) { mainClass.value = "" }
+                rc.detectedMainClasses.forEach { fqn ->
+                    LevelChip(fqn, selected = mainClass.value.trim() == fqn) { mainClass.value = fqn }
+                }
             }
         }
     }

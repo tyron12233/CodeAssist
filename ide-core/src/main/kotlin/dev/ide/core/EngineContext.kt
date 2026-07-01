@@ -113,6 +113,15 @@ internal interface EngineContext {
     /** Persist a project-scoped preference. */
     fun setProjectPref(key: String, value: String)
 
+    /** The active build-variant name for [module] (persisted choice, else the default variant). */
+    fun activeVariant(module: Module): String
+
+    /** All selectable build-variant names for [module] (empty for a non-Android module). */
+    fun listVariants(module: Module): List<String>
+
+    /** Select [module]'s active build variant; re-analyzes + re-indexes if it changed. */
+    fun setActiveVariant(module: Module, variantName: String)
+
     /** Drop the cached synthetic classes (Android `R`, ViewBinding, …) so the next analysis re-renders them
      *  (e.g. after a resource/facet/build-feature change). */
     fun invalidateSyntheticClasses()

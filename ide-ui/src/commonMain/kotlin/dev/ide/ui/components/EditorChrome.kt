@@ -82,6 +82,10 @@ fun EditorTopBar(
     onOpenPalette: () -> Unit,
     runTasks: () -> List<RunTaskOption> = { emptyList() },
     onPickTask: (RunTaskOption) -> Unit = {},
+    /** The active build variant to show in the switcher chip, or null to hide it (non-Android project). */
+    activeVariant: String? = null,
+    variants: () -> List<String> = { emptyList() },
+    onPickVariant: (String) -> Unit = {},
     onSave: () -> Unit = {},
     hasUnsavedChanges: Boolean = false,
     hasActiveFile: Boolean = false,
@@ -125,6 +129,7 @@ fun EditorTopBar(
                 // On a phone the bar can't hold every control, so Run stays inline and the rest (incl. the
                 // edit actions) collapse into a single ⋯ overflow menu — everything one tap away.
                 PluginToolbarActions(pluginActions, dim, onPluginAction)
+                if (activeVariant != null) VariantChip(activeVariant, variants, onPickVariant, compact = true)
                 RunControl(runTasks, onPickTask, compact = true)
                 EditorOverflowMenu(
                     onOpenPalette = onOpenPalette,
@@ -156,6 +161,7 @@ fun EditorTopBar(
                 // Shown when the open file has @Preview composables — renders/checks them via the interpreter.
                 if (showPreview) IconButtonCa(CaIcons.image, "Compose preview", onPreview, active = previewBusy)
                 PluginToolbarActions(pluginActions, dim, onPluginAction)
+                if (activeVariant != null) VariantChip(activeVariant, variants, onPickVariant, compact = false)
                 RunControl(runTasks, onPickTask, compact = false)
             }
         }
@@ -466,6 +472,55 @@ private fun RunControl(
                     }
                 }
             }
+    }
+}
+
+/**
+ * The active build-variant switcher: a `⌥ layers` chip showing the current variant (e.g. `debug`), opening a
+ * dropdown of the module's variants. Picking one re-points the editor's analysis classpath and the Run/assemble
+ * default. Shown only for an Android module (a non-empty [variants]); [label] is the current active variant.
+ */
+@Composable
+private fun VariantChip(
+    label: String,
+    variants: () -> List<String>,
+    onPick: (String) -> Unit,
+    compact: Boolean = false,
+) {
+    var open by remember { mutableStateOf(false) }
+    var items by remember { mutableStateOf(emptyList<String>()) }
+    val interaction = remember { MutableInteractionSource() }
+    val keyboard = LocalSoftwareKeyboardController.current
+    val openMenu = { keyboard?.hide(); items = variants(); open = true }
+    Box {
+        Row(
+            Modifier.height(34.dp)
+                .clip(RoundedCornerShape(Ca.radius.sm))
+                .pressScale(interaction)
+                .clickable(interaction, indication = null, onClick = openMenu)
+                .padding(horizontal = if (compact) 6.dp else 10.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(5.dp),
+        ) {
+            Icon(CaIcons.layers, "Build variant", Modifier.size(15.dp), tint = Ca.colors.textSecondary)
+            if (!compact) Text(label, color = Ca.colors.textSecondary, style = Ca.type.footnote, fontWeight = FontWeight.Medium)
+            Icon(CaIcons.caretDown, null, Modifier.size(12.dp), tint = Ca.colors.textTertiary)
+        }
+        CaDropdownMenu(expanded = open, onDismissRequest = { open = false }) {
+            if (items.isEmpty()) {
+                DropdownMenuItem(
+                    text = { Text("No variants", color = Ca.colors.textTertiary, style = Ca.type.footnote) },
+                    onClick = {}, enabled = false,
+                )
+            }
+            items.forEach { v ->
+                DropdownMenuItem(
+                    text = { Text(v, color = Ca.colors.textPrimary, style = Ca.type.footnote, fontWeight = if (v == label) FontWeight.SemiBold else FontWeight.Normal) },
+                    leadingIcon = { if (v == label) Icon(CaIcons.check, null, Modifier.size(14.dp), tint = Ca.colors.accent) else Box(Modifier.size(14.dp)) },
+                    onClick = { open = false; onPick(v) },
+                )
+            }
+        }
     }
 }
 

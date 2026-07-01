@@ -9,13 +9,13 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.launch
-import kotlin.io.path.readText
 import dev.ide.android.support.AndroidBuildSystem
 import dev.ide.android.support.AndroidFacet
 import dev.ide.android.support.AndroidVariants
 import dev.ide.android.support.tools.AndroidSdk
 import dev.ide.android.support.tools.D8InProcessDexer
 import dev.ide.android.support.tools.DebugKeystore
+import dev.ide.android.support.tools.RunDexer
 import dev.ide.android.support.tools.SigningConfig
 import dev.ide.build.BuildDiagnostic
 import dev.ide.build.BuildGoal
@@ -29,8 +29,7 @@ import dev.ide.build.SourceGenerator
 import dev.ide.build.TaskGraph
 import dev.ide.build.VariantSelector
 import dev.ide.build.engine.BuildCache
-import dev.ide.build.engine.DexBackend
-import dev.ide.build.engine.DexResult
+import dev.ide.build.engine.RunDexBackend
 import dev.ide.build.engine.GuardCategory
 import dev.ide.build.engine.Guards
 import dev.ide.build.engine.PermissionBroker
@@ -76,7 +75,6 @@ import java.io.InputStream
 import java.nio.file.Files
 import java.nio.file.Path
 import java.nio.file.Paths
-import java.util.stream.Collectors
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -181,8 +179,14 @@ internal class BuildService(private val ctx: EngineContext) : Disposable {
                 // On ART, run R8 in a forked VM with a bigger heap (self-falls-back to in-process if forking
                 // isn't available). Null on devices that didn't wire it → unchanged in-process behavior.
                 shrinker = t.r8Shrinker,
-                // ...and the dex merge (debug-path memory peak) in a forked VM too.
+                // ...the dex merge (debug-path memory peak) in a forked VM too...
                 mergeDexer = t.r8MergeDexer,
+                // ...and the same forked D8 as the dexBuilder ARCHIVE dexer (it's an OffHeapArchiveDexer): a big
+                // project jar / cold library archives off the app heap above the "Off-heap dexing threshold", and
+                // cold libraries archive several at once. Small incremental archives still stay in-process.
+                dexer = t.r8MergeDexer,
+                // The "Dex merge batch size" setting (app-scoped); read per build via the host's provider.
+                mergeChunk = t.mergeChunkProvider,
             )
         }
         val sdk =
@@ -202,15 +206,15 @@ internal class BuildService(private val ctx: EngineContext) : Disposable {
     }
 
     /**
-     * On-device only: the dex backend for the Java `run` path — D8 in-process, desugaring against the
-     * bundled `android.jar`. Paired with [ctx.dexRunner], it lets a console app run on ART. Null on the desktop
-     * (which forks `java` via [JavaBuildSystem.createRunGraph] instead).
+     * On-device only: the dex backend for the Java `run` path — D8 in-process, desugaring against the bundled
+     * `android.jar`. Paired with [ctx.dexRunner], it lets a console app run on ART. Null on the desktop (which
+     * forks `java` via [JavaBuildSystem.createRunGraph] instead). [RunDexer] content-hash caches the immutable
+     * library jars (stdlib + deps) into `caches/dex-run`, shared across projects, so a source edit re-dexes
+     * only the changed user classes instead of the whole runtime classpath.
      */
-    private val javaDexBackend: DexBackend? = ctx.androidTools?.let { t ->
-        DexBackend { inputs, minApi, outDir ->
-            val r = D8InProcessDexer().dex(inputs, t.androidJar, minApi, false, outDir)
-            DexResult(r.success, r.log)
-        }
+    private val javaRunDexBackend: RunDexBackend? = ctx.androidTools?.let { t ->
+        val runDexCache = (ctx.sharedCachesRoot ?: ctx.store.rootPath).resolve("caches").resolve("dex-run")
+        RunDexer(D8InProcessDexer(), t.androidJar, runDexCache)
     }
 
     private val buildCache = BuildCache(ctx.store.rootPath.resolve(".platform/caches/build"))
@@ -427,9 +431,13 @@ internal class BuildService(private val ctx: EngineContext) : Disposable {
         if (_permissionRequest.value?.id == id) pendingAnswer?.offer(decision)
     }
 
-    /** Tasks the UI's Run picker offers: a Java `run` for a runnable CLI module + Android `assemble<Variant>`. */
+    /** Tasks the UI's Run picker offers: a `run` for each runnable console (Java/Kotlin) module + Android
+     *  `assemble<Variant>`. A module is runnable when its Run configuration names a main class, or one is
+     *  auto-detected in its sources (see [runnableMainFor]). */
     fun runTasks(): List<RunTaskOption> = buildList {
-        findRunnable()?.let { (m, _) ->
+        for (m in ctx.modules()) {
+            if (!isConsoleRunModule(m)) continue
+            if (runnableMainFor(m) == null) continue
             add(
                 RunTaskOption(
                     "run:${m.name}", "Run ${m.name}", "run"
@@ -470,8 +478,12 @@ internal class BuildService(private val ctx: EngineContext) : Disposable {
         try {
             when {
                 id.startsWith("run:") -> {
-                    val (module, mainClass) = findRunnable()
-                        ?: return fail("No runnable main() found.")
+                    val moduleName = id.removePrefix("run:")
+                    val module = ctx.modules().firstOrNull { it.name == moduleName }
+                        ?: return fail("No module '$moduleName'.")
+                    val target = runnableMainFor(module)
+                        ?: return fail("No runnable main() found for ${module.name}. Set one in Module Settings ▸ Run.")
+                    val mainClass = target.mainClass
                     unresolvedBlocker(module)?.let { return fail(it) }
                     val project = ctx.projectOf(module) ?: return
                     // Start an interactive console session: program stdio + stdin flow through this ProgramIo
@@ -481,10 +493,11 @@ internal class BuildService(private val ctx: EngineContext) : Disposable {
                     currentRunIo = io
                     _runConsole.value = RunConsoleUi(sessionId, module.name, mainClass)
                     val runner = ctx.dexRunner
-                    val backend = javaDexBackend
+                    val backend = javaRunDexBackend
                     if (runner != null && backend != null) {
                         // On-device (ART): there is no `java` to fork, so dex the runtime classpath and run the dex,
-                        // targeting this device's API level (default 21 if unknown).
+                        // targeting this device's API level (default 21 if unknown). The dex runner reflects the
+                        // entry point itself, so it handles an instance main without a hint.
                         val minApi = ctx.androidTools?.apiLevel ?: 21
                         launch(
                             module.name, buildSystem.createDexRunGraph(
@@ -494,7 +507,7 @@ internal class BuildService(private val ctx: EngineContext) : Disposable {
                     } else {
                         launch(
                             module.name,
-                            buildSystem.createRunGraph(project, module, mainClass, programIo = io),
+                            buildSystem.createRunGraph(project, module, mainClass, programIo = io, instanceMain = target.instance),
                             "> Run $mainClass",
                             onComplete = ::finalizeRunConsole
                         )
@@ -502,10 +515,10 @@ internal class BuildService(private val ctx: EngineContext) : Disposable {
                 }
 
                 id.startsWith("assemble:") -> {
-                    val (modName, variant) = id.removePrefix("assemble:").split(":")
-                        .let { it[0] to it.getOrElse(1) { "debug" } }
-                    val module = ctx.modules().firstOrNull { it.name == modName }
-                        ?: return fail("No module '$modName'.")
+                    val parts = id.removePrefix("assemble:").split(":")
+                    val module = ctx.modules().firstOrNull { it.name == parts[0] }
+                        ?: return fail("No module '${parts[0]}'.")
+                    val variant = parts.getOrNull(1) ?: ctx.activeVariant(module)
                     unresolvedBlocker(module)?.let { return fail(it) }
                     val android = androidBuild
                         ?: return fail("Android SDK (platform + build-tools) not found — install one to assemble Android modules.")
@@ -524,10 +537,10 @@ internal class BuildService(private val ctx: EngineContext) : Disposable {
                 }
 
                 id.startsWith("bundle:") -> {
-                    val (modName, variant) = id.removePrefix("bundle:").split(":")
-                        .let { it[0] to it.getOrElse(1) { "debug" } }
-                    val module = ctx.modules().firstOrNull { it.name == modName }
-                        ?: return fail("No module '$modName'.")
+                    val parts = id.removePrefix("bundle:").split(":")
+                    val module = ctx.modules().firstOrNull { it.name == parts[0] }
+                        ?: return fail("No module '${parts[0]}'.")
+                    val variant = parts.getOrNull(1) ?: ctx.activeVariant(module)
                     unresolvedBlocker(module)?.let { return fail(it) }
                     val android = androidBuild
                         ?: return fail("Android SDK (platform + build-tools) not found — install one to bundle Android modules.")
@@ -547,16 +560,16 @@ internal class BuildService(private val ctx: EngineContext) : Disposable {
                 }
 
                 id.startsWith("androidRun:") -> {
-                    val (modName, variant) = id.removePrefix("androidRun:").split(":")
-                        .let { it[0] to it.getOrElse(1) { "debug" } }
-                    val module = ctx.modules().firstOrNull { it.name == modName }
-                        ?: return fail("No module '$modName'.")
+                    val parts = id.removePrefix("androidRun:").split(":")
+                    val module = ctx.modules().firstOrNull { it.name == parts[0] }
+                        ?: return fail("No module '${parts[0]}'.")
+                    val variant = parts.getOrNull(1) ?: ctx.activeVariant(module)
                     unresolvedBlocker(module)?.let { return fail(it) }
                     val installer =
                         ctx.apkInstaller ?: return fail("APK install is only available on device.")
                     val android = androidBuild ?: return fail("Android SDK not found.")
                     val pkg = module.facets.get(AndroidFacet.KEY)?.namespace
-                        ?: return fail("No Android package for '$modName'.")
+                        ?: return fail("No Android package for '${parts[0]}'.")
                     val project = ctx.projectOf(module) ?: return
                     val graph = android.createBuildGraph(
                         project, BuildRequest(
@@ -857,51 +870,14 @@ internal class BuildService(private val ctx: EngineContext) : Disposable {
         return "Can't build: $n declared ${if (n == 1) "dependency is" else "dependencies are"} unresolved.\n" + "$lines\nResolve them first: tap Retry on the dependency banner (check your internet connection), or open the Dependencies screen."
     }
 
-    /** First module (by source scan) whose source declares a runnable `main`, + its FQN. Java mains take
-     *  precedence over Kotlin so behavior is deterministic when a project mixes both. */
-    private fun findRunnable(): Pair<Module, String>? =
-        scanForMain(".java", ::mainClassIn) ?: scanForMain(".kt", ::mainClassInKotlin)
-
-    private fun scanForMain(ext: String, detect: (Path) -> String?): Pair<Module, String>? {
-        for (module in ctx.modules()) {
-            for (root in ctx.sourceRoots(module)) {
-                if (!Files.isDirectory(root)) continue
-                val files = runCatching {
-                    Files.walk(root).use { s ->
-                        s.filter { it.toString().endsWith(ext) }.collect(Collectors.toList())
-                    }
-                }.getOrDefault(emptyList())
-                files.firstNotNullOfOrNull(detect)?.let { return module to it }
-            }
-        }
-        return null
-    }
-
-    private fun mainClassIn(file: Path): String? {
-        val text = runCatching { file.readText() }.getOrNull() ?: return null
-        if (!MAIN_METHOD.containsMatchIn(text)) return null
-        val pkg = PACKAGE_DECL.find(text)?.groupValues?.get(1)
-        val cls = file.fileName.toString().removeSuffix(".java")
-        return if (pkg.isNullOrEmpty()) cls else "$pkg.$cls"
-    }
-
-    /** FQN of the JVM entry point for a Kotlin file declaring a top-level `fun main` — the file facade
-     *  (`Main.kt` → `MainKt`, honoring `@file:JvmName`). An `object`/companion `main` isn't detected. */
-    private fun mainClassInKotlin(file: Path): String? {
-        val text = runCatching { file.readText() }.getOrNull() ?: return null
-        if (!KOTLIN_MAIN.containsMatchIn(text)) return null
-        val pkg = KOTLIN_PACKAGE.find(text)?.groupValues?.get(1)
-        val simple = FILE_JVMNAME.find(text)?.groupValues?.get(1)
-            ?: kotlinFacadeName(file.fileName.toString().removeSuffix(".kt"))
-        return if (pkg.isNullOrEmpty()) simple else "$pkg.$simple"
-    }
-
-    /** The Kotlin compiler's default facade class name for a file: sanitize non-identifier chars, capitalize
-     *  the first letter, append `Kt` (`Main.kt` → `MainKt`, `my-app.kt` → `My_appKt`). */
-    private fun kotlinFacadeName(base: String): String {
-        val sanitized =
-            base.map { if (it.isLetterOrDigit() || it == '_') it else '_' }.joinToString("")
-        return sanitized.replaceFirstChar { it.uppercaseChar() } + "Kt"
+    /** The entry point to launch for console [module]: the user-configured Run override if set (carrying the
+     *  instance/static flag from a matching detected entry when known), else the first auto-detected entry
+     *  point in its sources (Java mains before Kotlin). Null when neither exists. */
+    private fun runnableMainFor(module: Module): RunTarget? {
+        val detected = MainClassDetection.detect(ctx, module)
+        val override = ctx.mainClassOverride(module)
+        if (override != null) return detected.firstOrNull { it.mainClass == override } ?: RunTarget(override, instance = false)
+        return detected.firstOrNull()
     }
 
     override fun dispose() {
@@ -921,16 +897,5 @@ internal class BuildService(private val ctx: EngineContext) : Disposable {
          *  program's output is otherwise unbounded. */
         private const val CONSOLE_CHUNK_MAX = 8192
         private const val CONSOLE_TRANSCRIPT_MAX = 1_000_000
-
-        private val PACKAGE_DECL = Regex("""(?m)^\s*package\s+([\w.]+)\s*;""")
-        private val MAIN_METHOD = Regex("""\bstatic\s+void\s+main\s*\(""")
-
-        // Kotlin run detection. Kotlin packages have no trailing `;`. A top-level `fun main(` is anchored at
-        // column 0 (top-level declarations are unindented) so a `fun main` nested in a class doesn't match.
-        private val KOTLIN_PACKAGE = Regex("""(?m)^\s*package\s+([\w.]+)""")
-        private val KOTLIN_MAIN =
-            Regex("""(?m)^(?:public\s+|internal\s+)?(?:suspend\s+)?fun\s+main\s*\(""")
-        private val FILE_JVMNAME =
-            Regex("""@file:(?:kotlin\.jvm\.)?JvmName\s*\(\s*"([^"]+)"\s*\)""")
     }
 }

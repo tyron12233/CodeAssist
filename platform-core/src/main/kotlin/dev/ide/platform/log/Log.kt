@@ -91,15 +91,27 @@ class RingBufferSink(private val capacity: Int) : LogSink {
     fun snapshot(): List<LogRecord> = synchronized(lock) { buffer.toList() }
 }
 
-/** Prints records to stdout (and stack traces to stderr for ERROR). The baseline sink for desktop/logcat. */
-class ConsoleLogSink : LogSink {
+/**
+ * Prints records to stdout (and stack traces to stderr for ERROR). The baseline sink for desktop/logcat.
+ *
+ * Binds to the console streams captured at CONSTRUCTION — not at each call. [Log] builds the default sink at
+ * process startup, long before any program run, so this captures the true console (the desktop terminal /
+ * the Android `System.out`→logcat redirect). That matters because a program run redirects the process-global
+ * `System.out`/`System.err` to the run console for the duration of the run (`DexClassLoaderRunner` /
+ * `JavaExecTask`); a call-time `println` would then dump every concurrent IDE log (build tasks, the `ide.mem`
+ * heartbeat, daemon chatter) into the user program's output. Holding the originals keeps IDE logs out of it.
+ */
+class ConsoleLogSink(
+    private val out: java.io.PrintStream = System.out,
+    private val err: java.io.PrintStream = System.err,
+) : LogSink {
     override fun log(record: LogRecord) {
         val line = "[${record.level}] ${record.tag}: ${record.message}"
         if (record.level == LogLevel.ERROR) {
-            System.err.println(line)
-            record.throwable?.printStackTrace()
+            err.println(line)
+            record.throwable?.printStackTrace(err)
         } else {
-            println(line)
+            out.println(line)
         }
     }
 }

@@ -298,6 +298,8 @@ data class UiDependencyNode(
     val children: List<String> = emptyList(),
     /** Declared transitive exclusions (`group:name`, `*` wildcards allowed). Only set on declared roots. */
     val exclusions: List<String> = emptyList(),
+    /** Build-variant config this declaration is scoped to (e.g. `debug`); null = shared (all variants). */
+    val variant: String? = null,
 )
 
 /** A resolved version clash: [artifact] (`group:name`) was requested at [requested]; [chosen] won. */
@@ -516,9 +518,23 @@ data class UiModuleConfig(
     val outputDir: String,
     val sourceSets: List<UiSourceSetInfo>,
     val facets: List<UiFacetConfig>,
+    /** The console Run configuration (which main class to launch), or null for a module that runs through
+     *  the APK pipeline rather than a `main` (Android app/library). */
+    val runConfig: UiRunConfig? = null,
 )
 
 data class UiSourceSetInfo(val name: String, val scope: String, val roots: List<String>)
+
+/**
+ * A console (Java/Kotlin) module's Run configuration. [mainClass] is the user's override (empty = auto-detect);
+ * [detectedMainClasses] are the entry points found in the module's sources (offered as a picker); [autoDetected]
+ * is the one used when no override is set (shown as the field's placeholder), or null when none was found.
+ */
+data class UiRunConfig(
+    val mainClass: String,
+    val detectedMainClasses: List<String>,
+    val autoDetected: String?,
+)
 
 /** One facet panel (e.g. the `[android]` table) with a generic, codec-derived field list. */
 data class UiFacetConfig(val table: String, val title: String, val fields: List<UiConfigField>)
@@ -543,6 +559,9 @@ sealed interface UiConfigField {
 data class UiModuleConfigEdit(
     val languageLevel: String? = null,
     val facetValues: Map<String, Map<String, Any?>> = emptyMap(),
+    /** The console Run main-class override to persist: null = leave unchanged, blank = clear (auto-detect),
+     *  otherwise the FQN to launch. */
+    val mainClass: String? = null,
 )
 
 data class UiConfigResult(val success: Boolean, val message: String)
@@ -783,6 +802,12 @@ data class UiCompletionResult(
      * context-sensitive result that changes meaning as the token grows), forcing a re-query on each edit.
      */
     val mayFilterLocally: Boolean = true,
+    /**
+     * Whether the provider truncated its candidates (more matched than it returned). When true the editor must
+     * NOT trust local narrowing to be complete — extending the prefix can surface candidates that didn't fit —
+     * so it keeps re-querying the backend per keystroke instead of only filtering the cached set in place.
+     */
+    val isIncomplete: Boolean = false,
 )
 
 /** A go-to-definition target: open [path] and move the caret to [offset]. */

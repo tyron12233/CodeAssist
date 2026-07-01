@@ -329,9 +329,11 @@ class IdeServicesBackend(
     suspend fun composePreviewLibs(path: String): ComposePreviewLibs? =
         preview { services.composePreviewLibs(Paths.get(path)) }
 
-    // The owned XML-layout preview (LayoutPreviewBackend); the preview host calls this directly.
+    // The owned XML-layout preview (LayoutPreviewBackend); the preview host calls this directly. Runs on the
+    // preview lane so the render (real-view dex-load + resource-context build + inflate/measure/draw, or the
+    // owned engine pass) executes off the UI thread and is preempted by analysis and completion.
     override suspend fun layoutPreview(path: String, text: String, request: dev.ide.preview.PreviewRequest): dev.ide.preview.LayoutPreviewResult? =
-        services.layoutPreview(Paths.get(path), text, request)
+        preview { services.layoutPreview(Paths.get(path), text, request) }
 
     // ---- usage analytics (opt-in) ----
 

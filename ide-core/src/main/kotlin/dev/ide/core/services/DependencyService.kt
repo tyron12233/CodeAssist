@@ -76,8 +76,11 @@ internal class DependencyService(private val ctx: EngineContext) : Disposable {
      * out of the workspace) so they flow straight into the model's [LibraryTable] →
      * [dev.ide.model.ClasspathSnapshot] → build + analysis, like any other library.
      */
+    /** The shared download store (also the resolver's negative cache, cleared on explicit Retry). */
+    private val depsCache = ResolverCache(ctx.sharedCachesRoot ?: ctx.store.rootPath)
+
     private val depsResolver = MavenDependencyResolver(
-        cache = ResolverCache(ctx.sharedCachesRoot ?: ctx.store.rootPath),
+        cache = depsCache,
         fileFor = { p -> ctx.store.vfs.fileFor(p) },
     )
 
@@ -169,13 +172,52 @@ internal class DependencyService(private val ctx: EngineContext) : Disposable {
     /** Fingerprint of the declared library-dependency set (the reconcile marker's contents). */
     private fun reconcileFingerprint(mods: List<Module>): String = mods.flatMap { m ->
         m.dependencies.filterIsInstance<LibraryDependency>()
-            .map { "${m.id.value}|${it.library.name}" }
+            .map { "${m.id.value}|${it.library.name}|${it.variant ?: ""}" }
     }.sorted().joinToString("\n")
 
     /** Record that the current declared set has been fully resolved, so the next open skips the re-walk. */
     private fun markReconciled(fingerprint: String) = runCatching {
         java.nio.file.Files.createDirectories(reconcileMarker.parent)
         reconcileMarker.writeText(fingerprint)
+    }
+
+    /** Sidecar mirroring the last resolve's unresolved declared coordinates (name → reason). The in-memory
+     *  [unresolvedReasons] is the authoritative verdict but starts empty each session, so without this a
+     *  project opened with a known-bad closure would show "unresolved symbol" errors with a blank resolve bar
+     *  until the background reconcile re-failed. Persisting it lets the banner appear the instant such a
+     *  project opens, before any resolve runs (seeded into [unresolvedReasons] by [loadPersistedUnresolved]). */
+    private val unresolvedMarker: java.nio.file.Path get() = ctx.store.rootPath.resolve(".platform/.deps-unresolved")
+
+    /** Persist the currently-displayed unresolved set ([computeUnresolved], so it's already declared-filtered:
+     *  a removed dep's stale reason drops out). Deletes the sidecar when nothing is unresolved, so a healthy
+     *  project carries no banner state. Called wherever the verdict changes: every resolve via
+     *  [recordResolveReasons], and the remove/refresh path via [publishDependencyHealth]. */
+    private fun persistUnresolved() = runCatching {
+        val byName = computeUnresolved()
+            .associate { it.coordinate to it.reason.replace('\t', ' ').replace('\n', ' ') }
+        if (byName.isEmpty()) {
+            java.nio.file.Files.deleteIfExists(unresolvedMarker)
+        } else {
+            java.nio.file.Files.createDirectories(unresolvedMarker.parent)
+            unresolvedMarker.writeText(byName.entries.joinToString("\n") { "${it.key}\t${it.value}" })
+        }
+    }
+
+    /** Seed [unresolvedReasons] from the sidecar at open, so the first [publishDependencyHealth] reflects the
+     *  last-known unresolved set immediately. A still-broken closure keeps its banner; a since-healed one is
+     *  cleared by the reconcile that always runs when unresolved deps were persisted (its marker is absent in
+     *  that case, so it isn't gated). Best-effort: a missing/garbled sidecar just means "nothing seeded". */
+    private fun loadPersistedUnresolved() = runCatching {
+        if (!java.nio.file.Files.exists(unresolvedMarker)) return@runCatching
+        unresolvedMarker.readText().lineSequence().forEach { line ->
+            val tab = line.indexOf('\t')
+            if (tab > 0) unresolvedReasons[line.substring(0, tab)] = line.substring(tab + 1)
+        }
+    }
+
+    init {
+        // Seed the last session's unresolved verdict so an open with a bad closure shows its banner at once.
+        loadPersistedUnresolved()
     }
 
     // --- dependency-health (resolved vs unresolved) error state ----------------------------------
@@ -212,10 +254,12 @@ internal class DependencyService(private val ctx: EngineContext) : Disposable {
         }
     }
 
-    /** Publish the current dependency-health into [depsState] (the persistent project error state). */
+    /** Publish the current dependency-health into [depsState] (the persistent project error state), and mirror
+     *  it to the sidecar so the next open can show the banner before re-resolving. */
     private fun publishDependencyHealth() {
         val unresolved = computeUnresolved()
         _depsState.update { it.copy(unresolved = unresolved) }
+        persistUnresolved()
     }
 
     /** Heuristic reason for an unresolved coordinate, from one resolve's outcome: nothing resolved at all
@@ -239,6 +283,8 @@ internal class DependencyService(private val ctx: EngineContext) : Disposable {
                 unresolvedReasonFor(anyResolved)
             else unresolvedReasons.remove(name)
         }
+        // Mirror the fresh verdict to disk so the banner survives a restart and shows before any re-resolve.
+        persistUnresolved()
     }
 
 
@@ -272,31 +318,65 @@ internal class DependencyService(private val ctx: EngineContext) : Disposable {
         depsLog.info("reconcile: ${mods.size} module(s) with Maven deps → resolving")
 
         depsScope.launch {
-            var changedAny = false
-            var allComplete = true
-            for (m in mods) {
-                // finalize=false: defer the one save/invalidate/reindex to after the whole batch.
-                val asm = runCatching {
-                    assembleModuleClasspath(
-                        m, NoProgress, finalize = false
-                    )
-                }.onFailure { depsLog.warn("reconcile ${m.name} aborted: ${it.javaClass.simpleName}: ${it.message}") }
-                    .getOrNull()
-                if (asm == null || asm.unresolved.isNotEmpty()) allComplete =
-                    false // partial → retry next open
-                if (asm?.changed == true) changedAny = true
+            // The reconcile is a background heal. It does NOT pre-show the resolve bar: a re-walk that's fully
+            // served from the disk cache (the common reopen case) should be invisible. [reconcileProgress]
+            // flips `resolving` on only when the resolver reports a real network download, so the bar appears
+            // strictly when something is actually being fetched (honest progress).
+            try {
+                var changedAny = false
+                var allComplete = true
+                var anyRetriable = false
+                for (m in mods) {
+                    // finalize=false: defer the one save/invalidate/reindex to after the whole batch.
+                    val asm = runCatching {
+                        assembleModuleClasspath(
+                            m, reconcileProgress(), finalize = false
+                        )
+                    }.onFailure { depsLog.warn("reconcile ${m.name} aborted: ${it.javaClass.simpleName}: ${it.message}") }
+                        .getOrNull()
+                    if (asm == null || asm.unresolved.isNotEmpty()) allComplete =
+                        false // partial → maybe retry next open
+                    // An aborted module (exception) is treated as transient → keep retrying.
+                    if (asm == null || asm.retriable) anyRetriable = true
+                    if (asm?.changed == true) changedAny = true
+                }
+                if (changedAny) {
+                    ctx.store.save(); ctx.invalidateAnalyzers(); ctx.resyncIndex()
+                }
+                // Mark reconciled when fully resolved OR when the only failures are hard 404s (not transient):
+                // re-walking won't help those, so don't re-resolve every open. A genuine offline/transient
+                // failure leaves the marker absent, so the next open retries — preserving offline auto-recovery.
+                if (allComplete || !anyRetriable) markReconciled(fingerprint)
+            } finally {
+                // Clear the resolving flag and refresh the project error state from what's now on disk
+                // (reasons stamped during the resolves), so any genuinely-unresolved dep keeps its banner.
+                _depsState.update {
+                    it.copy(resolving = false, message = "", unresolved = computeUnresolved())
+                }
             }
-            if (changedAny) {
-                ctx.store.save(); ctx.invalidateAnalyzers(); ctx.resyncIndex()
-            }
-            if (allComplete) markReconciled(fingerprint)
-            // Refresh the project error state from what's now on disk (reasons stamped during the resolves).
-            publishDependencyHealth()
         }
     }
 
+    /** Progress for the background reconcile: shows the resolve bar ONLY once the resolver actually downloads
+     *  from the network (its messages are non-null only for real fetches — see [MavenDependencyResolver]). A
+     *  fully-cached re-walk produces no messages, so the bar never appears. */
+    private fun reconcileProgress(): ProgressReporter = object : ProgressReporter {
+        override fun report(fraction: Double, message: String?) {
+            if (message != null) _depsState.update {
+                it.copy(resolving = true, message = message, log = appendDepsLog(it.log, message))
+            }
+        }
+
+        override fun checkCanceled() {}
+        override val isCanceled: Boolean get() = false
+    }
+
     private data class ModuleAssembly(
-        val changed: Boolean, val unresolved: List<Coordinate>, val resolvedCount: Int
+        val changed: Boolean, val unresolved: List<Coordinate>, val resolvedCount: Int,
+        /** True if a failure was transient (network) rather than a hard 404 — see [ResolutionResult.retriable].
+         *  When false, re-walking on the next open won't help, so the reconcile marker can be written despite
+         *  the unresolved entries (negative cache + explicit Retry recover the hard-404 case). */
+        val retriable: Boolean = false,
     )
 
     /**
@@ -353,7 +433,7 @@ internal class DependencyService(private val ctx: EngineContext) : Disposable {
         for ((libName, coord) in directs) {
             val artifacts = partition[libName].orEmpty()
             if (artifacts.isEmpty()) continue   // primary didn't resolve (offline) → keep any existing closure
-            val freshClasses = artifacts.map { it.classesRoot.path }.toSet()
+            val freshClasses = artifacts.flatMap { listOf(it.classesRoot.path) + it.extraClassesRoots.map { r -> r.path } }.toSet()
             // The whole closure's `-sources.jar`s — direct AND transitive — so go-to-source, real parameter
             // names, and javadoc/KDoc resolve for every type the library can reach, not just the declared
             // coordinate. (`sourceAttachments` → JdtSourceAnalyzer's resolver + the source-doc index.) Included
@@ -369,6 +449,7 @@ internal class DependencyService(private val ctx: EngineContext) : Disposable {
                 kind = if (primary?.kind == ArtifactKind.AAR) LibraryKind.AAR else LibraryKind.JAR
                 artifacts.forEach { a ->
                     addClassesRoot(a.classesRoot)
+                    a.extraClassesRoots.forEach { addClassesRoot(it) }
                     a.sourcesRoot?.let { addSourcesRoot(it) }
                 }
                 commit()
@@ -378,7 +459,7 @@ internal class DependencyService(private val ctx: EngineContext) : Disposable {
         if (changed && finalize) {
             ctx.store.save(); ctx.invalidateAnalyzers(); ctx.resyncIndex()
         }
-        return ModuleAssembly(changed, result.unresolved, result.resolved.size)
+        return ModuleAssembly(changed, result.unresolved, result.resolved.size, retriable = result.retriable)
     }
 
     /**
@@ -418,6 +499,7 @@ internal class DependencyService(private val ctx: EngineContext) : Disposable {
             )
             var changedAny = false
             var allComplete = true
+            var anyRetriable = false
             try {
                 moduleNames.forEachIndexed { i, name ->
                     val module = ctx.modules().firstOrNull { it.name == name } ?: return@forEachIndexed
@@ -436,6 +518,7 @@ internal class DependencyService(private val ctx: EngineContext) : Disposable {
                     }.onFailure { depsLog.warn("pending resolve $name aborted: ${it.javaClass.simpleName}: ${it.message}") }
                         .getOrNull()
                     if (asm == null || asm.unresolved.isNotEmpty()) allComplete = false
+                    if (asm == null || asm.retriable) anyRetriable = true
                     if (asm?.changed == true) changedAny = true
                 }
                 if (changedAny) {
@@ -443,9 +526,10 @@ internal class DependencyService(private val ctx: EngineContext) : Disposable {
                     ctx.invalidateAnalyzers()
                     ctx.resyncIndex()
                 }
-                // Only mark the declared set reconciled when it resolved completely; a partial resolve
-                // (offline) leaves the marker absent so the next open retries via reconciliation.
-                if (allComplete) markReconciled(reconcileFingerprint(mavenDepModules()))
+                // Mark the declared set reconciled when it resolved completely OR the only failures are hard
+                // 404s (not transient): a transient/offline partial leaves the marker absent so the next open
+                // retries, while a permanent miss won't trigger a futile re-walk every open.
+                if (allComplete || !anyRetriable) markReconciled(reconcileFingerprint(mavenDepModules()))
             } finally {
                 // Publish the final dependency-health alongside resolving=false: any dep that didn't resolve
                 // stays as the persistent error state (with the reason recorded during the resolve).
@@ -470,6 +554,9 @@ internal class DependencyService(private val ctx: EngineContext) : Disposable {
      */
     suspend fun retryDependencyResolution() {
         runCatching { java.nio.file.Files.deleteIfExists(reconcileMarker) }
+        // Explicit user retry: forget the recorded 404s so known-missing artifacts (and absent sources) are
+        // re-probed — the user may have just added the repo that carries them, or come back online.
+        depsCache.clearMisses()
         val mods = mavenDepModules()
         depsLog.info("retryDependencyResolution: ${mods.size} module(s) with Maven deps")
         if (mods.isEmpty()) {
@@ -483,6 +570,7 @@ internal class DependencyService(private val ctx: EngineContext) : Disposable {
         )
         var changedAny = false
         var allComplete = true
+        var anyRetriable = false
         try {
             mods.forEachIndexed { i, m ->
                 _depsState.update {
@@ -498,12 +586,15 @@ internal class DependencyService(private val ctx: EngineContext) : Disposable {
                 }.onFailure { depsLog.warn("retry resolve ${m.name} aborted: ${it.javaClass.simpleName}: ${it.message}") }
                     .getOrNull()
                 if (asm == null || asm.unresolved.isNotEmpty()) allComplete = false
+                if (asm == null || asm.retriable) anyRetriable = true
                 if (asm?.changed == true) changedAny = true
             }
             if (changedAny) {
                 ctx.store.save(); ctx.invalidateAnalyzers(); ctx.resyncIndex()
             }
-            if (allComplete) markReconciled(reconcileFingerprint(mavenDepModules()))
+            // As elsewhere: a transient failure leaves the marker absent (retry next open); a hard-404-only
+            // result is marked so it won't re-walk every open (the user can Retry again to force a re-probe).
+            if (allComplete || !anyRetriable) markReconciled(reconcileFingerprint(mavenDepModules()))
         } finally {
             _depsState.update {
                 it.copy(
@@ -688,7 +779,7 @@ internal class DependencyService(private val ctx: EngineContext) : Disposable {
                 if (coord != null) {
                     val ga = "${coord.group}:${coord.name}"
                     val resolvedNode = nodes.values.firstOrNull { "${it.group}:${it.name}" == ga }
-                    if (resolvedNode != null) declaredRoots += resolvedNode.copy(exclusions = excl)
+                    if (resolvedNode != null) declaredRoots += resolvedNode.copy(exclusions = excl, scope = scopeLabel(entry.scope), variant = entry.variant)
                     else {
                         unresolved += entry.library.name
                         val lib = findLibrary(entry.library.name)
@@ -706,6 +797,7 @@ internal class DependencyService(private val ctx: EngineContext) : Disposable {
                             compatible = compatible,
                             incompatibleReason = if (!compatible) aarReason(module) else null,
                             exclusions = excl,
+                            variant = entry.variant,
                         )
                         declaredRoots += node
                         nodes.putIfAbsent(node.coordinate, node)
@@ -726,6 +818,7 @@ internal class DependencyService(private val ctx: EngineContext) : Disposable {
                         compatible = compatible,
                         incompatibleReason = if (!compatible) aarReason(module) else null,
                         local = true,
+                        variant = entry.variant,
                     )
                     declaredRoots += node
                     nodes.putIfAbsent(node.coordinate, node)
@@ -741,6 +834,7 @@ internal class DependencyService(private val ctx: EngineContext) : Disposable {
                     kind = UiDepKind.Module,
                     declared = true,
                     scope = scopeLabel(entry.scope),
+                    variant = entry.variant,
                 )
                 declaredRoots += node
                 nodes.putIfAbsent(node.coordinate, node)
@@ -753,6 +847,7 @@ internal class DependencyService(private val ctx: EngineContext) : Disposable {
                     coordinate = entry.bom.toString(),
                     group = entry.bom.group, name = entry.bom.name, version = entry.bom.version,
                     kind = UiDepKind.Platform, declared = true, scope = "platform",
+                    variant = entry.variant,
                 )
                 declaredRoots += node
                 nodes.putIfAbsent(node.coordinate, node)
@@ -766,10 +861,11 @@ internal class DependencyService(private val ctx: EngineContext) : Disposable {
             moduleName = moduleName,
             buildSystem = buildSystem,
             acceptsAar = accepts,
-            // Dedup by coordinate: two declared coordinates that share a group:name (e.g. two versions of the
-            // same artifact) collapse to the SAME resolved node after conflict resolution, so the same node
-            // would otherwise appear twice — which crashes the LazyColumn (duplicate item key). Keep the first.
-            declared = declaredRoots.distinctBy { it.coordinate },
+            // Dedup by (coordinate, variant): two declared coordinates that share a group:name (e.g. two
+            // versions of the same artifact) collapse to the SAME resolved node after conflict resolution, so
+            // the same node would otherwise appear twice — which crashes the LazyColumn (duplicate item key).
+            // The variant is part of the key so the SAME coordinate scoped to two variants both survive.
+            declared = declaredRoots.distinctBy { it.coordinate to it.variant },
             nodes = nodes.values.toList(),
             conflicts = result?.conflicts?.map {
                 UiVersionConflict(
@@ -805,7 +901,8 @@ internal class DependencyService(private val ctx: EngineContext) : Disposable {
         moduleName: String,
         coordinate: String,
         scope: String,
-        exclusions: List<String> = emptyList()
+        exclusions: List<String> = emptyList(),
+        variant: String? = null,
     ): UiAddResult {
         // The standalone "add" (Dependencies screen): owns the resolve-state flag; the resolution core is
         // shared with the deferred template-dependency loop ([startPendingDependencyResolution]).
@@ -820,7 +917,8 @@ internal class DependencyService(private val ctx: EngineContext) : Disposable {
                 coordinate,
                 scope,
                 depsProgress(),
-                exclusions = exclusions.mapNotNull(Exclusion::parse)
+                exclusions = exclusions.mapNotNull(Exclusion::parse),
+                variant = variant,
             )
         } finally {
             // resolveAndAttach → assembleModuleClasspath already stamped reasons; refresh the error state.
@@ -839,6 +937,7 @@ internal class DependencyService(private val ctx: EngineContext) : Disposable {
         progress: ProgressReporter,
         finalize: Boolean = true,
         exclusions: List<Exclusion> = emptyList(),
+        variant: String? = null,
     ): UiAddResult {
         val module = ctx.modules().firstOrNull { it.name == moduleName } ?: return UiAddResult(
             false, "No module '$moduleName'."
@@ -852,7 +951,7 @@ internal class DependencyService(private val ctx: EngineContext) : Disposable {
             false,
             "$coordinate has no version — import a platform (BOM) first, or give an explicit version."
         )
-        if (module.dependencies.any { it is LibraryDependency && it.library.name == coordinate }) return UiAddResult(
+        if (module.dependencies.any { it is LibraryDependency && it.library.name == coordinate && it.variant == variant }) return UiAddResult(
             false, "$coordinate is already a dependency of '$moduleName'."
         )
 
@@ -883,7 +982,7 @@ internal class DependencyService(private val ctx: EngineContext) : Disposable {
         // Persist with the resolved, concrete coordinate — a versionless declaration is pinned to the
         // version the platform supplied at add time (a later BOM bump won't move it; re-add to update).
         val libraryName = primary.coordinate.toString()
-        if (libraryName != coordinate && module.dependencies.any { it is LibraryDependency && it.library.name == libraryName }) return UiAddResult(
+        if (libraryName != coordinate && module.dependencies.any { it is LibraryDependency && it.library.name == libraryName && it.variant == variant }) return UiAddResult(
             false, "$libraryName is already a dependency of '$moduleName'."
         )
 
@@ -894,7 +993,7 @@ internal class DependencyService(private val ctx: EngineContext) : Disposable {
         project.beginModification().apply {
             module(module.id).addDependency(
                 LibraryDependency(
-                    LibraryRef(libraryName), parseScope(scope), exclusions = exclusions
+                    LibraryRef(libraryName), parseScope(scope), exclusions = exclusions, variant = variant
                 )
             )
             commit()
@@ -927,14 +1026,14 @@ internal class DependencyService(private val ctx: EngineContext) : Disposable {
      * `platform(...)` semantics. It contributes no artifact; it supplies versions to versionless
      * dependencies added afterwards. Verified resolvable before it's persisted.
      */
-    suspend fun addPlatform(moduleName: String, coordinate: String): UiAddResult {
+    suspend fun addPlatform(moduleName: String, coordinate: String, variant: String? = null): UiAddResult {
         val module = ctx.modules().firstOrNull { it.name == moduleName } ?: return UiAddResult(
             false, "No module '$moduleName'."
         )
         val bom = parseCoordinate(coordinate) ?: return UiAddResult(
             false, "A platform BOM needs a version — expected group:name:version."
         )
-        if (module.dependencies.any { it is PlatformDependency && it.bom == bom }) return UiAddResult(
+        if (module.dependencies.any { it is PlatformDependency && it.bom == bom && it.variant == variant }) return UiAddResult(
             false, "$coordinate is already a platform of '$moduleName'."
         )
 
@@ -963,7 +1062,7 @@ internal class DependencyService(private val ctx: EngineContext) : Disposable {
         val project =
             ctx.projectOf(module) ?: return UiAddResult(false, "No project owns '$moduleName'.")
         project.beginModification().apply {
-            module(module.id).addDependency(PlatformDependency(bom))
+            module(module.id).addDependency(PlatformDependency(bom, variant = variant))
             commit()
         }
         ctx.store.save()
@@ -1131,6 +1230,105 @@ internal class DependencyService(private val ctx: EngineContext) : Disposable {
             ) else UiAddResult(true, "Exclusions updated for $coordinate", asm.resolvedCount)
         } catch (e: Exception) {
             UiAddResult(false, "Re-resolution failed: ${e.message}")
+        } finally {
+            _depsState.update { it.copy(resolving = false, unresolved = computeUnresolved()) }
+        }
+    }
+
+    /**
+     * Published versions of the declared library [coordinate]'s artifact (`group:name`), newest-first —
+     * for the Dependencies screen's version picker. [coordinate] is the declared library name
+     * (`group:name:version`); only its `group:name` is used. Network-backed (uncached metadata); empty
+     * when offline, not a Maven coordinate, or the artifact has no published metadata.
+     */
+    suspend fun availableVersions(moduleName: String, coordinate: String): List<String> {
+        val coord = parseInputCoordinate(coordinate) ?: return emptyList()
+        if (coord.group.isBlank() || coord.name.isBlank()) return emptyList()
+        return runCatching { depsResolver.availableVersions(coord.group, coord.name, currentRepositories()) }
+            .getOrDefault(emptyList())
+    }
+
+    /**
+     * Update an already-declared library dependency of [moduleName] in ONE re-resolve: change its [version],
+     * [scope], and/or transitive [exclusions]. [coordinate] identifies the declaration by its `group:name`
+     * (the displayed/resolved coordinate may differ from the persisted one after a newest-wins bump, so the
+     * match is on `group:name`, not the exact string). [version]/[scope]/[exclusions] are the DESIRED final
+     * values. A version change is validated against the repositories before the model is touched, so a typo
+     * can't silently break the classpath. A no-op (success) when nothing changed.
+     */
+    suspend fun updateDependency(
+        moduleName: String,
+        coordinate: String,
+        version: String,
+        scope: String,
+        exclusions: List<String>,
+    ): UiAddResult {
+        val module = ctx.modules().firstOrNull { it.name == moduleName }
+            ?: return UiAddResult(false, "No module '$moduleName'.")
+        val target = parseInputCoordinate(coordinate)
+            ?: return UiAddResult(false, "$coordinate is not a Maven coordinate.")
+        // Match on group:name: the resolved coordinate shown in the tree can be a newest-wins bump of the
+        // version actually persisted in module.toml.
+        val entry = module.dependencies.filterIsInstance<LibraryDependency>().firstOrNull {
+            parseCoordinate(it.library.name)?.let { c -> c.group == target.group && c.name == target.name } == true
+        } ?: return UiAddResult(false, "$coordinate is not a declared library dependency of '$moduleName'.")
+        val declared = parseCoordinate(entry.library.name)
+            ?: return UiAddResult(false, "$coordinate is not a versioned Maven coordinate.")
+
+        val newVersion = version.trim().ifBlank { declared.version }
+        val newCoord = Coordinate(declared.group, declared.name, newVersion)
+        val newLibraryName = newCoord.toString()
+        val parsedExclusions = exclusions.mapNotNull(Exclusion::parse)
+        val newScope = parseScope(scope)
+        val versionChanged = newVersion != declared.version
+
+        if (!versionChanged && newScope == entry.scope && parsedExclusions == entry.exclusions)
+            return UiAddResult(true, "No changes.")
+        if (newLibraryName != entry.library.name &&
+            module.dependencies.any { it is LibraryDependency && it.library.name == newLibraryName })
+            return UiAddResult(false, "$newLibraryName is already a dependency of '$moduleName'.")
+
+        val project = ctx.projectOf(module) ?: return UiAddResult(false, "No project owns '$moduleName'.")
+        _depsState.value = DepsResolveState(
+            resolving = true,
+            message = "Updating ${declared.name}…",
+            log = listOf("Updating ${declared.name}…"),
+        )
+        return try {
+            // Validate a new version resolves before mutating the model, so a bad version can't break the
+            // classpath. (Scope/exclusion-only changes keep the same artifact, so no probe is needed.)
+            if (versionChanged) {
+                val check = runCatching {
+                    depsResolver.resolve(
+                        listOf(newCoord), currentRepositories(), conflictPolicy, depsProgress(),
+                        platforms = declaredPlatforms(module),
+                    )
+                }.getOrNull()
+                val found = check?.resolved?.any { it.coordinate.group == newCoord.group && it.coordinate.name == newCoord.name } == true
+                if (!found) return UiAddResult(false, "Couldn't find $newLibraryName in the configured repositories.")
+            }
+            project.beginModification().apply {
+                module(module.id).removeDependency(entry)
+                module(module.id).addDependency(LibraryDependency(LibraryRef(newLibraryName), newScope, exclusions = parsedExclusions))
+                commit()
+            }
+            val updated = ctx.modules().firstOrNull { it.name == moduleName }
+                ?: return UiAddResult(false, "Module '$moduleName' disappeared.")
+            val asm = assembleModuleClasspath(updated, depsProgress(), finalize = true)
+            // The declared set changed → drop any stale reason + let the next open re-verify the closure.
+            unresolvedReasons.remove(entry.library.name)
+            runCatching { java.nio.file.Files.deleteIfExists(reconcileMarker) }
+            when {
+                asm.unresolved.isNotEmpty() -> UiAddResult(
+                    true,
+                    "Updated, but ${asm.unresolved.size} artifact(s) failed to download — re-resolve to complete the classpath.",
+                    asm.resolvedCount,
+                )
+                versionChanged -> UiAddResult(true, "Updated ${declared.name} to $newVersion", asm.resolvedCount)
+                else -> UiAddResult(true, "Updated ${declared.name}", asm.resolvedCount)
+            }
+        } catch (e: Exception) {
+            UiAddResult(false, "Update failed: ${e.message}")
         } finally {
             _depsState.update { it.copy(resolving = false, unresolved = computeUnresolved()) }
         }
@@ -1317,7 +1515,7 @@ internal class DependencyService(private val ctx: EngineContext) : Disposable {
 
     /** Add a module-on-module dependency from [moduleName] onto [targetModule]. An `api` scope is exported
      *  (Gradle semantics). Blocked on self/cycle/dup. */
-    fun addModuleDependency(moduleName: String, targetModule: String, scope: String): UiAddResult {
+    fun addModuleDependency(moduleName: String, targetModule: String, scope: String, variant: String? = null): UiAddResult {
         val module = ctx.modules().firstOrNull { it.name == moduleName } ?: return UiAddResult(
             false, "No module '$moduleName'."
         )
@@ -1329,7 +1527,7 @@ internal class DependencyService(private val ctx: EngineContext) : Disposable {
         val target = project.modules.firstOrNull { it.name == targetModule } ?: return UiAddResult(
             false, "No module '$targetModule' in this project."
         )
-        if (module.dependencies.any { it is ModuleDependency && it.target == target.id }) return UiAddResult(
+        if (module.dependencies.any { it is ModuleDependency && it.target == target.id && it.variant == variant }) return UiAddResult(
             false, "'$moduleName' already depends on '$targetModule'."
         )
         if (dependsOnTransitively(target, module.id, project)) return UiAddResult(
@@ -1340,7 +1538,7 @@ internal class DependencyService(private val ctx: EngineContext) : Disposable {
             project.beginModification().apply {
                 module(module.id).addDependency(
                     ModuleDependency(
-                        target.id, resolvedScope, exported = resolvedScope == DependencyScope.API
+                        target.id, resolvedScope, exported = resolvedScope == DependencyScope.API, variant = variant
                     )
                 )
                 commit()

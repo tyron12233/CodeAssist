@@ -72,6 +72,19 @@ internal fun EditorCenter(
             )
         )
     }
+    // The active build variant shown in the switcher chip. It targets the Android-app module being run
+    // (derived from the run-task ids), so a non-Android project leaves it null and the chip is hidden. A
+    // `variantEpoch` bump recomputes the label + re-analyzes open files after a switch.
+    var variantEpoch by remember { mutableStateOf(0) }
+    val variantModule = remember(project.name, variantEpoch) {
+        state.backend.build.runTasks().firstNotNullOfOrNull { t ->
+            listOf("androidRun:", "assemble:", "bundle:").firstOrNull { t.id.startsWith(it) }
+                ?.let { p -> t.id.removePrefix(p).substringBefore(":") }
+        }
+    }
+    val activeVariant = remember(project.name, variantEpoch, variantModule) {
+        variantModule?.let { state.backend.build.activeVariant(it) }
+    }
     Box(modifier) {
         Column(Modifier.fillMaxSize()) {
             EditorTopBar(
@@ -81,6 +94,13 @@ internal fun EditorCenter(
                 onOpenPalette = { state.paletteOpen = true },
                 runTasks = { state.backend.build.runTasks() },
                 onPickTask = { state.consoleOpen = true; state.backend.build.runTask(it.id) },
+                activeVariant = activeVariant,
+                variants = { variantModule?.let { state.backend.build.listVariants(it) } ?: emptyList() },
+                onPickVariant = { v ->
+                    variantModule?.let { state.backend.build.setActiveVariant(it, v) }
+                    variantEpoch++
+                    state.reanalyzeOpenFiles()
+                },
                 onSave = { state.saveActive() },
                 hasUnsavedChanges = active?.modified == true,
                 hasActiveFile = active != null,

@@ -39,9 +39,16 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.LinearProgressIndicator
+import androidx.compose.material3.PlainTooltip
 import androidx.compose.material3.Text
+import androidx.compose.material3.TooltipBox
+import androidx.compose.material3.TooltipDefaults
+import androidx.compose.material3.rememberTooltipState
+import androidx.compose.foundation.verticalScroll
+import dev.ide.ui.backend.UiVersionConflict
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -166,7 +173,8 @@ fun DependenciesPane(
     BoxWithConstraints(modifier.fillMaxSize().background(Ca.colors.bg)) {
         val expanded = maxWidth >= DEPS_EXPANDED_BREAKPOINT
         Column(Modifier.fillMaxSize()) {
-            DepPaneToolbar(tab, { tab = it }, resolvedView, { resolvedView = it }, { addOpen = true }, { reposOpen = true }, resolving, resolveState.message, compact = !expanded)
+            DepPaneToolbar(tab, { tab = it }, resolvedView, { resolvedView = it }, { addOpen = true }, { reposOpen = true },
+                { coroutine.launch { backend.deps.retryDependencyResolution(); reloadKey++ } }, resolving, resolveState.message, compact = !expanded)
             Box(Modifier.fillMaxWidth().height(1.dp).background(Ca.colors.separator))
             DepBody(deps, loading, tab, resolvedView, resolveState, codeFont, Modifier.weight(1f).fillMaxWidth(), { pendingRemove = it }, { pendingEdit = it }, onExcludeTransitive, onRemoveExclusion)
         }
@@ -212,16 +220,18 @@ fun DependenciesPane(
             },
         )
 
-        // ---- edit exclusions ----
+        // ---- edit dependency (version · scope · exclusions) ----
         pendingEdit?.let { node ->
-            EditExclusionsDialog(
+            EditDependencySheet(
+                backend = backend,
+                moduleName = moduleName,
                 node = node,
                 codeFont = codeFont,
                 expanded = expanded,
                 onDismiss = { pendingEdit = null },
-                onSave = { newExclusions ->
+                onSave = { version, scope, exclusions ->
                     coroutine.launch {
-                        val result = backend.deps.setDependencyExclusions(moduleName, node.coordinate, newExclusions)
+                        val result = backend.deps.updateDependency(moduleName, node.coordinate, version, scope, exclusions)
                         toast = ToastMsg(result.message, error = !result.success)
                         if (result.success) reloadKey++
                     }
@@ -254,6 +264,7 @@ private fun DepPaneToolbar(
     onView: (DepView) -> Unit,
     onAdd: () -> Unit,
     onRepos: () -> Unit,
+    onResolve: () -> Unit,
     resolving: Boolean,
     resolveMessage: String,
     compact: Boolean,
@@ -270,6 +281,9 @@ private fun DepPaneToolbar(
                 maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f, fill = false))
         }
         Spacer(Modifier.weight(1f))
+        // Force a fresh resolve of the declared deps — clears the reconcile marker so resolver changes
+        // (e.g. new variant/constraint handling) actually re-apply to a project whose deps are unchanged.
+        IconButtonCa(CaIcons.refresh, "Re-resolve dependencies", onClick = { if (!resolving) onResolve() })
         IconButtonCa(CaIcons.pkg, "Repositories", onClick = onRepos)
         PrimaryButton("Add", onClick = onAdd, icon = CaIcons.plus, iconOnly = compact)
     }
@@ -356,7 +370,7 @@ private fun DepBody(
     codeFont: FontFamily,
     modifier: Modifier,
     onRemove: (String) -> Unit,
-    onEditExclusions: (UiDependencyNode) -> Unit,
+    onEdit: (UiDependencyNode) -> Unit,
     onExcludeTransitive: (root: UiDependencyNode, transitive: UiDependencyNode) -> Unit,
     onRemoveExclusion: (root: UiDependencyNode, exclusion: String) -> Unit,
 ) {
@@ -365,7 +379,7 @@ private fun DepBody(
             isLoading -> ResolvingPanel(resolveState)
             deps == null -> Empty("Couldn't load dependencies.")
             // The persistent error state carries the (heuristic) why per coordinate — surface it here too.
-            else -> DepContent(deps, tab, resolvedView, codeFont, resolveState.unresolved.associate { it.coordinate to it.reason }, onRemove, onEditExclusions, onExcludeTransitive, onRemoveExclusion)
+            else -> DepContent(deps, tab, resolvedView, codeFont, resolveState.unresolved.associate { it.coordinate to it.reason }, onRemove, onEdit, onExcludeTransitive, onRemoveExclusion)
         }
     }
 }
@@ -404,14 +418,21 @@ private fun ResolveBar(fraction: Double) {
 }
 
 @Composable
-private fun DepContent(deps: UiModuleDeps, tab: DepTab, resolvedView: DepView, codeFont: FontFamily, reasons: Map<String, String>, onRemove: (String) -> Unit, onEditExclusions: (UiDependencyNode) -> Unit, onExcludeTransitive: (root: UiDependencyNode, transitive: UiDependencyNode) -> Unit, onRemoveExclusion: (root: UiDependencyNode, exclusion: String) -> Unit) {
+private fun DepContent(deps: UiModuleDeps, tab: DepTab, resolvedView: DepView, codeFont: FontFamily, reasons: Map<String, String>, onRemove: (String) -> Unit, onEdit: (UiDependencyNode) -> Unit, onExcludeTransitive: (root: UiDependencyNode, transitive: UiDependencyNode) -> Unit, onRemoveExclusion: (root: UiDependencyNode, exclusion: String) -> Unit) {
     val nodesByCoord = remember(deps) { deps.nodes.associateBy { it.coordinate } }
     val expanded = remember(deps) { androidx.compose.runtime.mutableStateMapOf<String, Boolean>() }
     val unresolvedSet = remember(deps) { deps.unresolved.toSet() }
+    // Only a major-version clash (semver-incompatible) is flagged on a row; benign newest-wins differences
+    // are counted in the summary, not painted on every node. Keyed by `group:name`.
+    val realConflicts = remember(deps) { deps.conflicts.filter(::isRealConflict).associateBy { it.artifact } }
+    fun conflictFor(node: UiDependencyNode): UiVersionConflict? = realConflicts["${node.group}:${node.name}"]
 
     LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(vertical = 8.dp)) {
-        // Version conflicts resolved newest-wins are normal/expected, so no summary banner (it floods the
-        // list on large graphs). The per-node "conflict" chip still flags individual clashes in the tree.
+        // A quiet, collapsible conflict summary: real (major-version) clashes are listed for review; benign
+        // newest-wins differences are just counted (the per-row warning glyph flags the real ones in place).
+        if (deps.conflicts.isNotEmpty()) item("conflicts") {
+            ConflictSummaryBanner(deps.conflicts, realConflicts.keys, codeFont, Modifier.animateItem())
+        }
         if (deps.cycles.isNotEmpty()) item("cycles") {
             BannerCard(CaIcons.refresh, Ca.colors.error, "${deps.cycles.size} dependency cycle${plural(deps.cycles.size)}", Modifier.animateItem()) {
                 deps.cycles.forEach { cycle -> Text(cycle.joinToString(" → ") { it.substringBeforeLast(':') }, color = Ca.colors.textSecondary, style = Ca.type.caption.copy(fontFamily = codeFont)) }
@@ -438,8 +459,9 @@ private fun DepContent(deps: UiModuleDeps, tab: DepTab, resolvedView: DepView, c
                         DependencyRow(node, codeFont, depth = 0, expandable = node.children.isNotEmpty(), expanded = open,
                             onToggle = { expanded["decl:${node.coordinate}"] = !open },
                             onRemove = { onRemove(node.coordinate) }, unresolved = node.coordinate in unresolvedSet,
-                            onEditExclusions = if (node.kind == UiDepKind.Jar || node.kind == UiDepKind.Aar) {
-                                if (!node.local) ({ onEditExclusions(node) }) else null
+                            conflict = conflictFor(node),
+                            onEdit = if (node.kind == UiDepKind.Jar || node.kind == UiDepKind.Aar) {
+                                if (!node.local) ({ onEdit(node) }) else null
                             } else null)
                         AnimatedVisibility(open, enter = expandVertically(tween(Motion.FAST)) + fadeIn(), exit = shrinkVertically(tween(Motion.FAST)) + fadeOut()) {
                             Column {
@@ -460,13 +482,13 @@ private fun DepContent(deps: UiModuleDeps, tab: DepTab, resolvedView: DepView, c
                 DepView.Tree -> {
                     if (deps.declared.isEmpty()) item("empty") { EmptyRow("Nothing resolved yet.") }
                     deps.declared.forEach { root ->
-                        treeRows(root, root, nodesByCoord, 0, emptyList(), expanded, codeFont, { onRemove(root.coordinate) }, onExcludeTransitive)
+                        treeRows(root, root, nodesByCoord, 0, emptyList(), expanded, codeFont, realConflicts, { onRemove(root.coordinate) }, onExcludeTransitive)
                     }
                 }
                 DepView.Graph -> {
                     if (deps.nodes.isEmpty()) item("empty") { EmptyRow("Nothing resolved yet.") }
                     val sorted = deps.nodes.sortedWith(compareByDescending<UiDependencyNode> { it.declared }.thenBy { it.coordinate })
-                    items(sorted, key = { "graph:${it.coordinate}" }) { node -> Box(Modifier.animateItem()) { GraphRow(node, nodesByCoord, codeFont) } }
+                    items(sorted, key = { "graph:${it.coordinate}" }) { node -> Box(Modifier.animateItem()) { GraphRow(node, nodesByCoord, codeFont, conflictFor(node)) } }
                 }
             }
         }
@@ -481,6 +503,7 @@ private fun LazyListScope.treeRows(
     ancestors: List<String>,
     expanded: SnapshotStateMap<String, Boolean>,
     codeFont: FontFamily,
+    realConflicts: Map<String, UiVersionConflict>,
     onRemove: (() -> Unit)?,
     onExcludeTransitive: (root: UiDependencyNode, transitive: UiDependencyNode) -> Unit,
 ) {
@@ -493,20 +516,22 @@ private fun LazyListScope.treeRows(
     item(key) {
         Box(Modifier.animateItem()) {
             DependencyRow(node, codeFont, depth = depth, expandable = children.isNotEmpty(), expanded = isOpen,
-                onToggle = { expanded[key] = !isOpen }, onRemove = onRemove, cycle = cycle, onExclude = onExclude)
+                onToggle = { expanded[key] = !isOpen }, onRemove = onRemove, cycle = cycle,
+                conflict = realConflicts["${node.group}:${node.name}"], onExclude = onExclude)
         }
     }
-    if (isOpen) children.forEach { child -> treeRows(root, child, nodesByCoord, depth + 1, ancestors + node.coordinate, expanded, codeFont, null, onExcludeTransitive) }
+    if (isOpen) children.forEach { child -> treeRows(root, child, nodesByCoord, depth + 1, ancestors + node.coordinate, expanded, codeFont, realConflicts, null, onExcludeTransitive) }
 }
 
 @Composable
-private fun GraphRow(node: UiDependencyNode, nodesByCoord: Map<String, UiDependencyNode>, codeFont: FontFamily) {
+private fun GraphRow(node: UiDependencyNode, nodesByCoord: Map<String, UiDependencyNode>, codeFont: FontFamily, conflict: UiVersionConflict?) {
     Column(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 6.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             DepBadge(node)
             Box(Modifier.weight(1f, fill = false)) { Column { DepPrimary(node, codeFont, dimmed = !node.declared); DepSubtitle(node) } }
-            if (node.declared) Chip(node.scope ?: "declared", fill = Ca.colors.accentSoft, textColor = Ca.colors.accent)
-            if (node.inConflict) Chip("conflict", fill = Ca.colors.warning.copy(alpha = 0.16f), textColor = Ca.colors.warning)
+            if (node.declared) node.variant?.let { VariantBadge(it) }
+            if (node.declared) node.scope?.takeIf { it != "platform" }?.let { ScopeBadge(it) }
+            conflict?.let { ConflictBadge(it) }
         }
         if (node.children.isNotEmpty()) {
             Row(Modifier.padding(start = 30.dp, top = 3.dp).horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
@@ -531,7 +556,8 @@ private fun DependencyRow(
     onRemove: (() -> Unit)?,
     cycle: Boolean = false,
     unresolved: Boolean = false,
-    onEditExclusions: (() -> Unit)? = null,
+    conflict: UiVersionConflict? = null,
+    onEdit: (() -> Unit)? = null,
     onExclude: (() -> Unit)? = null,
 ) {
     Row(
@@ -552,13 +578,14 @@ private fun DependencyRow(
                 else -> DepSubtitle(node)
             }
         }
-        node.scope?.let { Chip(it, fill = Ca.colors.accentSoft, textColor = Ca.colors.accent) }
+        node.variant?.let { VariantBadge(it) }
+        node.scope?.takeIf { it != "platform" }?.let { ScopeBadge(it) }
         // No "excludes N" summary chip here — excluded entries show as their own rows (with an "excluded"
         // pill) when the dependency is expanded.
-        if (unresolved) Chip("unresolved", fill = Ca.colors.error.copy(alpha = 0.16f), textColor = Ca.colors.error)
-        if (node.inConflict) Chip("conflict", fill = Ca.colors.warning.copy(alpha = 0.16f), textColor = Ca.colors.warning)
+        if (unresolved) WithTooltip("Couldn't resolve — check the version/repository") { Icon(CaIcons.error, "Unresolved", Modifier.size(16.dp), tint = Ca.colors.error) }
+        conflict?.let { ConflictBadge(it) }
         if (!node.compatible) Icon(CaIcons.warning, "Incompatible", Modifier.size(16.dp), tint = Ca.colors.error)
-        if (onEditExclusions != null) IconButtonCa(CaIcons.gear, "Edit exclusions for ${node.name}", onClick = onEditExclusions, boxSize = 28, iconSize = 16, tint = if (node.exclusions.isNotEmpty()) Ca.colors.accent else Ca.colors.textTertiary)
+        if (onEdit != null) IconButtonCa(CaIcons.gear, "Edit ${node.name}", onClick = onEdit, boxSize = 28, iconSize = 16, tint = if (node.exclusions.isNotEmpty()) Ca.colors.accent else Ca.colors.textTertiary)
         if (onExclude != null) RowActionMenu("More actions for ${node.name}", "Exclude ${node.name}", CaIcons.close, onExclude)
         if (onRemove != null) IconButtonCa(CaIcons.close, "Remove ${node.name}", onClick = onRemove, boxSize = 28, iconSize = 16, tint = Ca.colors.textTertiary)
     }
@@ -633,6 +660,9 @@ private fun AddDependencyContent(
     var results by remember { mutableStateOf<List<UiArtifactHit>>(emptyList()) }
     var searching by remember { mutableStateOf(false) }
     var scope by remember { mutableStateOf("implementation") }
+    // The build variant this declaration is scoped to (null = shared / all variants → a plain `implementation`).
+    var variant by remember { mutableStateOf<String?>(null) }
+    var variants by remember { mutableStateOf<List<String>>(emptyList()) }
     var moduleTargets by remember { mutableStateOf<List<String>>(emptyList()) }
     var localCandidates by remember { mutableStateOf<List<String>>(emptyList()) }
     var busy by remember { mutableStateOf(false) }
@@ -641,6 +671,7 @@ private fun AddDependencyContent(
     val resolveState by backend.deps.depsState.collectAsState()
     val scopeOptions = listOf("implementation", "api", "compileOnly", "runtimeOnly", "testImplementation")
     val coroutine = rememberCoroutineScope()
+    LaunchedEffect(moduleName) { variants = runCatching { backend.build.listVariants(moduleName) }.getOrDefault(emptyList()) }
 
     LaunchedEffect(query, mode) {
         val q = query.trim()
@@ -662,10 +693,10 @@ private fun AddDependencyContent(
         busy = true; error = null; adding = coordinate
         coroutine.launch {
             val result = when (mode) {
-                AddMode.Platform -> backend.deps.addPlatform(moduleName, coordinate)
-                AddMode.Module -> backend.deps.addModuleDependency(moduleName, coordinate, scope)
+                AddMode.Platform -> backend.deps.addPlatform(moduleName, coordinate, variant = variant)
+                AddMode.Module -> backend.deps.addModuleDependency(moduleName, coordinate, scope, variant = variant)
                 AddMode.Local -> backend.deps.addLocalLibrary(moduleName, coordinate, scope)
-                AddMode.Library -> backend.deps.addDependency(moduleName, coordinate, scope)
+                AddMode.Library -> backend.deps.addDependency(moduleName, coordinate, scope, variant = variant)
             }
             busy = false; adding = null
             if (result.success) onResult(result) else error = result.message
@@ -719,6 +750,18 @@ private fun AddDependencyContent(
             Text("scope", color = Ca.colors.textTertiary, style = Ca.type.caption, modifier = Modifier.padding(end = 4.dp))
             scopeOptions.forEach { s -> ScopeChip(s, s == scope) { if (!busy) scope = s } }
         } else Spacer(Modifier.height(10.dp))
+
+        // variant selector — library/module/platform deps on an Android module: scope the dependency to a
+        // build variant (e.g. `debug` → `debugImplementation`). "All variants" (null) is the shared default.
+        // (Local file libraries aren't variant-scoped.)
+        if (mode != AddMode.Local && variants.isNotEmpty()) Row(
+            Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(bottom = 10.dp),
+            horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Text("variant", color = Ca.colors.textTertiary, style = Ca.type.caption, modifier = Modifier.padding(end = 4.dp))
+            ScopeChip("All variants", variant == null) { if (!busy) variant = null }
+            variants.forEach { v -> ScopeChip(v, v == variant) { if (!busy) variant = v } }
+        }
 
         // Transitive exclusions aren't set here anymore — add the dependency, then exclude any transitive
         // from the dependency tree (its ⋮ menu) or the per-dependency "Edit exclusions" editor.
@@ -960,55 +1003,151 @@ private fun ConfirmRemoveDialog(coordinate: String?, moduleName: String?, onDism
     }
 }
 
-/** Edit the transitive exclusions on an already-declared library. Prefilled with the current set; Save
- *  re-resolves the module. Either side of a `group:name` entry may be `*`. */
+/**
+ * Edit one declared library: change its **version** (picked from a live repository list, or typed),
+ * its **scope**, and its transitive **exclusions**, applied in one re-resolve. Prefilled with the
+ * current values; the version list streams in from the repositories (newest-first) with an
+ * "update available" hint when a newer release exists. Saves via [onSave] (`version`, `scope`, exclusions).
+ */
 @Composable
-private fun EditExclusionsDialog(
+private fun EditDependencySheet(
+    backend: IdeBackend,
+    moduleName: String,
     node: UiDependencyNode,
     codeFont: FontFamily,
     expanded: Boolean,
     onDismiss: () -> Unit,
-    onSave: (List<String>) -> Unit,
+    onSave: (version: String, scope: String, exclusions: List<String>) -> Unit,
 ) {
-    var text by remember(node.coordinate) { mutableStateOf(node.exclusions.joinToString(", ")) }
+    var versionText by remember(node.coordinate) { mutableStateOf(node.version) }
+    var scope by remember(node.coordinate) { mutableStateOf(node.scope ?: "implementation") }
+    var exclText by remember(node.coordinate) { mutableStateOf(node.exclusions.joinToString(", ")) }
+    var versions by remember(node.coordinate) { mutableStateOf<List<String>>(emptyList()) }
+    var loadingVersions by remember(node.coordinate) { mutableStateOf(true) }
+    LaunchedEffect(node.coordinate) {
+        loadingVersions = true
+        versions = runCatching { backend.deps.availableVersions(moduleName, node.coordinate) }.getOrDefault(emptyList())
+        loadingVersions = false
+    }
+    // The list is newest-first, so a newer release exists when the current version isn't at the top of it.
+    val newest = versions.firstOrNull()
+    val updateAvailable = newest != null && node.version in versions && newest != node.version
+    val scopeOptions = listOf("implementation", "api", "compileOnly", "runtimeOnly", "testImplementation")
+
     val card: @Composable () -> Unit = {
         Column(
-            Modifier.padding(horizontal = if (expanded) 12.dp else 0.dp).widthIn(max = 520.dp).fillMaxWidth()
+            Modifier.padding(horizontal = if (expanded) 12.dp else 0.dp).widthIn(max = 540.dp).fillMaxWidth()
                 .then(if (expanded) Modifier.background(Ca.colors.glassThick, RoundedCornerShape(Ca.radius.xl)).border(1.dp, Ca.colors.glassEdge, RoundedCornerShape(Ca.radius.xl)) else Modifier)
                 .padding(if (expanded) 20.dp else 4.dp),
         ) {
-            Text("Edit exclusions", color = Ca.colors.textPrimary, style = Ca.type.subhead, fontWeight = FontWeight.SemiBold)
-            Spacer(Modifier.height(6.dp))
-            Text(shortCoord(node.coordinate), color = Ca.colors.textSecondary, style = Ca.type.caption.copy(fontFamily = codeFont))
+            Text("Edit dependency", color = Ca.colors.textPrimary, style = Ca.type.subhead, fontWeight = FontWeight.SemiBold)
             Spacer(Modifier.height(4.dp))
-            Text("Transitive dependencies to drop from this library's closure — one or more group:name entries (either side may be *), separated by commas, spaces, or newlines.",
-                color = Ca.colors.textTertiary, style = Ca.type.caption2)
-            Spacer(Modifier.height(12.dp))
-            Row(
-                Modifier.fillMaxWidth().background(Ca.colors.surface2, RoundedCornerShape(Ca.radius.control))
-                    .border(1.dp, Ca.colors.hairline, RoundedCornerShape(Ca.radius.control)).padding(horizontal = 12.dp, vertical = 11.dp),
-                verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp),
-            ) {
-                Icon(CaIcons.close, null, Modifier.size(16.dp), tint = Ca.colors.textTertiary)
-                Box(Modifier.weight(1f)) {
-                    if (text.isEmpty()) Text("e.g. com.google.guava:guava, org.json:*", color = Ca.colors.textTertiary, style = Ca.type.caption, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                    BasicTextField(text, { text = it }, singleLine = false,
-                        textStyle = Ca.type.caption.copy(color = Ca.colors.textPrimary, fontFamily = codeFont),
-                        cursorBrush = SolidColor(Ca.colors.accent), modifier = Modifier.fillMaxWidth())
-                }
+            Text(shortCoord(node.coordinate), color = Ca.colors.textSecondary, style = Ca.type.caption.copy(fontFamily = codeFont))
+
+            // ---- version ----
+            SheetSection("Version")
+            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Box(Modifier.weight(1f)) { SheetField(versionText, "version", codeFont, leading = CaIcons.pkg) { versionText = it } }
+                if (loadingVersions) CircularProgressIndicator(Modifier.size(16.dp), color = Ca.colors.textTertiary, strokeWidth = 2.dp)
+                else if (updateAvailable && newest != null) UpdateHintChip(newest) { versionText = newest }
             }
+            VersionList(versions, selected = versionText, loading = loadingVersions, codeFont = codeFont) { versionText = it }
+
+            // ---- scope ----
+            SheetSection("Scope")
+            Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
+                scopeOptions.forEach { s -> ScopeChip(s, s == scope) { scope = s } }
+            }
+
+            // ---- exclusions ----
+            SheetSection("Exclusions")
+            Text("Transitive group:name entries to drop (either side may be *), comma/space separated.",
+                color = Ca.colors.textTertiary, style = Ca.type.caption2)
+            Spacer(Modifier.height(8.dp))
+            SheetField(exclText, "e.g. com.google.guava:guava, org.json:*", codeFont, leading = CaIcons.close, singleLine = false) { exclText = it }
+
             Spacer(Modifier.height(16.dp))
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                 Spacer(Modifier.weight(1f))
                 DialogButton("Cancel", destructive = false, onClick = onDismiss)
                 DialogButton("Save", destructive = false, onClick = {
-                    onSave(text.split(',', ' ', '\n', '\t').map { it.trim() }.filter { it.isNotEmpty() })
+                    onSave(versionText.trim(), scope, exclText.split(',', ' ', '\n', '\t').map { it.trim() }.filter { it.isNotEmpty() })
                 })
             }
         }
     }
-    if (expanded) DropdownOverlay(visible = true, onDismiss = onDismiss, topPadding = 120.dp) { card() }
-    else BottomSheet(visible = true, onDismiss = onDismiss, heightFraction = 0.5f) { Box(Modifier.padding(horizontal = 16.dp, vertical = 4.dp)) { card() } }
+    if (expanded) DropdownOverlay(visible = true, onDismiss = onDismiss, topPadding = 80.dp) { card() }
+    else BottomSheet(visible = true, onDismiss = onDismiss, heightFraction = 0.9f) { Box(Modifier.padding(horizontal = 16.dp, vertical = 4.dp)) { card() } }
+}
+
+/** A small section header inside the edit sheet. */
+@Composable
+private fun SheetSection(label: String) {
+    Spacer(Modifier.height(14.dp))
+    Text(label.uppercase(), color = Ca.colors.textTertiary, style = Ca.type.caption2, fontWeight = FontWeight.SemiBold)
+    Spacer(Modifier.height(6.dp))
+}
+
+/** A boxed text field with a leading icon, matching the sheet's other inputs. */
+@Composable
+private fun SheetField(value: String, hint: String, codeFont: FontFamily, leading: ImageVector, singleLine: Boolean = true, onChange: (String) -> Unit) {
+    Row(
+        Modifier.fillMaxWidth().background(Ca.colors.surface2, RoundedCornerShape(Ca.radius.control))
+            .border(1.dp, Ca.colors.hairline, RoundedCornerShape(Ca.radius.control)).padding(horizontal = 12.dp, vertical = 11.dp),
+        verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp),
+    ) {
+        Icon(leading, null, Modifier.size(16.dp), tint = Ca.colors.textTertiary)
+        Box(Modifier.weight(1f)) {
+            if (value.isEmpty()) Text(hint, color = Ca.colors.textTertiary, style = Ca.type.caption, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            BasicTextField(value, onChange, singleLine = singleLine,
+                textStyle = Ca.type.caption.copy(color = Ca.colors.textPrimary, fontFamily = codeFont),
+                cursorBrush = SolidColor(Ca.colors.accent), modifier = Modifier.fillMaxWidth())
+        }
+    }
+}
+
+/** The "↑ newest X" affordance shown when a newer release than the current version is published. */
+@Composable
+private fun UpdateHintChip(newest: String, onClick: () -> Unit) {
+    Row(
+        Modifier.background(Ca.colors.accentSoft, RoundedCornerShape(Ca.radius.pill))
+            .clickable(remember { MutableInteractionSource() }, null, onClick = onClick)
+            .padding(horizontal = 10.dp, vertical = 6.dp),
+        verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp),
+    ) {
+        Icon(CaIcons.chevronUp, null, Modifier.size(13.dp), tint = Ca.colors.accent)
+        Text(newest, color = Ca.colors.accent, style = Ca.type.caption2, fontWeight = FontWeight.SemiBold, maxLines = 1)
+    }
+}
+
+/** The scrollable list of published versions (newest-first); the current selection carries a check. */
+@Composable
+private fun VersionList(versions: List<String>, selected: String, loading: Boolean, codeFont: FontFamily, onSelect: (String) -> Unit) {
+    Spacer(Modifier.height(8.dp))
+    when {
+        loading -> Text("Loading versions…", color = Ca.colors.textTertiary, style = Ca.type.caption2, modifier = Modifier.padding(vertical = 6.dp))
+        versions.isEmpty() -> Text("Couldn't load versions — type one above.", color = Ca.colors.textTertiary, style = Ca.type.caption2, modifier = Modifier.padding(vertical = 6.dp))
+        else -> Column(
+            Modifier.fillMaxWidth().heightIn(max = 188.dp).verticalScroll(rememberScrollState())
+                .background(Ca.colors.surface2, RoundedCornerShape(Ca.radius.control))
+                .border(1.dp, Ca.colors.hairline, RoundedCornerShape(Ca.radius.control)),
+        ) {
+            versions.forEach { v ->
+                val isSel = v == selected
+                Row(
+                    Modifier.fillMaxWidth().height(34.dp).clickable(remember(v) { MutableInteractionSource() }, null) { onSelect(v) }
+                        .background(if (isSel) Ca.colors.accentSoft else Color.Transparent)
+                        .padding(horizontal = 12.dp),
+                    verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    Text(v, color = if (isSel) Ca.colors.accent else Ca.colors.textPrimary,
+                        style = Ca.type.caption.copy(fontFamily = codeFont), fontWeight = if (isSel) FontWeight.SemiBold else FontWeight.Normal,
+                        modifier = Modifier.weight(1f), maxLines = 1, overflow = TextOverflow.Ellipsis)
+                    if (isSel) Icon(CaIcons.check, "Selected", Modifier.size(15.dp), tint = Ca.colors.accent)
+                }
+            }
+        }
+    }
 }
 
 @Composable
@@ -1104,6 +1243,133 @@ private fun LetterBox(letter: String, color: Color, size: Int = 20) {
     }
 }
 
+// ---- scope + conflict indicators (compact, icon-first; full text on hover/long-press) -----------
+
+/** The compact representation of a dependency scope: a single letter + the full name (for the tooltip). */
+private enum class ScopeStyle(val letter: String, val full: String) {
+    IMPLEMENTATION("I", "implementation"), API("A", "api"), COMPILE_ONLY("C", "compileOnly"),
+    RUNTIME_ONLY("R", "runtimeOnly"), TEST("T", "testImplementation"), OTHER("·", "")
+}
+
+private fun scopeStyle(scope: String): ScopeStyle = when (scope.lowercase().replace("_", "").replace("-", "")) {
+    "api" -> ScopeStyle.API
+    "compileonly" -> ScopeStyle.COMPILE_ONLY
+    "runtimeonly" -> ScopeStyle.RUNTIME_ONLY
+    "testimplementation", "test" -> ScopeStyle.TEST
+    "implementation" -> ScopeStyle.IMPLEMENTATION
+    else -> ScopeStyle.OTHER
+}
+
+/** A scope shown as a color-coded letter badge (`I`/`A`/`C`/`R`/`T`) — the full name is the tooltip. Round
+ *  (vs. the square kind badge) so the two never read as the same thing on one row. */
+@Composable
+private fun ScopeBadge(scope: String) {
+    val style = scopeStyle(scope)
+    val color = when (style) {
+        ScopeStyle.API -> Ca.colors.run                 // exported (api) — like a module's compile surface
+        ScopeStyle.IMPLEMENTATION -> Ca.colors.accent
+        ScopeStyle.COMPILE_ONLY -> Ca.colors.info
+        ScopeStyle.RUNTIME_ONLY -> Ca.colors.warning
+        ScopeStyle.TEST -> Ca.colors.textTertiary
+        ScopeStyle.OTHER -> Ca.colors.textTertiary
+    }
+    WithTooltip(style.full.ifEmpty { scope }) {
+        Box(Modifier.size(18.dp).background(color.copy(alpha = 0.18f), RoundedCornerShape(Ca.radius.pill)), contentAlignment = Alignment.Center) {
+            Text(style.letter, color = color, style = Ca.type.caption2, fontWeight = FontWeight.Bold)
+        }
+    }
+}
+
+/** A small pill marking a declared dependency as scoped to one build variant (e.g. `debug`). */
+@Composable
+private fun VariantBadge(variant: String) {
+    WithTooltip("Only in the '$variant' variant") {
+        Box(
+            Modifier.background(Ca.colors.textTertiary.copy(alpha = 0.14f), RoundedCornerShape(Ca.radius.pill))
+                .padding(horizontal = 6.dp, vertical = 2.dp),
+        ) {
+            Text(variant, color = Ca.colors.textSecondary, style = Ca.type.caption2, fontWeight = FontWeight.Medium, maxLines = 1)
+        }
+    }
+}
+
+/** A conflict that's worth flagging on the row: a warning glyph; the requested→chosen detail is the tooltip. */
+@Composable
+private fun ConflictBadge(conflict: UiVersionConflict) {
+    WithTooltip("Version conflict: ${conflict.requested.joinToString(" vs ")} → using ${conflict.chosen}") {
+        Icon(CaIcons.warning, "Version conflict", Modifier.size(16.dp), tint = Ca.colors.warning)
+    }
+}
+
+/** A version conflict worth surfacing per-row: the requested versions span more than one MAJOR version
+ *  (semver-incompatible). A pure patch/minor difference is resolved newest-wins with no risk, so it's only
+ *  counted in the summary, never painted on the row. */
+private fun isRealConflict(c: UiVersionConflict): Boolean =
+    c.requested.mapNotNull(::majorOf).toSet().size > 1
+
+/** The leading numeric (major) component of a Maven version, or null when it doesn't start with a number. */
+private fun majorOf(v: String): Int? =
+    v.trimStart('v', 'V', '[', '(', ' ').takeWhile { it.isDigit() }.toIntOrNull()
+
+/** Wrap [content] with a hover (desktop) / long-press (touch) tooltip showing [text]. */
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun WithTooltip(text: String, content: @Composable () -> Unit) {
+    TooltipBox(
+        positionProvider = TooltipDefaults.rememberPlainTooltipPositionProvider(),
+        tooltip = { PlainTooltip { Text(text, style = Ca.type.caption2) } },
+        state = rememberTooltipState(),
+    ) { content() }
+}
+
+/**
+ * A quiet, collapsible summary of version conflicts. Real (major-version) clashes are listed for review
+ * and the banner opens by default; when every clash is a benign newest-wins difference it stays a single
+ * muted, collapsed line so it never floods the list. [realArtifacts] are the `group:name`s of real clashes.
+ */
+@Composable
+private fun ConflictSummaryBanner(conflicts: List<UiVersionConflict>, realArtifacts: Set<String>, codeFont: FontFamily, modifier: Modifier = Modifier) {
+    val real = conflicts.filter { it.artifact in realArtifacts }
+    val benign = conflicts.filterNot { it.artifact in realArtifacts }
+    var open by remember(conflicts) { mutableStateOf(real.isNotEmpty()) }
+    val color = if (real.isNotEmpty()) Ca.colors.warning else Ca.colors.textTertiary
+    val title = if (real.isNotEmpty()) "${real.size} version conflict${plural(real.size)} to review"
+        else "${benign.size} version${plural(benign.size)} auto-resolved (newest wins)"
+    Column(
+        modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = 6.dp)
+            .background(color.copy(alpha = 0.10f), RoundedCornerShape(Ca.radius.md))
+            .border(1.dp, color.copy(alpha = 0.3f), RoundedCornerShape(Ca.radius.md)),
+    ) {
+        Row(
+            Modifier.fillMaxWidth().clickable(remember { MutableInteractionSource() }, null) { open = !open }.padding(12.dp),
+            verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            Icon(if (real.isNotEmpty()) CaIcons.warning else CaIcons.info, null, Modifier.size(16.dp), tint = color)
+            Text(title, color = color, style = Ca.type.footnote, fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f))
+            if (real.isNotEmpty() && benign.isNotEmpty()) Text("+${benign.size} auto-resolved", color = Ca.colors.textTertiary, style = Ca.type.caption2)
+            Icon(if (open) CaIcons.chevronUp else CaIcons.chevronDown, null, Modifier.size(16.dp), tint = Ca.colors.textTertiary)
+        }
+        AnimatedVisibility(open, enter = expandVertically(tween(Motion.FAST)) + fadeIn(), exit = shrinkVertically(tween(Motion.FAST)) + fadeOut()) {
+            Column(Modifier.padding(start = 12.dp, end = 12.dp, bottom = 12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                real.forEach { ConflictLine(it, codeFont, highlight = true) }
+                benign.forEach { ConflictLine(it, codeFont, highlight = false) }
+            }
+        }
+    }
+}
+
+@Composable
+private fun ConflictLine(c: UiVersionConflict, codeFont: FontFamily, highlight: Boolean) {
+    Row(verticalAlignment = Alignment.Top, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+        if (highlight) Icon(CaIcons.warning, null, Modifier.size(12.dp).padding(top = 2.dp), tint = Ca.colors.warning)
+        Column {
+            Text(c.artifact, color = Ca.colors.textSecondary, style = Ca.type.caption.copy(fontFamily = codeFont), maxLines = 1, overflow = TextOverflow.Ellipsis)
+            Text("${c.requested.joinToString(", ")} → ${c.chosen}", color = if (highlight) Ca.colors.warning else Ca.colors.textTertiary,
+                style = Ca.type.caption2.copy(fontFamily = codeFont), maxLines = 2, overflow = TextOverflow.Ellipsis)
+        }
+    }
+}
+
 @Composable
 private fun BannerCard(icon: ImageVector, color: Color, title: String, modifier: Modifier = Modifier, content: @Composable () -> Unit) {
     Column(
@@ -1163,7 +1429,8 @@ private fun DepSubtitle(node: UiDependencyNode) {
 @Composable
 private fun VersionTag(version: String, codeFont: FontFamily) {
     Box(Modifier.background(Ca.colors.surface2, RoundedCornerShape(Ca.radius.xs)).padding(horizontal = 6.dp, vertical = 1.dp)) {
-        Text(version, color = Ca.colors.textSecondary, style = Ca.type.caption2.copy(fontFamily = codeFont))
+        Text(version, color = Ca.colors.textSecondary, style = Ca.type.caption2.copy(fontFamily = codeFont),
+            maxLines = 1, softWrap = false, overflow = TextOverflow.Ellipsis)
     }
 }
 

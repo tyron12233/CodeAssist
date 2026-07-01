@@ -1,5 +1,11 @@
 package dev.ide.ui.components
 
+import androidx.compose.animation.core.RepeatMode
+import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -69,6 +75,7 @@ import dev.ide.ui.ext.ToolWindowContribution
 import dev.ide.ui.ext.ToolWindowRegistry
 import dev.ide.ui.icons.CaIcons
 import dev.ide.ui.theme.Ca
+import dev.ide.ui.theme.Motion
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlin.time.Duration.Companion.milliseconds
@@ -297,7 +304,17 @@ private fun RunningStrip(steps: List<BuildStepUi>) {
     if (steps.isEmpty()) return
     val total = steps.size
     val done = steps.count { it.status.isSettled }
+    val runningCount = steps.count { it.status == StepStatus.Running }
     val current = steps.firstOrNull { it.status == StepStatus.Running }?.name
+    // Count an in-flight step as half-complete so the bar nudges forward the instant a step starts —
+    // the running step is represented in the fill, not only in the label. Then tween between targets so
+    // the bar glides smoothly instead of snapping each time a step settles.
+    val target = ((done + runningCount * 0.5f) / total).coerceIn(0f, 1f)
+    val progress by animateFloatAsState(
+        targetValue = target,
+        animationSpec = tween(durationMillis = Motion.BASE, easing = Motion.soft),
+        label = "buildProgress",
+    )
     Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
         Row(
             verticalAlignment = Alignment.CenterVertically,
@@ -311,7 +328,7 @@ private fun RunningStrip(steps: List<BuildStepUi>) {
             Text("$done/$total", color = Ca.colors.textTertiary, style = Ca.type.caption)
         }
         LinearProgressIndicator(
-            progress = { if (total == 0) 0f else done / total.toFloat() },
+            progress = { progress },
             modifier = Modifier.fillMaxWidth().height(3.dp),
             color = Ca.colors.accent,
             trackColor = Ca.colors.surface2,
@@ -841,16 +858,27 @@ private fun StepsTab(steps: List<BuildStepUi>) {
 
 @Composable
 private fun StepRow(step: BuildStepUi) {
+    val running = step.status == StepStatus.Running
+    // A slow breathing accent tint marks the row that's executing right now (the spinner icon already
+    // turns); together they make the active step unmistakable in the list.
+    val tint = if (running) runningPulseAlpha() else 0f
     Row(
-        Modifier.fillMaxWidth().padding(vertical = 3.dp),
+        Modifier.fillMaxWidth()
+            .background(Ca.colors.accent.copy(alpha = tint), RoundedCornerShape(Ca.radius.sm))
+            .padding(horizontal = 6.dp, vertical = 3.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(10.dp),
     ) {
         StatusIcon(step.status)
         Text(
             step.name,
-            color = if (step.status == StepStatus.Pending) Ca.colors.textSecondary.copy(alpha = 0.55f) else Ca.colors.textSecondary,
+            color = when {
+                running -> Ca.colors.textPrimary
+                step.status == StepStatus.Pending -> Ca.colors.textSecondary.copy(alpha = 0.55f)
+                else -> Ca.colors.textSecondary
+            },
             style = Ca.type.footnote,
+            fontWeight = FontWeight.Medium.takeIf { running },
         )
         // The "why it didn't run" tag, Gradle-style: UP-TO-DATE / NO-SOURCE / SKIPPED, dimmed at the right.
         statusTag(step.status)?.let { tag ->
@@ -858,6 +886,22 @@ private fun StepRow(step: BuildStepUi) {
             Text(tag, color = Ca.colors.textTertiary, style = Ca.type.caption)
         }
     }
+}
+
+/** A slow breathing alpha (~0.05 ↔ 0.15) for the currently-running step's row tint. */
+@Composable
+private fun runningPulseAlpha(): Float {
+    val transition = rememberInfiniteTransition(label = "stepPulse")
+    val alpha by transition.animateFloat(
+        initialValue = 0.05f,
+        targetValue = 0.15f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(durationMillis = 950, easing = Motion.soft),
+            repeatMode = RepeatMode.Reverse,
+        ),
+        label = "stepPulseAlpha",
+    )
+    return alpha
 }
 
 private fun statusTag(status: StepStatus): String? = when (status) {

@@ -59,6 +59,7 @@ import dev.ide.lang.xml.XmlSourceAnalyzer
 import dev.ide.lang.jdt.context.ModuleCompilationContext
 import dev.ide.lang.jdt.rename.JdtRename
 import dev.ide.lang.jdt.index.JavaClassNamesIndex
+import dev.ide.lang.jdt.index.JavaMainIndex
 import dev.ide.lang.jdt.index.JavaMembersByOwnerIndex
 import dev.ide.lang.jdt.index.JavaMembersIndex
 import dev.ide.lang.jdt.index.JavaPackageTypesIndex
@@ -131,6 +132,7 @@ import dev.ide.lang.jdt.index.JavaSourceDocIndex
 import dev.ide.lang.jdt.synthetic.SyntheticJavaSource
 import dev.ide.lang.kotlin.index.KotlinBuiltinsIndex
 import dev.ide.lang.kotlin.index.KotlinCallableIndex
+import dev.ide.lang.kotlin.index.KotlinMainIndex
 import dev.ide.lang.kotlin.index.KotlinSourceDocIndex
 import dev.ide.lang.kotlin.index.KotlinTypeShapeIndex
 import dev.ide.lang.kotlin.interp.ResolvedClass
@@ -205,6 +207,9 @@ class AndroidDeviceTools(
     /** On-device D8 dexer for the dex MERGE step (the debug-path memory peak), run in a forked VM so it gets a
      *  heap above the app cap. Null → the in-process merge. Supplied by :ide-android; self-falls-back. */
     val r8MergeDexer: dev.ide.android.support.tools.Dexer? = null,
+    /** Max class-dex merged in one batch on a large app (the "Dex merge batch size" setting). Read per build so
+     *  a change applies on the next build; defaults to [dev.ide.core.settings.BuiltInSettingsPages.DEX_MERGE_BATCH_DEFAULT]. */
+    val mergeChunkProvider: () -> Int = { dev.ide.core.settings.BuiltInSettingsPages.DEX_MERGE_BATCH_DEFAULT },
 )
 
 /**
@@ -312,6 +317,8 @@ class IdeServices private constructor(
     private val apkInstaller: ApkInstaller? = null,
     /** Optional platform runtime that renders *live* custom views in the layout preview (device dex / desktop shim). */
     private val customViewRuntime: dev.ide.preview.impl.CustomViewRuntime? = null,
+    /** Optional device-only runtime that renders the layout with the REAL Android view stack (layoutlib-on-device). */
+    private val realViewRuntime: dev.ide.preview.impl.RealViewRuntime? = null,
     /** Non-null only on-device (supplied by :ide-android): loads runtime (non-bundled) Kotlin compiler plugins
      *  via D8-dex + `DexClassLoader`. Null → the desktop `DefaultKotlinPluginLoader` (URLClassLoader). */
     private val kotlinPluginLoader: KotlinPluginLoader? = null,
@@ -417,6 +424,10 @@ class IdeServices private constructor(
     private val _indexStatus = MutableStateFlow(IndexUiStatus())
     val indexStatus: StateFlow<IndexUiStatus> get() = _indexStatus
 
+    // Live stage of the real-view layout render (relink → render), for the floating status chip; null = idle.
+    private val _realViewProgress = MutableStateFlow<dev.ide.ui.backend.PreviewProgress?>(null)
+    val realViewProgress: StateFlow<dev.ide.ui.backend.PreviewProgress?> get() = _realViewProgress
+
     // The narrow shared-infrastructure view ([EngineContext]) handed to this engine's decomposed concern
     // services, so each one depends on the surface it needs rather than the whole engine. An inner object so
     // it can reach private helpers (projectOf/invalidateAnalyzers/resyncIndex) without widening their
@@ -451,6 +462,9 @@ class IdeServices private constructor(
         override fun invalidateSyntheticClasses() = this@IdeServices.invalidateSyntheticClasses()
         override fun projectPref(key: String) = this@IdeServices.projectPref(key)
         override fun setProjectPref(key: String, value: String) = this@IdeServices.setProjectPref(key, value)
+        override fun activeVariant(module: Module) = this@IdeServices.activeVariant(module)
+        override fun listVariants(module: Module) = this@IdeServices.listVariants(module)
+        override fun setActiveVariant(module: Module, variantName: String) = this@IdeServices.setActiveVariant(module, variantName)
         override fun invalidateAnalyzers() = this@IdeServices.invalidateAnalyzers()
         override fun resyncIndex() = this@IdeServices.resyncIndex()
     }
@@ -509,27 +523,41 @@ class IdeServices private constructor(
                 total = s.total,
             )
         }
-        // Cold-start sequencing — memory safety. The index build and the two Kotlin warm-ups are each heavy,
-        // and the warm-ups deliberately RETAIN their environments (KotlinEnvironmentKeepAlive), so firing all
-        // three at project open stacks their peaks on top of each other. On a tight-heap device (ART/emulator)
-        // that storm drove the whole system into the kernel low-memory killer mid-index: the app was SIGKILLed
-        // (no catchable exception — the index's runCatching guards can't stop an OS kill), which users saw as
-        // "the app crashes after indexing" with the index dialog frozen on whatever file was current. So on
-        // device we run them SEQUENTIALLY — index first (the user-visible critical path), then the warm-ups —
-        // and skip a warm-up when the heap lacks room for its transient cost; a skipped warm-up just pays its
-        // cold start lazily on first use, which beats an OOM kill. Desktop has ample heap, so it keeps
-        // overlapping the warm-ups with the index to hide cold start.
+        // Cold-start sequencing — memory safety vs editor latency. The index build and the two Kotlin warm-ups
+        // are each heavy, and the warm-ups deliberately RETAIN their environments (KotlinEnvironmentKeepAlive),
+        // so firing all THREE at project open stacks their peaks on top of each other. On a tight-heap device
+        // (ART/emulator) that storm drove the whole system into the kernel low-memory killer mid-index: the app
+        // was SIGKILLed (no catchable exception — the index's runCatching guards can't stop an OS kill), which
+        // users saw as "the app crashes after indexing" with the index dialog frozen on whatever file was
+        // current. So on device we do NOT fire all three at once. The COMPILER warm-up (the heap-heavy one,
+        // needed only for the first Run/build) stays sequenced AFTER the index. But the PARSER warm-up sits on
+        // the EDITOR critical path — the highlighting daemon's first FOLDS/SEMANTIC/DIAGNOSTICS pass parses
+        // through KotlinParserHost — so gating it behind a multi-second index build means a file opened during
+        // indexing pays the cold KotlinCoreEnvironment standup on the engine thread (folding/coloring stalls).
+        // It's also the LIGHTER of the two. So we overlap ONLY the parser warm-up with the index (two peaks, not
+        // three — strictly less than the storm that OOM'd), still heap-guarded so a tight device skips it and
+        // falls back to the lazy standup. Desktop has ample heap and overlaps both warm-ups with the index.
         if (buildOnly) {
             // Headless build engine (the :build daemon): skip the editor cold-start (symbol index + Kotlin
             // warm-ups). A build uses only the model/classpath/compilers, never the editor index, and the
             // warm-ups are editor-latency optimizations — dropping them frees that baseline for the dexer/R8.
             memLog.info("build-only engine: skipping editor index + Kotlin warm-ups")
         } else if (androidTools != null) {
+            val hasKotlin = projectHasKotlin()
+            // Parser warm-up OVERLAPS the index build (editor critical path; see the sequencing note above).
+            // Heap-guarded so a tight device skips it and falls back to the lazy standup on the first parse.
+            if (hasKotlin) indexScope.launch {
+                if (freeHeapBytes() >= PARSER_WARMUP_MIN_FREE_BYTES) {
+                    runCatching { KotlinParserHost.warmUp() }
+                    memLog.info("after Kotlin parser warm-up (parallel with index): ${MemSample.now().fmt()}")
+                } else memLog.warn("skipped Kotlin parser warm-up (headroom ${MemSample.now().headroomMb}MB < ${PARSER_WARMUP_MIN_FREE_BYTES / MB_BYTES}MB floor)")
+            }
             indexScope.launch {
                 // Phase-0 build-process-isolation instrumentation (docs/build-process-isolation.md): track the
-                // project-open memory storm (index + the two retained Kotlin warm-ups) so its peak can be
-                // compared against a build's peak — that comparison decides whether a separate build process
-                // targets the dominant OOM. A periodic sampler catches the storm's true intra-phase peak.
+                // project-open memory storm (index + the retained Kotlin warm-ups) so its peak can be compared
+                // against a build's peak — that comparison decides whether a separate build process targets the
+                // dominant OOM. A periodic sampler catches the storm's true intra-phase peak (incl. the parser
+                // warm-up now overlapping this build).
                 val openPeak = PeakHeap().also { it.record() }
                 val sampler = launch {
                     while (isActive) {
@@ -540,11 +568,9 @@ class IdeServices private constructor(
                     memLog.info("project open (before index): ${MemSample.now().fmt()}")
                     runCatching { indexService.ensureUpToDate(buildIndexScope()) }
                     memLog.info("after index build: ${MemSample.now().fmt()}")
-                    if (projectHasKotlin()) {
-                        if (freeHeapBytes() >= PARSER_WARMUP_MIN_FREE_BYTES) {
-                            runCatching { KotlinParserHost.warmUp() }
-                            memLog.info("after Kotlin parser warm-up: ${MemSample.now().fmt()}")
-                        } else memLog.warn("skipped Kotlin parser warm-up (headroom ${MemSample.now().headroomMb}MB < ${PARSER_WARMUP_MIN_FREE_BYTES / MB_BYTES}MB floor)")
+                    // Compiler warm-up is the heap-heavy one and is only needed for the first Run/build (never for
+                    // editing), so keep it AFTER the index build to bound the project-open peak.
+                    if (hasKotlin) {
                         if (freeHeapBytes() >= COMPILER_WARMUP_MIN_FREE_BYTES) {
                             runCatching { kotlinJvmCompiler.warmUp(compileBootClasspath) }
                             memLog.info("after Kotlin compiler warm-up: ${MemSample.now().fmt()}")
@@ -1042,6 +1068,50 @@ class IdeServices private constructor(
         storeProps(projectSettingsFile, props, "CodeAssist project settings")
     }
 
+    // --- active build variant (per module) -----------------------------------------------------
+    // The build variant the editor analyzes against and the build/run default targets. Persisted per
+    // module in .platform/settings.properties; defaults to the module's default (debug-ish) variant.
+
+    private fun variantPrefKey(module: Module) = "variant.${module.name}"
+
+    /** The active build-variant name for [module] (its persisted choice, else the default variant, else "main"). */
+    fun activeVariant(module: Module): String =
+        projectPref(variantPrefKey(module))
+            ?: dev.ide.android.support.AndroidVariants.defaultVariant(module)?.name
+            ?: "main"
+
+    /** All selectable build-variant names for [module] (empty for a non-Android module). */
+    fun listVariants(module: Module): List<String> =
+        dev.ide.android.support.AndroidVariants.compute(module).map { it.name }
+
+    /** Select [variantName] as [module]'s active variant; re-analyzes + re-indexes if it changed. */
+    fun setActiveVariant(module: Module, variantName: String) {
+        if (activeVariant(module) == variantName) return
+        setProjectPref(variantPrefKey(module), variantName)
+        invalidateAnalyzers()
+        resyncIndex()
+    }
+
+    /** [listVariants] by module name (the string-keyed backend surface). */
+    fun listVariants(moduleName: String): List<String> =
+        modules().firstOrNull { it.name == moduleName }?.let { listVariants(it) } ?: emptyList()
+
+    /** The active variant for [moduleName], or null when the module is unknown or has no variants (non-Android). */
+    fun activeVariant(moduleName: String): String? {
+        val m = modules().firstOrNull { it.name == moduleName } ?: return null
+        if (listVariants(m).isEmpty()) return null
+        return activeVariant(m)
+    }
+
+    /** [setActiveVariant] by module name (no-op for an unknown module). */
+    fun setActiveVariant(moduleName: String, variantName: String) {
+        modules().firstOrNull { it.name == moduleName }?.let { setActiveVariant(it, variantName) }
+    }
+
+    /** The active variant's dependency config-name set for [module] (null = non-Android → no variant filter). */
+    private fun activeConfigs(module: Module): Set<String>? =
+        dev.ide.android.support.AndroidVariants.select(module, activeVariant(module))?.configurations
+
     private fun persistInspectionProfile(profile: dev.ide.analysis.AnalysisProfile) {
         // "<id>=off" disables; "<id>=<SEVERITY>" overrides; an enabled-default analyzer is simply omitted.
         val props = java.util.Properties()
@@ -1191,7 +1261,7 @@ class IdeServices private constructor(
     private fun buildAnalyzer(module: Module, language: LanguageId): SourceAnalyzer =
         backendFor(language).createAnalyzer(
             ModuleCompilationContext.create(
-                store.workspace, module
+                store.workspace, module, activeConfigs(module)
             )
         ).also {
             when (it) {
@@ -1794,7 +1864,7 @@ class IdeServices private constructor(
         val module = moduleForEditableFile(file) ?: moduleForFile(file) ?: return null
         val cp = runCatching {
             ModuleCompilationContext.create(
-                store.workspace, module
+                store.workspace, module, activeConfigs(module)
             ).classpath
         }.getOrNull() ?: return null
         val jars = cp.entries.map { Paths.get(it.root.path) }
@@ -2281,7 +2351,7 @@ class IdeServices private constructor(
         val empty = dev.ide.android.support.metadata.CustomViewScanner.Scan(emptyList(), emptyMap())
         val jars = runCatching {
             ModuleCompilationContext.create(
-                store.workspace, module
+                store.workspace, module, activeConfigs(module)
             ).classpath.entries
         }.getOrDefault(emptyList())
             .mapNotNull { runCatching { Paths.get(it.root.path) }.getOrNull() }
@@ -2356,7 +2426,7 @@ class IdeServices private constructor(
     /** True when [target]'s module library classpath includes AppCompat, so its `app:` compat attrs resolve. */
     private fun moduleUsesAppCompat(target: dev.ide.analysis.AnalysisTarget): Boolean =
         runCatching {
-            ModuleCompilationContext.create(store.workspace, target.module).classpath.entries.any {
+            ModuleCompilationContext.create(store.workspace, target.module, activeConfigs(target.module)).classpath.entries.any {
                 it.root.path.contains("appcompat", ignoreCase = true)
             }
         }.getOrDefault(false)
@@ -2564,10 +2634,33 @@ class IdeServices private constructor(
         val cached = resourceRepository(module) ?: return null
         val repo = cached.repo
         val (themeName, title) = manifestThemeAndLabel(module, repo)
-        val customViews = if (referencesCustomView(text)) cachedCustomViewFactory(
-            module, repo, cached.fingerprint
-        ) else null
-        return runCatching {
+        // Real-view ("layoutlib-on-device") path, when requested and a runtime is wired. On success it returns
+        // the rendered PNG; on any failure it returns owned rendering annotated with the reason (never blank).
+        if (request.realViews && realViewRuntime != null) {
+            // realViewPreview publishes its pipeline stage to _realViewProgress (the status chip); clear it
+            // here so every exit path (success or owned fallback) leaves the chip idle.
+            return try {
+                realViewPreview(module, repo, cached.fingerprint, themeName, title, file, text, request)
+            } finally {
+                _realViewProgress.value = null
+            }
+        }
+        return ownedPreview(module, repo, cached.fingerprint, themeName, title, text, request, extraProblem = null)
+    }
+
+    /** Build the owned render tree + chrome (the cross-platform path), optionally appending [extraProblem]. */
+    private fun ownedPreview(
+        module: Module,
+        repo: dev.ide.android.support.resources.ResourceRepository,
+        fingerprint: String,
+        themeName: String?,
+        title: String,
+        text: String,
+        request: dev.ide.preview.PreviewRequest,
+        extraProblem: String?,
+    ): dev.ide.preview.LayoutPreviewResult? {
+        val customViews = if (referencesCustomView(text)) cachedCustomViewFactory(module, repo, fingerprint) else null
+        val base = runCatching {
             dev.ide.preview.impl.LayoutPreviewService(
                 customViewFactory = customViews ?: dev.ide.preview.impl.CustomViewFactory.NONE
             ).preview(
@@ -2579,12 +2672,154 @@ class IdeServices private constructor(
                         .firstOrNull()?.source?.let { runCatching { it.readText() }.getOrNull() }
                 },
             )
-        }.getOrNull()
+        }.getOrNull() ?: return null
+        if (extraProblem == null) return base
+        return dev.ide.preview.LayoutPreviewResult(
+            base.root, base.resources, base.density, base.scaledDensity, base.imageFile,
+            base.problems + dev.ide.preview.PreviewProblem("real-view", extraProblem),
+        )
     }
 
-    /** Cheap check: does the layout reference a `pkg.Custom` view tag (lower-case pkg + Capitalised class)? */
-    private val customViewTagRegex = Regex("""<[a-z][\w.]*\.[A-Z]\w*[\s/>]""")
-    private fun referencesCustomView(xml: String): Boolean = customViewTagRegex.containsMatchIn(xml)
+    /** Relinks the build's compiled resources with the live editor buffer for the real-view preview, so the
+     *  edited (or newly added) layout renders. Null when no Android tooling is wired (desktop). */
+    private val previewResourceLinker: dev.ide.android.support.PreviewResourceLinker? by lazy {
+        val t = androidTools ?: return@lazy null
+        val sdk = dev.ide.android.support.tools.AndroidSdk.forDevice(t.androidJar, t.nativeLibDir)
+            .takeIf { it.hasNativeTools() } ?: return@lazy null
+        val cache = (sharedCachesRoot ?: store.rootPath).resolve("caches").resolve("preview-res")
+        dev.ide.android.support.PreviewResourceLinker(
+            dev.ide.android.support.tools.Aapt2Subprocess(sdk.aapt2), t.androidJar, cache,
+        )
+    }
+
+    /**
+     * Render [file] with the on-device real-view runtime (the real framework + the project's real libraries).
+     * The build's aapt2-linked resources are relinked with the live editor buffer ([previewResourceLinker]) so
+     * the edited (or newly added) layout renders, falling back to the build's own `resources.ap_` if the relink
+     * fails; the build's `R.jar` is reused on the class loader. On success returns a [LayoutPreviewResult]
+     * carrying the rendered PNG; otherwise returns owned rendering annotated with the reason. Never returns null
+     * (the caller only enters here with a non-null runtime).
+     */
+    private fun realViewPreview(
+        module: Module,
+        repo: dev.ide.android.support.resources.ResourceRepository,
+        fingerprint: String,
+        themeName: String?,
+        title: String,
+        file: Path,
+        text: String,
+        request: dev.ide.preview.PreviewRequest,
+    ): dev.ide.preview.LayoutPreviewResult? {
+        val runtime = realViewRuntime ?: return ownedPreview(module, repo, fingerprint, themeName, title, text, request, null)
+        val facet = module.facets.get(AndroidFacet.KEY)
+            ?: return ownedPreview(module, repo, fingerprint, themeName, title, text, request, null)
+        val activeVariant = dev.ide.android.support.AndroidVariants.defaultVariant(module)
+        val variant = activeVariant?.name ?: "debug"
+        // Relink the live buffer over the project's resources so the preview reflects the edited (or newly
+        // added) layout. The linker self-builds its base from the live res tree, so a prior successful build
+        // is NOT required and edits to other resources show; it falls back internally to the build's flats.
+        val moduleDir = Paths.get(module.outputDir.path).parent.parent
+        val manifestPath = dev.ide.android.support.AndroidBuildSystem.mergedManifestPath(module, variant)
+            .takeIf { Files.exists(it) } ?: moduleDir.resolve(facet.manifest)
+        val resDirs = dev.ide.android.support.resources.AndroidResources.resourceDirs(module, store.workspace)
+        // The runtime library set + the AAR package names, resolved once. Must be the RUNTIME set (what the APK
+        // packages), NOT the compile classpath: a Material widget's `implementation` transitives (e.g.
+        // androidx.emoji2, pulled in by AppCompatTextView's EmojiCompat) are on the runtime path but absent from
+        // compile, so a compile-only classpath inflates with NoClassDefFoundError. `AndroidLibraries.resolve`
+        // gives exactly the runtime/packaged set the build's dexBuilder uses; module outputs cover multi-module
+        // + user custom views. Dexed via the shared cache (SharedLibraryDexer), so it's dexed once and reused.
+        val explodeRoot = dev.ide.android.support.AndroidBuildSystem.explodedAarPath(module, variant)
+        val resolved = runCatching {
+            dev.ide.android.support.AndroidLibraries.resolve(module, explodeRoot, activeVariant?.configurations)
+        }.getOrNull()
+        // Extra R packages: every AAR package (androidx.coordinatorlayout, com.google.android.material, …) plus
+        // every OTHER android module's package. A library/framework view references its OWN `R` at inflate time
+        // (e.g. CoordinatorLayout → `androidx.coordinatorlayout.R$attr`), and AARs do NOT ship their `R` — the
+        // consuming app generates one per package via aapt2 `--extra-packages`. Without these the preview crashes
+        // with NoClassDefFoundError for a lib's R class. Mirrors the build's `extraPackages`.
+        val extraPackages = ((resolved?.aarPackages ?: emptyList()) +
+            modules().mapNotNull { it.facets.get(AndroidFacet.KEY)?.namespace }.filter { it != facet.namespace })
+            .distinct()
+        // Relink the live buffer over the project's resources so the preview reflects the edited (or newly
+        // added) layout. The linker self-builds its base from the live res tree, so a prior successful build
+        // is NOT required and edits to other resources show; it falls back internally to the build's flats. It
+        // also generates a preview `R.jar` (app + [extraPackages]) with ids matching the relinked arsc, so the
+        // preview no longer depends on a prior build's (id-mismatched, possibly absent) R.jar.
+        val linked = previewResourceLinker?.link(
+            module, variant, resDirs, file, text, manifestPath, facet.namespace, facet.minSdk, facet.targetSdk,
+            extraPackages = extraPackages,
+            progress = { _realViewProgress.value = dev.ide.ui.backend.PreviewProgress(it) },
+        )
+        // The resources.ap_ to render against: the live relink, else the build's own, else owned rendering.
+        val resourcesAp = linked?.resourcesAp
+            ?: dev.ide.android.support.AndroidBuildSystem.resourcesApPath(module, variant).takeIf { Files.exists(it) }
+            ?: return ownedPreview(module, repo, fingerprint, themeName, title, text, request,
+                "Real-view resources unavailable (${linked?.error ?: "build the project once"}) — showing owned rendering")
+        // The R.jar: prefer the relink's (ids match the relinked arsc AND it covers every lib package); fall
+        // back to the build's if the relink didn't produce one (e.g. it used the build's compiled-flats base).
+        val rJar = linked?.rJar?.takeIf { Files.exists(it) }
+            ?: dev.ide.android.support.AndroidBuildSystem.rJarPath(module, variant).takeIf { Files.exists(it) }
+        val runtimeLibs = resolved?.dexJars ?: emptyList()
+        val moduleOutputs = modules().flatMap { m ->
+            runCatching {
+                ModuleCompilationContext.create(store.workspace, m, activeConfigs(m)).classpath.entries
+                    .filter { it.kind == dev.ide.model.ClasspathEntryKind.MODULE_OUTPUT }.map { Paths.get(it.root.path) }
+            }.getOrDefault(emptyList())
+        }
+        val libs = dev.ide.model.MavenClasspath.dedupeForAndroidDex(
+            (runtimeLibs + moduleOutputs).filter { Files.exists(it) && it.toString().endsWith(".jar") }.distinct()
+        )
+        val classpath = libs + listOfNotNull(rJar)
+        val req = dev.ide.preview.impl.RealViewRequest(
+            layoutName = file.fileName.toString().substringBeforeLast('.'),
+            layoutText = text,
+            widthPx = request.widthPx, heightPx = request.heightPx, density = request.density, night = request.night,
+            resourcesAp = resourcesAp, classpath = classpath, packageName = facet.namespace, themeName = themeName,
+            minApi = facet.minSdk,
+        ).apply {
+            // Fine render stages ("Dexing"/"Inflating"/"Drawing") from the runtime drive the status chip.
+            stageListener = { _realViewProgress.value = dev.ide.ui.backend.PreviewProgress(it) }
+        }
+        _realViewProgress.value = dev.ide.ui.backend.PreviewProgress("Rendering")
+        val result = runCatching { runtime.render(req) }.getOrElse { t ->
+            dev.ide.preview.impl.RealViewResult(null, error = t.message ?: t.javaClass.simpleName)
+        }
+        // The render is a live native Bitmap on device (no PNG round-trip) or PNG bytes as the portable form.
+        val nativeImage = result?.nativeBitmap
+        val png = result?.pngBytes
+        if (nativeImage == null && png == null) {
+            return ownedPreview(module, repo, fingerprint, themeName, title, text, request,
+                "Real-view render unavailable (${result?.error ?: "no result"}) — showing owned rendering")
+        }
+        val resources = dev.ide.preview.impl.ProjectPreviewResources(
+            repo, request.density, request.density, night = request.night, themeName = themeName
+        )
+        val root = dev.ide.preview.RenderNode().apply { renderer = dev.ide.preview.PlaceholderRenderer; tag = "real-view" }
+        return dev.ide.preview.LayoutPreviewResult(
+            root, resources, request.density, request.density, renderedImage = png, renderedNativeImage = nativeImage,
+            viewTree = result?.viewTree,
+        )
+    }
+
+    /** Fully-qualified view tags in a layout (`<lower.pkg.Upper …>`) — candidate custom views. */
+    private val customViewTagRegex = Regex("""<([a-z][\w.]*\.[A-Z]\w*)[\s/>]""")
+
+    /**
+     * Does [xml] reference one of the USER's OWN custom views — a fully-qualified tag whose class has a `.java`/
+     * `.kt` source somewhere in the project? Only those need the compile+instrument+dex pipeline (it exists to
+     * run a user view's own drawing code). Library/framework views (`androidx.*`, Material) are also FQ tags but
+     * carry no project source: they render via a registered renderer or a placeholder and must NOT drag the
+     * whole project through a preview build — which is wasteful and, with unresolved deps, fails outright.
+     */
+    private fun referencesCustomView(xml: String): Boolean {
+        val fqns = customViewTagRegex.findAll(xml).map { it.groupValues[1] }.toSet()
+        if (fqns.isEmpty()) return false
+        val roots = modules().flatMap { sourceRoots(it) }.filter { Files.isDirectory(it) }
+        return fqns.any { fqn ->
+            val rel = fqn.replace('.', '/')
+            roots.any { Files.exists(it.resolve("$rel.java")) || Files.exists(it.resolve("$rel.kt")) }
+        }
+    }
 
     // ---- Preview caches: layout preview re-renders on every keystroke, so the per-render work below
     // (parse all res XML into a ResourceRepository; preview-compile + instrument + dex the project's Java
@@ -2718,27 +2953,33 @@ class IdeServices private constructor(
                     }
                 }
             }
-            val deps = modules().flatMap { m ->
-                runCatching {
-                    ModuleCompilationContext.create(
-                        store.workspace, m
-                    ).classpath.entries.map { Paths.get(it.root.path) }
-                }.getOrDefault(emptyList())
-            }.filter { Files.exists(it) }.distinct()
+            // Dedupe to one jar per artifact before dexing: flattening every module's classpath can present the
+            // same library at two versions, and the bundled kotlin-stdlib (a `.platform/…` path) collides with a
+            // Maven kotlin-stdlib the project resolves — either makes D8 fail with "Type … is defined multiple
+            // times". (KMP `-android`/`-jvm` no longer collide here: the resolver selects one variant up front.)
+            val deps = dev.ide.model.MavenClasspath.dedupeForAndroidDex(
+                modules().flatMap { m ->
+                    runCatching {
+                        ModuleCompilationContext.create(
+                            store.workspace, m, activeConfigs(m)
+                        ).classpath.entries.map { Paths.get(it.root.path) }
+                    }.getOrDefault(emptyList())
+                }.filter { Files.exists(it) }.distinct()
+            )
             // Java 8, NOT a fixed 17: the preview always feeds android.jar as -bootclasspath, and ecj rejects
             // -bootclasspath at compliance >= 9 ("option -bootclasspath not supported at compliance level 9 and
             // above"). The on-device build is JAVA_8 for the same reason (android.jar is the boot library), and
             // android.jar's signatures resolve at any source level, so 8 is the safe cap for the preview compile.
+            // Boot = android.jar PLUS the desugar stubs (`core-lambda-stubs.jar`: `java.lang.invoke.Lambda-
+            // Metafactory`/`StringConcatFactory`), which android.jar omits — without them any lambda or string
+            // concat in the compiled closure fails ecj with "The type java.lang.invoke.LambdaMetafactory cannot
+            // be resolved". Mirrors [compileBootClasspath] (the analyzer/build use the same boot library).
             val result = JdtBatchCompiler.compile(
-                sources, deps, outDir, sourceLevel = "8", bootClasspath = listOf(androidJar)
+                sources, deps, outDir, sourceLevel = "8",
+                bootClasspath = listOf(androidJar) + (androidTools?.desugarStubs ?: emptyList()),
             )
             if (!result.success) {
-                val errs = result.messages.filter { it.contains("ERROR", ignoreCase = true) }
-                    .ifEmpty { result.messages }
-                return@runCatching failingCustomViewFactory(
-                    "preview compile failed: ${
-                        errs.take(3).joinToString(" / ").ifBlank { "(no diagnostics)" }
-                    }")
+                return@runCatching failingCustomViewFactory("preview compile failed:\n${formatCompileErrors(result)}")
             }
 
             // Instrument every compiled .class in place (reparent View bases, redirect obtainStyledAttributes).
@@ -2769,6 +3010,25 @@ class IdeServices private constructor(
                 t.message ?: "preview setup failed (${t.javaClass.simpleName})"
             )
         }
+    }
+
+    /**
+     * Render a failed preview compile as a short, copy-friendly block: each error as `File.java:line  message`
+     * (file name only — the absolute cache path is noise) with the actual ecj description, capped at a few lines.
+     */
+    private fun formatCompileErrors(result: JdtBatchCompiler.Result): String {
+        val errs = result.diagnostics.filter { it.isError }
+        if (errs.isNotEmpty()) {
+            val cap = 5
+            val shown = errs.take(cap).joinToString("\n") { d ->
+                val name = d.file?.substringAfterLast('/')?.substringAfterLast('\\')
+                val loc = name?.let { n -> d.line?.let { "$n:$it" } ?: n }
+                if (loc != null) "$loc  ${d.message}" else d.message
+            }
+            return if (errs.size > cap) "$shown\n…and ${errs.size - cap} more" else shown
+        }
+        // Fallback when nothing parsed (an unusual compiler message shape): the raw lines, sans the path noise.
+        return result.messages.take(3).joinToString("\n").ifBlank { "(no diagnostics)" }
     }
 
     /** A [CustomViewFactory] whose every [create] fails with [reason], so the preview pane shows it. */
@@ -3339,6 +3599,8 @@ class IdeServices private constructor(
                 KotlinCallableIndex, // Kotlin backend: persistent extensions + top-level callables
                 JavaSourceDocIndex, // param names + javadoc from attached Java sources
                 KotlinSourceDocIndex, // param names + KDoc from attached Kotlin sources
+                JavaMainIndex, // runnable entry points in Java source (the Run picker)
+                KotlinMainIndex, // runnable entry points in Kotlin source (the Run picker)
                 AndroidResourceIndex, // Android resource declarations
             ).forEach { extensions.register(INDEX_EP, it, indexPlugin) }
 
@@ -3495,6 +3757,8 @@ class IdeServices private constructor(
             apkInstaller: ApkInstaller? = null,
             /** On-device live custom-view runtime (from :ide-android) — dex + Bridge classloader for the layout preview. */
             customViewRuntime: dev.ide.preview.impl.CustomViewRuntime? = null,
+            /** On-device real-view layout renderer (from :ide-android) — the layoutlib-on-device preview path. */
+            realViewRuntime: dev.ide.preview.impl.RealViewRuntime? = null,
             /** On-device Kotlin compiler-plugin loader (from :ide-android): D8-dex + DexClassLoader. */
             kotlinPluginLoader: KotlinPluginLoader? = null,
             /** App-level shared download cache (projects-root parent); null → per-project. */
@@ -3517,6 +3781,7 @@ class IdeServices private constructor(
                 dexRunner,
                 apkInstaller,
                 customViewRuntime,
+                realViewRuntime,
                 kotlinPluginLoader,
                 sharedCachesRoot,
                 env = env,
@@ -3542,6 +3807,8 @@ class IdeServices private constructor(
             apkInstaller: ApkInstaller? = null,
             /** On-device live custom-view runtime (from :ide-android) — dex + Bridge classloader for the layout preview. */
             customViewRuntime: dev.ide.preview.impl.CustomViewRuntime? = null,
+            /** On-device real-view layout renderer (from :ide-android) — the layoutlib-on-device preview path. */
+            realViewRuntime: dev.ide.preview.impl.RealViewRuntime? = null,
             /** On-device Kotlin compiler-plugin loader (from :ide-android): D8-dex + DexClassLoader. */
             kotlinPluginLoader: KotlinPluginLoader? = null,
             /** App-level shared download cache (projects-root parent); null → per-project. */
@@ -3562,6 +3829,7 @@ class IdeServices private constructor(
                 dexRunner,
                 apkInstaller,
                 customViewRuntime,
+                realViewRuntime,
                 kotlinPluginLoader,
                 sharedCachesRoot,
                 buildOnly = buildOnly,

@@ -142,6 +142,11 @@ interface BlockService {
 
 /** Resource + Compose preview rendering for the Preview view. */
 interface PreviewService {
+    /** Live state of the real-view layout-render pipeline, for the floating status chip — non-null while a
+     *  render is in progress (e.g. "Merging resources", "Linking resources", "Dexing", "Rendering"), null when
+     *  idle/done. Drives a small spinner + label like the build/index status indicators. */
+    val previewProgress: StateFlow<PreviewProgress?> get() = MutableStateFlow(null)
+
     /** A render-ready model of the drawable XML in [path] (live buffer [text]), or null. */
     suspend fun drawablePreview(path: String, text: String): UiDrawable? = null
 
@@ -158,6 +163,10 @@ interface PreviewService {
     suspend fun runComposePreview(path: String, text: String, functionName: String): UiPreviewResult =
         UiPreviewResult(ok = false, message = "Compose preview is not available")
 }
+
+/** A stage of the real-view layout-render pipeline, shown in the floating status chip. [stage] is a short
+ *  human label (e.g. "Linking resources", "Rendering"); a non-null value means that stage is in progress. */
+data class PreviewProgress(val stage: String)
 
 // ---------------------------------------------------------------------------
 // Indexing & search
@@ -216,6 +225,15 @@ interface BuildService {
 
     /** Answer the pending [permissionRequest] [id] with [decision]. */
     fun answerPermission(id: Int, decision: UiPermissionDecision) {}
+
+    /** Selectable build-variant names for [moduleName] (e.g. `freeDebug`), empty for a non-Android module. */
+    fun listVariants(moduleName: String): List<String> = emptyList()
+
+    /** The active build variant for [moduleName] — what the editor analyzes against and Run/assemble targets. */
+    fun activeVariant(moduleName: String): String? = null
+
+    /** Select [variant] as [moduleName]'s active variant (re-analyzes the editor + re-indexes). */
+    fun setActiveVariant(moduleName: String, variant: String) {}
 }
 
 // ---------------------------------------------------------------------------
@@ -242,12 +260,13 @@ interface DependencyService {
     /** Search repositories for [query]; hits flagged compatible with [moduleName]. */
     suspend fun searchArtifacts(query: String, moduleName: String): List<UiArtifactHit> = emptyList()
 
-    /** Resolve and add [coordinate] to [moduleName] at [scope], bundling its transitive closure. */
-    suspend fun addDependency(moduleName: String, coordinate: String, scope: String, exclusions: List<String> = emptyList()): UiAddResult =
+    /** Resolve and add [coordinate] to [moduleName] at [scope], bundling its transitive closure.
+     *  [variant] scopes the declaration to a build variant (e.g. `debug` → `debugImplementation`); null = shared. */
+    suspend fun addDependency(moduleName: String, coordinate: String, scope: String, exclusions: List<String> = emptyList(), variant: String? = null): UiAddResult =
         UiAddResult(false, "Dependency management not supported by this backend")
 
-    /** Import a Maven BOM as a platform of [moduleName] (Gradle `platform(...)`). */
-    suspend fun addPlatform(moduleName: String, coordinate: String): UiAddResult =
+    /** Import a Maven BOM as a platform of [moduleName] (Gradle `platform(...)`); [variant] scopes it to a build variant. */
+    suspend fun addPlatform(moduleName: String, coordinate: String, variant: String? = null): UiAddResult =
         UiAddResult(false, "Dependency management not supported by this backend")
 
     /** One-click Firebase setup (BoM + [artifacts]). */
@@ -265,11 +284,18 @@ interface DependencyService {
     suspend fun setDependencyExclusions(moduleName: String, coordinate: String, exclusions: List<String>): UiAddResult =
         UiAddResult(false, "Dependency management not supported by this backend")
 
+    /** Published versions of the declared library [coordinate]'s artifact, newest-first (the version picker). */
+    suspend fun availableVersions(moduleName: String, coordinate: String): List<String> = emptyList()
+
+    /** Update a declared library [coordinate] — change its version/scope/exclusions in one re-resolve. */
+    suspend fun updateDependency(moduleName: String, coordinate: String, version: String, scope: String, exclusions: List<String>): UiAddResult =
+        UiAddResult(false, "Dependency management not supported by this backend")
+
     /** Other modules [moduleName] may depend on (no self/cycle/duplicate). */
     fun moduleDependencyTargets(moduleName: String): List<String> = emptyList()
 
-    /** Add a module-on-module dependency from [moduleName] onto [targetModule] at [scope]. */
-    suspend fun addModuleDependency(moduleName: String, targetModule: String, scope: String): UiAddResult =
+    /** Add a module-on-module dependency from [moduleName] onto [targetModule] at [scope]; [variant] scopes it. */
+    suspend fun addModuleDependency(moduleName: String, targetModule: String, scope: String, variant: String? = null): UiAddResult =
         UiAddResult(false, "Dependency management not supported by this backend")
 
     /** The directory a picked local library should be copied into, or null. */

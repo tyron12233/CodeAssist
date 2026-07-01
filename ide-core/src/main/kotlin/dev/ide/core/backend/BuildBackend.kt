@@ -31,4 +31,8 @@ internal class BuildBackend(private val ctx: BackendContext) : BuildService {
     override val permissionRequest: StateFlow<UiPermissionRequest?> =
         ctx.engineFlow<UiPermissionRequest?>(null) { runner(it).permissionRequest }
     override fun answerPermission(id: Int, decision: UiPermissionDecision) = runner(ctx.services).answerPermission(id, decision)
+
+    override fun listVariants(moduleName: String): List<String> = ctx.services.listVariants(moduleName)
+    override fun activeVariant(moduleName: String): String? = ctx.services.activeVariant(moduleName)
+    override fun setActiveVariant(moduleName: String, variant: String) = ctx.services.setActiveVariant(moduleName, variant)
 }
