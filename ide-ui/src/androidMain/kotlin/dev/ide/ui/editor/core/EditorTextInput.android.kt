@@ -152,9 +152,16 @@ private class EditorTextInputNode(
     }
 
     private fun stopSession() {
+        val hadSession = job != null
         job?.cancel()
         job = null
         session.imeFinishComposing()
+        // The input session is bound to focus, not keyboard visibility: cancelling it deactivates the
+        // InputConnection, but the soft keyboard keeps floating. A keyboard left up over a dead connection has
+        // the IME poll it forever ("getSurroundingText / getTextBeforeCursor on inactive InputConnection" log
+        // spam after a focus/overlay transition). Dismiss it so the IME unbinds. Only when we actually had a
+        // session up, so we never yank some other focused field's keyboard.
+        if (hadSession) hideSoftKeyboard()
     }
 
     // Re-raise the soft keyboard on the host view's existing input connection, without tearing down and
@@ -164,6 +171,16 @@ private class EditorTextInputNode(
         val view = requireView()
         val imm = view.context.getSystemService(Context.INPUT_METHOD_SERVICE) as InputMethodManager
         imm.showSoftInput(view, 0)
+    }
+
+    // Dismiss the soft keyboard for the host window. Paired with [stopSession]'s connection teardown so the IME
+    // stops polling a deactivated InputConnection. Guarded on attachment because [stopSession] also runs from
+    // [onDetach]; a detached node has no view.
+    private fun hideSoftKeyboard() {
+        if (!isAttached) return
+        val view = requireView()
+        val imm = view.context.getSystemService(Context.INPUT_METHOD_SERVICE) as InputMethodManager
+        imm.hideSoftInputFromWindow(view.windowToken, 0)
     }
 
     // Tell the IME to drop and re-create the input connection so it re-reads the EditorInfo (inputType etc.).
@@ -331,9 +348,10 @@ private class EditorInputConnection(
     private val bridge: EditorImeBridge,
     /**
      * Context-starvation mode (Settings → Editor → Keyboard suggestions OFF). The IME is handed NO text
-     * context — empty before/after/selected/surrounding/extracted text, composing rejected, and its
-     * `setSelection` ignored — so it can't run autocorrect / auto-space / suggestions over the buffer.
-     * Mirrors sora-editor's `disallowSuggestions`. A normal keyboard otherwise (suggestions on).
+     * context — empty before/after/selected/surrounding/extracted text, re-composing existing text
+     * ([setComposingRegion]) refused, and its `setSelection` ignored — so it can't run autocorrect /
+     * auto-space / suggestions over the buffer. The active composing word is still tracked ([setComposingText])
+     * so the IME stays in sync. Mirrors sora-editor's `disallowSuggestions`. A normal keyboard otherwise.
      */
     private val rawMode: Boolean,
 ) : BaseInputConnection(view, true) {
@@ -364,13 +382,13 @@ private class EditorInputConnection(
         // Composing text never spans a line break; refuse one and let the IME fall back to committing the text,
         // so the underlined composing region can't straddle two lines.
         if ('\n' in s) return false
-        if (rawMode) {
-            // No composing in raw mode → the IME has no word to autocorrect / auto-space. Commit the text
-            // directly and reject, which makes the keyboard fall back to per-character commitText.
-            session.imeFinishComposing()
-            if (s.isNotEmpty()) session.imeCommitText(s, newCursorPosition)
-            return false
-        }
+        // Honor composition even in rawMode. An IME (esp. SwiftKey / Gboard glide typing) keeps its OWN composing
+        // buffer and re-sends the whole word as it grows/shrinks, expecting each call to REPLACE the region.
+        // The old rawMode path committed + rejected, leaving our buffer with no composing region — so the IME's
+        // next setComposingText landed AFTER the committed word instead of replacing it (typing "hello" then
+        // backspace became "hellohell": "delete re-inserts the suggestion"). What actually suppresses autocorrect/
+        // auto-space is the context starvation below (empty getText*/extracted, ignored setSelection, rejected
+        // setComposingRegion); tracking the active composing word does NOT re-enable it.
         session.imeSetComposingText(s, newCursorPosition)
         return true
     }

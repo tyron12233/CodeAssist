@@ -144,6 +144,7 @@ internal class EditorBackend(private val ctx: BackendContext) : EditorService {
             },
             replaceStart = result.replacementRange.start,
             replaceEnd = result.replacementRange.end,
+            isIncomplete = result.isIncomplete,
         )
     }
 

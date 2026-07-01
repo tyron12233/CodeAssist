@@ -25,6 +25,10 @@ data class CompletionSession(
     val base: List<UiCompletionItem>,
     /** Mirrors [UiCompletionResult.mayFilterLocally]; when false [filtered] returns [base] untouched. */
     val canFilterLocally: Boolean = true,
+    /** Mirrors [UiCompletionResult.isIncomplete]: [base] is TRUNCATED, so narrowing it locally may miss
+     *  candidates. The popup still filters it visually for instant feedback, but the editor keeps re-querying
+     *  per keystroke (it can't skip the backend round-trip the way it can for a complete set). */
+    val isIncomplete: Boolean = false,
 ) {
     /**
      * The items to show for [prefix] (the text typed since [tokenStart]). Ranking is preserved from the
@@ -49,9 +53,24 @@ data class CompletionSession(
 
     companion object {
         fun from(result: UiCompletionResult): CompletionSession =
-            CompletionSession(result.replaceStart, result.items, result.mayFilterLocally)
+            CompletionSession(result.replaceStart, result.items, result.mayFilterLocally, result.isIncomplete)
     }
 }
+
+/**
+ * Whether the keystroke that landed [caret] can be absorbed by narrowing [session]'s cached set LOCALLY —
+ * letting the editor skip a backend re-query (which would otherwise run on the interactive engine lane and
+ * preempt the highlighting/diagnostics daemon). True only when the popup is live ([dismissed] false), the
+ * same token is still being extended ([CompletionSession.coversCaret]), and the cached set is a COMPLETE,
+ * locally-filterable prefix set the client-side [CompletionSession.filtered] is authoritative over. When this
+ * is false (new/changed token, a truncated/incomplete set, or a provider that opted out of local filtering)
+ * the editor must re-query so it doesn't serve a stale or partial list.
+ */
+internal fun canNarrowLocally(
+    session: CompletionSession?, dismissed: Boolean, text: CharSequence, caret: Int, extra: String = "",
+): Boolean =
+    !dismissed && session != null && session.canFilterLocally && !session.isIncomplete &&
+        session.coversCaret(text, caret, extra)
 
 /**
  * Identifier-continuation test (Java-ish, but neutral enough for most C-family languages). [extra] adds

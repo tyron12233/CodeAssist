@@ -76,11 +76,11 @@ class EditorEngineDaemonTest {
         daemon.restart("v1")
         advanceUntilIdle()
         assertEquals(
-            listOf("DIAGNOSTICS", "SEMANTIC", "INLAY", "FOLDS", "PREVIEWS"), fake.calls.toList(),
-            "passes must run sequentially in priority order",
+            listOf("FOLDS", "SEMANTIC", "DIAGNOSTICS", "INLAY", "PREVIEWS"), fake.calls.toList(),
+            "passes must run sequentially in priority order (FOLDS leads — parse-only, paints first)",
         )
         assertEquals(
-            listOf(DaemonPass.DIAGNOSTICS, DaemonPass.SEMANTIC, DaemonPass.INLAY, DaemonPass.FOLDS, DaemonPass.PREVIEWS),
+            listOf(DaemonPass.FOLDS, DaemonPass.SEMANTIC, DaemonPass.DIAGNOSTICS, DaemonPass.INLAY, DaemonPass.PREVIEWS),
             rec.passesDone(),
         )
         daemon.close()
@@ -110,7 +110,7 @@ class EditorEngineDaemonTest {
         daemon.restart("v1")
         advanceUntilIdle()
         // DIAGNOSTICS ran, was preempted, then retried; every pass ultimately completed.
-        assertEquals(listOf("DIAGNOSTICS", "DIAGNOSTICS", "SEMANTIC", "INLAY", "FOLDS", "PREVIEWS"), fake.calls.toList())
+        assertEquals(listOf("FOLDS", "SEMANTIC", "DIAGNOSTICS", "DIAGNOSTICS", "INLAY", "PREVIEWS"), fake.calls.toList())
         assertTrue(rec.events.any { it.first == DaemonPhase.PASS_PREEMPTED && it.second == DaemonPass.DIAGNOSTICS })
         assertEquals(5, rec.passesDone().size, "all five passes finished after the retry")
         daemon.close()

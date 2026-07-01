@@ -147,8 +147,14 @@ internal fun DrawScope.drawEditor(
     }
     val textLeft = gutterWidth + metrics.padLeft - hOff
     fun lineTop(line: Int) = metrics.padTop + vlayout.topRow(line) * lineH - vOff
-    fun xOf(line: Int, offset: Int): Float =
-        textLeft + layoutFor(line).getHorizontalPosition(rawToVisual(line, offset - doc.lineStart(line)), usePrimaryDirection = true)
+    fun xOf(line: Int, offset: Int): Float {
+        val l = layoutFor(line)
+        // Clamp into the laid-out text. Callers (the bracket-pair box, touch handles) pass offsets remembered
+        // against the document, which can momentarily lag a fresh edit and land a column past the line's end;
+        // getHorizontalPosition throws on an out-of-range offset, so a one-frame-stale highlight must not crash.
+        val col = rawToVisual(line, offset - doc.lineStart(line)).coerceIn(0, l.layoutInput.text.length)
+        return textLeft + l.getHorizontalPosition(col, usePrimaryDirection = true)
+    }
     // Viewport-Y of the TOP of the wrapped sub-row holding [offset] on [line] (== lineTop when not wrapping).
     fun yTopOf(line: Int, offset: Int): Float {
         if (!wrap) return lineTop(line)

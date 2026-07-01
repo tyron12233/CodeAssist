@@ -53,9 +53,16 @@ data class EditorDaemonPolicy(
     val preemptRetryDelay: Duration = 150.milliseconds,
     /** Max consecutive preemptions of one pass before giving up this run (a later edit retriggers). */
     val maxPreemptRetries: Int = 8,
-    /** Passes to run, in priority order. */
+    /**
+     * Passes to run, in priority order. FOLDS is first because it's parse-only (no symbol resolution, no
+     * classpath/index): on a cold open the structure chevrons can paint off the bare PSI in ~parse time
+     * instead of queuing behind the resolve-heavy DIAGNOSTICS pass (which, on a Compose-scale classpath,
+     * waits seconds for the symbol model + index). SEMANTIC (type-aware coloring) follows so the overlay
+     * lands before diagnostics too; DIAGNOSTICS / INLAY / PREVIEWS are the heavier, less time-critical tail.
+     * All passes share the one serialized engine worker, so this order is literally the paint order.
+     */
     val passOrder: List<DaemonPass> = listOf(
-        DaemonPass.DIAGNOSTICS, DaemonPass.SEMANTIC, DaemonPass.INLAY, DaemonPass.FOLDS, DaemonPass.PREVIEWS,
+        DaemonPass.FOLDS, DaemonPass.SEMANTIC, DaemonPass.DIAGNOSTICS, DaemonPass.INLAY, DaemonPass.PREVIEWS,
     ),
 )
 
@@ -124,6 +131,9 @@ class EditorEngineDaemon(
     private suspend fun runPasses(text: String, myRev: Int) {
         observer?.on(DaemonPhase.RUN_STARTED, null, myRev)
         try {
+            // Sync the engine's live overlay to this run's buffer ONCE, up front — every pass below reads it,
+            // and decoupling it from a specific pass lets the passes run in any order (FOLDS now leads).
+            backend.editor.updateDocument(path, text)
             for (pass in policy.passOrder) runPass(pass, text, myRev)
             observer?.on(DaemonPhase.RUN_FINISHED, null, myRev)
         } catch (c: CancellationException) {
@@ -162,7 +172,6 @@ class EditorEngineDaemon(
     private suspend fun fetchAndApply(pass: DaemonPass, text: String, myRev: Int) {
         when (pass) {
             DaemonPass.DIAGNOSTICS -> {
-                backend.editor.updateDocument(path, text) // the engine's live overlay must see the buffer first
                 val r = backend.editor.analyze(path, text)
                 ifCurrent(myRev) { onDiagnostics(r) }
             }

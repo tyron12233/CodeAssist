@@ -130,6 +130,7 @@ import kotlin.math.max
 import kotlin.math.min
 import kotlin.math.roundToInt
 import kotlin.time.Duration.Companion.milliseconds
+import kotlin.time.TimeSource
 
 /**
  * The code editor surface, rebuilt sora-editor-style for typing latency on phones: the document is a
@@ -701,6 +702,10 @@ private fun CodeEditorContent(
     var tripleArmed by remember(path) { mutableStateOf(false) }
     var tripleArmPos by remember(path) { mutableStateOf(Offset.Zero) }
     var tripleArmJob by remember(path) { mutableStateOf<Job?>(null) }
+    // When the double-tap armed the line-select. detectTapGestures runs onPress for the second tap of a
+    // double-tap too, AFTER onDoubleTap arms — so the triple branch must require the press to have begun
+    // after this mark (a genuine third tap), else a plain double-tap would immediately re-select the line.
+    var tripleArmMark by remember(path) { mutableStateOf<TimeSource.Monotonic.ValueTimeMark?>(null) }
     // Mouse click-count tracking (single → caret, double → word, triple → line); reset across files.
     // We count clicks ourselves rather than via detectTapGestures so the mouse path can own the whole
     // gesture (click + drag-to-select) and consume the drag before the scroll containers steal it.
@@ -966,9 +971,18 @@ private fun CodeEditorContent(
         }
 
         when {
-            // Auto-open only when enabled in Settings; Ctrl-Space (an explicit reopen) always works.
-            before == '.' || (before != null && isIdentifierChar(before, extraWordChars(path))) ->
+            // A new member-access context (`.`) always needs a fresh candidate set from the backend.
+            before == '.' ->
                 if (completion.autoPopupEnabled) completion.reopen() else completion.dismiss()
+            // Extending an identifier: if the live popup session already covers this token with a complete,
+            // locally-filterable set, the client-side filter (`displayed = liveCompletion.filtered(prefix)`)
+            // narrows it instantly — so skip the backend re-query (it would be redundant AND would preempt the
+            // highlighting/diagnostics daemon on the shared engine lane). Otherwise (new/changed token, a
+            // truncated/incomplete set) re-query so the list stays authoritative.
+            before != null && isIdentifierChar(before, extraWordChars(path)) ->
+                if (!canNarrowLocally(completion.current, completion.dismissed, d.chars, caret, extraWordChars(path))) {
+                    if (completion.autoPopupEnabled) completion.reopen() else completion.dismiss()
+                }
             else -> completion.dismiss()
         }
     }
@@ -1368,12 +1382,22 @@ private fun CodeEditorContent(
                         // (cancelled), and the longPressed guard avoids clobbering a long-press word selection.
                         onPress = { pos ->
                             longPressed = false
+                            // Marked at finger-down. detectTapGestures runs onPress for the SECOND tap of a
+                            // double-tap too, and that body runs AFTER onDoubleTap has selected the word and
+                            // armed the line-select. Its press began before the arm, so skip it entirely —
+                            // otherwise it clobbers the word selection. A genuine third tap begins after the
+                            // arm (mark is earlier than its press) and falls through to the triple branch.
+                            val pressMark = TimeSource.Monotonic.markNow()
                             val released = tryAwaitRelease()
-                            if (released && !longPressed) {
+                            val nearArm = tripleArmed && (pos - tripleArmPos).getDistance() < 60f
+                            val doubleTapSecondTap =
+                                nearArm && tripleArmMark?.let { (it - pressMark).isPositive() } == true
+                            if (released && !longPressed && !doubleTapSecondTap) {
                                 focus.requestFocus()
                                 quickDoc = null // a tap in the editor dismisses an open quick-doc popup
-                                // Third quick tap near the double-tap → select the whole line.
-                                val triple = tripleArmed && (pos - tripleArmPos).getDistance() < 60f
+                                // Third quick tap near the double-tap → select the whole line. (The second tap
+                                // of the double-tap was already excluded above, so a near-arm press here is a third.)
+                                val triple = nearArm
                                 // A tap on a gutter error/warning glyph opens that line's diagnostic sheet
                                 // (full message + fixes) instead of moving the caret.
                                 val gutterDiag = if (pos.x < gutterWidthPx) acts.diagnosticOnLine(lineAtY(pos.y)) else null
@@ -1412,7 +1436,7 @@ private fun CodeEditorContent(
                             editorSession.selectWordAt(offsetAt(pos))
                             if (lastInputWasTouch) handlesVisible = true
                             // arm triple-tap: a quick third tap nearby (within the window below) selects the line
-                            tripleArmed = true; tripleArmPos = pos
+                            tripleArmed = true; tripleArmPos = pos; tripleArmMark = TimeSource.Monotonic.markNow()
                             tripleArmJob?.cancel()
                             tripleArmJob = scope.launch { delay(320.milliseconds); tripleArmed = false }
                         },

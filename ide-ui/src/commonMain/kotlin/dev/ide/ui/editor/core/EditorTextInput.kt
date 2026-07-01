@@ -39,10 +39,12 @@ data class EditorImeOptions(
     /**
      * Allow the soft keyboard's autocorrect, predictive suggestions, glide typing, and auto-space-after-
      * punctuation. **On (the default)** is a normal keyboard. Turning it OFF marks the input field as raw
-     * code (a `visible-password` input type): a typed `.` doesn't get an auto-inserted space, identifiers
-     * aren't "corrected", and the suggestion strip is suppressed (at the cost of a password-style keyboard
-     * on some IMEs). The bridge never requests no-personalized-learning (that triggers Gboard's incognito UI)
-     * and never auto-capitalizes.
+     * code: a typed `.` doesn't get an auto-inserted space and identifiers aren't "corrected". The bridge
+     * enforces this by starving the IME of text context (empty before/after/extracted text, ignored
+     * `setSelection`, refused re-composition of existing text) plus the `NO_SUGGESTIONS` hint, rather than a
+     * password-style input type. The active composing word is still tracked so the keyboard stays in sync.
+     * The bridge never requests no-personalized-learning (that triggers Gboard's incognito UI) and never
+     * auto-capitalizes.
      */
     val softKeyboardSuggestions: Boolean = true,
 )

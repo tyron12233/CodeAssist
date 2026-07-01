@@ -22,6 +22,38 @@ class CompletionMatchTest {
     private fun sessionOf(vararg items: UiCompletionItem) =
         CompletionSession.from(UiCompletionResult(items.toList(), replaceStart = 0, replaceEnd = 0))
 
+    private fun sessionAt(tokenStart: Int, incomplete: Boolean = false, mayFilter: Boolean = true) =
+        CompletionSession.from(UiCompletionResult(
+            listOf(item("bar")), replaceStart = tokenStart, replaceEnd = tokenStart,
+            mayFilterLocally = mayFilter, isIncomplete = incomplete,
+        ))
+
+    // --- canNarrowLocally: the gate that lets the editor skip a backend re-query while narrowing client-side ---
+
+    @Test fun narrowsLocallyWhenCompleteSessionStillCoversTheToken() {
+        // popup live, "foo.bar" with the token at 4, caret after "bar" → narrow the cached set, no re-query
+        assertTrue(canNarrowLocally(sessionAt(4), dismissed = false, text = "foo.bar", caret = 7))
+    }
+
+    @Test fun requeriesWhenSessionIsIncomplete() {
+        // truncated set → extending the prefix could surface dropped candidates → must re-query
+        assertFalse(canNarrowLocally(sessionAt(4, incomplete = true), dismissed = false, text = "foo.bar", caret = 7))
+    }
+
+    @Test fun requeriesWhenProviderOptedOutOfLocalFiltering() {
+        assertFalse(canNarrowLocally(sessionAt(4, mayFilter = false), dismissed = false, text = "foo.bar", caret = 7))
+    }
+
+    @Test fun requeriesWhenPopupDismissedOrNoSession() {
+        assertFalse(canNarrowLocally(sessionAt(4), dismissed = true, text = "foo.bar", caret = 7))
+        assertFalse(canNarrowLocally(null, dismissed = false, text = "foo.bar", caret = 7))
+    }
+
+    @Test fun requeriesWhenCaretLeftTheToken() {
+        assertFalse(canNarrowLocally(sessionAt(4), dismissed = false, text = "foo.b r", caret = 7)) // non-ident in span
+        assertFalse(canNarrowLocally(sessionAt(4), dismissed = false, text = "foo.bar", caret = 3)) // caret before tokenStart
+    }
+
     @Test
     fun emptyQueryMatchesEverythingWithNoHighlight() {
         assertContentEquals(intArrayOf(), matchPositions("newFile", ""))
