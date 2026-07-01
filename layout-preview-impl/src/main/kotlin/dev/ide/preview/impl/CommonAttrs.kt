@@ -63,6 +63,10 @@ internal object CommonAttrs {
             (cons ?: HashMap<String, String>().also { m -> cons = m })[c] = it
         }
         cons?.let { p.extras["constraints"] = it }
+
+        // CoordinatorLayout child behaviour (e.g. `@string/appbar_scrolling_view_behavior`) — the content that
+        // scrolls under the app bar. Captured for CoordinatorLayoutRenderer to offset below the app bar.
+        attrs.app("layout_behavior")?.let { p.extras["layoutBehavior"] = it }
     }
 
     private val CONSTRAINT_ATTRS = listOf(

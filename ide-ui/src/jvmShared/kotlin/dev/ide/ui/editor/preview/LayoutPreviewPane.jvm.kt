@@ -20,10 +20,12 @@ import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -48,6 +50,7 @@ import dev.ide.preview.LayoutPreviewBackend
 import dev.ide.preview.LayoutPreviewResult
 import dev.ide.preview.PreviewEngine
 import dev.ide.preview.PreviewRequest
+import dev.ide.preview.PreviewViewNode
 import dev.ide.preview.RCanvas
 import dev.ide.preview.RImage
 import dev.ide.preview.RPaint
@@ -58,6 +61,7 @@ import dev.ide.ui.backend.IdeBackend
 import dev.ide.ui.icons.CaIcons
 import dev.ide.ui.theme.Ca
 import kotlin.math.roundToInt
+import kotlinx.coroutines.delay
 
 /**
  * The layout Preview view: renders the layout on a [PreviewSurface] device card — the same chrome (device /
@@ -65,18 +69,53 @@ import kotlin.math.roundToInt
  * blueprint wireframe, tap-to-select with an attribute inspector, the system-UI toggle, and a render-problem
  * chip. The inflated tree is drawn through the owned `PreviewEngine` over a Compose-backed `RCanvas`.
  */
+/** Debounce before fetching a layout render, so a fast typing burst coalesces into one render request. */
+private const val PREVIEW_DEBOUNCE_MS = 200L
+
+/** Floating render-pipeline status chip (spinner + stage label), shown top-right while a real-view render
+ *  runs — the "Merging resources" / "Linking resources" / "Rendering" stages from the engine. */
+@Composable
+private fun PreviewStatusChip(stage: String, modifier: Modifier = Modifier) {
+    Row(
+        modifier
+            .clip(RoundedCornerShape(50))
+            .background(Ca.colors.surface.copy(alpha = 0.92f))
+            .border(1.dp, Ca.colors.separator, RoundedCornerShape(50))
+            .padding(horizontal = Ca.spacing.s3, vertical = Ca.spacing.s2),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(Ca.spacing.s2),
+    ) {
+        CircularProgressIndicator(Modifier.size(13.dp), color = Ca.colors.accent, strokeWidth = 2.dp)
+        Text(stage, style = Ca.type.footnote, color = Ca.colors.textSecondary)
+    }
+}
+
 @Composable
 actual fun LayoutPreviewPane(path: String, text: String, backend: IdeBackend, modifier: Modifier) {
     val state = rememberPreviewSurfaceState(path)
     var showChrome by remember { mutableStateOf(true) }
     var blueprint by remember { mutableStateOf(false) }
+    // Real-view ("layoutlib-on-device") is the default renderer; owned rendering is the fallback (and the
+    // desktop path, where no real-view runtime is wired). The toggle stays as an escape hatch.
+    var realViews by remember { mutableStateOf(true) }
     var treeOpen by remember { mutableStateOf(false) }
+    // Owned-render selection (a RenderNode) vs. real-view selection (a captured PreviewViewNode) — only one is
+    // in play per result (the real-view path carries `viewTree`, the owned path carries `root`).
     var selected by remember(path) { mutableStateOf<RenderNode?>(null) }
+    var selectedView by remember(path) { mutableStateOf<PreviewViewNode?>(null) }
 
-    val request = PreviewRequest(state.widthPx, state.heightPx, state.device.density, showChrome, state.night)
+    val request = PreviewRequest(state.widthPx, state.heightPx, state.device.density, showChrome, state.night, realViews = realViews)
     val lpBackend = backend as? LayoutPreviewBackend
     var result by remember { mutableStateOf<LayoutPreviewResult?>(null) }
-    LaunchedEffect(path, text, request, lpBackend) {
+    // Re-fetch when dependency resolution settles: a re-resolve changes the module classpath the real-view
+    // render dexes against, so the preview must re-render rather than keep a stale (pre-resolve) result.
+    val depsResolving = backend.deps.depsState.collectAsState().value.resolving
+    // Live render-pipeline stage (relink → render) for the floating status chip; null when idle.
+    val renderProgress = backend.preview.previewProgress.collectAsState().value
+    LaunchedEffect(path, text, request, lpBackend, depsResolving) {
+        // The effect re-launches (cancelling the prior) on every keystroke; this delay coalesces a typing
+        // burst into a single render. The fetch runs on the backend's preview lane, off the UI thread.
+        delay(PREVIEW_DEBOUNCE_MS)
         result = lpBackend?.layoutPreview(path, text, request)
     }
 
@@ -86,17 +125,25 @@ actual fun LayoutPreviewPane(path: String, text: String, backend: IdeBackend, mo
 
     val r = result
     if (lpBackend == null || r == null) {
-        Box(modifier.fillMaxSize().background(Ca.colors.editorBg), contentAlignment = Alignment.Center) {
+        Box(modifier.fillMaxSize().background(Ca.colors.editorBg)) {
             Text(
                 if (lpBackend == null) "Layout preview isn't available for this project" else "No layout preview for this file",
                 color = Ca.colors.textTertiary, style = Ca.type.footnote,
+                modifier = Modifier.align(Alignment.Center),
             )
+            // First render (no prior result yet): still show the pipeline status chip.
+            renderProgress?.let { PreviewStatusChip(it.stage, Modifier.align(Alignment.TopEnd).padding(Ca.spacing.s3)) }
         }
         return
     }
 
     val resources = remember(r) { UiPreviewResources(r.resources, r.imageFile) }
     val engine = remember(r) { PreviewEngine(SimpleRenderContext(gfx, resources, state.device.density, state.device.density)) }
+    // Real-view ("layoutlib-on-device") render, when the backend produced one: the live native Bitmap (device,
+    // no PNG round-trip) if present, else PNG bytes (portable form / desktop).
+    val realImage = remember(r.renderedNativeImage, r.renderedImage) {
+        r.renderedNativeImage?.let { nativeImageToBitmap(it) } ?: r.renderedImage?.let { decodeImageBytes(it) }
+    }
     val accent = Ca.colors.accent
     val surfaceColor = Ca.colors.surface
     val separatorColor = Ca.colors.separator
@@ -107,7 +154,7 @@ actual fun LayoutPreviewPane(path: String, text: String, backend: IdeBackend, mo
         cardColor = if (blueprint) BlueprintGround else Color.White,
         cardBorderColor = if (blueprint) BlueprintLine.copy(alpha = 0.4f) else Ca.colors.separator,
         blueprint = blueprint,
-        onSurfaceTap = { selected = null },
+        onSurfaceTap = { selected = null; selectedView = null },
         topBarExtras = {
             Divider()
             PillButton({ treeOpen = !treeOpen }) {
@@ -115,6 +162,9 @@ actual fun LayoutPreviewPane(path: String, text: String, backend: IdeBackend, mo
             }
             PillButton({ blueprint = !blueprint }) {
                 Icon(CaIcons.box, "Blueprint", Modifier.size(16.dp), tint = if (blueprint) accent else Ca.colors.textSecondary)
+            }
+            PillButton({ realViews = !realViews }) {
+                Icon(CaIcons.androidLogo, "Real views (beta)", Modifier.size(16.dp), tint = if (realViews) accent else Ca.colors.textSecondary)
             }
         },
         bottomBarExtras = {
@@ -130,49 +180,82 @@ actual fun LayoutPreviewPane(path: String, text: String, backend: IdeBackend, mo
                 modifier = Modifier.align(Alignment.TopStart).padding(Ca.spacing.s3),
             )
 
-            // Component tree (start edge): selecting a node drives the canvas highlight + the inspector.
+            // Render-pipeline status (top-end): a floating spinner + stage label while a real-view render runs.
+            renderProgress?.let { PreviewStatusChip(it.stage, Modifier.align(Alignment.TopEnd).padding(Ca.spacing.s3)) }
+
+            // Component tree (start edge): selecting a node drives the canvas highlight + the inspector. The
+            // real-view path shows the REAL inflated hierarchy (`viewTree`); the owned path shows `root`.
+            val vt = r.viewTree
             if (treeOpen) {
-                ComponentTreePanel(
-                    root = r.root,
-                    selected = selected,
-                    onSelect = { selected = it },
-                    surfaceColor = surfaceColor,
-                    separatorColor = separatorColor,
-                    accent = accent,
-                    modifier = Modifier.align(Alignment.CenterStart).padding(Ca.spacing.s3),
-                    onClose = { treeOpen = false },
-                )
+                if (vt != null) {
+                    RealViewTreePanel(
+                        root = vt, selected = selectedView, onSelect = { selectedView = it },
+                        surfaceColor = surfaceColor, separatorColor = separatorColor, accent = accent,
+                        modifier = Modifier.align(Alignment.CenterStart).padding(Ca.spacing.s3),
+                        onClose = { treeOpen = false },
+                    )
+                } else {
+                    ComponentTreePanel(
+                        root = r.root, selected = selected, onSelect = { selected = it },
+                        surfaceColor = surfaceColor, separatorColor = separatorColor, accent = accent,
+                        modifier = Modifier.align(Alignment.CenterStart).padding(Ca.spacing.s3),
+                        onClose = { treeOpen = false },
+                    )
+                }
             }
 
             // Inspector (top-end), when a node is selected.
-            selected?.let { node ->
-                InspectorPanel(
-                    node = node, density = state.device.density,
-                    modifier = Modifier.align(Alignment.TopEnd).padding(Ca.spacing.s3),
-                    onClose = { selected = null },
-                )
+            if (vt != null) {
+                selectedView?.let { node ->
+                    RealViewInspectorPanel(
+                        node = node,
+                        modifier = Modifier.align(Alignment.TopEnd).padding(Ca.spacing.s3),
+                        onClose = { selectedView = null },
+                    )
+                }
+            } else {
+                selected?.let { node ->
+                    InspectorPanel(
+                        node = node, density = state.device.density,
+                        modifier = Modifier.align(Alignment.TopEnd).padding(Ca.spacing.s3),
+                        onClose = { selected = null },
+                    )
+                }
             }
         },
     ) { widthPx, heightPx, density ->
         Box(
             Modifier.fillMaxSize().pointerInput(r) {
                 detectTapGestures(
-                    onTap = { p -> selected = engine.hitTest(r.root, p.x, p.y) },
+                    // Tap = select. Real-view path hit-tests the captured hierarchy (bounds line up with the
+                    // rendered bitmap); owned path hit-tests the render tree.
+                    onTap = { p ->
+                        val vt = r.viewTree
+                        if (vt != null) selectedView = vt.hitTest(p.x, p.y)
+                        else selected = engine.hitTest(r.root, p.x, p.y)
+                    },
                     onDoubleTap = { if (state.userScale <= 0f) state.userScale = 1f else { state.userScale = 0f; state.offset = Offset.Zero } },
                 )
             },
         ) {
             Canvas(Modifier.fillMaxSize()) {
-                if (blueprint) {
-                    // Wireframe: every node as a thin cyan outline — no real fills (the LayoutLib "blueprint"
-                    // idiom). The engine still measures/lays out via render() into a throwaway pass so bounds
-                    // are populated; we then stroke the tree ourselves.
-                    engine.render(r.root, widthPx, heightPx, NullRCanvas)
-                    drawWireframe(r.root, BlueprintLine, density)
-                } else {
-                    engine.render(r.root, widthPx, heightPx, ComposeRCanvas(this, measurer))
+                val img = realImage
+                when {
+                    // Real-view path: paint the device-rendered PNG 1:1 (it's already device px from the origin).
+                    img != null -> drawImage(img)
+                    blueprint -> {
+                        // Wireframe: every node as a thin cyan outline — no real fills (the LayoutLib "blueprint"
+                        // idiom). The engine still measures/lays out via render() into a throwaway pass so bounds
+                        // are populated; we then stroke the tree ourselves.
+                        engine.render(r.root, widthPx, heightPx, NullRCanvas)
+                        drawWireframe(r.root, BlueprintLine, density)
+                    }
+                    else -> engine.render(r.root, widthPx, heightPx, ComposeRCanvas(this, measurer))
                 }
-                selected?.let { n -> drawSelection(n, accent, surfaceColor, density) }
+                // Selection chrome: the owned tree over the owned render, or the captured hierarchy over the
+                // real-view bitmap (both in device px from the origin, so they overlay 1:1).
+                if (img == null) selected?.let { n -> drawSelectionBox(n.left.toFloat(), n.top.toFloat(), n.right.toFloat(), n.bottom.toFloat(), accent, surfaceColor, density) }
+                else selectedView?.let { n -> drawSelectionBox(n.left.toFloat(), n.top.toFloat(), n.right.toFloat(), n.bottom.toFloat(), accent, surfaceColor, density) }
             }
         }
     }
@@ -258,10 +341,10 @@ private fun DrawScope.drawWireframe(node: RenderNode, color: Color, density: Flo
     for (child in node.children) drawWireframe(child, color, density)
 }
 
-/** The selection chrome: an accent outline plus the design's four corner handles. */
-private fun DrawScope.drawSelection(n: RenderNode, accent: Color, handleFill: Color, density: Float) {
-    val l = n.left.toFloat(); val t = n.top.toFloat(); val rr = n.right.toFloat(); val b = n.bottom.toFloat()
-    drawRect(accent, Offset(l, t), Size(n.width.toFloat(), n.height.toFloat()), style = Stroke(width = 1.5f * density))
+/** The selection chrome: an accent outline plus the design's four corner handles, over the given bounds
+ *  (device px). Shared by the owned-render ([RenderNode]) and real-view ([PreviewViewNode]) selection. */
+private fun DrawScope.drawSelectionBox(l: Float, t: Float, rr: Float, b: Float, accent: Color, handleFill: Color, density: Float) {
+    drawRect(accent, Offset(l, t), Size(rr - l, b - t), style = Stroke(width = 1.5f * density))
     val hs = 7f * density
     for ((cx, cy) in listOf(l to t, rr to t, l to b, rr to b)) {
         val tl = Offset(cx - hs / 2f, cy - hs / 2f)
@@ -316,5 +399,117 @@ private fun InspectorPanel(node: RenderNode, density: Float, modifier: Modifier,
                 Text(value, color = Ca.colors.textPrimary, style = Ca.type.caption)
             }
         }
+    }
+}
+
+/**
+ * The real-view (device "layoutlib") hierarchy panel — the actual inflated [PreviewViewNode] tree flattened to
+ * indented rows. Mirrors [ComponentTreePanel] but over the captured hierarchy (which includes the window decor
+ * chrome the real framework builds around the layout), so selecting a row highlights the view on the rendered
+ * bitmap and opens its attributes.
+ */
+@Composable
+private fun RealViewTreePanel(
+    root: PreviewViewNode,
+    selected: PreviewViewNode?,
+    onSelect: (PreviewViewNode) -> Unit,
+    surfaceColor: Color,
+    separatorColor: Color,
+    accent: Color,
+    modifier: Modifier,
+    onClose: () -> Unit,
+) {
+    val rows = remember(root) { flattenViewTree(root) }
+    Column(
+        modifier.widthIn(min = 190.dp, max = 260.dp)
+            .shadow(10.dp, RoundedCornerShape(Ca.radius.md))
+            .clip(RoundedCornerShape(Ca.radius.md)).background(surfaceColor)
+            .border(1.dp, separatorColor, RoundedCornerShape(Ca.radius.md)),
+    ) {
+        Row(Modifier.fillMaxWidth().padding(start = Ca.spacing.s3, end = Ca.spacing.s1, top = Ca.spacing.s1, bottom = Ca.spacing.s1), verticalAlignment = Alignment.CenterVertically) {
+            Text("View hierarchy", color = Ca.colors.textTertiary, style = Ca.type.caption, fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f))
+            PillButton(onClose) { Icon(CaIcons.close, "Close", Modifier.size(14.dp), tint = Ca.colors.textTertiary) }
+        }
+        Box(Modifier.fillMaxWidth().height(1.dp).background(separatorColor))
+        Column(Modifier.heightIn(max = 340.dp).verticalScroll(rememberScrollState()).padding(vertical = Ca.spacing.s1)) {
+            for ((node, depth) in rows) {
+                val on = node === selected
+                Row(
+                    Modifier.fillMaxWidth()
+                        .clickable { onSelect(node) }
+                        .background(if (on) accent.copy(alpha = 0.14f) else Color.Transparent)
+                        .padding(start = (8 + depth * 14).dp, end = Ca.spacing.s2, top = 5.dp, bottom = 5.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(Ca.spacing.s2),
+                ) {
+                    Icon(
+                        if (node.children.isNotEmpty()) CaIcons.layers else CaIcons.dot,
+                        null, Modifier.size(14.dp),
+                        tint = if (on) accent else Ca.colors.textSecondary,
+                    )
+                    Text(
+                        node.simpleName.ifEmpty { "View" },
+                        color = if (on) accent else Ca.colors.textPrimary,
+                        style = Ca.type.caption, fontWeight = if (on) FontWeight.SemiBold else FontWeight.Normal,
+                        maxLines = 1,
+                    )
+                    node.id?.let {
+                        Text("@id/$it", color = Ca.colors.textTertiary, style = Ca.type.caption2, maxLines = 1)
+                    }
+                }
+            }
+        }
+    }
+}
+
+/** Pre-order flatten of a captured [PreviewViewNode] tree to (node, depth) rows for the hierarchy panel. */
+private fun flattenViewTree(
+    node: PreviewViewNode,
+    depth: Int = 0,
+    out: MutableList<Pair<PreviewViewNode, Int>> = ArrayList(),
+): List<Pair<PreviewViewNode, Int>> {
+    out.add(node to depth)
+    for (child in node.children) flattenViewTree(child, depth + 1, out)
+    return out
+}
+
+/**
+ * The real-view attribute inspector: the selected view's class + id, then its captured attributes bucketed by
+ * group (Layout / Appearance / Text / …). Read-only for now — a faithful "what the framework actually inflated"
+ * view of the node, distinct from the owned-render [InspectorPanel].
+ */
+@Composable
+private fun RealViewInspectorPanel(node: PreviewViewNode, modifier: Modifier, onClose: () -> Unit) {
+    val groups = remember(node) { node.properties.groupBy { it.group } }
+    Column(
+        modifier.widthIn(min = 220.dp, max = 300.dp)
+            .shadow(10.dp, RoundedCornerShape(Ca.radius.md))
+            .clip(RoundedCornerShape(Ca.radius.md)).background(Ca.colors.surface)
+            .border(1.dp, Ca.colors.separator, RoundedCornerShape(Ca.radius.md)),
+    ) {
+        Row(Modifier.fillMaxWidth().padding(start = Ca.spacing.s3, end = Ca.spacing.s1, top = Ca.spacing.s1, bottom = Ca.spacing.s1), verticalAlignment = Alignment.CenterVertically) {
+            Column(Modifier.weight(1f)) {
+                Text(node.simpleName.ifEmpty { "View" }, color = Ca.colors.textPrimary, style = Ca.type.subhead, fontWeight = FontWeight.SemiBold, maxLines = 1)
+                Text(node.className, color = Ca.colors.textTertiary, style = Ca.type.caption2, maxLines = 1)
+            }
+            PillButton(onClose) { Icon(CaIcons.close, "Close", Modifier.size(14.dp), tint = Ca.colors.textTertiary) }
+        }
+        Box(Modifier.fillMaxWidth().height(1.dp).background(Ca.colors.separator))
+        Column(Modifier.heightIn(max = 420.dp).verticalScroll(rememberScrollState()).padding(Ca.spacing.s3), verticalArrangement = Arrangement.spacedBy(Ca.spacing.s2)) {
+            node.id?.let { InspectorAttrRow("id", "@id/$it") }
+            for ((group, props) in groups) {
+                Text(group.uppercase(), color = Ca.colors.textTertiary, style = Ca.type.caption2, fontWeight = FontWeight.SemiBold, modifier = Modifier.padding(top = Ca.spacing.s1))
+                for (p in props) InspectorAttrRow(p.name, p.value)
+            }
+        }
+    }
+}
+
+/** One attribute row (name / value) in the real-view inspector. */
+@Composable
+private fun InspectorAttrRow(name: String, value: String) {
+    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(Ca.spacing.s2)) {
+        Text(name, color = Ca.colors.textTertiary, style = Ca.type.caption, modifier = Modifier.width(96.dp), maxLines = 1)
+        Text(value, color = Ca.colors.textPrimary, style = Ca.type.caption, modifier = Modifier.weight(1f))
     }
 }

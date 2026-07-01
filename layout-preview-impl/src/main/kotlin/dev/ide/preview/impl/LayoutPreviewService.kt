@@ -29,7 +29,7 @@ class LayoutPreviewService(
         imageLoader: (resType: String, name: String, file: String?) -> RImage? = { _, _, _ -> null },
         layoutProvider: (name: String) -> String? = { null },
     ): LayoutPreviewResult {
-        val resources = ProjectPreviewResources(repo, density, scaledDensity, imageLoader, night)
+        val resources = ProjectPreviewResources(repo, density, scaledDensity, imageLoader, night, themeName)
         val ctx = SimpleRenderContext(HeadlessGraphics(), resources, density, scaledDensity)
         val inflater = LayoutInflater(registry, customViewFactory, layoutProvider)
         val content = inflater.inflate(xml, ctx)

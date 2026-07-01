@@ -13,6 +13,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
@@ -48,6 +49,9 @@ import androidx.compose.ui.input.pointer.PointerEventPass
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.input.pointer.positionChanged
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.foundation.text.selection.SelectionContainer
+import androidx.compose.ui.platform.LocalClipboardManager
+import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
@@ -264,6 +268,11 @@ fun PreviewProblemChip(issues: List<PreviewIssue>, modifier: Modifier) {
             }
         }
         if (open) {
+            val clipboard = LocalClipboardManager.current
+            // Plain-text form of every issue, for the Copy button (titles + messages, blank-line separated).
+            val copyText = issues.joinToString("\n\n") { iss ->
+                (if (iss.title.isNotEmpty()) iss.title + "\n" else "") + iss.message
+            }
             Column(
                 Modifier.padding(top = Ca.spacing.s2).widthIn(max = 360.dp).heightIn(max = 320.dp)
                     .clip(RoundedCornerShape(Ca.radius.md)).background(Ca.colors.surface)
@@ -271,11 +280,25 @@ fun PreviewProblemChip(issues: List<PreviewIssue>, modifier: Modifier) {
                     .verticalScroll(rememberScrollState()).padding(Ca.spacing.s3),
                 verticalArrangement = Arrangement.spacedBy(Ca.spacing.s2),
             ) {
-                for (p in issues) Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
-                    if (p.title.isNotEmpty()) {
-                        Text(p.title, color = if (p.level == PreviewIssueLevel.ERROR) Ca.colors.error else Ca.colors.textPrimary, style = Ca.type.caption, fontWeight = FontWeight.SemiBold)
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+                    Text("${issues.size} problem${if (issues.size == 1) "" else "s"}", color = Ca.colors.textSecondary, style = Ca.type.caption)
+                    PillButton({ clipboard.setText(AnnotatedString(copyText)) }) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Icon(CaIcons.copy, "Copy problems", Modifier.size(13.dp), tint = Ca.colors.textSecondary)
+                            Text(" Copy", color = Ca.colors.textSecondary, style = Ca.type.caption)
+                        }
                     }
-                    Text(p.message, color = Ca.colors.textSecondary, style = Ca.type.caption2)
+                }
+                // SelectionContainer so the text can also be long-pressed/dragged to select + copy manually.
+                SelectionContainer {
+                    Column(verticalArrangement = Arrangement.spacedBy(Ca.spacing.s2)) {
+                        for (p in issues) Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                            if (p.title.isNotEmpty()) {
+                                Text(p.title, color = if (p.level == PreviewIssueLevel.ERROR) Ca.colors.error else Ca.colors.textPrimary, style = Ca.type.caption, fontWeight = FontWeight.SemiBold)
+                            }
+                            Text(p.message, color = Ca.colors.textSecondary, style = Ca.type.caption2)
+                        }
+                    }
                 }
             }
         }

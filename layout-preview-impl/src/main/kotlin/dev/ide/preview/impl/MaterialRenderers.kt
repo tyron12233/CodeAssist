@@ -127,4 +127,10 @@ fun dev.ide.preview.RendererRegistry.withMaterial(): dev.ide.preview.RendererReg
     .register(listOf("FloatingActionButton", "ExtendedFloatingActionButton"), FabRenderer)
     .register(listOf("Chip"), ChipRenderer())
     .register(listOf("ConstraintLayout"), ConstraintLayoutRenderer)
-    .register(listOf("CoordinatorLayout", "AppBarLayout", "BottomNavigationView", "MaterialToolbar", "Toolbar"), FrameLayoutRenderer)
+    .register(listOf("CoordinatorLayout"), CoordinatorLayoutRenderer)
+    .register(listOf("AppBarLayout"), AppBarLayoutRenderer)
+    .register(listOf("Toolbar", "MaterialToolbar", "ActionBar"), ToolbarRenderer)
+    .register(listOf("BottomNavigationView", "BottomAppBar", "NavigationRailView"), BottomNavRenderer)
+    // List/pager containers: their items come from an adapter at runtime, so they preview as an empty box
+    // (a registered renderer, NOT the custom-view path — they aren't the user's class and need no compile/dex).
+    .register(listOf("RecyclerView", "ViewPager", "ViewPager2", "ListView", "GridView", "ExpandableListView"), FrameLayoutRenderer)

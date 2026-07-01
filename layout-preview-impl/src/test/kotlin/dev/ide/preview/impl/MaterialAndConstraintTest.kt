@@ -8,6 +8,7 @@ import dev.ide.preview.impl.headless.HeadlessGraphics
 import dev.ide.preview.impl.headless.RecordingCanvas
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertNotNull
 import kotlin.test.assertTrue
 
 class MaterialAndConstraintTest {
@@ -70,6 +71,78 @@ class MaterialAndConstraintTest {
             400, 400,
         )
         assertEquals(400, root.children[0].width, "0dp width fills the parent span")
+    }
+
+    @Test fun `coordinator scaffold renders a primary app bar at top and a surface bottom nav at the bottom`() {
+        val (root, canvas) = layout(
+            """
+            <androidx.coordinatorlayout.widget.CoordinatorLayout
+                xmlns:android="http://schemas.android.com/apk/res/android"
+                xmlns:app="http://schemas.android.com/apk/res-auto"
+                android:layout_width="match_parent" android:layout_height="match_parent">
+                <com.google.android.material.appbar.AppBarLayout
+                    android:layout_width="match_parent" android:layout_height="wrap_content">
+                    <com.google.android.material.appbar.MaterialToolbar
+                        android:id="@+id/toolbar"
+                        android:layout_width="match_parent" android:layout_height="?attr/actionBarSize"/>
+                </com.google.android.material.appbar.AppBarLayout>
+                <androidx.constraintlayout.widget.ConstraintLayout
+                    android:layout_width="match_parent" android:layout_height="match_parent"
+                    app:layout_behavior="@string/appbar_scrolling_view_behavior">
+                    <FrameLayout android:id="@+id/container"
+                        android:layout_width="0dp" android:layout_height="0dp"
+                        app:layout_constraintTop_toTopOf="parent"
+                        app:layout_constraintBottom_toTopOf="@id/bottomNav"
+                        app:layout_constraintStart_toStartOf="parent"
+                        app:layout_constraintEnd_toEndOf="parent"/>
+                    <com.google.android.material.bottomnavigation.BottomNavigationView
+                        android:id="@+id/bottomNav"
+                        android:layout_width="0dp" android:layout_height="wrap_content"
+                        app:layout_constraintBottom_toBottomOf="parent"
+                        app:layout_constraintStart_toStartOf="parent"
+                        app:layout_constraintEnd_toEndOf="parent"/>
+                </androidx.constraintlayout.widget.ConstraintLayout>
+            </androidx.coordinatorlayout.widget.CoordinatorLayout>
+            """.trimIndent(),
+            400, 800,
+        )
+        assertEquals(800, root.height, "the coordinator fills the window")
+
+        // The app bar: a full-width colorPrimary bar of actionBarSize height, pinned to the top.
+        val primary = 0xFF6200EE.toInt()
+        val appBar = assertNotNull(canvas.ops.firstOrNull { it.kind == "rect" && it.color == primary }, "a colorPrimary app bar is drawn")
+        assertEquals(0f, appBar.l); assertEquals(400f, appBar.r)
+        assertEquals(0f, appBar.t, "app bar at the very top")
+        assertEquals(56f, appBar.b - appBar.t, "app bar honours actionBarSize (56dp @ density 1)")
+
+        // The bottom nav: a full-width surface bar (56dp) flush with the bottom edge.
+        val surface = 0xFFFFFFFF.toInt()
+        val bottomNav = assertNotNull(canvas.ops.firstOrNull { it.kind == "rect" && it.color == surface }, "a colorSurface bottom-nav bar is drawn")
+        assertEquals(800f, bottomNav.b, "bottom nav is flush with the bottom edge")
+        assertEquals(56f, bottomNav.b - bottomNav.t, "bottom nav is 56dp tall")
+        assertTrue(bottomNav.t > appBar.b, "the content/nav region sits below the app bar, not under it")
+    }
+
+    @Test fun `library list-container tags render via a registered renderer, not the custom-view placeholder`() {
+        // A layout of only framework/library views (no user class). It must inflate cleanly — RecyclerView gets
+        // a registered renderer, NOT a "custom view not rendered" placeholder (and upstream, no project compile).
+        val inflater = LayoutInflater()
+        val root = inflater.inflate(
+            """
+            <androidx.coordinatorlayout.widget.CoordinatorLayout
+                xmlns:android="http://schemas.android.com/apk/res/android"
+                xmlns:app="http://schemas.android.com/apk/res-auto"
+                android:layout_width="match_parent" android:layout_height="match_parent">
+                <androidx.recyclerview.widget.RecyclerView
+                    android:layout_width="match_parent" android:layout_height="match_parent"
+                    app:layout_behavior="com.google.android.material.appbar.AppBarLayout${'$'}ScrollingViewBehavior"/>
+            </androidx.coordinatorlayout.widget.CoordinatorLayout>
+            """.trimIndent(),
+            ctx,
+        )
+        assertTrue(inflater.problems.isEmpty(), "no custom-view problems for a library-only layout: ${inflater.problems}")
+        assertEquals(CoordinatorLayoutRenderer, root.renderer)
+        assertEquals(FrameLayoutRenderer, root.children.single().renderer, "RecyclerView uses a registered renderer")
     }
 
     @Test fun `constraint toBottomOf stacks a sibling`() {

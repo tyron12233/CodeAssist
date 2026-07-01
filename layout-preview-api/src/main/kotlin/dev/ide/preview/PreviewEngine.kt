@@ -58,6 +58,25 @@ class LayoutPreviewResult(
     val imageFile: (ref: String) -> String? = { null },
     /** Nodes that couldn't be rendered as intended (unknown tag, unresolved include, custom view) — surfaced in the pane. */
     val problems: List<PreviewProblem> = emptyList(),
+    /**
+     * A complete PNG of the layout rendered with the REAL Android view stack (the on-device "layoutlib" path),
+     * or null for the owned-rendering path. When present the UI shows this image instead of driving
+     * [PreviewEngine] over [root] (which is then a minimal/empty tree). Device-only; desktop never sets it.
+     */
+    val renderedImage: ByteArray? = null,
+    /**
+     * The same real-view render as a live native image (an `android.graphics.Bitmap`, held as `Any?` so the
+     * api stays android-free) — set on device instead of [renderedImage] so the same-process UI wraps it with
+     * no PNG encode/decode. The UI prefers this over [renderedImage] when present; desktop never sets it.
+     */
+    val renderedNativeImage: Any? = null,
+    /**
+     * The captured hierarchy of the REAL inflated view tree (device "layoutlib" path), or null for the
+     * owned-rendering path (where [root] already carries the geometry). When present the UI drives its
+     * component tree + tap-to-select + inspector off THIS tree instead of [root] (bounds line up with the
+     * rendered image). Device-only; desktop never sets it.
+     */
+    val viewTree: PreviewViewNode? = null,
 )
 
 /** A node the preview couldn't render as intended; [tag] is the widget/structural tag, [message] the reason. */
@@ -70,6 +89,8 @@ data class PreviewRequest(
     val density: Float,
     val showChrome: Boolean = true,
     val night: Boolean = false,
+    /** Request the on-device real-view ("layoutlib") render; the backend falls back to owned rendering if it can't. */
+    val realViews: Boolean = false,
 )
 
 /**

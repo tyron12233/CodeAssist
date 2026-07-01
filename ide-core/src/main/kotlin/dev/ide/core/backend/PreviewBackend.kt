@@ -1,6 +1,7 @@
 package dev.ide.core.backend
 
 import dev.ide.core.BackendContext
+import dev.ide.ui.backend.PreviewProgress
 import dev.ide.ui.backend.PreviewService
 import dev.ide.ui.backend.UiColorEntry
 import dev.ide.ui.backend.UiComposePreview
@@ -9,11 +10,20 @@ import dev.ide.ui.backend.UiPreviewConfig
 import dev.ide.ui.backend.UiPreviewResult
 import dev.ide.lang.kotlin.interp.PreviewInfo
 import dev.ide.platform.EngineCanceledException
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
 import java.nio.file.Paths
+
+private val IDLE_PROGRESS: StateFlow<PreviewProgress?> = MutableStateFlow(null)
 
 /** [PreviewService]: Compose `@Preview` discovery/run (interpreter, preemptible lanes) + drawable/color/image
  *  resource previews. Maps the engine's preview models onto the neutral UI DTOs. */
 internal class PreviewBackend(private val ctx: BackendContext) : PreviewService {
+
+    // The real-view layout render publishes its pipeline stage here (relink → render) for the status chip;
+    // the engine owns the flow so it's the live one being updated. Idle (null) when no project is open.
+    override val previewProgress: StateFlow<PreviewProgress?>
+        get() = ctx.servicesOrNull?.realViewProgress ?: IDLE_PROGRESS
 
     override suspend fun composePreviews(path: String, text: String): List<UiComposePreview> =
     // Purely syntactic (scans for @Preview @Composable) — the interpreter only runs on the Preview button,

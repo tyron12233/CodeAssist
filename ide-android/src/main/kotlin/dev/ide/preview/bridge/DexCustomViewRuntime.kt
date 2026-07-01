@@ -38,7 +38,10 @@ class DexCustomViewRuntime(
         if (inputs.isEmpty()) throw CustomViewPreviewException("nothing to dex for preview (no compiled classes)")
 
         val dexOut = File(cacheDir, "preview-dex").apply { deleteRecursively(); mkdirs() }
-        val result = runCatching { D8InProcessDexer().dex(inputs, androidJar, minApi, false, dexOut.toPath()) }
+        // Cap at D8's max supported API: a newer device level (e.g. 37) only earns a "not supported … use 36 or
+        // earlier" warning and adds noise to any real failure. The dex is debug-only and loads on any level.
+        val dexApi = minOf(minApi, MAX_D8_API)
+        val result = runCatching { D8InProcessDexer().dex(inputs, androidJar, dexApi, false, dexOut.toPath()) }
             .getOrElse { throw CustomViewPreviewException("D8 dexing of preview classes threw: ${it.message ?: it.javaClass.simpleName}", it) }
         if (!result.success) {
             throw CustomViewPreviewException("D8 dexing of preview classes failed: ${result.log.takeLast(3).joinToString(" / ").ifBlank { "(no diagnostics)" }}")
@@ -83,5 +86,10 @@ class DexCustomViewRuntime(
                 }
             }
         }
+    }
+
+    private companion object {
+        /** Highest API level the bundled D8 accepts; a newer device level only earns a warning, so cap to it. */
+        const val MAX_D8_API = 36
     }
 }

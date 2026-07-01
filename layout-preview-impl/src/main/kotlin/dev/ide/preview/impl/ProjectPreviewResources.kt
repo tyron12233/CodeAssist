@@ -7,6 +7,8 @@ import dev.ide.android.support.preview.DrawableResolver
 import dev.ide.android.support.preview.ResolvedDrawable
 import dev.ide.android.support.resources.ResourceRepository
 import dev.ide.android.support.resources.ResourceType
+import dev.ide.lang.xml.XmlNode
+import dev.ide.lang.xml.XmlTreeParser
 import dev.ide.preview.PreviewResources
 import dev.ide.preview.RImage
 import dev.ide.preview.ResolvedValue
@@ -18,7 +20,9 @@ import kotlin.io.path.readText
  * Parses literal colors/dimensions and resolves `@type/name` references (recursively, so `@color/a → @color/b
  * → #fff` collapses to an ARGB), framework `@android:color/…` via the small builtin table, and `@drawable/…`
  * to a loaded image through the injected [imageLoader] (image decoding is platform-specific). Theme `?attr/…`
- * references are not yet resolved (returns null — the renderer falls back to its default).
+ * references resolve against [themeName]'s style chain (e.g. `?attr/colorPrimary`) and fall back to a small
+ * table of framework defaults (`actionBarSize`, the Material colour roles) so widgets that key off the theme
+ * (toolbars, app bars) still get sensible values when the project theme can't be resolved.
  */
 class ProjectPreviewResources(
     private val repo: ResourceRepository,
@@ -27,7 +31,13 @@ class ProjectPreviewResources(
     private val imageLoader: (resType: String, name: String, file: String?) -> RImage? = { _, _, _ -> null },
     /** When true, prefer `-night`-qualified resource values (dark-theme preview). */
     private val night: Boolean = false,
+    /** The activity's theme, for resolving `?attr/…` against its `<style>` chain; null disables that path. */
+    private val themeName: String? = null,
 ) : PreviewResources {
+
+    private val themeResolver: ThemeResolver? by lazy(LazyThreadSafetyMode.NONE) {
+        themeName?.let { ThemeResolver(repo, this) }
+    }
 
     /** The config-appropriate definition of `type/name` — `-night` first when [night], default otherwise. */
     private fun definition(type: ResourceType, name: String): dev.ide.android.support.resources.ResourceItem? {
@@ -41,8 +51,48 @@ class ProjectPreviewResources(
         val s = raw.trim()
         if (s.isEmpty()) return null
         if (s.startsWith("@")) return resolveRef(s, format)
-        if (s.startsWith("?")) return null // theme attribute — not yet modelled
+        if (s.startsWith("?")) return resolveThemeAttr(s, format)
         return parseLiteral(s, format)
+    }
+
+    /**
+     * Resolve a `?attr/name` (or `?android:attr/name`, `?name`) theme reference. The real value is preferred:
+     * we walk [themeName]'s `<style>` chain in the merged repository, which includes the project's own themes
+     * AND the AppCompat/Material AAR themes (their `res/` is merged in), so `colorPrimary`/`actionBarSize`/…
+     * resolve from the actual library values. Only when that yields nothing — a themeless preview, an
+     * unresolved support-library dependency, or a genuine framework attribute whose value lives in
+     * `framework-res` (not parseable from `android.jar`, which holds resource names but not values) — do we
+     * fall back to [FRAMEWORK_THEME_ATTRS]. The looked-up value is itself resolved (literal, `@ref`, or `?attr`).
+     */
+    private fun resolveThemeAttr(raw: String, format: ValueFormat, depth: Int = 0): ResolvedValue? {
+        if (depth > 8) return null
+        val attr = raw.removePrefix("?").let { if ('/' in it) it.substringAfterLast('/') else it.substringAfterLast(':') }
+        val value = themeName?.let { themeResolver?.rawAttr(it, attr, "android:$attr") } ?: FRAMEWORK_THEME_ATTRS[attr]
+        value ?: return null
+        return if (value.startsWith("?")) resolveThemeAttr(value, format, depth + 1) else resolve(value, format)
+    }
+
+    /** The titles of `<item>`s in a `@menu/…` resource (refs resolved), for rendering nav/menu bars. */
+    fun menuTitles(ref: String): List<String> {
+        val parsed = parseRef(ref) ?: return emptyList()
+        if (parsed.type != ResourceType.MENU) return emptyList()
+        val src = repo.definitions(parsed.type, parsed.name).firstOrNull()?.source ?: return emptyList()
+        val text = runCatching { src.readText() }.getOrNull() ?: return emptyList()
+        val (document, _) = runCatching { XmlTreeParser(TextDocument(text, parsed.name)).parse() }.getOrNull() ?: return emptyList()
+        val titles = ArrayList<String>()
+        fun walk(node: XmlNode) {
+            for (child in node.childTags) {
+                if (child.name?.substringAfterLast('.') == "item") {
+                    val reader = XmlAttrReader(child)
+                    (reader.android("title") ?: reader.app("title"))?.let { t ->
+                        titles.add((resolve(t, ValueFormat.STRING) as? ResolvedValue.Str)?.text?.toString() ?: t)
+                    }
+                }
+                walk(child)
+            }
+        }
+        walk(document)
+        return titles
     }
 
     override fun image(ref: String): RImage? {
@@ -173,5 +223,35 @@ class ProjectPreviewResources(
         // @[+]?[pkg:]type/name
         val REF = Regex("""@\+?(?:([A-Za-z][\w.]*):)?([A-Za-z]\w*)/([A-Za-z_][\w.]*)""")
         val DIMEN = Regex("""^(-?[\d.]+)\s*([A-Za-z]*)$""")
+
+        /**
+         * Last-resort defaults for the common framework/Material theme attributes the renderers key off, used
+         * ONLY when the theme chain (project + AAR themes) can't supply them — e.g. a themeless preview, an
+         * unresolved AppCompat/Material dependency, or `?android:attr/actionBarSize` whose value lives in
+         * `framework-res` (not in `android.jar`). Material baseline palette so such a preview still reads as
+         * Material rather than rendering blank; a project that ships its own/AAR theme overrides every entry.
+         */
+        val FRAMEWORK_THEME_ATTRS = mapOf(
+            "actionBarSize" to "56dp",
+            "listPreferredItemHeight" to "64dp",
+            "listPreferredItemHeightSmall" to "48dp",
+            "listPreferredItemHeightLarge" to "80dp",
+            "colorPrimary" to "#FF6200EE",
+            "colorPrimaryDark" to "#FF3700B3",
+            "colorPrimaryVariant" to "#FF3700B3",
+            "colorOnPrimary" to "#FFFFFFFF",
+            "colorAccent" to "#FF03DAC5",
+            "colorSecondary" to "#FF03DAC5",
+            "colorOnSecondary" to "#FF000000",
+            "colorSurface" to "#FFFFFFFF",
+            "colorOnSurface" to "#FF1D1B20",
+            "colorOnSurfaceVariant" to "#FF49454F",
+            "colorBackground" to "#FFFAFAFA",
+            "colorError" to "#FFB00020",
+            "colorControlNormal" to "#FF757575",
+            "colorControlActivated" to "#FF6200EE",
+            "textColorPrimary" to "#DE000000",
+            "textColorSecondary" to "#8A000000",
+        )
     }
 }
