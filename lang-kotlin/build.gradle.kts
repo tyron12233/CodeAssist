@@ -68,3 +68,14 @@ tasks.processResources {
 tasks.named<org.jetbrains.kotlin.gradle.tasks.KotlinCompile>("compileTestKotlin") {
     exclude("**/Test.kt")
 }
+
+// The compile/ tests run the real in-process K2 compiler (KotlinCoreEnvironment + kotlinc invocations).
+// In the default single shared worker JVM (forkEvery=0) that compiler state accumulates across test
+// classes until the heap is exhausted; the OOM then surfaces as a spurious assertion failure (a compile
+// reports success=false, or incremental NOOP/INCREMENTAL detection falls back to FULL). Give the worker
+// real heap and start a fresh JVM per test class so the compiler footprint can't build up. Scoped to the
+// unit `test` task so the regressionTest benchmarks keep their own JVM/heap settings.
+tasks.named<Test>("test") {
+    maxHeapSize = "3g"
+    setForkEvery(1)
+}
