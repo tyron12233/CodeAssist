@@ -789,7 +789,14 @@ class KotlinSymbolService(
      * null for a non-classpath type (handled elsewhere: source model, built-ins, synthetic, Java source index).
      */
     private fun typeShape(fqn: String): TypeShape? {
-        val lookupFqn = Builtins.javaTypeFor(fqn) ?: fqn
+        // The type-shape index is keyed by dot-form FQNs, but a binary's supertype FQN arrives in bytecode
+        // `$`-nested form (e.g. `FrameLayout.LayoutParams`'s super is `android.view.ViewGroup$MarginLayoutParams`).
+        // Normalize so an inherited-member walk up a nested-class chain doesn't miss the index — otherwise it
+        // used to drop everything inherited through a nested supertype (e.g. `FrameLayout.LayoutParams.MATCH_PARENT`,
+        // which is declared two levels up on `ViewGroup.LayoutParams`). The live reader path already tolerates
+        // `$` via classBytes's `.`↔`$` retry; only the index's exact-key lookup needs the dot form.
+        val dotFqn = if ('$' in fqn) fqn.replace('$', '.') else fqn
+        val lookupFqn = Builtins.javaTypeFor(dotFqn) ?: dotFqn
         index?.let { idx ->
             // The persistent `kotlin.typeShape` index is the SOLE source for classpath binaries once wired —
             // no live decode/bytecode read, ever (that's the index's job; it decoded these at build time).
@@ -799,7 +806,7 @@ class KotlinSymbolService(
             return idx.exact<TypeShape>(TYPE_SHAPE, lookupFqn).firstOrNull()?.withContext(this)
         }
         // No index wired (standalone / tests): live decode/bytecode is the only classpath source.
-        reader.decoded(fqn, this)?.let { return TypeShape.of(it, this) }
+        reader.decoded(dotFqn, this)?.let { return TypeShape.of(it, this) }
         return javaShape(lookupFqn)?.let { TypeShape.of(it) }
     }
 
