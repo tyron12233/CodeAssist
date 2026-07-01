@@ -22,6 +22,7 @@ object AarExtractor {
         val manifest: Path?,
         val jniDir: Path?,
         val proguardTxt: Path?,        // the AAR's consumer keep rules (root `proguard.txt`), applied by the app's R8
+        val aarMetadata: Path?,        // META-INF/.../aar-metadata.properties (AGP's minCompileSdk etc.); null if absent
     )
 
     fun explode(aar: Path, into: Path): Exploded {
@@ -40,6 +41,7 @@ object AarExtractor {
             manifest = into.resolve("AndroidManifest.xml").takeIf { Files.isRegularFile(it) },
             jniDir = into.resolve("jni").takeIf { Files.isDirectory(it) },
             proguardTxt = into.resolve("proguard.txt").takeIf { Files.isRegularFile(it) },
+            aarMetadata = into.resolve(AarMetadata.ENTRY_PATH).takeIf { Files.isRegularFile(it) },
         )
     }
 

@@ -50,7 +50,9 @@ class AndroidRClassProvider(
                 fqName = "${facet.namespace}.R.${type.rClass}",
                 modifiers = NESTED_MODIFIERS,
                 fields = repo.names(type).sorted().map { name ->
-                    SyntheticField(name, constant = hex(ids.id(type, name)))
+                    // Field name is the aapt2-sanitized identifier (e.g. style `Theme.App` → `Theme_App`); the
+                    // id lookup keeps the raw resource name. User code references the sanitized name.
+                    SyntheticField(fieldName(name), constant = hex(ids.id(type, name)))
                 },
             )
         }
@@ -64,18 +66,24 @@ class AndroidRClassProvider(
             val attrs = repo.styleableAttrs(styleable)
             val array = ids.styleableArray(repo, styleable)
             fields += SyntheticField(
-                name = styleable,
+                name = fieldName(styleable),
                 type = "int[]",
                 constant = array.joinToString(prefix = "{ ", postfix = " }") { hex(it) }.let { if (array.isEmpty()) "{}" else it },
             )
+            // A styleable's child <attr> may reference a framework attr by its prefixed name (`android:textColor`);
+            // aapt2 names the index constant `<Styleable>_android_textColor`, so sanitize the attr too — an
+            // unsanitized `:` (or `.`) makes the generated R.java fail to compile ("Syntax error on token ':'").
             attrs.forEachIndexed { index, attr ->
-                fields += SyntheticField("${styleable}_$attr", constant = index.toString())
+                fields += SyntheticField("${fieldName(styleable)}_${fieldName(attr)}", constant = index.toString())
             }
         }
         return SyntheticClass(fqName = "$namespace.R.styleable", modifiers = NESTED_MODIFIERS, fields = fields)
     }
 
     private fun hex(id: Int?): String = if (id == null) "0" else "0x%08x".format(id)
+
+    /** aapt2's R field-name sanitization: a resource/attr name → a valid Java identifier (`.`/`:` → `_`). */
+    private fun fieldName(name: String): String = name.replace('.', '_').replace(':', '_')
 
     private companion object {
         // Nested R subclasses must be `public static final` — like real R.java. Without STATIC they are inner

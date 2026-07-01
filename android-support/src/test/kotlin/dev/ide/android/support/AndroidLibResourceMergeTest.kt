@@ -85,18 +85,25 @@ class AndroidLibResourceMergeTest {
             ZipFile(apk.toFile()).use { zf ->
                 val arsc = zf.getInputStream(zf.getEntry("resources.arsc")).readBytes().toString(Charsets.ISO_8859_1)
                 assertTrue("liba_greeting" in arsc, "the android-lib's resource was not merged into resources.arsc")
-                val dex = zf.getInputStream(zf.getEntry("classes.dex")).readBytes().toString(Charsets.ISO_8859_1)
+                // The app's final R (incl. the lib packages) dexes as the content-hashed R.jar layer, so scan
+                // every classes*.dex rather than assuming a particular layer.
+                val dexNames = zf.entries().toList().map { it.name }.filter { it.matches(Regex("classes\\d*\\.dex")) }
+                val dex = dexNames.joinToString("") { zf.getInputStream(zf.getEntry(it)).readBytes().toString(Charsets.ISO_8859_1) }
                 assertTrue("Lcom/example/liba/LibGreeter;" in dex, "android-lib code not dexed")
                 assertTrue("Lcom/example/liba/R" in dex, "the library's final R must be dexed (by the app)")
             }
 
             // Decoupled R model: the library's own compiled output carries LibGreeter but NOT R; its R is a
-            // separate compile-only stub. The final R is generated/dexed by the app (asserted above).
+            // separate compile-only R.jar. The final R is generated/dexed by the app (asserted above).
             assertTrue(Files.exists(dir.resolve("liba/build/classes/com/example/liba/LibGreeter.class")), "lib class missing")
             assertTrue(!Files.exists(dir.resolve("liba/build/classes/com/example/liba/R.class")),
                 "the library's dexed output must NOT contain R (it is compile-only)")
-            assertTrue(Files.exists(dir.resolve("liba/build/intermediates/r/classes/com/example/liba/R.class")),
-                "the compile-only library R should be generated separately")
+            val libRJar = dir.resolve("liba/build/intermediates/r/R.jar")
+            assertTrue(Files.exists(libRJar), "the compile-only library R.jar should be generated separately")
+            ZipFile(libRJar.toFile()).use { zf ->
+                assertTrue(zf.getEntry("com/example/liba/R\$string.class") != null,
+                    "the library R.jar should hold the lib's own R classes")
+            }
         } finally {
             platform.dispose(); dir.toFile().deleteRecursively()
         }

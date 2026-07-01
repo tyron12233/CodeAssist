@@ -89,12 +89,13 @@ class R8InProcessShrinker : Shrinker {
             } else {
                 R8.run(command)
             }
-            ToolResult.ok(buildList {
+            ToolResult.ok(DexDiagnostics.humanize(buildList {
                 add("R8 (in-process) processed ${programs.size} input(s) -> ${request.outDir.fileName}")
                 addAll(diagnostics) // R8 can emit warnings (unused rules, missing classes) on a successful run
-            })
+            }))
         } catch (t: Throwable) {
-            ToolResult.fail("R8 in-process failed: ${t.message}", diagnostics)
+            // The captured handler diagnostics carry the real cause; humanize them into an actionable Problem.
+            ToolResult(false, DexDiagnostics.humanize(diagnostics + "R8 shrinking failed: ${t.message}"))
         }
     }
 
@@ -127,7 +128,7 @@ class R8InProcessShrinker : Shrinker {
             L8.run(builder.build())
             ToolResult.ok(listOf("L8 (in-process) dexed the core-library desugaring runtime -> ${request.outDir.fileName}"))
         } catch (t: Throwable) {
-            ToolResult.fail("L8 in-process failed: ${t.message}", diagnostics)
+            ToolResult(false, DexDiagnostics.humanize(diagnostics + "L8 (core-library desugaring) failed: ${t.message}"))
         }
     }
 }

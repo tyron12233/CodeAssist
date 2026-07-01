@@ -191,15 +191,72 @@ class ManifestMergerTest {
     }
 
     @Test
-    fun libraryDemandingHigherMinSdkIsStillFlagged() {
-        // The silence above must not hide a genuine problem: a library needing a HIGHER minSdk than the app.
+    fun libraryDemandingHigherMinSdkIsAnError() {
+        // The silence above must not hide a genuine problem: a library needing a HIGHER minSdk than the app is a
+        // build error (AGP's checkUsesSdkMinVersion), which fails the merge task via result.hasErrors.
         val lib = """
             <manifest xmlns:android="http://schemas.android.com/apk/res/android" package="com.lib">
                 <uses-sdk android:minSdkVersion="33"/>
             </manifest>
         """.trimIndent()
         val r = ManifestMerger.mergeXml(APP, listOf(lib), libraryNames = listOf("com.lib"))
-        assertTrue(r.messages.any { it.severity == ManifestMerger.Severity.WARNING && "minSdkVersion 33" in it.text })
+        assertTrue(r.hasErrors, "expected a minSdk error: ${r.messages}")
+        assertTrue(r.messages.any {
+            it.severity == ManifestMerger.Severity.ERROR &&
+                "minSdkVersion 24 cannot be smaller than version 33" in it.text &&
+                "com.lib" in it.text
+        }, "messages: ${r.messages}")
+    }
+
+    @Test
+    fun facetMinSdkGatesLibrariesEvenWhenTheAppManifestDeclaresNoUsesSdk() {
+        // The real build path: the app carries no <uses-sdk> (minSdk lives in the facet, passed as appMinSdk).
+        // The gate must still fire against the facet value, not silently default the app to API 1.
+        val appNoSdk = """
+            <manifest xmlns:android="http://schemas.android.com/apk/res/android" package="com.example.app">
+                <application android:label="App"><activity android:name=".MainActivity"/></application>
+            </manifest>
+        """.trimIndent()
+        val lib = """
+            <manifest xmlns:android="http://schemas.android.com/apk/res/android" package="com.needy.lib">
+                <uses-sdk android:minSdkVersion="23"/>
+            </manifest>
+        """.trimIndent()
+        // Facet minSdk 21 < library 23 -> error; bump the facet to 23 -> clean.
+        val fail = ManifestMerger.mergeXml(appNoSdk, listOf(lib), libraryNames = listOf("com.needy.lib"), appMinSdk = 21)
+        assertTrue(fail.hasErrors, "expected a minSdk error: ${fail.messages}")
+        assertTrue(fail.messages.any {
+            it.severity == ManifestMerger.Severity.ERROR && "cannot be smaller than version 23" in it.text
+        }, "messages: ${fail.messages}")
+        val ok = ManifestMerger.mergeXml(appNoSdk, listOf(lib), libraryNames = listOf("com.needy.lib"), appMinSdk = 23)
+        assertFalse(ok.hasErrors, "unexpected error: ${ok.messages}")
+    }
+
+    @Test
+    fun overrideLibraryExemptsThatLibraryFromTheMinSdkGate() {
+        // tools:overrideLibrary on the app's <uses-sdk> forces usage of a too-high-minSdk dependency by package.
+        val appOverride = """
+            <manifest xmlns:android="http://schemas.android.com/apk/res/android"
+                xmlns:tools="http://schemas.android.com/tools" package="com.example.app">
+                <uses-sdk android:minSdkVersion="21" tools:overrideLibrary="com.needy.lib"/>
+                <application/>
+            </manifest>
+        """.trimIndent()
+        val needy = """
+            <manifest xmlns:android="http://schemas.android.com/apk/res/android" package="com.needy.lib">
+                <uses-sdk android:minSdkVersion="23"/>
+            </manifest>
+        """.trimIndent()
+        val other = """
+            <manifest xmlns:android="http://schemas.android.com/apk/res/android" package="com.other.lib">
+                <uses-sdk android:minSdkVersion="26"/>
+            </manifest>
+        """.trimIndent()
+        // The overridden library is exempt; a DIFFERENT too-high library still errors.
+        val exempt = ManifestMerger.mergeXml(appOverride, listOf(needy), libraryNames = listOf("com.needy.lib"))
+        assertFalse(exempt.hasErrors, "override should exempt com.needy.lib: ${exempt.messages}")
+        val stillFails = ManifestMerger.mergeXml(appOverride, listOf(other), libraryNames = listOf("com.other.lib"))
+        assertTrue(stillFails.hasErrors, "override must not exempt an unlisted library: ${stillFails.messages}")
     }
 
     @Test
@@ -258,7 +315,8 @@ class ManifestMergerTest {
                 <application/>
             </manifest>
         """.trimIndent()
-        val r = ManifestMerger.mergeXml(appNoSdk, listOf(lib), libraryNames = listOf("androidx.core"))
+        // minSdk comes from the facet (appMinSdk), not the manifest; the library's 14 <= 21 so no gate error.
+        val r = ManifestMerger.mergeXml(appNoSdk, listOf(lib), libraryNames = listOf("androidx.core"), appMinSdk = 21)
         assertFalse(r.hasErrors, "errors: ${r.messages}")
         // No <uses-sdk> leaked in, so aapt2's --target-sdk-version (the facet value) stays authoritative.
         assertTrue(descendants(parse(r.xml), "uses-sdk").isEmpty(), "library uses-sdk leaked into the app manifest")

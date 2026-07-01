@@ -101,4 +101,44 @@ class AndroidRClassProviderTest {
             dir.toFile().deleteRecursively()
         }
     }
+
+    @Test
+    fun `R field names with colons and dots are sanitized to compile`() {
+        // A real-world repo: a dotted style name (Theme.App) and a styleable whose child <attr> references a
+        // framework attr by prefix (android:textColor). aapt2 emits `Theme_App` / `View_android_textColor`;
+        // emitting the raw names produces invalid Java ("Syntax error on token ':'") — the device preview bug.
+        val colonRepo = ResourceRepository(
+            items = listOf(
+                ResourceItem(ResourceType.STYLE, "Theme.App", value = null),
+                ResourceItem(ResourceType.ATTR, "android:textColor"),
+                ResourceItem(ResourceType.ATTR, "barColor"),
+                ResourceItem(ResourceType.STYLEABLE, "View"),
+            ),
+            styleableAttrs = mapOf("View" to listOf("android:textColor", "barColor")),
+        )
+        val colonModel = object : ResourceModel {
+            override fun parse(resDirs: List<Path>): ResourceRepository = colonRepo
+        }
+        withAppModule { module, workspace ->
+            val ctx = object : SyntheticClassContext {
+                override val module = module
+                override val workspace = workspace
+            }
+            val r = AndroidRClassProvider(colonModel).classesFor(ctx).single { it.fqName == "com.example.app.R" }
+            val java = SyntheticJavaSource.emit(r)
+            assertTrue("Theme_App" in java && "Theme.App" !in java, "dotted style name sanitized to Theme_App: $java")
+            assertTrue("View_android_textColor" in java && "android:textColor" !in java, "framework-attr index constant sanitized: $java")
+
+            val dir = createTempDirectory("r-colon")
+            try {
+                val src = dir.resolve("com/example/app/R.java")
+                Files.createDirectories(src.parent)
+                Files.write(src, java.toByteArray())
+                val result = JdtBatchCompiler.compile(listOf(src), emptyList(), dir.resolve("out"), sourceLevel = "8")
+                assertTrue(result.success, "sanitized R must compile:\n${result.messages.joinToString("\n")}")
+            } finally {
+                dir.toFile().deleteRecursively()
+            }
+        }
+    }
 }

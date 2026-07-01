@@ -36,7 +36,10 @@ import javax.xml.parsers.DocumentBuilderFactory
  *    so a library's `<uses-sdk>` never reaches the output: its min/target/maxSdkVersion are dropped if the app
  *    declares its own, and the whole element is skipped if the app declares none (importing it would make the
  *    library's `targetSdkVersion` the app's effective target). A library declaring a higher `minSdkVersion`
- *    than the app's is still reported (overridable via `tools:overrideLibrary`).
+ *    than the app's is a build **error** (AGP's `checkUsesSdkMinVersion`): the app's floor is authoritative
+ *    (from [mergeXml]'s `appMinSdk`, i.e. the facet/build config, falling back to the app manifest else API 1),
+ *    a library with no `minSdkVersion` imposes no floor, and the app can exempt one library by package via
+ *    `<uses-sdk tools:overrideLibrary="the.lib.package">`.
  *  - **Class-name resolution**: a library's relative component name (`.Foo` or a bare `Foo` on an
  *    `<activity>`/`<activity-alias>`/`<service>`/`<receiver>`/`<provider>`/`<application>`/`<instrumentation>`)
  *    is expanded to the library's fully-qualified package before merge (`PackageParser.buildClassName`), so it
@@ -56,13 +59,22 @@ object ManifestMerger {
         val hasErrors: Boolean get() = messages.any { it.severity == Severity.ERROR }
     }
 
-    /** Merge files: the app [primary] + [libraries] (already in decreasing priority). */
-    fun merge(primary: Path, libraries: List<Path>, placeholders: Map<String, String> = emptyMap()): Result {
+    /**
+     * Merge files: the app [primary] + [libraries] (already in decreasing priority). [appMinSdk] is the app's
+     * authoritative minSdk from the build config (facet) used to gate each library's `minSdkVersion` floor; when
+     * null the check falls back to the app manifest's own `<uses-sdk minSdkVersion>` (else API 1).
+     */
+    fun merge(
+        primary: Path,
+        libraries: List<Path>,
+        placeholders: Map<String, String> = emptyMap(),
+        appMinSdk: Int? = null,
+    ): Result {
         val primaryXml = Files.readAllBytes(primary).toString(Charsets.UTF_8)
         val libXmls = libraries.mapNotNull { lib ->
             runCatching { lib to Files.readAllBytes(lib).toString(Charsets.UTF_8) }.getOrNull()
         }
-        return mergeXml(primaryXml, libXmls.map { it.second }, placeholders, libXmls.map { it.first.toString() })
+        return mergeXml(primaryXml, libXmls.map { it.second }, placeholders, libXmls.map { it.first.toString() }, appMinSdk)
     }
 
     /**
@@ -74,12 +86,22 @@ object ManifestMerger {
         libraries: List<String>,
         placeholders: Map<String, String> = emptyMap(),
         libraryNames: List<String> = emptyList(),
+        appMinSdk: Int? = null,
     ): Result {
         val messages = ArrayList<Message>()
         val mergedDoc = runCatching { parse(primary) }.getOrElse {
             return Result(primary, listOf(Message(Severity.ERROR, "primary manifest is not valid XML: ${it.message}")))
         }
         substitutePlaceholders(mergedDoc.documentElement, placeholders, "primary manifest", messages)
+
+        // The app's authoritative minSdk (build config wins; else the app manifest's own value; else API 1) and
+        // the library packages exempted from the floor check via <uses-sdk tools:overrideLibrary>. Both are read
+        // now, before the tools namespace is stripped from the output.
+        val appUsesSdk = childElements(mergedDoc.documentElement).firstOrNull { it.tagName == "uses-sdk" }
+        val effectiveAppMin = appMinSdk
+            ?: appUsesSdk?.let { getAttr(it, ANDROID_NS, "minSdkVersion")?.toIntOrNull() }
+            ?: 1
+        val overrideLibs = appUsesSdk?.let { toolsList(it, "overrideLibrary") }?.toSet() ?: emptySet()
 
         libraries.forEachIndexed { i, libXml ->
             val name = libraryNames.getOrNull(i) ?: "library #${i + 1}"
@@ -90,6 +112,9 @@ object ManifestMerger {
             }
             substitutePlaceholders(libDoc.documentElement, placeholders, name, messages)
             val libPkg = libDoc.documentElement.getAttribute("package").ifEmpty { null }
+            // Enforce the library's minSdk floor against the app before merging (the library's <uses-sdk> itself
+            // never reaches the output, so the gate runs whether or not the app declares its own <uses-sdk>).
+            checkLibraryMinSdk(libDoc.documentElement, name, libPkg, effectiveAppMin, overrideLibs, messages)
             // Resolve the library's relative component class names against ITS package before merging: a
             // ".Foo" (or bare "Foo") would otherwise resolve against the app package once merged under it.
             if (libPkg != null) expandClassNames(libDoc.documentElement, libPkg)
@@ -114,7 +139,6 @@ object ManifestMerger {
         mergeAttributes(into, from, doc, lib, msgs)
         if (toolsNode(into) == "mergeOnlyAttributes") return
         mergeChildren(into, from, doc, lib, libPkg, msgs)
-        if (into.tagName == "uses-sdk") checkUsesSdk(into, from, lib, msgs)
     }
 
     private fun mergeAttributes(into: Element, from: Element, doc: Document, lib: String, msgs: MutableList<Message>) {
@@ -129,7 +153,7 @@ object ManifestMerger {
             val local = a.localName ?: a.name
             // ManifestMerger2 never merges a library's package or its uses-sdk version attributes up into the
             // app: the app values are authoritative, so a difference is expected, not a conflict to report.
-            // (A library demanding a *higher* minSdk is still flagged separately by checkUsesSdk.)
+            // (A library demanding a *higher* minSdk is flagged separately by checkLibraryMinSdk.)
             if (isPrimaryAuthoritative(into, ns, local)) continue
             val higher = getAttr(into, ns, local)
             when {
@@ -177,14 +201,29 @@ object ManifestMerger {
         }
     }
 
-    /** uses-sdk: the app's min/target win; a library asking for a higher minSdk is flagged (unless overridden). */
-    private fun checkUsesSdk(into: Element, from: Element, lib: String, msgs: MutableList<Message>) {
-        val appMin = getAttr(into, ANDROID_NS, "minSdkVersion")?.toIntOrNull() ?: 1
-        val libMin = getAttr(from, ANDROID_NS, "minSdkVersion")?.toIntOrNull() ?: return
-        val override = toolsList(into, "overrideLibrary").isNotEmpty() || toolsAttr(into, "overrideLibrary") != null
-        if (libMin > appMin && !override) msgs += Message(Severity.WARNING,
-            "$lib requires minSdkVersion $libMin but the app declares $appMin; raise it or add tools:overrideLibrary")
-        // The app's uses-sdk values are authoritative — do not let the library lower/raise them.
+    /**
+     * Enforce a library's `minSdkVersion` floor against the app (AGP's `checkUsesSdkMinVersion`): a dependency
+     * that needs a HIGHER minSdk than the app is a build ERROR, since it may call APIs missing on the app's
+     * floor. The app's minSdk always wins in the merged output; this is purely a lower-bound gate that runs for
+     * every library whether or not the app declares its own `<uses-sdk>` (the app floor is [appMin], from the
+     * build config). A library with no `minSdkVersion` imposes no floor (AGP's default of API 1). The app opts a
+     * specific library out with `<uses-sdk tools:overrideLibrary="the.lib.package">` (its package in [overrideLibs]).
+     */
+    private fun checkLibraryMinSdk(
+        libRoot: Element,
+        lib: String,
+        libPkg: String?,
+        appMin: Int,
+        overrideLibs: Set<String>,
+        msgs: MutableList<Message>,
+    ) {
+        val libUsesSdk = childElements(libRoot).firstOrNull { it.tagName == "uses-sdk" } ?: return
+        val libMin = getAttr(libUsesSdk, ANDROID_NS, "minSdkVersion")?.toIntOrNull() ?: return
+        if (libMin <= appMin || (libPkg != null && libPkg in overrideLibs)) return
+        val fix = libPkg?.let { " Raise the app's minSdk to at least $libMin, or add tools:overrideLibrary=\"$it\" to force it." }
+            ?: " Raise the app's minSdk to at least $libMin."
+        msgs += Message(Severity.ERROR,
+            "uses-sdk:minSdkVersion $appMin cannot be smaller than version $libMin declared in library $lib.$fix")
     }
 
     /**

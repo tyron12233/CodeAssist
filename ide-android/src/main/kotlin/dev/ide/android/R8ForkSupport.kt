@@ -1,8 +1,10 @@
 package dev.ide.android
 
+import android.app.ActivityManager
 import android.content.Context
 import dev.ide.platform.log.Log
 import java.io.File
+import java.util.concurrent.Semaphore
 import java.util.concurrent.TimeUnit
 import java.util.zip.ZipInputStream
 
@@ -100,4 +102,61 @@ object R8ForkSupport {
     }
 
     private val CEILING_LADDER = listOf(768, 1024, 1536, 2048, 3072, 4096)
+
+    // --- Concurrent-fork budget + process-wide gate ---------------------------------------------------------
+
+    /** Hard cap on concurrent forked VMs regardless of how much RAM the device has — each fork still spawns a
+     *  process and competes for cores, and the win over the old serial flood is mostly batching. */
+    const val MAX_CONCURRENT_FORKS = 3
+
+    /** Fraction of *available* device RAM budgeted per concurrent fork. Generous (a fork's `-Xmx` is an upper
+     *  bound on its RSS, rarely the steady state) but leaves headroom so the low-memory killer stays away. */
+    private const val FORK_RAM_FRACTION = 0.5
+
+    /** Device-wide available RAM (MB) via [ActivityManager.MemoryInfo.availMem]; 0 if unavailable. */
+    fun availableMemMb(context: Context): Long = runCatching {
+        val am = context.applicationContext.getSystemService(Context.ACTIVITY_SERVICE) as ActivityManager
+        val mi = ActivityManager.MemoryInfo()
+        am.getMemoryInfo(mi)
+        mi.availMem / (1024 * 1024)
+    }.getOrDefault(0L)
+
+    /**
+     * How many forked VMs of [xmxMb] this device can safely run at once. [override] (the user's "Max concurrent
+     * dex forks" setting) wins when > 0; otherwise it's derived from available RAM ([FORK_RAM_FRACTION] of
+     * availMem per fork), clamped to `[1, min(cores, MAX_CONCURRENT_FORKS)]`. Under memory pressure availMem
+     * collapses this to 1 — one big fork, still far better than the old fork-per-library flood.
+     */
+    fun forkBudget(context: Context, xmxMb: Int, override: Int?): Int {
+        if (override != null && override > 0) return override.coerceIn(1, 8)
+        val cores = Runtime.getRuntime().availableProcessors().coerceAtLeast(1)
+        val availMb = availableMemMb(context)
+        val byRam = if (availMb > 0 && xmxMb > 0) ((availMb * FORK_RAM_FRACTION) / xmxMb).toInt() else 1
+        return byRam.coerceIn(1, minOf(cores, MAX_CONCURRENT_FORKS))
+    }
+
+    @Volatile
+    private var forkGate: Semaphore? = null
+
+    /** Process-wide gate sized once on first use (fair, FIFO). Init-once because resizing a live semaphore is
+     *  racy and the budget (device RAM / fork heap) doesn't change within a build — a setting change applies on
+     *  the next build-process start. */
+    @Synchronized
+    private fun gate(permits: Int): Semaphore =
+        forkGate ?: Semaphore(permits.coerceAtLeast(1), true).also {
+            forkGate = it
+            log.info("fork gate: capped at $permits concurrent forked VM(s)")
+        }
+
+    /**
+     * Run [body] (a forked-VM launch) holding one permit on the process-wide concurrent-fork gate, so the
+     * sibling dex-merge tasks — `mergeProjectDex`/`mergeLibDex`/`mergeExtDex` run in parallel and each forks —
+     * can't collectively spawn more big-heap VMs than the device affords. Blocking acquire (callers are on an
+     * IO dispatcher). [permits] sizes the gate on first use only.
+     */
+    fun <T> withForkPermit(permits: Int, body: () -> T): T {
+        val g = gate(permits)
+        g.acquire()
+        return try { body() } finally { g.release() }
+    }
 }

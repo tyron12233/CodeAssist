@@ -69,14 +69,14 @@ internal object ApkPackaging {
             }
             dexFiles.forEachIndexed { i, dex ->
                 val name = if (i == 0) "classes.dex" else "classes${i + 1}.dex"
-                if (written.add(name)) putDeflated(zos, name, Files.readAllBytes(dex))
+                if (written.add(name)) putDeflated(zos, name, dex)
             }
 
             // 3) assets/**
             for (dir in assetsDirs.filter { Files.isDirectory(it) }) {
                 allFiles(dir).forEach { f ->
                     val name = "assets/" + dir.relativize(f).toString().replace('\\', '/')
-                    if (written.add(name)) putDeflated(zos, name, Files.readAllBytes(f))
+                    if (written.add(name)) putDeflated(zos, name, f)
                 }
             }
 
@@ -84,16 +84,18 @@ internal object ApkPackaging {
             for (dir in jniLibDirs.filter { Files.isDirectory(it) }) {
                 allFiles(dir).forEach { f ->
                     val name = "lib/" + dir.relativize(f).toString().replace('\\', '/')
-                    if (written.add(name)) putDeflated(zos, name, Files.readAllBytes(f))
+                    if (written.add(name)) putDeflated(zos, name, f)
                 }
             }
         }
         return written.toList()
     }
 
-    private fun putDeflated(zos: ZipOutputStream, name: String, bytes: ByteArray) {
+    /** STREAM the file into the zip (8 KB buffer) rather than reading it whole into a ByteArray — keeps heap
+     *  flat regardless of entry size (native `.so` libs / large assets are the biggest files in an APK). */
+    private fun putDeflated(zos: ZipOutputStream, name: String, file: Path) {
         zos.putNextEntry(ZipEntry(name).apply { method = ZipEntry.DEFLATED })
-        zos.write(bytes)
+        Files.newInputStream(file).use { it.copyTo(zos) }
         zos.closeEntry()
     }
 

@@ -19,4 +19,9 @@ interface IBuildCallback {
     oneway void onRunConsole(int runId, String moduleName, String mainClass, int phase, boolean acceptsInput, boolean hasExit, int exitCode);
     oneway void onConsoleChunk(int runId, String text, int kind); // one new transcript chunk (output/input/system)
     oneway void onPermission(int reqId, String category, String detail); // pending sandbox prompt; reqId < 0 = cleared
+
+    // The android "Run" just installed [packageName]; launch it HERE in the UI process. The install runs in
+    // :build, but firing the installed app's activity from that background process is blocked by Android's
+    // background-activity-launch rules — the UI has a foreground activity, so it can.
+    oneway void onLaunchPackage(String packageName);
 }

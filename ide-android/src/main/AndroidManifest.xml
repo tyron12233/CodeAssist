@@ -4,6 +4,17 @@
     <!-- Maven dependency resolution downloads artifacts from Maven Central (the Dependencies screen). -->
     <uses-permission android:name="android.permission.INTERNET" />
 
+    <!-- Package visibility (Android 11+/API 30): the android "Run" installs the user's APK and then
+         launches it. getLaunchIntentForPackage / queryIntentActivities are filtered unless the target is
+         visible; the installer already sees what it installs, but declaring the MAIN/LAUNCHER query makes
+         that resolution robust (and is the standard fix for getLaunchIntentForPackage returning null). -->
+    <queries>
+        <intent>
+            <action android:name="android.intent.action.MAIN" />
+            <category android:name="android.intent.category.LAUNCHER" />
+        </intent>
+    </queries>
+
     <!-- The android "Run" builds a debug APK and installs it via PackageInstaller; the OS shows its own
          install-confirmation. The user must also grant "install unknown apps" to CodeAssist (we deep-link
          to that Settings screen when it isn't granted yet). -->
@@ -78,6 +89,14 @@
                     android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
                     android:value="Compiling and running the user's on-device software project — a long-running, user-initiated build that must continue if the user navigates away from the IDE." />
         </service>
+
+        <!-- Real-view layout-preview renderer in its own ":preview" OS process (layout-preview Step 3): it
+             inflates + draws arbitrary library/user View code off the IDE's heap, so a render crash/OOM kills
+             only this process (the client falls back to in-process rendering). A plain bound service. -->
+        <service
+                android:name=".preview.PreviewRenderService"
+                android:process=":preview"
+                android:exported="false" />
 
         <!-- Exposes a single project file to other apps as a content:// URI for Share / "Open with",
              without FileUriExposedException. Folder-level browsing is handled by the DocumentsProvider below. -->

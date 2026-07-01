@@ -139,8 +139,32 @@ object AndroidIde {
                 ?: mgr?.preference(dev.ide.core.settings.BuiltInSettingsPages.R8_CEILING_PREF)?.trim()?.toIntOrNull()?.takeIf { it > 0 }
         }
         val r8Shrinker = ForkedR8Shrinker(context.applicationContext, r8ModeProvider, r8HeapProvider)
-        // The dex MERGE (debug-path memory peak) forks too, under the same R8 execution / heap settings.
-        val r8MergeDexer = ForkedD8Dexer(context.applicationContext, r8ModeProvider, r8HeapProvider)
+        // The debug-dex memory knobs (Build Runtime page), read lazily like the R8 ones.
+        val dexOffHeapKey = settingsPrefix + dev.ide.core.settings.BuiltInSettingsPages.DEX_OFFHEAP_MB
+        val dexOffHeapProvider = { managerRef.get()?.preference(dexOffHeapKey)?.trim()?.toIntOrNull() }
+        val dexMergeBatchKey = settingsPrefix + dev.ide.core.settings.BuiltInSettingsPages.DEX_MERGE_BATCH
+        val dexMergeChunkProvider = {
+            managerRef.get()?.preference(dexMergeBatchKey)?.trim()?.toIntOrNull()?.takeIf { it > 0 }
+                ?: dev.ide.core.settings.BuiltInSettingsPages.DEX_MERGE_BATCH_DEFAULT
+        }
+        // "Max concurrent dex forks" (0/absent = auto, sized from device RAM): how many forked merge/archive VMs
+        // run at once, batching the per-library merges instead of forking one VM at a time.
+        val dexForkConcurrencyKey = settingsPrefix + dev.ide.core.settings.BuiltInSettingsPages.DEX_FORK_CONCURRENCY
+        val dexForkConcurrencyProvider = { managerRef.get()?.preference(dexForkConcurrencyKey)?.trim()?.toIntOrNull() }
+        // The dex MERGE (debug-path memory peak) forks too, under the same R8 execution / heap settings; the
+        // archive step forks above the "Off-heap dexing threshold". The merge batches + parallelizes across
+        // forked VMs bounded by the process-wide fork gate (see ForkedD8Dexer / R8ForkSupport).
+        val r8MergeDexer = ForkedD8Dexer(context.applicationContext, r8ModeProvider, r8HeapProvider, dexOffHeapProvider, dexForkConcurrencyProvider)
+        // Renders the layout with the REAL framework + library views (layoutlib-on-device): reuses the build's
+        // aapt2-linked resources + R.jar, dexes the library classpath, inflates real views, draws to a bitmap.
+        // Runs in the separate `:preview` process (RemoteRealViewRuntime) when the "Build in a separate process"
+        // setting is on (default) — isolating arbitrary library/user View code, with in-process fallback —
+        // governed by the same toggle as the build daemon (read lazily via the manager).
+        val separateProcessKey = settingsPrefix + dev.ide.core.settings.BuiltInSettingsPages.SEPARATE_PROCESS
+        val realViewRuntime = dev.ide.preview.realview.RemoteRealViewRuntime(
+            context.applicationContext, androidJar.toPath(), File(context.cacheDir, "realview"), Build.VERSION.SDK_INT,
+            separateProcessEnabled = { managerRef.get()?.preference(separateProcessKey)?.trim() != "false" },
+        )
         // Project data left by previous app versions (same `com.tyron.code` package, so the same external
         // files dir survives a Play update). Swept into backups, and recovered into the picker by
         // `importLegacyProjects` when in a loadable format. Two known locations:
@@ -160,9 +184,11 @@ object AndroidIde {
             deviceApiLevel = Build.VERSION.SDK_INT,
             apkInstaller = apkInstaller,
             customViewRuntime = previewRuntime,
+            realViewRuntime = realViewRuntime,
             kotlinPluginLoader = kotlinPluginLoader,
             r8Shrinker = r8Shrinker,
             r8MergeDexer = r8MergeDexer,
+            mergeChunkProvider = dexMergeChunkProvider,
         ).also { managerRef.set(it) }
     }
 
@@ -201,6 +227,10 @@ object AndroidIde {
         addSink(AnalyticsLogSink(service))
         return service
     }
+
+    /** Provision just the bundled `android.jar` for a process that needs only it (the `:preview` render
+     *  daemon), without the full [createProjectManager] engine setup. Idempotent (marker-guarded copy). */
+    fun provisionAndroidJar(context: Context): File = copyAsset(context, "android.jar", File(appHomeDir(context), "android.jar"))
 
     /** App-specific external storage base (`Android/data/<pkg>/files`), or internal `filesDir` if external
      *  isn't currently mounted. Resolved the same way by [bootstrap] and [ProjectsDocumentsProvider] so both

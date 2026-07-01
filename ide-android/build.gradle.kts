@@ -650,4 +650,11 @@ dependencies {
     // app only transitively (via :ide-core), so add it compileOnly — the app's dexed copy provides it (and the
     // relocated ecj-art) at runtime.
     androidTestCompileOnly(project(":lang-jdt"))
+    // The on-device build benchmark (OnDeviceBuildBenchmarkTest) opens a project model + drives AndroidBuildSystem
+    // directly, and (self-contained mode) seeds a Material project + resolves it with the Maven resolver. These
+    // reach the app only transitively via :ide-core, so compile against them here; the app's dexed copies provide
+    // them at runtime.
+    androidTestCompileOnly(project(":project-model-impl"))
+    androidTestCompileOnly(project(":deps-impl"))
+    androidTestCompileOnly(project(":deps-api"))
 }

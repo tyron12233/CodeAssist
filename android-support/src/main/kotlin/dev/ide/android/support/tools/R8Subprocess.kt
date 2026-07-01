@@ -63,7 +63,8 @@ class R8Subprocess(
                 add("--output"); add(request.outDir.toString())
                 addAll(existing.map { it.toString() })
             }
-            Subprocess.run(cmd)
+            // A failed forked R8 dumps the process stderr (a Java stack trace); humanize it to the actual cause.
+            Subprocess.run(cmd).let { it.copy(log = DexDiagnostics.humanize(it.log)) }
         } finally {
             temp.forEach { runCatching { Files.deleteIfExists(it) } }
         }
@@ -85,6 +86,6 @@ class R8Subprocess(
             add("--output"); add(request.outDir.toString())
             add(request.desugarJdkLibs.toString())
         }
-        return Subprocess.run(cmd)
+        return Subprocess.run(cmd).let { it.copy(log = DexDiagnostics.humanize(it.log)) }
     }
 }

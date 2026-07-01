@@ -106,11 +106,18 @@ class D8InProcessDexer : Dexer {
             if (mode == OutputMode.DexFilePerClassFile) {
                 builder.setIntermediate(true)
             }
-            classpath.filter { Files.exists(it) }.takeIf { it.isNotEmpty() }
-                ?.let { builder.addClasspathFiles(it) }
-
+            // Feed the desugaring classpath + android.jar (bootclasspath) as SHARED, cached resource providers
+            // (AGP's ClassFileProviderFactory) instead of re-adding the files each invocation: android.jar and
+            // stable library jars are then opened + class-indexed once per process and reused across every dex
+            // call, not re-parsed per library. A jar that can't be opened as an archive (e.g. a directory)
+            // falls back to addClasspathFiles.
+            for (cp in classpath.filter { Files.exists(it) }) {
+                val p = SharedDexClasspath.provider(cp)
+                if (p != null) builder.addClasspathResourceProvider(p) else builder.addClasspathFiles(cp)
+            }
             if (Files.exists(androidJar)) {
-                builder.addLibraryFiles(androidJar)
+                val lib = SharedDexClasspath.provider(androidJar)
+                if (lib != null) builder.addLibraryResourceProvider(lib) else builder.addLibraryFiles(androidJar)
             }
             // Core-library desugaring: rewrite java.* backport references per the config (the L8 step dexes
             // the runtime separately). Applied at the archive step where class->dex conversion happens.
@@ -136,9 +143,11 @@ class D8InProcessDexer : Dexer {
                 add("D8 (in-process) $role ${programs.size} input(s) -> ${outDir.fileName}")
                 addAll(diagnostics)
             }
-            ToolResult.ok(summary)
+            ToolResult.ok(DexDiagnostics.humanize(summary))
         } catch (t: Throwable) {
-            ToolResult.fail("D8 in-process failed: ${t.message}", diagnostics)
+            // The captured handler diagnostics carry the real cause (e.g. a duplicate-class error); humanize them
+            // into an actionable Problem instead of the generic CompilationFailedException message.
+            ToolResult(false, DexDiagnostics.humanize(diagnostics + "D8 dexing failed: ${t.message}"))
         }
     }
 }

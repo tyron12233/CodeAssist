@@ -57,6 +57,7 @@ class Aapt2Subprocess(private val aapt2: Path) : Aapt2 {
         nonFinalIds: Boolean,
         proguardRules: Path?,
         protoFormat: Boolean,
+        overlays: List<Path>,
     ): ToolResult {
         Files.createDirectories(genJavaDir)
         outApk.parent?.let { Files.createDirectories(it) }
@@ -81,6 +82,8 @@ class Aapt2Subprocess(private val aapt2: Path) : Aapt2 {
             add("--target-sdk-version"); add(targetSdk.toString())
             add("--auto-add-overlay")
             addAll(compiled.map { it.toString() })
+            // `-R` marks an overlay: it overrides resources the base archives also define (and adds new ones).
+            overlays.forEach { add("-R"); add(it.toString()) }
         }
         val r = Subprocess.run(cmd)
         return if (r.success) r else ToolResult(false, r.log + selfTest())

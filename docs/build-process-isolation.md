@@ -98,6 +98,57 @@ death notification.
 - Pre-warm the daemon after project open (off the critical path) so the first build is not cold.
 - Idle shutdown to reclaim the daemon heap; both processes get the per-process `largeHeap` ceiling.
 
+### Forked-VM dexing: heap above the app cap, batched + cautiously parallel
+
+The dex MERGE (debug path) and the R8 pass (release path) are the memory peaks, and a managed app process is
+capped at the device's `dalvik.vm.heapsize` (e.g. 576 MB) no matter the physical RAM. A VM launched from the
+command line (`dalvikvm64 -Xmx<n>m`) is not a zygote app process, so its `-Xmx` can exceed that cap (~1.5 GB
+measured). So `ForkedR8Shrinker` and `ForkedD8Dexer` run those steps in a forked VM (machinery in
+`R8ForkSupport`: launcher discovery, R8 dex asset, capability ladder), self-falling-back to in-process when
+forking isn't usable. The large dexBuilder archive (clean-build project jar / big library) forks too, above
+the "Off-heap dexing threshold" setting.
+
+The merge previously forked **once per external-library bucket**, serially: `mergeExtDex` runs per-library
+below AGP's `LIBRARIES_MERGING_THRESHOLD`, and `DexConcurrency` — sized from the *app* heap — collapses to one
+worker on a phone. ~100 libraries → ~100 sequential, single-threaded forked VMs, each paying VM spawn + R8
+classload + `android.jar` parse. But a forked VM runs off the app heap, so the app-heap bound is the wrong
+constraint. The fix:
+
+- **Batch** (`Dexer.mergePlan` → `MergePlan`): a 1.5 GB fork merges many libraries at once, so the merge task
+  coalesces the per-library buckets into one group per concurrent fork — N forks collapse to a handful. The
+  in-process default (desktop) is unchanged: one group per bucket, app-heap-bounded concurrency. Because the
+  per-library layout used to keep each library in its own indexed group (so a class duplicated across two
+  libraries — a shaded stdlib the resolver can't coordinate-dedup — survived as ART first-wins), batching now
+  deduplicates by class across the scope (first bucket wins, same runtime winner) so D8 doesn't reject the
+  duplicate; merge-all stays passthrough.
+- **Cautious parallel**: how many forks run at once is `forkBudget` = available device RAM ÷ the fork heap,
+  clamped to `[1, min(cores, MAX_CONCURRENT_FORKS=3)]`. Under memory pressure that is 1 (one big fork, still
+  far better than N serial ones).
+- **Process-wide fork gate** (`R8ForkSupport.withForkPermit`): `mergeProjectDex`/`mergeLibDex`/`mergeExtDex`
+  depend only on `dexBuilder`, so they are parallel-eligible and each forks; a shared FIFO semaphore sized to
+  `forkBudget` caps the *total* concurrent forked VMs (merge + off-heap archive) so the sibling tasks can't
+  collectively over-commit RAM. R8 is not gated — the release path replaces the merge chain and forks one VM
+  at a time.
+- **Setting**: "Max concurrent dex forks" (`DEX_FORK_CONCURRENCY`, Build Runtime page, advanced). `0` = auto
+  (the RAM-derived `forkBudget`); a non-zero value overrides it. The gate is sized once per build process, so
+  a change applies on the next build-process start.
+
+A failed forked dex/merge/R8 dumps the process's stderr — a wall of Java stack frames and obfuscated R8
+internal symbols around a one-line cause. `DexDiagnostics.humanize` (applied to every dexer/shrinker's
+`ToolResult.log`) strips that noise, shortens the internal per-class dex-archive paths to class names, and
+rewrites the failure signatures it recognizes (duplicate class, the 64K method limit, out-of-memory, an
+unsupported bytecode version) into a single `error: <plain explanation + fix>` line — which the existing parser
+surfaces as one Problem and a task uses (`DexDiagnostics.firstError`) as its failure summary instead of a
+generic "dex merge failed".
+
+The **archive** step (`dexBuilder`) uses the same forked dexer (injected as both the merge and archive dexer in
+`inProcess(...)`): a big project jar / library above the "Off-heap dexing threshold" archives off the app heap,
+and the per-jar library archives run several at once via `OffHeapArchiveDexer` (concurrency = `forkBudget`, each
+jar still in its own content-hash bucket so incremental reuse is intact — no batching, unlike the merge). A
+small incremental project archive stays in-process. All of it shares the same fork gate. The in-process dexer
+doesn't implement `OffHeapArchiveDexer`, so desktop / in-process builds archive in-process under `DexConcurrency`
+as before.
+
 ### Preconditions (verified)
 
 Flush-on-build is already solved. The build reads source only from disk; `openDocuments` (in-memory editor

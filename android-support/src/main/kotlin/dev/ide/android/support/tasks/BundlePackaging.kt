@@ -47,7 +47,9 @@ internal object BundlePackaging {
                         else -> "root/${e.name}"   // e.g. any stray top-level file aapt2 emitted
                     }
                     if (!written.add(target)) continue
-                    putDeflated(zos, target, ap.getInputStream(e).use { it.readBytes() })
+                    zos.putNextEntry(ZipEntry(target).apply { method = ZipEntry.DEFLATED })
+                    ap.getInputStream(e).use { it.copyTo(zos) }
+                    zos.closeEntry()
                 }
             }
 
@@ -57,7 +59,7 @@ internal object BundlePackaging {
             }
             dexFiles.forEachIndexed { i, dex ->
                 val name = "dex/" + if (i == 0) "classes.dex" else "classes${i + 1}.dex"
-                if (written.add(name)) putDeflated(zos, name, Files.readAllBytes(dex))
+                if (written.add(name)) putDeflated(zos, name, dex)
             }
 
             // 3) assets/** and 4) lib/<abi>/**
@@ -70,13 +72,15 @@ internal object BundlePackaging {
     private fun copyTree(zos: ZipOutputStream, dir: Path, prefix: String, written: MutableSet<String>) {
         allFiles(dir).forEach { f ->
             val name = prefix + dir.relativize(f).toString().replace('\\', '/')
-            if (written.add(name)) putDeflated(zos, name, Files.readAllBytes(f))
+            if (written.add(name)) putDeflated(zos, name, f)
         }
     }
 
-    private fun putDeflated(zos: ZipOutputStream, name: String, bytes: ByteArray) {
+    /** STREAM the file into the zip (8 KB buffer) rather than reading it whole into a ByteArray — keeps heap
+     *  flat regardless of entry size (native `.so` libs / large assets are the biggest files in a bundle). */
+    private fun putDeflated(zos: ZipOutputStream, name: String, file: Path) {
         zos.putNextEntry(ZipEntry(name).apply { method = ZipEntry.DEFLATED })
-        zos.write(bytes)
+        Files.newInputStream(file).use { it.copyTo(zos) }
         zos.closeEntry()
     }
 

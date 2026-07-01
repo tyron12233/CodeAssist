@@ -1,16 +1,20 @@
 package dev.ide.android
 
+import android.app.Activity
+import android.content.Context
 import android.content.Intent
 import android.net.Uri
 import android.os.Bundle
 import android.provider.DocumentsContract
 import android.provider.OpenableColumns
+import android.webkit.MimeTypeMap
 import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.SystemBarStyle
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
+import androidx.activity.result.contract.ActivityResultContract
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
@@ -78,7 +82,7 @@ class MainActivity : ComponentActivity() {
                         // concurrent first-run provision would race and corrupt the kotlinc-home). Debug-only +
                         // flag-gated; replaced in Phase 3b by RemoteBuildRunner wired into the UI Run button.
                         if (BuildConfig.DEBUG && BuildDaemonProof.ENABLED) BuildDaemonProof.run(applicationContext)
-                    }.onFailure { e -> error = e.message ?: e.toString() }
+                    }.onFailure { e -> error = e.stackTraceToString() ?: e.toString() }
             }
 
             var pendingTarget by remember { mutableStateOf<String?>(null) }
@@ -105,7 +109,7 @@ class MainActivity : ComponentActivity() {
             // "Save As" export: the user picks a destination (Files/Drive/Downloads); we copy the bytes there.
             var pendingExport by remember { mutableStateOf<String?>(null) }
             val exportLauncher =
-                rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("application/octet-stream")) { uri ->
+                rememberLauncherForActivityResult(ExportDocumentContract()) { uri ->
                     val src = pendingExport
                     pendingExport = null
                     if (uri != null && src != null) exportTo(uri, src)
@@ -306,6 +310,30 @@ private fun firstSourceRoot(root: TreeNode): String? {
     root.sourceRootPath?.let { return it }
     for (child in root.children) firstSourceRoot(child)?.let { return it }
     return null
+}
+
+/**
+ * "Save As" contract that derives the document MIME type from the file's own extension instead of a fixed
+ * generic one. This is what keeps a collision-renamed export as `app-debug (1).apk` rather than
+ * `app-debug.apk (1)`: DocumentsUI only splits off the extension before appending ` (n)` when the requested
+ * MIME type maps back to the title's extension. With a mismatched type (e.g. `application/octet-stream` for
+ * an `.apk`, which maps to `application/vnd.android.package-archive`) it treats the whole `app-debug.apk` as
+ * the base name. Requesting `getMimeTypeFromExtension(ext) ?: octet-stream` mirrors exactly how the system
+ * re-derives the type from the extension, so the two always agree and the ` (n)` lands before the extension.
+ * Input is the suggested file name; result is the chosen document URI (or null if cancelled).
+ */
+private class ExportDocumentContract : ActivityResultContract<String, Uri?>() {
+    override fun createIntent(context: Context, input: String): Intent {
+        val ext = input.substringAfterLast('.', "").lowercase()
+        val mime = MimeTypeMap.getSingleton().getMimeTypeFromExtension(ext) ?: "application/octet-stream"
+        return Intent(Intent.ACTION_CREATE_DOCUMENT)
+            .addCategory(Intent.CATEGORY_OPENABLE)
+            .setType(mime)
+            .putExtra(Intent.EXTRA_TITLE, input)
+    }
+
+    override fun parseResult(resultCode: Int, intent: Intent?): Uri? =
+        intent.takeIf { resultCode == Activity.RESULT_OK }?.data
 }
 
 /** Minimal dark splash shown while the engine boots (before the themed UI is available). */

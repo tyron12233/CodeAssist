@@ -5,6 +5,7 @@ import dev.ide.model.ContentRole
 import dev.ide.model.DependencyScope
 import dev.ide.model.Module
 import dev.ide.model.SourceSetTemplate
+import dev.ide.model.VariantId
 import dev.ide.model.impl.FacetCodecRegistry
 import dev.ide.model.impl.ModuleTypeRegistry
 import dev.ide.model.impl.ProjectModel
@@ -58,6 +59,70 @@ class AndroidVariantTest {
 
             assertEquals("freeDebug", AndroidVariants.select(module, "freeDebug")?.name)
             assertEquals(null, AndroidVariants.select(module, "nope"))
+        }
+    }
+
+    @Test
+    fun configurationsAreTheUnfilteredCandidateNames() {
+        // Variant.configurations (the dependency-config filter set) must be the FULL candidate name set, even
+        // for names with no declared source set — so a `debugImplementation`/flavor-qualified dependency still
+        // matches the variant. `paidDebug` has no `paidDebug` source set, but `paidDebug` is still a config.
+        withModule(
+            facet = AndroidFacet(
+                namespace = "com.example.app",
+                compileSdk = 34,
+                flavorDimensions = listOf("tier"),
+                productFlavors = listOf(ProductFlavor("free", dimension = "tier"), ProductFlavor("paid", dimension = "tier")),
+            ),
+            extraSourceSets = listOf("free", "paid", "freeDebug"),
+        ) { module ->
+            val freeDebug = AndroidVariants.compute(module).first { it.name == "freeDebug" }
+            assertEquals(setOf("main", "free", "debug", "freeDebug"), freeDebug.configurations)
+
+            val paidDebug = AndroidVariants.compute(module).first { it.name == "paidDebug" }
+            assertEquals(setOf("main", "paid", "debug", "paidDebug"), paidDebug.configurations)
+            // ...even though the paidDebug source set was never declared:
+            assertEquals(listOf("main", "paid", "debug"), paidDebug.activeSourceSets.map { it.name })
+        }
+    }
+
+    @Test
+    fun matchLibraryVariantIsDimensionAwareWithDebuggabilityFallback() {
+        val dir = Files.createTempDirectory("android-match")
+        val platform = PlatformCore()
+        try {
+            val store = ProjectModel.open(dir, platform, FacetCodecRegistry().register(AndroidFacetCodec))
+            ModuleTypeRegistry(platform.extensions).register(AndroidLibModuleType, AndroidSupport.PLUGIN)
+            val libType = ModuleTypeRegistry(platform.extensions).resolve("android-lib")
+            store.workspace.beginModification().apply { addProject("demo", BuildSystemId.NATIVE, store.vfs.root()); commit() }
+            store.workspace.projects.single().beginModification().apply {
+                addModule("lib", libType).apply {
+                    putFacet(AndroidFacet(
+                        namespace = "com.lib", compileSdk = 34, isApplication = false,
+                        flavorDimensions = listOf("tier"),
+                        productFlavors = listOf(ProductFlavor("free", dimension = "tier"), ProductFlavor("paid", dimension = "tier")),
+                    ))
+                }
+                commit()
+            }
+            val lib = store.workspace.projects.single().modules.single { it.name == "lib" }
+            // The consuming app shares the `tier` dimension and adds a debuggable `staging` build type.
+            val appFacet = AndroidFacet(
+                namespace = "com.app", compileSdk = 34,
+                flavorDimensions = listOf("tier"),
+                productFlavors = listOf(ProductFlavor("free", dimension = "tier"), ProductFlavor("paid", dimension = "tier")),
+                buildTypes = listOf(BuildType("debug"), BuildType("release"), BuildType("staging", debuggable = true)),
+            )
+            fun consumer(name: String, bt: String, flavors: List<String>) =
+                AndroidVariant(VariantId("app:$name"), name, bt, flavors, emptyList(), emptySet())
+
+            // exact build type + dimension-matched flavor
+            assertEquals("freeDebug", AndroidVariants.matchLibraryVariant(lib, consumer("freeDebug", "debug", listOf("free")), appFacet)?.name)
+            assertEquals("paidRelease", AndroidVariants.matchLibraryVariant(lib, consumer("paidRelease", "release", listOf("paid")), appFacet)?.name)
+            // `staging` (debuggable) isn't a lib build type → fall back to the lib's debuggable variant of the same flavor.
+            assertEquals("freeDebug", AndroidVariants.matchLibraryVariant(lib, consumer("freeStaging", "staging", listOf("free")), appFacet)?.name)
+        } finally {
+            platform.dispose(); dir.toFile().deleteRecursively()
         }
     }
 

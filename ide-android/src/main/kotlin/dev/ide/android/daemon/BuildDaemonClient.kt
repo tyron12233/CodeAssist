@@ -26,6 +26,8 @@ class BuildDaemonClient(
     private val onRunConsole: (runId: Int, moduleName: String, mainClass: String, phase: Int, acceptsInput: Boolean, hasExit: Boolean, exitCode: Int) -> Unit = { _, _, _, _, _, _, _ -> },
     private val onConsoleChunk: (runId: Int, text: String, kind: Int) -> Unit = { _, _, _ -> },
     private val onPermission: (reqId: Int, category: String, detail: String) -> Unit = { _, _, _ -> },
+    /** The daemon installed an android-app APK; launch it here in the UI process (foreground-activity rules). */
+    private val onLaunchPackage: (packageName: String) -> Unit = {},
     /** Fires on EVERY (re)connect — including the auto-restart after the daemon dies — so a client can
      *  re-drive in-flight work. (Distinct from [bind]'s one-shot `onReady`, which fires only the first time.) */
     private val onConnected: () -> Unit = {},
@@ -58,6 +60,7 @@ class BuildDaemonClient(
             onRunConsole.invoke(runId, moduleName ?: "", mainClass ?: "", phase, acceptsInput, hasExit, exitCode)
         override fun onConsoleChunk(runId: Int, text: String?, kind: Int) = onConsoleChunk.invoke(runId, text ?: "", kind)
         override fun onPermission(reqId: Int, category: String?, detail: String?) = onPermission.invoke(reqId, category ?: "", detail ?: "")
+        override fun onLaunchPackage(packageName: String?) = onLaunchPackage.invoke(packageName ?: "")
     }
 
     private val connection = object : ServiceConnection {

@@ -71,13 +71,14 @@ class AndroidIncrementalDexTest {
                 TaskExecutorImpl(cache).execute(buildSystem.createBuildGraph(store.workspace.projects.single(), request), SimpleTaskContext(), 2)
             }
 
-            // One dexBuilder archives each scope; mergeProjectDex + mergeExtDex combine the app & library archives.
+            // dexBuilder archives the app; the external library is dexed by dexExtLibs (one forked pass to indexed
+            // dex — minSdk 24 desugars, so per-lib buckets buy no incrementality); mergeProjectDex combines the app.
             val first = build()
             assertTrue(first.succeeded, "first build failed")
             val firstRan = first.ranTasks.map { it.value }
             assertTrue(":app:dexBuilderDebug" in firstRan, "dexBuilder should run first time; ran=$firstRan")
             assertTrue(":app:mergeProjectDexDebug" in firstRan, "project dex should merge first time; ran=$firstRan")
-            assertTrue(":app:mergeExtDexDebug" in firstRan, "external-library dex should merge first time; ran=$firstRan")
+            assertTrue(":app:dexExtLibsDebug" in firstRan, "external-library dex should run first time; ran=$firstRan")
 
             // Edit only the app source, then rebuild.
             write(dir, "app/src/main/java/com/example/app/MainActivity.java", activity("two"))
@@ -85,11 +86,11 @@ class AndroidIncrementalDexTest {
             assertTrue(second.succeeded, "incremental build failed")
             val ran = second.ranTasks.map { it.value }
             val skipped = second.skippedTasks.map { it.value }
-            // dexBuilder re-runs (as in AGP) but only re-archives the changed app; the external library's
-            // content-addressed bucket is untouched, so its merge skips — proof the library is NOT re-dexed.
+            // dexBuilder re-runs (as in AGP) but only re-archives the changed app; the external library's inputs
+            // are untouched, so dexExtLibs skips (its indexed output is reused) — proof the library is NOT re-dexed.
             assertTrue(":app:dexBuilderDebug" in ran, "edited app must re-run dexBuilder; ran=$ran")
             assertTrue(":app:mergeProjectDexDebug" in ran, "project-dex merge must re-run; ran=$ran")
-            assertTrue(":app:mergeExtDexDebug" in skipped, "unchanged library dex merge must skip; skipped=$skipped")
+            assertTrue(":app:dexExtLibsDebug" in skipped, "unchanged external-library dex must skip; skipped=$skipped")
         } finally {
             platform.dispose(); dir.toFile().deleteRecursively()
         }

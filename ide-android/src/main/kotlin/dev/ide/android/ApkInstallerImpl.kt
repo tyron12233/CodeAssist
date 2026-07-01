@@ -10,6 +10,7 @@ import android.net.Uri
 import android.os.Build
 import android.provider.Settings
 import androidx.core.content.ContextCompat
+import dev.ide.android.daemon.PackageLaunchBridge
 import dev.ide.core.ApkInstaller
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -22,6 +23,10 @@ import java.nio.file.Path
  * `REQUEST_INSTALL_PACKAGES`); if the app isn't yet allowed to install unknown apps, it opens the relevant
  * Settings screen. A per-session receiver handles the pending-user-action prompt, then launches the
  * installed package. Streams progress to the build console via [installAndLaunch]'s `log`.
+ *
+ * Under build-process isolation this runs in the `:build` process (no foreground activity), so the launch is
+ * handed to the UI process via [PackageLaunchBridge] — firing the activity from `:build` would trip Android's
+ * background-activity-launch block. Only when no UI is reachable (isolation off / unbound) does it launch here.
  */
 class ApkInstallerImpl(context: Context) : ApkInstaller {
     private val context = context.applicationContext
@@ -73,14 +78,14 @@ class ApkInstallerImpl(context: Context) : ApkInstaller {
                     }
                     PackageInstaller.STATUS_SUCCESS -> {
                         log("Installed $packageName.")
-                        val launch = context.packageManager.getLaunchIntentForPackage(packageName)
-                        if (launch != null) {
-                            runCatching { context.startActivity(launch.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)) }
-                            log("Launching $packageName…")
-                        } else {
-                            log("Installed — no launchable activity in $packageName.")
-                        }
                         runCatching { context.unregisterReceiver(this) }
+                        // Prefer the UI process for the launch (it has a foreground activity → no
+                        // background-activity-launch block, and it owns the "Launching…" build-console line).
+                        // Fall back to launching here only when there's no UI to forward to (isolation off /
+                        // unbound) — ApkLauncher then retries while this process's PackageManager catches up.
+                        if (!PackageLaunchBridge.forwardLaunch(packageName)) {
+                            ApkLauncher.launch(context, packageName, log)
+                        }
                     }
                     else -> {
                         val msg = intent.getStringExtra(PackageInstaller.EXTRA_STATUS_MESSAGE)

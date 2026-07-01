@@ -25,6 +25,7 @@ internal class ManifestMergeTask(
     private val primaryManifest: Path,
     private val libraryManifests: List<Path>,
     private val placeholders: Map<String, String>,
+    private val minSdk: Int,
     private val targetSdk: Int,
     private val outManifest: Path,
 ) : Task {
@@ -34,6 +35,9 @@ internal class ManifestMergeTask(
             filePaths("libs", libraryManifests.filter { Files.exists(it) })
             // Placeholder values are part of the merged output, so a change must re-run the merge.
             property("placeholders", placeholders.toSortedMap().toString())
+            // Not part of the output, but the library-minSdk gate compares against it: re-run so the error
+            // appears/clears when the app's minSdk crosses a dependency's declared floor.
+            property("minSdk", minSdk)
             // Not part of the output, but the edge-to-edge advisory depends on it: re-run so the warning
             // appears/clears when the resolved target crosses the threshold.
             property("targetSdk", targetSdk)
@@ -48,7 +52,7 @@ internal class ManifestMergeTask(
         // Catch Throwable (not just Exception): an XML/regex impl quirk on ART can surface as an Error
         // (e.g. ExceptionInInitializerError) — report it as a build failure with the cause, never crash.
         val result = try {
-            ManifestMerger.merge(primaryManifest, libs, placeholders)
+            ManifestMerger.merge(primaryManifest, libs, placeholders, appMinSdk = minSdk)
         } catch (t: Throwable) {
             val cause = t.cause ?: t
             return TaskResult.Failed("manifest merge crashed: ${cause::class.simpleName}: ${cause.message}", t)

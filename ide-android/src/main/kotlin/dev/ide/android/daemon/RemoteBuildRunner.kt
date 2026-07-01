@@ -38,6 +38,7 @@ import kotlinx.coroutines.flow.update
  */
 class RemoteBuildRunner(context: Context, private val services: IdeServices) : BuildRunner {
     private val log = Log.logger("ide.daemon")
+    private val appContext = context.applicationContext
     private val workspaceRoot = services.workspaceRoot.toString()
 
     private val _buildState = MutableStateFlow(BuildState())
@@ -91,11 +92,19 @@ class RemoteBuildRunner(context: Context, private val services: IdeServices) : B
         },
         onConsoleChunk = { runId, text, kind ->
             _runConsole.update { cur ->
-                if (cur != null && cur.id == runId) cur.copy(transcript = cur.transcript + ConsoleChunk(text, chunkKindOf(kind))) else cur
+                if (cur == null || cur.id != runId) return@update cur
+                cur.copy(transcript = appendConsoleChunk(cur.transcript, text, chunkKindOf(kind)))
             }
         },
         onPermission = { reqId, category, detail ->
             _permissionRequest.value = if (reqId < 0) null else UiPermissionRequest(reqId, category, detail)
+        },
+        onLaunchPackage = { pkg ->
+            // The daemon installed the APK in :build; launch it here in the UI process (it has a foreground
+            // activity, so the activity launch isn't blocked) and surface the outcome in the build console.
+            if (pkg.isNotEmpty()) {
+                dev.ide.android.ApkLauncher.launch(appContext, pkg) { msg -> _buildState.update { it.copy(log = it.log + line(msg)) } }
+            }
         },
         onConnected = ::onDaemonConnected,
         onDeath = {
@@ -146,6 +155,24 @@ class RemoteBuildRunner(context: Context, private val services: IdeServices) : B
         if (connected) runCatching { client.open(workspaceRoot, services.modelGeneration) } // → daemon onOpened → runs `pending`
     }
 
+    /** Append a streamed console fragment, coalescing into the trailing same-kind chunk (bounded per chunk)
+     *  and capping the total transcript — mirrors the in-process [dev.ide.core.services.BuildService] so the
+     *  daemon-backed transcript has the same shape and can't grow without limit on a chatty program. */
+    private fun appendConsoleChunk(chunks: List<ConsoleChunk>, text: String, kind: ConsoleChunkKind): List<ConsoleChunk> {
+        if (text.isEmpty()) return chunks
+        val last = chunks.lastOrNull()
+        val merged = if (last != null && last.kind == kind && last.text.length < CONSOLE_CHUNK_MAX) {
+            chunks.dropLast(1) + ConsoleChunk(last.text + text, kind)
+        } else {
+            chunks + ConsoleChunk(text, kind)
+        }
+        var total = merged.sumOf { it.text.length }
+        if (total <= CONSOLE_TRANSCRIPT_MAX) return merged
+        val out = ArrayDeque(merged)
+        while (total > CONSOLE_TRANSCRIPT_MAX && out.size > 1) total -= out.removeFirst().text.length
+        return out.toList()
+    }
+
     private fun line(msg: String) = BuildLogLine(msg)
     private fun runStatusOf(name: String, fallback: RunStatus) = runCatching { RunStatus.valueOf(name) }.getOrDefault(fallback)
     private fun stepStatusOf(name: String) = runCatching { StepStatus.valueOf(name) }.getOrDefault(StepStatus.Pending)
@@ -157,5 +184,10 @@ class RemoteBuildRunner(context: Context, private val services: IdeServices) : B
         val idx = steps.indexOfFirst { it.name == name }
         val next = if (idx >= 0) steps.toMutableList().also { it[idx] = BuildStepUi(name, status) } else steps + BuildStepUi(name, status)
         return copy(steps = next)
+    }
+
+    private companion object {
+        const val CONSOLE_CHUNK_MAX = 8192
+        const val CONSOLE_TRANSCRIPT_MAX = 1_000_000
     }
 }

@@ -98,12 +98,21 @@ runs a console application's `main` on the runtime classpath (the equivalent of 
 plugin `run`). Compilation goes through a `JavaCompile` port so the compiler backend is pluggable.
 
 On device (ART, where there is no `java` binary to fork) the run graph is `compileJava → dexRun →
-runDex`: the runtime classpath is dexed through an injected dex backend and handed to an injected
+runDex`: the runtime classpath is dexed through an injected `RunDexBackend` and handed to an injected
 runner. The dexer instruments the run's classpath with two bytecode passes — one that turns
 `System.exit`-style calls into a controlled exit the runner catches (so a program's exit ends the run,
 not the IDE), and a run sandbox that rewrites network / file / reflection / process call sites to
 trampolines mediated by a permission broker (which prompts on an undecided category). This is a
 best-effort guard over a curated API set, not a hardened sandbox.
+
+The backend dexes scope-aware and **content-hash cached** (the host impl, `RunDexer` in `:android-support`,
+reuses the same caching the Android pipeline uses): immutable library jars (stdlib + dependencies) are
+instrumented + dexed once, keyed by content hash + a guard/D8 version, and reused from a per-project staging
+cache and a shared cross-project cache; only the changed user class output is re-dexed per build. This keeps
+a source edit from re-dexing the whole runtime classpath (the dominant `dexRun` cost). The instrumented run
+cache is namespaced apart from the APK pipeline's uninstrumented dex cache. Output is a flat `classes*.dex`
+set (libraries first, in a stable order so an unchanged library keeps the same bytes across runs and ART
+reuses its oat); the runner loads every `.dex` under it (multidex), so no separate merge step is needed.
 
 ### Kotlin/Java mixed modules
 
@@ -149,7 +158,11 @@ mergeResources → aapt2Compile → aapt2Link (+R) → [compileKotlin →] compi
   re-dex, with the unchanged ones as the desugaring classpath); sub-module and external scopes are
   per-jar content-hash buckets (an unchanged library is reused). Scope merges run only when their
   scope changed. `minSdk ≥ 21` uses native multidex; below that, a single merge produces one
-  `classes.dex`. Library jars are dexed **in parallel** (a worker pool sized from cores and free heap,
+  `classes.dex`. **The native-multidex merge is itself bucketed + incremental (AGP's `DexMergingTask`):**
+  classes are distributed across a fixed number of buckets by a stable hash of their class path, each bucket
+  merges into its own indexed group, and — keyed by a persisted per-bucket signature — only the buckets whose
+  classes changed are re-merged, so editing one class re-merges one bucket instead of the whole scope. Library
+  jars are dexed **in parallel** (a worker pool sized from cores and free heap,
   with each D8 invocation's thread count capped so `workers × threads` doesn't oversubscribe — small,
   memory-safe fan-out on a phone; wide on a desktop), reusing three tiers before doing any work: the
   module's own bucket (unchanged since last build), a **shared cross-project content-addressed cache**
@@ -158,10 +171,29 @@ mergeResources → aapt2Compile → aapt2Link (+R) → [compileKotlin →] compi
   Each library is dexed against the **rest of the library universe as a desugaring classpath** (D8
   `--classpath`, the jar itself excluded), so D8 can resolve the interface hierarchies that default/static
   interface-method desugaring needs — eliminating the "Type … not found, required for … desugaring"
-  warnings. The shared cache key folds a digest of that whole library universe, so a cached bucket is only
-  reused under an identical desugaring classpath; the app's own (project) classes are kept out of the
-  universe, so an app edit never invalidates a library bucket. The key also carries a `DEX_CACHE_FORMAT`
-  stamp that must be bumped whenever the bundled r8 version changes.
+  warnings. android.jar (the bootclasspath) and the classpath jars are handed to D8 as **shared, cached
+  resource providers** (AGP's `ClassFileProviderFactory`): each jar is opened + class-indexed once per process
+  and reused across every dex invocation, so archiving dozens of libraries no longer re-parses android.jar
+  (~26 MB) per library. Archiving runs **in-process** (reusing those shared providers); only the dex *merge*
+  (the memory peak) forks a bigger-heap VM on device. The shared cache key is scoped like AGP's dexing
+  transforms: when no desugaring applies (minSdk ≥
+  26, no core-library desugaring) a library's dex depends only on its own bytes, so the key is **own-content
+  only** (AGP's `DexingNoClasspathTransform`) and the bucket is shared across every project regardless of
+  classpath; when desugaring applies, the key folds a digest of the **scope-appropriate** library universe
+  (AGP's `DexingWithClasspathTransform`) — for an external library that universe is the **external library set
+  alone**, since deps point down and an external library never desugars against your sub-modules, app, or R.
+  Because the app's project classes and the generated `R.jar` are deliberately kept out of the external
+  universe, editing app code, a resource (R shifts), or a sub-module never invalidates an external-library
+  bucket. The key also carries a `DEX_CACHE_FORMAT` stamp that must be bumped whenever the bundled r8 version
+  changes.
+- **R.jar placement (AGP-faithful).** The app's `R.jar` (`compile_and_runtime_not_namespaced_r_class_jar`) is
+  dexed in its **own archive scope** and **merged into the project dex layer** (`mergeProjectDex`), where AGP
+  keeps R — not the external scope. It is content-hashed, so it re-dexes only when resources change, and being
+  out of the external scope means a resource edit re-dexes/re-merges only the small project layer while
+  `mergeExtDex` (the stable library layer) stays up-to-date. A resource-only build therefore never touches the
+  dependency libraries — the material-you case where a single R shift used to re-dex all ~60 AndroidX/Material
+  libraries. Stale `R.class` left in the project *class* output by older compile-R builds are still excluded
+  from the project scope (the authoritative R comes only from `R.jar`).
 - **In-process memory budget.** On a phone every in-process D8/R8 invocation runs in the IDE's own small,
   shared ART heap, so OOM — not cores — is the limit. The worker/thread plan is sized from `maxMemory()`
   (collapsing to a single worker on a tight heap), R8 (the heaviest whole-program pass) runs with a capped
@@ -193,6 +225,17 @@ mergeResources → aapt2Compile → aapt2Link (+R) → [compileKotlin →] compi
   its dexed output, so ids are not inlined); the app generates and dexes the final R for all library
   packages. A library is therefore compiled once, independent of the app, with no duplicate R.
 - **Multi-module.** The whole module-dependency closure is compiled and every output dexed.
+- **Variant-aware.** A build targets one variant (`BuildRequest.variant`), and a dependency library is built
+  in the variant that matches it — same build type first, then the most flavor overlap, else the library's
+  default variant. The matched variant selects which source sets, resources, R and library dependencies the
+  library contributes, so a `debug`- or flavor-only resource or dependency never leaks into the wrong variant.
+  Build-variant-scoped dependencies (a `debugImplementation`-style declaration carrying a config qualifier)
+  are filtered into the classpath the same way (`Module.classpath(scope, variant)`).
+
+The build/run default variant is the module's **active variant** — persisted per module and shared with the
+editor (which analyzes against that variant's classpath). The Run picker still lists every variant's
+`assemble`/`bundle`/`androidRun` task explicitly; a task id without a variant suffix falls back to the active
+variant.
 
 Tool access is split by the ART reality behind injected ports: aapt2 and zipalign are native binaries
 invoked as subprocesses; D8/R8 and apksigner are pure-Java and run either as a subprocess (desktop) or

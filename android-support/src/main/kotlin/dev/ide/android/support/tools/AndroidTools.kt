@@ -46,6 +46,80 @@ internal fun suppressBenignDexWarnings(lines: List<String>): List<String> {
     return out
 }
 
+/**
+ * Make D8/R8 output readable for the build console + Problems list. The raw output of a failed dex/merge/shrink
+ * — especially from the forked VM, which dumps the process's stderr — is a wall of Java stack frames and
+ * obfuscated R8 internal symbols around a one-line cause. [humanize]:
+ *  - suppresses the benign desugaring warnings ([suppressBenignDexWarnings]);
+ *  - drops the stack-trace noise (`at …`, `… N more`, `Exception in thread …`, the bare `Error in <path>:`
+ *    headers);
+ *  - shortens the internal per-class dex-archive paths (`…/ext/<hash>/kotlin/ArrayIntrinsicsKt.dex`) to the
+ *    class name (`kotlin.ArrayIntrinsicsKt`);
+ *  - rewrites the failure signatures it recognizes into a single `error: <plain explanation + fix>` line (so
+ *    the existing [CompilerOutputParser] surfaces ONE actionable Problem), collapsing the duplicate copies D8
+ *    prints (the diagnostic, then the thrown exception's cause).
+ *
+ * Applied to every dexer/shrinker's [ToolResult.log], so the console, the Problems list, and a task's failure
+ * summary ([firstError]) all read cleanly without each call site re-parsing.
+ */
+internal object DexDiagnostics {
+    private val STACK_AT = Regex("""^at\s+\S.*""")
+    private val MORE = Regex("""^\.\.\.\s+\d+\s+more$""")
+    private val ERROR_IN_HEADER = Regex("""^Error in\s+.*:$""")
+    // An internal per-class dex-archive path: <…>/<24-hex bucket>/<class path>.dex
+    private val DEX_BUCKET_PATH = Regex("""\S*/[0-9a-f]{24}/(\S+?)\.dex""")
+    private val DUP_TYPE = Regex("""Type (\S+) is defined multiple times""")
+    private val ALREADY_PRESENT = Regex("""(?:Program|Classpath) type already present:\s*([^\s,]+)""")
+    private val UNSUPPORTED_VERSION = Regex("""[Uu]nsupported class file (?:major )?version|bytecode (?:that is )?newer""")
+    private const val TOO_MANY = "Cannot fit requested classes in a single dex file"
+
+    fun humanize(log: List<String>): List<String> {
+        val base = suppressBenignDexWarnings(log)
+        val out = ArrayList<String>(base.size)
+        val seen = HashSet<String>()   // collapse the same recognized error echoed by diagnostic + exception cause
+        for (raw in base) {
+            val t = raw.trim()
+            if (STACK_AT.matches(t) || MORE.matches(t) || t.startsWith("Exception in thread ") || ERROR_IN_HEADER.matches(t)) continue
+            val friendly = recognize(raw)
+            if (friendly != null) {
+                if (seen.add(friendly)) out.add(friendly)
+                continue
+            }
+            out.add(shortenPaths(raw))
+        }
+        return out
+    }
+
+    /** The first recognized error message in [log] (already-humanized), for a task's `TaskResult.Failed`
+     *  summary; null when nothing error-like is present (caller keeps its generic message). */
+    fun firstError(log: List<String>): String? =
+        log.firstOrNull { it.startsWith("error:", ignoreCase = true) }?.substringAfter(':')?.trim()
+
+    private fun recognize(line: String): String? {
+        DUP_TYPE.find(line)?.let { return duplicate(it.groupValues[1]) }
+        ALREADY_PRESENT.find(line)?.let { return duplicate(it.groupValues[1]) }
+        if (line.contains(TOO_MANY))
+            return "error: Too many methods or fields to fit in a single dex file (the 64K limit). Enable multidex (automatic at minSdk 21+) or remove unused dependencies."
+        if (line.contains("OutOfMemoryError"))
+            return "error: The dexer ran out of memory. Raise the \"R8 forked-VM heap\" setting in Build Runtime settings, or reduce the build's dependencies."
+        if (UNSUPPORTED_VERSION.containsMatchIn(line))
+            return "error: A class was compiled for a newer Java bytecode version than the dexer supports. Lower the module's language level to Java 17 or below."
+        return null
+    }
+
+    private fun duplicate(type: String): String =
+        "error: Duplicate class '${asClassName(type)}' — more than one library on the classpath defines it (often a shaded or duplicated dependency). Remove or exclude one copy so a single version remains."
+
+    /** Normalize a class reference (a `path/Foo.dex`, a `La/B;` descriptor, or a dotted name) to a dotted FQN. */
+    private fun asClassName(raw: String): String =
+        raw.trim().trimEnd(',', ':').removeSuffix(".dex").removeSuffix(".class")
+            .removePrefix("L").removeSuffix(";").replace('/', '.')
+
+    /** Replace internal per-class dex-archive paths with the class name, so a retained line reads in user terms. */
+    private fun shortenPaths(line: String): String =
+        DEX_BUCKET_PATH.replace(line) { it.groupValues[1].replace('/', '.') }
+}
+
 /** aapt2: compile resources to an intermediate form, then link them into `resources.ap_` + `R.java`. */
 interface Aapt2 {
     /** Compile each res directory into a flat-file archive; returns the produced archives under [outDir]. */
@@ -55,6 +129,10 @@ interface Aapt2 {
      * Link [compiled] archives with the [manifest] against [androidJar] into [outApk] (`resources.ap_`),
      * emitting `R.java` for [customPackage] — and, for each entry in [extraPackages] (dependency
      * android-lib packages), an additional `R.java` with the same merged IDs — under [genJavaDir].
+     *
+     * [overlays] are linked as aapt2 `-R` overlays (on top of [compiled]): each overrides a resource the base
+     * also defines and, with `--auto-add-overlay`, may add new ones — used by the layout preview to relink the
+     * live editor buffer over the build's compiled resources without recompiling the whole project.
      */
     fun link(
         compiled: List<Path>,
@@ -71,6 +149,7 @@ interface Aapt2 {
         nonFinalIds: Boolean = false,   // libraries generate a non-final R (IDs not inlined by the compiler)
         proguardRules: Path? = null,    // aapt2 `--proguard`: keep rules for manifest/layout-referenced classes (for R8)
         protoFormat: Boolean = false,   // aapt2 `--proto-format`: emit proto resources (R8 resource shrinking input)
+        overlays: List<Path> = emptyList(), // aapt2 `-R` overlays applied on top of [compiled]
     ): ToolResult
 
     /**
@@ -111,6 +190,57 @@ interface Dexer {
      * rewrites `java.*` backport call sites per it (the L8 step then dexes the runtime).
      */
     fun dexArchive(inputs: List<Path>, classpath: List<Path>, androidJar: Path, minApi: Int, release: Boolean, outDir: Path, threads: Int = 0, desugaredLibConfig: Path? = null): ToolResult
+
+    /**
+     * How a dex *merge* of [inputCount] independent inputs (per-library buckets or chunks) should be split into
+     * [dex] invocations and run. Returning null means "plan it for an in-process dexer" — the merge task then
+     * bounds concurrency by the *app* heap (`DexConcurrency`), one group per input.
+     *
+     * A dexer that runs the merge in a FORKED VM overrides this: a fork has its own large `-Xmx` and costs ~0
+     * app heap, so the app-heap bound is the wrong constraint. It instead batches many libraries per forked VM
+     * (so N per-library merges collapse to a handful of forked invocations) and reports how many forks the
+     * *device's available RAM* allows to run at once — see [MergePlan].
+     */
+    fun mergePlan(inputCount: Int): MergePlan? = null
+}
+
+/**
+ * A plan for a dex *merge* over a set of independent inputs (see [Dexer.mergePlan]). The merge task coalesces
+ * the inputs into at most [maxInvocations] groups (each its own `classes*.dex` group), and runs [concurrency]
+ * of them at a time with [threadsPerInvocation] D8 threads each.
+ */
+data class MergePlan(
+    /** Coalesce the independent inputs into at most this many [Dexer.dex] invocations. A forking dexer sets
+     *  this low (batch many libraries per forked VM); an unbounded value keeps one group per input. */
+    val maxInvocations: Int,
+    /** How many invocations to run concurrently. */
+    val concurrency: Int,
+    /** D8 `--thread-count` per invocation (so `concurrency × threads` doesn't oversubscribe cores). */
+    val threadsPerInvocation: Int,
+)
+
+/**
+ * Optional capability of a [Dexer]: run the per-jar library *archive* OFF the app heap (in a forked VM), so
+ * `dexBuilder` can archive several cold libraries at once instead of one-at-a-time in-process. The in-process
+ * dexer does not implement it — its archives hold `android.jar` in the app heap, so concurrency must stay
+ * bounded by `DexConcurrency`; a forked archive runs off that heap and is bounded by device RAM instead.
+ *
+ * Each jar is archived into its own per-class bucket (so the content-hash incremental reuse `dexBuilder`
+ * depends on is preserved — no batching, unlike the merge). Only the library scope routes through this; the
+ * project scope keeps the size-thresholded [Dexer.dexArchive] (a small incremental edit must not fork).
+ */
+interface OffHeapArchiveDexer {
+    /** Plan for archiving [jarCount] library jars off-heap. `concurrency` (forks at once) and
+     *  `threadsPerInvocation` are used; `maxInvocations` is not (each jar keeps its own bucket). Concurrency
+     *  is 1 when forking is unavailable here, so the caller falls back to serial in-process archiving. */
+    fun offHeapArchivePlan(jarCount: Int): MergePlan
+
+    /** Archive [jar] into [outDir] in a forked VM (one jar → its own per-class bucket), with [classpath] as the
+     *  desugaring classpath; falls back to in-process when forking isn't available. */
+    fun dexArchiveOffHeap(
+        jar: Path, classpath: List<Path>, androidJar: Path, minApi: Int, release: Boolean, outDir: Path,
+        threads: Int, desugaredLibConfig: Path?,
+    ): ToolResult
 }
 
 /** Pass-through R8 config: no shrink/optimize/obfuscate, so R8 behaves as a plain dexer. Used as a fallback

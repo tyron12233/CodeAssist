@@ -33,6 +33,40 @@ object AndroidVariants {
     fun defaultVariant(module: Module): AndroidVariant? =
         compute(module).let { all -> all.firstOrNull { it.name.endsWith("debug", ignoreCase = true) } ?: all.firstOrNull() }
 
+    /**
+     * Pick [lib]'s variant matching the [consumer] variant of a depender whose config is [consumerFacet].
+     * Build-type-first, then **flavor-dimension-aware** (a flavor matches only within the same dimension, not
+     * by raw name) preferring the most shared dimensions, then a **debuggability** fallback when the lib has no
+     * variant with the consumer's build type, finally the lib's default. Pure + testable. Null only when [lib]
+     * declares no variants (not an Android module).
+     */
+    fun matchLibraryVariant(lib: Module, consumer: AndroidVariant, consumerFacet: AndroidFacet): AndroidVariant? {
+        val libFacet = lib.facets.get(AndroidFacet.KEY) ?: return null
+        val all = compute(lib)
+        if (all.isEmpty()) return null
+        all.firstOrNull { it.name == consumer.name }?.let { return it }   // exact variant name
+
+        // The consumer's selected flavor in each dimension, and a lib flavor's dimension.
+        val consumerByDim: Map<String?, String> =
+            consumer.flavorNames.associateBy { fn -> consumerFacet.productFlavors.firstOrNull { it.name == fn }?.dimension }
+        fun libDim(fn: String): String? = libFacet.productFlavors.firstOrNull { it.name == fn }?.dimension
+        // Compatible iff for every dimension the lib variant fills, the consumer's flavor in that dimension
+        // matches (or the consumer has none in that dimension → lenient, lets a more-dimensioned lib still build).
+        fun flavorCompatible(v: AndroidVariant): Boolean =
+            v.flavorNames.all { lf -> val cf = consumerByDim[libDim(lf)]; cf == null || cf == lf }
+        fun sharedMatches(v: AndroidVariant): Int = v.flavorNames.count { lf -> consumerByDim[libDim(lf)] == lf }
+        fun debuggable(facet: AndroidFacet, buildType: String): Boolean =
+            facet.buildType(buildType)?.debuggable ?: buildType.equals("debug", ignoreCase = true)
+
+        all.filter { it.buildTypeName == consumer.buildTypeName && flavorCompatible(it) }
+            .maxByOrNull { sharedMatches(it) }?.let { return it }
+        // No variant with the consumer's build type: fall back to one with the same debuggability.
+        val consumerDebuggable = debuggable(consumerFacet, consumer.buildTypeName)
+        all.filter { debuggable(libFacet, it.buildTypeName) == consumerDebuggable && flavorCompatible(it) }
+            .maxByOrNull { sharedMatches(it) }?.let { return it }
+        return defaultVariant(lib)
+    }
+
     private fun defaultVariant(module: Module, requested: String): AndroidVariant? =
         if (requested == "main" || requested.isEmpty()) defaultVariant(module) else null
 
@@ -57,6 +91,9 @@ object AndroidVariants {
             buildTypeName = buildType,
             flavorNames = flavorNames,
             activeSourceSets = active,
+            // The UNFILTERED candidate names (before keeping only declared source sets), so a config-qualified
+            // dependency matches even when the module declares no source-set dir of that name.
+            configurations = relevant,
         )
     }
 
@@ -93,6 +130,7 @@ class AndroidVariant(
     val buildTypeName: String,
     val flavorNames: List<String>,
     override val activeSourceSets: List<SourceSet>,
+    override val configurations: Set<String> = emptySet(),
 ) : Variant {
     override fun resolvedScopes(): Set<DependencyScope> = setOf(
         DependencyScope.API,

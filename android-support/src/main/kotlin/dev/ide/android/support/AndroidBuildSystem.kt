@@ -4,10 +4,13 @@ import dev.ide.android.support.tasks.Aapt2CompileTask
 import dev.ide.android.support.tasks.Aapt2LinkTask
 import dev.ide.android.support.tasks.AndroidCompileTask
 import dev.ide.android.support.tasks.AndroidKotlinCompileTask
+import dev.ide.android.support.tasks.CheckAarMetadataTask
 import dev.ide.android.support.tasks.ConvertResourcesTask
 import dev.ide.android.support.tasks.DexArchiveBuilderTask
+import dev.ide.android.support.tasks.DexExternalLibsTask
 import dev.ide.android.support.tasks.DexMergeTask
 import dev.ide.android.support.tasks.GenerateLibraryRTask
+import dev.ide.android.support.tasks.GenerateRJarTask
 import dev.ide.android.support.tasks.GenerateViewBindingTask
 import dev.ide.android.support.gms.GoogleServices
 import dev.ide.android.support.tasks.BundleTask
@@ -123,6 +126,10 @@ class AndroidBuildSystem(
      * signs (debug) rather than failing. Null resolver ⇒ everything uses [signing] (the prior behavior).
      */
     private val signingResolver: ((Module, String) -> SigningConfig?)? = null,
+    /** Max class-dex merged per batch when a debug scope is very large (the "Dex merge batch size" setting); a
+     *  large app's merge is split into chunks of this size so its working set stays bounded ([DexMergeTask]).
+     *  Read once per [createBuildGraph]; defaults to [DexMergeTask.DEFAULT_MERGE_CHUNK]. */
+    private val mergeChunk: () -> Int = { DexMergeTask.DEFAULT_MERGE_CHUNK },
 ) : BuildSystem {
 
     override val id: BuildSystemId = BuildSystemId.NATIVE
@@ -168,9 +175,10 @@ class AndroidBuildSystem(
         for (app in targets) {
             val variant = AndroidVariants.select(app, request.variant.name)
                 ?: AndroidVariants.defaultVariant(app) ?: continue
+            val appFacet = app.facets.get(AndroidFacet.KEY) ?: continue
             for (m in moduleClosure(app, byId)) {
                 if (!registered.add(m.id)) continue
-                if (m.facets.get(AndroidFacet.KEY) != null) registerAndroidLibrary(tasks, m, byId, withJar)
+                if (m.facets.get(AndroidFacet.KEY) != null) registerAndroidLibrary(tasks, m, byId, withJar, variant, appFacet)
                 else javaPlugin.registerModule(tasks, m, byId, withJar)   // reuse the Java plugin
             }
             appendApp(tasks, app, variant, request.goal, byId)
@@ -189,8 +197,8 @@ class AndroidBuildSystem(
         val v = variant.name.cap()
         fun step(s: String) = TaskName(":${app.name}:$s$v")
 
-        val libs = AndroidLibraries.resolve(app, layout.explodedAar)
-        val appModuleOutputs = app.classpath(DependencyScope.IMPLEMENTATION).entries
+        val libs = AndroidLibraries.resolve(app, layout.explodedAar, variant.configurations)
+        val appModuleOutputs = app.classpath(DependencyScope.IMPLEMENTATION, variant = variant.configurations).entries
             .filter { it.kind == ClasspathEntryKind.MODULE_OUTPUT }.map { Paths.get(it.root.path) }
 
         val closure = moduleClosure(app, byId)
@@ -205,10 +213,14 @@ class AndroidBuildSystem(
         val gmsJson = GoogleServices.findJson(layout.moduleDir, variant)
         val gmsRes = if (gmsJson != null) listOf(layout.generatedGmsRes) else emptyList()
 
-        val mergeResInputs = depAndroidLibs.flatMap { moduleRoots(it, ContentRole.ANDROID_RES) } +
+        // A dependency lib contributes the resources/assets of ITS matching variant (build-type-first), not
+        // all its source sets, so a debug-only or flavor-only resource doesn't leak into the wrong variant.
+        fun depRoots(dep: Module, role: ContentRole): List<Path> =
+            AndroidVariants.matchLibraryVariant(dep, variant, facet)?.let { roots(it, role) } ?: moduleRoots(dep, role)
+        val mergeResInputs = depAndroidLibs.flatMap { depRoots(it, ContentRole.ANDROID_RES) } +
             libs.resDirs + gmsRes + roots(variant, ContentRole.ANDROID_RES)
         val sourceRoots = roots(variant, ContentRole.SOURCE)
-        val assetsDirs = depAndroidLibs.flatMap { moduleRoots(it, ContentRole.ASSETS) } +
+        val assetsDirs = depAndroidLibs.flatMap { depRoots(it, ContentRole.ASSETS) } +
             libs.assetsDirs + roots(variant, ContentRole.ASSETS)
         val level = levelOf(app.languageLevel)
         val bt = facet.buildType(variant.buildTypeName)
@@ -254,12 +266,14 @@ class AndroidBuildSystem(
         val directDepKotlin = directModuleDeps(app, byId).filter { moduleHasKotlin(it) }
             .map { TaskName(":${it.name}:compileKotlin") }
         val kotlinClasspath = compileBootclasspath + libs.compileJars + appModuleOutputs + upstreamKotlin
-        val compileClasspath = kotlinClasspath + if (appHasKotlin) listOf(layout.kotlinClasses) else emptyList()
+        // The Java compile resolves `R` from the generated R.jar (Kotlin keeps resolving it from `R.java` source).
+        val compileClasspath = kotlinClasspath + listOf(layout.rJar) + if (appHasKotlin) listOf(layout.kotlinClasses) else emptyList()
 
         val mergeRes = step("mergeResources")
         val processManifest = step("processManifest")
         val aapt2Compile = step("aapt2Compile")
         val aapt2Link = step("aapt2Link")
+        val generateRFile = step("generateRFile")
         val compileKotlin = step("compileKotlin")
         val compile = step("compileJava")
         // buildFeatures { viewBinding }: generate <Layout>Binding.java from this module's own layouts, fed to
@@ -283,10 +297,16 @@ class AndroidBuildSystem(
             listOf(processGms)
         } else emptyList()
         tasks.task(mergeRes, mergeResDeps) { MergeResourcesTask(mergeRes, mergeResInputs, layout.mergedRes) }
+        // Fail early (before compilation) if a dependency AAR requires a higher compileSdk than the app has
+        // (AGP's checkAarMetadata). Gates processManifest so a violation stops the build with a clear message.
+        val checkAarMeta = step("checkAarMetadata")
+        tasks.task(checkAarMeta) {
+            CheckAarMetadataTask(checkAarMeta, libs.aarMetadata, facet.compileSdk, layout.aarMetadataCheck)
+        }
         // Merge dependency-library + AAR manifests into the app manifest (so their components/permissions
         // land in the APK), substituting ${applicationId} etc. The linked manifest is the merged one.
-        tasks.task(processManifest) {
-            ManifestMergeTask(processManifest, layout.manifest(facet), libraryManifests, manifestPlaceholders, facet.targetSdk, layout.mergedManifest)
+        tasks.task(processManifest, listOf(checkAarMeta)) {
+            ManifestMergeTask(processManifest, layout.manifest(facet), libraryManifests, manifestPlaceholders, facet.minSdk, facet.targetSdk, layout.mergedManifest)
         }
         tasks.task(aapt2Compile, listOf(mergeRes)) { Aapt2CompileTask(aapt2Compile, listOf(layout.mergedRes), layout.compiledRes, aapt2) }
         // A minify build needs aapt2's manifest/layout keep rules so R8 does not strip XML-referenced classes;
@@ -310,6 +330,8 @@ class AndroidBuildSystem(
                 protoFormat = protoResources,
             )
         }
+        // Package the generated R.java (app + every --extra-package) as R.jar bytecode instead of compiling it.
+        tasks.task(generateRFile, listOf(aapt2Link)) { GenerateRJarTask(generateRFile, layout.genJava, layout.rJar) }
         if (appHasKotlin) {
             tasks.task(compileKotlin, listOf(aapt2Link) + directDepCompiles + directDepKotlin + vbDep) {
                 AndroidKotlinCompileTask(
@@ -328,10 +350,11 @@ class AndroidBuildSystem(
             }
         }
 
-        // The app compiles the WHOLE gen tree — its own R plus the final R for every dependency-lib package.
+        // The app compiles its own sources + ViewBinding; `R` arrives as R.jar (from generateRFile) on the
+        // classpath, not as compiled source. Non-R generated files (e.g. Manifest.java) are still compiled.
         tasks.task(
             compile,
-            listOf(aapt2Link) + directDepCompiles + (if (appHasKotlin) listOf(compileKotlin) else emptyList()) + vbDep
+            listOf(aapt2Link, generateRFile) + directDepCompiles + (if (appHasKotlin) listOf(compileKotlin) else emptyList()) + vbDep
         ) {
             AndroidCompileTask(
                 compile,
@@ -356,11 +379,22 @@ class AndroidBuildSystem(
         val subProjectJars = closure.map { jarPath(it) }
         val moduleJarProducers = closure.map { TaskName(":${it.name}:jar") }
         val externalJars = libs.dexJars
+        // The app's R.jar (generateRFile): dexed in its OWN scope (rArchives) and merged into the PROJECT dex layer,
+        // where AGP keeps R — NOT the external scope. Content-hashed, so it re-dexes only when resources change,
+        // and being out of the external scope means a resource edit never re-dexes or re-merges the stable libraries.
+        val rJars = listOf(layout.rJar)
 
         // Core-library desugaring: extract the config when enabled and the host ships the artifacts. The R8
         // (minify) path emits L8 keep rules and shrinks the runtime; the D8 (debug) path keeps the whole runtime.
         val desugaring = if (facet.coreLibraryDesugaringEnabled) desugarLib else null
         val desugarJson = desugaring?.extractConfigJson(layout.desugarConfigJson)
+
+        // Fast external-library dexing: when desugaring applies (the per-lib archive cache is already whole-set
+        // keyed, so per-lib buckets buy no incrementality — see DexExternalLibsTask), dex the whole external
+        // classpath to indexed dex in ONE forked big-heap pass instead of per-lib archive + merge (~2.6x faster
+        // fresh on a high-RAM device; self-falls-back to in-process). minSdk >= 26 (no desugaring) keeps per-lib
+        // buckets for cross-project per-library reuse. Native multidex only (mono-dex merges everything as one).
+        val dexExtOnePass = facet.minSdk in 21..25 && externalJars.isNotEmpty() && !minify
 
         // The merged dex layers the packager assembles (renumbered into one classes*.dex set) + packageApk's deps.
         var dexDirs: List<Path>
@@ -381,9 +415,9 @@ class AndroidBuildSystem(
             val resourceShrink = if (shrinkResources) ResourceShrink(layout.protoAp, layout.shrunkProtoAp) else null
 
             val minifyTask = TaskName(":${app.name}:minify${v}WithR8")
-            tasks.task(minifyTask, listOf(aapt2Link, compile) + moduleJarProducers) {
+            tasks.task(minifyTask, listOf(aapt2Link, generateRFile, compile) + moduleJarProducers) {
                 R8MinifyTask(
-                    minifyTask, appProjectClasses + subProjectJars + externalJars, sdk.androidJar, facet.minSdk,
+                    minifyTask, appProjectClasses + subProjectJars + externalJars + rJars, sdk.androidJar, facet.minSdk,
                     keepRuleFiles, inlineRules, facet.r8FullMode,
                     layout.dexArchives.resolve("r8-staging"), layout.dex, shrinker,
                     mappingOutput = layout.mappingTxt,
@@ -407,34 +441,74 @@ class AndroidBuildSystem(
             // Debug: ONE dexBuilder archives each scope (per-class, content-addressed, internally incremental);
             // the scope merges combine the archives into indexed dex. AGP names: dexBuilder → mergeProjectDex /
             // mergeLibDex / mergeExtDex (native multidex), or → mergeDex (MERGE_ALL) for mono/legacy multidex.
+            // When forking the external classpath, R.jar is ALSO routed through a forked one-pass ([dexRDex],
+            // its own dex layer) rather than archived in dexBuilder + merged into the project layer: R is ~50
+            // dependency-package classes that dex GC-bound + single-threaded in-process (~5s), so the big-heap
+            // fork helps it too. Otherwise R stays in dexBuilder + the project merge (AGP's scope for R).
+            val forkedR = dexExtOnePass
             val dexBuilder = step("dexBuilder")
-            tasks.task(dexBuilder, listOf(compile) + moduleJarProducers) {
+            tasks.task(dexBuilder, listOf(compile, generateRFile) + moduleJarProducers) {
                 DexArchiveBuilderTask(dexBuilder, appProjectClasses, subProjectJars, externalJars, sdk.androidJar,
                     facet.minSdk, release, layout.dexArchives.resolve("project.jar"),
                     layout.projectArchives, layout.subArchives, layout.extArchives, dexer, dexCacheRoot,
-                    desugaredLibConfig = desugarJson)
+                    desugaredLibConfig = desugarJson,
+                    rJars = if (forkedR) emptyList() else rJars, rDexRoot = if (forkedR) null else layout.rArchives,
+                    // When one-passing the external classpath, keep ext libs on the desugaring classpath here but
+                    // don't archive them — DexExternalLibsTask dexes them to indexed dex directly.
+                    archiveExternalScope = !dexExtOnePass)
             }
+            // The "Dex merge batch size" setting, read once for this build (chunks a very large scope merge).
+            val mergeBatch = mergeChunk()
             if (facet.minSdk >= 21) {
                 // Native multidex: ART loads many dex, so keep the scopes split for the best incrementality.
                 val mergeProjectDex = step("mergeProjectDex")
+                // R.jar merges into the PROJECT layer (AGP's scope for R) unless it's forked into its own layer.
+                val projectMergeInputs = if (forkedR) listOf(layout.projectArchives) else listOf(layout.projectArchives, layout.rArchives)
                 tasks.task(mergeProjectDex, listOf(dexBuilder)) {
-                    DexMergeTask(mergeProjectDex, listOf(layout.projectArchives), sdk.androidJar, facet.minSdk, release, layout.projectDex, mergeDexer)
+                    DexMergeTask(mergeProjectDex, projectMergeInputs, sdk.androidJar, facet.minSdk, release, layout.projectDex, mergeDexer, mergeChunk = mergeBatch)
                 }
                 val dirs = arrayListOf(layout.projectDex)
                 val deps = arrayListOf(aapt2Link, mergeProjectDex)
                 if (subProjectJars.isNotEmpty()) {
                     val mergeLibDex = step("mergeLibDex")
                     tasks.task(mergeLibDex, listOf(dexBuilder)) {
-                        DexMergeTask(mergeLibDex, listOf(layout.subArchives), sdk.androidJar, facet.minSdk, release, layout.libDex, mergeDexer)
+                        DexMergeTask(mergeLibDex, listOf(layout.subArchives), sdk.androidJar, facet.minSdk, release, layout.libDex, mergeDexer, mergeChunk = mergeBatch)
                     }
                     dirs.add(layout.libDex); deps.add(mergeLibDex)
                 }
-                if (externalJars.isNotEmpty()) {
+                if (externalJars.isNotEmpty() && dexExtOnePass) {
+                    // One forked big-heap pass: whole external classpath → indexed dex, content-addressed by the
+                    // library set. Sequenced AFTER the in-process dex tasks (dexBuilder + the project/lib merges;
+                    // not a data dep — it reads the library jars): the forked VM and the in-process dexers both
+                    // want all cores + heap, so overlapping them makes BOTH slower. Run alone, it gets the full
+                    // machine (~6s vs ~15s contended).
+                    val dexExtLibs = step("dexExtLibs")
+                    tasks.task(dexExtLibs, deps.toList()) {
+                        DexExternalLibsTask(dexExtLibs, externalJars, sdk.androidJar, facet.minSdk, release, layout.extDex, mergeDexer, desugarJson, dexCacheRoot?.resolve("ext-indexed"))
+                    }
+                    dirs.add(layout.extDex); deps.add(dexExtLibs)
+                }
+                if (forkedR) {
+                    // R.jar → its own indexed dex layer + cache namespace via the forked big-heap one-pass (so a
+                    // resource edit re-dexes only R, never the 61 libs). Sequenced after the other dex tasks (incl.
+                    // dexExtLibs) so the forked VMs don't overlap and contend. The fork wins even for R's classes:
+                    // D8 in-process is GC-bound on ART's ~576MB app heap (measured 5.9s in-process vs 3.1s forked),
+                    // and that holds whether or not android.jar is loaded — it's D8's own working set, not the
+                    // library. R is the app's FINAL R for every lib package (--extra-packages), so it is not tiny.
+                    val dexRDex = step("dexRDex")
+                    tasks.task(dexRDex, listOf(generateRFile) + deps.toList()) {
+                        DexExternalLibsTask(dexRDex, rJars, sdk.androidJar, facet.minSdk, release, layout.rDex, mergeDexer, desugarJson, dexCacheRoot?.resolve("r-indexed"))
+                    }
+                    dirs.add(layout.rDex); deps.add(dexRDex)
+                }
+                if (externalJars.isNotEmpty() && !dexExtOnePass) {
                     val mergeExtDex = step("mergeExtDex")
                     // Below AGP's LIBRARIES_MERGING_THRESHOLD: merge per-library (more dex files, finer isolation).
                     val perLib = externalJars.size <= extMergeThreshold(facet.minSdk)
                     tasks.task(mergeExtDex, listOf(dexBuilder)) {
-                        DexMergeTask(mergeExtDex, listOf(layout.extArchives), sdk.androidJar, facet.minSdk, release, layout.extDex, mergeDexer, groupPerBucket = perLib)
+                        // External libs are immutable + pinned, so their MERGED dex is content-addressable and
+                        // reused across builds/cleans/projects (mergeCacheRoot) — not just the per-lib archives.
+                        DexMergeTask(mergeExtDex, listOf(layout.extArchives), sdk.androidJar, facet.minSdk, release, layout.extDex, mergeDexer, groupPerBucket = perLib, mergeChunk = mergeBatch, mergeCacheRoot = dexCacheRoot?.resolve("merged-ext"))
                     }
                     dirs.add(layout.extDex); deps.add(mergeExtDex)
                 }
@@ -443,8 +517,8 @@ class AndroidBuildSystem(
                 // Mono-/legacy-multidex (minSdk < 21): merge every scope into a single classes.dex set.
                 val mergeDex = step("mergeDex")
                 tasks.task(mergeDex, listOf(dexBuilder)) {
-                    DexMergeTask(mergeDex, listOf(layout.projectArchives, layout.subArchives, layout.extArchives),
-                        sdk.androidJar, facet.minSdk, release, layout.dex, mergeDexer)
+                    DexMergeTask(mergeDex, listOf(layout.projectArchives, layout.subArchives, layout.extArchives, layout.rArchives),
+                        sdk.androidJar, facet.minSdk, release, layout.dex, mergeDexer, mergeChunk = mergeBatch)
                 }
                 dexDirs = listOf(layout.dex); pkgDeps = listOf(aapt2Link, mergeDex)
             }
@@ -501,11 +575,16 @@ class AndroidBuildSystem(
      * shared `processResources`/`classes`/`jar` lifecycle from the Java plugin. A plain `java-lib` goes
      * straight through [JavaPlugin.registerModule]; this is the android variant of that.
      */
-    private fun registerAndroidLibrary(tasks: TaskContainer, m: Module, byId: Map<ModuleId, Module>, withJar: Boolean) {
+    private fun registerAndroidLibrary(tasks: TaskContainer, m: Module, byId: Map<ModuleId, Module>, withJar: Boolean, consumerVariant: AndroidVariant, consumerFacet: AndroidFacet) {
         val classesOut = Paths.get(m.outputDir.path)
         val buildDir = classesOut.parent
-        val libs = AndroidLibraries.resolve(m, buildDir.resolve("intermediates").resolve("exploded-aar"))
-        val moduleOutputs = m.classpath(DependencyScope.IMPLEMENTATION).entries
+        // Build this dependency lib in the variant matching the app being assembled (build-type + dimension-aware
+        // flavor match); its variant-scoped source sets, resources, R and library deps are used, not all sets.
+        val libVariant = AndroidVariants.matchLibraryVariant(m, consumerVariant, consumerFacet)
+        val configs = libVariant?.configurations
+        fun srcRoots(role: ContentRole): List<Path> = libVariant?.let { roots(it, role) } ?: moduleRoots(m, role)
+        val libs = AndroidLibraries.resolve(m, buildDir.resolve("intermediates").resolve("exploded-aar"), configs)
+        val moduleOutputs = m.classpath(DependencyScope.IMPLEMENTATION, variant = configs).entries
             .filter { it.kind == ClasspathEntryKind.MODULE_OUTPUT }.map { Paths.get(it.root.path) }
         val level = levelOf(m.languageLevel)
         val facet = m.facets.get(AndroidFacet.KEY)!!
@@ -513,7 +592,7 @@ class AndroidBuildSystem(
         val upstreamKotlin = moduleOutputs.map { it.resolveSibling("kotlin-classes") }
         val classpath = ArrayList(compileBootclasspath + libs.compileJars + moduleOutputs + upstreamKotlin)
         val compileDeps = directModuleDeps(m, byId).map { TaskName(":${it.name}:compileJava") }.toMutableList()
-        val sourceRoots = moduleRoots(m, ContentRole.SOURCE)
+        val sourceRoots = srcRoots(ContentRole.SOURCE)
 
         val rRoot = buildDir.resolve("intermediates").resolve("r")
         val generateR = TaskName(":${m.name}:generateR")
@@ -521,7 +600,7 @@ class AndroidBuildSystem(
         tasks.task(generateR) {
             GenerateLibraryRTask(
                 generateR,
-                moduleRoots(m, ContentRole.ANDROID_RES),
+                srcRoots(ContentRole.ANDROID_RES),
                 buildDir.parent.resolve(facet.manifest),
                 sdk.androidJar,
                 facet.namespace,
@@ -533,9 +612,11 @@ class AndroidBuildSystem(
                 aapt2
             )
         }
-        val rClasses = rRoot.resolve("classes")
-        tasks.task(compileR, listOf(generateR)) { AndroidCompileTask(compileR, emptyList(), rRoot.resolve("gen"), compileBootclasspath, rClasses, level, bootClasspath) }
-        classpath.add(rClasses); compileDeps.add(compileR)
+        // The lib's own (non-final) R as R.jar bytecode — compile-only, kept OUT of the dexed output, so the
+        // app's final R wins at runtime. Same R.jar artifact shape as the app, generated not compiled.
+        val rJar = rRoot.resolve("R.jar")
+        tasks.task(compileR, listOf(generateR)) { GenerateRJarTask(compileR, rRoot.resolve("gen"), rJar) }
+        classpath.add(rJar); compileDeps.add(compileR)
 
         // buildFeatures { viewBinding }: a lib generates bindings from its OWN layouts (against its own R) and,
         // unlike R, they are real code — compiled into the lib's output, so they dex into the AAR/jar.
@@ -543,7 +624,7 @@ class AndroidBuildSystem(
         val libViewBinding = if (facet.buildFeatures.viewBinding) TaskName(":${m.name}:generateViewBinding") else null
         if (libViewBinding != null) {
             tasks.task(libViewBinding) {
-                GenerateViewBindingTask(libViewBinding, moduleRoots(m, ContentRole.ANDROID_RES), facet.namespace, vbDir)
+                GenerateViewBindingTask(libViewBinding, srcRoots(ContentRole.ANDROID_RES), facet.namespace, vbDir)
             }
             compileDeps.add(libViewBinding)
         }
@@ -557,7 +638,7 @@ class AndroidBuildSystem(
         if (libHasKotlin) {
             val compileKotlin = TaskName(":${m.name}:compileKotlin")
             val depKotlin = directModuleDeps(m, byId).filter { moduleHasKotlin(it) }.map { TaskName(":${it.name}:compileKotlin") }
-            val kotlinCp = compileBootclasspath + libs.compileJars + moduleOutputs + upstreamKotlin + rClasses
+            val kotlinCp = compileBootclasspath + libs.compileJars + moduleOutputs + upstreamKotlin + listOf(rJar)
             tasks.task(compileKotlin, listOf(compileR) + compileDeps.filter { it != compileR } + depKotlin) {
                 AndroidKotlinCompileTask(m, compileKotlin, sourceRoots, rRoot.resolve("gen"), kotlinCp, libKotlin, level, bootClasspath, kotlin, plugins, extraGenDirs = libVbGenDirs)
             }
@@ -578,7 +659,7 @@ class AndroidBuildSystem(
             )
         }
         val procRes = TaskName(":${m.name}:processResources")
-        tasks.task(procRes) { ProcessResourcesTask(procRes, moduleRoots(m, ContentRole.RESOURCE), buildDir.resolve("resources")) }
+        tasks.task(procRes) { ProcessResourcesTask(procRes, srcRoots(ContentRole.RESOURCE), buildDir.resolve("resources")) }
         val classes = TaskName(":${m.name}:classes")
         val classDirs = listOf(classesOut) + if (libHasKotlin) listOf(libKotlin) else emptyList()
         tasks.task(classes, listOf(compile, procRes)) { LifecycleTask(classes, trackedDirs = classDirs + buildDir.resolve("resources")) }
@@ -634,9 +715,12 @@ class AndroidBuildSystem(
         val mergedRes: Path = inter.resolve("merged-res")
         val compiledRes: Path = inter.resolve("res")
         val explodedAar: Path = inter.resolve("exploded-aar")
+        val aarMetadataCheck: Path = inter.resolve("aar-metadata-check").resolve("check.stamp") // checkAarMetadata marker
         val mergedManifest: Path = inter.resolve("merged-manifest").resolve("AndroidManifest.xml")
         val generatedGmsRes: Path = buildDir.resolve("generated").resolve("res").resolve("google-services").resolve(variantName)
         val genJava: Path = inter.resolve("gen")
+        // AGP's compile_and_runtime_not_namespaced_r_class_jar: the R classes as bytecode, not compiled R.java.
+        val rJar: Path = inter.resolve("compile_and_runtime_not_namespaced_r_class_jar").resolve("R.jar")
         val viewBindingGen: Path = inter.resolve("gen-view-binding")  // ViewBinding <Layout>Binding.java
         val classes: Path = inter.resolve("classes")
         val kotlinClasses: Path = inter.resolve("kotlin-classes")   // K2 output (dexed as project scope)
@@ -644,9 +728,14 @@ class AndroidBuildSystem(
         val projectArchives: Path = dexArchives.resolve("project")  // dexBuilder: app classes, per content hash
         val subArchives: Path = dexArchives.resolve("sub")          // dexBuilder: sub-module jars, per content hash
         val extArchives: Path = dexArchives.resolve("ext")          // dexBuilder: external libs, per content hash
+        // The app's R.jar is dexed into its OWN archive root (not the external scope) and MERGED into the project
+        // dex layer (mergeProjectDex) — AGP keeps R in the project scope. This keeps `extArchives` pure external
+        // libraries, so mergeExtDex is stable across resource edits (only the project layer re-merges when R shifts).
+        val rArchives: Path = dexArchives.resolve("r")              // dexBuilder: the app's R.jar, per content hash
         val projectDex: Path = inter.resolve("project-dex")     // mergeProjectDex output (app code)
         val libDex: Path = inter.resolve("lib-dex")             // mergeLibDex output (sub-module code)
-        val extDex: Path = inter.resolve("ext-dex")             // mergeExtDex output (external library code)
+        val extDex: Path = inter.resolve("ext-dex")             // mergeExtDex / dexExtLibs output (external library code)
+        val rDex: Path = inter.resolve("r-dex")                 // dexRDex output (the app's R.jar as its own dex layer)
         val resourcesAp: Path = inter.resolve("resources.ap_")
         val aaptProguardRules: Path = inter.resolve("aapt_rules.txt") // keep rules aapt2 derives from the manifest
         val proguardDefaults: Path = inter.resolve("proguard-defaults") // bundled default proguard files, extracted
@@ -687,6 +776,35 @@ class AndroidBuildSystem(
             return buildDir.resolve("outputs").resolve("bundle").resolve(variantName).resolve("${module.name}-$variantName.aab")
         }
 
+        private fun interDir(module: Module, variantName: String): Path =
+            Paths.get(module.outputDir.path).parent.resolve("intermediates").resolve("android").resolve(variantName)
+
+        /** aapt2-linked resources (`resources.ap_`: binary manifest + `resources.arsc` + compiled res XML) for
+         *  [module]+[variantName] (matches [Layout.resourcesAp]) — the real `Resources` input for the on-device
+         *  layout preview. Exists only after a build/assemble has linked resources. */
+        fun resourcesApPath(module: Module, variantName: String): Path = interDir(module, variantName).resolve("resources.ap_")
+
+        /** The non-namespaced `R.jar` (AGP's `compile_and_runtime_not_namespaced_r_class_jar`) for [module]+
+         *  [variantName] (matches [Layout.rJar]) — the R classes (app + dep packages) whose ids match
+         *  [resourcesApPath]'s arsc, so library views' `R.styleable.*` resolve correctly at inflate time. */
+        fun rJarPath(module: Module, variantName: String): Path =
+            interDir(module, variantName).resolve("compile_and_runtime_not_namespaced_r_class_jar").resolve("R.jar")
+
+        /** The aapt2-compiled resource archives dir for [module]+[variantName] (matches [Layout.compiledRes]) —
+         *  the per-directory `res-*.zip` flats the link consumes. Reused as the base for the real-view preview's
+         *  live relink (overlay the edited layout, skip recompiling the whole project). */
+        fun compiledResPath(module: Module, variantName: String): Path = interDir(module, variantName).resolve("res")
+
+        /** The merged (app + library) `AndroidManifest.xml` for [module]+[variantName] (matches
+         *  [Layout.mergedManifest]) — the manifest the link uses; reused by the real-view preview relink. */
+        fun mergedManifestPath(module: Module, variantName: String): Path =
+            interDir(module, variantName).resolve("merged-manifest").resolve("AndroidManifest.xml")
+
+        /** Where AARs are exploded for [module]+[variantName] (matches [Layout.explodedAar]) — passed to
+         *  [AndroidLibraries.resolve] so the real-view preview resolves the SAME runtime library set the build
+         *  dexes (reusing the build's explosion when present). */
+        fun explodedAarPath(module: Module, variantName: String): Path = interDir(module, variantName).resolve("exploded-aar")
+
         /**
          * AGP's external-library merge threshold (`DexMergingTask.LIBRARIES_MERGING_THRESHOLD` / its M+
          * cousin): at/below it, external libs are merged per-library (more `classes*.dex` files but finer
@@ -715,10 +833,13 @@ class AndroidBuildSystem(
          * ART (where `java -jar` is impossible); the desktop test runs it too, so the on-device dex/sign
          * code path is exercised on the host.
          */
-        fun inProcess(sdk: AndroidSdk, signing: SigningConfig, bootClasspath: List<Path> = emptyList(), kotlin: IncrementalKotlinCompiler? = null, plugins: List<KotlinCompilerPlugin> = BUILTIN_KOTLIN_COMPILER_PLUGINS, dexCacheRoot: Path? = null, desugarLib: DesugarLib? = null, signingResolver: ((Module, String) -> SigningConfig?)? = null, shrinker: Shrinker? = null, mergeDexer: Dexer? = null): AndroidBuildSystem =
+        fun inProcess(sdk: AndroidSdk, signing: SigningConfig, bootClasspath: List<Path> = emptyList(), kotlin: IncrementalKotlinCompiler? = null, plugins: List<KotlinCompilerPlugin> = BUILTIN_KOTLIN_COMPILER_PLUGINS, dexCacheRoot: Path? = null, desugarLib: DesugarLib? = null, signingResolver: ((Module, String) -> SigningConfig?)? = null, shrinker: Shrinker? = null, dexer: Dexer? = null, mergeDexer: Dexer? = null, mergeChunk: () -> Int = { DexMergeTask.DEFAULT_MERGE_CHUNK }): AndroidBuildSystem =
             AndroidBuildSystem(
                 sdk, signing, bootClasspath,
-                dexer = D8InProcessDexer(),
+                // The dexBuilder ARCHIVE dexer. The host can inject a forked-VM D8 (an [OffHeapArchiveDexer]) so a
+                // big project jar / cold library archives off the app heap and several libraries archive at once;
+                // default keeps archiving in-process (app-heap-bounded by DexConcurrency).
+                dexer = dexer ?: D8InProcessDexer(),
                 // R8 is the heaviest in-process step (whole-program). On ART the host can inject a forked-VM
                 // shrinker that runs R8 with a bigger -Xmx than the app heap cap; default keeps it in-process.
                 shrinker = shrinker ?: R8InProcessShrinker(),
@@ -731,6 +852,7 @@ class AndroidBuildSystem(
                 dexCacheRoot = dexCacheRoot,
                 desugarLib = desugarLib,
                 signingResolver = signingResolver,
+                mergeChunk = mergeChunk,
             )
 
         /** A debug-signed [subprocess] build system, creating the shared debug keystore on demand. */

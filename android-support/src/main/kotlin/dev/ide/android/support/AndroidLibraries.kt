@@ -1,12 +1,16 @@
 package dev.ide.android.support
 
 import dev.ide.android.support.tools.AarExtractor
+import dev.ide.android.support.tools.AarMetadata
 import dev.ide.model.ClasspathEntryKind
 import dev.ide.model.DependencyScope
 import dev.ide.model.Module
 import java.nio.file.Files
 import java.nio.file.Path
 import java.nio.file.Paths
+
+/** A dependency AAR's `aar-metadata.properties` (AGP's `minCompileSdk` etc.), tagged with a display [name]. */
+data class AarMetadataRef(val name: String, val propertiesFile: Path)
 
 /** A module's resolved library dependencies, split into the forms the Android pipeline consumes. */
 class ResolvedLibraries(
@@ -18,6 +22,7 @@ class ResolvedLibraries(
     val aarPackages: List<String>, // AAR manifest packages → aapt2 `--extra-packages` (their `R` + custom attrs)
     val consumerProguardFiles: List<Path>, // AAR `proguard.txt` consumer keep rules, applied by the app's R8
     val aarManifests: List<Path>,  // AAR `AndroidManifest.xml` files → merged into the app manifest
+    val aarMetadata: List<AarMetadataRef>, // compile-scope AAR `aar-metadata.properties` → checkAarMetadata
 )
 
 /**
@@ -32,9 +37,9 @@ class ResolvedLibraries(
  */
 object AndroidLibraries {
 
-    fun resolve(module: Module, explodeRoot: Path): ResolvedLibraries {
-        val compileRoots = libraryRoots(module, DependencyScope.IMPLEMENTATION)
-        val runtimeRoots = libraryRoots(module, DependencyScope.RUNTIME_ONLY)
+    fun resolve(module: Module, explodeRoot: Path, variant: Set<String>? = null): ResolvedLibraries {
+        val compileRoots = libraryRoots(module, DependencyScope.IMPLEMENTATION, variant)
+        val runtimeRoots = libraryRoots(module, DependencyScope.RUNTIME_ONLY, variant)
 
         val compileJars = ArrayList<Path>()
         val dexJars = ArrayList<Path>()
@@ -44,26 +49,30 @@ object AndroidLibraries {
         val aarPackages = ArrayList<String>()
         val consumerProguardFiles = ArrayList<Path>()
         val aarManifests = ArrayList<Path>()
+        val aarMetadata = ArrayList<AarMetadataRef>()
 
         val cache = HashMap<Path, AarExtractor.Exploded>()
         fun explode(aar: Path) = cache.getOrPut(aar) { AarExtractor.explode(aar, explodeRoot.resolve(dirNameOf(aar))) }
 
-        fun addAarParts(classesJars: List<Path>, res: Path?, assets: Path?, jni: Path?, manifest: Path?, proguard: Path?) {
+        fun addAarParts(classesJars: List<Path>, res: Path?, assets: Path?, jni: Path?, manifest: Path?, proguard: Path?, metadata: Path?, name: String) {
             compileJars.addAll(classesJars)
             res?.let { resDirs.add(it) }
             assets?.let { assetsDirs.add(it) }
             jni?.let { jniLibDirs.add(it) }
             manifest?.let { manifestPackage(it)?.let(aarPackages::add); aarManifests.add(it) }
             proguard?.let { consumerProguardFiles.add(it) }
+            metadata?.let { aarMetadata.add(AarMetadataRef(name, it)) }
         }
 
         for (root in compileRoots) when {
-            isAar(root) -> explode(root).let { addAarParts(it.classesJars, it.resDir, it.assetsDir, it.jniDir, it.manifest, it.proguardTxt) }
+            isAar(root) -> explode(root).let { addAarParts(it.classesJars, it.resDir, it.assetsDir, it.jniDir, it.manifest, it.proguardTxt, it.aarMetadata, root.fileName.toString()) }
             // A Maven-resolved AAR is stored as its exploded `classes.jar`; its res/assets/jni/manifest/proguard are siblings.
             isExplodedAar(root) -> root.parent.let { dir ->
                 addAarParts(listOf(root), dirOrNull(dir, "res"), dirOrNull(dir, "assets"), dirOrNull(dir, "jni"),
                     dir.resolve("AndroidManifest.xml").takeIf { Files.isRegularFile(it) },
-                    dir.resolve("proguard.txt").takeIf { Files.isRegularFile(it) })
+                    dir.resolve("proguard.txt").takeIf { Files.isRegularFile(it) },
+                    dir.resolve(AarMetadata.ENTRY_PATH).takeIf { Files.isRegularFile(it) },
+                    dir.fileName?.toString() ?: root.toString())
             }
             isJar(root) -> compileJars.add(root)
         }
@@ -75,12 +84,12 @@ object AndroidLibraries {
         return ResolvedLibraries(
             compileJars.distinct(), dexJars.distinct(), resDirs.distinct(), assetsDirs.distinct(),
             jniLibDirs.distinct(), aarPackages.distinct(), consumerProguardFiles.distinct(),
-            aarManifests.distinct(),
+            aarManifests.distinct(), aarMetadata.distinct(),
         )
     }
 
-    private fun libraryRoots(module: Module, scope: DependencyScope): List<Path> =
-        module.classpath(scope).entries
+    private fun libraryRoots(module: Module, scope: DependencyScope, variant: Set<String>?): List<Path> =
+        module.classpath(scope, variant = variant).entries
             .filter { it.kind == ClasspathEntryKind.LIBRARY }
             .map { Paths.get(it.root.path) }
 

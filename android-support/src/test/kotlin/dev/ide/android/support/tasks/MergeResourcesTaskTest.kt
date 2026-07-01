@@ -55,4 +55,52 @@ class MergeResourcesTaskTest {
             tmp.toFile().deleteRecursively()
         }
     }
+
+    /**
+     * Two libraries declaring the same-named `<declare-styleable>` with DISJOINT attrs must have their
+     * child `<attr>` declarations UNIONED, not last-wins-overridden (aapt2 semantics). The device failure:
+     * AppCompat and Material both ship `<declare-styleable name="SearchView">`; overriding dropped Material's
+     * `dividerVisible`/`containedAnimationEnabled` (declared ONLY there), so a style referencing them failed
+     * `aapt2 link` with "style attribute 'attr/dividerVisible' not found".
+     */
+    @Test
+    fun sameNamedStyleableUnionsChildAttrs() = runBlocking {
+        val tmp = Files.createTempDirectory("merge-styleable")
+        try {
+            // AppCompat-shaped SearchView: bare references + its own attrs.
+            val appcompat = writeValues(tmp.resolve("appcompat"), "values",
+                "<declare-styleable name=\"SearchView\">" +
+                    "<attr format=\"reference\" name=\"layout\"/>" +
+                    "<attr format=\"boolean\" name=\"iconifiedByDefault\"/>" +
+                    "</declare-styleable>")
+            // Material-shaped SearchView: the attrs declared ONLY here (format-bearing).
+            val material = writeValues(tmp.resolve("material"), "values",
+                "<declare-styleable name=\"SearchView\">" +
+                    "<attr format=\"reference\" name=\"layout\"/>" +
+                    "<attr format=\"boolean\" name=\"dividerVisible\"/>" +
+                    "<attr format=\"boolean\" name=\"containedAnimationEnabled\"/>" +
+                    "</declare-styleable>")
+            val out = tmp.resolve("merged")
+
+            MergeResourcesTask(TaskName(":app:mergeResources"), listOf(appcompat, material), out)
+                .execute(SimpleTaskContext())
+
+            val text = Files.readString(out.resolve("values").resolve("values.xml"))
+            // Exactly one SearchView styleable survives, holding the UNION of both sources' attrs.
+            assertEquals(1, Regex("declare-styleable name=\"SearchView\"").findAll(text).count(),
+                "one merged SearchView styleable")
+            assertTrue(Regex("name=\"dividerVisible\"[^>]*format|format=[^>]*name=\"dividerVisible\"|format=\"boolean\" name=\"dividerVisible\"")
+                .containsMatchIn(text) || text.contains("name=\"dividerVisible\""),
+                "Material's dividerVisible attr must survive the union: $text")
+            assertTrue(text.contains("name=\"containedAnimationEnabled\""),
+                "Material's containedAnimationEnabled attr must survive the union")
+            assertTrue(text.contains("name=\"iconifiedByDefault\""),
+                "AppCompat's iconifiedByDefault attr must survive the union")
+            // `layout` is shared by both sources but must appear exactly once after dedup.
+            assertEquals(1, Regex("name=\"layout\"").findAll(text).count(),
+                "shared attr deduped to one declaration")
+        } finally {
+            tmp.toFile().deleteRecursively()
+        }
+    }
 }

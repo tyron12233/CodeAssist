@@ -11,6 +11,7 @@ import java.io.File
 import java.io.OutputStream
 import java.io.PrintStream
 import java.lang.reflect.InvocationTargetException
+import java.lang.reflect.Modifier
 import java.nio.file.Files
 import java.nio.file.Path
 import java.util.stream.Collectors
@@ -90,6 +91,14 @@ class DexClassLoaderRunner(private val cacheDir: File) : DexRunner {
                 return@withContext 1
             }
         val noArg = main.parameterCount == 0
+        // A static `main` is called with a null receiver; an INSTANCE `main` (a plain `class Test { fun main() }`)
+        // is invoked on a fresh instance built from the class's no-arg constructor.
+        val receiver: Any? = if (Modifier.isStatic(main.modifiers)) null else {
+            runCatching { clazz.getDeclaredConstructor().apply { isAccessible = true }.newInstance() }.getOrElse { t ->
+                log("Cannot instantiate $mainClass to run its instance main(): ${t.message ?: t}")
+                return@withContext 1
+            }
+        }
 
         val sink = ChunkStream(io)
         val printer = PrintStream(sink, true, "UTF-8")
@@ -100,7 +109,7 @@ class DexClassLoaderRunner(private val cacheDir: File) : DexRunner {
         try {
             System.setOut(printer); System.setErr(printer); System.setIn(io.stdin)
             io.started()
-            runInterruptible { if (noArg) main.invoke(null) else main.invoke(null, args.toTypedArray()) }
+            runInterruptible { if (noArg) main.invoke(receiver) else main.invoke(receiver, args.toTypedArray()) }
         } catch (e: InvocationTargetException) {
             when (val cause = e.targetException) {
                 is ControlledExit -> code =

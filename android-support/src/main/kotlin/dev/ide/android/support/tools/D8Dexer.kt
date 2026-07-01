@@ -60,12 +60,10 @@ class D8Dexer(
         Files.createDirectories(outDir)
         val existing = inputs.filter { Files.exists(it) }
         if (existing.isEmpty()) return ToolResult.fail("no class inputs to dex")
-        val cmd = buildList {
-            add(javaLauncher.toString());
-            addAll(vmArgs);
-            add("-cp");
-            add(toolCp);
-            add("com.android.tools.r8.D8")
+        // Everything D8 itself parses (NOT the JVM `-cp`/vmArgs) goes through a D8 `@<file>` argument file: the
+        // merge can have hundreds of input dex archives (+ a long desugaring classpath), and passing them inline
+        // overflows the OS argv limit when launching the forked VM ("error=7, Argument list too long").
+        val d8Args = buildList {
             add(if (release) "--release" else "--debug")
             // Archive mode = one intermediate .dex per input class file (D8 OutputMode.DexFilePerClassFile),
             // the per-class dexing dexBuilder runs; merge resolves the intermediates.
@@ -91,7 +89,17 @@ class D8Dexer(
             add("--output"); add(outDir.toString())
             addAll(existing.map { it.toString() })
         }
-        val r = Subprocess.run(cmd)
-        return r.copy(log = suppressBenignDexWarnings(r.log))
+        val argFile = Files.createTempFile(outDir, "d8-args", ".txt")
+        // One argument per line; D8/R8 split the file on whitespace (newlines included). Device + temp paths
+        // carry no spaces, so no quoting is needed.
+        Files.write(argFile, d8Args)
+        return try {
+            val cmd = listOf(javaLauncher.toString()) + vmArgs + listOf("-cp", toolCp, "com.android.tools.r8.D8", "@$argFile")
+            val r = Subprocess.run(cmd)
+            // A failed forked D8 dumps the process stderr (a Java stack trace); humanize it to the actual cause.
+            r.copy(log = DexDiagnostics.humanize(r.log))
+        } finally {
+            runCatching { Files.deleteIfExists(argFile) }
+        }
     }
 }
