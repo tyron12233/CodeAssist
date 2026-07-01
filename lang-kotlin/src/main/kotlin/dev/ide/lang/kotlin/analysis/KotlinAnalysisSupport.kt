@@ -10,7 +10,9 @@ import dev.ide.analysis.Diagnostic
 import dev.ide.analysis.DiagnosticProvider
 import dev.ide.analysis.DiagnosticSource
 import dev.ide.analysis.FixContext
+import dev.ide.analysis.QUICK_FIX_PROVIDER_EP
 import dev.ide.analysis.QuickFix
+import dev.ide.analysis.QuickFixProvider
 import dev.ide.analysis.WorkspaceEdit
 import dev.ide.lang.dom.TextRange
 import dev.ide.lang.kotlin.KotlinDiagnosticCodes
@@ -60,11 +62,30 @@ class KotlinImportActionProvider : ActionProvider {
     }
 }
 
+/** Code-keyed quick-fix: on `kt.abstractNotImplemented`, generate `override` stubs for the unimplemented
+ *  inherited abstract members into the class body (the "Implement members" lightbulb). */
+class KotlinImplementMembersFixProvider : QuickFixProvider {
+    override val forCodes = setOf(KotlinDiagnosticCodes.ABSTRACT_NOT_IMPLEMENTED)
+    override val languages = setOf(KOTLIN)
+
+    override fun fixes(diagnostic: Diagnostic, target: AnalysisTarget): List<QuickFix> {
+        val analyzer = target.resolver as? KotlinSourceAnalyzer ?: return emptyList()
+        val fix = analyzer.implementMembersFix(target.file, diagnostic.range.start) ?: return emptyList()
+        return listOf(object : QuickFix {
+            override val title = fix.title
+            override val kind = CodeActionKind.QUICK_FIX
+            override suspend fun computeEdits(ctx: FixContext): WorkspaceEdit =
+                WorkspaceEdit.of(ctx.target.file, *fix.edits.toTypedArray())
+        })
+    }
+}
+
 object KotlinAnalysisSupport {
     val PLUGIN = PluginId("kotlin-analysis")
 
     fun register(extensions: ExtensionRegistry, plugin: PluginId = PLUGIN) {
         extensions.register(DIAGNOSTIC_PROVIDER_EP, KotlinDiagnosticProvider(), plugin)
         extensions.register(ACTION_PROVIDER_EP, KotlinImportActionProvider(), plugin)
+        extensions.register(QUICK_FIX_PROVIDER_EP, KotlinImplementMembersFixProvider(), plugin)
     }
 }

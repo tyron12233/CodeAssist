@@ -24,6 +24,14 @@ class KotlinCallApplicabilityTest {
         return runBlocking { analyzer.incrementalParser.parseFull(doc); analyzer.analyze(doc.file).diagnostics }
     }
 
+    /** Multi-file project; analyze [focal]. For cross-file checks (the sealed type in one file, the `when` in another). */
+    private fun diagnoseMulti(files: Map<String, String>, focal: String): List<Diagnostic> {
+        val srcDir = tempProject(files)
+        val analyzer = KotlinSourceAnalyzer(fakeContext(srcDir))
+        val doc = SnippetDoc(files.getValue(focal), DiskFile(srcDir.resolve(focal)))
+        return runBlocking { analyzer.incrementalParser.parseFull(doc); analyzer.analyze(doc.file).diagnostics }
+    }
+
     // ---- overload applicability: argument TYPE ----
 
     @Test
@@ -312,6 +320,51 @@ class KotlinCallApplicabilityTest {
             d.any { it.code == "kt.whenExhaustive" && it.message.contains("Done") },
             "a `when` over a same-file sealed hierarchy missing `Done` must be flagged; got $d",
         )
+    }
+
+    @Test
+    fun nonExhaustiveCrossFileSealedWhenIsFlagged() {
+        // The sealed type + its subclasses live in one file; the `when` in another. Subclasses are same-module,
+        // so the model enumerates them all — this must flag the missing `Done`.
+        val d = diagnoseMulti(
+            mapOf(
+                "S.kt" to "package p\nsealed class S\nclass Loading : S()\nclass Done : S()\n",
+                "Use.kt" to "package p\nfun f(s: S): Int = when (s) {\n  is Loading -> 1\n}\n",
+            ),
+            "Use.kt",
+        )
+        assertTrue(
+            d.any { it.code == "kt.whenExhaustive" && it.message.contains("Done") },
+            "a cross-file sealed `when` missing `Done` must be flagged; got $d",
+        )
+    }
+
+    @Test
+    fun exhaustiveCrossFileSealedWhenNotFlagged() {
+        val d = diagnoseMulti(
+            mapOf(
+                "S.kt" to "package p\nsealed class S\nclass Loading : S()\nclass Done : S()\n",
+                "Use.kt" to "package p\nfun f(s: S): Int = when (s) {\n  is Loading -> 1\n  is Done -> 2\n}\n",
+            ),
+            "Use.kt",
+        )
+        assertTrue(d.none { it.code == "kt.whenExhaustive" }, "an exhaustive cross-file sealed `when` must not be flagged; got $d")
+    }
+
+    @Test
+    fun tooManyArgsForAllOverloadsFlagged() {
+        // No overload of `p` takes 3 args → `kt.argumentCount` "too many". (callNotApplicable's TooMany verdict.)
+        val d = diagnose("package p\nfun p(a: Int) {}\nfun p(a: Int, b: Int) {}\nfun h() { p(1, 2, 3) }")
+        assertTrue(
+            d.any { it.code == "kt.argumentCount" && it.message.contains("Too many") },
+            "a call exceeding every overload's arity must flag too-many; got $d",
+        )
+    }
+
+    @Test
+    fun argCountWithinAnOverloadNotFlagged() {
+        val d = diagnose("package p\nfun p(a: Int) {}\nfun p(a: Int, b: Int) {}\nfun h() { p(1, 2) }")
+        assertTrue(d.none { it.code == "kt.argumentCount" }, "a call matching an overload's arity must not flag; got $d")
     }
 
     @Test

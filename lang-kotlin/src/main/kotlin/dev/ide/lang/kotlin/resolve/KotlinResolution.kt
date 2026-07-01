@@ -18,13 +18,16 @@ import org.jetbrains.kotlin.psi.KtArrayAccessExpression
 import org.jetbrains.kotlin.psi.KtBinaryExpression
 import org.jetbrains.kotlin.psi.KtBinaryExpressionWithTypeRHS
 import org.jetbrains.kotlin.psi.KtBlockExpression
+import org.jetbrains.kotlin.psi.KtBreakExpression
 import org.jetbrains.kotlin.psi.KtCallExpression
 import org.jetbrains.kotlin.psi.KtCallableDeclaration
 import org.jetbrains.kotlin.psi.KtCatchClause
+import org.jetbrains.kotlin.psi.KtContinueExpression
 import org.jetbrains.kotlin.psi.KtClass
 import org.jetbrains.kotlin.psi.KtClassLiteralExpression
 import org.jetbrains.kotlin.psi.KtClassOrObject
 import org.jetbrains.kotlin.psi.KtConstantExpression
+import org.jetbrains.kotlin.psi.KtDelegatedSuperTypeEntry
 import org.jetbrains.kotlin.psi.KtDestructuringDeclaration
 import org.jetbrains.kotlin.psi.KtDoWhileExpression
 import org.jetbrains.kotlin.psi.KtExpression
@@ -33,6 +36,7 @@ import org.jetbrains.kotlin.psi.KtForExpression
 import org.jetbrains.kotlin.psi.KtFunction
 import org.jetbrains.kotlin.psi.KtFunctionLiteral
 import org.jetbrains.kotlin.psi.KtIfExpression
+import org.jetbrains.kotlin.psi.KtIsExpression
 import org.jetbrains.kotlin.psi.KtLambdaArgument
 import org.jetbrains.kotlin.psi.KtLambdaExpression
 import org.jetbrains.kotlin.psi.KtNameReferenceExpression
@@ -47,18 +51,60 @@ import org.jetbrains.kotlin.psi.KtReturnExpression
 import org.jetbrains.kotlin.psi.KtStringTemplateExpression
 import org.jetbrains.kotlin.psi.KtSuperExpression
 import org.jetbrains.kotlin.psi.KtThisExpression
+import org.jetbrains.kotlin.psi.KtThrowExpression
 import org.jetbrains.kotlin.psi.KtAnnotationEntry
 import org.jetbrains.kotlin.psi.KtValueArgument
 import org.jetbrains.kotlin.psi.KtValueArgumentList
+import org.jetbrains.kotlin.psi.KtWhenConditionIsPattern
+import org.jetbrains.kotlin.psi.KtWhenConditionWithExpression
+import org.jetbrains.kotlin.psi.KtWhenEntry
 import org.jetbrains.kotlin.psi.KtWhenExpression
 import org.jetbrains.kotlin.psi.KtWhileExpression
 import org.jetbrains.kotlin.psi.ValueArgument
+import org.jetbrains.kotlin.psi.psiUtil.containingClassOrObject
+import org.jetbrains.kotlin.psi.psiUtil.getStrictParentOfType
 
 /** The Compose calling-convention status of a code position (see [KotlinResolver.composableContextAt]). */
 enum class ComposableContext { COMPOSABLE, NON_COMPOSABLE, UNKNOWN }
 
 /** The suspend calling-convention status of a code position (see [KotlinResolver.suspendContextAt]). */
 enum class SuspendContext { SUSPEND, NON_SUSPEND, UNKNOWN }
+
+/**
+ * Opt-in counters for the resolver's compute-vs-cache behavior, off by default — when disabled each call
+ * site is a single volatile-guarded branch, so there is no production cost. The preview-lowering and
+ * completion benchmarks flip [enabled] to attribute cost between type inference and candidate enumeration,
+ * and to see how often a result is recomputed rather than served from the per-snapshot cache. Counts are
+ * approximate under concurrency (plain longs); the benchmarks drive them single-threaded.
+ */
+object KotlinResolverStats {
+    @Volatile var enabled: Boolean = false
+    @Volatile var inferCalls: Long = 0
+    @Volatile var inferComputes: Long = 0
+    @Volatile var callTargetsCalls: Long = 0
+    @Volatile var callTargetsComputes: Long = 0
+    fun reset() { inferCalls = 0; inferComputes = 0; callTargetsCalls = 0; callTargetsComputes = 0 }
+}
+
+/**
+ * The per-snapshot memo caches a [KotlinResolver] fills — inference, callee, the call's overload set, implicit
+ * receivers, and the compose/suspend context. They are pure for a given (immutable) parse, so they can be
+ * SHARED across the several resolvers a single keystroke builds over the same snapshot (the analyzer's
+ * diagnostics pass and the Compose preview lowerer each construct their own [KotlinResolver]). Sharing the
+ * caches — but NOT the resolver's transient per-resolution state ([KotlinResolver.narrowings] /
+ * `resolvingCallees`, which each instance keeps to itself) — means the second pass reuses the first's
+ * inference/overload work instead of recomputing it cold, without coupling the two passes' transient state.
+ * Every engine lane runs on one serialized worker (`EngineScheduler`), so a shared instance is never touched
+ * concurrently; plain maps suffice. A fresh instance (the default) is fully standalone, as before.
+ */
+class KotlinResolverCaches {
+    val infer = HashMap<KtExpression, KotlinType?>()
+    val callee = HashMap<KtCallExpression, KotlinSymbol?>()
+    val callTargets = HashMap<KtCallExpression, List<KotlinSymbol>>()
+    val implicitReceivers = HashMap<Int, List<KotlinType>>()
+    val composeCtx = HashMap<PsiElement, ComposableContext>()
+    val suspendCtx = HashMap<PsiElement, SuspendContext>()
+}
 
 /**
  * Resolution and the inference subset, computed over the LIVE [KtFile] (the buffer being edited).
@@ -71,6 +117,9 @@ class KotlinResolver(
     private val ktFile: KtFile,
     private val parsed: KotlinParsedFile,
     private val service: KotlinSymbolService,
+    /** Memo caches, sharable across the resolvers a single keystroke builds over the same parse snapshot (see
+     *  [KotlinResolverCaches]). Defaults to a private instance, so a standalone resolver behaves as before. */
+    private val caches: KotlinResolverCaches = KotlinResolverCaches(),
 ) {
     val fileContext: FileContext = run {
         val imports = ktFile.importDirectives.mapNotNull { imp ->
@@ -81,21 +130,17 @@ class KotlinResolver(
 
     // --- inference ---
 
-    // Per-snapshot memo caches. Inference + callee resolution are pure for a given (immutable) parse, but
+    // Per-snapshot memo caches (held by [caches], sharable across a keystroke's resolvers — see
+    // [KotlinResolverCaches]). Inference + callee resolution are pure for a given (immutable) parse, but
     // recursive and heavily re-entered (esp. on deeply nested Compose, where each call walks its whole ancestor
     // scope chain). Caching turns the O(depth² · calls) blowup into O(calls) — the difference between a ~20s and
-    // an instant preview. Safe because a [KotlinResolver] is created per parse snapshot (never reused across edits).
-    private val inferCache = HashMap<KtExpression, KotlinType?>()
-    private val calleeCache = HashMap<KtCallExpression, KotlinSymbol?>()
-    // The call's overload set (all candidates by name+receiver). Resolving it is classpath member/scope lookup;
-    // the analyze pass probes it more than once per call (missing-required-arg AND unknown-named-arg checks,
-    // plus named-argument completion), so memoize it per snapshot like the callee/infer caches above.
-    private val callTargetsCache = HashMap<KtCallExpression, List<KotlinSymbol>>()
-    private val implicitReceiversCache = HashMap<Int, List<KotlinType>>()
-    // Composable context is identical for every position inside one boundary (a function/accessor/lambda), and
-    // it's queried per call expression in the analyze pass, so memoize by that boundary element.
-    private val composeCtxCache = HashMap<PsiElement, ComposableContext>()
-    private val suspendCtxCache = HashMap<PsiElement, SuspendContext>()
+    // an instant preview. The aliases below keep every existing use site unchanged.
+    private val inferCache get() = caches.infer
+    private val calleeCache get() = caches.callee
+    private val callTargetsCache get() = caches.callTargets
+    private val implicitReceiversCache get() = caches.implicitReceivers
+    private val composeCtxCache get() = caches.composeCtx
+    private val suspendCtxCache get() = caches.suspendCtx
 
     // Smart-cast narrowings: a stack of `name → narrowed type` scopes the LOWERER pushes while lowering an
     // `if (x is T) { … }` then-branch (or `when (x) { is T -> … }`), so `x`'s members resolve against `T`.
@@ -116,12 +161,141 @@ class KotlinResolver(
         return null
     }
 
+    // --- smart casts (editor) ---
+    //
+    // The lowerer's [narrowings] stack above is push/pop-driven and only the interpreter uses it. The EDITOR
+    // (completion + diagnostics) never pushes onto it, so it derives smart casts the other way: PURELY from a
+    // name reference's POSITION in the (immutable) PSI, i.e. which `is` checks enclose it. Since that is a
+    // function of the expression alone, [inferType]'s cache holds it correctly. [typeOfName] consults it (gated
+    // to when the narrowing stack is empty, so the interpreter's flow-narrowing stays authoritative there).
+
+    /**
+     * The smart-cast type of a simple-name reference [name] used at [offset]: the type an `is` check in flow
+     * scope narrows it to. Covers the `if (x is T)` then-branch (and the `else` of an `if (x !is T)`), the
+     * short-circuit RHS of `x is T && …` / `x !is T || …`, a `when (x) { is T -> … }` branch, a `while (x is T)`
+     * body, and the statements after an `if (x !is T) return`/`throw`/`break`/`continue` early-exit guard. Null
+     * when no narrowing is in effect. Conservative like the lowerer: only a simple-name subject narrows, and only
+     * to a classifier that resolves (generic args erased, made non-null, since `is T` implies non-null `T`); a
+     * parameterized/unresolved cast target degrades to null. Soundness-wise this can only ADD members a value
+     * has after the user-written check (matching Kotlin), so a missed narrowing under-reports (never a false
+     * "unresolved"), and a spurious one only fails to flag an error Kotlin would, never the reverse.
+     */
+    private fun smartCastTypeAt(name: String, offset: Int): KotlinType? {
+        var child: PsiElement? = null
+        var node: PsiElement? = elementAt(offset)
+        while (node != null) {
+            when (node) {
+                // The then/else of an `if`, the body of a `while`, are each wrapped in a control-structure
+                // container node, so the use site is matched by RANGE, not by child identity against the
+                // (unwrapped) branch.
+                is KtIfExpression -> {
+                    if (node.then?.textRange?.contains(offset) == true) conditionNarrowing(node.condition, name, whenTrue = true)?.let { return it }
+                    if (node.`else`?.textRange?.contains(offset) == true) conditionNarrowing(node.condition, name, whenTrue = false)?.let { return it }
+                }
+                is KtWhileExpression ->
+                    if (node.body?.textRange?.contains(offset) == true) conditionNarrowing(node.condition, name, whenTrue = true)?.let { return it }
+                // The short-circuit RHS of `&&`/`||` sees the LHS's narrowing (`x is T && x.member`,
+                // `x !is T || x.member`). Only the RHS; the LHS itself runs unnarrowed (disjoint ranges).
+                is KtBinaryExpression -> if (node.right?.textRange?.contains(offset) == true) when (node.operationToken) {
+                    KtTokens.ANDAND -> conditionNarrowing(node.left, name, whenTrue = true)?.let { return it }
+                    KtTokens.OROR -> conditionNarrowing(node.left, name, whenTrue = false)?.let { return it }
+                    else -> {}
+                }
+                is KtWhenExpression -> whenSubjectNarrowing(node, child, name)?.let { return it }
+                is KtBlockExpression -> earlyExitNarrowing(node, child, name)?.let { return it }
+            }
+            child = node
+            node = node.parent
+        }
+        return null
+    }
+
+    /** The narrowing a condition imposes on [name] when it evaluates to [whenTrue]: from `name is T` (true side)
+     *  / `name !is T` (false side), conjoined through `&&` on the true side and `||` on the false side. Null when
+     *  the condition doesn't narrow [name] or the target won't resolve. Mirrors the lowerer's `conditionNarrowings`,
+     *  keyed to one name. */
+    private fun conditionNarrowing(cond: KtExpression?, name: String, whenTrue: Boolean): KotlinType? =
+        when (val c = unwrapParens(cond)) {
+            is KtIsExpression -> {
+                val lhs = (unwrapParens(c.leftHandSide) as? KtNameReferenceExpression)?.getReferencedName()
+                if (lhs == name && whenTrue != c.isNegated) typeFromIsTarget(c.typeReference?.text) else null
+            }
+            is KtBinaryExpression -> when (c.operationToken) {
+                KtTokens.ANDAND -> if (whenTrue) conditionNarrowing(c.left, name, true) ?: conditionNarrowing(c.right, name, true) else null
+                KtTokens.OROR -> if (!whenTrue) conditionNarrowing(c.left, name, false) ?: conditionNarrowing(c.right, name, false) else null
+                else -> null
+            }
+            else -> null
+        }
+
+    /** `when (subject) { is T -> ‹here› }` (or a subject `val`) narrows a simple-name subject to `T` inside a
+     *  positive single-`is` branch; a subjectless `when { name is T -> … }` narrows via the branch condition.
+     *  [fromChild] is the `when`'s child on the path; only a branch entry narrows (not the subject/`else`). */
+    private fun whenSubjectNarrowing(whenExpr: KtWhenExpression, fromChild: PsiElement?, name: String): KotlinType? {
+        val entry = fromChild as? KtWhenEntry ?: return null
+        if (entry.isElse) return null
+        val subjectName = whenSubjectName(whenExpr)
+        if (subjectName != null) {
+            if (subjectName != name) return null
+            // Only a single positive `is T` narrows; a comma branch (`is A, is B`) doesn't smart-cast.
+            val pattern = entry.conditions.singleOrNull() as? KtWhenConditionIsPattern ?: return null
+            return if (pattern.isNegated) null else typeFromIsTarget(pattern.typeReference?.text)
+        }
+        // Subjectless `when { name is T -> … }`: the branch condition is a boolean expression on names.
+        val condExpr = (entry.conditions.singleOrNull() as? KtWhenConditionWithExpression)?.expression ?: return null
+        return conditionNarrowing(condExpr, name, whenTrue = true)
+    }
+
+    /** The simple name a `when` narrows on: its subject `val` (`when (val y = …)` → `y`) or a simple-name
+     *  subject (`when (x)` → `x`); null for a computed/absent subject. */
+    private fun whenSubjectName(whenExpr: KtWhenExpression): String? {
+        whenExpr.subjectVariable?.name?.let { return it }
+        return (whenExpr.subjectExpression as? KtNameReferenceExpression)?.getReferencedName()
+    }
+
+    /** The narrowing in effect for [name] after a preceding early-exit guard in [block]: `if (name !is T) return`
+     *  makes `name` a `T` for the rest of the block. [fromChild] is the statement on the path to the use site;
+     *  only statements before it are guards. The last applicable guard wins. */
+    private fun earlyExitNarrowing(block: KtBlockExpression, fromChild: PsiElement?, name: String): KotlinType? {
+        var result: KotlinType? = null
+        for (st in block.statements) {
+            if (st === fromChild) break
+            val guard = st as? KtIfExpression ?: continue
+            if (guard.`else` != null) continue                // a fall-through `else` isn't an early exit
+            if (!branchAlwaysJumps(guard.then)) continue       // the then must transfer control out
+            // After `if (cond) <jump>`, the rest of the block holds cond == false.
+            conditionNarrowing(guard.condition, name, whenTrue = false)?.let { result = it }
+        }
+        return result
+    }
+
+    /** Whether [branch] unconditionally transfers control out of the enclosing block (so code after the guard
+     *  is reached only when the guard's condition was false): a `return`/`throw`/`break`/`continue`, or a block
+     *  whose last statement does. */
+    private fun branchAlwaysJumps(branch: KtExpression?): Boolean = when (val b = branch) {
+        is KtReturnExpression, is KtThrowExpression, is KtBreakExpression, is KtContinueExpression -> true
+        is KtBlockExpression -> branchAlwaysJumps(b.statements.lastOrNull() as? KtExpression)
+        else -> false
+    }
+
+    /** The classifier a smart-cast `is T` narrows to: generic args erased and made non-null. Null when [typeText]
+     *  is absent or doesn't resolve. */
+    private fun typeFromIsTarget(typeText: String?): KotlinType? {
+        val text = typeText?.substringBefore('<')?.removeSuffix("?")?.trim()?.takeIf { it.isNotEmpty() } ?: return null
+        return runCatching { service.typeFromText(text, fileContext) }.getOrNull()
+    }
+
+    private fun unwrapParens(e: KtExpression?): KtExpression? =
+        if (e is KtParenthesizedExpression) unwrapParens(e.expression) else e
+
     fun inferType(expr: KtExpression?): KotlinType? {
         if (expr == null) return null
+        if (KotlinResolverStats.enabled) KotlinResolverStats.inferCalls++
         // A narrowed type is flow-dependent, not a property of the expression alone — bypass the cache so it
         // can't leak across narrowing scopes.
         val cacheable = narrowings.isEmpty()
         if (cacheable && inferCache.containsKey(expr)) return inferCache[expr]
+        if (KotlinResolverStats.enabled) KotlinResolverStats.inferComputes++
         val r = when (expr) {
             is KtParenthesizedExpression -> inferType(expr.expression)
             is KtConstantExpression -> constType(expr)
@@ -136,11 +310,12 @@ class KotlinResolver(
             is KtBinaryExpressionWithTypeRHS -> castType(expr)
             is KtPrefixExpression -> inferPrefixType(expr)
             is KtArrayAccessExpression -> inferArrayGet(expr)
-            // `if`/`when` used as an expression: the value is one of the branches, so its type is the type of
-            // a branch — the `then`/`else` of an `if`, the first typeable entry of a `when`. (A common Compose
-            // pattern: `Icon(if (selected) IconA else IconB, …)` — typing the arg disambiguates the overload.)
-            is KtIfExpression -> inferType(branchExpr(expr.then)) ?: inferType(branchExpr(expr.`else`))
-            is KtWhenExpression -> expr.entries.firstNotNullOfOrNull { inferType(branchExpr(it.expression)) }
+            // `if`/`when` used as an expression: the value is one of the branches, so its type is the common
+            // type of the branches — made nullable if any branch is `null` (`fun f(): E? = when(x){ a->E.A;
+            // else->null }`). (A common Compose pattern: `Icon(if (selected) IconA else IconB, …)` — typing the
+            // arg disambiguates the overload.)
+            is KtIfExpression -> inferBranchUnion(listOf(expr.then, expr.`else`))
+            is KtWhenExpression -> inferBranchUnion(expr.entries.map { it.expression })
             else -> null
         }
         if (cacheable) inferCache[expr] = r
@@ -248,6 +423,26 @@ class KotlinResolver(
         else -> branch
     }
 
+    /** The type of an `if`/`when` used as an expression: the common classifier of its branches, made nullable
+     *  if any branch is `null` (or itself nullable). Conservative — if the typeable branches disagree on
+     *  classifier, or any branch's type is unknown, returns null so the type-mismatch check backs off rather
+     *  than guess a least-upper-bound (which could false-positive against a more specific declared type). */
+    private fun inferBranchUnion(branches: List<KtExpression?>): KotlinType? {
+        var common: KotlinType? = null
+        var nullable = false
+        for (b in branches) {
+            val e = branchExpr(b) ?: continue
+            if (isNullBranch(e)) { nullable = true; continue }
+            val t = inferType(e) ?: return null // an unknown branch → can't confidently unify
+            if (t.nullable) nullable = true
+            if (common == null) common = t
+            else if (t.qualifiedName != common.qualifiedName) return null // branches disagree → give up
+        }
+        return common?.withNullable(nullable)
+    }
+
+    private fun isNullBranch(e: KtExpression): Boolean = e is KtConstantExpression && e.text.trim() == "null"
+
     /** `xs[i]` → the element type: the (substituted) return type of the receiver's `get(index)` operator
      *  (`List<String>.get` → `String`, `Map<K,V>.get` → `V?`). Null when the receiver type or `get` is unknown. */
     private fun inferArrayGet(e: KtArrayAccessExpression): KotlinType? {
@@ -308,6 +503,16 @@ class KotlinResolver(
     private fun typeOfQualified(q: KtQualifiedExpression): KotlinType? {
         // A fully-qualified type used directly (`android.R`, `java.util.Locale`) — resolve the whole text.
         if (service.isKnownType(q.text)) return service.typeByFqn(q.text)
+        // Static ENUM-CONSTANT access (`SomeEnum.A`): the constant's value type IS the enum. Resolve it via the
+        // receiver's TYPE denotation FIRST — so it works even when the receiver name also resolves to a value
+        // (an enum `E` shadowed by the top-level `kotlin.math.E`, a Double), and without this `SomeEnum.A` is
+        // mis-resolved as a nested classifier named `A`. Enum entries aren't instance members, so `membersNamed`
+        // never surfaces them.
+        (q.selectorExpression as? KtNameReferenceExpression)?.let { sel ->
+            typeDenotationFqn(q.receiverExpression)?.let { fqn ->
+                if (sel.getReferencedName() in enumConstantNames(fqn)) return service.typeByFqn(fqn)
+            }
+        }
         val receiverType = inferType(q.receiverExpression)
             ?: typeOfTypeName(q.receiverExpression) // receiver may be a class name (companion/static access)
             ?: return null
@@ -316,9 +521,9 @@ class KotlinResolver(
             is KtNameReferenceExpression -> {
                 val name = sel.getReferencedName()
                 // A member property/field, else a NESTED type/object reached through its enclosing type
-                // (`Icons.AutoMirrored`, `Icons.AutoMirrored.Filled`) — a classifier, not a member, so it
-                // resolves by probing the candidate nested FQN. This makes the receiver of an icon extension
-                // property (`Icons.AutoMirrored.Filled.List`) type, so the property binds as an extension.
+                // (`Icons.AutoMirrored`, `Icons.AutoMirrored.Filled`) — a classifier, not a member, resolved by
+                // probing the candidate nested FQN (so an icon extension-property receiver
+                // `Icons.AutoMirrored.Filled.List` types and the property binds as an extension).
                 memberNamed(receiverType, name)?.type as? KotlinType
                     ?: nestedType(receiverType.qualifiedName, name)
             }
@@ -1019,7 +1224,11 @@ class KotlinResolver(
     }
 
     private fun typeOfName(name: String, offset: Int): KotlinType? {
-        narrowedType(name)?.let { return it } // an active smart-cast (`if (x is T)`) overrides the declared type
+        narrowedType(name)?.let { return it } // the lowerer's explicit flow-narrowing stack
+        // Editor smart cast: an `if (x is T)` guard narrows `x` to `T` here (completion + diagnostics both
+        // resolve a receiver through inferType -> typeOfName). Off while the lowerer drives the stack above,
+        // so the interpreter keeps its own authoritative flow-narrowing.
+        if (narrowings.isEmpty()) smartCastTypeAt(name, offset)?.let { return it }
         localsAt(offset).firstOrNull { it.name == name }?.let { return it.type as? KotlinType }
         // Members of any implicit `this` (apply/with/run block, extension fn, enclosing class).
         for (recv in implicitReceiversAt(offset)) memberNamed(recv, name)?.let { return it.type as? KotlinType }
@@ -1404,7 +1613,9 @@ class KotlinResolver(
      *  functions + the constructors of a capitalized callee (source and classpath). Used to surface a call's
      *  parameters; resolution stays best-effort (overloads are all returned, the consumer unions them). */
     fun callTargets(call: KtCallExpression): List<KotlinSymbol> {
+        if (KotlinResolverStats.enabled) KotlinResolverStats.callTargetsCalls++
         callTargetsCache[call]?.let { return it }
+        if (KotlinResolverStats.enabled) KotlinResolverStats.callTargetsComputes++
         return computeCallTargets(call).also { callTargetsCache[call] = it }
     }
 
@@ -1607,6 +1818,11 @@ class KotlinResolver(
                 is KtReturnExpression ->
                     if (child === node.returnedExpression) return enclosingFunctionReturnType(node)
                 is KtValueArgument -> return expectedArgType(node)
+                // A `when`-entry condition with a SUBJECT (`when (color) { █ }`) expects the subject's type — so
+                // value completion offers its enum constants / companion constants. A subjectless `when` has
+                // Boolean conditions; left to the generic path (offering true/false there is low value).
+                is org.jetbrains.kotlin.psi.KtWhenConditionWithExpression ->
+                    node.getStrictParentOfType<KtWhenExpression>()?.subjectExpression?.let { s -> inferType(s)?.let { return it } }
                 // A condition is wrapped in a container node, so match by range rather than child identity.
                 is KtIfExpression -> if (node.condition?.textRange?.contains(offset) == true) return service.typeByFqn("kotlin.Boolean")
                 is KtWhileExpression -> if (node.condition?.textRange?.contains(offset) == true) return service.typeByFqn("kotlin.Boolean")
@@ -1679,6 +1895,140 @@ class KotlinResolver(
         if (Modifier.STATIC in m.modifiers || Modifier.PRIVATE in m.modifiers || Modifier.FINAL in m.modifiers) return false
         return true
     }
+
+    // --- inheritance diagnostics (missing-abstract / nothing-to-override / override-required) ---
+    //
+    // All three share [resolvedSupertypeMembers] and follow the engine's conservative contract: each returns a
+    // "can't decide → do nothing" result whenever any supertype is unresolved, the class uses interface
+    // delegation (`: I by impl`, which supplies the members invisibly), or there are no supertypes — so a
+    // parse-only model never false-positives. Member matching is name-based (+ arity / param simple-type names
+    // for functions): too loose only in the safe direction (a real error goes unreported, never the reverse).
+
+    /** Flattened members of [cls]'s whole RESOLVED supertype closure ([KotlinSymbolService.membersOf] already
+     *  returns own+inherited), or null when it can't be computed safely — no supertypes, a `by` delegation, or
+     *  any supertype FQN that doesn't resolve. Callers treat null as "back off, emit nothing". */
+    private fun resolvedSupertypeMembers(cls: KtClassOrObject): List<KotlinSymbol>? {
+        val entries = cls.superTypeListEntries
+        if (entries.isEmpty()) return null
+        if (entries.any { it is KtDelegatedSuperTypeEntry }) return null // `: Foo by delegate` supplies members
+        val fqns = entries.map { it.typeReference?.text?.let { t -> service.resolveTypeName(t, fileContext) } }
+        if (fqns.any { it == null }) return null // an unresolved supertype → we can't see the whole picture
+        return fqns.filterNotNull().distinct()
+            .flatMap { service.membersOf(it, emptyList(), null).filterIsInstance<KotlinSymbol>() }
+            .filter { !it.isExtension }
+    }
+
+    /** The inheritance problems found on one class — consumed by the diagnostics layer. [missing] is populated
+     *  only for a concrete implementor (an abstract class may leave abstracts unimplemented). */
+    class InheritanceReport(
+        val missing: List<KotlinSymbol>,
+        val overridesNothing: List<KtCallableDeclaration>,
+        val needsOverride: List<Pair<KtCallableDeclaration, KotlinSymbol>>,
+    ) {
+        val isEmpty: Boolean get() = missing.isEmpty() && overridesNothing.isEmpty() && needsOverride.isEmpty()
+        companion object { val EMPTY = InheritanceReport(emptyList(), emptyList(), emptyList()) }
+    }
+
+    /**
+     * All three inheritance checks for [cls] in ONE pass (the supertype closure is resolved once, not per
+     * member — important for per-keystroke cost). [concrete] gates the missing-abstract part (false for an
+     * abstract/sealed class, which may leave abstracts unimplemented). Returns [InheritanceReport.EMPTY] when
+     * the closure can't be resolved safely (see [resolvedSupertypeMembers]) — the conservative back-off.
+     */
+    fun inheritanceProblems(cls: KtClassOrObject, concrete: Boolean): InheritanceReport {
+        val closure = resolvedSupertypeMembers(cls) ?: return InheritanceReport.EMPTY
+        val byName: Map<String, List<KotlinSymbol>> = closure.groupBy { it.name }
+        val missing = if (concrete) unimplementedFrom(cls, closure) else emptyList()
+        val overridesNothing = ArrayList<KtCallableDeclaration>()
+        val needsOverride = ArrayList<Pair<KtCallableDeclaration, KotlinSymbol>>()
+        for (d in cls.declarations) {
+            val member = d as? KtCallableDeclaration ?: continue
+            if (member !is KtNamedFunction && member !is KtProperty) continue
+            val name = member.name ?: continue
+            val sameName = byName[name].orEmpty()
+            if (member.hasModifier(KtTokens.OVERRIDE_KEYWORD)) {
+                if (sameName.isEmpty()) overridesNothing += member // `override` but nothing carries this name
+            } else if (!member.hasModifier(KtTokens.PRIVATE_KEYWORD)) {
+                hiddenSupertypeMember(member, sameName)?.let { needsOverride += member to it }
+            }
+        }
+        return InheritanceReport(missing, overridesNothing, needsOverride)
+    }
+
+    /**
+     * The inherited ABSTRACT members [cls] leaves unimplemented — each as the [KotlinSymbol] to override (the
+     * "must implement abstract member" error + the implement-members fix consume these). Empty when nothing is
+     * missing OR the closure can't be resolved safely. An abstract member is "provided" if a concrete member of
+     * the same [memberKey] exists in [cls] or anywhere up the chain. Standalone entry for the quick-fix.
+     */
+    fun unimplementedAbstractMembers(cls: KtClassOrObject): List<KotlinSymbol> =
+        unimplementedFrom(cls, resolvedSupertypeMembers(cls) ?: return emptyList())
+
+    private fun unimplementedFrom(cls: KtClassOrObject, closure: List<KotlinSymbol>): List<KotlinSymbol> {
+        val provided = HashSet(ownMemberKeys(cls))
+        closure.forEach { if (it.isImplementableMember() && Modifier.ABSTRACT !in it.modifiers) provided += memberKey(it) }
+        val required = LinkedHashMap<String, KotlinSymbol>()
+        closure.forEach { m ->
+            if (m.isImplementableMember() && Modifier.ABSTRACT in m.modifiers) memberKey(m).let { if (it !in provided) required.putIfAbsent(it, m) }
+        }
+        return required.values.toList()
+    }
+
+    /** Only a method or a property is an "abstract member to implement" — a nested type (a `@Metadata`/bytecode
+     *  nested `interface`/`abstract class` surfaces as a `CLASS`-kind member carrying `ABSTRACT`, e.g.
+     *  `Activity.ScreenCaptureCallback`), a constructor, or an enum constant must never be required. */
+    private fun KotlinSymbol.isImplementableMember(): Boolean =
+        kind == SymbolKind.METHOD || kind == SymbolKind.FIELD
+
+    /** The inherited open/abstract member [member] (declared WITHOUT `override`) hides, or null. Matches a
+     *  function on arity + param simple-type names (so a genuine overload `f(String)` vs inherited `f(Int)` does
+     *  NOT match) and backs off on a `final`/`static` match (a different error). [sameName] = closure members
+     *  sharing the name. */
+    private fun hiddenSupertypeMember(member: KtCallableDeclaration, sameName: List<KotlinSymbol>): KotlinSymbol? {
+        if (sameName.isEmpty()) return null
+        val isFun = member is KtNamedFunction
+        val localParams = if (member is KtNamedFunction) member.valueParameters.map { simpleTypeName(it.typeReference?.text) } else emptyList()
+        val matches = sameName.filter { m ->
+            (m.kind == SymbolKind.METHOD) == isFun &&
+                if (isFun) m.paramTypes.size == localParams.size &&
+                    m.paramTypes.indices.all { i -> paramSimpleName(m.paramTypes[i]) == localParams[i] }
+                else true
+        }
+        if (matches.isEmpty()) return null
+        if (matches.any { Modifier.FINAL in it.modifiers || Modifier.STATIC in it.modifiers }) return null
+        return matches.first()
+    }
+
+    /** A name+shape key so a concrete member of the same shape (in the class or up the chain) counts as
+     *  implementing an abstract one. Functions key on name+arity (generics don't change arity); properties on name. */
+    private fun memberKey(m: KotlinSymbol): String =
+        if (m.kind == SymbolKind.METHOD) "M:${m.name}/${m.paramTypes.size}" else "P:${m.name}"
+
+    /** The keys [cls] itself supplies: declared functions/properties + primary-constructor `val`/`var`
+     *  properties. The `override` keyword is irrelevant here (a missing one is the override-required check's
+     *  concern, not a missing implementation). */
+    private fun ownMemberKeys(cls: KtClassOrObject): Set<String> {
+        val out = HashSet<String>()
+        cls.declarations.forEach { d ->
+            when (d) {
+                is KtNamedFunction -> d.name?.let { out += "M:$it/${d.valueParameters.size}" }
+                is KtProperty -> d.name?.let { out += "P:$it" }
+                else -> {}
+            }
+        }
+        cls.primaryConstructorParameters.forEach { p -> if (p.hasValOrVar()) p.name?.let { out += "P:$it" } }
+        return out
+    }
+
+    /** Simple name of a parameter's declared type TEXT (`kotlin.Int` / `List<String>` → `Int` / `List`); null
+     *  text → null. Type arguments are dropped (JVM erasure forbids overloading on them, so it's safe). */
+    private fun simpleTypeName(text: String?): String? =
+        text?.substringBefore('<')?.substringAfterLast('.')?.trim()?.takeIf { it.isNotEmpty() }
+
+    /** Simple name of an inherited member's parameter [TypeRef] (`kotlin.String` → `String`, a type parameter
+     *  keeps its name `T`), for matching against a local parameter's [simpleTypeName]. */
+    private fun paramSimpleName(t: dev.ide.lang.resolve.TypeRef?): String? =
+        (t as? KotlinType)?.qualifiedName?.substringAfterLast('.')?.takeIf { it.isNotEmpty() }
 
     private fun localVar(p: KtProperty) = KotlinSymbol(
         name = p.name ?: "_",

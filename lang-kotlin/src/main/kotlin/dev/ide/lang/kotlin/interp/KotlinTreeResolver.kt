@@ -80,8 +80,13 @@ class KotlinTreeResolver(
     private val ktFile: KtFile,
     parsed: KotlinParsedFile,
     private val service: KotlinSymbolService,
+    /** Memo caches shared with the rest of the keystroke (the analyzer's diagnostics resolver), so the lowerer
+     *  reuses inference/overload work already done for this snapshot instead of recomputing it cold. Null → a
+     *  private cache (the standalone case, e.g. tests). See [dev.ide.lang.kotlin.resolve.KotlinResolverCaches]. */
+    caches: dev.ide.lang.kotlin.resolve.KotlinResolverCaches? = null,
 ) {
-    private val resolver = KotlinResolver(ktFile, parsed, service)
+    private val resolver =
+        if (caches != null) KotlinResolver(ktFile, parsed, service, caches) else KotlinResolver(ktFile, parsed, service)
 
     private val scopes = ArrayDeque<MutableMap<String, Binding>>()
     private var slotCounter = 0
@@ -1373,26 +1378,34 @@ class KotlinTreeResolver(
     // --- callee selection (sound: never guess between live overloads) ---
 
     private fun chooseCallee(call: KtCallExpression): KotlinSymbol? {
-        val candidates = runCatching { resolver.callTargets(call) }.getOrDefault(emptyList())
-            // A TOP-LEVEL extension (`fun String.getSize()`, carrying its declaring package) resolves only when
-            // it is actually in scope — imported, same-package, or default-imported. `callTargets` surfaces the
-            // receiver type's extensions UNFILTERED (via `membersForCompletion`), which otherwise lets an
-            // out-of-scope or wrong-receiver stdlib false positive (`kotlin.jvm.internal.PrimitiveSpreadBuilder`'s
-            // `getSize`, keyed on `kotlin.Any`) win the overload tie-break over the real source extension — or
-            // resolve at all where nothing legal exists. Member-extensions (`packageName == null`; resolved via
-            // their in-scope receiver, e.g. `RowScope.weight`) are NOT import-gated and pass through unchanged.
-            .filter { !it.isExtension || it.packageName == null || extensionInScope(it) }
-            // Dedup by SIGNATURE (kind + name + param types), IGNORING the declaring owner. A method with the
-            // same signature from different owners is the same call shape: an override surfacing from both the
-            // class and its supertype (`SnapshotStateList.add` + `MutableList.add`), the same callable present
-            // twice (a stdlib jar on the classpath AND bundled), or a member extension declared on the same
-            // receiver by sibling scopes (`RowScope.weight` + `ColumnScope.weight`, both on `Modifier`). Keying
-            // on the owner left these as distinct candidates that could never narrow → a false ambiguity.
-            // The vararg index IS part of the key: `listOf(element: T)` and `listOf(vararg elements: T)` both
-            // decode to params `[T]`, so without it the dedup would merge them and DROP the vararg overload —
-            // leaving `listOf("a", "b")` (which only the vararg accepts) unresolvable.
+        val raw = runCatching { resolver.callTargets(call) }.getOrDefault(emptyList())
+        if (raw.isEmpty()) return null
+        // A TOP-LEVEL extension (`fun String.getSize()`, carrying its declaring package) resolves only when
+        // it is actually in scope — imported, same-package, or default-imported. `callTargets` surfaces the
+        // receiver type's extensions UNFILTERED (via `membersForCompletion`), which otherwise lets an
+        // out-of-scope or wrong-receiver stdlib false positive (`kotlin.jvm.internal.PrimitiveSpreadBuilder`'s
+        // `getSize`, keyed on `kotlin.Any`) win the overload tie-break over the real source extension — or
+        // resolve at all where nothing legal exists. Member-extensions (`packageName == null`; resolved via
+        // their in-scope receiver, e.g. `RowScope.weight`) are NOT import-gated and pass through unchanged.
+        val inScope = raw.filter { !it.isExtension || it.packageName == null || extensionInScope(it) }
+        // Fast path: the overwhelmingly common call resolves to a single (or zero) candidate. Return it without
+        // building the signature-dedup key (a per-candidate string + param-type list) or running the
+        // type-directed tie-break ladder below (and the inference it drives). Behaviour-preserving: with one
+        // candidate every `ifEmpty` fallback in the ladder yields that same candidate anyway.
+        if (inScope.size <= 1) return inScope.firstOrNull()
+        // Dedup by SIGNATURE (kind + name + param types), IGNORING the declaring owner. A method with the
+        // same signature from different owners is the same call shape: an override surfacing from both the
+        // class and its supertype (`SnapshotStateList.add` + `MutableList.add`), the same callable present
+        // twice (a stdlib jar on the classpath AND bundled), or a member extension declared on the same
+        // receiver by sibling scopes (`RowScope.weight` + `ColumnScope.weight`, both on `Modifier`). Keying
+        // on the owner left these as distinct candidates that could never narrow → a false ambiguity.
+        // The vararg index IS part of the key: `listOf(element: T)` and `listOf(vararg elements: T)` both
+        // decode to params `[T]`, so without it the dedup would merge them and DROP the vararg overload —
+        // leaving `listOf("a", "b")` (which only the vararg accepts) unresolvable.
+        val candidates = inScope
             .distinctBy { c -> c.kind.toString() + "/" + c.name + "/" + c.varargParamIndex + "/" + c.paramTypes.map { (it as? KotlinType)?.qualifiedName } }
         if (candidates.isEmpty()) return null
+        if (candidates.size == 1) return candidates.single()
         val valueArgs = call.valueArguments
         val argCount = valueArgs.size
         // A named argument (or an omitted default) means the source args don't line up 1:1 with the leading

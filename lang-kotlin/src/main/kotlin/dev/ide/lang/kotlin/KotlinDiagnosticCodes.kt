@@ -30,6 +30,16 @@ object KotlinDiagnosticCodes {
     const val CONFLICTING_IMPORT = "kt.conflictingImport"
     const val MODIFIERS = "kt.modifiers"
     const val ABSTRACT_MODIFIER = "kt.abstractModifier"
+
+    // --- inheritance / override correctness ---
+    /** A concrete class/object leaves an inherited abstract member unimplemented. */
+    const val ABSTRACT_NOT_IMPLEMENTED = "kt.abstractNotImplemented"
+    /** A member is declared `override` but no supertype declares a member of that name. */
+    const val NOTHING_TO_OVERRIDE = "kt.nothingToOverride"
+    /** A member hides an inherited member of the same signature but is missing the `override` modifier. */
+    const val OVERRIDE_REQUIRED = "kt.overrideRequired"
+    /** A constructor call on an interface or abstract/sealed class (which cannot be instantiated). */
+    const val ABSTRACT_INSTANTIATION = "kt.abstractInstantiation"
     const val LATEINIT = "kt.lateinit"
     const val VAL_VAR_PARAMETER = "kt.valVarParameter"
     const val VAL_REASSIGN = "kt.valReassign"
@@ -42,11 +52,26 @@ object KotlinDiagnosticCodes {
     const val USELESS_ELVIS = "kt.uselessElvis"
     const val UNREACHABLE = "kt.unreachable"
 
+    /** A type reference with the wrong number of type arguments for its classifier (`Map<Int>`, `List<A, B>`). */
+    const val TYPE_ARGUMENT_COUNT = "kt.typeArgumentCount"
+
     // --- unused (warnings / hints) ---
     const val UNUSED_IMPORT = "kt.unusedImport"
     const val UNUSED_PRIVATE = "kt.unusedPrivate"
     const val UNUSED_LOCAL = "kt.unusedLocal"
+    const val UNUSED_PARAMETER = "kt.unusedParameter"
     const val VAR_COULD_BE_VAL = "kt.varCouldBeVal"
+
+    // --- redundancy (warnings / hints) ---
+    /** A not-null assertion (`!!`) on a value that is already non-null. */
+    const val REDUNDANT_NOT_NULL = "kt.redundantNotNull"
+    /** A safe call (`?.`) on a value that is already non-null. */
+    const val REDUNDANT_SAFE_CALL = "kt.redundantSafeCall"
+    /** A string-template entry that wraps a bare name in braces needlessly (`"${name}"` → `"$name"`). */
+    const val REDUNDANT_STRING_TEMPLATE = "kt.redundantStringTemplate"
+
+    /** An `==`/`!=` between two unrelated final types that can never be equal (`"x" == 5`, `ColorA == ColorB`). */
+    const val INCOMPARABLE_EQUALITY = "kt.incomparableEquality"
     /** A Java bean accessor called explicitly (`view.setText("x")` / `view.getText()`) where Kotlin's
      *  synthetic-property syntax (`view.text = "x"` / `view.text`) is idiomatic. */
     const val USE_PROPERTY_ACCESS = "kt.usePropertyAccess"

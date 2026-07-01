@@ -12,6 +12,7 @@ import dev.ide.lang.incremental.DocumentSnapshot
 import dev.ide.lang.incremental.IncrementalParser
 import dev.ide.lang.incremental.ReparseResult
 import dev.ide.lang.kotlin.completion.KotlinCompletion
+import dev.ide.lang.kotlin.completion.KotlinCompletionItems
 import dev.ide.lang.kotlin.parse.KotlinDomNode
 import dev.ide.lang.kotlin.parse.KotlinIncrementalParser
 import dev.ide.lang.kotlin.parse.KotlinParsedFile
@@ -111,12 +112,51 @@ class KotlinSourceAnalyzer(ctx: CompilationContext) : SourceAnalyzer, Disposable
     private val backing = KotlinIncrementalParser()
     private val lastByFile = ConcurrentHashMap<String, KotlinParsedFile>()
 
+    // A keystroke resolves the same snapshot twice — the diagnostics pass (incrementalAnalysis) AND, when the
+    // preview is open, the Compose preview lowerer — each through its own KotlinResolver, recomputing inference
+    // + overload resolution from cold (measured: ~1100 inferType + 654 callTargets duplicated per keystroke).
+    // The lowerer reuses the diagnostics pass's per-snapshot memo caches instead. Keyed by file path; the prior
+    // entry is unreachable once replaced. Safe: every engine lane runs on EngineScheduler's single serialized
+    // worker, so the shared caches are never touched concurrently, and each pass keeps its own transient
+    // resolver state (narrowings/reentrancy) — only the pure memo caches are shared.
+    private class CachesEntry(val parsed: KotlinParsedFile, val caches: dev.ide.lang.kotlin.resolve.KotlinResolverCaches)
+    private val cachesBySnapshot = ConcurrentHashMap<String, CachesEntry>()
+
+    /** Diagnostics ALWAYS resolves with a fresh cache: a dependency edit leaves the dependent file's OWN
+     *  snapshot unchanged, so reusing a prior cache would stale-serve cross-file results (caught by
+     *  `crossFileDependencyEditInvalidatesDependentCache`). The fresh cache is published so the preview lowerer
+     *  of the SAME keystroke can reuse it ([reuseCachesFor]). */
+    private fun freshCachesFor(parsed: KotlinParsedFile): dev.ide.lang.kotlin.resolve.KotlinResolverCaches {
+        val c = dev.ide.lang.kotlin.resolve.KotlinResolverCaches()
+        cachesBySnapshot[parsed.file.path] = CachesEntry(parsed, c)
+        return c
+    }
+
+    /** The preview lowerer reuses the cache the diagnostics pass just published for this EXACT snapshot (the
+     *  per-keystroke win — no redundant second resolution); absent one (a preview with no diagnostics pass), it
+     *  builds and publishes its own. Preview is best-effort and re-renders on change, so reuse is safe here. */
+    private fun reuseCachesFor(parsed: KotlinParsedFile): dev.ide.lang.kotlin.resolve.KotlinResolverCaches {
+        cachesBySnapshot[parsed.file.path]?.let { if (it.parsed === parsed) return it.caches }
+        return freshCachesFor(parsed)
+    }
+
     override val incrementalParser: IncrementalParser = object : IncrementalParser {
         override fun parseFull(snapshot: DocumentSnapshot): ParsedFile {
             // A settled buffer is parseFull'd for several features in succession (analyze, semantic highlight,
             // breadcrumb, …). The PSI parse is pure for a given text, so reuse the last parse when the text is
             // unchanged instead of re-running the parser each time.
-            lastByFile[snapshot.file.path]?.let { if (it.ktFile.text.contentEquals(snapshot.text)) return it }
+            val prev = lastByFile[snapshot.file.path]
+            if (prev != null && prev.ktFile.text.contentEquals(snapshot.text)) return prev
+            // Text changed: reparse only the edited subtree of the prior PSI in place (reusing the rest), which
+            // is far cheaper than re-lexing/re-parsing the whole file on a large buffer. Falls back to a full
+            // parse when incremental reparse doesn't apply / fails (a failed reparse leaves the prior tree
+            // possibly mutated, so it's discarded here by replacing the map entry with the fresh parse).
+            if (prev != null) {
+                KotlinParserHost.tryReparse(prev.ktFile, snapshot.text)?.let { reparsed ->
+                    return KotlinParsedFile(reparsed, snapshot.file, snapshot.version)
+                        .also { lastByFile[snapshot.file.path] = it }
+                }
+            }
             return (backing.parseFull(snapshot) as KotlinParsedFile).also { lastByFile[snapshot.file.path] = it }
         }
 
@@ -144,6 +184,7 @@ class KotlinSourceAnalyzer(ctx: CompilationContext) : SourceAnalyzer, Disposable
             parsedFor = { lastByFile[it.path] },
             resolverFor = { syncFocal(it); KotlinResolver(it.ktFile, it, service) },
             refresh = { refreshOverlay() },
+            externalStampFor = { service.externalContentStamp(it) },
         )
     }
 
@@ -160,7 +201,7 @@ class KotlinSourceAnalyzer(ctx: CompilationContext) : SourceAnalyzer, Disposable
     // --- Compose preview (interpreter integration; see docs/compose-interpreter.md) ---
 
     /** PSI→ResolvedTree lowering for the Compose-preview interpreter, with its own per-function memoization. */
-    private val previewLowering by lazy { dev.ide.lang.kotlin.interp.KotlinPreviewLowering(service) }
+    private val previewLowering by lazy { dev.ide.lang.kotlin.interp.KotlinPreviewLowering(service, ::reuseCachesFor) }
 
     /** The `@Preview @Composable` functions in [file]'s last parse — the editor's preview targets. */
     fun composePreviews(file: VirtualFile): List<dev.ide.lang.kotlin.interp.PreviewInfo> =
@@ -220,7 +261,7 @@ class KotlinSourceAnalyzer(ctx: CompilationContext) : SourceAnalyzer, Disposable
 
     /** The incremental-analyze engine (runs the semantic checks with per-declaration caching). Holds the
      *  per-file analyze cache, so a single instance is kept for the analyzer's lifetime. */
-    private val incrementalAnalysis by lazy { IncrementalSemanticAnalysis(service) }
+    private val incrementalAnalysis by lazy { IncrementalSemanticAnalysis(service, ::freshCachesFor) }
 
     override suspend fun analyze(file: VirtualFile): AnalysisResult = KotlinPerf.trace("kt.analyze") {
         val parsed = lastByFile[file.path] ?: return@trace AnalysisResult(file, emptyList())
@@ -268,6 +309,51 @@ class KotlinSourceAnalyzer(ctx: CompilationContext) : SourceAnalyzer, Disposable
             }
         }
         return out.take(12)
+    }
+
+    /**
+     * The "Implement members" quick-fix for a `kt.abstractNotImplemented` diagnostic anchored at [offset] (the
+     * class name): generate `override` stubs for the inherited abstract members [cls] leaves unimplemented and
+     * insert them into the class body (creating a `{ }` body when the class has none). Null when the class
+     * isn't found or nothing is actually missing (the diagnostic is stale). The stub text is the same one
+     * completion's override items use ([KotlinCompletionItems.overrideStubText]).
+     */
+    fun implementMembersFix(file: VirtualFile, offset: Int): KotlinImportFix? {
+        val parsed = lastByFile[file.path] ?: return null
+        refreshOverlay(); syncFocal(parsed)
+        val ktFile = parsed.ktFile
+        val cls = classCovering(ktFile, offset) ?: return null
+        val missing = KotlinResolver(ktFile, parsed, service).unimplementedAbstractMembers(cls)
+        if (missing.isEmpty()) return null
+        val text = ktFile.text
+        val baseIndent = lineIndentOf(text, cls.textRange.startOffset)
+        val memberIndent = "$baseIndent    "
+        val stubs = missing.joinToString("\n\n") { m ->
+            memberIndent + KotlinCompletionItems.overrideStubText(m).replace("\n", "\n$memberIndent")
+        }
+        val body = cls.body
+        val edit = if (body != null) {
+            val at = (body.rBrace?.textRange?.startOffset ?: body.textRange.endOffset)
+            DocumentEdit(at, 0, "\n$stubs\n$baseIndent")
+        } else {
+            DocumentEdit(cls.textRange.endOffset, 0, " {\n$stubs\n$baseIndent}")
+        }
+        return KotlinImportFix("Implement members", listOf(edit))
+    }
+
+    /** The innermost class/object enclosing [offset] (the abstract-not-implemented diagnostic anchors on its name). */
+    private fun classCovering(ktFile: KtFile, offset: Int): KtClassOrObject? {
+        var n: PsiElement? = ktFile.findElementAt(offset.coerceIn(0, (ktFile.textLength - 1).coerceAtLeast(0)))
+        while (n != null) { if (n is KtClassOrObject) return n; n = n.parent }
+        return null
+    }
+
+    /** The leading whitespace (indent) of the line containing [offset] in [text]. */
+    private fun lineIndentOf(text: CharSequence, offset: Int): String {
+        val lineStart = text.lastIndexOf('\n', (offset - 1).coerceAtLeast(0)).let { if (it < 0) 0 else it + 1 }
+        var i = lineStart
+        while (i < text.length && (text[i] == ' ' || text[i] == '\t')) i++
+        return text.subSequence(lineStart, i).toString()
     }
 
     /** The `by`-delegated properties whose delegate expression covers [offset] — the targets a delegate-operator

@@ -86,6 +86,31 @@ class KotlinAdvancedCompletionTest {
         assertFalse(ls.any { it.startsWith("override fun") }, "no override stubs inside a body; got ${ls.take(20)}")
     }
 
+    // --- override-property stubs in a primary constructor ---
+
+    @Test
+    fun primaryConstructorOffersOverridePropertyStubByName() {
+        // Typing the inherited property's name in the ctor → an `override val id: String` stub (full insert).
+        val item = items("Use.kt", "package demo\nclass My(i|) : Base").firstOrNull { it.label == "override val id: String" }
+        assertNotNull(item, "ctor override-property stub for `id` expected")
+        assertTrue(item.insertText == "override val id: String", "full stub inserted; got '${item.insertText}'")
+    }
+
+    @Test
+    fun primaryConstructorOverrideStubDropsAlreadyTypedKeyword() {
+        // `override ` already typed → the stub omits it so we don't double up the keyword.
+        val item = items("Use.kt", "package demo\nclass My(override |) : Base").firstOrNull { it.label == "override val id: String" }
+        assertNotNull(item, "ctor override-property stub for `id` expected after `override `")
+        assertTrue(item.insertText == "val id: String", "keyword not duplicated; got '${item.insertText}'")
+    }
+
+    @Test
+    fun primaryConstructorOverrideStubsAreFunctionFree() {
+        // A ctor parameter overrides PROPERTIES only — never the inherited functions.
+        val ls = labels("Use.kt", "package demo\nclass My(override |) : Base")
+        assertFalse(ls.any { it.startsWith("override fun") }, "no function stubs in a ctor param list; got ${ls.take(20)}")
+    }
+
     // --- expected-type completion ---
 
     @Test
@@ -117,6 +142,38 @@ class KotlinAdvancedCompletionTest {
         assertTrue(idx >= 0, "mkColor should be offered; got ${ls.take(20)}")
     }
 
+    // --- expected-type value completion: when-branch, named/positional args (2026-06-30) ---
+
+    @Test
+    fun whenBranchOnEnumSubjectOffersConstants() {
+        val ls = labels("WhenBranch.kt", "package demo\nfun f(c: Color) = when (c) {\n  | -> 1\n  else -> 0\n}")
+        assertTrue(ls.any { it == "Color.RED" }, "a when on an enum subject should offer its constants in a branch; got $ls")
+    }
+
+    @Test
+    fun positionalEnumArgumentOffersConstants() {
+        val ls = labels("ArgEnum.kt", "package demo\nfun f() { paint(|) }")
+        assertTrue(ls.any { it == "Color.RED" }, "an enum-typed positional argument should offer its constants; got $ls")
+    }
+
+    @Test
+    fun genericTypeArgumentPositionOffersTypes() {
+        val ls = labels("TypeArg.kt", "package demo\nfun f() { val x: List<U|> = emptyList() }")
+        assertTrue(ls.any { it == "User" }, "a type-argument position should offer classifiers; got $ls")
+    }
+
+    @Test
+    fun callableReferenceOffersReceiverMembers() {
+        val ls = labels("CallableRef.kt", "package demo\nfun f() { val r = User::| }")
+        assertTrue(ls.any { it == "name" || it == "age" }, "`User::|` should offer the receiver type's members; got $ls")
+    }
+
+    @Test
+    fun namedBooleanArgumentValueOffersTrueFalse() {
+        val ls = labels("ArgBool.kt", "package demo\nfun toggle(on: Boolean) {}\nfun f() { toggle(on = |) }")
+        assertTrue("true" in ls && "false" in ls, "a Boolean named-arg value should offer true/false; got $ls")
+    }
+
     companion object {
         val srcDir: Path = tempProject(
             mapOf(
@@ -131,6 +188,7 @@ class KotlinAdvancedCompletionTest {
                 "Base.kt" to """
                     package demo
                     abstract class Base {
+                        abstract val id: String
                         abstract fun onCreate(savedState: String)
                         open fun render(): String = ""
                     }

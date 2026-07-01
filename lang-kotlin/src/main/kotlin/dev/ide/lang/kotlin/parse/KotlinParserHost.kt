@@ -77,6 +77,17 @@ object KotlinParserHost {
         fileFactory.createFileFromText(fileName, KotlinLanguage.INSTANCE, text) as KtFile
     }
 
+    /**
+     * Incrementally reparse [file] in place so its text becomes [newText], reusing the unchanged subtrees of
+     * the existing PSI (only the changed span is re-lexed/re-parsed). Returns the same (now-mutated) [file] on
+     * success, or null when incremental reparse isn't applicable / failed — the caller then [parse]s fresh
+     * (a failed reparse may leave [file] partially mutated, so it must be discarded). Serialized under the
+     * same [lock] as [parse], so it never races a parse on a background index thread. See [KotlinPsiMutation].
+     */
+    fun tryReparse(file: KtFile, newText: CharSequence): KtFile? = synchronized(lock) {
+        KotlinPsiMutation.reparse(file, newText)
+    }
+
     /** Force the (expensive) environment up now — call off the UI thread at startup to hide cold-start. */
     fun warmUp() {
         environment // touch the lazy

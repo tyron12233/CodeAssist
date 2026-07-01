@@ -22,16 +22,21 @@ import dev.ide.lang.kotlin.symbols.KotlinType
 import dev.ide.lang.resolve.Modifier
 import dev.ide.lang.resolve.SymbolKind
 import org.jetbrains.kotlin.com.intellij.psi.PsiElement
+import org.jetbrains.kotlin.lexer.KtTokens
 import org.jetbrains.kotlin.psi.KtBlockExpression
 import org.jetbrains.kotlin.psi.KtBlockStringTemplateEntry
 import org.jetbrains.kotlin.psi.KtCallExpression
+import org.jetbrains.kotlin.psi.KtCallableReferenceExpression
 import org.jetbrains.kotlin.psi.KtClassBody
 import org.jetbrains.kotlin.psi.KtExpression
+import org.jetbrains.kotlin.psi.KtFile
 import org.jetbrains.kotlin.psi.KtImportDirective
 import org.jetbrains.kotlin.psi.KtNameReferenceExpression
 import org.jetbrains.kotlin.psi.KtNamedFunction
 import org.jetbrains.kotlin.psi.KtPackageDirective
+import org.jetbrains.kotlin.psi.KtParameter
 import org.jetbrains.kotlin.psi.KtParameterList
+import org.jetbrains.kotlin.psi.KtPrimaryConstructor
 import org.jetbrains.kotlin.psi.KtProperty
 import org.jetbrains.kotlin.psi.KtPropertyAccessor
 import org.jetbrains.kotlin.psi.KtQualifiedExpression
@@ -70,6 +75,26 @@ class KotlinCompletion(
 
     override val id = "kotlin.completion"
 
+    // Single-slot completion working tree. Completion fires on every keystroke against a marker-spliced copy
+    // of the buffer; keeping the last spliced PSI lets us reparse only the changed span (the typed char + the
+    // moved marker) instead of re-parsing the whole file each keystroke (the per-keystroke parse cost on a
+    // large Compose file). Kept SEPARATE from the analyzer's lastByFile tree because this one carries the
+    // marker. Bounded to one file (the focused one); a different path full-parses and replaces it. Touched
+    // only on the single serialized engine worker (completion lane), so no synchronization beyond the parse
+    // lock that KotlinParserHost.tryReparse already takes.
+    private var splicedPath: String? = null
+    private var splicedTree: KtFile? = null
+
+    /** Parse [spliced] (the marker-spliced buffer for [path]) by incrementally reparsing the prior spliced tree
+     *  when it's the same file, else a full parse; updates the single-slot cache. */
+    private fun parseSpliced(name: String, path: String, spliced: String): KtFile {
+        val prev = if (splicedPath == path) splicedTree else null
+        val kt = prev?.let { KotlinParserHost.tryReparse(it, spliced) } ?: KotlinParserHost.parse(name, spliced)
+        splicedPath = path
+        splicedTree = kt
+        return kt
+    }
+
     override suspend fun fillCompletionVariants(params: CompletionParams, result: CompletionResultSet) {
         val res = KotlinPerf.trace("kt.complete") { completeInner(params.document, params.offset) }
         result.addAllElements(res.items)
@@ -95,7 +120,7 @@ class KotlinCompletion(
 
         // Splice the marker right at the caret so the parser yields a real reference node even after `.`.
         val spliced = original.substring(0, offset) + MARKER + original.substring(offset)
-        val kt = KotlinPerf.span("parse") { KotlinParserHost.parse(document.file.name, spliced) }
+        val kt = KotlinPerf.span("parse") { parseSpliced(document.file.name, document.file.path, spliced) }
         val parsed = KotlinParsedFile(kt, document.file, document.version)
         // Same-file freshness: a class/member declared in THIS buffer (`with(LocalClass()) { … }`) resolves from
         // the live PSI. Keyed by the marker-free text hash so it shares the focal entry analyze/highlight set
@@ -119,8 +144,10 @@ class KotlinCompletion(
 
         val pos = KotlinPerf.span("candidates") {
             when (val where = classifyPosition(markerLeaf, nameRef)) {
-                is CompletionPosition.MemberAccess -> memberAccessCandidates(where.receiver, offset, resolver, prefix)
-                CompletionPosition.TypeReference -> PositionResult(service.typeNamesByPrefix(prefix))
+                is CompletionPosition.MemberAccess -> memberAccessCandidates(where.receiver, offset, resolver, prefix, where.callableRef)
+                // A type slot also carries a few keyword positions (a `where` clause after a generic
+                // signature); KotlinKeywords returns nothing for a plain type reference, so this is safe.
+                CompletionPosition.TypeReference -> PositionResult(service.typeNamesByPrefix(prefix), keywordContext = true)
                 CompletionPosition.NameReference -> nameReferenceCandidates(markerLeaf, offset, prefix, resolver, autoImport)
             }
         }
@@ -171,8 +198,9 @@ class KotlinCompletion(
 
     /** Where the caret sits, deciding which candidate set applies (see [KotlinCompletion]'s class doc). */
     private sealed interface CompletionPosition {
-        /** `receiver.<caret>` — the selector of a qualified expression. */
-        class MemberAccess(val receiver: KtExpression) : CompletionPosition
+        /** `receiver.<caret>` — the selector of a qualified expression, or `receiver::<caret>` (a callable
+         *  reference; [callableRef]), where instance members are valid even on a type receiver (unbound refs). */
+        class MemberAccess(val receiver: KtExpression, val callableRef: Boolean = false) : CompletionPosition
         /** Inside a type reference — only classifiers belong. */
         object TypeReference : CompletionPosition
         /** A bare name in expression/statement position. */
@@ -189,16 +217,22 @@ class KotlinCompletion(
         val keywordContext: Boolean = false,
     )
 
-    private fun classifyPosition(markerLeaf: PsiElement?, nameRef: KtNameReferenceExpression?): CompletionPosition = when {
-        nameRef != null && isSelectorOfQualified(nameRef) ->
-            CompletionPosition.MemberAccess((nameRef.parent as KtQualifiedExpression).receiverExpression)
-        inTypePosition(markerLeaf) -> CompletionPosition.TypeReference
-        else -> CompletionPosition.NameReference
+    private fun classifyPosition(markerLeaf: PsiElement?, nameRef: KtNameReferenceExpression?): CompletionPosition {
+        // A callable reference `Receiver::name` (`String::length`, `foo::bar`) — the name after `::` completes
+        // from the receiver's members, exactly like a `.` access (bound/unbound is the same candidate set).
+        val callableRefReceiver = nameRef?.let { (it.parent as? KtCallableReferenceExpression)?.takeIf { p -> p.callableReference === it }?.receiverExpression }
+        return when {
+            callableRefReceiver != null -> CompletionPosition.MemberAccess(callableRefReceiver, callableRef = true)
+            nameRef != null && isSelectorOfQualified(nameRef) ->
+                CompletionPosition.MemberAccess((nameRef.parent as KtQualifiedExpression).receiverExpression)
+            inTypePosition(markerLeaf) -> CompletionPosition.TypeReference
+            else -> CompletionPosition.NameReference
+        }
     }
 
     /** `receiver.<caret>` — instance members + extensions, type-receiver statics + companion members, or, when
      *  the receiver is a pure package/FQN path, that package's sub-packages + types (inserted fully-qualified). */
-    private fun memberAccessCandidates(receiver: KtExpression, offset: Int, resolver: KotlinResolver, prefix: String): PositionResult {
+    private fun memberAccessCandidates(receiver: KtExpression, offset: Int, resolver: KotlinResolver, prefix: String, callableRef: Boolean = false): PositionResult {
         val recvType = KotlinPerf.span("infer") { resolver.inferType(receiver) }
         if (recvType != null) {
             // Instance receiver (`listOf("").`) → instance members + extensions; type receiver (`Int.`) →
@@ -206,15 +240,21 @@ class KotlinCompletion(
             // .kotlin_builtins), so `List.` is naturally empty and `Int.` shows MAX_VALUE. Constructors are never
             // reached via `.`. Prefix-aware: with large classpaths (Compose) a receiver's member+extension set is
             // huge, so push the typed prefix into the symbol service rather than enumerating then filtering.
+            // A callable reference (`String::length`) admits BOTH instance (unbound) and static members on a type
+            // receiver, so the static-only visibility filter is skipped there.
             val typeReceiver = resolver.isTypeReceiver(receiver)
             val members = KotlinPerf.span("members") {
                 service.membersForCompletion(recvType.qualifiedName, recvType.typeArguments, prefix)
-            }.filter { memberVisibleOn(it, typeReceiver) }
+            }.filter { callableRef || memberVisibleOn(it, typeReceiver) }
             // A bare `Type.` where the type has a companion object resolves to the companion instance, so the
             // companion's own members (Compose's `Color.Black`/`White`) and the extensions applicable to it
             // (`Modifier.Companion : Modifier` → `Modifier.padding`/`background`) are in scope too — instance-filtered.
             val raw = if (typeReceiver) {
-                members + service.companionMembersFor(recvType.qualifiedName, prefix)
+                // An enum's CONSTANTS are reached statically (`Test.A`) but aren't instance members, so
+                // `membersForCompletion` (which surfaces `values()`/`valueOf()`/`entries`) never lists them.
+                val enumConstants = service.enumConstantsOf(recvType.qualifiedName)
+                    .filter { it.name.startsWith(prefix, ignoreCase = true) }
+                members + enumConstants + service.companionMembersFor(recvType.qualifiedName, prefix)
                     .filter { memberVisibleOn(it, typeReceiver = false) }
             } else {
                 // Member-extensions in scope on an instance receiver (`map.printMap()` where `printMap` is a
@@ -241,6 +281,15 @@ class KotlinCompletion(
             resolver.overridableMembersAt(offset)
                 .filter { it.name.startsWith(prefix, ignoreCase = true) }
                 .forEach { extra += KotlinCompletionItems.overrideItem(it) }
+        }
+        // Primary-constructor parameter position → offer the inherited open PROPERTIES as `override val name: T`
+        // stubs (a ctor parameter can override a supertype property, never a function). When `override` is
+        // already typed on the parameter the stub omits it (the keyword token is likewise suppressed).
+        if (isPrimaryCtorParamPosition(markerLeaf)) {
+            val overrideTyped = climbTo<KtParameter>(markerLeaf)?.hasModifier(KtTokens.OVERRIDE_KEYWORD) == true
+            resolver.overridableMembersAt(offset)
+                .filter { it.kind == SymbolKind.FIELD && it.name.startsWith(prefix, ignoreCase = true) }
+                .forEach { extra += KotlinCompletionItems.ctorOverrideParam(it, overrideTyped) }
         }
         // Inside a call's argument list → offer the callee's not-yet-supplied parameter names. When the caret is
         // on the NAME of an argument that is ALREADY named (`foo(contai|nerColor = x)`), the ` = ` is already
@@ -280,6 +329,23 @@ class KotlinCompletion(
                     return false
                 is KtProperty -> if (prev != null && prev === n.initializer) return false
                 is KtNamedFunction -> if (prev != null && prev === n.bodyExpression) return false
+            }
+            prev = n
+            n = n.parent
+        }
+        return false
+    }
+
+    /** True at a name/modifier spot in a PRIMARY constructor's parameter list (not inside a parameter's type
+     *  reference or default value) — where `override val`/`var` property stubs belong. */
+    private fun isPrimaryCtorParamPosition(leaf: PsiElement?): Boolean {
+        var prev: PsiElement? = null
+        var n: PsiElement? = leaf
+        while (n != null) {
+            when (n) {
+                is KtTypeReference, is KtValueArgumentList -> return false
+                is KtParameter -> if (prev != null && prev === n.defaultValue) return false
+                is KtParameterList -> return n.parent is KtPrimaryConstructor
             }
             prev = n
             n = n.parent

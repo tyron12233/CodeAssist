@@ -107,6 +107,8 @@ class BuiltinsReader(private val jars: List<Path>) {
                     isObject = isObject,
                     companionObjectName = companionName,
                     isKotlin = true,
+                    isInterface = Flags.CLASS_KIND.get(cls.flags) == ProtoBuf.Class.Kind.INTERFACE,
+                    isAbstract = Flags.MODALITY.get(cls.flags).let { it == ProtoBuf.Modality.ABSTRACT || it == ProtoBuf.Modality.SEALED },
                 )
             }
             out
@@ -123,7 +125,7 @@ class BuiltinsReader(private val jars: List<Path>) {
                 kind = SymbolKind.METHOD,
                 type = typeRef(ret, nr, tp, tt),
                 owner = owner,
-                modifiers = if (static) setOf(Modifier.STATIC) else emptySet(),
+                modifiers = (if (static) setOf(Modifier.STATIC) else emptySet()) + abstractFlag(f.flags),
                 origin = BINARY,
                 signature = "($params): ${typeText(ret, nr, tp, tt)}",
                 typeParameters = f.typeParameterList.map { nr.getString(it.name) },
@@ -140,11 +142,16 @@ class BuiltinsReader(private val jars: List<Path>) {
                 kind = SymbolKind.FIELD,
                 type = typeRef(ret, nr, tp, tt),
                 owner = owner,
-                modifiers = if (static) setOf(Modifier.STATIC) else emptySet(),
+                modifiers = (if (static) setOf(Modifier.STATIC) else emptySet()) + abstractFlag(p.flags),
                 origin = BINARY,
                 signature = ": ${typeText(ret, nr, tp, tt)}",
             )
         }
+
+        /** ABSTRACT modality on a builtin member (e.g. `Iterator.next`, `Comparable.compareTo`) → [Modifier.ABSTRACT],
+         *  so implementing a builtin interface requires an override. A member with a default body decodes OPEN. */
+        private fun abstractFlag(flags: Int): Set<Modifier> =
+            if (Flags.MODALITY.get(flags) == ProtoBuf.Modality.ABSTRACT) setOf(Modifier.ABSTRACT) else emptySet()
 
         private fun typeRef(t: ProtoBuf.Type, nr: NameResolverImpl, tp: Map<Int, String>, tt: TypeTable): TypeRef? = when {
             t.hasTypeParameter() -> KotlinType(tp[t.typeParameter] ?: "T", nullable = t.nullable, context = null, isTypeParameter = true)

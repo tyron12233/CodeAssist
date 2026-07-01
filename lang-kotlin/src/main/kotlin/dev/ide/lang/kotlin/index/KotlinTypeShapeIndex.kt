@@ -37,7 +37,7 @@ import java.io.DataOutput
  */
 object KotlinTypeShapeIndex : IndexExtension<String, TypeShape> {
     override val id = IndexId("kotlin.typeShape")
-    override val version = 13 // v13: + member KotlinSymbol.isDeprecated (deprecation strikethrough highlighting)
+    override val version = 15 // v15: + TypeShape.sealedSubclasses (cross-file/library `when` exhaustiveness)
     override val keyDescriptor: KeyDescriptor<String> = StringKeyDescriptor
     override val valueExternalizer = TypeShapeExternalizer
     override val matching = MatchingMode.PREFIX_ONLY // queried only by exact owner FQN
@@ -77,6 +77,9 @@ object TypeShapeExternalizer : Externalizer<TypeShape> {
         out.writeBoolean(value.isObject)
         out.writeUTF(value.companionObjectName ?: "")
         out.writeBoolean(value.isKotlin)
+        out.writeBoolean(value.isInterface)
+        out.writeBoolean(value.isAbstract)
+        writeStrings(out, value.sealedSubclasses)
     }
 
     override fun read(inp: DataInput): TypeShape {
@@ -87,7 +90,10 @@ object TypeShapeExternalizer : Externalizer<TypeShape> {
         val isObject = inp.readBoolean()
         val companion = inp.readUTF().ifEmpty { null }
         val isKotlin = inp.readBoolean()
-        return TypeShape(tps, bounds, supers, members, isObject, companion, isKotlin)
+        val isInterface = inp.readBoolean()
+        val isAbstract = inp.readBoolean()
+        val sealedSubclasses = readStrings(inp)
+        return TypeShape(tps, bounds, supers, members, isObject, companion, isKotlin, isInterface, isAbstract, sealedSubclasses)
     }
 
     private fun writeSymbol(out: DataOutput, s: KotlinSymbol) {

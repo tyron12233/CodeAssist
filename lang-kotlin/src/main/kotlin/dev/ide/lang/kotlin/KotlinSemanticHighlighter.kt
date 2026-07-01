@@ -22,6 +22,7 @@ import org.jetbrains.kotlin.psi.KtAnnotationEntry
 import org.jetbrains.kotlin.psi.KtBinaryExpression
 import org.jetbrains.kotlin.psi.KtBlockExpression
 import org.jetbrains.kotlin.psi.KtConstructorCalleeExpression
+import org.jetbrains.kotlin.psi.KtDeclaration
 import org.jetbrains.kotlin.psi.KtNameReferenceExpression
 import org.jetbrains.kotlin.psi.KtNamedFunction
 import org.jetbrains.kotlin.psi.KtObjectDeclaration
@@ -53,13 +54,58 @@ class KotlinSemanticHighlighter(
     private val parsedFor: (VirtualFile) -> KotlinParsedFile?,
     private val resolverFor: (KotlinParsedFile) -> KotlinResolver,
     private val refresh: () -> Unit,
+    /** Content stamp of OTHER source files (cross-file deps); a change invalidates the per-declaration cache,
+     *  since a reference here can resolve to — and recolor against — a symbol edited in another file. */
+    private val externalStampFor: (String) -> Long = { 0L },
 ) : SemanticHighlightService {
+
+    // Per-top-level-declaration token cache (see [IncrementalDecls]). An edit re-colors only the changed
+    // declaration and reuses every other declaration's tokens, re-anchored to its shifted offset — so a
+    // keystroke no longer re-resolves the WHOLE file. One instance per analyzer (this cache is its state).
+    private class DeclTokens(val key: IncrementalDecls.Key, val rel: List<SemanticToken>)
+    private class Snapshot(val importsKey: String, val externalStamp: Long, val decls: List<DeclTokens>)
+    private val cache = java.util.concurrent.ConcurrentHashMap<String, Snapshot>()
 
     override suspend fun highlight(file: VirtualFile): List<SemanticToken> {
         val parsed = parsedFor(file) ?: return emptyList()
         refresh() // cross-file freshness: a decl just typed in another open file resolves here
         val resolver = resolverFor(parsed)
+        val ktFile = parsed.ktFile
         val out = ArrayList<SemanticToken>(256)
+        // Non-declaration top-level children (package / imports / file annotations) — cheap, recomputed each
+        // time. They precede every declaration in a Kotlin file, so emitting them first keeps document order.
+        for (child in ktFile.children) if (child !is KtDeclaration) collectInto(child, resolver, out)
+
+        val topDecls = ktFile.declarations
+        val importsKey = IncrementalDecls.importsKey(ktFile)
+        val externalStamp = externalStampFor(file.path)
+        val prev = cache[file.path]?.takeIf { it.externalStamp == externalStamp }
+        val recompute = IncrementalDecls.recomputeIndices(prev?.decls?.map { it.key }, prev?.importsKey, importsKey, topDecls)
+        val newEntries = ArrayList<DeclTokens>(topDecls.size)
+        for ((i, d) in topDecls.withIndex()) {
+            val base = d.textRange.startOffset
+            if (recompute != null && i !in recompute) {
+                val cached = prev!!.decls[i] // text identical → reuse this declaration's tokens, re-anchored
+                cached.rel.forEach { out += shift(it, base) }
+                newEntries += cached
+            } else {
+                val abs = ArrayList<SemanticToken>()
+                collectInto(d, resolver, abs)
+                out += abs
+                newEntries += DeclTokens(IncrementalDecls.keyOf(d), abs.map { shift(it, -base) })
+            }
+        }
+        cache[file.path] = Snapshot(importsKey, externalStamp, newEntries)
+        return out
+    }
+
+    /** Shift a token's range by [delta] (relative⇄absolute re-anchoring; [SemanticToken] has no copy()). */
+    private fun shift(t: SemanticToken, delta: Int): SemanticToken =
+        SemanticToken(TextRange(t.range.start + delta, t.range.end + delta), t.kind, t.modifiers)
+
+    /** Walk [root]'s subtree depth-first, emitting a [SemanticToken] per classifiable identifier into [out] —
+     *  the same classification the whole-file pass used, now scoped to a subtree so it runs per declaration. */
+    private fun collectInto(root: PsiElement, resolver: KotlinResolver, out: MutableList<SemanticToken>) {
         var seen = 0
         fun emit(range: org.jetbrains.kotlin.com.intellij.openapi.util.TextRange?, kind: HighlightKind, mods: Set<HighlightModifier> = emptySet()) {
             if (range == null) return
@@ -97,8 +143,7 @@ class KotlinSemanticHighlighter(
             var c = psi.firstChild
             while (c != null) { walk(c); c = c.nextSibling }
         }
-        walk(parsed.ktFile)
-        return out
+        walk(root)
     }
 
     private fun classKind(c: KtClass): HighlightKind = when {

@@ -17,10 +17,12 @@ import kotlin.metadata.KmPackage
 import kotlin.metadata.KmProperty
 import kotlin.metadata.KmType
 import kotlin.metadata.KmTypeParameter
+import kotlin.metadata.Modality
 import kotlin.metadata.Visibility
 import kotlin.metadata.declaresDefaultValue
 import kotlin.metadata.isInline
 import kotlin.metadata.isNullable
+import kotlin.metadata.modality
 import kotlin.metadata.visibility
 import org.objectweb.asm.MethodVisitor
 import kotlin.metadata.isSuspend
@@ -57,6 +59,13 @@ object KotlinMetadata {
          *  reference to it (`CardDefaults.`) denotes the INSTANCE, so its members are accessed like an
          *  instance's — not statics off a type. */
         val isObject: Boolean = false,
+        /** True when this class is a Kotlin `interface` — it cannot be instantiated directly. */
+        val isInterface: Boolean = false,
+        /** True when this class is an `abstract` (or `sealed`) class — it cannot be instantiated directly. */
+        val isAbstractClass: Boolean = false,
+        /** A `sealed` class/interface's DIRECT subclass FQNs (`km.sealedSubclasses`), for `when`-exhaustiveness
+         *  over a library sealed type; empty otherwise. */
+        val sealedSubclasses: List<String> = emptyList(),
     ) {
         /** Just the supertype classifier FQNs — for the supertype walk that doesn't need type arguments. */
         val supertypeFqns: List<String> get() = supertypes.mapNotNull { (it as? KotlinType)?.qualifiedName }
@@ -160,7 +169,14 @@ object KotlinMetadata {
                 origin = BINARY,
             )
         }
-        return Decoded(classFqn, km.supertypes.mapNotNull { typeRef(it, ctx, classTp) }, km.typeParameters.map { it.name }, own, emptyList(), ext, companionObjectName = km.companionObject, isObject = km.kind == ClassKind.OBJECT)
+        return Decoded(
+            classFqn, km.supertypes.mapNotNull { typeRef(it, ctx, classTp) }, km.typeParameters.map { it.name },
+            own, emptyList(), ext, companionObjectName = km.companionObject, isObject = km.kind == ClassKind.OBJECT,
+            isInterface = km.kind == ClassKind.INTERFACE,
+            // SEALED is abstract for instantiation purposes too (a sealed class can't be instantiated directly).
+            isAbstractClass = km.modality == Modality.ABSTRACT || km.modality == Modality.SEALED,
+            sealedSubclasses = km.sealedSubclasses.map { it.replace('/', '.') }, // ClassName uses '/' for packages, '.' for nesting
+        )
     }
 
     private fun decodePackage(km: KmPackage, ctx: KotlinTypeContext?, facadeFqn: String?, composable: Set<String>): Decoded {
@@ -184,7 +200,7 @@ object KotlinMetadata {
             kind = SymbolKind.METHOD,
             type = typeRef(f.returnType, ctx, tp),
             owner = owner,
-            modifiers = visibilityMods(f.visibility),
+            modifiers = visibilityMods(f.visibility) + abstractMod(f.modality),
             isInternal = f.visibility == Visibility.INTERNAL,
             origin = BINARY,
             receiverTypeFqn = recvFqn,
@@ -213,7 +229,7 @@ object KotlinMetadata {
             kind = SymbolKind.FIELD,
             type = typeRef(p.returnType, ctx, tp),
             owner = owner,
-            modifiers = visibilityMods(p.visibility),
+            modifiers = visibilityMods(p.visibility) + abstractMod(p.modality),
             isInternal = p.visibility == Visibility.INTERNAL,
             origin = BINARY,
             receiverTypeFqn = recvFqn,
@@ -315,6 +331,12 @@ object KotlinMetadata {
         Visibility.PROTECTED -> setOf(Modifier.PROTECTED)
         else -> emptySet()
     }
+
+    /** An ABSTRACT member (an interface member with no body, or an `abstract` class member) carries
+     *  [Modifier.ABSTRACT] so the "must implement abstract member" check can require an override. An interface
+     *  member WITH a default body decodes as OPEN, so it is correctly NOT required. */
+    private fun abstractMod(m: Modality): Set<Modifier> =
+        if (m == Modality.ABSTRACT) setOf(Modifier.ABSTRACT) else emptySet()
 
     /** Pull the `@kotlin.Metadata` annotation values off the class with ASM, or null if absent. */
     private fun extract(classBytes: ByteArray): Metadata? {

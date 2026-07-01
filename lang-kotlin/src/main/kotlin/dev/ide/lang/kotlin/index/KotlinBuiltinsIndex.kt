@@ -26,7 +26,7 @@ import dev.ide.lang.kotlin.symbols.TypeShape
  */
 object KotlinBuiltinsIndex : IndexExtension<String, TypeShape> {
     override val id = IndexId("kotlin.builtins")
-    override val version = 2 // v2: shared TypeShapeExternalizer gained member isDeprecated
+    override val version = 4 // v4: shared TypeShapeExternalizer gained TypeShape.sealedSubclasses
     override val keyDescriptor: KeyDescriptor<String> = StringKeyDescriptor
     override val valueExternalizer = TypeShapeExternalizer
     override val matching = MatchingMode.PREFIX_ONLY // queried only by exact Kotlin FQN

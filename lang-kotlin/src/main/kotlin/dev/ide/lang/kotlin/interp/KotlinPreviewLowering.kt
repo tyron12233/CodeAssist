@@ -15,7 +15,13 @@ import java.util.concurrent.ConcurrentHashMap
  * integration with its own per-function memoization, independent of the diagnostics/completion paths that
  * share the same [KotlinSymbolService].
  */
-class KotlinPreviewLowering(private val service: KotlinSymbolService) {
+class KotlinPreviewLowering(
+    private val service: KotlinSymbolService,
+    /** Supplies the per-snapshot memo caches shared with the editor's diagnostics resolver, so lowering reuses
+     *  the inference/overload work analyze already did for the same keystroke instead of recomputing it cold.
+     *  Null → each lowering builds a private cache (standalone use / tests). */
+    private val cachesFor: ((KotlinParsedFile) -> dev.ide.lang.kotlin.resolve.KotlinResolverCaches)? = null,
+) {
 
     /** The `@Preview @Composable` functions in [parsed] (the editor's preview targets), expanded to one entry
      *  per variant. A custom MultiPreview annotation declared in another source file is resolved through the
@@ -180,7 +186,9 @@ class KotlinPreviewLowering(private val service: KotlinSymbolService) {
         val sigMatch = prev != null && prev.fileSigHash == sigHash
         // Reuse the classes whole when no signature/class-body changed (only function bodies can change without
         // moving sigHash, and those never affect a class's lowering); else build the resolver lazily and re-lower.
-        val resolver by lazy(LazyThreadSafetyMode.NONE) { KotlinTreeResolver(parsed.ktFile, parsed, service) }
+        val resolver by lazy(LazyThreadSafetyMode.NONE) {
+            KotlinTreeResolver(parsed.ktFile, parsed, service, cachesFor?.invoke(parsed))
+        }
         val functions = parsed.ktFile.declarations.filterIsInstance<KtNamedFunction>().associate { fn ->
             val ownHash = fn.text.hashCode()
             val start = fn.textRange.startOffset

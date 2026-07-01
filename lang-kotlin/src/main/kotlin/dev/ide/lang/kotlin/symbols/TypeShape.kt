@@ -28,6 +28,14 @@ class TypeShape(
     /** True when this shape came from a Kotlin `@Metadata` class (vs plain Java bytecode). Lets the consumer
      *  answer "is this a Kotlin binary?" (e.g. constructor-default-argument soundness) from the index. */
     val isKotlin: Boolean = false,
+    /** True when this type is an `interface` — it cannot be instantiated directly (the abstract-instantiation
+     *  check). Indexed so the consumer needn't re-decode. */
+    val isInterface: Boolean = false,
+    /** True when this type is an `abstract`/`sealed` class — it cannot be instantiated directly. */
+    val isAbstract: Boolean = false,
+    /** A `sealed` class/interface's DIRECT subclass FQNs (from `@Metadata` `sealedSubclasses`); empty otherwise.
+     *  Drives `when`-exhaustiveness over a LIBRARY sealed type (a project sealed type uses the source model). */
+    val sealedSubclasses: List<String> = emptyList(),
 ) {
     /** Rebind every contained [KotlinType] to [ctx] (used after reading a context-free index entry). */
     fun withContext(ctx: KotlinTypeContext?): TypeShape = TypeShape(
@@ -35,12 +43,13 @@ class TypeShape(
         typeParameterBounds.map { it.rebind(ctx) },
         supertypes.map { it.rebind(ctx) },
         members.map { it.rebindTypes(ctx) },
-        isObject, companionObjectName, isKotlin,
+        isObject, companionObjectName, isKotlin, isInterface, isAbstract, sealedSubclasses,
     )
 
     companion object {
         fun of(js: JavaShape): TypeShape =
-            TypeShape(js.typeParameters, js.typeParameterBounds, js.superTypes, js.members, isKotlin = false)
+            TypeShape(js.typeParameters, js.typeParameterBounds, js.superTypes, js.members, isKotlin = false,
+                isInterface = js.isInterface, isAbstract = js.isAbstract)
 
         /** A Kotlin `@Metadata` class: supertypes carry their type arguments (so inherited generic members
          *  substitute); metadata carries no type-parameter bounds. The class's MEMBER extensions (`RowScope`'s
@@ -51,6 +60,7 @@ class TypeShape(
             d.typeParameters, emptyList(),
             d.supertypes.map { it.rebind(ctx) }, d.ownMembers + d.extensions,
             isObject = d.isObject, companionObjectName = d.companionObjectName, isKotlin = true,
+            isInterface = d.isInterface, isAbstract = d.isAbstractClass, sealedSubclasses = d.sealedSubclasses,
         )
     }
 }

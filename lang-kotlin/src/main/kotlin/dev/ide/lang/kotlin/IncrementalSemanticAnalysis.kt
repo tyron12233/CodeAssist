@@ -16,7 +16,13 @@ import java.util.concurrent.ConcurrentHashMap
  * themselves: this owns the incremental-reuse machinery (text hashing, offset re-anchoring, header
  * comparison), the checks own what each diagnostic means.
  */
-internal class IncrementalSemanticAnalysis(private val service: KotlinSymbolService) {
+internal class IncrementalSemanticAnalysis(
+    private val service: KotlinSymbolService,
+    /** Supplies the per-snapshot memo caches shared with the Compose preview lowerer, so the two passes a
+     *  keystroke runs over the same snapshot don't each recompute inference/overload resolution cold. Null →
+     *  a private cache per pass (standalone use / tests). */
+    private val cachesFor: ((KotlinParsedFile) -> dev.ide.lang.kotlin.resolve.KotlinResolverCaches)? = null,
+) {
 
     private val checks = KotlinSemanticChecks(service)
 
@@ -29,7 +35,9 @@ internal class IncrementalSemanticAnalysis(private val service: KotlinSymbolServ
     private class StmtDiags(val text: String, val declares: Boolean, val rel: List<Diagnostic>)
     // [bodyStmts] is present for a block-bodied function — it enables INTRA-function reuse (a keystroke in a
     // 150-line @Composable re-checks only the touched statement, not all ~50 calls). Null for other declarations.
-    private class DeclDiags(val header: String, val fullText: String, val rel: List<Diagnostic>, val bodyStmts: List<StmtDiags>? = null)
+    // [key] carries the declaration's PSI node (identity), header, and full text for change detection (see
+    // [IncrementalDecls]) — node identity from an incremental reparse decides "unchanged" without materializing text.
+    private class DeclDiags(val key: IncrementalDecls.Key, val rel: List<Diagnostic>, val bodyStmts: List<StmtDiags>? = null)
     // [externalStamp] = the content versions of OTHER source files at cache time ([KotlinSymbolService.
     // externalContentStamp]); when it changes, a cross-file dependency was edited, so this file's cached
     // diagnostics may be stale (e.g. a class whose property type changed in another file) → full re-analyze.
@@ -73,7 +81,8 @@ internal class IncrementalSemanticAnalysis(private val service: KotlinSymbolServ
     fun diagnostics(parsed: KotlinParsedFile): List<Diagnostic> {
         checks.resetPassCaches() // PSI-keyed per-pass caches must not survive the reparse
         val ktFile = parsed.ktFile
-        val resolver = KotlinResolver(ktFile, parsed, service)
+        val caches = cachesFor?.invoke(parsed)
+        val resolver = if (caches != null) KotlinResolver(ktFile, parsed, service, caches) else KotlinResolver(ktFile, parsed, service)
         val localAliases = typeAliasNamesIn(ktFile) // same-file typealiases (the disk model may lag the buffer)
 
         val fileLevel = KotlinPerf.span("fileLevel") { checks.fileLevelDiagnostics(ktFile) }
@@ -83,9 +92,11 @@ internal class IncrementalSemanticAnalysis(private val service: KotlinSymbolServ
         val externalStamp = service.externalContentStamp(parsed.file.path)
         // A cross-file dependency changed (a class edited in ANOTHER file) → this file's cached diagnostics may
         // be stale even though its own text is unchanged → re-analyze fully. (Self-edits are excluded from the
-        // stamp and handled by the per-declaration text diff in recomputeIndices.)
+        // stamp and handled by the per-declaration identity/text diff in IncrementalDecls.recomputeIndices.)
         val prev = analyzeCache[parsed.file.path]?.takeIf { it.externalStamp == externalStamp }
-        val recompute = KotlinPerf.span("scopeCheck") { recomputeIndices(prev, importsKey, topDecls) } // null → full
+        val recompute = KotlinPerf.span("scopeCheck") {
+            IncrementalDecls.recomputeIndices(prev?.decls?.map { it.key }, prev?.importsKey, importsKey, topDecls)
+        } // null → full
 
         val perDecl = ArrayList<List<Diagnostic>>(topDecls.size)
         val newEntries = ArrayList<DeclDiags>(topDecls.size)
@@ -105,12 +116,12 @@ internal class IncrementalSemanticAnalysis(private val service: KotlinSymbolServ
                     val fineReuse = recompute != null && recompute.size == 1 && recompute[0] == i
                     val (diags, stmts) = analyzeFunctionBody(fn, if (fineReuse) prev?.decls?.getOrNull(i) else null, resolver, localAliases)
                     perDecl += diags
-                    newEntries += DeclDiags(headerOf(d), d.text, diags.map { it.copy(range = TextRange(it.range.start - base, it.range.end - base)) }, stmts)
+                    newEntries += DeclDiags(IncrementalDecls.keyOf(d), diags.map { it.copy(range = TextRange(it.range.start - base, it.range.end - base)) }, stmts)
                 } else {
                     val diags = ArrayList<Diagnostic>()
                     checks.walkDecl(d, resolver, localAliases, diags)
                     perDecl += diags
-                    newEntries += DeclDiags(headerOf(d), d.text, diags.map { it.copy(range = TextRange(it.range.start - base, it.range.end - base)) })
+                    newEntries += DeclDiags(IncrementalDecls.keyOf(d), diags.map { it.copy(range = TextRange(it.range.start - base, it.range.end - base)) })
                 }
             }
         } }
@@ -119,30 +130,6 @@ internal class IncrementalSemanticAnalysis(private val service: KotlinSymbolServ
         val result = ArrayList<Diagnostic>(fileLevel)
         perDecl.forEach { result += it }
         return result
-    }
-
-    /**
-     * Which top-level declarations must be re-analyzed against [prev], or null to re-analyze the whole file.
-     * Empty list → nothing changed (reuse all). One index → a safe body-only function edit (see
-     * [diagnostics]). Anything else → null (full).
-     */
-    private fun recomputeIndices(prev: AnalyzeCache?, importsKey: String, topDecls: List<KtDeclaration>): List<Int>? {
-        if (prev == null || prev.importsKey != importsKey || prev.decls.size != topDecls.size) return null
-        val changed = ArrayList<Int>(2)
-        for (i in topDecls.indices) if (topDecls[i].text != prev.decls[i].fullText) changed += i
-        if (changed.size > 1) return null // a multi-declaration edit → don't reason about it; re-analyze fully
-        if (changed.isEmpty()) return changed // identical text (e.g. a caret-only re-analyze) → reuse everything
-        val k = changed[0]
-        val fn = topDecls[k] as? KtNamedFunction ?: return null
-        val body = fn.bodyBlockExpression ?: return null // expression bodies feed inference → treat as structural
-        val newHeader = fn.text.substring(0, body.textRange.startOffset - fn.textRange.startOffset)
-        return if (newHeader == prev.decls[k].header) changed else null // header changed → signature changed → full
-    }
-
-    /** A declaration's pre-body text (signature surface) for a block-bodied function; its full text otherwise. */
-    private fun headerOf(d: KtDeclaration): String {
-        val body = (d as? KtNamedFunction)?.bodyBlockExpression ?: return d.text
-        return d.text.substring(0, body.textRange.startOffset - d.textRange.startOffset)
     }
 
     /**

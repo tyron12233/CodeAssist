@@ -33,6 +33,10 @@ class JavaShape(
     /** Generic supertypes (superclass + interfaces) carrying their type arguments (`Collection<E>`). */
     val superTypes: List<TypeRef>,
     val members: List<KotlinSymbol>,
+    /** True when this type is a Java/Android `interface` (`ACC_INTERFACE`) — cannot be instantiated. */
+    val isInterface: Boolean = false,
+    /** True when this type is `abstract` (`ACC_ABSTRACT`, which interfaces also set) — cannot be instantiated. */
+    val isAbstract: Boolean = false,
 )
 
 object JavaBytecode {
@@ -47,9 +51,11 @@ object JavaBytecode {
         val typeParamBounds = ArrayList<TypeRef>()
         val superTypes = ArrayList<TypeRef>()
         var selfName: String? = null
+        var classAccess = 0
         cr.accept(object : ClassVisitor(Opcodes.ASM9) {
             override fun visit(version: Int, access: Int, name: String?, sig: String?, superName: String?, interfaces: Array<out String>?) {
                 selfName = name
+                classAccess = access
                 if (sig != null) {
                     val v = ClassSigVisitor(ctx)
                     SignatureReader(sig).accept(v)
@@ -132,7 +138,11 @@ object JavaBytecode {
                 return null
             }
         }, ClassReader.SKIP_CODE or ClassReader.SKIP_DEBUG or ClassReader.SKIP_FRAMES)
-        return JavaShape(typeParams, typeParamBounds, superTypes, members)
+        return JavaShape(
+            typeParams, typeParamBounds, superTypes, members,
+            isInterface = classAccess and Opcodes.ACC_INTERFACE != 0,
+            isAbstract = classAccess and Opcodes.ACC_ABSTRACT != 0,
+        )
     }
 
     private fun hidden(access: Int): Boolean =

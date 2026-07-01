@@ -89,24 +89,54 @@ internal object KotlinCompletionItems {
         )
     }
 
+    /** The `override fun foo(...): T` / `override val bar: T` header for an inherited member [m]. */
+    private fun overrideHeader(m: KotlinSymbol): String {
+        val ret = (m.type as? KotlinType)?.toString()?.takeIf { it.isNotBlank() && it != "Unit" }
+        return if (m.kind == SymbolKind.METHOD) "override fun ${m.name}${paramListOf(m.signature)}" + (ret?.let { ": $it" } ?: "")
+        else "override val ${m.name}" + (ret?.let { ": $it" } ?: "")
+    }
+
+    /** The full `override` stub for an inherited member [m] — a function body / property getter that throws
+     *  `TODO(...)`. Shared by completion's [overrideItem] and the implement-members quick-fix. */
+    fun overrideStubText(m: KotlinSymbol): String {
+        val header = overrideHeader(m)
+        val todo = "TODO(\"Not yet implemented\")"
+        return if (m.kind == SymbolKind.METHOD) "$header {\n    $todo\n}" else "$header\n    get() = $todo"
+    }
+
     /** An `override fun/val …` stub for an inherited member, body `TODO(...)`, with the caret selecting the TODO. */
     fun overrideItem(m: KotlinSymbol): CompletionItem {
-        val isFun = m.kind == SymbolKind.METHOD
-        val ret = (m.type as? KotlinType)?.toString()?.takeIf { it.isNotBlank() && it != "Unit" }
-        val header =
-            if (isFun) "override fun ${m.name}${paramListOf(m.signature)}" + (ret?.let { ": $it" } ?: "")
-            else "override val ${m.name}" + (ret?.let { ": $it" } ?: "")
+        val header = overrideHeader(m)
+        val insert = overrideStubText(m)
         val todo = "TODO(\"Not yet implemented\")"
-        val insert = if (isFun) "$header {\n    $todo\n}" else "$header\n    get() = $todo"
         val sel = insert.indexOf(todo)
         return CompletionItem(
             label = header,
             insertText = insert,
-            kind = if (isFun) CompletionItemKind.METHOD else CompletionItemKind.FIELD,
+            kind = if (m.kind == SymbolKind.METHOD) CompletionItemKind.METHOD else CompletionItemKind.FIELD,
             detail = "override",
             sortPriority = -2,
             symbol = m,
             caret = if (sel >= 0) CaretAction.Select(sel, todo.length) else CaretAction.AtEnd,
+        )
+    }
+
+    /** An `override val name: Type` stub for a primary-constructor parameter overriding an inherited open
+     *  property. [overrideAlreadyTyped] drops the leading `override ` when the user has already typed it (so
+     *  accepting after `class Foo(override |)` inserts `val name: Type`, not a duplicate keyword). Always emits
+     *  `val` (matching [overrideItem]); a supertype `var` still compiles when narrowed to `val`. */
+    fun ctorOverrideParam(m: KotlinSymbol, overrideAlreadyTyped: Boolean): CompletionItem {
+        val ret = (m.type as? KotlinType)?.toString()?.takeIf { it.isNotBlank() && it != "Unit" }
+        val body = "val ${m.name}" + (ret?.let { ": $it" } ?: "")
+        val header = "override $body"
+        return CompletionItem(
+            label = header,
+            insertText = if (overrideAlreadyTyped) body else header,
+            kind = CompletionItemKind.FIELD,
+            detail = "override",
+            sortPriority = -2,
+            symbol = m,
+            caret = CaretAction.AtEnd,
         )
     }
 

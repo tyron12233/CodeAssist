@@ -5,12 +5,14 @@ import dev.ide.lang.kotlin.parse.KotlinParsedFile
 import dev.ide.lang.kotlin.parse.KotlinParserHost
 import dev.ide.vfs.VirtualFile
 import org.jetbrains.kotlin.lexer.KtTokens
+import org.jetbrains.kotlin.psi.KtClass
 import org.jetbrains.kotlin.psi.KtClassOrObject
 import org.jetbrains.kotlin.psi.KtModifierListOwner
 import org.jetbrains.kotlin.psi.KtFile
 import org.jetbrains.kotlin.psi.KtNamedFunction
 import org.jetbrains.kotlin.psi.KtParameter
 import org.jetbrains.kotlin.psi.KtProperty
+import org.jetbrains.kotlin.psi.psiUtil.containingClassOrObject
 
 /**
  * The project-source declaration index. Every `.kt` in the module is parsed to PSI (no resolution) and its
@@ -50,6 +52,9 @@ class RawCallable(
     val isSuspend: Boolean = false,
     /** A `@Deprecated` declaration (detected by annotation simple name) — for strikethrough highlighting. */
     val isDeprecated: Boolean = false,
+    /** An ABSTRACT member: an explicit `abstract` modifier, or an interface member with no body — so a concrete
+     *  subtype must override it. An interface member WITH a default body is NOT abstract. */
+    val isAbstract: Boolean = false,
     /** The index of the `vararg` value parameter, or -1 if none. */
     val varargParamIndex: Int = -1,
     /** The function's own type-parameter names (`fun <T> items(…)` → `["T"]`) — so a param/return type that
@@ -96,6 +101,12 @@ class RawClass(
     val isInterface: Boolean = false,
     val isEnum: Boolean = false,
     val isAnnotation: Boolean = false,
+    /** True for an `abstract` or `sealed` class — it cannot be instantiated directly (the abstract-instantiation
+     *  check). An interface is signalled by [isInterface]; both block `Type()`. */
+    val isAbstract: Boolean = false,
+    /** True for a `sealed` class/interface — its subclasses are exhaustively enumerable (same-module), driving
+     *  the cross-file `when`-exhaustiveness check. */
+    val isSealed: Boolean = false,
 )
 
 class SourceFile(
@@ -243,7 +254,24 @@ object SourceIndexBuilder {
             isCompanion = (c as? org.jetbrains.kotlin.psi.KtObjectDeclaration)?.isCompanion() == true,
             isInterface = asClass?.isInterface() == true,
             isEnum = asClass?.isEnum() == true,
-            isAnnotation = asClass?.isAnnotation() == true)
+            isAnnotation = asClass?.isAnnotation() == true,
+            isAbstract = asClass?.let { it.hasModifier(KtTokens.ABSTRACT_KEYWORD) || it.hasModifier(KtTokens.SEALED_KEYWORD) } == true,
+            isSealed = asClass?.isSealed() == true)
+    }
+
+    /** ABSTRACT member detection: an explicit `abstract` modifier, or an interface member with no implementation
+     *  (a function with no body / a property with no initializer, delegate or accessor body). A top-level
+     *  declaration (no enclosing class) is never abstract. */
+    private fun isAbstractFunction(f: KtNamedFunction): Boolean {
+        if (f.hasModifier(KtTokens.ABSTRACT_KEYWORD)) return true
+        val cls = f.containingClassOrObject as? KtClass ?: return false
+        return cls.isInterface() && !f.hasBody()
+    }
+
+    private fun isAbstractProperty(p: KtProperty): Boolean {
+        if (p.hasModifier(KtTokens.ABSTRACT_KEYWORD)) return true
+        val cls = p.containingClassOrObject as? KtClass ?: return false
+        return cls.isInterface() && p.initializer == null && p.delegate == null && p.accessors.none { it.hasBody() }
     }
 
     /** [c] plus its companion object(s) and every (transitively) nested class/object, each as its own
@@ -256,7 +284,12 @@ object SourceIndexBuilder {
         rawClass(c, ctx, parsed)?.let { out += it }
         out += companionClasses(c, ctx, parsed)
         c.declarations.forEach { d ->
-            if (d is KtClassOrObject && !(d is org.jetbrains.kotlin.psi.KtObjectDeclaration && d.isCompanion())) {
+            // A `KtEnumEntry` IS a `KtClassOrObject` (it extends `KtClass`), but an enum CONSTANT is a value of
+            // the enum type, not a nested type — registering `Test.A` as a class made `isKnownType("Test.A")`
+            // true, so `Test.A` mis-resolved to a classifier `A` instead of the enum type (its constants are
+            // surfaced via [RawClass.enumEntries] / `enumConstantsOf`).
+            if (d is KtClassOrObject && d !is org.jetbrains.kotlin.psi.KtEnumEntry &&
+                !(d is org.jetbrains.kotlin.psi.KtObjectDeclaration && d.isCompanion())) {
                 out += collectClasses(d, ctx, parsed)
             }
         }
@@ -284,6 +317,7 @@ object SourceIndexBuilder {
         isInline = f.hasModifier(KtTokens.INLINE_KEYWORD),
         isSuspend = f.hasModifier(KtTokens.SUSPEND_KEYWORD),
         isDeprecated = hasAnno(f, "Deprecated"),
+        isAbstract = isAbstractFunction(f),
         varargParamIndex = f.valueParameters.indexOfFirst { it.isVarArg },
         paramHasDefault = f.valueParameters.map { it.hasDefaultValue() },
         typeParameterNames = f.typeParameters.mapNotNull { it.name },
@@ -304,6 +338,7 @@ object SourceIndexBuilder {
         visibility = visOf(p),
         isVar = p.isVar,
         isDeprecated = hasAnno(p, "Deprecated"),
+        isAbstract = isAbstractProperty(p),
         jvmStatic = hasAnno(p, "JvmStatic"),
         jvmField = hasAnno(p, "JvmField"),
     )

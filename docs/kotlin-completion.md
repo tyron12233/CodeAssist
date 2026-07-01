@@ -51,9 +51,31 @@ editor cases:
 - locals typed from their initializers,
 - member and call return types,
 - constructor calls,
-- chained calls (`a.b().c`).
+- chained calls (`a.b().c`),
+- **smart casts** after an `is` check (see below).
 
 This is deliberately a subset — enough to rank completion well without a full type checker.
+
+### Smart casts
+
+A simple-name reference is narrowed by an enclosing `is` check, purely from its **position** in the
+parse tree (no flow graph): `if (x is T) x.‹member›` resolves `x`'s members against `T`. Covered shapes,
+all in `KotlinResolver.smartCastTypeAt`:
+
+- the then-branch of `if (x is T)` and the else-branch of `if (x !is T)`;
+- the short-circuit RHS of `x is T && …` and `x !is T || …`;
+- a `when (x) { is T -> … }` branch (single positive `is`; a subject `val` narrows too);
+- a `while (x is T)` body;
+- the statements after an early-exit guard `if (x !is T) return` / `throw` / `break` / `continue`.
+
+The cast target's generic arguments are erased and it is made non-null (`is T` implies `T`). Because a
+name reference's smart cast is a function of its position alone, `inferType`'s per-snapshot cache holds it
+correctly. Both completion and the diagnostics (the unresolved-member and type-mismatch checks) consume it
+for free, since each resolves a receiver through `inferType`. It is conservative in the same direction as
+the rest of the model: a missed narrowing only under-reports (never a false "unresolved"), and a spurious
+one only fails to flag an error the compiler would, never the reverse. The preview interpreter keeps its
+own flow-driven narrowing (a push/pop stack the lowerer drives); this position-based path is gated off
+while that stack is active, so the interpreter is unchanged.
 
 ## Completion
 
@@ -146,6 +168,8 @@ Kotlin support is **beta**. The list below reflects what ships today and what is
   from bytecode.
 - The declared-type-driven **inference subset** (locals from initializers, member/call return types,
   constructor calls, `a.b().c` chains) that drives completion ranking.
+- **Smart casts** after an `is` check (`if (x is T) x.member`, `!is`+early-return guards, `&&`/`||`,
+  `when`, `while`), narrowing both completion and the unresolved-member / type-mismatch diagnostics.
 - **Go-to-definition** across project files and the classpath.
 - **Syntax / well-formedness diagnostics** surfaced from the tolerant parse.
 - **Kotlin → bytecode build**: in-process K2 codegen with per-file, ABI-aware incremental compilation,
@@ -179,8 +203,10 @@ These are deliberate simplifications of the editor-time model (the build's K2 co
 
 - **No full type checker.** Resolution is a pragmatic subset aimed at ranking completion well, not at
   verifying a program. Code that does not type-check can still produce completions.
-- **No smart casts.** Flow-sensitive narrowing after an `is` check or a null guard is not modeled, so a
-  member that only exists after a smart cast may not appear.
+- **Partial smart casts.** Narrowing after an `is` check is modeled position-by-position (see *Resolution
+  and inference → Smart casts*), but only for simple-name subjects in the supported shapes. Null guards
+  (`if (x != null)`) are not yet narrowed, and a narrowing broken by a later reassignment is not detected
+  (it errs toward keeping the narrowed type).
 - **Limited generic inference.** Generic type arguments are not fully substituted through call chains;
   completions on a heavily generic expression may fall back to the erased/declared shape.
 - **Limited lambda / SAM inference.** Parameter and return types inferred *through* lambdas and SAM

@@ -632,6 +632,18 @@ class KotlinSymbolService(
                 .flatMap { ownAndInherited(it, emptyList(), visited) }
             return own + synthetic + inherited
         }
+        // `kotlin.Throwable` is a mapped built-in whose `.kotlin_builtins` shape is intentionally minimal
+        // (`message`, `cause`); the rest of its API — `stackTrace`, `printStackTrace`, `localizedMessage`,
+        // `addSuppressed`, `fillInStackTrace`, … — lives on `java.lang.Throwable`, and Kotlin surfaces it
+        // through the mapping. Enumerate the JVM type's members WITH bean synthesis (so `getStackTrace()` →
+        // the `stackTrace` property) instead of the stub, so `e.stackTrace`/`e.message` complete on any
+        // `Throwable`/`Exception` (an exception caught as `java.lang.Exception` inherits this via its supertype
+        // chain). Unlike `Any`/`String`, whose Kotlin built-in IS the full API, Throwable's is deliberately a
+        // subset — so this is a Throwable-specific augmentation, not a general "read the java type" rule.
+        if (fqn == "kotlin.Throwable") {
+            typeShape(Builtins.javaTypeFor(fqn) ?: "java.lang.Throwable")
+                ?.let { return membersFromShape(it, typeArgs, visited, synthesizeBeanProps = true) }
+        }
         // Kotlin built-ins (List/Int/String/…): the real members, preferred over the java.* approximation.
         // These ARE Kotlin types (even though their bytecode is java.lang.String etc.), so NO synthetic Java
         // bean properties — `"".bytes` is not a Kotlin property of String.
@@ -1235,6 +1247,38 @@ class KotlinSymbolService(
         }
     }
 
+    /**
+     * The DIRECT subclasses (FQNs) of the SOURCE `sealed` class/interface [fqn] — gathered across the whole
+     * project model, so it is COMPLETE (a sealed type's subclasses must be in the same module, hence all in the
+     * source model). Returns null when [fqn] isn't a known source sealed type (a library sealed class would need
+     * its metadata `sealedSubclasses`, which isn't decoded — the caller then backs off). Drives cross-file
+     * `when`-exhaustiveness.
+     */
+    fun sealedSubclassesOf(fqn: String): List<String>? {
+        val m = model()
+        val sealed = m.classByFqn[fqn]
+        if (sealed != null) {
+            if (!sealed.isSealed) return null
+            val out = ArrayList<String>()
+            for (rc in m.classByFqn.values) {
+                if (rc.fqn == fqn) continue
+                if (rc.superTypeTexts.any { superHeadFqn(it, rc.ctx) == fqn }) out += rc.fqn
+            }
+            return out
+        }
+        // A LIBRARY (classpath) sealed type: its direct subclasses come from the `@Metadata` `sealedSubclasses`
+        // (decoded into the type shape). Non-empty ⟹ it is sealed (only sealed types carry the list).
+        return typeShape(fqn)?.sealedSubclasses?.takeIf { it.isNotEmpty() }
+    }
+
+    /** The resolved classifier FQN of a supertype-list entry's text (`State`, `State<T>`, `State()`,
+     *  `pkg.State`); falls back to the raw head when it can't be resolved (so an already-qualified text still
+     *  compares equal to a candidate FQN, and an unresolvable simple name just won't match → safe miss). */
+    private fun superHeadFqn(superText: String, ctx: FileContext?): String? {
+        val head = superText.substringBefore('<').substringBefore('(').trim()
+        return resolveTypeName(head, ctx) ?: head
+    }
+
     /** Whether [fqn] is a Kotlin BINARY (`@Metadata`) class. Its constructors may have default arguments that
      *  the metadata decode doesn't surface, so an argument-count check against them would be unsound. */
     fun hasKotlinMetadata(fqn: String): Boolean = typeShape(fqn)?.isKotlin == true
@@ -1244,6 +1288,25 @@ class KotlinSymbolService(
 
     fun isSourceClass(fqn: String): Boolean = fqn in model().classByFqn
     fun sourceClass(fqn: String): RawClass? = model().classByFqn[fqn]
+
+    /**
+     * Whether [fqn] is a type that CANNOT be created with a constructor call (`Foo()`) — an `interface` or an
+     * `abstract`/`sealed` class. Returns `null` when it can't be decided (the type doesn't resolve in any
+     * source/classpath/built-in source, or the classpath index is in dumb mode), so the caller MUST back off
+     * rather than flag — the abstract-instantiation check never fires on an unknown type. Project source first
+     * (a freshly-edited class resolves before the index catches up), then classpath binaries + built-ins.
+     */
+    fun isNonInstantiableType(fqn: String): Boolean? {
+        sourceClass(fqn)?.let { return it.isInterface || it.isAbstract }
+        (typeShape(fqn) ?: builtinShape(fqn))?.let { return it.isInterface || it.isAbstract }
+        return null
+    }
+
+    /** Whether [fqn] declares a companion object — where an `operator fun invoke` could make `Type()` a valid
+     *  CALL rather than a (forbidden) constructor invocation. The abstract-instantiation check backs off when
+     *  this is true, so it never false-positives on the companion-invoke factory pattern. */
+    fun typeHasCompanionObject(fqn: String): Boolean =
+        sourceClass(fqn)?.companionObjectName != null || (typeShape(fqn) ?: builtinShape(fqn))?.companionObjectName != null
 
     /** Whether [fqn] is a plain JAVA type (classpath binary, not a Kotlin `@Metadata` class, not a project
      *  Kotlin source class, not a mapped built-in). Java types expose synthetic bean properties + drive the
@@ -1316,7 +1379,7 @@ class KotlinSymbolService(
                 "private" -> setOf(dev.ide.lang.resolve.Modifier.PRIVATE)
                 "protected" -> setOf(dev.ide.lang.resolve.Modifier.PROTECTED)
                 else -> emptySet()
-            },
+            } + if (rc.isAbstract) setOf(dev.ide.lang.resolve.Modifier.ABSTRACT) else emptySet(),
             isInternal = rc.visibility == "internal",
             isComposable = rc.isComposable,
             isInline = rc.isInline,

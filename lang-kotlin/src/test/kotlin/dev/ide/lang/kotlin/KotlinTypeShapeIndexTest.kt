@@ -66,6 +66,15 @@ class KotlinTypeShapeIndexTest {
     }
 
     @Test
+    fun codecRoundTripsSealedSubclasses() {
+        val shape = TypeShape(
+            emptyList(), emptyList(), emptyList(), emptyList(),
+            isAbstract = true, isKotlin = true, sealedSubclasses = listOf("p.Loading", "p.Done"),
+        )
+        assertEquals(listOf("p.Loading", "p.Done"), roundTrip(shape).sealedSubclasses, "sealedSubclasses survive the codec")
+    }
+
+    @Test
     fun consumerResolvesGenericsThroughIndex() {
         // val a = gen.Box.of(t) → Box<Txt>; a.get() → Txt → `.upper` resolves, all served by the index.
         val hs = hints("fun f(t: gen.Txt) { val a = gen.Box.of(t) }")
