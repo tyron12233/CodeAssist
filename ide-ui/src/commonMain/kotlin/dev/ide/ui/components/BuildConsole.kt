@@ -124,7 +124,7 @@ fun BuildConsole(
     }
 
     Column(modifier, verticalArrangement = Arrangement.spacedBy(10.dp)) {
-        Header(buildState, errors, warnings, onRun, onStop, onCollapse)
+        Header(buildState, errors, warnings, tab, activePluginTab != null, onRun, onStop, onCollapse)
         if (indexStatus.building) IndexingSection(indexStatus)
         buildState.banner?.let { FirstBuildBanner(it) }
         if (running) RunningStrip(buildState.steps)
@@ -169,6 +169,8 @@ private fun Header(
     state: BuildState,
     errors: Int,
     warnings: Int,
+    tab: BuildTab,
+    pluginActive: Boolean,
     onRun: () -> Unit,
     onStop: () -> Unit,
     onCollapse: () -> Unit
@@ -207,7 +209,8 @@ private fun Header(
             )
         }
         StatusPill(state.status)
-        if (state.log.isNotEmpty()) CopyLogButton(state.log)
+        val (copyLabel, copyProvide) = copyForTab(state, tab, pluginActive)
+        if (copyProvide != null) CopyButton(copyLabel, copyProvide)
         if (running) IconButtonCa(
             CaIcons.stop,
             "Stop",
@@ -254,13 +257,37 @@ private fun StatusPill(status: RunStatus) {
 }
 
 /**
- * Copies the whole console log to the clipboard in one tap — the only practical way to capture a build
- * failure off a device with no `adb`/logcat. Each line carries its time + task so the paste is useful.
- * Flips to a check for ~1.5s as confirmation.
+ * The copy target for the active tab: the whole Problems / Log / Steps transcript as pasteable text. Copying
+ * the full set (not just the filtered view) is deliberate — it's the only practical way to capture a build off
+ * a device with no `adb`/logcat. Returns a null provider when there's nothing to copy (or a plugin tab owns
+ * the pane), which hides the button. The text is built on demand so an empty tap never pays for it.
+ */
+private fun copyForTab(
+    state: BuildState,
+    tab: BuildTab,
+    pluginActive: Boolean,
+): Pair<String, (() -> String)?> {
+    if (pluginActive) return "" to null
+    return when (tab) {
+        BuildTab.Problems -> "problems" to (
+            if (state.diagnostics.isEmpty()) null
+            else fun(): String = renderProblemsForCopy(state.diagnostics))
+        BuildTab.Log -> "log" to (
+            if (state.log.isEmpty()) null
+            else fun(): String = state.log.joinToString("\n", transform = ::renderLogForCopy))
+        BuildTab.Steps -> "steps" to (
+            if (state.steps.isEmpty()) null
+            else fun(): String = renderStepsForCopy(state.steps))
+    }
+}
+
+/**
+ * Copies [provide]'s text to the clipboard in one tap and flips to a check for ~1.5s as confirmation. The
+ * text is built lazily on click, so a large transcript costs nothing until the user actually copies it.
  */
 @OptIn(ExperimentalComposeUiApi::class)
 @Composable
-private fun CopyLogButton(log: List<BuildLogLine>) {
+private fun CopyButton(label: String, provide: () -> String) {
     val clipboard = LocalClipboardManager.current
     val scope = rememberCoroutineScope()
     var copied by remember { mutableStateOf(false) }
@@ -271,15 +298,9 @@ private fun CopyLogButton(log: List<BuildLogLine>) {
     }
     IconButtonCa(
         if (copied) CaIcons.check else CaIcons.copy,
-        if (copied) "Log copied" else "Copy log",
+        if (copied) "Copied" else "Copy $label",
         onClick = {
-            scope.launch {
-                val text = log.joinToString(separator = "\n") {
-                    renderLogForCopy(it)
-                }
-
-                clipboard.setText(AnnotatedString(text))
-            }
+            scope.launch { clipboard.setText(AnnotatedString(provide())) }
             copied = true
         },
         boxSize = 28,
@@ -296,6 +317,54 @@ private fun renderLogForCopy(l: BuildLogLine): String = buildString {
         append('['); append(l.task); append("] ")
     }
     append(l.message)
+}
+
+/** One compiler-style line per diagnostic — `severity: file:line:col: message [source]` + any snippet. */
+private fun renderProblemsForCopy(diagnostics: List<BuildDiagnosticUi>): String =
+    diagnostics.joinToString("\n", transform = ::renderProblemForCopy)
+
+private fun renderProblemForCopy(d: BuildDiagnosticUi): String = buildString {
+    append(
+        when (d.severity) {
+            UiSeverity.Error -> "error"
+            UiSeverity.Warning -> "warning"
+            UiSeverity.Info -> "info"
+            UiSeverity.Hint -> "hint"
+        }
+    )
+    append(": ")
+    d.file?.let { f ->
+        append(f)
+        if (d.line > 0) {
+            append(':'); append(d.line)
+            if (d.column > 0) {
+                append(':'); append(d.column)
+            }
+        }
+        append(": ")
+    }
+    append(d.message)
+    val source = d.source.ifEmpty { d.kind }
+    if (source.isNotEmpty()) {
+        append(" ["); append(source); append(']')
+    }
+    d.detail?.takeIf { it.isNotBlank() }?.let {
+        append('\n'); append(it.trimEnd())
+    }
+}
+
+/** One line per build step — `name  STATUS` — mirroring the Steps tab. */
+private fun renderStepsForCopy(steps: List<BuildStepUi>): String =
+    steps.joinToString("\n") { "${it.name}  ${stepStatusLabel(it.status)}" }
+
+private fun stepStatusLabel(status: StepStatus): String = when (status) {
+    StepStatus.Pending -> "PENDING"
+    StepStatus.Running -> "RUNNING"
+    StepStatus.Done -> "DONE"
+    StepStatus.UpToDate -> "UP-TO-DATE"
+    StepStatus.NoSource -> "NO-SOURCE"
+    StepStatus.Skipped -> "SKIPPED"
+    StepStatus.Failed -> "FAILED"
 }
 
 /** A live progress bar over the step graph while a build runs: the current step + a done/total fraction. */
@@ -469,13 +538,18 @@ private fun ProblemsTab(diagnostics: List<BuildDiagnosticUi>, onOpen: (BuildDiag
             )
         } else {
             val groups = remember(shown) { groupByFile(shown) }
-            LazyColumn(
-                Modifier.weight(1f).fillMaxWidth(),
-                verticalArrangement = Arrangement.spacedBy(2.dp)
-            ) {
-                for ((file, items) in groups) {
-                    if (file.isNotEmpty()) item { ProblemFileHeader(file, items.size) }
-                    items(items) { d -> ProblemRow(d, indented = file.isNotEmpty(), onOpen) }
+            // Selectable so a problem message / captured snippet can be lifted out by hand; the header's
+            // Copy button grabs the whole set. Row taps still jump to file:line (tap = click, long-press /
+            // drag = select).
+            SelectionContainer(Modifier.weight(1f).fillMaxWidth()) {
+                LazyColumn(
+                    Modifier.fillMaxSize(),
+                    verticalArrangement = Arrangement.spacedBy(2.dp)
+                ) {
+                    for ((file, items) in groups) {
+                        if (file.isNotEmpty()) item { ProblemFileHeader(file, items.size) }
+                        items(items) { d -> ProblemRow(d, indented = file.isNotEmpty(), onOpen) }
+                    }
                 }
             }
         }
@@ -851,8 +925,10 @@ private fun StepsTab(steps: List<BuildStepUi>) {
         EmptyState("No build steps yet.", Modifier.fillMaxSize())
         return
     }
-    LazyColumn(Modifier.fillMaxSize(), verticalArrangement = Arrangement.spacedBy(2.dp)) {
-        items(steps) { StepRow(it) }
+    SelectionContainer(Modifier.fillMaxSize()) {
+        LazyColumn(Modifier.fillMaxSize(), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+            items(steps) { StepRow(it) }
+        }
     }
 }
 
