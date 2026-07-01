@@ -67,4 +67,49 @@ class ResolverCache(val root: Path) {
     /** Directory an `.aar` is exploded into (e.g. its `classes.jar`, `res/`, `assets/`). */
     fun explodedDir(c: Coordinate): Path =
         base.resolve(c.group.replace('.', '/')).resolve(c.name).resolve(c.version).resolve("${c.name}-${c.version}-exploded")
+
+    // --- negative cache --------------------------------------------------------------------------
+    // A genuine 404 (the resource is absent from every repo, NOT a network error) is remembered so a later
+    // open doesn't re-probe the network for something that doesn't exist — the dominant repeat-download cause
+    // is `-sources.jar`s, which most libraries never publish. A miss expires after [MISS_TTL_MS] so a since-
+    // published artifact is eventually picked up, and the explicit "Retry" path clears all misses. Network
+    // ERRORS are never recorded here (they're transient); only clean 404s are.
+
+    private val missBase: Path = root.resolve(".platform").resolve("caches").resolve("resolved-deps-misses")
+
+    private fun missFileFor(relative: String): Path = missBase.resolve("$relative.miss")
+
+    /** True if [relative] was recorded absent within the TTL (so skip the network). Expired entries are
+     *  deleted and treated as unknown, so the artifact is re-probed once. */
+    fun isKnownMissing(relative: String, now: Long = System.currentTimeMillis()): Boolean {
+        val f = missFileFor(relative)
+        if (!Files.isRegularFile(f)) return false
+        val ts = runCatching { String(Files.readAllBytes(f)).trim().toLong() }.getOrNull() ?: return false
+        if (now - ts > MISS_TTL_MS) { runCatching { Files.deleteIfExists(f) }; return false }
+        return true
+    }
+
+    /** Record [relative] as absent (a confirmed 404 across every repo). Best-effort; a write failure just
+     *  means the miss isn't remembered (the artifact is re-probed next time — never an error). */
+    fun recordMissing(relative: String, now: Long = System.currentTimeMillis()) {
+        runCatching {
+            val f = missFileFor(relative)
+            Files.createDirectories(f.parent)
+            Files.write(f, now.toString().toByteArray())
+        }
+    }
+
+    /** Drop all negative-cache entries — called when the user explicitly retries, so known-misses are re-probed. */
+    fun clearMisses() {
+        if (!Files.isDirectory(missBase)) return
+        runCatching {
+            Files.walk(missBase).use { s ->
+                s.sorted(Comparator.reverseOrder()).forEach { runCatching { Files.deleteIfExists(it) } }
+            }
+        }
+    }
+
+    private companion object {
+        const val MISS_TTL_MS = 7L * 24 * 60 * 60 * 1000   // 7 days
+    }
 }

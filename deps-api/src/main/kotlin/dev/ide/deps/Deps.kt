@@ -48,6 +48,11 @@ data class ResolutionResult(
     val resolved: List<ResolvedArtifact>,
     val unresolved: List<Coordinate>,
     val conflicts: List<VersionConflict>,
+    /** True if at least one [unresolved] coordinate failed for a TRANSIENT reason (network/timeout/5xx)
+     *  rather than a genuine 404 — so re-resolving later (online) may succeed. False when every failure is a
+     *  hard miss (won't fix itself; the resolver records those in its negative cache). Lets a caller skip a
+     *  futile re-walk on the next open while still auto-retrying a real offline failure. Defaults false. */
+    val retriable: Boolean = false,
 )
 
 data class ResolvedArtifact(
@@ -56,6 +61,9 @@ data class ResolvedArtifact(
     val classesRoot: VirtualFile,            // jar, or classes.jar extracted from an aar
     val sourcesRoot: VirtualFile? = null,
     val dependsOn: List<Coordinate> = emptyList(),
+    /** Additional class roots when a single GMM variant publishes more than one primary jar/aar (rare);
+     *  these join [classesRoot] on the classpath. Empty for the common single-artifact case. */
+    val extraClassesRoots: List<VirtualFile> = emptyList(),
 )
 
 enum class ArtifactKind { JAR, AAR }
