@@ -1041,7 +1041,18 @@ class IndexServiceImpl(
         override val sourcePath: Path = file
         override fun bytes(): ByteArray = text.toByteArray()
         override fun text(): String = text
-        override fun dom(): ParsedFile? = parse(file, text)
+        override fun dom(): ParsedFile? = shared("dom") { parse(file, text) }
+
+        // FileContent-style per-file memo: this input is handed to every extension for the file in one pass
+        // (see indexSourceFile), which runs them sequentially on a single thread — so a plain map is safe, and
+        // an AST parsed by the first Java/Kotlin index is reused by the rest instead of re-parsed per index.
+        private val memo = HashMap<String, Any?>()
+
+        @Suppress("UNCHECKED_CAST")
+        override fun <T> shared(key: String, compute: () -> T): T {
+            if (memo.containsKey(key)) return memo[key] as T
+            val v = compute(); memo[key] = v; return v
+        }
     }
 
     companion object {

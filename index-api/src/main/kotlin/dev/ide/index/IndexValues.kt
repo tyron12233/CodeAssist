@@ -28,6 +28,36 @@ data class MemberValue(val name: String, val owner: String, val kind: String, va
  */
 data class SourceDocValue(val name: String, val arity: Int, val names: List<String>, val doc: String?)
 
+/**
+ * runnable-entry-point hit: a class the Run action can launch. [fqn] is what the runner loads — a Kotlin file
+ * facade (`com.example.MainKt`), a `@JvmStatic` owner, a Java class, or an instance-main class. [fileId] is the
+ * interned source file (resolve via [IndexService.filePath]) so a hit can be scoped to a module's roots.
+ * [instance] is true when there is no static `main`, so the runner constructs the class (no-arg constructor)
+ * and calls the instance `main` — the JVM launcher can't (it requires a static entry point), but our reflective
+ * runner can (matching Java's newer instance-`main` entry points).
+ */
+data class EntryPointValue(val fqn: String, val fileId: Int, val instance: Boolean)
+
+/**
+ * Shared identifiers for the runnable-entry-point indexes (one per source language). Producers ([the Java and
+ * Kotlin backends]) and the consumer (the run service) agree on the [IndexId]s and the single [KEY] every
+ * entry point is stored under, so a run lookup is `exact(id, KEY)` merged across both.
+ */
+object EntryPointIndex {
+    val JAVA = IndexId("java.mains")
+    val KOTLIN = IndexId("kotlin.mains")
+
+    /** The single term every entry point is keyed by (there is nothing to prefix/fuzzy match — we want them all). */
+    const val KEY = "main"
+}
+
+object EntryPointExternalizer : Externalizer<EntryPointValue> {
+    override fun write(out: DataOutput, value: EntryPointValue) {
+        out.writeUTF(value.fqn); out.writeInt(value.fileId); out.writeBoolean(value.instance)
+    }
+    override fun read(inp: DataInput) = EntryPointValue(inp.readUTF(), inp.readInt(), inp.readBoolean())
+}
+
 object ClassNameExternalizer : Externalizer<ClassNameValue> {
     override fun write(out: DataOutput, value: ClassNameValue) {
         out.writeUTF(value.fqn); out.writeByte(value.origin.ordinal); out.writeUTF(value.kind)

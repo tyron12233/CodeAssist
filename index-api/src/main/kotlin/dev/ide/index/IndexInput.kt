@@ -22,4 +22,14 @@ interface IndexInput {
     fun bytes(): ByteArray
     fun text(): String?
     fun dom(): ParsedFile?
+
+    /**
+     * Per-input memo shared across every index extension that processes THIS input in a pass — the same role
+     * as IntelliJ's `FileContent` (one input instance is handed to all extensions for a file). An extension
+     * computes an expensive per-file artifact (a parsed AST, a distilled declaration model) under a stable
+     * [key] once; every other extension asking for the same [key] reuses it, so a file is parsed once, not
+     * once per index. [compute] may return null (a failed parse) and the null is cached too. The default is
+     * no caching (each call recomputes) — inputs that aren't shared across extensions need nothing more.
+     */
+    fun <T> shared(key: String, compute: () -> T): T = compute()
 }
