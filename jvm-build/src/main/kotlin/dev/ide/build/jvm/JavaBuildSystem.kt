@@ -7,12 +7,12 @@ import dev.ide.build.TaskDescriptor
 import dev.ide.build.TaskGraph
 import dev.ide.build.TaskName
 import dev.ide.build.engine.DefaultTaskContainer
-import dev.ide.build.engine.DexBackend
 import dev.ide.build.engine.DexExecTask
 import dev.ide.build.engine.DexRunner
 import dev.ide.build.engine.JavaDexTask
 import dev.ide.build.engine.JavaExecTask
 import dev.ide.build.engine.ProgramIo
+import dev.ide.build.engine.RunDexBackend
 import dev.ide.build.SourceGenerator
 import dev.ide.build.engine.SimpleBuildConfiguration
 import dev.ide.build.engine.classOutputs
@@ -83,13 +83,15 @@ class JavaBuildSystem(
         programArgs: List<String> = emptyList(),
         javaLauncher: () -> Path = { Paths.get(System.getProperty("java.home"), "bin", "java") },
         programIo: ProgramIo? = null,
+        /** True when [mainClass]'s `main` is an instance method (run via the reflective launcher). */
+        instanceMain: Boolean = false,
     ): TaskGraph {
         val byId = project.modules.associateBy { it.id }
         val tasks = DefaultTaskContainer()
         val java = JavaPlugin(bootClasspath, kotlin, plugins, generators)
         for (m in moduleClosure(listOf(module.id), byId)) java.registerModule(tasks, m, byId, withJar = false)
         val runName = TaskName(":${module.name}:run")
-        tasks.register(runName) { JavaExecTask(runName, mainClass, { runtimeClasspath(module) }, programArgs, javaLauncher, programIo) }
+        tasks.register(runName) { JavaExecTask(runName, mainClass, { runtimeClasspath(module) }, programArgs, javaLauncher, programIo, instanceMain) }
             .configure { dependsOn(TaskName(":${module.name}:classes")) }
         return tasks.build()
     }
@@ -105,7 +107,7 @@ class JavaBuildSystem(
         module: Module,
         mainClass: String,
         minApi: Int,
-        dexBackend: DexBackend,
+        dexBackend: RunDexBackend,
         dexRunner: DexRunner,
         programArgs: List<String> = emptyList(),
         programIo: ProgramIo? = null,

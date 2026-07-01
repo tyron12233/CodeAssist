@@ -30,6 +30,10 @@ import org.objectweb.asm.tree.TypeInsnNode
 object SandboxGuard {
     private const val GUARDS = "dev/ide/build/engine/Guards"
 
+    /** Bump when the rewrite / guarded API set changes. Folded into the run-dex cache key so cached
+     *  instrumented library dex is invalidated by a guard change (see [RunDexRequest.guardVersion]). */
+    const val VERSION = 1
+
     /** Instance vs static affects which opcodes match; [guardDesc] is the exact descriptor of the [Guards] target. */
     private class M(val guardName: String, val guardDesc: String, val static: Boolean)
 

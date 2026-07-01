@@ -4,9 +4,9 @@ import dev.ide.build.BuildGoal
 import dev.ide.build.BuildRequest
 import dev.ide.build.VariantSelector
 import dev.ide.build.engine.BuildCache
-import dev.ide.build.engine.DexBackend
 import dev.ide.build.engine.DexResult
 import dev.ide.build.engine.DexRunner
+import dev.ide.build.engine.RunDexBackend
 import dev.ide.build.engine.ProgramIo
 import dev.ide.build.engine.SimpleTaskContext
 import dev.ide.build.engine.TaskExecutorImpl
@@ -140,12 +140,12 @@ class JavaBuildTest {
             val (_, project) = buildWorkspace(dir, platform)
             val app = project.modules.first { it.name == "app" }
 
-            // Fake D8: record the runtime classpath it was handed, drop a placeholder classes.dex so the graph proceeds.
-            var dexedInputs: List<Path> = emptyList()
-            val dexBackend = DexBackend { inputs, _, outDir ->
-                dexedInputs = inputs
-                Files.createDirectories(outDir); Files.write(outDir.resolve("classes.dex"), byteArrayOf(0))
-                DexResult(true, listOf("fake-dex ${inputs.size} input(s)"))
+            // Fake D8: record the runtime classpath scopes it was handed, drop a placeholder classes.dex so the graph proceeds.
+            var dexedClasspath: List<Path> = emptyList()
+            val dexBackend = RunDexBackend { request ->
+                dexedClasspath = request.userClassDirs + request.libJars
+                Files.createDirectories(request.outDex); Files.write(request.outDex.resolve("classes.dex"), byteArrayOf(0))
+                DexResult(true, listOf("fake-dex ${dexedClasspath.size} input(s)"))
             }
             // Fake DexClassLoader runner: record what it was asked to run.
             var ranMain: String? = null
@@ -167,7 +167,7 @@ class JavaBuildTest {
             val ran = outcome.ranTasks.map { it.value }
             assertTrue(":app:dexRun" in ran, "dexRun must run: $ran")
             assertTrue(":app:runDex" in ran, "runDex must run: $ran")
-            assertTrue(dexedInputs.isNotEmpty(), "the dex backend must receive the runtime classpath (app + deps)")
+            assertTrue(dexedClasspath.isNotEmpty(), "the dex backend must receive the runtime classpath (app + deps)")
             assertTrue(ranMain == "com.example.app.Main", "runner got the wrong main: $ranMain")
             assertTrue(ranDexDir?.let { Files.exists(it.resolve("classes.dex")) } == true, "runner must get the produced dex dir")
 

@@ -20,12 +20,36 @@ import java.nio.file.Path
  */
 
 /**
- * Dex backend: turn a runtime classpath (class dirs + jars) into indexed `classes.dex` under `outDir`.
- * Supplied by the host (D8 in-process, from :android-support) — the mirror of [JavaCompile].
+ * Dex backend for the console-run path. Supplied by the host (D8 in-process, from :android-support) — the
+ * mirror of [JavaCompile]. Unlike a single monolithic dex of the whole runtime classpath (which re-dexes
+ * `kotlin-stdlib` + every dependency on EVERY source edit — the old behavior and the dominant `dexRun` cost),
+ * this lets the host dex the run's classpath SCOPE-AWARE and CACHED: immutable library jars are content-hash
+ * cached (dexed once, reused across builds and projects), so an edit re-dexes only the changed user classes.
  */
-fun interface DexBackend {
-    fun dex(inputs: List<Path>, minApi: Int, outDir: Path): DexResult
+fun interface RunDexBackend {
+    /** Dex [request]'s runtime classpath into `request.outDex` — a flat dir of `.dex` files a `DexClassLoader`
+     *  loads (multidex: the runner joins every `.dex` under it onto the load path). */
+    fun dexForRun(request: RunDexRequest): DexResult
 }
+
+/**
+ * A console run's dex request. [userClassDirs] (the module's own class output, incl. its `kotlin-classes`)
+ * change on every edit and are re-dexed each build; [libJars] (stdlib + resolved dependency jars) are
+ * immutable and content-hash cached. [instrument] is build-engine's run-sandbox bytecode rewrite
+ * ([ExitGuard] + [SandboxGuard]) applied to BOTH scopes before dexing — passed as a function so the
+ * Android-free engine keeps owning the sandbox while the host owns D8. [guardVersion] keys the library dex
+ * cache, so a guard-logic change invalidates it (and so the run's INSTRUMENTED dex never aliases the
+ * uninstrumented APK dex cache). [stagingDir] is scratch the backend may keep between builds.
+ */
+class RunDexRequest(
+    val userClassDirs: List<Path>,
+    val libJars: List<Path>,
+    val minApi: Int,
+    val instrument: (entryName: String, bytes: ByteArray) -> ByteArray,
+    val guardVersion: String,
+    val stagingDir: Path,
+    val outDex: Path,
+)
 
 data class DexResult(val success: Boolean, val log: List<String> = emptyList())
 
@@ -85,9 +109,10 @@ internal class LoggingProgramIo(private val log: (String) -> Unit) : ProgramIo {
 }
 
 /**
- * `dexRun`: dex the module's runtime classpath into [outDex]. Class directories are jarred into
- * [stagingDir] first (D8 reads jars/class files, not raw dirs); library jars pass through. A normal
- * incremental task — re-dexes only when the runtime classpath content changes.
+ * `dexRun`: dex the module's runtime classpath into [outDex]. Splits the classpath into the mutable user
+ * class output (directories) and the immutable library jars, and hands both to the [RunDexBackend], which
+ * content-hash caches the libraries so an edit re-dexes only the user classes. A normal incremental task at
+ * the graph level too — re-dexes nothing when the whole runtime classpath is unchanged.
  */
 class JavaDexTask(
     override val name: TaskName,
@@ -95,13 +120,15 @@ class JavaDexTask(
     private val minApi: Int,
     private val stagingDir: Path,
     private val outDex: Path,
-    private val dexBackend: DexBackend,
+    private val dexBackend: RunDexBackend,
 ) : Task {
     override val inputs: TaskInputs get() = TaskInputsImpl().apply {
         val cp = runtimeClasspath()
         dirPaths("classes", cp.filter { Files.isDirectory(it) })
         filePaths("libs", cp.filter { !Files.isDirectory(it) })
         property("minApi", minApi)
+        // A guard change rewrites the instrumented dex, so re-run even when the classpath is unchanged.
+        property("guardVersion", GUARD_VERSION)
     }
     override val outputs: TaskOutputs get() = TaskOutputsImpl().apply { dirPath("dex", outDex) }
 
@@ -109,23 +136,31 @@ class JavaDexTask(
         ctx.checkCanceled()
         Files.createDirectories(stagingDir)
         Files.createDirectories(outDex)
-        // Instrument everything on the run's classpath (user classes AND libraries): ExitGuard so a program's
-        // exit ends the run not the IDE, and SandboxGuard so its network/file/reflection/exec calls are mediated
-        // by the permission broker. Both pre-scan and no-op classes that can't match, so this stays cheap.
-        val transform: (String, ByteArray) -> ByteArray = { name, bytes ->
-            if (name.endsWith(".class")) SandboxGuard.instrument(ExitGuard.instrument(bytes)) else bytes
-        }
         val cp = runtimeClasspath().filter { Files.exists(it) }
-        val inputs = cp.mapIndexed { i, p ->
-            when {
-                Files.isDirectory(p) -> stagingDir.resolve("in$i.jar").also { writeJar(p, it, transform) }
-                else -> stagingDir.resolve("lib$i.jar").also { copyJarTransformed(p, it, transform) }
-            }
-        }.filter { Files.exists(it) && Files.size(it) > 0L }
-        if (inputs.isEmpty()) return@withContext TaskResult.Failed("nothing to dex for run")
-        val r = dexBackend.dex(inputs, minApi, outDex)
+        if (cp.isEmpty()) return@withContext TaskResult.Failed("nothing to dex for run")
+        // Instrument everything on the run's classpath (user classes AND libraries): ExitGuard so a program's
+        // exit ends the run not the IDE, and SandboxGuard so its network/file/reflection/exec calls are
+        // mediated by the permission broker. Both pre-scan and no-op classes that can't match, so this stays
+        // cheap; for libraries it is paid once and cached with the dex.
+        val request = RunDexRequest(
+            userClassDirs = cp.filter { Files.isDirectory(it) },
+            libJars = cp.filter { !Files.isDirectory(it) },
+            minApi = minApi,
+            instrument = { entry, bytes ->
+                if (entry.endsWith(".class")) SandboxGuard.instrument(ExitGuard.instrument(bytes)) else bytes
+            },
+            guardVersion = GUARD_VERSION,
+            stagingDir = stagingDir,
+            outDex = outDex,
+        )
+        val r = dexBackend.dexForRun(request)
         r.log.forEach(ctx.logger())
         if (r.success) TaskResult.Success else TaskResult.Failed("dex (run) failed")
+    }
+
+    companion object {
+        /** Identity of the run-sandbox instrumentation; part of the library dex cache key. */
+        val GUARD_VERSION: String = "${ExitGuard.VERSION}.${SandboxGuard.VERSION}"
     }
 }
 

@@ -35,6 +35,10 @@ object RunGuard {
 object ExitGuard {
     private const val GUARD = "dev/ide/build/engine/RunGuard"
 
+    /** Bump when the rewrite changes. Folded into the run-dex cache key so cached instrumented library dex
+     *  is invalidated by a guard change (see [RunDexRequest.guardVersion]). */
+    const val VERSION = 1
+
     fun instrument(classBytes: ByteArray): ByteArray {
         if (!mightCallExit(classBytes)) return classBytes
         val reader = ClassReader(classBytes)

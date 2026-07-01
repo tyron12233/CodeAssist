@@ -11,7 +11,6 @@ import java.nio.file.Paths
 import java.util.jar.JarEntry
 import java.util.jar.JarOutputStream
 import java.util.stream.Collectors
-import java.util.zip.ZipInputStream
 
 /**
  * Language-neutral helpers for the JVM build: a module's source/output paths, its compile classpath
@@ -50,28 +49,8 @@ fun levelOf(level: LanguageLevel): String = when (level) {
     LanguageLevel.JAVA_21 -> "21"
 }
 
-/** Copy [src] jar to [dest], rewriting each entry's bytes via [transform] — used by the dex-run path to
- *  instrument library jars (exit + sandbox guards). Directory entries and duplicates are dropped. */
-internal fun copyJarTransformed(src: Path, dest: Path, transform: (String, ByteArray) -> ByteArray) {
-    dest.parent?.let { Files.createDirectories(it) }
-    val seen = HashSet<String>()
-    ZipInputStream(Files.newInputStream(src)).use { zis ->
-        JarOutputStream(Files.newOutputStream(dest)).use { jos ->
-            var e = zis.nextEntry
-            while (e != null) {
-                if (!e.isDirectory && seen.add(e.name)) {
-                    val out = transform(e.name, zis.readBytes())
-                    jos.putNextEntry(JarEntry(e.name)); jos.write(out); jos.closeEntry()
-                }
-                e = zis.nextEntry
-            }
-            jos.ensureNonEmpty(seen.isEmpty())
-        }
-    }
-}
-
 /** Jar [classesDir], optionally rewriting each entry's bytes via [transform] (entryName, bytes) — used by
- *  the dex-run path to instrument `System.exit`. The default identity transform is plain jarring. */
+ *  the `jar` lifecycle task. The default identity transform is plain jarring. */
 internal fun writeJar(classesDir: Path, jarPath: Path, transform: (String, ByteArray) -> ByteArray = { _, b -> b }) =
     writeJar(listOf(classesDir), jarPath, transform)
 

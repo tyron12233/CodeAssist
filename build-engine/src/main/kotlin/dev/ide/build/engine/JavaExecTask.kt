@@ -36,14 +36,25 @@ class JavaExecTask(
     private val programArgs: List<String> = emptyList(),
     private val javaLauncher: () -> Path = { Paths.get(System.getProperty("java.home"), "bin", "java") },
     private val programIo: ProgramIo? = null,
+    /** When true, [mainClass]'s `main` is an INSTANCE method (no static entry point). The `java` launcher can't
+     *  invoke that, so route the run through [ReflectiveMainLauncher], which constructs the class and calls it. */
+    private val instanceMain: Boolean = false,
 ) : Task, AlwaysRun {
 
     override val inputs: TaskInputs get() = TaskInputsImpl()
     override val outputs: TaskOutputs get() = TaskOutputsImpl()
 
     override suspend fun execute(ctx: TaskContext): TaskResult = withContext(Dispatchers.IO) {
-        val cp = runtimeClasspath().joinToString(File.pathSeparator) { it.toString() }
-        val command = listOf(javaLauncher().toString(), "-cp", cp, mainClass) + programArgs
+        val cpEntries = runtimeClasspath().map { it.toString() }
+        val launcherCp = if (instanceMain) launcherClasspath() else null
+        val command = if (launcherCp != null) {
+            // Fork the reflective launcher; it loads the target, instantiates it, and calls the instance main.
+            val cp = (cpEntries + launcherCp).joinToString(File.pathSeparator)
+            listOf(javaLauncher().toString(), "-cp", cp, LAUNCHER_CLASS, mainClass) + programArgs
+        } else {
+            val cp = cpEntries.joinToString(File.pathSeparator)
+            listOf(javaLauncher().toString(), "-cp", cp, mainClass) + programArgs
+        }
         ctx.logger()("> Run $mainClass")
         val io = programIo
         if (io == null) {
@@ -116,5 +127,15 @@ class JavaExecTask(
                 runCatching { process.destroyForcibly() }
             }
         }
+    }
+
+    /** The classpath entry holding [ReflectiveMainLauncher] (this build-engine artifact), so the forked JVM
+     *  can load it, or null if it can't be located (then the run falls back to a direct static launch). */
+    private fun launcherClasspath(): String? = runCatching {
+        File(ReflectiveMainLauncher::class.java.protectionDomain.codeSource.location.toURI()).toString()
+    }.getOrNull()
+
+    private companion object {
+        const val LAUNCHER_CLASS = "dev.ide.build.engine.ReflectiveMainLauncher"
     }
 }
