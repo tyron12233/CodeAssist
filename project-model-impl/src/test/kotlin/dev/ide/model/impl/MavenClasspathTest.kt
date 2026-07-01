@@ -55,6 +55,42 @@ class MavenClasspathTest {
         assertTrue(ui in result && foundation in result, "different artifacts must both remain: $result")
     }
 
+    // ---- dedupeForAndroidDex: dex-input dedup (bundled-vs-Maven; one artifact name, newest version wins) ----
+    // KMP `-android`/`-jvm` collapse is no longer this layer's job — the resolver picks the right artifact
+    // variant from Gradle Module Metadata, so the two are never both present here.
+
+    private fun p(s: String) = java.nio.file.Paths.get(s)
+
+    @Test
+    fun dexDedupCollapsesBundledAndMavenStdlib() {
+        // The IDE's bundled stdlib (a `.platform/` path the directory-keyed resolveVersionConflicts can't read)
+        // vs a Maven-resolved stdlib. Same artifact → keep the newest.
+        val bundled = p("/projects/quran-app/.platform/kotlin-stdlib-2.4.0.jar")
+        val maven = p("/cache/resolved-deps/org/jetbrains/kotlin/kotlin-stdlib/2.2.0/kotlin-stdlib-2.2.0.jar")
+        val result = MavenClasspath.dedupeForAndroidDex(listOf(maven, bundled)).map { it.toString() }
+        assertEquals(listOf(bundled.toString()), result, "only the newest (2.4.0 bundled) stdlib survives")
+    }
+
+    @Test
+    fun dexDedupKeepsUnversionedDirsAndDistinctArtifacts() {
+        val classesJar = p("/cache/local-lib/classes.jar")              // not Maven-shaped → keep
+        val moduleOut = p("/project/app/build/classes")                  // a dir → keep
+        val coroutines = p("/cache/resolved-deps/org/jetbrains/kotlinx/kotlinx-coroutines-core-jvm/1.8.0/kotlinx-coroutines-core-jvm-1.8.0.jar")
+        val result = MavenClasspath.dedupeForAndroidDex(listOf(classesJar, moduleOut, coroutines)).map { it.toString() }
+        assertTrue(result.containsAll(listOf(classesJar, moduleOut, coroutines).map { it.toString() }),
+            "unversioned/dir entries and a distinct artifact all survive: $result")
+    }
+
+    @Test
+    fun dexDedupKeepsAndroidAndJvmOfDistinctModules() {
+        // After GMM selection only one platform artifact of any ONE module reaches the dexer; a `-android`
+        // and a `-jvm` of DIFFERENT modules are distinct artifacts and must both survive (no suffix folding).
+        val android = p("/cache/resolved-deps/androidx/datastore/datastore-core-android/1.1.1/datastore-core-android-1.1.1-exploded/classes.jar")
+        val jvm = p("/cache/resolved-deps/org/jetbrains/kotlinx/kotlinx-coroutines-core-jvm/1.8.0/kotlinx-coroutines-core-jvm-1.8.0.jar")
+        val result = MavenClasspath.dedupeForAndroidDex(listOf(android, jvm)).map { it.toString() }
+        assertEquals(listOf(android.toString(), jvm.toString()), result, "distinct-module -android and -jvm both kept")
+    }
+
     /** A [VirtualFile] that only carries a [path] — all the dedup logic reads. */
     private class PathOnlyFile(override val path: String) : VirtualFile {
         override val name get() = path.substringAfterLast('/')

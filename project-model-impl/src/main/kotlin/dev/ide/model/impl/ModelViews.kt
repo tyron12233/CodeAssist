@@ -114,21 +114,33 @@ internal class ModuleImpl(
      * Module dependencies are resolved workspace-wide (cross-project). The result is ordered,
      * deduplicated, and content-hashed (the fingerprint keys both the build cache and analyzer caches).
      */
-    override fun classpath(scope: DependencyScope, transitive: Boolean): ClasspathSnapshot {
+    override fun classpath(scope: DependencyScope, transitive: Boolean, variant: Set<String>?): ClasspathSnapshot {
         val items = ArrayList<ClasspathEntry>()
         val visitedModules = hashSetOf(data.id)
         for (entry in data.dependencies) {
-            if (directInPhase(scope, entry.scope)) addEntry(entry, scope, transitive, items, visitedModules)
+            if (directInPhase(scope, entry.scope) && includedInVariant(entry, variant))
+                addEntry(entry, scope, transitive, variant, items, visitedModules)
         }
         return ClasspathSnapshotImpl(MavenClasspath.resolveVersionConflicts(items))
     }
 
     override fun <T : Any> service(key: ServiceKey<T>): T = store.moduleContainer(id).getService(key)
 
+    /**
+     * Whether [entry] belongs to the active build-variant config set: a `null` [active] (no variant filter)
+     * includes everything, a shared (unqualified) entry is always included, otherwise the entry's config
+     * name must be one of the active names. The same [active] set is reused for the target module's closure
+     * (build-type-first matching: a `debug` lib entry matches the consumer's `debug`); a target whose flavor
+     * names differ won't match those flavor-qualified entries — see the variant docs.
+     */
+    private fun includedInVariant(entry: OrderEntry, active: Set<String>?): Boolean =
+        active == null || entry.variant == null || entry.variant in active
+
     private fun addEntry(
         entry: OrderEntry,
         scope: DependencyScope,
         transitive: Boolean,
+        variant: Set<String>?,
         out: MutableList<ClasspathEntry>,
         visited: MutableSet<String>,
     ) {
@@ -142,7 +154,8 @@ internal class ModuleImpl(
                 out.add(ClasspathEntry(moduleOutput(target.project, target.module), ClasspathEntryKind.MODULE_OUTPUT))
                 if (transitive) {
                     for (te in target.module.dependencies) {
-                        if (propagates(scope, te)) addEntry(te, scope, transitive, out, visited)
+                        if (propagates(scope, te) && includedInVariant(te, variant))
+                            addEntry(te, scope, transitive, variant, out, visited)
                     }
                 }
             }
@@ -214,6 +227,7 @@ internal class VariantImpl(
     override val name: String,
     override val activeSourceSets: List<SourceSet>,
     private val scopes: Set<DependencyScope>,
+    override val configurations: Set<String> = setOf("main"),
 ) : Variant {
     override fun resolvedScopes(): Set<DependencyScope> = scopes
 }

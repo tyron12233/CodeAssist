@@ -74,8 +74,14 @@ interface Module {
     val facets: FacetContainer
     val outputDir: VirtualFile
 
-    /** Assemble the classpath for a scope, enforcing api/implementation export rules (see ClasspathSnapshot). */
-    fun classpath(scope: DependencyScope, transitive: Boolean = true): ClasspathSnapshot
+    /**
+     * Assemble the classpath for a scope, enforcing api/implementation export rules (see ClasspathSnapshot).
+     * [variant] is the set of active build-variant config names (e.g. `{main, free, debug, freeDebug}`); a
+     * `null` variant includes every entry (the build-variant-agnostic default), while a non-null set drops
+     * any [OrderEntry] whose [OrderEntry.variant] qualifier isn't in it (a shared, unqualified entry always
+     * stays). The same set filters the module-dependency closure.
+     */
+    fun classpath(scope: DependencyScope, transitive: Boolean = true, variant: Set<String>? = null): ClasspathSnapshot
 
     /** This module's MODULE-scoped service for [key], falling back to the workspace then application scope. */
     fun <T : Any> service(key: ServiceKey<T>): T
@@ -131,6 +137,14 @@ interface Variant {
     val name: String                        // "freeDebug"
     val activeSourceSets: List<SourceSet>
     fun resolvedScopes(): Set<DependencyScope>
+
+    /**
+     * The dependency-config names active in this variant: the candidate source-set names — `{main, each
+     * flavor, the combined-flavor name, the build type, the variant name}`. This is the set passed as the
+     * `variant` filter to [Module.classpath]: an [OrderEntry] (or source set) qualified by one of these
+     * names belongs to the variant. Generic so `project-model-impl` can filter without knowing Android.
+     */
+    val configurations: Set<String> get() = emptySet()
 }
 
 // ---------------------------------------------------------------------------
@@ -157,12 +171,20 @@ sealed interface OrderEntry {
     val scope: DependencyScope
     /** true == Gradle `api` semantics: visible to downstream modules' compile classpath. */
     val exported: Boolean
+    /**
+     * Build-variant config name this entry is scoped to — the Gradle `debugImplementation` /
+     * `freeImplementation` semantics (the config name is a build type, a flavor, or a full variant name).
+     * `null` == shared: present in every variant. [Module.classpath] keeps an entry iff its variant
+     * filter is `null`, or this is `null`, or this is in the active config-name set.
+     */
+    val variant: String? get() = null
 }
 
 data class ModuleDependency(
     val target: ModuleId,
     override val scope: DependencyScope,
     override val exported: Boolean = false,
+    override val variant: String? = null,
 ) : OrderEntry
 
 data class LibraryDependency(
@@ -175,6 +197,7 @@ data class LibraryDependency(
      * excluded here can still arrive through another declaration that doesn't exclude it. Empty by default.
      */
     val exclusions: List<Exclusion> = emptyList(),
+    override val variant: String? = null,
 ) : OrderEntry
 
 /**
@@ -210,6 +233,7 @@ data class PlatformDependency(
     val bom: Coordinate,
     override val scope: DependencyScope = DependencyScope.IMPLEMENTATION,
     override val exported: Boolean = false,
+    override val variant: String? = null,
 ) : OrderEntry
 
 enum class DependencyScope(val onCompile: Boolean, val onRuntime: Boolean, val onTest: Boolean) {

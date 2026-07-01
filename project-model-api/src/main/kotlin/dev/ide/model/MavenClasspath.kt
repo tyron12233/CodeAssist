@@ -21,6 +21,53 @@ object MavenClasspath {
      *  across versions of one `group:name`), [version] its per-version child — the inputs to "newest wins". */
     private class Artifact(val artifactKey: String, val version: String)
 
+    /**
+     * Dedupe a raw jar list for an Android **dex** input: at most one jar per artifact, so D8 never sees a
+     * class twice ("Type … is defined multiple times" — a fatal dex error). For one artifact present at two
+     * versions reached by unlike paths — the IDE's bundled `kotlin-stdlib-2.4.0.jar` (a non-Maven `.platform/…`
+     * path) vs a Maven `kotlin-stdlib-2.2.0.jar` — the newest version wins. (Kotlin-Multiplatform `-android`
+     * vs `-jvm` collisions used to be collapsed here too, but the resolver now selects the right artifact
+     * variant from Gradle Module Metadata up front, so only one is ever present.)
+     *
+     * The coordinate (artifact name + version) is read from the Maven directory layout — so it works for plain
+     * jars AND exploded-AAR `classes.jar`s — falling back to the file name for non-Maven paths (the bundled
+     * stdlib). Paths with neither (module output dirs) carry no coordinate and pass through.
+     */
+    fun dedupeForAndroidDex(jars: List<java.nio.file.Path>): List<java.nio.file.Path> {
+        val parsed = jars.map { path -> val c = dexCoordinate(path); ParsedJar(path, c?.first, c?.second) }
+        // Per artifact (keyed by its exact name, no platform-suffix folding), the newest version wins.
+        val winner = HashMap<String, String>()
+        for (j in parsed) {
+            val base = j.base ?: continue
+            val cur = winner[base]
+            if (cur == null || isNewer(j.version!!, cur)) winner[base] = j.version!!
+        }
+        val emitted = HashSet<String>()
+        val out = ArrayList<java.nio.file.Path>(jars.size)
+        for (j in parsed) {
+            if (j.base == null) { out.add(j.path); continue }     // no coordinate (dir / odd path) → keep
+            if (j.version != winner[j.base]) continue              // a superseded version → drop
+            if (emitted.add(j.base)) out.add(j.path)              // the winner; first path of it wins
+        }
+        return out
+    }
+
+    private class ParsedJar(val path: java.nio.file.Path, val base: String?, val version: String?)
+
+    /** Artifact name + version for a dex input: Maven layout first (plain jar OR exploded AAR), else file name. */
+    private fun dexCoordinate(path: java.nio.file.Path): Pair<String, String>? {
+        coordinateOf(path.toString())?.let { c ->
+            val name = java.nio.file.Paths.get(c.artifactKey).fileName?.toString()
+            if (name != null) return name to c.version
+        }
+        val file = path.fileName?.toString() ?: return null
+        if (!file.endsWith(".jar", ignoreCase = true)) return null
+        return FILE_NAME_VERSION.matchEntire(file)?.let { it.groupValues[1] to it.groupValues[2] }
+    }
+
+    // <name>-<version>.jar with a digit-led version (e.g. `kotlin-stdlib-2.4.0`, `core-jvm-1.8.0-alpha01`).
+    private val FILE_NAME_VERSION = Regex("""(.+?)-(\d[A-Za-z0-9.]*(?:-[A-Za-z0-9.]+)*)\.jar""", RegexOption.IGNORE_CASE)
+
     fun resolveVersionConflicts(items: List<ClasspathEntry>): List<ClasspathEntry> {
         val winner = HashMap<String, String>()
         for (e in items) {

@@ -124,6 +124,51 @@ class PersistenceRoundTripTest {
         }
     }
 
+    /** Build-variant-qualified dependencies (debug/freeDebug) survive a save→reload unchanged. */
+    @Test
+    fun variantQualifiedDependenciesRoundTrip() {
+        val dir = Files.createTempDirectory("codeassist-variant-deps")
+        val platform = PlatformCore()
+        platform.registerTestTypes()
+        try {
+            val store = ProjectModel.open(dir, platform, FacetCodecRegistry().register(JavaFacetCodec))
+            val javaLib = ModuleTypeRegistry(platform.extensions).resolve("java-lib")
+            store.workspace.beginModification().apply {
+                addProject("app", BuildSystemId.NATIVE, store.vfs.root()); commit()
+            }
+            store.workspace.projects.single().beginModification().apply {
+                addModule("feature", javaLib).apply {
+                    addSourceSet(SourceSetTemplate("main", DependencyScope.IMPLEMENTATION, mapOf("src/main/java" to setOf(ContentRole.SOURCE))))
+                }
+                addModule("app", javaLib).apply {
+                    addSourceSet(SourceSetTemplate("main", DependencyScope.IMPLEMENTATION, mapOf("src/main/java" to setOf(ContentRole.SOURCE))))
+                    addDependency(LibraryDependency(LibraryRef("g:shared:1"), DependencyScope.IMPLEMENTATION))
+                    addDependency(LibraryDependency(LibraryRef("g:debugonly:1"), DependencyScope.IMPLEMENTATION, variant = "debug"))
+                    addDependency(ModuleDependency(ModuleId("feature"), DependencyScope.API, exported = true, variant = "freeDebug"))
+                }
+                commit()
+            }
+            val before = store.data
+            store.save()
+
+            val platform2 = PlatformCore().also { it.registerTestTypes() }
+            try {
+                val store2 = ProjectModel.open(dir, platform2, FacetCodecRegistry().register(JavaFacetCodec))
+                assertEquals(before, store2.data) // identical snapshot, variants and all
+
+                val app = store2.workspace.projects.single().modules.first { it.name == "app" }
+                assertEquals(null, app.dependencies.filterIsInstance<LibraryDependency>().first { it.library.name == "g:shared:1" }.variant)
+                assertEquals("debug", app.dependencies.filterIsInstance<LibraryDependency>().first { it.library.name == "g:debugonly:1" }.variant)
+                assertEquals("freeDebug", app.dependencies.filterIsInstance<ModuleDependency>().single().variant)
+            } finally {
+                platform2.dispose()
+            }
+        } finally {
+            platform.dispose()
+            dir.toFile().deleteRecursively()
+        }
+    }
+
     /** addContentRoot appends typed roots (creating a set when missing); removeContentRoot drops one; both round-trip. */
     @Test
     fun addAndRemoveContentRootRoundTrips() {

@@ -135,16 +135,26 @@ object ModelPersistence {
             doc["sourceSets"] = ssMap
         }
         if (m.dependencies.isNotEmpty()) {
-            val byScope = LinkedHashMap<String, MutableList<Any?>>()
-            for (e in m.dependencies) {
-                byScope.getOrPut(scopeKey(e.scope)) { ArrayList() }.add(orderEntryToToml(e))
-            }
+            // Shared (unqualified) deps stay as scope-keyed lists directly under [dependencies] — byte-identical
+            // to the pre-variant format. Variant-qualified deps go under nested [dependencies.<config>] tables,
+            // config names emitted in sorted order for a deterministic round-trip.
             val depTable = LinkedHashMap<String, Any?>()
-            for ((k, items) in byScope) depTable[k] = items.toList()
+            val (shared, qualified) = m.dependencies.partition { it.variant == null }
+            for ((k, items) in scopeGrouped(shared)) depTable[k] = items
+            for (config in qualified.mapNotNull { it.variant }.distinct().sorted()) {
+                depTable[config] = scopeGrouped(qualified.filter { it.variant == config })
+            }
             doc["dependencies"] = depTable
         }
         for (f in m.facets) doc[f.tomlTable] = LinkedHashMap(f.values)
         return doc
+    }
+
+    /** Group [entries] by scope key (declaration order preserved), each value the list of serialized entries. */
+    private fun scopeGrouped(entries: List<OrderEntry>): Map<String, Any?> {
+        val byScope = LinkedHashMap<String, MutableList<Any?>>()
+        for (e in entries) byScope.getOrPut(scopeKey(e.scope)) { ArrayList() }.add(orderEntryToToml(e))
+        return byScope.mapValues { it.value.toList() }
     }
 
     private fun orderEntryToToml(e: OrderEntry): Any = when (e) {
@@ -253,9 +263,18 @@ object ModelPersistence {
         } ?: emptyList()
 
         val deps = ArrayList<OrderEntry>()
-        (doc["dependencies"] as? Map<*, *>)?.forEach { (scopeKeyAny, itemsAny) ->
-            val scope = scopeForKey(scopeKeyAny.toString()) ?: return@forEach
-            for (item in (itemsAny as List<*>)) deps.add(tomlToOrderEntry(item, scope))
+        (doc["dependencies"] as? Map<*, *>)?.forEach { (keyAny, valueAny) ->
+            val key = keyAny.toString()
+            val scope = scopeForKey(key)
+            when {
+                // A scope-keyed list directly under [dependencies] is a shared (unqualified) dependency.
+                scope != null -> for (item in (valueAny as List<*>)) deps.add(tomlToOrderEntry(item, scope, variant = null))
+                // A [dependencies.<config>] sub-table holds that variant's scope-keyed lists.
+                valueAny is Map<*, *> -> valueAny.forEach { (sKeyAny, itemsAny) ->
+                    val s = scopeForKey(sKeyAny.toString()) ?: return@forEach
+                    for (item in (itemsAny as List<*>)) deps.add(tomlToOrderEntry(item, s, variant = key))
+                }
+            }
         }
 
         val facets = doc.entries
@@ -265,17 +284,18 @@ object ModelPersistence {
         return ModuleData(id, name, dirRelPath, typeId, languageLevel, output, sourceSets, deps, facets)
     }
 
-    private fun tomlToOrderEntry(item: Any?, scope: DependencyScope): OrderEntry {
+    private fun tomlToOrderEntry(item: Any?, scope: DependencyScope, variant: String?): OrderEntry {
         val exported = scope == DependencyScope.API
         return when (item) {
-            is String -> LibraryDependency(LibraryRef(item), scope, exported)
+            is String -> LibraryDependency(LibraryRef(item), scope, exported, variant = variant)
             is Map<*, *> -> when {
                 item.containsKey("library") -> LibraryDependency(
                     LibraryRef(item["library"] as String), scope, exported,
                     exclusions = (item["exclude"] as? List<*>).orEmpty().mapNotNull { Exclusion.parse(it as String) },
+                    variant = variant,
                 )
-                item.containsKey("module") -> ModuleDependency(ModuleId(item["module"] as String), scope, exported)
-                item.containsKey("platform") -> PlatformDependency(parseCoordinate(item["platform"] as String), scope, exported)
+                item.containsKey("module") -> ModuleDependency(ModuleId(item["module"] as String), scope, exported, variant = variant)
+                item.containsKey("platform") -> PlatformDependency(parseCoordinate(item["platform"] as String), scope, exported, variant = variant)
                 item.containsKey("sdk") -> SdkDependency(SdkRef(item["sdk"] as String), scope)
                 else -> error("unrecognized dependency entry: $item")
             }

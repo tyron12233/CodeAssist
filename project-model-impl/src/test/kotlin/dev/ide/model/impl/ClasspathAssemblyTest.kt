@@ -107,6 +107,64 @@ class ClasspathAssemblyTest {
     }
 
     @Test
+    fun variantFilterSelectsConfigQualifiedDirectDependencies() = withWorkspace { platform, store ->
+        val javaLib = ModuleTypeRegistry(platform.extensions).resolve("java-lib")
+        for (n in listOf("sharedLib", "debugLib", "releaseLib")) {
+            store.workspace.libraryTable.create(n).apply {
+                kind = LibraryKind.JAR
+                addClassesRoot(store.vfs.fileFor(store.rootPath.resolve("libs/$n.jar")))
+                commit()
+            }
+        }
+        store.workspace.beginModification().apply { addProject("app", BuildSystemId.NATIVE, store.vfs.root()); commit() }
+        store.workspace.projects.single().beginModification().apply {
+            addModule("app", javaLib).apply {
+                addDependency(LibraryDependency(LibraryRef("sharedLib"), DependencyScope.IMPLEMENTATION))
+                addDependency(LibraryDependency(LibraryRef("debugLib"), DependencyScope.IMPLEMENTATION, variant = "debug"))
+                addDependency(LibraryDependency(LibraryRef("releaseLib"), DependencyScope.IMPLEMENTATION, variant = "release"))
+            }
+            commit()
+        }
+        val app = store.workspace.projects.single().modules.first { it.name == "app" }
+
+        val debug = app.classpath(DependencyScope.IMPLEMENTATION, variant = setOf("main", "debug")).entries.map { it.root.path }
+        assertTrue(debug.any { it.contains("sharedLib.jar") }, "a shared (unqualified) dep is in every variant: $debug")
+        assertTrue(debug.any { it.contains("debugLib.jar") }, "a debug-qualified dep is in the debug variant: $debug")
+        assertTrue(debug.none { it.contains("releaseLib.jar") }, "a release-qualified dep is absent from debug: $debug")
+
+        val all = app.classpath(DependencyScope.IMPLEMENTATION, variant = null).entries.map { it.root.path }
+        assertTrue(
+            all.any { it.contains("debugLib.jar") } && all.any { it.contains("releaseLib.jar") },
+            "a null variant filter includes every entry (back-compat): $all",
+        )
+    }
+
+    @Test
+    fun variantFilterAppliesToTheModuleDependencyClosure() = withWorkspace { platform, store ->
+        val javaLib = ModuleTypeRegistry(platform.extensions).resolve("java-lib")
+        store.workspace.libraryTable.create("debugApiLib").apply {
+            kind = LibraryKind.JAR
+            addClassesRoot(store.vfs.fileFor(store.rootPath.resolve("libs/debugApiLib.jar")))
+            commit()
+        }
+        store.workspace.beginModification().apply { addProject("app", BuildSystemId.NATIVE, store.vfs.root()); commit() }
+        store.workspace.projects.single().beginModification().apply {
+            addModule("lib", javaLib).apply {
+                addDependency(LibraryDependency(LibraryRef("debugApiLib"), DependencyScope.API, exported = true, variant = "debug"))
+            }
+            addModule("consumer", javaLib).apply {
+                addDependency(ModuleDependency(ModuleId("lib"), DependencyScope.API, exported = true))
+            }
+            commit()
+        }
+        val consumer = store.workspace.projects.single().modules.first { it.name == "consumer" }
+        val debug = consumer.classpath(DependencyScope.IMPLEMENTATION, variant = setOf("main", "debug")).entries.map { it.root.path }
+        val release = consumer.classpath(DependencyScope.IMPLEMENTATION, variant = setOf("main", "release")).entries.map { it.root.path }
+        assertTrue(debug.any { it.contains("debugApiLib.jar") }, "the lib's debug api dep flows into the consumer's debug classpath: $debug")
+        assertTrue(release.none { it.contains("debugApiLib.jar") }, "the lib's debug api dep is absent from the consumer's release classpath: $release")
+    }
+
+    @Test
     fun fingerprintIsDeterministicAndDistinguishesClasspaths() = withWorkspace { platform, store ->
         build(store, platform)
         val consumer = store.consumer()

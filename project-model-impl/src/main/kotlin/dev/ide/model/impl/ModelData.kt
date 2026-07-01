@@ -120,8 +120,11 @@ private fun normalizeModule(m: ModuleData): ModuleData = m.copy(
     sourceSets = m.sourceSets.sortedBy { it.name }.map { ss ->
         ss.copy(contentRoots = ss.contentRoots.sortedBy { it.dirRelPath })
     },
-    // Stable sort by scope groups entries the way module.toml stores them while preserving the
-    // declaration order *within* a scope (which is what classpath search order depends on).
-    dependencies = m.dependencies.map { it.normalizedExported() }.sortedBy { scopeOrder(it.scope) },
+    // Stable sort by variant config then scope, grouping entries the way module.toml stores them (shared
+    // deps first, then each [dependencies.<config>] table in sorted config order) while preserving the
+    // declaration order *within* a (variant, scope) group (which is what classpath search order depends on).
+    // For a shared-only module every variant is null, so this reduces to the prior scope-only sort.
+    dependencies = m.dependencies.map { it.normalizedExported() }
+        .sortedWith(compareBy({ it.variant ?: "" }, { scopeOrder(it.scope) })),
     facets = m.facets.sortedBy { it.tomlTable },
 )

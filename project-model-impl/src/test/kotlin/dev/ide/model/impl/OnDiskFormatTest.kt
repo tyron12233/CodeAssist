@@ -70,4 +70,38 @@ class OnDiskFormatTest {
             dir.toFile().deleteRecursively()
         }
     }
+
+    /** A variant-qualified dependency lands under a nested `[dependencies.<config>]` table; the bare
+     *  `[dependencies]` table keeps only the shared (unqualified) entries, byte-identical to the old format. */
+    @Test
+    fun variantQualifiedDependenciesUseNestedTables() {
+        val dir = Files.createTempDirectory("codeassist-variant-format")
+        val platform = PlatformCore()
+        platform.registerTestTypes()
+        try {
+            val store = ProjectModel.open(dir, platform, FacetCodecRegistry().register(JavaFacetCodec))
+            val javaLib = ModuleTypeRegistry(platform.extensions).resolve("java-lib")
+            store.workspace.beginModification().apply {
+                addProject("app", BuildSystemId.NATIVE, store.vfs.root()); commit()
+            }
+            store.workspace.projects.single().beginModification().apply {
+                addModule("core", javaLib).apply {
+                    addSourceSet(SourceSetTemplate("main", DependencyScope.IMPLEMENTATION, mapOf("src/main/java" to setOf(ContentRole.SOURCE))))
+                    addDependency(LibraryDependency(LibraryRef("g:shared:1"), DependencyScope.IMPLEMENTATION))
+                    addDependency(LibraryDependency(LibraryRef("g:debugonly:1"), DependencyScope.IMPLEMENTATION, variant = "debug"))
+                }
+                commit()
+            }
+            store.save()
+
+            val moduleToml = Files.readString(dir.resolve("core/module.toml"))
+            assertContains(moduleToml, "[dependencies]")
+            assertContains(moduleToml, "implementation = [\"g:shared:1\"]")
+            assertContains(moduleToml, "[dependencies.debug]")
+            assertContains(moduleToml, "implementation = [\"g:debugonly:1\"]")
+        } finally {
+            platform.dispose()
+            dir.toFile().deleteRecursively()
+        }
+    }
 }
