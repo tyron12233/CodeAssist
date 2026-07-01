@@ -62,8 +62,7 @@ object JavaClassNamesIndex : IndexExtension<String, ClassNameValue> {
             val (fqn, simple) = classEntryToFqn(input.unitName!!) ?: return emptyMap()
             return mapOf(simple to listOf(ClassNameValue(fqn, input.origin, "class")))
         }
-        val text = input.text() ?: return emptyMap()
-        val parsed = JavaSourceIndexer.parse(text)
+        val parsed = JavaSourceIndexer.sharedParsed(input)
         val out = HashMap<String, MutableList<ClassNameValue>>()
         for (d in parsed.decls) {
             if (d.kind !in TYPE_KINDS) continue
@@ -119,8 +118,7 @@ object JavaPackageTypesIndex : IndexExtension<String, ClassNameValue> {
             val pkg = fqn.substringBeforeLast('.', "").ifEmpty { return emptyMap() }
             return mapOf(pkg to listOf(ClassNameValue(fqn, input.origin, "class")))
         }
-        val text = input.text() ?: return emptyMap()
-        val parsed = JavaSourceIndexer.parse(text)
+        val parsed = JavaSourceIndexer.sharedParsed(input)
         val pkg = parsed.packageName?.takeIf { it.isNotEmpty() } ?: return emptyMap()
         val out = HashMap<String, MutableList<ClassNameValue>>()
         for (d in parsed.decls) {
@@ -145,7 +143,7 @@ object JavaPackagesIndex : IndexExtension<String, String> {
             val fqn = classEntryToFqn(input.unitName!!)?.first ?: return emptyMap()
             return packagePrefixes(fqn).associateWith { listOf(it) }
         }
-        val pkg = input.text()?.let { JavaSourceIndexer.parse(it).packageName }?.takeIf { it.isNotEmpty() }
+        val pkg = JavaSourceIndexer.sharedParsed(input).packageName?.takeIf { it.isNotEmpty() }
             ?: return emptyMap()
         return packagePrefixes("$pkg.X").associateWith { listOf(it) }
     }
@@ -180,9 +178,8 @@ object JavaMembersIndex : IndexExtension<String, MemberValue> {
     }
 
     private fun indexSource(input: IndexInput): Map<String, Collection<MemberValue>> {
-        val text = input.text() ?: return emptyMap()
         val out = HashMap<String, MutableList<MemberValue>>()
-        for (d in JavaSourceIndexer.parse(text).decls) {
+        for (d in JavaSourceIndexer.sharedParsed(input).decls) {
             if (d.kind != DeclKind.METHOD && d.kind != DeclKind.FIELD) continue
             out.getOrPut(d.name) { ArrayList() }
                 .add(MemberValue(d.name, d.container ?: "", d.kind.name.lowercase(), ""))
@@ -205,8 +202,7 @@ object JavaMembersByOwnerIndex : IndexExtension<String, MemberValue> {
     override val inputFilter = InputFilter { it.origin == IndexOrigin.SOURCE && it.unitName?.endsWith(".java") == true }
 
     override fun index(input: IndexInput): Map<String, Collection<MemberValue>> {
-        val text = input.text() ?: return emptyMap()
-        val parsed = JavaSourceIndexer.parse(text)
+        val parsed = JavaSourceIndexer.sharedParsed(input)
         val out = HashMap<String, MutableList<MemberValue>>()
         for (d in parsed.decls) {
             if ((d.kind != DeclKind.METHOD && d.kind != DeclKind.FIELD) || !d.public) continue
@@ -228,12 +224,11 @@ object JavaSourceSymbolsIndex : IndexExtension<String, SymbolValue> {
     override val inputFilter = InputFilter { isSource(it) }
 
     override fun index(input: IndexInput): Map<String, Collection<SymbolValue>> {
-        val text = input.text() ?: return emptyMap()
         // The file is referenced by its interned id (resolve via IndexService.filePath), not its path string.
         val fileId = input.fileId
         if (fileId < 0) return emptyMap()
         val out = HashMap<String, MutableList<SymbolValue>>()
-        for (d in JavaSourceIndexer.parse(text).decls) {
+        for (d in JavaSourceIndexer.sharedParsed(input).decls) {
             out.getOrPut(d.name) { ArrayList() }
                 .add(SymbolValue(d.name, d.kind.name.lowercase(), fileId, d.offset, d.container))
         }

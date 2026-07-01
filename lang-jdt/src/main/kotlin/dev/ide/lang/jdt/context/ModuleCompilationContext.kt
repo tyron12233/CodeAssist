@@ -30,14 +30,20 @@ import java.security.MessageDigest
  */
 object ModuleCompilationContext {
 
-    fun create(workspace: Workspace, module: Module): CompilationContext {
+    /**
+     * [variant] is the active build-variant config-name set (e.g. `{main, free, debug, freeDebug}`); a
+     * `null` variant includes every dependency (the build-variant-agnostic default), while a non-null set
+     * drops any dependency whose [dev.ide.model.OrderEntry.variant] qualifier isn't in it (a shared,
+     * unqualified one always stays). Lets the editor analyze against the selected variant's classpath.
+     */
+    fun create(workspace: Workspace, module: Module, variant: Set<String>? = null): CompilationContext {
         val sources = LinkedHashSet<VirtualFile>()
         val libraries = LinkedHashSet<ClasspathEntry>()
         val sourceAttachments = LinkedHashSet<VirtualFile>()
         val sdkNames = LinkedHashSet<String>()
         val libIndex = libraryIndex(workspace)
 
-        collect(workspace, module, isRoot = true, sources, libraries, sourceAttachments, sdkNames, libIndex, HashSet())
+        collect(workspace, module, isRoot = true, variant, sources, libraries, sourceAttachments, sdkNames, libIndex, HashSet())
 
         val sdk: Sdk? = sdkNames.firstNotNullOfOrNull { workspace.sdkTable.byName(it) }
             ?: workspace.sdkTable.sdks.firstOrNull()
@@ -63,6 +69,7 @@ object ModuleCompilationContext {
         workspace: Workspace,
         module: Module,
         isRoot: Boolean,
+        variant: Set<String>?,
         sources: MutableSet<VirtualFile>,
         libraries: MutableSet<ClasspathEntry>,
         sourceAttachments: MutableSet<VirtualFile>,
@@ -79,6 +86,7 @@ object ModuleCompilationContext {
         }
 
         for (entry in module.dependencies) {
+            if (!includedInVariant(entry.variant, variant)) continue
             val propagate = isRoot || entry.exported
             when (entry) {
                 is SdkDependency -> sdkNames.add(entry.sdk.name)
@@ -90,13 +98,17 @@ object ModuleCompilationContext {
                 }
                 is ModuleDependency -> if (propagate) {
                     findModule(workspace, entry.target)?.let {
-                        collect(workspace, it, isRoot = false, sources, libraries, sourceAttachments, sdkNames, libIndex, visited)
+                        collect(workspace, it, isRoot = false, variant, sources, libraries, sourceAttachments, sdkNames, libIndex, visited)
                     }
                 }
                 is PlatformDependency -> { /* a BOM contributes no classes to the compile classpath */ }
             }
         }
     }
+
+    /** Whether an entry whose qualifier is [entryVariant] belongs to the active config set [active] (null = all). */
+    private fun includedInVariant(entryVariant: String?, active: Set<String>?): Boolean =
+        active == null || entryVariant == null || entryVariant in active
 
     private fun findModule(workspace: Workspace, id: ModuleId): Module? =
         workspace.projects.firstNotNullOfOrNull { p -> p.modules.firstOrNull { it.id == id } }

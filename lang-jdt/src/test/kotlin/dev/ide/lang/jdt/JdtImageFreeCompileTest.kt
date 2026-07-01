@@ -65,6 +65,44 @@ class JdtImageFreeCompileTest {
         }
     }
 
+    /**
+     * The ImageFree name environment must resolve types from a **directory** classpath entry (loose `.class`),
+     * not just jars — the build splits R compilation from app compilation and feeds the R output dir back as a
+     * classpath entry (and Kotlin/module output dirs arrive the same way). Compile a helper into a dir, then
+     * compile a second unit that references it with that dir on `-classpath`.
+     */
+    @Test
+    fun resolvesTypesFromADirectoryClasspathEntry() {
+        val androidJar = androidJar() ?: run { println("[ImageFreeCompile] no Android SDK — skipping"); return }
+        val dir = Files.createTempDirectory("imagefree-dir")
+        try {
+            val libOut = dir.resolve("libout")
+            val lib = JdtBatchCompiler.compile(
+                listOf(write(dir, "p/Lib.java", "package p; public class Lib { public static int v(){ return 7; } }")),
+                classpath = emptyList(), outputDir = libOut, sourceLevel = "17", bootClasspath = listOf(androidJar)
+            )
+            assertTrue(lib.success, "lib compiles: ${lib.messages}")
+            assertTrue(Files.exists(libOut.resolve("p/Lib.class")), "lib class emitted")
+
+            val appOut = dir.resolve("appout")
+            val app = JdtBatchCompiler.compile(
+                listOf(write(dir, "q/App.java", "package q; public class App { int x = p.Lib.v(); }")),
+                classpath = listOf(libOut), outputDir = appOut, sourceLevel = "17", bootClasspath = listOf(androidJar)
+            )
+            assertTrue(app.success, "app resolves p.Lib from the directory classpath entry: ${app.messages}")
+            assertTrue(Files.exists(appOut.resolve("q/App.class")), "app class emitted")
+        } finally {
+            dir.toFile().deleteRecursively()
+        }
+    }
+
+    private fun write(dir: Path, rel: String, body: String): Path {
+        val p = dir.resolve("src").resolve(rel)
+        Files.createDirectories(p.parent)
+        Files.write(p, body.toByteArray())
+        return p
+    }
+
     private fun sdkRoots() = listOfNotNull(
         System.getenv("ANDROID_HOME"),
         System.getenv("ANDROID_SDK_ROOT"),

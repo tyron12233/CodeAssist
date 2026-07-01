@@ -26,7 +26,55 @@ import java.nio.file.Path
  */
 object JdtBatchCompiler {
 
-    data class Result(val success: Boolean, val messages: List<String>)
+    /** One parsed compiler problem: the source [file] + [line] (when known) and the human-readable [message]. */
+    data class Diagnostic(val file: String?, val line: Int?, val message: String, val isError: Boolean)
+
+    data class Result(
+        val success: Boolean,
+        /** Raw compiler output lines (ecj's textual report or the GNU-shaped lines), for logs/back-compat. */
+        val messages: List<String>,
+        /** Structured problems parsed from the output — file/line/message, so callers can present them cleanly. */
+        val diagnostics: List<Diagnostic> = emptyList(),
+    )
+
+    // `<n>. ERROR|WARNING in <file> (at line <n>)` — ecj's textual diagnostic header.
+    private val ECJ_HEADER = Regex("""^\d+\.\s+(ERROR|WARNING)\s+in\s+(.+?)\s+\(at line (\d+)\)""")
+    // ecj's trailing summary, e.g. `1 problem (1 error)` — a boundary, never a diagnostic.
+    private val ECJ_SUMMARY = Regex("""^\d+\s+problems?\b""")
+
+    /**
+     * Parse ecj's textual report into structured [Diagnostic]s. Each problem is a header line followed by the
+     * offending source snippet + caret (both indented) and then the description (flush-left); blocks are
+     * separated by `----------`. We key off the header and take the flush-left, non-summary lines as the message
+     * — so callers get the *actual* error text, not just the header (which is all a naive `contains("ERROR")` keeps).
+     */
+    fun parseEcjDiagnostics(text: String): List<Diagnostic> {
+        val lines = text.lines()
+        val out = ArrayList<Diagnostic>()
+        var i = 0
+        while (i < lines.size) {
+            val header = ECJ_HEADER.find(lines[i].trim())
+            if (header == null) { i++; continue }
+            val isError = header.groupValues[1] == "ERROR"
+            val file = header.groupValues[2]
+            val line = header.groupValues[3].toIntOrNull()
+            i++
+            val message = StringBuilder()
+            while (i < lines.size) {
+                val raw = lines[i]
+                val trimmed = raw.trim()
+                if (trimmed == "----------" || ECJ_HEADER.containsMatchIn(trimmed) || ECJ_SUMMARY.containsMatchIn(trimmed)) break
+                // Snippet + caret lines are indented; the description is flush-left.
+                if (trimmed.isNotEmpty() && !raw[0].isWhitespace()) {
+                    if (message.isNotEmpty()) message.append(' ')
+                    message.append(trimmed)
+                }
+                i++
+            }
+            out.add(Diagnostic(file, line, message.toString().ifBlank { if (isError) "error" else "warning" }, isError))
+        }
+        return out
+    }
 
     /** Compliance level parsed from an ecj `-source`/`-target` string (`"8"`, `"11"`, `"1.8"`, …) is >= 9. */
     private fun complianceAtLeast9(level: String): Boolean {
@@ -83,7 +131,8 @@ object JdtBatchCompiler {
         val ok = runCatching {
             BatchCompiler.compile(args.toTypedArray(), PrintWriter(out), PrintWriter(err), null)
         }.getOrDefault(false)
-        val messages = (err.toString() + "\n" + out.toString()).lines().filter { it.isNotBlank() }
-        return Result(ok, messages)
+        val raw = err.toString() + "\n" + out.toString()
+        val messages = raw.lines().filter { it.isNotBlank() }
+        return Result(ok, messages, parseEcjDiagnostics(raw))
     }
 }
