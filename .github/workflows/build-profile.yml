@@ -1,0 +1,36 @@
+name: Android Profile CI
+
+on:
+  push:
+    branches: [ "main" ]
+  pull_request:
+    branches: [ "main" ]
+  workflow_dispatch:
+
+jobs:
+  build-profile:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout source
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 21
+        uses: actions/setup-java@v4
+        with:
+          java-version: '21'
+          distribution: 'temurin'
+          cache: gradle
+
+      - name: Grant execute permission for gradlew
+        run: chmod +x gradlew
+
+      - name: Build profile APK
+        run: ./gradlew :ide-android:assembleProfile --no-daemon
+
+      - name: Upload profile APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: ide-android-profile-apk
+          path: ide-android/build/outputs/apk/profile/*.apk
+          if-no-files-found: error
