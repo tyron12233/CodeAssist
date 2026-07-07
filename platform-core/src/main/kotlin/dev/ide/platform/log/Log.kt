@@ -112,6 +112,9 @@ class ConsoleLogSink(
             record.throwable?.printStackTrace(err)
         } else {
             out.println(line)
+            // A WARN with an attached throwable used to swallow it entirely, leaving bare "X failed" lines
+            // in the device log with no cause. Print the stack for those too.
+            record.throwable?.printStackTrace(out)
         }
     }
 }

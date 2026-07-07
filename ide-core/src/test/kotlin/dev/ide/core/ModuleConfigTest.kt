@@ -3,6 +3,7 @@ package dev.ide.core
 import dev.ide.ui.backend.UiConfigField
 import dev.ide.ui.backend.UiFacetConfig
 import dev.ide.ui.backend.UiModuleConfigEdit
+import dev.ide.ui.backend.UiPackagingRules
 import dev.ide.ui.backend.UiSearchOptions
 import java.nio.file.Files
 import kotlin.test.Test
@@ -91,6 +92,65 @@ class ModuleConfigTest {
         is UiConfigField.Bool -> value
         is UiConfigField.StringList -> values
         is UiConfigField.TableList -> rows.map { row -> row.associate { it.key to it.rawValue() } }
+    }
+
+    @Test
+    fun packagingOptionsRoundTripAndPersist() {
+        val dir = Files.createTempDirectory("ide-pkg")
+        IdeServices.bootstrapDemo(dir).use { ide ->
+            // Defaults exposed; a fresh module has no configured rules.
+            val initial = assertNotNull(ide.moduleService.getPackagingOptions("app"), "android module has packaging options")
+            assertTrue(initial.resources.excludes.isEmpty() && initial.jniLibs.pickFirsts.isEmpty(), "starts unconfigured")
+            assertTrue(initial.defaultResourceExcludes.any { it.contains("MANIFEST.MF") }, "AGP defaults exposed read-only")
+            assertTrue(initial.defaultResourceMerges.any { it.contains("services") }, "default services merge exposed")
+
+            // A pure-Java module returns null (not Android).
+            assertEquals(null, ide.moduleService.getPackagingOptions("core"), "java-lib has no packaging options")
+
+            val r = ide.moduleService.updatePackagingOptions(
+                "app",
+                UiPackagingRules(excludes = listOf("/META-INF/extra.txt", "  "), pickFirsts = listOf("**/win.properties"), merges = listOf("/META-INF/custom/**")),
+                UiPackagingRules(excludes = listOf("**/libc++_shared.so")),
+            )
+            assertTrue(r.success, "update should succeed: ${r.message}")
+
+            val after = assertNotNull(ide.moduleService.getPackagingOptions("app"))
+            assertEquals(listOf("/META-INF/extra.txt"), after.resources.excludes, "blank patterns dropped")
+            assertEquals(listOf("**/win.properties"), after.resources.pickFirsts)
+            assertEquals(listOf("/META-INF/custom/**"), after.resources.merges)
+            assertEquals(listOf("**/libc++_shared.so"), after.jniLibs.excludes)
+        }
+        // Persisted to module.toml.
+        IdeServices.open(dir).use { reopened ->
+            val reloaded = assertNotNull(reopened.moduleService.getPackagingOptions("app"))
+            assertEquals(listOf("/META-INF/extra.txt"), reloaded.resources.excludes, "packaging persisted")
+            assertEquals(listOf("**/libc++_shared.so"), reloaded.jniLibs.excludes)
+        }
+        dir.toFile().deleteRecursively()
+    }
+
+    @Test
+    fun settingsSaveDoesNotClobberPackaging() {
+        val dir = Files.createTempDirectory("ide-pkg-preserve")
+        IdeServices.bootstrapDemo(dir).use { ide ->
+            ide.moduleService.updatePackagingOptions(
+                "app",
+                UiPackagingRules(excludes = listOf("/META-INF/keep-me.txt")),
+                UiPackagingRules(),
+            )
+            // A Settings-tab save sends the facet map WITHOUT the packaging block (it's edited on its own tab).
+            val cfg = assertNotNull(ide.moduleService.getModuleConfig("app"))
+            val android = assertNotNull(cfg.facets.firstOrNull { it.table == "android" })
+            assertTrue(android.fields.none { it.key == "packaging" }, "packaging isn't a generic Settings field")
+            val edit = UiModuleConfigEdit(facetValues = mapOf("android" to android.toValues(overrides = mapOf("minSdk" to 23L))))
+            assertTrue(ide.moduleService.updateModuleConfig("app", edit).success)
+
+            // The Settings save changed minSdk but preserved the separately-configured packaging.
+            val minSdk = (ide.moduleService.getModuleConfig("app")!!.facets.first { it.table == "android" }.fields.first { it.key == "minSdk" } as UiConfigField.Number).value
+            assertEquals(23L, minSdk)
+            assertEquals(listOf("/META-INF/keep-me.txt"), ide.moduleService.getPackagingOptions("app")!!.resources.excludes, "packaging survived a Settings save")
+        }
+        dir.toFile().deleteRecursively()
     }
 
     @Test

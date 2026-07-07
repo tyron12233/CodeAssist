@@ -13,15 +13,19 @@ plugins {
 dependencies {
     api(project(":language-api"))            // the SPI (+ project-model-api / vfs-api / platform-core, transitively)
     implementation(project(":index-api"))    // Java/Android interop: member & type shape via the shared indexes
+    // The pure symbol/index layer (neutral symbol model + @Metadata/bytecode decoders + KotlinCallableIndex),
+    // extracted from this module so it stays compiler-free.
+    api(project(":lang-kotlin-index"))
     implementation(project(":analysis-api")) // owns the Kotlin diagnostic + import-fix providers
     // Owns the `compileKotlin` build task (KotlinCompileTask): the build graph drives K2 directly through it,
     // so build-engine carries no KotlinCompile port. Brings build-api transitively.
     implementation(project(":build-engine"))
 
-    // The Kotlin frontend's PARSER only — a resolution-free standalone PSI host (text -> KtFile). We never
-    // build a BindingContext or run the analyzer; all semantics are ours. compiler-embeddable bundles the
-    // intellij-core PSI machinery the parser needs.
-    implementation(libs.kotlin.compiler.embeddable)
+    // The Kotlin frontend as a PSI host (text -> KtFile) + the build's in-process K2JVMCompiler. We never
+    // build a BindingContext or run the analyzer for editing; all editor semantics are ours. The compiler
+    // comes from :kotlin-compiler-deps - the UNSHADED `-for-ide` split over the real IntelliJ platform,
+    // replacing kotlin-compiler-embeddable, so there is one PSI/compiler platform in the whole IDE.
+    implementation(project(":kotlin-compiler-deps"))
     // Decode Kotlin libraries' @kotlin.Metadata to recover real Kotlin signatures (extension functions,
     // properties, default args, nullability) that plain bytecode erases. Small + compiler-free.
     implementation(libs.kotlin.metadata.jvm)
@@ -54,8 +58,11 @@ dependencies { bundledStdlib(libs.kotlin.stdlib) }
 // Bundle the Compose compiler-plugin JAR (`/kotlin-compose-compiler-plugin.jar`) the same way: when a module
 // depends on the Compose runtime, the in-process K2JVMCompiler is fed this jar via `-Xplugin` so @Composable
 // functions get the plugin transform. `ComposeCompilerPlugin` extracts it; the host applies it per-module.
+// The `-for-ide` build of the plugin: it must link the same unshaded compiler world as :kotlin-compiler-deps
+// (the `-embeddable` plugin variant references the relocated org.jetbrains.kotlin.com.intellij.* and cannot
+// load in the unshaded compiler).
 val bundledComposePlugin: Configuration by configurations.creating { isTransitive = false }
-dependencies { bundledComposePlugin(libs.kotlin.compose.compiler.plugin) }
+dependencies { bundledComposePlugin(libs.kotlin.compose.compiler.plugin.ide) }
 
 tasks.processResources {
     from(bundledStdlib) { rename { "kotlin-stdlib.jar" } }

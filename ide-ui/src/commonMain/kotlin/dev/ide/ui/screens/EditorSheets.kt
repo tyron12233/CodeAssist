@@ -38,9 +38,14 @@ import dev.ide.ui.ext.BuiltInUiActions
 import dev.ide.ui.ext.UiActionHost
 import dev.ide.ui.ext.UiActionRegistry
 import dev.ide.ui.ext.UiDestinations
+import dev.ide.ui.generated.resources.Res
+import dev.ide.ui.generated.resources.edsheet_source_control
+import dev.ide.ui.generated.resources.edsheet_source_control_desc
+import dev.ide.ui.generated.resources.more
 import dev.ide.ui.icons.CaIcons
 import dev.ide.ui.icons.actionIcon
 import dev.ide.ui.theme.Ca
+import org.jetbrains.compose.resources.stringResource
 
 @Composable
 internal fun PaletteOverlay(state: IdeUiState, onToggleTheme: () -> Unit, onOpenHub: () -> Unit, onOpenDependencies: (String?) -> Unit) {
@@ -103,8 +108,8 @@ internal fun DestinationSheets(
     BottomSheet(visible = state.sheetDest == RailDestination.Source, onDismiss = { state.sheetDest = null }, heightFraction = 0.55f) {
         ComingSoon(
             icon = CaIcons.gitBranch,
-            title = "Source Control",
-            description = "Git integration — staging, diffs, commit & push — is on the roadmap.",
+            title = stringResource(Res.string.edsheet_source_control),
+            description = stringResource(Res.string.edsheet_source_control_desc),
             modifier = Modifier.fillMaxWidth().weight(1f),
         )
     }
@@ -156,7 +161,7 @@ internal fun MoreSheetContent(
     // Scrollable so every row (incl. "Close project") is reachable when the sheet is short — e.g. the soft
     // keyboard is up and the sheet has been lifted above it (issue #994).
     Column(modifier.verticalScroll(rememberScrollState()).padding(horizontal = 12.dp, vertical = 4.dp)) {
-        Text("More", color = Ca.colors.textPrimary, style = Ca.type.headline, fontWeight = FontWeight.SemiBold,
+        Text(stringResource(Res.string.more), color = Ca.colors.textPrimary, style = Ca.type.headline, fontWeight = FontWeight.SemiBold,
             modifier = Modifier.padding(start = 6.dp, top = 4.dp, bottom = 10.dp))
         actions.forEach { a ->
             MoreRow(actionIcon(a.iconId), a.text, a.description ?: "") { a.perform(host) }

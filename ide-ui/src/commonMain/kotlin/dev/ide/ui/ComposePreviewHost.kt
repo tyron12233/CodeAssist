@@ -22,5 +22,13 @@ interface ComposePreviewHost {
      * host is currently lowering/interpreting vs. settled so the pane can show a loading badge.
      */
     @Composable
-    fun Preview(path: String, preview: UiComposePreview, text: String, dark: Boolean, onProblems: (List<PreviewIssue>) -> Unit, onBusy: (Boolean) -> Unit, modifier: Modifier)
+    fun Preview(
+        path: String,
+        preview: UiComposePreview,
+        text: String,
+        dark: Boolean,
+        onProblems: (List<PreviewIssue>) -> Unit,
+        onBusy: (Boolean) -> Unit,
+        modifier: Modifier
+    )
 }

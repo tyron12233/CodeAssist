@@ -1,5 +1,7 @@
 package dev.ide.core
 
+import kotlinx.coroutines.runBlocking
+
 import dev.ide.lang.completion.CompletionItemKind
 import java.nio.file.Files
 import kotlin.test.Test
@@ -31,7 +33,7 @@ class HippieCompletionTest {
                 }
             """.trimIndent()
             val offset = code.indexOf("|CARET|")
-            val result = ide.complete(probe, code.replace("|CARET|", ""), offset)
+            val result = runBlocking { ide.complete(probe, code.replace("|CARET|", ""), offset) }
 
             val word = result.items.firstOrNull { it.insertText == "ztrocketfuel" }
             assertTrue(word != null, "buffer word should be offered: ${result.items.map { it.insertText }}")

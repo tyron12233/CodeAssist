@@ -17,7 +17,7 @@ plugins {
 
 subprojects {
     group = "dev.ide"
-    version = "0.1.0"
+    version = "3.3.0"
 
     // Shared configuration applied to every module once it applies the Kotlin/JVM plugin.
     plugins.withId("org.jetbrains.kotlin.jvm") {

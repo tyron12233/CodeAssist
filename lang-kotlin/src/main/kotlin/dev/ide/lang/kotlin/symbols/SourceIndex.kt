@@ -30,6 +30,25 @@ data class ImportInfo(val fqn: String, val alias: String?, val isStar: Boolean) 
 /** Per-file resolution context: the package + imports a type-text is resolved against. Shared by its decls. */
 class FileContext(val path: String, val packageName: String, val imports: List<ImportInfo>)
 
+/**
+ * The declared type text of a `vararg x: E` parameter as it is seen from INSIDE the body / as a `val` property
+ * — i.e. the ARRAY, not the element `E`. A non-null primitive `E` maps to its specialized array (`Int` ->
+ * `IntArray`, …); any other `E` (incl. a nullable primitive like `Int?`) boxes into `Array<E>`. Returns null
+ * only when [elementText] is null.
+ */
+fun varargArrayText(elementText: String?): String? = when (val e = elementText?.trim()) {
+    null -> null
+    "Int" -> "IntArray"
+    "Long" -> "LongArray"
+    "Short" -> "ShortArray"
+    "Byte" -> "ByteArray"
+    "Char" -> "CharArray"
+    "Boolean" -> "BooleanArray"
+    "Float" -> "FloatArray"
+    "Double" -> "DoubleArray"
+    else -> "Array<$e>"
+}
+
 class RawCallable(
     val name: String,
     val isFunction: Boolean,
@@ -48,6 +67,8 @@ class RawCallable(
     val isComposable: Boolean = false,
     /** An `inline` function. */
     val isInline: Boolean = false,
+    /** An `infix` function — completed in the infix-operator slot (`a foo b`). */
+    val isInfix: Boolean = false,
     /** A `suspend` function. */
     val isSuspend: Boolean = false,
     /** A `@Deprecated` declaration (detected by annotation simple name) — for strikethrough highlighting. */
@@ -60,6 +81,9 @@ class RawCallable(
     /** The function's own type-parameter names (`fun <T> items(…)` → `["T"]`) — so a param/return type that
      *  references one is marked a type parameter (enabling generic inference: binding `T` from an argument). */
     val typeParameterNames: List<String> = emptyList(),
+    /** Each type parameter's declared upper-bound TEXT (positional with [typeParameterNames]); "" if unbounded.
+     *  Drives the explicit-type-argument bound check and erasing an unbound parameter to its bound. */
+    val typeParameterBounds: List<String> = emptyList(),
     /** Whether each value parameter declares a default (positional with [paramTexts]) — so a required-argument
      *  check can tell which the call may omit. Empty ⇒ not a function / unknown. */
     val paramHasDefault: List<Boolean> = emptyList(),
@@ -87,6 +111,9 @@ class RawClass(
     /** The class's own type-parameter names (`class Box<T>` → `["T"]`) — so a member type that references one
      *  (`val value: T`) is marked a type parameter and binds from the receiver's type arguments. */
     val typeParameterNames: List<String> = emptyList(),
+    /** Each type parameter's declared upper-bound TEXT (positional with [typeParameterNames]), from the inline
+     *  `<T : Bound>` form or a `where T : Bound` clause; "" when unbounded. Drives the type-argument bound check. */
+    val typeParameterBounds: List<String> = emptyList(),
     /** Entry names when this is an `enum class` (`RED`, `GREEN`); empty otherwise. */
     val enumEntries: List<String> = emptyList(),
     /** The companion object's simple name (`"Companion"` by default), or null if none. A bare `Type.`
@@ -180,9 +207,11 @@ object SourceIndexBuilder {
         val supers = c.superTypeListEntries.mapNotNull { it.typeReference?.text }
         val members = ArrayList<RawCallable>()
         val ctors = ArrayList<RawCallable>()
-        // Primary-constructor `val/var` params are member properties.
+        // Primary-constructor `val/var` params are member properties. A `vararg val` property's type is the
+        // array (`vararg val xs: Int` -> `IntArray`), not the element, so `c.xs.sum()` resolves.
         c.primaryConstructorParameters.filter { it.hasValOrVar() }.forEach { p ->
-            members += RawCallable(p.name ?: "_", false, null, p.typeReference?.text, null, emptyList(), ctx, node(parsed, p), visOf(p),
+            val typeText = if (p.isVarArg) varargArrayText(p.typeReference?.text) else p.typeReference?.text
+            members += RawCallable(p.name ?: "_", false, null, typeText, null, emptyList(), ctx, node(parsed, p), visOf(p),
                 isVar = p.valOrVarKeyword?.text == "var", jvmField = hasAnno(p, "JvmField"))
         }
         if (c.primaryConstructorParameters.isNotEmpty() || c.hasExplicitPrimaryConstructor()) {
@@ -249,6 +278,12 @@ object SourceIndexBuilder {
         return RawClass(fqn, c.name ?: fqn.substringAfterLast('.'), c is org.jetbrains.kotlin.psi.KtObjectDeclaration,
             supers, members, ctors, ctx, node(parsed, c),
             typeParameterNames = asClass?.typeParameters?.mapNotNull { it.name } ?: emptyList(),
+            typeParameterBounds = asClass?.let { cls ->
+                val whereBounds = cls.typeConstraints.mapNotNull { tc ->
+                    tc.subjectTypeParameterName?.getReferencedName()?.let { n -> n to (tc.boundTypeReference?.text ?: "") }
+                }.toMap()
+                cls.typeParameters.map { tp -> tp.extendsBound?.text ?: whereBounds[tp.name] ?: "" }
+            } ?: emptyList(),
             enumEntries = enumEntries,
             companionObjectName = companion?.let { it.name ?: "Companion" },
             isCompanion = (c as? org.jetbrains.kotlin.psi.KtObjectDeclaration)?.isCompanion() == true,
@@ -315,12 +350,19 @@ object SourceIndexBuilder {
         visibility = visOf(f),
         isComposable = f.annotationEntries.any { it.shortName?.asString() == "Composable" },
         isInline = f.hasModifier(KtTokens.INLINE_KEYWORD),
+        isInfix = f.hasModifier(KtTokens.INFIX_KEYWORD),
         isSuspend = f.hasModifier(KtTokens.SUSPEND_KEYWORD),
         isDeprecated = hasAnno(f, "Deprecated"),
         isAbstract = isAbstractFunction(f),
         varargParamIndex = f.valueParameters.indexOfFirst { it.isVarArg },
         paramHasDefault = f.valueParameters.map { it.hasDefaultValue() },
         typeParameterNames = f.typeParameters.mapNotNull { it.name },
+        typeParameterBounds = f.let { fn ->
+            val whereBounds = fn.typeConstraints.mapNotNull { tc ->
+                tc.subjectTypeParameterName?.getReferencedName()?.let { n -> n to (tc.boundTypeReference?.text ?: "") }
+            }.toMap()
+            fn.typeParameters.map { tp -> tp.extendsBound?.text ?: whereBounds[tp.name] ?: "" }
+        },
         jvmStatic = hasAnno(f, "JvmStatic"),
         jvmOverloads = hasAnno(f, "JvmOverloads"),
         jvmName = annoArg(f, "JvmName"),
@@ -359,7 +401,7 @@ object SourceIndexBuilder {
         else -> null
     }
 
-    private fun node(parsed: KotlinParsedFile, psi: org.jetbrains.kotlin.com.intellij.psi.PsiElement): DomNode? =
+    private fun node(parsed: KotlinParsedFile, psi: com.intellij.psi.PsiElement): DomNode? =
         runCatching { parsed.adapt(psi) }.getOrNull()
 
     private fun walk(file: VirtualFile, onFile: (VirtualFile) -> Unit) {

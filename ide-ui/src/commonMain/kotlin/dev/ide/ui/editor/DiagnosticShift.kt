@@ -6,6 +6,7 @@ import dev.ide.ui.backend.UiInlayHint
 import dev.ide.ui.backend.UiSemanticToken
 import dev.ide.ui.editor.core.EditSpan
 import dev.ide.ui.editor.core.EditorDocument
+import dev.ide.ui.editor.folding.FoldRegion
 
 /**
  * Re-aligns diagnostics to an edited buffer so error squiggles and gutter marks track the text *as the
@@ -136,9 +137,9 @@ fun shiftComposePreviews(markers: List<UiComposePreview>, edit: EditSpan, docLen
  * before/inside it, until a fresh (debounced) pass replaces the set. A region the edit fully consumed (its
  * braces deleted) collapses to empty and is dropped — the refetch re-derives folds from the new structure.
  */
-fun shiftFoldRegions(regions: List<dev.ide.ui.editor.folding.FoldRegion>, edit: EditSpan, docLength: Int): List<dev.ide.ui.editor.folding.FoldRegion> {
+fun shiftFoldRegions(regions: List<FoldRegion>, edit: EditSpan, docLength: Int): List<FoldRegion> {
     if (regions.isEmpty() || edit.isNoOp) return regions
-    val out = ArrayList<dev.ide.ui.editor.folding.FoldRegion>(regions.size)
+    val out = ArrayList<FoldRegion>(regions.size)
     for (r in regions) {
         val start = mapStart(r.start, edit).coerceIn(0, docLength)
         val end = mapEnd(r.end, edit).coerceIn(start, docLength)

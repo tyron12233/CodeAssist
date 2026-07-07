@@ -11,9 +11,11 @@ import androidx.compose.ui.text.TextLayoutResult
 import androidx.compose.ui.text.drawText
 import androidx.compose.ui.unit.dp
 import dev.ide.ui.backend.UiDiagnostic
+import dev.ide.ui.backend.UiFileSymbol
 import dev.ide.ui.backend.UiSeverity
 import dev.ide.ui.editor.core.EditorDocument
 import dev.ide.ui.editor.core.EditorSession
+import dev.ide.ui.editor.folding.FoldModel
 import kotlin.math.floor
 import kotlin.math.max
 import kotlin.math.min
@@ -75,7 +77,7 @@ internal fun mapDiagnosticsToLines(diagnostics: List<UiDiagnostic>, doc: EditorD
 
 /**
  * The vertical projection the editor + renderer share: document lines ⇄ visual rows. When not wrapping it is
- * the [dev.ide.ui.editor.folding.FoldModel]'s one-row-per-visible-line mapping; when wrapping, a line spans
+ * the [FoldModel]'s one-row-per-visible-line mapping; when wrapping, a line spans
  * several rows ([rowsOf]) and [topRow] is the cumulative-row offset. [correctRange] shapes the on-screen lines
  * and records their exact wrapped height so the frame is pixel-aligned (a no-op when not wrapping).
  */
@@ -96,7 +98,7 @@ internal fun DrawScope.drawEditor(
     layoutFor: (Int) -> TextLayoutResult,
     compositeLayoutFor: (Int) -> TextLayoutResult,
     rawToVisual: (Int, Int) -> Int,
-    foldModel: dev.ide.ui.editor.folding.FoldModel,
+    foldModel: FoldModel,
     vlayout: VLayout,
     wrap: Boolean,
     foldableStartLines: Set<Int>,
@@ -108,7 +110,7 @@ internal fun DrawScope.drawEditor(
     findMatches: List<Match>,
     currentMatch: Int,
     occurrences: List<Match>,
-    structure: List<dev.ide.ui.backend.UiFileSymbol>,
+    structure: List<UiFileSymbol>,
     colors: EditorDrawColors,
     caretVisible: Boolean,
     caretContent: Offset,
@@ -474,16 +476,16 @@ internal const val STICKY_MAX = 3
  * draw and the tap hit-test compute identical rows. Empty when nothing encloses the top line.
  */
 internal fun stickyHeaderItems(
-    structure: List<dev.ide.ui.backend.UiFileSymbol>,
+    structure: List<UiFileSymbol>,
     firstVisibleLine: Int,
-    doc: dev.ide.ui.editor.core.EditorDocument,
+    doc: EditorDocument,
     max: Int,
-): List<dev.ide.ui.backend.UiFileSymbol> {
+): List<UiFileSymbol> {
     if (structure.isEmpty()) return emptyList()
     val enclosing = structure.filter {
         val nameLine = doc.lineForOffset(it.nameOffset.coerceIn(0, doc.length))
         val endLine = doc.lineForOffset(it.endOffset.coerceIn(0, doc.length))
-        nameLine < firstVisibleLine && firstVisibleLine <= endLine
+        firstVisibleLine in (nameLine + 1)..endLine
     }.sortedBy { doc.lineForOffset(it.nameOffset.coerceIn(0, doc.length)) }
     return if (enclosing.size <= max) enclosing else enclosing.subList(enclosing.size - max, enclosing.size)
 }

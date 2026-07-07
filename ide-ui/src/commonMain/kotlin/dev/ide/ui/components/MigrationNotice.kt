@@ -56,7 +56,8 @@ fun MigrationNotice(visible: Boolean, onBackup: suspend () -> Unit, onDismiss: (
             NoticeBody(
                 onBackup = onBackup,
                 onDismiss = onDismiss,
-                modifier = Modifier.fillMaxWidth().widthIn(max = 560.dp).padding(horizontal = 24.dp, vertical = 8.dp),
+                modifier = Modifier.fillMaxWidth().widthIn(max = 560.dp)
+                    .padding(horizontal = 24.dp, vertical = 8.dp),
             )
         }
     } else {
@@ -87,7 +88,12 @@ private fun NoticeBody(onBackup: suspend () -> Unit, onDismiss: () -> Unit, modi
             Icon(CaIcons.box, null, Modifier.size(34.dp), tint = Ca.colors.warning)
         }
         Spacer(Modifier.height(20.dp))
-        Text(stringResource(Res.string.a_new_build_system), color = Ca.colors.textPrimary, style = Ca.type.title2, textAlign = TextAlign.Center)
+        Text(
+            stringResource(Res.string.a_new_build_system),
+            color = Ca.colors.textPrimary,
+            style = Ca.type.title2,
+            textAlign = TextAlign.Center
+        )
         Spacer(Modifier.height(12.dp))
         Text(
             stringResource(Res.string.a_new_build_system_content),
@@ -98,7 +104,11 @@ private fun NoticeBody(onBackup: suspend () -> Unit, onDismiss: () -> Unit, modi
         Spacer(Modifier.height(24.dp))
         PrimaryButton(
             text = stringResource(if (busy) Res.string.preparing_backup else Res.string.backup_projects),
-            onClick = { if (!busy) scope.launch { busy = true; runCatching { onBackup() }; busy = false } },
+            onClick = {
+                if (!busy) scope.launch {
+                    busy = true; runCatching { onBackup() }; busy = false
+                }
+            },
             modifier = Modifier.fillMaxWidth(),
         )
         Spacer(Modifier.height(8.dp))
@@ -107,7 +117,11 @@ private fun NoticeBody(onBackup: suspend () -> Unit, onDismiss: () -> Unit, modi
             color = Ca.colors.textSecondary,
             style = Ca.type.subhead,
             modifier = Modifier
-                .clickable(remember { MutableInteractionSource() }, indication = null, onClick = onDismiss)
+                .clickable(
+                    remember { MutableInteractionSource() },
+                    indication = null,
+                    onClick = onDismiss
+                )
                 .padding(12.dp),
         )
     }

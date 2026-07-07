@@ -1,5 +1,7 @@
 package dev.ide.core
 
+import kotlinx.coroutines.runBlocking
+
 import dev.ide.analysis.DiagnosticSource
 import dev.ide.analysis.DiagnosticTag
 import dev.ide.lang.dom.Severity
@@ -30,7 +32,7 @@ class AnalysisIntegrationTest {
                 appendLine("}")
             }
 
-            val diags = ide.analyzeDiagnostics(probe, text)
+            val diags = runBlocking { ide.analyzeDiagnostics(probe, text) }
             val codes = diags.mapNotNull { it.code }.toSet()
 
             assertTrue(
@@ -63,7 +65,7 @@ class AnalysisIntegrationTest {
                 appendLine("}")
             }
 
-            val codes = ide.analyzeDiagnostics(probe, text).mapNotNull { it.code }.toSet()
+            val codes = runBlocking { ide.analyzeDiagnostics(probe, text) }.mapNotNull { it.code }.toSet()
             assertTrue("java.systemOut" !in codes, "// noinspection on the prior line should suppress it; codes=$codes")
         }
         dir.toFile().deleteRecursively()

@@ -147,6 +147,11 @@ class RemoteBuildRunner(context: Context, private val services: IdeServices) : B
      *  If the daemon isn't connected yet (or is mid-restart after a death), [onDaemonConnected] drives it once
      *  the binding (re)connects — so a build/retry queued while disconnected isn't lost. */
     private fun execute(action: () -> Unit) {
+        // Persist the UI process's live editor buffers to disk FIRST. The daemon is a separate process with no
+        // editor overlay of its own, so its `flushOpenDocuments()` is a no-op — without this it compiles
+        // whatever was last saved and runs stale code on an unsaved edit. The in-process runner flushes inside
+        // BuildService.runTask; the remote runner must flush here, in the process that actually holds the edits.
+        runCatching { services.flushOpenDocuments() }
         _buildState.value = BuildState(status = RunStatus.Running)
         pending = action
         // Pass the current model revision: if the UI committed a config change (e.g. minifyEnabled) since the

@@ -308,6 +308,15 @@ internal object CandidateCollector {
         else -> Proximity.INHERITED
     }
 
-    private fun matches(name: String, prefix: String): Boolean =
-        prefix.isEmpty() || name.startsWith(prefix) || name.startsWith(prefix, ignoreCase = true)
+    // The shared graded matcher (prefix/camel-hump/substring) so `mDL` reaches `myDynamicList` on the
+    // Java path too. Single-slot memo: one completion filters hundreds of bindings with the same prefix
+    // (a stale race just recomputes — the matcher is a pure value of its prefix).
+    private var lastMatcher: dev.ide.lang.completion.PrefixMatcher? = null
+
+    private fun matches(name: String, prefix: String): Boolean {
+        if (prefix.isEmpty()) return true
+        val m = lastMatcher?.takeIf { it.prefix == prefix }
+            ?: dev.ide.lang.completion.PrefixMatcher(prefix).also { lastMatcher = it }
+        return m.matches(name)
+    }
 }

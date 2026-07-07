@@ -20,8 +20,15 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import dev.ide.ui.RailDestination
+import dev.ide.ui.generated.resources.Res
+import dev.ide.ui.generated.resources.edchrome_files
+import dev.ide.ui.generated.resources.edchrome_more
+import dev.ide.ui.generated.resources.edchrome_settings_and_tools
+import dev.ide.ui.generated.resources.edchrome_source
+import dev.ide.ui.generated.resources.search
 import dev.ide.ui.icons.CaIcons
 import dev.ide.ui.theme.Ca
+import org.jetbrains.compose.resources.stringResource
 
 /** The expanded-layout left navigation rail (glass-regular, 64px): project tile, destinations, settings. */
 @Composable
@@ -43,14 +50,14 @@ fun SideRail(
             ProjectTile(projectInitial, size = 42.dp)
             Box(Modifier.padding(vertical = 2.dp).width(32.dp).height(1.dp).background(Ca.colors.separator))
 
-            RailItem(CaIcons.docText, "Files", selected == RailDestination.Files) { onSelect(RailDestination.Files) }
-            RailItem(CaIcons.search, "Search", selected == RailDestination.Search) { onSelect(RailDestination.Search) }
-            RailItem(CaIcons.gitBranch, "Source", selected == RailDestination.Source) { onSelect(RailDestination.Source) }
-            RailItem(CaIcons.ellipsis, "More", selected == RailDestination.More) { onSelect(RailDestination.More) }
+            RailItem(CaIcons.docText, stringResource(Res.string.edchrome_files), selected == RailDestination.Files) { onSelect(RailDestination.Files) }
+            RailItem(CaIcons.search, stringResource(Res.string.search), selected == RailDestination.Search) { onSelect(RailDestination.Search) }
+            RailItem(CaIcons.gitBranch, stringResource(Res.string.edchrome_source), selected == RailDestination.Source) { onSelect(RailDestination.Source) }
+            RailItem(CaIcons.ellipsis, stringResource(Res.string.edchrome_more), selected == RailDestination.More) { onSelect(RailDestination.More) }
 
             Box(Modifier.weight(1f))
             // One entry to the Settings & Tools hub (global settings · code style · SDK & keystore managers).
-            RailItem(CaIcons.gear, "Settings & Tools", false, onClick = onOpenHub)
+            RailItem(CaIcons.gear, stringResource(Res.string.edchrome_settings_and_tools), false, onClick = onOpenHub)
         }
     }
 }

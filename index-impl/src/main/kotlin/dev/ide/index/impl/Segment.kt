@@ -63,6 +63,9 @@ internal class Segment private constructor(
     private val sparseGrams: SparseIndex,
 ) : Closeable {
 
+    // Set once a value payload in this segment fails to deserialize (see [readPostings]); throttles the warning.
+    private var warnedCorrupt = false
+
     // ---- queries (mirror IndexData's semantics so ranking is identical) ----
 
     /** Append every value stored under [key] exactly. */
@@ -98,34 +101,81 @@ internal class Segment private constructor(
         }
     }
 
-    /** Append up to [cap] fuzzy/substring hits, scored as [Scoring.scoreFuzzy]. */
+    /** Append up to [cap] fuzzy/substring/camel-hump hits, scored as [Scoring.scoreFuzzy]. */
     fun fuzzy(pattern: String, out: MutableList<Hit<Any>>, cap: Int) {
         if (numTerms == 0) return
-        if (!fuzzyEnabled || pattern.length < 3) { prefix(pattern, out, cap); return }
-        val grams = Scoring.trigramsOf(pattern.lowercase())
-        if (grams.isEmpty()) return
-
-        // Each gram's posting list is the ascending name offsets that contain it; intersect them. A gram
-        // absent from the corpus is SKIPPED (not treated as an empty intersection) — same as IndexData, so a
-        // pattern with a never-seen trigram still yields candidates via its other grams + the scorer.
-        var candidates: LongArray? = null
-        for (g in grams) {
-            val list = trigramPostings(g) ?: continue
-            candidates = if (candidates == null) list else intersectSorted(candidates, list)
-            if (candidates.isEmpty()) return
+        val hump = Scoring.humpQuery(pattern)
+        val useTrigrams = fuzzyEnabled && pattern.length >= 3
+        if (!useTrigrams && !hump) {
+            // Below trigram length there is no posting list to intersect; scan the two first-character
+            // windows so a short pattern still matches case-insensitively (prefix tiers only, no noise).
+            if (pattern.length < 3) {
+                val lo = pattern[0].lowercaseChar()
+                val up = pattern[0].uppercaseChar()
+                windowScan(lo, out, cap, null) { t, o -> Scoring.scorePrefixCi(t, pattern, o) }
+                if (up != lo) windowScan(up, out, cap, null) { t, o -> Scoring.scorePrefixCi(t, pattern, o) }
+            } else prefix(pattern, out, cap)
+            return
         }
-        val names = candidates ?: return // every gram absent ⇒ no candidates
 
-        for (nameRel in names) {
-            val cur = Cursor(namesBase + nameRel)
+        // A camel-hump match shares no contiguous trigram with the pattern, so trigram intersection can
+        // never find it; every hump match is anchored at the term's first char, so scan those two windows
+        // (skipping terms the trigram pass already scored).
+        val seen: MutableSet<String>? = if (hump && useTrigrams) HashSet() else null
+        if (useTrigrams) {
+            // Each gram's posting list is the ascending name offsets that contain it; intersect them. A gram
+            // absent from the corpus is SKIPPED (not treated as an empty intersection) — same as IndexData, so a
+            // pattern with a never-seen trigram still yields candidates via its other grams + the scorer.
+            var candidates: LongArray? = null
+            for (g in Scoring.trigramsOf(pattern.lowercase())) {
+                val list = trigramPostings(g) ?: continue
+                candidates = if (candidates == null) list else intersectSorted(candidates, list)
+                if (candidates.isEmpty()) break
+            }
+            for (nameRel in candidates ?: LongArray(0)) {
+                val cur = Cursor(namesBase + nameRel)
+                val term = cur.readString()
+                val postingsRel = cur.readVarLong()
+                seen?.add(term)
+                readPostings(postingsRel) { v, origin ->
+                    val s = Scoring.scoreFuzzy(term, pattern, origin)
+                    if (s > 0) {
+                        out.add(Hit(term, v, s))
+                        if (out.size >= cap) return
+                    }
+                }
+            }
+        }
+        if (hump && out.size < cap) {
+            val lo = pattern[0].lowercaseChar()
+            val up = pattern[0].uppercaseChar()
+            windowScan(lo, out, cap, seen) { t, o -> Scoring.scoreFuzzy(t, pattern, o) }
+            if (up != lo) windowScan(up, out, cap, seen) { t, o -> Scoring.scoreFuzzy(t, pattern, o) }
+        }
+    }
+
+    /** Scan the window of terms starting with [first], scoring each via [score] (skipping [seen] terms). */
+    private inline fun windowScan(
+        first: Char, out: MutableList<Hit<Any>>, cap: Int, seen: Set<String>?,
+        score: (String, IndexOrigin) -> Int,
+    ) {
+        if (numTerms == 0 || out.size >= cap) return
+        val p = first.toString()
+        val cur = Cursor(namesBase + sparseTerms.offAt(sparseTerms.floor(p)))
+        val end = namesBase + namesLen
+        while (cur.pos < end) {
             val term = cur.readString()
             val postingsRel = cur.readVarLong()
-            readPostings(postingsRel) { v, origin ->
-                val s = Scoring.scoreFuzzy(term, pattern, origin)
-                if (s > 0) {
-                    out.add(Hit(term, v, s))
-                    if (out.size >= cap) return
+            when {
+                term < p -> {} // still before the window (sparse landed us just before it)
+                term.startsWith(p) -> if (seen == null || term !in seen) readPostings(postingsRel) { v, origin ->
+                    val s = score(term, origin)
+                    if (s > 0) {
+                        out.add(Hit(term, v, s))
+                        if (out.size >= cap) return
+                    }
                 }
+                else -> return // past the window
             }
         }
     }
@@ -165,11 +215,26 @@ internal class Segment private constructor(
         val count = cur.readVarLong().toInt()
         repeat(count) {
             val origin = IndexOrigin.entries[cur.readByte()]
-            val value = DataInputStream(ByteArrayInputStream(cur.readBytes(cur.readVarLong().toInt()))).use {
-                externalizer.read(it)
+            // Each payload is independently length-framed, so [cur] is advanced past this value BEFORE the
+            // externalizer runs — a value that fails to deserialize (a stale/corrupt segment: e.g. a shared
+            // externalizer whose format drifted without a version bump) is skipped, not fatal, and the cursor
+            // stays aligned for the next value. Degrading a query beats crashing the caller (e.g. completion).
+            val payload = cur.readBytes(cur.readVarLong().toInt())
+            val value = try {
+                DataInputStream(ByteArrayInputStream(payload)).use { externalizer.read(it) }
+            } catch (t: Throwable) {
+                warnCorruptOnce(t)
+                return@repeat
             }
             emit(value, origin)
         }
+    }
+
+    /** Log the first unreadable value in this segment (throttled to once); the query then skips it and continues. */
+    private fun warnCorruptOnce(t: Throwable) {
+        if (warnedCorrupt) return
+        warnedCorrupt = true
+        LOG.warn("index segment $segId has unreadable value(s) (stale/corrupt payload) — skipping; a re-index will rebuild it", t)
     }
 
     /** A forward byte reader over the channel, served block-by-block from the [cache]. */
@@ -254,6 +319,7 @@ internal class Segment private constructor(
     companion object {
         internal const val MAGIC = 0x49445831 // "IDX1"
         const val SPARSE_INTERVAL = 64
+        private val LOG = dev.ide.platform.log.Log.logger("index")
 
         /** Open an existing segment file: read the footer (resident sparse index), keep the channel for reads. */
         fun open(file: Path, ext: IndexExtension<*, *>, cache: BlockCache, segId: Int): Segment =

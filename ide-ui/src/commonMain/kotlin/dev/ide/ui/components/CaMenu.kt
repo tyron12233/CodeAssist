@@ -89,7 +89,14 @@ fun CaSubmenuItem(
         DropdownMenuItem(
             text = { Text(label, color = labelColor, style = Ca.type.footnote) },
             leadingIcon = icon?.let { { Icon(it, null, Modifier.size(15.dp), tint = iconTint) } },
-            trailingIcon = { Icon(CaIcons.caretRight, null, Modifier.size(15.dp), tint = Ca.colors.textTertiary) },
+            trailingIcon = {
+                Icon(
+                    CaIcons.caretRight,
+                    null,
+                    Modifier.size(15.dp),
+                    tint = Ca.colors.textTertiary
+                )
+            },
             onClick = { onExpandedChange(!expanded) },
             modifier = Modifier
                 .hoverable(interaction)

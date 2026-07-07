@@ -32,8 +32,21 @@ import androidx.compose.ui.unit.dp
 import dev.ide.ui.components.Chip
 import dev.ide.ui.components.entranceSlideUp
 import dev.ide.ui.components.pressScale
+import dev.ide.ui.generated.resources.Res
+import dev.ide.ui.generated.resources.join_the_community
+import dev.ide.ui.generated.resources.learn_browse_samples
+import dev.ide.ui.generated.resources.learn_browse_samples_content
+import dev.ide.ui.generated.resources.learn_community_content
+import dev.ide.ui.generated.resources.learn_documentation
+import dev.ide.ui.generated.resources.learn_documentation_content
+import dev.ide.ui.generated.resources.learn_soon
+import dev.ide.ui.generated.resources.learn_subtitle
+import dev.ide.ui.generated.resources.learn_title
+import dev.ide.ui.generated.resources.learn_tutorials
+import dev.ide.ui.generated.resources.learn_tutorials_content
 import dev.ide.ui.icons.CaIcons
 import dev.ide.ui.theme.Ca
+import org.jetbrains.compose.resources.stringResource
 
 /**
  * The home screen's Learn tab: jumping-off points to the docs, the community, and the store's samples, plus
@@ -55,23 +68,23 @@ fun LearnScreen(
             verticalArrangement = Arrangement.spacedBy(10.dp),
         ) {
             Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
-                Text("Learn", color = Ca.colors.textPrimary, style = Ca.type.large, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                Text("Guides, samples, and the community", color = Ca.colors.textSecondary, style = Ca.type.subhead)
+                Text(stringResource(Res.string.learn_title), color = Ca.colors.textPrimary, style = Ca.type.large, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                Text(stringResource(Res.string.learn_subtitle), color = Ca.colors.textSecondary, style = Ca.type.subhead)
             }
             Spacer(Modifier.height(6.dp))
 
             var i = 0
             if (onOpenDocs != null) {
-                LearnCard(CaIcons.docText, "Documentation", "Architecture, build, and language guides.", delayMillis = i++ * 50, onClick = onOpenDocs)
+                LearnCard(CaIcons.docText, stringResource(Res.string.learn_documentation), stringResource(Res.string.learn_documentation_content), delayMillis = i++ * 50, onClick = onOpenDocs)
             }
             if (onBrowseSamples != null) {
-                LearnCard(CaIcons.grid, "Browse samples", "Open the store's sample projects to read and run.", delayMillis = i++ * 50, onClick = onBrowseSamples)
+                LearnCard(CaIcons.grid, stringResource(Res.string.learn_browse_samples), stringResource(Res.string.learn_browse_samples_content), delayMillis = i++ * 50, onClick = onBrowseSamples)
             }
             if (onJoinDiscord != null) {
-                LearnCard(CaIcons.discord, "Join the community", "Ask questions and share what you build.", delayMillis = i++ * 50, accent = DiscordBlurple, onClick = onJoinDiscord)
+                LearnCard(CaIcons.discord, stringResource(Res.string.join_the_community), stringResource(Res.string.learn_community_content), delayMillis = i++ * 50, accent = DiscordBlurple, onClick = onJoinDiscord)
             }
             // The in-app, interactive tutorials are not built yet; surface the destination without a fake link.
-            SoonCard(CaIcons.lightbulb, "Interactive tutorials", "Step-by-step lessons inside the editor.")
+            SoonCard(CaIcons.lightbulb, stringResource(Res.string.learn_tutorials), stringResource(Res.string.learn_tutorials_content))
         }
     }
 }
@@ -138,6 +151,6 @@ private fun SoonCard(icon: ImageVector, title: String, subtitle: String) {
             Text(title, color = Ca.colors.textSecondary, style = Ca.type.headline)
             Text(subtitle, color = Ca.colors.textTertiary, style = Ca.type.footnote)
         }
-        Chip("Soon", fill = Ca.colors.surface2, textColor = Ca.colors.textTertiary)
+        Chip(stringResource(Res.string.learn_soon), fill = Ca.colors.surface2, textColor = Ca.colors.textTertiary)
     }
 }

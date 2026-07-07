@@ -26,6 +26,8 @@ private fun baseColor(kind: String, s: SyntaxColors): Color? = when (kind) {
     "property", "field" -> s.property
     "enumConstant" -> s.constant
     "parameter", "localVariable" -> s.variable
+    "stringTemplateEntry" -> s.keyword // the `$`/`${`/`}` of a Kotlin string interpolation (pops out of the string)
+    "stringEscape" -> s.number        // an escape sequence (`\n`, `\uXXXX`, `\$`) inside a string literal
     "namespace" -> s.default          // a Java/Kotlin package / import segment (muted)
     "xmlNamespace" -> s.keyword       // an XML namespace prefix (android:/app:/tools:) reads like markup
     "xmlReference" -> s.constant      // an @type/name / ?attr/name resource reference in an attribute value

@@ -27,6 +27,9 @@ import dev.ide.ui.components.ErrorDialog
 import dev.ide.ui.components.MigrationNotice
 import dev.ide.ui.components.OnboardingSheet
 import dev.ide.ui.components.PermissionDialog
+import dev.ide.ui.components.RunConflictDialog
+import dev.ide.ui.generated.resources.Res
+import dev.ide.ui.generated.resources.settings_title
 import dev.ide.ui.navigation.ScreenHost
 import dev.ide.ui.platform.PlatformBackHandler
 import dev.ide.ui.screens.CreateProjectScreen
@@ -54,6 +57,8 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.drop
 import kotlinx.coroutines.launch
+import org.jetbrains.compose.resources.stringResource
+import kotlin.time.Duration.Companion.milliseconds
 
 /**
  * Root of the reusable IDE UI. Hosts pick the toolkit (Compose Desktop window, Android activity) and
@@ -128,8 +133,18 @@ fun CodeAssistApp(
         }
         snapshotFlow { state.openFiles.map { it.path } to state.activeIndex }.drop(1)
             .collectLatest {
-                delay(300)
+                delay(300.milliseconds)
                 state.backend.projects.saveOpenTabs(state.tabsSnapshot())
+            }
+    }
+
+    // Persist the file-tree expansion (debounced) so the tree reopens the same way next launch — keyed per
+    // project + view mode. `drop(1)` skips the seeded initial state; `collectLatest` coalesces rapid toggles.
+    LaunchedEffect(state) {
+        snapshotFlow { state.treeMode to state.expandedTreeSnapshot() }.drop(1)
+            .collectLatest { (mode, ids) ->
+                delay(300.milliseconds)
+                state.backend.files.saveExpandedTreeState(mode, ids.toList())
             }
     }
     // A successful create/open advances the epoch — land in the editor on the new project.
@@ -391,7 +406,7 @@ fun CodeAssistApp(
                             // The logs viewer is an editor overlay; only meaningful with a project open.
                             onOpenLogs = { if (epoch > 0) { state.logsOpen = true; screen = Screen.Editor } },
                             view = if (hubReturn == Screen.Editor) SettingsView.All else SettingsView.Global,
-                            title = "Settings",
+                            title = stringResource(Res.string.settings_title),
                             codeFont = codeFont,
                             fileActions = fileActions,
                         )
@@ -429,6 +444,9 @@ fun CodeAssistApp(
             )
             // The run sandbox's permission prompt — overlays everything while a guarded program is blocked.
             PermissionDialog(backend)
+            // "Already running" confirmation — raised when a new Run is requested while a build/program is
+            // still in flight (e.g. a runaway loop); offers Stop-and-Run with a remembered choice.
+            RunConflictDialog(state)
             // IntelliJ-style non-fatal error dialog — overlays everything when the engine reports an
             // unexpected error or an uncaught exception is intercepted (the app keeps running).
             ErrorDialog(backend)

@@ -8,13 +8,16 @@ import dev.ide.analytics.impl.DefaultAnalyticsService
 import dev.ide.analytics.impl.SupabaseSink
 import dev.ide.core.IdeServicesBackend
 import dev.ide.core.ProjectManager
+import dev.ide.core.settings.BuiltInSettingsPages
 import dev.ide.platform.log.Log.addSink
+import dev.ide.preview.bridge.DexCustomViewRuntime
 import java.io.File
 import java.nio.file.Path
 import java.util.zip.ZipInputStream
 import java.nio.file.Paths
 import java.util.Locale
 import java.util.UUID
+import java.util.concurrent.atomic.AtomicReference
 
 /**
  * On-device bootstrap for the IDE engine, the Android counterpart to :ide-desktop's wiring. ART has no
@@ -33,14 +36,14 @@ object AndroidIde {
     /** Heavy (file copy + project gen + JDT init) — call off the main thread. */
     fun bootstrap(context: Context): Session {
         val startNs = System.nanoTime()
-        // App-specific EXTERNAL storage (`Android/data/<pkg>/files/codeassist`): no permission needed, yet
-        // reachable by other file managers via [ProjectsDocumentsProvider]. Fall back to internal storage
-        // only if external isn't mounted (rare). The location is resolved identically by the provider.
+
+        // App-specific EXTERNAL storage (Android/data/<pkg>/files/codeassist)
         val home = appHomeDir(context).apply { mkdirs() }
         val manager = createProjectManager(context)
+
         // Measure the forked-VM R8 heap ceiling once per app version, in the background, and cache it. The
         // Build Runtime settings use it as the heap slider's MAX (user scales down from the real device
-        // limit) and the shrinker uses it as the default heap. Off the main thread; never blocks startup.
+        // limit) and the shrinker uses it as the default heap.
         detectR8CeilingAsync(context, manager)
 
         // Recover projects left in internal storage by a build from before the move to external app storage
@@ -48,7 +51,6 @@ object AndroidIde {
         // most once; non-destructive.
         runCatching { manager.importLegacyProjects() }
 
-        // Opt-in usage analytics (no collection until the user grants consent — see docs/analytics.md).
         val analytics = buildAnalytics(manager, home)
         // Start with no project open (the picker is shown); opening one from it creates that project's engine
         // on demand. The download cache is shared across projects via the ProjectManager (sharedCachesRoot).
@@ -59,7 +61,11 @@ object AndroidIde {
         val appContext = context.applicationContext
         val backend = IdeServicesBackend(
             initial = null, manager = manager, analytics = analytics,
-            buildRunnerFactory = { svc -> dev.ide.android.daemon.RemoteBuildRunner(appContext, svc) },
+            buildRunnerFactory = { svc ->
+                dev.ide.android.daemon.RemoteBuildRunner(
+                    appContext, svc
+                )
+            },
         )
         // Process-wide uncaught-exception handler: report app_crash + surface the non-fatal dialog + keep the
         // app alive (the MainActivity main-thread guard handles the UI looper). See IdeServicesBackend.
@@ -67,7 +73,10 @@ object AndroidIde {
         // cold_start: time the whole on-device bootstrap (asset copy + project load + engine init). Emitted
         // once per launch for users who consented; no-op otherwise. Also serves as the per-launch anchor.
         if (backend.diagnostics.analyticsConsent() == true) {
-            backend.diagnostics.track(dev.ide.analytics.Events.COLD_START, mapOf("duration_ms" to ((System.nanoTime() - startNs) / 1_000_000).toString()))
+            backend.diagnostics.track(
+                dev.ide.analytics.Events.COLD_START,
+                mapOf("duration_ms" to ((System.nanoTime() - startNs) / 1_000_000).toString())
+            )
         }
 
         return Session(backend)
@@ -90,7 +99,8 @@ object AndroidIde {
         // concatenation at source >= 9 (D8 desugars it at build time). Without this on the boot classpath the
         // editor reports a spurious "StringConcatFactory cannot be resolved" on any Java 9+ buffer. Desktop
         // pulls it from build-tools (IdeServices.detectAndroidSdk); on ART it ships as an asset.
-        val coreLambdaStubs = copyAsset(context, "core-lambda-stubs.jar", File(home, "core-lambda-stubs.jar"))
+        val coreLambdaStubs =
+            copyAsset(context, "core-lambda-stubs.jar", File(home, "core-lambda-stubs.jar"))
         // The on-device Kotlin compiler (K2JVMCompiler) is dexed, but IntelliJ-core boots its extension
         // registry by reading XML descriptors (META-INF/extensions/*.xml) from a real filesystem path, which
         // a dex APK doesn't expose. Extract the bundled kotlinc-resources.zip (the compiler jar minus its
@@ -109,61 +119,86 @@ object AndroidIde {
         // android.jar MUST stay first: ProjectManager.onDevice treats bootClasspath.first() as the SDK
         // android.jar. The desugar stubs ride alongside it as the platform.
         val bootClasspath = listOf(androidJar.absolutePath, coreLambdaStubs.absolutePath)
-        // Runs a dexed Java console app in-process (ART has no `java` to fork); the oat cache is transient.
-        val dexRunner = DexClassLoaderRunner(File(context.cacheDir, "dexrun"))
+        // Runs a dexed console app on ART (there's no `java` to fork). Prefer a FORKED `dalvikvm` process
+        // (fully isolated + truly killable: a runaway loop dies with the process, and the run needs no
+        // in-process sandbox); fall back to the in-process DexClassLoader on the rare device with no dalvikvm.
+        val forkRunner = ForkedDalvikRunner(File(context.cacheDir, "dexrun-fork"))
+        val dexRunner: dev.ide.build.engine.DexRunner =
+            if (forkRunner.available()) forkRunner else DexClassLoaderRunner(File(context.cacheDir, "dexrun"))
         // Installs + launches a built APK (the android Run) via the system package installer.
         val apkInstaller = ApkInstallerImpl(context)
         // Renders live custom views in the layout preview: D8-dex the instrumented classes + DexClassLoader.
-        val previewRuntime = dev.ide.preview.bridge.DexCustomViewRuntime(
+        val previewRuntime = DexCustomViewRuntime(
             context.applicationContext, androidJar.toPath(),
             File(context.cacheDir, "preview"), Build.VERSION.SDK_INT,
         )
         // Loads runtime (non-bundled) Kotlin compiler plugins on ART: D8-dex the plugin classpath + DexClassLoader.
         val kotlinPluginLoader = ArtKotlinPluginLoader(
-            androidJar.toPath(), File(context.cacheDir, "kotlinc-plugins").toPath(), Build.VERSION.SDK_INT,
+            androidJar.toPath(),
+            File(context.cacheDir, "kotlinc-plugins").toPath(),
+            Build.VERSION.SDK_INT,
         )
         // Runs the release/minify R8 pass in a forked dalvikvm with a heap above the app cap (the bundled
         // r8.dex asset is its classpath). Self-falls-back to in-process R8 if forking isn't usable here.
         // The heap comes from the "R8 maximum heap" setting, read lazily from the manager's prefs at build
         // time (a holder breaks the cycle: the shrinker is built before the manager it reads from).
-        val managerRef = java.util.concurrent.atomic.AtomicReference<ProjectManager?>()
-        val settingsPrefix = "settings.${dev.ide.core.settings.BuiltInSettingsPages.BUILD_RUNTIME}."
-        val r8HeapKey = settingsPrefix + dev.ide.core.settings.BuiltInSettingsPages.R8_MAX_HEAP
-        val r8ModeKey = settingsPrefix + dev.ide.core.settings.BuiltInSettingsPages.R8_MODE
+        val managerRef = AtomicReference<ProjectManager?>()
+        val settingsPrefix = "settings.${BuiltInSettingsPages.BUILD_RUNTIME}."
+        val r8HeapKey = settingsPrefix + BuiltInSettingsPages.R8_MAX_HEAP
+        val r8ModeKey = settingsPrefix + BuiltInSettingsPages.R8_MODE
         val r8ModeProvider = { managerRef.get()?.preference(r8ModeKey)?.trim() }
         // The user's heap setting, else the measured device ceiling (so the default matches the slider), else
         // null → the built-in default. Shared by the forked R8 shrinker and the forked D8 merge dexer.
         val r8HeapProvider = {
             val mgr = managerRef.get()
             mgr?.preference(r8HeapKey)?.trim()?.toIntOrNull()
-                ?: mgr?.preference(dev.ide.core.settings.BuiltInSettingsPages.R8_CEILING_PREF)?.trim()?.toIntOrNull()?.takeIf { it > 0 }
+                ?: mgr?.preference(BuiltInSettingsPages.R8_CEILING_PREF)
+                    ?.trim()?.toIntOrNull()?.takeIf { it > 0 }
         }
-        val r8Shrinker = ForkedR8Shrinker(context.applicationContext, r8ModeProvider, r8HeapProvider)
+        val r8Shrinker =
+            ForkedR8Shrinker(context.applicationContext, r8ModeProvider, r8HeapProvider)
         // The debug-dex memory knobs (Build Runtime page), read lazily like the R8 ones.
-        val dexOffHeapKey = settingsPrefix + dev.ide.core.settings.BuiltInSettingsPages.DEX_OFFHEAP_MB
-        val dexOffHeapProvider = { managerRef.get()?.preference(dexOffHeapKey)?.trim()?.toIntOrNull() }
-        val dexMergeBatchKey = settingsPrefix + dev.ide.core.settings.BuiltInSettingsPages.DEX_MERGE_BATCH
+        val dexOffHeapKey =
+            settingsPrefix + BuiltInSettingsPages.DEX_OFFHEAP_MB
+        val dexOffHeapProvider =
+            { managerRef.get()?.preference(dexOffHeapKey)?.trim()?.toIntOrNull() }
+        val dexMergeBatchKey =
+            settingsPrefix + BuiltInSettingsPages.DEX_MERGE_BATCH
         val dexMergeChunkProvider = {
             managerRef.get()?.preference(dexMergeBatchKey)?.trim()?.toIntOrNull()?.takeIf { it > 0 }
-                ?: dev.ide.core.settings.BuiltInSettingsPages.DEX_MERGE_BATCH_DEFAULT
+                ?: BuiltInSettingsPages.DEX_MERGE_BATCH_DEFAULT
         }
         // "Max concurrent dex forks" (0/absent = auto, sized from device RAM): how many forked merge/archive VMs
         // run at once, batching the per-library merges instead of forking one VM at a time.
-        val dexForkConcurrencyKey = settingsPrefix + dev.ide.core.settings.BuiltInSettingsPages.DEX_FORK_CONCURRENCY
-        val dexForkConcurrencyProvider = { managerRef.get()?.preference(dexForkConcurrencyKey)?.trim()?.toIntOrNull() }
+        val dexForkConcurrencyKey =
+            settingsPrefix + BuiltInSettingsPages.DEX_FORK_CONCURRENCY
+        val dexForkConcurrencyProvider =
+            { managerRef.get()?.preference(dexForkConcurrencyKey)?.trim()?.toIntOrNull() }
         // The dex MERGE (debug-path memory peak) forks too, under the same R8 execution / heap settings; the
         // archive step forks above the "Off-heap dexing threshold". The merge batches + parallelizes across
         // forked VMs bounded by the process-wide fork gate (see ForkedD8Dexer / R8ForkSupport).
-        val r8MergeDexer = ForkedD8Dexer(context.applicationContext, r8ModeProvider, r8HeapProvider, dexOffHeapProvider, dexForkConcurrencyProvider)
+        val r8MergeDexer = ForkedD8Dexer(
+            context.applicationContext,
+            r8ModeProvider,
+            r8HeapProvider,
+            dexOffHeapProvider,
+            dexForkConcurrencyProvider
+        )
         // Renders the layout with the REAL framework + library views (layoutlib-on-device): reuses the build's
         // aapt2-linked resources + R.jar, dexes the library classpath, inflates real views, draws to a bitmap.
         // Runs in the separate `:preview` process (RemoteRealViewRuntime) when the "Build in a separate process"
         // setting is on (default) — isolating arbitrary library/user View code, with in-process fallback —
         // governed by the same toggle as the build daemon (read lazily via the manager).
-        val separateProcessKey = settingsPrefix + dev.ide.core.settings.BuiltInSettingsPages.SEPARATE_PROCESS
+        val separateProcessKey =
+            settingsPrefix + BuiltInSettingsPages.SEPARATE_PROCESS
         val realViewRuntime = dev.ide.preview.realview.RemoteRealViewRuntime(
-            context.applicationContext, androidJar.toPath(), File(context.cacheDir, "realview"), Build.VERSION.SDK_INT,
-            separateProcessEnabled = { managerRef.get()?.preference(separateProcessKey)?.trim() != "false" },
+            context.applicationContext,
+            androidJar.toPath(),
+            File(context.cacheDir, "realview"),
+            Build.VERSION.SDK_INT,
+            separateProcessEnabled = {
+                managerRef.get()?.preference(separateProcessKey)?.trim() != "false"
+            },
         )
         // Project data left by previous app versions (same `com.tyron.code` package, so the same external
         // files dir survives a Play update). Swept into backups, and recovered into the picker by
@@ -174,8 +209,8 @@ object AndroidIde {
         // the backup and the file manager (this dir is a sibling of our home, both under [externalHome]).
         val legacyProjectsDir = File(externalHome(context), "Projects").toPath()
         val legacyInternalHome = File(context.filesDir, "codeassist").toPath()
-        val legacyDataDirs = listOf(legacyProjectsDir, legacyInternalHome)
-            .filter { java.nio.file.Files.exists(it) }
+        val legacyDataDirs =
+            listOf(legacyProjectsDir, legacyInternalHome).filter { java.nio.file.Files.exists(it) }
         return ProjectManager.onDevice(
             projectsRoot, bootClasspath, nativeLibDir, debugKeystore.toPath(),
             storageRoot = externalHome(context).toPath(),
@@ -198,13 +233,15 @@ object AndroidIde {
      * install id is a random UUID persisted once in prefs (not tied to any account); the session id is fresh
      * per launch. The service starts gated on the stored consent and collects nothing until it's granted.
      */
-    private fun buildAnalytics(manager: ProjectManager, home: File): dev.ide.analytics.AnalyticsService {
+    private fun buildAnalytics(
+        manager: ProjectManager, home: File
+    ): dev.ide.analytics.AnalyticsService {
         val url = BuildConfig.ANALYTICS_URL
         val key = BuildConfig.ANALYTICS_KEY
         if (url.isBlank() || key.isBlank()) return dev.ide.analytics.NoopAnalyticsService
 
-        val installId = manager.preference("analytics.install.id")
-            ?: UUID.randomUUID().toString().also { manager.setPreference("analytics.install.id", it) }
+        val installId = manager.preference("analytics.install.id") ?: UUID.randomUUID().toString()
+            .also { manager.setPreference("analytics.install.id", it) }
         val device = DeviceInfo(
             appVersion = BuildConfig.VERSION_NAME,
             appBuild = BuildConfig.VERSION_CODE,
@@ -230,7 +267,8 @@ object AndroidIde {
 
     /** Provision just the bundled `android.jar` for a process that needs only it (the `:preview` render
      *  daemon), without the full [createProjectManager] engine setup. Idempotent (marker-guarded copy). */
-    fun provisionAndroidJar(context: Context): File = copyAsset(context, "android.jar", File(appHomeDir(context), "android.jar"))
+    fun provisionAndroidJar(context: Context): File =
+        copyAsset(context, "android.jar", File(appHomeDir(context), "android.jar"))
 
     /** App-specific external storage base (`Android/data/<pkg>/files`), or internal `filesDir` if external
      *  isn't currently mounted. Resolved the same way by [bootstrap] and [ProjectsDocumentsProvider] so both
@@ -257,7 +295,9 @@ object AndroidIde {
         Thread {
             runCatching {
                 val ceiling = R8ForkSupport.detectCeiling(appContext) ?: 0
-                manager.setPreference(dev.ide.core.settings.BuiltInSettingsPages.R8_CEILING_PREF, ceiling.toString())
+                manager.setPreference(
+                    BuiltInSettingsPages.R8_CEILING_PREF, ceiling.toString()
+                )
                 manager.setPreference(R8_CEILING_STAMP_PREF, stamp)
             }
         }.apply { isDaemon = true; name = "r8-ceiling-detect" }.start()
@@ -284,7 +324,8 @@ object AndroidIde {
             context.packageManager.getPackageInfo(context.packageName, 0).lastUpdateTime
         }.getOrDefault(0L).toString()
         val marker = File(dest.parentFile, "${dest.name}.provisioned")
-        val upToDate = dest.exists() && dest.length() > 0L && marker.exists() && marker.readText() == stamp
+        val upToDate =
+            dest.exists() && dest.length() > 0L && marker.exists() && marker.readText() == stamp
         if (!upToDate) {
             dest.parentFile?.mkdirs()
             context.assets.open(name).use { input ->

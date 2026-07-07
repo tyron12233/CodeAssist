@@ -54,11 +54,32 @@ import dev.ide.ui.backend.UiStoreItemKind
 import dev.ide.ui.backend.UiStoreSection
 import dev.ide.ui.components.BottomSheet
 import dev.ide.ui.components.Chip
+import dev.ide.ui.components.ComingSoon
 import dev.ide.ui.components.IconButtonCa
 import dev.ide.ui.components.PrimaryButton
 import dev.ide.ui.components.darken
 import dev.ide.ui.components.entranceSlideUp
 import dev.ide.ui.components.pressScale
+import dev.ide.ui.generated.resources.Res
+import dev.ide.ui.generated.resources.clear
+import dev.ide.ui.generated.resources.store_all
+import dev.ide.ui.generated.resources.store_coming_soon
+import dev.ide.ui.generated.resources.store_community_content
+import dev.ide.ui.generated.resources.store_get
+import dev.ide.ui.generated.resources.store_installing
+import dev.ide.ui.generated.resources.store_kind_community
+import dev.ide.ui.generated.resources.store_kind_sample
+import dev.ide.ui.generated.resources.store_kind_template
+import dev.ide.ui.generated.resources.store_no_matches
+import dev.ide.ui.generated.resources.store_search_hint
+import dev.ide.ui.generated.resources.store_settings_and_tools
+import dev.ide.ui.generated.resources.store_soon
+import dev.ide.ui.generated.resources.store_subtitle
+import dev.ide.ui.generated.resources.store_title
+import dev.ide.ui.generated.resources.store_unavailable
+import dev.ide.ui.generated.resources.store_unavailable_content
+import dev.ide.ui.generated.resources.store_use_template
+import dev.ide.ui.generated.resources.store_by_author
 import dev.ide.ui.icons.CaIcons
 import dev.ide.ui.icons.TreeIcon
 import dev.ide.ui.icons.TreeIcons
@@ -66,6 +87,7 @@ import dev.ide.ui.icons.resolveTint
 import dev.ide.ui.theme.Ca
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import org.jetbrains.compose.resources.stringResource
 
 /**
  * The Projects Store: the home screen's Store tab. A featured carousel, category filters, and section lists
@@ -83,10 +105,10 @@ fun ProjectsStoreScreen(
 ) {
     val available = remember { backend.store.storeAvailable() }
     if (!available) {
-        dev.ide.ui.components.ComingSoon(
+        ComingSoon(
             icon = CaIcons.grid,
-            title = "Store unavailable",
-            description = "The project store isn't available in this build.",
+            title = stringResource(Res.string.store_unavailable),
+            description = stringResource(Res.string.store_unavailable_content),
             modifier = modifier.fillMaxSize().background(Ca.colors.bg),
         )
         return
@@ -142,14 +164,14 @@ private fun StoreHeader(onOpenHub: (() -> Unit)?) {
         horizontalArrangement = Arrangement.spacedBy(8.dp),
     ) {
         Column(Modifier.weight(1f)) {
-            Text("Store", color = Ca.colors.textPrimary, style = Ca.type.large, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            Text(stringResource(Res.string.store_title), color = Ca.colors.textPrimary, style = Ca.type.large, maxLines = 1, overflow = TextOverflow.Ellipsis)
             Text(
-                "Templates and sample projects to start from",
+                stringResource(Res.string.store_subtitle),
                 color = Ca.colors.textSecondary, style = Ca.type.subhead,
                 maxLines = 1, overflow = TextOverflow.Ellipsis,
             )
         }
-        if (onOpenHub != null) IconButtonCa(CaIcons.gear, "Settings & tools", onOpenHub)
+        if (onOpenHub != null) IconButtonCa(CaIcons.gear, stringResource(Res.string.store_settings_and_tools), onOpenHub)
     }
 }
 
@@ -167,7 +189,7 @@ private fun SearchField(value: String, onChange: (String) -> Unit, modifier: Mod
     ) {
         Icon(CaIcons.search, null, Modifier.size(18.dp), tint = Ca.colors.textTertiary)
         Box(Modifier.weight(1f), contentAlignment = Alignment.CenterStart) {
-            if (value.isEmpty()) Text("Search the store", color = Ca.colors.textTertiary, style = Ca.type.subhead)
+            if (value.isEmpty()) Text(stringResource(Res.string.store_search_hint), color = Ca.colors.textTertiary, style = Ca.type.subhead)
             BasicTextField(
                 value = value,
                 onValueChange = onChange,
@@ -183,7 +205,7 @@ private fun SearchField(value: String, onChange: (String) -> Unit, modifier: Mod
                 Modifier.size(22.dp).clickable(interaction, indication = null) { onChange("") },
                 contentAlignment = Alignment.Center,
             ) {
-                Icon(CaIcons.close, "Clear", Modifier.size(15.dp), tint = Ca.colors.textTertiary)
+                Icon(CaIcons.close, stringResource(Res.string.clear), Modifier.size(15.dp), tint = Ca.colors.textTertiary)
             }
         }
     }
@@ -196,7 +218,7 @@ private fun CategoryRow(categories: List<String>, selected: String?, onSelect: (
         horizontalArrangement = Arrangement.spacedBy(8.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        FilterChip("All", selected == null) { onSelect(null) }
+        FilterChip(stringResource(Res.string.store_all), selected == null) { onSelect(null) }
         categories.forEach { c -> FilterChip(c, selected == c) { onSelect(c) } }
     }
 }
@@ -356,9 +378,9 @@ private fun EmptySectionCard() {
             Icon(CaIcons.discord, null, Modifier.size(20.dp), tint = Ca.colors.accent)
         }
         Column(Modifier.weight(1f)) {
-            Text("Coming soon", color = Ca.colors.textPrimary, style = Ca.type.subhead, fontWeight = FontWeight.SemiBold)
+            Text(stringResource(Res.string.store_coming_soon), color = Ca.colors.textPrimary, style = Ca.type.subhead, fontWeight = FontWeight.SemiBold)
             Text(
-                "Community projects will land here once submissions open.",
+                stringResource(Res.string.store_community_content),
                 color = Ca.colors.textSecondary, style = Ca.type.footnote,
             )
         }
@@ -371,7 +393,7 @@ private fun EmptySectionCard() {
 private fun ResultsList(results: List<UiStoreItem>, onClick: (UiStoreItem) -> Unit) {
     if (results.isEmpty()) {
         Box(Modifier.fillMaxSize().padding(HPAD), contentAlignment = Alignment.TopCenter) {
-            Text("No matches", color = Ca.colors.textTertiary, style = Ca.type.subhead, modifier = Modifier.padding(top = 24.dp))
+            Text(stringResource(Res.string.store_no_matches), color = Ca.colors.textTertiary, style = Ca.type.subhead, modifier = Modifier.padding(top = 24.dp))
         }
         return
     }
@@ -406,8 +428,8 @@ private fun StoreRow(item: UiStoreItem, delayMillis: Int, onClick: () -> Unit) {
             Text(item.summary, color = Ca.colors.textSecondary, style = Ca.type.footnote, maxLines = 2, overflow = TextOverflow.Ellipsis)
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                 Chip(item.category, fill = Ca.colors.surface2, textColor = Ca.colors.textSecondary)
-                if (!item.available) Chip("Soon", fill = Ca.colors.warning.copy(alpha = 0.16f), textColor = Ca.colors.warning)
-                item.author?.let { Text("by $it", color = Ca.colors.textTertiary, style = Ca.type.caption2) }
+                if (!item.available) Chip(stringResource(Res.string.store_soon), fill = Ca.colors.warning.copy(alpha = 0.16f), textColor = Ca.colors.warning)
+                item.author?.let { Text(stringResource(Res.string.store_by_author, it), color = Ca.colors.textTertiary, style = Ca.type.caption2) }
             }
         }
         Icon(CaIcons.chevronRight, null, Modifier.size(20.dp), tint = Ca.colors.textTertiary)
@@ -457,14 +479,14 @@ private fun StoreDetailSheet(
             when {
                 item.kind == UiStoreItemKind.Template && item.templateId != null ->
                     PrimaryButton(
-                        "Use this template",
+                        stringResource(Res.string.store_use_template),
                         onClick = { onCreateFromTemplate(item.templateId!!) },
                         icon = CaIcons.plus,
                         modifier = Modifier.fillMaxWidth(),
                     )
                 item.available ->
                     PrimaryButton(
-                        if (busy) "Installing…" else "Get",
+                        if (busy) stringResource(Res.string.store_installing) else stringResource(Res.string.store_get),
                         onClick = {
                             if (!busy) {
                                 busy = true
@@ -478,7 +500,7 @@ private fun StoreDetailSheet(
                         icon = CaIcons.download,
                         modifier = Modifier.fillMaxWidth(),
                     )
-                else -> DisabledCta("Coming soon")
+                else -> DisabledCta(stringResource(Res.string.store_coming_soon))
             }
         }
         Spacer(Modifier.height(4.dp))
@@ -518,8 +540,9 @@ private fun StoreGlyph(
     }
 }
 
+@Composable
 private fun kindLabel(item: UiStoreItem): String = when (item.kind) {
-    UiStoreItemKind.Template -> "Template"
-    UiStoreItemKind.Sample -> "Sample"
-    UiStoreItemKind.Community -> "Community"
+    UiStoreItemKind.Template -> stringResource(Res.string.store_kind_template)
+    UiStoreItemKind.Sample -> stringResource(Res.string.store_kind_sample)
+    UiStoreItemKind.Community -> stringResource(Res.string.store_kind_community)
 }

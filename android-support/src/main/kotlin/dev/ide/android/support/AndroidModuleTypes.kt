@@ -10,7 +10,7 @@ import dev.ide.model.SourceSetTemplate
 /**
  * The Android module types contributed by android-support. `android-app` produces a
  * signed APK; `android-lib` produces an AAR. Both lay down the conventional Android source-set layout
- * (`src/<set>/{java,res,assets}`) and attach a default [AndroidFacet] so a freshly-created module is
+ * (`src/<set>/{java,kotlin,res,assets,resources,jniLibs}`) and attach a default [AndroidFacet] so a freshly-created module is
  * immediately buildable; the project-structure UI then edits the facet to set the real namespace/SDKs.
  *
  * Only the native build system builds these (the Gradle-compat layer maps `com.android.*` plugins onto
@@ -53,6 +53,8 @@ sealed class AndroidModuleType(
             "src/$name/kotlin" to setOf(ContentRole.SOURCE),   // Kotlin sources compile via compileKotlin
             "src/$name/res" to setOf(ContentRole.ANDROID_RES),
             "src/$name/assets" to setOf(ContentRole.ASSETS),
+            "src/$name/resources" to setOf(ContentRole.RESOURCE),  // Java resources → merged into the APK root
+            "src/$name/jniLibs" to setOf(ContentRole.JNI_LIBS),    // prebuilt `<abi>/*.so` → packaged under lib/
         ),
     )
 

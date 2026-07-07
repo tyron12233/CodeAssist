@@ -1,27 +1,29 @@
 package dev.ide.lang.kotlin.parse
 
-import org.jetbrains.kotlin.com.intellij.core.CoreApplicationEnvironment
-import org.jetbrains.kotlin.com.intellij.lang.ASTNode
-import org.jetbrains.kotlin.com.intellij.mock.MockComponentManager
-import org.jetbrains.kotlin.com.intellij.openapi.editor.Document
-import org.jetbrains.kotlin.com.intellij.openapi.fileTypes.FileType
-import org.jetbrains.kotlin.com.intellij.openapi.progress.EmptyProgressIndicator
-import org.jetbrains.kotlin.com.intellij.openapi.project.Project
-import org.jetbrains.kotlin.com.intellij.openapi.util.Computable
-import org.jetbrains.kotlin.com.intellij.openapi.util.TextRange
-import org.jetbrains.kotlin.com.intellij.openapi.util.UserDataHolderBase
-import org.jetbrains.kotlin.com.intellij.pom.PomModel
-import org.jetbrains.kotlin.com.intellij.pom.PomModelAspect
-import org.jetbrains.kotlin.com.intellij.pom.PomTransaction
-import org.jetbrains.kotlin.com.intellij.pom.tree.TreeAspect
-import org.jetbrains.kotlin.com.intellij.psi.PsiElement
-import org.jetbrains.kotlin.com.intellij.psi.PsiFile
-import org.jetbrains.kotlin.com.intellij.psi.PsiTreeChangeListener
-import org.jetbrains.kotlin.com.intellij.psi.codeStyle.CodeStyleManager
-import org.jetbrains.kotlin.com.intellij.psi.codeStyle.Indent
-import org.jetbrains.kotlin.com.intellij.psi.impl.BlockSupportImpl
-import org.jetbrains.kotlin.com.intellij.psi.impl.PsiTreeChangePreprocessor
-import org.jetbrains.kotlin.com.intellij.util.ThrowableRunnable
+import com.intellij.core.CoreApplicationEnvironment
+import com.intellij.lang.ASTNode
+import com.intellij.mock.MockComponentManager
+import com.intellij.openapi.Disposable
+import com.intellij.openapi.editor.Document
+import com.intellij.openapi.fileTypes.FileType
+import com.intellij.openapi.progress.EmptyProgressIndicator
+import com.intellij.openapi.project.Project
+import com.intellij.openapi.util.Computable
+import com.intellij.openapi.util.TextRange
+import com.intellij.openapi.util.UserDataHolderBase
+import com.intellij.pom.PomModel
+import com.intellij.pom.PomModelAspect
+import com.intellij.pom.PomTransaction
+import com.intellij.pom.event.PomModelListener
+import com.intellij.pom.tree.TreeAspect
+import com.intellij.psi.PsiElement
+import com.intellij.psi.PsiFile
+import com.intellij.psi.PsiTreeChangeListener
+import com.intellij.psi.codeStyle.CodeStyleManager
+import com.intellij.psi.codeStyle.Indent
+import com.intellij.psi.impl.BlockSupportImpl
+import com.intellij.psi.impl.PsiTreeChangePreprocessor
+import com.intellij.util.ThrowableRunnable
 import org.jetbrains.kotlin.psi.KtFile
 
 /**
@@ -46,12 +48,25 @@ internal object KotlinPsiMutation {
     @Volatile private var disabled = false
     private val blockSupport = BlockSupportImpl()
 
+    /** Whether `java.lang.ClassValue` exists (JVM: yes; ART/Android: no). The IntelliJ message bus needs it to
+     *  publish the PSI-change events [reparse] triggers, so its absence means incremental reparse can't work. */
+    private val classValueAvailable: Boolean =
+        runCatching { Class.forName("java.lang.ClassValue", false, KotlinPsiMutation::class.java.classLoader) }.isSuccess
+
     /** Stand up the PSI-mutation services/EPs on [project] once. Returns false (permanently) if the infra
      *  can't be registered on this platform — then [reparse] no-ops and the caller's full parse is used.
      *  Idempotent; the caller holds the parse lock so registration is serialized. */
     private fun ensureReady(project: Project): Boolean {
         if (ready) return true
         if (disabled) return false
+        // IntelliJ's MessageBus (fired by performActualPsiChange -> PsiManagerImpl.beforeChange) caches its
+        // listener method handles through java.lang.ClassValue, which does NOT exist on ART. On Android every
+        // reparse would then throw NoClassDefFoundError, be caught below, and fall back to a full parse — but
+        // the caller would re-attempt on the NEXT keystroke too, so each edit pays an exception + a ~60-line
+        // ART-logged stack for a path that can never succeed here. Detect the missing class ONCE and disable
+        // incremental reparse permanently, so the caller goes straight to a (working) full parse with no churn.
+        // Desktop has ClassValue, so incremental reparse stays on there.
+        if (!classValueAvailable) { disabled = true; return false }
         return try {
             if (CodeStyleManager.getInstance(project) == null) {
                 val cm = project as MockComponentManager
@@ -62,8 +77,8 @@ internal object KotlinPsiMutation {
             // PsiManagerImpl fires before/after-change events through these EPs while applying the diff; with
             // none registered the lookup throws. Register them empty (no listeners) so the firing is a no-op.
             for ((name, klass) in arrayOf(
-                "org.jetbrains.kotlin.com.intellij.psi.treeChangeListener" to PsiTreeChangeListener::class.java,
-                "org.jetbrains.kotlin.com.intellij.psi.treeChangePreprocessor" to PsiTreeChangePreprocessor::class.java,
+                "com.intellij.psi.treeChangeListener" to PsiTreeChangeListener::class.java,
+                "com.intellij.psi.treeChangePreprocessor" to PsiTreeChangePreprocessor::class.java,
             )) if (!area.hasExtensionPoint(name)) CoreApplicationEnvironment.registerExtensionPoint(area, name, klass)
             ready = true
             true
@@ -93,6 +108,11 @@ internal object KotlinPsiMutation {
             // BlockSupport guarantees the result equals a full reparse; verify text as a cheap safety net and
             // fall back (null) on any mismatch rather than serving a divergent tree.
             if (file.text.contentEquals(newText)) file else null
+        } catch (t: LinkageError) {
+            // A missing/incompatible platform class (e.g. java.lang.ClassValue on ART) can NEVER succeed:
+            // disable incremental reparse so we stop re-throwing + logging it on every subsequent keystroke.
+            disabled = true
+            null
         } catch (t: Throwable) {
             null // a one-off reparse failure: fall back to a full parse for this edit (infra stays enabled)
         }
@@ -115,6 +135,10 @@ internal object KotlinPsiMutation {
         override fun <T : PomModelAspect> getModelAspect(aspectClass: Class<T>): T? =
             if (aspectClass == TreeAspect::class.java) treeAspect as T else null
         override fun runTransaction(transaction: PomTransaction) { transaction.run() }
+        // Listener registration is a no-op: nothing in this headless core publishes or consumes POM events.
+        override fun addModelListener(listener: PomModelListener) {}
+        override fun addModelListener(listener: PomModelListener, parentDisposable: Disposable) {}
+        override fun removeModelListener(listener: PomModelListener) {}
     }
 
     /** No-op [CodeStyleManager]: the reparse only needs `performActionWithFormatterDisabled` to run its action

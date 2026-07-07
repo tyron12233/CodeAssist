@@ -12,46 +12,46 @@ import dev.ide.index.StringExternalizer
 import dev.ide.index.StringKeyDescriptor
 import dev.ide.index.impl.IndexServiceImpl
 import kotlinx.coroutines.runBlocking
-import org.jetbrains.kotlin.com.intellij.codeInsight.ExternalAnnotationsManager
-import org.jetbrains.kotlin.com.intellij.codeInsight.InferredAnnotationsManager
-import org.jetbrains.kotlin.com.intellij.core.CoreApplicationEnvironment
-import org.jetbrains.kotlin.com.intellij.core.JavaCoreApplicationEnvironment
-import org.jetbrains.kotlin.com.intellij.core.JavaCoreProjectEnvironment
-import org.jetbrains.kotlin.com.intellij.ide.highlighter.JavaFileType
-import org.jetbrains.kotlin.com.intellij.lang.jvm.facade.JvmElementProvider
-import org.jetbrains.kotlin.com.intellij.openapi.Disposable
-import org.jetbrains.kotlin.com.intellij.openapi.application.ApplicationManager
-import org.jetbrains.kotlin.com.intellij.openapi.extensions.AreaInstance
-import org.jetbrains.kotlin.com.intellij.openapi.extensions.LoadingOrder
-import org.jetbrains.kotlin.com.intellij.openapi.project.Project
-import org.jetbrains.kotlin.com.intellij.openapi.roots.LanguageLevelProjectExtension
-import org.jetbrains.kotlin.com.intellij.openapi.util.Computable
-import org.jetbrains.kotlin.com.intellij.openapi.util.Disposer
-import org.jetbrains.kotlin.com.intellij.openapi.vfs.VirtualFileSystem
-import org.jetbrains.kotlin.com.intellij.pom.java.LanguageLevel
-import org.jetbrains.kotlin.com.intellij.psi.JavaModuleSystem
-import org.jetbrains.kotlin.com.intellij.psi.JavaPsiFacade
-import org.jetbrains.kotlin.com.intellij.psi.PsiAnnotation
-import org.jetbrains.kotlin.com.intellij.psi.PsiClass
-import org.jetbrains.kotlin.com.intellij.psi.PsiElement
-import org.jetbrains.kotlin.com.intellij.psi.PsiElementFinder
-import org.jetbrains.kotlin.com.intellij.psi.PsiExpression
-import org.jetbrains.kotlin.com.intellij.psi.PsiFile
-import org.jetbrains.kotlin.com.intellij.psi.PsiFileFactory
-import org.jetbrains.kotlin.com.intellij.psi.PsiJavaFile
-import org.jetbrains.kotlin.com.intellij.psi.PsiLocalVariable
-import org.jetbrains.kotlin.com.intellij.psi.PsiManager
-import org.jetbrains.kotlin.com.intellij.psi.PsiMethodCallExpression
-import org.jetbrains.kotlin.com.intellij.psi.PsiModifierListOwner
-import org.jetbrains.kotlin.com.intellij.psi.PsiNameValuePair
-import org.jetbrains.kotlin.com.intellij.psi.PsiPackage
-import org.jetbrains.kotlin.com.intellij.psi.augment.PsiAugmentProvider
-import org.jetbrains.kotlin.com.intellij.psi.impl.JavaClassSupersImpl
-import org.jetbrains.kotlin.com.intellij.psi.impl.PsiElementFinderImpl
-import org.jetbrains.kotlin.com.intellij.psi.impl.file.PsiPackageImpl
-import org.jetbrains.kotlin.com.intellij.psi.search.GlobalSearchScope
-import org.jetbrains.kotlin.com.intellij.psi.util.JavaClassSupers
-import org.jetbrains.kotlin.com.intellij.psi.util.PsiTreeUtil
+import com.intellij.codeInsight.ExternalAnnotationsManager
+import com.intellij.codeInsight.InferredAnnotationsManager
+import com.intellij.core.CoreApplicationEnvironment
+import com.intellij.core.JavaCoreApplicationEnvironment
+import com.intellij.core.JavaCoreProjectEnvironment
+import com.intellij.ide.highlighter.JavaFileType
+import com.intellij.lang.jvm.facade.JvmElementProvider
+import com.intellij.openapi.Disposable
+import com.intellij.openapi.application.ApplicationManager
+import com.intellij.openapi.extensions.AreaInstance
+import com.intellij.openapi.extensions.LoadingOrder
+import com.intellij.openapi.project.Project
+import com.intellij.openapi.roots.LanguageLevelProjectExtension
+import com.intellij.openapi.util.Computable
+import com.intellij.openapi.util.Disposer
+import com.intellij.openapi.vfs.VirtualFileSystem
+import com.intellij.pom.java.LanguageLevel
+import com.intellij.psi.JavaModuleSystem
+import com.intellij.psi.JavaPsiFacade
+import com.intellij.psi.PsiAnnotation
+import com.intellij.psi.PsiClass
+import com.intellij.psi.PsiElement
+import com.intellij.psi.PsiElementFinder
+import com.intellij.psi.PsiExpression
+import com.intellij.psi.PsiFile
+import com.intellij.psi.PsiFileFactory
+import com.intellij.psi.PsiJavaFile
+import com.intellij.psi.PsiLocalVariable
+import com.intellij.psi.PsiManager
+import com.intellij.psi.PsiMethodCallExpression
+import com.intellij.psi.PsiModifierListOwner
+import com.intellij.psi.PsiNameValuePair
+import com.intellij.psi.PsiPackage
+import com.intellij.psi.augment.PsiAugmentProvider
+import com.intellij.psi.impl.JavaClassSupersImpl
+import com.intellij.psi.impl.PsiElementFinderImpl
+import com.intellij.psi.impl.file.PsiPackageImpl
+import com.intellij.psi.search.GlobalSearchScope
+import com.intellij.psi.util.JavaClassSupers
+import com.intellij.psi.util.PsiTreeUtil
 import org.junit.jupiter.api.Assumptions.assumeTrue
 import java.nio.file.Files
 import java.nio.file.Path
@@ -361,7 +361,7 @@ private class IndexBackedFinder(
 
 /** No-op ExternalAnnotationsManager: there are no external annotation roots in a standalone env. */
 private class StubExternalAnnotations : ExternalAnnotationsManager() {
-    override fun hasAnnotationRootsForFile(file: org.jetbrains.kotlin.com.intellij.openapi.vfs.VirtualFile): Boolean = false
+    override fun hasAnnotationRootsForFile(file: com.intellij.openapi.vfs.VirtualFile): Boolean = false
     override fun isExternalAnnotation(annotation: PsiAnnotation): Boolean = false
     override fun findExternalAnnotation(owner: PsiModifierListOwner, fqn: String): PsiAnnotation? = null
     override fun findExternalAnnotations(owner: PsiModifierListOwner, fqn: String): MutableList<PsiAnnotation> = mutableListOf()

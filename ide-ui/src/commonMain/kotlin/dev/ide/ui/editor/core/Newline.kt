@@ -42,7 +42,7 @@ fun smartEnter(text: CharSequence, caret: Int, language: CodeLanguage): RangeEdi
     if (controlFlowNeedsBraces(code)) {
         val open = if (lineText.isEmpty() || lineText.endsWith(" ")) "{" else " {"
         val body = "\n" + indent + unit
-        val insert = open + body + "\n" + indent + "}"
+        val insert = "$open$body\n$indent}"
         return RangeEdit(lineEnd, lineEnd, insert, lineEnd + open.length + body.length)
     }
     val lastCh = code.lastOrNull()
@@ -71,7 +71,7 @@ private fun controlFlowNeedsBraces(code: String): Boolean {
 private val OPEN_TO_CLOSE = mapOf('(' to ')', '[' to ']', '{' to '}')
 private val CLOSE_TO_OPEN = OPEN_TO_CLOSE.entries.associate { (k, v) -> v to k }
 
-private fun CharSequence.charOrNull(i: Int): Char? = if (i in 0 until length) this[i] else null
+private fun CharSequence.charOrNull(i: Int): Char? = if (i in indices) this[i] else null
 
 /** Index of the next non-blank char at or after [pos] on the same line (stops at a newline), or -1. */
 private fun nextNonBlankOnLine(text: CharSequence, pos: Int): Int {
@@ -116,7 +116,7 @@ private open class BraceNewlineHandler(
 
         // Split a string literal across two lines, joined with `+`: `"foo|bar"` → `"foo" +` / `"bar"`.
         if (stringSplits && insideStringLiteral(text, lineStart, pos)) {
-            val insert = "\" +\n" + indent + unit + "\""
+            val insert = "\" +\n$indent$unit\""
             return RangeEdit(pos, pos, insert, pos + insert.length)
         }
 
@@ -454,7 +454,7 @@ private fun continueBlockComment(text: CharSequence, pos: Int, lineStart: Int, i
     // Opening line (`/* …` or `/** …`) that isn't closed yet → drop in a `*` line and the closing `*/`.
     if (firstCh == '/' && indexBounded(text, "*/", pos) < 0) {
         val mid = "\n$indent * "
-        return RangeEdit(pos, pos, mid + "\n$indent */", pos + mid.length)
+        return RangeEdit(pos, pos, "$mid\n$indent */", pos + mid.length)
     }
     if (firstCh != '*') {
         // Opener line without a `*` (rare `/* text`) → align the new star one past the `/`.
@@ -583,7 +583,7 @@ private class ListMarker(val end: Int, val next: String)
 
 /** Detects a `- ` / `* ` / `+ ` bullet or an ordered `N. ` / `N) ` marker beginning at [from] (before [pos]). */
 private fun listMarker(text: CharSequence, from: Int, pos: Int): ListMarker? {
-    if (from < 0 || from >= pos) return null
+    if (from !in 0..<pos) return null
     val c = text[from]
     if ((c == '-' || c == '*' || c == '+') && from + 1 < text.length && text[from + 1] == ' ') {
         return ListMarker(from + 2, "$c ")

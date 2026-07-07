@@ -34,11 +34,82 @@ import dev.ide.ui.components.SettingsSliderRow
 import dev.ide.ui.components.SettingsToggleRow
 import dev.ide.ui.editor.CodeLanguage
 import dev.ide.ui.editor.highlight
+import dev.ide.ui.generated.resources.Res
+import dev.ide.ui.generated.resources.back
+import dev.ide.ui.generated.resources.codestyle_after_comma
+import dev.ide.ui.generated.resources.codestyle_after_comma_desc
+import dev.ide.ui.generated.resources.codestyle_after_imports
+import dev.ide.ui.generated.resources.codestyle_after_type_cast
+import dev.ide.ui.generated.resources.codestyle_after_type_cast_desc
+import dev.ide.ui.generated.resources.codestyle_around_lambda_arrow
+import dev.ide.ui.generated.resources.codestyle_around_lambda_arrow_desc
+import dev.ide.ui.generated.resources.codestyle_around_operators
+import dev.ide.ui.generated.resources.codestyle_around_operators_desc
+import dev.ide.ui.generated.resources.codestyle_around_ternary
+import dev.ide.ui.generated.resources.codestyle_around_ternary_desc
+import dev.ide.ui.generated.resources.codestyle_before_brace
+import dev.ide.ui.generated.resources.codestyle_before_brace_desc
+import dev.ide.ui.generated.resources.codestyle_before_field
+import dev.ide.ui.generated.resources.codestyle_before_first_member
+import dev.ide.ui.generated.resources.codestyle_before_method
+import dev.ide.ui.generated.resources.codestyle_before_parens
+import dev.ide.ui.generated.resources.codestyle_before_parens_desc
+import dev.ide.ui.generated.resources.codestyle_before_semicolon
+import dev.ide.ui.generated.resources.codestyle_before_semicolon_desc
+import dev.ide.ui.generated.resources.codestyle_between_types
+import dev.ide.ui.generated.resources.codestyle_binary_expressions
+import dev.ide.ui.generated.resources.codestyle_blank_lines
+import dev.ide.ui.generated.resources.codestyle_brace_placement
+import dev.ide.ui.generated.resources.codestyle_brace_end_of_line
+import dev.ide.ui.generated.resources.codestyle_brace_next_line
+import dev.ide.ui.generated.resources.codestyle_chained_calls
+import dev.ide.ui.generated.resources.codestyle_comments
+import dev.ide.ui.generated.resources.codestyle_continuation_indent
+import dev.ide.ui.generated.resources.codestyle_continuation_indent_desc
+import dev.ide.ui.generated.resources.codestyle_format_comments
+import dev.ide.ui.generated.resources.codestyle_format_comments_desc
+import dev.ide.ui.generated.resources.codestyle_indent_size
+import dev.ide.ui.generated.resources.codestyle_indent_size_desc
+import dev.ide.ui.generated.resources.codestyle_indent_with_tabs
+import dev.ide.ui.generated.resources.codestyle_indent_with_tabs_desc
+import dev.ide.ui.generated.resources.codestyle_indentation
+import dev.ide.ui.generated.resources.codestyle_keep_at_most
+import dev.ide.ui.generated.resources.codestyle_keep_at_most_desc
+import dev.ide.ui.generated.resources.codestyle_kotlin_note
+import dev.ide.ui.generated.resources.codestyle_lang_java
+import dev.ide.ui.generated.resources.codestyle_lang_kotlin
+import dev.ide.ui.generated.resources.codestyle_language
+import dev.ide.ui.generated.resources.codestyle_language_desc
+import dev.ide.ui.generated.resources.codestyle_line_width
+import dev.ide.ui.generated.resources.codestyle_line_width_desc
+import dev.ide.ui.generated.resources.codestyle_method_arguments
+import dev.ide.ui.generated.resources.codestyle_method_parameters
+import dev.ide.ui.generated.resources.codestyle_preset_android
+import dev.ide.ui.generated.resources.codestyle_preset_custom
+import dev.ide.ui.generated.resources.codestyle_preset_google
+import dev.ide.ui.generated.resources.codestyle_preset_kotlin_official
+import dev.ide.ui.generated.resources.codestyle_preview
+import dev.ide.ui.generated.resources.codestyle_preview_no_project
+import dev.ide.ui.generated.resources.codestyle_reformat_on_save
+import dev.ide.ui.generated.resources.codestyle_reformat_on_save_desc
+import dev.ide.ui.generated.resources.codestyle_spaces
+import dev.ide.ui.generated.resources.codestyle_style
+import dev.ide.ui.generated.resources.codestyle_style_desc
+import dev.ide.ui.generated.resources.codestyle_title
+import dev.ide.ui.generated.resources.codestyle_within_parens
+import dev.ide.ui.generated.resources.codestyle_within_parens_desc
+import dev.ide.ui.generated.resources.codestyle_wrap_comments
+import dev.ide.ui.generated.resources.codestyle_wrap_comments_desc
+import dev.ide.ui.generated.resources.codestyle_wrap_if_long
+import dev.ide.ui.generated.resources.codestyle_wrap_never
+import dev.ide.ui.generated.resources.codestyle_wrap_one_per_line
+import dev.ide.ui.generated.resources.codestyle_wrapping_and_braces
 import dev.ide.ui.icons.CaIcons
 import dev.ide.ui.platform.isMobilePlatform
 import dev.ide.ui.theme.Ca
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import org.jetbrains.compose.resources.stringResource
 
 private const val LANG_JAVA = "java"
 private const val LANG_KOTLIN = "kotlin"
@@ -97,8 +168,8 @@ fun CodeStyleScreen(backend: IdeBackend, hasProject: Boolean, onBack: () -> Unit
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(8.dp),
         ) {
-            IconButtonCa(CaIcons.chevronLeft, "Back", onBack, boxSize = iconBox)
-            Text("Code Style", style = Ca.type.title3, fontWeight = FontWeight.SemiBold, color = Ca.colors.textPrimary, modifier = Modifier.weight(1f))
+            IconButtonCa(CaIcons.chevronLeft, stringResource(Res.string.back), onBack, boxSize = iconBox)
+            Text(stringResource(Res.string.codestyle_title), style = Ca.type.title3, fontWeight = FontWeight.SemiBold, color = Ca.colors.textPrimary, modifier = Modifier.weight(1f))
         }
 
         Column(
@@ -107,16 +178,16 @@ fun CodeStyleScreen(backend: IdeBackend, hasProject: Boolean, onBack: () -> Unit
         ) {
             SettingsCard(null) {
                 SettingsChoiceRow(
-                    "Language", "Each language keeps its own profile", language,
-                    listOf(LANG_JAVA to "Java", LANG_KOTLIN to "Kotlin"),
+                    stringResource(Res.string.codestyle_language), stringResource(Res.string.codestyle_language_desc), language,
+                    listOf(LANG_JAVA to stringResource(Res.string.codestyle_lang_java), LANG_KOTLIN to stringResource(Res.string.codestyle_lang_kotlin)),
                 ) { language = it }
                 SettingsDivider()
                 SettingsChoiceRow(
-                    "Style", "A preset starting point; changing any option below switches to Custom", style.preset,
+                    stringResource(Res.string.codestyle_style), stringResource(Res.string.codestyle_style_desc), style.preset,
                     presetOptions(language),
                 ) { picked -> update(if (picked == PRESET_CUSTOM) display.copy(preset = PRESET_CUSTOM) else presetDefaults(picked)) }
                 SettingsDivider()
-                SettingsToggleRow("Reformat on save", "Reformat the file each time you save it", formatOnSave) {
+                SettingsToggleRow(stringResource(Res.string.codestyle_reformat_on_save), stringResource(Res.string.codestyle_reformat_on_save_desc), formatOnSave) {
                     formatOnSave = it
                     backend.settings.setPreference(FORMAT_ON_SAVE_KEY, it.toString())
                 }
@@ -126,84 +197,84 @@ fun CodeStyleScreen(backend: IdeBackend, hasProject: Boolean, onBack: () -> Unit
 
             if (!javaOnly) {
                 Text(
-                    "Kotlin formatting normalizes indentation, tabs, blank lines, and inline spacing. Brace placement and line wrapping follow the code as written.",
+                    stringResource(Res.string.codestyle_kotlin_note),
                     color = Ca.colors.textTertiary, style = Ca.type.caption2,
                     modifier = Modifier.padding(horizontal = 4.dp),
                 )
             }
 
             if (custom) {
-                SettingsCard("Indentation") {
-                    SettingsSliderRow("Indent size", "Spaces per level", display.indentSize, 1, 8, 1, null) { edit { copy(indentSize = it) } }
+                SettingsCard(stringResource(Res.string.codestyle_indentation)) {
+                    SettingsSliderRow(stringResource(Res.string.codestyle_indent_size), stringResource(Res.string.codestyle_indent_size_desc), display.indentSize, 1, 8, 1, null) { edit { copy(indentSize = it) } }
                     if (javaOnly) {
                         SettingsDivider()
-                        SettingsSliderRow("Continuation indent", "Extra indent for a wrapped line", display.continuationIndent, 1, 16, 1, null) { edit { copy(continuationIndent = it) } }
+                        SettingsSliderRow(stringResource(Res.string.codestyle_continuation_indent), stringResource(Res.string.codestyle_continuation_indent_desc), display.continuationIndent, 1, 16, 1, null) { edit { copy(continuationIndent = it) } }
                         SettingsDivider()
-                        SettingsSliderRow("Line width", "Column the formatter wraps at", display.maxLineLength, 60, 200, 10, null) { edit { copy(maxLineLength = it) } }
+                        SettingsSliderRow(stringResource(Res.string.codestyle_line_width), stringResource(Res.string.codestyle_line_width_desc), display.maxLineLength, 60, 200, 10, null) { edit { copy(maxLineLength = it) } }
                     }
                     SettingsDivider()
-                    SettingsToggleRow("Indent with tabs", "Use tabs instead of spaces", display.useTabs) { edit { copy(useTabs = it) } }
+                    SettingsToggleRow(stringResource(Res.string.codestyle_indent_with_tabs), stringResource(Res.string.codestyle_indent_with_tabs_desc), display.useTabs) { edit { copy(useTabs = it) } }
                 }
 
                 if (javaOnly) {
-                    SettingsCard("Wrapping & braces") {
-                        SettingsChoiceRow("Brace placement", null, display.braceStyle, listOf("endOfLine" to "End of line", "nextLine" to "Next line")) { edit { copy(braceStyle = it) } }
+                    SettingsCard(stringResource(Res.string.codestyle_wrapping_and_braces)) {
+                        SettingsChoiceRow(stringResource(Res.string.codestyle_brace_placement), null, display.braceStyle, listOf("endOfLine" to stringResource(Res.string.codestyle_brace_end_of_line), "nextLine" to stringResource(Res.string.codestyle_brace_next_line))) { edit { copy(braceStyle = it) } }
                         SettingsDivider()
-                        SettingsChoiceRow("Method parameters", null, display.wrapMethodParameters, wrapOptions()) { edit { copy(wrapMethodParameters = it) } }
+                        SettingsChoiceRow(stringResource(Res.string.codestyle_method_parameters), null, display.wrapMethodParameters, wrapOptions()) { edit { copy(wrapMethodParameters = it) } }
                         SettingsDivider()
-                        SettingsChoiceRow("Method arguments", null, display.wrapMethodArguments, wrapOptions()) { edit { copy(wrapMethodArguments = it) } }
+                        SettingsChoiceRow(stringResource(Res.string.codestyle_method_arguments), null, display.wrapMethodArguments, wrapOptions()) { edit { copy(wrapMethodArguments = it) } }
                         SettingsDivider()
-                        SettingsChoiceRow("Chained calls", null, display.wrapChainedCalls, wrapOptions()) { edit { copy(wrapChainedCalls = it) } }
+                        SettingsChoiceRow(stringResource(Res.string.codestyle_chained_calls), null, display.wrapChainedCalls, wrapOptions()) { edit { copy(wrapChainedCalls = it) } }
                         SettingsDivider()
-                        SettingsChoiceRow("Binary expressions", null, display.wrapBinaryExpressions, wrapOptions()) { edit { copy(wrapBinaryExpressions = it) } }
+                        SettingsChoiceRow(stringResource(Res.string.codestyle_binary_expressions), null, display.wrapBinaryExpressions, wrapOptions()) { edit { copy(wrapBinaryExpressions = it) } }
                     }
                 }
 
                 // Inline spacing. The first five rules are honored by Kotlin too (token-level rewriting); the
                 // rest need Java's full formatter, so they are Java-only.
-                SettingsCard("Spaces") {
-                    SettingsToggleRow("Within parentheses", "`( x )` instead of `(x)`", display.spaceWithinParens) { edit { copy(spaceWithinParens = it) } }
+                SettingsCard(stringResource(Res.string.codestyle_spaces)) {
+                    SettingsToggleRow(stringResource(Res.string.codestyle_within_parens), stringResource(Res.string.codestyle_within_parens_desc), display.spaceWithinParens) { edit { copy(spaceWithinParens = it) } }
                     SettingsDivider()
-                    SettingsToggleRow("After comma", "`a, b` instead of `a,b`", display.spaceAfterComma) { edit { copy(spaceAfterComma = it) } }
+                    SettingsToggleRow(stringResource(Res.string.codestyle_after_comma), stringResource(Res.string.codestyle_after_comma_desc), display.spaceAfterComma) { edit { copy(spaceAfterComma = it) } }
                     SettingsDivider()
-                    SettingsToggleRow("Around operators", "`a + b`, `x = 1`", display.spaceAroundOperators) { edit { copy(spaceAroundOperators = it) } }
+                    SettingsToggleRow(stringResource(Res.string.codestyle_around_operators), stringResource(Res.string.codestyle_around_operators_desc), display.spaceAroundOperators) { edit { copy(spaceAroundOperators = it) } }
                     SettingsDivider()
-                    SettingsToggleRow("Before brace", "`) {` instead of `){`", display.spaceBeforeBrace) { edit { copy(spaceBeforeBrace = it) } }
+                    SettingsToggleRow(stringResource(Res.string.codestyle_before_brace), stringResource(Res.string.codestyle_before_brace_desc), display.spaceBeforeBrace) { edit { copy(spaceBeforeBrace = it) } }
                     SettingsDivider()
-                    SettingsToggleRow("Around lambda arrow", "`a -> b`", display.spaceAroundLambdaArrow) { edit { copy(spaceAroundLambdaArrow = it) } }
+                    SettingsToggleRow(stringResource(Res.string.codestyle_around_lambda_arrow), stringResource(Res.string.codestyle_around_lambda_arrow_desc), display.spaceAroundLambdaArrow) { edit { copy(spaceAroundLambdaArrow = it) } }
                     if (javaOnly) {
                         SettingsDivider()
-                        SettingsToggleRow("Before parentheses", "`if (` `for (` `while (`", display.spaceBeforeParens) { edit { copy(spaceBeforeParens = it) } }
+                        SettingsToggleRow(stringResource(Res.string.codestyle_before_parens), stringResource(Res.string.codestyle_before_parens_desc), display.spaceBeforeParens) { edit { copy(spaceBeforeParens = it) } }
                         SettingsDivider()
-                        SettingsToggleRow("Before semicolon", "`x ;` instead of `x;`", display.spaceBeforeSemicolon) { edit { copy(spaceBeforeSemicolon = it) } }
+                        SettingsToggleRow(stringResource(Res.string.codestyle_before_semicolon), stringResource(Res.string.codestyle_before_semicolon_desc), display.spaceBeforeSemicolon) { edit { copy(spaceBeforeSemicolon = it) } }
                         SettingsDivider()
-                        SettingsToggleRow("Around ternary", "`c ? a : b`", display.spaceAroundTernary) { edit { copy(spaceAroundTernary = it) } }
+                        SettingsToggleRow(stringResource(Res.string.codestyle_around_ternary), stringResource(Res.string.codestyle_around_ternary_desc), display.spaceAroundTernary) { edit { copy(spaceAroundTernary = it) } }
                         SettingsDivider()
-                        SettingsToggleRow("After type cast", "`(Foo) x` instead of `(Foo)x`", display.spaceAfterTypeCast) { edit { copy(spaceAfterTypeCast = it) } }
+                        SettingsToggleRow(stringResource(Res.string.codestyle_after_type_cast), stringResource(Res.string.codestyle_after_type_cast_desc), display.spaceAfterTypeCast) { edit { copy(spaceAfterTypeCast = it) } }
                     }
                 }
 
-                SettingsCard("Blank lines") {
-                    SettingsSliderRow("Keep at most", "Maximum consecutive blank lines", display.blankLinesToKeep, 0, 5, 1, null) { edit { copy(blankLinesToKeep = it) } }
+                SettingsCard(stringResource(Res.string.codestyle_blank_lines)) {
+                    SettingsSliderRow(stringResource(Res.string.codestyle_keep_at_most), stringResource(Res.string.codestyle_keep_at_most_desc), display.blankLinesToKeep, 0, 5, 1, null) { edit { copy(blankLinesToKeep = it) } }
                     if (javaOnly) {
                         SettingsDivider()
-                        SettingsSliderRow("After imports", null, display.blankLinesAfterImports, 0, 5, 1, null) { edit { copy(blankLinesAfterImports = it) } }
+                        SettingsSliderRow(stringResource(Res.string.codestyle_after_imports), null, display.blankLinesAfterImports, 0, 5, 1, null) { edit { copy(blankLinesAfterImports = it) } }
                         SettingsDivider()
-                        SettingsSliderRow("Before method", null, display.blankLinesBeforeMethod, 0, 5, 1, null) { edit { copy(blankLinesBeforeMethod = it) } }
+                        SettingsSliderRow(stringResource(Res.string.codestyle_before_method), null, display.blankLinesBeforeMethod, 0, 5, 1, null) { edit { copy(blankLinesBeforeMethod = it) } }
                         SettingsDivider()
-                        SettingsSliderRow("Before field", null, display.blankLinesBeforeField, 0, 5, 1, null) { edit { copy(blankLinesBeforeField = it) } }
+                        SettingsSliderRow(stringResource(Res.string.codestyle_before_field), null, display.blankLinesBeforeField, 0, 5, 1, null) { edit { copy(blankLinesBeforeField = it) } }
                         SettingsDivider()
-                        SettingsSliderRow("Before first member", null, display.blankLinesBeforeFirstMember, 0, 5, 1, null) { edit { copy(blankLinesBeforeFirstMember = it) } }
+                        SettingsSliderRow(stringResource(Res.string.codestyle_before_first_member), null, display.blankLinesBeforeFirstMember, 0, 5, 1, null) { edit { copy(blankLinesBeforeFirstMember = it) } }
                         SettingsDivider()
-                        SettingsSliderRow("Between types", null, display.blankLinesBetweenTypes, 0, 5, 1, null) { edit { copy(blankLinesBetweenTypes = it) } }
+                        SettingsSliderRow(stringResource(Res.string.codestyle_between_types), null, display.blankLinesBetweenTypes, 0, 5, 1, null) { edit { copy(blankLinesBetweenTypes = it) } }
                     }
                 }
 
                 if (javaOnly) {
-                    SettingsCard("Comments") {
-                        SettingsToggleRow("Format comments", "Reindent Javadoc / block / line comments", display.formatComments) { edit { copy(formatComments = it) } }
+                    SettingsCard(stringResource(Res.string.codestyle_comments)) {
+                        SettingsToggleRow(stringResource(Res.string.codestyle_format_comments), stringResource(Res.string.codestyle_format_comments_desc), display.formatComments) { edit { copy(formatComments = it) } }
                         SettingsDivider()
-                        SettingsToggleRow("Wrap comments", "Wrap comment text at the line width", display.wrapComments) { edit { copy(wrapComments = it) } }
+                        SettingsToggleRow(stringResource(Res.string.codestyle_wrap_comments), stringResource(Res.string.codestyle_wrap_comments_desc), display.wrapComments) { edit { copy(wrapComments = it) } }
                     }
                 }
             }
@@ -213,7 +284,7 @@ fun CodeStyleScreen(backend: IdeBackend, hasProject: Boolean, onBack: () -> Unit
 
 @Composable
 private fun PreviewCard(preview: String, language: String, hasProject: Boolean) {
-    SettingsCard("Preview") {
+    SettingsCard(stringResource(Res.string.codestyle_preview)) {
         Column(
             Modifier.fillMaxWidth().heightIn(max = 320.dp)
                 .background(Ca.colors.editorBg, RoundedCornerShape(Ca.radius.control))
@@ -221,7 +292,7 @@ private fun PreviewCard(preview: String, language: String, hasProject: Boolean) 
         ) {
             if (!hasProject) {
                 Text(
-                    "Open a project to preview formatting.",
+                    stringResource(Res.string.codestyle_preview_no_project),
                     color = Ca.colors.textTertiary,
                     style = Ca.type.codeSmall,
                 )
@@ -241,13 +312,27 @@ private fun PreviewCard(preview: String, language: String, hasProject: Boolean) 
     }
 }
 
+@Composable
 private fun presetOptions(language: String): List<Pair<String, String>> = when (language) {
-    LANG_KOTLIN -> listOf("kotlin_official" to "Kotlin official", "android" to "Android", PRESET_CUSTOM to "Custom")
-    else -> listOf("google" to "Google", "android" to "Android", PRESET_CUSTOM to "Custom")
+    LANG_KOTLIN -> listOf(
+        "kotlin_official" to stringResource(Res.string.codestyle_preset_kotlin_official),
+        "android" to stringResource(Res.string.codestyle_preset_android),
+        PRESET_CUSTOM to stringResource(Res.string.codestyle_preset_custom),
+    )
+    else -> listOf(
+        "google" to stringResource(Res.string.codestyle_preset_google),
+        "android" to stringResource(Res.string.codestyle_preset_android),
+        PRESET_CUSTOM to stringResource(Res.string.codestyle_preset_custom),
+    )
 }
 
+@Composable
 private fun wrapOptions(): List<Pair<String, String>> =
-    listOf("never" to "Never", "ifLong" to "If long", "onePerLine" to "One per line")
+    listOf(
+        "never" to stringResource(Res.string.codestyle_wrap_never),
+        "ifLong" to stringResource(Res.string.codestyle_wrap_if_long),
+        "onePerLine" to stringResource(Res.string.codestyle_wrap_one_per_line),
+    )
 
 /** What the controls display: a named preset shows its canonical values; Custom shows the stored fields. */
 private fun displayStyle(style: UiCodeStyle): UiCodeStyle =

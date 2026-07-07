@@ -6,7 +6,7 @@ import dev.ide.ui.backend.IdeBackend
 
 /**
  * True for an Android layout XML (`res/layout/…`), which the Preview view renders through the owned layout
- * engine (built-in widgets + system chrome), distinct from the drawable/colour/bitmap resource previews.
+ * engine (built-in widgets + system chrome), distinct from the drawable/color/bitmap resource previews.
  */
 fun isLayoutPreviewable(path: String): Boolean {
     val p = path.replace('\\', '/')

@@ -201,6 +201,56 @@ class SegmentTest {
         }
     }
 
+    /**
+     * A value that fails to deserialize (a stale/corrupt payload — e.g. a shared externalizer whose format
+     * drifted without a version bump, the on-device `UTFDataFormatException` crash) must be SKIPPED, not fatal:
+     * each payload is independently length-framed so the cursor stays aligned, and the readable values under the
+     * same and neighbouring terms still come back. Simulated by a reader that consumes a phantom field for any
+     * value tagged `BAD`, reading past the framed payload → EOFException, exactly like reading extra fields the
+     * writer never wrote.
+     */
+    @Test
+    fun unreadableValueIsSkippedNotFatal() {
+        val dir = Files.createTempDirectory("seg")
+        try {
+            val driftExt = object : IndexExtension<String, String> {
+                override val id = IndexId("test.drift")
+                override val version = 1
+                override val keyDescriptor: KeyDescriptor<String> = StringKeyDescriptor
+                override val valueExternalizer = object : Externalizer<String> {
+                    override fun write(out: java.io.DataOutput, value: String) = out.writeUTF(value)
+                    override fun read(inp: java.io.DataInput): String {
+                        val s = inp.readUTF()
+                        if (s.startsWith("BAD")) inp.readInt() // phantom field → reads past the framed payload
+                        return s
+                    }
+                }
+                override val matching = MatchingMode.PREFIX_AND_FUZZY
+                override val inputFilter = InputFilter { true }
+                override fun index(input: IndexInput): Map<String, Collection<String>> = emptyMap()
+            }
+            val file = dir.resolve("drift.seg")
+            Segment.write(
+                file, driftExt,
+                listOf(
+                    entry("Foo", "Foo.good"),
+                    entry("Foo", "BAD.foo"),  // second value under Foo can't be read
+                    entry("Bar", "BAD.bar"),  // Bar's only value can't be read
+                    entry("Baz", "Baz.good"),
+                ),
+            )
+            val s = Segment.open(file, driftExt, BlockCache(8L * 1024 * 1024), 0)
+            try {
+                assertEquals(listOf("Foo.good"), exact(s, "Foo")) // the good value survives, the bad one is skipped
+                assertTrue(exact(s, "Bar").isEmpty())             // an all-bad term degrades to empty, no crash
+                assertEquals(listOf("Baz.good"), exact(s, "Baz")) // a later term is unaffected (cursor stayed aligned)
+                assertEquals(setOf("Baz.good"), prefix(s, "Ba").map { it.value as String }.toSet())
+            } finally { s.close() }
+        } finally {
+            dir.toFile().deleteRecursively()
+        }
+    }
+
     @Test
     fun emptySegmentIsQueryable() {
         val dir = Files.createTempDirectory("seg")
@@ -209,6 +259,66 @@ class SegmentTest {
             assertTrue(exact(s, "x").isEmpty())
             assertTrue(prefix(s, "x").isEmpty())
             assertTrue(fuzzy(s, "xyz").isEmpty())
+            s.close()
+        } finally {
+            dir.toFile().deleteRecursively()
+        }
+    }
+
+    @Test
+    fun camelHumpPatternsSurfaceThroughFuzzy() {
+        val dir = Files.createTempDirectory("seg")
+        try {
+            val s = seg(
+                dir,
+                listOf(
+                    entry("NullPointerException", "java.lang.NullPointerException"),
+                    entry("NoSuchElementException", "java.util.NoSuchElementException"),
+                    entry("myDynamicList", "pkg.myDynamicList"),
+                    entry("Number", "java.lang.Number"),
+                ),
+            )
+            // A hump pattern shares no contiguous trigram with its match — served by the window scan.
+            assertTrue(fuzzy(s, "NPE").any { it.key == "NullPointerException" })
+            assertTrue(fuzzy(s, "mDL").any { it.key == "myDynamicList" })
+            // The hump hit ranks above the looser subsequence tier.
+            val npe = fuzzy(s, "NPE")
+            assertTrue(
+                npe.first { it.key == "NullPointerException" }.score >
+                    (npe.firstOrNull { it.key == "NoSuchElementException" }?.score ?: Int.MIN_VALUE),
+            )
+            s.close()
+        } finally {
+            dir.toFile().deleteRecursively()
+        }
+    }
+
+    @Test
+    fun humpQueriesWorkWithoutATrigramIndex() {
+        val dir = Files.createTempDirectory("seg")
+        try {
+            val s = seg(
+                dir,
+                listOf(entry("NullPointerException", "NPEv"), entry("Apple", "Apple")),
+                mode = MatchingMode.PREFIX_ONLY,
+            )
+            // The window scan needs no trigram dictionary, so hump queries survive PREFIX_ONLY segments.
+            assertTrue(fuzzy(s, "NPE").any { it.key == "NullPointerException" })
+            s.close()
+        } finally {
+            dir.toFile().deleteRecursively()
+        }
+    }
+
+    @Test
+    fun shortPatternsMatchCaseInsensitivelyThroughFuzzy() {
+        val dir = Files.createTempDirectory("seg")
+        try {
+            val s = seg(dir, listOf(entry("String", "String"), entry("stack", "stack"), entry("List", "List")))
+            // Below trigram length the fuzzy path used to degrade to the case-sensitive prefix scan;
+            // the first-character window scan keeps it case-insensitive.
+            val hits = fuzzy(s, "st").map { it.key }
+            assertTrue("String" in hits && "stack" in hits, "expected both cases, got $hits")
             s.close()
         } finally {
             dir.toFile().deleteRecursively()

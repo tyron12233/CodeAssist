@@ -131,4 +131,10 @@ internal interface EngineContext {
 
     /** Re-run the background index build over the current scope. */
     fun resyncIndex()
+
+    /** The workspace change-notification spine. A service that mutated the world PUBLISHES the fact here
+     *  (e.g. [WorkspaceEventHub.librariesChanged] after a finished resolution wrote `libraries.json`);
+     *  the invalidation chains run as the hub's subscribers. Prefer publishing over calling
+     *  [invalidateAnalyzers]/[resyncIndex] directly: the event is what the out-of-process engines see. */
+    val events: WorkspaceEventHub
 }

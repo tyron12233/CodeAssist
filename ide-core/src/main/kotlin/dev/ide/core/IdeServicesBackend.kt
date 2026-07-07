@@ -157,8 +157,8 @@ class IdeServicesBackend(
      *  3. [preview] — preview rendering/lowering: lowest priority, preempted by both; retries automatically.
      */
     private val scheduler = EngineScheduler(engineDispatcher)
-    override suspend fun <T> interactive(block: () -> T): T = logEditorFailures("completion") { scheduler.interactive(block = block) }
-    override suspend fun <T> background(block: () -> T): T = logEditorFailures("analysis") { scheduler.background(block = block) }
+    override suspend fun <T> interactive(block: suspend () -> T): T = logEditorFailures("completion") { scheduler.interactive(block = block) }
+    override suspend fun <T> background(block: suspend () -> T): T = logEditorFailures("analysis") { scheduler.background(block = block) }
     override suspend fun <T> preview(block: suspend () -> T): T = logEditorFailures("preview") { scheduler.preview(block = block) }
 
     private val editorLog = Log.logger("ide.editor")
@@ -310,6 +310,7 @@ class IdeServicesBackend(
             name = services.projectDisplayName(),
             rootPath = services.workspaceRoot.toString(),
             moduleCount = services.modules().size,
+            compatibility = runCatching { services.isCompatibilityMode() }.getOrDefault(false),
         )
 
     // ---- Compose preview (LayoutPreviewBackend; aggregator-level, uses the preview lane) ----

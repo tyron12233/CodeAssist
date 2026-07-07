@@ -152,6 +152,22 @@ class ProjectManager private constructor(
         IdeServices.openAt(Paths.get(rootPath), sdk(), androidTools, dexRunner, apkInstaller, customViewRuntime, realViewRuntime = realViewRuntime, kotlinPluginLoader = kotlinPluginLoader, sharedCachesRoot = homeDir, env = env, buildOnly = buildOnly)
 
     /**
+     * Import the Gradle project at [sourceDir] into a new workspace under [projectsRoot] (copying its
+     * sources, minus build outputs), build a best-effort compatibility-mode model from its scripts, and open
+     * it. Returns null when [sourceDir] isn't an importable Gradle project or the import fails.
+     */
+    fun importGradleProject(sourceDir: Path): IdeServices? {
+        if (!GradleImport.isGradleProject(sourceDir)) return null
+        val dest = uniqueProjectDir(sourceDir.fileName?.toString() ?: "gradle-project")
+        val ok = runCatching {
+            copyTree(sourceDir, dest)
+            IdeServices.importGradleProjectAt(dest, sdk(), languageLevel)
+        }.getOrDefault(false)
+        if (!ok) { runCatching { deleteTree(dest) }; return null }
+        return open(dest.toString())
+    }
+
+    /**
      * Permanently delete the project rooted at [rootPath] from disk. Guarded to a direct child of
      * [projectsRoot] so a stray path can never wipe an unrelated directory; a missing project is a no-op.
      */

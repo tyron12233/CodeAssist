@@ -4,6 +4,7 @@ import dev.ide.android.support.tools.AarExtractor
 import dev.ide.android.support.tools.AarMetadata
 import dev.ide.model.ClasspathEntryKind
 import dev.ide.model.DependencyScope
+import dev.ide.model.MavenClasspath
 import dev.ide.model.Module
 import java.nio.file.Files
 import java.nio.file.Path
@@ -81,8 +82,17 @@ object AndroidLibraries {
             isExplodedAar(root) -> dexJars.add(root)
             isJar(root) -> dexJars.add(root)
         }
+        // At most one jar per artifact before dexing/compiling: a plain `.distinct()` only collapses the same
+        // path, but the IDE injects its bundled `kotlin-stdlib-<v>.jar` (a non-Maven `.platform/…` path) into
+        // every Kotlin module, which collides with any Maven `kotlin-stdlib` the graph resolves (directly or
+        // transitively) — two copies of `kotlin/collections/ArraysUtilJVM` etc. that make D8 fail with "Type …
+        // is defined multiple times". `dedupeForAndroidDex` keys off the artifact name+version (Maven layout,
+        // else the file name) so it recognises the bundled jar as `kotlin-stdlib` and keeps the newest — the
+        // same collapse the layout-preview classpaths already do. Distinct artifacts pass through untouched.
         return ResolvedLibraries(
-            compileJars.distinct(), dexJars.distinct(), resDirs.distinct(), assetsDirs.distinct(),
+            MavenClasspath.dedupeForAndroidDex(compileJars.distinct()),
+            MavenClasspath.dedupeForAndroidDex(dexJars.distinct()),
+            resDirs.distinct(), assetsDirs.distinct(),
             jniLibDirs.distinct(), aarPackages.distinct(), consumerProguardFiles.distinct(),
             aarManifests.distinct(), aarMetadata.distinct(),
         )

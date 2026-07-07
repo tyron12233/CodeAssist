@@ -12,7 +12,7 @@ import dev.ide.ui.editor.core.EditorSession
 import dev.ide.ui.editor.core.RangeEdit
 
 /**
- * The editor's in-file find/replace state + behaviour, pulled out of [CodeEditor] so the surface composable
+ * The editor's in-file find/replace state + behavior, pulled out of [CodeEditor] so the surface composable
  * isn't carrying eight `mutableStateOf`s and three edit routines. It owns only its own UI state and drives the
  * [EditorSession] (select-to-scroll, apply replacements); the composable reads [matches]/[currentIndex] to
  * paint highlights and renders the [FindReplaceBar] against these properties.

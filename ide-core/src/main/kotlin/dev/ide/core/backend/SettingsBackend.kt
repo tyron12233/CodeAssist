@@ -162,6 +162,9 @@ internal class SettingsBackend(private val ctx: BackendContext) : SettingsServic
     }
 
     private fun applyAfterChange(page: SettingsPage, key: String) {
+        // Publish the change on the workspace event spine FIRST (config stamp + the out-of-process hint
+        // fan-out), then apply the engine-side effects below. No engine open → nothing to notify or apply.
+        ctx.servicesOrNull?.events?.settingChanged(page.id, key, page.scope == SettingsScope.PROJECT)
         when (page.id) {
             // Completion knobs feed the engine; everything else built-in is applied UI-side (the UI re-reads
             // settings()), so there's nothing to push here.

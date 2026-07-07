@@ -2,8 +2,10 @@ package dev.ide.platform
 
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.async
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeout
 import java.util.concurrent.CopyOnWriteArrayList
 import kotlin.test.Test
@@ -107,6 +109,28 @@ class EngineSchedulerTest {
 
         println("\n=== keystroke contention timeline (completion latency=${completionLatency}ms) ===")
         println(timeline.render())
+    }
+
+    @Test
+    fun aSuspendedInteractiveBlockFreesTheWorkerForOtherCalls() = runBlocking {
+        val sched = EngineScheduler()
+        val started = CompletableDeferred<Unit>()
+        val gate = CompletableDeferred<String>()
+        val first = async(Dispatchers.Default) {
+            sched.interactive {
+                started.complete(Unit)
+                // The K2-completion shape: hop off the worker for I/O mid-block. The serialized worker
+                // must free at this suspension point, not sit blocked until the I/O answers.
+                withContext(Dispatchers.IO) { gate.await() }
+            }
+        }
+        started.await() // the first call holds the worker until it parks on its I/O
+        // While the first call is parked, a second call runs to completion on the freed worker — it would
+        // time out behind the first if suspension held the worker.
+        val second = withTimeout(2_000) { sched.interactive { "second" } }
+        assertEquals("second", second)
+        gate.complete("items")
+        assertEquals("items", withTimeout(2_000) { first.await() })
     }
 
     private inline fun timeMs(block: () -> Unit): Long {

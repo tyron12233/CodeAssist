@@ -36,7 +36,7 @@ class KotlinIndexedSuspendTest {
         packageName = "lib", receiverTypeParam = null, typeParameters = emptyList(),
         returnType = KotlinType("kotlin.Unit"), paramTypes = emptyList(), receiverTypeArgs = emptyList(),
         declaringClassFqn = "lib.LibKt", paramNames = emptyList(), isComposable = false, isInline = false,
-        isSuspend = true,
+        isInfix = false, isSuspend = true,
     )
 
     @Test fun callableShapeRoundTripsIsSuspend() {
@@ -48,6 +48,24 @@ class KotlinIndexedSuspendTest {
         val back = DataInputStream(ByteArrayInputStream(bos.toByteArray())).use { CallableShapeExternalizer.read(it) }
         assertTrue(back.isSuspend, "the codec must persist isSuspend")
         assertTrue(back.toSymbol(null).isSuspend, "the decoded shape's symbol must be suspend")
+    }
+
+    @Test fun callableShapeRoundTripsIsInfix() {
+        // `infix fun Int.downTo(to: Int)` → the shape must carry isInfix through from/toSymbol AND the codec,
+        // or infix-function completion in the operator slot breaks for indexed (library) callables.
+        val shape = CallableShape(
+            name = "downTo", kind = SymbolKind.METHOD, receiverFqn = "kotlin.Int", signature = "(to: Int): IntProgression",
+            packageName = "kotlin.ranges", receiverTypeParam = null, typeParameters = emptyList(),
+            returnType = KotlinType("kotlin.ranges.IntProgression"), paramTypes = listOf(KotlinType("kotlin.Int")),
+            receiverTypeArgs = emptyList(), declaringClassFqn = "kotlin.ranges.RangesKt", paramNames = listOf("to"),
+            isComposable = false, isInline = false, isInfix = true, isSuspend = false,
+        )
+        assertTrue(shape.toSymbol(null).isInfix, "from/toSymbol must preserve isInfix")
+        val bos = ByteArrayOutputStream()
+        DataOutputStream(bos).use { CallableShapeExternalizer.write(it, shape) }
+        val back = DataInputStream(ByteArrayInputStream(bos.toByteArray())).use { CallableShapeExternalizer.read(it) }
+        assertTrue(back.isInfix, "the codec must persist isInfix")
+        assertTrue(back.toSymbol(null).isInfix, "the decoded shape's symbol must be infix")
     }
 
     @Test fun indexedLibrarySuspendCallIsFlagged() {
@@ -72,7 +90,7 @@ class KotlinIndexedSuspendTest {
             packageName = "lib", receiverTypeParam = null, typeParameters = emptyList(),
             returnType = KotlinType("kotlin.Unit"), paramTypes = emptyList(), receiverTypeArgs = emptyList(),
             declaringClassFqn = "lib.LibKt", paramNames = emptyList(), isComposable = false, isInline = false,
-            isSuspend = true,
+            isInfix = false, isSuspend = true,
         )
 
         @Suppress("UNCHECKED_CAST")

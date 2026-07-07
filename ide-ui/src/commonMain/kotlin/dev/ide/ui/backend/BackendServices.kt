@@ -19,6 +19,16 @@ interface FileService {
     /** The workspace as a tree, shaped by [mode] (curated project view or the raw filesystem). */
     fun fileTree(mode: TreeViewMode = TreeViewMode.Project): TreeNode
 
+    /**
+     * The tree-node ids the user last left expanded for [mode], persisted per project, or null if none has
+     * been persisted yet (the caller then applies the default expansion). Ids are the stable, path-based
+     * [TreeNode.id]s from [fileTree], so they survive restarts and refreshes.
+     */
+    fun expandedTreeState(mode: TreeViewMode = TreeViewMode.Project): List<String>? = null
+
+    /** Persist the expanded tree-node [ids] for [mode] (per project) so [fileTree] reopens the same way. */
+    fun saveExpandedTreeState(mode: TreeViewMode, ids: List<String>) {}
+
     /** Read a file's current on-disk text. */
     fun readFile(path: String): String
 
@@ -81,6 +91,10 @@ interface EditorService {
 
     /** Code completion for the live buffer [text] at [offset]. */
     suspend fun complete(path: String, text: String, offset: Int): UiCompletionResult
+
+    /** Notify that the user ACCEPTED a completion item — feeds the backend's acceptance-frequency
+     *  ranking (frequently picked items float up on later completions). Fire-and-forget; default no-op. */
+    suspend fun completionAccepted(path: String, label: String) {}
 
     /** Diagnostics for the live buffer [text]. May throw [AnalysisPreempted] when completion took priority. */
     suspend fun analyze(path: String, text: String): List<UiDiagnostic>
@@ -356,6 +370,15 @@ interface ModuleService {
     suspend fun setBuildFeature(moduleName: String, feature: String, enabled: Boolean): UiConfigResult =
         UiConfigResult(false, "Build features not supported by this backend")
 
+    /** The Android packaging options (Java-resource + native-lib merge rules) for [moduleName], or null when
+     *  it is not an Android module. */
+    suspend fun getPackagingOptions(moduleName: String): UiPackagingOptions? = null
+
+    /** Persist the Android packaging merge rules for [moduleName] (empty lists clear the block). */
+    suspend fun updatePackagingOptions(
+        moduleName: String, resources: UiPackagingRules, jniLibs: UiPackagingRules
+    ): UiConfigResult = UiConfigResult(false, "Packaging options not supported by this backend")
+
     /** For an Android module, the referenced-but-missing module-relative keep-rule files. */
     suspend fun missingProguardFiles(moduleName: String): List<UiMissingProguardFile> = emptyList()
 
@@ -457,6 +480,27 @@ interface ProjectService {
 
     /** Persist the open editor tabs for the active project. */
     fun saveOpenTabs(tabs: UiOpenTabs) {}
+
+    /**
+     * Compatibility details for the currently-open project, or null when it is a native project (not imported
+     * from Gradle). Drives the editor's compatibility-mode notice — see [UiCompatibilityInfo].
+     */
+    fun compatibilityInfo(): UiCompatibilityInfo? = null
+
+    /**
+     * Re-read the open compatibility-mode project's Gradle build scripts into the model (modules, dependencies,
+     * Android config), then re-resolve dependencies and re-index. Slow (parses + network resolution), so it
+     * suspends off the main thread. No-op returning `ok = false` when the project isn't a Gradle import.
+     */
+    suspend fun syncGradle(): UiSyncResult = UiSyncResult(false, "Not a Gradle project")
+
+    /**
+     * Import the Gradle project at [sourceRootPath] into a new native workspace under the projects root and
+     * open it in compatibility mode (bumps [projectEpoch]). Returns a failure result when the folder isn't an
+     * importable Gradle project or no project manager is available.
+     */
+    suspend fun importGradleProject(sourceRootPath: String): UiProjectResult =
+        UiProjectResult(false, "Gradle import not supported by this backend")
 }
 
 // ---------------------------------------------------------------------------

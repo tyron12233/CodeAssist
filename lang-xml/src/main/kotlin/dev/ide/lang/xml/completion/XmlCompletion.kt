@@ -45,21 +45,23 @@ class XmlCompletion(
 
     companion object {
         /**
-         * Namespace-aware prefix match: the candidate matches if it starts with [prefix], OR its **local
-         * name** does — the part after a namespace `:` (so `layout_w` matches `android:layout_width`), a
+         * Namespace-aware match: the candidate matches if it does at any [PrefixMatcher] grade
+         * (prefix / camel-hump / substring — so `lw` matches `layout_width`), OR its **local name**
+         * does — the part after a namespace `:` (so `layout_w` matches `android:layout_width`), a
          * resource `/` (so `home` matches `@string/home`), or a package `.` (so `MaterialButton` matches
          * the fully-qualified custom view `com.google.android.material.button.MaterialButton`). This is what
          * lets the user complete an attribute or a custom view by its short name. Case-insensitive.
          */
         fun nameMatches(candidate: String, prefix: String): Boolean {
             if (prefix.isEmpty()) return true
-            if (candidate.startsWith(prefix, ignoreCase = true)) return true
+            val m = dev.ide.lang.completion.PrefixMatcher(prefix)
+            if (m.matches(candidate)) return true
             val afterColon = candidate.substringAfter(':', "")
-            if (afterColon.isNotEmpty() && afterColon.startsWith(prefix, ignoreCase = true)) return true
+            if (afterColon.isNotEmpty() && m.matches(afterColon)) return true
             val afterSlash = candidate.substringAfterLast('/', "")
-            if (afterSlash.isNotEmpty() && afterSlash.startsWith(prefix, ignoreCase = true)) return true
+            if (afterSlash.isNotEmpty() && m.matches(afterSlash)) return true
             val afterDot = candidate.substringAfterLast('.', "")
-            return afterDot.isNotEmpty() && afterDot.startsWith(prefix, ignoreCase = true)
+            return afterDot.isNotEmpty() && m.matches(afterDot)
         }
     }
 }

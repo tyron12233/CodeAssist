@@ -60,8 +60,12 @@ class CompletionParams(
      *  can't resolve types or the file didn't parse. */
     val typeResolver: ((DomNode) -> TypeRef?)? = null,
 ) {
-    /** Case-insensitive prefix test against the typed [prefix] — the common gate before adding an item. */
-    fun prefixMatches(name: String): Boolean = prefix.isEmpty() || name.startsWith(prefix, ignoreCase = true)
+    /** The graded matcher for [prefix] — exact / prefix / camel-hump / substring. Contributors gate
+     *  candidates through this (not a raw `startsWith`) so `mDL` completes `myDynamicList` uniformly. */
+    val matcher: PrefixMatcher = PrefixMatcher(prefix)
+
+    /** The common gate before adding an item: does [name] match the typed [prefix] at any grade? */
+    fun prefixMatches(name: String): Boolean = matcher.matches(name)
 }
 
 /**

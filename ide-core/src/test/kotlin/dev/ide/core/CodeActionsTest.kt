@@ -1,5 +1,7 @@
 package dev.ide.core
 
+import kotlinx.coroutines.runBlocking
+
 import dev.ide.lang.incremental.DocumentEdit
 import java.nio.file.Files
 import java.nio.file.Path
@@ -83,7 +85,7 @@ class CodeActionsTest {
             "import com.example.util.Formatter;",
             "import com.example.util.Formatter;\nimport java.util.List;",
         )
-        ide.analyzeDiagnostics(main, text) // publish the unused-import warning so the quick-fix attaches
+        runBlocking { ide.analyzeDiagnostics(main, text) } // publish the unused-import warning so the quick-fix attaches
         val at = text.indexOf("import java.util.List;")
         val actions = ide.editorActions(main, text, at, at)
         val idx = actions.indexOfFirst { it.title == "Remove unused import" }

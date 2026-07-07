@@ -316,6 +316,97 @@ class KotlinKeywordCompletionTest {
         assertFalse("vararg" in labels("package demo\nclass C { vara| }"), "no `vararg` as a class-member modifier")
     }
 
+    // --- K: import alias, for-loop `in`, infix operators/functions ---
+
+    @Test
+    fun asOfferedAfterCompleteImportPath() {
+        val ls = labels("package demo\nimport foo.Bar |")
+        assertTrue("as" in ls, "expected `as` after a complete import path (aliased import); got $ls")
+        val typing = labels("package demo\nimport foo.Bar a|")
+        assertTrue("as" in typing, "expected `as` while typing the alias keyword; got $typing")
+    }
+
+    @Test
+    fun importAliasSpotOffersOnlyAs() {
+        // The alias slot admits `as` alone — the top-level declaration keywords the caret's file scope would
+        // otherwise surface (`abstract`, `annotation class`, …) must not leak in.
+        val ls = labels("package demo\nimport foo.Bar a|")
+        assertFalse("abstract" in ls, "no top-level modifier in an import-alias slot; got $ls")
+        assertFalse("annotation class" in ls, "no declaration head in an import-alias slot; got $ls")
+    }
+
+    @Test
+    fun inOfferedAfterForLoopVariable() {
+        assertTrue("in" in labels("package demo\nfun g() { for (item |) }"), "expected `in` after a for-loop variable")
+        assertTrue("in" in labels("package demo\nfun g() { for (item i|) }"), "expected `in` while typing the for-loop `in`")
+    }
+
+    @Test
+    fun forLoopInSpotSuppressesStatementKeywords() {
+        // `for (i i|` reads as a statement position from the enclosing block, which would offer `interface`/`if`
+        // on the `i` prefix — but the only keyword the header admits here is `in`.
+        val ls = labels("package demo\nfun g() { for (i i|) }")
+        assertTrue("in" in ls, "expected `in`; got $ls")
+        assertFalse("interface" in ls, "no `interface` in a for-loop header; got $ls")
+        assertFalse("if" in ls, "no `if` in a for-loop header; got $ls")
+    }
+
+    @Test
+    fun inNotOfferedOnceForLoopRangeStarted() {
+        // The `in` keyword is already present — the caret is in the range expression, not the header.
+        assertFalse("in" in labels("package demo\nfun g() { for (i in xs) { va| } }"), "no header `in` inside the loop body")
+    }
+
+    // Infix FUNCTIONS are type-resolved against the left operand by KotlinCompletion, so their popup item
+    // carries the signature label (`downTo(to: Int)`); the symbol name identifies them.
+    private fun symbolNames(code: String): List<String> = items(code).mapNotNull { it.symbol?.name }
+
+    @Test
+    fun rangeInfixFunctionsOfferedInForRange() {
+        assertTrue("downTo" in symbolNames("package demo\nfun g() { for (i in 0 d|) }"), "expected `downTo` in a for-loop range")
+        assertTrue("until" in symbolNames("package demo\nfun g() { for (i in 0 u|) }"), "expected `until` in a for-loop range")
+        assertTrue("step" in symbolNames("package demo\nfun g() { for (i in (0..10) s|) }"), "expected `step` after a range")
+    }
+
+    @Test
+    fun infixFunctionInsertsInfixForm() {
+        // Accepting `downTo` in the operator slot must insert `downTo ` (for `0 downTo 10`), not the call `downTo()`.
+        val downTo = items("package demo\nfun g() { for (i in 0 d|) }").first { it.symbol?.name == "downTo" }
+        assertEquals("downTo ", downTo.insertText, "an infix function must insert the `a downTo b` form")
+    }
+
+    @Test
+    fun infixFunctionsAreTypeFiltered() {
+        // `step` applies to a progression, not a bare Int — so it must NOT be offered on an `Int` left operand.
+        assertFalse("step" in symbolNames("package demo\nfun g() { for (i in 0 s|) }"), "no `step` on a bare Int")
+    }
+
+    @Test
+    fun infixSpotSuppressesStatementKeywords() {
+        // `for (i in 0 d|` reads as a statement position from the block, which would offer `do` on the `d`
+        // prefix — but an infix-operator slot admits only operators/infix functions.
+        assertTrue("downTo" in symbolNames("package demo\nfun g() { for (i in 0 d|) }"), "expected `downTo`")
+        assertFalse("do" in labels("package demo\nfun g() { for (i in 0 d|) }"), "no `do` in an infix-operator slot")
+    }
+
+    @Test
+    fun castAndContainsOperatorsOfferedInInfixPosition() {
+        val cast = labels("package demo\nfun g(x: Any) { val r = x a| }")
+        assertTrue("as" in cast, "expected the `as` cast operator; got $cast")
+        assertTrue("as?" in cast, "expected the `as?` safe-cast operator; got $cast")
+        val contains = labels("package demo\nfun g(x: Any) { val r = x i| }")
+        assertTrue("in" in contains, "expected the `in` membership operator; got $contains")
+        assertTrue("is" in contains, "expected the `is` type-check operator; got $contains")
+    }
+
+    @Test
+    fun infixFunctionsNotOfferedAtBareStatementStart() {
+        // `downTo`/`as` are infix-slot only — a fresh statement (no left operand) must not surface them.
+        val ls = labels("package demo\nfun g() { d| }")
+        assertFalse("downTo" in ls, "no `downTo` at a statement start; got $ls")
+        assertFalse("as" in labels("package demo\nfun g() { a| }"), "no `as` at a statement start")
+    }
+
     companion object {
         val srcDir: Path = tempProject(emptyMap())
         val analyzer = KotlinSourceAnalyzer(fakeContext(srcDir))

@@ -8,7 +8,8 @@ import java.nio.file.StandardCopyOption
 import java.util.zip.ZipFile
 
 /**
- * Supplies the Jetpack Compose kotlinc compiler plugin (`kotlin-compose-compiler-plugin-embeddable`) and
+ * Supplies the Jetpack Compose kotlinc compiler plugin (`compose-compiler-plugin-for-ide`, the unshaded
+ * build matching :kotlin-compiler-deps) and
  * decides when a module needs it.
  *
  * Compose code can't merely be compiled like ordinary Kotlin: the Compose compiler plugin rewrites every

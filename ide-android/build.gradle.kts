@@ -119,40 +119,21 @@ val bundleComposeRuntimeAsset = tasks.register<Copy>("bundleComposeRuntimeAsset"
 // --- kotlinc resources asset (extension-point descriptors for on-device K2) ----------------------
 // The K2 compiler's classes are dexed into the app, but IntelliJ-core boots its extension registry by
 // reading XML descriptors (META-INF/extensions/*.xml, plugin.xml, …) from a real filesystem path — a dex
-// APK exposes those only as classloader resources, not files. So we ship the compiler's resources (the jar
-// MINUS its already-dexed .class entries — small) as an asset; the app extracts it to a dir at runtime and
-// publishes the path in the `kotlinc.art.home` system property, which the ASM PathUtil pass reads
-// (see buildSrc/.../PathUtilSelfLocatePass).
-val kotlincCompilerArtifact: Configuration by configurations.creating {
+// APK exposes those only as classloader resources, not files. So we ship the compiler's resources as an
+// asset; the app extracts it to a dir at runtime and publishes the path in the `kotlinc.art.home` system
+// property, which the ASM PathUtil pass reads (see build-logic/.../PathUtilSelfLocatePass). The zip is
+// built by :kotlin-compiler-deps (the union of the unshaded platform + `-for-ide` compiler jars' non-class
+// entries; it used to be stripped from kotlin-compiler-embeddable).
+val kotlincCompilerResources: Configuration by configurations.creating {
     isCanBeConsumed = false
     isCanBeResolved = true
 }
-dependencies { kotlincCompilerArtifact(libs.kotlin.compiler.embeddable) { isTransitive = false } }
+dependencies { kotlincCompilerResources(project(path = ":kotlin-compiler-deps", configuration = "kotlincResourcesElements")) }
 
-val bundleKotlincResourcesAsset = tasks.register("bundleKotlincResourcesAsset") {
-    description = "Strip .class entries from kotlin-compiler-embeddable into a kotlinc-resources.zip asset."
-    val jarFiles = kotlincCompilerArtifact
-    val outZip = layout.buildDirectory.file("kotlinc-resources-asset/kotlinc-resources.zip")
-    inputs.files(jarFiles)
-    outputs.file(outZip)
-    doLast {
-        val jar = jarFiles.singleFile
-        val out = outZip.get().asFile
-        out.parentFile.mkdirs()
-        var kept = 0
-        ZipFile(jar).use { zip ->
-            ZipOutputStream(out.outputStream().buffered()).use { zos ->
-                for (e in zip.entries()) {
-                    if (e.isDirectory || e.name.endsWith(".class")) continue
-                    zos.putNextEntry(ZipEntry(e.name).apply { time = 315532800000L }) // fixed → reproducible
-                    zip.getInputStream(e).use { it.copyTo(zos) }
-                    zos.closeEntry()
-                    kept++
-                }
-            }
-        }
-        logger.lifecycle("bundleKotlincResourcesAsset: kept $kept non-class resource(s) → ${out.name}")
-    }
+val bundleKotlincResourcesAsset = tasks.register<Copy>("bundleKotlincResourcesAsset") {
+    description = "Stage :kotlin-compiler-deps' kotlinc-resources.zip into a generated assets dir."
+    from(kotlincCompilerResources)
+    into(layout.buildDirectory.dir("kotlinc-resources-asset"))
 }
 
 // --- R8 tool dexed as an asset (forked-VM R8 for the release/minify OOM fix) ---------------------
@@ -221,7 +202,7 @@ android {
         targetSdk = 36
         // versionCode must exceed the last published release (the previous-codebase app reached ~29).
         versionCode = 46
-        versionName = "3.2.0"
+        versionName = "3.3.0"
         // connectedAndroidTest harness (the on-device Kotlin-compiler discovery spike).
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 
@@ -240,10 +221,7 @@ android {
     }
 
     buildFeatures {
-        // VERSION_NAME / VERSION_CODE + the ANALYTICS_* fields above are read from BuildConfig at runtime.
         buildConfig = true
-        // Phase-2 build-process-isolation IPC skeleton: the BuildDaemonService AIDL (IBuildDaemon /
-        // IBuildCallback under src/main/aidl). See docs/build-process-isolation.md.
         aidl = true
     }
 
@@ -337,9 +315,9 @@ android {
             )
             pickFirsts += setOf(
                 "META-INF/MANIFEST.MF",
-                // kotlin-compiler-embeddable bundles a shaded stdlib, so its .kotlin_builtins / .kotlin_metadata
-                // collide with the real kotlin-stdlib on the runtime classpath. Same 2.4.0 content — keep one.
-                // (These are loaded at runtime by Kotlin reflection/builtins, so pickFirst, not exclude.)
+                // The compiler jars carry serialized builtins that can collide with the real kotlin-stdlib
+                // on the runtime classpath. Same content — keep one. (These are loaded at runtime by Kotlin
+                // reflection/builtins, so pickFirst, not exclude.)
                 "**/*.kotlin_builtins",
                 "**/*.kotlin_metadata",
             )
@@ -390,7 +368,7 @@ val generateStaxApiJar = tasks.register("generateStaxApiJar") {
     }
 }
 
-// --- javax.swing.Icon (java.desktop) for on-device K2 --------------------------------------------
+// --- javax.* JDK types (java.desktop, java.management) for on-device K2 --------------------------
 // IntelliJ-core's PSI carries a Swing-based icon API: dozens of classes (ElementBase, PsiPackageBase,
 // the asJava light classes, …) declare methods returning javax.swing.Icon, and four marker interfaces
 // (ui.icons.ReplaceableIcon/CompositeIcon, openapi.util.ScalableIcon/DummyIcon) `extends javax.swing.Icon`.
@@ -405,22 +383,74 @@ val generateStaxApiJar = tasks.register("generateStaxApiJar") {
 // With the type present, RowIcon stays a subtype of Icon and every icon method/ctor/<clinit> + the four
 // markers verify normally — no bytecode surgery (this replaces the old ASM SwingIconArtPass interface strip,
 // which only made the markers load and then broke verification of RowIcon-returning methods).
+//
+// javax.management (java.management module) gets the same treatment for the platform's low-memory watcher:
+// AppScheduledExecutorService.<init> (reached by KaFirSessionProvider — the K2 Analysis API session, device
+// logcat confirmed) constructs LowMemoryWatcherManager, whose <init> stores a NotificationListener-typed
+// field implemented by the anonymous LowMemoryWatcherManager$3 — so the $3 CLASS LINK and the field write
+// need the interface present, or every K2 analyze/complete dies with NoClassDefFoundError. Every method
+// that actually CALLS JMX there ($2.run subscribing via ManagementFactory, shutdown, getMajorGcTime) also
+// touches java.lang.management and is already gutted by the kotlinc-art ManagementStubPass, so the shipped
+// types are load-time surface only: NotificationListener + NotificationFilter (pure interfaces over
+// java.util.EventListener/Serializable) and Notification (a plain EventObject subclass). NotificationEmitter
+// is deliberately NOT shipped — it appears only inside gutted bodies, and it would drag in the
+// NotificationBroadcaster → MBeanNotificationInfo chain.
+// module → class-file path, extracted from the build JBR's jrt image below.
+val javaxApiEntries = listOf(
+    "java.desktop" to "javax/swing/Icon.class",
+    "java.management" to "javax/management/NotificationListener.class",
+    "java.management" to "javax/management/NotificationFilter.class",
+    "java.management" to "javax/management/Notification.class",
+)
 val generateSwingApiJar = tasks.register("generateSwingApiJar") {
-    description = "Extract javax.swing.Icon from the build JDK's java.desktop module into a dexable jar."
+    description = "Extract the javax.swing/javax.management types the unshaded platform links against into a dexable jar."
     val outJar = layout.buildDirectory.file("swing-api/swing-api.jar")
+    // The entry list is the task's real input; without it Gradle treats an existing jar as up-to-date
+    // forever and a newly added type never ships.
+    inputs.property("entries", javaxApiEntries.map { "${it.first}:${it.second}" })
     outputs.file(outJar)
     doLast {
         val out = outJar.get().asFile
         out.parentFile.mkdirs()
         val jrt = FileSystems.getFileSystem(URI.create("jrt:/"))
-        val iconClass = jrt.getPath("/modules/java.desktop/javax/swing/Icon.class")
         ZipOutputStream(out.outputStream().buffered()).use { zos ->
-            zos.putNextEntry(ZipEntry("javax/swing/Icon.class").apply { time = 315532800000L })
-            Files.copy(iconClass, zos)
-            zos.closeEntry()
+            for ((module, path) in javaxApiEntries) {
+                zos.putNextEntry(ZipEntry(path).apply { time = 315532800000L })
+                Files.copy(jrt.getPath("/modules/$module/$path"), zos)
+                zos.closeEntry()
+            }
         }
-        logger.lifecycle("generateSwingApiJar: wrote javax/swing/Icon.class → ${out.name}")
+        logger.lifecycle("generateSwingApiJar: wrote ${javaxApiEntries.size} javax classes → ${out.name}")
     }
+}
+
+// --- ART shims for the unshaded IntelliJ platform (javax.swing.SwingUtilities, jdk.jfr.*) ---------
+// The unshaded platform (:kotlin-compiler-deps) touches two more JDK packages Android omits but that app
+// classes MAY define (unlike java.*): javax.swing.SwingUtilities (MockApplication.invokeLater / EDT checks,
+// hit the moment JavaCoreApplicationEnvironment registers the ClassFileDecompilers EP listener - device
+// logcat confirmed) and jdk.jfr (the platform's diagnostic JFR event classes). Compile the headless shim
+// sources (src/artShims, inherited from the retired aa-runtime module) against android.jar (so javax.swing
+// doesn't exist at compile time) and dex them. The old aaShims' com.intellij.* replacements are gone: those
+// FQNs live in the merged compiler jar and are handled by the kotlinc-art ASM passes instead.
+val artShimAndroidJar = provider {
+    val sdkDir = System.getenv("ANDROID_HOME") ?: System.getenv("ANDROID_SDK_ROOT")
+        ?: rootProject.file("local.properties").takeIf { it.exists() }
+            ?.let { Properties().apply { it.inputStream().use { s -> load(s) } }.getProperty("sdk.dir") }
+        ?: throw GradleException("Android SDK not found (set ANDROID_HOME or sdk.dir in local.properties)")
+    File(sdkDir, "platforms/android-36/android.jar")
+}
+val compileArtShims = tasks.register<JavaCompile>("compileArtShims") {
+    source = fileTree(layout.projectDirectory.dir("src/artShims/java"))
+    classpath = files()
+    options.bootstrapClasspath = files(artShimAndroidJar)
+    sourceCompatibility = "8"
+    targetCompatibility = "8"
+    destinationDirectory.set(layout.buildDirectory.dir("art-shims/classes"))
+}
+val artShimsJar = tasks.register<Jar>("artShimsJar") {
+    from(compileArtShims.flatMap { it.destinationDirectory })
+    archiveFileName.set("art-shims.jar")
+    destinationDirectory.set(layout.buildDirectory.dir("art-shims"))
 }
 
 // --- on-device native aapt2 ----------------------------------------------------------------------
@@ -514,6 +544,13 @@ configurations.configureEach {
         exclude(group = "org.eclipse.jdt", module = "ecj")
         exclude(group = "org.eclipse.platform", module = "org.eclipse.core.runtime")
         exclude(group = "org.eclipse.platform", module = "org.eclipse.equinox.common")
+        // JNA arrives TWICE under different group ids: the standard net.java.dev.jna 5.15 (via jdt.core ->
+        // eclipse core.filesystem) and JetBrains' org.jetbrains.intellij.deps.jna 5.9 fork (via
+        // :kotlin-compiler-deps' support set for the unshaded IntelliJ platform). Same com.sun.jna classes,
+        // so D8 rejects the pair as duplicates. Keep the standard (newer) one that was always dexed; the
+        // fork's classes are API-compatible for the platform's (rarely hit) JNA touchpoints.
+        exclude(group = "org.jetbrains.intellij.deps.jna", module = "jna")
+        exclude(group = "org.jetbrains.intellij.deps.jna", module = "jna-platform")
     }
 }
 
@@ -585,17 +622,21 @@ dependencies {
     // verification at class load. Generated from the build JDK above (see generateSwingApiJar).
     implementation(files(generateSwingApiJar.map { it.outputs.files.singleFile }))
 
-    // gnu.trove.* — IntelliJ-core uses Trove4j (un-relocated) but kotlin-compiler-embeddable doesn't bundle
-    // it; dex it so the on-device compiler's FileUtil/VFS classes resolve (matches CodeAssist's approach).
-    implementation(libs.trove4j)
+    // javax.swing.SwingUtilities + jdk.jfr.* headless shims (see compileArtShims above): the unshaded
+    // IntelliJ platform reaches them at runtime (MockApplication.invokeLater, JFR diagnostics) and Android
+    // omits both packages.
+    implementation(files(artShimsJar.flatMap { it.archiveFile }))
+
+    // (gnu.trove and the platform support libs now arrive transitively via :kotlin-compiler-deps, the
+    // unshaded compiler dependency set that :lang-kotlin api-consumes.)
 
     // The Jetpack Compose kotlinc plugin's classes — dexed into the app so kotlinc can resolve its
     // `ComposePluginRegistrar` on ART. The build feeds the plugin to the in-process K2JVMCompiler via
     // `-Xplugin` (the jar is the lang-kotlin bundled resource); kotlinc reads the service descriptor from
     // that jar but defines the registrar class through parent delegation to the app classloader (a jar's
     // bytecode can't be loaded at runtime on ART), so the class must live here. Non-transitive: it needs
-    // only its own classes — the (embeddable) Kotlin compiler it builds on is already dexed via :lang-kotlin.
-    implementation(libs.kotlin.compose.compiler.plugin) { isTransitive = false }
+    // only its own classes — the (unshaded) Kotlin compiler it builds on is already dexed via :lang-kotlin.
+    implementation(libs.kotlin.compose.compiler.plugin.ide) { isTransitive = false }
 
     // build-engine's DexRunner/DexBackend ports (kept `implementation` in :ide-core, so not transitive):
     // :ide-android supplies the on-device DexClassLoader runner that backs the Java `run` on ART.
@@ -641,7 +682,7 @@ dependencies {
     // against. It arrives in the app only as a transitive `implementation` (via :ide-core → :lang-kotlin),
     // which doesn't leak to the androidTest *compile* classpath — and at runtime the app's dexed copy
     // already provides it — so compileOnly is exactly right: types to compile, no second dexed copy.
-    androidTestCompileOnly(libs.kotlin.compiler.embeddable)
+    androidTestCompileOnly(project(":kotlin-compiler-deps"))
     // The spike's Compose case references ComposeCompilerPlugin (lang-kotlin) to locate the bundled plugin
     // jar. Like the compiler API, lang-kotlin reaches the app only transitively, so add it compileOnly: the
     // type to compile against, with the app's dexed copy providing it at runtime.

@@ -4,8 +4,10 @@ import dev.ide.lang.completion.CompletionContributor
 import dev.ide.lang.completion.CompletionItem
 import dev.ide.lang.completion.CompletionItemKind
 import dev.ide.lang.completion.CompletionParams
+import dev.ide.lang.completion.CompletionRelevance
 import dev.ide.lang.completion.CompletionResult
 import dev.ide.lang.completion.CompletionResultSet
+import dev.ide.lang.completion.PrefixMatcher
 import dev.ide.lang.completion.TextEdit
 import dev.ide.lang.dom.TextRange
 import dev.ide.lang.kotlin.KotlinPerf
@@ -14,15 +16,15 @@ import dev.ide.lang.kotlin.parse.KotlinParserHost
 import dev.ide.lang.kotlin.parse.climbTo
 import dev.ide.lang.kotlin.parse.identifierPrefixBefore
 import dev.ide.lang.kotlin.interp.PreviewConstants
-import dev.ide.lang.kotlin.resolve.ComposableContext
-import dev.ide.lang.kotlin.resolve.KotlinResolver
+import dev.ide.lang.kotlin.resolve.*
 import dev.ide.lang.kotlin.symbols.KotlinSymbol
 import dev.ide.lang.kotlin.symbols.KotlinSymbolService
 import dev.ide.lang.kotlin.symbols.KotlinType
 import dev.ide.lang.resolve.Modifier
 import dev.ide.lang.resolve.SymbolKind
-import org.jetbrains.kotlin.com.intellij.psi.PsiElement
+import com.intellij.psi.PsiElement
 import org.jetbrains.kotlin.lexer.KtTokens
+import org.jetbrains.kotlin.psi.KtBinaryExpression
 import org.jetbrains.kotlin.psi.KtBlockExpression
 import org.jetbrains.kotlin.psi.KtBlockStringTemplateEntry
 import org.jetbrains.kotlin.psi.KtCallExpression
@@ -33,6 +35,7 @@ import org.jetbrains.kotlin.psi.KtFile
 import org.jetbrains.kotlin.psi.KtImportDirective
 import org.jetbrains.kotlin.psi.KtNameReferenceExpression
 import org.jetbrains.kotlin.psi.KtNamedFunction
+import org.jetbrains.kotlin.psi.KtOperationReferenceExpression
 import org.jetbrains.kotlin.psi.KtPackageDirective
 import org.jetbrains.kotlin.psi.KtParameter
 import org.jetbrains.kotlin.psi.KtParameterList
@@ -55,6 +58,7 @@ import org.jetbrains.kotlin.psi.KtValueArgumentName
  * copy of the buffer, parse it, find the marker's element, and classify the position ([CompletionPosition]):
  *   • selector of a (safe-)qualified expression -> MemberAccess  -> receiver members ∪ extensions (or a package's members)
  *   • inside a type reference                    -> TypeReference -> visible classifiers
+ *   • the operation reference of a binary expr   -> InfixName     -> infix functions applicable to the left operand
  *   • a bare name in expression position         -> NameReference -> scope symbols + visible types
  * Candidates are prefix-filtered, ranked (prefix/proximity), and mapped to neutral [CompletionItem]s by
  * [KotlinCompletionItems]; auto-import edits come from [KotlinAutoImport].
@@ -107,6 +111,9 @@ class KotlinCompletion(
         val original = document.text.toString()
         val offset = requestedOffset.coerceIn(0, original.length)
         val prefix = identifierPrefixBefore(original, offset)
+        // The graded matcher every candidate gate below shares: exact/prefix/camel-hump/substring, so
+        // `mDL` reaches `myDynamicList` through the same filter chain a plain prefix takes.
+        val matcher = PrefixMatcher(prefix)
         val replaceRange = TextRange(offset - prefix.length, offset)
         // The first non-whitespace char after the identifier token the editor will replace (it extends the
         // replacement forward over the rest of the word) — lets an item avoid inserting a second `(`/`{` when
@@ -144,11 +151,12 @@ class KotlinCompletion(
 
         val pos = KotlinPerf.span("candidates") {
             when (val where = classifyPosition(markerLeaf, nameRef)) {
-                is CompletionPosition.MemberAccess -> memberAccessCandidates(where.receiver, offset, resolver, prefix, where.callableRef)
+                is CompletionPosition.MemberAccess -> memberAccessCandidates(where.receiver, offset, resolver, matcher, where.callableRef)
                 // A type slot also carries a few keyword positions (a `where` clause after a generic
                 // signature); KotlinKeywords returns nothing for a plain type reference, so this is safe.
                 CompletionPosition.TypeReference -> PositionResult(service.typeNamesByPrefix(prefix), keywordContext = true)
-                CompletionPosition.NameReference -> nameReferenceCandidates(markerLeaf, offset, prefix, resolver, autoImport)
+                is CompletionPosition.InfixName -> infixCandidates(where.left, offset, resolver, matcher)
+                CompletionPosition.NameReference -> nameReferenceCandidates(markerLeaf, offset, matcher, resolver, autoImport)
             }
         }
         val raw = pos.raw
@@ -161,14 +169,25 @@ class KotlinCompletion(
         }
 
         val candidates = KotlinPerf.span("rank") { raw.asSequence()
-            .filter { it.name != "_" && it.name.startsWith(prefix, ignoreCase = true) && MARKER !in it.name }
+            .filter { it.name != "_" && matcher.matches(it.name) && MARKER !in it.name }
             .distinctBy { it.name + "#" + it.kind + "#" + (it.signature ?: "") }
-            .map { Candidate(it, if (pos.packageCompletion) emptyList() else importEditFor(it, autoImport)) }
-            .sortedWith(rank(prefix, pos.expected, composableContext))
+            .map { s ->
+                Candidate(
+                    symbol = s,
+                    importEdit = if (pos.packageCompletion) emptyList() else importEditFor(s, autoImport),
+                    fitsExpected = pos.expected != null && matchesExpected(s, pos.expected),
+                    grade = matcher.grade(s.name)?.ordinal ?: PrefixMatcher.Grade.entries.size,
+                    boosted = composableContext && s.isComposable,
+                    group = memberGroup(s),
+                )
+            }
+            .sortedWith(rank())
             .take(MAX_ITEMS)
             .toList() }
 
-        val symbolItems = candidates.map { KotlinCompletionItems.toItem(it.symbol, it.importEdit, followingChar) }
+        val symbolItems = candidates.map {
+            KotlinCompletionItems.toItem(it.symbol, it.importEdit, followingChar, it.relevance(), infix = pos.infixInsert)
+        }
 
         // Keyword / live-template contributions, appended after the symbol candidates so a real symbol always
         // sorts first within a match tier; the editor's match-tier re-sort still floats an exact keyword/template
@@ -203,6 +222,9 @@ class KotlinCompletion(
         class MemberAccess(val receiver: KtExpression, val callableRef: Boolean = false) : CompletionPosition
         /** Inside a type reference — only classifiers belong. */
         object TypeReference : CompletionPosition
+        /** The operation-reference slot of a binary expression (`a foo█`, `0 downTo█`) — only infix functions
+         *  applicable to [left] belong (plus the `as`/`in`/`is` keyword operators from KotlinKeywords). */
+        class InfixName(val left: KtExpression) : CompletionPosition
         /** A bare name in expression/statement position. */
         object NameReference : CompletionPosition
     }
@@ -215,6 +237,9 @@ class KotlinCompletion(
         val expected: KotlinType? = null,
         val packageCompletion: Boolean = false,
         val keywordContext: Boolean = false,
+        /** The candidates are infix functions at an operator slot → insert the `a foo b` form (`foo `), not
+         *  the call form `foo()`. */
+        val infixInsert: Boolean = false,
     )
 
     private fun classifyPosition(markerLeaf: PsiElement?, nameRef: KtNameReferenceExpression?): CompletionPosition {
@@ -226,13 +251,23 @@ class KotlinCompletion(
             nameRef != null && isSelectorOfQualified(nameRef) ->
                 CompletionPosition.MemberAccess((nameRef.parent as KtQualifiedExpression).receiverExpression)
             inTypePosition(markerLeaf) -> CompletionPosition.TypeReference
-            else -> CompletionPosition.NameReference
+            else -> infixOperatorLeft(markerLeaf)?.let { CompletionPosition.InfixName(it) } ?: CompletionPosition.NameReference
         }
+    }
+
+    /** When [leaf] is the operation-reference slot of a binary expression (`a foo█`, `0 downTo█`), the left
+     *  operand whose type the infix function must resolve against; null otherwise (a right operand `a + b█` is
+     *  a plain name reference, not the operation reference). */
+    private fun infixOperatorLeft(leaf: PsiElement?): KtExpression? {
+        val ref = climbTo<KtOperationReferenceExpression>(leaf) ?: return null
+        val bin = ref.parent as? KtBinaryExpression ?: return null
+        return if (bin.operationReference === ref) bin.left else null
     }
 
     /** `receiver.<caret>` — instance members + extensions, type-receiver statics + companion members, or, when
      *  the receiver is a pure package/FQN path, that package's sub-packages + types (inserted fully-qualified). */
-    private fun memberAccessCandidates(receiver: KtExpression, offset: Int, resolver: KotlinResolver, prefix: String, callableRef: Boolean = false): PositionResult {
+    private fun memberAccessCandidates(receiver: KtExpression, offset: Int, resolver: KotlinResolver, matcher: PrefixMatcher, callableRef: Boolean = false): PositionResult {
+        val prefix = matcher.prefix
         val recvType = KotlinPerf.span("infer") { resolver.inferType(receiver) }
         if (recvType != null) {
             // Instance receiver (`listOf("").`) → instance members + extensions; type receiver (`Int.`) →
@@ -253,7 +288,7 @@ class KotlinCompletion(
                 // An enum's CONSTANTS are reached statically (`Test.A`) but aren't instance members, so
                 // `membersForCompletion` (which surfaces `values()`/`valueOf()`/`entries`) never lists them.
                 val enumConstants = service.enumConstantsOf(recvType.qualifiedName)
-                    .filter { it.name.startsWith(prefix, ignoreCase = true) }
+                    .filter { matcher.matches(it.name) }
                 members + enumConstants + service.companionMembersFor(recvType.qualifiedName, prefix)
                     .filter { memberVisibleOn(it, typeReceiver = false) }
             } else {
@@ -270,16 +305,34 @@ class KotlinCompletion(
         else PositionResult(emptyList())
     }
 
+    /** `left infixName█` — the infix functions applicable to [left]'s type: its own members plus the extensions
+     *  on it (`0 downTo`, `range step`, a user `infix fun`), each filtered to `infix`. The `as`/`in`/`is`
+     *  keyword operators that also fit the slot come from KotlinKeywords (keywordContext), so a null-typed or
+     *  unresolved left operand still offers those. Scope symbols are NOT offered — an operation reference only
+     *  accepts an infix function name, never an arbitrary local. */
+    private fun infixCandidates(left: KtExpression, offset: Int, resolver: KotlinResolver, matcher: PrefixMatcher): PositionResult {
+        val prefix = matcher.prefix
+        val recvType = KotlinPerf.span("infer") { resolver.inferType(left) }
+            ?: return PositionResult(emptyList(), keywordContext = true)
+        val members = KotlinPerf.span("members") {
+            service.membersForCompletion(recvType.qualifiedName, recvType.typeArguments, prefix)
+        }
+        val scopeExt = resolver.scopeMemberExtensions(offset, recvType, prefix)
+        val raw = (members + scopeExt).filter { it.kind == SymbolKind.METHOD && it.isInfix }
+        return PositionResult(raw, keywordContext = true, infixInsert = true)
+    }
+
     /** A bare name in expression/statement position: scope symbols + visible types, plus the override-stub,
      *  named-argument, and expected-type extras, and the keyword/live-template context. */
     private fun nameReferenceCandidates(
-        markerLeaf: PsiElement?, offset: Int, prefix: String, resolver: KotlinResolver, autoImport: KotlinAutoImport,
+        markerLeaf: PsiElement?, offset: Int, matcher: PrefixMatcher, resolver: KotlinResolver, autoImport: KotlinAutoImport,
     ): PositionResult {
+        val prefix = matcher.prefix
         val extra = ArrayList<CompletionItem>()
         // Member-declaration position in a class body → offer overridable inherited members as stubs.
         if (isOverridePosition(markerLeaf)) {
             resolver.overridableMembersAt(offset)
-                .filter { it.name.startsWith(prefix, ignoreCase = true) }
+                .filter { matcher.matches(it.name) }
                 .forEach { extra += KotlinCompletionItems.overrideItem(it) }
         }
         // Primary-constructor parameter position → offer the inherited open PROPERTIES as `override val name: T`
@@ -288,7 +341,7 @@ class KotlinCompletion(
         if (isPrimaryCtorParamPosition(markerLeaf)) {
             val overrideTyped = climbTo<KtParameter>(markerLeaf)?.hasModifier(KtTokens.OVERRIDE_KEYWORD) == true
             resolver.overridableMembersAt(offset)
-                .filter { it.kind == SymbolKind.FIELD && it.name.startsWith(prefix, ignoreCase = true) }
+                .filter { it.kind == SymbolKind.FIELD && matcher.matches(it.name) }
                 .forEach { extra += KotlinCompletionItems.ctorOverrideParam(it, overrideTyped) }
         }
         // Inside a call's argument list → offer the callee's not-yet-supplied parameter names. When the caret is
@@ -300,15 +353,15 @@ class KotlinCompletion(
             val editingName = climbTo<KtValueArgumentName>(markerLeaf) != null
             val supplied = suppliedArgNames(call)
             resolver.callParameters(call)
-                .filter { it.name !in supplied && it.name.startsWith(prefix, ignoreCase = true) }
+                .filter { it.name !in supplied && matcher.matches(it.name) }
                 .forEach { extra += KotlinCompletionItems.namedArgItem(it, bareName = editingName) }
         }
         // Inside an annotation's argument list → its parameter names (ranked first), plus the enum-ish constants
         // for @Preview's uiMode/device which aren't recoverable from the parameter type alone.
-        extra += annotationArgExtras(markerLeaf, prefix, resolver)
+        extra += annotationArgExtras(markerLeaf, matcher, resolver)
         // The type the context wants → offer literals/enum constants and rank assignable candidates first.
         val expected = resolver.expectedTypeAt(offset)
-        expected?.let { extra += expectedExtras(it, prefix, autoImport) }
+        expected?.let { extra += expectedExtras(it, matcher, autoImport) }
         val raw = KotlinPerf.span("scope") { resolver.scopeSymbolsAt(offset, prefix) } +
             KotlinPerf.span("typeNames") { service.typeNamesByPrefix(prefix) }
         return PositionResult(raw, extra = extra, expected = expected, keywordContext = true)
@@ -373,7 +426,7 @@ class KotlinCompletion(
      * constants the argument accepts (not recoverable from the `Int`/`String` parameter type alone). Empty
      * outside an annotation.
      */
-    private fun annotationArgExtras(leaf: PsiElement?, prefix: String, resolver: KotlinResolver): List<CompletionItem> {
+    private fun annotationArgExtras(leaf: PsiElement?, matcher: PrefixMatcher, resolver: KotlinResolver): List<CompletionItem> {
         val arg = climbTo<KtValueArgument>(leaf) ?: return emptyList()
         val list = arg.parent as? KtValueArgumentList ?: return emptyList()
         val ann = list.parent as? KtAnnotationEntry ?: return emptyList()
@@ -389,16 +442,16 @@ class KotlinCompletion(
             }
             when (argName) {
                 "uiMode" -> PreviewConstants.uiModeConstants.keys
-                    .filter { it.startsWith(prefix, ignoreCase = true) }.forEach { constItem("Configuration", it, "uiMode") }
+                    .filter { matcher.matches(it) }.forEach { constItem("Configuration", it, "uiMode") }
                 "device" -> PreviewConstants.deviceConstants.keys
-                    .filter { it.startsWith(prefix, ignoreCase = true) }.forEach { constItem("Devices", it, "device") }
+                    .filter { matcher.matches(it) }.forEach { constItem("Devices", it, "device") }
             }
         }
         // Name position (a bare argument, or editing an argument's name) → the annotation's parameter names.
         if (argName == null || editingName) {
             val supplied = list.arguments.mapNotNull { it.getArgumentName()?.asName?.identifier }.toHashSet()
             val params = resolver.annotationParameters(ann)
-                .filter { it.name !in supplied && it.name.startsWith(prefix, ignoreCase = true) }
+                .filter { it.name !in supplied && matcher.matches(it.name) }
             if (params.isNotEmpty()) {
                 params.forEach { out += KotlinCompletionItems.namedArgItem(it, bareName = editingName) }
             } else if (short in previewAnnotationNames) {
@@ -406,7 +459,7 @@ class KotlinCompletion(
                 // fall back to the bundled argument list so @Preview completion works regardless. Same item shape
                 // as a resolved named argument (label `name =`, inserts `name = `).
                 PreviewConstants.previewArgNames
-                    .filter { it !in supplied && it.startsWith(prefix, ignoreCase = true) }
+                    .filter { it !in supplied && matcher.matches(it) }
                     .forEach { out += CompletionItem("$it =", "$it = ", CompletionItemKind.PARAMETER, detail = "@Preview", sortPriority = -1) }
             }
         }
@@ -416,31 +469,34 @@ class KotlinCompletion(
     /** Literals/constants the expected type admits: `true`/`false` for Boolean, `Enum.CONSTANT` for an enum,
      *  and the type's own companion constants (`Color.Transparent`, `Alignment.Center`) — each with an
      *  auto-import of the type when it isn't already visible. Powers value completion after `param = `. */
-    private fun expectedExtras(expected: KotlinType, prefix: String, autoImport: KotlinAutoImport): List<CompletionItem> {
+    private fun expectedExtras(expected: KotlinType, matcher: PrefixMatcher, autoImport: KotlinAutoImport): List<CompletionItem> {
         val out = ArrayList<CompletionItem>()
         val simple = expected.qualifiedName.substringAfterLast('.')
+        // These constants ARE the expected type, so they carry the fits-expected relevance the weigher boosts.
+        val fits = CompletionRelevance(fitsExpectedType = true)
         fun constItem(c: KotlinSymbol, kind: CompletionItemKind) {
             val insert = "$simple.${c.name}"
             out += CompletionItem(
                 label = insert, insertText = insert, kind = kind, detail = simple,
                 sortPriority = -1, symbol = c, additionalEdits = autoImport.editForType(expected.qualifiedName),
+                relevance = fits,
             )
         }
         if (expected.qualifiedName == "kotlin.Boolean") {
             for (b in listOf("true", "false")) {
-                if (b.startsWith(prefix, ignoreCase = true)) {
-                    out += CompletionItem(b, b, CompletionItemKind.KEYWORD, sortPriority = -1)
+                if (matcher.matches(b)) {
+                    out += CompletionItem(b, b, CompletionItemKind.KEYWORD, sortPriority = -1, relevance = fits)
                 }
             }
         }
         val consts = service.enumConstantsOf(expected.qualifiedName)
         if (consts.isNotEmpty()) {
-            consts.filter { it.name.startsWith(prefix, ignoreCase = true) }.forEach { constItem(it, CompletionItemKind.ENUM_CONSTANT) }
+            consts.filter { matcher.matches(it.name) }.forEach { constItem(it, CompletionItemKind.ENUM_CONSTANT) }
         } else {
             // Not an enum — offer the type's companion constants OF that type (`val Transparent: Color` on
             // `Color`'s companion), the value-class / object-constant idiom. Capped so a large palette (Color
             // has dozens) doesn't flood the popup; prefix-filtering narrows it as the user types.
-            service.companionMembersFor(expected.qualifiedName, prefix)
+            service.companionMembersFor(expected.qualifiedName, matcher.prefix)
                 .filter { it.kind == SymbolKind.FIELD && (it.type as? KotlinType)?.qualifiedName == expected.qualifiedName }
                 .take(MAX_EXPECTED_CONSTANTS)
                 .forEach { constItem(it, CompletionItemKind.FIELD) }
@@ -450,13 +506,32 @@ class KotlinCompletion(
 
     // --- ranking ---
 
-    private class Candidate(val symbol: KotlinSymbol, val importEdit: List<TextEdit>)
+    /** A raw candidate with its rank facts computed ONCE (not per comparison): the same facts ride the
+     *  emitted item as [CompletionRelevance] so the engine's weigher chain reproduces this order over the
+     *  merged, multi-contributor set. */
+    private class Candidate(
+        val symbol: KotlinSymbol,
+        val importEdit: List<TextEdit>,
+        val fitsExpected: Boolean,
+        val grade: Int,
+        val boosted: Boolean,
+        val group: Int,
+    ) {
+        fun relevance() = CompletionRelevance(
+            fitsExpectedType = fitsExpected,
+            contextBoost = boosted,
+            callableWeight = group,
+            inScope = importEdit.isEmpty(),
+            deprecated = symbol.isDeprecated,
+            proximity = KotlinCompletionItems.proximity(symbol.kind),
+        )
+    }
 
-    private fun rank(prefix: String, expected: KotlinType?, composableContext: Boolean): Comparator<Candidate> = compareBy(
-        { if (expected != null && matchesExpected(it.symbol, expected)) 0 else 1 }, // expected-type matches first
-        { if (it.symbol.name.startsWith(prefix)) 0 else 1 },       // case-sensitive prefix first
-        { if (composableContext && it.symbol.isComposable) 0 else 1 }, // @Composable callables first in a @Composable context
-        { memberGroup(it.symbol) },                                // own members > source ext > library ext > universal scope fns > Object methods
+    private fun rank(): Comparator<Candidate> = compareBy(
+        { if (it.fitsExpected) 0 else 1 },                         // expected-type matches first
+        { it.grade },                                              // exact > cs-prefix > ci-prefix > hump > substring
+        { if (it.boosted) 0 else 1 },                              // @Composable callables first in a @Composable context
+        { it.group },                                              // own members > source ext > library ext > universal scope fns > Object methods
         { if (it.importEdit.isEmpty()) 0 else 1 },                 // in-scope (no import) before needs-import
         { KotlinCompletionItems.proximity(it.symbol.kind) },       // locals/members before library
         { it.symbol.name.length },
@@ -558,7 +633,9 @@ class KotlinCompletion(
     private companion object {
         // The classic completion dummy identifier; unlikely to collide with real code.
         const val MARKER = "IntellijIdeaRulezzz"
-        const val MAX_ITEMS = 100
+        // Matches the engine's ranked cap (CompletionEngine.MAX_ITEMS) so this rank-aware inner cut never
+        // drops a candidate the engine's global ranking would have kept — the engine cap is authoritative.
+        const val MAX_ITEMS = 200
         // Cap on a type's own companion constants offered at an expected-type slot (`Color` has dozens of
         // named colors) so the popup stays readable; the typed prefix narrows them further.
         const val MAX_EXPECTED_CONSTANTS = 12

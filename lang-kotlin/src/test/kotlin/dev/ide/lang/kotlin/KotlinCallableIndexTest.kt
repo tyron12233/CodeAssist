@@ -68,6 +68,15 @@ class KotlinCallableIndexTest {
         assertTrue("println" in items, "top-level println via the callable index; got ${items.take(20)}")
     }
 
+    @Test
+    fun consumerResolvesInfixFunctionThroughIndex() {
+        // `0 downTo|` — the `infix fun Int.downTo` from the stdlib, served through the callable index with its
+        // isInfix flag intact, so it surfaces (and inserts the infix form) in the operator slot.
+        val res = runBlocking { analyzer.completeAtCaret(srcDir, "Use.kt", "fun f() { for (i in 0 downT|) {} }") }
+        assertTrue("downTo" in res.items.mapNotNull { it.symbol?.name }, "Int.downTo via the callable index; got ${res.items.map { it.label }.take(20)}")
+        assertEquals("downTo ", res.items.first { it.symbol?.name == "downTo" }.insertText, "infix insert form")
+    }
+
     companion object {
         val srcDir: Path = tempProject(mapOf("Seed.kt" to "package demo\n"))
 

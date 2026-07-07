@@ -88,7 +88,9 @@ class KotlinFacadeCompletionTest {
                         .take(limit)
                 else emptySequence()
 
-            override fun <V : Any> fuzzy(id: IndexId, pattern: String, limit: Int): Sequence<Hit<V>> = emptySequence()
+            // The real engine's fuzzy is a superset of prefix (typeNamesByPrefix queries through it).
+            override fun <V : Any> fuzzy(id: IndexId, pattern: String, limit: Int): Sequence<Hit<V>> =
+                prefix(id, pattern, limit)
             override suspend fun ensureUpToDate(scope: IndexScope) {}
             override suspend fun reindexSource(path: Path, text: String) {}
             override val status = IndexStatus(ready = true)

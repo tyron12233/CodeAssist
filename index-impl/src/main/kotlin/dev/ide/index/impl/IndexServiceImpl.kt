@@ -63,6 +63,15 @@ class IndexServiceImpl(
      *  files whose content changed since the last session; null disables cross-launch persistence (the source
      *  diff still avoids reparsing unchanged files within a single session). */
     private val sourceCacheRoot: Path? = null,
+    /**
+     * READ-ONLY mode, for a second process sharing [cacheRoot] with the IDE (the Kotlin Analysis API
+     * daemon): [ensureUpToDate] opens whatever content-addressed segments already exist but NEVER builds a
+     * missing one (queries simply lack that artifact's entries until the owning process builds it and a
+     * later [ensureUpToDate] re-opens), and the mutating entry points ([invalidate], [reindexSource]) are
+     * rejected. The IDE process is the store's sole writer; a reader can't duplicate its build work, and
+     * the safety of concurrent same-segment builds never has to be relied on.
+     */
+    private val readOnly: Boolean = false,
 ) : IndexService, Closeable {
 
     private class State(val ext: IndexExtension<*, *>) {
@@ -407,10 +416,15 @@ class IndexServiceImpl(
             // classpath (authoritative negatives, no probing — see JdtEnvironmentCache.libraryBytes). Only
             // claim that when EVERY artifact indexed: a skipped jar's classes are absent, so resolving them
             // would be a false "not found". A partial index stays usable (segments are open and queried), the
-            // name environment just keeps probing instead of trusting misses.
-            val complete = skipped.get() == 0
-            val msg =
-                if (complete) "Indexed" else "Indexed (partial: ${skipped.get()} artifact(s) skipped)"
+            // name environment just keeps probing instead of trusting misses. A read-only service's missing
+            // (not-yet-built-by-the-owner) segments withhold ready the same way.
+            val missing = probes.sumOf { it.missing }
+            val complete = skipped.get() == 0 && missing == 0
+            val msg = when {
+                complete -> "Indexed"
+                missing > 0 -> "Indexed (partial: $missing segment(s) not built yet)"
+                else -> "Indexed (partial: ${skipped.get()} artifact(s) skipped)"
+            }
             setStatus(IndexStatus(false, msg, 1.0, ready = complete))
         } catch (t: Throwable) {
             setStatus(IndexStatus(false, "Indexing failed: ${t.message}", 1.0))
@@ -419,6 +433,7 @@ class IndexServiceImpl(
     }
 
     override suspend fun invalidate() {
+        check(!readOnly) { "read-only index: invalidate() belongs to the owning (IDE) process" }
         // [cacheRoot] holds the STATIC (SDK + library) segments and may be SHARED across projects. Each
         // artifact is content-addressed to one `.seg`, so two projects depending on the same jar reuse it.
         // So invalidate must NOT blind-wipe [cacheRoot] (that would delete other projects' segments): it drops
@@ -466,9 +481,12 @@ class IndexServiceImpl(
     }
 
     /** One artifact's contribution to a build, for the [perfLog] measurement. [built] is 0 when every
-     *  extension's segment was reused from the shared on-disk cache (a pure cache hit). */
+     *  extension's segment was reused from the shared on-disk cache (a pure cache hit). [missing] counts
+     *  the extensions whose segment did not exist and was NOT built (read-only mode); a non-zero missing
+     *  count withholds `ready`, exactly like a skipped artifact. */
     private class ArtifactProbe(
-        val label: String, val reused: Int, val built: Int, val entries: Int, val ms: Long
+        val label: String, val reused: Int, val built: Int, val entries: Int, val ms: Long,
+        val missing: Int = 0,
     ) {
         val isHit: Boolean get() = built == 0
     }
@@ -505,6 +523,11 @@ class IndexServiceImpl(
         val needBuild = states.values.filter { key !in it.openHashes }
         if (needBuild.isEmpty()) {
             return ArtifactProbe(art.label, reused, 0, 0, elapsedMs(t0))
+        }
+        if (readOnly) {
+            // A reader never builds: the artifact's entries are absent until the owning (IDE) process
+            // writes the segment; the next ensureUpToDate re-checks the store and opens it then.
+            return ArtifactProbe(art.label, reused, 0, 0, elapsedMs(t0), missing = needBuild.size)
         }
 
         // Stream each extension's entries straight into a per-(ext) [SegmentWriter] rather than buffering the
@@ -649,6 +672,7 @@ class IndexServiceImpl(
     }
 
     override suspend fun reindexSource(path: Path, text: String) {
+        check(!readOnly) { "read-only index: reindexSource() belongs to the owning (IDE) process" }
         val id = fileIds.idFor(path.toString())
         indexSourceFile(path, text, null, id)
         // Keep this file's fingerprint current so a later [ensureUpToDate] in the same session won't needlessly

@@ -107,6 +107,7 @@ import dev.ide.ui.backend.UiAction
 import dev.ide.ui.backend.UiComposePreview
 import dev.ide.ui.backend.UiCompletionItem
 import dev.ide.ui.backend.UiDiagnostic
+import dev.ide.ui.backend.UiFileSymbol
 import dev.ide.ui.backend.UiSeverity
 import dev.ide.ui.platform.isMobilePlatform
 import dev.ide.ui.editor.core.EditorDocument
@@ -114,6 +115,8 @@ import dev.ide.ui.editor.core.EditorSession
 import dev.ide.ui.editor.core.InlayPiece
 import dev.ide.ui.editor.core.LineRenderCache
 import dev.ide.ui.backend.UiInlayHint
+import dev.ide.ui.backend.UiQuickDoc
+import dev.ide.ui.backend.UiRenameResult
 import dev.ide.ui.editor.core.RangeEdit
 import dev.ide.ui.editor.core.WrapModel
 import dev.ide.ui.editor.core.smartEnter
@@ -203,9 +206,27 @@ fun CodeEditor(
     // whole editor subtree to LTR so it renders identically regardless of the device language.
     CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Ltr) {
         CodeEditorContent(
-            path, session, backend, modifier, onSave, onNavigate, onRenamed,
-            findEpoch, formatEpoch, fontScale, onFontScaleChange, onPreview, completionAutoPopup, completionDelayMs,
-            twoAxisScroll, pinchZoom, softKeyboardSuggestions, wordWrap, wrapIndent, fontLigatures, obscured,
+            path,
+            session,
+            backend,
+            modifier,
+            onSave,
+            onNavigate,
+            onRenamed,
+            findEpoch,
+            formatEpoch,
+            fontScale,
+            onFontScaleChange,
+            onPreview,
+            completionAutoPopup,
+            completionDelayMs,
+            twoAxisScroll,
+            pinchZoom,
+            softKeyboardSuggestions,
+            wordWrap,
+            wrapIndent,
+            fontLigatures,
+            obscured,
         )
     }
 }
@@ -254,7 +275,8 @@ private fun CodeEditorContent(
     // Zoom scales the code + gutter text size; the metrics/render-cache below key on these styles, so a zoom
     // recomputes line metrics and re-shapes lines at the new size (the cache is rebuilt — expected on zoom).
     val zoom = clampFontScale(fontScale)
-    val liveScale = rememberUpdatedState(zoom) // read inside the pinch gesture (pointerInput captures once)
+    val liveScale =
+        rememberUpdatedState(zoom) // read inside the pinch gesture (pointerInput captures once)
     val codeStyle = remember(syntax, typography, zoom, fontLigatures) {
         // Drop the theme's explicit lineHeight: the editor stacks visual rows itself at `metrics.lineHeight`,
         // and an explicit lineHeight makes a soft-wrapped paragraph space its MIDDLE rows differently from its
@@ -270,9 +292,17 @@ private fun CodeEditorContent(
             fontFeatureSettings = if (fontLigatures) null else "liga off, calt off, clig off, dlig off",
         )
     }
-    val gutterStyle = remember(typography, zoom) { typography.codeSmall.copy(fontSize = typography.codeSmall.fontSize * zoom) }
+    val gutterStyle = remember(
+        typography,
+        zoom
+    ) { typography.codeSmall.copy(fontSize = typography.codeSmall.fontSize * zoom) }
     val metrics = remember(measurer, codeStyle, density) {
-        val probe = measurer.measure(AnnotatedString("MMMMMMMMMM"), style = codeStyle, softWrap = false, maxLines = 1)
+        val probe = measurer.measure(
+            AnnotatedString("MMMMMMMMMM"),
+            style = codeStyle,
+            softWrap = false,
+            maxLines = 1
+        )
         // Row height = the SOFT-WRAP inter-row advance, measured from a probe that actually wraps — not the
         // single-line box height nor a hard-newline advance (both differ by ~1px from how wrapped rows lay out).
         // The editor positions every visual row by `lineHeight`, so it MUST equal the advance `drawText` uses
@@ -282,8 +312,9 @@ private fun CodeEditorContent(
             AnnotatedString("M".repeat(240)), style = codeStyle, softWrap = true,
             constraints = Constraints(maxWidth = (cw * 40).coerceAtLeast(cw + 1)),
         )
-        val rowAdvance = if (wrapProbe.lineCount > 1) wrapProbe.getLineTop(1) - wrapProbe.getLineTop(0)
-        else probe.size.height.toFloat()
+        val rowAdvance =
+            if (wrapProbe.lineCount > 1) wrapProbe.getLineTop(1) - wrapProbe.getLineTop(0)
+            else probe.size.height.toFloat()
         with(density) {
             EditorMetrics(
                 lineHeight = rowAdvance,
@@ -313,7 +344,8 @@ private fun CodeEditorContent(
     }
 
     // (@Preview gutter markers are now the daemon's PREVIEWS pass — applied to the session above.)
-    val inlayStyle = remember(colors) { SpanStyle(color = colors.textTertiary, fontStyle = FontStyle.Italic) }
+    val inlayStyle =
+        remember(colors) { SpanStyle(color = colors.textTertiary, fontStyle = FontStyle.Italic) }
     val perLineInlays = remember(inlayHints, editorSession.doc) {
         if (inlayHints.isEmpty()) emptyMap() else buildMap<Int, MutableList<InlayPiece>> {
             val d = editorSession.doc
@@ -321,7 +353,8 @@ private fun CodeEditorContent(
                 val off = h.offset.coerceIn(0, d.length)
                 val line = d.lineForOffset(off)
                 val col = off - d.lineStart(line)
-                val txt = (if (h.paddingLeft) " " else "") + h.text + (if (h.paddingRight) " " else "")
+                val txt =
+                    (if (h.paddingLeft) " " else "") + h.text + (if (h.paddingRight) " " else "")
                 getOrPut(line) { ArrayList() }.add(InlayPiece(col, txt))
             }
         }
@@ -341,12 +374,20 @@ private fun CodeEditorContent(
     val foldPlaceholderStyle = remember(colors) {
         // A faint chip behind `...` — a low-alpha overlay (NOT hairline.copy(alpha=…), which would replace the
         // hairline's alpha and paint a near-opaque white box in dark mode).
-        val chipBg = if (colors.isDark) Color.White.copy(alpha = 0.10f) else Color.Black.copy(alpha = 0.06f)
+        val chipBg =
+            if (colors.isDark) Color.White.copy(alpha = 0.10f) else Color.Black.copy(alpha = 0.06f)
         SpanStyle(color = colors.textTertiary, background = chipBg)
     }
-    val compositeCache = remember(editorSession.doc, editorSession.foldModel, codeStyle, foldPlaceholderStyle, palette) {
+    val compositeCache = remember(
+        editorSession.doc,
+        editorSession.foldModel,
+        codeStyle,
+        foldPlaceholderStyle,
+        palette
+    ) {
         HashMap<Int, TextLayoutResult>()
     }
+
     fun compositeLayoutFor(line: Int): TextLayoutResult = compositeCache.getOrPut(line) {
         val fm = editorSession.foldModel
         val info = fm.foldStartingAt(line)
@@ -361,18 +402,32 @@ private fun CodeEditorContent(
         val ranges = ArrayList<AnnotatedString.Range<SpanStyle>>()
         for (sp in editorSession.styles.spansFor(line)) {
             val st = palette[sp.type.ordinal] ?: continue
-            val s = sp.start.coerceIn(0, prefixLen); val e = sp.end.coerceIn(0, prefixLen)
+            val s = sp.start.coerceIn(0, prefixLen);
+            val e = sp.end.coerceIn(0, prefixLen)
             if (e > s) ranges.add(AnnotatedString.Range(st, s, e))
         }
-        val suffixCol0 = info.suffixStart - doc.lineStart(info.endLine) // suffix's start column on the end line
+        val suffixCol0 =
+            info.suffixStart - doc.lineStart(info.endLine) // suffix's start column on the end line
         val base = phEnd
         for (sp in editorSession.styles.spansFor(info.endLine)) {
             val st = palette[sp.type.ordinal] ?: continue
-            val cs = maxOf(sp.start, suffixCol0); val ce = sp.end
-            if (ce > cs) ranges.add(AnnotatedString.Range(st, (base + cs - suffixCol0).coerceAtMost(text.length), (base + ce - suffixCol0).coerceAtMost(text.length)))
+            val cs = maxOf(sp.start, suffixCol0);
+            val ce = sp.end
+            if (ce > cs) ranges.add(
+                AnnotatedString.Range(
+                    st,
+                    (base + cs - suffixCol0).coerceAtMost(text.length),
+                    (base + ce - suffixCol0).coerceAtMost(text.length)
+                )
+            )
         }
         ranges.add(AnnotatedString.Range(foldPlaceholderStyle, prefixLen, phEnd))
-        measurer.measure(AnnotatedString(text, spanStyles = ranges), style = codeStyle, softWrap = false, maxLines = 1)
+        measurer.measure(
+            AnnotatedString(text, spanStyles = ranges),
+            style = codeStyle,
+            softWrap = false,
+            maxLines = 1
+        )
     }
     // Document lines that begin ANY fold region (collapsed or open) — drives the gutter chevrons.
     val foldableStartLines = remember(editorSession.foldRegions, editorSession.doc) {
@@ -384,7 +439,12 @@ private fun CodeEditorContent(
     val gutterNumberCache = remember(measurer, gutterStyle) { HashMap<Int, TextLayoutResult>() }
     fun numberLayout(n: Int): TextLayoutResult =
         gutterNumberCache.getOrPut(n) {
-            measurer.measure(AnnotatedString(n.toString()), style = gutterStyle, softWrap = false, maxLines = 1)
+            measurer.measure(
+                AnnotatedString(n.toString()),
+                style = gutterStyle,
+                softWrap = false,
+                maxLines = 1
+            )
         }
 
     // A fold strip on the inner edge of the gutter holds the ▸/▾ chevrons (collapsed folds always show one;
@@ -415,7 +475,8 @@ private fun CodeEditorContent(
             .coerceAtLeast(maxOf(1, (metrics.charWidth * 8f).toInt()))
     else 0
     renderCache.setWrapWidth(wrapWidthPx)
-    val wrapCols = if (wrapWidthPx > 0) (wrapWidthPx / metrics.charWidth).toInt().coerceAtLeast(1) else 0
+    val wrapCols =
+        if (wrapWidthPx > 0) (wrapWidthPx / metrics.charWidth).toInt().coerceAtLeast(1) else 0
     // Smart wrap indent (IntelliJ-style): continuation rows align under the line's own indent. Capped at half
     // the wrap width so wrapped text always keeps room. The indent is applied during measurement in the line
     // cache (TextIndent.restLine), so all caret/tap/selection geometry tracks it automatically.
@@ -424,7 +485,12 @@ private fun CodeEditorContent(
     // IntelliJ indents wrapped parts to the original indent PLUS a small continuation shift (one indent level),
     // so the wrap reads as a continuation rather than aligning flush under the code.
     val wrapExtraIndentCols = 4
-    renderCache.setWrapIndent(wrapIndentActive, with(density) { metrics.charWidth.toSp() }, wrapMaxIndentCols, wrapExtraIndentCols)
+    renderCache.setWrapIndent(
+        wrapIndentActive,
+        with(density) { metrics.charWidth.toSp() },
+        wrapMaxIndentCols,
+        wrapExtraIndentCols
+    )
     // Cheap monospace estimate of a line's wrap-row count — count display columns (tabs to 4-col stops); the
     // first row holds `wrapCols`, continuation rows hold `wrapCols - indent`. No text shaping; on-screen lines
     // are corrected to the exact lineCount in [VLayout.correctRange], so this only sizes the OFF-screen extent.
@@ -442,7 +508,10 @@ private fun CodeEditorContent(
             i++
         }
         if (cols <= wrapCols) return 1
-        val indent = if (wrapIndentActive) ((if (leading < 0) cols else leading) + wrapExtraIndentCols).coerceAtMost(wrapMaxIndentCols) else 0
+        val indent =
+            if (wrapIndentActive) ((if (leading < 0) cols else leading) + wrapExtraIndentCols).coerceAtMost(
+                wrapMaxIndentCols
+            ) else 0
         val contCols = (wrapCols - indent).coerceAtLeast(1)
         return 1 + (cols - wrapCols + contCols - 1) / contCols
     }
@@ -459,7 +528,10 @@ private fun CodeEditorContent(
         val sig = Triple(wrapWidthPx, editorSession.doc.lineCount, wrapIndentActive)
         if (wrapEstimateSig.value != sig) {
             wrapEstimateSig.value = sig
-            for (ln in 0 until editorSession.doc.lineCount) wrapModel.setRows(ln, estimateWrapRows(ln))
+            for (ln in 0 until editorSession.doc.lineCount) wrapModel.setRows(
+                ln,
+                estimateWrapRows(ln)
+            )
         }
     }
     // Wrap geometry is "active" only once the viewport has been measured (wrapWidthPx > 0). Until then —
@@ -476,19 +548,32 @@ private fun CodeEditorContent(
     val vlayout: VLayout = object : VLayout {
         private val fold get() = editorSession.foldModel
         override val totalRows: Int
-            get() = if (wrapActive) { wrapModel.ensure(fold); wrapModel.totalRows } else fold.visualLineCount
+            get() = if (wrapActive) {
+                wrapModel.ensure(fold); wrapModel.totalRows
+            } else fold.visualLineCount
+
         override fun topRow(line: Int): Int =
-            if (wrapActive) { wrapModel.ensure(fold); wrapModel.topRow(line) } else fold.visualForDocLine(line)
+            if (wrapActive) {
+                wrapModel.ensure(fold); wrapModel.topRow(line)
+            } else fold.visualForDocLine(line)
+
         override fun rowsOf(line: Int): Int {
             val f = fold
             return when {
-                wrapActive -> { wrapModel.ensure(f); wrapModel.rowsOf(line) }
+                wrapActive -> {
+                    wrapModel.ensure(f); wrapModel.rowsOf(line)
+                }
+
                 f.isHidden(line) -> 0
                 else -> 1
             }
         }
+
         override fun docLineForRow(row: Int): Int =
-            if (wrapActive) { wrapModel.ensure(fold); wrapModel.docLineForRow(row) } else fold.docLineForVisual(row)
+            if (wrapActive) {
+                wrapModel.ensure(fold); wrapModel.docLineForRow(row)
+            } else fold.docLineForVisual(row)
+
         override fun correctRange(first: Int, last: Int) {
             if (!wrapActive) return
             val f = fold
@@ -503,11 +588,19 @@ private fun CodeEditorContent(
         }
     }
 
-    fun contentHeight() = metrics.padTop + vlayout.totalRows * metrics.lineHeight + metrics.padBottom
+    fun contentHeight() =
+        metrics.padTop + vlayout.totalRows * metrics.lineHeight + metrics.padBottom
+
     fun contentWidth() = if (wrapActive) viewport.width.toFloat()
-        else metrics.padLeft + max(renderCache.measuredMaxWidth, editorSession.maxLineChars * metrics.charWidth) + metrics.padRight
+    else metrics.padLeft + max(
+        renderCache.measuredMaxWidth,
+        editorSession.maxLineChars * metrics.charWidth
+    ) + metrics.padRight
+
     fun maxV() = (contentHeight() - viewport.height).coerceAtLeast(0f)
-    fun maxH() = if (wrapActive) 0f else (contentWidth() - (viewport.width - gutterWidthPx)).coerceAtLeast(0f)
+    fun maxH() =
+        if (wrapActive) 0f else (contentWidth() - (viewport.width - gutterWidthPx)).coerceAtLeast(0f)
+
     val vScroll = rememberScrollableState { delta ->
         val old = vOffset.floatValue
         val new = (old + delta).coerceIn(0f, maxV())
@@ -542,7 +635,15 @@ private fun CodeEditorContent(
     // map to a coerced position that no longer matches what's rendered.
     // Re-clamp on fold changes too: collapsing a region shrinks the content height without changing the line
     // count, so a stale vOffset could otherwise strand the viewport past the (now shorter) document end.
-    LaunchedEffect(zoom, editorSession.doc.lineCount, editorSession.foldRegions, viewport, wordWrap, wrapWidthPx, wrapIndentActive) {
+    LaunchedEffect(
+        zoom,
+        editorSession.doc.lineCount,
+        editorSession.foldRegions,
+        viewport,
+        wordWrap,
+        wrapWidthPx,
+        wrapIndentActive
+    ) {
         if (wordWrap) hOffset.floatValue = 0f // wrapped: there is no horizontal scroll
         vOffset.floatValue = vOffset.floatValue.coerceIn(0f, maxV())
         hOffset.floatValue = hOffset.floatValue.coerceIn(0f, maxH())
@@ -551,7 +652,9 @@ private fun CodeEditorContent(
     // ---- geometry helpers (viewport coordinates ↔ document offsets) — routed through [vlayout] so a collapsed
     // region occupies one visual row and a wrapped line occupies several; within a line, the line's own
     // TextLayoutResult resolves the wrapped sub-row (getLineForOffset/getLineTop) and the x position ----
-    fun lineTop(line: Int) = metrics.padTop + vlayout.topRow(line) * metrics.lineHeight - vOffset.floatValue
+    fun lineTop(line: Int) =
+        metrics.padTop + vlayout.topRow(line) * metrics.lineHeight - vOffset.floatValue
+
     fun textLeft() = gutterWidthPx + metrics.padLeft - hOffset.floatValue
     fun caretGeometry(offset: Int): Triple<Int, Float, Float> { // line, xInViewport, topInViewport (of the sub-row)
         val doc = editorSession.doc
@@ -582,7 +685,7 @@ private fun CodeEditorContent(
     }
     // Sticky scroll headers: the file's declarations (fetched debounced below); the renderer pins the ones
     // enclosing the top visible line, and [stickyHeaderHit] maps a tap in that pinned band back to a decl.
-    var editorStructure by remember(path) { mutableStateOf(emptyList<dev.ide.ui.backend.UiFileSymbol>()) }
+    var editorStructure by remember(path) { mutableStateOf(emptyList<UiFileSymbol>()) }
 
     /** The document line shown at viewport [y] (the fold-start line when [y] is on a collapsed row). */
     fun lineAtY(y: Float): Int {
@@ -590,16 +693,19 @@ private fun CodeEditorContent(
             .toInt().coerceIn(0, (vlayout.totalRows - 1).coerceAtLeast(0))
         return vlayout.docLineForRow(row)
     }
+
     /** If [pos] lands on a pinned sticky-header row, the declaration it stands for (to jump to); else null.
      *  Mirrors the renderer's [stickyHeaderItems] so the hit-test and the drawn rows always agree. */
-    fun stickyHeaderHit(pos: Offset): dev.ide.ui.backend.UiFileSymbol? {
+    fun stickyHeaderHit(pos: Offset): UiFileSymbol? {
         if (editorStructure.isEmpty()) return null
         val firstVisibleLine = lineAtY(0f)
         if (firstVisibleLine <= 0) return null
-        val sticky = stickyHeaderItems(editorStructure, firstVisibleLine, editorSession.doc, STICKY_MAX)
+        val sticky =
+            stickyHeaderItems(editorStructure, firstVisibleLine, editorSession.doc, STICKY_MAX)
         if (sticky.isEmpty()) return null
         return sticky.getOrNull(floor(pos.y / metrics.lineHeight).toInt())
     }
+
     /** Handle a tap that targets folding: the gutter fold strip toggles the line's fold; tapping a collapsed
      *  line's placeholder (the dimmed `...` past the visible prefix) expands it. Returns true when handled. */
     fun foldActionAt(pos: Offset): Boolean {
@@ -612,11 +718,15 @@ private fun CodeEditorContent(
         val info = editorSession.foldModel.foldStartingAt(line)
         if (info != null && pos.x >= textLeft()) {
             val prefixCols = (info.prefixEnd - doc.lineStart(line)).coerceAtLeast(0)
-            val prefixX = textLeft() + compositeLayoutFor(line).getHorizontalPosition(prefixCols, usePrimaryDirection = true)
+            val prefixX = textLeft() + compositeLayoutFor(line).getHorizontalPosition(
+                prefixCols,
+                usePrimaryDirection = true
+            )
             if (pos.x >= prefixX) return editorSession.toggleFoldAtLine(line)
         }
         return false
     }
+
     fun offsetAt(pos: Offset): Int {
         val doc = editorSession.doc
         val line = lineAtY(pos.y)
@@ -630,7 +740,9 @@ private fun CodeEditorContent(
         val visualCol = layout.getOffsetForPosition(Offset(xInLine.coerceAtLeast(0f), yInLine))
         val col = renderCache.visualToRaw(line, visualCol)
         // On a collapsed fold-start line only the prefix (text before the fold) is real; clamp the caret there.
-        val maxCol = editorSession.foldModel.foldStartingAt(line)?.let { it.prefixEnd - doc.lineStart(line) } ?: doc.lineLength(line)
+        val maxCol =
+            editorSession.foldModel.foldStartingAt(line)?.let { it.prefixEnd - doc.lineStart(line) }
+                ?: doc.lineLength(line)
         return doc.lineStart(line) + col.coerceAtMost(maxCol)
     }
 
@@ -664,7 +776,10 @@ private fun CodeEditorContent(
         val ln = d.lineForOffset(off)
         val vcol = renderCache.rawToVisual(ln, off - d.lineStart(ln))
         val layout = layoutFor(ln)
-        val x = gutterWidthPx + metrics.padLeft + layout.getHorizontalPosition(vcol, usePrimaryDirection = true)
+        val x = gutterWidthPx + metrics.padLeft + layout.getHorizontalPosition(
+            vcol,
+            usePrimaryDirection = true
+        )
         // Content-space Y uses the VISUAL row (folds above it shrink Y) plus the wrapped sub-row within the line.
         val subTop = if (wordWrap) layout.getLineTop(layout.getLineForOffset(vcol)) else 0f
         Offset(x, metrics.padTop + vlayout.topRow(ln) * metrics.lineHeight + subTop)
@@ -672,7 +787,8 @@ private fun CodeEditorContent(
     LaunchedEffect(caretTarget) {
         // Snap on the first placement (file open) and across off-screen jumps (go-to-symbol, PageUp/Down) —
         // a glide across the whole document reads as a glitch; glide only for moves within a viewport.
-        val far = viewport.height > 0 && kotlin.math.abs(caretTarget.y - caretAnim.value.y) > viewport.height
+        val far =
+            viewport.height > 0 && kotlin.math.abs(caretTarget.y - caretAnim.value.y) > viewport.height
         // Typing advances the caret on (nearly) every keystroke; gliding then keeps a 60fps spring redraw loop
         // running the whole time someone types — costly on a phone. Snap when the buffer changed (typing/edit),
         // and reserve the glide for pure caret moves (arrows, taps, go-to) where it reads as intentional motion.
@@ -688,7 +804,10 @@ private fun CodeEditorContent(
         } else {
             caretAnim.animateTo(
                 caretTarget,
-                animationSpec = spring(dampingRatio = Spring.DampingRatioNoBouncy, stiffness = Spring.StiffnessHigh),
+                animationSpec = spring(
+                    dampingRatio = Spring.DampingRatioNoBouncy,
+                    stiffness = Spring.StiffnessHigh
+                ),
             )
         }
     }
@@ -731,7 +850,8 @@ private fun CodeEditorContent(
 
     // ---- code actions (lightbulb) + diagnostic sheet — state + behaviour in [EditorActionsController];
     // opening either dismisses the completion popup so they don't overlap ----
-    val acts = rememberEditorActionsController(path, editorSession, backend) { completion.dismiss() }
+    val acts =
+        rememberEditorActionsController(path, editorSession, backend) { completion.dismiss() }
 
     // ---- in-file find / replace (Ctrl-F / Ctrl-R; or the toolbar Find button via findEpoch) ----
     // State + behaviour live in [FindReplaceController]; the surface only opens it, paints its matches, and
@@ -742,11 +862,13 @@ private fun CodeEditorContent(
     var gotoLineOpen by remember(path) { mutableStateOf(false) }
 
     // ---- quick documentation (Ctrl-Q / toolbar): a floating card with the symbol's signature + doc comment ----
-    var quickDoc by remember(path) { mutableStateOf<dev.ide.ui.backend.UiQuickDoc?>(null) }
+    var quickDoc by remember(path) { mutableStateOf<UiQuickDoc?>(null) }
     fun showQuickDoc() {
         val caret = editorSession.selection.start
         val text = editorSession.doc.text
-        scope.launch { quickDoc = runCatching { backend.editor.quickDocAt(path, text, caret) }.getOrNull() }
+        scope.launch {
+            quickDoc = runCatching { backend.editor.quickDocAt(path, text, caret) }.getOrNull()
+        }
     }
 
     // ---- rename refactoring (F2 / Shift-F6): prompt for a new name, then a project-wide rename ----
@@ -760,21 +882,32 @@ private fun CodeEditorContent(
         val caret = editorSession.selection.start
         scope.launch {
             val target = runCatching { backend.editor.prepareRename(path, text, caret) }.getOrNull()
-            if (target != null) { renameError = null; rename = RenameUiState(caret, target.oldName, target.kind, target.oldName) }
+            if (target != null) {
+                renameError = null; rename =
+                    RenameUiState(caret, target.oldName, target.kind, target.oldName)
+            }
         }
     }
 
     fun commitRename() {
         val r = rename ?: return
-        if (renameBusy || r.newName.isBlank() || r.newName == r.oldName) { rename = null; return }
+        if (renameBusy || r.newName.isBlank() || r.newName == r.oldName) {
+            rename = null; return
+        }
         renameBusy = true; renameError = null
         val text = editorSession.doc.text
         scope.launch {
             val result = runCatching { backend.editor.rename(path, text, r.offset, r.newName) }
-                .getOrElse { dev.ide.ui.backend.UiRenameResult(false, it.message ?: "Rename failed") }
+                .getOrElse {
+                    UiRenameResult(
+                        false,
+                        it.message ?: "Rename failed"
+                    )
+                }
             renameBusy = false
-            if (result.success) { rename = null; onRenamed(result.newPath) }
-            else renameError = result.message
+            if (result.success) {
+                rename = null; onRenamed(result.newPath)
+            } else renameError = result.message
         }
     }
 
@@ -782,13 +915,15 @@ private fun CodeEditorContent(
     // edit), but derive everything from the rope's O(log N) random access / small substrings — the body
     // never forces the O(n) full-text materialization (only debounced consumers pull the full String).
     val doc = editorSession.doc
-    val diagnostics = editorSession.diagnostics // the session owns and auto-shifts these; rendered here
+    val diagnostics =
+        editorSession.diagnostics // the session owns and auto-shifts these; rendered here
     val docLength = doc.length
     val caretOffset = editorSession.selection.start.coerceIn(0, docLength)
     // Language-specific word chars (XML namespace `:` and resource-ref `@?+/.-`) so the popup survives
     // them as the user types. Java gets none, preserving its behavior.
     val wordExtra = extraWordChars(path)
-    val liveCompletion = completion.current?.takeIf { it.coversCaret(doc.chars, caretOffset, wordExtra) }
+    val liveCompletion =
+        completion.current?.takeIf { it.coversCaret(doc.chars, caretOffset, wordExtra) }
     val activePrefix = liveCompletion?.let { doc.substring(it.tokenStart, caretOffset) } ?: ""
     val displayed = liveCompletion?.filtered(activePrefix) ?: emptyList()
     val showPopup = !completion.dismissed && displayed.isNotEmpty()
@@ -809,7 +944,11 @@ private fun CodeEditorContent(
     }
     SideEffect {
         val live = liveCompletion
-        if (live != null && hasItems) completion.snapshotShown(live.tokenStart, displayed, activePrefix)
+        if (live != null && hasItems) completion.snapshotShown(
+            live.tokenStart,
+            displayed,
+            activePrefix
+        )
     }
 
     // Accept [picked], or — for the keyboard path — the currently-selected item. Callers that already know
@@ -830,7 +969,8 @@ private fun CodeEditorContent(
         editorSession.applyEdits(edits, finalSel)
         if (insertsAboveViewport) {
             val anchorAfter = editorSession.doc.lineForOffset(finalSel.min)
-            val delta = (editorSession.foldModel.visualForDocLine(anchorAfter) - visualBefore) * metrics.lineHeight
+            val delta =
+                (editorSession.foldModel.visualForDocLine(anchorAfter) - visualBefore) * metrics.lineHeight
             if (delta > 0f) vOffset.floatValue = (vOffset.floatValue + delta).coerceIn(0f, maxV())
         }
     }
@@ -841,7 +981,8 @@ private fun CodeEditorContent(
         val chars = editorSession.doc.chars
         val len = chars.length
         val mainStart = s.tokenStart.coerceIn(0, len)
-        val anchorLine = editorSession.doc.lineForOffset(mainStart) // the completion line, for viewport stability
+        val anchorLine =
+            editorSession.doc.lineForOffset(mainStart) // the completion line, for viewport stability
         // Replace the WHOLE identifier token under the caret, not just the typed prefix: completing in the
         // middle of a word (get<caret>TextState) then removes the trailing suffix instead of leaving it.
         var mainEnd = caretOffset.coerceIn(mainStart, len)
@@ -851,7 +992,7 @@ private fun CodeEditorContent(
         // no-op and feel like nothing happened — append a space to acknowledge it and advance the caret,
         // unless something non-space already follows.
         val noOp = item.insertText == chars.subSequence(mainStart, mainEnd).toString() &&
-            item.additionalEdits.isEmpty() && item.caret == null
+                item.additionalEdits.isEmpty() && item.caret == null
         val nextIsSpace = mainEnd < len && chars[mainEnd].isWhitespace()
         val insert = if (noOp && !nextIsSpace) item.insertText + " " else item.insertText
 
@@ -867,6 +1008,7 @@ private fun CodeEditorContent(
         // The text edit we're about to apply ends in an identifier char; without this the revision trigger
         // would immediately reopen the popup. Keep it closed until the user types again.
         completion.suppressNext()
+        completion.noteAccepted(item) // acceptance-frequency ranking learns this pick
         val snip = item.snippet
         if (snip != null) {
             var base = mainStart
@@ -901,7 +1043,11 @@ private fun CodeEditorContent(
     // "Complete Statement". The decision is a pure function ([smartEnter]); we just apply its edit.
     fun completeStatement() {
         completion.dismiss()
-        val edit = smartEnter(editorSession.doc.chars, editorSession.selection.start, editorSession.language)
+        val edit = smartEnter(
+            editorSession.doc.chars,
+            editorSession.selection.start,
+            editorSession.language
+        )
         editorSession.applyEdits(listOf(edit), TextRange(edit.caret))
     }
 
@@ -980,9 +1126,17 @@ private fun CodeEditorContent(
             // highlighting/diagnostics daemon on the shared engine lane). Otherwise (new/changed token, a
             // truncated/incomplete set) re-query so the list stays authoritative.
             before != null && isIdentifierChar(before, extraWordChars(path)) ->
-                if (!canNarrowLocally(completion.current, completion.dismissed, d.chars, caret, extraWordChars(path))) {
+                if (!canNarrowLocally(
+                        completion.current,
+                        completion.dismissed,
+                        d.chars,
+                        caret,
+                        extraWordChars(path)
+                    )
+                ) {
                     if (completion.autoPopupEnabled) completion.reopen() else completion.dismiss()
                 }
+
             else -> completion.dismiss()
         }
     }
@@ -1010,7 +1164,13 @@ private fun CodeEditorContent(
     // signature help — re-resolve whenever the caret moves or the buffer changes (or Ctrl/Cmd-P bumps sigEpoch).
     // Gated by a cheap local scan so we only call the backend when the caret is actually inside a call's parens;
     // dismisses (and re-arms) when the caret leaves the call, so Esc only hides it for the current call.
-    LaunchedEffect(path, editorSession.textRevision, editorSession.selection, sig.epoch, isFocused) {
+    LaunchedEffect(
+        path,
+        editorSession.textRevision,
+        editorSession.selection,
+        sig.epoch,
+        isFocused
+    ) {
         sig.resolve(isFocused, editorSession)
     }
 
@@ -1043,14 +1203,17 @@ private fun CodeEditorContent(
         val top = metrics.padTop + vlayout.topRow(line) * metrics.lineHeight + subTop
         val bottom = top + metrics.lineHeight
         val vh = viewport.height.toFloat()
-        if (top < vOffset.floatValue) vOffset.floatValue = (top - metrics.lineHeight).coerceIn(0f, maxV())
-        else if (bottom > vOffset.floatValue + vh) vOffset.floatValue = (bottom - vh + metrics.lineHeight).coerceIn(0f, maxV())
+        if (top < vOffset.floatValue) vOffset.floatValue =
+            (top - metrics.lineHeight).coerceIn(0f, maxV())
+        else if (bottom > vOffset.floatValue + vh) vOffset.floatValue =
+            (bottom - vh + metrics.lineHeight).coerceIn(0f, maxV())
         // Horizontal follow only when not wrapping — a wrapped buffer never scrolls sideways.
         if (!wordWrap) {
             val caretX = layout.getHorizontalPosition(vcol, usePrimaryDirection = true)
             val textViewW = viewport.width - gutterWidthPx - metrics.padLeft
             val margin = metrics.charWidth * 3
-            if (caretX < hOffset.floatValue + margin) hOffset.floatValue = (caretX - margin).coerceIn(0f, maxH())
+            if (caretX < hOffset.floatValue + margin) hOffset.floatValue =
+                (caretX - margin).coerceIn(0f, maxH())
             else if (caretX > hOffset.floatValue + textViewW - margin) {
                 hOffset.floatValue = (caretX - textViewW + margin).coerceIn(0f, maxH())
             }
@@ -1060,7 +1223,10 @@ private fun CodeEditorContent(
     // Fetch the file's declarations (debounced) for sticky headers — kept off the keystroke path.
     LaunchedEffect(path, editorSession.textRevision) {
         delay(300.milliseconds)
-        editorStructure = runCatching { backend.editor.fileStructure(path, editorSession.doc.text) }.getOrDefault(emptyList())
+        editorStructure =
+            runCatching { backend.editor.fileStructure(path, editorSession.doc.text) }.getOrDefault(
+                emptyList()
+            )
     }
 
     LaunchedEffect(path) { runCatching { focus.requestFocus() } }
@@ -1092,7 +1258,8 @@ private fun CodeEditorContent(
     val occurrences = remember(doc, occurrenceWord) {
         val w = occurrenceWord ?: return@remember emptyList<Match>()
         findMatches(doc.text, w, FindOptions(caseSensitive = true, wholeWord = true))
-            .takeIf { it.size >= 2 } ?: emptyList() // only meaningful when it appears more than once
+            .takeIf { it.size >= 2 }
+            ?: emptyList() // only meaningful when it appears more than once
     }
 
     // ---- keyboard handling ----
@@ -1106,39 +1273,78 @@ private fun CodeEditorContent(
         lastInputWasTouch = false
         when (ev.key) {
             Key.DirectionLeft -> {
-                if (ev.isMetaPressed) editorSession.moveLineStart(select) else editorSession.moveHorizontal(-1, select, word)
+                if (ev.isMetaPressed) editorSession.moveLineStart(select) else editorSession.moveHorizontal(
+                    -1,
+                    select,
+                    word
+                )
                 return true
             }
+
             Key.DirectionRight -> {
-                if (ev.isMetaPressed) editorSession.moveLineEnd(select) else editorSession.moveHorizontal(1, select, word)
+                if (ev.isMetaPressed) editorSession.moveLineEnd(select) else editorSession.moveHorizontal(
+                    1,
+                    select,
+                    word
+                )
                 return true
             }
+
             Key.DirectionUp -> {
-                if (ev.isMetaPressed) editorSession.moveDocBoundary(-1, select) else editorSession.moveVertical(-1, select)
+                if (ev.isMetaPressed) editorSession.moveDocBoundary(
+                    -1,
+                    select
+                ) else editorSession.moveVertical(-1, select)
                 return true
             }
+
             Key.DirectionDown -> {
-                if (ev.isMetaPressed) editorSession.moveDocBoundary(1, select) else editorSession.moveVertical(1, select)
+                if (ev.isMetaPressed) editorSession.moveDocBoundary(
+                    1,
+                    select
+                ) else editorSession.moveVertical(1, select)
                 return true
             }
+
             Key.MoveHome -> {
-                if (ev.isCtrlPressed) editorSession.moveDocBoundary(-1, select) else editorSession.moveLineStart(select)
+                if (ev.isCtrlPressed) editorSession.moveDocBoundary(
+                    -1,
+                    select
+                ) else editorSession.moveLineStart(select)
                 return true
             }
+
             Key.MoveEnd -> {
-                if (ev.isCtrlPressed) editorSession.moveDocBoundary(1, select) else editorSession.moveLineEnd(select)
+                if (ev.isCtrlPressed) editorSession.moveDocBoundary(
+                    1,
+                    select
+                ) else editorSession.moveLineEnd(select)
                 return true
             }
-            Key.PageUp -> { editorSession.moveVertical(-pageLines, select); return true }
-            Key.PageDown -> { editorSession.moveVertical(pageLines, select); return true }
-            Key.Backspace -> { editorSession.backspace(word); return true }
-            Key.Delete -> { editorSession.deleteForward(word); return true }
+
+            Key.PageUp -> {
+                editorSession.moveVertical(-pageLines, select); return true
+            }
+
+            Key.PageDown -> {
+                editorSession.moveVertical(pageLines, select); return true
+            }
+
+            Key.Backspace -> {
+                editorSession.backspace(word); return true
+            }
+
+            Key.Delete -> {
+                editorSession.deleteForward(word); return true
+            }
+
             Key.Enter, Key.NumPadEnter -> {
                 // Shift+Enter = complete statement (IntelliJ's Smart Enter): finish the line then open a new one.
                 if (ev.isShiftPressed && !shortcut && !ev.isAltPressed) completeStatement()
                 else editorSession.commitText("\n")
                 return true
             }
+
             Key.Tab -> {
                 if (!shortcut && !ev.isAltPressed) {
                     if (ev.isShiftPressed) editorSession.dedent() else editorSession.indent()
@@ -1149,21 +1355,50 @@ private fun CodeEditorContent(
         }
         if (shortcut) {
             when (ev.key) {
-                Key.A -> { editorSession.selectAll(); return true }
-                Key.C -> { editorSession.selectedText()?.let { clipboard.setText(AnnotatedString(it)) }; return true }
-                Key.X -> { editorSession.cutSelection()?.let { clipboard.setText(AnnotatedString(it)) }; return true }
+                Key.A -> {
+                    editorSession.selectAll(); return true
+                }
+
+                Key.C -> {
+                    editorSession.selectedText()
+                        ?.let { clipboard.setText(AnnotatedString(it)) }; return true
+                }
+
+                Key.X -> {
+                    editorSession.cutSelection()
+                        ?.let { clipboard.setText(AnnotatedString(it)) }; return true
+                }
+
                 Key.V -> {
-                    clipboard.getText()?.text?.let { if (it.isNotEmpty()) editorSession.commitText(it) }
+                    clipboard.getText()?.text?.let {
+                        if (it.isNotEmpty()) editorSession.commitText(
+                            it
+                        )
+                    }
                     return true
                 }
                 // Undo (⌘/Ctrl-Z), redo (⌘/Ctrl-Shift-Z or Ctrl-Y). Dismiss the popup/snippet first so they
                 // don't act on the reverted buffer.
-                Key.Z -> { completion.dismiss(); snippet = null; if (ev.isShiftPressed) editorSession.redo() else editorSession.undo(); return true }
-                Key.Y -> { completion.dismiss(); snippet = null; editorSession.redo(); return true }
+                Key.Z -> {
+                    completion.dismiss(); snippet =
+                        null; if (ev.isShiftPressed) editorSession.redo() else editorSession.undo(); return true
+                }
+
+                Key.Y -> {
+                    completion.dismiss(); snippet = null; editorSession.redo(); return true
+                }
                 // Zoom: ⌘/Ctrl with +/-/0 (mirrors the pinch gesture).
-                Key.Equals, Key.Plus, Key.NumPadAdd -> { onFontScaleChange(clampFontScale(fontScale * 1.1f)); return true }
-                Key.Minus, Key.NumPadSubtract -> { onFontScaleChange(clampFontScale(fontScale / 1.1f)); return true }
-                Key.Zero -> { onFontScaleChange(1f); return true }
+                Key.Equals, Key.Plus, Key.NumPadAdd -> {
+                    onFontScaleChange(clampFontScale(fontScale * 1.1f)); return true
+                }
+
+                Key.Minus, Key.NumPadSubtract -> {
+                    onFontScaleChange(clampFontScale(fontScale / 1.1f)); return true
+                }
+
+                Key.Zero -> {
+                    onFontScaleChange(1f); return true
+                }
             }
             return false
         }
@@ -1194,7 +1429,11 @@ private fun CodeEditorContent(
                 .fillMaxSize()
                 .onSizeChanged { viewport = it }
                 .onGloballyPositioned { contentInWindow.value = it.positionInWindow() }
-                .editorTextInput(editorSession, editorIme, EditorImeOptions(softKeyboardSuggestions))
+                .editorTextInput(
+                    editorSession,
+                    editorIme,
+                    EditorImeOptions(softKeyboardSuggestions)
+                )
                 .focusRequester(focus)
                 .onFocusChanged { isFocused = it.isFocused }
                 .focusable()
@@ -1203,19 +1442,28 @@ private fun CodeEditorContent(
                     // Reformat code (⌘/Ctrl-Alt-L, IntelliJ): the selection if any, else the whole file.
                     if ((ev.isCtrlPressed || ev.isMetaPressed) && ev.isAltPressed && ev.key == Key.L) {
                         val sel = editorSession.selection
-                        scope.launch { if (!sel.collapsed) runFormat(sel.min, sel.max) else runFormat(0, 0) }
+                        scope.launch {
+                            if (!sel.collapsed) runFormat(
+                                sel.min,
+                                sel.max
+                            ) else runFormat(0, 0)
+                        }
                         return@onPreviewKeyEvent true
                     }
                     if ((ev.isCtrlPressed || ev.isMetaPressed) && ev.key == Key.S) {
                         // Reformat-on-save (Settings → Code Style) reformats first, then saves the result.
-                        if (runCatching { backend.settings.settings().formatOnSave }.getOrDefault(false)) {
+                        if (runCatching { backend.settings.settings().formatOnSave }.getOrDefault(
+                                false
+                            )
+                        ) {
                             scope.launch { runFormat(0, 0); onSave() }
                         } else onSave()
                         return@onPreviewKeyEvent true
                     }
                     // Find (⌘/Ctrl-F) / find+replace (⌘/Ctrl-R); seed the query from the current selection.
                     if ((ev.isCtrlPressed || ev.isMetaPressed) && (ev.key == Key.F || ev.key == Key.R)) {
-                        val seed = editorSession.selectedText()?.takeIf { it.isNotEmpty() && '\n' !in it }
+                        val seed =
+                            editorSession.selectedText()?.takeIf { it.isNotEmpty() && '\n' !in it }
                         find.openBar(replace = ev.key == Key.R, seed = seed)
                         completion.dismiss()
                         return@onPreviewKeyEvent true
@@ -1225,7 +1473,9 @@ private fun CodeEditorContent(
                         gotoLineOpen = true; completion.dismiss(); return@onPreviewKeyEvent true
                     }
                     // Quick documentation (⌘/Ctrl-Q, IntelliJ); Esc dismisses an open doc popup first.
-                    if (quickDoc != null && ev.key == Key.Escape) { quickDoc = null; return@onPreviewKeyEvent true }
+                    if (quickDoc != null && ev.key == Key.Escape) {
+                        quickDoc = null; return@onPreviewKeyEvent true
+                    }
                     if ((ev.isCtrlPressed || ev.isMetaPressed) && ev.key == Key.Q) {
                         showQuickDoc(); completion.dismiss(); return@onPreviewKeyEvent true
                     }
@@ -1234,7 +1484,13 @@ private fun CodeEditorContent(
                         val text = editorSession.doc.text
                         val caret = editorSession.selection.start
                         scope.launch {
-                            runCatching { backend.editor.definitionAt(path, text, caret) }.getOrNull()
+                            runCatching {
+                                backend.editor.definitionAt(
+                                    path,
+                                    text,
+                                    caret
+                                )
+                            }.getOrNull()
                                 ?.let { onNavigate(it.path, it.offset) }
                         }
                         return@onPreviewKeyEvent true
@@ -1284,10 +1540,22 @@ private fun CodeEditorContent(
                     }
                     if (acts.menuOpen) {
                         return@onPreviewKeyEvent when (ev.key) {
-                            Key.Escape -> { acts.closeMenu(); true }
-                            Key.DirectionDown -> { acts.moveSelection(1); true }
-                            Key.DirectionUp -> { acts.moveSelection(-1); true }
-                            Key.Enter, Key.Tab -> { acts.applyAt(acts.menuSelected); true }
+                            Key.Escape -> {
+                                acts.closeMenu(); true
+                            }
+
+                            Key.DirectionDown -> {
+                                acts.moveSelection(1); true
+                            }
+
+                            Key.DirectionUp -> {
+                                acts.moveSelection(-1); true
+                            }
+
+                            Key.Enter, Key.Tab -> {
+                                acts.applyAt(acts.menuSelected); true
+                            }
+
                             else -> false
                         }
                     }
@@ -1297,8 +1565,15 @@ private fun CodeEditorContent(
                     val sn = snippet
                     if (sn != null && !showPopup) {
                         when (ev.key) {
-                            Key.Tab -> { if (ev.isShiftPressed) sn.prev() else if (!sn.next()) snippet = null; return@onPreviewKeyEvent true }
-                            Key.Escape -> { sn.finish(); snippet = null; return@onPreviewKeyEvent true }
+                            Key.Tab -> {
+                                if (ev.isShiftPressed) sn.prev() else if (!sn.next()) snippet =
+                                    null; return@onPreviewKeyEvent true
+                            }
+
+                            Key.Escape -> {
+                                sn.finish(); snippet = null; return@onPreviewKeyEvent true
+                            }
+
                             else -> Unit
                         }
                     }
@@ -1309,10 +1584,23 @@ private fun CodeEditorContent(
                     }
                     if (!showPopup) return@onPreviewKeyEvent false
                     when (ev.key) {
-                        Key.Escape -> { completion.dismiss(); true }
-                        Key.DirectionDown -> { completion.selected = (safeSelected + 1).coerceAtMost((displayed.size - 1).coerceAtLeast(0)); true }
-                        Key.DirectionUp -> { completion.selected = (safeSelected - 1).coerceAtLeast(0); true }
-                        Key.Tab, Key.Enter -> { accept(); true }
+                        Key.Escape -> {
+                            completion.dismiss(); true
+                        }
+
+                        Key.DirectionDown -> {
+                            completion.selected =
+                                (safeSelected + 1).coerceAtMost((displayed.size - 1).coerceAtLeast(0)); true
+                        }
+
+                        Key.DirectionUp -> {
+                            completion.selected = (safeSelected - 1).coerceAtLeast(0); true
+                        }
+
+                        Key.Tab, Key.Enter -> {
+                            accept(); true
+                        }
+
                         else -> false
                     }
                 }
@@ -1326,7 +1614,10 @@ private fun CodeEditorContent(
                 .then(
                     if (!pinchZoom) Modifier else Modifier.pointerInput(Unit) {
                         awaitEachGesture {
-                            awaitFirstDown(requireUnconsumed = false, pass = PointerEventPass.Initial)
+                            awaitFirstDown(
+                                requireUnconsumed = false,
+                                pass = PointerEventPass.Initial
+                            )
                             do {
                                 val event = awaitPointerEvent(PointerEventPass.Initial)
                                 if (event.changes.count { it.pressed } >= 2) {
@@ -1394,25 +1685,34 @@ private fun CodeEditorContent(
                                 nearArm && tripleArmMark?.let { (it - pressMark).isPositive() } == true
                             if (released && !longPressed && !doubleTapSecondTap) {
                                 focus.requestFocus()
-                                quickDoc = null // a tap in the editor dismisses an open quick-doc popup
+                                quickDoc =
+                                    null // a tap in the editor dismisses an open quick-doc popup
                                 // Third quick tap near the double-tap → select the whole line. (The second tap
                                 // of the double-tap was already excluded above, so a near-arm press here is a third.)
                                 val triple = nearArm
                                 // A tap on a gutter error/warning glyph opens that line's diagnostic sheet
                                 // (full message + fixes) instead of moving the caret.
-                                val gutterDiag = if (pos.x < gutterWidthPx) acts.diagnosticOnLine(lineAtY(pos.y)) else null
+                                val gutterDiag =
+                                    if (pos.x < gutterWidthPx) acts.diagnosticOnLine(lineAtY(pos.y)) else null
                                 val stickyHit = stickyHeaderHit(pos)
                                 when {
                                     stickyHit != null -> { // tapped a pinned sticky header → jump to that declaration
-                                        editorSession.setCaret(stickyHit.nameOffset.coerceIn(0, editorSession.doc.length))
+                                        editorSession.setCaret(
+                                            stickyHit.nameOffset.coerceIn(
+                                                0,
+                                                editorSession.doc.length
+                                            )
+                                        )
                                         if (lastInputWasTouch) editorIme.show()
                                     }
+
                                     foldActionAt(pos) -> {} // toggled/expanded a fold (gutter chevron or placeholder)
                                     triple -> {
                                         tripleArmed = false; tripleArmJob?.cancel()
                                         editorSession.selectLineAt(offsetAt(pos))
                                         if (lastInputWasTouch) handlesVisible = true
                                     }
+
                                     gutterDiag != null -> acts.openSheet(gutterDiag)
                                     else -> {
                                         val newCaret = offsetAt(pos)
@@ -1436,9 +1736,11 @@ private fun CodeEditorContent(
                             editorSession.selectWordAt(offsetAt(pos))
                             if (lastInputWasTouch) handlesVisible = true
                             // arm triple-tap: a quick third tap nearby (within the window below) selects the line
-                            tripleArmed = true; tripleArmPos = pos; tripleArmMark = TimeSource.Monotonic.markNow()
+                            tripleArmed = true; tripleArmPos = pos; tripleArmMark =
+                            TimeSource.Monotonic.markNow()
                             tripleArmJob?.cancel()
-                            tripleArmJob = scope.launch { delay(320.milliseconds); tripleArmed = false }
+                            tripleArmJob =
+                                scope.launch { delay(320.milliseconds); tripleArmed = false }
                         },
                         onLongPress = { pos ->
                             longPressed = true
@@ -1489,7 +1791,10 @@ private fun CodeEditorContent(
                             // triple click still extends from where the click landed.
                             val dragAnchor = editorSession.selection.start
                             drag(down.id) { change ->
-                                editorSession.setSelectionRange(dragAnchor, offsetAt(change.position))
+                                editorSession.setSelectionRange(
+                                    dragAnchor,
+                                    offsetAt(change.position)
+                                )
                                 change.consume()
                             }
                             return@awaitEachGesture
@@ -1502,14 +1807,18 @@ private fun CodeEditorContent(
                             val (_, x, top) = caretGeometry(offset)
                             return Offset(x, top + metrics.lineHeight + handleRadius * 0.6f)
                         }
+
                         val sel = editorSession.selection
                         val hit: Char? = when {
                             handlesVisible && !sel.collapsed &&
-                                (down.position - handleCenter(sel.min)).getDistance() < handleRadius -> 'a'
+                                    (down.position - handleCenter(sel.min)).getDistance() < handleRadius -> 'a'
+
                             handlesVisible && !sel.collapsed &&
-                                (down.position - handleCenter(sel.max)).getDistance() < handleRadius -> 'b'
+                                    (down.position - handleCenter(sel.max)).getDistance() < handleRadius -> 'b'
+
                             handlesVisible && sel.collapsed &&
-                                (down.position - handleCenter(sel.start)).getDistance() < handleRadius -> 'c'
+                                    (down.position - handleCenter(sel.start)).getDistance() < handleRadius -> 'c'
+
                             else -> null
                         }
                         if (hit != null) {
@@ -1518,10 +1827,19 @@ private fun CodeEditorContent(
                             // Lift the hit-point back up to the anchored line so dragging tracks what you see.
                             val lift = metrics.lineHeight * 0.5f + handleRadius * 0.6f
                             drag(down.id) { change ->
-                                val off = offsetAt(change.position.copy(y = change.position.y - lift))
+                                val off =
+                                    offsetAt(change.position.copy(y = change.position.y - lift))
                                 when (hit) {
-                                    'a' -> editorSession.setSelectionRange(editorSession.selection.max, off)
-                                    'b' -> editorSession.setSelectionRange(editorSession.selection.min, off)
+                                    'a' -> editorSession.setSelectionRange(
+                                        editorSession.selection.max,
+                                        off
+                                    )
+
+                                    'b' -> editorSession.setSelectionRange(
+                                        editorSession.selection.min,
+                                        off
+                                    )
+
                                     else -> editorSession.setCaret(off)
                                 }
                                 change.consume()
@@ -1610,9 +1928,11 @@ private fun CodeEditorContent(
                     if (fm.isHidden(ln)) continue // diagnostic inside a collapsed region → no chip
                     // Place after the composite text on a fold-start line, else after the real line. When wrapping,
                     // sit after the end of the line's LAST wrapped row (its right edge + that row's vertical offset).
-                    val chipLayout = if (fm.foldStartingAt(ln) != null) compositeLayoutFor(ln) else layoutFor(ln)
+                    val chipLayout =
+                        if (fm.foldStartingAt(ln) != null) compositeLayoutFor(ln) else layoutFor(ln)
                     val lastSub = if (wordWrap) (chipLayout.lineCount - 1).coerceAtLeast(0) else 0
-                    val lineWidth = if (wordWrap) chipLayout.getLineRight(lastSub) else chipLayout.size.width.toFloat()
+                    val lineWidth =
+                        if (wordWrap) chipLayout.getLineRight(lastSub) else chipLayout.size.width.toFloat()
                     DiagnosticChip(
                         d.severity,
                         d.unused,
@@ -1655,7 +1975,11 @@ private fun CodeEditorContent(
                         handlesVisible = false
                     },
                     onPaste = {
-                        clipboard.getText()?.text?.let { if (it.isNotEmpty()) editorSession.commitText(it) }
+                        clipboard.getText()?.text?.let {
+                            if (it.isNotEmpty()) editorSession.commitText(
+                                it
+                            )
+                        }
                         handlesVisible = false
                     },
                     onSelectAll = { editorSession.selectAll() },
@@ -1664,107 +1988,37 @@ private fun CodeEditorContent(
             }
         }
 
-        // completion popup, anchored at the token start in viewport coordinates. Mounted on `popupVisible`
-        // (the keep-alive latch) and rendered from `shownCompletion` (the last good state) so a keystroke's
-        // transient session swap / filter miss doesn't blink the window shut.
-        val shown = completion.shown
-        if (completion.popupVisible && shown != null && engaged) {
-            val anchor = shown.tokenStart.coerceIn(0, docLength)
-            val (anchorLine, anchorX, anchorTop) = caretGeometry(anchor)
-            val lineBottomPx = anchorTop + metrics.lineHeight
-            val gapPx = with(density) { 6.dp.roundToPx() }
-            val marginPx = with(density) { 8.dp.roundToPx() }
-            val positionProvider = remember(anchorX, lineBottomPx, gapPx, marginPx) {
-                CompletionPopupPositionProvider(
-                    anchorX.roundToInt().coerceAtLeast(gutterWidthPx.roundToInt()),
-                    lineBottomPx.roundToInt(),
-                    gapPx,
-                    marginPx,
-                )
-            }
-            // room between the caret line and the pane bottom (which already sits above the keyboard)
-            val caretBottomY = paneTopInWindow + lineBottomPx
-            val roomBelowDp = with(density) { (paneBottomInWindow - caretBottomY - gapPx - marginPx).toDp() }
+        // completion popup, anchored at the token start in viewport coordinates (extracted so ART can compile
+        // this emission block on its own — the parent composable was over the JIT method-size limit).
+        CompletionPopupLayer(
+            completion = completion,
+            engaged = engaged,
+            docLength = docLength,
+            caretGeometry = { caretGeometry(it) },
+            metrics = metrics,
+            gutterWidthPx = gutterWidthPx,
+            paneTopInWindow = paneTopInWindow,
+            paneBottomInWindow = paneBottomInWindow,
+            safeSelected = safeSelected,
+            onAccept = { accept(it) },
+        )
 
-            Popup(
-                popupPositionProvider = positionProvider,
-                onDismissRequest = { completion.dismiss() },
-                // The popup is non-focusable (typing must reach the editor), but Compose still registers it
-                // for outside-touch dismissal — and every tap on the SOFT KEYBOARD is a touch outside the
-                // popup window, so it fired onDismissRequest on each keystroke and blinked the popup shut.
-                // Disable click-outside dismissal; the popup closes on Esc, accept, or the caret leaving the
-                // token (handled above), not on a stray outside touch.
-                properties = PopupProperties(focusable = false, dismissOnClickOutside = false),
-            ) {
-                BoxWithConstraints {
-                    val compact = maxWidth < 600.dp
-                    val popupWidth = if (compact) (maxWidth * 0.85f).coerceIn(240.dp, 340.dp) else 440.dp
-                    // Fill the room below the caret (the popup always opens below it) so the list auto-expands —
-                    // and re-expands as the user scrolls, since `roomBelowDp` derives from caretGeometry/vOffset
-                    // and recomputes on each scroll. `roomBelowDp` already runs to the editor pane's bottom (above
-                    // the keyboard / symbol bar; the hidden bottom nav is NOT reserved), minus the gap+margin —
-                    // no extra strip reserve (docs are beside/flip now, never a strip under the list). Bounded
-                    // only by a generous ceiling for tall desktop windows.
-                    val listMax = roomBelowDp.coerceIn(MinListHeight, MaxListHeight)
-                    val items = shown.items
-                    CompletionList(
-                        items = items,
-                        selectedIndex = safeSelected.coerceIn(0, (items.size - 1).coerceAtLeast(0)),
-                        prefix = shown.prefix,
-                        width = popupWidth,
-                        maxListHeight = listMax,
-                        // Narrow screens flip to docs on demand (the side panel would squish); wide shows it beside.
-                        docsBeside = !compact,
-                        onPick = { item ->
-                            completion.selected = items.indexOf(item).coerceAtLeast(0)
-                            accept(item) // accept the tapped row, not the (stale) currently-selected index
-                        },
-                        onHover = { completion.selected = it },
-                    )
-                }
-            }
-        }
-
-        // signature-help (parameter-info) panel — floated ABOVE the caret line, independent of the completion
-        // popup below it. Non-focusable so typing keeps reaching the editor; dismissed by the host logic above.
-        val sigHelp = sig.help
-        if (sigHelp != null && !sig.dismissed && engaged && sigHelp.signatures.isNotEmpty()) {
-            val (_, sigX, sigTop) = caretGeometry(caretOffset)
-            val gapPx = with(density) { 6.dp.roundToPx() }
-            val positionProvider = remember(sigX, sigTop, gapPx) {
-                AboveAnchorPositionProvider(
-                    sigX.roundToInt().coerceAtLeast(gutterWidthPx.roundToInt()),
-                    sigTop.roundToInt(),
-                    gapPx,
-                )
-            }
-            Popup(
-                popupPositionProvider = positionProvider,
-                onDismissRequest = { sig.dismiss() },
-                properties = PopupProperties(focusable = false, dismissOnClickOutside = false),
-            ) {
-                SignatureHelpPopup(sigHelp, mobile = isMobilePlatform)
-            }
-        }
-
-        // lightbulb floating just ABOVE the caret — ONLY when the caret has entered a line/range a diagnostic
-        // covers (so it clearly signals "there's a fix to apply here"), there are actions, the completion popup
-        // isn't showing, and the fix menu isn't already open. Tap it → the fix list (opens below the caret).
-        // Caret intentions elsewhere stay reachable via Alt-Enter / the selection toolbar, just without a bulb.
-        if (acts.available.isNotEmpty() && acts.caretDiagnostic != null && !showPopup && !acts.menuOpen && engaged) {
-            val (_, bulbX, bulbTop) = caretGeometry(caretOffset)
-            val gapPx = with(density) { 6.dp.roundToPx() }
-            val positionProvider = remember(bulbX, bulbTop, gapPx) {
-                AboveAnchorPositionProvider(
-                    bulbX.roundToInt().coerceAtLeast(gutterWidthPx.roundToInt()),
-                    bulbTop.roundToInt(),
-                    gapPx,
-                )
-            }
-            Popup(popupPositionProvider = positionProvider) {
-                FloatingLightbulb(onClick = { acts.openMenu() })
-            }
-        }
+        // signature-help + lightbulb — both floated ABOVE the caret line; extracted for ART method-size.
+        SignatureHelpLayer(
+            sig = sig,
+            engaged = engaged,
+            caretOffset = caretOffset,
+            caretGeometry = { caretGeometry(it) },
+            gutterWidthPx = gutterWidthPx,
+        )
+        LightbulbLayer(
+            acts = acts,
+            showPopup = showPopup,
+            engaged = engaged,
+            caretOffset = caretOffset,
+            caretGeometry = { caretGeometry(it) },
+            gutterWidthPx = gutterWidthPx,
+        )
 
         // @Preview gutter icons — a tappable glyph in the gutter beside each Compose @Preview annotation.
         // Tapping switches this tab to the Preview surface rendering that specific variant. Positioned per line
@@ -1786,36 +2040,15 @@ private fun CodeEditorContent(
             )
         }
 
-        // code-actions menu, anchored below the caret line (same position machinery as completion)
-        if (acts.menuOpen && acts.available.isNotEmpty() && engaged) {
-            val (_, anchorX, anchorTop) = caretGeometry(caretOffset)
-            val lineBottomPx = anchorTop + metrics.lineHeight
-            val gapPx = with(density) { 6.dp.roundToPx() }
-            val marginPx = with(density) { 8.dp.roundToPx() }
-            val positionProvider = remember(anchorX, lineBottomPx, gapPx, marginPx) {
-                CompletionPopupPositionProvider(
-                    anchorX.roundToInt().coerceAtLeast(gutterWidthPx.roundToInt()),
-                    lineBottomPx.roundToInt(),
-                    gapPx,
-                    marginPx,
-                )
-            }
-            Popup(
-                popupPositionProvider = positionProvider,
-                onDismissRequest = { acts.closeMenu() },
-            ) {
-                BoxWithConstraints {
-                    val compact = maxWidth < 600.dp
-                    val popupWidth = if (compact) (maxWidth * 0.9f).coerceIn(240.dp, 340.dp) else 360.dp
-                    CodeActionsMenu(
-                        actions = acts.available,
-                        selectedIndex = acts.menuSelected.coerceIn(0, (acts.available.size - 1).coerceAtLeast(0)),
-                        width = popupWidth,
-                        onPick = { acts.applyAt(it) },
-                    )
-                }
-            }
-        }
+        // code-actions menu, anchored below the caret line (same position machinery as completion); extracted.
+        CodeActionsMenuLayer(
+            acts = acts,
+            engaged = engaged,
+            caretOffset = caretOffset,
+            caretGeometry = { caretGeometry(it) },
+            metrics = metrics,
+            gutterWidthPx = gutterWidthPx,
+        )
 
         // go-to-line prompt — a small centered card; jumps the caret (the into-view effect scrolls to it)
         if (gotoLineOpen) {
@@ -1824,7 +2057,8 @@ private fun CodeEditorContent(
                 onGo = { line, col ->
                     val d = editorSession.doc
                     val l = (line - 1).coerceIn(0, d.lineCount - 1)
-                    val off = (d.lineStart(l) + (col - 1).coerceAtLeast(0)).coerceAtMost(d.lineEnd(l))
+                    val off =
+                        (d.lineStart(l) + (col - 1).coerceAtLeast(0)).coerceAtMost(d.lineEnd(l))
                     editorSession.setCaret(off)
                     gotoLineOpen = false
                     runCatching { focus.requestFocus() }
@@ -1845,7 +2079,11 @@ private fun CodeEditorContent(
                 error = renameError,
                 onChange = { rename = r.copy(newName = it) },
                 onCommit = { commitRename() },
-                onCancel = { if (!renameBusy) { rename = null; renameError = null } },
+                onCancel = {
+                    if (!renameBusy) {
+                        rename = null; renameError = null
+                    }
+                },
                 modifier = Modifier.align(Alignment.TopCenter),
             )
         }
@@ -1883,6 +2121,187 @@ private fun CodeEditorContent(
                 onClose = { find.open = false; runCatching { focus.requestFocus() } },
                 modifier = Modifier.align(Alignment.TopCenter),
             )
+        }
+    }
+}
+
+// The caret-anchored popup emission blocks, extracted from CodeEditorContent so each compiles as its own
+// method. CodeEditorContent was over ART's per-method JIT/AOT instruction limit (~17k), so on device it stayed
+// interpreted — every recomposition (including showing these popups) ran slow. Splitting the emission blocks
+// out lets ART compile them. Behaviour is identical: each is called at the same site with the same state; the
+// anchor geometry is read at composition time via the [caretGeometry] lambda (no deferred layout-phase reads),
+// so recomposition triggers are unchanged.
+
+/** Completion popup, anchored at the token start below the caret line. Mounted on `popupVisible` (the keep-
+ *  alive latch) and rendered from `shown` (the last good state) so a keystroke's transient session swap /
+ *  filter miss doesn't blink the window shut. */
+@Composable
+private fun CompletionPopupLayer(
+    completion: CompletionController,
+    engaged: Boolean,
+    docLength: Int,
+    caretGeometry: (Int) -> Triple<Int, Float, Float>,
+    metrics: EditorMetrics,
+    gutterWidthPx: Float,
+    paneTopInWindow: Float,
+    paneBottomInWindow: Float,
+    safeSelected: Int,
+    onAccept: (UiCompletionItem?) -> Unit,
+) {
+    val shown = completion.shown
+    if (completion.popupVisible && shown != null && engaged) {
+        val density = LocalDensity.current
+        val anchor = shown.tokenStart.coerceIn(0, docLength)
+        val (_, anchorX, anchorTop) = caretGeometry(anchor)
+        val lineBottomPx = anchorTop + metrics.lineHeight
+        val gapPx = with(density) { 6.dp.roundToPx() }
+        val marginPx = with(density) { 8.dp.roundToPx() }
+        val positionProvider = remember(anchorX, lineBottomPx, gapPx, marginPx) {
+            CompletionPopupPositionProvider(
+                anchorX.roundToInt().coerceAtLeast(gutterWidthPx.roundToInt()),
+                lineBottomPx.roundToInt(),
+                gapPx,
+                marginPx,
+            )
+        }
+        // room between the caret line and the pane bottom (which already sits above the keyboard)
+        val caretBottomY = paneTopInWindow + lineBottomPx
+        val roomBelowDp =
+            with(density) { (paneBottomInWindow - caretBottomY - gapPx - marginPx).toDp() }
+
+        Popup(
+            popupPositionProvider = positionProvider,
+            onDismissRequest = { completion.dismiss() },
+            // Non-focusable (typing must reach the editor); click-outside dismissal disabled because every
+            // soft-keyboard tap is a touch outside the popup window and would otherwise blink it shut.
+            properties = PopupProperties(focusable = false, dismissOnClickOutside = false),
+        ) {
+            BoxWithConstraints {
+                val compact = maxWidth < 600.dp
+                val popupWidth =
+                    if (compact) (maxWidth * 0.85f).coerceIn(240.dp, 340.dp) else 440.dp
+                // Fill the room below the caret so the list auto-expands (and re-expands as the user scrolls,
+                // since roomBelowDp derives from caretGeometry/vOffset). Bounded by a generous ceiling.
+                val listMax = roomBelowDp.coerceIn(MinListHeight, MaxListHeight)
+                val items = shown.items
+                CompletionList(
+                    items = items,
+                    selectedIndex = safeSelected.coerceIn(0, (items.size - 1).coerceAtLeast(0)),
+                    prefix = shown.prefix,
+                    width = popupWidth,
+                    maxListHeight = listMax,
+                    docsBeside = !compact,
+                    onPick = { item ->
+                        completion.selected = items.indexOf(item).coerceAtLeast(0)
+                        onAccept(item) // accept the tapped row, not the (stale) currently-selected index
+                    },
+                    onHover = { completion.selected = it },
+                )
+            }
+        }
+    }
+}
+
+/** Signature-help (parameter-info) panel, floated ABOVE the caret line, independent of the completion popup. */
+@Composable
+private fun SignatureHelpLayer(
+    sig: SignatureHelpController,
+    engaged: Boolean,
+    caretOffset: Int,
+    caretGeometry: (Int) -> Triple<Int, Float, Float>,
+    gutterWidthPx: Float,
+) {
+    val sigHelp = sig.help
+    if (sigHelp != null && !sig.dismissed && engaged && sigHelp.signatures.isNotEmpty()) {
+        val density = LocalDensity.current
+        val (_, sigX, sigTop) = caretGeometry(caretOffset)
+        val gapPx = with(density) { 6.dp.roundToPx() }
+        val positionProvider = remember(sigX, sigTop, gapPx) {
+            AboveAnchorPositionProvider(
+                sigX.roundToInt().coerceAtLeast(gutterWidthPx.roundToInt()),
+                sigTop.roundToInt(),
+                gapPx,
+            )
+        }
+        Popup(
+            popupPositionProvider = positionProvider,
+            onDismissRequest = { sig.dismiss() },
+            properties = PopupProperties(focusable = false, dismissOnClickOutside = false),
+        ) {
+            SignatureHelpPopup(sigHelp, mobile = isMobilePlatform)
+        }
+    }
+}
+
+/** Lightbulb floating just ABOVE the caret — only when the caret is on a diagnostic that has fixes, the
+ *  completion popup isn't showing, and the fix menu isn't already open. Tap → the fix list. */
+@Composable
+private fun LightbulbLayer(
+    acts: EditorActionsController,
+    showPopup: Boolean,
+    engaged: Boolean,
+    caretOffset: Int,
+    caretGeometry: (Int) -> Triple<Int, Float, Float>,
+    gutterWidthPx: Float,
+) {
+    if (acts.available.isNotEmpty() && acts.caretDiagnostic != null && !showPopup && !acts.menuOpen && engaged) {
+        val density = LocalDensity.current
+        val (_, bulbX, bulbTop) = caretGeometry(caretOffset)
+        val gapPx = with(density) { 6.dp.roundToPx() }
+        val positionProvider = remember(bulbX, bulbTop, gapPx) {
+            AboveAnchorPositionProvider(
+                bulbX.roundToInt().coerceAtLeast(gutterWidthPx.roundToInt()),
+                bulbTop.roundToInt(),
+                gapPx,
+            )
+        }
+        Popup(popupPositionProvider = positionProvider) {
+            FloatingLightbulb(onClick = { acts.openMenu() })
+        }
+    }
+}
+
+/** Code-actions menu, anchored below the caret line (same position machinery as the completion popup). */
+@Composable
+private fun CodeActionsMenuLayer(
+    acts: EditorActionsController,
+    engaged: Boolean,
+    caretOffset: Int,
+    caretGeometry: (Int) -> Triple<Int, Float, Float>,
+    metrics: EditorMetrics,
+    gutterWidthPx: Float,
+) {
+    if (acts.menuOpen && acts.available.isNotEmpty() && engaged) {
+        val density = LocalDensity.current
+        val (_, anchorX, anchorTop) = caretGeometry(caretOffset)
+        val lineBottomPx = anchorTop + metrics.lineHeight
+        val gapPx = with(density) { 6.dp.roundToPx() }
+        val marginPx = with(density) { 8.dp.roundToPx() }
+        val positionProvider = remember(anchorX, lineBottomPx, gapPx, marginPx) {
+            CompletionPopupPositionProvider(
+                anchorX.roundToInt().coerceAtLeast(gutterWidthPx.roundToInt()),
+                lineBottomPx.roundToInt(),
+                gapPx,
+                marginPx,
+            )
+        }
+        Popup(
+            popupPositionProvider = positionProvider,
+            onDismissRequest = { acts.closeMenu() },
+        ) {
+            BoxWithConstraints {
+                val compact = maxWidth < 600.dp
+                val popupWidth = if (compact) (maxWidth * 0.9f).coerceIn(240.dp, 340.dp) else 360.dp
+                CodeActionsMenu(
+                    actions = acts.available,
+                    selectedIndex = acts.menuSelected.coerceIn(
+                        0,
+                        (acts.available.size - 1).coerceAtLeast(0)
+                    ),
+                    width = popupWidth,
+                    onPick = { acts.applyAt(it) },
+                )
+            }
         }
     }
 }

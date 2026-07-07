@@ -63,6 +63,15 @@ value class HighlightKind(val id: String) {
         val ENUM_CONSTANT = HighlightKind("enumConstant")
         val PARAMETER = HighlightKind("parameter")
         val LOCAL_VARIABLE = HighlightKind("localVariable")
+
+        /** A string-template interpolation delimiter — the `$` of `$name`, or the `${`/`}` of `${expr}`.
+         *  Colored distinctly so an interpolation stands out from the surrounding string literal. */
+        val STRING_TEMPLATE_ENTRY = HighlightKind("stringTemplateEntry")
+
+        /** An escape sequence inside a string literal (`\n`, `\t`, `\uXXXX`, `\$`). */
+        val STRING_ESCAPE = HighlightKind("stringEscape")
+
+        val KEYWORD = HighlightKind("keyword")
     }
 }
 

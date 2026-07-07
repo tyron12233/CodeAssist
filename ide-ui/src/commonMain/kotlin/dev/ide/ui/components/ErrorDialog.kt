@@ -36,8 +36,14 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import dev.ide.ui.backend.IdeBackend
 import dev.ide.ui.backend.UiError
+import dev.ide.ui.generated.resources.Res
+import dev.ide.ui.generated.resources.errdlg_dismiss
+import dev.ide.ui.generated.resources.errdlg_hide_details
+import dev.ide.ui.generated.resources.errdlg_show_details
+import dev.ide.ui.generated.resources.errdlg_unexpected
 import dev.ide.ui.icons.CaIcons
 import dev.ide.ui.theme.Ca
+import org.jetbrains.compose.resources.stringResource
 
 /**
  * The IntelliJ-style non-fatal error dialog. When the engine logs an unexpected error (or an uncaught
@@ -86,7 +92,7 @@ private fun ErrorCard(err: UiError, onDismiss: () -> Unit) {
         }
         Spacer(Modifier.height(12.dp))
         Text(
-            err.message.ifBlank { "An unexpected error occurred. The app has kept running." },
+            err.message.ifBlank { stringResource(Res.string.errdlg_unexpected) },
             color = Ca.colors.textSecondary,
             style = Ca.type.subhead,
         )
@@ -94,7 +100,7 @@ private fun ErrorCard(err: UiError, onDismiss: () -> Unit) {
         if (err.detail.isNotBlank()) {
             Spacer(Modifier.height(12.dp))
             Text(
-                if (expanded) "Hide details" else "Show details",
+                stringResource(if (expanded) Res.string.errdlg_hide_details else Res.string.errdlg_show_details),
                 color = Ca.colors.accent,
                 style = Ca.type.caption,
                 modifier = Modifier
@@ -126,6 +132,6 @@ private fun ErrorCard(err: UiError, onDismiss: () -> Unit) {
         }
 
         Spacer(Modifier.height(20.dp))
-        PrimaryButton(text = "Dismiss", onClick = onDismiss, modifier = Modifier.fillMaxWidth())
+        PrimaryButton(text = stringResource(Res.string.errdlg_dismiss), onClick = onDismiss, modifier = Modifier.fillMaxWidth())
     }
 }

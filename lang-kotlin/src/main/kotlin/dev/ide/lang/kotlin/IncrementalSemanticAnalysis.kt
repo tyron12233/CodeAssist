@@ -2,9 +2,12 @@ package dev.ide.lang.kotlin
 
 import dev.ide.lang.dom.Diagnostic
 import dev.ide.lang.dom.TextRange
+import dev.ide.lang.kotlin.analysis.DiagnosticReporter
+import dev.ide.lang.kotlin.analysis.KotlinAnalysisSession
+import dev.ide.lang.kotlin.analysis.KotlinCheckerDriver
 import dev.ide.lang.kotlin.parse.KotlinParsedFile
 import dev.ide.lang.kotlin.parse.typeAliasNamesIn
-import dev.ide.lang.kotlin.resolve.KotlinResolver
+import dev.ide.lang.kotlin.resolve.*
 import dev.ide.lang.kotlin.symbols.KotlinSymbolService
 import org.jetbrains.kotlin.psi.KtDeclaration
 import org.jetbrains.kotlin.psi.KtNamedFunction
@@ -26,6 +29,10 @@ internal class IncrementalSemanticAnalysis(
 
     private val checks = KotlinSemanticChecks(service)
 
+    // The read-only checker set, driven over each declaration's subtree in one walk (see KotlinCheckerDriver).
+    // Built once: the checkers are stateless beyond the per-pass caches [checks] clears in resetPassCaches.
+    private val driver = KotlinCheckerDriver(checks.checkers())
+
     // Per-file incremental-analyze cache. The semantic pass re-resolves the whole file, which is the editor's
     // dominant cost on a large file; this lets a body-only edit re-analyze ONLY the changed function and reuse
     // every other declaration's diagnostics (re-anchored to its shifted offset). See [diagnostics].
@@ -35,13 +42,19 @@ internal class IncrementalSemanticAnalysis(
     private class StmtDiags(val text: String, val declares: Boolean, val rel: List<Diagnostic>)
     // [bodyStmts] is present for a block-bodied function — it enables INTRA-function reuse (a keystroke in a
     // 150-line @Composable re-checks only the touched statement, not all ~50 calls). Null for other declarations.
-    // [key] carries the declaration's PSI node (identity), header, and full text for change detection (see
-    // [IncrementalDecls]) — node identity from an incremental reparse decides "unchanged" without materializing text.
-    private class DeclDiags(val key: IncrementalDecls.Key, val rel: List<Diagnostic>, val bodyStmts: List<StmtDiags>? = null)
+    // [facts] carries the declaration's change-detection key plus its dependency surface (provided/referenced
+    // names) so [IncrementalDecls.plan] can invalidate only the declarations a change actually affects.
+    private class DeclDiags(val facts: IncrementalDecls.Facts, val rel: List<Diagnostic>, val bodyStmts: List<StmtDiags>? = null)
     // [externalStamp] = the content versions of OTHER source files at cache time ([KotlinSymbolService.
     // externalContentStamp]); when it changes, a cross-file dependency was edited, so this file's cached
     // diagnostics may be stale (e.g. a class whose property type changed in another file) → full re-analyze.
-    private class AnalyzeCache(val importsKey: String, val externalStamp: Long, val decls: List<DeclDiags>)
+    // [fileText]/[imports] are the full text + import surface at cache time, for the next pass's change diff.
+    private class AnalyzeCache(
+        val imports: IncrementalDecls.Imports,
+        val fileText: String,
+        val externalStamp: Long,
+        val decls: List<DeclDiags>,
+    )
     private val analyzeCache = ConcurrentHashMap<String, AnalyzeCache>()
 
     /**
@@ -71,61 +84,77 @@ internal class IncrementalSemanticAnalysis(
      *
      * The set is `file-level checks` + `Σ per top-level declaration`. Walking the package/import subtrees yields
      * nothing (the per-node checks back off inside imports), so this is equivalent to one whole-file walk.
-     * Incremental reuse: when exactly one top-level declaration changed AND it is a block-bodied function whose
-     * HEADER (modifiers/annotations/receiver/params/return type) is unchanged, only its body changed — nothing
-     * any OTHER declaration resolves against moved (a block body's return type is declared, so it's part of the
-     * header), and imports are unchanged (guarded). So that one function is re-analyzed and every other
-     * declaration's cached diagnostics are reused, re-anchored to its new start offset. Any other shape
-     * (signature change, added/removed/reordered declaration, multiple changes, an import edit) → full re-analyze.
+     * Incremental reuse is driven by [IncrementalDecls.plan]: the edited span is located by a text diff, and
+     * only the declarations it can affect are re-analyzed (the changed ones, plus the dependents of any
+     * signature or import change), with every other declaration's cached diagnostics reused re-anchored to its
+     * shifted offset. A single body-only function edit further reuses the unchanged statements WITHIN it
+     * ([analyzeFunctionBody]). A structural change (declaration added/removed/reordered), a package or
+     * star-import change, or a symbolic-operator signature change can't be scoped soundly → full re-analyze.
+     * A cross-file edit ([externalStamp]) still triggers a full re-analyze (per-declaration cross-file scoping
+     * is a later phase).
      */
     fun diagnostics(parsed: KotlinParsedFile): List<Diagnostic> {
         checks.resetPassCaches() // PSI-keyed per-pass caches must not survive the reparse
         val ktFile = parsed.ktFile
         val caches = cachesFor?.invoke(parsed)
-        val resolver = if (caches != null) KotlinResolver(ktFile, parsed, service, caches) else KotlinResolver(ktFile, parsed, service)
-        val localAliases = typeAliasNamesIn(ktFile) // same-file typealiases (the disk model may lag the buffer)
+        val resolver = if (caches != null) {
+            KotlinResolver(ktFile, parsed, service, caches)
+        } else {
+            KotlinResolver(ktFile, parsed, service)
+        }
 
+        // same-file typealiases (the disk model may lag the buffer)
+        val localAliases = typeAliasNamesIn(ktFile)
+        // The read-only session shared by every checker this pass. `resolveReady` is read once here (it can't
+        // flip mid-pass on the single engine thread), gating the classpath-dependent checks in "dumb mode".
+        val session = KotlinAnalysisSession(resolver, service, localAliases, service.classpathReady())
         val fileLevel = KotlinPerf.span("fileLevel") { checks.fileLevelDiagnostics(ktFile) }
 
         val topDecls = ktFile.declarations
-        val importsKey = (ktFile.packageDirective?.text ?: "") + "\u0000" + (ktFile.importList?.text ?: "")
-        val externalStamp = service.externalContentStamp(parsed.file.path)
+        val curImports = IncrementalDecls.importsOf(ktFile)
+        val curFileText = ktFile.text
         // A cross-file dependency changed (a class edited in ANOTHER file) → this file's cached diagnostics may
         // be stale even though its own text is unchanged → re-analyze fully. (Self-edits are excluded from the
-        // stamp and handled by the per-declaration identity/text diff in IncrementalDecls.recomputeIndices.)
+        // stamp and scoped by [IncrementalDecls.plan] below; per-declaration cross-file scoping is a later phase.)
+        val externalStamp = service.externalContentStamp(parsed.file.path)
         val prev = analyzeCache[parsed.file.path]?.takeIf { it.externalStamp == externalStamp }
-        val recompute = KotlinPerf.span("scopeCheck") {
-            IncrementalDecls.recomputeIndices(prev?.decls?.map { it.key }, prev?.importsKey, importsKey, topDecls)
-        } // null → full
+        // The recompute plan: the declarations this edit can actually affect (the changed ones plus the
+        // dependents of any signature/import change). Everything else is reused, re-anchored. See IncrementalDecls.
+        val plan = KotlinPerf.span("scopeCheck") {
+            IncrementalDecls.plan(prev?.decls?.map { it.facts }, prev?.imports, prev?.fileText, topDecls, curImports, curFileText)
+        }
+        val recompute: Set<Int>? = (plan as? IncrementalDecls.Plan.Partial)?.recompute // null → full recompute
+        val fineReuseIndex: Int? = (plan as? IncrementalDecls.Plan.Partial)?.fineReuse
 
         val perDecl = ArrayList<List<Diagnostic>>(topDecls.size)
         val newEntries = ArrayList<DeclDiags>(topDecls.size)
         KotlinPerf.span("walk") { for ((i, d) in topDecls.withIndex()) {
             val base = d.textRange.startOffset
             if (recompute != null && i !in recompute) {
-                val cached = prev!!.decls[i] // text identical → reuse, re-anchored to the (possibly shifted) offset
+                val cached = prev!!.decls[i] // unaffected → reuse, re-anchored to the (possibly shifted) offset
                 perDecl += cached.rel.map { it.copy(range = TextRange(it.range.start + base, it.range.end + base)) }
                 newEntries += cached
             } else {
-                // A body-only edit to a single block-bodied function (header + imports unchanged, guaranteed by
-                // [recomputeIndices]) → reuse the unchanged statements WITHIN it. `prev` is index-aligned only in
-                // that single-change case, so intra-function reuse is enabled there alone; a full re-analyze still
+                // Recompute this declaration. A block-bodied function reuses its unchanged statements ONLY when it
+                // is the single body-only change ([fineReuseIndex]); a dependent (re-checked because a sibling's
+                // signature moved) has unchanged text but changed resolution, so it re-checks fully. Either way it
                 // records per-statement entries so the NEXT edit can reuse them.
                 val fn = d as? KtNamedFunction
                 if (fn != null && fn.bodyBlockExpression != null) {
-                    val fineReuse = recompute != null && recompute.size == 1 && recompute[0] == i
-                    val (diags, stmts) = analyzeFunctionBody(fn, if (fineReuse) prev?.decls?.getOrNull(i) else null, resolver, localAliases)
+                    val prevEntry = if (fineReuseIndex == i) prev?.decls?.getOrNull(i) else null
+                    val (diags, stmts) = analyzeFunctionBody(fn, prevEntry, session)
                     perDecl += diags
-                    newEntries += DeclDiags(IncrementalDecls.keyOf(d), diags.map { it.copy(range = TextRange(it.range.start - base, it.range.end - base)) }, stmts)
+                    newEntries += DeclDiags(IncrementalDecls.factsOf(d), diags.map { it.copy(range = TextRange(it.range.start - base, it.range.end - base)) }, stmts)
                 } else {
-                    val diags = ArrayList<Diagnostic>()
-                    checks.walkDecl(d, resolver, localAliases, diags)
+                    val reporter = DiagnosticReporter()
+                    driver.run(d, session, reporter)
+                    val diags = reporter.drain()
                     perDecl += diags
-                    newEntries += DeclDiags(IncrementalDecls.keyOf(d), diags.map { it.copy(range = TextRange(it.range.start - base, it.range.end - base)) })
+                    newEntries += DeclDiags(IncrementalDecls.factsOf(d), diags.map { it.copy(range = TextRange(it.range.start - base, it.range.end - base)) })
                 }
             }
         } }
-        analyzeCache[parsed.file.path] = AnalyzeCache(importsKey, externalStamp, newEntries)
+        analyzeCache[parsed.file.path] = AnalyzeCache(curImports, curFileText, externalStamp, newEntries)
 
         val result = ArrayList<Diagnostic>(fileLevel)
         perDecl.forEach { result += it }
@@ -135,8 +164,8 @@ internal class IncrementalSemanticAnalysis(
     /**
      * Analyze one block-bodied function, reusing the per-statement diagnostics of unchanged top-level body
      * statements (against [prev]). Returns the function's diagnostics (absolute offsets) plus the per-statement
-     * cache to store for next time. Equivalent to [KotlinSemanticChecks.walkDecl] of the whole function —
-     * verified by `KotlinIncrementalAnalyzeTest` (incremental == full).
+     * cache to store for next time. Equivalent to a full driver walk of the whole function, verified by
+     * `KotlinIncrementalAnalyzeTest` (incremental == full).
      *
      * Three parts, composed so the result is identical to a full walk:
      *  - **frame** — the function node + header + the body-block-level checks (missing-return, param/return
@@ -148,14 +177,18 @@ internal class IncrementalSemanticAnalysis(
      *    unchanged AND no earlier statement that declares a name changed (so its visible scope is identical).
      */
     private fun analyzeFunctionBody(
-        fn: KtNamedFunction, prev: DeclDiags?, resolver: KotlinResolver, localAliases: Set<String>,
+        fn: KtNamedFunction, prev: DeclDiags?, session: KotlinAnalysisSession,
     ): Pair<List<Diagnostic>, List<StmtDiags>> {
         val body = fn.bodyBlockExpression!!
         val statements = body.statements
         val out = ArrayList<Diagnostic>()
         // Frame: walk the function but stop at each top-level statement (handled per-statement below); skip the
         // cross-statement local checks (done next). This still runs the block-node checks (duplicate/unreachable).
-        KotlinPerf.span("frame") { checks.walkDecl(fn, resolver, localAliases, out, stopAt = statements.toHashSet(), skipLocalDeclChecks = true) }
+        KotlinPerf.span("frame") {
+            val reporter = DiagnosticReporter()
+            driver.run(fn, session, reporter, stopAt = statements.toHashSet(), skipCrossStatement = true)
+            out += reporter.drain()
+        }
         KotlinPerf.span("localDecl") { checks.localDeclarationChecks(fn, out) }
 
         val prevStmts = prev?.bodyStmts
@@ -169,11 +202,12 @@ internal class IncrementalSemanticAnalysis(
             val prevS = prevStmts?.getOrNull(i)
             val changed = prevS == null || prevS.text != text
             if (!changed && !scopeDirty) {
-                prevS!!.rel.forEach { out += it.copy(range = TextRange(it.range.start + sBase, it.range.end + sBase)) }
+                prevS.rel.forEach { out += it.copy(range = TextRange(it.range.start + sBase, it.range.end + sBase)) }
                 newStmts += prevS
             } else {
-                val sd = ArrayList<Diagnostic>()
-                checks.walkDecl(st, resolver, localAliases, sd, skipLocalDeclChecks = true)
+                val reporter = DiagnosticReporter()
+                driver.run(st, session, reporter, skipCrossStatement = true)
+                val sd = reporter.drain()
                 out += sd
                 newStmts += StmtDiags(text, declares, sd.map { it.copy(range = TextRange(it.range.start - sBase, it.range.end - sBase)) })
             }

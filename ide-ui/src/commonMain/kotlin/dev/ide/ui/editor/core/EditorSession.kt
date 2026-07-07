@@ -10,6 +10,8 @@ import dev.ide.ui.backend.UiDiagnostic
 import dev.ide.ui.backend.UiInlayHint
 import dev.ide.ui.backend.UiSemanticToken
 import dev.ide.ui.editor.CodeLanguage
+import dev.ide.ui.editor.folding.FoldModel
+import dev.ide.ui.editor.folding.FoldRegion
 import dev.ide.ui.editor.shiftComposePreviews
 import dev.ide.ui.editor.shiftDiagnostics
 import dev.ide.ui.editor.shiftFoldRegions
@@ -102,24 +104,24 @@ class EditorSession(
      * host refills the authoritative set via [applyCodeFolds], preserving the user's current toggles. The
      * renderer/geometry read [foldModel], rebuilt lazily whenever the regions or the document change.
      */
-    var foldRegions by mutableStateOf<List<dev.ide.ui.editor.folding.FoldRegion>>(emptyList())
+    var foldRegions by mutableStateOf<List<FoldRegion>>(emptyList())
         private set
 
     /** Whether the [collapsedByDefault] folds have been applied once for this file (so a refetch doesn't re-collapse
      *  a region the user has since expanded). */
     private var defaultFoldsApplied = false
 
-    private var foldModelCache: dev.ide.ui.editor.folding.FoldModel? = null
+    private var foldModelCache: FoldModel? = null
     private var foldModelDoc: EditorDocument? = null
-    private var foldModelRegions: List<dev.ide.ui.editor.folding.FoldRegion>? = null
+    private var foldModelRegions: List<FoldRegion>? = null
 
     /** The current folding projection (document ⇄ visual-row mapping + composites), rebuilt only when the
-     *  regions or the document change. [dev.ide.ui.editor.folding.FoldModel.EMPTY]-equivalent when nothing folds. */
-    val foldModel: dev.ide.ui.editor.folding.FoldModel
+     *  regions or the document change. [FoldModel.EMPTY]-equivalent when nothing folds. */
+    val foldModel: FoldModel
         get() {
             val d = doc; val r = foldRegions
             if (foldModelCache == null || foldModelDoc !== d || foldModelRegions !== r) {
-                foldModelCache = dev.ide.ui.editor.folding.FoldModel.build(d, r)
+                foldModelCache = FoldModel.build(d, r)
                 foldModelDoc = d; foldModelRegions = r
             }
             return foldModelCache!!
@@ -263,7 +265,7 @@ class EditorSession(
      * collapsed. [collapsedByDefault] regions (imports) collapse only the FIRST time they appear for this file
      * (so re-expanding imports survives the next pass). Offsets come straight from the fresh parse.
      */
-    fun applyCodeFolds(fresh: List<dev.ide.ui.editor.folding.FoldRegion>) {
+    fun applyCodeFolds(fresh: List<FoldRegion>) {
         val previouslyCollapsed = foldRegions.filter { it.collapsed }
         foldRegions = fresh.map { r ->
             val keepCollapsed = previouslyCollapsed.any { it.start == r.start && it.end == r.end } ||

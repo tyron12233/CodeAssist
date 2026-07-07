@@ -34,6 +34,25 @@ object JavaSourceIndexer {
 
     data class Parsed(val packageName: String?, val decls: List<Decl>)
 
+    /** One member's annotation use, for the annotated-by index: `owner#member` derives from [member]. */
+    data class MemberAnnotation(val member: String, val kind: DeclKind, val annotation: String)
+
+    /**
+     * A type's structural relations for the subtype + annotation indexes: its `extends`/`implements`
+     * references and annotation uses AS WRITTEN (a binding-free parse sees `List` / `@Override`, not FQNs;
+     * the indexes key by short name and resolve best-effort via [imports]).
+     */
+    data class TypeInfo(
+        val fqn: String,
+        val kind: DeclKind,
+        val supertypes: List<String>,
+        val annotations: List<String>,
+        val memberAnnotations: List<MemberAnnotation>,
+    )
+
+    /** The file's type relations + its import map (simple name → FQN), shared across the indexes. */
+    data class Relations(val packageName: String?, val types: List<TypeInfo>, val imports: Map<String, String>)
+
     /** Cross-pass content cache: source text → its parsed [CompilationUnit] (detached, binding-free → safe to
      *  hold). Bounded LRU; access-ordered so the hot working set survives. Keyed by content, so a changed file
      *  gets a fresh parse (no stale reuse) and identical content re-uses one parse. */
@@ -52,6 +71,10 @@ object JavaSourceIndexer {
     /** The distilled declaration model for this file, derived once from [sharedCu] and shared across indexes. */
     fun sharedParsed(input: IndexInput): Parsed =
         input.shared("jdt.parsed") { declsOf(sharedCu(input)) }
+
+    /** The file's type relations (supertypes + annotations), derived once and shared across indexes. */
+    fun sharedRelations(input: IndexInput): Relations =
+        input.shared("jdt.relations") { relationsOf(sharedCu(input)) }
 
     /** A binding-free JDT parse of [text] to a [CompilationUnit] (statement recovery on), or null on failure.
      *  Content-cached across passes ([cuCache]). */
@@ -109,5 +132,78 @@ object JavaSourceIndexer {
             }
         })
         return Parsed(pkg, decls)
+    }
+
+    /** Walk [cu] into per-type supertype references + annotation uses (as written) and the import map. */
+    fun relationsOf(cu: CompilationUnit?): Relations {
+        if (cu == null) return Relations(null, emptyList(), emptyMap())
+        val pkg = cu.`package`?.name?.fullyQualifiedName
+        val imports = HashMap<String, String>()
+        for (imp in cu.imports()) {
+            val i = imp as? org.eclipse.jdt.core.dom.ImportDeclaration ?: continue
+            if (i.isOnDemand || i.isStatic) continue
+            val fqn = i.name.fullyQualifiedName
+            imports[fqn.substringAfterLast('.')] = fqn
+        }
+        val types = ArrayList<TypeInfo>()
+        val path = ArrayDeque<String>()
+
+        fun annotationsOf(modifiers: List<*>): List<String> = modifiers.mapNotNull {
+            (it as? org.eclipse.jdt.core.dom.Annotation)?.typeName?.fullyQualifiedName
+        }
+
+        fun enter(
+            name: String, kind: DeclKind, supertypes: List<String>, mods: List<*>, body: List<*>,
+        ) {
+            path.addLast(name)
+            val fqn = (pkg?.plus(".") ?: "") + path.joinToString(".")
+            val memberAnns = ArrayList<MemberAnnotation>()
+            for (d in body) {
+                when (d) {
+                    is MethodDeclaration -> annotationsOf(d.modifiers()).forEach {
+                        memberAnns += MemberAnnotation(d.name.identifier, DeclKind.METHOD, it)
+                    }
+                    is FieldDeclaration -> {
+                        val anns = annotationsOf(d.modifiers())
+                        if (anns.isNotEmpty()) for (frag in d.fragments()) {
+                            val f = frag as? VariableDeclarationFragment ?: continue
+                            anns.forEach { memberAnns += MemberAnnotation(f.name.identifier, DeclKind.FIELD, it) }
+                        }
+                    }
+                }
+            }
+            types += TypeInfo(fqn, kind, supertypes, annotationsOf(mods), memberAnns)
+        }
+
+        cu.accept(object : ASTVisitor() {
+            override fun visit(n: TypeDeclaration): Boolean {
+                val supers = ArrayList<String>()
+                n.superclassType?.let { supers += it.toString() }
+                n.superInterfaceTypes().forEach { supers += it.toString() }
+                enter(
+                    n.name.identifier,
+                    if (n.isInterface) DeclKind.INTERFACE else DeclKind.CLASS,
+                    supers, n.modifiers(), n.bodyDeclarations(),
+                )
+                return true
+            }
+            override fun endVisit(n: TypeDeclaration) { path.removeLastOrNull() }
+            override fun visit(n: EnumDeclaration): Boolean {
+                enter(n.name.identifier, DeclKind.ENUM, n.superInterfaceTypes().map { it.toString() }, n.modifiers(), n.bodyDeclarations())
+                return true
+            }
+            override fun endVisit(n: EnumDeclaration) { path.removeLastOrNull() }
+            override fun visit(n: RecordDeclaration): Boolean {
+                enter(n.name.identifier, DeclKind.RECORD, n.superInterfaceTypes().map { it.toString() }, n.modifiers(), n.bodyDeclarations())
+                return true
+            }
+            override fun endVisit(n: RecordDeclaration) { path.removeLastOrNull() }
+            override fun visit(n: AnnotationTypeDeclaration): Boolean {
+                enter(n.name.identifier, DeclKind.ANNOTATION, emptyList(), n.modifiers(), n.bodyDeclarations())
+                return true
+            }
+            override fun endVisit(n: AnnotationTypeDeclaration) { path.removeLastOrNull() }
+        })
+        return Relations(pkg, types, imports)
     }
 }

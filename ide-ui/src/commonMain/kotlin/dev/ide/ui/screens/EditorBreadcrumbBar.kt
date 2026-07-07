@@ -27,9 +27,15 @@ import dev.ide.ui.OpenFile
 import dev.ide.ui.components.Breadcrumb
 import dev.ide.ui.editor.preview.isLayoutPreviewable
 import dev.ide.ui.editor.preview.isPreviewable
+import dev.ide.ui.generated.resources.Res
+import dev.ide.ui.generated.resources.breadcrumb_blocks
+import dev.ide.ui.generated.resources.breadcrumb_code
+import dev.ide.ui.generated.resources.breadcrumb_preview
+import dev.ide.ui.generated.resources.breadcrumb_split
 import dev.ide.ui.icons.CaIcons
 import dev.ide.ui.theme.Ca
 import kotlinx.coroutines.delay
+import org.jetbrains.compose.resources.stringResource
 import kotlin.time.Duration.Companion.milliseconds
 
 /**
@@ -97,22 +103,22 @@ private fun ViewModeToggle(
     ) {
         SegmentItem(
             CaIcons.code,
-            "Code",
+            stringResource(Res.string.breadcrumb_code),
             mode == EditorViewMode.Text
         ) { onSelect(EditorViewMode.Text) }
-        SegmentItem(CaIcons.layers, "Blocks", mode == EditorViewMode.Blocks) {
+        SegmentItem(CaIcons.layers, stringResource(Res.string.breadcrumb_blocks), mode == EditorViewMode.Blocks) {
             onSelect(
                 EditorViewMode.Blocks
             )
         }
         if (canPreview) {
-            SegmentItem(CaIcons.image, "Preview", mode == EditorViewMode.Preview) {
+            SegmentItem(CaIcons.image, stringResource(Res.string.breadcrumb_preview), mode == EditorViewMode.Preview) {
                 onSelect(
                     EditorViewMode.Preview
                 )
             }
             // Split = code + preview together, so you can edit and watch it update (the phone-friendly path).
-            SegmentItem(CaIcons.split, "Split", mode == EditorViewMode.Split) {
+            SegmentItem(CaIcons.split, stringResource(Res.string.breadcrumb_split), mode == EditorViewMode.Split) {
                 onSelect(
                     EditorViewMode.Split
                 )

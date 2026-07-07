@@ -7,8 +7,8 @@ import dev.ide.lang.folding.FoldingService
 import dev.ide.lang.kotlin.parse.KotlinParsedFile
 import dev.ide.platform.EngineCancellation
 import dev.ide.vfs.VirtualFile
-import org.jetbrains.kotlin.com.intellij.psi.PsiComment
-import org.jetbrains.kotlin.com.intellij.psi.PsiElement
+import com.intellij.psi.PsiComment
+import com.intellij.psi.PsiElement
 import org.jetbrains.kotlin.kdoc.psi.api.KDoc
 import org.jetbrains.kotlin.psi.KtBlockExpression
 import org.jetbrains.kotlin.psi.KtClassBody

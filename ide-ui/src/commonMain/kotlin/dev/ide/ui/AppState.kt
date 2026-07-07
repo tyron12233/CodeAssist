@@ -1,18 +1,26 @@
 package dev.ide.ui
 
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateListOf
+import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.snapshots.SnapshotStateMap
 import dev.ide.ui.backend.IdeBackend
 import dev.ide.ui.backend.NodeKind
+import dev.ide.ui.backend.RunStatus
 import dev.ide.ui.backend.TreeNode
 import dev.ide.ui.backend.TreeViewMode
 import dev.ide.ui.backend.UiRenameResult
 import dev.ide.ui.backend.UiSourceRootRole
 import dev.ide.ui.backend.UiNewFileTemplate
+import dev.ide.ui.backend.UiOpenTabs
+import dev.ide.ui.backend.UiSettings
 import dev.ide.ui.editor.core.EditorSession
 import dev.ide.ui.editor.languageFor
+import dev.ide.ui.editor.preview.PreviewKind
+import dev.ide.ui.editor.preview.previewKindOf
 import dev.ide.ui.platform.isMobilePlatform
 
 /**
@@ -51,7 +59,7 @@ class OpenFile(val path: String, val name: String, initial: String) {
     /** Which surface this tab shows — text, blocks, or resource preview (text/blocks edit the one [session]).
      *  Image resources open straight into Preview (their bytes aren't editable text). */
     var viewMode by mutableStateOf(
-        if (dev.ide.ui.editor.preview.previewKindOf(path) == dev.ide.ui.editor.preview.PreviewKind.BITMAP)
+        if (previewKindOf(path) == PreviewKind.BITMAP)
             EditorViewMode.Preview else EditorViewMode.Text,
     )
     /** Which `@Preview` composable the Compose preview should render — set when the user taps a preview
@@ -95,8 +103,16 @@ class IdeUiState(val backend: IdeBackend, val composePreviewHost: ComposePreview
     var tree: TreeNode by mutableStateOf(backend.files.fileTree(treeMode))
         private set
 
+    /**
+     * Which file-tree branches are expanded, keyed by [TreeNode.id]. Held here (not inside `FileNavigator`)
+     * so it survives navigating away, toggling the pane/drawer, tree refreshes, and view-mode flips — and is
+     * persisted per project + view mode by the host (so the tree reopens the same way next launch). Seeded in
+     * [loadTreeExpansion] from the persisted set, or the defaults when the project has none yet.
+     */
+    val treeExpanded: SnapshotStateMap<String, Boolean> = mutableStateMapOf()
+
     val openFiles = mutableStateListOf<OpenFile>()
-    var activeIndex by mutableStateOf(-1)
+    var activeIndex by mutableIntStateOf(-1)
 
     var rail by mutableStateOf(RailDestination.Files)
     // On mobile the tree + console are space-consuming sheets — start them closed; on desktop they're
@@ -107,6 +123,51 @@ class IdeUiState(val backend: IdeBackend, val composePreviewHost: ComposePreview
     var paletteOpen by mutableStateOf(false)
     /** The in-file structure / outline bottom sheet (opened from the breadcrumb tap or Ctrl-F12). */
     var structureOpen by mutableStateOf(false)
+
+    // ---- run-conflict gate: guard a new Run while a build/program is already running ----
+
+    /** Non-null while the "a build/program is already running" confirmation is up; holds the run the user
+     *  is trying to start. `RunConflictDialog` renders it; null = no conflict pending. */
+    var runConflict by mutableStateOf<PendingRun?>(null)
+        private set
+
+    /**
+     * Funnel every Run/task launch through this. If nothing is running, [action] fires immediately. If a
+     * build or program is already in progress, the user must confirm — either automatically (they earlier
+     * chose "don't ask again", which remembers Stop-and-Run) or via the confirmation dialog. This guards a
+     * runaway program (e.g. an infinite loop) from being silently shadowed by a second run that can never
+     * start (the engine drops a run request while one is already Running).
+     */
+    fun requestRun(action: () -> Unit) {
+        if (backend.build.buildState.value.status != RunStatus.Running) {
+            action(); return
+        }
+        if (backend.settings.preference(RUN_CONFLICT_ALWAYS_STOP_PREF)?.toBooleanStrictOrNull() == true) {
+            stopThenRun(action); return
+        }
+        runConflict = PendingRun(action)
+    }
+
+    /** The user chose "Stop and Run" in the conflict dialog. [remember] persists that choice so future runs
+     *  skip the prompt and stop-and-run automatically. */
+    fun confirmStopAndRun(remember: Boolean) {
+        if (remember) backend.settings.setPreference(RUN_CONFLICT_ALWAYS_STOP_PREF, "true")
+        val pending = runConflict
+        runConflict = null
+        pending?.let { stopThenRun(it.action) }
+    }
+
+    /** The user dismissed the conflict dialog — keep the current run going, start nothing new. */
+    fun dismissRunConflict() {
+        runConflict = null
+    }
+
+    /** Stop the in-progress build/run, then start [action]. The engine flips its status out of Running
+     *  synchronously on stop, so the queued run isn't dropped — equivalent to tapping Stop then Run. */
+    private fun stopThenRun(action: () -> Unit) {
+        backend.build.stopBuild()
+        action()
+    }
     // ---- live editor preferences (seeded from persisted settings in init; the Settings screen updates them
     // via [applySettings] so open editors react immediately) ----
 
@@ -141,10 +202,34 @@ class IdeUiState(val backend: IdeBackend, val composePreviewHost: ComposePreview
 
     init {
         applySettings(backend.settings.settings())
+        loadTreeExpansion()
     }
 
+    /**
+     * (Re)seed [treeExpanded] for the current [treeMode]: the persisted expanded set if this project has one,
+     * otherwise the defaults (each module / source root / the workspace expanded). Called on creation and on a
+     * view-mode flip (the two modes shape the tree differently, so each remembers its own expansion).
+     */
+    private fun loadTreeExpansion() {
+        treeExpanded.clear()
+        val saved = backend.files.expandedTreeState(treeMode)
+        if (saved == null) {
+            fun seedDefaults(n: TreeNode) {
+                if (n.kind == NodeKind.Module || n.kind == NodeKind.SourceRoot || n.kind == NodeKind.Workspace)
+                    treeExpanded[n.id] = true
+                n.children.forEach(::seedDefaults)
+            }
+            seedDefaults(tree)
+        } else {
+            saved.forEach { treeExpanded[it] = true }
+        }
+    }
+
+    /** The currently-expanded tree-node ids — the host persists this (debounced) whenever it changes. */
+    fun expandedTreeSnapshot(): Set<String> = treeExpanded.filterValues { it }.keys.toSet()
+
     /** Push persisted IDE settings into the live editor-pref fields (called on creation + on each settings change). */
-    fun applySettings(s: dev.ide.ui.backend.UiSettings) {
+    fun applySettings(s: UiSettings) {
         inlayHintsEnabled = s.inlayHints
         editorFontScale = s.editorFontScale
         fontLigaturesEnabled = s.fontLigatures
@@ -249,8 +334,8 @@ class IdeUiState(val backend: IdeBackend, val composePreviewHost: ComposePreview
     }
 
     /** The current open tabs as a persistable snapshot (paths in tab order + the active index). */
-    fun tabsSnapshot(): dev.ide.ui.backend.UiOpenTabs =
-        dev.ide.ui.backend.UiOpenTabs(openFiles.map { it.path }, activeIndex)
+    fun tabsSnapshot(): UiOpenTabs =
+        UiOpenTabs(openFiles.map { it.path }, activeIndex)
 
     /** Pick a sensible first file: a `Main.java`, else the first source file in the tree. */
     fun defaultFile(): TreeNode? {
@@ -265,11 +350,12 @@ class IdeUiState(val backend: IdeBackend, val composePreviewHost: ComposePreview
     /** Re-read the workspace tree from the backend (after a file is created/removed). */
     fun refreshTree() { tree = backend.files.fileTree(treeMode) }
 
-    /** Switch the tree view mode (Project ↔ All Files) and rebuild the tree. */
+    /** Switch the tree view mode (Project ↔ All Files), rebuild the tree, and restore that mode's expansion. */
     fun selectTreeMode(mode: TreeViewMode) {
         if (mode == treeMode) return
         treeMode = mode
         refreshTree()
+        loadTreeExpansion()
     }
 
     /**
@@ -417,4 +503,13 @@ class IdeUiState(val backend: IdeBackend, val composePreviewHost: ComposePreview
         if (ok) refreshTree()
         return ok
     }
+
+    companion object {
+        /** App preference: "true" once the user checks "don't ask again" on the run-conflict dialog — future
+         *  runs then stop the current build/program and start automatically, without prompting. */
+        const val RUN_CONFLICT_ALWAYS_STOP_PREF = "run.conflict.alwaysStop"
+    }
 }
+
+/** A run the user is trying to start while a build/program is already running (see [IdeUiState.requestRun]). */
+class PendingRun(val action: () -> Unit)

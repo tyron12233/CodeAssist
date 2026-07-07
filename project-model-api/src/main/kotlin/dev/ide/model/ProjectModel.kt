@@ -108,7 +108,18 @@ interface ContentRoot {
     val roles: Set<ContentRole>
 }
 
-enum class ContentRole { SOURCE, RESOURCE, ANDROID_RES, AIDL, ASSETS, GENERATED, EXCLUDED }
+enum class ContentRole {
+    SOURCE,
+    /** Java/JVM resources (`src/<set>/resources`) — non-code files packaged into the jar/APK root. */
+    RESOURCE,
+    ANDROID_RES,
+    AIDL,
+    ASSETS,
+    /** Prebuilt native libraries (`src/<set>/jniLibs`), laid out `<abi>/lib*.so`, packaged under `lib/`. */
+    JNI_LIBS,
+    GENERATED,
+    EXCLUDED,
+}
 
 interface ProjectSettings {
     fun get(key: String): String?

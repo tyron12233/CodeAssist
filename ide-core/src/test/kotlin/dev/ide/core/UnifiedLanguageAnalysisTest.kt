@@ -1,5 +1,7 @@
 package dev.ide.core
 
+import kotlinx.coroutines.runBlocking
+
 import java.nio.file.Files
 import kotlin.io.path.createTempDirectory
 import kotlin.test.AfterTest
@@ -34,7 +36,7 @@ class UnifiedLanguageAnalysisTest {
         // deterministic without awaiting the index.
         val kt = write("core/src/main/java/com/example/core/Broken.kt", "package com.example.core\nfun broken( { }\n")
         val text = Files.readString(kt)
-        val diags = s.analyzeDiagnostics(kt, text)
+        val diags = runBlocking { s.analyzeDiagnostics(kt, text) }
         assertTrue(diags.any { it.code == "kt.syntax" }, "Kotlin syntax diagnostic should reach the unified engine: ${diags.map { it.code to it.message }}")
     }
 
@@ -46,7 +48,7 @@ class UnifiedLanguageAnalysisTest {
         val layout = write("app/src/main/res/layout/unified_test.xml", "<LinearLayout android:orientation=\"vertical\"></LinearLayout>")
         val text = Files.readString(layout)
 
-        val diags = s.analyzeDiagnostics(layout, text)
+        val diags = runBlocking { s.analyzeDiagnostics(layout, text) }
         assertTrue(diags.any { it.code == "android.missingNamespace" }, "XML lint diagnostic should reach the unified engine: ${diags.map { it.code }}")
 
         // The quick-fix is offered at the tag and inserts the namespace declaration.

@@ -10,7 +10,7 @@ import dev.ide.ui.editor.folding.FoldModel
  * It holds a per-document-line wrap-row count ([rawRows]) and a fold-aware prefix sum of visual rows
  * ([prefix]) so [topRow] is O(1) and [docLineForRow] is O(log n). Counts start as a cheap monospace COLUMN
  * estimate (no text shaping — see the caller) and are corrected to the exact `TextLayoutResult.lineCount` as
- * lines are shaped for drawing, via [setRows]. So the document height is instant-but-approximate off screen
+ * lines are shaped for drawing, via [setRows]. So the document height is instant-but-approximate off-screen
  * and pixel-exact for the rows actually on screen.
  *
  * Folds compose on top: a hidden line contributes 0 rows, a collapsed fold-start line contributes 1 (it

@@ -75,6 +75,15 @@ interface ProgramIo {
  */
 interface DexRunner {
     suspend fun run(dexDir: Path, mainClass: String, args: List<String>, io: ProgramIo): Int
+
+    /**
+     * True when the program runs in a SEPARATE OS process (e.g. a forked `dalvikvm`), false when it runs in
+     * this process (a `DexClassLoader`). An isolated run is fully sandboxed by the process boundary: its
+     * `System.exit` ends only the fork and a runaway loop is killed by destroying the process — so the run
+     * dex needs NO `ExitGuard`/`SandboxGuard` instrumentation (the guards exist only to protect the shared
+     * in-process runner). [JavaDexTask] reads this (via the graph's `guarded` flag) to skip instrumentation.
+     */
+    val isolatedProcess: Boolean get() = false
 }
 
 /**
@@ -121,14 +130,23 @@ class JavaDexTask(
     private val stagingDir: Path,
     private val outDex: Path,
     private val dexBackend: RunDexBackend,
+    /** When false, the run dex is NOT instrumented — the program runs in a separate process (a forked
+     *  `dalvikvm`) that the process boundary already isolates, so `ExitGuard`/`SandboxGuard` (which only
+     *  protect the in-process runner) are unnecessary and would break natural `System.exit`. */
+    private val guarded: Boolean = true,
 ) : Task {
+    /** The guard identity that keys the dex cache, or `"noguard"` when the dex is left uninstrumented — so an
+     *  instrumented and an uninstrumented run of the same classpath never alias each other's cached dex. */
+    private val guardKey: String get() = if (guarded) GUARD_VERSION else "noguard"
+
     override val inputs: TaskInputs get() = TaskInputsImpl().apply {
         val cp = runtimeClasspath()
         dirPaths("classes", cp.filter { Files.isDirectory(it) })
         filePaths("libs", cp.filter { !Files.isDirectory(it) })
         property("minApi", minApi)
-        // A guard change rewrites the instrumented dex, so re-run even when the classpath is unchanged.
-        property("guardVersion", GUARD_VERSION)
+        // A guard change (or toggling instrumentation on/off) rewrites the dex, so re-run even when the
+        // classpath is unchanged.
+        property("guardVersion", guardKey)
     }
     override val outputs: TaskOutputs get() = TaskOutputsImpl().apply { dirPath("dex", outDex) }
 
@@ -138,18 +156,23 @@ class JavaDexTask(
         Files.createDirectories(outDex)
         val cp = runtimeClasspath().filter { Files.exists(it) }
         if (cp.isEmpty()) return@withContext TaskResult.Failed("nothing to dex for run")
-        // Instrument everything on the run's classpath (user classes AND libraries): ExitGuard so a program's
-        // exit ends the run not the IDE, and SandboxGuard so its network/file/reflection/exec calls are
-        // mediated by the permission broker. Both pre-scan and no-op classes that can't match, so this stays
-        // cheap; for libraries it is paid once and cached with the dex.
+        // When [guarded], instrument everything on the run's classpath (user classes AND libraries): ExitGuard
+        // so a program's exit ends the run not the IDE, and SandboxGuard so its network/file/reflection/exec
+        // calls are mediated by the permission broker. Both pre-scan and no-op classes that can't match, so
+        // this stays cheap; for libraries it is paid once and cached with the dex. For an isolated (forked)
+        // run the process boundary is the sandbox, so we dex the bytes unchanged — `System.exit` then exits
+        // the fork naturally instead of throwing the guard's ControlledExit.
+        val instrument: (String, ByteArray) -> ByteArray = if (guarded) {
+            { entry, bytes -> if (entry.endsWith(".class")) SandboxGuard.instrument(ExitGuard.instrument(bytes)) else bytes }
+        } else {
+            { _, bytes -> bytes }
+        }
         val request = RunDexRequest(
             userClassDirs = cp.filter { Files.isDirectory(it) },
             libJars = cp.filter { !Files.isDirectory(it) },
             minApi = minApi,
-            instrument = { entry, bytes ->
-                if (entry.endsWith(".class")) SandboxGuard.instrument(ExitGuard.instrument(bytes)) else bytes
-            },
-            guardVersion = GUARD_VERSION,
+            instrument = instrument,
+            guardVersion = guardKey,
             stagingDir = stagingDir,
             outDex = outDex,
         )

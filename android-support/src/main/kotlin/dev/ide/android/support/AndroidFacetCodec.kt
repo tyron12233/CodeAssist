@@ -33,6 +33,8 @@ object AndroidFacetCodec : FacetCodec<AndroidFacet> {
         // buildFeatures: flatten the on flags into the `[android]` table (off ⇒ absent), like the knobs above.
         if (facet.buildFeatures.viewBinding) put("viewBinding", true)
         if (facet.buildFeatures.compose) put("compose", true)
+        // packaging: only when the user configured something (defaults are applied at build time, not stored).
+        if (!facet.packaging.isDefault) put("packaging", encodePackaging(facet.packaging))
     }
 
     override fun decode(values: Map<String, Any?>): AndroidFacet {
@@ -55,6 +57,39 @@ object AndroidFacetCodec : FacetCodec<AndroidFacet> {
             buildFeatures = BuildFeatures(
                 viewBinding = values["viewBinding"] as? Boolean ?: false,
                 compose = values["compose"] as? Boolean ?: false,
+            ),
+            packaging = decodePackaging(values.table("packaging")),
+        )
+    }
+
+    /**
+     * `packaging` as a nested inline table `{ resources = { excludes = [...], ... }, jniLibs = { ... } }`;
+     * each sub-table and each list is emitted only when non-empty so the encoded map matches a reload.
+     */
+    private fun encodePackaging(p: AndroidPackaging): Map<String, Any?> = buildMap {
+        if (!p.resources.isEmpty) put("resources", buildMap {
+            if (p.resources.excludes.isNotEmpty()) put("excludes", p.resources.excludes.toList())
+            if (p.resources.pickFirsts.isNotEmpty()) put("pickFirsts", p.resources.pickFirsts.toList())
+            if (p.resources.merges.isNotEmpty()) put("merges", p.resources.merges.toList())
+        })
+        if (!p.jniLibs.isEmpty) put("jniLibs", buildMap {
+            if (p.jniLibs.excludes.isNotEmpty()) put("excludes", p.jniLibs.excludes.toList())
+            if (p.jniLibs.pickFirsts.isNotEmpty()) put("pickFirsts", p.jniLibs.pickFirsts.toList())
+        })
+    }
+
+    private fun decodePackaging(t: Map<String, Any?>): AndroidPackaging {
+        val res = t.table("resources")
+        val jni = t.table("jniLibs")
+        return AndroidPackaging(
+            resources = ResourcePackaging(
+                excludes = res.stringSet("excludes"),
+                pickFirsts = res.stringSet("pickFirsts"),
+                merges = res.stringSet("merges"),
+            ),
+            jniLibs = JniLibsPackaging(
+                excludes = jni.stringSet("excludes"),
+                pickFirsts = jni.stringSet("pickFirsts"),
             ),
         )
     }
@@ -109,6 +144,12 @@ object AndroidFacetCodec : FacetCodec<AndroidFacet> {
     private fun Map<String, Any?>.int(key: String): Int? = (this[key] as? Number)?.toInt()
     private fun Map<String, Any?>.stringList(key: String): List<String> =
         (this[key] as? List<*>)?.mapNotNull { it as? String } ?: emptyList()
+    // LinkedHashSet keeps insertion order so the encoded list round-trips byte-identically.
+    private fun Map<String, Any?>.stringSet(key: String): Set<String> = stringList(key).toCollection(LinkedHashSet())
+
+    @Suppress("UNCHECKED_CAST")
+    private fun Map<String, Any?>.table(key: String): Map<String, Any?> =
+        (this[key] as? Map<*, *>)?.let { it as Map<String, Any?> } ?: emptyMap()
 
     @Suppress("UNCHECKED_CAST")
     private fun Map<String, Any?>.tableList(key: String): List<Map<String, Any?>> =

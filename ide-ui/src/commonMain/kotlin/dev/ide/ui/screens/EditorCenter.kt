@@ -1,5 +1,7 @@
 package dev.ide.ui.screens
 
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -37,8 +39,12 @@ import dev.ide.ui.editor.preview.LayoutPreviewPane
 import dev.ide.ui.editor.preview.ResourcePreviewPane
 import dev.ide.ui.editor.preview.isLayoutPreviewable
 import dev.ide.ui.editor.preview.isPreviewable
+import dev.ide.ui.generated.resources.Res
+import dev.ide.ui.generated.resources.edview_open_a_file_from_navigator
 import dev.ide.ui.theme.Ca
+import dev.ide.ui.theme.Motion
 import kotlinx.coroutines.launch
+import org.jetbrains.compose.resources.stringResource
 
 /**
  * Top bar + deps progress + tabs + breadcrumb row + the code canvas — the editor column shared by both
@@ -50,11 +56,18 @@ internal fun EditorCenter(
     state: IdeUiState,
     indexStatus: IndexUiStatus,
     compact: Boolean,
-    modifier: Modifier
+    modifier: Modifier,
+    /** Live navigator-open fraction from the compact layout's push drawer (gesture-accurate); null on
+     *  layouts without one — the top-bar icon then eases 0↔1 off [IdeUiState.navOpen] instead. */
+    navFraction: (() -> Float)? = null,
 ) {
     val project = state.backend.project
     val depsState by state.backend.deps.depsState.collectAsState()
     val depsScope = rememberCoroutineScope()
+    // Gradle compatibility mode: non-null only for a project imported from Gradle. Drives the top-bar compat
+    // chip + the details banner below the toolbar; the chip re-opens a dismissed banner.
+    val compatInfo = remember(project.rootPath) { state.backend.projects.compatibilityInfo() }
+    var showCompatBanner by remember(project.rootPath) { mutableStateOf(compatInfo != null) }
     // @Preview presence (enables the Design view-mode toggle + top-bar shortcut) is set by the editor daemon's
     // PREVIEWS pass below — no separate detection effect.
     var hasPreview by remember(state.active?.path) { mutableStateOf(false) }
@@ -85,17 +98,26 @@ internal fun EditorCenter(
     val activeVariant = remember(project.name, variantEpoch, variantModule) {
         variantModule?.let { state.backend.build.activeVariant(it) }
     }
+
+    val easedNav by animateFloatAsState(
+        if (state.navOpen) 1f else 0f,
+        tween(Motion.BASE, easing = Motion.quiet),
+        label = "navIconFraction",
+    )
     Box(modifier) {
-        Column(Modifier.fillMaxSize()) {
+        Column(Modifier.fillMaxSize().background(Ca.colors.editorBg)) {
             EditorTopBar(
                 projectName = project.name,
                 indexStatus = indexStatus,
                 onToggleNav = { state.navOpen = !state.navOpen },
+                navFraction = navFraction ?: { easedNav },
                 onOpenPalette = { state.paletteOpen = true },
                 runTasks = { state.backend.build.runTasks() },
-                onPickTask = { state.consoleOpen = true; state.backend.build.runTask(it.id) },
+                onPickTask = { state.consoleOpen = true; state.requestRun { state.backend.build.runTask(it.id) } },
                 activeVariant = activeVariant,
-                variants = { variantModule?.let { state.backend.build.listVariants(it) } ?: emptyList() },
+                variants = {
+                    variantModule?.let { state.backend.build.listVariants(it) } ?: emptyList()
+                },
                 onPickVariant = { v ->
                     variantModule?.let { state.backend.build.setActiveVariant(it, v) }
                     variantEpoch++
@@ -118,6 +140,8 @@ internal fun EditorCenter(
                 previewBusy = active?.viewMode == EditorViewMode.Preview,
                 onPreview = { active?.let { it.viewMode = EditorViewMode.Preview } },
                 onIndexClick = { state.indexDetailOpen = true },
+                compatibilityMode = compatInfo != null,
+                onCompatClick = { showCompatBanner = true },
                 pluginActions = toolbarActions,
                 onPluginAction = { id ->
                     depsScope.launch {
@@ -133,6 +157,15 @@ internal fun EditorCenter(
                 compact = compact,
             )
             DepsProgressBar(depsState) { depsScope.launch { state.backend.deps.retryDependencyResolution() } }
+            if (compatInfo != null) {
+                GradleCompatBanner(
+                    state = state,
+                    info = compatInfo,
+                    visible = showCompatBanner,
+                    compact = compact,
+                    onDismiss = { showCompatBanner = false },
+                )
+            }
             TabsStrip(
                 openFiles = state.openFiles,
                 activeIndex = state.activeIndex,
@@ -233,7 +266,7 @@ internal fun EditorCenter(
                     contentAlignment = Alignment.Center
                 ) {
                     Text(
-                        "Open a file from the navigator",
+                        stringResource(Res.string.edview_open_a_file_from_navigator),
                         color = Ca.colors.textTertiary,
                         style = Ca.type.subhead
                     )

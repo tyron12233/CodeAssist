@@ -34,11 +34,27 @@ import androidx.compose.ui.unit.dp
 import dev.ide.ui.backend.NodeKind
 import dev.ide.ui.backend.TreeNode
 import dev.ide.ui.backend.UiDirEntry
+import dev.ide.ui.generated.resources.Res
+import dev.ide.ui.generated.resources.cancel
+import dev.ide.ui.generated.resources.delete
+import dev.ide.ui.generated.resources.fileop_copy_here
+import dev.ide.ui.generated.resources.fileop_copy_title
+import dev.ide.ui.generated.resources.fileop_delete_dir_body
+import dev.ide.ui.generated.resources.fileop_delete_dir_title
+import dev.ide.ui.generated.resources.fileop_delete_file_body
+import dev.ide.ui.generated.resources.fileop_delete_file_title
+import dev.ide.ui.generated.resources.fileop_empty_folder
+import dev.ide.ui.generated.resources.fileop_move_here
+import dev.ide.ui.generated.resources.fileop_move_title
+import dev.ide.ui.generated.resources.fileop_new_name
+import dev.ide.ui.generated.resources.fileop_rename_title
+import dev.ide.ui.generated.resources.rename
 import dev.ide.ui.icons.CaIcons
 import dev.ide.ui.icons.TreeIcon
 import dev.ide.ui.icons.TreeIcons
 import dev.ide.ui.icons.resolveTint
 import dev.ide.ui.theme.Ca
+import org.jetbrains.compose.resources.stringResource
 
 /** The on-disk path a node's file operations act on: a file's own path, a package's deepest directory, or a
  *  folder's directory (Android `res/` folder, build-output, or any plain directory). Null for nodes that
@@ -103,28 +119,27 @@ private fun RenamePanel(node: TreeNode, onDismiss: () -> Unit, onConfirm: (Strin
     val valid = name.isNotBlank() && name != current && '/' !in name && '\\' !in name
     fun submit() { if (valid) { onConfirm(name.trim()); onDismiss() } }
 
-    DialogCard("Rename '${node.name}'") {
-        FieldLabel("New name")
+    DialogCard(stringResource(Res.string.fileop_rename_title, node.name)) {
+        FieldLabel(stringResource(Res.string.fileop_new_name))
         DialogField(value = name, onValueChange = { name = it }, placeholder = node.name, focusRequester = focus, onSubmit = ::submit, onCancel = onDismiss)
         Spacer12()
-        ButtonRow(onDismiss, "Rename", valid, ::submit)
+        ButtonRow(onDismiss, stringResource(Res.string.rename), valid, ::submit)
     }
 }
 
 @Composable
 private fun DeletePanel(node: TreeNode, onDismiss: () -> Unit, onConfirm: () -> Unit) {
     val isDir = node.kind != NodeKind.File
-    DialogCard(if (isDir) "Delete '${node.name}' and its contents?" else "Delete '${node.name}'?") {
+    DialogCard(stringResource(if (isDir) Res.string.fileop_delete_dir_title else Res.string.fileop_delete_file_title, node.name)) {
         Text(
-            if (isDir) "This permanently removes the folder and everything inside it. This can't be undone."
-            else "This permanently removes the file. This can't be undone.",
+            stringResource(if (isDir) Res.string.fileop_delete_dir_body else Res.string.fileop_delete_file_body),
             color = Ca.colors.textSecondary, style = Ca.type.footnote,
         )
         Spacer12()
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
             Spacer(Modifier.weight(1f))
-            DialogButton("Cancel", primary = false, enabled = true, onClick = onDismiss)
-            DangerButton("Delete") { onConfirm(); onDismiss() }
+            DialogButton(stringResource(Res.string.cancel), primary = false, enabled = true, onClick = onDismiss)
+            DangerButton(stringResource(Res.string.delete)) { onConfirm(); onDismiss() }
         }
     }
 }
@@ -175,7 +190,7 @@ private fun DirectoryBrowserPanel(
     onDismiss: () -> Unit,
     onConfirm: (String) -> Unit,
 ) {
-    val verb = if (kind == FileOpKind.Move) "Move" else "Copy"
+    val isMove = kind == FileOpKind.Move
     val srcPath = node.fileOpPath()
     val srcLeaf = srcPath?.let(::leafName)
     val start = remember(node) {
@@ -190,7 +205,7 @@ private fun DirectoryBrowserPanel(
     val blocked = (srcPath != null && (cur == srcPath || isUnder(cur, srcPath))) ||
         (srcLeaf != null && srcLeaf in names)
 
-    DialogCard("$verb '${node.name}' to…") {
+    DialogCard(stringResource(if (isMove) Res.string.fileop_move_title else Res.string.fileop_copy_title, node.name)) {
         // Breadcrumb pills.
         Row(
             Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
@@ -214,7 +229,7 @@ private fun DirectoryBrowserPanel(
         Spacer12()
         // The current folder's contents.
         if (entries.isEmpty()) {
-            Text("This folder is empty.", color = Ca.colors.textSecondary, style = Ca.type.footnote)
+            Text(stringResource(Res.string.fileop_empty_folder), color = Ca.colors.textSecondary, style = Ca.type.footnote)
         } else {
             Column(
                 Modifier.fillMaxWidth().heightIn(max = 320.dp).verticalScroll(rememberScrollState()),
@@ -241,7 +256,7 @@ private fun DirectoryBrowserPanel(
             }
         }
         Spacer12()
-        ButtonRow(onDismiss, "$verb here", !blocked) { onConfirm(cur); onDismiss() }
+        ButtonRow(onDismiss, stringResource(if (isMove) Res.string.fileop_move_here else Res.string.fileop_copy_here), !blocked) { onConfirm(cur); onDismiss() }
     }
 }
 
@@ -273,7 +288,7 @@ private fun DialogCard(title: String, content: @Composable () -> Unit) {
 private fun ButtonRow(onCancel: () -> Unit, confirmLabel: String, enabled: Boolean, onConfirm: () -> Unit) {
     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
         Spacer(Modifier.weight(1f))
-        DialogButton("Cancel", primary = false, enabled = true, onClick = onCancel)
+        DialogButton(stringResource(Res.string.cancel), primary = false, enabled = true, onClick = onCancel)
         DialogButton(confirmLabel, primary = true, enabled = enabled, onClick = onConfirm)
     }
 }

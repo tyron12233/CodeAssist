@@ -9,11 +9,13 @@ import androidx.compose.animation.scaleIn
 import androidx.compose.animation.scaleOut
 import androidx.compose.animation.shrinkHorizontally
 import androidx.compose.animation.togetherWith
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Row
@@ -24,6 +26,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
@@ -49,21 +52,67 @@ import androidx.compose.ui.focus.focusProperties
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.RoundRect
+import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.graphics.drawscope.clipPath
+import androidx.compose.ui.graphics.lerp
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import dev.ide.ui.OpenFile
 import dev.ide.ui.backend.DepsResolveState
 import dev.ide.ui.backend.IndexUiStatus
 import dev.ide.ui.backend.RunTaskOption
 import dev.ide.ui.backend.UiActionItem
+import dev.ide.ui.generated.resources.Res
+import dev.ide.ui.generated.resources.close
+import dev.ide.ui.generated.resources.edchrome_build_console
+import dev.ide.ui.generated.resources.edchrome_build_variant
+import dev.ide.ui.generated.resources.edchrome_command_palette
+import dev.ide.ui.generated.resources.edchrome_compose_preview
+import dev.ide.ui.generated.resources.edchrome_find_replace
+import dev.ide.ui.generated.resources.edchrome_gradle_compat
+import dev.ide.ui.generated.resources.edchrome_gradle_compatibility_mode
+import dev.ide.ui.generated.resources.edchrome_hide_inlay_hints
+import dev.ide.ui.generated.resources.edchrome_hide_resolution_details
+import dev.ide.ui.generated.resources.edchrome_hide_unresolved_dependencies
+import dev.ide.ui.generated.resources.edchrome_indexed
+import dev.ide.ui.generated.resources.edchrome_indexing
+import dev.ide.ui.generated.resources.edchrome_indexing_percent
+import dev.ide.ui.generated.resources.edchrome_more_actions
+import dev.ide.ui.generated.resources.edchrome_no_matching_tasks
+import dev.ide.ui.generated.resources.edchrome_no_variants
+import dev.ide.ui.generated.resources.edchrome_nothing_to_run
+import dev.ide.ui.generated.resources.edchrome_reformat_code
+import dev.ide.ui.generated.resources.edchrome_resolving_dependencies
+import dev.ide.ui.generated.resources.edchrome_search_tasks
+import dev.ide.ui.generated.resources.edchrome_show_inlay_hints
+import dev.ide.ui.generated.resources.edchrome_show_resolution_details
+import dev.ide.ui.generated.resources.edchrome_show_unresolved_dependencies
+import dev.ide.ui.generated.resources.edchrome_toggle_inlay_hints
+import dev.ide.ui.generated.resources.edchrome_toggle_navigator
+import dev.ide.ui.generated.resources.edchrome_unresolved_dependencies
+import dev.ide.ui.generated.resources.redo
+import dev.ide.ui.generated.resources.retry
+import dev.ide.ui.generated.resources.run
+import dev.ide.ui.generated.resources.save
+import dev.ide.ui.generated.resources.undo
 import dev.ide.ui.icons.CaIcons
 import dev.ide.ui.icons.actionIcon
 import dev.ide.ui.theme.Ca
+import dev.ide.ui.theme.CodeAssistTheme
+import org.jetbrains.compose.resources.pluralStringResource
+import org.jetbrains.compose.resources.stringResource
 
 /**
  * Top bar (glass-regular), pared back to the essentials: sidebar toggle · project name · index status ·
@@ -79,6 +128,9 @@ fun EditorTopBar(
     projectName: String,
     indexStatus: IndexUiStatus,
     onToggleNav: () -> Unit,
+    /** Live navigator-open fraction (0 closed → 1 open) driving the sidebar icon's miniature-screen
+     *  animation — the drawer's gesture fraction on phone, an eased toggle on desktop. Deferred read. */
+    navFraction: () -> Float = { 0f },
     onOpenPalette: () -> Unit,
     runTasks: () -> List<RunTaskOption> = { emptyList() },
     onPickTask: (RunTaskOption) -> Unit = {},
@@ -103,6 +155,10 @@ fun EditorTopBar(
     onPreview: () -> Unit = {},
     previewBusy: Boolean = false,
     onIndexClick: () -> Unit = {},
+    /** True when the project was imported from Gradle (compatibility mode) — shows the amber compat chip. */
+    compatibilityMode: Boolean = false,
+    /** Tapped on the compat chip: re-opens the compatibility-mode details banner. */
+    onCompatClick: () -> Unit = {},
     /** Plugin-contributed toolbar actions (the `mainToolbar` place), rendered just before Run. Empty by
      *  default — built-in chrome stays native; this is the seam a plugin adds a button through. */
     pluginActions: List<UiActionItem> = emptyList(),
@@ -110,26 +166,40 @@ fun EditorTopBar(
     compact: Boolean = false,
 ) {
     val dim = Ca.colors.textTertiary.copy(alpha = 0.35f)
-    GlassSurface(modifier = Modifier.fillMaxWidth().height(52.dp), material = GlassMaterial.Regular) {
+    GlassSurface(
+        modifier = Modifier.fillMaxWidth().height(52.dp),
+        material = GlassMaterial.Regular
+    ) {
         Row(
             Modifier.fillMaxWidth().fillMaxHeight().padding(horizontal = 12.dp),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(if (compact) 6.dp else 10.dp),
         ) {
-            IconButtonCa(CaIcons.sidebar, "Toggle navigator", onToggleNav)
+            SidebarToggleButton(navFraction, onToggleNav)
             // The name takes the flexible middle and truncates — the right-hand cluster keeps its size.
             Text(
-                projectName, color = Ca.colors.textPrimary, style = Ca.type.subhead, fontWeight = FontWeight.SemiBold,
-                maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f),
+                projectName,
+                color = Ca.colors.textPrimary,
+                style = Ca.type.subhead,
+                fontWeight = FontWeight.SemiBold,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.weight(1f),
             )
+            if (compatibilityMode) CompatModeChip(compact = compact, onClick = onCompatClick)
             IndexStatusChip(indexStatus, compact = compact, onClick = onIndexClick)
             // Accent-tinted while there are unsaved changes; saves the active tab (Cmd/Ctrl-S also works).
-            IconButtonCa(CaIcons.save, "Save", onSave, active = hasUnsavedChanges)
+            IconButtonCa(CaIcons.save, stringResource(Res.string.save), onSave, active = hasUnsavedChanges)
             if (compact) {
                 // On a phone the bar can't hold every control, so Run stays inline and the rest (incl. the
                 // edit actions) collapse into a single ⋯ overflow menu — everything one tap away.
                 PluginToolbarActions(pluginActions, dim, onPluginAction)
-                if (activeVariant != null) VariantChip(activeVariant, variants, onPickVariant, compact = true)
+                if (activeVariant != null) VariantChip(
+                    activeVariant,
+                    variants,
+                    onPickVariant,
+                    compact = true
+                )
                 RunControl(runTasks, onPickTask, compact = true)
                 EditorOverflowMenu(
                     onOpenPalette = onOpenPalette,
@@ -150,20 +220,98 @@ fun EditorTopBar(
             } else {
                 // Edit actions (undo/redo/find) sit just before Run — disabled-tinted with no file open.
                 if (hasActiveFile) {
-                    IconButtonCa(CaIcons.undo, "Undo", onUndo, tint = if (canUndo) null else dim)
-                    IconButtonCa(CaIcons.redo, "Redo", onRedo, tint = if (canRedo) null else dim)
-                    IconButtonCa(CaIcons.search, "Find / replace", onFind)
-                    IconButtonCa(CaIcons.braces, "Reformat code", onReformat)
+                    IconButtonCa(CaIcons.undo, stringResource(Res.string.undo), onUndo, tint = if (canUndo) null else dim)
+                    IconButtonCa(CaIcons.redo, stringResource(Res.string.redo), onRedo, tint = if (canRedo) null else dim)
+                    IconButtonCa(CaIcons.search, stringResource(Res.string.edchrome_find_replace), onFind)
+                    IconButtonCa(CaIcons.braces, stringResource(Res.string.edchrome_reformat_code), onReformat)
                 }
-                IconButtonCa(CaIcons.command, "Command palette", onOpenPalette)
-                IconButtonCa(CaIcons.eye, "Toggle inlay hints", onToggleInlayHints, active = inlayHintsOn)
-                IconButtonCa(CaIcons.terminal, "Build console", onToggleConsole, active = consoleOpen)
+                IconButtonCa(CaIcons.command, stringResource(Res.string.edchrome_command_palette), onOpenPalette)
+                IconButtonCa(
+                    CaIcons.eye,
+                    stringResource(Res.string.edchrome_toggle_inlay_hints),
+                    onToggleInlayHints,
+                    active = inlayHintsOn
+                )
+                IconButtonCa(
+                    CaIcons.terminal,
+                    stringResource(Res.string.edchrome_build_console),
+                    onToggleConsole,
+                    active = consoleOpen
+                )
                 // Shown when the open file has @Preview composables — renders/checks them via the interpreter.
-                if (showPreview) IconButtonCa(CaIcons.image, "Compose preview", onPreview, active = previewBusy)
+                if (showPreview) IconButtonCa(
+                    CaIcons.image,
+                    stringResource(Res.string.edchrome_compose_preview),
+                    onPreview,
+                    active = previewBusy
+                )
                 PluginToolbarActions(pluginActions, dim, onPluginAction)
-                if (activeVariant != null) VariantChip(activeVariant, variants, onPickVariant, compact = false)
+                if (activeVariant != null) VariantChip(
+                    activeVariant,
+                    variants,
+                    onPickVariant,
+                    compact = false
+                )
                 RunControl(runTasks, onPickTask, compact = false)
             }
+        }
+    }
+}
+
+/**
+ * The navigator toggle: a **miniature of the screen** whose drawer pane grows and tints accent exactly in
+ * step with the real drawer ([fraction] 0→1) — the divider is the drawer's edge, so a swipe drags the icon
+ * live and a toggle glides it. Drawn in the draw phase off a deferred [fraction] read: per-frame drawer
+ * movement invalidates only this canvas, never recomposing the bar.
+ */
+@Composable
+fun SidebarToggleButton(fraction: () -> Float, onClick: () -> Unit, modifier: Modifier = Modifier) {
+    val interaction = remember { MutableInteractionSource() }
+    val outline = Ca.colors.textSecondary
+    val accent = Ca.colors.accent
+    val toggleNavLabel = stringResource(Res.string.edchrome_toggle_navigator)
+    Box(
+        modifier
+            .size(34.dp)
+            .pressScale(interaction)
+            .clickable(interaction, indication = null, onClick = onClick)
+            .semantics { contentDescription = toggleNavLabel },
+        contentAlignment = Alignment.Center,
+    ) {
+        Canvas(Modifier.size(width = 19.dp, height = 15.dp)) {
+            val f = fraction().coerceIn(0f, 1f)
+            val stroke = 1.5.dp.toPx()
+            val inset = stroke / 2f
+            val corner = CornerRadius(3.5.dp.toPx())
+            // The divider = the drawer's edge: rides right as the drawer opens (a stylized travel, not
+            // the literal screen ratio, so the glyph stays legible at 19px).
+            val divider = inset + (size.width - 2 * inset) * (0.34f + 0.30f * f)
+            val frame = Path().apply {
+                addRoundRect(
+                    RoundRect(
+                        inset,
+                        inset,
+                        size.width - inset,
+                        size.height - inset,
+                        corner
+                    )
+                )
+            }
+            clipPath(frame) {
+                drawRect(
+                    color = lerp(outline.copy(alpha = 0.32f), accent, f),
+                    topLeft = Offset(inset, inset),
+                    size = Size(divider - inset, size.height - 2 * inset),
+                )
+            }
+            drawRoundRect(
+                color = outline,
+                topLeft = Offset(inset, inset),
+                size = Size(size.width - 2 * inset, size.height - 2 * inset),
+                cornerRadius = corner,
+                style = Stroke(stroke),
+            )
+            drawLine(outline, Offset(divider, inset), Offset(divider, size.height - inset), stroke)
         }
     }
 }
@@ -171,7 +319,11 @@ fun EditorTopBar(
 /** Renders the plugin-contributed toolbar actions (the `mainToolbar` action place). Disabled actions are
  *  tinted muted; clicking routes the action id back to the host, which runs it through the registry. */
 @Composable
-private fun PluginToolbarActions(actions: List<UiActionItem>, dim: Color, onAction: (String) -> Unit) {
+private fun PluginToolbarActions(
+    actions: List<UiActionItem>,
+    dim: Color,
+    onAction: (String) -> Unit
+) {
     actions.forEach { a ->
         IconButtonCa(
             actionIcon(a.iconId),
@@ -206,20 +358,26 @@ private fun EditorOverflowMenu(
 ) {
     var open by remember { mutableStateOf(false) }
     Box {
-        IconButtonCa(CaIcons.ellipsis, "More actions", { open = true })
+        IconButtonCa(CaIcons.ellipsis, stringResource(Res.string.edchrome_more_actions), { open = true })
         CaDropdownMenu(expanded = open, onDismissRequest = { open = false }) {
             if (hasActiveFile) {
-                OverflowItem(CaIcons.undo, "Undo", enabled = canUndo) { open = false; onUndo() }
-                OverflowItem(CaIcons.redo, "Redo", enabled = canRedo) { open = false; onRedo() }
-                OverflowItem(CaIcons.search, "Find / replace") { open = false; onFind() }
-                OverflowItem(CaIcons.braces, "Reformat code") { open = false; onReformat() }
+                OverflowItem(CaIcons.undo, stringResource(Res.string.undo), enabled = canUndo) { open = false; onUndo() }
+                OverflowItem(CaIcons.redo, stringResource(Res.string.redo), enabled = canRedo) { open = false; onRedo() }
+                OverflowItem(CaIcons.search, stringResource(Res.string.edchrome_find_replace)) { open = false; onFind() }
+                OverflowItem(CaIcons.braces, stringResource(Res.string.edchrome_reformat_code)) { open = false; onReformat() }
             }
-            OverflowItem(CaIcons.command, "Command palette") { open = false; onOpenPalette() }
+            OverflowItem(CaIcons.command, stringResource(Res.string.edchrome_command_palette)) { open = false; onOpenPalette() }
             OverflowItem(
-                CaIcons.eye, if (inlayHintsOn) "Hide inlay hints" else "Show inlay hints", active = inlayHintsOn,
+                CaIcons.eye,
+                if (inlayHintsOn) stringResource(Res.string.edchrome_hide_inlay_hints) else stringResource(Res.string.edchrome_show_inlay_hints),
+                active = inlayHintsOn,
             ) { open = false; onToggleInlayHints() }
-            OverflowItem(CaIcons.terminal, "Build console", active = consoleOpen) { open = false; onToggleConsole() }
-            if (showPreview) OverflowItem(CaIcons.image, "Compose preview") { open = false; onPreview() }
+            OverflowItem(CaIcons.terminal, stringResource(Res.string.edchrome_build_console), active = consoleOpen) {
+                open = false; onToggleConsole()
+            }
+            if (showPreview) OverflowItem(CaIcons.image, stringResource(Res.string.edchrome_compose_preview)) {
+                open = false; onPreview()
+            }
         }
     }
 }
@@ -243,7 +401,14 @@ private fun OverflowItem(
         else -> Ca.colors.textSecondary
     }
     DropdownMenuItem(
-        text = { Text(label, color = textColor, style = Ca.type.footnote, fontWeight = FontWeight.Medium) },
+        text = {
+            Text(
+                label,
+                color = textColor,
+                style = Ca.type.footnote,
+                fontWeight = FontWeight.Medium
+            )
+        },
         leadingIcon = { Icon(icon, null, Modifier.size(16.dp), tint = tint) },
         onClick = onClick,
         enabled = enabled,
@@ -266,42 +431,59 @@ fun DepsProgressBar(state: DepsResolveState, onRetry: () -> Unit) {
     var expanded by remember { mutableStateOf(false) }
     GlassSurface(modifier = Modifier.fillMaxWidth(), material = GlassMaterial.Regular) {
         Column(Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 6.dp)) {
-            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
                 Icon(CaIcons.pkg, null, Modifier.size(14.dp), tint = Ca.colors.accent)
                 Text(
-                    state.message.ifBlank { "Resolving dependencies…" }, color = Ca.colors.textSecondary,
-                    style = Ca.type.footnote, maxLines = 1, overflow = TextOverflow.Ellipsis,
+                    state.message.ifBlank { stringResource(Res.string.edchrome_resolving_dependencies) },
+                    color = Ca.colors.textSecondary,
+                    style = Ca.type.footnote,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
                     modifier = Modifier.weight(1f).padding(bottom = 4.dp),
                 )
                 // Expand to a live log of what the resolver is doing (POMs walked, artifacts downloaded).
                 if (state.log.isNotEmpty()) {
                     IconButtonCa(
                         if (expanded) CaIcons.caretDown else CaIcons.caretRight,
-                        if (expanded) "Hide resolution details" else "Show resolution details",
+                        if (expanded) stringResource(Res.string.edchrome_hide_resolution_details) else stringResource(Res.string.edchrome_show_resolution_details),
                         { expanded = !expanded }, boxSize = 24, iconSize = 14,
                     )
                 }
             }
             if (state.fraction in 0.0..1.0) {
                 LinearProgressIndicator(
-                    progress = { state.fraction.toFloat() }, modifier = Modifier.fillMaxWidth().height(3.dp),
-                    color = Ca.colors.accent, trackColor = Ca.colors.surface2,
+                    progress = { state.fraction.toFloat() },
+                    modifier = Modifier.fillMaxWidth().height(3.dp),
+                    color = Ca.colors.accent,
+                    trackColor = Ca.colors.surface2,
                 )
             } else {
-                LinearProgressIndicator(Modifier.fillMaxWidth().height(3.dp), color = Ca.colors.accent, trackColor = Ca.colors.surface2)
+                LinearProgressIndicator(
+                    Modifier.fillMaxWidth().height(3.dp),
+                    color = Ca.colors.accent,
+                    trackColor = Ca.colors.surface2
+                )
             }
             AnimatedVisibility(expanded && state.log.isNotEmpty()) {
                 val scroll = rememberScrollState()
                 // Follow the tail as new lines stream in.
                 LaunchedEffect(state.log.size) { scroll.scrollTo(scroll.maxValue) }
                 Column(
-                    Modifier.fillMaxWidth().heightIn(max = 160.dp).padding(top = 8.dp).verticalScroll(scroll),
+                    Modifier.fillMaxWidth().heightIn(max = 160.dp).padding(top = 8.dp)
+                        .verticalScroll(scroll),
                     verticalArrangement = Arrangement.spacedBy(1.dp),
                 ) {
                     for (line in state.log) {
                         Text(
-                            line, color = Ca.colors.textTertiary, style = Ca.type.codeSmall,
-                            maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.fillMaxWidth(),
+                            line,
+                            color = Ca.colors.textTertiary,
+                            style = Ca.type.codeSmall,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                            modifier = Modifier.fillMaxWidth(),
                         )
                     }
                 }
@@ -325,13 +507,19 @@ private fun UnresolvedDepsBanner(state: DepsResolveState, onRetry: () -> Unit) {
                 .background(Ca.colors.error.copy(alpha = 0.08f))
                 .padding(horizontal = 12.dp, vertical = 8.dp),
         ) {
-            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
                 Icon(CaIcons.error, null, Modifier.size(16.dp), tint = Ca.colors.error)
                 Column(Modifier.weight(1f)) {
                     Text(
-                        "$n ${if (n == 1) "dependency" else "dependencies"} couldn't be resolved",
-                        color = Ca.colors.error, style = Ca.type.footnote, fontWeight = FontWeight.SemiBold,
-                        maxLines = 1, overflow = TextOverflow.Ellipsis,
+                        pluralStringResource(Res.plurals.edchrome_unresolved_dependencies, n, n),
+                        color = Ca.colors.error,
+                        style = Ca.type.footnote,
+                        fontWeight = FontWeight.SemiBold,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
                     )
                     Text(
                         state.unresolved.first().reason, color = Ca.colors.textSecondary,
@@ -340,33 +528,49 @@ private fun UnresolvedDepsBanner(state: DepsResolveState, onRetry: () -> Unit) {
                 }
                 // Retry: re-resolve the declared set (cache-first; recovers once the network is back).
                 Row(
-                    Modifier.background(Ca.colors.error.copy(alpha = 0.16f), RoundedCornerShape(Ca.radius.pill))
+                    Modifier.background(
+                        Ca.colors.error.copy(alpha = 0.16f),
+                        RoundedCornerShape(Ca.radius.pill)
+                    )
                         .clickable(onClick = onRetry).padding(horizontal = 10.dp, vertical = 5.dp),
-                    verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(4.dp),
                 ) {
-                    Icon(CaIcons.refresh, "Retry", Modifier.size(13.dp), tint = Ca.colors.error)
-                    Text("Retry", color = Ca.colors.error, style = Ca.type.caption, fontWeight = FontWeight.SemiBold)
+                    Icon(CaIcons.refresh, stringResource(Res.string.retry), Modifier.size(13.dp), tint = Ca.colors.error)
+                    Text(
+                        stringResource(Res.string.retry),
+                        color = Ca.colors.error,
+                        style = Ca.type.caption,
+                        fontWeight = FontWeight.SemiBold
+                    )
                 }
                 IconButtonCa(
                     if (expanded) CaIcons.caretDown else CaIcons.caretRight,
-                    if (expanded) "Hide unresolved dependencies" else "Show unresolved dependencies",
+                    if (expanded) stringResource(Res.string.edchrome_hide_unresolved_dependencies) else stringResource(Res.string.edchrome_show_unresolved_dependencies),
                     { expanded = !expanded }, boxSize = 24, iconSize = 14,
                 )
             }
             AnimatedVisibility(expanded) {
                 Column(
-                    Modifier.fillMaxWidth().heightIn(max = 200.dp).padding(top = 8.dp).verticalScroll(rememberScrollState()),
+                    Modifier.fillMaxWidth().heightIn(max = 200.dp).padding(top = 8.dp)
+                        .verticalScroll(rememberScrollState()),
                     verticalArrangement = Arrangement.spacedBy(6.dp),
                 ) {
                     for (u in state.unresolved) {
                         Column(Modifier.fillMaxWidth()) {
                             Text(
-                                u.coordinate, color = Ca.colors.textPrimary, style = Ca.type.codeSmall,
-                                maxLines = 1, overflow = TextOverflow.Ellipsis,
+                                u.coordinate,
+                                color = Ca.colors.textPrimary,
+                                style = Ca.type.codeSmall,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
                             )
                             Text(
-                                "${u.reason}  ·  ${u.module}", color = Ca.colors.textTertiary,
-                                style = Ca.type.caption2, maxLines = 2, overflow = TextOverflow.Ellipsis,
+                                "${u.reason}  ·  ${u.module}",
+                                color = Ca.colors.textTertiary,
+                                style = Ca.type.caption2,
+                                maxLines = 2,
+                                overflow = TextOverflow.Ellipsis,
                             )
                         }
                     }
@@ -395,7 +599,7 @@ private fun RunControl(
         // (below) so the menu's focusable popup can't auto-focus it and pop the keyboard on open.
         val openMenu = { keyboard?.hide(); query = ""; items = tasks(); open = true }
         if (compact) {
-            IconButtonCa(CaIcons.play, "Run", onClick = openMenu, tint = Ca.colors.accent)
+            IconButtonCa(CaIcons.play, stringResource(Res.string.run), onClick = openMenu, tint = Ca.colors.accent)
         } else {
             Row(
                 Modifier.height(34.dp)
@@ -406,72 +610,112 @@ private fun RunControl(
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(6.dp),
             ) {
-                Icon(CaIcons.play, "Run", Modifier.size(16.dp), tint = Ca.colors.accent)
-                Text("Run", color = Ca.colors.accent, style = Ca.type.subhead, fontWeight = FontWeight.SemiBold)
+                Icon(CaIcons.play, stringResource(Res.string.run), Modifier.size(16.dp), tint = Ca.colors.accent)
+                Text(
+                    stringResource(Res.string.run),
+                    color = Ca.colors.accent,
+                    style = Ca.type.subhead,
+                    fontWeight = FontWeight.SemiBold
+                )
             }
         }
         CaDropdownMenu(
             expanded = open,
             onDismissRequest = { open = false },
         ) {
-                if (items.size > 3) {
-                    val searchFocus = remember { FocusRequester() }
-                    // The field is NOT focusable until the user taps it (`canFocus = searchTapped`), so the
-                    // menu's focusable popup can't auto-focus it on open and raise the keyboard. Reset each time
-                    // the menu opens. Tapping the box activates it and requests focus → the keyboard shows then.
-                    var searchTapped by remember(open) { mutableStateOf(false) }
-                    LaunchedEffect(searchTapped) { if (searchTapped) runCatching { searchFocus.requestFocus() } }
-                    Box(
-                        Modifier.padding(horizontal = 10.dp, vertical = 6.dp).width(240.dp)
-                            .background(Ca.colors.surface, RoundedCornerShape(Ca.radius.sm))
-                            .clickable { searchTapped = true }
-                            .padding(horizontal = 10.dp, vertical = 8.dp),
-                    ) {
-                        if (query.isEmpty()) Text("Search tasks…", color = Ca.colors.textTertiary, style = Ca.type.footnote)
-                        BasicTextField(
-                            value = query,
-                            onValueChange = { query = it },
-                            singleLine = true,
-                            textStyle = Ca.type.footnote.copy(color = Ca.colors.textPrimary),
-                            cursorBrush = SolidColor(Ca.colors.accent),
-                            modifier = Modifier.fillMaxWidth()
-                                .focusRequester(searchFocus)
-                                .focusProperties { canFocus = searchTapped },
+            if (items.size > 3) {
+                val searchFocus = remember { FocusRequester() }
+                // The field is NOT focusable until the user taps it (`canFocus = searchTapped`), so the
+                // menu's focusable popup can't auto-focus it on open and raise the keyboard. Reset each time
+                // the menu opens. Tapping the box activates it and requests focus → the keyboard shows then.
+                var searchTapped by remember(open) { mutableStateOf(false) }
+                LaunchedEffect(searchTapped) { if (searchTapped) runCatching { searchFocus.requestFocus() } }
+                Box(
+                    Modifier.padding(horizontal = 10.dp, vertical = 6.dp).width(240.dp)
+                        .background(Ca.colors.surface, RoundedCornerShape(Ca.radius.sm))
+                        .clickable { searchTapped = true }
+                        .padding(horizontal = 10.dp, vertical = 8.dp),
+                ) {
+                    if (query.isEmpty()) Text(
+                        stringResource(Res.string.edchrome_search_tasks),
+                        color = Ca.colors.textTertiary,
+                        style = Ca.type.footnote
+                    )
+                    BasicTextField(
+                        value = query,
+                        onValueChange = { query = it },
+                        singleLine = true,
+                        textStyle = Ca.type.footnote.copy(color = Ca.colors.textPrimary),
+                        cursorBrush = SolidColor(Ca.colors.accent),
+                        modifier = Modifier.fillMaxWidth()
+                            .focusRequester(searchFocus)
+                            .focusProperties { canFocus = searchTapped },
+                    )
+                }
+            }
+            val filtered = items.filter {
+                query.isBlank() || it.label.contains(query, ignoreCase = true) || it.group.contains(
+                    query,
+                    ignoreCase = true
+                )
+            }
+            if (items.isEmpty()) {
+                DropdownMenuItem(
+                    text = {
+                        Text(
+                            stringResource(Res.string.edchrome_nothing_to_run),
+                            color = Ca.colors.textTertiary,
+                            style = Ca.type.footnote
+                        )
+                    },
+                    onClick = {}, enabled = false,
+                )
+            }
+            if (filtered.isEmpty()) {
+                DropdownMenuItem(
+                    text = {
+                        Text(
+                            stringResource(Res.string.edchrome_no_matching_tasks),
+                            color = Ca.colors.textTertiary,
+                            style = Ca.type.footnote
+                        )
+                    },
+                    onClick = {}, enabled = false,
+                )
+            }
+            Box(Modifier.heightIn(max = 320.dp)) {
+                Column {
+                    filtered.forEach { task ->
+                        DropdownMenuItem(
+                            text = {
+                                Column {
+                                    Text(
+                                        task.label,
+                                        color = Ca.colors.textPrimary,
+                                        style = Ca.type.footnote,
+                                        fontWeight = FontWeight.Medium
+                                    )
+                                    Text(
+                                        task.group,
+                                        color = Ca.colors.textTertiary,
+                                        style = Ca.type.caption2
+                                    )
+                                }
+                            },
+                            leadingIcon = {
+                                Icon(
+                                    CaIcons.play,
+                                    null,
+                                    Modifier.size(14.dp),
+                                    tint = Ca.colors.accent
+                                )
+                            },
+                            onClick = { open = false; onPickTask(task) },
                         )
                     }
                 }
-                val filtered = items.filter {
-                    query.isBlank() || it.label.contains(query, ignoreCase = true) || it.group.contains(query, ignoreCase = true)
-                }
-                if (items.isEmpty()) {
-                    DropdownMenuItem(
-                        text = { Text("Nothing to run", color = Ca.colors.textTertiary, style = Ca.type.footnote) },
-                        onClick = {}, enabled = false,
-                    )
-                }
-                if (filtered.isEmpty()) {
-                    DropdownMenuItem(
-                        text = { Text("No matching tasks", color = Ca.colors.textTertiary, style = Ca.type.footnote) },
-                        onClick = {}, enabled = false,
-                    )
-                }
-                Box(Modifier.heightIn(max = 320.dp)) {
-                    Column {
-                        filtered.forEach { task ->
-                            DropdownMenuItem(
-                                text = {
-                                    Column {
-                                        Text(task.label, color = Ca.colors.textPrimary, style = Ca.type.footnote, fontWeight = FontWeight.Medium)
-                                        Text(task.group, color = Ca.colors.textTertiary, style = Ca.type.caption2)
-                                    }
-                                },
-                                leadingIcon = { Icon(CaIcons.play, null, Modifier.size(14.dp), tint = Ca.colors.accent) },
-                                onClick = { open = false; onPickTask(task) },
-                            )
-                        }
-                    }
-                }
             }
+        }
     }
 }
 
@@ -502,21 +746,51 @@ private fun VariantChip(
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(5.dp),
         ) {
-            Icon(CaIcons.layers, "Build variant", Modifier.size(15.dp), tint = Ca.colors.textSecondary)
-            if (!compact) Text(label, color = Ca.colors.textSecondary, style = Ca.type.footnote, fontWeight = FontWeight.Medium)
+            Icon(
+                CaIcons.layers,
+                stringResource(Res.string.edchrome_build_variant),
+                Modifier.size(15.dp),
+                tint = Ca.colors.textSecondary
+            )
+            if (!compact) Text(
+                label,
+                color = Ca.colors.textSecondary,
+                style = Ca.type.footnote,
+                fontWeight = FontWeight.Medium
+            )
             Icon(CaIcons.caretDown, null, Modifier.size(12.dp), tint = Ca.colors.textTertiary)
         }
         CaDropdownMenu(expanded = open, onDismissRequest = { open = false }) {
             if (items.isEmpty()) {
                 DropdownMenuItem(
-                    text = { Text("No variants", color = Ca.colors.textTertiary, style = Ca.type.footnote) },
+                    text = {
+                        Text(
+                            stringResource(Res.string.edchrome_no_variants),
+                            color = Ca.colors.textTertiary,
+                            style = Ca.type.footnote
+                        )
+                    },
                     onClick = {}, enabled = false,
                 )
             }
             items.forEach { v ->
                 DropdownMenuItem(
-                    text = { Text(v, color = Ca.colors.textPrimary, style = Ca.type.footnote, fontWeight = if (v == label) FontWeight.SemiBold else FontWeight.Normal) },
-                    leadingIcon = { if (v == label) Icon(CaIcons.check, null, Modifier.size(14.dp), tint = Ca.colors.accent) else Box(Modifier.size(14.dp)) },
+                    text = {
+                        Text(
+                            v,
+                            color = Ca.colors.textPrimary,
+                            style = Ca.type.footnote,
+                            fontWeight = if (v == label) FontWeight.SemiBold else FontWeight.Normal
+                        )
+                    },
+                    leadingIcon = {
+                        if (v == label) Icon(
+                            CaIcons.check,
+                            null,
+                            Modifier.size(14.dp),
+                            tint = Ca.colors.accent
+                        ) else Box(Modifier.size(14.dp))
+                    },
                     onClick = { open = false; onPick(v) },
                 )
             }
@@ -525,11 +799,45 @@ private fun VariantChip(
 }
 
 /**
+ * An amber pill marking that the project was imported from Gradle and runs in compatibility mode. Always
+ * present while such a project is open (so the limitation is never out of sight); tapping it re-opens the
+ * details banner. Collapses to an icon-only chip on a phone.
+ */
+@Composable
+private fun CompatModeChip(compact: Boolean, onClick: () -> Unit) {
+    val shape = RoundedCornerShape(Ca.radius.pill)
+    Row(
+        Modifier.clip(shape).clickable(onClick = onClick)
+            .background(Ca.colors.warning.copy(alpha = 0.16f), shape)
+            .padding(horizontal = if (compact) 6.dp else 9.dp, vertical = 4.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(4.dp),
+    ) {
+        Icon(
+            CaIcons.warning,
+            stringResource(Res.string.edchrome_gradle_compatibility_mode),
+            Modifier.size(13.dp),
+            tint = Ca.colors.warning
+        )
+        if (!compact) Text(
+            stringResource(Res.string.edchrome_gradle_compat),
+            color = Ca.colors.warning,
+            style = Ca.type.caption,
+            fontWeight = FontWeight.SemiBold
+        )
+    }
+}
+
+/**
  * A compact indexing indicator: accent spinner + percent while building, a faint check when ready. When
  * [onClick] is supplied the chip is tappable, opening the index-status dialog (what's being indexed).
  */
 @Composable
-fun IndexStatusChip(status: IndexUiStatus, compact: Boolean = false, onClick: (() -> Unit)? = null) {
+fun IndexStatusChip(
+    status: IndexUiStatus,
+    compact: Boolean = false,
+    onClick: (() -> Unit)? = null
+) {
     val shape = RoundedCornerShape(Ca.radius.pill)
     // On a phone the idle "Indexed" chip is just clutter that crowds the Run button — show only while building.
     if (compact && !status.building) return
@@ -537,13 +845,24 @@ fun IndexStatusChip(status: IndexUiStatus, compact: Boolean = false, onClick: ((
         .then(if (onClick != null) Modifier.clickable(onClick = onClick) else Modifier)
     if (status.building) {
         Row(
-            base.background(Ca.colors.accentSoft, shape).padding(horizontal = 10.dp, vertical = 5.dp),
+            base.background(Ca.colors.accentSoft, shape)
+                .padding(horizontal = 10.dp, vertical = 5.dp),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(6.dp),
         ) {
-            CircularProgressIndicator(Modifier.size(13.dp), color = Ca.colors.accent, strokeWidth = 2.dp)
-            val label = if (status.fraction in 0.0..1.0) "Indexing… ${(status.fraction * 100).toInt()}%" else "Indexing…"
-            Text(label, color = Ca.colors.accent, style = Ca.type.caption, fontWeight = FontWeight.Medium)
+            CircularProgressIndicator(
+                Modifier.size(13.dp),
+                color = Ca.colors.accent,
+                strokeWidth = 2.dp
+            )
+            val label =
+                if (status.fraction in 0.0..1.0) stringResource(Res.string.edchrome_indexing_percent, (status.fraction * 100).toInt()) else stringResource(Res.string.edchrome_indexing)
+            Text(
+                label,
+                color = Ca.colors.accent,
+                style = Ca.type.caption,
+                fontWeight = FontWeight.Medium
+            )
         }
     } else {
         Row(
@@ -552,7 +871,7 @@ fun IndexStatusChip(status: IndexUiStatus, compact: Boolean = false, onClick: ((
             horizontalArrangement = Arrangement.spacedBy(6.dp),
         ) {
             Icon(CaIcons.check, null, Modifier.size(12.dp), tint = Ca.colors.success)
-            Text("Indexed", color = Ca.colors.textTertiary, style = Ca.type.caption)
+            Text(stringResource(Res.string.edchrome_indexed), color = Ca.colors.textTertiary, style = Ca.type.caption)
         }
     }
 }
@@ -565,31 +884,34 @@ fun TabsStrip(
     onSelect: (Int) -> Unit,
     onClose: (OpenFile) -> Unit,
 ) {
+    if (openFiles.isEmpty()) return
+
     val accent = Ca.colors.accent
     Row(
         Modifier
             .fillMaxWidth()
             .height(40.dp)
+            .padding(vertical = 4.dp)
             .background(Ca.colors.editorBg)
             .horizontalScroll(rememberScrollState()),
         verticalAlignment = Alignment.CenterVertically,
     ) {
+        Spacer(modifier = Modifier.width(8.dp))
         openFiles.forEachIndexed { index, file ->
             val active = index == activeIndex
             Row(
                 Modifier
                     .fillMaxHeight()
+                    .background(
+                        color = if (active) accent.copy(alpha = 0.1f) else Ca.colors.editorBg,
+                        shape = RoundedCornerShape(Ca.radius.sm)
+                    )
+                    .border(
+                        width = if (active) 1.dp else 0.dp,
+                        color = if (active) accent.copy(alpha = 0.75f) else Color.Transparent,
+                        shape = RoundedCornerShape(Ca.radius.sm)
+                    )
                     .clickable { onSelect(index) }
-                    .drawBehind {
-                        if (active) {
-                            drawLine(
-                                accent,
-                                Offset(0f, size.height - 1f),
-                                Offset(size.width, size.height - 1f),
-                                strokeWidth = 2f,
-                            )
-                        }
-                    }
                     .padding(horizontal = 14.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
@@ -606,19 +928,44 @@ fun TabsStrip(
                     enter = fadeIn() + expandHorizontally() + scaleIn(initialScale = 0.4f),
                     exit = fadeOut() + shrinkHorizontally() + scaleOut(targetScale = 0.4f),
                 ) {
-                    Box(Modifier.padding(start = 8.dp).size(7.dp).background(Ca.colors.gitModified, RoundedCornerShape(Ca.radius.pill)))
+                    Box(
+                        Modifier.padding(start = 8.dp).size(7.dp)
+                            .background(Ca.colors.gitModified, RoundedCornerShape(Ca.radius.pill))
+                    )
                 }
                 Box(
                     Modifier.padding(start = 8.dp).size(16.dp).clickable { onClose(file) },
                     contentAlignment = Alignment.Center,
                 ) {
-                    Icon(CaIcons.close, "Close", Modifier.size(12.dp), tint = Ca.colors.textTertiary)
+                    Icon(
+                        CaIcons.close,
+                        stringResource(Res.string.close),
+                        Modifier.size(12.dp),
+                        tint = Ca.colors.textTertiary
+                    )
                 }
             }
         }
     }
     // a hairline under the tabs
     Box(Modifier.fillMaxWidth().height(1.dp).background(Ca.colors.separator))
+}
+
+@Preview
+@Composable
+fun TabsStripPreview() {
+    val openFiles = listOf(
+        OpenFile("Test", "Test.kt", ""),
+        OpenFile("Second", "Second.kt", "")
+    )
+    CodeAssistTheme {
+        TabsStrip(
+            openFiles = openFiles,
+            activeIndex = 0,
+            onSelect = {},
+            onClose = {}
+        )
+    }
 }
 
 /** Scope breadcrumb (solid): path segments; the last is primary/600, earlier ones secondary. As the caret
@@ -651,7 +998,12 @@ fun Breadcrumb(segments: List<String>) {
                         style = Ca.type.caption,
                         fontWeight = if (last) FontWeight.SemiBold else FontWeight.Normal,
                     )
-                    if (!last) Icon(CaIcons.chevronRight, null, Modifier.size(13.dp), tint = Ca.colors.textTertiary)
+                    if (!last) Icon(
+                        CaIcons.chevronRight,
+                        null,
+                        Modifier.size(13.dp),
+                        tint = Ca.colors.textTertiary
+                    )
                 }
             }
         }

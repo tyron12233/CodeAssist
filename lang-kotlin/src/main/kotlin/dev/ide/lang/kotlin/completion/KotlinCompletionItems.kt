@@ -3,8 +3,9 @@ package dev.ide.lang.kotlin.completion
 import dev.ide.lang.completion.CaretAction
 import dev.ide.lang.completion.CompletionItem
 import dev.ide.lang.completion.CompletionItemKind
+import dev.ide.lang.completion.CompletionRelevance
 import dev.ide.lang.completion.TextEdit
-import dev.ide.lang.kotlin.resolve.KotlinResolver
+import dev.ide.lang.kotlin.resolve.*
 import dev.ide.lang.kotlin.symbols.KotlinSymbol
 import dev.ide.lang.kotlin.symbols.KotlinType
 import dev.ide.lang.kotlin.symbols.TypeRendering
@@ -31,14 +32,25 @@ internal object KotlinCompletionItems {
      * non-space character after the token the editor will replace, so an item won't add a second `(`/`{` when
      * the call syntax is already there (`foo|(x)` must not become `foo()(x)`).
      */
-    fun toItem(s: KotlinSymbol, importEdit: List<TextEdit>, followingChar: Char? = null): CompletionItem {
+    fun toItem(
+        s: KotlinSymbol,
+        importEdit: List<TextEdit>,
+        followingChar: Char? = null,
+        relevance: CompletionRelevance? = null,
+        /** The item completes an INFIX operator name (`a downTo█`): insert the bare name + a space (`downTo `)
+         *  for the `a downTo b` form, never the call form `downTo()`. The label still shows the signature. */
+        infix: Boolean = false,
+    ): CompletionItem {
         val isFunction = s.kind == SymbolKind.METHOD || s.kind == SymbolKind.CONSTRUCTOR
-        val hasParams = isFunction && s.signature?.startsWith("()") == false && s.signature.startsWith("(")
+        val sig = s.signature
+        val hasParams = isFunction && sig != null && sig.startsWith("(") && !sig.startsWith("()")
         // The call syntax may already be present after the caret (`foo|(x)`, `Column| { }`) — don't add a second
         // `(`/`{`; just insert the name and let the existing arguments/lambda stand.
         val callSyntaxFollows = followingChar == '(' || followingChar == '{'
-        val trailingLambda = if (isFunction && !callSyntaxFollows) trailingLambdaParam(s) else null
+        val trailingLambda = if (isFunction && !infix && !callSyntaxFollows) trailingLambdaParam(s) else null
         val (insert, caret) = when {
+            // Infix use (`a downTo b`): the name followed by a space, ready for the right operand — not `downTo()`.
+            infix -> "${s.name} " to CaretAction.AtEnd
             // A function whose LAST parameter is a function type → insert a trailing lambda. Only a SOLE
             // parameter (`remember { }`, `forEach { }`, or a Composable whose only slot is the content lambda)
             // drops the parens and lands the caret in the braces. Any other parameters — even on a @Composable
@@ -86,6 +98,7 @@ internal object KotlinCompletionItems {
             symbol = s,
             additionalEdits = importEdit,
             caret = caret,
+            relevance = relevance,
         )
     }
 
@@ -142,7 +155,7 @@ internal object KotlinCompletionItems {
 
     /** A named-argument label. [bareName] inserts only the parameter name (the caret is on an already-named
      *  argument, so ` = ` is present and must not be duplicated); otherwise it inserts `name = `. */
-    fun namedArgItem(p: KotlinResolver.ParamInfo, bareName: Boolean = false): CompletionItem = CompletionItem(
+    fun namedArgItem(p: ParamInfo, bareName: Boolean = false): CompletionItem = CompletionItem(
         label = "${p.name} =",
         insertText = if (bareName) p.name else "${p.name} = ",
         kind = CompletionItemKind.PARAMETER,

@@ -79,7 +79,7 @@ data class CompletionItem(
     /** Origin shown right-aligned on the row: a type's package, or a member's declaring class. Null hides it. */
     val container: String? = null,
     val documentation: String? = null,
-    /** Lower sorts first; backends set this from prefix match + expected-type match + proximity. */
+    /** Lower sorts first; the final within-backend tiebreaker after the weigher chain (see `Contributor.kt`). */
     val sortPriority: Int = 0,
     /** The resolved symbol behind this item, if any (for navigation, docs-on-demand). */
     val symbol: Symbol? = null,
@@ -87,7 +87,36 @@ data class CompletionItem(
     val additionalEdits: List<TextEdit> = emptyList(),
     /** Where the caret (and any selection) lands once this item is accepted; see [CaretAction]. */
     val caret: CaretAction = CaretAction.AtEnd,
+    /** Producer-computed relevance facts the ranking weighers read; null ranks as [CompletionRelevance.NONE]. */
+    val relevance: CompletionRelevance? = null,
 )
+
+/**
+ * The relevance facts a producing contributor already knows at emit time, carried on the item so the
+ * [CompletionWeigher] chain can rank the merged set without re-resolving any symbol. Every field has a
+ * neutral default: a contributor that fills nothing ranks exactly as before (the weighers see no signal).
+ */
+data class CompletionRelevance(
+    /** The candidate's produced/declared type is assignable to the type the context expects. */
+    val fitsExpectedType: Boolean = false,
+    /** Backend-judged contextual fit beyond types — e.g. a `@Composable` callable inside a composable
+     *  calling context. A boost, never a filter. */
+    val contextBoost: Boolean = false,
+    /** Grouping of a callable relative to its receiver, lower = closer: own member (0), project-source
+     *  extension (1), library extension (2), universal scope function (3), `Object`/`Any` method (4). */
+    val callableWeight: Int = 0,
+    /** Already visible at the caret — imported or in scope, so accepting it adds no import. */
+    val inScope: Boolean = true,
+    val deprecated: Boolean = false,
+    /** Producer-computed declaration proximity (lower = closer): locals/parameters, then members, then
+     *  project symbols, then library. 0 = no signal, so a backend that doesn't fill it is unaffected. */
+    val proximity: Int = 0,
+) {
+    companion object {
+        /** What the weighers assume for an item whose producer attached no relevance. */
+        val NONE = CompletionRelevance()
+    }
+}
 
 /**
  * Where the caret — and optionally a selection — ends up after a [CompletionItem] is accepted, expressed

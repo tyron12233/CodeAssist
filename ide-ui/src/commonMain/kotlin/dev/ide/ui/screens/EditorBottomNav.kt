@@ -20,23 +20,28 @@ import dev.ide.ui.RailDestination
 import dev.ide.ui.components.GlassMaterial
 import dev.ide.ui.components.GlassSurface
 import dev.ide.ui.components.IconButtonCa
+import dev.ide.ui.generated.resources.Res
+import dev.ide.ui.generated.resources.edbottomnav_source
+import dev.ide.ui.generated.resources.more
+import dev.ide.ui.generated.resources.search
 import dev.ide.ui.icons.CaIcons
 import dev.ide.ui.theme.Ca
+import org.jetbrains.compose.resources.stringResource
 
-/** The phone-only bottom navigation bar (the compact counterpart to the desktop side rail). */
+/** The phone-only bottom navigation items (the compact counterpart to the desktop side rail). Files has no
+ *  tab here — the file tree is the left push drawer (edge swipe or the top-bar toggle), not a destination.
+ *  Draws no surface of its own: it renders as the collapsed face of the [dev.ide.ui.components.BuildDock],
+ *  which owns the glass bar and the swipe-up-to-console gesture. */
 @Composable
 internal fun BottomNav(selected: RailDestination, onSelect: (RailDestination) -> Unit) {
-    GlassSurface(modifier = Modifier.fillMaxWidth().height(60.dp), material = GlassMaterial.Thick) {
-        Row(
-            Modifier.fillMaxSize(),
-            horizontalArrangement = Arrangement.SpaceEvenly,
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            BottomNavItem(CaIcons.docText, "Files", selected == RailDestination.Files) { onSelect(RailDestination.Files) }
-            BottomNavItem(CaIcons.search, "Search", selected == RailDestination.Search) { onSelect(RailDestination.Search) }
-            BottomNavItem(CaIcons.gitBranch, "Source", selected == RailDestination.Source) { onSelect(RailDestination.Source) }
-            BottomNavItem(CaIcons.ellipsis, "More", selected == RailDestination.More) { onSelect(RailDestination.More) }
-        }
+    Row(
+        Modifier.fillMaxWidth().height(60.dp),
+        horizontalArrangement = Arrangement.SpaceEvenly,
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        BottomNavItem(CaIcons.search, stringResource(Res.string.search), selected == RailDestination.Search) { onSelect(RailDestination.Search) }
+        BottomNavItem(CaIcons.gitBranch, stringResource(Res.string.edbottomnav_source), selected == RailDestination.Source) { onSelect(RailDestination.Source) }
+        BottomNavItem(CaIcons.ellipsis, stringResource(Res.string.more), selected == RailDestination.More) { onSelect(RailDestination.More) }
     }
 }
 

@@ -33,6 +33,7 @@ import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardOptions
@@ -70,6 +71,8 @@ import dev.ide.ui.backend.UiSigningAssignment
 import dev.ide.ui.backend.UiSigningAssignments
 import dev.ide.ui.backend.UiFacetConfig
 import dev.ide.ui.backend.UiMissingProguardFile
+import dev.ide.ui.backend.UiPackagingOptions
+import dev.ide.ui.backend.UiPackagingRules
 import dev.ide.ui.backend.UiModuleConfig
 import dev.ide.ui.backend.UiModuleConfigEdit
 import dev.ide.ui.backend.UiModuleRef
@@ -84,20 +87,94 @@ import dev.ide.ui.components.GlassMaterial
 import dev.ide.ui.components.GlassSurface
 import dev.ide.ui.components.IconButtonCa
 import dev.ide.ui.components.PrimaryButton
+import dev.ide.ui.generated.resources.Res
+import dev.ide.ui.generated.resources.add
+import dev.ide.ui.generated.resources.back
+import dev.ide.ui.generated.resources.cancel
+import dev.ide.ui.generated.resources.create
+import dev.ide.ui.generated.resources.remove
+import dev.ide.ui.generated.resources.modcfg_add_placeholder
+import dev.ide.ui.generated.resources.modcfg_add_row
+import dev.ide.ui.generated.resources.modcfg_add_source_root
+import dev.ide.ui.generated.resources.modcfg_auto_detect
+import dev.ide.ui.generated.resources.modcfg_auto_detected
+import dev.ide.ui.generated.resources.modcfg_build_features_android_only
+import dev.ide.ui.generated.resources.modcfg_build_features_intro
+import dev.ide.ui.generated.resources.modcfg_couldnt_create
+import dev.ide.ui.generated.resources.modcfg_couldnt_load_config
+import dev.ide.ui.generated.resources.modcfg_created
+import dev.ide.ui.generated.resources.modcfg_debug_default
+import dev.ide.ui.generated.resources.modcfg_java_version
+import dev.ide.ui.generated.resources.modcfg_keystores_empty
+import dev.ide.ui.generated.resources.modcfg_manage_keystores
+import dev.ide.ui.generated.resources.modcfg_missing_keep_rule_files
+import dev.ide.ui.generated.resources.modcfg_missing_keep_rule_files_content
+import dev.ide.ui.generated.resources.modcfg_module_name_placeholder
+import dev.ide.ui.generated.resources.modcfg_name
+import dev.ide.ui.generated.resources.modcfg_new_badge
+import dev.ide.ui.generated.resources.modcfg_new_module
+import dev.ide.ui.generated.resources.modcfg_no_module_types
+import dev.ide.ui.generated.resources.modcfg_no_modules
+import dev.ide.ui.generated.resources.modcfg_no_roots
+import dev.ide.ui.generated.resources.modcfg_no_rows_yet
+import dev.ide.ui.generated.resources.modcfg_no_source_sets
+import dev.ide.ui.generated.resources.modcfg_output
+import dev.ide.ui.generated.resources.modcfg_remove
+import dev.ide.ui.generated.resources.modcfg_remove_named
+import dev.ide.ui.generated.resources.modcfg_remove_module
+import dev.ide.ui.generated.resources.modcfg_remove_module_content
+import dev.ide.ui.generated.resources.modcfg_removed
+import dev.ide.ui.generated.resources.modcfg_run
+import dev.ide.ui.generated.resources.modcfg_run_config_hint
+import dev.ide.ui.generated.resources.modcfg_run_main_class_placeholder
+import dev.ide.ui.generated.resources.modcfg_save
+import dev.ide.ui.generated.resources.modcfg_save_changes
+import dev.ide.ui.generated.resources.modcfg_section_general
+import dev.ide.ui.generated.resources.modcfg_section_source_sets
+import dev.ide.ui.generated.resources.modcfg_signing_android_only
+import dev.ide.ui.generated.resources.modcfg_signing_intro
+import dev.ide.ui.generated.resources.modcfg_packaging_android_only
+import dev.ide.ui.generated.resources.modcfg_packaging_intro
+import dev.ide.ui.generated.resources.modcfg_packaging_glob_hint
+import dev.ide.ui.generated.resources.modcfg_packaging_resources
+import dev.ide.ui.generated.resources.modcfg_packaging_jni
+import dev.ide.ui.generated.resources.modcfg_packaging_jni_note
+import dev.ide.ui.generated.resources.modcfg_packaging_excludes
+import dev.ide.ui.generated.resources.modcfg_packaging_excludes_desc
+import dev.ide.ui.generated.resources.modcfg_packaging_pick_first
+import dev.ide.ui.generated.resources.modcfg_packaging_pick_first_desc
+import dev.ide.ui.generated.resources.modcfg_packaging_merge
+import dev.ide.ui.generated.resources.modcfg_packaging_merge_desc
+import dev.ide.ui.generated.resources.modcfg_packaging_default_excludes
+import dev.ide.ui.generated.resources.modcfg_packaging_default_merges
+import dev.ide.ui.generated.resources.modcfg_tab_build_features
+import dev.ide.ui.generated.resources.modcfg_tab_dependencies
+import dev.ide.ui.generated.resources.modcfg_tab_packaging
+import dev.ide.ui.generated.resources.modcfg_tab_settings
+import dev.ide.ui.generated.resources.modcfg_tab_signing
+import dev.ide.ui.generated.resources.modcfg_title_modules
+import dev.ide.ui.generated.resources.modcfg_new_module_action
+import dev.ide.ui.generated.resources.modcfg_type
 import dev.ide.ui.icons.CaIcons
 import dev.ide.ui.theme.Ca
 import dev.ide.ui.theme.Motion
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import org.jetbrains.compose.resources.StringResource
+import org.jetbrains.compose.resources.stringResource
 
 private data class ConfigToast(val text: String, val error: Boolean)
 
+/** A sentinel substituted into a composable-resolved format template so a callback can fill in a runtime arg. */
+private const val ARG_TOKEN = "\u0000"
+
 /** The tabs of a module's detail view. */
-enum class ModulesTab(val label: String) {
-    Settings("Settings"),
-    BuildFeatures("Build Features"),
-    Signing("Signing"),
-    Dependencies("Dependencies"),
+enum class ModulesTab(val label: StringResource) {
+    Settings(Res.string.modcfg_tab_settings),
+    BuildFeatures(Res.string.modcfg_tab_build_features),
+    Packaging(Res.string.modcfg_tab_packaging),
+    Signing(Res.string.modcfg_tab_signing),
+    Dependencies(Res.string.modcfg_tab_dependencies),
 }
 
 /**
@@ -135,7 +212,7 @@ private fun ModulesHeader(title: String, icon: ImageVector, onBack: () -> Unit, 
             Modifier.fillMaxWidth().height(56.dp).padding(horizontal = 10.dp),
             verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp),
         ) {
-            IconButtonCa(CaIcons.chevronLeft, "Back", onBack)
+            IconButtonCa(CaIcons.chevronLeft, stringResource(Res.string.back), onBack)
             Icon(icon, null, Modifier.size(20.dp), tint = Ca.colors.accent)
             Text(title, color = Ca.colors.textPrimary, style = Ca.type.headline, fontWeight = FontWeight.SemiBold,
                 modifier = Modifier.weight(1f), maxLines = 1, overflow = TextOverflow.Ellipsis)
@@ -153,17 +230,19 @@ private fun ModulesList(backend: IdeBackend, codeFont: FontFamily, onOpen: (Stri
     var pendingRemove by remember { mutableStateOf<String?>(null) }
     var toast by remember { mutableStateOf<ConfigToast?>(null) }
     val scope = rememberCoroutineScope()
+    // Resolved here (composable) so the "Removed <name>" toast can be built from the non-composable confirm callback.
+    val removedTemplate = stringResource(Res.string.modcfg_removed, ARG_TOKEN)
     LaunchedEffect(toast) { if (toast != null) { delay(2600); toast = null } }
 
     Box(Modifier.fillMaxSize().background(Ca.colors.bg)) {
         Column(Modifier.fillMaxSize()) {
-            ModulesHeader("Modules", CaIcons.layers, onBack) {
-                IconButtonCa(CaIcons.plus, "New module", onClick = { newOpen = true }, active = true)
+            ModulesHeader(stringResource(Res.string.modcfg_title_modules), CaIcons.layers, onBack) {
+                IconButtonCa(CaIcons.plus, stringResource(Res.string.modcfg_new_module_action), onClick = { newOpen = true }, active = true)
             }
             Box(Modifier.fillMaxWidth().height(1.dp).background(Ca.colors.separator))
             if (modules.isEmpty()) {
                 Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                    Text("No modules. Tap + to add one.", color = Ca.colors.textTertiary, style = Ca.type.subhead)
+                    Text(stringResource(Res.string.modcfg_no_modules), color = Ca.colors.textTertiary, style = Ca.type.subhead)
                 }
             } else {
                 LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -192,7 +271,7 @@ private fun ModulesList(backend: IdeBackend, codeFont: FontFamily, onOpen: (Stri
             onConfirm = {
                 val name = pendingRemove
                 if (name != null && backend.modules.removeModule(name)) {
-                    toast = ConfigToast("Removed $name", error = false); modules = backend.modules.configurableModules()
+                    toast = ConfigToast(removedTemplate.replace(ARG_TOKEN, name), error = false); modules = backend.modules.configurableModules()
                 }
                 pendingRemove = null
             },
@@ -215,7 +294,7 @@ private fun ModuleListItem(module: UiModuleRef, onOpen: () -> Unit, onRemove: ()
             Text(module.name, color = Ca.colors.textPrimary, style = Ca.type.subhead, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis)
             Text(module.typeDisplay, color = Ca.colors.textTertiary, style = Ca.type.caption2, maxLines = 1, overflow = TextOverflow.Ellipsis)
         }
-        IconButtonCa(CaIcons.close, "Remove ${module.name}", onClick = onRemove, boxSize = 30, iconSize = 16, tint = Ca.colors.textTertiary)
+        IconButtonCa(CaIcons.close, stringResource(Res.string.modcfg_remove_named, module.name), onClick = onRemove, boxSize = 30, iconSize = 16, tint = Ca.colors.textTertiary)
         Icon(CaIcons.chevronRight, null, Modifier.size(16.dp), tint = Ca.colors.textTertiary)
     }
 }
@@ -233,6 +312,7 @@ private fun ModuleDetail(backend: IdeBackend, moduleName: String, initialTab: Mo
             when (tab) {
                 ModulesTab.Settings -> ModuleSettingsTab(backend, moduleName, codeFont, Modifier.weight(1f).fillMaxWidth())
                 ModulesTab.BuildFeatures -> BuildFeaturesPane(backend, moduleName, Modifier.weight(1f).fillMaxWidth())
+                ModulesTab.Packaging -> PackagingPane(backend, moduleName, codeFont, Modifier.weight(1f).fillMaxWidth())
                 ModulesTab.Signing -> SigningPane(backend, moduleName, onOpenKeystoreManager, Modifier.weight(1f).fillMaxWidth())
                 ModulesTab.Dependencies -> DependenciesPane(backend, moduleName, codeFont, fileActions, Modifier.weight(1f).fillMaxWidth())
             }
@@ -251,7 +331,7 @@ private fun ModuleTabRow(tab: ModulesTab, onSelect: (ModulesTab) -> Unit) {
                 Modifier.background(bg, RoundedCornerShape(Ca.radius.pill)).clickable(remember { MutableInteractionSource() }, null) { onSelect(t) }
                     .padding(horizontal = 16.dp, vertical = 7.dp),
             ) {
-                Text(t.label, color = if (sel) Ca.colors.accent else Ca.colors.textSecondary, style = Ca.type.footnote, fontWeight = FontWeight.SemiBold)
+                Text(stringResource(t.label), color = if (sel) Ca.colors.accent else Ca.colors.textSecondary, style = Ca.type.footnote, fontWeight = FontWeight.SemiBold)
             }
         }
     }
@@ -281,7 +361,7 @@ private fun BuildFeaturesPane(backend: IdeBackend, moduleName: String, modifier:
             loading -> Box(Modifier.fillMaxSize(), Alignment.Center) { CircularProgressIndicator(color = Ca.colors.accent) }
             f == null -> Box(Modifier.fillMaxSize().padding(32.dp), Alignment.Center) {
                 Text(
-                    "Build features apply to Android modules only.",
+                    stringResource(Res.string.modcfg_build_features_android_only),
                     color = Ca.colors.textTertiary, style = Ca.type.subhead,
                 )
             }
@@ -292,7 +372,7 @@ private fun BuildFeaturesPane(backend: IdeBackend, moduleName: String, modifier:
             ) {
                 item("intro") {
                     Text(
-                        "Turn build features on per module. Enabling one adds the dependencies it needs.",
+                        stringResource(Res.string.modcfg_build_features_intro),
                         color = Ca.colors.textSecondary, style = Ca.type.footnote,
                     )
                 }
@@ -340,6 +420,116 @@ private fun BuildFeatureRow(feature: UiBuildFeature, working: Boolean, switchEna
     }
 }
 
+// ---- Packaging (Java-resource + native-lib merge rules) ------------------------------------------
+
+@Composable
+private fun PackagingPane(backend: IdeBackend, moduleName: String, codeFont: FontFamily, modifier: Modifier) {
+    var options by remember(moduleName) { mutableStateOf<UiPackagingOptions?>(null) }
+    var loading by remember(moduleName) { mutableStateOf(true) }
+    var reloadKey by remember(moduleName) { mutableStateOf(0) }
+    var saving by remember(moduleName) { mutableStateOf(false) }
+    var toast by remember { mutableStateOf<ConfigToast?>(null) }
+    val scope = rememberCoroutineScope()
+
+    // Editable copies of every list, seeded from the loaded options (re-seeded on reload).
+    val resExcludes = remember(moduleName, reloadKey) { mutableStateListOf<String>() }
+    val resPickFirsts = remember(moduleName, reloadKey) { mutableStateListOf<String>() }
+    val resMerges = remember(moduleName, reloadKey) { mutableStateListOf<String>() }
+    val jniExcludes = remember(moduleName, reloadKey) { mutableStateListOf<String>() }
+    val jniPickFirsts = remember(moduleName, reloadKey) { mutableStateListOf<String>() }
+
+    LaunchedEffect(moduleName, reloadKey) {
+        loading = true
+        val o = runCatching { backend.modules.getPackagingOptions(moduleName) }.getOrNull()
+        options = o
+        if (o != null) {
+            resExcludes.clear(); resExcludes.addAll(o.resources.excludes)
+            resPickFirsts.clear(); resPickFirsts.addAll(o.resources.pickFirsts)
+            resMerges.clear(); resMerges.addAll(o.resources.merges)
+            jniExcludes.clear(); jniExcludes.addAll(o.jniLibs.excludes)
+            jniPickFirsts.clear(); jniPickFirsts.addAll(o.jniLibs.pickFirsts)
+        }
+        loading = false
+    }
+    LaunchedEffect(toast) { if (toast != null) { delay(2600); toast = null } }
+
+    Box(modifier) {
+        val o = options
+        when {
+            loading -> Box(Modifier.fillMaxSize(), Alignment.Center) { CircularProgressIndicator(color = Ca.colors.accent) }
+            o == null -> Box(Modifier.fillMaxSize().padding(32.dp), Alignment.Center) {
+                Text(stringResource(Res.string.modcfg_packaging_android_only), color = Ca.colors.textTertiary, style = Ca.type.subhead)
+            }
+            else -> Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                Text(stringResource(Res.string.modcfg_packaging_intro), color = Ca.colors.textSecondary, style = Ca.type.footnote)
+                Text(stringResource(Res.string.modcfg_packaging_glob_hint), color = Ca.colors.textTertiary, style = Ca.type.caption2)
+
+                SectionCard(stringResource(Res.string.modcfg_packaging_resources)) {
+                    PackagingRuleList(stringResource(Res.string.modcfg_packaging_excludes), stringResource(Res.string.modcfg_packaging_excludes_desc), resExcludes, codeFont)
+                    PackagingRuleList(stringResource(Res.string.modcfg_packaging_pick_first), stringResource(Res.string.modcfg_packaging_pick_first_desc), resPickFirsts, codeFont)
+                    PackagingRuleList(stringResource(Res.string.modcfg_packaging_merge), stringResource(Res.string.modcfg_packaging_merge_desc), resMerges, codeFont)
+                    DefaultsDisclosure(stringResource(Res.string.modcfg_packaging_default_excludes), o.defaultResourceExcludes, codeFont)
+                    DefaultsDisclosure(stringResource(Res.string.modcfg_packaging_default_merges), o.defaultResourceMerges, codeFont)
+                }
+
+                SectionCard(stringResource(Res.string.modcfg_packaging_jni)) {
+                    Text(stringResource(Res.string.modcfg_packaging_jni_note), color = Ca.colors.textTertiary, style = Ca.type.caption2)
+                    PackagingRuleList(stringResource(Res.string.modcfg_packaging_excludes), stringResource(Res.string.modcfg_packaging_excludes_desc), jniExcludes, codeFont)
+                    PackagingRuleList(stringResource(Res.string.modcfg_packaging_pick_first), stringResource(Res.string.modcfg_packaging_pick_first_desc), jniPickFirsts, codeFont)
+                }
+
+                Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.End) {
+                    if (saving) CircularProgressIndicator(Modifier.size(20.dp).padding(end = 4.dp), color = Ca.colors.accent, strokeWidth = 2.dp)
+                    PrimaryButton(stringResource(Res.string.modcfg_save), icon = CaIcons.check, onClick = {
+                        if (!saving) {
+                            saving = true
+                            scope.launch {
+                                val r = backend.modules.updatePackagingOptions(
+                                    moduleName,
+                                    UiPackagingRules(resExcludes.toList(), resPickFirsts.toList(), resMerges.toList()),
+                                    UiPackagingRules(jniExcludes.toList(), jniPickFirsts.toList()),
+                                )
+                                toast = ConfigToast(r.message, error = !r.success)
+                                saving = false
+                                if (r.success) reloadKey++
+                            }
+                        }
+                    })
+                }
+            }
+        }
+        ConfigToastHost(toast, Modifier.align(Alignment.BottomCenter))
+    }
+}
+
+/** One labelled + described glob-pattern list within a packaging section. */
+@Composable
+private fun PackagingRuleList(label: String, description: String, values: SnapshotStateList<String>, codeFont: FontFamily) {
+    Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(5.dp)) {
+        Text(label, color = Ca.colors.textPrimary, style = Ca.type.footnote, fontWeight = FontWeight.SemiBold)
+        Text(description, color = Ca.colors.textTertiary, style = Ca.type.caption2)
+        StringListEditor(values, codeFont)
+    }
+}
+
+/** A collapsible read-only list of the AGP defaults that are always applied on top of the module's rules. */
+@Composable
+private fun DefaultsDisclosure(label: String, patterns: List<String>, codeFont: FontFamily) {
+    var open by remember { mutableStateOf(false) }
+    Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+        Row(
+            Modifier.fillMaxWidth().clickable(remember { MutableInteractionSource() }, null) { open = !open },
+            verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp),
+        ) {
+            Icon(if (open) CaIcons.chevronDown else CaIcons.chevronRight, null, Modifier.size(14.dp), tint = Ca.colors.textTertiary)
+            Text("$label (${patterns.size})", color = Ca.colors.textTertiary, style = Ca.type.caption2, fontWeight = FontWeight.Medium)
+        }
+        if (open) patterns.forEach { p ->
+            Text(p, color = Ca.colors.textTertiary, style = Ca.type.caption2.copy(fontFamily = codeFont), modifier = Modifier.padding(start = 20.dp))
+        }
+    }
+}
+
 // ---- Signing (assign a keystore to each build type) ----------------------------------------------
 
 @Composable
@@ -363,7 +553,7 @@ private fun SigningPane(backend: IdeBackend, moduleName: String, onOpenKeystoreM
         when {
             loading -> Box(Modifier.fillMaxSize(), Alignment.Center) { CircularProgressIndicator(color = Ca.colors.accent) }
             d == null -> Box(Modifier.fillMaxSize().padding(32.dp), Alignment.Center) {
-                Text("Signing applies to Android modules only.", color = Ca.colors.textTertiary, style = Ca.type.subhead)
+                Text(stringResource(Res.string.modcfg_signing_android_only), color = Ca.colors.textTertiary, style = Ca.type.subhead)
             }
             else -> LazyColumn(
                 Modifier.fillMaxSize(),
@@ -373,7 +563,7 @@ private fun SigningPane(backend: IdeBackend, moduleName: String, onOpenKeystoreM
                 item("intro") {
                     Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                         Text(
-                            "Choose the keystore that signs each build type. An unassigned type signs with the debug keystore.",
+                            stringResource(Res.string.modcfg_signing_intro),
                             color = Ca.colors.textSecondary, style = Ca.type.footnote,
                         )
                         Row(
@@ -383,7 +573,7 @@ private fun SigningPane(backend: IdeBackend, moduleName: String, onOpenKeystoreM
                             verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp),
                         ) {
                             Icon(CaIcons.key, null, Modifier.size(15.dp), tint = Ca.colors.accent)
-                            Text("Manage keystores", style = Ca.type.footnote, fontWeight = FontWeight.SemiBold, color = Ca.colors.accent)
+                            Text(stringResource(Res.string.modcfg_manage_keystores), style = Ca.type.footnote, fontWeight = FontWeight.SemiBold, color = Ca.colors.accent)
                         }
                     }
                 }
@@ -401,7 +591,7 @@ private fun SigningPane(backend: IdeBackend, moduleName: String, onOpenKeystoreM
                     }
                 }
                 if (d.keystores.isEmpty()) item("empty") {
-                    Text("No keystores yet — create one in the Keystore Manager to sign release builds.",
+                    Text(stringResource(Res.string.modcfg_keystores_empty),
                         color = Ca.colors.textTertiary, style = Ca.type.caption2)
                 }
             }
@@ -420,7 +610,7 @@ private fun BuildTypeSigningRow(assignment: UiSigningAssignment, keystores: List
         Text(assignment.buildType, style = Ca.type.subhead, fontWeight = FontWeight.SemiBold, color = Ca.colors.textPrimary)
         // The choices: the default debug keystore (null) plus every registered keystore.
         Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            SigningPill("debug (default)", selected = assignment.keystoreId == null, enabled = !busy) { onAssign(null) }
+            SigningPill(stringResource(Res.string.modcfg_debug_default), selected = assignment.keystoreId == null, enabled = !busy) { onAssign(null) }
             keystores.forEach { ks ->
                 SigningPill(ks.name, selected = assignment.keystoreId == ks.id, enabled = !busy) { onAssign(ks.id) }
             }
@@ -453,6 +643,9 @@ private fun ModuleSettingsTab(backend: IdeBackend, moduleName: String, codeFont:
     var missingProguard by remember(moduleName) { mutableStateOf<List<UiMissingProguardFile>>(emptyList()) }
     val scope = rememberCoroutineScope()
     val fsEpoch by backend.files.fileSystemEpoch.collectAsState()
+    // Resolved here (composable) so the create-proguard toasts can be built from the non-composable callback.
+    val createdTemplate = stringResource(Res.string.modcfg_created, ARG_TOKEN)
+    val couldntCreateTemplate = stringResource(Res.string.modcfg_couldnt_create, ARG_TOKEN)
 
     LaunchedEffect(moduleName, reloadKey) {
         loading = true
@@ -476,7 +669,7 @@ private fun ModuleSettingsTab(backend: IdeBackend, moduleName: String, codeFont:
                 scope.launch {
                     val created = backend.modules.createProguardFile(moduleName, entry)
                     toast = ConfigToast(
-                        if (created != null) "Created $entry" else "Couldn't create $entry",
+                        (if (created != null) createdTemplate else couldntCreateTemplate).replace(ARG_TOKEN, entry),
                         error = created == null,
                     )
                     if (created != null) reloadKey++
@@ -510,15 +703,15 @@ private fun ConfirmModuleRemove(moduleName: String?, onDismiss: () -> Unit, onCo
                 .background(Ca.colors.glassThick, RoundedCornerShape(Ca.radius.xl))
                 .border(1.dp, Ca.colors.glassEdge, RoundedCornerShape(Ca.radius.xl)).padding(20.dp),
         ) {
-            Text("Remove module", color = Ca.colors.textPrimary, style = Ca.type.subhead, fontWeight = FontWeight.SemiBold)
+            Text(stringResource(Res.string.modcfg_remove_module), color = Ca.colors.textPrimary, style = Ca.type.subhead, fontWeight = FontWeight.SemiBold)
             Spacer(Modifier.height(8.dp))
-            Text("Remove '${shown ?: ""}' from the project? Its files are left on disk; other modules' dependencies on it are dropped.",
+            Text(stringResource(Res.string.modcfg_remove_module_content, shown ?: ""),
                 color = Ca.colors.textSecondary, style = Ca.type.footnote)
             Spacer(Modifier.height(16.dp))
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                 Spacer(Modifier.weight(1f))
-                DialogTextButton("Cancel", destructive = false, onClick = onDismiss)
-                DialogTextButton("Remove", destructive = true, onClick = onConfirm)
+                DialogTextButton(stringResource(Res.string.cancel), destructive = false, onClick = onDismiss)
+                DialogTextButton(stringResource(Res.string.modcfg_remove), destructive = true, onClick = onConfirm)
             }
         }
     }
@@ -550,7 +743,7 @@ private fun NewModuleDialog(
                 .border(1.dp, Ca.colors.glassEdge, RoundedCornerShape(Ca.radius.xl)).padding(20.dp),
         ) {
             if (types.isEmpty()) {
-                Text("No module types available.", color = Ca.colors.textTertiary, style = Ca.type.subhead)
+                Text(stringResource(Res.string.modcfg_no_module_types), color = Ca.colors.textTertiary, style = Ca.type.subhead)
             } else {
                 var name by remember { mutableStateOf("") }
                 var typeIdx by remember { mutableStateOf(0) }
@@ -559,14 +752,14 @@ private fun NewModuleDialog(
                 // Facet forms are rebuilt when the chosen type changes (each type has its own default facets).
                 val forms = remember(type.id) { type.defaultFacets.map { it.toForm() } }
 
-                Text("New module", color = Ca.colors.textPrimary, style = Ca.type.title3, fontWeight = FontWeight.SemiBold)
+                Text(stringResource(Res.string.modcfg_new_module), color = Ca.colors.textPrimary, style = Ca.type.title3, fontWeight = FontWeight.SemiBold)
                 Spacer(Modifier.height(12.dp))
                 LazyColumn(Modifier.fillMaxWidth().heightIn(max = 440.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
                     item("name") {
-                        LabeledField("Name") {
+                        LabeledField(stringResource(Res.string.modcfg_name)) {
                             Box(Modifier.fillMaxWidth().background(Ca.colors.surface2, RoundedCornerShape(Ca.radius.control))
                                 .border(1.dp, Ca.colors.hairline, RoundedCornerShape(Ca.radius.control)).padding(horizontal = 12.dp, vertical = 10.dp)) {
-                                if (name.isEmpty()) Text("e.g. feature, core", color = Ca.colors.textTertiary, style = Ca.type.footnote)
+                                if (name.isEmpty()) Text(stringResource(Res.string.modcfg_module_name_placeholder), color = Ca.colors.textTertiary, style = Ca.type.footnote)
                                 BasicTextField(name, { name = it }, singleLine = true,
                                     textStyle = Ca.type.footnote.copy(color = Ca.colors.textPrimary, fontFamily = codeFont),
                                     cursorBrush = SolidColor(Ca.colors.accent), modifier = Modifier.fillMaxWidth())
@@ -574,14 +767,14 @@ private fun NewModuleDialog(
                         }
                     }
                     item("type") {
-                        LabeledField("Type") {
+                        LabeledField(stringResource(Res.string.modcfg_type)) {
                             Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                                 types.forEachIndexed { i, t -> LevelChip(t.displayName, i == typeIdx) { typeIdx = i } }
                             }
                         }
                     }
                     item("level") {
-                        LabeledField("Java version") {
+                        LabeledField(stringResource(Res.string.modcfg_java_version)) {
                             Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                                 type.languageLevels.forEach { lvl -> LevelChip(prettyLevel(lvl), lvl == level) { level = lvl } }
                             }
@@ -592,8 +785,8 @@ private fun NewModuleDialog(
                 Spacer(Modifier.height(12.dp))
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                     Spacer(Modifier.weight(1f))
-                    DialogTextButton("Cancel", destructive = false, onClick = onDismiss)
-                    PrimaryButton("Create", icon = CaIcons.check, onClick = {
+                    DialogTextButton(stringResource(Res.string.cancel), destructive = false, onClick = onDismiss)
+                    PrimaryButton(stringResource(Res.string.create), icon = CaIcons.check, onClick = {
                         onCreate(name.trim(), type.id, level, forms.associate { it.table to it.toValues() })
                     })
                 }
@@ -623,7 +816,7 @@ private fun ConfigBody(
                 CircularProgressIndicator(Modifier.size(28.dp), color = Ca.colors.accent, strokeWidth = 3.dp)
             }
             config == null -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                Text("Couldn't load module configuration.", color = Ca.colors.textTertiary, style = Ca.type.subhead)
+                Text(stringResource(Res.string.modcfg_couldnt_load_config), color = Ca.colors.textTertiary, style = Ca.type.subhead)
             }
             else -> ConfigForm(config, codeFont, projectRoot, missingProguard, onAddSourceRoot, onRemoveSourceRoot, onCreateProguard, onSave)
         }
@@ -651,14 +844,14 @@ private fun ConfigForm(
     LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
         // ---- General ----
         item("general") {
-            SectionCard("General") {
-                MetaRow("Type") { Chip(config.typeDisplay, fill = Ca.colors.accentSoft, textColor = Ca.colors.accent) }
-                MetaRow("Output") {
+            SectionCard(stringResource(Res.string.modcfg_section_general)) {
+                MetaRow(stringResource(Res.string.modcfg_type)) { Chip(config.typeDisplay, fill = Ca.colors.accentSoft, textColor = Ca.colors.accent) }
+                MetaRow(stringResource(Res.string.modcfg_output)) {
                     Text(shortenPath(config.outputDir, projectRoot), color = Ca.colors.textTertiary,
                         style = Ca.type.caption.copy(fontFamily = codeFont), maxLines = 1, overflow = TextOverflow.Ellipsis)
                 }
                 Spacer(Modifier.height(2.dp))
-                Text("Java version", color = Ca.colors.textSecondary, style = Ca.type.caption, fontWeight = FontWeight.Medium)
+                Text(stringResource(Res.string.modcfg_java_version), color = Ca.colors.textSecondary, style = Ca.type.caption, fontWeight = FontWeight.Medium)
                 Row(Modifier.fillMaxWidth().padding(top = 2.dp).horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                     config.languageLevels.forEach { lvl -> LevelChip(prettyLevel(lvl), lvl == level) { level = lvl } }
                 }
@@ -672,11 +865,11 @@ private fun ConfigForm(
 
         // ---- Source sets (add / remove typed roots) ----
         item("sourceSets") {
-            SectionCard("Source sets", action = {
-                IconButtonCa(CaIcons.plus, "Add source root", onClick = onAddSourceRoot, boxSize = 26, iconSize = 16, active = true)
+            SectionCard(stringResource(Res.string.modcfg_section_source_sets), action = {
+                IconButtonCa(CaIcons.plus, stringResource(Res.string.modcfg_add_source_root), onClick = onAddSourceRoot, boxSize = 26, iconSize = 16, active = true)
             }) {
                 if (config.sourceSets.isEmpty()) {
-                    Text("No source sets yet.", color = Ca.colors.textTertiary, style = Ca.type.caption2)
+                    Text(stringResource(Res.string.modcfg_no_source_sets), color = Ca.colors.textTertiary, style = Ca.type.caption2)
                 }
                 config.sourceSets.forEach { ss -> SourceSetRow(ss, codeFont, projectRoot) { root -> onRemoveSourceRoot(ss.name, root) } }
             }
@@ -692,7 +885,7 @@ private fun ConfigForm(
 
         item("save") {
             Row(Modifier.fillMaxWidth().padding(top = 2.dp, bottom = 8.dp), horizontalArrangement = Arrangement.End) {
-                PrimaryButton(if (dirty) "Save changes" else "Save", icon = CaIcons.check, onClick = {
+                PrimaryButton(stringResource(if (dirty) Res.string.modcfg_save_changes else Res.string.modcfg_save), icon = CaIcons.check, onClick = {
                     onSave(UiModuleConfigEdit(
                         languageLevel = level,
                         facetValues = forms.associate { it.table to it.toValues() },
@@ -711,9 +904,9 @@ private fun ConfigForm(
  */
 @Composable
 private fun RunConfigCard(rc: UiRunConfig, mainClass: MutableState<String>, codeFont: FontFamily) {
-    SectionCard("Run") {
+    SectionCard(stringResource(Res.string.modcfg_run)) {
         Text(
-            "The main class the Run button launches for this module. Leave blank to auto-detect.",
+            stringResource(Res.string.modcfg_run_config_hint),
             color = Ca.colors.textSecondary, style = Ca.type.caption,
         )
         Box(
@@ -723,7 +916,7 @@ private fun RunConfigCard(rc: UiRunConfig, mainClass: MutableState<String>, code
         ) {
             if (mainClass.value.isEmpty()) {
                 Text(
-                    rc.autoDetected?.let { "$it  (auto-detected)" } ?: "e.g. com.example.Main",
+                    rc.autoDetected?.let { stringResource(Res.string.modcfg_auto_detected, it) } ?: stringResource(Res.string.modcfg_run_main_class_placeholder),
                     color = Ca.colors.textTertiary,
                     style = Ca.type.footnote.copy(fontFamily = codeFont),
                     maxLines = 1, overflow = TextOverflow.Ellipsis,
@@ -743,7 +936,7 @@ private fun RunConfigCard(rc: UiRunConfig, mainClass: MutableState<String>, code
                 Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
                 horizontalArrangement = Arrangement.spacedBy(6.dp),
             ) {
-                LevelChip("Auto-detect", selected = mainClass.value.isBlank()) { mainClass.value = "" }
+                LevelChip(stringResource(Res.string.modcfg_auto_detect), selected = mainClass.value.isBlank()) { mainClass.value = "" }
                 rc.detectedMainClasses.forEach { fqn ->
                     LevelChip(fqn, selected = mainClass.value.trim() == fqn) { mainClass.value = fqn }
                 }
@@ -770,10 +963,10 @@ private fun MissingProguardCard(
     ) {
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             Icon(CaIcons.warning, null, Modifier.size(18.dp), tint = Ca.colors.warning)
-            Text("Missing keep-rule files", color = Ca.colors.textPrimary, style = Ca.type.subhead, fontWeight = FontWeight.SemiBold)
+            Text(stringResource(Res.string.modcfg_missing_keep_rule_files), color = Ca.colors.textPrimary, style = Ca.type.subhead, fontWeight = FontWeight.SemiBold)
         }
         Text(
-            "These files are referenced by a build type but don't exist, so R8 skips them when minify is on.",
+            stringResource(Res.string.modcfg_missing_keep_rule_files_content),
             color = Ca.colors.textSecondary, style = Ca.type.caption,
         )
         missing.forEach { mf ->
@@ -802,7 +995,7 @@ private fun CreateRuleButton(onClick: () -> Unit) {
         verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(5.dp),
     ) {
         Icon(CaIcons.plus, null, Modifier.size(14.dp), tint = Ca.colors.accent)
-        Text("Create", color = Ca.colors.accent, style = Ca.type.caption, fontWeight = FontWeight.SemiBold)
+        Text(stringResource(Res.string.create), color = Ca.colors.accent, style = Ca.type.caption, fontWeight = FontWeight.SemiBold)
     }
 }
 
@@ -840,12 +1033,12 @@ private fun SourceSetRow(ss: UiSourceSetInfo, codeFont: FontFamily, projectRoot:
             Text(ss.name, color = Ca.colors.textPrimary, style = Ca.type.footnote, fontWeight = FontWeight.SemiBold)
             Chip(ss.scope.lowercase(), fill = Ca.colors.accentSoft, textColor = Ca.colors.accent)
         }
-        if (ss.roots.isEmpty()) Text("no roots", color = Ca.colors.textTertiary, style = Ca.type.caption2)
+        if (ss.roots.isEmpty()) Text(stringResource(Res.string.modcfg_no_roots), color = Ca.colors.textTertiary, style = Ca.type.caption2)
         ss.roots.forEach { r ->
             Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                 Text(shortenPath(r, projectRoot), color = Ca.colors.textTertiary, style = Ca.type.caption2.copy(fontFamily = codeFont),
                     maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
-                IconButtonCa(CaIcons.close, "Remove ${shortenPath(r, projectRoot)}", onClick = { onRemoveRoot(r) }, boxSize = 22, iconSize = 12)
+                IconButtonCa(CaIcons.close, stringResource(Res.string.modcfg_remove_named, shortenPath(r, projectRoot)), onClick = { onRemoveRoot(r) }, boxSize = 22, iconSize = 12)
             }
         }
     }
@@ -956,7 +1149,7 @@ private fun StringListEditor(values: SnapshotStateList<String>, codeFont: FontFa
             ) {
                 Text(v, color = Ca.colors.textPrimary, style = Ca.type.caption.copy(fontFamily = codeFont), modifier = Modifier.weight(1f),
                     maxLines = 1, overflow = TextOverflow.Ellipsis)
-                IconButtonCa(CaIcons.close, "Remove", { values.removeAt(i) }, boxSize = 24, iconSize = 14, tint = Ca.colors.textTertiary)
+                IconButtonCa(CaIcons.close, stringResource(Res.string.remove), { values.removeAt(i) }, boxSize = 24, iconSize = 14, tint = Ca.colors.textTertiary)
             }
         }
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -964,12 +1157,12 @@ private fun StringListEditor(values: SnapshotStateList<String>, codeFont: FontFa
                 Modifier.weight(1f).background(Ca.colors.surface2, RoundedCornerShape(Ca.radius.sm))
                     .border(1.dp, Ca.colors.hairline, RoundedCornerShape(Ca.radius.sm)).padding(horizontal = 10.dp, vertical = 7.dp),
             ) {
-                if (draft.isEmpty()) Text("Add…", color = Ca.colors.textTertiary, style = Ca.type.caption)
+                if (draft.isEmpty()) Text(stringResource(Res.string.modcfg_add_placeholder), color = Ca.colors.textTertiary, style = Ca.type.caption)
                 BasicTextField(draft, { draft = it }, singleLine = true,
                     textStyle = Ca.type.caption.copy(color = Ca.colors.textPrimary, fontFamily = codeFont),
                     cursorBrush = SolidColor(Ca.colors.accent), modifier = Modifier.fillMaxWidth())
             }
-            IconButtonCa(CaIcons.plus, "Add", { if (draft.isNotBlank()) { values.add(draft.trim()); draft = "" } }, boxSize = 30, iconSize = 16, active = true)
+            IconButtonCa(CaIcons.plus, stringResource(Res.string.add), { if (draft.isNotBlank()) { values.add(draft.trim()); draft = "" } }, boxSize = 30, iconSize = 16, active = true)
         }
     }
 }
@@ -983,7 +1176,7 @@ private fun TableListEditor(field: FieldState.TableF, codeFont: FontFamily) {
 
     Column(Modifier.fillMaxWidth().animateContentSize(tween(Motion.BASE, easing = Motion.spring)), verticalArrangement = Arrangement.spacedBy(8.dp)) {
         Text(field.label, color = Ca.colors.textSecondary, style = Ca.type.caption, fontWeight = FontWeight.Medium)
-        if (field.rows.isEmpty()) Text("No ${singular}s yet — add one below.", color = Ca.colors.textTertiary, style = Ca.type.caption2)
+        if (field.rows.isEmpty()) Text(stringResource(Res.string.modcfg_no_rows_yet, "${singular}s"), color = Ca.colors.textTertiary, style = Ca.type.caption2)
         field.rows.forEachIndexed { i, row ->
             val isNew = i == justAdded
             val borderColor by animateColorAsState(if (isNew) Ca.colors.accent else Ca.colors.hairline, tween(Motion.SLOW), label = "newRowBorder")
@@ -994,13 +1187,13 @@ private fun TableListEditor(field: FieldState.TableF, codeFont: FontFamily) {
             ) {
                 Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                     Text(rowTitle(row, i), color = Ca.colors.textPrimary, style = Ca.type.footnote, fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f))
-                    if (isNew) Chip("new", fill = Ca.colors.accentSoft, textColor = Ca.colors.accent)
-                    IconButtonCa(CaIcons.close, "Remove", { val at = i; field.rows.removeAt(at); if (justAdded == at) justAdded = -1 }, boxSize = 24, iconSize = 14, tint = Ca.colors.textTertiary)
+                    if (isNew) Chip(stringResource(Res.string.modcfg_new_badge), fill = Ca.colors.accentSoft, textColor = Ca.colors.accent)
+                    IconButtonCa(CaIcons.close, stringResource(Res.string.remove), { val at = i; field.rows.removeAt(at); if (justAdded == at) justAdded = -1 }, boxSize = 24, iconSize = 14, tint = Ca.colors.textTertiary)
                 }
                 row.forEach { FieldEditor(it, codeFont) }
             }
         }
-        AddRowButton("Add $singular") { field.rows.add(cloneTemplateRow(field)); justAdded = field.rows.lastIndex }
+        AddRowButton(stringResource(Res.string.modcfg_add_row, singular)) { field.rows.add(cloneTemplateRow(field)); justAdded = field.rows.lastIndex }
     }
 }
 

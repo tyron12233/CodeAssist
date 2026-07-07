@@ -9,10 +9,12 @@ import dev.ide.model.template.TextValidation
 import dev.ide.platform.log.Log
 import dev.ide.ui.backend.ProjectInfo
 import dev.ide.ui.backend.ProjectService
+import dev.ide.ui.backend.UiCompatibilityInfo
 import dev.ide.ui.backend.UiProjectIcon
 import dev.ide.ui.backend.UiOpenTabs
 import dev.ide.ui.backend.UiProjectResult
 import dev.ide.ui.backend.UiProjectTemplate
+import dev.ide.ui.backend.UiSyncResult
 import dev.ide.ui.backend.UiTemplateParam
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.StateFlow
@@ -34,7 +36,9 @@ internal class ProjectBackend(private val ctx: BackendContext) : ProjectService 
 
     override fun projects(): List<ProjectInfo> =
         ctx.manager?.list()?.map { ProjectInfo(it.name, it.rootPath, it.moduleCount, it.compatibility, it.isAndroid) }
-            ?: ctx.servicesOrNull?.let { listOf(ProjectInfo(it.projectDisplayName(), it.workspaceRoot.toString(), it.modules().size)) }
+            ?: ctx.servicesOrNull?.let {
+                listOf(ProjectInfo(it.projectDisplayName(), it.workspaceRoot.toString(), it.modules().size, runCatching { it.isCompatibilityMode() }.getOrDefault(false)))
+            }
             ?: emptyList()
 
     // Resolved launcher icon, cached so revisiting the picker doesn't re-read the model + image each time
@@ -105,6 +109,52 @@ internal class ProjectBackend(private val ctx: BackendContext) : ProjectService 
     override suspend fun backupProjects(): String? {
         val mgr = ctx.manager ?: return null
         return withContext(Dispatchers.IO) { runCatching { mgr.exportBackup().toString() }.getOrNull() }
+    }
+
+    // ---- Gradle compatibility mode ----
+
+    override fun compatibilityInfo(): UiCompatibilityInfo? {
+        val svc = ctx.servicesOrNull ?: return null
+        if (!svc.isCompatibilityMode()) return null
+        return UiCompatibilityInfo(
+            summary = "Opened in Gradle compatibility mode. The build scripts were read statically, not run, " +
+                "so dependencies and versions were extracted best-effort — builds and dependency resolution may fail.",
+            notes = runCatching { svc.compatibilityNotes() }.getOrDefault(emptyList()),
+        )
+    }
+
+    override suspend fun syncGradle(): UiSyncResult {
+        val svc = ctx.servicesOrNull ?: return UiSyncResult(false, "No project is open.")
+        return withContext(Dispatchers.IO) {
+            runCatching {
+                val outcome = svc.syncGradleFromScripts()
+                if (outcome.ok) {
+                    // The scripts (re-)declared the model's dependencies; re-resolve them and rebuild the
+                    // index so new modules/sources and changed classpaths take effect in the open project.
+                    svc.dependencies.retryDependencyResolution()
+                    svc.reindex()
+                }
+                UiSyncResult(outcome.ok, outcome.message, outcome.notes)
+            }.getOrElse { e ->
+                log.error("Gradle sync failed", e)
+                UiSyncResult(false, e.message ?: "Gradle sync failed")
+            }
+        }
+    }
+
+    override suspend fun importGradleProject(sourceRootPath: String): UiProjectResult {
+        val mgr = ctx.manager ?: return UiProjectResult(false, "Gradle import not supported by this backend")
+        return withContext(Dispatchers.IO) {
+            runCatching {
+                val next = mgr.importGradleProject(Paths.get(sourceRootPath))
+                    ?: return@runCatching UiProjectResult(false, "That folder isn't an importable Gradle project.")
+                ctx.swapEngine(next)
+                UiProjectResult(true, "Imported ${next.projectDisplayName()}", next.workspaceRoot.toString())
+            }.getOrElse { e ->
+                log.error("Couldn't import the Gradle project at $sourceRootPath", e)
+                UiProjectResult(false, e.message ?: "Failed to import Gradle project")
+            }
+        }
     }
 
     // Open tabs are persisted per project, alongside the other workspace state under `.platform/`. Format:

@@ -10,6 +10,7 @@ import dev.ide.lang.completion.CompletionItemKind
 import dev.ide.lang.completion.CompletionParams
 import dev.ide.lang.completion.CompletionResult
 import dev.ide.lang.completion.CompletionWeigher
+import dev.ide.lang.completion.STANDARD_WEIGHERS
 import dev.ide.platform.ExtensionRegistry
 
 /**
@@ -81,10 +82,14 @@ class CompletionEngine(private val extensions: ExtensionRegistry) {
         /** Run order for the language backend's own contributor — early, so cross-cutting contributors can
          *  filter/decorate its items. */
         const val BACKEND_ORDER = 0
-        // Built-ins, dominant first: the structural tier ([ItemTierWeigher]) keeps real symbols above
-        // fallback snippets/words regardless of the backend's `sortPriority` scale, then [SortPriorityWeigher]
-        // honours the legacy `sortPriority` (lower = earlier) within a tier. Plugins layer more weighers via the EP.
-        val BUILT_IN_WEIGHERS = listOf(ItemTierWeigher, SortPriorityWeigher)
+        // Built-ins, dominant first: the structural tier ([ItemTierWeigher], order 100) keeps real symbols
+        // above fallback snippets/words regardless of the backend's `sortPriority` scale; the standard
+        // relevance chain (`STANDARD_WEIGHERS`, orders 200..399 — expected type, match grade, context boost,
+        // callable weight, imported, kind, deprecation) ranks within the tier off each item's
+        // [dev.ide.lang.completion.CompletionRelevance]; and [SortPriorityWeigher] (1000) honours the legacy
+        // `sortPriority` (lower = earlier) as the final within-backend tiebreaker. Plugins layer more
+        // weighers via the EP (the host registers the per-project stats weigher there).
+        val BUILT_IN_WEIGHERS = listOf(ItemTierWeigher, SortPriorityWeigher) + STANDARD_WEIGHERS
     }
 }
 

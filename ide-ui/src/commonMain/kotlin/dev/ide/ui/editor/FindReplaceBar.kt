@@ -37,8 +37,21 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.unit.dp
 import dev.ide.ui.components.IconButtonCa
+import dev.ide.ui.generated.resources.Res
+import dev.ide.ui.generated.resources.close
+import dev.ide.ui.generated.resources.find_all
+import dev.ide.ui.generated.resources.find_case_sensitive
+import dev.ide.ui.generated.resources.find_next_match
+import dev.ide.ui.generated.resources.find_placeholder
+import dev.ide.ui.generated.resources.find_previous_match
+import dev.ide.ui.generated.resources.find_regex
+import dev.ide.ui.generated.resources.find_replace
+import dev.ide.ui.generated.resources.find_replace_placeholder
+import dev.ide.ui.generated.resources.find_toggle_replace
+import dev.ide.ui.generated.resources.find_whole_word
 import dev.ide.ui.icons.CaIcons
 import dev.ide.ui.theme.Ca
+import org.jetbrains.compose.resources.stringResource
 
 /**
  * The in-file find/replace bar, docked at the top of the editor. Find row: query field + match count +
@@ -80,13 +93,13 @@ fun FindReplaceBar(
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
             IconButtonCa(
                 if (replaceMode) CaIcons.chevronDown else CaIcons.chevronRight,
-                "Toggle replace", onClick = onToggleReplaceMode, iconSize = 16, boxSize = 30,
+                stringResource(Res.string.find_toggle_replace), onClick = onToggleReplaceMode, iconSize = 16, boxSize = 30,
             )
             Box(Modifier.weight(1f)) {
                 FieldBox(
                     value = query,
                     onChange = onQueryChange,
-                    placeholder = "Find",
+                    placeholder = stringResource(Res.string.find_placeholder),
                     focusRequester = focus,
                     error = regexError,
                     onEnter = { shift -> if (shift) onPrev() else onNext() },
@@ -104,21 +117,21 @@ fun FindReplaceBar(
                 style = Ca.type.caption2,
                 modifier = Modifier.widthIn(min = 34.dp),
             )
-            OptionChip("Aa", options.caseSensitive) { onOptionsChange(options.copy(caseSensitive = !options.caseSensitive)) }
-            OptionChip("W", options.wholeWord) { onOptionsChange(options.copy(wholeWord = !options.wholeWord)) }
-            OptionChip(".*", options.regex) { onOptionsChange(options.copy(regex = !options.regex)) }
-            IconButtonCa(CaIcons.chevronUp, "Previous match", onClick = onPrev, iconSize = 16, boxSize = 30)
-            IconButtonCa(CaIcons.chevronDown, "Next match", onClick = onNext, iconSize = 16, boxSize = 30)
-            IconButtonCa(CaIcons.close, "Close", onClick = onClose, iconSize = 16, boxSize = 30)
+            OptionChip(stringResource(Res.string.find_case_sensitive), options.caseSensitive) { onOptionsChange(options.copy(caseSensitive = !options.caseSensitive)) }
+            OptionChip(stringResource(Res.string.find_whole_word), options.wholeWord) { onOptionsChange(options.copy(wholeWord = !options.wholeWord)) }
+            OptionChip(stringResource(Res.string.find_regex), options.regex) { onOptionsChange(options.copy(regex = !options.regex)) }
+            IconButtonCa(CaIcons.chevronUp, stringResource(Res.string.find_previous_match), onClick = onPrev, iconSize = 16, boxSize = 30)
+            IconButtonCa(CaIcons.chevronDown, stringResource(Res.string.find_next_match), onClick = onNext, iconSize = 16, boxSize = 30)
+            IconButtonCa(CaIcons.close, stringResource(Res.string.close), onClick = onClose, iconSize = 16, boxSize = 30)
         }
         if (replaceMode) {
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                 Box(Modifier.size(30.dp)) {} // align under the chevron
                 Box(Modifier.weight(1f)) {
-                    FieldBox(value = replace, onChange = onReplaceChange, placeholder = "Replace", error = false)
+                    FieldBox(value = replace, onChange = onReplaceChange, placeholder = stringResource(Res.string.find_replace_placeholder), error = false)
                 }
-                PillButton("Replace", enabled = matchCount > 0, onClick = onReplaceOne)
-                PillButton("All", enabled = matchCount > 0, onClick = onReplaceAll)
+                PillButton(stringResource(Res.string.find_replace), enabled = matchCount > 0, onClick = onReplaceOne)
+                PillButton(stringResource(Res.string.find_all), enabled = matchCount > 0, onClick = onReplaceAll)
             }
         }
     }

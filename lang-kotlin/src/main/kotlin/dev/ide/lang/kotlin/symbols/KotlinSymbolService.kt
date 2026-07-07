@@ -1,10 +1,12 @@
 package dev.ide.lang.kotlin.symbols
 
+import dev.ide.lang.kotlin.resolve.inferType
 import dev.ide.index.ClassNameValue
 import dev.ide.index.IndexId
 import dev.ide.index.IndexOrigin
 import dev.ide.index.IndexService
 import dev.ide.index.MemberValue
+import dev.ide.lang.completion.PrefixMatcher
 import dev.ide.lang.dom.DomNode
 import dev.ide.lang.resolve.Modifier
 import dev.ide.lang.resolve.Symbol
@@ -13,7 +15,9 @@ import dev.ide.lang.resolve.SymbolOrigin
 import dev.ide.lang.resolve.TypeRef
 import dev.ide.lang.kotlin.compile.BundledKotlinStdlib
 import dev.ide.lang.kotlin.index.CallableShape
+import dev.ide.lang.kotlin.index.KotlinBuiltinCallableIndex
 import dev.ide.lang.kotlin.index.KotlinCallableIndex
+import dev.ide.lang.kotlin.index.KotlinSourceCallableIndex
 import dev.ide.lang.synthetic.SyntheticClass
 import dev.ide.lang.synthetic.SyntheticField
 import dev.ide.lang.synthetic.SyntheticMethod
@@ -137,21 +141,26 @@ class KotlinSymbolService(
 
     /** True when the classpath memos are safe to use: clears them on a (re)build start, never caches mid-build. */
     private fun classpathCacheUsable(idx: IndexService): Boolean {
-        val building = idx.status.building
+        val status = idx.status
+        val building = status.building
         if (building && !extMemoBuilding) {
             classpathExtMemo.clear(); checkMembersMemo.clear(); companionMembersMemo.clear(); classpathTypeExistsMemo.clear()
         }
         extMemoBuilding = building
-        return !building
+        // Not ready ⇒ queries return PARTIAL results (whatever segments are open) for progressive completion;
+        // those must never enter the session memos or they'd keep serving the partial view after the build.
+        return !building && status.ready
     }
 
     /**
-     * "Dumb mode" gate for classpath/library symbols. When an [index] is wired (the IDE path), classpath
-     * lookups must wait for it to be [IndexStatus.ready]: before the first build finishes (and while a rebuild
-     * runs) we return NOTHING for classpath binaries rather than falling back to a live jar scan / `@Metadata`
-     * decode — so a freshly opened project never pays the bulk-scan cost, it just offers buffer-words + same-file
-     * symbols until the index is ready. With no index wired (standalone / tests) there is no other source, so
-     * the live reader IS the classpath and this is always true.
+     * "Dumb mode" gate for RESOLUTION-driven negative conclusions (the unresolved-symbol diagnostics): until
+     * the classpath index is [IndexStatus.ready] a miss can't be told apart from a not-yet-indexed symbol.
+     * COMPLETION no longer blacks out behind this — the list queries ([extensionsFor], [topLevelCallables],
+     * [typeNamesByPrefix]) answer progressively from whatever segments are already open while the build runs
+     * (never a live jar scan; partial answers stay out of the session memos via [classpathCacheUsable]).
+     * The type-SHAPE lookups ([typeShape]/[builtinShape]) stay gated: they feed inference whose consumers
+     * would turn a partial supertype chain into false mismatch errors. With no index wired (standalone /
+     * tests) there is no other source, so the live reader IS the classpath and this is always true.
      */
     fun classpathReady(): Boolean = index?.status?.ready ?: true
 
@@ -569,10 +578,23 @@ class KotlinSymbolService(
      * user is actually typing toward gets materialized, not hundreds per keystroke. An empty prefix = all
      * (same as [membersOf]).
      */
-    fun membersForCompletion(typeFqn: String, typeArgs: List<TypeRef>, namePrefix: String): List<KotlinSymbol> {
+    fun membersForCompletion(
+        typeFqn: String,
+        typeArgs: List<TypeRef>,
+        namePrefix: String,
+        /** EXACT-name mode for the resolution probes ([membersNamed]): the graded matcher would admit
+         *  hump/substring matches ("first" nets `indexOfFirst`, `firstOrNull`, …) only for the caller to
+         *  discard them — per inference step, the dominant chain-completion allocation. */
+        exactName: Boolean = false,
+    ): List<KotlinSymbol> {
+        val m = PrefixMatcher(namePrefix)
         val own = dev.ide.lang.kotlin.KotlinPerf.span("own") { ownAndInherited(typeFqn, typeArgs, HashSet()) }
-        val ownMatched = if (namePrefix.isEmpty()) own else own.filter { it.name.startsWith(namePrefix, ignoreCase = true) }
-        return ownMatched + dev.ide.lang.kotlin.KotlinPerf.span("ext") { extensionsFor(typeFqn, typeArgs, namePrefix) }
+        val ownMatched = when {
+            namePrefix.isEmpty() -> own
+            exactName -> own.filter { it.name == namePrefix }
+            else -> own.filter { m.matches(it.name) }
+        }
+        return ownMatched + dev.ide.lang.kotlin.KotlinPerf.span("ext") { extensionsFor(typeFqn, typeArgs, namePrefix, exactName) }
     }
 
     /**
@@ -585,7 +607,7 @@ class KotlinSymbolService(
      */
     fun membersNamed(typeFqn: String, typeArgs: List<TypeRef>, name: String): List<KotlinSymbol> {
         if (name.isEmpty()) return emptyList()
-        return membersForCompletion(typeFqn, typeArgs, name).filter { it.name == name }
+        return membersForCompletion(typeFqn, typeArgs, name, exactName = true)
     }
 
     /** Same-named members for the diagnostics existence / extension-in-scope check. Cached for a CLASSPATH
@@ -604,9 +626,15 @@ class KotlinSymbolService(
         kotlinSupertypesMemo(typeFqn).map { typeByFqn(it) }
 
     /** [kotlinSupertypes] memoized per FQN; the walk is the hot cost. A SOURCE type's chain (its FQN is in the
-     *  project model) goes in the edit-dropped memo, everything else in the session-stable classpath memo. */
+     *  project model) goes in the edit-dropped memo, everything else in the session-stable classpath memo.
+     *  Until the index is ready a classpath chain is INCOMPLETE (shapes gated / segments still opening), so it
+     *  is computed uncached — otherwise a dumb-mode walk would pin an empty chain for the whole session. */
     private fun kotlinSupertypesMemo(fqn: String): List<String> {
-        val memo = if (model().classByFqn.containsKey(fqn)) sourceSupertypeMemo else classpathSupertypeMemo
+        val memo = if (model().classByFqn.containsKey(fqn)) sourceSupertypeMemo else {
+            val idx = index
+            if (idx != null && !idx.status.ready) return kotlinSupertypes(fqn, HashSet())
+            classpathSupertypeMemo
+        }
         return memo.getOrPut(fqn) { kotlinSupertypes(fqn, HashSet()) }
     }
 
@@ -689,29 +717,47 @@ class KotlinSymbolService(
         )
     }
 
-    fun extensionsFor(fqnRaw: String, typeArgs: List<TypeRef> = emptyList(), namePrefix: String = ""): List<KotlinSymbol> {
+    fun extensionsFor(
+        fqnRaw: String,
+        typeArgs: List<TypeRef> = emptyList(),
+        namePrefix: String = "",
+        /** EXACT-name mode for resolution probes; see [membersForCompletion]. */
+        exactName: Boolean = false,
+    ): List<KotlinSymbol> {
         // A JVM receiver type maps to its Kotlin classifier so the Kotlin-keyed extensions apply (a value typed
         // `java.lang.String` still gets `String.uppercase`, a `java.util.List` gets `Iterable.map`).
         val fqn = Builtins.kotlinTypeFor(fqnRaw) ?: fqnRaw
         // Always include kotlin.Any: `T.let`/`also`/`run`/`apply`/… (unbounded type-param receiver) are keyed
         // there and apply to every instance, and a builtin supertype chain may not list Any explicitly.
         val targets = (listOf(fqn, "kotlin.Any") + kotlinSupertypesMemo(fqn)).toHashSet()
-        fun matches(name: String) = namePrefix.isEmpty() || name.startsWith(namePrefix, ignoreCase = true)
+        val m = PrefixMatcher(namePrefix)
+        fun matches(name: String) = when {
+            namePrefix.isEmpty() -> true
+            exactName -> name == namePrefix
+            else -> m.matches(name)
+        }
         // Classpath extensions: from the persistent `kotlin.callables` index when wired (prefix-queried per
         // receiver, so the large per-receiver + `kotlin.Any` buckets stay on disk and only the prefix matches
         // load), else the in-memory scan fallback (standalone / tests with no index). Either way the prefix
         // is applied BEFORE bindExtensionReceiver, which allocates a fresh symbol per generic receiver.
+        // A camel-hump prefix pushes only its guaranteed first character into the packed key
+        // ([PrefixMatcher.indexPrefix]); the matcher then narrows the bucket before symbols materialize.
         val idx = index
         val fromClasspath = if (idx != null) {
-            val cacheable = classpathCacheUsable(idx) // clears memos on a build start; false while building
-            if (!idx.status.ready) emptyList() // dumb: no index yet → no classpath extensions (no scan)
-            else {
+            // Progressive while indexing ("dumb mode"): the query runs over whatever segments are already
+            // open — partial results instead of a blackout — and [classpathCacheUsable] keeps those partial
+            // answers OUT of the session memos until the index is ready. Never a live jar scan.
+            val cacheable = classpathCacheUsable(idx) // false while building / before ready
+            run {
                 // The stdlib's extensions (`Iterable.map`, `String.trim`) are in the index too — the host adds
                 // the bundled stdlib jar to the index scope — so a single prefix query per receiver covers them.
-                fun query(t: String) = idx.prefix<CallableShape>(KotlinCallableIndex.id, KotlinCallableIndex.extPrefix(t, namePrefix), EXTENSION_QUERY_LIMIT)
+                fun query(t: String) = idx.prefix<CallableShape>(KotlinCallableIndex.id, KotlinCallableIndex.extPrefix(t, m.indexPrefix), EXTENSION_QUERY_LIMIT)
+                    .filter { matches(it.value.name) }
                     .map { it.value.toSymbol(this) }.toList()
                 dev.ide.lang.kotlin.KotlinPerf.span("ext.index") { targets.flatMap { t ->
-                    if (cacheable) classpathExtMemo.getOrPut(t + ' ' + namePrefix) { query(t) } else query(t)
+                    // The mode rides the key: an exact probe's narrow result must never serve a lenient query.
+                    val key = (if (exactName) "=" else "~") + t + ' ' + namePrefix
+                    if (cacheable) classpathExtMemo.getOrPut(key) { query(t) } else query(t)
                 } }
             }
         } else {
@@ -721,10 +767,20 @@ class KotlinSymbolService(
         val fromSource = model().extensions
             .filter { matches(it.name) && resolveTypeName(it.receiverText ?: return@filter false, it.ctx) in targets }
             .map { toSymbol(it, null) }
+        // Cross-file source extensions from the persistent `kotlin.callables.source` index — available as
+        // soon as the file is index-synced, without waiting on the in-memory source model to warm. The
+        // completion dedup folds an entry together with its model twin once both exist.
+        val fromSourceIndex = if (idx != null) {
+            targets.flatMap { t ->
+                idx.prefix<CallableShape>(KotlinSourceCallableIndex.id, KotlinCallableIndex.extPrefix(t, m.indexPrefix), EXTENSION_QUERY_LIMIT)
+                    .filter { matches(it.value.name) }
+                    .map { it.value.toSymbol(this, SOURCE) }
+            }
+        } else emptyList()
         // Drop compiler/runtime-implementation callables (e.g. `kotlin.jvm.internal.PrimitiveSpreadBuilder`'s
         // `getSize`, mis-keyed as a `kotlin.Any` extension) — never user-visible. Then bind the extension
         // receiver's type params (Iterable<T>.map, T.also) from the actual receiver.
-        return (fromClasspath + fromSource)
+        return (fromClasspath + fromSource + fromSourceIndex)
             .filterNot { isImplementationCallable(it) }
             .map { bindExtensionReceiver(it, fqn, typeArgs) }
     }
@@ -1013,6 +1069,7 @@ class KotlinSymbolService(
             isInternal = s.isInternal,
             isComposable = s.isComposable,
             isInline = s.isInline,
+            isInfix = s.isInfix,
             isSuspend = s.isSuspend,
             isDeprecated = s.isDeprecated,
             varargParamIndex = s.varargParamIndex,
@@ -1072,29 +1129,47 @@ class KotlinSymbolService(
      * few downstream — it walks the by-name map and keeps the matching buckets.
      */
     fun topLevelCallables(prefix: String = ""): List<KotlinSymbol> {
+        val m = PrefixMatcher(prefix)
         val src = model().topLevel
-            .filter { prefix.isEmpty() || it.name.startsWith(prefix, ignoreCase = true) }
+            .filter { prefix.isEmpty() || m.matches(it.name) }
             .map { toSymbol(it, null) }
         val idx = index
         val cp = if (idx != null) {
-            if (!idx.status.ready) emptyList() // dumb: no index yet → no classpath/stdlib top-level callables
-            else {
+            run {
                 // Prefix-query the persistent index; an empty prefix (the explicit "show all" / resolution path,
                 // not per-keystroke) is uncapped so it stays complete, while a typed prefix is bounded by matches.
+                // A camel-hump prefix pushes only its first character into the packed key; the matcher narrows.
+                // While the index is still building this returns the already-open segments' callables —
+                // progressive completion instead of a dumb-mode blackout.
                 val limit = if (prefix.isEmpty()) Int.MAX_VALUE else CALLABLE_QUERY_LIMIT
                 // The stdlib's top-level callables (`println`, `listOf`) are in the index too (the host adds the
                 // bundled stdlib jar to the index scope), so the prefix query covers them.
-                idx.prefix<CallableShape>(KotlinCallableIndex.id, KotlinCallableIndex.topKey(prefix), limit)
-                    .map { it.value.toSymbol(this) }.toList()
+                idx.prefix<CallableShape>(KotlinCallableIndex.id, KotlinCallableIndex.topKey(m.indexPrefix), limit)
+                    .filter { prefix.isEmpty() || m.matches(it.value.name) }
+                    .map { it.value.toSymbol(this) }.toList() +
+                    // Cross-file source top-levels straight from the source index (available before the
+                    // in-memory model warms; the completion dedup folds them with their model twins).
+                    idx.prefix<CallableShape>(KotlinSourceCallableIndex.id, KotlinCallableIndex.topKey(m.indexPrefix), limit)
+                        .filter { prefix.isEmpty() || m.matches(it.value.name) }
+                        .map { it.value.toSymbol(this, SOURCE) }.toList() +
+                    // The builtin intrinsics (`arrayOf`/`intArrayOf`/…) — top-level functions in `.kotlin_builtins`
+                    // with no `.class` facade, so absent from the `.class`-scanning KotlinCallableIndex above.
+                    idx.prefix<CallableShape>(KotlinBuiltinCallableIndex.id, KotlinCallableIndex.topKey(m.indexPrefix), limit)
+                        .filter { prefix.isEmpty() || m.matches(it.value.name) }
+                        .map { it.value.toSymbol(this) }.toList()
             }
         } else {
             val byName = reader.scan(this).topLevelByName
-            if (prefix.isEmpty()) byName.values.flatten()
+            val fromReader = if (prefix.isEmpty()) byName.values.flatten()
             else {
                 val acc = ArrayList<KotlinSymbol>()
-                for ((name, syms) in byName) if (name.startsWith(prefix, ignoreCase = true)) acc += syms
+                for ((name, syms) in byName) if (m.matches(name)) acc += syms
                 acc
             }
+            // `reader` scans only `.class`; the builtin intrinsics live in `.kotlin_builtins`, so add them
+            // from the live decode (the IDE path reads them from KotlinBuiltinCallableIndex above).
+            fromReader + builtins.topLevelCallables()
+                .filter { it.receiverTypeFqn == null && (prefix.isEmpty() || m.matches(it.name)) }
         }
         return src + cp
     }
@@ -1112,6 +1187,13 @@ class KotlinSymbolService(
             val pkg = s.packageName ?: s.declaringClassFqn?.substringBeforeLast('.', "")?.ifEmpty { null }
             if (pkg != null) out += "$pkg.$name"
         }
+        // Extensions named [name] regardless of receiver (the receiver-blind `name:` keys) — so an
+        // unresolved `x.shout()` can offer `import demo.shout` even though extensions are receiver-keyed.
+        index?.let { idx ->
+            (idx.exact<CallableShape>(KotlinCallableIndex.id, KotlinCallableIndex.nameKey(name)) +
+                idx.exact<CallableShape>(KotlinSourceCallableIndex.id, KotlinCallableIndex.nameKey(name)))
+                .forEach { shape -> shape.packageName?.let { out += "$it.$name" } }
+        }
         typeNamesByPrefix(name).forEach { s ->
             val fqn = s.type?.qualifiedName
             if (fqn != null && '.' in fqn && fqn.substringAfterLast('.') == name) out += fqn
@@ -1123,10 +1205,14 @@ class KotlinSymbolService(
         val src = model().topLevel.filter { it.name == name }.map { toSymbol(it, null) }
         val idx = index
         val cp = if (idx != null) {
-            if (!idx.status.ready) emptyList() // dumb: no index yet → no classpath/stdlib callables (no scan)
             // Index only — the stdlib (`println`, `listOf`) is indexed alongside every other library jar.
-            else idx.exact<CallableShape>(KotlinCallableIndex.id, KotlinCallableIndex.topKey(name)).map { it.toSymbol(this) }.toList()
-        } else reader.scan(this).topLevelByName[name].orEmpty()
+            // While building this sees the already-open segments (partial, progressive); resolution-driven
+            // NEGATIVE conclusions gate on [classpathReady] separately.
+            idx.exact<CallableShape>(KotlinCallableIndex.id, KotlinCallableIndex.topKey(name)).map { it.toSymbol(this) }.toList() +
+                idx.exact<CallableShape>(KotlinSourceCallableIndex.id, KotlinCallableIndex.topKey(name)).map { it.toSymbol(this, SOURCE) }.toList() +
+                idx.exact<CallableShape>(KotlinBuiltinCallableIndex.id, KotlinCallableIndex.topKey(name)).map { it.toSymbol(this) }.toList()
+        } else reader.scan(this).topLevelByName[name].orEmpty() +
+            builtins.topLevelCallables().filter { it.receiverTypeFqn == null && it.name == name }
         return src + cp
     }
 
@@ -1136,28 +1222,30 @@ class KotlinSymbolService(
      * plus same-project source classes), each filtered by [prefix]. Powers `java.<caret>` / `java.ut<caret>`.
      */
     fun packageMembers(packageFqn: String, prefix: String, limit: Int = 100): List<KotlinSymbol> {
+        val m = PrefixMatcher(prefix)
         val out = LinkedHashMap<String, KotlinSymbol>()
         index?.let { idx ->
-            // Sub-packages: query everything under `packageFqn.` and keep the next path segment.
-            val full = if (prefix.isEmpty()) "$packageFqn." else "$packageFqn.$prefix"
+            // Sub-packages: query everything under `packageFqn.` and keep the next path segment (only the
+            // matcher-guaranteed first characters ride the packed key, so camel-hump prefixes still match).
+            val full = if (prefix.isEmpty()) "$packageFqn." else "$packageFqn.${m.indexPrefix}"
             idx.prefix<String>(PACKAGES, full, 500).forEach { hit ->
                 if (!hit.value.startsWith("$packageFqn.")) return@forEach
                 val seg = hit.value.removePrefix("$packageFqn.").substringBefore('.')
-                if (seg.isNotEmpty() && seg.startsWith(prefix, ignoreCase = true)) {
+                if (seg.isNotEmpty() && (prefix.isEmpty() || m.matches(seg))) {
                     out.getOrPut("pkg:$seg") { KotlinSymbol(seg, SymbolKind.PACKAGE, origin = BINARY) }
                 }
             }
             // Public types directly in the package.
             idx.exact<ClassNameValue>(PACKAGE_TYPES, packageFqn).forEach { v ->
                 val simple = v.fqn.substringAfterLast('.')
-                if (!simple.startsWith(prefix, ignoreCase = true)) return@forEach
+                if (prefix.isNotEmpty() && !m.matches(simple)) return@forEach
                 if (v.origin != IndexOrigin.SOURCE && isKotlinFacade(v.fqn, simple)) return@forEach
                 out.getOrPut(v.fqn) { KotlinSymbol(simple, classNameKind(v.kind), typeByFqn(v.fqn), origin = BINARY) }
             }
         }
         // Same-project source classes declared in this package (the index lags the live buffer).
         model().classByFqn.values
-            .filter { it.fqn.substringBeforeLast('.', "") == packageFqn && it.simpleName.startsWith(prefix, ignoreCase = true) }
+            .filter { it.fqn.substringBeforeLast('.', "") == packageFqn && (prefix.isEmpty() || m.matches(it.simpleName)) }
             .forEach { out.getOrPut(it.fqn) { KotlinSymbol(it.simpleName, SymbolKind.CLASS, typeByFqn(it.fqn), origin = SOURCE, declarationNode = it.node) } }
         return out.values.take(limit)
     }
@@ -1179,19 +1267,28 @@ class KotlinSymbolService(
 
     /** Type-name candidates by prefix: source classes + defaults + the classpath `classNames` index. */
     fun typeNamesByPrefix(prefix: String, limit: Int = 100): List<KotlinSymbol> {
+        val m = PrefixMatcher(prefix)
         val out = LinkedHashMap<String, KotlinSymbol>()
-        model().classByFqn.values.filter { !it.isCompanion && it.simpleName.startsWith(prefix, ignoreCase = true) }
+        model().classByFqn.values.filter { !it.isCompanion && (prefix.isEmpty() || m.matches(it.simpleName)) }
             .forEach { out[it.fqn] = KotlinSymbol(it.simpleName, SymbolKind.CLASS, typeByFqn(it.fqn), origin = SOURCE, declarationNode = it.node) }
         // Top-level synthetic classes (Android `R`/`BuildConfig`, …) complete by simple name like any type.
         synthetic().let { idx ->
-            idx.topLevelFqns.filter { it.substringAfterLast('.').startsWith(prefix, ignoreCase = true) }
+            idx.topLevelFqns.filter { prefix.isEmpty() || m.matches(it.substringAfterLast('.')) }
                 .forEach { fqn -> out.getOrPut(fqn) { KotlinSymbol(fqn.substringAfterLast('.'), syntheticKind(idx.byFqn.getValue(fqn).kind), typeByFqn(fqn), origin = SOURCE) } }
         }
-        Builtins.DEFAULT_SIMPLE_TYPES.filter { it.key.startsWith(prefix, ignoreCase = true) }
+        Builtins.DEFAULT_SIMPLE_TYPES.filter { prefix.isEmpty() || m.matches(it.key) }
             .forEach { (s, fqn) -> out.getOrPut(fqn) { KotlinSymbol(s, SymbolKind.CLASS, typeByFqn(fqn), origin = BINARY) } }
-        index?.prefix<ClassNameValue>(CLASS_NAMES, prefix, limit)?.forEach { hit ->
+        // The classNames segments carry a trigram dictionary, so the fuzzy path answers camel-hump
+        // (`NPE`, `mDL`) and case-insensitive queries the byte-prefix scan cannot; the matcher then drops
+        // the loose subsequence tier the fuzzy scorer keeps.
+        val classHits = index?.let { idx ->
+            if (prefix.isEmpty()) idx.prefix<ClassNameValue>(CLASS_NAMES, prefix, limit)
+            else idx.fuzzy<ClassNameValue>(CLASS_NAMES, prefix, limit)
+        }
+        classHits?.forEach { hit ->
             val v = hit.value
             val simple = v.fqn.substringAfterLast('.')
+            if (prefix.isNotEmpty() && !m.matches(simple)) return@forEach
             if (v.origin != IndexOrigin.SOURCE && isKotlinFacade(v.fqn, simple)) return@forEach
             out.getOrPut(v.fqn) {
                 KotlinSymbol(simple, classNameKind(v.kind), typeByFqn(v.fqn), origin = BINARY)
@@ -1210,6 +1307,16 @@ class KotlinSymbolService(
     fun classTypeParameters(fqn: String): List<String> {
         model().classByFqn[fqn]?.let { return it.typeParameterNames }
         return typeShape(fqn)?.typeParameters ?: emptyList()
+    }
+
+    /** Each type parameter's resolved upper bound (positional with [classTypeParameters]), or null where the bound
+     *  is absent/unknown. Source classes parse the declared bound text; classpath classes use the type-shape's
+     *  erased bounds (empty for a Kotlin-metadata class, whose decode doesn't carry them). */
+    fun classTypeParameterBounds(fqn: String): List<KotlinType?> {
+        model().classByFqn[fqn]?.let { rc ->
+            return rc.typeParameterBounds.map { b -> if (b.isBlank()) null else typeFromText(b, rc.ctx) }
+        }
+        return typeShape(fqn)?.typeParameterBounds?.map { it as? KotlinType } ?: emptyList()
     }
 
     /**
@@ -1309,6 +1416,14 @@ class KotlinSymbolService(
         return null
     }
 
+    /** Whether [fqn] is an INTERFACE (as opposed to a class) — an interface is bare in a supertype list, a class
+     *  (even abstract) has a constructor that must be initialized. Null when [fqn] is unknown (→ back off). */
+    fun isInterfaceType(fqn: String): Boolean? {
+        sourceClass(fqn)?.let { return it.isInterface }
+        (typeShape(fqn) ?: builtinShape(fqn))?.let { return it.isInterface }
+        return null
+    }
+
     /** Whether [fqn] declares a companion object — where an `operator fun invoke` could make `Type()` a valid
      *  CALL rather than a (forbidden) constructor invocation. The abstract-instantiation check backs off when
      *  this is true, so it never false-positives on the companion-invoke factory pattern. */
@@ -1380,6 +1495,11 @@ class KotlinSymbolService(
             receiverTypeFqn = receiverFqn,
             signature = sig,
             typeParameters = rc.typeParameterNames,
+            // Each type parameter's upper bound (unbounded → `Any`, matching the Java-bytecode convention), for the
+            // explicit-type-argument bound check and unbound-parameter erasure. Only when bounds were captured.
+            typeParameterBounds = if (rc.typeParameterBounds.any { it.isNotBlank() })
+                rc.typeParameterBounds.map { b -> (if (b.isBlank()) null else typeFromText(b, rc.ctx)) ?: typeByFqn("kotlin.Any") ?: KotlinType("kotlin.Any") }
+            else emptyList(),
             paramTypes = if (rc.isFunction) rc.paramTexts.map { (_, t) -> markTypeParameters(typeFromText(t, rc.ctx), tps) } else emptyList(),
             paramNames = if (rc.isFunction) rc.paramTexts.map { (n, _) -> n } else emptyList(),
             modifiers = when (rc.visibility) {
@@ -1390,6 +1510,7 @@ class KotlinSymbolService(
             isInternal = rc.visibility == "internal",
             isComposable = rc.isComposable,
             isInline = rc.isInline,
+            isInfix = rc.isInfix,
             isSuspend = rc.isSuspend,
             isDeprecated = rc.isDeprecated,
             varargParamIndex = if (rc.isFunction) rc.varargParamIndex else -1,

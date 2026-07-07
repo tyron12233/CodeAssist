@@ -36,17 +36,20 @@ import dev.ide.ui.components.NewSourceRequest
 import dev.ide.ui.components.NewXmlFileDialog
 import dev.ide.ui.components.NewXmlTarget
 import dev.ide.ui.components.xmlTargetOf
+import dev.ide.ui.generated.resources.Res
+import dev.ide.ui.generated.resources.edscreen_project_root
 import dev.ide.ui.platform.PlatformBackHandler
 import dev.ide.ui.platform.isMobilePlatform
 import kotlinx.coroutines.launch
+import org.jetbrains.compose.resources.stringResource
 
 /** Width at/below which the UI reflows to the compact (phone) layout. */
 internal val COMPACT_BREAKPOINT = 720.dp
 
 /**
  * The editor screen, adaptive by window width: expanded (side rail · navigator · editor · console)
- * on wide windows, compact (single editor pane, bottom nav, navigator/console as sheets) when the
- * window is narrowed past [COMPACT_BREAKPOINT].
+ * on wide windows, compact (single editor pane, the navigator as a left push drawer, and the bottom
+ * nav doubling as the swipe-up build dock/console) when the window is narrowed past [COMPACT_BREAKPOINT].
  *
  * This top-level entry owns the screen-wide state that the layouts share: the file-creation / file-op
  * request flags (whose dialogs are hosted here so they overlay both layouts), and the system-back routing.
@@ -81,9 +84,10 @@ fun EditorScreen(
     var fileOp by remember { mutableStateOf<FileOpRequest?>(null) }
     // New File / New Folder can target any directory; res/ folders additionally offer the templated XML flow.
     val rootPath = state.backend.project.rootPath
+    val projectRootLabel = stringResource(Res.string.edscreen_project_root)
     fun dirLabel(dir: String): String =
         if (dir.startsWith(rootPath)) dir.removePrefix(rootPath).trim('/', '\\')
-            .ifEmpty { "project root" } else dir
+            .ifEmpty { projectRootLabel } else dir
 
     val onNewFile: (String, List<PackageSegment>) -> Unit =
         { dir, segs -> newEntry = NewEntryRequest(dir, NewEntryKind.File, dirLabel(dir), segs) }

@@ -26,7 +26,10 @@ import dev.ide.lang.kotlin.symbols.TypeShape
  */
 object KotlinBuiltinsIndex : IndexExtension<String, TypeShape> {
     override val id = IndexId("kotlin.builtins")
-    override val version = 4 // v4: shared TypeShapeExternalizer gained TypeShape.sealedSubclasses
+    // Base 5 folds in TypeShapeExternalizer.FORMAT (the shared codec). Bumped 4→5 to abandon stale on-device
+    // segments: the shared externalizer gained isDeprecated + isInfix while this index was left at 4, so an old
+    // v4 segment was read with the newer format and desynced mid-value (UTFDataFormatException in readSymbol).
+    override val version = 5 + TypeShapeExternalizer.FORMAT
     override val keyDescriptor: KeyDescriptor<String> = StringKeyDescriptor
     override val valueExternalizer = TypeShapeExternalizer
     override val matching = MatchingMode.PREFIX_ONLY // queried only by exact Kotlin FQN

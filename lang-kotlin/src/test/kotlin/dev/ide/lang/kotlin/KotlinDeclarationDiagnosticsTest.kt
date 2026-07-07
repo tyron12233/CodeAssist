@@ -171,6 +171,87 @@ class KotlinDeclarationDiagnosticsTest {
         )
     }
 
+    @Test
+    fun destructuringEntryConflictingWithLocalValIsFlagged() {
+        // The reported case: `a` is already a local `val`, then re-bound by a destructuring in the same block.
+        val diags = diagnose(
+            "Destr.kt",
+            "package demo\nfun f() {\n" +
+                "  val a = \"Hello\"\n" +
+                "  println(a)\n" +
+                "  val test = listOf(2 to 2)\n" +
+                "  val (a, b) = test\n" +
+                "}\n",
+        )
+        assertTrue(
+            diags.count { it.code == "kt.conflictingDeclaration" && it.message.contains("'a'") } >= 2,
+            "the redeclared `a` (val + destructuring entry) should both be flagged as conflicting; got $diags",
+        )
+        assertTrue(
+            diags.none { it.code == "kt.conflictingDeclaration" && it.message.contains("'b'") },
+            "`b` is declared once and must not be flagged; got $diags",
+        )
+    }
+
+    @Test
+    fun duplicateEntriesInOneDestructuringAreFlagged() {
+        val diags = diagnose("DestrDup.kt", "package demo\nfun f() { val (x, x) = 1 to 2 }")
+        assertTrue(
+            diags.count { it.code == "kt.conflictingDeclaration" && it.message.contains("'x'") } >= 2,
+            "`val (x, x)` should flag both entries as conflicting; got $diags",
+        )
+    }
+
+    @Test
+    fun distinctDestructuringAndIgnoreHoleAreNotFlagged() {
+        // Distinct names never conflict; `_` is the ignore hole and two `_`s must not collide.
+        val diags = diagnose("DestrOk.kt", "package demo\nfun f() {\n  val (a, b) = 1 to 2\n  val (_, d) = 3 to 4\n  val (_, e) = 5 to 6\n}\n")
+        assertTrue(
+            diags.none { it.code == "kt.conflictingDeclaration" },
+            "distinct destructuring entries (and `_` holes) must not be flagged; got $diags",
+        )
+    }
+
+    // --- function without a body must be abstract (2026-07-07) ---
+
+    @Test
+    fun concreteFunctionWithoutBodyIsFlagged() {
+        val diags = diagnose("NoBody.kt", "package demo\nclass C {\n  fun foo()\n}")
+        assertTrue(
+            diags.any { it.code == "kt.functionNoBody" && it.message.contains("foo") },
+            "a non-abstract `fun foo()` with no body should be flagged; got $diags",
+        )
+    }
+
+    @Test
+    fun abstractInterfaceAndBodiedFunctionsAreClean() {
+        val diags = diagnose(
+            "Bodies.kt",
+            "package demo\n" +
+                "interface I { fun a() }\n" +                       // interface member: implicitly abstract
+                "abstract class B { abstract fun b(); fun c() {} }\n" + // abstract member + concrete member
+                "external fun d()\n" +                              // external: body elsewhere
+                "fun e() = 1\n",                                    // expression body
+        )
+        assertTrue(diags.none { it.code == "kt.functionNoBody" }, "valid body-less/bodied functions must not be flagged; got $diags")
+    }
+
+    // --- val ++/-- reassignment (2026-07-07) ---
+
+    @Test
+    fun incrementOfValIsFlagged() {
+        val post = diagnose("Inc.kt", "package demo\nfun f() { val x = 0\n  x++ }")
+        assertTrue(post.any { it.code == "kt.valReassign" }, "`x++` on a val should be flagged; got $post")
+        val pre = diagnose("Inc2.kt", "package demo\nfun f() { val x = 0\n  --x }")
+        assertTrue(pre.any { it.code == "kt.valReassign" }, "`--x` on a val should be flagged; got $pre")
+    }
+
+    @Test
+    fun incrementOfVarIsClean() {
+        val diags = diagnose("Inc3.kt", "package demo\nfun f() { var x = 0\n  x++\n  ++x }")
+        assertTrue(diags.none { it.code == "kt.valReassign" }, "incrementing a var is fine; got $diags")
+    }
+
     companion object {
         val srcDir: Path = tempProject(mapOf("Seed.kt" to "package demo\n"))
         val analyzer = KotlinSourceAnalyzer(fakeContext(srcDir))

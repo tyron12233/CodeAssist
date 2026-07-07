@@ -17,6 +17,13 @@ import org.objectweb.asm.tree.VarInsnNode
  * Android's ART (no `ManagementFactory`, no `*MXBean`, no `ThreadInfo`). It can't be stubbed (app classes
  * may not live in `java.*`), so we rewrite the bytecode instead.
  *
+ * `javax.management.*` (also absent on ART) is deliberately NOT handled here: app classes MAY live in
+ * `javax.*`, so the types the platform links against at class-load time — `LowMemoryWatcherManager$3
+ * implements NotificationListener`, and the ctor's listener field write — are SHIPPED from the build JBR
+ * instead (`:ide-android` `generateSwingApiJar`, the javax.swing.Icon treatment). Every method that CALLS
+ * JMX also touches `java.lang.management` and is gutted below, so the shipped types are load-time surface
+ * only, never a live management API.
+ *
  * Discovered by the device spike (`KotlinCompilerArtSpikeTest`): `PerformanceManager` reaches for
  * `ManagementFactory.getThreadMXBean()` etc. and throws the moment those instructions execute (ART resolves
  * lazily). The six compiler classes that touch the package are all observability/diagnostics — perf metrics,
@@ -39,13 +46,16 @@ class ManagementStubPass : ArtPatchPass {
 
     override val name: String = "java-lang-management-stub"
 
+    // The com.intellij.* names are the UNSHADED platform's (the app dexes :kotlin-compiler-deps' jars; the
+    // relocated org.jetbrains.kotlin.com.intellij.* world went away with kotlin-compiler-embeddable). They
+    // match aa-runtime's ART treatment of the same classes (LowMemoryWatcherManager / DebugAttachDetectorArgs).
     private val targets: Set<String> = setOf(
         "org.jetbrains.kotlin.util.PerformanceManager",
         "org.jetbrains.kotlin.build.report.metrics.BuildMetricsReporterKt",
-        "org.jetbrains.kotlin.com.intellij.diagnostic.ThreadDumper",
-        "org.jetbrains.kotlin.com.intellij.openapi.util.LowMemoryWatcherManager",
-        "org.jetbrains.kotlin.com.intellij.openapi.util.LowMemoryWatcherManager\$2",
-        "org.jetbrains.kotlin.com.intellij.util.DebugAttachDetectorArgs",
+        "com.intellij.diagnostic.ThreadDumper",
+        "com.intellij.openapi.util.LowMemoryWatcherManager",
+        "com.intellij.openapi.util.LowMemoryWatcherManager\$2",
+        "com.intellij.util.DebugAttachDetectorArgs",
     )
 
     override fun handles(classFqn: String): Boolean = classFqn in targets

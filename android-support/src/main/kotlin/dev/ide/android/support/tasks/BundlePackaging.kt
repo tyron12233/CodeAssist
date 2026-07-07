@@ -30,6 +30,7 @@ internal object BundlePackaging {
         assetsDirs: List<Path>,
         jniLibDirs: List<Path>,
         outZip: Path,
+        javaResJars: List<Path> = emptyList(),
     ): List<String> {
         outZip.parent?.let { Files.createDirectories(it) }
         val written = LinkedHashSet<String>()
@@ -65,6 +66,19 @@ internal object BundlePackaging {
             // 3) assets/** and 4) lib/<abi>/**
             for (dir in assetsDirs.filter { Files.isDirectory(it) }) copyTree(zos, dir, "assets/", written)
             for (dir in jniLibDirs.filter { Files.isDirectory(it) }) copyTree(zos, dir, "lib/", written)
+
+            // 5) merged Java resources → the bundle's `root/` (bundletool relocates these to the APK root).
+            for (jar in javaResJars.filter { Files.isRegularFile(it) }) {
+                ZipFile(jar.toFile()).use { zf ->
+                    for (e in zf.entries().toList().filter { !it.isDirectory }.sortedBy { it.name }) {
+                        val name = "root/${e.name}"
+                        if (!written.add(name)) continue
+                        zos.putNextEntry(ZipEntry(name).apply { method = ZipEntry.DEFLATED })
+                        zf.getInputStream(e).use { it.copyTo(zos) }
+                        zos.closeEntry()
+                    }
+                }
+            }
         }
         return written.toList()
     }

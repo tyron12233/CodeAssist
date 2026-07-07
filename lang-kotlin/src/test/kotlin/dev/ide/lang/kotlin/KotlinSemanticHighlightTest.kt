@@ -164,6 +164,61 @@ class KotlinSemanticHighlightTest {
         )
     }
 
+    @Test
+    fun stringTemplateVariableIsColored() {
+        // The core ask: a variable interpolated into a string colors like the variable it is (not string green).
+        val short = tokens("Tpl.kt", "fun f() {\n  val name = \"x\"\n  println(\"hi \$name\")\n}\n")
+        assertTrue(
+            short.count { it.text == "name" && it.kind == "localVariable" } >= 2,
+            "the interpolated `\$name` should color as a localVariable; got $short",
+        )
+        val block = tokens("Tpl.kt", "package demo\nfun f(p: Point) { println(\"x=\${p.x}\") }")
+        assertTrue(
+            block.any { it.text == "p" && it.kind == "parameter" } && block.any { it.text == "x" && it.kind == "property" },
+            "a `\${p.x}` member read should color the receiver + property; got $block",
+        )
+    }
+
+    @Test
+    fun stringTemplateDelimitersAreColored() {
+        val toks = tokens("Tpl.kt", "package demo\nfun f(p: Point) { println(\"a\$p b\${p.x}c\") }")
+        assertTrue(toks.any { it.text == "\$" && it.kind == "stringTemplateEntry" }, "the `\$` of `\$p` should be colored; got $toks")
+        assertTrue(toks.any { it.text == "\${" && it.kind == "stringTemplateEntry" }, "the `\${` should be colored; got $toks")
+        assertTrue(toks.any { it.text == "}" && it.kind == "stringTemplateEntry" }, "the closing `}` should be colored; got $toks")
+    }
+
+    @Test
+    fun escapeSequenceIsColored() {
+        val toks = tokens("Esc.kt", "fun f() { val s = \"tab\\there\\n\" }")
+        assertTrue(toks.any { it.text == "\\t" && it.kind == "stringEscape" }, "`\\t` should color as stringEscape; got $toks")
+        assertTrue(toks.any { it.text == "\\n" && it.kind == "stringEscape" }, "`\\n` should color as stringEscape; got $toks")
+    }
+
+    @Test
+    fun destructuringDeclarationAndUseAreColored() {
+        val toks = tokens("Destr.kt", "package demo\nfun f(p: Point) {\n  val (a, b) = p\n  println(a + b)\n}\n")
+        // Both entries are declared read-only locals, and the later `a`/`b` reads resolve back to them.
+        assertTrue(
+            toks.count { it.text == "a" && it.kind == "localVariable" && HighlightModifier.DECLARATION in it.mods } == 1 &&
+                toks.count { it.text == "a" && it.kind == "localVariable" && HighlightModifier.DECLARATION !in it.mods } >= 1,
+            "the destructured `a` should be a localVariable at both its declaration and use; got $toks",
+        )
+        assertTrue(
+            toks.any { it.text == "b" && it.kind == "localVariable" && HighlightModifier.READONLY in it.mods },
+            "the destructured `b` should be read-only; got $toks",
+        )
+    }
+
+    @Test
+    fun forLoopDestructuringIsColored() {
+        val toks = tokens("ForD.kt", "package demo\nfun f(m: Map<String, Int>) {\n  for ((k, v) in m) { println(k); println(v) }\n}\n")
+        assertTrue(
+            toks.count { it.text == "k" && it.kind == "localVariable" } >= 2 &&
+                toks.count { it.text == "v" && it.kind == "localVariable" } >= 2,
+            "for-loop destructuring `(k, v)` should color both the declaration and the uses; got $toks",
+        )
+    }
+
     companion object {
         val srcDir: Path = tempProject(mapOf(
             "Seed.kt" to "package demo\n",

@@ -88,6 +88,7 @@ import dev.ide.core.templates.JavaLibraryTemplate
 import dev.ide.core.templates.KotlinConsoleAppTemplate
 import dev.ide.core.templates.KotlinLibraryTemplate
 import dev.ide.platform.Disposable
+import java.util.concurrent.CopyOnWriteArrayList
 import dev.ide.platform.PluginId
 import dev.ide.platform.SERVICE_EP
 import dev.ide.platform.ServiceDescriptor
@@ -125,15 +126,29 @@ import dev.ide.android.support.index.AndroidResourceIndex
 import dev.ide.android.support.index.ResourceDeclValue
 import dev.ide.core.actions.BuiltInActions
 import dev.ide.core.completion.CompletionEngine
+import dev.ide.core.completion.CompletionOptions
+import dev.ide.core.completion.CompletionStats
 import dev.ide.core.completion.PostfixContributor
 import dev.ide.index.IndexItemState
+import dev.ide.lang.completion.CompletionContributor
+import dev.ide.lang.completion.CompletionItem
 import dev.ide.lang.jdt.index.JavaClassLocatorIndex
+import dev.ide.lang.jdt.index.JavaSourceAnnotationIndex
 import dev.ide.lang.jdt.index.JavaSourceDocIndex
+import dev.ide.lang.jdt.index.JavaSourceSubtypeIndex
 import dev.ide.lang.jdt.synthetic.SyntheticJavaSource
+import dev.ide.lang.kotlin.completion.KotlinPostfixTemplates
+import dev.ide.lang.kotlin.index.BinaryAnnotationIndex
+import dev.ide.lang.kotlin.index.BinarySubtypeIndex
+import dev.ide.lang.kotlin.index.KotlinBuiltinCallableIndex
 import dev.ide.lang.kotlin.index.KotlinBuiltinsIndex
 import dev.ide.lang.kotlin.index.KotlinCallableIndex
+import dev.ide.lang.kotlin.index.KotlinSourceCallableIndex
+import dev.ide.lang.kotlin.index.KotlinPackageDeclIndex
 import dev.ide.lang.kotlin.index.KotlinMainIndex
+import dev.ide.lang.kotlin.index.KotlinSourceAnnotationIndex
 import dev.ide.lang.kotlin.index.KotlinSourceDocIndex
+import dev.ide.lang.kotlin.index.KotlinSourceSubtypeIndex
 import dev.ide.lang.kotlin.index.KotlinTypeShapeIndex
 import dev.ide.lang.kotlin.interp.ResolvedClass
 import dev.ide.lang.kotlin.interp.ResolvedFunction
@@ -159,6 +174,8 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import java.nio.file.Files
 import java.nio.file.Path
 import java.util.concurrent.ConcurrentHashMap
@@ -366,6 +383,16 @@ class IdeServices private constructor(
      *  their own. This engine just queries the registry per request. */
     private val completionEngine: CompletionEngine = CompletionEngine(platform.extensions)
 
+    /** Per-project completion-acceptance counters behind the app-global `platform.stats` weigher (which
+     *  reaches them through [ApplicationEnvironment.activeEngine]). */
+    val completionStats: CompletionStats by lazy {
+        CompletionStats(store.rootPath.resolve(".platform/completion-stats.properties"))
+    }
+
+    /** Record that the user accepted the completion item labeled [label] (see [CompletionStats]). */
+    fun noteCompletionAccepted(label: String) =
+        completionStats.noteAccepted(CompletionStats.keyOf(label))
+
     /** The backend whose `languages` contains [language], or the first (Java/JDT) as a fallback. */
     private fun backendFor(language: LanguageId): LanguageBackend =
         languageBackends.firstOrNull { language in it.languages } ?: languageBackends.first()
@@ -467,6 +494,52 @@ class IdeServices private constructor(
         override fun setActiveVariant(module: Module, variantName: String) = this@IdeServices.setActiveVariant(module, variantName)
         override fun invalidateAnalyzers() = this@IdeServices.invalidateAnalyzers()
         override fun resyncIndex() = this@IdeServices.resyncIndex()
+        override val events get() = this@IdeServices.events
+    }
+
+    /** Callbacks fired (on the mutating thread) when the workspace CONFIGURATION changed (model commit,
+     *  variant/settings/SDK change): a general seam for out-of-process consumers. Declared BEFORE [events]
+     *  so a model commit during construction can never observe it uninitialized. */
+    private val configurationListeners = CopyOnWriteArrayList<() -> Unit>()
+
+    /**
+     * The workspace change-notification spine (see [WorkspaceEventHub]). Every mutation this engine performs
+     * publishes a typed event here, and the invalidation chains (analyzers/index/synthetics/overlays) run as
+     * its subscribers, so in-process consumers and the out-of-process engines' hint fan-out observe one
+     * ordered stream. The [WorkspaceEventHub.Reactions] impl is an inner object for the same reason
+     * [engineContext] is: it reaches the private helpers without widening their visibility.
+     */
+    internal val events: WorkspaceEventHub = WorkspaceEventHub(store, object : WorkspaceEventHub.Reactions {
+        override fun invalidateAnalyzers() = this@IdeServices.invalidateAnalyzers()
+        override fun invalidateSyntheticClasses() = this@IdeServices.invalidateSyntheticClasses()
+        override fun resyncIndex() = this@IdeServices.resyncIndex()
+        override fun reindexSourceAsync(path: Path) {
+            indexScope.launch {
+                runCatching {
+                    val text = openDocuments[path] ?: path.readText()
+                    indexService.reindexSource(path, text)
+                }
+            }
+        }
+        override fun dropJavaBindingCaches() {
+            store.liveModuleContainers()
+                .forEach { (it.peekService(ANALYZER_JAVA) as? JdtSourceAnalyzer)?.invalidateBindingCache() }
+        }
+        override fun dropOverlaysUnder(root: Path) = this@IdeServices.dropOverlaysUnder(root)
+        override fun rekeyOverlays(from: Path, to: Path) = this@IdeServices.rekeyOverlays(from, to)
+        override fun isResourcePath(path: Path) = this@IdeServices.isResourcePath(path)
+        override fun configurationChanged() {
+            // Seam for out-of-process engines: configuration-change hints hang off here (a no-op until a
+            // listener is attached).
+            configurationListeners.forEach { runCatching { it() } }
+        }
+    })
+
+    /** Register a configuration-change callback (deps/variant/SDK/settings); returns a [Disposable] that
+     *  unregisters it. */
+    fun addConfigurationListener(listener: () -> Unit): Disposable {
+        configurationListeners.add(listener)
+        return Disposable { configurationListeners.remove(listener) }
     }
 
     /** WORKSPACE-scoped signing service (keystore registry + per-build-type assignment). */
@@ -603,6 +676,9 @@ class IdeServices private constructor(
                 }
             }
         }
+        // Arm the event hub's reactions only now: init's own commits (ensureKotlinStdlib) must not trigger
+        // invalidation over fields that are still initializing (a throwing reaction would abort the commit).
+        events.activate()
         // This is now the active project for app-level extension callbacks that fire outside any service scope
         // (the command actions, the synthetic-R provider, the XML resource host — all registered once on the
         // app registry). Set LAST in init, so the engine is fully constructed before it can be resolved as the
@@ -671,20 +747,7 @@ class IdeServices private constructor(
             // key re-indexes them every cold start (android.jar alone is ~90% of all index entries). Give them a
             // PATH-free `<name>-<size>` key so the segment is reused across launches (and later matches a prebuilt
             // segment shipped under the same id). Keyed by the same Path objects that appear in [libraryJars].
-            stableJarIds = run {
-                val bundled =
-                    (compileBootClasspath + listOfNotNull(BundledKotlinStdlib.jar())).map {
-                        it.toAbsolutePath().normalize().toString()
-                    }.toSet()
-                libraryJars.filter { it.toAbsolutePath().normalize().toString() in bundled }
-                    .associateWith { p ->
-                        "${p.fileName}-${
-                            runCatching { java.nio.file.Files.size(p) }.getOrDefault(
-                                0L
-                            )
-                        }"
-                    }
-            },
+            stableJarIds = libraryJars.mapNotNull { p -> bundledStableJarId(p)?.let { p to it } }.toMap(),
             jdkHome = jdt.firstNotNullOfOrNull { it.jdkHome },
             // Attached library/SDK SOURCE archives (incl. the downloaded JDK src.zip, folded in by the JDT
             // branch of analyzerFor) → the source-doc index: real param names + javadoc/KDoc.
@@ -712,13 +775,19 @@ class IdeServices private constructor(
         )
     }
 
+    // Serializes the background ensureUpToDate passes: the event hub triggers a re-sync per model commit,
+    // so back-to-back triggers (a reconcile loop's per-module commits) must queue, not interleave.
+    private val indexSyncMutex = Mutex()
+
     /** Re-invalidate and rebuild the workspace indexes from scratch (the UI's "Re-index" action). */
     fun reindex() {
         invalidateSyntheticClasses()
         indexScope.launch {
-            runCatching {
-                indexService.invalidate()
-                indexService.ensureUpToDate(buildIndexScope())
+            indexSyncMutex.withLock {
+                runCatching {
+                    indexService.invalidate()
+                    indexService.ensureUpToDate(buildIndexScope())
+                }
             }
         }
     }
@@ -731,7 +800,9 @@ class IdeServices private constructor(
      */
     private fun resyncIndex() {
         invalidateSyntheticClasses()
-        indexScope.launch { runCatching { indexService.ensureUpToDate(buildIndexScope()) } }
+        indexScope.launch {
+            indexSyncMutex.withLock { runCatching { indexService.ensureUpToDate(buildIndexScope()) } }
+        }
     }
 
     // ---- SDK / toolchain manager (download Android SDK packages + JDK sources) ----
@@ -751,7 +822,7 @@ class IdeServices private constructor(
      *  engine has no editor analyzers to refresh, so it doesn't subscribe (and doesn't build the SDK manager).
      *  Initialized as a property (not in [registerScopedServices]) so it runs after the engine's other fields. */
     private val sdkChangeSubscription: Disposable? =
-        if (buildOnly) null else sdkManager.addChangeListener { invalidateAnalyzers(); resyncIndex() }
+        if (buildOnly) null else sdkManager.addChangeListener { events.librariesChanged() }
 
     /**
      * The compile bootclasspath. On-device ([androidTools] non-null) ecj has no readable JRE, so every compile
@@ -872,31 +943,15 @@ class IdeServices private constructor(
         openDocuments[file.toAbsolutePath().normalize()] = text
     }
 
-    /** Persist a single editor buffer to disk and keep it as the live overlay (it now equals disk). */
+    /** Persist a single editor buffer to disk and keep it as the live overlay (it now equals disk). The
+     *  invalidation chain (JDT binding-cache drop, res→R refresh, xml re-index, kt→facade refresh) runs as
+     *  the [events] hub's [FileChanged][dev.ide.vfs.FileChanged] reaction, not inline here. */
     fun save(file: Path, text: String) {
         val path = file.toAbsolutePath().normalize()
         openDocuments[path] = text
         path.parent?.let { Files.createDirectories(it) }
         path.writeText(text)
-        // A write to disk can change how OTHER files resolve (a dependency's saved edit). The JDT binding-parse
-        // cache keys only on the focal text, so drop it on any save to avoid a same-text focal parse going stale.
-        // Peek the live module containers so this never forces an analyzer to build.
-        store.liveModuleContainers()
-            .forEach { (it.peekService(ANALYZER_JAVA) as? JdtSourceAnalyzer)?.invalidateBindingCache() }
-        if (isResourcePath(path)) {
-            invalidateSyntheticClasses() // an edited res file changes R
-            if (path.toString().endsWith(".xml")) {
-                indexScope.launch {
-                    runCatching {
-                        indexService.reindexSource(
-                            path, text
-                        )
-                    }
-                } // keep the resource index current
-            }
-        } else if (isKotlin(path)) {
-            invalidateSyntheticClasses() // an edited .kt file changes its `<File>Kt` facade / class shapes
-        }
+        events.fileChanged(path, text)
     }
 
     /** A path under an Android `res/` tree — a change to it can change the synthetic R class. */
@@ -906,9 +961,11 @@ class IdeServices private constructor(
     /**
      * Write live editor buffers to disk ("save all"). Completion runs off the in-memory overlay, but the
      * compiler reads sources from disk, so a build must flush first, or it compiles stale files. Only
-     * writes when content actually changed.
+     * writes when content actually changed. Public so the UI process can flush before a build runs in the
+     * separate `:build` daemon — the daemon has no editor buffers of its own, so its own flush is a no-op and
+     * it would otherwise compile whatever was last saved to disk (running stale code on an unsaved edit).
      */
-    private fun flushOpenDocuments() {
+    fun flushOpenDocuments() {
         for ((path, content) in openDocuments) {
             runCatching {
                 if (!Files.exists(path) || path.readText() != content) {
@@ -1003,6 +1060,16 @@ class IdeServices private constructor(
         return out
     }
 
+    /** The IDE's stable, path-free index-segment key for a BUNDLED jar (android.jar / desugar stubs / the
+     *  bundled kotlin-stdlib; re-extracted from assets, so mtime is unstable), or null for a normal jar. */
+    private fun bundledStableJarId(p: Path): String? {
+        val norm = p.toAbsolutePath().normalize().toString()
+        val bundled = (compileBootClasspath + listOfNotNull(BundledKotlinStdlib.jar()))
+            .map { it.toAbsolutePath().normalize().toString() }
+        if (norm !in bundled) return null
+        return "${p.fileName}-${runCatching { Files.size(p) }.getOrDefault(0L)}"
+    }
+
     private fun fqcnOf(path: Path, text: String): String? {
         val cls =
             path.fileName.toString().removeSuffix(".java").takeIf { it.isNotEmpty() } ?: return null
@@ -1021,8 +1088,8 @@ class IdeServices private constructor(
 
     /** User-tunable completion knobs (max items + optional contributors); applied to the next [complete]. */
     @Volatile
-    var completionOptions: dev.ide.core.completion.CompletionOptions =
-        dev.ide.core.completion.CompletionOptions()
+    var completionOptions: CompletionOptions =
+        CompletionOptions()
 
     /** Settings pages contributed by plugins (the built-in pages are assembled by the backend). */
     fun settingsPages(): List<dev.ide.platform.settings.SettingsPage> =
@@ -1084,12 +1151,14 @@ class IdeServices private constructor(
     fun listVariants(module: Module): List<String> =
         dev.ide.android.support.AndroidVariants.compute(module).map { it.name }
 
-    /** Select [variantName] as [module]'s active variant; re-analyzes + re-indexes if it changed. */
+    /** Select [variantName] as [module]'s active variant; re-analyzes + re-indexes if it changed (the hub's
+     *  `variant.*` settings reaction; a variant switch changes the variant-filtered classpath). */
     fun setActiveVariant(module: Module, variantName: String) {
         if (activeVariant(module) == variantName) return
         setProjectPref(variantPrefKey(module), variantName)
-        invalidateAnalyzers()
-        resyncIndex()
+        events.settingChanged(
+            dev.ide.core.settings.BuiltInSettingsPages.BUILD, variantPrefKey(module), projectScoped = true,
+        )
     }
 
     /** [listVariants] by module name (the string-keyed backend surface). */
@@ -1191,6 +1260,33 @@ class IdeServices private constructor(
     fun projectDisplayName(): String =
         store.workspace.projects.firstOrNull()?.name ?: (workspaceRoot.fileName?.toString()
             ?: "workspace")
+
+    /** True when this project was imported from Gradle and runs in compatibility mode. */
+    fun isCompatibilityMode(): Boolean = GradleImport.isCompatibilityMode(workspaceRoot)
+
+    /** The reader notes recorded at import/sync time (what the tolerant Gradle reader couldn't fully extract). */
+    fun compatibilityNotes(): List<String> = GradleImport.readNotes(workspaceRoot)
+
+    /**
+     * Re-read the Gradle build scripts still present at [workspaceRoot] into the OPEN model: add any new
+     * modules, and refresh each module's declared dependencies + Android facet from the scripts (the scripts
+     * are the source of truth in compatibility mode, so a user-added dependency not in the scripts is
+     * dropped). Model + persistence only — the caller re-resolves dependencies and re-indexes afterwards.
+     */
+    internal fun syncGradleFromScripts(): GradleSyncOutcome {
+        val spec = GradleImport.parse(workspaceRoot)
+            ?: return GradleSyncOutcome(false, "No Gradle build scripts were found to sync from.", emptyList())
+        val level = store.workspace.projects.firstOrNull()?.modules?.firstOrNull()?.languageLevel ?: LanguageLevel.JAVA_17
+        val (added, updated) = GradleImport.reconcile(store, spec, level)
+        store.save()
+        GradleImport.markCompatibilityMode(workspaceRoot, spec.report.notes)
+        val message = buildString {
+            append("Synced from Gradle")
+            if (added > 0) append(" · $added module${if (added == 1) "" else "s"} added")
+            if (updated > 0) append(" · $updated module${if (updated == 1) "" else "s"} updated")
+        }
+        return GradleSyncOutcome(true, message, spec.report.notes)
+    }
 
     fun sourceRoots(module: Module): List<Path> = module.sourceSets.flatMap { it.contentRoots }
         .filter { ContentRole.SOURCE in it.roles || ContentRole.GENERATED in it.roles }
@@ -1360,10 +1456,15 @@ class IdeServices private constructor(
     /**
      * Completion for [text] (the live editor buffer) at [offset], bound to [file]'s module + language. Runs
      * through the unified [CompletionEngine]: the language backend (wrapped as a contributor), every
-     * cross-cutting / plugin [dev.ide.lang.completion.CompletionContributor], and buffer-word completion are
-     * merged and ranked in one pipeline — there is no privileged backend call here anymore.
+     * cross-cutting / plugin [CompletionContributor], and buffer-word completion are
+     * merged and ranked in one pipeline — there is no privileged backend call here anymore. `suspend`
+     * because a contributor may genuinely leave the worker mid-run (out-of-process work off the engine worker).
      */
-    fun complete(file: Path, text: String, offset: Int): CompletionResult {
+    suspend fun complete(
+        file: Path,
+        text: String,
+        offset: Int,
+    ): CompletionResult {
         val lang = languageFor(file)
         val safeOffset = offset.coerceIn(0, text.length)
         val prefix = identifierPrefixBefore(text, safeOffset)
@@ -1377,31 +1478,33 @@ class IdeServices private constructor(
         // A backend that throws mid-completion (e.g. the Kotlin parse host on ART) would otherwise propagate
         // out to the UI and surface as a silent empty popup with no trace. Log the cause (logcat/stderr) and
         // degrade to no suggestions, so one failing file can't disable completion and the failure is diagnosable.
-        return runCatching {
-            runSync {
-                val vfile = store.vfs.fileFor(file)
-                // Parse the LIVE snapshot (not the cached lastByFile tree, which can lag the just-typed buffer)
-                // so `position`/`parsedFile` reflect the completion buffer — the receiver-type-driven postfix
-                // contributor depends on it. parseFull reuses the cached parse when the text is unchanged.
-                val parsed =
-                    analyzer?.let { runCatching { it.incrementalParser.parseFull(snapshot) }.getOrNull() }
-                val params = CompletionParams(
-                    document = snapshot,
-                    offset = safeOffset,
-                    prefix = prefix,
-                    language = lang,
-                    trigger = CompletionTrigger.Explicit,
-                    replacementRange = replaceRange,
-                    position = parsed?.nodeAt(safeOffset),
-                    parsedFile = parsed,
-                    typeResolver = analyzer?.let { a -> { node -> runCatching { a.resolveType(node) }.getOrNull() } },
-                )
-                // Per-call contributions: the language backend's own completion contributors, merged with the
-                // EP (cross-cutting / plugin) contributors by the engine.
-                val perCall = analyzer?.completionContributions() ?: emptyList()
-                completionEngine.complete(params, perCall, completionOptions)
-            }
-        }.getOrElse { e ->
+        // Preemption is NOT a failure: a superseded request surfaces as EngineCanceledException and must
+        // reach the host (which keeps the current popup) rather than degrade to an empty list that clobbers it.
+        return try {
+            // Parse the LIVE snapshot (not the cached lastByFile tree, which can lag the just-typed buffer)
+            // so `position`/`parsedFile` reflect the completion buffer — the receiver-type-driven postfix
+            // contributor depends on it. parseFull reuses the cached parse when the text is unchanged.
+            val parsed =
+                analyzer?.let { runCatching { it.incrementalParser.parseFull(snapshot) }.getOrNull() }
+            val params = CompletionParams(
+                document = snapshot,
+                offset = safeOffset,
+                prefix = prefix,
+                language = lang,
+                trigger = CompletionTrigger.Explicit,
+                replacementRange = replaceRange,
+                position = parsed?.nodeAt(safeOffset),
+                parsedFile = parsed,
+                typeResolver = analyzer?.let { a -> { node -> runCatching { a.resolveType(node) }.getOrNull() } },
+            )
+            // Per-call contributions: the language backend's own completion contributors, merged with the
+            // EP (cross-cutting / plugin) contributors by the engine.
+            completionEngine.complete(params, analyzer?.completionContributions() ?: emptyList(), completionOptions)
+        } catch (e: kotlinx.coroutines.CancellationException) {
+            throw e
+        } catch (e: dev.ide.platform.EngineCanceledException) {
+            throw e
+        } catch (e: Throwable) {
             System.err.println("[IdeServices] completion failed for $file (${lang.id}): ${e.stackTraceToString()}")
             CompletionResult(emptyList(), false, replaceRange)
         }
@@ -1633,13 +1736,14 @@ class IdeServices private constructor(
     /** Run the full pipeline (per-language analyzers + diagnostic providers, suppression + profile) over
      *  [file]'s live buffer. ONE engine serves Java/Kotlin/XML: the environment picks the analyzer by the
      *  file's language and each provider is dispatched by its declared `languages`, so there are no more
-     *  per-language special cases here. `moduleForEditableFile` (not `moduleForFile`) gates so XML resource
-     *  files and the manifest — which sit outside the source roots — still analyze. */
-    fun analyzeDiagnostics(file: Path, text: String): List<dev.ide.analysis.Diagnostic> {
+     *  per-language special cases here. `suspend` because a provider may genuinely leave the worker mid-run
+     *  (out-of-process work off the engine worker). `moduleForEditableFile` (not `moduleForFile`) gates so
+     *  XML resource files and the manifest — which sit outside the source roots — still analyze. */
+    suspend fun analyzeDiagnostics(file: Path, text: String): List<dev.ide.analysis.Diagnostic> {
         if (analysisDisabled(file) || moduleForEditableFile(file) == null) return emptyList()
         updateDocument(file, text)
         return try {
-            runSync { analysisEngine.analyzeNow(store.vfs.fileFor(file)) }
+            analysisEngine.analyzeNow(store.vfs.fileFor(file))
         } catch (e: LinkageError) {
             analysisUnavailable.add(languageFor(file))
             emptyList()
@@ -2032,9 +2136,9 @@ class IdeServices private constructor(
             }
         }
 
-        invalidateAnalyzers()
-        invalidateSyntheticClasses()
-        resyncIndex()
+        // One batched mutation event: the hub coalesces the reaction (a multi-file edit / file rename
+        // invalidates analyzers + synthetics and re-syncs the index exactly once).
+        events.filesMutated(editsByPath.keys.toList(), newPath?.let { fileAbs to it })
         return RenameOutcome(
             true,
             "Renamed '${target.oldName}' to '$name'",
@@ -2183,9 +2287,7 @@ class IdeServices private constructor(
                 abs
             )
         }.getOrDefault(false)
-        if (ok) {
-            dropOverlaysUnder(abs); invalidateAnalyzers(); resyncIndex()
-        }
+        if (ok) events.fileDeleted(abs) // reaction: drop overlays under it, invalidate analyzers, re-sync
         return ok
     }
 
@@ -2221,8 +2323,7 @@ class IdeServices private constructor(
         if (Files.exists(dest)) return RenameOutcome(false, "'$name' already exists here.")
         return runCatching {
             Files.move(abs, dest)
-            rekeyOverlays(abs, dest)
-            invalidateAnalyzers(); resyncIndex()
+            events.fileMoved(abs, dest) // reaction: re-key overlays, invalidate analyzers, re-sync
             RenameOutcome(true, "Renamed to '$name'", newPath = dest.toString())
         }.getOrElse { RenameOutcome(false, "Rename failed: ${it.message}") }
     }
@@ -2236,9 +2337,11 @@ class IdeServices private constructor(
         return runCatching {
             Files.createDirectories(dir)
             Files.move(abs, dest)
+            // The package-line/import rewrite is mutation mechanics and needs the overlays re-keyed first;
+            // the invalidation chain then runs as the hub's FileMoved reaction.
             rekeyOverlays(abs, dest)
             fixPackagesAfterRelocation(dest, updateReferences = true)
-            invalidateAnalyzers(); invalidateSyntheticClasses(); resyncIndex()
+            events.fileMoved(abs, dest)
             dest
         }.getOrNull()
     }
@@ -2257,10 +2360,24 @@ class IdeServices private constructor(
             // The copy lands in a new package; fix its own `package` line, but leave references to the
             // original alone (a copy is a new type, not a moved one).
             fixPackagesAfterRelocation(dest, updateReferences = false)
-            invalidateAnalyzers(); invalidateSyntheticClasses(); resyncIndex()
+            // Publish the real created-file set (a copied package = one event per file, coalesced reaction).
+            events.filesCreated(filesUnder(dest))
             dest
         }.getOrNull()
     }
+
+    /** [root] itself for a file, or every regular file under it for a directory (for created-file events). */
+    private fun filesUnder(root: Path): List<Path> =
+        if (Files.isDirectory(root)) {
+            runCatching {
+                Files.walk(root).use { s ->
+                    // Collectors.toList, not Stream.toList: the latter is Java 16+, absent on ART/API 26.
+                    s.filter { Files.isRegularFile(it) }.collect(java.util.stream.Collectors.toList())
+                }
+            }.getOrDefault(listOf(root))
+        } else {
+            listOf(root)
+        }
 
     /** Every `.java` file across the workspace's modules (for the project-wide reference sweep). */
     private fun projectJavaFiles(): List<Path> {
@@ -2483,14 +2600,8 @@ class IdeServices private constructor(
                 ) + entry + existing.substring(idx) else existing + entry
                 target.writeText(merged)
             }
-            invalidateSyntheticClasses()
-            indexScope.launch {
-                runCatching {
-                    indexService.reindexSource(
-                        target, target.readText()
-                    )
-                }
-            }
+            // Reaction (res .xml): refresh R + re-index the file.
+            if (existing == null) events.fileCreated(target) else events.fileChanged(target)
         }
         return unique
     }
@@ -2516,14 +2627,7 @@ class IdeServices private constructor(
         return runCatching {
             Files.createDirectories(folder)
             target.writeText(resourceFileStub(type))
-            invalidateSyntheticClasses()
-            indexScope.launch {
-                runCatching {
-                    indexService.reindexSource(
-                        target, target.readText()
-                    )
-                }
-            }
+            events.fileCreated(target) // reaction (res .xml): refresh R + re-index the file
             target.toString()
         }.getOrNull()
     }
@@ -3300,6 +3404,8 @@ class IdeServices private constructor(
         // change subscription — the shared instance itself is disposed by the application container at app
         // shutdown, not on a per-project close.
         runCatching { sdkChangeSubscription?.dispose() }
+        // Unsubscribe the event hub from the (app-wide) bus so a closed engine's reactions never fire again.
+        runCatching { events.close() }
         // Dispose the workspace + module service containers (the application container, the parent, is owned
         // by ProjectManager). This disposes the per-module analyzers, closing their library-jar handles,
         // before the index's segment channels are released.
@@ -3580,7 +3686,7 @@ class IdeServices private constructor(
                 ),
                 completionPlugin,
             )
-            dev.ide.lang.kotlin.completion.KotlinPostfixTemplates.all().forEach {
+            KotlinPostfixTemplates.all().forEach {
                 extensions.register(dev.ide.lang.postfix.POSTFIX_TEMPLATE_EP, it, completionPlugin)
             }
 
@@ -3597,11 +3703,22 @@ class IdeServices private constructor(
                 KotlinTypeShapeIndex, // Kotlin backend: persistent owner-keyed member shapes
                 KotlinBuiltinsIndex, // Kotlin backend: intrinsic List/Int/String shapes (.kotlin_builtins)
                 KotlinCallableIndex, // Kotlin backend: persistent extensions + top-level callables
+                KotlinBuiltinCallableIndex, // Kotlin backend: top-level intrinsics (arrayOf/intArrayOf/… in .kotlin_builtins)
+                KotlinSourceCallableIndex, // same key scheme over project .kt (cross-file source extensions)
+                KotlinPackageDeclIndex, // per-package top-level classifiers + callables
                 JavaSourceDocIndex, // param names + javadoc from attached Java sources
                 KotlinSourceDocIndex, // param names + KDoc from attached Kotlin sources
                 JavaMainIndex, // runnable entry points in Java source (the Run picker)
                 KotlinMainIndex, // runnable entry points in Kotlin source (the Run picker)
                 AndroidResourceIndex, // Android resource declarations
+                // Direct inheritors + annotated-by (the parity plan's Phase 1.3/1.4), keyed by SHORT name
+                // across all three producer sides; consumers merge SubtypeIndex.ALL / AnnotationIndex.ALL.
+                BinarySubtypeIndex,
+                BinaryAnnotationIndex,
+                KotlinSourceSubtypeIndex,
+                KotlinSourceAnnotationIndex,
+                JavaSourceSubtypeIndex,
+                JavaSourceAnnotationIndex,
             ).forEach { extensions.register(INDEX_EP, it, indexPlugin) }
 
             // platform.blockMapping: the built-in Java block decomposition.
@@ -3721,6 +3838,16 @@ class IdeServices private constructor(
                 SYNTHETIC_CLASS_EP,
                 AndroidRClassProvider { m, _ -> env.activeEngine?.resourceRepo(m) },
                 PluginId("android-support"),
+            )
+
+            // platform.completionWeigher: the acceptance-frequency stats weigher (IntelliJ's `stats`) —
+            // app-global like every weigher, counting through the ACTIVE engine's per-project counters.
+            extensions.register(
+                dev.ide.lang.completion.COMPLETION_WEIGHER_EP,
+                dev.ide.lang.completion.StatsWeigher { item ->
+                    env.activeEngine?.completionStats?.countFor(CompletionStats.keyOf(item.label)) ?: 0
+                },
+                PluginId("completion-builtins"),
             )
 
             // The XML editor diagnostics: the resource host + Android attribute schema + the app-compat
@@ -3849,7 +3976,7 @@ class IdeServices private constructor(
             store.replaceSdks(listOf(sdk))
             GradleImport.populate(store, spec, languageLevel)
             store.save()
-            GradleImport.markCompatibilityMode(root)
+            GradleImport.markCompatibilityMode(root, spec.report.notes)
             return true
         }
     }

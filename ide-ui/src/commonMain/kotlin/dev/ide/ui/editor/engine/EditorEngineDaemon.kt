@@ -10,6 +10,7 @@ import dev.ide.ui.backend.UiSemanticToken
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
@@ -22,17 +23,21 @@ enum class DaemonPass { DIAGNOSTICS, SEMANTIC, INLAY, FOLDS, PREVIEWS }
 
 /** Daemon lifecycle, emitted to a [DaemonObserver] — the instrument a headless harness records a timeline from. */
 enum class DaemonPhase {
-    /** A document change cancelled the in-flight run and scheduled a fresh one (after the reparse delay). */
+    /** A document change canceled the in-flight run and scheduled a fresh one (after the reparse delay). */
     RESTARTED,
+
     /** The reparse delay elapsed without a newer edit; the pass run begins. */
     RUN_STARTED,
     PASS_STARTED,
     PASS_DONE,
+
     /** A pass was preempted by a higher-priority engine call (completion); the daemon waits and retries it. */
     PASS_PREEMPTED,
+
     /** A pass didn't apply to this file (language gate) and contributed nothing. */
     PASS_SKIPPED,
     RUN_FINISHED,
+
     /** A newer edit (or close) cancelled the run mid-flight. */
     RUN_CANCELLED,
 }
@@ -51,7 +56,7 @@ data class EditorDaemonPolicy(
     val autoReparseDelay: Duration = 300.milliseconds,
     /** After a pass is preempted by completion, how long to wait before retrying it. */
     val preemptRetryDelay: Duration = 150.milliseconds,
-    /** Max consecutive preemptions of one pass before giving up this run (a later edit retriggers). */
+    /** Max consecutive preemption of one pass before giving up this run (a later edit retriggers). */
     val maxPreemptRetries: Int = 8,
     /**
      * Passes to run, in priority order. FOLDS is first because it's parse-only (no symbol resolution, no
@@ -62,14 +67,18 @@ data class EditorDaemonPolicy(
      * All passes share the one serialized engine worker, so this order is literally the paint order.
      */
     val passOrder: List<DaemonPass> = listOf(
-        DaemonPass.FOLDS, DaemonPass.SEMANTIC, DaemonPass.DIAGNOSTICS, DaemonPass.INLAY, DaemonPass.PREVIEWS,
+        DaemonPass.FOLDS,
+        DaemonPass.SEMANTIC,
+        DaemonPass.DIAGNOSTICS,
+        DaemonPass.INLAY,
+        DaemonPass.PREVIEWS,
     ),
 )
 
 /**
  * The editor's highlighting daemon — modelled on IntelliJ's `DaemonCodeAnalyzer`.
  *
- * Instead of N independent debounced effects each retrying on its own (the old [CodeEditor] shape, which
+ * Instead of N independent debounced effects each retrying on its own (the old [dev.ide.ui.editor.CodeEditor] shape, which
  * fanned out 4–5 concurrent passes per keystroke that all then independently retried on preemption — a
  * retry storm against the one engine thread), this is ONE restartable daemon: a document change [restart]s it
  * (cancelling any in-flight run), and after the reparse delay it runs the highlighting passes **in priority
@@ -98,17 +107,20 @@ class EditorEngineDaemon(
     var onCodeFolds: (List<UiFoldRegion>) -> Unit = {}
     var onComposePreviews: (List<UiComposePreview>) -> Unit = {}
 
-    /** Whether [pass] should run for this file (language gate); a skipped pass clears its sink. */
+    /** Whether [DaemonPass] should run for this file (language gate); a skipped pass clears its sink. */
     var appliesTo: (DaemonPass) -> Boolean = { true }
+
     // User-toggleable passes (Settings → Editor/Analysis), gated without touching the language [appliesTo].
     var inlayEnabled: Boolean = true
     var analyzeEnabled: Boolean = true
     var semanticEnabled: Boolean = true
     var foldingEnabled: Boolean = true
+
     /** Reparse debounce in ms (Settings → Analysis → Advanced); defaults to the policy's value. */
     var autoReparseDelayMs: Int = policy.autoReparseDelay.inWholeMilliseconds.toInt()
 
-    @Volatile private var revision = 0
+    @Volatile
+    private var revision = 0
     private var job: Job? = null
 
     /** A document change: cancel the in-flight run and schedule a fresh one after the reparse delay. */
@@ -155,13 +167,13 @@ class EditorEngineDaemon(
                 fetchAndApply(pass, text, myRev)
                 observer?.on(DaemonPhase.PASS_DONE, pass, myRev)
                 return
-            } catch (preempt: AnalysisPreempted) {
+            } catch (_: AnalysisPreempted) {
                 observer?.on(DaemonPhase.PASS_PREEMPTED, pass, myRev)
                 if (++attempt >= policy.maxPreemptRetries) return
                 delay(policy.preemptRetryDelay) // a higher-priority call holds the engine; wait, then retry this pass
             } catch (c: CancellationException) {
                 throw c // a newer edit (or close) superseded this run
-            } catch (e: Throwable) {
+            } catch (_: Throwable) {
                 if (clearOnError(pass)) applyEmpty(pass, myRev)
                 return // a non-preemption failure: drop this pass for the run, a later edit retriggers
             }
@@ -175,18 +187,22 @@ class EditorEngineDaemon(
                 val r = backend.editor.analyze(path, text)
                 ifCurrent(myRev) { onDiagnostics(r) }
             }
+
             DaemonPass.SEMANTIC -> {
                 val r = backend.editor.semanticTokens(path, text)
                 ifCurrent(myRev) { onSemanticTokens(r) }
             }
+
             DaemonPass.INLAY -> {
                 val r = backend.editor.hintsAt(path, text, 0, text.length)
                 ifCurrent(myRev) { onInlayHints(r) }
             }
+
             DaemonPass.FOLDS -> {
                 val r = backend.editor.codeFolds(path, text)
                 ifCurrent(myRev) { onCodeFolds(r) }
             }
+
             DaemonPass.PREVIEWS -> {
                 val r = backend.preview.composePreviews(path, text)
                 ifCurrent(myRev) { onComposePreviews(r) }
@@ -220,6 +236,6 @@ class EditorEngineDaemon(
     }
 
     private suspend fun ifCurrent(myRev: Int, apply: () -> Unit) {
-        if (myRev == revision && coroutineContext.isActive) apply()
+        if (myRev == revision && currentCoroutineContext().isActive) apply()
     }
 }

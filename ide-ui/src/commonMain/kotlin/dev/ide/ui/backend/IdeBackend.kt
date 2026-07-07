@@ -581,6 +581,27 @@ data class UiBuildFeature(
     val note: String? = null,
 )
 
+/**
+ * A module's Android packaging options (AGP's `packaging { }`) — the merge rules the user configures for
+ * how Java resources + native libraries with the same archive path are combined. Null when the module is
+ * not Android. [defaultResourceExcludes]/[defaultResourceMerges] are AGP's always-applied defaults, shown
+ * read-only so the user sees what is already dropped/merged out of the box.
+ */
+data class UiPackagingOptions(
+    val moduleName: String,
+    val resources: UiPackagingRules,
+    val jniLibs: UiPackagingRules,
+    val defaultResourceExcludes: List<String>,
+    val defaultResourceMerges: List<String>,
+)
+
+/** The editable glob-pattern lists for one packaging category. [merges] is unused for native libs (binary). */
+data class UiPackagingRules(
+    val excludes: List<String> = emptyList(),
+    val pickFirsts: List<String> = emptyList(),
+    val merges: List<String> = emptyList(),
+)
+
 // ---------------------------------------------------------------------------
 // Signing keystores
 // ---------------------------------------------------------------------------
@@ -661,10 +682,20 @@ data class ProjectInfo(
     val isAndroid: Boolean = false,
 )
 
+/**
+ * Details of a Gradle **compatibility-mode** project (see [ProjectService.compatibilityInfo]). The project's
+ * Gradle scripts were read statically, not evaluated, so its model is a best-effort approximation: builds and
+ * dependency resolution may fail, and versions/config the reader couldn't extract are listed in [notes].
+ */
+data class UiCompatibilityInfo(val summary: String, val notes: List<String> = emptyList())
+
+/** The result of re-syncing a compatibility-mode project from its Gradle scripts (see [ProjectService.syncGradle]). */
+data class UiSyncResult(val ok: Boolean, val message: String, val notes: List<String> = emptyList())
+
 /** How the project tree is shaped — a curated module view, or the raw filesystem (see [IdeBackend.fileTree]). */
 enum class TreeViewMode { Project, AllFiles }
 
-/** The kind of a content/source root the user can add to a module (maps to a backend `ContentRole`). */
+/** The kind of content/source root the user can add to a module (maps to a backend `ContentRole`). */
 enum class UiSourceRootRole { Source, Resource, AndroidRes, Assets, Aidl }
 
 /**

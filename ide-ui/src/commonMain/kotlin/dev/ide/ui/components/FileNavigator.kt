@@ -1,5 +1,6 @@
 package dev.ide.ui.components
 
+import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -12,25 +13,31 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
+import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
@@ -51,13 +58,53 @@ import dev.ide.ui.icons.resolveTint
 import dev.ide.ui.platform.isMobilePlatform
 import dev.ide.ui.platform.secondaryClickable
 import dev.ide.ui.theme.Ca
+import dev.ide.ui.generated.resources.Res
+import dev.ide.ui.generated.resources.modules
+import dev.ide.ui.generated.resources.filetree_open_in_file_manager
+import dev.ide.ui.generated.resources.filetree_import_files
+import dev.ide.ui.generated.resources.filetree_change_view
+import dev.ide.ui.generated.resources.filetree_scope_project
+import dev.ide.ui.generated.resources.filetree_scope_all_files
+import dev.ide.ui.generated.resources.filetree_more_actions
+import dev.ide.ui.generated.resources.filetree_new_file
+import dev.ide.ui.generated.resources.filetree_new_folder
+import dev.ide.ui.generated.resources.filetree_expand_all
+import dev.ide.ui.generated.resources.filetree_collapse_all
+import dev.ide.ui.generated.resources.filetree_refresh
+import dev.ide.ui.generated.resources.filetree_sort_by
+import dev.ide.ui.generated.resources.filetree_sort_name
+import dev.ide.ui.generated.resources.filetree_sort_type
+import dev.ide.ui.generated.resources.filetree_settings_of
+import dev.ide.ui.generated.resources.filetree_dependencies_of
+import dev.ide.ui.generated.resources.filetree_share_node
+import dev.ide.ui.generated.resources.filetree_actions_for
+import dev.ide.ui.generated.resources.filetree_module_settings
+import dev.ide.ui.generated.resources.filetree_dependencies
+import dev.ide.ui.generated.resources.filetree_add_source_root
+import dev.ide.ui.generated.resources.filetree_new
+import dev.ide.ui.generated.resources.filetree_import_from_file_manager
+import dev.ide.ui.generated.resources.filetree_export
+import dev.ide.ui.generated.resources.filetree_reveal_in_file_manager
+import dev.ide.ui.generated.resources.filetree_rename
+import dev.ide.ui.generated.resources.filetree_move
+import dev.ide.ui.generated.resources.filetree_copy
+import dev.ide.ui.generated.resources.filetree_delete
+import dev.ide.ui.generated.resources.filetree_java_class
+import dev.ide.ui.generated.resources.filetree_kotlin_file
+import dev.ide.ui.generated.resources.filetree_resource_file
+import dev.ide.ui.generated.resources.filetree_file
+import dev.ide.ui.generated.resources.filetree_directory
+import dev.ide.ui.generated.resources.filetree_new_in
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
+import org.jetbrains.compose.resources.pluralStringResource
+import org.jetbrains.compose.resources.stringResource
 
 /**
  * File navigator content: header + a module → source folder → package → file tree (caret toggles).
  * Surface-agnostic — it draws no background of its own so it reads correctly either as a persistent
- * pane (wrapped in a regular-glass [GlassSurface]) or as the content of a glass-thick [BottomSheet]
- * on phone. The caller sizes it via [modifier] (e.g. `fillMaxSize()` in a pane, `weight(1f)` in a
- * sheet).
+ * pane (wrapped in a regular-glass [GlassSurface]) or as the left [PushDrawer] on phone. The caller
+ * sizes it via [modifier] (e.g. `fillMaxSize()`).
  *
  * Icons come from the extensible [TreeIcons] registry keyed by [TreeNode.iconId]. Any directory row reveals
  * a `+` on hover (desktop) that creates a file there via [onNewFile]; on touch (and right-click) the row's
@@ -65,8 +112,10 @@ import dev.ide.ui.theme.Ca
  * ([onNewFolder]), New Java Class / Kotlin File ([onNewSource], on Java/Kotlin source roots & packages), and
  * New Resource File ([onNewResource], on `res/`) — so you can create anything anywhere. The header carries the IntelliJ-style scope
  * dropdown (Project ⇄ All files, [mode]/[onModeChange]) and an overflow `⋮` menu with tree-wide actions
- * (New file/folder at the workspace root, Expand/Collapse all, Sort by name/type).
+ * (New file/folder at the workspace root, Expand/Collapse all, Sort by name/type). The tree pane is also
+ * pull-to-refresh: dragging it down re-reads the workspace from disk via [onRefreshTree].
  */
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun FileNavigator(
     root: TreeNode,
@@ -111,13 +160,18 @@ fun FileNavigator(
     onContextAction: (String, TreeNode) -> Unit = { _, _ -> },
     /** Open the whole project folder in the system file manager (the DocumentsProvider root). Null hides the button. */
     onOpenInFiles: (() -> Unit)? = null,
+    /** Re-read the workspace tree from disk (the overflow menu's "Refresh"). */
+    onRefreshTree: () -> Unit = {},
     mode: TreeViewMode = TreeViewMode.Project,
     onModeChange: (TreeViewMode) -> Unit = {},
+    /** The expansion state (keyed by [TreeNode.id]), hoisted by the host so it survives navigation and is
+     *  persisted per project + mode. Null falls back to a local, default-seeded map (used by previews/tests). */
+    expandedState: androidx.compose.runtime.snapshots.SnapshotStateMap<String, Boolean>? = null,
 ) {
-    // The tree is rebuilt with new node ids when the view mode flips, so re-seed the default-expanded set.
-    val expanded = remember(mode) {
-        mutableSetExpandedDefaults(root)
-    }
+    // Host-owned expansion (persisted, survives navigation) when provided; else a local default-seeded map
+    // re-seeded when the view mode flips (the two modes shape the tree with different node ids).
+    val expanded = expandedState ?: remember(mode) { mutableSetExpandedDefaults(root) }
+
     var sort by remember { mutableStateOf(TreeSort.Name) }
     val ctx = FileRowActions(
         canModify,
@@ -152,21 +206,21 @@ fun FileNavigator(
                     overflow = TextOverflow.Ellipsis
                 )
                 Text(
-                    "$moduleCount ${if (moduleCount == 1) "module" else "modules"}",
+                    pluralStringResource(Res.plurals.modules, moduleCount, moduleCount),
                     color = Ca.colors.textTertiary,
                     style = Ca.type.caption2
                 )
             }
             if (onOpenInFiles != null) IconButtonCa(
                 CaIcons.folderOpen,
-                "Open in file manager",
+                stringResource(Res.string.filetree_open_in_file_manager),
                 onClick = onOpenInFiles,
                 boxSize = 34,
                 iconSize = 18
             )
             if (canImport) IconButtonCa(
                 CaIcons.download,
-                "Import files",
+                stringResource(Res.string.filetree_import_files),
                 onClick = onImport,
                 boxSize = 34,
                 iconSize = 18
@@ -175,6 +229,7 @@ fun FileNavigator(
             HeaderOverflowMenu(
                 onNewFile = { rootDir?.let { onNewFile(it, emptyList()) } },
                 onNewFolder = { rootDir?.let { onNewFolder(it, emptyList()) } },
+                onRefresh = onRefreshTree,
                 onExpandAll = { expandAll(root, expanded) },
                 onCollapseAll = { expanded.clear() },
                 sort = sort,
@@ -184,32 +239,80 @@ fun FileNavigator(
         // The scope selector (Project ⇄ All files) — a dropdown button, like IntelliJ's view chooser.
         ScopeDropdown(mode, onModeChange, Modifier.padding(start = 12.dp, bottom = 8.dp))
         Box(Modifier.fillMaxWidth().height(1.dp).background(Ca.colors.separator))
-        Column(
-            Modifier.fillMaxWidth().weight(1f).verticalScroll(rememberScrollState())
-                .padding(vertical = 6.dp)
+        // The tree is virtualized: only the currently-visible (expanded-into) rows are flattened and handed to
+        // a LazyColumn, so a project with thousands of files composes just what's on screen instead of the whole
+        // tree at once. Flattening reacts to `expanded`/`sort` via derivedStateOf; each row animates in/out and
+        // slides into place (animateItem) as branches open and close.
+        val rows by remember(root, sort, expanded) {
+            derivedStateOf { flattenVisible(root.children, 0, expanded, sort) }
+        }
+        // Pull-to-refresh re-reads the tree from disk. `refreshTree` is synchronous, so hold the spinner up
+        // for a short beat afterwards purely so the gesture registers visually.
+        val refreshScope = rememberCoroutineScope()
+        var isRefreshing by remember { mutableStateOf(false) }
+        PullToRefreshBox(
+            isRefreshing = isRefreshing,
+            onRefresh = {
+                refreshScope.launch {
+                    isRefreshing = true
+                    onRefreshTree()
+                    delay(500)
+                    isRefreshing = false
+                }
+            },
+            modifier = Modifier.fillMaxWidth()
+                .weight(1f)
+                .padding(vertical = 6.dp),
         ) {
-            root.children.sortedForTree(sort).forEach {
-                TreeRow(
-                    it,
-                    0,
-                    expanded,
-                    sort,
-                    activePath,
-                    onOpen,
-                    onNewFile,
-                    onNewFolder,
-                    onNewResource,
-                    onNewSource,
-                    onViewDependencies,
-                    onConfigureModule,
-                    onAddSourceRoot,
-                    canShare,
-                    onShare,
-                    ctx
-                )
+            LazyColumn(Modifier.fillMaxSize()) {
+                items(rows, key = { it.node.id }) { row ->
+                    TreeRowContent(
+                        row.node,
+                        row.depth,
+                        expanded,
+                        activePath,
+                        onOpen,
+                        onNewFile,
+                        onNewFolder,
+                        onNewResource,
+                        onNewSource,
+                        onViewDependencies,
+                        onConfigureModule,
+                        onAddSourceRoot,
+                        canShare,
+                        onShare,
+                        ctx,
+                        Modifier.animateItem(),
+                    )
+                }
             }
         }
     }
+}
+
+/** One visible tree row after flattening: the [node] and its nesting [depth] (drives the row's indent). */
+private data class FlatRow(val node: TreeNode, val depth: Int)
+
+/**
+ * Flatten the tree into the list of rows that are currently visible — every node, plus the children of any
+ * node the user has expanded, in display (sorted) order. Descent stops at collapsed nodes, so the result is
+ * O(visible rows), not O(all files): this is what makes the LazyColumn cheap on a large project.
+ */
+private fun flattenVisible(
+    nodes: List<TreeNode>,
+    depth: Int,
+    expanded: androidx.compose.runtime.snapshots.SnapshotStateMap<String, Boolean>,
+    sort: TreeSort,
+): List<FlatRow> {
+    val out = ArrayList<FlatRow>()
+    fun walk(siblings: List<TreeNode>, d: Int) {
+        siblings.sortedForTree(sort).forEach { n ->
+            out.add(FlatRow(n, d))
+            if (n.children.isNotEmpty() && expanded[n.id] == true) walk(n.children, d + 1)
+        }
+    }
+    walk(nodes, depth)
+    return out
 }
 
 /** The directory a New action targets for this node: a directory node's own dir, or a file's parent. */
@@ -248,7 +351,7 @@ private fun List<TreeNode>.sortedForTree(sort: TreeSort): List<TreeNode> = when 
 }
 
 /** The delete/rename/move/copy callbacks the per-row context menu invokes (bundled to avoid threading five
- *  parameters through the recursive [TreeRow]). [enabled] gates whether the menu is offered at all. */
+ *  parameters through [TreeRowContent]). [enabled] gates whether the menu is offered at all. */
 private class FileRowActions(
     val enabled: Boolean,
     val onRename: (TreeNode) -> Unit,
@@ -266,9 +369,10 @@ private class FileRowActions(
 )
 
 /** The label shown in the scope dropdown for a view mode. */
+@Composable
 private fun TreeViewMode.label(): String = when (this) {
-    TreeViewMode.Project -> "Project"
-    TreeViewMode.AllFiles -> "All files"
+    TreeViewMode.Project -> stringResource(Res.string.filetree_scope_project)
+    TreeViewMode.AllFiles -> stringResource(Res.string.filetree_scope_all_files)
 }
 
 /** IntelliJ-style scope chooser: a small button showing the current view, opening a menu to switch. */
@@ -297,7 +401,7 @@ private fun ScopeDropdown(
             )
             Icon(
                 CaIcons.chevronDown,
-                "Change view",
+                stringResource(Res.string.filetree_change_view),
                 Modifier.size(15.dp),
                 tint = Ca.colors.textTertiary
             )
@@ -315,6 +419,7 @@ private fun ScopeDropdown(
 private fun HeaderOverflowMenu(
     onNewFile: () -> Unit,
     onNewFolder: () -> Unit,
+    onRefresh: () -> Unit,
     onExpandAll: () -> Unit,
     onCollapseAll: () -> Unit,
     sort: TreeSort,
@@ -324,27 +429,28 @@ private fun HeaderOverflowMenu(
     Box {
         IconButtonCa(
             CaIcons.ellipsis,
-            "More actions",
+            stringResource(Res.string.filetree_more_actions),
             onClick = { open = true },
             boxSize = 34,
             iconSize = 18
         )
         CaDropdownMenu(expanded = open, onDismissRequest = { open = false }) {
-            FileActionItem(CaIcons.plus, "New file") { open = false; onNewFile() }
-            FileActionItem(CaIcons.folder, "New folder") { open = false; onNewFolder() }
-            FileActionItem(CaIcons.chevronDown, "Expand all") { open = false; onExpandAll() }
-            FileActionItem(CaIcons.chevronUp, "Collapse all") { open = false; onCollapseAll() }
+            FileActionItem(CaIcons.plus, stringResource(Res.string.filetree_new_file)) { open = false; onNewFile() }
+            FileActionItem(CaIcons.folder, stringResource(Res.string.filetree_new_folder)) { open = false; onNewFolder() }
+            FileActionItem(CaIcons.refresh, stringResource(Res.string.filetree_refresh)) { open = false; onRefresh() }
+            FileActionItem(CaIcons.chevronDown, stringResource(Res.string.filetree_expand_all)) { open = false; onExpandAll() }
+            FileActionItem(CaIcons.chevronUp, stringResource(Res.string.filetree_collapse_all)) { open = false; onCollapseAll() }
             Box(
                 Modifier.fillMaxWidth().height(1.dp).padding(vertical = 4.dp)
                     .background(Ca.colors.separator)
             )
-            MenuSectionLabel("Sort by")
-            CheckableMenuItem("Name", checked = sort == TreeSort.Name) {
+            MenuSectionLabel(stringResource(Res.string.filetree_sort_by))
+            CheckableMenuItem(stringResource(Res.string.filetree_sort_name), checked = sort == TreeSort.Name) {
                 open = false; onSort(
                 TreeSort.Name
             )
             }
-            CheckableMenuItem("Type", checked = sort == TreeSort.Type) {
+            CheckableMenuItem(stringResource(Res.string.filetree_sort_type), checked = sort == TreeSort.Type) {
                 open = false; onSort(
                 TreeSort.Type
             )
@@ -383,6 +489,8 @@ private fun CheckableMenuItem(label: String, checked: Boolean, onClick: () -> Un
 }
 
 
+/** Fallback default-expanded set for the [expandedState]-less path (previews/tests): modules, source roots,
+ *  and the workspace open. In the real app the host owns this map ([IdeUiState.treeExpanded], persisted). */
 private fun mutableSetExpandedDefaults(root: TreeNode): androidx.compose.runtime.snapshots.SnapshotStateMap<String, Boolean> {
     val map = androidx.compose.runtime.mutableStateMapOf<String, Boolean>()
     fun walk(n: TreeNode) {
@@ -394,13 +502,14 @@ private fun mutableSetExpandedDefaults(root: TreeNode): androidx.compose.runtime
     return map
 }
 
+/** Renders a single already-flattened tree row (no recursion — the [LazyColumn] owns the child rows). The
+ *  caret toggles this node's [expanded] entry; [modifier] carries the list's `animateItem()` placement. */
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
-private fun TreeRow(
+private fun TreeRowContent(
     node: TreeNode,
     depth: Int,
     expanded: androidx.compose.runtime.snapshots.SnapshotStateMap<String, Boolean>,
-    sort: TreeSort,
     activePath: String?,
     onOpen: (TreeNode) -> Unit,
     onNewFile: (dirPath: String, segments: List<PackageSegment>) -> Unit,
@@ -413,6 +522,7 @@ private fun TreeRow(
     canShare: Boolean = false,
     onShare: (TreeNode) -> Unit = {},
     ctx: FileRowActions,
+    modifier: Modifier = Modifier,
 ) {
     val isExpandable = node.children.isNotEmpty()
     val isOpen = expanded[node.id] == true
@@ -448,11 +558,15 @@ private fun TreeRow(
 
     // Taller, finger-friendly rows on touch; denser on desktop where pointer precision is higher.
     val rowHeight = if (isMobilePlatform) 40.dp else 30.dp
-    Box {
+    Box(modifier) {
+        // Rows read as inset rounded pills (the sidebar idiom of the design system) rather than
+        // full-bleed stripes — the selection highlight is clipped to the pill.
         Row(
             Modifier
                 .fillMaxWidth()
                 .height(rowHeight)
+                .padding(horizontal = 6.dp, vertical = 1.dp)
+                .clip(RoundedCornerShape(Ca.radius.sm))
                 .background(if (isActive) Ca.colors.accentSoft else Color.Transparent)
                 .hoverable(interaction)
                 .combinedClickable(
@@ -470,14 +584,16 @@ private fun TreeRow(
                     onLongClick = if (hasMenu) ({ menuOpen = true }) else null,
                 )
                 .secondaryClickable(enabled = hasMenu) { menuOpen = true }
-                .padding(start = (8 + depth * 16).dp, end = 8.dp),
+                .padding(start = (6 + depth * 16).dp, end = 6.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
             if (isExpandable) {
+                // One caret glyph rotated 0°→90° so open/close reads as a smooth turn, not a swap.
+                val caretAngle by animateFloatAsState(if (isOpen) 90f else 0f, label = "caret")
                 Icon(
-                    if (isOpen) CaIcons.caretDown else CaIcons.caretRight,
+                    CaIcons.caretRight,
                     null,
-                    Modifier.size(14.dp),
+                    Modifier.size(14.dp).rotate(caretAngle),
                     tint = Ca.colors.textTertiary,
                 )
                 Spacer(Modifier.width(4.dp))
@@ -527,14 +643,14 @@ private fun TreeRow(
                     ) {
                         IconButtonCa(
                             CaIcons.gear,
-                            "Settings of ${node.name}",
+                            stringResource(Res.string.filetree_settings_of, node.name),
                             onClick = { onConfigureModule(node) },
                             boxSize = 22,
                             iconSize = 14
                         )
                         IconButtonCa(
                             CaIcons.layers,
-                            "Dependencies of ${node.name}",
+                            stringResource(Res.string.filetree_dependencies_of, node.name),
                             onClick = { onViewDependencies(node) },
                             boxSize = 22,
                             iconSize = 14
@@ -556,7 +672,7 @@ private fun TreeRow(
                 node.filePath != null && canShare && (hovered || isActive) ->
                     IconButtonCa(
                         CaIcons.share,
-                        "Share ${node.name}",
+                        stringResource(Res.string.filetree_share_node, node.name),
                         onClick = { onShare(node) },
                         boxSize = 22,
                         iconSize = 14
@@ -575,7 +691,7 @@ private fun TreeRow(
             if ((canContext || canRevealHere) && hovered)
                 IconButtonCa(
                     CaIcons.ellipsis,
-                    "Actions for ${node.name}",
+                    stringResource(Res.string.filetree_actions_for, node.name),
                     onClick = { menuOpen = true },
                     boxSize = 22,
                     iconSize = 14
@@ -586,20 +702,20 @@ private fun TreeRow(
             onDismissRequest = { menuOpen = false },
         ) {
             if (canModuleMenu) {
-                FileActionItem(CaIcons.gear, "Module settings") {
+                FileActionItem(CaIcons.gear, stringResource(Res.string.filetree_module_settings)) {
                     menuOpen = false; onConfigureModule(node)
                 }
-                FileActionItem(CaIcons.layers, "Dependencies") {
+                FileActionItem(CaIcons.layers, stringResource(Res.string.filetree_dependencies)) {
                     menuOpen = false; onViewDependencies(node)
                 }
-                FileActionItem(CaIcons.plus, "Add source root") {
+                FileActionItem(CaIcons.plus, stringResource(Res.string.filetree_add_source_root)) {
                     menuOpen = false; onAddSourceRoot(
                     node
                 )
                 }
             }
             if (canNew) CaSubmenuItem(
-                label = "New",
+                label = stringResource(Res.string.filetree_new),
                 icon = CaIcons.plus,
                 expanded = openSubmenu == "new",
                 onExpandedChange = { openSubmenu = if (it) "new" else null },
@@ -616,21 +732,21 @@ private fun TreeRow(
                 ) { menuOpen = false }
             }
             if (canImportHere) targetDir?.let { dir ->
-                FileActionItem(CaIcons.download, "Import from file manager") {
+                FileActionItem(CaIcons.download, stringResource(Res.string.filetree_import_from_file_manager)) {
                     menuOpen = false; ctx.onImportInto(dir)
                 }
             }
-            if (canExportHere) FileActionItem(CaIcons.save, "Export…") {
+            if (canExportHere) FileActionItem(CaIcons.save, stringResource(Res.string.filetree_export)) {
                 menuOpen = false; ctx.onExport(node)
             }
-            if (canRevealHere) FileActionItem(CaIcons.share, "Reveal in file manager") {
+            if (canRevealHere) FileActionItem(CaIcons.share, stringResource(Res.string.filetree_reveal_in_file_manager)) {
                 menuOpen = false; ctx.onReveal(node)
             }
             if (canContext) {
-                FileActionItem(CaIcons.docText, "Rename") { menuOpen = false; ctx.onRename(node) }
-                FileActionItem(CaIcons.arrowRight, "Move") { menuOpen = false; ctx.onMove(node) }
-                FileActionItem(CaIcons.copy, "Copy") { menuOpen = false; ctx.onCopy(node) }
-                FileActionItem(CaIcons.close, "Delete", danger = true) {
+                FileActionItem(CaIcons.docText, stringResource(Res.string.filetree_rename)) { menuOpen = false; ctx.onRename(node) }
+                FileActionItem(CaIcons.arrowRight, stringResource(Res.string.filetree_move)) { menuOpen = false; ctx.onMove(node) }
+                FileActionItem(CaIcons.copy, stringResource(Res.string.filetree_copy)) { menuOpen = false; ctx.onCopy(node) }
+                FileActionItem(CaIcons.close, stringResource(Res.string.filetree_delete), danger = true) {
                     menuOpen = false; ctx.onDelete(node)
                 }
             }
@@ -647,27 +763,6 @@ private fun TreeRow(
                 }
             }
         }
-    }
-
-    if (isOpen) node.children.sortedForTree(sort).forEach {
-        TreeRow(
-            it,
-            depth + 1,
-            expanded,
-            sort,
-            activePath,
-            onOpen,
-            onNewFile,
-            onNewFolder,
-            onNewResource,
-            onNewSource,
-            onViewDependencies,
-            onConfigureModule,
-            onAddSourceRoot,
-            canShare,
-            onShare,
-            ctx
-        )
     }
 }
 
@@ -749,14 +844,14 @@ private fun NewActionItems(
     // plain folder / res context.
     val segs = node.packageSegments
     if (isSourceContext && targetDir != null) {
-        FileActionItem(CaIcons.code, "Java Class") {
+        FileActionItem(CaIcons.code, stringResource(Res.string.filetree_java_class)) {
             close(); onNewSource(
             targetDir,
             NewSourceLang.Java,
             segs
         )
         }
-        FileActionItem(CaIcons.code, "Kotlin File") {
+        FileActionItem(CaIcons.code, stringResource(Res.string.filetree_kotlin_file)) {
             close(); onNewSource(
             targetDir,
             NewSourceLang.Kotlin,
@@ -766,11 +861,11 @@ private fun NewActionItems(
     }
     if (canNewResource) FileActionItem(
         CaIcons.image,
-        "Resource File"
+        stringResource(Res.string.filetree_resource_file)
     ) { close(); onNewResource(node) }
     if (targetDir != null) {
-        FileActionItem(CaIcons.plus, "File") { close(); onNewFile(targetDir, segs) }
-        FileActionItem(CaIcons.folder, "Directory") { close(); onNewFolder(targetDir, segs) }
+        FileActionItem(CaIcons.plus, stringResource(Res.string.filetree_file)) { close(); onNewFile(targetDir, segs) }
+        FileActionItem(CaIcons.folder, stringResource(Res.string.filetree_directory)) { close(); onNewFolder(targetDir, segs) }
     }
 }
 
@@ -789,7 +884,7 @@ private fun NewHoverButton(
 ) {
     var open by remember { mutableStateOf(false) }
     Box {
-        IconButtonCa(CaIcons.plus, "New", onClick = { open = true }, boxSize = 22, iconSize = 14)
+        IconButtonCa(CaIcons.plus, stringResource(Res.string.filetree_new), onClick = { open = true }, boxSize = 22, iconSize = 14)
         CaDropdownMenu(expanded = open, onDismissRequest = { open = false }) {
             NewActionItems(
                 node,
@@ -853,7 +948,7 @@ private fun SegmentedPathLabel(
                             .padding(horizontal = 2.dp),
                     )
                     CaDropdownMenu(expanded = open, onDismissRequest = { open = false }) {
-                        MenuSectionLabel("New in ${seg.packageName}")
+                        MenuSectionLabel(stringResource(Res.string.filetree_new_in, seg.packageName))
                         NewActionItems(
                             node,
                             seg.dirPath,

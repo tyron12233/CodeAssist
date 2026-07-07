@@ -85,24 +85,132 @@ import dev.ide.ui.components.entranceSlideUp
 import dev.ide.ui.icons.CaIcons
 import dev.ide.ui.theme.Ca
 import dev.ide.ui.theme.Motion
+import dev.ide.ui.generated.resources.Res
+import dev.ide.ui.generated.resources.add
+import dev.ide.ui.generated.resources.cancel
+import dev.ide.ui.generated.resources.remove
+import dev.ide.ui.generated.resources.save
+import dev.ide.ui.generated.resources.dep_declared
+import dev.ide.ui.generated.resources.dep_resolved
+import dev.ide.ui.generated.resources.dep_tree
+import dev.ide.ui.generated.resources.dep_graph
+import dev.ide.ui.generated.resources.dep_mode_library
+import dev.ide.ui.generated.resources.dep_mode_platform
+import dev.ide.ui.generated.resources.dep_mode_module
+import dev.ide.ui.generated.resources.dep_mode_local
+import dev.ide.ui.generated.resources.dep_resolving
+import dev.ide.ui.generated.resources.dep_re_resolve
+import dev.ide.ui.generated.resources.dep_repositories
+import dev.ide.ui.generated.resources.dep_repositories_subtitle
+import dev.ide.ui.generated.resources.dep_repo_name_hint
+import dev.ide.ui.generated.resources.dep_repo_url_hint
+import dev.ide.ui.generated.resources.dep_remove_repo
+import dev.ide.ui.generated.resources.dep_built_in
+import dev.ide.ui.generated.resources.dep_load_failed
+import dev.ide.ui.generated.resources.dep_resolving_dependencies
+import dev.ide.ui.generated.resources.dep_downloading_artifacts
+import dev.ide.ui.generated.resources.dep_unresolved_count
+import dev.ide.ui.generated.resources.dep_none_declared
+import dev.ide.ui.generated.resources.dep_nothing_resolved
+import dev.ide.ui.generated.resources.dep_not_resolved
+import dev.ide.ui.generated.resources.dep_cycle_shown_above
+import dev.ide.ui.generated.resources.dep_couldnt_resolve_tooltip
+import dev.ide.ui.generated.resources.dep_unresolved
+import dev.ide.ui.generated.resources.dep_incompatible
+import dev.ide.ui.generated.resources.dep_edit_named
+import dev.ide.ui.generated.resources.dep_more_actions
+import dev.ide.ui.generated.resources.dep_exclude_named
+import dev.ide.ui.generated.resources.dep_remove_named
+import dev.ide.ui.generated.resources.dep_transitive
+import dev.ide.ui.generated.resources.dep_options_excluded
+import dev.ide.ui.generated.resources.dep_remove_exclusion
+import dev.ide.ui.generated.resources.dep_excluded
+import dev.ide.ui.generated.resources.dep_add_dependency
+import dev.ide.ui.generated.resources.dep_search_bom_hint
+import dev.ide.ui.generated.resources.dep_search_library_hint
+import dev.ide.ui.generated.resources.dep_scope
+import dev.ide.ui.generated.resources.dep_variant
+import dev.ide.ui.generated.resources.dep_all_variants
+import dev.ide.ui.generated.resources.dep_suggested
+import dev.ide.ui.generated.resources.dep_adding
+import dev.ide.ui.generated.resources.dep_resolving_transitive
+import dev.ide.ui.generated.resources.dep_no_other_modules
+import dev.ide.ui.generated.resources.dep_no_results
+import dev.ide.ui.generated.resources.dep_type_to_search
+import dev.ide.ui.generated.resources.dep_add_named
+import dev.ide.ui.generated.resources.dep_import_as_platform
+import dev.ide.ui.generated.resources.dep_add_versionless
+import dev.ide.ui.generated.resources.dep_add_exact
+import dev.ide.ui.generated.resources.dep_add_infer_group
+import dev.ide.ui.generated.resources.dep_choose_local_file
+import dev.ide.ui.generated.resources.dep_copied_into_libs
+import dev.ide.ui.generated.resources.dep_already_in_project
+import dev.ide.ui.generated.resources.dep_no_local_libs
+import dev.ide.ui.generated.resources.dep_attach_named
+import dev.ide.ui.generated.resources.dep_remove_dependency
+import dev.ide.ui.generated.resources.dep_remove_confirm
+import dev.ide.ui.generated.resources.dep_edit_dependency
+import dev.ide.ui.generated.resources.dep_section_version
+import dev.ide.ui.generated.resources.dep_section_scope
+import dev.ide.ui.generated.resources.dep_section_exclusions
+import dev.ide.ui.generated.resources.dep_exclusions_help
+import dev.ide.ui.generated.resources.dep_exclusions_hint
+import dev.ide.ui.generated.resources.dep_version_hint
+import dev.ide.ui.generated.resources.dep_loading_versions
+import dev.ide.ui.generated.resources.dep_versions_load_failed
+import dev.ide.ui.generated.resources.dep_selected
+import dev.ide.ui.generated.resources.dep_variant_only_tooltip
+import dev.ide.ui.generated.resources.dep_version_conflict_tooltip
+import dev.ide.ui.generated.resources.dep_version_conflict
+import dev.ide.ui.generated.resources.dep_extra_auto_resolved
+import dev.ide.ui.generated.resources.dep_repo_invalid
+import dev.ide.ui.generated.resources.dep_subtitle_module
+import dev.ide.ui.generated.resources.dep_subtitle_platform
+import dev.ide.ui.generated.resources.dep_subtitle_local_aar
+import dev.ide.ui.generated.resources.dep_subtitle_local_jar
+import dev.ide.ui.generated.resources.dep_cycles
+import dev.ide.ui.generated.resources.dep_conflicts_to_review
+import dev.ide.ui.generated.resources.dep_versions_auto_resolved
+import org.jetbrains.compose.resources.pluralStringResource
+import org.jetbrains.compose.resources.stringResource
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
 /** Top-level split: what the module DECLARES (the roots you added) vs the RESOLVED transitive closure. The
  *  Declared tab is the place a declared-but-unresolved dependency stays visible (with a red badge) instead of
  *  silently vanishing from the resolved graph. */
-private enum class DepTab(val label: String, val icon: ImageVector) {
-    Declared("Declared", CaIcons.resources), Resolved("Resolved", CaIcons.gitBranch)
+private enum class DepTab(val icon: ImageVector) {
+    Declared(CaIcons.resources), Resolved(CaIcons.gitBranch)
+}
+
+@Composable
+private fun DepTab.label(): String = when (this) {
+    DepTab.Declared -> stringResource(Res.string.dep_declared)
+    DepTab.Resolved -> stringResource(Res.string.dep_resolved)
 }
 
 /** Sub-views of the Resolved tab: the transitive closure as an expandable tree or a flat listing. */
-private enum class DepView(val label: String, val icon: ImageVector) {
-    Tree("Tree", CaIcons.layers), Graph("Graph", CaIcons.gitBranch)
+private enum class DepView(val icon: ImageVector) {
+    Tree(CaIcons.layers), Graph(CaIcons.gitBranch)
+}
+
+@Composable
+private fun DepView.label(): String = when (this) {
+    DepView.Tree -> stringResource(Res.string.dep_tree)
+    DepView.Graph -> stringResource(Res.string.dep_graph)
 }
 
 /** The Add flow can add a library/AAR, import a BOM as a platform (Gradle `platform(...)`), depend on
  *  another module, or attach a local jar/aar file. */
-private enum class AddMode(val label: String) { Library("Library"), Platform("Platform (BOM)"), Module("Module"), Local("Local file") }
+private enum class AddMode { Library, Platform, Module, Local }
+
+@Composable
+private fun AddMode.label(): String = when (this) {
+    AddMode.Library -> stringResource(Res.string.dep_mode_library)
+    AddMode.Platform -> stringResource(Res.string.dep_mode_platform)
+    AddMode.Module -> stringResource(Res.string.dep_mode_module)
+    AddMode.Local -> stringResource(Res.string.dep_mode_local)
+}
 
 /** A typed string is treated as a direct coordinate when it carries a `:` — `group:name[:version]`. */
 private fun looksLikeCoordinate(s: String): Boolean =
@@ -277,15 +385,15 @@ private fun DepPaneToolbar(
         if (tab == DepTab.Resolved) ViewToggle(resolvedView, onView, compact = true)
         if (resolving) {
             CircularProgressIndicator(Modifier.size(16.dp), color = Ca.colors.accent, strokeWidth = 2.dp)
-            if (!compact) Text(resolveMessage.ifBlank { "Resolving…" }, color = Ca.colors.accent, style = Ca.type.caption2,
+            if (!compact) Text(resolveMessage.ifBlank { stringResource(Res.string.dep_resolving) }, color = Ca.colors.accent, style = Ca.type.caption2,
                 maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f, fill = false))
         }
         Spacer(Modifier.weight(1f))
         // Force a fresh resolve of the declared deps — clears the reconcile marker so resolver changes
         // (e.g. new variant/constraint handling) actually re-apply to a project whose deps are unchanged.
-        IconButtonCa(CaIcons.refresh, "Re-resolve dependencies", onClick = { if (!resolving) onResolve() })
-        IconButtonCa(CaIcons.pkg, "Repositories", onClick = onRepos)
-        PrimaryButton("Add", onClick = onAdd, icon = CaIcons.plus, iconOnly = compact)
+        IconButtonCa(CaIcons.refresh, stringResource(Res.string.dep_re_resolve), onClick = { if (!resolving) onResolve() })
+        IconButtonCa(CaIcons.pkg, stringResource(Res.string.dep_repositories), onClick = onRepos)
+        PrimaryButton(stringResource(Res.string.add), onClick = onAdd, icon = CaIcons.plus, iconOnly = compact)
     }
 }
 
@@ -297,27 +405,28 @@ private fun RepositoriesContent(backend: IdeBackend, codeFont: FontFamily, modif
     var name by remember { mutableStateOf("") }
     var url by remember { mutableStateOf("") }
     var error by remember { mutableStateOf<String?>(null) }
+    val invalidRepoMsg = stringResource(Res.string.dep_repo_invalid)
 
     val add = {
         if (backend.deps.addRepository(name, url)) { repos = backend.deps.repositories(); name = ""; url = ""; error = null }
-        else error = "Enter a valid http(s) URL that isn't already added."
+        else error = invalidRepoMsg
     }
 
     Column(modifier) {
-        Text("Repositories", color = Ca.colors.textPrimary, style = Ca.type.title3, fontWeight = FontWeight.SemiBold)
+        Text(stringResource(Res.string.dep_repositories), color = Ca.colors.textPrimary, style = Ca.type.title3, fontWeight = FontWeight.SemiBold)
         Spacer(Modifier.height(4.dp))
-        Text("Where libraries resolve from. Built-in repos can't be removed.", color = Ca.colors.textTertiary, style = Ca.type.caption)
+        Text(stringResource(Res.string.dep_repositories_subtitle), color = Ca.colors.textTertiary, style = Ca.type.caption)
         Spacer(Modifier.height(12.dp))
         LazyColumn(Modifier.fillMaxWidth().heightIn(max = 240.dp)) {
             items(repos, key = { it.url }) { r -> RepoRow(r) { if (backend.deps.removeRepository(r.url)) repos = backend.deps.repositories() } }
         }
         Spacer(Modifier.height(12.dp))
         // add a custom repository
-        RepoField("Name (optional)", name, codeFont) { name = it; error = null }
+        RepoField(stringResource(Res.string.dep_repo_name_hint), name, codeFont) { name = it; error = null }
         Spacer(Modifier.height(8.dp))
         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            Box(Modifier.weight(1f)) { RepoField("https://repo.example.com/maven", url, codeFont) { url = it; error = null } }
-            PrimaryButton("Add", onClick = add, icon = CaIcons.plus)
+            Box(Modifier.weight(1f)) { RepoField(stringResource(Res.string.dep_repo_url_hint), url, codeFont) { url = it; error = null } }
+            PrimaryButton(stringResource(Res.string.add), onClick = add, icon = CaIcons.plus)
         }
         error?.let {
             Spacer(Modifier.height(8.dp))
@@ -337,8 +446,8 @@ private fun RepoRow(repo: dev.ide.ui.backend.UiRepository, onRemove: () -> Unit)
             Text(repo.name, color = Ca.colors.textPrimary, style = Ca.type.footnote, fontWeight = FontWeight.Medium, maxLines = 1, overflow = TextOverflow.Ellipsis)
             Text(repo.url, color = Ca.colors.textTertiary, style = Ca.type.caption2, maxLines = 1, overflow = TextOverflow.Ellipsis)
         }
-        if (!repo.builtin) IconButtonCa(CaIcons.close, "Remove ${repo.name}", onClick = onRemove, boxSize = 28, iconSize = 16, tint = Ca.colors.textTertiary)
-        else Text("built-in", color = Ca.colors.textTertiary, style = Ca.type.caption2)
+        if (!repo.builtin) IconButtonCa(CaIcons.close, stringResource(Res.string.dep_remove_repo, repo.name), onClick = onRemove, boxSize = 28, iconSize = 16, tint = Ca.colors.textTertiary)
+        else Text(stringResource(Res.string.dep_built_in), color = Ca.colors.textTertiary, style = Ca.type.caption2)
     }
 }
 
@@ -377,7 +486,7 @@ private fun DepBody(
     Crossfade(targetState = loading, animationSpec = tween(Motion.BASE), label = "depBody", modifier = modifier) { isLoading ->
         when {
             isLoading -> ResolvingPanel(resolveState)
-            deps == null -> Empty("Couldn't load dependencies.")
+            deps == null -> Empty(stringResource(Res.string.dep_load_failed))
             // The persistent error state carries the (heuristic) why per coordinate — surface it here too.
             else -> DepContent(deps, tab, resolvedView, codeFont, resolveState.unresolved.associate { it.coordinate to it.reason }, onRemove, onEdit, onExcludeTransitive, onRemoveExclusion)
         }
@@ -398,8 +507,8 @@ private fun ResolvingPanel(state: DepsResolveState) {
             verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
             CircularProgressIndicator(Modifier.size(30.dp), color = Ca.colors.accent, strokeWidth = 3.dp)
-            Text("Resolving dependencies", color = Ca.colors.textPrimary, style = Ca.type.subhead, fontWeight = FontWeight.SemiBold)
-            Text(state.message.ifBlank { "Downloading POMs & artifacts…" }, color = Ca.colors.textSecondary,
+            Text(stringResource(Res.string.dep_resolving_dependencies), color = Ca.colors.textPrimary, style = Ca.type.subhead, fontWeight = FontWeight.SemiBold)
+            Text(state.message.ifBlank { stringResource(Res.string.dep_downloading_artifacts) }, color = Ca.colors.textSecondary,
                 style = Ca.type.caption, maxLines = 2, overflow = TextOverflow.Ellipsis)
             ResolveBar(state.fraction)
         }
@@ -434,12 +543,12 @@ private fun DepContent(deps: UiModuleDeps, tab: DepTab, resolvedView: DepView, c
             ConflictSummaryBanner(deps.conflicts, realConflicts.keys, codeFont, Modifier.animateItem())
         }
         if (deps.cycles.isNotEmpty()) item("cycles") {
-            BannerCard(CaIcons.refresh, Ca.colors.error, "${deps.cycles.size} dependency cycle${plural(deps.cycles.size)}", Modifier.animateItem()) {
+            BannerCard(CaIcons.refresh, Ca.colors.error, pluralStringResource(Res.plurals.dep_cycles, deps.cycles.size, deps.cycles.size), Modifier.animateItem()) {
                 deps.cycles.forEach { cycle -> Text(cycle.joinToString(" → ") { it.substringBeforeLast(':') }, color = Ca.colors.textSecondary, style = Ca.type.caption.copy(fontFamily = codeFont)) }
             }
         }
         if (deps.unresolved.isNotEmpty()) item("unresolved") {
-            BannerCard(CaIcons.error, Ca.colors.error, "${deps.unresolved.size} unresolved", Modifier.animateItem()) {
+            BannerCard(CaIcons.error, Ca.colors.error, stringResource(Res.string.dep_unresolved_count, deps.unresolved.size), Modifier.animateItem()) {
                 deps.unresolved.forEach { coord ->
                     Text(coord, color = Ca.colors.textSecondary, style = Ca.type.caption.copy(fontFamily = codeFont))
                     reasons[coord]?.let { Text(it, color = Ca.colors.textTertiary, style = Ca.type.caption2) }
@@ -452,7 +561,7 @@ private fun DepContent(deps: UiModuleDeps, tab: DepTab, resolvedView: DepView, c
             // red "unresolved" badge when resolution couldn't satisfy it. Expand a row to peek at its
             // (resolved) transitive children.
             DepTab.Declared -> {
-                if (deps.declared.isEmpty()) item("empty") { EmptyRow("No dependencies declared. Tap Add to download one.") }
+                if (deps.declared.isEmpty()) item("empty") { EmptyRow(stringResource(Res.string.dep_none_declared)) }
                 items(deps.declared, key = { "decl:${it.coordinate}" }) { node ->
                     val open = expanded["decl:${node.coordinate}"] == true
                     Column(Modifier.fillMaxWidth().animateItem()) {
@@ -480,13 +589,13 @@ private fun DepContent(deps: UiModuleDeps, tab: DepTab, resolvedView: DepView, c
             // declared deps or a flat listing.
             DepTab.Resolved -> when (resolvedView) {
                 DepView.Tree -> {
-                    if (deps.declared.isEmpty()) item("empty") { EmptyRow("Nothing resolved yet.") }
+                    if (deps.declared.isEmpty()) item("empty") { EmptyRow(stringResource(Res.string.dep_nothing_resolved)) }
                     deps.declared.forEach { root ->
                         treeRows(root, root, nodesByCoord, 0, emptyList(), expanded, codeFont, realConflicts, { onRemove(root.coordinate) }, onExcludeTransitive)
                     }
                 }
                 DepView.Graph -> {
-                    if (deps.nodes.isEmpty()) item("empty") { EmptyRow("Nothing resolved yet.") }
+                    if (deps.nodes.isEmpty()) item("empty") { EmptyRow(stringResource(Res.string.dep_nothing_resolved)) }
                     val sorted = deps.nodes.sortedWith(compareByDescending<UiDependencyNode> { it.declared }.thenBy { it.coordinate })
                     items(sorted, key = { "graph:${it.coordinate}" }) { node -> Box(Modifier.animateItem()) { GraphRow(node, nodesByCoord, codeFont, conflictFor(node)) } }
                 }
@@ -571,10 +680,10 @@ private fun DependencyRow(
         Column(Modifier.weight(1f)) {
             DepPrimary(node, codeFont, dimmed = unresolved)
             when {
-                unresolved -> Text("not resolved — check the version/repository or re-resolve", color = Ca.colors.error, style = Ca.type.caption2, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                unresolved -> Text(stringResource(Res.string.dep_not_resolved), color = Ca.colors.error, style = Ca.type.caption2, maxLines = 1, overflow = TextOverflow.Ellipsis)
                 !node.compatible && node.incompatibleReason != null ->
                     Text(node.incompatibleReason, color = Ca.colors.error, style = Ca.type.caption2, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                cycle -> Text("cycle — already shown above", color = Ca.colors.warning, style = Ca.type.caption2)
+                cycle -> Text(stringResource(Res.string.dep_cycle_shown_above), color = Ca.colors.warning, style = Ca.type.caption2)
                 else -> DepSubtitle(node)
             }
         }
@@ -582,12 +691,12 @@ private fun DependencyRow(
         node.scope?.takeIf { it != "platform" }?.let { ScopeBadge(it) }
         // No "excludes N" summary chip here — excluded entries show as their own rows (with an "excluded"
         // pill) when the dependency is expanded.
-        if (unresolved) WithTooltip("Couldn't resolve — check the version/repository") { Icon(CaIcons.error, "Unresolved", Modifier.size(16.dp), tint = Ca.colors.error) }
+        if (unresolved) WithTooltip(stringResource(Res.string.dep_couldnt_resolve_tooltip)) { Icon(CaIcons.error, stringResource(Res.string.dep_unresolved), Modifier.size(16.dp), tint = Ca.colors.error) }
         conflict?.let { ConflictBadge(it) }
-        if (!node.compatible) Icon(CaIcons.warning, "Incompatible", Modifier.size(16.dp), tint = Ca.colors.error)
-        if (onEdit != null) IconButtonCa(CaIcons.gear, "Edit ${node.name}", onClick = onEdit, boxSize = 28, iconSize = 16, tint = if (node.exclusions.isNotEmpty()) Ca.colors.accent else Ca.colors.textTertiary)
-        if (onExclude != null) RowActionMenu("More actions for ${node.name}", "Exclude ${node.name}", CaIcons.close, onExclude)
-        if (onRemove != null) IconButtonCa(CaIcons.close, "Remove ${node.name}", onClick = onRemove, boxSize = 28, iconSize = 16, tint = Ca.colors.textTertiary)
+        if (!node.compatible) Icon(CaIcons.warning, stringResource(Res.string.dep_incompatible), Modifier.size(16.dp), tint = Ca.colors.error)
+        if (onEdit != null) IconButtonCa(CaIcons.gear, stringResource(Res.string.dep_edit_named, node.name), onClick = onEdit, boxSize = 28, iconSize = 16, tint = if (node.exclusions.isNotEmpty()) Ca.colors.accent else Ca.colors.textTertiary)
+        if (onExclude != null) RowActionMenu(stringResource(Res.string.dep_more_actions, node.name), stringResource(Res.string.dep_exclude_named, node.name), CaIcons.close, onExclude)
+        if (onRemove != null) IconButtonCa(CaIcons.close, stringResource(Res.string.dep_remove_named, node.name), onClick = onRemove, boxSize = 28, iconSize = 16, tint = Ca.colors.textTertiary)
     }
 }
 
@@ -602,8 +711,8 @@ private fun TransitiveRow(node: UiDependencyNode, codeFont: FontFamily, depth: I
             DepPrimary(node, codeFont, dimmed = true)
             DepSubtitle(node)
         }
-        Text("transitive", color = Ca.colors.textTertiary, style = Ca.type.caption2)
-        if (onExclude != null) RowActionMenu("More actions for ${node.name}", "Exclude ${node.name}", CaIcons.close) { onExclude(node) }
+        Text(stringResource(Res.string.dep_transitive), color = Ca.colors.textTertiary, style = Ca.type.caption2)
+        if (onExclude != null) RowActionMenu(stringResource(Res.string.dep_more_actions, node.name), stringResource(Res.string.dep_exclude_named, node.name), CaIcons.close) { onExclude(node) }
     }
 }
 
@@ -620,8 +729,8 @@ private fun ExcludedRow(exclusion: String, codeFont: FontFamily, onRemoveExclusi
         Icon(CaIcons.close, null, Modifier.size(13.dp), tint = Ca.colors.textTertiary)
         Text(exclusion, color = Ca.colors.textTertiary, style = Ca.type.subhead.copy(fontFamily = codeFont),
             maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
-        Chip("excluded", fill = Ca.colors.surface2, textColor = Ca.colors.textSecondary)
-        RowActionMenu("Options for excluded $exclusion", "Remove exclusion", CaIcons.plus, onRemoveExclusion)
+        Chip(stringResource(Res.string.dep_excluded), fill = Ca.colors.surface2, textColor = Ca.colors.textSecondary)
+        RowActionMenu(stringResource(Res.string.dep_options_excluded, exclusion), stringResource(Res.string.dep_remove_exclusion), CaIcons.plus, onRemoveExclusion)
     }
 }
 
@@ -720,11 +829,11 @@ private fun AddDependencyContent(
     }
 
     Column(modifier) {
-        Text("Add dependency", color = Ca.colors.textPrimary, style = Ca.type.title3, fontWeight = FontWeight.SemiBold, modifier = Modifier.padding(bottom = 12.dp))
+        Text(stringResource(Res.string.dep_add_dependency), color = Ca.colors.textPrimary, style = Ca.type.title3, fontWeight = FontWeight.SemiBold, modifier = Modifier.padding(bottom = 12.dp))
 
         // Library / Platform (BOM) / Module / Local toggle — scrolls horizontally so chips never squish.
         Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(bottom = 12.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            AddMode.entries.forEach { m -> ModeChip(m.label, m == mode) { if (!busy) { mode = m; error = null } } }
+            AddMode.entries.forEach { m -> ModeChip(m.label(), m == mode) { if (!busy) { mode = m; error = null } } }
         }
 
         // search field — library/platform only (Module picks project modules; Local picks files)
@@ -735,8 +844,8 @@ private fun AddDependencyContent(
         ) {
             Icon(CaIcons.search, null, Modifier.size(18.dp), tint = Ca.colors.accent)
             Box(Modifier.weight(1f)) {
-                val hint = if (mode == AddMode.Platform) "Search a BOM, or type group:name:version — e.g. androidx.compose:compose-bom:…"
-                    else "Search Maven Central, or type group:name[:version]…"
+                val hint = if (mode == AddMode.Platform) stringResource(Res.string.dep_search_bom_hint)
+                    else stringResource(Res.string.dep_search_library_hint)
                 if (query.isEmpty()) Text(hint, color = Ca.colors.textTertiary, style = Ca.type.subhead, maxLines = 1, overflow = TextOverflow.Ellipsis)
                 BasicTextField(query, { query = it; error = null }, singleLine = true, enabled = !busy,
                     textStyle = Ca.type.subhead.copy(color = Ca.colors.textPrimary, fontFamily = codeFont),
@@ -747,7 +856,7 @@ private fun AddDependencyContent(
 
         // scope selector — libraries + module deps (a platform carries no scope)
         if (mode != AddMode.Platform) Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(vertical = 10.dp), horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
-            Text("scope", color = Ca.colors.textTertiary, style = Ca.type.caption, modifier = Modifier.padding(end = 4.dp))
+            Text(stringResource(Res.string.dep_scope), color = Ca.colors.textTertiary, style = Ca.type.caption, modifier = Modifier.padding(end = 4.dp))
             scopeOptions.forEach { s -> ScopeChip(s, s == scope) { if (!busy) scope = s } }
         } else Spacer(Modifier.height(10.dp))
 
@@ -758,8 +867,8 @@ private fun AddDependencyContent(
             Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(bottom = 10.dp),
             horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically,
         ) {
-            Text("variant", color = Ca.colors.textTertiary, style = Ca.type.caption, modifier = Modifier.padding(end = 4.dp))
-            ScopeChip("All variants", variant == null) { if (!busy) variant = null }
+            Text(stringResource(Res.string.dep_variant), color = Ca.colors.textTertiary, style = Ca.type.caption, modifier = Modifier.padding(end = 4.dp))
+            ScopeChip(stringResource(Res.string.dep_all_variants), variant == null) { if (!busy) variant = null }
             variants.forEach { v -> ScopeChip(v, v == variant) { if (!busy) variant = v } }
         }
 
@@ -773,7 +882,7 @@ private fun AddDependencyContent(
             Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(bottom = 10.dp),
             horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically,
         ) {
-            Text("suggested", color = Ca.colors.textTertiary, style = Ca.type.caption, modifier = Modifier.padding(end = 4.dp))
+            Text(stringResource(Res.string.dep_suggested), color = Ca.colors.textTertiary, style = Ca.type.caption, modifier = Modifier.padding(end = 4.dp))
             val quickAdd: (String, suspend () -> UiAddResult) -> Unit = { label, action ->
                 if (!busy) {
                     busy = true; error = null; adding = label
@@ -807,13 +916,13 @@ private fun AddDependencyContent(
                 Column(Modifier.fillMaxWidth().heightIn(min = 160.dp), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(12.dp)) {
                     Spacer(Modifier.height(20.dp))
                     CircularProgressIndicator(Modifier.size(28.dp), color = Ca.colors.accent, strokeWidth = 3.dp)
-                    Text("Adding ${adding?.let(::shortCoord) ?: ""}", color = Ca.colors.textPrimary, style = Ca.type.subhead, fontWeight = FontWeight.SemiBold)
-                    Text(resolveState.message.ifBlank { "Resolving transitive dependencies…" }, color = Ca.colors.textSecondary, style = Ca.type.caption, maxLines = 2, overflow = TextOverflow.Ellipsis)
+                    Text(stringResource(Res.string.dep_adding, adding?.let(::shortCoord) ?: ""), color = Ca.colors.textPrimary, style = Ca.type.subhead, fontWeight = FontWeight.SemiBold)
+                    Text(resolveState.message.ifBlank { stringResource(Res.string.dep_resolving_transitive) }, color = Ca.colors.textSecondary, style = Ca.type.caption, maxLines = 2, overflow = TextOverflow.Ellipsis)
                     ResolveBar(resolveState.fraction)
                 }
             } else if (mode == AddMode.Module) {
                 LazyColumn(listModifier) {
-                    if (moduleTargets.isEmpty()) item { EmptyRow("No other modules available to depend on.") }
+                    if (moduleTargets.isEmpty()) item { EmptyRow(stringResource(Res.string.dep_no_other_modules)) }
                     items(moduleTargets, key = { it }) { target ->
                         ModuleTargetRow(target, Modifier.animateItem()) { performAdd(target) }
                     }
@@ -837,8 +946,8 @@ private fun AddDependencyContent(
                     items(results, key = { it.coordinate }) { hit ->
                         AddResultRow(hit, codeFont, Modifier.animateItem()) { performAdd(hit.coordinate) }
                     }
-                    if (typed.length >= 2 && results.isEmpty() && !searching && !looksLikeCoordinate(typed)) item { EmptyRow("No results.") }
-                    if (typed.length < 2) item { EmptyRow("Type at least 2 characters to search, or a full group:name[:version].") }
+                    if (typed.length >= 2 && results.isEmpty() && !searching && !looksLikeCoordinate(typed)) item { EmptyRow(stringResource(Res.string.dep_no_results)) }
+                    if (typed.length < 2) item { EmptyRow(stringResource(Res.string.dep_type_to_search)) }
                 }
             }
         }
@@ -854,14 +963,19 @@ private fun ModuleTargetRow(name: String, modifier: Modifier, onAdd: () -> Unit)
     ) {
         LetterBox("M", Ca.colors.accent)
         Text(":$name", color = Ca.colors.textPrimary, style = Ca.type.footnote, fontWeight = FontWeight.Medium, modifier = Modifier.weight(1f), maxLines = 1, overflow = TextOverflow.Ellipsis)
-        IconButtonCa(CaIcons.plus, "Add $name", onClick = onAdd, active = true, boxSize = 32, iconSize = 18)
+        IconButtonCa(CaIcons.plus, stringResource(Res.string.dep_add_named, name), onClick = onAdd, active = true, boxSize = 32, iconSize = 18)
     }
 }
 
 /** A row offering to add the literally-typed coordinate (handles versionless `group:name` + BOMs). */
 @Composable
 private fun DirectAddRow(coordinate: String, mode: AddMode, codeFont: FontFamily, modifier: Modifier, onAdd: () -> Unit) {
-    val versionless = coordinate.count { it == ':' } == 1
+    val parts = coordinate.split(":")
+    // `name:version` (2nd segment version-like) is a full add whose group is inferred by search; only a
+    // `group:name` whose 2nd segment is NOT a version is truly versionless (a BOM supplies the version).
+    val secondIsVersion = parts.getOrNull(1)?.firstOrNull()?.isDigit() == true
+    val versionless = parts.size == 2 && !secondIsVersion
+    val inferGroup = parts.size == 2 && secondIsVersion
     val color = if (mode == AddMode.Platform) Ca.colors.info else Ca.colors.accent
     Row(
         modifier.fillMaxWidth().height(52.dp).clickable(remember { MutableInteractionSource() }, null, onClick = onAdd).padding(vertical = 4.dp),
@@ -872,14 +986,15 @@ private fun DirectAddRow(coordinate: String, mode: AddMode, codeFont: FontFamily
             Text(coordinate, color = Ca.colors.textPrimary, style = Ca.type.footnote.copy(fontFamily = codeFont), maxLines = 1, overflow = TextOverflow.Ellipsis)
             Text(
                 when {
-                    mode == AddMode.Platform -> "Import as a platform (BOM)"
-                    versionless -> "Add versionless — version from a platform"
-                    else -> "Add this exact coordinate"
+                    mode == AddMode.Platform -> stringResource(Res.string.dep_import_as_platform)
+                    versionless -> stringResource(Res.string.dep_add_versionless)
+                    inferGroup -> stringResource(Res.string.dep_add_infer_group)
+                    else -> stringResource(Res.string.dep_add_exact)
                 },
                 color = Ca.colors.textTertiary, style = Ca.type.caption2,
             )
         }
-        IconButtonCa(CaIcons.plus, "Add $coordinate", onClick = onAdd, active = true, boxSize = 32, iconSize = 18)
+        IconButtonCa(CaIcons.plus, stringResource(Res.string.dep_add_named, coordinate), onClick = onAdd, active = true, boxSize = 32, iconSize = 18)
     }
 }
 
@@ -907,14 +1022,14 @@ private fun LocalLibraryBody(
             ) {
                 Icon(CaIcons.plus, null, Modifier.size(18.dp), tint = Ca.colors.accent)
                 Column(Modifier.weight(1f)) {
-                    Text("Choose a .jar or .aar file", color = Ca.colors.accent, style = Ca.type.footnote, fontWeight = FontWeight.SemiBold)
-                    Text("Copied into the module's libs/ folder", color = Ca.colors.textTertiary, style = Ca.type.caption2)
+                    Text(stringResource(Res.string.dep_choose_local_file), color = Ca.colors.accent, style = Ca.type.footnote, fontWeight = FontWeight.SemiBold)
+                    Text(stringResource(Res.string.dep_copied_into_libs), color = Ca.colors.textTertiary, style = Ca.type.caption2)
                 }
             }
         }
         if (candidates.isNotEmpty()) {
             item("from-project") {
-                Text("Already in the project", color = Ca.colors.textTertiary, style = Ca.type.caption,
+                Text(stringResource(Res.string.dep_already_in_project), color = Ca.colors.textTertiary, style = Ca.type.caption,
                     fontWeight = FontWeight.Medium, modifier = Modifier.padding(top = 10.dp, bottom = 4.dp))
             }
             items(candidates, key = { "local:$it" }) { path ->
@@ -922,7 +1037,7 @@ private fun LocalLibraryBody(
             }
         }
         if (!canPick && candidates.isEmpty()) item("empty") {
-            EmptyRow("No local jars/aars found. Import one into the project, or open this on a device to pick a file.")
+            EmptyRow(stringResource(Res.string.dep_no_local_libs))
         }
     }
 }
@@ -941,7 +1056,7 @@ private fun LocalCandidateRow(path: String, codeFont: FontFamily, modifier: Modi
             Text(fileName, color = Ca.colors.textPrimary, style = Ca.type.footnote, fontWeight = FontWeight.Medium, maxLines = 1, overflow = TextOverflow.Ellipsis)
             Text(path, color = Ca.colors.textTertiary, style = Ca.type.caption2.copy(fontFamily = codeFont), maxLines = 1, overflow = TextOverflow.Ellipsis)
         }
-        IconButtonCa(CaIcons.plus, "Attach $fileName", onClick = onAttach, active = true, boxSize = 32, iconSize = 18)
+        IconButtonCa(CaIcons.plus, stringResource(Res.string.dep_attach_named, fileName), onClick = onAttach, active = true, boxSize = 32, iconSize = 18)
     }
 }
 
@@ -971,8 +1086,8 @@ private fun AddResultRow(hit: UiArtifactHit, codeFont: FontFamily, modifier: Mod
                 Text(hit.incompatibleReason, color = Ca.colors.error, style = Ca.type.caption2, maxLines = 1, overflow = TextOverflow.Ellipsis)
             else Text(hit.packaging, color = Ca.colors.textTertiary, style = Ca.type.caption2)
         }
-        if (hit.compatible) IconButtonCa(CaIcons.plus, "Add ${hit.coordinate}", onClick = onAdd, active = true, boxSize = 32, iconSize = 18)
-        else Icon(CaIcons.warning, "Incompatible", Modifier.size(18.dp), tint = Ca.colors.error)
+        if (hit.compatible) IconButtonCa(CaIcons.plus, stringResource(Res.string.dep_add_named, hit.coordinate), onClick = onAdd, active = true, boxSize = 32, iconSize = 18)
+        else Icon(CaIcons.warning, stringResource(Res.string.dep_incompatible), Modifier.size(18.dp), tint = Ca.colors.error)
     }
 }
 
@@ -989,15 +1104,15 @@ private fun ConfirmRemoveDialog(coordinate: String?, moduleName: String?, onDism
                 .background(Ca.colors.glassThick, RoundedCornerShape(Ca.radius.xl))
                 .border(1.dp, Ca.colors.glassEdge, RoundedCornerShape(Ca.radius.xl)).padding(20.dp),
         ) {
-            Text("Remove dependency", color = Ca.colors.textPrimary, style = Ca.type.subhead, fontWeight = FontWeight.SemiBold)
+            Text(stringResource(Res.string.dep_remove_dependency), color = Ca.colors.textPrimary, style = Ca.type.subhead, fontWeight = FontWeight.SemiBold)
             Spacer(Modifier.height(8.dp))
-            Text("Remove ${shown?.let(::shortCoord) ?: ""} from ${moduleName ?: ""}? Its resolved classpath will be detached from the module.",
+            Text(stringResource(Res.string.dep_remove_confirm, shown?.let(::shortCoord) ?: "", moduleName ?: ""),
                 color = Ca.colors.textSecondary, style = Ca.type.footnote)
             Spacer(Modifier.height(16.dp))
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                 Spacer(Modifier.weight(1f))
-                DialogButton("Cancel", destructive = false, onClick = onDismiss)
-                DialogButton("Remove", destructive = true, onClick = onConfirm)
+                DialogButton(stringResource(Res.string.cancel), destructive = false, onClick = onDismiss)
+                DialogButton(stringResource(Res.string.remove), destructive = true, onClick = onConfirm)
             }
         }
     }
@@ -1040,37 +1155,37 @@ private fun EditDependencySheet(
                 .then(if (expanded) Modifier.background(Ca.colors.glassThick, RoundedCornerShape(Ca.radius.xl)).border(1.dp, Ca.colors.glassEdge, RoundedCornerShape(Ca.radius.xl)) else Modifier)
                 .padding(if (expanded) 20.dp else 4.dp),
         ) {
-            Text("Edit dependency", color = Ca.colors.textPrimary, style = Ca.type.subhead, fontWeight = FontWeight.SemiBold)
+            Text(stringResource(Res.string.dep_edit_dependency), color = Ca.colors.textPrimary, style = Ca.type.subhead, fontWeight = FontWeight.SemiBold)
             Spacer(Modifier.height(4.dp))
             Text(shortCoord(node.coordinate), color = Ca.colors.textSecondary, style = Ca.type.caption.copy(fontFamily = codeFont))
 
             // ---- version ----
-            SheetSection("Version")
+            SheetSection(stringResource(Res.string.dep_section_version))
             Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                Box(Modifier.weight(1f)) { SheetField(versionText, "version", codeFont, leading = CaIcons.pkg) { versionText = it } }
+                Box(Modifier.weight(1f)) { SheetField(versionText, stringResource(Res.string.dep_version_hint), codeFont, leading = CaIcons.pkg) { versionText = it } }
                 if (loadingVersions) CircularProgressIndicator(Modifier.size(16.dp), color = Ca.colors.textTertiary, strokeWidth = 2.dp)
                 else if (updateAvailable && newest != null) UpdateHintChip(newest) { versionText = newest }
             }
             VersionList(versions, selected = versionText, loading = loadingVersions, codeFont = codeFont) { versionText = it }
 
             // ---- scope ----
-            SheetSection("Scope")
+            SheetSection(stringResource(Res.string.dep_section_scope))
             Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
                 scopeOptions.forEach { s -> ScopeChip(s, s == scope) { scope = s } }
             }
 
             // ---- exclusions ----
-            SheetSection("Exclusions")
-            Text("Transitive group:name entries to drop (either side may be *), comma/space separated.",
+            SheetSection(stringResource(Res.string.dep_section_exclusions))
+            Text(stringResource(Res.string.dep_exclusions_help),
                 color = Ca.colors.textTertiary, style = Ca.type.caption2)
             Spacer(Modifier.height(8.dp))
-            SheetField(exclText, "e.g. com.google.guava:guava, org.json:*", codeFont, leading = CaIcons.close, singleLine = false) { exclText = it }
+            SheetField(exclText, stringResource(Res.string.dep_exclusions_hint), codeFont, leading = CaIcons.close, singleLine = false) { exclText = it }
 
             Spacer(Modifier.height(16.dp))
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                 Spacer(Modifier.weight(1f))
-                DialogButton("Cancel", destructive = false, onClick = onDismiss)
-                DialogButton("Save", destructive = false, onClick = {
+                DialogButton(stringResource(Res.string.cancel), destructive = false, onClick = onDismiss)
+                DialogButton(stringResource(Res.string.save), destructive = false, onClick = {
                     onSave(versionText.trim(), scope, exclText.split(',', ' ', '\n', '\t').map { it.trim() }.filter { it.isNotEmpty() })
                 })
             }
@@ -1125,8 +1240,8 @@ private fun UpdateHintChip(newest: String, onClick: () -> Unit) {
 private fun VersionList(versions: List<String>, selected: String, loading: Boolean, codeFont: FontFamily, onSelect: (String) -> Unit) {
     Spacer(Modifier.height(8.dp))
     when {
-        loading -> Text("Loading versions…", color = Ca.colors.textTertiary, style = Ca.type.caption2, modifier = Modifier.padding(vertical = 6.dp))
-        versions.isEmpty() -> Text("Couldn't load versions — type one above.", color = Ca.colors.textTertiary, style = Ca.type.caption2, modifier = Modifier.padding(vertical = 6.dp))
+        loading -> Text(stringResource(Res.string.dep_loading_versions), color = Ca.colors.textTertiary, style = Ca.type.caption2, modifier = Modifier.padding(vertical = 6.dp))
+        versions.isEmpty() -> Text(stringResource(Res.string.dep_versions_load_failed), color = Ca.colors.textTertiary, style = Ca.type.caption2, modifier = Modifier.padding(vertical = 6.dp))
         else -> Column(
             Modifier.fillMaxWidth().heightIn(max = 188.dp).verticalScroll(rememberScrollState())
                 .background(Ca.colors.surface2, RoundedCornerShape(Ca.radius.control))
@@ -1143,7 +1258,7 @@ private fun VersionList(versions: List<String>, selected: String, loading: Boole
                     Text(v, color = if (isSel) Ca.colors.accent else Ca.colors.textPrimary,
                         style = Ca.type.caption.copy(fontFamily = codeFont), fontWeight = if (isSel) FontWeight.SemiBold else FontWeight.Normal,
                         modifier = Modifier.weight(1f), maxLines = 1, overflow = TextOverflow.Ellipsis)
-                    if (isSel) Icon(CaIcons.check, "Selected", Modifier.size(15.dp), tint = Ca.colors.accent)
+                    if (isSel) Icon(CaIcons.check, stringResource(Res.string.dep_selected), Modifier.size(15.dp), tint = Ca.colors.accent)
                 }
             }
         }
@@ -1189,14 +1304,14 @@ private fun ToastHost(toast: ToastMsg?, modifier: Modifier) {
 @Composable
 private fun ViewToggle(view: DepView, onSelect: (DepView) -> Unit, compact: Boolean = false) {
     Row(Modifier.background(Ca.colors.surface2, RoundedCornerShape(Ca.radius.sm)).padding(2.dp), horizontalArrangement = Arrangement.spacedBy(2.dp)) {
-        DepView.entries.forEach { v -> SegItem(v.icon, v.label, v == view, compact) { onSelect(v) } }
+        DepView.entries.forEach { v -> SegItem(v.icon, v.label(), v == view, compact) { onSelect(v) } }
     }
 }
 
 @Composable
 private fun TabToggle(tab: DepTab, onSelect: (DepTab) -> Unit, compact: Boolean = false) {
     Row(Modifier.background(Ca.colors.surface2, RoundedCornerShape(Ca.radius.sm)).padding(2.dp), horizontalArrangement = Arrangement.spacedBy(2.dp)) {
-        DepTab.entries.forEach { t -> SegItem(t.icon, t.label, t == tab, compact) { onSelect(t) } }
+        DepTab.entries.forEach { t -> SegItem(t.icon, t.label(), t == tab, compact) { onSelect(t) } }
     }
 }
 
@@ -1283,7 +1398,7 @@ private fun ScopeBadge(scope: String) {
 /** A small pill marking a declared dependency as scoped to one build variant (e.g. `debug`). */
 @Composable
 private fun VariantBadge(variant: String) {
-    WithTooltip("Only in the '$variant' variant") {
+    WithTooltip(stringResource(Res.string.dep_variant_only_tooltip, variant)) {
         Box(
             Modifier.background(Ca.colors.textTertiary.copy(alpha = 0.14f), RoundedCornerShape(Ca.radius.pill))
                 .padding(horizontal = 6.dp, vertical = 2.dp),
@@ -1296,8 +1411,8 @@ private fun VariantBadge(variant: String) {
 /** A conflict that's worth flagging on the row: a warning glyph; the requested→chosen detail is the tooltip. */
 @Composable
 private fun ConflictBadge(conflict: UiVersionConflict) {
-    WithTooltip("Version conflict: ${conflict.requested.joinToString(" vs ")} → using ${conflict.chosen}") {
-        Icon(CaIcons.warning, "Version conflict", Modifier.size(16.dp), tint = Ca.colors.warning)
+    WithTooltip(stringResource(Res.string.dep_version_conflict_tooltip, conflict.requested.joinToString(" vs "), conflict.chosen)) {
+        Icon(CaIcons.warning, stringResource(Res.string.dep_version_conflict), Modifier.size(16.dp), tint = Ca.colors.warning)
     }
 }
 
@@ -1333,8 +1448,8 @@ private fun ConflictSummaryBanner(conflicts: List<UiVersionConflict>, realArtifa
     val benign = conflicts.filterNot { it.artifact in realArtifacts }
     var open by remember(conflicts) { mutableStateOf(real.isNotEmpty()) }
     val color = if (real.isNotEmpty()) Ca.colors.warning else Ca.colors.textTertiary
-    val title = if (real.isNotEmpty()) "${real.size} version conflict${plural(real.size)} to review"
-        else "${benign.size} version${plural(benign.size)} auto-resolved (newest wins)"
+    val title = if (real.isNotEmpty()) pluralStringResource(Res.plurals.dep_conflicts_to_review, real.size, real.size)
+        else pluralStringResource(Res.plurals.dep_versions_auto_resolved, benign.size, benign.size)
     Column(
         modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = 6.dp)
             .background(color.copy(alpha = 0.10f), RoundedCornerShape(Ca.radius.md))
@@ -1346,7 +1461,7 @@ private fun ConflictSummaryBanner(conflicts: List<UiVersionConflict>, realArtifa
         ) {
             Icon(if (real.isNotEmpty()) CaIcons.warning else CaIcons.info, null, Modifier.size(16.dp), tint = color)
             Text(title, color = color, style = Ca.type.footnote, fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f))
-            if (real.isNotEmpty() && benign.isNotEmpty()) Text("+${benign.size} auto-resolved", color = Ca.colors.textTertiary, style = Ca.type.caption2)
+            if (real.isNotEmpty() && benign.isNotEmpty()) Text(stringResource(Res.string.dep_extra_auto_resolved, benign.size), color = Ca.colors.textTertiary, style = Ca.type.caption2)
             Icon(if (open) CaIcons.chevronUp else CaIcons.chevronDown, null, Modifier.size(16.dp), tint = Ca.colors.textTertiary)
         }
         AnimatedVisibility(open, enter = expandVertically(tween(Motion.FAST)) + fadeIn(), exit = shrinkVertically(tween(Motion.FAST)) + fadeOut()) {
@@ -1425,6 +1540,16 @@ private fun DepSubtitle(node: UiDependencyNode) {
     depSubtitle(node)?.let { Text(it, color = Ca.colors.textTertiary, style = Ca.type.caption2, maxLines = 1, overflow = TextOverflow.Ellipsis) }
 }
 
+/** The dimmed subtitle text: a localized kind descriptor, the Maven group, or null. */
+@Composable
+private fun depSubtitle(node: UiDependencyNode): String? = when {
+    node.kind == UiDepKind.Module -> stringResource(Res.string.dep_subtitle_module)
+    node.kind == UiDepKind.Platform -> node.group.ifEmpty { stringResource(Res.string.dep_subtitle_platform) }
+    node.local -> if (node.kind == UiDepKind.Aar) stringResource(Res.string.dep_subtitle_local_aar) else stringResource(Res.string.dep_subtitle_local_jar)
+    node.group.isNotEmpty() -> node.group
+    else -> null
+}
+
 /** A small, dimmed monospace tag for a dependency's version, kept visually separate from its name. */
 @Composable
 private fun VersionTag(version: String, codeFont: FontFamily) {
@@ -1438,15 +1563,4 @@ private fun VersionTag(version: String, codeFont: FontFamily) {
 private fun primaryName(node: UiDependencyNode): String =
     if (node.kind == UiDepKind.Module) ":${node.name}" else node.name
 
-/** The dimmed subtitle: the Maven group, or a kind descriptor when there's no group. */
-private fun depSubtitle(node: UiDependencyNode): String? = when {
-    node.kind == UiDepKind.Module -> "module"
-    node.kind == UiDepKind.Platform -> node.group.ifEmpty { "platform (BOM)" }
-    node.local -> if (node.kind == UiDepKind.Aar) "local aar" else "local jar"
-    node.group.isNotEmpty() -> node.group
-    else -> null
-}
-
 private fun shortCoord(coord: String): String = coord.split(":").let { if (it.size >= 3) "${it[1]}:${it[2]}" else coord }
-
-private fun plural(n: Int) = if (n == 1) "" else "s"

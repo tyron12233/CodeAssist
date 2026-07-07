@@ -27,7 +27,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.font.FontWeight
@@ -52,10 +51,10 @@ fun previewKindOf(path: String): PreviewKind? {
     val file = p.substringAfterLast('/')
     val ext = file.substringAfterLast('.', "")
     val folder = p.substringBeforeLast('/').substringAfterLast('/').substringBefore('-')
-    return when {
-        ext == "xml" && (folder == "drawable" || folder == "color" || folder == "mipmap") -> PreviewKind.DRAWABLE
-        ext in IMAGE_EXTS -> PreviewKind.BITMAP
-        ext == "xml" && folder == "values" && file.contains("color") -> PreviewKind.COLOR
+    return when (ext) {
+        "xml" if (folder == "drawable" || folder == "color" || folder == "mipmap") -> PreviewKind.DRAWABLE
+        in IMAGE_EXTS -> PreviewKind.BITMAP
+        "xml" if folder == "values" && file.contains("color") -> PreviewKind.COLOR
         else -> null
     }
 }
@@ -67,7 +66,12 @@ fun isPreviewable(path: String): Boolean = previewKindOf(path) != null
  * resolving references through [backend]. Static (no editing); recomputes when the buffer changes.
  */
 @Composable
-fun ResourcePreviewPane(path: String, text: String, backend: IdeBackend, modifier: Modifier = Modifier) {
+fun ResourcePreviewPane(
+    path: String,
+    text: String,
+    backend: IdeBackend,
+    modifier: Modifier = Modifier
+) {
     Box(modifier.background(Ca.colors.editorBg)) {
         when (previewKindOf(path)) {
             PreviewKind.DRAWABLE -> DrawablePreview(path, text, backend)
@@ -103,7 +107,11 @@ private fun DrawablePreview(path: String, text: String, backend: IdeBackend) {
                 Canvas(Modifier.fillMaxSize()) {
                     drawCheckerboard()
                     val pad = 16.dp.toPx()
-                    drawUiDrawable(d, Offset(pad, pad), Size(size.width - 2 * pad, size.height - 2 * pad))
+                    drawUiDrawable(
+                        d,
+                        Offset(pad, pad),
+                        Size(size.width - 2 * pad, size.height - 2 * pad)
+                    )
                 }
             }
             if (d is UiDrawable.Unsupported) {
@@ -118,14 +126,23 @@ private fun DrawablePreview(path: String, text: String, backend: IdeBackend) {
 @Composable
 private fun ColorPreview(path: String, text: String, backend: IdeBackend) {
     var colors by remember(path) { mutableStateOf<List<UiColorEntry>>(emptyList()) }
-    LaunchedEffect(path, text) { colors = runCatching { backend.preview.colorResources(path, text) }.getOrDefault(emptyList()) }
+    LaunchedEffect(path, text) {
+        colors =
+            runCatching { backend.preview.colorResources(path, text) }.getOrDefault(emptyList())
+    }
     if (colors.isEmpty()) {
         EmptyPreview("No colors declared in this file")
         return
     }
-    Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(Ca.spacing.s5), verticalArrangement = Arrangement.spacedBy(Ca.spacing.s3)) {
+    Column(
+        Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(Ca.spacing.s5),
+        verticalArrangement = Arrangement.spacedBy(Ca.spacing.s3)
+    ) {
         for (c in colors) {
-            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(Ca.spacing.s3)) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(Ca.spacing.s3)
+            ) {
                 Box(
                     Modifier.size(44.dp).clip(RoundedCornerShape(Ca.radius.sm))
                         .border(1.dp, Ca.colors.separator, RoundedCornerShape(Ca.radius.sm)),
@@ -136,7 +153,12 @@ private fun ColorPreview(path: String, text: String, backend: IdeBackend) {
                     }
                 }
                 Column {
-                    androidx.compose.material3.Text(c.name, color = Ca.colors.textPrimary, style = Ca.type.subhead, fontWeight = FontWeight.Medium)
+                    androidx.compose.material3.Text(
+                        c.name,
+                        color = Ca.colors.textPrimary,
+                        style = Ca.type.subhead,
+                        fontWeight = FontWeight.Medium
+                    )
                     androidx.compose.material3.Text(
                         c.rawValue.ifEmpty { "—" } + if (c.argb == null) "  (unresolved)" else "",
                         color = Ca.colors.textSecondary, style = Ca.type.caption,
@@ -152,7 +174,9 @@ private fun BitmapPreview(path: String, backend: IdeBackend) {
     var image by remember(path) { mutableStateOf<ImageBitmap?>(null) }
     var loaded by remember(path) { mutableStateOf(false) }
     LaunchedEffect(path) {
-        image = runCatching { backend.preview.resourceImageBytes(path)?.let { decodeImageBytes(it) } }.getOrNull()
+        image = runCatching {
+            backend.preview.resourceImageBytes(path)?.let { decodeImageBytes(it) }
+        }.getOrNull()
         loaded = true
     }
     val img = image
@@ -165,12 +189,18 @@ private fun BitmapPreview(path: String, backend: IdeBackend) {
             verticalArrangement = Arrangement.Center,
         ) {
             Box(
-                Modifier.fillMaxWidth().aspectRatio((img.width.toFloat() / img.height).coerceIn(0.2f, 5f))
+                Modifier.fillMaxWidth()
+                    .aspectRatio((img.width.toFloat() / img.height).coerceIn(0.2f, 5f))
                     .clip(RoundedCornerShape(Ca.radius.md))
                     .border(1.dp, Ca.colors.separator, RoundedCornerShape(Ca.radius.md)),
             ) {
                 Canvas(Modifier.fillMaxSize()) { drawCheckerboard() }
-                Image(img, contentDescription = path.substringAfterLast('/'), modifier = Modifier.fillMaxSize().padding(8.dp), contentScale = ContentScale.Fit)
+                Image(
+                    img,
+                    contentDescription = path.substringAfterLast('/'),
+                    modifier = Modifier.fillMaxSize().padding(8.dp),
+                    contentScale = ContentScale.Fit
+                )
             }
             Box(Modifier.padding(top = Ca.spacing.s3)) { Caption("${img.width} × ${img.height} px") }
         }

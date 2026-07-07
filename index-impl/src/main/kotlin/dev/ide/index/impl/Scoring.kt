@@ -45,6 +45,29 @@ internal object Scoring {
         return base - term.length.coerceAtMost(40) + originBonus(origin)
     }
 
+    /** The score for a short pattern's case-insensitive prefix window scan, or -1 for "no match" —
+     *  the sub-trigram-length fallback of the fuzzy path (prefix tiers only; no substring noise). */
+    fun scorePrefixCi(term: String, p: String, origin: IndexOrigin): Int {
+        val base = when {
+            term == p -> 1000
+            term.startsWith(p) -> 850
+            term.startsWith(p, ignoreCase = true) -> 700
+            else -> return -1
+        }
+        return base - term.length.coerceAtMost(40) + originBonus(origin)
+    }
+
+    /**
+     * Whether [pattern] is a deliberate camel-hump query — an uppercase char after the first position
+     * (`mDL`, `NPE`). Hump candidates share no contiguous trigram with the pattern, so the trigram
+     * intersection can never surface them; both index sides answer these with a first-character window
+     * scan instead (every hump match is anchored at the term's first char).
+     */
+    fun humpQuery(pattern: String): Boolean {
+        for (i in 1 until pattern.length) if (pattern[i].isUpperCase()) return true
+        return false
+    }
+
     fun trigramsOf(s: String): List<String> {
         if (s.length < 3) return emptyList()
         return (0..s.length - 3).map { s.substring(it, it + 3) }

@@ -30,6 +30,7 @@ internal class BundleTask(
     private val outAab: Path,
     private val baseModuleZip: Path,
     private val bundler: Bundler,
+    private val javaResJars: List<Path> = emptyList(),
 ) : Task {
     override val inputs: TaskInputs
         get() = TaskInputsImpl().apply {
@@ -37,6 +38,7 @@ internal class BundleTask(
             dirPaths("dex", dexDirs)
             dirPaths("assets", assetsDirs)
             dirPaths("jni", jniLibDirs)
+            filePaths("javaRes", javaResJars)
         }
     override val outputs: TaskOutputs get() = TaskOutputsImpl().apply { filePath("aab", outAab) }
 
@@ -45,7 +47,7 @@ internal class BundleTask(
         if (!Files.isRegularFile(protoAp))
             return TaskResult.Failed("proto resources missing (aapt2 --proto-format link did not run): $protoAp")
         return runCatching {
-            val entries = BundlePackaging.buildBaseModuleZip(protoAp, dexDirs, assetsDirs, jniLibDirs, baseModuleZip)
+            val entries = BundlePackaging.buildBaseModuleZip(protoAp, dexDirs, assetsDirs, jniLibDirs, baseModuleZip, javaResJars)
             ctx.logger()("bundle module -> base.zip (${entries.size} entries)")
             val r = bundler.bundle(BundleRequest(listOf(baseModuleZip), outAab))
             r.log.forEach(ctx.logger())

@@ -50,6 +50,8 @@ data class AndroidFacet(
     val coreLibraryDesugaringEnabled: Boolean = false,
     /** AGP's `android { buildFeatures { … } }`: per-module toggles for generated-code/compiler features. */
     val buildFeatures: BuildFeatures = BuildFeatures(),
+    /** AGP's `android { packaging { … } }`: how Java resources + native libs are merged into the APK. */
+    val packaging: AndroidPackaging = AndroidPackaging(),
 ) : Facet {
     override val key: FacetKey<AndroidFacet> get() = KEY
 
@@ -127,6 +129,87 @@ data class BuildType(
      */
     val signingConfig: String? = null,
 )
+
+/**
+ * AGP's `packaging { }` block: the merge rules the packager applies when the same archive path is
+ * contributed by more than one input (the app's own resources, a sub-module, an AAR, an external jar).
+ * The patterns are AGP-style globs relative to the APK root (a double-star crosses a slash, a single
+ * star stays within a segment, a leading slash is optional). These are ADDED to a faithful set of AGP
+ * defaults ([resources] excludes the kotlin_module + signature files + licence noise, and merges the
+ * META-INF services entries), so a module with no configured packaging still behaves like AGP.
+ */
+data class AndroidPackaging(
+    val resources: ResourcePackaging = ResourcePackaging(),
+    val jniLibs: JniLibsPackaging = JniLibsPackaging(),
+) {
+    /** True when the user configured anything (drives "emit only when set" persistence). */
+    val isDefault: Boolean get() = resources.isEmpty && jniLibs.isEmpty
+
+    companion object {
+        /**
+         * AGP's default Java-resource excludes, always applied on top of the module's own: jar signatures
+         * (invalid after repackaging), the redundant per-jar `MANIFEST.MF`, Maven/tooling metadata,
+         * licence/notice noise, Kotlin module/metadata files, the coroutines debug probe, and hidden files.
+         */
+        val DEFAULT_RESOURCE_EXCLUDES: List<String> = listOf(
+            "/META-INF/LICENSE",
+            "/META-INF/LICENSE.txt",
+            "/META-INF/LICENSE.md",
+            "/META-INF/NOTICE",
+            "/META-INF/NOTICE.txt",
+            "/META-INF/NOTICE.md",
+            "/META-INF/DEPENDENCIES",
+            "/META-INF/MANIFEST.MF",
+            "/META-INF/*.DSA",
+            "/META-INF/*.EC",
+            "/META-INF/*.SF",
+            "/META-INF/*.RSA",
+            "/META-INF/*.kotlin_module",
+            "/META-INF/*.version",
+            "/META-INF/maven/**",
+            "/META-INF/proguard/**",
+            "/META-INF/com.android.tools/**",
+            "/NOTICE",
+            "/NOTICE.txt",
+            "/LICENSE",
+            "/LICENSE.txt",
+            "/**/*.kotlin_metadata",
+            "/DebugProbesKt.bin",
+            "/**/.*",
+        )
+
+        /** AGP concatenates the META-INF services entries (ServiceLoader registrations) rather than picking one. */
+        val DEFAULT_RESOURCE_MERGES: List<String> = listOf("/META-INF/services/**")
+    }
+}
+
+/**
+ * `packaging { resources { … } }`: how Java resources (non-code files from `src/<set>/resources` and the
+ * non-class entries of dependency jars/AARs) are merged into the APK root.
+ */
+data class ResourcePackaging(
+    /** Paths to drop entirely (added to the AGP defaults). */
+    val excludes: Set<String> = emptySet(),
+    /** Paths where the first-seen provider wins and later duplicates are silently dropped. */
+    val pickFirsts: Set<String> = emptySet(),
+    /** Paths whose duplicates are concatenated rather than deduplicated (e.g. the META-INF services entries). */
+    val merges: Set<String> = emptySet(),
+) {
+    val isEmpty: Boolean get() = excludes.isEmpty() && pickFirsts.isEmpty() && merges.isEmpty()
+}
+
+/**
+ * `packaging { jniLibs { … } }`: how native libraries (the `.so` files from `src/<set>/jniLibs`, an AAR's
+ * `jni` dir, and any inside dependency jars) are merged into the APK's `lib` dir. There is no `merges` —
+ * `.so` files are binary and can't be concatenated. Debug-symbol stripping is not modelled: it needs the
+ * NDK, which is absent on device, so (like AGP without an NDK) libraries are packaged as-is.
+ */
+data class JniLibsPackaging(
+    val excludes: Set<String> = emptySet(),
+    val pickFirsts: Set<String> = emptySet(),
+) {
+    val isEmpty: Boolean get() = excludes.isEmpty() && pickFirsts.isEmpty()
+}
 
 /** A product flavor (`free`/`paid`/`demo`/…), grouped by a [dimension]. */
 data class ProductFlavor(

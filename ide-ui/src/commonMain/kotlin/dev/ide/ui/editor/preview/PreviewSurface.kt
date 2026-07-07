@@ -55,8 +55,23 @@ import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import dev.ide.ui.generated.resources.Res
+import dev.ide.ui.generated.resources.copy
+import dev.ide.ui.generated.resources.preview_copy_problems
+import dev.ide.ui.generated.resources.preview_device_compact
+import dev.ide.ui.generated.resources.preview_device_phone
+import dev.ide.ui.generated.resources.preview_device_tablet
+import dev.ide.ui.generated.resources.preview_fit
+import dev.ide.ui.generated.resources.preview_night
+import dev.ide.ui.generated.resources.preview_night_mode
+import dev.ide.ui.generated.resources.preview_problems
+import dev.ide.ui.generated.resources.preview_problems_count
+import dev.ide.ui.generated.resources.preview_rotate
+import dev.ide.ui.generated.resources.preview_zoom_in
 import dev.ide.ui.icons.CaIcons
 import dev.ide.ui.theme.Ca
+import org.jetbrains.compose.resources.pluralStringResource
+import org.jetbrains.compose.resources.stringResource
 import kotlin.math.min
 import kotlin.math.roundToInt
 
@@ -94,6 +109,16 @@ class PreviewSurfaceState {
 
 @Composable
 fun rememberPreviewSurfaceState(resetKey: Any?): PreviewSurfaceState = remember(resetKey) { PreviewSurfaceState() }
+
+/** Localized display name for a built-in device profile. [PREVIEW_DEVICES] keeps its stable English labels
+ *  (they double as device identifiers); a `@Preview(device=...)` override's own label falls through as-is. */
+@Composable
+private fun deviceLabel(label: String): String = when (label) {
+    "Phone" -> stringResource(Res.string.preview_device_phone)
+    "Compact" -> stringResource(Res.string.preview_device_compact)
+    "Tablet" -> stringResource(Res.string.preview_device_tablet)
+    else -> label
+}
 
 /**
  * The common preview surface both Preview views render into: a device card floating over a dotted (or
@@ -204,7 +229,7 @@ fun PreviewSurface(
             // When a @Preview dictates the device the pill is non-cycling (the device is fixed by the annotation).
             PillButton({ if (deviceOverride == null) state.deviceIndex = (state.deviceIndex + 1) % PREVIEW_DEVICES.size }) {
                 Text(
-                    if (compact) "$wdp×$hdp" else "${device.label} · $wdp×$hdp",
+                    if (compact) "$wdp×$hdp" else "${deviceLabel(device.label)} · $wdp×$hdp",
                     color = if (deviceOverride != null) Ca.colors.accent else Ca.colors.textSecondary,
                     style = Ca.type.caption, maxLines = 1,
                     modifier = Modifier.padding(horizontal = if (compact) Ca.spacing.s1 else Ca.spacing.s2),
@@ -212,14 +237,14 @@ fun PreviewSurface(
             }
             Divider()
             PillButton({ state.landscape = !state.landscape }) {
-                Icon(CaIcons.refresh, "Rotate", Modifier.size(15.dp), tint = if (state.landscape) Ca.colors.accent else Ca.colors.textSecondary)
+                Icon(CaIcons.refresh, stringResource(Res.string.preview_rotate), Modifier.size(15.dp), tint = if (state.landscape) Ca.colors.accent else Ca.colors.textSecondary)
             }
             Divider()
             PillButton({ state.night = !state.night }) {
                 if (compact) {
-                    Icon(CaIcons.moon, "Night mode", Modifier.size(15.dp), tint = if (state.night) Ca.colors.accent else Ca.colors.textTertiary)
+                    Icon(CaIcons.moon, stringResource(Res.string.preview_night_mode), Modifier.size(15.dp), tint = if (state.night) Ca.colors.accent else Ca.colors.textTertiary)
                 } else {
-                    Text("Night", color = if (state.night) Ca.colors.accent else Ca.colors.textTertiary, style = Ca.type.caption, modifier = Modifier.padding(horizontal = Ca.spacing.s1))
+                    Text(stringResource(Res.string.preview_night), color = if (state.night) Ca.colors.accent else Ca.colors.textTertiary, style = Ca.type.caption, modifier = Modifier.padding(horizontal = Ca.spacing.s1))
                 }
             }
             topBarExtras(compact)
@@ -229,9 +254,9 @@ fun PreviewSurface(
         GlassBar(Modifier.align(Alignment.BottomCenter).padding(Ca.spacing.s4)) {
             PillButton({ val b = if (state.userScale <= 0f) fit else state.userScale; state.userScale = (b / 1.25f).coerceIn(0.2f, 5f) }) { MinusGlyph() }
             Text("${(scale * 100f).roundToInt()}%", color = Ca.colors.textSecondary, style = Ca.type.caption, modifier = Modifier.width(44.dp), textAlign = TextAlign.Center)
-            PillButton({ val b = if (state.userScale <= 0f) fit else state.userScale; state.userScale = (b * 1.25f).coerceIn(0.2f, 5f) }) { Icon(CaIcons.plus, "Zoom in", Modifier.size(16.dp), tint = Ca.colors.textPrimary) }
+            PillButton({ val b = if (state.userScale <= 0f) fit else state.userScale; state.userScale = (b * 1.25f).coerceIn(0.2f, 5f) }) { Icon(CaIcons.plus, stringResource(Res.string.preview_zoom_in), Modifier.size(16.dp), tint = Ca.colors.textPrimary) }
             Divider()
-            PillButton({ state.userScale = 0f; state.offset = Offset.Zero }) { Icon(CaIcons.refresh, "Fit", Modifier.size(15.dp), tint = Ca.colors.textSecondary) }
+            PillButton({ state.userScale = 0f; state.offset = Offset.Zero }) { Icon(CaIcons.refresh, stringResource(Res.string.preview_fit), Modifier.size(15.dp), tint = Ca.colors.textSecondary) }
             bottomBarExtras(compact)
         }
 
@@ -262,7 +287,7 @@ fun PreviewProblemChip(issues: List<PreviewIssue>, modifier: Modifier) {
         GlassBar(Modifier) {
             PillButton({ open = !open }) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    Icon(if (hasError) CaIcons.error else CaIcons.warning, "Preview problems", Modifier.size(15.dp), tint = tint)
+                    Icon(if (hasError) CaIcons.error else CaIcons.warning, stringResource(Res.string.preview_problems), Modifier.size(15.dp), tint = tint)
                     Text(" ${issues.size}", color = tint, style = Ca.type.caption)
                 }
             }
@@ -281,11 +306,11 @@ fun PreviewProblemChip(issues: List<PreviewIssue>, modifier: Modifier) {
                 verticalArrangement = Arrangement.spacedBy(Ca.spacing.s2),
             ) {
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
-                    Text("${issues.size} problem${if (issues.size == 1) "" else "s"}", color = Ca.colors.textSecondary, style = Ca.type.caption)
+                    Text(pluralStringResource(Res.plurals.preview_problems_count, issues.size, issues.size), color = Ca.colors.textSecondary, style = Ca.type.caption)
                     PillButton({ clipboard.setText(AnnotatedString(copyText)) }) {
                         Row(verticalAlignment = Alignment.CenterVertically) {
-                            Icon(CaIcons.copy, "Copy problems", Modifier.size(13.dp), tint = Ca.colors.textSecondary)
-                            Text(" Copy", color = Ca.colors.textSecondary, style = Ca.type.caption)
+                            Icon(CaIcons.copy, stringResource(Res.string.preview_copy_problems), Modifier.size(13.dp), tint = Ca.colors.textSecondary)
+                            Text(" " + stringResource(Res.string.copy), color = Ca.colors.textSecondary, style = Ca.type.caption)
                         }
                     }
                 }

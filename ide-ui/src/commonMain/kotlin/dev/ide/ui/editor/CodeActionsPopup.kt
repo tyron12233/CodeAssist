@@ -38,8 +38,19 @@ import androidx.compose.ui.unit.dp
 import dev.ide.ui.backend.UiAction
 import dev.ide.ui.backend.UiActionKind
 import dev.ide.ui.backend.UiSeverity
+import dev.ide.ui.generated.resources.Res
+import dev.ide.ui.generated.resources.codeaction_dismiss
+import dev.ide.ui.generated.resources.codeaction_preview_composable
+import dev.ide.ui.generated.resources.codeaction_quick_fixes
+import dev.ide.ui.generated.resources.codeaction_severity_error
+import dev.ide.ui.generated.resources.codeaction_severity_hint
+import dev.ide.ui.generated.resources.codeaction_severity_info
+import dev.ide.ui.generated.resources.codeaction_severity_unused
+import dev.ide.ui.generated.resources.codeaction_severity_warning
+import dev.ide.ui.generated.resources.codeaction_show_context_actions
 import dev.ide.ui.icons.CaIcons
 import dev.ide.ui.theme.Ca
+import org.jetbrains.compose.resources.stringResource
 
 /**
  * The editor code-action affordances (intentions + quick-fixes), styled like the completion popup:
@@ -64,7 +75,7 @@ fun FloatingLightbulb(onClick: () -> Unit, modifier: Modifier = Modifier) {
             .padding(horizontal = 7.dp, vertical = 5.dp),
         contentAlignment = Alignment.Center,
     ) {
-        Icon(CaIcons.lightbulb, contentDescription = "Show context actions", tint = Ca.colors.warning, modifier = Modifier.size(16.dp))
+        Icon(CaIcons.lightbulb, contentDescription = stringResource(Res.string.codeaction_show_context_actions), tint = Ca.colors.warning, modifier = Modifier.size(16.dp))
     }
 }
 
@@ -81,7 +92,7 @@ fun PreviewGutterIcon(onClick: () -> Unit, modifier: Modifier = Modifier) {
             .clickable(onClick = onClick),
         contentAlignment = Alignment.Center,
     ) {
-        Icon(CaIcons.image, contentDescription = "Preview this composable", tint = Ca.colors.accent, modifier = Modifier.size(15.dp))
+        Icon(CaIcons.image, contentDescription = stringResource(Res.string.codeaction_preview_composable), tint = Ca.colors.accent, modifier = Modifier.size(15.dp))
     }
 }
 
@@ -163,10 +174,10 @@ fun DiagnosticSheet(
         UiSeverity.Info, UiSeverity.Hint -> CaIcons.info
     }
     val label = when (severity) {
-        UiSeverity.Error -> "Error"
-        UiSeverity.Warning -> if (unused) "Unused" else "Warning"
-        UiSeverity.Info -> "Info"
-        UiSeverity.Hint -> "Hint"
+        UiSeverity.Error -> stringResource(Res.string.codeaction_severity_error)
+        UiSeverity.Warning -> if (unused) stringResource(Res.string.codeaction_severity_unused) else stringResource(Res.string.codeaction_severity_warning)
+        UiSeverity.Info -> stringResource(Res.string.codeaction_severity_info)
+        UiSeverity.Hint -> stringResource(Res.string.codeaction_severity_hint)
     }
     val sheetShape = RoundedCornerShape(topStart = Ca.radius.sheet, topEnd = Ca.radius.sheet)
     // scrim over the editor pane (tap to dismiss); panel docked at the bottom for thumb reach
@@ -191,7 +202,7 @@ fun DiagnosticSheet(
                 Box(
                     Modifier.size(30.dp).clip(CircleShape).clickable(onClick = onDismiss),
                     contentAlignment = Alignment.Center,
-                ) { Icon(CaIcons.close, "Dismiss", Modifier.size(16.dp), tint = Ca.colors.textSecondary) }
+                ) { Icon(CaIcons.close, stringResource(Res.string.codeaction_dismiss), Modifier.size(16.dp), tint = Ca.colors.textSecondary) }
             }
             Spacer(Modifier.height(10.dp))
             SelectionContainer {
@@ -206,7 +217,7 @@ fun DiagnosticSheet(
                 Spacer(Modifier.height(12.dp))
                 Box(Modifier.fillMaxWidth().height(1.dp).background(Ca.colors.separator))
                 Spacer(Modifier.height(6.dp))
-                Text("Quick fixes", color = Ca.colors.textTertiary, style = Ca.type.caption2, fontWeight = FontWeight.SemiBold, modifier = Modifier.padding(horizontal = 12.dp, vertical = 4.dp))
+                Text(stringResource(Res.string.codeaction_quick_fixes), color = Ca.colors.textTertiary, style = Ca.type.caption2, fontWeight = FontWeight.SemiBold, modifier = Modifier.padding(horizontal = 12.dp, vertical = 4.dp))
                 actions.forEachIndexed { i, a -> ActionRow(a, selected = false, onPick = { onPick(i) }, height = 48.dp) }
             }
             Spacer(Modifier.height(8.dp))

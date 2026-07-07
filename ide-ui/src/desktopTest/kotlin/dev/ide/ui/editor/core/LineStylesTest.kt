@@ -90,6 +90,82 @@ class LineStylesTest {
     private fun LineSpanTypeAt(s: LineStyles, line: Int, col: Int): TokenType? =
         s.spansFor(line).firstOrNull { col >= it.start && col < it.end }?.type
 
+    /** Token type covering [col] in a freshly styled [line], or null if the column is left uncolored. */
+    private fun typeAt(line: String, col: Int, language: CodeLanguage): TokenType? =
+        styleLine(line, LexState.CODE, language).spans.firstOrNull { col >= it.start && col < it.end }?.type
+
+    @Test
+    fun kotlinStringInterpolationHighlightsNestedCode() {
+        // The reported bug: keywords + nested strings inside `${…}` were swallowed into the outer string.
+        val line = "    println(\"I \${if (b) \"got\" else \"lost\"} focus.\")"
+        // Anchor by content so the assertions survive if the leading indent changes.
+        fun at(sub: String) = typeAt(line, line.indexOf(sub), CodeLanguage.Kotlin)
+        assertEquals(TokenType.KEYWORD, at("if ("), "`if` inside \${} should be a keyword")
+        assertEquals(TokenType.KEYWORD, at("else "), "`else` inside \${} should be a keyword")
+        assertEquals(TokenType.STRING, typeAt(line, line.indexOf("got"), CodeLanguage.Kotlin), "nested \"got\" should be a string")
+        assertEquals(TokenType.STRING, typeAt(line, line.indexOf("lost"), CodeLanguage.Kotlin), "nested \"lost\" should be a string")
+        assertEquals(TokenType.STRING, typeAt(line, line.indexOf("I \$"), CodeLanguage.Kotlin), "the outer literal `I ` is a string")
+        assertEquals(TokenType.STRING, typeAt(line, line.indexOf(" focus"), CodeLanguage.Kotlin), "the trailing literal is a string")
+        assertEquals(TokenType.FUNC, at("println"), "`println(` is a call")
+        // `b` inside the interpolation is left for the semantic layer (not string-green).
+        assertEquals(null, typeAt(line, line.indexOf("b)"), CodeLanguage.Kotlin), "the interpolated var is uncolored lexically")
+    }
+
+    @Test
+    fun kotlinSimpleInterpolationLeavesNameUncolored() {
+        val line = "val m = \"hi \$name!\""
+        assertEquals(TokenType.STRING, typeAt(line, line.indexOf("hi"), CodeLanguage.Kotlin))
+        assertEquals(null, typeAt(line, line.indexOf("name"), CodeLanguage.Kotlin), "\$name identifier is left for semantics")
+        assertEquals(TokenType.STRING, typeAt(line, line.indexOf("!"), CodeLanguage.Kotlin), "the `!\"` tail is still string")
+        assertEquals(TokenType.KEYWORD, typeAt(line, 0, CodeLanguage.Kotlin), "`val` is a keyword")
+    }
+
+    @Test
+    fun kotlinRawStringCarriesStateAcrossLines() {
+        val doc = EditorDocument.of("val s = \"\"\"abc\ndef\"\"\".trim()")
+        val styles = LineStyles(CodeLanguage.Kotlin)
+        styles.reset(doc)
+        assertIncrementalMatchesFresh(doc, styles, CodeLanguage.Kotlin)
+        assertEquals(LexState.KT_RAW_STRING, styleLine(doc.lineText(0), LexState.CODE, CodeLanguage.Kotlin).exitState)
+        assertEquals(TokenType.STRING, LineSpanTypeAt(styles, 1, 0), "line 1 opens inside the raw string")
+        // `trim` after the closing `"""` on line 1 is back to code.
+        assertEquals(TokenType.FUNC, LineSpanTypeAt(styles, 1, doc.lineText(1).indexOf("trim")))
+    }
+
+    @Test
+    fun kotlinKeywordsHighlightOutsideStrings() {
+        assertEquals(TokenType.KEYWORD, typeAt("fun foo() {}", 0, CodeLanguage.Kotlin))
+        assertEquals(TokenType.KEYWORD, typeAt("when (x) {}", 0, CodeLanguage.Kotlin))
+        assertEquals(TokenType.KEYWORD, typeAt("if (a) b else c", 0, CodeLanguage.Kotlin))
+        assertEquals(TokenType.KEYWORD, typeAt("if (a) b else c", "if (a) b ".length, CodeLanguage.Kotlin))
+    }
+
+    @Test
+    fun fuzzKotlinIncrementalEqualsFresh() {
+        val rnd = Random(11)
+        val snippets = listOf(
+            "/*", "*" + "/", "//x", "\"s\"", "\"\"" + "\"", "\${", "}", "if ", "else ", "fun ",
+            "\"a\$x b\${y}c\"", "\n", "}", "{", "a", " ",
+        )
+        var doc = EditorDocument.of(
+            "fun f(b: Boolean) {\n" +
+                "  val s = \"\"\"raw \$b\ntext\"\"\"\n" +
+                "  println(\"I \${if (b) \"got\" else \"lost\"} f\")\n" +
+                "}\n"
+        )
+        val styles = LineStyles(CodeLanguage.Kotlin)
+        styles.reset(doc)
+        repeat(800) {
+            val len = doc.text.length
+            val start = rnd.nextInt(len + 1)
+            val del = rnd.nextInt(6)
+            val end = (start + del).coerceAtMost(len)
+            val ins = if (rnd.nextBoolean()) snippets[rnd.nextInt(snippets.size)] else ""
+            doc = edit(doc, styles, start, end, ins)
+            assertIncrementalMatchesFresh(doc, styles, CodeLanguage.Kotlin)
+        }
+    }
+
     @Test
     fun fuzzIncrementalEqualsFresh() {
         val rnd = Random(7)

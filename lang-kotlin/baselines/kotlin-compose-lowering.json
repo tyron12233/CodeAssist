@@ -1,6 +1,6 @@
 {
-  "alloc.body-edit.bytes": 7239064,
-  "alloc.full.bytes": 82293176,
-  "lowering.body-edit.ns": 4576250,
-  "lowering.full.ns": 3.843172925E7
+  "alloc.body-edit.bytes": 3260616,
+  "alloc.full.bytes": 76175808,
+  "lowering.body-edit.ns": 1346947.75,
+  "lowering.full.ns": 3.100827075E7
 }

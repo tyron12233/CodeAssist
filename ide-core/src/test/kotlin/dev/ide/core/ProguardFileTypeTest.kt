@@ -1,5 +1,7 @@
 package dev.ide.core
 
+import kotlinx.coroutines.runBlocking
+
 import dev.ide.ui.backend.TreeNode
 import java.nio.file.Files
 import kotlin.test.Test
@@ -30,7 +32,7 @@ class ProguardFileTypeTest {
             assertEquals("proguard", node.iconId)
 
             // (b) the editor analysis produces no diagnostics (it is not routed to the Java backend).
-            val diags = ide.analyzeDiagnostics(proguard, rules)
+            val diags = runBlocking { ide.analyzeDiagnostics(proguard, rules) }
             assertTrue(diags.isEmpty(), "a .pro file must not be analysed as Java, but got: $diags")
         }
         dir.toFile().deleteRecursively()

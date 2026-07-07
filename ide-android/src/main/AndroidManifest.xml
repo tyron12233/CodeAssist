@@ -24,7 +24,9 @@
          running, so the OS won't kill it if the user switches away mid-build (docs/build-process-isolation.md).
          "specialUse": a code build/run is a long-running, user-initiated task that fits no other FGS category
          (not data sync / media / location / …); the justification is declared on the <service> below for Play.
-         POST_NOTIFICATIONS (API 33+) lets the ongoing "Building…" notification show; the FGS still runs without it. -->
+         POST_NOTIFICATIONS (API 33+) lets the ongoing "Building…" notification show; the FGS still runs without
+         it. Being a runtime permission on API 33+, it must be REQUESTED at launch (MainActivity); declaring it
+         here alone is not enough, and without the grant the OS silently suppresses the notification. -->
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_SPECIAL_USE" />
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />

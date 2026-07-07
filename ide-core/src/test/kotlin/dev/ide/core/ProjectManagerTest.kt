@@ -1,5 +1,7 @@
 package dev.ide.core
 
+import kotlinx.coroutines.runBlocking
+
 import dev.ide.android.support.templates.JetpackComposeAppTemplate
 import dev.ide.model.LibraryDependency
 import dev.ide.model.template.TemplateArgs
@@ -129,7 +131,7 @@ class ProjectManagerTest {
                 val main = java.nio.file.Path.of(manager.list().first().rootPath)
                     .resolve("app/src/main/kotlin/com/acme/kt/Main.kt")
                 val text = Files.readString(main)
-                val diags = ide.analyzeDiagnostics(main, text)
+                val diags = runBlocking { ide.analyzeDiagnostics(main, text) }
                 assertTrue(
                     diags.none { it.severity == dev.ide.lang.dom.Severity.ERROR },
                     "valid Kotlin should produce no error diagnostics; got $diags",

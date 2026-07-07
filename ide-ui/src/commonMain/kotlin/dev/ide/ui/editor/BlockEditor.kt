@@ -91,9 +91,38 @@ import dev.ide.ui.editor.blocks.rememberCBlockShape
 import dev.ide.ui.editor.blocks.rememberValueShape
 import dev.ide.ui.editor.blocks.valueShapeOf
 import dev.ide.ui.editor.blocks.valueShapePadding
+import dev.ide.ui.generated.resources.Res
+import dev.ide.ui.generated.resources.back
+import dev.ide.ui.generated.resources.block_add_a_block
+import dev.ide.ui.generated.resources.block_add_block
+import dev.ide.ui.generated.resources.block_block_count
+import dev.ide.ui.generated.resources.block_button
+import dev.ide.ui.generated.resources.block_cannot_project
+import dev.ide.ui.generated.resources.block_drop_to_delete
+import dev.ide.ui.generated.resources.block_duplicate
+import dev.ide.ui.generated.resources.block_edit_expression
+import dev.ide.ui.generated.resources.block_focus_hint
+import dev.ide.ui.generated.resources.block_fold
+import dev.ide.ui.generated.resources.block_import_count
+import dev.ide.ui.generated.resources.block_keyword_to
+import dev.ide.ui.generated.resources.block_live_projection
+import dev.ide.ui.generated.resources.block_no_index_matches
+import dev.ide.ui.generated.resources.block_no_matches
+import dev.ide.ui.generated.resources.block_projecting
+import dev.ide.ui.generated.resources.block_search_placeholder
+import dev.ide.ui.generated.resources.block_searching_index
+import dev.ide.ui.generated.resources.block_statement_slot
+import dev.ide.ui.generated.resources.block_trash
+import dev.ide.ui.generated.resources.block_wrap_if
+import dev.ide.ui.generated.resources.clear
+import dev.ide.ui.generated.resources.close
+import dev.ide.ui.generated.resources.delete
+import dev.ide.ui.generated.resources.expand
 import dev.ide.ui.icons.CaIcons
 import dev.ide.ui.theme.Ca
 import dev.ide.ui.theme.CodeAssistTheme
+import org.jetbrains.compose.resources.pluralStringResource
+import org.jetbrains.compose.resources.stringResource
 import kotlin.math.roundToInt
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.delay
@@ -161,8 +190,8 @@ fun BlockEditor(
         Column(Modifier.fillMaxSize()) {
             val current = tree
             when {
-                current == null && failed -> Hint("This file can’t be projected to blocks yet.")
-                current == null -> Hint("Projecting blocks…")
+                current == null && failed -> Hint(stringResource(Res.string.block_cannot_project))
+                current == null -> Hint(stringResource(Res.string.block_projecting))
                 else -> Box(
                     Modifier.weight(1f).fillMaxWidth().verticalScroll(rememberScrollState())
                         .clickable(remember { MutableInteractionSource() }, null) { ctx.select(null) }
@@ -219,7 +248,7 @@ private fun FileHeader(name: String, pkg: String?, imports: Int) {
         Icon(CaIcons.box, null, Modifier.size(15.dp), tint = Ca.colors.syntax.type)
         Text(name, color = Ca.colors.textPrimary, style = Ca.type.code, fontWeight = FontWeight.SemiBold)
         if (pkg != null) Text(pkg, color = Ca.colors.textTertiary, style = Ca.type.codeSmall)
-        if (imports > 0) Text("· $imports imports", color = Ca.colors.textTertiary, fontSize = 10.5.sp)
+        if (imports > 0) Text(pluralStringResource(Res.plurals.block_import_count, imports, imports), color = Ca.colors.textTertiary, fontSize = 10.5.sp)
     }
 }
 
@@ -252,10 +281,10 @@ private fun MethodHat(node: UiBlockNode, ctx: Ctx) {
                 .padding(start = 13.dp, end = 16.dp, top = 8.dp, bottom = 8.dp + if (expanded) BlockMetrics.connDepth else 0.dp),
             verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp),
         ) {
-            Icon(if (expanded) CaIcons.caretDown else CaIcons.caretRight, "fold", Modifier.size(13.dp), tint = Ca.colors.block.text.copy(alpha = 0.8f))
+            Icon(if (expanded) CaIcons.caretDown else CaIcons.caretRight, stringResource(Res.string.block_fold), Modifier.size(13.dp), tint = Ca.colors.block.text.copy(alpha = 0.8f))
             Text(signatureOf(node, ctx.source), color = Ca.colors.block.text, style = Ca.type.code, fontWeight = FontWeight.SemiBold)
             body?.let {
-                if (!expanded) Text("· ${it.children.size} block${if (it.children.size == 1) "" else "s"}",
+                if (!expanded) Text(pluralStringResource(Res.plurals.block_block_count, it.children.size, it.children.size),
                     color = Ca.colors.block.text.copy(alpha = 0.78f), fontSize = 10.5.sp)
             }
         }
@@ -572,7 +601,7 @@ private fun ValuePart(node: UiBlockNode, part: UiBlockPart, ctx: Ctx, depth: Int
             when {
                 // B1: a declaration's `=` reads as the word "to" (`set x to 1`).
                 s == "=" && (node.label == "var" || node.kind == "local_var" || node.kind == "field_decl") ->
-                    Text("to", color = Ca.colors.block.text, style = Ca.type.code, fontWeight = FontWeight.SemiBold)
+                    Text(stringResource(Res.string.block_keyword_to), color = Ca.colors.block.text, style = Ca.type.code, fontWeight = FontWeight.SemiBold)
                 s.isNotEmpty() -> Text(s, color = Ca.colors.block.text.copy(alpha = 0.7f), style = Ca.type.code)
             }
         }
@@ -777,7 +806,7 @@ private fun CollapsedChip(node: UiBlockNode, ctx: Ctx) {
         verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp),
     ) {
         Text(summaryOf(node, ctx.source), color = Ca.colors.block.text, style = Ca.type.code, maxLines = 1)
-        Icon(CaIcons.braces, "expand", Modifier.size(13.dp), tint = Ca.colors.block.text.copy(alpha = 0.7f))
+        Icon(CaIcons.braces, stringResource(Res.string.expand), Modifier.size(13.dp), tint = Ca.colors.block.text.copy(alpha = 0.7f))
     }
 }
 
@@ -802,15 +831,15 @@ internal fun FocusSheet(node: UiBlockNode, ctx: Ctx, canBack: Boolean, onBack: (
             verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                if (canBack) Icon(CaIcons.chevronLeft, "back", Modifier.size(20.dp).clickable(remember { MutableInteractionSource() }, null, onClick = onBack), tint = Ca.colors.textSecondary)
+                if (canBack) Icon(CaIcons.chevronLeft, stringResource(Res.string.back), Modifier.size(20.dp).clickable(remember { MutableInteractionSource() }, null, onClick = onBack), tint = Ca.colors.textSecondary)
                 Icon(CaIcons.braces, null, Modifier.size(16.dp), tint = Ca.colors.accent)
-                Text("Edit expression", color = Ca.colors.textPrimary, style = Ca.type.headline, modifier = Modifier.weight(1f))
-                Icon(CaIcons.close, "close", Modifier.size(18.dp).clickable(remember { MutableInteractionSource() }, null, onClick = onClose), tint = Ca.colors.textTertiary)
+                Text(stringResource(Res.string.block_edit_expression), color = Ca.colors.textPrimary, style = Ca.type.headline, modifier = Modifier.weight(1f))
+                Icon(CaIcons.close, stringResource(Res.string.close), Modifier.size(18.dp).clickable(remember { MutableInteractionSource() }, null, onClick = onClose), tint = Ca.colors.textTertiary)
             }
             Box(
                 Modifier.fillMaxWidth().clip(shape).background(color, shape).padding(horizontal = 14.dp, vertical = 10.dp),
             ) { BlockInline(node, ctx, onPill = true, skipBody = false) }
-            Text("Tap a socket to edit it; tap a nested chip to go deeper.", color = Ca.colors.textTertiary, style = Ca.type.caption)
+            Text(stringResource(Res.string.block_focus_hint), color = Ca.colors.textTertiary, style = Ca.type.caption)
         }
     }
 }
@@ -827,7 +856,7 @@ private fun Ghost(gap: DropDescriptor.StatementGap, empty: Boolean, ctx: Ctx) {
         verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp),
     ) {
         Icon(CaIcons.plus, null, Modifier.size(12.dp), tint = Ca.colors.textTertiary)
-        if (empty) Text("add block", color = Ca.colors.textTertiary, fontStyle = FontStyle.Italic, fontSize = 11.sp)
+        if (empty) Text(stringResource(Res.string.block_add_block), color = Ca.colors.textTertiary, fontStyle = FontStyle.Italic, fontSize = 11.sp)
     }
 }
 
@@ -848,8 +877,8 @@ private fun BlockBar(drag: DragState, onAddBlock: () -> Unit) {
                 verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp),
             ) {
                 val on = drag.hovered == DropDescriptor.Trash
-                Icon(CaIcons.close, "trash", Modifier.size(16.dp), tint = if (on) Ca.colors.textOnAccent else Ca.colors.textSecondary)
-                Text("Drop to delete", color = if (on) Ca.colors.textOnAccent else Ca.colors.textSecondary, style = Ca.type.footnote, fontWeight = FontWeight.SemiBold)
+                Icon(CaIcons.close, stringResource(Res.string.block_trash), Modifier.size(16.dp), tint = if (on) Ca.colors.textOnAccent else Ca.colors.textSecondary)
+                Text(stringResource(Res.string.block_drop_to_delete), color = if (on) Ca.colors.textOnAccent else Ca.colors.textSecondary, style = Ca.type.footnote, fontWeight = FontWeight.SemiBold)
             }
         } else {
             Row(
@@ -858,12 +887,12 @@ private fun BlockBar(drag: DragState, onAddBlock: () -> Unit) {
                 verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp),
             ) {
                 Icon(CaIcons.plus, null, Modifier.size(16.dp), tint = Ca.colors.accent)
-                Text("Block", color = Ca.colors.accent, style = Ca.type.footnote, fontWeight = FontWeight.SemiBold)
+                Text(stringResource(Res.string.block_button), color = Ca.colors.accent, style = Ca.type.footnote, fontWeight = FontWeight.SemiBold)
             }
         }
         Box(Modifier.weight(1f))
         Box(Modifier.size(6.dp).clip(RoundedCornerShape(Ca.radius.pill)).background(Ca.colors.run))
-        Text("live projection · synced with Code", color = Ca.colors.textTertiary, fontSize = 11.sp, fontWeight = FontWeight.Medium)
+        Text(stringResource(Res.string.block_live_projection), color = Ca.colors.textTertiary, fontSize = 11.sp, fontWeight = FontWeight.Medium)
     }
 }
 
@@ -904,9 +933,9 @@ private fun Palette(ctx: Ctx, onClose: () -> Unit) {
         ) {
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 Icon(CaIcons.layers, null, Modifier.size(18.dp), tint = Ca.colors.accent)
-                Text("Add a block", color = Ca.colors.textPrimary, style = Ca.type.headline, modifier = Modifier.weight(1f))
-                Text("statement slot", color = Ca.colors.textTertiary, style = Ca.type.caption)
-                Icon(CaIcons.close, "close", Modifier.size(18.dp).clickable(remember { MutableInteractionSource() }, null, onClick = onClose), tint = Ca.colors.textTertiary)
+                Text(stringResource(Res.string.block_add_a_block), color = Ca.colors.textPrimary, style = Ca.type.headline, modifier = Modifier.weight(1f))
+                Text(stringResource(Res.string.block_statement_slot), color = Ca.colors.textTertiary, style = Ca.type.caption)
+                Icon(CaIcons.close, stringResource(Res.string.close), Modifier.size(18.dp).clickable(remember { MutableInteractionSource() }, null, onClick = onClose), tint = Ca.colors.textTertiary)
             }
             PaletteSearch(query) { query = it }
             val statics = if (query.isBlank()) PALETTE else PALETTE.filter { it.label.contains(query.trim(), ignoreCase = true) }
@@ -915,9 +944,9 @@ private fun Palette(ctx: Ctx, onClose: () -> Unit) {
                 hits.forEach { (hit, fromMembers) -> PaletteBlock(hit.name, hit.detail, BlockCat.Call, templateFor(hit, fromMembers), ctx) }
             }
             when {
-                searching -> Text("Searching the index…", color = Ca.colors.textTertiary, style = Ca.type.caption)
-                query.isNotBlank() && hits.isEmpty() && statics.isEmpty() -> Text("No matches", color = Ca.colors.textTertiary, style = Ca.type.caption)
-                query.isNotBlank() && hits.isEmpty() -> Text("No index matches", color = Ca.colors.textTertiary, style = Ca.type.caption)
+                searching -> Text(stringResource(Res.string.block_searching_index), color = Ca.colors.textTertiary, style = Ca.type.caption)
+                query.isNotBlank() && hits.isEmpty() && statics.isEmpty() -> Text(stringResource(Res.string.block_no_matches), color = Ca.colors.textTertiary, style = Ca.type.caption)
+                query.isNotBlank() && hits.isEmpty() -> Text(stringResource(Res.string.block_no_index_matches), color = Ca.colors.textTertiary, style = Ca.type.caption)
             }
         }
     }
@@ -932,7 +961,7 @@ private fun PaletteSearch(query: String, onQuery: (String) -> Unit) {
     ) {
         Icon(CaIcons.search, null, Modifier.size(14.dp), tint = Ca.colors.textTertiary)
         Box(Modifier.weight(1f)) {
-            if (query.isEmpty()) Text("Search blocks, classes, methods…", color = Ca.colors.textTertiary, style = Ca.type.codeSmall)
+            if (query.isEmpty()) Text(stringResource(Res.string.block_search_placeholder), color = Ca.colors.textTertiary, style = Ca.type.codeSmall)
             BasicTextField(
                 query, onQuery, singleLine = true,
                 textStyle = Ca.type.codeSmall.copy(color = Ca.colors.textPrimary),
@@ -940,7 +969,7 @@ private fun PaletteSearch(query: String, onQuery: (String) -> Unit) {
                 modifier = Modifier.fillMaxWidth(),
             )
         }
-        if (query.isNotEmpty()) Icon(CaIcons.close, "clear", Modifier.size(13.dp).clickable(remember { MutableInteractionSource() }, null) { onQuery("") }, tint = Ca.colors.textTertiary)
+        if (query.isNotEmpty()) Icon(CaIcons.close, stringResource(Res.string.clear), Modifier.size(13.dp).clickable(remember { MutableInteractionSource() }, null) { onQuery("") }, tint = Ca.colors.textTertiary)
     }
 }
 
@@ -979,11 +1008,11 @@ private fun ActionBar(selection: Selection, ctx: Ctx, modifier: Modifier) {
         horizontalArrangement = Arrangement.spacedBy(2.dp), verticalAlignment = Alignment.CenterVertically,
     ) {
         if (selection.insertCtx != null) {
-            ActionItem(CaIcons.layers, "Wrap if") { ctx.apply(UiBlockEdit.WrapInIf(selection.blockId)) }
-            ActionItem(CaIcons.plus, "Duplicate") { val ic = selection.insertCtx; ctx.apply(UiBlockEdit.InsertTemplate(ic.ownerId, ic.slotIndex, ic.index + 1, selection.sourceText)) }
+            ActionItem(CaIcons.layers, stringResource(Res.string.block_wrap_if)) { ctx.apply(UiBlockEdit.WrapInIf(selection.blockId)) }
+            ActionItem(CaIcons.plus, stringResource(Res.string.block_duplicate)) { val ic = selection.insertCtx; ctx.apply(UiBlockEdit.InsertTemplate(ic.ownerId, ic.slotIndex, ic.index + 1, selection.sourceText)) }
             Box(Modifier.width(1.dp).height(24.dp).background(Ca.colors.separator))
         }
-        ActionItem(CaIcons.close, "Delete", tint = Ca.colors.error) { ctx.apply(UiBlockEdit.DeleteBlock(selection.blockId)) }
+        ActionItem(CaIcons.close, stringResource(Res.string.delete), tint = Ca.colors.error) { ctx.apply(UiBlockEdit.DeleteBlock(selection.blockId)) }
     }
 }
 

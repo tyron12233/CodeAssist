@@ -1,5 +1,7 @@
 package dev.ide.core
 
+import kotlinx.coroutines.runBlocking
+
 import dev.ide.index.IndexId
 import java.nio.file.Files
 import kotlin.test.Test
@@ -22,7 +24,7 @@ class ImportCompletionE2ETest {
             fun complete(variant: String): List<String> {
                 val code = "package com.example.app;\n$variant"
                 val offset = code.indexOf("|CARET|")
-                return ide.complete(probe, code.replace("|CARET|", ""), offset).items.map { it.insertText }
+                return runBlocking { ide.complete(probe, code.replace("|CARET|", ""), offset) }.items.map { it.insertText }
             }
 
             val empty = complete("import java.|CARET|")

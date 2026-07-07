@@ -1,7 +1,7 @@
 package dev.ide.lang.kotlin.parse
 
-import org.jetbrains.kotlin.com.intellij.psi.PsiElement
-import org.jetbrains.kotlin.com.intellij.psi.PsiErrorElement
+import com.intellij.psi.PsiElement
+import com.intellij.psi.PsiErrorElement
 import dev.ide.lang.dom.Diagnostic
 import dev.ide.lang.dom.DomNode
 import dev.ide.lang.dom.NodeKind

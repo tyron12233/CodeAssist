@@ -1,5 +1,7 @@
 package dev.ide.core
 
+import kotlinx.coroutines.runBlocking
+
 import dev.ide.lang.completion.CompletionItemKind
 import java.nio.file.Files
 import java.nio.file.Path
@@ -65,7 +67,7 @@ class KotlinInteropCompletionTest {
 
     private fun labels(s: IdeServices, probe: Path, text: String, anchor: String): List<String> {
         val offset = text.indexOf(anchor) + anchor.length
-        return s.complete(probe, text, offset).items.map { it.insertText.substringBefore('(') }
+        return runBlocking { s.complete(probe, text, offset) }.items.map { it.insertText.substringBefore('(') }
     }
 
     @Test
@@ -158,7 +160,7 @@ class KotlinInteropCompletionTest {
         val probe = root.resolve("core/src/main/java/com/example/core/Probe.java")
         // box(a, b=1) → box(int) overload exists; the 1-arg call must NOT be flagged unresolved/inapplicable.
         val text = "package com.example.core;\nclass Probe { int m() { return new Overloaded().box(5); } }"
-        val msgs = s.analyzeDiagnostics(probe, text).map { it.message }
+        val msgs = runBlocking { s.analyzeDiagnostics(probe, text) }.map { it.message }
         assertTrue(msgs.none { it.contains("box", ignoreCase = true) }, "1-arg box(5) must resolve via @JvmOverloads: $msgs")
     }
 
@@ -176,7 +178,7 @@ class KotlinInteropCompletionTest {
         val s = bootstrapWithKotlin()
         val ktFile = root.resolve("core/src/main/java/com/example/core/Bad.kt")
         val text = "package com.example.core\nfun f() { val x = undefinedThing }"
-        val msgs = s.analyzeDiagnostics(ktFile, text).map { it.message }
+        val msgs = runBlocking { s.analyzeDiagnostics(ktFile, text) }.map { it.message }
         assertTrue(msgs.any { it.contains("undefinedThing") }, "unresolved reference should be flagged: $msgs")
     }
 
@@ -185,7 +187,7 @@ class KotlinInteropCompletionTest {
         val s = bootstrapWithKotlin()
         val ktFile = root.resolve("core/src/main/java/com/example/core/Good.kt")
         val text = "package com.example.core\nfun f() { println(\"hi\") }"
-        val msgs = s.analyzeDiagnostics(ktFile, text).map { it.message }
+        val msgs = runBlocking { s.analyzeDiagnostics(ktFile, text) }.map { it.message }
         assertTrue(msgs.none { it.contains("Unresolved") }, "valid Kotlin must not be flagged: $msgs")
     }
 
@@ -211,13 +213,13 @@ class KotlinInteropCompletionTest {
 
         fun snippetLabels(text: String, anchor: String): List<String> {
             val offset = text.indexOf(anchor) + anchor.length
-            return s.complete(probe, text, offset).items.filter { it.kind == CompletionItemKind.SNIPPET }.map { it.label }
+            return runBlocking { s.complete(probe, text, offset) }.items.filter { it.kind == CompletionItemKind.SNIPPET }.map { it.label }
         }
 
         // `.val` applies to any receiver and rewrites to `val name = x`.
         val valText = "package com.example.core\nfun g() { val x = 5\n x.va }"
         val valOffset = valText.indexOf("x.va") + "x.va".length
-        val valItems = s.complete(probe, valText, valOffset).items
+        val valItems = runBlocking { s.complete(probe, valText, valOffset) }.items
         assertTrue(
             valItems.any { it.kind == CompletionItemKind.SNIPPET && it.label == "val" && it.insertText == "val name = x" },
             "expected `.val` postfix: ${valItems.filter { it.kind == CompletionItemKind.SNIPPET }.map { it.label to it.insertText }}",
@@ -233,7 +235,7 @@ class KotlinInteropCompletionTest {
         val s = bootstrapWithKotlin()
         val ktFile = root.resolve("core/src/main/java/com/example/core/Mismatch.kt")
         val text = "package com.example.core\nval a: Int = \"\""
-        val msgs = s.analyzeDiagnostics(ktFile, text).map { it.message }
+        val msgs = runBlocking { s.analyzeDiagnostics(ktFile, text) }.map { it.message }
         assertTrue(msgs.any { it.contains("Type mismatch") }, "val a: Int = \"\" should be flagged: $msgs")
     }
 }

@@ -1,5 +1,7 @@
 package dev.ide.core
 
+import kotlinx.coroutines.runBlocking
+
 import dev.ide.ui.backend.RunStatus
 import java.nio.file.Files
 import kotlin.test.Test
@@ -125,7 +127,7 @@ class IdeServicesTest {
             )
             val offset = text.indexOf("formatter.\n") + "formatter.".length
             // bare names — a method's insertText now carries `()` (see CompletionInsertionTest)
-            val names = ide.complete(mainFile, text, offset).items.map { it.insertText.substringBefore('(') }
+            val names = runBlocking { ide.complete(mainFile, text, offset) }.items.map { it.insertText.substringBefore('(') }
             assertTrue(names.containsAll(listOf("format", "banner")), "completion inside the open on-disk file: $names")
         }
         dir.toFile().deleteRecursively()
@@ -157,6 +159,6 @@ class IdeServicesTest {
     private fun labelsAt(ide: IdeServices, file: java.nio.file.Path, codeWithCaret: String): List<String> {
         val offset = codeWithCaret.indexOf("|CARET|")
         val text = codeWithCaret.replace("|CARET|", "")
-        return ide.complete(file, text, offset).items.map { it.insertText.substringBefore('(') }
+        return runBlocking { ide.complete(file, text, offset) }.items.map { it.insertText.substringBefore('(') }
     }
 }

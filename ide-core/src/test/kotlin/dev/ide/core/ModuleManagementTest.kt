@@ -49,6 +49,27 @@ class ModuleManagementTest {
     }
 
     @Test
+    fun androidModuleMaterializesOnlyMainRoots() {
+        // A freshly-created Android module declares main/debug/release source sets, but only `main`'s primary
+        // source dir + res are laid down on disk — the empty variant sets and optional roots (a second-language
+        // dir, assets) stay uncreated so the tree isn't cluttered with a dozen empty folders.
+        val dir = Files.createTempDirectory("ide-androidmod")
+        IdeServices.bootstrapJavaDemo(dir).use { ide ->
+            val r = ide.moduleService.createModule("feature", "android-lib", "JAVA_17", emptyMap())
+            assertTrue(r.success, r.message)
+            val mod = ide.modules().first { it.name == "feature" }
+            val moduleRoot = assertNotNull(ide.moduleRoot(mod), "the module root resolves")
+            assertTrue(Files.isDirectory(moduleRoot.resolve("src/main/java")), "src/main/java is materialized")
+            assertTrue(Files.isDirectory(moduleRoot.resolve("src/main/res")), "src/main/res is materialized")
+            assertFalse(Files.exists(moduleRoot.resolve("src/debug")), "the empty debug source set is not created")
+            assertFalse(Files.exists(moduleRoot.resolve("src/release")), "the empty release source set is not created")
+            assertFalse(Files.exists(moduleRoot.resolve("src/main/kotlin")), "the empty second-language dir is not created")
+            assertFalse(Files.exists(moduleRoot.resolve("src/main/assets")), "the empty assets dir is not created")
+        }
+        dir.toFile().deleteRecursively()
+    }
+
+    @Test
     fun moduleDependencyAddRemoveAndCycleGuard() {
         val dir = Files.createTempDirectory("ide-moddep")
         IdeServices.bootstrapJavaDemo(dir).use { ide ->
