@@ -844,6 +844,13 @@ data class UiCompletionResult(
 /** A go-to-definition target: open [path] and move the caret to [offset]. */
 data class UiDefinition(val path: String, val offset: Int)
 
+/** A gutter "implementations / is subclassed" marker: [offset] anchors the type declaration's name;
+ *  [targets] are its direct inheritors. [isInterface] picks the glyph (implemented vs subclassed). */
+data class UiInheritorMarker(val offset: Int, val isInterface: Boolean, val targets: List<UiInheritorTarget>)
+
+/** One inheritor target for the gutter picker: its fully-qualified [fqn] and [kind] label (class/interface/…). */
+data class UiInheritorTarget(val fqn: String, val kind: String)
+
 /** The renameable symbol under the caret: its current [oldName] and a human [kind] label (e.g. "method"). */
 data class UiRenameTarget(val oldName: String, val kind: String)
 

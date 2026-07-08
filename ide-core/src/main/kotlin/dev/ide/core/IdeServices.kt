@@ -1768,6 +1768,30 @@ class IdeServices private constructor(
         return analyzer.composePreviews(vf)
     }
 
+    /** Gutter inheritor ("implementations / is subclassed") markers for [file]'s live buffer — one per
+     *  inheritable Kotlin type that has direct subtypes in the index. Empty for non-Kotlin files or before
+     *  the subtype index has built. */
+    fun inheritorMarkers(file: Path, text: String): List<dev.ide.lang.kotlin.InheritorMarker> {
+        val module = moduleForEditableFile(file) ?: return emptyList()
+        val analyzer = analyzerFor(
+            module, KotlinLanguageBackend.LANGUAGE_ID
+        ) as? dev.ide.lang.kotlin.KotlinSourceAnalyzer ?: return emptyList()
+        val vf = store.vfs.fileFor(file)
+        analyzer.incrementalParser.parseFull(EditorDocument(vf, docVersion.incrementAndGet(), text))
+        return analyzer.inheritorMarkers(vf)
+    }
+
+    /** Resolve an inheritor type [fqn] (from an [inheritorMarkers] target) to its source location for
+     *  go-to-implementation, bound to [contextFile]'s module (whose source model spans its dependency
+     *  modules). Null when [fqn] is classpath-only — no navigable project source. */
+    fun implementationLocation(contextFile: Path, fqn: String): Pair<Path, Int>? {
+        val module = moduleForEditableFile(contextFile) ?: return null
+        val analyzer = analyzerFor(
+            module, KotlinLanguageBackend.LANGUAGE_ID
+        ) as? dev.ide.lang.kotlin.KotlinSourceAnalyzer ?: return null
+        return analyzer.declarationLocation(fqn)?.let { (vf, off) -> Paths.get(vf.path) to off }
+    }
+
     /**
      * The cross-MODULE-expanded preview model for [vf] (already parsed in [entry]'s analyzer): seed from the
      * entry file, then run the reachable-declaration expansion across [module] PLUS its transitive dependency

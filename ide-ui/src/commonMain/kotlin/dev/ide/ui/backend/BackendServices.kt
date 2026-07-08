@@ -126,6 +126,14 @@ interface EditorService {
     /** Go-to-definition for the symbol/reference at [offset], or null. */
     suspend fun definitionAt(path: String, text: String, offset: Int): UiDefinition? = null
 
+    /** Gutter inheritor ("implementations") markers for [text] — one per inheritable type with direct subtypes.
+     *  Empty for languages/files without the subtype relation indexed. */
+    suspend fun inheritorMarkers(path: String, text: String): List<UiInheritorMarker> = emptyList()
+
+    /** Resolve an inheritor [fqn] (from an [inheritorMarkers] target) to its source location for
+     *  go-to-implementation, relative to [contextPath]'s module. Null when it's classpath-only (no source). */
+    suspend fun implementationLocationOf(contextPath: String, fqn: String): UiDefinition? = null
+
     /** Quick documentation (signature + doc comment) for the symbol at [offset], or null. */
     suspend fun quickDocAt(path: String, text: String, offset: Int): UiQuickDoc? = null
 

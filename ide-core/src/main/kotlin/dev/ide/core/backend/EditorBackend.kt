@@ -23,6 +23,8 @@ import dev.ide.ui.backend.UiCompletionKind
 import dev.ide.ui.backend.UiCompletionResult
 import dev.ide.ui.backend.UiDefinition
 import dev.ide.ui.backend.UiFileSymbol
+import dev.ide.ui.backend.UiInheritorMarker
+import dev.ide.ui.backend.UiInheritorTarget
 import dev.ide.ui.backend.UiQuickDoc
 import dev.ide.ui.backend.UiDiagnostic
 import dev.ide.ui.backend.UiFoldRegion
@@ -81,6 +83,14 @@ internal class EditorBackend(private val ctx: BackendContext) : EditorService {
                 Paths.get(path), text, offset
             )
         }?.let { (p, o) -> UiDefinition(p.toString(), o) }
+
+    override suspend fun inheritorMarkers(path: String, text: String): List<UiInheritorMarker> =
+        withContext(ctx.engineDispatcher) { ctx.services.inheritorMarkers(Paths.get(path), text) }
+            .map { m -> UiInheritorMarker(m.offset, m.isInterface, m.targets.map { UiInheritorTarget(it.fqn, it.kind) }) }
+
+    override suspend fun implementationLocationOf(contextPath: String, fqn: String): UiDefinition? =
+        withContext(ctx.engineDispatcher) { ctx.services.implementationLocation(Paths.get(contextPath), fqn) }
+            ?.let { (p, o) -> UiDefinition(p.toString(), o) }
 
     override suspend fun quickDocAt(path: String, text: String, offset: Int): UiQuickDoc? = try {
         ctx.background {
@@ -172,7 +182,9 @@ internal class EditorBackend(private val ctx: BackendContext) : EditorService {
         // completion request can cut ahead; a preempted pass surfaces as AnalysisPreempted for the host to retry.
         val t0 = System.nanoTime()
         val diagnostics = try {
-            ctx.background { ctx.services.analyzeDiagnostics(Paths.get(path), text) }
+            timedPass("diagnostics", path, { it.size }) {
+                ctx.background { ctx.services.analyzeDiagnostics(Paths.get(path), text) }
+            }
         } catch (_: EngineCanceledException) {
             throw AnalysisPreempted() // preempted: don't record a (misleadingly short) latency sample
         }
@@ -200,10 +212,12 @@ internal class EditorBackend(private val ctx: BackendContext) : EditorService {
         path: String, text: String, startOffset: Int, endOffset: Int
     ): List<UiInlayHint> {
         val hints = try {
-            ctx.background {
-                ctx.services.inlayHints(
-                    Paths.get(path), text, startOffset, endOffset
-                )
+            timedPass("inlay", path, { it.size }) {
+                ctx.background {
+                    ctx.services.inlayHints(
+                        Paths.get(path), text, startOffset, endOffset
+                    )
+                }
             }
         } catch (_: EngineCanceledException) {
             // Preempted by a higher-priority call (e.g. completion) on the shared engine thread. Surface it so
@@ -256,7 +270,9 @@ internal class EditorBackend(private val ctx: BackendContext) : EditorService {
 
     override suspend fun semanticTokens(path: String, text: String): List<UiSemanticToken> {
         val tokens = try {
-            ctx.background { ctx.services.semanticTokens(Paths.get(path), text) }
+            timedPass("semantic", path, { it.size }) {
+                ctx.background { ctx.services.semanticTokens(Paths.get(path), text) }
+            }
         } catch (_: EngineCanceledException) {
             // Preempted by completion on the shared engine thread — surface it so the host retries and keeps
             // the current coloring meanwhile (returning empty would clear it until the next edit).
@@ -274,7 +290,9 @@ internal class EditorBackend(private val ctx: BackendContext) : EditorService {
 
     override suspend fun codeFolds(path: String, text: String): List<UiFoldRegion> {
         val folds = try {
-            ctx.background { ctx.services.codeFolds(Paths.get(path), text) }
+            timedPass("folds", path, { it.size }) {
+                ctx.background { ctx.services.codeFolds(Paths.get(path), text) }
+            }
         } catch (_: EngineCanceledException) {
             throw AnalysisPreempted() // preempted by completion — host retries, keeps current folds meanwhile
         }
