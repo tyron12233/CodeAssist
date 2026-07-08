@@ -289,6 +289,75 @@ class EditorSessionTest {
     }
 
     @Test
+    fun deleteSurroundingSkipsTheComposingRegion() {
+        // The framework contract: deleteSurroundingText deletes AROUND the composing text, never inside it,
+        // and the composition survives the edit (shifted). Deleting into the composed word — or clearing the
+        // region — makes the IME's next setComposingText land at the wrong offsets (duplicated text).
+        val s = session("foo ", 4)
+        s.imeSetComposingText("bar", 1)
+        assertEquals("foo bar", s.doc.text)
+        s.imeDeleteSurrounding(1, 0) // must delete the space BEFORE "bar", not the 'r' before the caret
+        assertEquals("foobar", s.doc.text)
+        assertEquals(TextRange(3, 6), s.composing, "composition survives, shifted left")
+        assertEquals(TextRange(6), s.selection)
+        s.imeSetComposingText("bars", 1) // the IME grows its word — must replace the tracked region
+        assertEquals("foobars", s.doc.text)
+    }
+
+    @Test
+    fun deleteSurroundingNoOpStillResyncsTheIme() {
+        // Backspace on an already-aligned closer is deliberately a no-op in the editor — but the IME that sent
+        // deleteSurroundingText(1, 0) believes a char was deleted, so the session must ask it to resync.
+        val code = "class A {\n    fun f() {\n        body()\n    }\n}"
+        val caret = code.indexOf("    }") + 4
+        val s = session(code, caret)
+        var restarts = 0
+        s.imeListener = object : EditorSession.ImeListener {
+            override fun onStateChanged() {}
+            override fun onRestartInput() { restarts++ }
+        }
+        s.imeDeleteSurrounding(1, 0)
+        assertEquals(code, s.doc.text, "aligned closer keeps its indent")
+        assertEquals(1, restarts, "the IME is told its one-char-deleted model is stale")
+    }
+
+    @Test
+    fun smartEditResyncInsideAnImeBatchIsDeferredToItsEnd() {
+        // A pair-aware delete fired from inside an IME batch edit must not restart input between the IME's
+        // batched ops — the restart flushes once when the batch closes.
+        val s = session("foo()", 4)
+        var restarts = 0
+        var restartedMidBatch = false
+        var inBatch = false
+        s.imeListener = object : EditorSession.ImeListener {
+            override fun onStateChanged() {}
+            override fun onRestartInput() {
+                restarts++
+                if (inBatch) restartedMidBatch = true
+            }
+        }
+        s.beginBatch()
+        inBatch = true
+        s.imeDeleteSurrounding(1, 0) // deletes the whole "()" pair — diverges from the IME's model
+        assertEquals("foo", s.doc.text)
+        inBatch = false
+        s.endBatch()
+        assertEquals(1, restarts)
+        assertTrue(!restartedMidBatch, "restartInput must wait for the batch to close")
+    }
+
+    @Test
+    fun hostileImeOffsetsDoNotCrash() {
+        // TextRange rejects negative offsets; raw IME ints must be clamped before construction.
+        val s = session("ab", 0)
+        s.imeSetSelection(-1, -1)
+        assertEquals(TextRange(0), s.selection)
+        s.imeCommitText("x", -5) // caret would land at a negative offset — clamp to 0
+        assertEquals("xab", s.doc.text)
+        assertEquals(TextRange(0), s.selection)
+    }
+
+    @Test
     fun batchedImeEditsPushImeOnce() {
         // The session has no host text mirror to coalesce anymore; what a batch coalesces is the IME push.
         val s = session("x", 1)

@@ -170,6 +170,7 @@ class EditorSession(
     private var batchDepth = 0
     private var pendingIme = false // an IME state push was deferred while a batch was open
     private var pendingImeText = false // ...and at least one of those deferred pushes was a text edit
+    private var pendingRestart = false // an IME restart was deferred while a batch was open
     private var goalColumn = -1 // sticky column for consecutive vertical caret moves
 
     // ---- undo / redo ----
@@ -353,7 +354,13 @@ class EditorSession(
                 trimUndo()
                 refreshUndoState()
             }
-            if (pendingIme) {
+            if (pendingRestart) {
+                // A restart supersedes the deferred selection/text pushes — the IME re-reads everything.
+                pendingRestart = false
+                pendingIme = false
+                pendingImeText = false
+                imeListener?.onRestartInput()
+            } else if (pendingIme) {
                 pendingIme = false
                 val l = imeListener
                 if (pendingImeText) { pendingImeText = false; l?.onTextChanged(null) } // null span → full refresh
@@ -499,10 +506,19 @@ class EditorSession(
      * Skipped entirely when an extracted-text monitor is active: that IME is kept exact by the per-edit
      * [ImeListener.onTextChanged] push (a partial `updateExtractedText`), so it never drifts and the restart
      * would be pure churn. The restart remains the fallback for IMEs that don't mirror our text.
+     *
+     * Deferred while a batch is open: a smart edit can fire from *inside* an IME batch (the Gboard
+     * `deleteSurroundingText` fast path routes through [backspace]), and restarting input between the IME's
+     * own batched ops would drop the rest of them. [endBatch] flushes the restart once the batch closes.
      */
     private fun resyncIme() {
         val l = imeListener ?: return
-        if (!l.isSyncingExtractedText()) l.onRestartInput()
+        if (l.isSyncingExtractedText()) return
+        if (batchDepth > 0) {
+            pendingRestart = true
+            return
+        }
+        l.onRestartInput()
     }
 
     // ---- editing ops (keyboard + UI) ----
@@ -1039,24 +1055,43 @@ class EditorSession(
     fun imeDeleteSurrounding(before: Int, after: Int) {
         // the Gboard backspace fast path — and the one place pair-aware delete applies
         if (before == 1 && after == 0 && composing == null && selection.collapsed) {
+            val rev = textRevision
             backspace()
+            // A smart rule that kept the text unchanged (backspace on an already-aligned closer) still looked
+            // like a successful one-char delete to the IME, so its model is now off by one — resync it.
+            if (textRevision == rev) resyncIme()
             return
         }
+        // Deletion happens OUTSIDE the composing region as well as the selection (the framework contract:
+        // deleteSurroundingText never touches the composing text), and the composition survives, shifted.
         beginBatch()
-        val selMax = selection.max
-        val aEnd = (selMax + after).coerceAtMost(doc.length)
-        if (aEnd > selMax) replaceRange(selMax, aEnd, "", TextRange(selection.start, selection.end), composing)
-        val selMin = selection.min
-        val bStart = (selMin - before).coerceAtLeast(0)
-        if (bStart < selMin) {
-            val del = selMin - bStart
-            replaceRange(bStart, selMin, "", TextRange(selection.min - del, selection.max - del), null)
+        val comp = composing
+        val delBeforeEnd = min(selection.min, comp?.min ?: selection.min)
+        val delAfterStart = max(selection.max, comp?.max ?: selection.max)
+        val aEnd = (delAfterStart + after).coerceAtMost(doc.length)
+        if (aEnd > delAfterStart) {
+            replaceRange(delAfterStart, aEnd, "", TextRange(selection.start, selection.end), composing)
+        }
+        val bStart = (delBeforeEnd - before).coerceAtLeast(0)
+        if (bStart < delBeforeEnd) {
+            val del = delBeforeEnd - bStart
+            val sel = selection
+            val c = composing
+            replaceRange(
+                bStart, delBeforeEnd, "",
+                TextRange(sel.start - del, sel.end - del),
+                c?.let { TextRange(it.min - del, it.max - del) },
+            )
         }
         endBatch()
     }
 
     fun imeSetSelection(start: Int, end: Int) {
-        updateSelectionAndComposing(TextRange(start, end), composing)
+        // Clamp before constructing: TextRange itself rejects negative offsets, and a misbehaving IME
+        // sending them must not crash the editor.
+        updateSelectionAndComposing(
+            TextRange(start.coerceIn(0, doc.length), end.coerceIn(0, doc.length)), composing,
+        )
     }
 
     fun imeTextBeforeCursor(n: Int): String {
@@ -1069,9 +1104,11 @@ class EditorSession(
         return doc.substring(start, (start + n.coerceIn(0, MAX_IPC_TEXT)).coerceAtMost(doc.length))
     }
 
+    // Clamped at 0: a large negative newCursorPosition near the document start must not produce a negative
+    // offset (TextRange throws on those). The upper bound is coerced where the TextRange is applied.
     private fun imeCaret(regionStart: Int, insertedLen: Int, newCursorPosition: Int): Int =
-        if (newCursorPosition > 0) regionStart + insertedLen + newCursorPosition - 1
-        else regionStart + newCursorPosition
+        (if (newCursorPosition > 0) regionStart + insertedLen + newCursorPosition - 1
+        else regionStart + newCursorPosition).coerceAtLeast(0)
 
     private companion object {
         /** Cap for IME text queries — never ship megabytes across the binder. */

@@ -136,10 +136,9 @@ import kotlin.time.Duration.Companion.milliseconds
 import kotlin.time.TimeSource
 
 /**
- * The code editor surface, rebuilt sora-editor-style for typing latency on phones: the document is a
- * line-indexed buffer ([EditorSession]/[EditorDocument]), a keystroke re-tokenizes and re-shapes only
- * the edited line, and rendering draws only the visible lines from a per-line layout cache onto
- * one canvas (gutter included — no per-line composables anywhere). Scrolling is two scroll offsets
+ * The code editor surface,the document is a line-indexed buffer ([EditorSession]/[EditorDocument]),
+ * a keystroke re-tokenizes and re-shapes only the edited line, and rendering draws only the visible
+ * lines from a per-line layout cache onto one canvas. Scrolling is two scroll offsets
  * read in the draw phase, so a fling redraws without recomposing; the soft keyboard talks straight
  * to the session through a platform `InputConnection` (see EditorTextInput.android.kt).
  *

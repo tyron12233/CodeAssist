@@ -439,12 +439,41 @@ private fun isOpenStartTagEnd(text: CharSequence, gt: Int): Boolean {
 }
 
 
-/** True when [pos] sits inside an unterminated block comment — its opener is the nearest comment delimiter before it. */
+/**
+ * True when [pos] sits inside an unterminated block comment. A forward scan tracks lexer state so a
+ * block-comment open/close delimiter inside a string, char, or raw-string literal — or inside a `//` line
+ * comment — is NOT mistaken for a real delimiter. (A bare last-open-vs-last-close index comparison was fooled
+ * by an opener sitting inside a string literal, leaving the editor convinced every line was a block comment
+ * and prepending a stray star on each Enter.) Bounded like the other comment scans: past the limit the scan
+ * starts mid-buffer and is best-effort.
+ */
 private fun insideBlockComment(text: CharSequence, pos: Int): Boolean {
-    val open = lastIndexBounded(text, "/*", pos - 1)
-    if (open < 0) return false
-    val close = lastIndexBounded(text, "*/", pos - 1)
-    return open > close
+    var i = if (pos > COMMENT_SCAN_LIMIT) pos - COMMENT_SCAN_LIMIT else 0
+    var inBlock = false
+    var inLine = false
+    var inStr = false
+    var inChar = false
+    var inRaw = false
+    while (i < pos) {
+        val c = text[i]
+        when {
+            inLine -> if (c == '\n') inLine = false
+            inBlock -> if (c == '*' && text.charOrNull(i + 1) == '/') { inBlock = false; i++ }
+            // A raw string (`"""…"""`) is literal — only a closing triple-quote ends it.
+            inRaw -> if (c == '"' && text.charOrNull(i + 1) == '"' && text.charOrNull(i + 2) == '"') { inRaw = false; i += 2 }
+            // A normal string/char literal ends at its closing quote (escapes skip the next char) or at EOL —
+            // an unterminated one can't swallow the rest of the buffer.
+            inStr -> if (c == '\\') i++ else if (c == '"' || c == '\n') inStr = false
+            inChar -> if (c == '\\') i++ else if (c == '\'' || c == '\n') inChar = false
+            c == '/' && text.charOrNull(i + 1) == '*' -> { inBlock = true; i++ }
+            c == '/' && text.charOrNull(i + 1) == '/' -> { inLine = true; i++ }
+            c == '"' && text.charOrNull(i + 1) == '"' && text.charOrNull(i + 2) == '"' -> { inRaw = true; i += 2 }
+            c == '"' -> inStr = true
+            c == '\'' -> inChar = true
+        }
+        i++
+    }
+    return inBlock
 }
 
 /** Continue (or auto-close) a block / doc comment: line up a leading `*`, and finish a freshly-opened comment. */
@@ -769,20 +798,7 @@ private fun firstNonWsIndex(text: CharSequence, lineStart: Int, pos: Int): Int {
 
 private const val COMMENT_SCAN_LIMIT = 100_000
 
-/** [needle]'s last start index at or before [from], bounded so a delimiter-free prefix can't cost O(N). */
-private fun lastIndexBounded(text: CharSequence, needle: String, from: Int): Int {
-    val limit = maxOf(0, from - COMMENT_SCAN_LIMIT)
-    var i = minOf(from, text.length - needle.length)
-    while (i >= limit) {
-        var k = 0
-        while (k < needle.length && text[i + k] == needle[k]) k++
-        if (k == needle.length) return i
-        i--
-    }
-    return -1
-}
-
-/** [needle]'s first start index at or after [from], bounded for the same reason as [lastIndexBounded]. */
+/** [needle]'s first start index at or after [from], bounded so a delimiter-free suffix can't cost O(N). */
 private fun indexBounded(text: CharSequence, needle: String, from: Int): Int {
     val limit = minOf(text.length - needle.length, from + COMMENT_SCAN_LIMIT)
     var i = maxOf(0, from)
