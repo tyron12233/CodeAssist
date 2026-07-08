@@ -4,6 +4,8 @@ import java.io.File
 import java.nio.file.Files
 import java.nio.file.Path
 import java.util.stream.Collectors
+import java.util.zip.ZipEntry
+import java.util.zip.ZipOutputStream
 
 /**
  * Shared on-device dex staging for the console-run path — used by both [DexClassLoaderRunner] (in-process)
@@ -56,5 +58,48 @@ object DexStaging {
             out.add(dest)
         }
         return out
+    }
+
+    /**
+     * Copy [sources] into a SINGLE read-only container zip at [container] (which MUST be on internal storage),
+     * their dexes stored under stable multidex names (`classes.dex`, `classes2.dex`, …, in load order), then
+     * make the container read-only there and verify the write bit actually cleared. Returns the container, or
+     * null (after logging via [log]) if it can't be made read-only — the only safe outcome, since ART rejects a
+     * writable dex/container on a command-line VM's classpath (W^X).
+     *
+     * **Why one container instead of N staged dexes** ([ForkedDalvikRunner]): the forked `dalvikvm` takes its
+     * classpath as one `-cp <a:b:c…>` command-line argument, and a large dependency graph produces *hundreds*
+     * of `classes*.dex` (the run dexer lays one dex down per library). Joining them all into one argument
+     * overflows the OS argument limit — `execve` fails with `E2BIG` ("Argument list too long"). ART loads every
+     * `classesN.dex` entry from a zip/apk on the classpath (standard multidex — this is how an APK loads), so a
+     * single container is equivalent to N paths while keeping the command line short regardless of dep count.
+     *
+     * Entries are DEFLATE-compressed: ART decompresses a zipped dex into memory when loading it from a
+     * classpath zip, so no page-alignment dance is needed, and the dex's own checksum (over the decompressed
+     * bytes) is unchanged, so ART's compiled-oat reuse for an unchanged program still holds.
+     */
+    fun stageReadOnlyContainer(container: File, sources: List<Path>, log: (String) -> Unit): File? {
+        if (sources.isEmpty()) { log("No dex to stage."); return null }
+        container.parentFile?.mkdirs()
+        // A prior container is read-only; deleting only needs write on the directory (internal storage grants
+        // it), so a shrinking dex set can't leave a stale container on the load path.
+        runCatching { container.setWritable(true, false); container.delete() }
+        try {
+            ZipOutputStream(container.outputStream().buffered()).use { zos ->
+                sources.forEachIndexed { i, src ->
+                    zos.putNextEntry(ZipEntry(if (i == 0) "classes.dex" else "classes${i + 1}.dex"))
+                    src.toFile().inputStream().use { it.copyTo(zos) }
+                    zos.closeEntry()
+                }
+            }
+        } catch (t: Throwable) {
+            log("Cannot stage run container: ${t.message ?: t}"); return null
+        }
+        container.setWritable(false, false)
+        if (container.canWrite()) {
+            log("Fatal: cannot make staged run container read-only (${container.absolutePath}). The run cache filesystem does not honor permissions.")
+            return null
+        }
+        return container
     }
 }

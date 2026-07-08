@@ -122,7 +122,7 @@ object AndroidIde {
         // Runs a dexed console app on ART (there's no `java` to fork). Prefer a FORKED `dalvikvm` process
         // (fully isolated + truly killable: a runaway loop dies with the process, and the run needs no
         // in-process sandbox); fall back to the in-process DexClassLoader on the rare device with no dalvikvm.
-        val forkRunner = ForkedDalvikRunner(File(context.cacheDir, "dexrun-fork"))
+        val forkRunner = ForkedDalvikRunner(context.applicationContext, File(context.cacheDir, "dexrun-fork"))
         val dexRunner: dev.ide.build.engine.DexRunner =
             if (forkRunner.available()) forkRunner else DexClassLoaderRunner(File(context.cacheDir, "dexrun"))
         // Installs + launches a built APK (the android Run) via the system package installer.

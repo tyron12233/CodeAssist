@@ -1,5 +1,6 @@
 package dev.ide.android
 
+import android.content.Context
 import dev.ide.build.engine.DexRunner
 import dev.ide.build.engine.ProgramIo
 import dev.ide.build.engine.StreamingTextDecoder
@@ -10,6 +11,7 @@ import kotlinx.coroutines.runInterruptible
 import kotlinx.coroutines.withContext
 import java.io.File
 import java.nio.file.Path
+import java.util.zip.ZipInputStream
 
 /**
  * On-device [DexRunner] that runs a dexed console program in a **forked `dalvikvm` process** — the ART
@@ -29,14 +31,21 @@ import java.nio.file.Path
  * so `-cp <staged dexes> <mainClass>` resolves `java.*`/`android.*` while the program's own classes and
  * dependency libraries come from the staged dex.
  *
- * Invocation is `dalvikvm -cp <dexes> <mainClass> <args>`, which requires a static `main(String[])` — this
- * covers Java `public static void main` and Kotlin `fun main()`/`fun main(args)` (kotlinc emits the static
- * `main(String[])` bridge). A class whose only entry is a non-static instance `main` is not supported in
- * forked mode (dalvikvm reports it); such programs need the in-process fallback runner.
+ * **Entry-point launch.** `dalvikvm`'s built-in launcher can only start a *static* `main(String[])`, but the
+ * Kotlin/JVM spec (plus this IDE's instance-`main` convenience) admits several other shapes — a no-arg
+ * `@JvmStatic fun main()` (which has no `(String[])` bridge), a plain class's instance `main`, etc. So instead
+ * of `dalvikvm -cp <dexes> <mainClass>`, the run is launched through the bundled [dev.ide.build.engine.ReflectiveMainLauncher]:
+ * `dalvikvm -cp <dexes> dev.ide.build.engine.ReflectiveMainLauncher <mainClass> <args>`. The launcher resolves
+ * and invokes the correct entry point reflectively (the same class the desktop `java` fork uses), so every
+ * runnable form works uniformly. Its dex ships as an asset ([LAUNCHER_ASSET]) — the app's own copy is buried
+ * in secondary dexes a bare `-cp <run dexes>` won't load — extracted here and appended to the run container.
+ * If that asset can't be extracted the run falls back to the native `dalvikvm -cp <dexes> <mainClass>` path,
+ * which still covers the common static `main(String[])` case.
  *
+ * @param context the app context — used to extract the bundled launcher dex asset.
  * @param cacheDir internal-storage scratch dir (e.g. `<internal cache>/dexrun-fork`) for the staged dex.
  */
-class ForkedDalvikRunner(private val cacheDir: File) : DexRunner {
+class ForkedDalvikRunner(private val context: Context, private val cacheDir: File) : DexRunner {
 
     override val isolatedProcess: Boolean get() = true
 
@@ -48,17 +57,31 @@ class ForkedDalvikRunner(private val cacheDir: File) : DexRunner {
         dexDir: Path, mainClass: String, args: List<String>, io: ProgramIo
     ): Int = withContext(Dispatchers.IO) {
         val log: (String) -> Unit = { line -> io.stdout(line + "\n") }
-        val sources = DexStaging.collectDexes(dexDir)
-        if (sources.isEmpty()) {
+        val userDexes = DexStaging.collectDexes(dexDir)
+        if (userDexes.isEmpty()) {
             log("No dex to run."); return@withContext 1
         }
         val launcher = R8ForkSupport.launcher() ?: run {
             log("No dalvikvm launcher available to run the program."); return@withContext 1
         }
-        // Stage the dex read-only on internal storage — ART won't load a writable dex on the VM's classpath.
-        val staged = DexStaging.stageReadOnly(File(cacheDir, "staged"), sources, log) ?: return@withContext 1
-        val cp = staged.joinToString(File.pathSeparator) { it.absolutePath }
-        val command = listOf(launcher, "-cp", cp, mainClass) + args
+        // Prepend the reflective entry-point launcher (see the class doc) so any Kotlin/JVM main shape runs, not
+        // just a static main(String[]). Its dex is appended to the container LAST so the user dexes keep their
+        // load-order indices (stable checksums → ART oat reuse). If the launcher asset is missing, fall back to
+        // dalvikvm's native launcher, which still starts a static main(String[]).
+        val launcherDexes = extractLauncherDexes()
+        val useLauncher = launcherDexes.isNotEmpty()
+        val sources = if (useLauncher) userDexes + launcherDexes else userDexes
+        // Stage the whole multidex set into ONE read-only container zip on internal storage. Read-only because
+        // ART won't load a writable dex on the VM's classpath (W^X); a single container because passing every
+        // `classes*.dex` as its own `-cp` path overflows the OS argument limit on a large dependency graph
+        // ("Argument list too long" / E2BIG) — ART loads all of a zip's `classesN.dex` entries (multidex).
+        val container = DexStaging.stageReadOnlyContainer(File(cacheDir, "staged/run.dex.jar"), sources, log)
+            ?: return@withContext 1
+        val command = if (useLauncher) {
+            listOf(launcher, "-cp", container.absolutePath, LAUNCHER_CLASS, mainClass) + args
+        } else {
+            listOf(launcher, "-cp", container.absolutePath, mainClass) + args
+        }
 
         val process = ProcessBuilder(command).redirectErrorStream(true).start()
         io.started()
@@ -110,5 +133,49 @@ class ForkedDalvikRunner(private val cacheDir: File) : DexRunner {
         }
         io.exited(code)
         code
+    }
+
+    /**
+     * Extract the bundled [ReflectiveMainLauncher] dex from `assets/`[LAUNCHER_ASSET] into internal storage and
+     * return its `.dex` file(s). Marker-guarded by the app's `lastUpdateTime`, so a new APK re-extracts; cached
+     * otherwise. Only READ from here (its bytes are copied into the read-only run container, which is the file
+     * ART actually loads), so — unlike the run container — these staged dexes need not be made read-only.
+     * Returns empty on any failure; the caller then falls back to dalvikvm's native launcher.
+     */
+    private fun extractLauncherDexes(): List<Path> {
+        val dir = File(cacheDir, "launcher")
+        val stamp = runCatching {
+            context.packageManager.getPackageInfo(context.packageName, 0).lastUpdateTime
+        }.getOrDefault(0L).toString()
+        val marker = File(dir, ".extracted")
+        fun dexes(): List<Path> =
+            dir.listFiles { f -> f.name.endsWith(".dex") }?.sortedBy { it.name }?.map { it.toPath() } ?: emptyList()
+        dexes().takeIf { marker.exists() && marker.readText() == stamp && it.isNotEmpty() }?.let { return it }
+        dir.mkdirs()
+        dir.listFiles()?.forEach { runCatching { it.delete() } }
+        return runCatching {
+            context.assets.open(LAUNCHER_ASSET).use { ins ->
+                ZipInputStream(ins.buffered()).use { zis ->
+                    var e = zis.nextEntry
+                    while (e != null) {
+                        if (!e.isDirectory && e.name.endsWith(".dex")) {
+                            File(dir, File(e.name).name).outputStream().use { out -> zis.copyTo(out) }
+                        }
+                        e = zis.nextEntry
+                    }
+                }
+            }
+            marker.writeText(stamp)
+            dexes()
+        }.getOrDefault(emptyList())
+    }
+
+    private companion object {
+        /** The dexed [dev.ide.build.engine.ReflectiveMainLauncher] asset (built by `:ide-android`'s
+         *  `bundleReflectiveLauncherDex`), extracted onto the forked VM's run classpath. */
+        const val LAUNCHER_ASSET = "reflective-launcher.dex.zip"
+
+        /** The launcher's FQN — invoked as `dalvikvm -cp <container> <LAUNCHER_CLASS> <mainClass> <args>`. */
+        const val LAUNCHER_CLASS = "dev.ide.build.engine.ReflectiveMainLauncher"
     }
 }
