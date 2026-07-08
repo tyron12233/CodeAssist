@@ -62,6 +62,9 @@ data class IdeSettings(
     val analyzeOnTheFly: Boolean = true,
     /** Quiet period after the last edit before the highlighting daemon runs its passes. */
     val reparseDelayMs: Int = 300,
+    /** Diagnostic-only: write per-pass and per-stage editor timings to the log (View logs), for finding what
+     *  makes a specific file slow. Off by default; equivalent to `-Dide.editor.perf=true` on desktop. */
+    val analysisPerfLogging: Boolean = false,
 
     // ---- code style (Reformat Code) ----
     // The per-language code style profiles live in their own per-language store (see CodeStyleSettings +

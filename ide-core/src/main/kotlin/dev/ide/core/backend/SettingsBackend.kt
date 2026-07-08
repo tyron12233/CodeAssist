@@ -8,6 +8,7 @@ import dev.ide.core.settings.CodeStyleSettings
 import dev.ide.core.settings.IdeSettings
 import dev.ide.core.settings.SettingsStore
 import dev.ide.lang.dom.Severity
+import dev.ide.platform.log.PerfTrace
 import dev.ide.platform.settings.PreferenceReader
 import dev.ide.platform.settings.SettingControl
 import dev.ide.platform.settings.SettingsPage
@@ -42,7 +43,14 @@ internal class SettingsBackend(private val ctx: BackendContext) : SettingsServic
         set = { k, v -> ctx.manager?.setPreference(k, v) },
     )
 
-    override fun settings(): UiSettings = settingsStore.load().toUi()
+    override fun settings(): UiSettings {
+        val s = settingsStore.load()
+        // Startup / re-read apply for the diagnostic timing flag (there's no separate init hook the backend
+        // reliably runs before the first pass; the app reads settings() at launch). Idempotent, and OR-ed
+        // with any `-D` seed inside [PerfTrace.applyUserPreference], so this never clears a desktop flag.
+        PerfTrace.applyUserPreference(s.analysisPerfLogging)
+        return s.toUi()
+    }
 
     override fun settingsPages(): List<UiSettingsPage> {
         val svc = ctx.servicesOrNull
@@ -171,6 +179,9 @@ internal class SettingsBackend(private val ctx: BackendContext) : SettingsServic
             BuiltInSettingsPages.COMPLETION -> ctx.servicesOrNull?.let { it.completionOptions = currentCompletionOptions() }
             BuiltInSettingsPages.BUILD -> if (key == BuiltInSettingsPages.CONFLICT_POLICY) {
                 ctx.servicesOrNull?.setConflictPolicy(parseConflictPolicy(readSetting(page.id, key, project = true)))
+            }
+            BuiltInSettingsPages.ANALYSIS -> if (key == BuiltInSettingsPages.PERF_LOGGING) {
+                PerfTrace.applyUserPreference(readSetting(page.id, key, project = false)?.toBooleanStrictOrNull() ?: false)
             }
             else -> if (!isBuiltIn(page.id)) page.onChanged(key, scopedReader(page)) // plugin pages react themselves
         }

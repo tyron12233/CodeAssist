@@ -29,8 +29,9 @@ internal class PreviewBackend(private val ctx: BackendContext) : PreviewService 
     // Purely syntactic (scans for @Preview @Composable) — the interpreter only runs on the Preview button,
         // never per keystroke. Preemptible so it can't block completion; re-runs on the next edit if skipped.
         try {
-            ctx.background { ctx.services.composePreviews(Paths.get(path), text) }
-                .map(::toUiPreview)
+            timedPass("previews", path, { it.size }) {
+                ctx.background { ctx.services.composePreviews(Paths.get(path), text) }
+            }.map(::toUiPreview)
         } catch (e: EngineCanceledException) {
             emptyList()
         }

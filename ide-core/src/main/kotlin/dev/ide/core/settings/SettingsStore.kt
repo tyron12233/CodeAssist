@@ -45,6 +45,7 @@ class SettingsStore(
             wordCompletion = bool("completion.wordCompletion", d.wordCompletion),
             analyzeOnTheFly = bool("analysis.onTheFly", d.analyzeOnTheFly),
             reparseDelayMs = int("analysis.reparseDelayMs", d.reparseDelayMs).coerceIn(MIN_REPARSE_DELAY_MS, MAX_REPARSE_DELAY_MS),
+            analysisPerfLogging = bool("analysis.perfLogging", d.analysisPerfLogging),
             formatOnSave = bool("codeStyle.formatOnSave", d.formatOnSave),
         )
     }
@@ -142,6 +143,7 @@ class SettingsStore(
         put("completion.wordCompletion", s.wordCompletion.toString())
         put("analysis.onTheFly", s.analyzeOnTheFly.toString())
         put("analysis.reparseDelayMs", s.reparseDelayMs.toString())
+        put("analysis.perfLogging", s.analysisPerfLogging.toString())
         put("codeStyle.formatOnSave", s.formatOnSave.toString())
     }
 
