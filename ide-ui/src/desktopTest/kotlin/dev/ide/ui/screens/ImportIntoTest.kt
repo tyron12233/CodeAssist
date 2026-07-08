@@ -3,6 +3,7 @@ package dev.ide.ui.screens
 import dev.ide.ui.IdeUiState
 import dev.ide.ui.StubBackend
 import dev.ide.ui.backend.FileActions
+import kotlinx.coroutines.Dispatchers
 import kotlin.test.Test
 import kotlin.test.assertEquals
 
@@ -26,7 +27,8 @@ class ImportIntoTest {
 
     @Test
     fun importsIntoTheSelectedDirectoryAndOpensTheFirstFile() {
-        val state = IdeUiState(StubBackend())
+        // Unconfined dispatchers make the async file-open in `doImportInto` run synchronously here.
+        val state = IdeUiState(StubBackend(), mainDispatcher = Dispatchers.Unconfined, ioDispatcher = Dispatchers.Unconfined)
         val actions = RecordingFileActions(listOf("/proj/app/src/main/res/drawable/icon.png"))
 
         doImportInto(state, actions, "/proj/app/src/main/res/drawable")
@@ -43,7 +45,8 @@ class ImportIntoTest {
 
     @Test
     fun cancelledImportOpensNothing() {
-        val state = IdeUiState(StubBackend())
+        // Unconfined dispatchers make the async file-open in `doImportInto` run synchronously here.
+        val state = IdeUiState(StubBackend(), mainDispatcher = Dispatchers.Unconfined, ioDispatcher = Dispatchers.Unconfined)
         val actions = RecordingFileActions(emptyList())
 
         doImportInto(state, actions, "/proj/app/src")

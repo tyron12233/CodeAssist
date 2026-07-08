@@ -81,14 +81,17 @@ class BuildDockSnapshot {
             var img = scene.render()
             for (frame in 1..80) img = scene.render(frame * 16_666_667L)
             val png = img.encodeToData(EncodedImageFormat.PNG)!!.bytes
-            File("$OUT/$name").writeBytes(png)
-            println("wrote $OUT/$name")
+            val out = File(OUT).apply { mkdirs() }.resolve(name)
+            out.writeBytes(png)
+            println("wrote $out")
         } finally {
             scene.close()
         }
     }
 
     private companion object {
-        const val OUT = "/private/tmp/claude-501/-Users-tyronscott-JavaProjects-CodeAssist/3ef37a35-7870-4cde-976f-e90e5e713766/scratchpad"
+        /** Overridable so a caller can collect the renders; defaults to the build dir. */
+        val OUT: String = System.getProperty("buildDock.snapshot.out")
+            ?: "build/snapshots/build-dock"
     }
 }

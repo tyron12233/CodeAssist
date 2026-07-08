@@ -3,6 +3,8 @@ package dev.ide.ui
 import dev.ide.ui.backend.NodeKind
 import dev.ide.ui.backend.TreeNode
 import dev.ide.ui.backend.TreeViewMode
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.runBlocking
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
@@ -46,6 +48,7 @@ class TreeExpansionStateTest {
     @Test
     fun seedsDefaultsWhenNothingPersisted() {
         val state = IdeUiState(TreeBackend())
+        runBlocking { state.ensureTreeLoaded() } // the tree builds off-thread now — await it before seeding defaults
         // Modules, source roots, and the workspace open by default; packages/files stay closed.
         assertTrue(state.treeExpanded["workspace"] == true)
         assertTrue(state.treeExpanded["module:app"] == true)
@@ -86,7 +89,8 @@ class TreeExpansionStateTest {
             saved[TreeViewMode.Project] = listOf("module:app")
             saved[TreeViewMode.AllFiles] = listOf("workspace")
         }
-        val state = IdeUiState(backend)
+        // Unconfined dispatchers make `selectTreeMode`'s off-thread tree reload run synchronously here.
+        val state = IdeUiState(backend, mainDispatcher = Dispatchers.Unconfined, ioDispatcher = Dispatchers.Unconfined)
         assertTrue(state.treeExpanded["module:app"] == true)
         assertFalse(state.treeExpanded["workspace"] == true)
         state.selectTreeMode(TreeViewMode.AllFiles)

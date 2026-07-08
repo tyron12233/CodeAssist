@@ -262,7 +262,7 @@ We never collect your code, file or project names, which features you use, or an
     <string name="edchrome_gradle_compatibility_mode">Gradle compatibility mode</string>
     <string name="edchrome_gradle_compat">Gradle compat</string>
     <string name="edchrome_indexing">Indexing…</string>
-    <string name="edchrome_indexing_percent">Indexing… %1$d%%</string>
+    <string name="edchrome_indexing_percent">Indexing… %1$d%</string>
     <string name="edchrome_indexed">Indexed</string>
 
     <!-- find (FindReplaceBar) -->

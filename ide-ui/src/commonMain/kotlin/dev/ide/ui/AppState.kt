@@ -21,7 +21,15 @@ import dev.ide.ui.editor.core.EditorSession
 import dev.ide.ui.editor.languageFor
 import dev.ide.ui.editor.preview.PreviewKind
 import dev.ide.ui.editor.preview.previewKindOf
+import dev.ide.ui.platform.ioDispatcher as platformIoDispatcher
 import dev.ide.ui.platform.isMobilePlatform
+import kotlinx.coroutines.CoroutineDispatcher
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancel
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 /**
  * Top-level screens, ordered by depth so the transition helper can infer direction: a move to a
@@ -91,17 +99,34 @@ class OpenFile(val path: String, val name: String, initial: String) {
     fun onSaved(text: String) { savedText = text; modified = false }
 }
 
+/** Placeholder root shown until the real tree finishes building off the main thread — renders as an empty pane. */
+private val EMPTY_TREE = TreeNode(id = "loading", name = "", kind = NodeKind.Workspace, filePath = null, iconId = "workspace")
+
 /**
  * App-wide UI state, hoisted so it survives screen switches. Holds the workspace tree, the open tabs,
  * and the overlay/pane toggles. Editor text lives per [OpenFile]; edits are pushed to the backend's
  * document overlay so cross-file analysis stays live.
  */
-class IdeUiState(val backend: IdeBackend, val composePreviewHost: ComposePreviewHost? = null) {
+class IdeUiState(
+    val backend: IdeBackend,
+    val composePreviewHost: ComposePreviewHost? = null,
+    // Injected so tests can drive opens synchronously (both `Unconfined`); production uses the UI thread for
+    // state mutations and the JVM `Dispatchers.IO` pool for the blocking disk read.
+    mainDispatcher: CoroutineDispatcher = Dispatchers.Main,
+    private val ioDispatcher: CoroutineDispatcher = platformIoDispatcher,
+) {
     /** Which shape the file tree takes — curated Project view vs the raw All-Files view (IntelliJ-style). */
     var treeMode by mutableStateOf(TreeViewMode.Project)
         private set
-    var tree: TreeNode by mutableStateOf(backend.files.fileTree(treeMode))
+    // Starts empty (cheap) and is filled by the first [ensureTreeLoaded]; building the real tree walks the
+    // filesystem recursively (both modes), so it runs off the main thread — inline it stalled project-open and
+    // every refresh on device (FUSE storage) → ANR.
+    var tree: TreeNode by mutableStateOf(EMPTY_TREE)
         private set
+    // Monotonic token so a superseded tree build (a newer refresh/mode-flip started) can't clobber the latest;
+    // and whether the real tree has been built at least once (gates the one-time initial load + default seed).
+    private var treeToken = 0
+    private var treeEverLoaded = false
 
     /**
      * Which file-tree branches are expanded, keyed by [TreeNode.id]. Held here (not inside `FileNavigator`)
@@ -113,6 +138,17 @@ class IdeUiState(val backend: IdeBackend, val composePreviewHost: ComposePreview
 
     val openFiles = mutableStateListOf<OpenFile>()
     var activeIndex by mutableIntStateOf(-1)
+
+    /**
+     * Scope for this state's own async work — chiefly reading a tapped file off the main thread (see [open]).
+     * Launched on [mainDispatcher] so Compose-state mutations stay on the UI thread; the blocking disk read
+     * hops to [ioDispatcher] inside. Cancelled by [dispose] when the project/backend changes and this state is
+     * replaced, so a slow read for an abandoned project can't complete against the new one.
+     */
+    private val scope = CoroutineScope(SupervisorJob() + mainDispatcher)
+
+    /** Cancel in-flight async work (file opens). Call when this state leaves composition. */
+    fun dispose() { scope.cancel() }
 
     var rail by mutableStateOf(RailDestination.Files)
     // On mobile the tree + console are space-consuming sheets — start them closed; on desktop they're
@@ -211,18 +247,21 @@ class IdeUiState(val backend: IdeBackend, val composePreviewHost: ComposePreview
      * view-mode flip (the two modes shape the tree differently, so each remembers its own expansion).
      */
     private fun loadTreeExpansion() {
+        // Apply only the persisted set here — the tree isn't built yet at construction, so the default seed
+        // (which reads [tree]) happens after the first off-thread build (see [loadTree]/[ensureTreeLoaded]).
         treeExpanded.clear()
-        val saved = backend.files.expandedTreeState(treeMode)
-        if (saved == null) {
-            fun seedDefaults(n: TreeNode) {
-                if (n.kind == NodeKind.Module || n.kind == NodeKind.SourceRoot || n.kind == NodeKind.Workspace)
-                    treeExpanded[n.id] = true
-                n.children.forEach(::seedDefaults)
-            }
-            seedDefaults(tree)
-        } else {
-            saved.forEach { treeExpanded[it] = true }
+        backend.files.expandedTreeState(treeMode)?.forEach { treeExpanded[it] = true }
+    }
+
+    /** Expand modules / source roots / the workspace by default. Additive (doesn't clear user toggles), so it's
+     *  safe to (re)run once the real tree lands. Reads [tree], so it must run after a tree build. */
+    private fun seedDefaultExpansion() {
+        fun seed(n: TreeNode) {
+            if (n.kind == NodeKind.Module || n.kind == NodeKind.SourceRoot || n.kind == NodeKind.Workspace)
+                treeExpanded[n.id] = true
+            n.children.forEach(::seed)
         }
+        seed(tree)
     }
 
     /** The currently-expanded tree-node ids — the host persists this (debounced) whenever it changes. */
@@ -270,32 +309,51 @@ class IdeUiState(val backend: IdeBackend, val composePreviewHost: ComposePreview
 
     val active: OpenFile? get() = openFiles.getOrNull(activeIndex)
 
+    /** Fire-and-forget open for UI callbacks — the file is read off the main thread ([openSuspend]). */
     fun open(path: String, name: String) {
-        val existing = openFiles.indexOfFirst { it.path == path }
-        if (existing >= 0) {
-            activeIndex = existing
-            return
-        }
-        val text = backend.files.readFile(path)
+        scope.launch { openSuspend(path, name) }
+    }
+
+    /**
+     * Open [path] as a tab: focus an already-open tab, else read the file **off the main thread** and add it.
+     * The disk read is the ANR risk (a tap on a tree row must never block the UI thread on device), so it runs
+     * on [ioDispatcher]; the resulting Compose-state mutations resume on the launching (main) dispatcher.
+     */
+    suspend fun openSuspend(path: String, name: String) {
+        if (focusOpenTab(path)) return
+        val text = withContext(ioDispatcher) { backend.files.readFile(path) }
+        // A second tap on the same row may have opened it while we were reading — focus it, don't duplicate.
+        if (focusOpenTab(path)) return
         backend.editor.updateDocument(path, text)
         openFiles.add(OpenFile(path, name, text))
         activeIndex = openFiles.lastIndex
     }
 
+    /** Focus the already-open tab for [path] if there is one; returns true when it existed. */
+    private fun focusOpenTab(path: String): Boolean {
+        val existing = openFiles.indexOfFirst { it.path == path }
+        if (existing >= 0) { activeIndex = existing; return true }
+        return false
+    }
+
     /** Open [path] and move the caret to [offset] (go-to-symbol). */
     fun openAt(path: String, offset: Int) {
         val name = path.substringAfterLast('/').substringAfterLast('\\')
-        open(path, name)
-        active?.session?.setCaret(offset) // setCaret coerces into the buffer
+        scope.launch {
+            openSuspend(path, name)
+            active?.session?.setCaret(offset) // setCaret coerces into the buffer
+        }
     }
 
     /** Open [path] and move the caret to 1-based [line]/[column] — the build console's jump-to-diagnostic. */
     fun openAtLine(path: String, line: Int, column: Int) {
         val name = path.substringAfterLast('/').substringAfterLast('\\')
-        open(path, name)
-        val session = active?.session ?: return
-        val base = session.doc.lineStart((line - 1).coerceAtLeast(0))
-        session.setCaret(base + (column - 1).coerceAtLeast(0)) // setCaret coerces into the buffer
+        scope.launch {
+            openSuspend(path, name)
+            val session = active?.session ?: return@launch
+            val base = session.doc.lineStart((line - 1).coerceAtLeast(0))
+            session.setCaret(base + (column - 1).coerceAtLeast(0)) // setCaret coerces into the buffer
+        }
     }
 
     fun close(file: OpenFile) {
@@ -321,12 +379,12 @@ class IdeUiState(val backend: IdeBackend, val composePreviewHost: ComposePreview
      * tab). Files that no longer exist on disk are skipped. Returns true if at least one tab was restored, so
      * the caller can fall back to [defaultFile] when there was no remembered session.
      */
-    fun restoreTabs(): Boolean {
+    suspend fun restoreTabs(): Boolean {
         val saved = backend.projects.openTabs()
         if (saved.paths.isEmpty()) return false
         for (path in saved.paths) {
             val name = path.substringAfterLast('/').substringAfterLast('\\')
-            runCatching { open(path, name) } // a deleted file throws in readFile — skip it
+            runCatching { openSuspend(path, name) } // a deleted file throws in readFile — skip it
         }
         if (openFiles.isEmpty()) return false
         activeIndex = saved.activeIndex.coerceIn(0, openFiles.lastIndex)
@@ -347,15 +405,37 @@ class IdeUiState(val backend: IdeBackend, val composePreviewHost: ComposePreview
             ?: all.firstOrNull()
     }
 
-    /** Re-read the workspace tree from the backend (after a file is created/removed). */
-    fun refreshTree() { tree = backend.files.fileTree(treeMode) }
+    /** Re-read the workspace tree from the backend (after a file is created/removed), off the main thread. */
+    fun refreshTree() { scope.launch { loadTree() } }
+
+    /**
+     * Build the current-mode tree **off the main thread** and publish it on the UI thread. A build that a newer
+     * refresh/mode-flip superseded is dropped ([treeToken]). When [seedExpansionIfDefault] and this mode has no
+     * persisted expansion, expands the modules/roots once the tree is in place.
+     */
+    private suspend fun loadTree(seedExpansionIfDefault: Boolean = false) {
+        val mode = treeMode
+        val token = ++treeToken
+        val built = withContext(ioDispatcher) { backend.files.fileTree(mode) }
+        if (token != treeToken || mode != treeMode) return // superseded by a later build
+        tree = built
+        treeEverLoaded = true
+        if (seedExpansionIfDefault && backend.files.expandedTreeState(mode) == null) seedDefaultExpansion()
+    }
+
+    /** Build the real tree the first time it's needed (project open). No-op once loaded — refreshes go via [refreshTree]. */
+    suspend fun ensureTreeLoaded() {
+        if (!treeEverLoaded) loadTree(seedExpansionIfDefault = true)
+    }
 
     /** Switch the tree view mode (Project ↔ All Files), rebuild the tree, and restore that mode's expansion. */
     fun selectTreeMode(mode: TreeViewMode) {
         if (mode == treeMode) return
         treeMode = mode
-        refreshTree()
-        loadTreeExpansion()
+        // Apply the persisted expansion for the new mode now; the default seed happens after the tree lands.
+        treeExpanded.clear()
+        backend.files.expandedTreeState(mode)?.forEach { treeExpanded[it] = true }
+        scope.launch { loadTree(seedExpansionIfDefault = true) }
     }
 
     /**
@@ -365,19 +445,25 @@ class IdeUiState(val backend: IdeBackend, val composePreviewHost: ComposePreview
      * renamed. Tabs with unsaved edits are left untouched so a rename never clobbers in-progress work.
      */
     fun reloadAfterRename(activePath: String?, newPath: String?) {
-        for (i in openFiles.indices) {
-            val f = openFiles[i]
-            val followsFileRename = newPath != null && f.path == activePath
-            if (!followsFileRename && f.modified) continue
-            val diskPath = if (followsFileRename) newPath!! else f.path
-            val text = runCatching { backend.files.readFile(diskPath) }.getOrNull() ?: continue
-            if (!followsFileRename && text == f.savedText) continue // untouched → preserve session/undo/caret
-            val name = diskPath.substringAfterLast('/').substringAfterLast('\\')
-            openFiles[i] = OpenFile(diskPath, name, text)
-            backend.editor.updateDocument(diskPath, text)
+        scope.launch {
+            for (i in openFiles.indices) {
+                val f = openFiles[i]
+                val followsFileRename = newPath != null && f.path == activePath
+                if (!followsFileRename && f.modified) continue
+                val diskPath = if (followsFileRename) newPath!! else f.path
+                val text = readTabText(diskPath) ?: continue
+                if (!followsFileRename && text == f.savedText) continue // untouched → preserve session/undo/caret
+                val name = diskPath.substringAfterLast('/').substringAfterLast('\\')
+                openFiles[i] = OpenFile(diskPath, name, text)
+                backend.editor.updateDocument(diskPath, text)
+            }
+            loadTree()
         }
-        refreshTree()
     }
+
+    /** Read [path]'s disk text off the main thread; null on any I/O error (a deleted/renamed file). */
+    private suspend fun readTabText(path: String): String? =
+        withContext(ioDispatcher) { runCatching { backend.files.readFile(path) }.getOrNull() }
 
     /** Re-push every open buffer to the editor backend so it re-analyzes against the current classpath — used
      *  after switching the active build variant (the engine has already invalidated the per-module analyzers). */
@@ -385,46 +471,54 @@ class IdeUiState(val backend: IdeBackend, val composePreviewHost: ComposePreview
         for (f in openFiles) backend.editor.updateDocument(f.path, f.text)
     }
 
-    /** Create a new file through the backend, refresh the tree, and open it in the editor. */
+    /** Create a new file through the backend (off the main thread), refresh the tree, and open it in the editor. */
     fun createFile(dirPath: String, fileName: String, content: String) {
-        val path = backend.files.createFile(dirPath, fileName, content) ?: return
-        refreshTree()
-        open(path, fileName)
+        scope.launch {
+            val path = withContext(ioDispatcher) { backend.files.createFile(dirPath, fileName, content) } ?: return@launch
+            loadTree()
+            openSuspend(path, fileName)
+        }
     }
 
-    /** Create a new directory through the backend and refresh the tree (nothing to open). */
+    /** Create a new directory through the backend (off the main thread) and refresh the tree (nothing to open). */
     fun createDirectory(parentPath: String, name: String) {
-        if (backend.files.createDirectory(parentPath, name) != null) refreshTree()
+        scope.launch {
+            if (withContext(ioDispatcher) { backend.files.createDirectory(parentPath, name) } != null) loadTree()
+        }
     }
 
     // ---- file & package operations (delete / rename / move / copy) ----
 
-    /** Delete a file or directory/package: close any open tabs under it, then refresh the tree. */
+    /** Delete a file or directory/package (off the main thread): close any open tabs under it, refresh the tree. */
     fun deletePath(path: String) {
-        if (!backend.files.deletePath(path)) return
-        closeTabsUnder(path)
-        refreshTree()
+        scope.launch {
+            if (!withContext(ioDispatcher) { backend.files.deletePath(path) }) return@launch
+            closeTabsUnder(path)
+            loadTree()
+        }
     }
 
     /** Rename a file/directory to [newName]; rebase open tabs onto the new path + refresh. Returns the result. */
     suspend fun renamePath(path: String, newName: String): UiRenameResult {
         val r = backend.files.renamePath(path, newName)
-        if (r.success) { rebaseTabs(path, r.newPath ?: path); refreshCleanTabs(); refreshTree() }
+        if (r.success) { rebaseTabs(path, r.newPath ?: path); refreshCleanTabs(); loadTree() }
         return r
     }
 
-    /** Move a file/directory into [destDir]; rebase open tabs + refresh. Returns true on success. */
-    fun movePath(path: String, destDir: String): Boolean {
-        val newPath = backend.files.movePath(path, destDir) ?: return false
-        rebaseTabs(path, newPath); refreshTree()
-        return true
+    /** Move a file/directory into [destDir] (off the main thread); rebase open tabs + refresh. */
+    fun movePath(path: String, destDir: String) {
+        scope.launch {
+            val newPath = withContext(ioDispatcher) { backend.files.movePath(path, destDir) } ?: return@launch
+            rebaseTabs(path, newPath) // re-read moved tabs off the main thread
+            loadTree()
+        }
     }
 
-    /** Copy a file/directory into [destDir]; refresh the tree. Returns true on success. */
-    fun copyPath(path: String, destDir: String): Boolean {
-        if (backend.files.copyPath(path, destDir) == null) return false
-        refreshTree()
-        return true
+    /** Copy a file/directory into [destDir] (off the main thread); refresh the tree. */
+    fun copyPath(path: String, destDir: String) {
+        scope.launch {
+            if (withContext(ioDispatcher) { backend.files.copyPath(path, destDir) } != null) loadTree()
+        }
     }
 
     /** True if [p] is [root] or lives under it (matching on either path separator). */
@@ -437,7 +531,7 @@ class IdeUiState(val backend: IdeBackend, val composePreviewHost: ComposePreview
     }
 
     /** Re-point open tabs at [oldPath] (or under it, for a directory) to [newPath], re-reading from disk. */
-    private fun rebaseTabs(oldPath: String, newPath: String) {
+    private suspend fun rebaseTabs(oldPath: String, newPath: String) {
         for (i in openFiles.indices) {
             val p = openFiles[i].path
             val rebased = when {
@@ -445,7 +539,7 @@ class IdeUiState(val backend: IdeBackend, val composePreviewHost: ComposePreview
                 underPath(p, oldPath) -> newPath + p.substring(oldPath.length)
                 else -> continue
             }
-            val text = runCatching { backend.files.readFile(rebased) }.getOrNull() ?: continue
+            val text = readTabText(rebased) ?: continue
             val name = rebased.substringAfterLast('/').substringAfterLast('\\')
             openFiles[i] = OpenFile(rebased, name, text)
             backend.editor.updateDocument(rebased, text)
@@ -453,29 +547,33 @@ class IdeUiState(val backend: IdeBackend, val composePreviewHost: ComposePreview
     }
 
     /** Re-read clean (unmodified) tabs whose disk content changed — e.g. references rewritten by a rename. */
-    private fun refreshCleanTabs() {
+    private suspend fun refreshCleanTabs() {
         for (i in openFiles.indices) {
             val f = openFiles[i]
             if (f.modified) continue
-            val text = runCatching { backend.files.readFile(f.path) }.getOrNull() ?: continue
+            val text = readTabText(f.path) ?: continue
             if (text == f.savedText) continue
             openFiles[i] = OpenFile(f.path, f.name, text)
             backend.editor.updateDocument(f.path, text)
         }
     }
 
-    /** Create a smart-scaffolded, nested-path-aware file under [dirPath], refresh the tree, and open it. */
+    /** Create a smart-scaffolded, nested-path-aware file under [dirPath] (off the main thread), refresh, and open. */
     fun createFileSmart(dirPath: String, name: String) {
-        val path = backend.files.createFileSmart(dirPath, name) ?: return
-        refreshTree()
-        open(path, name.substringAfterLast('/').substringAfterLast('\\'))
+        scope.launch {
+            val path = withContext(ioDispatcher) { backend.files.createFileSmart(dirPath, name) } ?: return@launch
+            loadTree()
+            openSuspend(path, name.substringAfterLast('/').substringAfterLast('\\'))
+        }
     }
 
-    /** Create a typed source file ([template]) named [name] under [dirPath], refresh the tree, and open it. */
+    /** Create a typed source file ([template]) named [name] under [dirPath] (off the main thread), refresh, open. */
     fun createSourceFile(dirPath: String, name: String, template: UiNewFileTemplate) {
-        val path = backend.files.createSourceFile(dirPath, name, template) ?: return
-        refreshTree()
-        open(path, path.substringAfterLast('/').substringAfterLast('\\'))
+        scope.launch {
+            val path = withContext(ioDispatcher) { backend.files.createSourceFile(dirPath, name, template) } ?: return@launch
+            loadTree()
+            openSuspend(path, path.substringAfterLast('/').substringAfterLast('\\'))
+        }
     }
 
     // ---- source-set / content-root management ----

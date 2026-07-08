@@ -122,15 +122,23 @@ fun BuildDock(
         }
 
         // Settle on release: a fling commits one detent in its direction, else snap to the nearest.
-        // The hoisted state is reported after the animation so an interrupted settle stays gesture-owned.
+        // The hoisted state is reported after the animation so an interrupted settle stays gesture-owned —
+        // but in a `finally`, so it still reports the committed detent when the animation is cancelled. A
+        // drag delta launches its `snapTo` on a separate scope, and on release that queued snapTo can grab
+        // the Animatable's mutex just after this `animateTo` starts, cancelling it; without the `finally`
+        // the dock shrinks to the bar while `open` stays stuck true, and a later relayout (the keyboard
+        // closing changes `halfPx` and re-runs the effect below) then re-expands the "closed" console.
         suspend fun settle(velocityY: Float) {
             val target = when {
                 velocityY < -flingPx -> if (height.value < halfPx) halfPx else fullPx
                 velocityY > flingPx -> if (height.value > halfPx) halfPx else barPx
                 else -> floatArrayOf(barPx, halfPx, fullPx).minBy { abs(it - height.value) }
             }
-            height.animateTo(target, tween(Motion.BASE, easing = Motion.quiet), initialVelocity = -velocityY)
-            onOpenChange(target > barPx + 1f)
+            try {
+                height.animateTo(target, tween(Motion.BASE, easing = Motion.quiet), initialVelocity = -velocityY)
+            } finally {
+                onOpenChange(target > barPx + 1f)
+            }
         }
 
         // External toggles (top-bar console button, Run auto-open, back press) animate the same height.

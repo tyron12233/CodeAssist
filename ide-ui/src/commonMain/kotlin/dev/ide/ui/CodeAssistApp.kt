@@ -9,6 +9,7 @@ import androidx.compose.foundation.layout.safeContent
 import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -122,12 +123,16 @@ fun CodeAssistApp(
     // The active project changes (create/open) bump the epoch; re-key per-project state on it.
     val epoch by backend.projects.projectEpoch.collectAsState()
     val state = remember(backend, epoch) { IdeUiState(backend, composePreviewHost) }
+    // Cancel the state's async file-read scope when it's replaced (project/backend change) or leaves composition,
+    // so a slow read for an abandoned project can't resolve against the new one.
+    DisposableEffect(state) { onDispose { state.dispose() } }
 
     // Reopen the tabs from the last session with this project; if there were none, land on a sensible first
     // file so entering the editor shows real code. Then persist tab changes (debounced) so they reopen next
     // launch — `drop(1)` skips the just-restored state, and `collectLatest` cancels the pending write when
     // another tab change lands within the debounce window.
     LaunchedEffect(state) {
+        state.ensureTreeLoaded() // build the real file tree off the main thread before it's shown / walked
         if (!state.restoreTabs()) {
             state.defaultFile()?.let { node -> node.filePath?.let { state.open(it, node.name) } }
         }
