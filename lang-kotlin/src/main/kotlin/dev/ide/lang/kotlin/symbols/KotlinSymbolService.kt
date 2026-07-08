@@ -134,6 +134,15 @@ class KotlinSymbolService(
     // probed per name reference by the unresolved-member/-type checks. Binary existence is session-stable; the
     // SOURCE-class half stays uncached (a Java class added mid-edit must resolve without a rebuild).
     private val classpathTypeExistsMemo = ConcurrentHashMap<String, Boolean>()
+    // Per-fqn memo of a type's FULL own+inherited member list (the recursive [ownAndInherited] walk) — the
+    // dominant editor cost on a member-heavy file (every `view.x`, `canvas.drawBitmap`, `bmp.width` otherwise
+    // re-walks the whole View/Canvas/Bitmap member+supertype closure). Only the UNBOUND (no-type-args) list is
+    // cached, keyed by fqn: a member's name/kind/existence is type-argument-independent (same rationale as
+    // [checkMembersMemo]); a generic receiver (`Box<String>`) bypasses the memo and binds fresh. Split by
+    // origin like the supertype memo — a classpath type's members can't change without a re-index (session-
+    // stable, dropped on build-start via [classpathCacheUsable]); a SOURCE type's change on edit.
+    private val classpathOwnMembersMemo = ConcurrentHashMap<String, List<KotlinSymbol>>()
+    @Volatile private var sourceOwnMembersMemo = ConcurrentHashMap<String, List<KotlinSymbol>>()
     // Tracks the index's last-seen build state so the classpath memos above are dropped the moment a (re)build
     // STARTS — a rebuilt index can carry different members/extensions (a dependency was added), and a query
     // mid-build sees only a partial index, so partial results must never be cached.
@@ -144,7 +153,7 @@ class KotlinSymbolService(
         val status = idx.status
         val building = status.building
         if (building && !extMemoBuilding) {
-            classpathExtMemo.clear(); checkMembersMemo.clear(); companionMembersMemo.clear(); classpathTypeExistsMemo.clear()
+            classpathExtMemo.clear(); checkMembersMemo.clear(); companionMembersMemo.clear(); classpathTypeExistsMemo.clear(); classpathOwnMembersMemo.clear()
         }
         extMemoBuilding = building
         // Not ready ⇒ queries return PARTIAL results (whatever segments are open) for progressive completion;
@@ -184,6 +193,7 @@ class KotlinSymbolService(
             changed.forEach { fileCache.remove(it); fileVersions[it] = ++versionClock }
             cachedModel = null
             sourceSupertypeMemo = ConcurrentHashMap() // only SOURCE chains can change; classpath memo stays warm
+            sourceOwnMembersMemo = ConcurrentHashMap() // a source type's members change on edit; classpath memo stays warm
         }
     }
 
@@ -202,6 +212,7 @@ class KotlinSymbolService(
             fileVersions[path] = ++versionClock // the focal file's content changed (matters to files depending on it)
             cachedModel = null
             sourceSupertypeMemo = ConcurrentHashMap() // only SOURCE chains can change; classpath memo stays warm
+            sourceOwnMembersMemo = ConcurrentHashMap() // a source type's members change on edit; classpath memo stays warm
         }
     }
 
@@ -569,7 +580,7 @@ class KotlinSymbolService(
     // --- members / supertypes / extensions (KotlinTypeContext) ---
 
     override fun membersOf(typeFqn: String, typeArgs: List<TypeRef>, accessibleFrom: Symbol?): List<Symbol> =
-        ownAndInherited(typeFqn, typeArgs, HashSet()) + extensionsFor(typeFqn, typeArgs)
+        ownAndInheritedCached(typeFqn, typeArgs) + extensionsFor(typeFqn, typeArgs)
 
     /**
      * Members of [typeFqn] whose name starts with [namePrefix] — the completion path. Pushing the prefix down
@@ -588,7 +599,7 @@ class KotlinSymbolService(
         exactName: Boolean = false,
     ): List<KotlinSymbol> {
         val m = PrefixMatcher(namePrefix)
-        val own = dev.ide.lang.kotlin.KotlinPerf.span("own") { ownAndInherited(typeFqn, typeArgs, HashSet()) }
+        val own = dev.ide.lang.kotlin.KotlinPerf.span("own") { ownAndInheritedCached(typeFqn, typeArgs) }
         val ownMatched = when {
             namePrefix.isEmpty() -> own
             exactName -> own.filter { it.name == namePrefix }
@@ -636,6 +647,26 @@ class KotlinSymbolService(
             classpathSupertypeMemo
         }
         return memo.getOrPut(fqn) { kotlinSupertypes(fqn, HashSet()) }
+    }
+
+    /**
+     * [ownAndInherited] memoized at the top level (its callers start a fresh `visited` set, so this never sees
+     * the recursion's shared guard — the internal supertype recursion stays on the raw function). Only the
+     * UNBOUND case (no type arguments) is cached: the walk's member names/kinds don't depend on type arguments
+     * (same rationale as [checkMembersMemo]/[membersNamedForCheck]), while a generic receiver (`Box<String>`,
+     * `List<Foo>`) still binds fresh — rare next to the flood of non-generic framework receivers a file hits.
+     * Classpath types cache session-stable (dropped on build-start / withheld mid-build, like the other
+     * classpath memos); source types cache into the edit-dropped memo.
+     */
+    private fun ownAndInheritedCached(fqn: String, typeArgs: List<TypeRef>): List<KotlinSymbol> {
+        if (typeArgs.isNotEmpty()) return ownAndInherited(fqn, typeArgs, HashSet()) // generic receiver → bind fresh
+        val kfqn = Builtins.kotlinTypeFor(fqn) ?: fqn
+        val idx = index
+        return when {
+            model().classByFqn.containsKey(kfqn) -> sourceOwnMembersMemo.getOrPut(kfqn) { ownAndInherited(fqn, emptyList(), HashSet()) }
+            idx != null && !classpathCacheUsable(idx) -> ownAndInherited(fqn, emptyList(), HashSet()) // mid-build: don't pin a partial shape
+            else -> classpathOwnMembersMemo.getOrPut(kfqn) { ownAndInherited(fqn, emptyList(), HashSet()) }
+        }
     }
 
     private fun ownAndInherited(fqnRaw: String, typeArgs: List<TypeRef>, visited: MutableSet<String>): List<KotlinSymbol> {
@@ -1319,6 +1350,14 @@ class KotlinSymbolService(
         return typeShape(fqn)?.typeParameterBounds?.map { it as? KotlinType } ?: emptyList()
     }
 
+    /** Each type parameter's declaration-site variance (positional with [classTypeParameters]): `"out"`, `"in"`,
+     *  or `""` for invariant. Available only for SOURCE classes (read straight from PSI); a classpath/binary
+     *  class returns an empty list (the Kotlin-metadata decode and type-shape index don't carry variance), so
+     *  the variance/projection checks back off for it. An empty list for a class WITH type arguments means
+     *  "unknown", distinct from a source invariant class (which returns `["", ...]`). */
+    fun classTypeParameterVariance(fqn: String): List<String> =
+        model().classByFqn[fqn]?.typeParameterVariance ?: emptyList()
+
     /**
      * The parameter types of the constructor of [fqn] whose arity accepts [argCount] (the unique one when a
      * source class has several), with the CLASS's type parameters marked so a call site can bind them from the
@@ -1383,6 +1422,54 @@ class KotlinSymbolService(
         // A LIBRARY (classpath) sealed type: its direct subclasses come from the `@Metadata` `sealedSubclasses`
         // (decoded into the type shape). Non-empty ⟹ it is sealed (only sealed types carry the list).
         return typeShape(fqn)?.sealedSubclasses?.takeIf { it.isNotEmpty() }
+    }
+
+    /**
+     * The DIRECT inheritors (subtypes) of ANY type [superFqn] — the reverse direction of [supertypesOf] and the
+     * generalization of [sealedSubclassesOf] to non-sealed types. Reads the [dev.ide.index.SubtypeIndex] family
+     * (its binary / Java-source / Kotlin-source producers, all already built + registered), merged and
+     * de-duplicated by subtype FQN. The index is keyed by the supertype's SHORT name (a resolution-free source
+     * parse can't reliably qualify `: Base`), so this filters the bucket by the recorded
+     * [dev.ide.index.SubtypeValue.supertype]: an exact FQN match (binary / resolved source), the JVM⇄Kotlin
+     * mapped alias (`kotlin.Throwable`⇄`java.lang.Throwable`), or a bare short-name match when the source
+     * producer left it unresolved (an unqualified `: Base` still matches — a possible homonym the caller can
+     * confirm through resolution). Empty when no index is wired. Reflects the LAST-BUILT index (a just-typed
+     * subclass appears after the source side reindexes), so it suits navigation, not exhaustiveness (which
+     * stays on the always-complete [sealedSubclassesOf] model walk).
+     */
+    fun directInheritors(superFqn: String): List<dev.ide.index.SubtypeValue> {
+        val idx = index ?: return emptyList()
+        val short = superFqn.substringAfterLast('.')
+        // Match either FQN form: bytecode records `java.lang.Throwable`, source may resolve to `kotlin.Throwable`.
+        val targets = setOfNotNull(superFqn, Builtins.javaTypeFor(superFqn), Builtins.kotlinTypeFor(superFqn))
+        val seen = HashSet<String>()
+        val out = ArrayList<dev.ide.index.SubtypeValue>()
+        for (id in dev.ide.index.SubtypeIndex.ALL) {
+            for (v in idx.exact<dev.ide.index.SubtypeValue>(id, dev.ide.index.SubtypeIndex.key(superFqn))) {
+                val sup = v.supertype.substringBefore('<').trim()
+                val matches = sup in targets || ('.' !in sup && sup == short)
+                if (matches && seen.add(v.fqn)) out += v
+            }
+        }
+        return out
+    }
+
+    /**
+     * The TRANSITIVE inheritor closure of [superFqn] (direct + indirect subtypes), breadth-first from
+     * [superFqn] with a visited guard (cycle-safe) and a [limit] cap (a pathological hierarchy can't spin).
+     * De-duplicated by FQN; deterministic BFS order. Built on [directInheritors], so the same freshness caveat
+     * applies.
+     */
+    fun allInheritors(superFqn: String, limit: Int = 500): List<dev.ide.index.SubtypeValue> {
+        val seen = hashSetOf(superFqn)
+        val out = ArrayList<dev.ide.index.SubtypeValue>()
+        val queue = ArrayDeque<String>().apply { add(superFqn) }
+        while (queue.isNotEmpty() && out.size < limit) {
+            for (v in directInheritors(queue.removeFirst())) {
+                if (seen.add(v.fqn)) { out += v; queue.add(v.fqn) }
+            }
+        }
+        return out
     }
 
     /** The resolved classifier FQN of a supertype-list entry's text (`State`, `State<T>`, `State()`,

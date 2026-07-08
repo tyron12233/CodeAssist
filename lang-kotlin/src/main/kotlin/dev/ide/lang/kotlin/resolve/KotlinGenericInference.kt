@@ -64,10 +64,16 @@ internal fun KotlinResolver.methodTypeParamErasure(sym: KotlinSymbol): Map<Strin
 internal fun KotlinResolver.inferTypeArguments(sym: KotlinSymbol, call: KtCallExpression): Map<String, TypeRef> {
     if (sym.typeParameters.isEmpty()) return emptyMap()
     val bindings = HashMap<String, TypeRef>()
-    // valueArguments already includes a trailing lambda (its getArgumentExpression() is the lambda).
+    // valueArguments already includes a trailing lambda (its getArgumentExpression() is the lambda). Map each
+    // argument to the DECLARED parameter it fills — via [lambdaParamIndex], which honors named arguments and
+    // Kotlin's trailing-lambda-fills-the-last-parameter rule — not its positional slot: `async { 42 }` passes
+    // only the trailing `block` lambda but `block` is the LAST param (after the defaulted `context`/`start`),
+    // so a positional index would bind the lambda against `context` and never pin `T` from `{ 42 }` (leaving a
+    // raw `Deferred` whose `.await()` loses `Int`). The `lastOrNull()` fallback stays for a vararg tail.
     call.valueArguments.forEachIndexed { i, arg ->
         val expr = arg.getArgumentExpression() ?: return@forEachIndexed
-        val pt = (sym.paramTypes.getOrNull(i) ?: sym.paramTypes.lastOrNull()) as? KotlinType ?: return@forEachIndexed
+        val paramIndex = lambdaParamIndex(call, i, sym)
+        val pt = (sym.paramTypes.getOrNull(paramIndex) ?: sym.paramTypes.lastOrNull()) as? KotlinType ?: return@forEachIndexed
         if (expr is KtLambdaExpression) bindLambdaReturn(pt, expr, bindings)
         else inferType(expr)?.let { unify(pt, it, bindings) }
     }

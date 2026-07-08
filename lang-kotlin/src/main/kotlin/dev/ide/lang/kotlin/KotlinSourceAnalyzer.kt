@@ -243,6 +243,55 @@ class KotlinSourceAnalyzer(ctx: CompilationContext) : SourceAnalyzer, Disposable
     fun composePreviews(file: VirtualFile): List<PreviewInfo> =
         lastByFile[file.path]?.let { previewLowering.previews(it) } ?: emptyList()
 
+    /**
+     * Gutter "implementations/overrides" markers for [file]'s last parse: one per INHERITABLE type declaration
+     * (an interface, or an `open`/`abstract`/`sealed` class — a `final` class / object / enum / annotation is
+     * skipped, nothing can extend it) that actually has direct inheritors in the [dev.ide.index.SubtypeIndex].
+     * Anchored to the type's name identifier. Only the inheritor FQNs/kinds are collected (cheap — one index
+     * query per type); a click resolves a target's location via [declarationLocation]. Empty until the index
+     * has built the subtype relation (navigation, so the "dumb until indexed" latency is acceptable).
+     */
+    fun inheritorMarkers(file: VirtualFile): List<InheritorMarker> {
+        val parsed = lastByFile[file.path] ?: return emptyList()
+        val out = ArrayList<InheritorMarker>()
+        for (decl in com.intellij.psi.util.PsiTreeUtil.collectElementsOfType(parsed.ktFile, KtClassOrObject::class.java)) {
+            if (!canBeInherited(decl)) continue
+            val fqn = decl.fqName?.asString() ?: continue
+            val anchor = decl.nameIdentifier?.textRange?.startOffset ?: continue
+            val subs = service.directInheritors(fqn)
+            if (subs.isEmpty()) continue
+            out += InheritorMarker(
+                anchor,
+                isInterface = decl is org.jetbrains.kotlin.psi.KtClass && decl.isInterface(),
+                targets = subs.map { InheritorTarget(it.fqn, it.kind) }.sortedBy { it.fqn },
+            )
+        }
+        return out.sortedBy { it.offset }
+    }
+
+    /** Whether a declaration can have subtypes (so an inheritors marker is meaningful): an interface or an
+     *  `open`/`abstract`/`sealed` class. A `final` class (Kotlin's default), object, enum, or annotation cannot. */
+    private fun canBeInherited(d: KtClassOrObject): Boolean {
+        val c = d as? org.jetbrains.kotlin.psi.KtClass ?: return false
+        if (c.isInterface()) return true
+        if (c.isEnum() || c.isAnnotation()) return false
+        return c.hasModifier(org.jetbrains.kotlin.lexer.KtTokens.OPEN_KEYWORD) ||
+            c.hasModifier(org.jetbrains.kotlin.lexer.KtTokens.ABSTRACT_KEYWORD) ||
+            c.hasModifier(org.jetbrains.kotlin.lexer.KtTokens.SEALED_KEYWORD)
+    }
+
+    /** Locate the SOURCE declaration of type [fqn] (file + its name-identifier offset) for go-to-implementation
+     *  navigation, or null when [fqn] isn't declared in project source (a classpath-only inheritor has no
+     *  navigable source). Parses the declaring file once (uncached) to find the offset. */
+    fun declarationLocation(fqn: String): Pair<VirtualFile, Int>? {
+        val psf = service.sourceFileDeclaringType(fqn) ?: return null
+        val kt = dev.ide.lang.kotlin.parse.KotlinParserHost.parse(psf.file.name, psf.text)
+        val decl = com.intellij.psi.util.PsiTreeUtil.collectElementsOfType(kt, KtClassOrObject::class.java)
+            .firstOrNull { it.fqName?.asString() == fqn }
+        val offset = decl?.nameIdentifier?.textRange?.startOffset ?: decl?.textRange?.startOffset ?: 0
+        return psf.file to offset
+    }
+
     /** Whether [file]'s last parse contains syntax errors; a preview must not interpret such a file. See
      *  [KotlinPreviewLowering.hasSyntaxErrors] for why. */
     fun hasSyntaxErrors(file: VirtualFile): Boolean =
@@ -597,9 +646,11 @@ class KotlinSourceAnalyzer(ctx: CompilationContext) : SourceAnalyzer, Disposable
         val name = psi.getReferencedName()
         val q = psi.parent as? KtQualifiedExpression
         val sym: Symbol? = if (q != null && q.selectorExpression === psi) {
-            resolver.inferType(q.receiverExpression)?.let { recv ->
-                service.membersNamed(recv.qualifiedName, recv.typeArguments, name).firstOrNull()
-            }
+            // A bare type-parameter receiver (`t.member` where `t: T`, `<T : Bound>`) navigates to the member of
+            // the parameter's upper bound; a normal receiver is unchanged (see receiverForMembers).
+            resolver.inferType(q.receiverExpression)
+                ?.let { resolver.receiverForMembers(it, q.receiverExpression.textRange.startOffset) }
+                ?.let { recv -> service.membersNamed(recv.qualifiedName, recv.typeArguments, name).firstOrNull() }
         } else {
             resolver.scopeSymbolsAt(psi.textRange.startOffset).firstOrNull { it.name == name }
                 ?: service.typeNamesByPrefix(name).firstOrNull { it.name == name }

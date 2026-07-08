@@ -80,10 +80,10 @@ class KotlinSemanticHighlighter(
 
     private val cache = java.util.concurrent.ConcurrentHashMap<String, Snapshot>()
 
-    override suspend fun highlight(file: VirtualFile): List<SemanticToken> {
-        val parsed = parsedFor(file) ?: return emptyList()
-        refresh() // cross-file freshness: a decl just typed in another open file resolves here
-        val resolver = resolverFor(parsed)
+    override suspend fun highlight(file: VirtualFile): List<SemanticToken> = KotlinPerf.trace("kt.highlight") {
+        val parsed = parsedFor(file) ?: return@trace emptyList()
+        KotlinPerf.span("refresh") { refresh() } // cross-file freshness: a decl just typed in another open file resolves here
+        val resolver = KotlinPerf.span("resolver") { resolverFor(parsed) }
         val ktFile = parsed.ktFile
         val out = ArrayList<SemanticToken>(256)
         // Non-declaration top-level children (package / imports / file annotations) — cheap, recomputed each
@@ -101,10 +101,10 @@ class KotlinSemanticHighlighter(
         val prev = cache[file.path]?.takeIf { it.externalStamp == externalStamp }
         // Recompute only the declarations this edit can affect (changed ones + dependents of a signature/import
         // change); reuse the rest re-anchored. Same dependency plan the diagnostics pass uses (see IncrementalDecls).
-        val plan = IncrementalDecls.plan(prev?.decls?.map { it.facts }, prev?.imports, prev?.fileText, topDecls, curImports, curFileText)
+        val plan = KotlinPerf.span("scopeCheck") { IncrementalDecls.plan(prev?.decls?.map { it.facts }, prev?.imports, prev?.fileText, topDecls, curImports, curFileText) }
         val recompute: Set<Int>? = (plan as? IncrementalDecls.Plan.Partial)?.recompute
         val newEntries = ArrayList<DeclTokens>(topDecls.size)
-        for ((i, d) in topDecls.withIndex()) {
+        KotlinPerf.span("walk") { for ((i, d) in topDecls.withIndex()) {
             val base = d.textRange.startOffset
             if (recompute != null && i !in recompute) {
                 val cached = prev!!.decls[i] // unaffected → reuse this declaration's tokens, re-anchored
@@ -116,9 +116,9 @@ class KotlinSemanticHighlighter(
                 out += abs
                 newEntries += DeclTokens(IncrementalDecls.factsOf(d), abs.map { shift(it, -base) })
             }
-        }
+        } }
         cache[file.path] = Snapshot(curImports, curFileText, externalStamp, newEntries)
-        return out
+        return@trace out
     }
 
     /** Shift a token's range by [delta] (relative⇄absolute re-anchoring; [SemanticToken] has no copy()). */
@@ -202,8 +202,10 @@ class KotlinSemanticHighlighter(
                         setOf(HighlightModifier.DECLARATION)
                     )
 
-                is KtCallExpression -> classifyCall(psi, resolver, ::emit)
-                is KtBinaryExpression -> classifyInfix(psi, resolver, ::emit)
+                // The three resolution-heavy categories get their own [KotlinPerf] bucket so a slow-highlight
+                // trace pins the cost on call-callee resolution vs infix resolution vs member/name inference.
+                is KtCallExpression -> KotlinPerf.span("hl.call") { classifyCall(psi, resolver, ::emit) }
+                is KtBinaryExpression -> KotlinPerf.span("hl.infix") { classifyInfix(psi, resolver, ::emit) }
                 // A named-argument label (`foo(name = x)`) is a parameter reference — color it like a parameter.
                 is KtValueArgumentName -> emit(
                     psi.referenceExpression.textRange,
@@ -212,7 +214,7 @@ class KotlinSemanticHighlighter(
                 )
 
                 is KtUserType -> classifyTypeRef(psi, ::emit)
-                is KtNameReferenceExpression -> classifyReference(psi, resolver, ::emit)
+                is KtNameReferenceExpression -> KotlinPerf.span("hl.ref") { classifyReference(psi, resolver, ::emit) }
                 is KtStringTemplateExpression -> classifyStringTemplate(psi, ::emit)
                 else -> {}
             }
@@ -428,7 +430,12 @@ class KotlinSemanticHighlighter(
             }
             resolver.staticMemberNamed(typeFqn, name)
         } else {
-            val recvType = resolver.inferType(receiver) ?: return
+            val inferred = resolver.inferType(receiver) ?: return
+            // A bare type-parameter receiver (`t.member` where `t: T`, `<T : Bound>`) highlights its members
+            // against the parameter's upper bound — whether or not the inferred `T` is MARKED (a class field's
+            // `T` is, a function parameter's isn't). Resolve the bound first, then skip a LEAKED (not-in-scope)
+            // type parameter, whose concrete members can't be known.
+            val recvType = resolver.receiverForMembers(inferred, receiver.textRange.startOffset) ?: return
             if (recvType.isTypeParameter) return
             resolver.instanceMemberNamed(recvType, name)
         } ?: return

@@ -85,6 +85,12 @@ object KotlinDiagnosticCodes {
     const val TYPE_ARGUMENT_COUNT = "kt.typeArgumentCount"
     /** A type argument that violates its type parameter's upper bound (`Box<String>` where `Box<T : Number>`). */
     const val UPPER_BOUND_VIOLATED = "kt.upperBoundViolated"
+    /** A declaration-site variance conflict: an `out` type parameter occurring in an `in` (or invariant)
+     *  position, or an `in` type parameter in an `out` (or invariant) position (TYPE_VARIANCE_CONFLICT). */
+    const val VARIANCE_CONFLICT = "kt.varianceConflict"
+    /** A use-site projection that conflicts with the type parameter's declaration-site variance
+     *  (`Comparable<out T>` where `Comparable<in T>`, `List<in T>` where `List<out E>`) — CONFLICTING_PROJECTION. */
+    const val CONFLICTING_PROJECTION = "kt.conflictingProjection"
 
     // --- unused (warnings / hints) ---
     const val UNUSED_IMPORT = "kt.unusedImport"
@@ -100,6 +106,9 @@ object KotlinDiagnosticCodes {
     const val REDUNDANT_SAFE_CALL = "kt.redundantSafeCall"
     /** A string-template entry that wraps a bare name in braces needlessly (`"${name}"` → `"$name"`). */
     const val REDUNDANT_STRING_TEMPLATE = "kt.redundantStringTemplate"
+    /** A use-site projection matching the type parameter's declaration-site variance, so it adds nothing
+     *  (`List<out String>` where `List<out E>`, `Comparable<in T>` where `Comparable<in T>`) — REDUNDANT_PROJECTION. */
+    const val REDUNDANT_PROJECTION = "kt.redundantProjection"
 
     /** An `==`/`!=` between two unrelated final types that can never be equal (`"x" == 5`, `ColorA == ColorB`). */
     const val INCOMPARABLE_EQUALITY = "kt.incomparableEquality"

@@ -46,6 +46,13 @@ import org.jetbrains.kotlin.psi.KtObjectDeclaration
 import org.jetbrains.kotlin.psi.KtPackageDirective
 import org.jetbrains.kotlin.psi.KtClass
 import org.jetbrains.kotlin.psi.KtNullableType
+import org.jetbrains.kotlin.psi.KtFunctionType
+import org.jetbrains.kotlin.psi.KtTypeElement
+import org.jetbrains.kotlin.psi.KtTypeParameter
+import org.jetbrains.kotlin.psi.KtTypeParameterListOwner
+import org.jetbrains.kotlin.psi.KtTypeProjection
+import org.jetbrains.kotlin.psi.KtProjectionKind
+import org.jetbrains.kotlin.types.Variance
 import org.jetbrains.kotlin.psi.KtParameter
 import org.jetbrains.kotlin.psi.KtParameterList
 import org.jetbrains.kotlin.psi.KtPrimaryConstructor
@@ -129,6 +136,7 @@ internal class KotlinSemanticChecks(private val service: KotlinSymbolService) {
                     report(unresolvedTypeReference(psi, resolver, localAliases))
                     report(typeArgumentCountMismatch(psi, resolver))
                     reportAll(typeArgumentBoundViolation(psi, resolver))
+                    reportAll(useSiteProjectionMisuse(psi, resolver))
                 }
             }
         },
@@ -268,6 +276,12 @@ internal class KotlinSemanticChecks(private val service: KotlinSymbolService) {
         },
         KotlinChecker(KtClassBody::class.java) { psi ->
             KotlinPerf.span("sem.dup") { reportAll(duplicateDeclarations((psi as KtClassBody).declarations)) }
+        },
+        // Declaration-site variance conflicts (an `out` param in an `in` position, etc.). On KtClass (only a
+        // class/interface can declare variant type parameters); resolution-gated because nested-generic
+        // composition resolves other classifiers' variance.
+        KotlinChecker(KtClass::class.java) { psi ->
+            KotlinPerf.span("sem.variance") { if (resolveReady) reportAll(declarationSiteVarianceConflicts(psi as KtClass, resolver)) }
         },
         // Class/object-level inheritance correctness (abstract-not-implemented, nothing-to-override,
         // override-required). Resolution-gated: needs the supertype closure, so it runs only when ready.
@@ -1102,7 +1116,9 @@ internal class KotlinSemanticChecks(private val service: KotlinSymbolService) {
     /**
      * A property that Kotlin requires to be initialized but isn't — a top-level or concrete-class property with
      * no initializer, delegate, or getter (`class C { val x: Int }`). Skips locals (deferred init is legal),
-     * `abstract`/`lateinit`/`expect`/`external`, and members of an interface/abstract/expect class.
+     * `abstract`/`lateinit`/`expect`/`external`, and members of an interface/abstract/expect class. A class
+     * member that is definitely assigned in an `init { }` block or a secondary constructor
+     * (`val x: Int; init { x = 1 }`) is legal deferred initialization, so it backs off there too.
      */
     private fun missingInitializer(prop: KtProperty): Diagnostic? {
         if (prop.hasInitializer() || prop.hasDelegate() || prop.getter != null || prop.setter != null) return null
@@ -1120,12 +1136,48 @@ internal class KotlinSemanticChecks(private val service: KotlinSymbolService) {
                         cls.hasModifier(KtTokens.SEALED_KEYWORD) || cls.hasModifier(KtTokens.EXPECT_KEYWORD) ||
                         cls.hasModifier(KtTokens.EXTERNAL_KEYWORD))
                 ) return null
+                // Deferred initialization in the constructor (`val x: Int; init { x = … }` or a secondary
+                // constructor body) is legal. Conservative: any assignment to the name in an init block or
+                // secondary constructor backs off (no full definite-assignment analysis), so a real "not on
+                // every path" gap is missed rather than false-flagged — matching the parse-only model's contract.
+                prop.name?.let { if (assignedInConstructor(cls, it)) return null }
             }
             else -> return null // local / other: deferred init is legal
         }
         val nameId = prop.nameIdentifier ?: return null
         val r = nameId.textRange
         return Diagnostic(TextRange(r.startOffset, r.endOffset), Severity.ERROR, "Property must be initialized", KotlinDiagnosticCodes.MUST_BE_INITIALIZED)
+    }
+
+    /** Whether [name] is the target of a plain assignment (`name = …` or `this.name = …`) anywhere in one of
+     *  [cls]'s `init { }` blocks or secondary-constructor bodies — the deferred-initialization forms. */
+    private fun assignedInConstructor(cls: KtClassOrObject, name: String): Boolean {
+        val bodies = ArrayList<PsiElement>()
+        cls.getAnonymousInitializers().mapNotNullTo(bodies) { it.body }
+        cls.secondaryConstructors.mapNotNullTo(bodies) { it.bodyExpression }
+        return bodies.any { assignsName(it, name) }
+    }
+
+    /** Whether [root]'s subtree contains a plain `=` assignment whose target is the simple name [name] or
+     *  `this.[name]` (an augmented assign / `field` is not deferred initialization of the property). */
+    private fun assignsName(root: PsiElement, name: String): Boolean {
+        var found = false
+        fun rec(e: PsiElement) {
+            if (found) return
+            if (e is KtBinaryExpression && e.operationToken == KtTokens.EQ) {
+                when (val lhs = e.left?.let { unwrapParen(it) }) {
+                    is KtNameReferenceExpression -> if (lhs.getReferencedName() == name) { found = true; return }
+                    is KtDotQualifiedExpression -> if (lhs.receiverExpression is KtThisExpression &&
+                        (lhs.selectorExpression as? KtNameReferenceExpression)?.getReferencedName() == name
+                    ) { found = true; return }
+                    else -> {}
+                }
+            }
+            var c = e.firstChild
+            while (c != null && !found) { rec(c); c = c.nextSibling }
+        }
+        rec(root)
+        return found
     }
 
     /**
@@ -2435,6 +2487,197 @@ internal class KotlinSemanticChecks(private val service: KotlinSymbolService) {
         "kotlin.Comparable" to 1, "kotlin.Array" to 1,
     )
 
+    // --- variance / projection misuse (declaration-site TYPE_VARIANCE_CONFLICT + use-site CONFLICTING/REDUNDANT_PROJECTION) ---
+
+    /** Declaration-site variance of the well-known builtin generics (not surfaced by the shape index). `"out"`/
+     *  `"in"`/`""` per type parameter. Read-only collections are covariant; MUTABLE ones invariant (`add`/`set`
+     *  consume the element); `Comparable` contravariant; `Map` is `[inv K, out V]`; `Array` invariant. */
+    private val BUILTIN_TYPE_VARIANCE = mapOf(
+        "kotlin.collections.Iterable" to listOf("out"), "kotlin.collections.MutableIterable" to listOf("out"),
+        "kotlin.collections.Collection" to listOf("out"), "kotlin.collections.MutableCollection" to listOf(""),
+        "kotlin.collections.List" to listOf("out"), "kotlin.collections.MutableList" to listOf(""),
+        "kotlin.collections.Set" to listOf("out"), "kotlin.collections.MutableSet" to listOf(""),
+        "kotlin.collections.Iterator" to listOf("out"), "kotlin.collections.MutableIterator" to listOf("out"),
+        "kotlin.collections.ListIterator" to listOf("out"), "kotlin.collections.MutableListIterator" to listOf(""),
+        "kotlin.collections.Map" to listOf("", "out"), "kotlin.collections.MutableMap" to listOf("", ""),
+        "kotlin.Comparable" to listOf("in"), "kotlin.Array" to listOf(""),
+        "kotlin.sequences.Sequence" to listOf("out"),
+    )
+
+    /** A variance position for the declaration-site walk. UNKNOWN = an unresolved-variance slot, which never
+     *  yields a conflict (so an unknown classifier in a member signature backs off instead of false-positive). */
+    private enum class VPos {
+        OUT, IN, INV, UNKNOWN;
+        fun flip() = when (this) { OUT -> IN; IN -> OUT; else -> this } // INV/UNKNOWN unchanged
+    }
+
+    /** Compose the incoming [pos] with a nested slot's declaration-site variance ([slot]: `"out"`/`"in"`/`""`
+     *  invariant, or null = unknown): `out` keeps, `in` flips, invariant erases to INV, unknown erases to UNKNOWN. */
+    private fun composeVariance(pos: VPos, slot: String?): VPos = when (slot) {
+        "out" -> pos
+        "in" -> pos.flip()
+        "" -> if (pos == VPos.UNKNOWN) VPos.UNKNOWN else VPos.INV
+        else -> VPos.UNKNOWN
+    }
+
+    /**
+     * Declaration-site variance conflicts (Kotlin's TYPE_VARIANCE_CONFLICT): an `out` (covariant) type parameter
+     * must occur only in `out` positions, an `in` (contravariant) one only in `in` positions. Positions: a
+     * function's value parameters (and receiver) are `in`, its return type `out`; a `val` property is `out`, a
+     * `var` property invariant; supertype arguments are `out`. Nested generics COMPOSE (via [composeVariance]),
+     * a function type `(A) -> B` contributes A at `in` and B at `out` (syntactic), a use-site projection on an
+     * argument overrides its slot, and a star projection erases the occurrence. `@UnsafeVariance` suppresses it.
+     *
+     * Conservative: variance is known only for source classes ([KotlinSymbolService.classTypeParameterVariance])
+     * and the builtins ([BUILTIN_TYPE_VARIANCE]); an unknown classifier's slot becomes UNKNOWN (no conflict), so
+     * a classpath generic backs the composition off rather than false-positive. Private members and plain
+     * (non-`val`/`var`) constructor parameters are exempt; a member's own type parameter shadows the class's.
+     */
+    private fun declarationSiteVarianceConflicts(cls: KtClass, resolver: KotlinResolver): List<Diagnostic> {
+        val params = cls.typeParameters
+            .filter { it.variance != Variance.INVARIANT }
+            .mapNotNull { tp -> tp.name?.let { it to tp.variance } }
+            .toMap()
+        if (params.isEmpty()) return emptyList()
+        val out = ArrayList<Diagnostic>()
+        for (member in cls.declarations) {
+            if (member.hasModifier(KtTokens.PRIVATE_KEYWORD)) continue
+            val scoped = shadowedRemoved(params, member)
+            if (scoped.isEmpty()) continue
+            when (member) {
+                is KtNamedFunction -> {
+                    walkVariance(member.receiverTypeReference, VPos.IN, scoped, resolver, out)
+                    member.valueParameters.forEach { walkVariance(it.typeReference, VPos.IN, scoped, resolver, out) }
+                    walkVariance(member.typeReference, VPos.OUT, scoped, resolver, out)
+                }
+                is KtProperty -> walkVariance(member.typeReference, if (member.isVar) VPos.INV else VPos.OUT, scoped, resolver, out)
+                else -> {}
+            }
+        }
+        // Primary-constructor `val`/`var` parameters are properties; plain params are private (exempt).
+        cls.primaryConstructor?.valueParameters?.forEach { p ->
+            if (!p.hasValOrVar() || p.hasModifier(KtTokens.PRIVATE_KEYWORD)) return@forEach
+            walkVariance(p.typeReference, if (p.isMutable) VPos.INV else VPos.OUT, params, resolver, out)
+        }
+        // Supertype type arguments are produced (`out` position).
+        cls.superTypeListEntries.forEach { walkVariance(it.typeReference, VPos.OUT, params, resolver, out) }
+        return out
+    }
+
+    /** [params] minus any name shadowed by [member]'s own type parameters (a member `fun <T> f()` shadows the
+     *  class's `T` within it, so that name is unconstrained there). */
+    private fun shadowedRemoved(params: Map<String, Variance>, member: KtDeclaration): Map<String, Variance> {
+        val own = (member as? KtTypeParameterListOwner)?.typeParameters?.mapNotNull { it.name }?.toSet().orEmpty()
+        return if (own.isEmpty()) params else params.filterKeys { it !in own }
+    }
+
+    /** Walk a member type reference at variance [pos], recording any variant-parameter occurrence in a wrong
+     *  position. `@UnsafeVariance` and an UNKNOWN position short-circuit the walk. */
+    private fun walkVariance(typeRef: KtTypeReference?, pos: VPos, params: Map<String, Variance>, resolver: KotlinResolver, out: MutableList<Diagnostic>) {
+        if (typeRef == null || pos == VPos.UNKNOWN) return
+        if (typeRef.annotationEntries.any { it.shortName?.asString() == "UnsafeVariance" }) return
+        walkVarianceElement(typeRef.typeElement, pos, params, resolver, out)
+    }
+
+    private fun walkVarianceElement(el: KtTypeElement?, pos: VPos, params: Map<String, Variance>, resolver: KotlinResolver, out: MutableList<Diagnostic>) {
+        when (el) {
+            null -> {}
+            is KtNullableType -> walkVarianceElement(el.innerType, pos, params, resolver, out)
+            is KtFunctionType -> {
+                walkVariance(el.receiverTypeReference, pos.flip(), params, resolver, out) // receiver consumed → in
+                el.parameters.forEach { walkVariance(it.typeReference, pos.flip(), params, resolver, out) } // params → in
+                walkVariance(el.returnTypeReference, pos, params, resolver, out) // return → out
+            }
+            is KtUserType -> {
+                val name = el.referenceExpression?.getReferencedName()
+                if (el.qualifier == null && name != null && params.containsKey(name)) {
+                    recordVarianceUse(el, name, params.getValue(name), pos, out) // a direct occurrence of the param
+                    return
+                }
+                val args = el.typeArgumentList?.arguments ?: return
+                if (args.isEmpty()) return
+                val declared = name?.let { declaredVarianceOf(el, it, resolver) } // null → classifier variance unknown
+                args.forEachIndexed { i, proj ->
+                    val slotPos = when (proj.projectionKind) {
+                        KtProjectionKind.STAR -> return@forEachIndexed // T does not occur under a star projection
+                        KtProjectionKind.OUT -> composeVariance(pos, "out")
+                        KtProjectionKind.IN -> composeVariance(pos, "in")
+                        KtProjectionKind.NONE -> if (declared == null) VPos.UNKNOWN else composeVariance(pos, declared.getOrNull(i))
+                    }
+                    walkVariance(proj.typeReference, slotPos, params, resolver, out)
+                }
+            }
+            else -> {}
+        }
+    }
+
+    private fun recordVarianceUse(el: KtUserType, name: String, declared: Variance, pos: VPos, out: MutableList<Diagnostic>) {
+        val conflict = when (declared) {
+            Variance.OUT_VARIANCE -> pos == VPos.IN || pos == VPos.INV
+            Variance.IN_VARIANCE -> pos == VPos.OUT || pos == VPos.INV
+            else -> false
+        }
+        if (!conflict) return
+        val declStr = if (declared == Variance.OUT_VARIANCE) "out" else "in"
+        val occStr = when (pos) { VPos.OUT -> "out"; VPos.IN -> "in"; else -> "invariant" }
+        val r = (el.referenceExpression ?: el).textRange
+        out += Diagnostic(
+            TextRange(r.startOffset, r.endOffset), Severity.ERROR,
+            "Type parameter '$name' is declared as '$declStr' but occurs in '$occStr' position",
+            KotlinDiagnosticCodes.VARIANCE_CONFLICT,
+        )
+    }
+
+    /** The declaration-site variance of the classifier named [name] in [userType] (`"out"`/`"in"`/`""` per
+     *  parameter), or null when unknown (a type-parameter name, an unresolvable name, or a classpath binary) so
+     *  the caller backs off. Builtins first, then the source model. */
+    private fun declaredVarianceOf(userType: KtUserType, name: String, resolver: KotlinResolver): List<String>? {
+        if (resolver.isTypeParameterInScope(name, userType.textRange.startOffset)) return null
+        val fqn = service.resolveTypeName(name, resolver.fileContext) ?: return null
+        BUILTIN_TYPE_VARIANCE[fqn]?.let { return it }
+        return service.classTypeParameterVariance(fqn).ifEmpty { null }
+    }
+
+    /**
+     * Use-site projection misuse: a projection conflicting with the type parameter's declaration-site variance
+     * (Kotlin's CONFLICTING_PROJECTION, an error — `List<in String>`, `Comparable<out T>`), or one matching it
+     * and thus redundant (REDUNDANT_PROJECTION, a warning — `List<out String>`). Per type-argument on a simple
+     * user type whose classifier's variance is known ([declaredVarianceOf]); an invariant slot (where a
+     * projection IS meaningful, `Array<out Any>`), an unknown classifier, a star/plain argument, or an arity gap
+     * backs off.
+     */
+    private fun useSiteProjectionMisuse(userType: KtUserType, resolver: KotlinResolver): List<Diagnostic> {
+        if (userType.parent is KtUserType) return emptyList() // a qualifier segment
+        val args = userType.typeArgumentList?.arguments ?: return emptyList()
+        if (args.isEmpty()) return emptyList()
+        val name = userType.referenceExpression?.getReferencedName()?.takeIf { it.isNotEmpty() } ?: return emptyList()
+        val declared = declaredVarianceOf(userType, name, resolver) ?: return emptyList()
+        val out = ArrayList<Diagnostic>()
+        args.forEachIndexed { i, proj ->
+            val use = when (proj.projectionKind) {
+                KtProjectionKind.IN -> "in"
+                KtProjectionKind.OUT -> "out"
+                else -> return@forEachIndexed // NONE / STAR: nothing to check
+            }
+            val decl = declared.getOrNull(i)?.takeIf { it.isNotBlank() } ?: return@forEachIndexed // invariant/unknown slot
+            val r = proj.textRange
+            if (decl == use) {
+                out += Diagnostic(
+                    TextRange(r.startOffset, r.endOffset), Severity.WARNING,
+                    "Projection is redundant: the corresponding type parameter of '$name' is already declared as '$decl'",
+                    KotlinDiagnosticCodes.REDUNDANT_PROJECTION,
+                )
+            } else {
+                out += Diagnostic(
+                    TextRange(r.startOffset, r.endOffset), Severity.ERROR,
+                    "Projection '$use' conflicts with the variance '$decl' of the corresponding type parameter of '$name'",
+                    KotlinDiagnosticCodes.CONFLICTING_PROJECTION,
+                )
+            }
+        }
+        return out
+    }
+
     private fun unresolvedTypeReference(userType: KtUserType, resolver: KotlinResolver, localAliases: Set<String>): Diagnostic? {
         // A qualified type (`java.util.Locale`, `Outer.Inner`) or a qualifier SEGMENT of one (the `gen` in
         // `gen.Txt`) — left alone; only a standalone simple name is checked.
@@ -2468,10 +2711,15 @@ internal class KotlinSemanticChecks(private val service: KotlinSymbolService) {
                 (parent.parent as? KtQualifiedExpression)?.takeIf { it.selectorExpression === parent }?.receiverExpression
             else -> null
         } ?: return null
-        val recvType = resolver.inferType(receiver) ?: return null // unknown receiver → don't flag
-        // A type-parameter receiver (an un-inferred `T`) can't have its concrete members enumerated — the
-        // universal `T`-receiver stdlib extensions (`let`/`run`/`apply`/…) would make the set non-empty and
-        // falsely "resolve" everything-or-nothing. Back off rather than flag a member we can't verify.
+        val inferred = resolver.inferType(receiver) ?: return null // unknown receiver → don't flag
+        // A bare type-parameter receiver declared in scope (`t.member` where `t: T`, `<T : Bound>`) validates
+        // against the parameter's upper bound — whether or not the inferred `T` is metadata/source-MARKED (a
+        // class field's `T` is marked, a function parameter's isn't; both must resolve). `receiverForMembers`
+        // returns the bound (in-scope + bounded), null (in-scope but unbounded → can't enumerate → back off),
+        // or `inferred` unchanged (not a scope type parameter). Run FIRST so the marked-T back-off below only
+        // catches a LEAKED `T` (a stdlib/library generic inference left unbound, not declared here): its
+        // universal `T`-receiver extensions (`let`/`run`/…) would falsely "resolve" everything, so back off.
+        val recvType = resolver.receiverForMembers(inferred, receiver.textRange.startOffset) ?: return null
         if (recvType.isTypeParameter) return null
         val name = expr.getReferencedName()
         if (name.isEmpty()) return null // an incomplete `recv.` — not a real member reference (and avoids a full scan)

@@ -17,6 +17,15 @@ import org.jetbrains.kotlin.psi.ValueArgument
 
 /** Call resolution: callee binding, overload selection, call-target enumeration, and value/annotation parameter shapes. */
 
+/** The type of a qualified call's receiver for MEMBER resolution: a bounded type-parameter receiver (`b.foo()`
+ *  where `b: T`, `<T : Bound>`) resolves against `Bound` (see [receiverForMembers]); an unbounded `T` keeps its
+ *  own type, so the call stays a member call with no candidates rather than falling through to top-level name
+ *  resolution; any other receiver type is unchanged. Null only when the receiver can't be typed at all. */
+internal fun KotlinResolver.memberReceiverOf(q: KtQualifiedExpression): KotlinType? {
+    val t = inferType(q.receiverExpression) ?: return null
+    return receiverForMembers(t, q.receiverExpression.textRange.startOffset) ?: t
+}
+
 private const val RECEIVER_EXACT = 1 shl 20
 
 /** Resolve a call's callee to the best-fitting function overload (member/extension via its receiver, or
@@ -54,7 +63,7 @@ internal fun KotlinResolver.computeCallee(call: KtCallExpression): KotlinSymbol?
     val name = (call.calleeExpression as? KtNameReferenceExpression)?.getReferencedName() ?: return null
     val argCount = call.valueArguments.size // already includes the trailing lambda
     val q = call.parent as? KtQualifiedExpression
-    val receiverType = if (q != null && q.selectorExpression === call) inferType(q.receiverExpression) else null
+    val receiverType = if (q != null && q.selectorExpression === call) memberReceiverOf(q) else null
     val candidates = if (receiverType != null) {
         val members = service.membersNamed(receiverType.qualifiedName, receiverType.typeArguments, name)
             .filter { it.kind == SymbolKind.METHOD }
@@ -215,7 +224,7 @@ fun KotlinResolver.callTargets(call: KtCallExpression): List<KotlinSymbol> {
 internal fun KotlinResolver.computeCallTargets(call: KtCallExpression): List<KotlinSymbol> {
     val name = (call.calleeExpression as? KtNameReferenceExpression)?.getReferencedName() ?: return emptyList()
     val q = call.parent as? KtQualifiedExpression
-    val receiverType = if (q != null && q.selectorExpression === call) inferType(q.receiverExpression) else null
+    val receiverType = if (q != null && q.selectorExpression === call) memberReceiverOf(q) else null
     if (receiverType != null) {
         val members = service.membersNamed(receiverType.qualifiedName, receiverType.typeArguments, name)
             .filter { it.kind == SymbolKind.METHOD }

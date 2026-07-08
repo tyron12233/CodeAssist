@@ -264,9 +264,25 @@ internal fun KotlinResolver.typeOfQualified(q: KtQualifiedExpression): KotlinTyp
             if (sel.getReferencedName() in enumConstantNames(fqn)) return service.typeByFqn(fqn)
         }
     }
-    val receiverType = inferType(q.receiverExpression)
+    // A NESTED-class constructor call reached through its enclosing type — `FrameLayout.LayoutParams(w, h)`,
+    // `Outer.Inner(…)`. The receiver denotes a TYPE (not a value) and `Owner.Nested` is a known type, so the
+    // call CONSTRUCTS it (its type params inferred from the args). Without this the selector is mis-read as a
+    // member function of `Owner` — none exists — so the whole expression (and any `.apply { }` receiver off
+    // it, whose implicit `this` is this type) fails to type and bare members inside the block flag unresolved.
+    (q.selectorExpression as? KtCallExpression)?.let { call ->
+        val callee = (call.calleeExpression as? KtNameReferenceExpression)?.getReferencedName()
+        if (callee != null && callee.firstOrNull()?.isUpperCase() == true) {
+            typeDenotationFqn(q.receiverExpression)?.let { ownerFqn ->
+                "$ownerFqn.$callee".takeIf { service.isKnownType(it) }?.let { return constructorResultType(it, call) }
+            }
+        }
+    }
+    val inferred = inferType(q.receiverExpression)
         ?: typeOfTypeName(q.receiverExpression) // receiver may be a class name (companion/static access)
         ?: return null
+    // A bare type-parameter receiver (`t.member` where `t: T`, `<T : Bound>`) resolves its members against the
+    // parameter's upper bound; a normal type is unchanged, an unbounded parameter yields null (no members).
+    val receiverType = receiverForMembers(inferred, q.receiverExpression.textRange.startOffset) ?: return null
     return when (val sel = q.selectorExpression) {
         is KtCallExpression -> typeOfCall(sel, receiverType)
         is KtNameReferenceExpression -> {

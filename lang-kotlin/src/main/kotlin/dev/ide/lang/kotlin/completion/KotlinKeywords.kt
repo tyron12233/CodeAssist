@@ -118,6 +118,9 @@ internal object KotlinKeywords {
         if (importAliasSpot(declRun)) { kw("as", trailingSpace = true); return out }
         //   `for (x █`         → `in`, before the loop range's `in` keyword has been typed.
         if (forLoopInSpot(leaf)) { kw("in", trailingSpace = true); return out }
+        //   `constructor() : █` → `this` / `super`, a secondary constructor's delegation call (the only two
+        //                          things that fit the delegation-reference slot).
+        if (constructorDelegationSpot(leaf, declRun)) { kw("this"); kw("super"); return out }
 
         // `by` delegation: a property-delegation spot (`val x █`) reads as STATEMENT/MEMBER, a supertype list
         // (`class A : I █`) reads as [Place.NONE] — both detected from the preceding declaration text.
@@ -423,6 +426,22 @@ internal object KotlinKeywords {
         val param = forE.loopParameter ?: return false
         return leaf.textRange.startOffset > param.textRange.endOffset
     }
+
+    /**
+     * True at the delegation-reference slot of a SECONDARY constructor (`constructor(…) : █`, before the
+     * `this(…)`/`super(…)` call) — the only position where the `this`/`super` delegation keywords fit.
+     * Detected from the preceding TEXT ([run]) like `by`/`where`: the half-typed delegation reference parses
+     * as a `PsiErrorElement` sibling under the class body, not into a `KtSecondaryConstructor`, so an ancestry
+     * walk can't see it. Requiring a [KtClassBody] ancestor excludes a PRIMARY constructor's `: Base()`
+     * supertype list, which sits in the class HEADER (before `{`); a fully-typed `this(█)`/`super(█)` argument
+     * slot doesn't match the regex (the `(` follows the `:`), so those stay ordinary expression positions.
+     */
+    private fun constructorDelegationSpot(leaf: PsiElement?, run: String): Boolean =
+        CTOR_DELEGATION_RE.matches(run) && leaf?.getParentOfType<KtClassBody>(strict = false) != null
+
+    /** A secondary constructor whose delegation `:` has been opened but not yet delegated (`constructor(…) : `),
+     *  optionally preceded by visibility modifiers. Anchored to the literal `constructor` keyword. */
+    private val CTOR_DELEGATION_RE = Regex("""(?:[a-z]+\s+)*constructor\s*\([^)]*\)\s*:\s*""")
 
     private class TypeParamCtx(val inlineFun: Boolean)
 

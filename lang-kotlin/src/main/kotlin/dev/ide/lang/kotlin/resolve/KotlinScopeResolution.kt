@@ -6,21 +6,30 @@ import dev.ide.lang.kotlin.symbols.KotlinSymbolService
 import dev.ide.lang.kotlin.symbols.KotlinType
 import dev.ide.lang.resolve.SymbolKind
 import com.intellij.psi.PsiElement
+import com.intellij.psi.util.PsiTreeUtil
+import dev.ide.lang.completion.PrefixMatcher
+import org.jetbrains.kotlin.psi.KtAnonymousInitializer
 import org.jetbrains.kotlin.psi.KtBlockExpression
 import org.jetbrains.kotlin.psi.KtCatchClause
 import org.jetbrains.kotlin.psi.KtClass
+import org.jetbrains.kotlin.psi.KtClassBody
 import org.jetbrains.kotlin.psi.KtClassOrObject
 import org.jetbrains.kotlin.psi.KtDestructuringDeclaration
 import org.jetbrains.kotlin.psi.KtExpression
+import org.jetbrains.kotlin.psi.KtFile
 import org.jetbrains.kotlin.psi.KtForExpression
 import org.jetbrains.kotlin.psi.KtFunction
 import org.jetbrains.kotlin.psi.KtFunctionLiteral
 import org.jetbrains.kotlin.psi.KtLambdaExpression
 import org.jetbrains.kotlin.psi.KtNameReferenceExpression
 import org.jetbrains.kotlin.psi.KtNamedFunction
+import org.jetbrains.kotlin.psi.KtParameter
 import org.jetbrains.kotlin.psi.KtParenthesizedExpression
 import org.jetbrains.kotlin.psi.KtProperty
+import org.jetbrains.kotlin.psi.KtPropertyAccessor
 import org.jetbrains.kotlin.psi.KtQualifiedExpression
+import org.jetbrains.kotlin.psi.KtSecondaryConstructor
+import org.jetbrains.kotlin.psi.KtSuperTypeCallEntry
 import org.jetbrains.kotlin.psi.KtWhenExpression
 
 /** Scope and name resolution: locals, implicit receivers, same-file symbols, enclosing class/companion context, and type-receiver classification. */
@@ -148,8 +157,78 @@ fun KotlinResolver.localsAt(offset: Int): List<KotlinSymbol> {
         }
         node = node.parent
     }
+    // Property-accessor scope: `field` (the backing field) and a setter's value parameter, both typed to the
+    // enclosing property's type — Kotlin's `field`/`value` soft keywords, available in getter AND setter bodies.
+    out += accessorScopeLocals(offset)
+    // Non-property primary-constructor parameters, visible only in constructor scope (an `init { }` block, a
+    // member property's initializer/delegate, or the superclass delegation call) — see [constructorScopeParams].
+    constructorScopeParams(offset).forEach { out += param(it) }
     return out
 }
+
+/**
+ * The property-accessor-local bindings in scope at [offset] when it sits inside a getter/setter body: `field`
+ * (the backing field, typed to the enclosing property's type) and, in a setter, the accessor's value
+ * parameter (`value` by default, or the custom name in `set(v)`), also of the property's type. Empty when
+ * [offset] is not inside a property accessor. The property's type comes from its explicit type or, absent
+ * one, its initializer (a `field`-referencing property without either doesn't compile, so that gap is moot).
+ */
+internal fun KotlinResolver.accessorScopeLocals(offset: Int): List<KotlinSymbol> {
+    val accessor = PsiTreeUtil.getParentOfType(elementAt(offset), KtPropertyAccessor::class.java) ?: return emptyList()
+    val prop = accessor.parent as? KtProperty ?: return emptyList()
+    val propType = service.typeFromText(prop.typeReference?.text, fileContext) ?: inferType(prop.initializer)
+    val out = ArrayList<KotlinSymbol>(2)
+    out += KotlinSymbol(
+        "field", SymbolKind.FIELD, type = propType, origin = SOURCE,
+        declarationNode = runCatching { parsed.adapt(prop) }.getOrNull(),
+    )
+    accessor.valueParameters.firstOrNull()?.let { p ->
+        out += KotlinSymbol(
+            p.name ?: "value", SymbolKind.PARAMETER,
+            type = service.typeFromText(p.typeReference?.text, fileContext) ?: propType, origin = SOURCE,
+            declarationNode = runCatching { parsed.adapt(p) }.getOrNull(),
+        )
+    }
+    return out
+}
+
+/**
+ * The primary-constructor parameters visible in *constructor scope* at [offset]: an `init { }` block, a member
+ * property's initializer/delegate expression, or the superclass delegation call `: Base(arg)` — the positions
+ * that run as part of the primary constructor. Only the NON-property parameters are returned (a `val`/`var`
+ * parameter is already a member, surfaced elsewhere); a plain parameter is in scope ONLY here, not in a member
+ * function or accessor body. Empty at any other position, including a member function body and a bare
+ * declaration slot. The first body boundary above the caret decides: an accessor / secondary constructor /
+ * member (or top-level) function body means "not constructor scope"; a lambda is transparent (kept walking).
+ */
+internal fun KotlinResolver.constructorScopeParams(offset: Int): List<KtParameter> {
+    var prev: PsiElement? = null
+    var node: PsiElement? = elementAt(offset)
+    while (node != null) {
+        when (node) {
+            // Bodies that do NOT run in the primary constructor — only `val`/`var` params are visible there.
+            is KtPropertyAccessor, is KtSecondaryConstructor -> return emptyList()
+            is KtNamedFunction -> if (node.parent is KtClassBody || node.parent is KtFile) return emptyList()
+            // `init { }` — runs in the primary constructor.
+            is KtAnonymousInitializer -> return classCtorParams(node)
+            // A member property's initializer / delegate expression (its accessors are excluded above).
+            is KtProperty -> if (node.parent is KtClassBody && (prev === node.initializer || prev === node.delegate))
+                return classCtorParams(node)
+            // The superclass delegation call `: Base(arg)` — its arguments run in the primary constructor.
+            is KtSuperTypeCallEntry -> return classCtorParams(node)
+            // Reached the class without passing through a constructor-scope context (a bare declaration slot).
+            is KtClassOrObject -> return emptyList()
+        }
+        prev = node
+        node = node.parent
+    }
+    return emptyList()
+}
+
+/** The non-property primary-constructor parameters of the class enclosing [e]. */
+private fun classCtorParams(e: PsiElement): List<KtParameter> =
+    PsiTreeUtil.getParentOfType(e, KtClassOrObject::class.java)
+        ?.primaryConstructorParameters?.filter { !it.hasValOrVar() }.orEmpty()
 
 /**
  * Whether the receiver [expr] is a type/static reference (`String.`, `Locale.`, a qualified type)
@@ -199,6 +278,53 @@ fun KotlinResolver.isTypeParameterInScope(name: String, offset: Int): Boolean {
         node = node.parent
     }
     return false
+}
+
+/**
+ * The declared upper bound of the type parameter [name] in scope at [offset], resolved to a type — so a value
+ * whose type is a bare `T` (`<T : Bound>`) enumerates the members of `Bound` (Kotlin resolves `t.member`
+ * against a type parameter's upper bound). Reads the parameter's `: Bound` clause and any matching `where T :
+ * Bound` constraint on the nearest enclosing type-parameter-list owner (function / class / property) that
+ * declares [name]; a bound that is itself another type parameter (`<R, T : R>`) is followed to its own bound.
+ * Returns null when [name] is not a type parameter in scope, has no explicit bound, or the bound is itself
+ * unresolvable — the caller then enumerates no members (a bare unbounded `T` has only `Any?`'s, as before).
+ */
+fun KotlinResolver.typeParameterUpperBound(name: String, offset: Int, seen: MutableSet<String> = HashSet()): KotlinType? {
+    if (!seen.add(name)) return null // guard a cyclic `<T : R, R : T>`
+    var node: PsiElement? = elementAt(offset)
+    while (node != null) {
+        if (node is org.jetbrains.kotlin.psi.KtTypeParameterListOwner) {
+            val tp = node.typeParameters.firstOrNull { it.name == name }
+            if (tp != null) {
+                val boundTexts = buildList {
+                    tp.extendsBound?.text?.let { add(it) }
+                    node.typeConstraints.forEach { c ->
+                        if (c.subjectTypeParameterName?.getReferencedName() == name) c.boundTypeReference?.text?.let { add(it) }
+                    }
+                }
+                for (text in boundTexts) {
+                    val t = service.typeFromText(text, fileContext) ?: continue
+                    if (service.isKnownType(t.qualifiedName)) return t
+                    // The bound is itself a type parameter (`<R, T : R>`) → resolve THAT one's bound.
+                    if (isTypeParameterInScope(t.qualifiedName, offset)) typeParameterUpperBound(t.qualifiedName, offset, seen)?.let { return it }
+                }
+                return null // declared here (an inner owner shadows an outer one) but no resolvable bound
+            }
+        }
+        node = node.parent
+    }
+    return null
+}
+
+/**
+ * [type] as a receiver for MEMBER access: a bare type-parameter classifier in scope at [offset] is replaced by
+ * its resolved upper bound ([typeParameterUpperBound]) so `t.member` sees the bound's members; any other type
+ * is returned unchanged. Null only when [type] IS a type parameter in scope with no resolvable bound (the
+ * caller then enumerates nothing, matching the pre-existing back-off). [type]'s nullability is preserved.
+ */
+fun KotlinResolver.receiverForMembers(type: KotlinType, offset: Int): KotlinType? {
+    if (!isTypeParameterInScope(type.qualifiedName, offset)) return type
+    return typeParameterUpperBound(type.qualifiedName, offset)?.withNullable(type.nullable)
 }
 
 internal fun KotlinResolver.enclosingClassOrObject(offset: Int): KtClassOrObject? {
@@ -304,7 +430,7 @@ fun KotlinResolver.scopeSymbolsAt(offset: Int, namePrefix: String = "", exactNam
     }
     // Locals/implicit members are small, so filter them here; the classpath top-level universe is large, so
     // [topLevelCallables] filters by prefix itself rather than materializing all of it (empty = all).
-    val m = dev.ide.lang.completion.PrefixMatcher(namePrefix)
+    val m = PrefixMatcher(namePrefix)
     val scoped = when {
         namePrefix.isEmpty() -> out
         exactName -> out.filter { it.name == namePrefix }

@@ -114,6 +114,9 @@ class RawClass(
     /** Each type parameter's declared upper-bound TEXT (positional with [typeParameterNames]), from the inline
      *  `<T : Bound>` form or a `where T : Bound` clause; "" when unbounded. Drives the type-argument bound check. */
     val typeParameterBounds: List<String> = emptyList(),
+    /** Each type parameter's declaration-site variance (positional with [typeParameterNames]): `"out"`,
+     *  `"in"`, or `""` for invariant. Drives the variance-conflict and use-site-projection checks. */
+    val typeParameterVariance: List<String> = emptyList(),
     /** Entry names when this is an `enum class` (`RED`, `GREEN`); empty otherwise. */
     val enumEntries: List<String> = emptyList(),
     /** The companion object's simple name (`"Companion"` by default), or null if none. A bare `Type.`
@@ -283,6 +286,13 @@ object SourceIndexBuilder {
                     tc.subjectTypeParameterName?.getReferencedName()?.let { n -> n to (tc.boundTypeReference?.text ?: "") }
                 }.toMap()
                 cls.typeParameters.map { tp -> tp.extendsBound?.text ?: whereBounds[tp.name] ?: "" }
+            } ?: emptyList(),
+            typeParameterVariance = asClass?.typeParameters?.map { tp ->
+                when (tp.variance) {
+                    org.jetbrains.kotlin.types.Variance.OUT_VARIANCE -> "out"
+                    org.jetbrains.kotlin.types.Variance.IN_VARIANCE -> "in"
+                    else -> ""
+                }
             } ?: emptyList(),
             enumEntries = enumEntries,
             companionObjectName = companion?.let { it.name ?: "Companion" },

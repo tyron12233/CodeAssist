@@ -125,6 +125,29 @@ class KotlinKeywordCompletionTest {
     }
 
     @Test
+    fun secondaryConstructorDelegationOffersThisAndSuper() {
+        val ls = labels("package demo\nclass C(val x: Int) {\n  constructor() : |\n}")
+        assertTrue("this" in ls, "a secondary-ctor delegation slot should offer `this`; got $ls")
+        assertTrue("super" in ls, "a secondary-ctor delegation slot should offer `super`; got $ls")
+        // The delegation-reference slot admits only this/super — not member-declaration keywords.
+        assertFalse("val" in ls, "no member keywords in the delegation slot; got $ls")
+        assertFalse("fun" in ls, "no member keywords in the delegation slot; got $ls")
+    }
+
+    @Test
+    fun secondaryConstructorDelegationFiltersByPrefix() {
+        assertTrue("this" in labels("package demo\nclass C {\n  constructor() : th|\n}"), "prefix `th` should match `this`")
+        assertTrue("super" in labels("package demo\nclass C {\n  constructor() : sup|\n}"), "prefix `sup` should match `super`")
+    }
+
+    @Test
+    fun secondaryConstructorBodyIsNotDelegationSlot() {
+        // Inside the body block `this`/`super` are still expression keywords, but statement keywords appear too.
+        val ls = labels("package demo\nclass C {\n  constructor() {\n    va|\n  }\n}")
+        assertTrue("val" in ls, "the ctor BODY is a statement position; got $ls")
+    }
+
+    @Test
     fun noinlineAndCrossinlineOnlyInInlineFunction() {
         assertTrue("noinline" in labels("package demo\ninline fun f(n|) {}"), "inline fun should offer `noinline`")
         assertTrue("crossinline" in labels("package demo\ninline fun f(cross|) {}"), "inline fun should offer `crossinline`")
