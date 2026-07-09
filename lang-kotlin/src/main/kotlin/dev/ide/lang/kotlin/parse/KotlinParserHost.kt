@@ -11,6 +11,7 @@ import org.jetbrains.kotlin.idea.KotlinLanguage
 import org.jetbrains.kotlin.psi.KtFile
 // The unshaded IntelliJ platform (:kotlin-compiler-deps), the same com.intellij.* world the K2 Analysis
 // API runs on, now that the relocated kotlin-compiler-embeddable is gone.
+import com.intellij.lang.ASTNode
 import com.intellij.openapi.util.Disposer
 import com.intellij.psi.PsiFileFactory
 
@@ -29,7 +30,14 @@ import com.intellij.psi.PsiFileFactory
  *
  * Threading: `createFileFromText` is serialized under [lock]. PSI's standalone core is not guaranteed
  * thread-safe for concurrent file creation, and a single parse is fast, so a coarse lock is the simplest
- * correct choice.
+ * correct choice. Crucially, `createFileFromText` only builds the tree the top-level parse eagerly demands;
+ * `ILazyParseableElementType` nodes (KDoc comments above all) defer building their subtree until first
+ * access. That deferred build would otherwise fire during DOM/index TRAVERSAL, which runs UNLOCKED, and
+ * during a parallel index build (`KotlinSourceDocIndex` reads each declaration's `docComment.text` on the
+ * bounded `Dispatchers.IO` fan-out) on several threads at once. Two concurrent `buildTree` calls on the
+ * shared standalone PSI corrupt its non-thread-safe internals: a native SIGSEGV in `artInstanceOfFromCode`.
+ * So every parse fully materializes its tree ([forceFullParse]) while still holding [lock]; after that, all
+ * `buildTree` has happened under the lock, and later traversal only ever READS a built, immutable tree.
  */
 object KotlinParserHost {
 
@@ -78,7 +86,9 @@ object KotlinParserHost {
      */
     fun parse(name: String, text: CharSequence): KtFile = synchronized(lock) {
         val fileName = if (name.endsWith(".kt") || name.endsWith(".kts")) name else "$name.kt"
-        fileFactory.createFileFromText(fileName, KotlinLanguage.INSTANCE, text) as KtFile
+        val file = fileFactory.createFileFromText(fileName, KotlinLanguage.INSTANCE, text) as KtFile
+        forceFullParse(file)
+        file
     }
 
     /**
@@ -89,7 +99,28 @@ object KotlinParserHost {
      * same [lock] as [parse], so it never races a parse on a background index thread. See [KotlinPsiMutation].
      */
     fun tryReparse(file: KtFile, newText: CharSequence): KtFile? = synchronized(lock) {
-        KotlinPsiMutation.reparse(file, newText)
+        KotlinPsiMutation.reparse(file, newText)?.also { forceFullParse(it) }
+    }
+
+    /**
+     * Materialize [file]'s entire AST now, under [lock]. `createFileFromText`/incremental reparse leave
+     * `ILazyParseableElementType` nodes (KDoc, some string templates) unexpanded; the first access to such a
+     * node builds its subtree. Walking every [ASTNode] and touching its `firstChildNode` forces each lazy
+     * node to parse here, while the lock is held, so no `buildTree` ever runs during the unlocked, possibly
+     * concurrent traversal that follows (see the threading note above). Iterative (an explicit stack) to
+     * avoid a deep-recursion overflow on large source files. Reading an already-built node's `firstChildNode`
+     * is a cheap field access, so a re-walk of an already-materialized tree is nearly free.
+     */
+    private fun forceFullParse(file: KtFile) {
+        val stack = ArrayDeque<ASTNode>()
+        file.node?.let { stack.addLast(it) }
+        while (stack.isNotEmpty()) {
+            var child = stack.removeLast().firstChildNode // forces this node's lazy subtree to build
+            while (child != null) {
+                stack.addLast(child)
+                child = child.treeNext
+            }
+        }
     }
 
     /** Force the (expensive) environment up now — call off the UI thread at startup to hide cold-start. */
