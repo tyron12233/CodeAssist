@@ -36,6 +36,8 @@ data class SyntaxColors(
     val punctuation: Color,
     val constant: Color,
     val annotation: Color,
+    /** A Kotlin label (`loop@`, `return@loop`, `this@Outer`) — a bronze marker, rendered italic. */
+    val label: Color,
     // semantic-highlight modifier accents (layered over the base kind color; see SemanticStyles)
     val composable: Color,
     val extension: Color,
@@ -140,6 +142,7 @@ private val DarkSyntax = SyntaxColors(
     punctuation = Color(0xFF8B8D96),
     constant = Color(0xFFD9A066),
     annotation = Color(0xFFE6C178),
+    label = Color(0xFFB5895B),
     composable = Color(0xFF4FC1A6),
     extension = Color(0xFF82AAFF),
     mutableVar = Color(0xFFE0918A),
@@ -160,6 +163,7 @@ private val LightSyntax = SyntaxColors(
     punctuation = Color(0xFF6B6C73),
     constant = Color(0xFFB9690B),
     annotation = Color(0xFF9A6700),
+    label = Color(0xFF8A5A2B),
     composable = Color(0xFF1F8A77),
     extension = Color(0xFF3A6FB5),
     mutableVar = Color(0xFFC0473F),

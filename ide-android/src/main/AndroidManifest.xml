@@ -75,6 +75,27 @@
                 <data android:mimeType="application/json" />
                 <data android:mimeType="application/xml" />
             </intent-filter>
+            <!-- Import a shared CodeAssist project package (.caproj) via "Open with". Best-effort: matches
+                 the application/x-caproj MIME and file:// paths by extension; content:// URIs don't expose an
+                 extension, so those are imported via the in-app Import button instead. Deliberately only VIEW
+                 (open-with), NOT SEND — a SEND filter would list CodeAssist in its own .caproj share sheet. -->
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+
+                <data android:mimeType="application/x-caproj" />
+            </intent-filter>
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+
+                <data android:scheme="file" />
+                <data android:scheme="content" />
+                <data android:host="*" />
+                <data android:mimeType="*/*" />
+                <data android:pathPattern=".*\\.caproj" />
+            </intent-filter>
         </activity>
 
         <!-- Phase-2 build-process-isolation skeleton (docs/build-process-isolation.md): the build/run daemon

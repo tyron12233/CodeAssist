@@ -509,6 +509,26 @@ interface ProjectService {
      */
     suspend fun importGradleProject(sourceRootPath: String): UiProjectResult =
         UiProjectResult(false, "Gradle import not supported by this backend")
+
+    /**
+     * Export the project at [rootPath] to a shareable `.caproj` package and return its path (under the app's
+     * exports dir), or null when packaging failed. The UI then hands the path to [FileActions.share] /
+     * [FileActions.exportFile]. Runs off the main thread.
+     */
+    suspend fun exportProject(rootPath: String, options: UiExportOptions): String? = null
+
+    /**
+     * Read the `.caproj` at [archivePath] for the import preview (manifest, file peek, icon) without
+     * extracting it. Returns null when the file isn't a readable package.
+     */
+    suspend fun previewImportPackage(archivePath: String): UiImportPreview? = null
+
+    /**
+     * Import the `.caproj` at [archivePath] into a new workspace and open it (bumps [projectEpoch]). Returns a
+     * failure result when the package is invalid or its format is unsupported.
+     */
+    suspend fun importPackage(archivePath: String): UiProjectResult =
+        UiProjectResult(false, "Project import not supported by this backend")
 }
 
 // ---------------------------------------------------------------------------
@@ -537,11 +557,92 @@ interface StoreService {
      * ready-made project. A successful create/install bumps [ProjectService.projectEpoch].
      */
     suspend fun install(id: String, args: Map<String, String> = emptyMap()): UiStoreInstallResult =
-        UiStoreInstallResult(false, "The Projects Store is not available in this build")
+        UiStoreInstallResult(false, "Explore is not available in this build")
 
     companion object {
         /** A store that advertises nothing — the default for backends that wire no catalog. */
         val Unsupported: StoreService = object : StoreService {}
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Learn (interactive lesson tracks + auto-checked exercises)
+// ---------------------------------------------------------------------------
+
+/**
+ * The interactive Learn experience: lesson tracks (Kotlin Basics, Java Basics, …), step-by-step content, and
+ * exercises the app compiles + runs + auto-checks. Content is bundled today; the same contract is what a
+ * remote (submission-backed) lesson catalog later implements, so the UI never changes. Progress is persisted
+ * locally through this seam. A backend that wires no content inherits [LearnService.Unsupported] (the Learn
+ * tab then shows only its jumping-off links).
+ *
+ * Exercise answers are checked here, on the backend ([check]) — they never cross to the UI. Quiz correctness
+ * travels in the DTO ([UiLessonStep.Quiz.correctIndex]) and is graded client-side.
+ */
+interface LearnService {
+    /** Whether a lesson catalog is configured. False ⇒ the Learn tab shows only its link cards. */
+    fun learnAvailable(): Boolean = false
+
+    /** The Learn landing payload: the ordered tracks with their lesson summaries. */
+    suspend fun catalog(): UiLearnCatalog = UiLearnCatalog()
+
+    /** The fully-loaded lesson [id] (its ordered steps), or null if unknown. */
+    suspend fun lesson(id: String): UiLesson? = null
+
+    /**
+     * Code completion for an interactive exercise's editor: completes [code] at [offset] against the hidden
+     * scratch project for [language] (`"kotlin"` | `"java"`), so a lesson buffer gets real member/keyword/
+     * stdlib suggestions. Empty when no scratch engine is available.
+     */
+    suspend fun complete(language: String, code: String, offset: Int): UiCompletionResult =
+        UiCompletionResult(emptyList(), offset, offset)
+
+    /** Live diagnostics (errors/warnings) for an interactive exercise's [code], analyzed against the scratch
+     *  project for [language] (`"kotlin"` | `"java"`). Empty when unavailable. */
+    suspend fun analyze(language: String, code: String): List<UiDiagnostic> = emptyList()
+
+    /** Inlay hints (inferred `val`/lambda types, parameter names, chained-call types) for an interactive
+     *  exercise's [code] in `[startOffset, endOffset)`, computed against the scratch project for [language]
+     *  (`"kotlin"` | `"java"`) — the same intelligence the project editor shows. Empty when unavailable. */
+    suspend fun hints(language: String, code: String, startOffset: Int, endOffset: Int): List<UiInlayHint> = emptyList()
+
+    /** Foldable regions for an interactive exercise's [code], computed against the scratch project for
+     *  [language] — the same code-folding the project editor shows. Empty when unavailable. */
+    suspend fun folds(language: String, code: String): List<UiFoldRegion> = emptyList()
+
+    /**
+     * Prepare the scratch project for [language] so a lesson's editor has real intelligence from the first
+     * keystroke: create it (if needed) and wait until its index is built (bounded by a timeout). Returns true
+     * once ready. Call before showing an interactive step.
+     */
+    suspend fun prepare(language: String): Boolean = true
+
+    /** Whether the scratch project for [language] is still building its index (completion/diagnostics are
+     *  limited until it finishes) — drives the lesson editor's "Indexing…" indicator + a re-analyze when done. */
+    suspend fun indexing(language: String): Boolean = false
+
+    /**
+     * Compile + run the learner's [code] for the interactive step [stepId] of lesson [lessonId] and check it
+     * against the exercise's expected result. Cold on the first call (compiler warm-up), fast afterwards.
+     */
+    suspend fun check(lessonId: String, stepId: String, code: String): UiExerciseResult =
+        UiExerciseResult(passed = false, compiled = false, message = "Learning exercises are not available in this build")
+
+    /** The locally-persisted progress (completed step ids per lesson). */
+    fun progress(): UiLearnProgress = UiLearnProgress()
+
+    /** Mark step [stepId] of lesson [lessonId] complete and record it as the resume point. */
+    fun markStepComplete(lessonId: String, stepId: String) {}
+
+    /** Record the learner's current place (for Resume) without marking it complete. */
+    fun recordVisit(lessonId: String, stepIndex: Int) {}
+
+    /** Where "Resume" on the Learn banner should go, or null if nothing has been started. */
+    fun resume(): UiResumePoint? = null
+
+    companion object {
+        /** A Learn service with no content — the default for backends that wire none. */
+        val Unsupported: LearnService = object : LearnService {}
     }
 }
 

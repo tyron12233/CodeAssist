@@ -51,6 +51,40 @@ We never collect your code, file or project names, which features you use, or an
     <string name="open_a_project">Open a project or start a new one.</string>
     <string name="new_project">New Project</string>
     <string name="new_project_content">Android app, Java console app, library…</string>
+    <!-- Project import / export (.caproj packages) -->
+    <string name="import_project">Import project</string>
+    <string name="import_action">Import</string>
+    <string name="import_created_with">Created with %1$s</string>
+    <string name="import_by">by %1$s</string>
+    <string name="import_section_contents">Contents</string>
+    <string name="import_more">+%1$d more</string>
+    <string name="import_incompatible">This package needs a newer version of CodeAssist to import.</string>
+    <string name="import_deps_bundled">Dependencies included</string>
+    <string name="import_failed">Couldn\'t import the project package.</string>
+    <string name="import_unrecognized_title">Can\'t import this file</string>
+    <string name="import_unrecognized">CodeAssist doesn\'t recognize this file. Choose a .caproj project package to import.</string>
+    <plurals name="caproj_files">
+        <item quantity="one">%1$d file</item>
+        <item quantity="other">%1$d files</item>
+    </plurals>
+    <string name="export_title">Export project</string>
+    <string name="export_intro">Package this project as a .caproj file you can share with anyone.</string>
+    <string name="export_bundle_deps">Bundle dependencies</string>
+    <string name="export_bundle_deps_desc">Include downloaded libraries so it imports and builds offline. Makes the file larger.</string>
+    <string name="export_author_label">Author (optional)</string>
+    <string name="export_author_hint">Your name</string>
+    <string name="export_description_label">Description (optional)</string>
+    <string name="export_description_hint">What does this project do?</string>
+    <string name="export_action">Export</string>
+    <string name="export_share">Share project</string>
+    <string name="export_failed">Couldn\'t export the project.</string>
+    <string name="export_exporting">Exporting…</string>
+    <string name="export_success_title">Project exported</string>
+    <string name="export_success_subtitle">Your project package is ready.</string>
+    <string name="export_locate">Show in file manager</string>
+    <string name="export_save_copy">Save a copy…</string>
+    <string name="export_done">Done</string>
+    <string name="export_retry">Try again</string>
     <string name="join_the_community">Join the community</string>
     <string name="join_the_community_content">Chat, get help, and share what you build on Discord.</string>
     <string name="support_title">Support CodeAssist</string>
@@ -62,6 +96,24 @@ We never collect your code, file or project names, which features you use, or an
     <string name="support_star">Star on GitHub</string>
     <string name="no_project_yet">No projects yet — create one to get started.</string>
     <string name="your_projects">Your projects</string>
+    <string name="project_kind_android">Android</string>
+    <string name="project_opened_just_now">Opened just now</string>
+    <plurals name="project_opened_minutes">
+        <item quantity="one">Opened %1$d minute ago</item>
+        <item quantity="other">Opened %1$d minutes ago</item>
+    </plurals>
+    <plurals name="project_opened_hours">
+        <item quantity="one">Opened %1$d hour ago</item>
+        <item quantity="other">Opened %1$d hours ago</item>
+    </plurals>
+    <plurals name="project_opened_days">
+        <item quantity="one">Opened %1$d day ago</item>
+        <item quantity="other">Opened %1$d days ago</item>
+    </plurals>
+    <plurals name="project_opened_weeks">
+        <item quantity="one">Opened %1$d week ago</item>
+        <item quantity="other">Opened %1$d weeks ago</item>
+    </plurals>
     <plurals name="modules">
         <item quantity="one">%1$d module</item>
         <item quantity="other">%1$d modules</item>
@@ -130,6 +182,14 @@ We never collect your code, file or project names, which features you use, or an
 
     <!-- edview (EditorCenter) -->
     <string name="edview_open_a_file_from_navigator">Open a file from the navigator</string>
+    <string name="edview_no_file_open_title">No file open</string>
+    <string name="edview_no_file_open_hint">Select a file from the navigator to start editing</string>
+
+    <!-- tabs (TabsStrip context menu; "Close" reuses the shared `close` string) -->
+    <string name="tab_close_others">Close Others</string>
+    <string name="tab_close_to_the_right">Close to the Right</string>
+    <string name="tab_close_to_the_left">Close to the Left</string>
+    <string name="tab_close_all">Close All</string>
 
     <!-- filetree (FileNavigator) — reuses existing `modules` plural -->
     <string name="filetree_open_in_file_manager">Open in file manager</string>
@@ -294,21 +354,29 @@ We never collect your code, file or project names, which features you use, or an
     <!-- NOTE: CodeAssistApp.kt reuses settings_title (must exist — expect from settings batch); dep flagged -->
 
     <!-- home/store/learn/search/logs/palette — reuses projects, join_the_community -->
-    <string name="home_store">Store</string>
+    <string name="home_store">Explore</string>
     <string name="home_learn">Learn</string>
-    <string name="store_title">Store</string>
+    <string name="store_title">Explore</string>
     <string name="store_subtitle">Templates and sample projects to start from</string>
     <string name="store_settings_and_tools">Settings &amp; tools</string>
-    <string name="store_search_hint">Search the store</string>
+    <string name="store_search_hint">Search templates and samples</string>
     <string name="store_all">All</string>
-    <string name="store_unavailable">Store unavailable</string>
-    <string name="store_unavailable_content">The project store isn't available in this build.</string>
+    <string name="store_unavailable">Explore unavailable</string>
+    <string name="store_unavailable_content">Explore isn't available in this build.</string>
     <string name="store_coming_soon">Coming soon</string>
     <string name="store_community_content">Community projects will land here once submissions open.</string>
     <string name="store_no_matches">No matches</string>
     <string name="store_soon">Soon</string>
     <string name="store_by_author">by %1$s</string>
     <string name="store_use_template">Use this template</string>
+    <string name="store_create">Create project</string>
+    <string name="store_item_about">About</string>
+    <string name="store_item_whats_included">What you get</string>
+    <string name="store_item_details">Details</string>
+    <string name="store_item_type">Type</string>
+    <string name="store_item_language">Language</string>
+    <string name="store_item_publisher">Publisher</string>
+    <string name="store_item_downloads">Downloads</string>
     <string name="store_installing">Installing…</string>
     <string name="store_get">Get</string>
     <string name="store_kind_template">Template</string>
@@ -319,11 +387,49 @@ We never collect your code, file or project names, which features you use, or an
     <string name="learn_documentation">Documentation</string>
     <string name="learn_documentation_content">Architecture, build, and language guides.</string>
     <string name="learn_browse_samples">Browse samples</string>
-    <string name="learn_browse_samples_content">Open the store's sample projects to read and run.</string>
+    <string name="learn_browse_samples_content">Open Explore's sample projects to read and run.</string>
     <string name="learn_community_content">Ask questions and share what you build.</string>
     <string name="learn_tutorials">Interactive tutorials</string>
     <string name="learn_tutorials_content">Step-by-step lessons inside the editor.</string>
     <string name="learn_soon">Soon</string>
+    <string name="learn_continue_learning">Continue learning</string>
+    <string name="learn_tracks">Learning tracks</string>
+    <string name="learn_all">All</string>
+    <string name="learn_more_resources">More</string>
+    <string name="learn_resume">Resume</string>
+    <string name="learn_start">Start</string>
+    <string name="learn_review">Review</string>
+    <string name="learn_continue">Continue</string>
+    <string name="learn_completed">Completed</string>
+    <string name="learn_minutes">%1$d min</string>
+    <string name="learn_lessons_progress">%1$d / %2$d lessons</string>
+    <string name="learn_step_progress">Step %1$d of %2$d</string>
+    <string name="learn_run_check">Run &amp; Check</string>
+    <string name="learn_running">Running…</string>
+    <string name="learn_need_hint">Need a hint?</string>
+    <string name="learn_hint_n">Hint %1$d</string>
+    <string name="learn_show_solution">Show solution</string>
+    <string name="learn_solution">Solution</string>
+    <string name="learn_copy_to_editor">Copy to editor</string>
+    <string name="learn_next">Next</string>
+    <string name="learn_finish">Finish</string>
+    <string name="learn_output">Output</string>
+    <string name="learn_preparing">Preparing your coding workspace…</string>
+    <string name="learn_preparing_sub">Building the code index so completions and error checks work instantly.</string>
+    <string name="learn_compose_preparing">Preparing your Compose workspace…</string>
+    <string name="learn_compose_downloading">Downloading the Compose libraries — this happens once.</string>
+    <string name="learn_compose_indexing">Indexing… the preview starts in a moment.</string>
+    <string name="learn_compose_edit_hint">Edit the code above and watch it re-render</string>
+    <string name="learn_indexing">Indexing… suggestions and checks improve in a moment</string>
+    <string name="learn_submit">Submit</string>
+    <string name="learn_quiz_correct">Correct!</string>
+    <string name="learn_quiz_incorrect">Not quite — try again.</string>
+    <string name="learn_lesson_complete">Lesson complete!</string>
+    <string name="learn_lesson_complete_content">Nice work — keep the momentum going.</string>
+    <plurals name="learn_lesson_count">
+        <item quantity="one">%1$d lesson</item>
+        <item quantity="other">%1$d lessons</item>
+    </plurals>
     <string name="search_tab_symbols">Symbols</string>
     <string name="search_tab_members">Members</string>
     <string name="search_tab_text">Text</string>

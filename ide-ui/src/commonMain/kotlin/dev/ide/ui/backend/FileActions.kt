@@ -23,9 +23,11 @@ interface FileActions {
     /**
      * Launch the platform file picker for ONE existing file and return its absolute path via [onPicked]
      * (null if cancelled). Unlike [importInto], this does NOT copy the file into the project — the caller
-     * reads it directly (e.g. importing a `.jks`/`.keystore` into the keystore registry). Default no-op.
+     * reads it directly (e.g. importing a `.jks`/`.keystore` into the keystore registry, or a `.caproj`
+     * project package). [extensions] (lowercase, no dot) narrows the picker to those file types; empty =
+     * any file. Default no-op.
      */
-    fun pickFile(onPicked: (String?) -> Unit) = onPicked(null)
+    fun pickFile(extensions: List<String> = emptyList(), onPicked: (String?) -> Unit) = onPicked(null)
 
     /** Whether this host can share/export a file out (shows the Share affordance). */
     val canShare: Boolean

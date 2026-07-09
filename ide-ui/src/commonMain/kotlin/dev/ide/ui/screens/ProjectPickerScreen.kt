@@ -51,6 +51,7 @@ import dev.ide.ui.components.BetaBadge
 import dev.ide.ui.components.BetaBanner
 import dev.ide.ui.components.CenteredDialog
 import dev.ide.ui.components.IconButtonCa
+import dev.ide.ui.components.darken
 import dev.ide.ui.components.ProjectTile
 import dev.ide.ui.components.StorageAccessCard
 import dev.ide.ui.components.entranceSlideUp
@@ -62,6 +63,8 @@ import dev.ide.ui.generated.resources.compatibility
 import dev.ide.ui.generated.resources.delete
 import dev.ide.ui.generated.resources.delete_project
 import dev.ide.ui.generated.resources.delete_project_content
+import dev.ide.ui.generated.resources.export_share
+import dev.ide.ui.generated.resources.import_project
 import dev.ide.ui.generated.resources.join_the_community
 import dev.ide.ui.generated.resources.join_the_community_content
 import dev.ide.ui.generated.resources.modules
@@ -69,6 +72,12 @@ import dev.ide.ui.generated.resources.new_project
 import dev.ide.ui.generated.resources.new_project_content
 import dev.ide.ui.generated.resources.no_project_yet
 import dev.ide.ui.generated.resources.open_a_project
+import dev.ide.ui.generated.resources.project_kind_android
+import dev.ide.ui.generated.resources.project_opened_days
+import dev.ide.ui.generated.resources.project_opened_hours
+import dev.ide.ui.generated.resources.project_opened_just_now
+import dev.ide.ui.generated.resources.project_opened_minutes
+import dev.ide.ui.generated.resources.project_opened_weeks
 import dev.ide.ui.generated.resources.projects
 import dev.ide.ui.generated.resources.recovered_projects
 import dev.ide.ui.generated.resources.recovered_projects_content
@@ -82,6 +91,8 @@ import dev.ide.ui.generated.resources.support_title
 import dev.ide.ui.generated.resources.your_files
 import dev.ide.ui.generated.resources.your_projects
 import dev.ide.ui.icons.CaIcons
+import dev.ide.ui.platform.isMobilePlatform
+import dev.ide.ui.platform.nowMillis
 import dev.ide.ui.theme.Ca
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -95,6 +106,10 @@ fun ProjectPickerScreen(
     onOpen: (ProjectInfo) -> Unit,
     onNewProject: () -> Unit,
     onDeleteProject: ((ProjectInfo) -> Unit)? = null,
+    /** Import a shared `.caproj` package (shows the header Import button). Null hides it. */
+    onImportProject: (() -> Unit)? = null,
+    /** Export a project as a shareable `.caproj` (shows a per-card Share action). Null hides it. */
+    onExportProject: ((ProjectInfo) -> Unit)? = null,
     onBackup: (() -> Unit)? = null,
     /** Open the global Settings & Tools hub (settings · code style · SDK & keystore managers) — reachable
      *  here without an open project. Null hides the entry point. */
@@ -143,6 +158,9 @@ fun ProjectPickerScreen(
                         overflow = TextOverflow.Ellipsis,
                     )
                 }
+                if (onImportProject != null) {
+                    IconButtonCa(CaIcons.download, stringResource(Res.string.import_project), onImportProject)
+                }
                 if (onBackup != null) BackupButton(onBackup, compact = narrow)
                 if (onOpenHub != null) {
                     IconButtonCa(CaIcons.gear, "Settings & tools", onOpenHub)
@@ -174,14 +192,18 @@ fun ProjectPickerScreen(
                 if (projects.isEmpty()) {
                     Text(stringResource(Res.string.no_project_yet), color = Ca.colors.textTertiary, style = Ca.type.footnote)
                 } else {
-                    SectionLabel(stringResource(Res.string.your_projects))
+                    SectionLabel(stringResource(Res.string.your_projects), count = projects.size)
                 }
+                // A single "now" so every card's relative "opened …" label is consistent across the list.
+                val now = remember(projects) { nowMillis() }
                 projects.forEachIndexed { i, project ->
                     ProjectCard(
                         project,
                         delayMillis = i * 50,
+                        now = now,
                         onOpen = { onOpen(project) },
                         onDelete = if (onDeleteProject != null) ({ pendingDelete = project }) else null,
+                        onExport = if (onExportProject != null) ({ onExportProject(project) }) else null,
                         loadIcon = loadIcon,
                     )
                 }
@@ -306,16 +328,30 @@ private fun NewProjectCard(onClick: () -> Unit) {
     }
 }
 
-/** A small uppercase section heading used to group the project list. */
+/** A small uppercase section heading (optionally with a count pill) used to group the project list. */
 @Composable
-private fun SectionLabel(text: String) {
-    Text(
-        text.uppercase(),
-        color = Ca.colors.textTertiary,
-        style = Ca.type.caption2,
-        fontWeight = FontWeight.SemiBold,
-        modifier = Modifier.padding(start = 2.dp, top = 2.dp),
-    )
+private fun SectionLabel(text: String, count: Int? = null) {
+    Row(
+        Modifier.padding(start = 2.dp, top = 2.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        Text(
+            text.uppercase(),
+            color = Ca.colors.textTertiary,
+            style = Ca.type.caption2,
+            fontWeight = FontWeight.SemiBold,
+        )
+        if (count != null) {
+            Box(
+                Modifier
+                    .background(Ca.colors.surface2, RoundedCornerShape(Ca.radius.pill))
+                    .padding(horizontal = 7.dp, vertical = 1.dp),
+            ) {
+                Text(count.toString(), color = Ca.colors.textTertiary, style = Ca.type.caption2, fontWeight = FontWeight.SemiBold)
+            }
+        }
+    }
 }
 
 /** Discord brand "blurple" — used only for the community card's icon/accent. */
@@ -456,11 +492,14 @@ private fun SupportButton(text: String, icon: ImageVector, modifier: Modifier = 
 private fun ProjectCard(
     project: ProjectInfo,
     delayMillis: Int,
+    now: Long,
     onOpen: () -> Unit,
     onDelete: (() -> Unit)?,
+    onExport: (() -> Unit)? = null,
     loadIcon: (suspend (ProjectInfo) -> UiProjectIcon?)? = null,
 ) {
     val interaction = remember { MutableInteractionSource() }
+    val opened = relativeOpened(project.lastOpened, now)
     Row(
         Modifier
             .entranceSlideUp(delayMillis)
@@ -473,18 +512,43 @@ private fun ProjectCard(
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(14.dp),
     ) {
-        ProjectAvatar(project, size = 52.dp, radius = Ca.radius.md, loadIcon = loadIcon)
-        Column(Modifier.weight(1f)) {
+        ProjectAvatar(project, size = 54.dp, radius = Ca.radius.md, loadIcon = loadIcon)
+        Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
             Text(project.name, color = Ca.colors.textPrimary, style = Ca.type.headline, maxLines = 1, overflow = TextOverflow.Ellipsis)
-            Text(project.rootPath, color = Ca.colors.textSecondary, style = Ca.type.footnote, maxLines = 1, overflow = TextOverflow.Ellipsis)
-            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            // The last-opened time is the primary secondary fact — its own line so it never gets crowded out.
+            if (opened != null) {
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(5.dp)) {
+                    Icon(CaIcons.clock, null, Modifier.size(12.dp), tint = Ca.colors.textTertiary)
+                    Text(opened, color = Ca.colors.textTertiary, style = Ca.type.caption, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                }
+            }
+            // Type/status tags first (left), then the module count (tags omitted when there's nothing to say).
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                if (project.isAndroid) AndroidTag()
+                if (project.compatibility) CompatibilityChip()
                 Text(
                     pluralStringResource(Res.plurals.modules, project.moduleCount, project.moduleCount),
                     color = Ca.colors.textTertiary,
                     style = Ca.type.caption,
                     fontWeight = FontWeight.Medium,
+                    maxLines = 1,
                 )
-                if (project.compatibility) CompatibilityChip()
+            }
+            // The full path only earns its space on desktop (on mobile it's always the same storage dir).
+            if (!isMobilePlatform) {
+                Text(project.rootPath, color = Ca.colors.textTertiary.copy(alpha = 0.7f), style = Ca.type.caption2, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            }
+        }
+        if (onExport != null) {
+            val exportInteraction = remember { MutableInteractionSource() }
+            Box(
+                Modifier
+                    .size(34.dp)
+                    .pressScale(exportInteraction)
+                    .clickable(exportInteraction, indication = null, onClick = onExport),
+                contentAlignment = Alignment.Center,
+            ) {
+                Icon(CaIcons.share, stringResource(Res.string.export_share), Modifier.size(17.dp), tint = Ca.colors.textTertiary)
             }
         }
         if (onDelete != null) {
@@ -500,6 +564,53 @@ private fun ProjectCard(
             }
         }
         Icon(CaIcons.chevronRight, null, Modifier.size(20.dp), tint = Ca.colors.textTertiary)
+    }
+}
+
+/** Android green — the project-kind tag on an Android project's card. */
+private val AndroidGreen = Color(0xFF3DDC84)
+
+/** A compact green pill (robot glyph + "Android") marking an Android project. */
+@Composable
+internal fun AndroidTag() {
+    Row(
+        Modifier
+            .background(AndroidGreen.copy(alpha = 0.16f), RoundedCornerShape(Ca.radius.pill))
+            .padding(horizontal = 8.dp, vertical = 2.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(4.dp),
+    ) {
+        Icon(CaIcons.androidLogo, null, Modifier.size(12.dp), tint = AndroidGreen.darken(0.85f))
+        Text(
+            stringResource(Res.string.project_kind_android),
+            color = AndroidGreen.darken(0.85f),
+            style = Ca.type.caption2,
+            fontWeight = FontWeight.SemiBold,
+            maxLines = 1,
+            softWrap = false,
+        )
+    }
+}
+
+/**
+ * A localized "opened N ago" label from an epoch-ms timestamp relative to [now], or null when the project
+ * has never been recorded as opened (so the card simply omits the line). Tiers: just now / minutes / hours
+ * / days / weeks.
+ */
+@Composable
+private fun relativeOpened(lastOpened: Long, now: Long): String? {
+    if (lastOpened <= 0L) return null
+    val diff = (now - lastOpened).coerceAtLeast(0L)
+    val minutes = (diff / 60_000L).toInt()
+    val hours = (diff / 3_600_000L).toInt()
+    val days = (diff / 86_400_000L).toInt()
+    val weeks = (diff / 604_800_000L).toInt()
+    return when {
+        minutes < 1 -> stringResource(Res.string.project_opened_just_now)
+        hours < 1 -> pluralStringResource(Res.plurals.project_opened_minutes, minutes, minutes)
+        days < 1 -> pluralStringResource(Res.plurals.project_opened_hours, hours, hours)
+        weeks < 1 -> pluralStringResource(Res.plurals.project_opened_days, days, days)
+        else -> pluralStringResource(Res.plurals.project_opened_weeks, weeks, weeks)
     }
 }
 
@@ -544,9 +655,19 @@ private fun ProjectAvatar(
         is AvatarContent.Vector -> Canvas(Modifier.size(size).clip(shape)) {
             drawUiDrawable(c.drawable, Offset.Zero, this.size)
         }
-        null -> ProjectTile(project.name, size = size, radius = radius)
+        null -> ProjectTile(project.name, size = size, radius = radius, color = projectColor(project.name))
     }
 }
+
+/** A palette of tile colors — used to give each project a distinct, stable avatar tint (hashed by name),
+ *  so the picker reads as a colorful gallery rather than a monochrome list. */
+private val PROJECT_PALETTE = listOf(
+    Color(0xFF3DDC84), Color(0xFF7F52FF), Color(0xFFF89820),
+    Color(0xFFE0533D), Color(0xFF3FBDD9), Color(0xFFB487F7), Color(0xFF00A8A0),
+)
+
+internal fun projectColor(name: String): Color =
+    PROJECT_PALETTE[(name.hashCode() and 0x7fffffff) % PROJECT_PALETTE.size]
 
 /** A small amber pill marking a project imported from Gradle (compatibility mode). */
 @Composable

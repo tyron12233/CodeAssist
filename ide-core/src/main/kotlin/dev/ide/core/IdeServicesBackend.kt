@@ -11,6 +11,7 @@ import dev.ide.ui.backend.FileService
 import dev.ide.ui.backend.ModuleService
 import dev.ide.ui.backend.SigningService
 import dev.ide.ui.backend.PreviewService
+import dev.ide.ui.backend.LearnService
 import dev.ide.ui.backend.ProjectService
 import dev.ide.ui.backend.SdkService
 import dev.ide.ui.backend.StoreService
@@ -29,6 +30,7 @@ import dev.ide.core.backend.stackTraceString
 import dev.ide.core.backend.FileBackend
 import dev.ide.core.backend.ModuleBackend
 import dev.ide.core.backend.PreviewBackend
+import dev.ide.core.backend.LearnBackend
 import dev.ide.core.backend.ProjectBackend
 import dev.ide.core.backend.StoreBackend
 import dev.ide.core.backend.SdkBackend
@@ -241,6 +243,10 @@ class IdeServicesBackend(
     override val signing: SigningService = SigningBackend(this)
     override val projects: ProjectService = ProjectBackend(this)
     override val store: StoreService = StoreBackend(this)
+    // Held as the concrete type so the Compose preview host can reach its ide-core-only lesson-lowering methods
+    // ([lowerLessonComposePreview]) that return an ide-core type the [LearnService] UI interface can't name.
+    private val learnBackend = LearnBackend(this)
+    override val learn: LearnService = learnBackend
     override val sdk: SdkService = SdkBackend(this)
     override val settings: SettingsService = SettingsBackend(this)
     override val actions: ActionService = ActionBackend(this)
@@ -330,11 +336,28 @@ class IdeServicesBackend(
     suspend fun composePreviewLibs(path: String): ComposePreviewLibs? =
         preview { services.composePreviewLibs(Paths.get(path)) }
 
+    /** Lower a self-contained Learn-lesson Compose snippet [code] (with NO open project) through the Learn
+     *  Compose scratch, for the preview host's `LessonPreview`. Rendering uses the bundled Compose runtime, so
+     *  no `composePreviewLibs` is needed. Delegates to [LearnBackend], which resolves `androidx.compose.*` once. */
+    suspend fun lowerLessonComposePreview(code: String): LoweredComposePreview? =
+        learnBackend.lowerCompose(code)
+
+    /** Why a Learn-lesson Compose snippet isn't interpretable yet (for the preview problem chip). */
+    suspend fun lessonComposePreviewDiagnostics(code: String): List<String> =
+        learnBackend.composeDiagnostics(code)
+
     // The owned XML-layout preview (LayoutPreviewBackend); the preview host calls this directly. Runs on the
     // preview lane so the render (real-view dex-load + resource-context build + inflate/measure/draw, or the
     // owned engine pass) executes off the UI thread and is preempted by analysis and completion.
     override suspend fun layoutPreview(path: String, text: String, request: dev.ide.preview.PreviewRequest): dev.ide.preview.LayoutPreviewResult? =
         preview { services.layoutPreview(Paths.get(path), text, request) }
+
+    // The Learn tab's standalone layout preview: an owned render of a self-contained lesson XML with NO open
+    // project (the learner may be on the Learn tab with nothing open), so it deliberately does NOT go through
+    // `services`. Uses an empty resource table + no theme; built-in + Material renderers do the rest. Off the
+    // UI thread on the shared engine dispatcher (owned rendering is cheap, so no preview-lane priority needed).
+    override suspend fun layoutPreviewStandalone(xml: String, request: dev.ide.preview.PreviewRequest): dev.ide.preview.LayoutPreviewResult? =
+        withContext(Dispatchers.Default) { renderStandaloneLayout(xml, request) }
 
     // ---- usage analytics (opt-in) ----
 
@@ -432,3 +455,24 @@ class IdeServicesBackend(
     }
 
 }
+
+/**
+ * Owned render of a self-contained layout [xml] against an EMPTY resource table + no theme — the Learn tab's
+ * Android-lesson preview, which visualizes a taught layout with no project open. Built-in + Material renderers
+ * handle the tags; unresolved project resources fall back (lesson XML is authored to be self-contained). Never
+ * the real-view path (that needs the SDK + a built project). Returns null on any inflation failure.
+ */
+private fun renderStandaloneLayout(
+    xml: String, request: dev.ide.preview.PreviewRequest
+): dev.ide.preview.LayoutPreviewResult? = runCatching {
+    dev.ide.preview.impl.LayoutPreviewService().preview(
+        xml = xml,
+        repo = dev.ide.android.support.resources.ResourceRepository(emptyList()),
+        themeName = null,
+        title = "",
+        density = request.density,
+        scaledDensity = request.density,
+        showChrome = request.showChrome,
+        night = request.night,
+    )
+}.getOrNull()

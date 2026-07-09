@@ -63,9 +63,11 @@ internal class FileBackend(private val ctx: BackendContext) : FileService {
     private fun moduleRoots(): Map<Path, String> =
         ctx.services.modules().mapNotNull { m -> ctx.services.moduleRoot(m)?.let { it.normalize() to m.name } }.toMap()
 
-    /** Curated module view: manifest + code/res/assets roots, plus each module's root config files. */
+    /** Curated module view: manifest + code/res/assets roots, plus each module's root config files, then the
+     *  workspace root's own files (a top-level README/LICENSE/config). */
     private fun projectTree(): TreeNode {
         val root = ctx.services.workspaceRoot
+        val moduleDirs = ctx.services.modules().mapNotNull { ctx.services.moduleRoot(it)?.normalize() }.toSet()
         val moduleNodes = ctx.services.modules().sortedBy { it.name }.map { module ->
             val moduleDir = ctx.services.moduleRoot(module)
             val children = ArrayList<TreeNode>()
@@ -94,13 +96,18 @@ internal class FileBackend(private val ctx: BackendContext) : FileService {
                 dirPath = moduleDir?.toString(),
             )
         }
+        // Files directly at the workspace root (README, LICENSE, top-level config) that aren't already shown
+        // as a module's own root files — so a top-level README/doc is visible in the curated view, not only
+        // under All Files. Skipped when a module IS the workspace root (its `moduleRootFiles` covers them).
+        val rootFiles = if (root.normalize() in moduleDirs) emptyList()
+        else childPartition(root).second.map { fileNode(it, ctx.services.moduleForFile(it)) }
         return TreeNode(
             id = "workspace",
             name = root.fileName?.toString() ?: "workspace",
             kind = NodeKind.Workspace,
             filePath = null,
             iconId = "workspace",
-            children = moduleNodes,
+            children = moduleNodes + rootFiles,
             dirPath = root.toString(),
         )
     }

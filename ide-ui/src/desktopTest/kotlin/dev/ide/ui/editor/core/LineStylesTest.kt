@@ -141,6 +141,16 @@ class LineStylesTest {
     }
 
     @Test
+    fun kotlinValueClassModifierIsAKeyword() {
+        // `value` is a keyword only in `value class` (a soft keyword); as a plain identifier it stays uncolored.
+        val decl = "value class Password(val v: String)"
+        assertEquals(TokenType.KEYWORD, typeAt(decl, 0, CodeLanguage.Kotlin), "`value` before `class` is a keyword")
+        assertEquals(TokenType.KEYWORD, typeAt(decl, decl.indexOf("class"), CodeLanguage.Kotlin), "`class` is a keyword")
+        // A plain `value` identifier (a common name) must NOT be colored as a keyword.
+        assertEquals(null, typeAt("val value = x.value", "val ".length, CodeLanguage.Kotlin), "`value` as an identifier is not a keyword")
+    }
+
+    @Test
     fun fuzzKotlinIncrementalEqualsFresh() {
         val rnd = Random(11)
         val snippets = listOf(
@@ -181,6 +191,53 @@ class LineStylesTest {
             val ins = if (rnd.nextBoolean()) snippets[rnd.nextInt(snippets.size)] else ""
             doc = edit(doc, styles, start, end, ins)
             assertIncrementalMatchesFresh(doc, styles, CodeLanguage.Java)
+        }
+    }
+
+    @Test
+    fun markdownConstructsAreTyped() {
+        assertEquals(TokenType.TYPE, typeAt("## Heading", 0, CodeLanguage.Markdown), "heading")
+        assertEquals(TokenType.KEYWORD, typeAt("- item", 0, CodeLanguage.Markdown), "bullet marker")
+        assertEquals(TokenType.KEYWORD, typeAt("12. item", 0, CodeLanguage.Markdown), "ordered marker")
+        assertEquals(null, typeAt("- item", "- ".length, CodeLanguage.Markdown), "list text is uncolored")
+        assertEquals(TokenType.COMMENT, typeAt("> quote", 0, CodeLanguage.Markdown), "block quote")
+        assertEquals(TokenType.PUNCT, typeAt("---", 0, CodeLanguage.Markdown), "thematic break")
+        assertEquals(TokenType.STRING, typeAt("use `code` here", "use ".length, CodeLanguage.Markdown), "inline code")
+        val link = "see [docs](http://x)"
+        assertEquals(TokenType.FUNC, typeAt(link, link.indexOf("[docs]"), CodeLanguage.Markdown), "link text")
+        assertEquals(TokenType.PROPERTY, typeAt(link, link.indexOf("(http"), CodeLanguage.Markdown), "link url")
+        // `#hashtag` (no space) is not a heading; a hyphen inside a word is not a break.
+        assertEquals(null, typeAt("a-b not a rule", 0, CodeLanguage.Markdown))
+    }
+
+    @Test
+    fun markdownFenceCarriesStateAcrossLines() {
+        val doc = EditorDocument.of("```kotlin\nval x = 1\n# not a heading\n```\n# real")
+        val styles = LineStyles(CodeLanguage.Markdown)
+        styles.reset(doc)
+        assertIncrementalMatchesFresh(doc, styles, CodeLanguage.Markdown)
+        assertEquals(LexState.MD_FENCE, styleLine(doc.lineText(0), LexState.CODE, CodeLanguage.Markdown).exitState)
+        assertEquals(TokenType.STRING, LineSpanTypeAt(styles, 1, 0), "code inside the fence")
+        assertEquals(TokenType.STRING, LineSpanTypeAt(styles, 2, 0), "`#` inside the fence is not a heading")
+        assertEquals(LexState.CODE, styleLine(doc.lineText(3), LexState.MD_FENCE, CodeLanguage.Markdown).exitState)
+        assertEquals(TokenType.TYPE, LineSpanTypeAt(styles, 4, 0), "heading after the fence closes")
+    }
+
+    @Test
+    fun fuzzMarkdownIncrementalEqualsFresh() {
+        val rnd = Random(13)
+        val snippets = listOf("```", "~~~", "# ", "> ", "- ", "`x`", "[a](b)", "\n", "text", " ", "---")
+        var doc = EditorDocument.of("# Title\n\ntext with `code`\n\n```\nfenced\n```\n- a\n- b\n")
+        val styles = LineStyles(CodeLanguage.Markdown)
+        styles.reset(doc)
+        repeat(800) {
+            val len = doc.text.length
+            val start = rnd.nextInt(len + 1)
+            val del = rnd.nextInt(6)
+            val end = (start + del).coerceAtMost(len)
+            val ins = if (rnd.nextBoolean()) snippets[rnd.nextInt(snippets.size)] else ""
+            doc = edit(doc, styles, start, end, ins)
+            assertIncrementalMatchesFresh(doc, styles, CodeLanguage.Markdown)
         }
     }
 }

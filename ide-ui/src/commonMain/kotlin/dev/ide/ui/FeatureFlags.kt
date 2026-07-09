@@ -11,5 +11,5 @@ object FeatureFlags {
      * from users: while off, the project picker renders on its own with no bottom navigation bar. Runtime
      * override: preference `feature.projectsStore` = "true".
      */
-    const val PROJECTS_STORE = false
+    const val PROJECTS_STORE = true
 }

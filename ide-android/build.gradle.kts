@@ -232,6 +232,18 @@ val bundleComposeFontsAsset = tasks.register<Copy>("bundleComposeFontsAsset") {
     into(layout.buildDirectory.dir("compose-fonts-asset/composeResources/dev.ide.ui.generated.resources/font"))
 }
 
+// Same Android packaging gap as the fonts above, for the sample-game preview drawables (the store's Explore
+// screenshots). PNGs are copied verbatim (unlike the strings, which are compiled), so stage them straight
+// from :ide-ui's source composeResources at the path the Compose resource runtime reads on device —
+// composeResources/<resClass-package>/drawable/… — so `Res.drawable.preview_*` resolves on device.
+val bundleComposeDrawablesAsset = tasks.register<Copy>("bundleComposeDrawablesAsset") {
+    description = "Stage :ide-ui's compose-resource drawables (sample previews) into the APK assets (Android packaging gap)."
+    from(project(":ide-ui").layout.projectDirectory.dir("src/commonMain/composeResources/drawable")) {
+        include("*.png")
+    }
+    into(layout.buildDirectory.dir("compose-drawables-asset/composeResources/dev.ide.ui.generated.resources/drawable"))
+}
+
 android {
     namespace = "dev.ide.android"
     compileSdk = 36
@@ -246,8 +258,8 @@ android {
         minSdk = 26
         targetSdk = 36
         // versionCode must exceed the last published release (the previous-codebase app reached ~29).
-        versionCode = 47
-        versionName = "3.3.1"
+        versionCode = 48
+        versionName = "3.4.0"
         // connectedAndroidTest harness (the on-device Kotlin-compiler discovery spike).
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 
@@ -278,6 +290,7 @@ android {
     sourceSets.getByName("main").assets.srcDir(layout.buildDirectory.dir("compose-runtime-asset").get().asFile)
     sourceSets.getByName("main").assets.srcDir(layout.buildDirectory.dir("compose-fonts-asset").get().asFile)
     sourceSets.getByName("main").assets.srcDir(layout.buildDirectory.dir("compose-strings-asset").get().asFile)
+    sourceSets.getByName("main").assets.srcDir(layout.buildDirectory.dir("compose-drawables-asset").get().asFile)
     sourceSets.getByName("main").assets.srcDir(layout.buildDirectory.dir("r8-dex-asset").get().asFile)
     sourceSets.getByName("main").assets.srcDir(layout.buildDirectory.dir("reflective-launcher-asset").get().asFile)
 
@@ -559,7 +572,7 @@ val fetchAndroidBuildTools = tasks.register("fetchAndroidBuildTools") {
 // Run before anything AGP does, so the freshly-fetched lib*.so are on disk when the native-lib merge runs,
 // and the staged kotlin-stdlib.jar asset is present when the asset merge runs.
 tasks.named("preBuild").configure {
-    dependsOn(fetchAndroidBuildTools, bundleKotlinStdlibAsset, bundleKotlincResourcesAsset, bundleComposeRuntimeAsset, bundleComposeFontsAsset, bundleComposeStringAsset, bundleR8DexAsset, bundleReflectiveLauncherDex)
+    dependsOn(fetchAndroidBuildTools, bundleKotlinStdlibAsset, bundleKotlincResourcesAsset, bundleComposeRuntimeAsset, bundleComposeFontsAsset, bundleComposeStringAsset, bundleComposeDrawablesAsset, bundleR8DexAsset, bundleReflectiveLauncherDex)
 }
 
 // Same Android packaging gap as the fonts above, for the i18n string resources. :ide-ui's

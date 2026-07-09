@@ -14,8 +14,11 @@ import org.eclipse.jdt.core.dom.IMethodBinding
 import org.eclipse.jdt.core.dom.IPackageBinding
 import org.eclipse.jdt.core.dom.ITypeBinding
 import org.eclipse.jdt.core.dom.IVariableBinding
+import org.eclipse.jdt.core.dom.MarkerAnnotation
 import org.eclipse.jdt.core.dom.Modifier
+import org.eclipse.jdt.core.dom.NormalAnnotation
 import org.eclipse.jdt.core.dom.SimpleName
+import org.eclipse.jdt.core.dom.SingleMemberAnnotation
 
 /**
  * Type-aware Java coloring over JDT bindings. Mirrors [dev.ide.lang.jdt.rename.JdtRename]'s reference walk:
@@ -41,6 +44,15 @@ class JdtSemanticHighlighter(private val analyzer: JdtSourceAnalyzer) : Semantic
                 out += SemanticToken(TextRange(node.startPosition, node.startPosition + node.length), kind, mods)
                 return true
             }
+
+            // Color the `@` of an annotation usage. The annotation type NAME is a SimpleName already classified
+            // as ANNOTATION above; adding just the leading `@` makes the whole `@Foo` read as one unit.
+            private fun emitAt(startPosition: Int) {
+                out += SemanticToken(TextRange(startPosition, startPosition + 1), HighlightKind.ANNOTATION)
+            }
+            override fun visit(node: MarkerAnnotation): Boolean { emitAt(node.startPosition); return true }
+            override fun visit(node: NormalAnnotation): Boolean { emitAt(node.startPosition); return true }
+            override fun visit(node: SingleMemberAnnotation): Boolean { emitAt(node.startPosition); return true }
         })
         return out
     }
@@ -59,6 +71,8 @@ class JdtSemanticHighlighter(private val analyzer: JdtSourceAnalyzer) : Semantic
         is IMethodBinding -> if (b.isConstructor) HighlightKind.CONSTRUCTOR else HighlightKind.METHOD
         is IVariableBinding -> when {
             b.isEnumConstant -> HighlightKind.ENUM_CONSTANT
+            // A `static final` field is a constant (`Math.PI`, `Integer.MAX_VALUE`) — colored apart from a field.
+            b.isField && Modifier.isStatic(b.modifiers) && Modifier.isFinal(b.modifiers) -> HighlightKind.CONSTANT
             b.isField -> HighlightKind.FIELD
             b.isParameter -> HighlightKind.PARAMETER
             else -> HighlightKind.LOCAL_VARIABLE

@@ -33,6 +33,11 @@ class ComposePreviewRenderer(
     /** The project's library [ClassLoader] (device preview) — see [ComposeDispatcher.loader]. Null on desktop
      *  (library composables resolve against the IDE's bundled Compose-for-Desktop). */
     private val loader: ClassLoader? = null,
+    /** When true (the editor default), a single unsupported/failed construct is SKIPPED so the rest of the
+     *  preview still renders. Pass false to make the first failure THROW to [Render]'s boundary → [onError] →
+     *  a visible error instead of a silently-empty preview (used by Learn lessons, whose snippets we author
+     *  and want to fail loudly if a construct doesn't dispatch). */
+    private val tolerateGaps: Boolean = true,
 ) {
 
     private val dispatcher = ComposeDispatcher(loader = loader)
@@ -63,7 +68,7 @@ class ComposePreviewRenderer(
         classes: List<ResolvedClass>,
         binding: PreviewParameterBinding,
     ): List<Any?> = runCatching {
-        Interpreter(program, dispatcher, runtime, classLoader = loader, classes = classes, tolerateGaps = true)
+        Interpreter(program, dispatcher, runtime, classLoader = loader, classes = classes, tolerateGaps = tolerateGaps)
             .previewParameterValues(binding.providerClass, binding.providerFqn, binding.limit)
     }.getOrElse {
         log.warning("Compose preview @PreviewParameter resolution failed: ${it::class.simpleName}: ${it.message}")
@@ -82,8 +87,9 @@ class ComposePreviewRenderer(
         onPartialError: (Throwable?) -> Unit = {},
     ) {
         val interpreter = remember(program, classes) {
-            // tolerateGaps: a single unsupported construct skips rather than blanking the whole preview.
-            Interpreter(program, dispatcher, runtime, classLoader = loader, classes = classes, tolerateGaps = true)
+            // tolerateGaps: a single unsupported construct skips rather than blanking the whole preview (the
+            // editor default); a lesson passes false so a gap surfaces as a visible error instead of a blank.
+            Interpreter(program, dispatcher, runtime, classLoader = loader, classes = classes, tolerateGaps = tolerateGaps)
         }
         // We're inside the IDE's composition: thread its composer, then drive the preview through its own
         // restart group so state changes recompose just the preview subtree.

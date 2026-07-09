@@ -16,8 +16,6 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
-import androidx.compose.material3.Text
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import dev.ide.ui.EditorViewMode
 import dev.ide.ui.IdeUiState
@@ -28,6 +26,7 @@ import dev.ide.ui.backend.UiActionContext
 import dev.ide.ui.backend.UiActionPlaces
 import dev.ide.ui.components.DepsProgressBar
 import dev.ide.ui.components.EditorTopBar
+import dev.ide.ui.components.NoOpenFilesView
 import dev.ide.ui.components.TabsStrip
 import dev.ide.ui.editor.BlockEditor
 import dev.ide.ui.editor.CodeEditor
@@ -36,15 +35,14 @@ import dev.ide.ui.editor.engine.EditorEngineDaemon
 import dev.ide.ui.editor.folding.FoldRegion
 import dev.ide.ui.editor.preview.ComposePreviewPane
 import dev.ide.ui.editor.preview.LayoutPreviewPane
+import dev.ide.ui.editor.preview.MarkdownPreviewPane
 import dev.ide.ui.editor.preview.ResourcePreviewPane
 import dev.ide.ui.editor.preview.isLayoutPreviewable
+import dev.ide.ui.editor.preview.isMarkdownPreviewable
 import dev.ide.ui.editor.preview.isPreviewable
-import dev.ide.ui.generated.resources.Res
-import dev.ide.ui.generated.resources.edview_open_a_file_from_navigator
 import dev.ide.ui.theme.Ca
 import dev.ide.ui.theme.Motion
 import kotlinx.coroutines.launch
-import org.jetbrains.compose.resources.stringResource
 
 /**
  * Top bar + deps progress + tabs + breadcrumb row + the code canvas — the editor column shared by both
@@ -171,6 +169,10 @@ internal fun EditorCenter(
                 activeIndex = state.activeIndex,
                 onSelect = { state.activeIndex = it },
                 onClose = { state.close(it) },
+                onCloseOthers = { state.closeOthers(it) },
+                onCloseToRight = { state.closeToRight(it) },
+                onCloseToLeft = { state.closeToLeft(it) },
+                onCloseAll = { state.closeAll() },
             )
             if (active != null) {
                 EditorDaemonEffect(state, active, indexStatus) { hasPreview = it }
@@ -217,6 +219,12 @@ internal fun EditorCenter(
                 }
                 val previewSurface: @Composable (Modifier) -> Unit = { mod ->
                     when {
+                        isMarkdownPreviewable(active.path) -> MarkdownPreviewPane(
+                            path = active.path,
+                            text = active.text,
+                            modifier = mod,
+                        )
+
                         isLayoutPreviewable(active.path) -> LayoutPreviewPane(
                             path = active.path,
                             text = active.text,
@@ -261,16 +269,7 @@ internal fun EditorCenter(
                     else -> codeSurface(Modifier.weight(1f).fillMaxWidth())
                 }
             } else {
-                Box(
-                    Modifier.weight(1f).fillMaxWidth().background(Ca.colors.editorBg),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Text(
-                        stringResource(Res.string.edview_open_a_file_from_navigator),
-                        color = Ca.colors.textTertiary,
-                        style = Ca.type.subhead
-                    )
-                }
+                NoOpenFilesView(Modifier.weight(1f).fillMaxWidth())
             }
         }
         // In-file structure / outline overlay (opened from the breadcrumb tap or Ctrl-F12).

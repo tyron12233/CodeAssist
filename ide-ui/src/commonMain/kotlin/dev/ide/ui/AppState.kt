@@ -35,7 +35,7 @@ import kotlinx.coroutines.withContext
  * Top-level screens, ordered by depth so the transition helper can infer direction: a move to a
  * higher-ordinal screen animates "forward" (deeper), a lower one "back".
  */
-enum class Screen { Projects, CreateProject, Editor, Hub, Run, ModuleConfig, SdkManager, KeystoreManager, KeystoreCreate, KeystoreImport, Settings, CodeStyle }
+enum class Screen { Projects, CreateProject, ImportProject, ExportProject, Editor, Hub, Run, ModuleConfig, SdkManager, KeystoreManager, KeystoreCreate, KeystoreImport, Settings, CodeStyle, LessonTrack, LessonPlayer, StoreItem }
 
 /**
  * The home screen's bottom-navigation destinations (the landing surface shown on [Screen.Projects]): the
@@ -361,6 +361,26 @@ class IdeUiState(
         if (idx < 0) return
         openFiles.removeAt(idx)
         activeIndex = activeIndex.coerceAtMost(openFiles.lastIndex)
+    }
+
+    /** Close every tab except [keep] (tab context menu). Iterates a copy, so mutating [openFiles] is safe. */
+    fun closeOthers(keep: OpenFile) = openFiles.filter { it !== keep }.forEach(::close)
+
+    /** Close all open tabs. */
+    fun closeAll() = openFiles.toList().forEach(::close)
+
+    /** Close the tabs positioned after [file] in the strip. `drop`/`take` copy, so the loop can mutate safely. */
+    fun closeToRight(file: OpenFile) {
+        val i = openFiles.indexOf(file)
+        if (i < 0) return
+        openFiles.drop(i + 1).forEach(::close)
+    }
+
+    /** Close the tabs positioned before [file] in the strip. */
+    fun closeToLeft(file: OpenFile) {
+        val i = openFiles.indexOf(file)
+        if (i <= 0) return
+        openFiles.take(i).forEach(::close)
     }
 
     /** Persist [file]'s buffer to disk, rebase its saved baseline, and clear the dirty flag. No-op if clean. */

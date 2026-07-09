@@ -10,33 +10,39 @@ import androidx.compose.animation.scaleOut
 import androidx.compose.animation.shrinkHorizontally
 import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.Canvas
-import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
-import androidx.compose.foundation.interaction.MutableInteractionSource
-import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
+import androidx.compose.foundation.gestures.Orientation
+import androidx.compose.foundation.gestures.rememberScrollableState
+import androidx.compose.foundation.gestures.scrollable
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.heightIn
-import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.lazy.LazyRow
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
+import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -50,8 +56,6 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusProperties
 import androidx.compose.ui.focus.focusRequester
-import androidx.compose.ui.platform.LocalSoftwareKeyboardController
-import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.RoundRect
@@ -63,6 +67,7 @@ import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.drawscope.clipPath
 import androidx.compose.ui.graphics.lerp
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
@@ -103,11 +108,22 @@ import dev.ide.ui.generated.resources.edchrome_toggle_inlay_hints
 import dev.ide.ui.generated.resources.edchrome_toggle_navigator
 import dev.ide.ui.generated.resources.edchrome_unresolved_dependencies
 import dev.ide.ui.generated.resources.redo
+import dev.ide.ui.generated.resources.edview_no_file_open_hint
+import dev.ide.ui.generated.resources.edview_no_file_open_title
 import dev.ide.ui.generated.resources.retry
 import dev.ide.ui.generated.resources.run
 import dev.ide.ui.generated.resources.save
+import dev.ide.ui.generated.resources.tab_close_all
+import dev.ide.ui.generated.resources.tab_close_others
+import dev.ide.ui.generated.resources.tab_close_to_the_left
+import dev.ide.ui.generated.resources.tab_close_to_the_right
 import dev.ide.ui.generated.resources.undo
 import dev.ide.ui.icons.CaIcons
+import dev.ide.ui.icons.TreeIcon
+import dev.ide.ui.icons.TreeIcons
+import dev.ide.ui.icons.fileIconId
+import dev.ide.ui.icons.resolveTint
+import dev.ide.ui.platform.secondaryClickable
 import dev.ide.ui.icons.actionIcon
 import dev.ide.ui.theme.Ca
 import dev.ide.ui.theme.CodeAssistTheme
@@ -337,7 +353,7 @@ private fun PluginToolbarActions(
 /**
  * The compact-bar overflow: a ⋯ button opening a dropdown of the secondary controls that don't fit inline on
  * a phone (command palette, inlay-hint toggle, build console, Compose preview). Toggled items show their
- * on-state in the accent colour.
+ * on-state in the accent color.
  */
 @Composable
 private fun EditorOverflowMenu(
@@ -876,79 +892,191 @@ fun IndexStatusChip(
     }
 }
 
-/** Tabs strip (solid editor-bg): active tab gets a 2px accent underline, a modified dot, a close icon. */
+/**
+ * Tabs strip (solid editor-bg): active tab gets an accent tint + border, a modified dot, a close icon. Each
+ * tab opens a close-operations context menu on right-click (desktop) / long-press (touch). Rendered in a
+ * [LazyRow] so a session with many open files only composes the tabs that are actually on screen.
+ */
 @Composable
 fun TabsStrip(
     openFiles: List<OpenFile>,
     activeIndex: Int,
     onSelect: (Int) -> Unit,
     onClose: (OpenFile) -> Unit,
+    onCloseOthers: (OpenFile) -> Unit = {},
+    onCloseToRight: (OpenFile) -> Unit = {},
+    onCloseToLeft: (OpenFile) -> Unit = {},
+    onCloseAll: () -> Unit = {},
 ) {
     if (openFiles.isEmpty()) return
 
-    val accent = Ca.colors.accent
-    Row(
+    LazyRow(
         Modifier
             .fillMaxWidth()
             .height(40.dp)
             .padding(vertical = 4.dp)
-            .background(Ca.colors.editorBg)
-            .horizontalScroll(rememberScrollState()),
+            .background(Ca.colors.editorBg),
+        contentPadding = PaddingValues(horizontal = 8.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Spacer(modifier = Modifier.width(8.dp))
-        openFiles.forEachIndexed { index, file ->
-            val active = index == activeIndex
-            Row(
-                Modifier
-                    .fillMaxHeight()
-                    .background(
-                        color = if (active) accent.copy(alpha = 0.1f) else Ca.colors.editorBg,
-                        shape = RoundedCornerShape(Ca.radius.sm)
-                    )
-                    .border(
-                        width = if (active) 1.dp else 0.dp,
-                        color = if (active) accent.copy(alpha = 0.75f) else Color.Transparent,
-                        shape = RoundedCornerShape(Ca.radius.sm)
-                    )
-                    .clickable { onSelect(index) }
-                    .padding(horizontal = 14.dp),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                Text(
-                    file.name,
-                    color = if (active) Ca.colors.textPrimary else Ca.colors.textSecondary,
-                    style = Ca.type.footnote,
-                    fontWeight = if (active) FontWeight.SemiBold else FontWeight.Normal,
-                )
-                // The unsaved-changes dot fades + scales while its slot (the dot *and* its leading gap, so the
-                // tab smoothly grows/shrinks) expands/collapses — instead of the tab jumping to a new width.
-                AnimatedVisibility(
-                    visible = file.modified,
-                    enter = fadeIn() + expandHorizontally() + scaleIn(initialScale = 0.4f),
-                    exit = fadeOut() + shrinkHorizontally() + scaleOut(targetScale = 0.4f),
-                ) {
-                    Box(
-                        Modifier.padding(start = 8.dp).size(7.dp)
-                            .background(Ca.colors.gitModified, RoundedCornerShape(Ca.radius.pill))
-                    )
-                }
-                Box(
-                    Modifier.padding(start = 8.dp).size(16.dp).clickable { onClose(file) },
-                    contentAlignment = Alignment.Center,
-                ) {
-                    Icon(
-                        CaIcons.close,
-                        stringResource(Res.string.close),
-                        Modifier.size(12.dp),
-                        tint = Ca.colors.textTertiary
-                    )
-                }
-            }
+        itemsIndexed(openFiles, key = { _, f -> f.path }) { index, file ->
+            EditorTab(
+                // Fade a newly-opened tab in, fade a closed one out, and slide the rest into place — so
+                // opening/closing tabs animates instead of snapping (LazyRow item animation, keyed by path).
+                modifier = Modifier.animateItem(),
+                file = file,
+                active = index == activeIndex,
+                canCloseOthers = openFiles.size > 1,
+                canCloseRight = index < openFiles.lastIndex,
+                canCloseLeft = index > 0,
+                onSelect = { onSelect(index) },
+                onClose = { onClose(file) },
+                onCloseOthers = { onCloseOthers(file) },
+                onCloseToRight = { onCloseToRight(file) },
+                onCloseToLeft = { onCloseToLeft(file) },
+                onCloseAll = onCloseAll,
+            )
         }
     }
     // a hairline under the tabs
     Box(Modifier.fillMaxWidth().height(1.dp).background(Ca.colors.separator))
+}
+
+/** One tab. The row selects on click; right-click (desktop) or long-press (touch) opens the close menu. */
+@OptIn(ExperimentalFoundationApi::class)
+@Composable
+private fun EditorTab(
+    file: OpenFile,
+    active: Boolean,
+    canCloseOthers: Boolean,
+    canCloseRight: Boolean,
+    canCloseLeft: Boolean,
+    onSelect: () -> Unit,
+    onClose: () -> Unit,
+    onCloseOthers: () -> Unit,
+    onCloseToRight: () -> Unit,
+    onCloseToLeft: () -> Unit,
+    onCloseAll: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    val accent = Ca.colors.accent
+    var menuOpen by remember { mutableStateOf(false) }
+    Box(modifier) {
+        Row(
+            Modifier
+                .fillMaxHeight()
+                .background(
+                    color = if (active) accent.copy(alpha = 0.1f) else Ca.colors.editorBg,
+                    shape = RoundedCornerShape(Ca.radius.sm)
+                )
+                .border(
+                    width = if (active) 1.dp else 0.dp,
+                    color = if (active) accent.copy(alpha = 0.75f) else Color.Transparent,
+                    shape = RoundedCornerShape(Ca.radius.sm)
+                )
+                .combinedClickable(onClick = onSelect, onLongClick = { menuOpen = true })
+                .secondaryClickable { menuOpen = true }
+                .padding(horizontal = 14.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            // Leading file-type icon (same glyph/badge as the file tree), so a tab is identifiable at a glance.
+            TabFileIcon(file.name)
+            Spacer(Modifier.width(8.dp))
+            Text(
+                file.name,
+                color = if (active) Ca.colors.textPrimary else Ca.colors.textSecondary,
+                style = Ca.type.footnote,
+                fontWeight = if (active) FontWeight.SemiBold else FontWeight.Normal,
+            )
+            // The unsaved-changes dot fades + scales while its slot (the dot *and* its leading gap, so the
+            // tab smoothly grows/shrinks) expands/collapses — instead of the tab jumping to a new width.
+            AnimatedVisibility(
+                visible = file.modified,
+                enter = fadeIn() + expandHorizontally() + scaleIn(initialScale = 0.4f),
+                exit = fadeOut() + shrinkHorizontally() + scaleOut(targetScale = 0.4f),
+            ) {
+                Box(
+                    Modifier.padding(start = 8.dp).size(7.dp)
+                        .background(Ca.colors.gitModified, RoundedCornerShape(Ca.radius.pill))
+                )
+            }
+            Box(
+                Modifier.padding(start = 8.dp).size(16.dp).clickable { onClose() },
+                contentAlignment = Alignment.Center,
+            ) {
+                Icon(
+                    CaIcons.close,
+                    stringResource(Res.string.close),
+                    Modifier.size(12.dp),
+                    tint = Ca.colors.textTertiary
+                )
+            }
+        }
+        CaDropdownMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }) {
+            OverflowItem(CaIcons.close, stringResource(Res.string.close)) { menuOpen = false; onClose() }
+            OverflowItem(CaIcons.close, stringResource(Res.string.tab_close_others), enabled = canCloseOthers) {
+                menuOpen = false; onCloseOthers()
+            }
+            OverflowItem(CaIcons.chevronRight, stringResource(Res.string.tab_close_to_the_right), enabled = canCloseRight) {
+                menuOpen = false; onCloseToRight()
+            }
+            OverflowItem(CaIcons.chevronLeft, stringResource(Res.string.tab_close_to_the_left), enabled = canCloseLeft) {
+                menuOpen = false; onCloseToLeft()
+            }
+            OverflowItem(CaIcons.close, stringResource(Res.string.tab_close_all)) { menuOpen = false; onCloseAll() }
+        }
+    }
+}
+
+/** Leading file-type icon for a tab — the same glyph/badge the file tree shows, resolved from the file name
+ *  ([fileIconId]). Files are always leaves, so a Folder-shaped id collapses to its closed glyph. */
+@Composable
+private fun TabFileIcon(name: String) {
+    when (val ic = TreeIcons.resolve(fileIconId(name))) {
+        is TreeIcon.Glyph -> Icon(ic.image, null, Modifier.size(15.dp), tint = resolveTint(ic.tint))
+        is TreeIcon.Folder -> Icon(ic.closed, null, Modifier.size(15.dp), tint = resolveTint(ic.tint))
+        is TreeIcon.Badge -> LetterBadge(ic.text, ic.color, 15)
+    }
+}
+
+/** The editor's empty state — shown in place of the code canvas when no tab is open: a muted glyph, a short
+ *  title, and a hint, centered. Nicer than a bare line of text.
+ *
+ *  A rightward swipe anywhere here opens the navigator: the view is a horizontal scroll that consumes nothing
+ *  (same `reverseDirection` config the editor uses), so the drag leaks to the compact layout's [PushDrawer]
+ *  nested-scroll exactly as swiping the editor at its horizontal start does — finger-following, then settling.
+ *  Where there's no drawer (the expanded layout) it's an inert no-op. */
+@Composable
+fun NoOpenFilesView(modifier: Modifier = Modifier) {
+    val drawerSwipe = rememberScrollableState { 0f }
+    Box(
+        modifier
+            .background(Ca.colors.editorBg)
+            .scrollable(drawerSwipe, Orientation.Horizontal, reverseDirection = true),
+        contentAlignment = Alignment.Center,
+    ) {
+        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+            Box(
+                Modifier.size(64.dp).background(Ca.colors.surface2, RoundedCornerShape(Ca.radius.md)),
+                contentAlignment = Alignment.Center,
+            ) {
+                Icon(CaIcons.docText, null, Modifier.size(30.dp), tint = Ca.colors.textTertiary)
+            }
+            Spacer(Modifier.height(16.dp))
+            Text(
+                stringResource(Res.string.edview_no_file_open_title),
+                color = Ca.colors.textSecondary,
+                style = Ca.type.subhead,
+                fontWeight = FontWeight.SemiBold,
+            )
+            Spacer(Modifier.height(6.dp))
+            Text(
+                stringResource(Res.string.edview_no_file_open_hint),
+                color = Ca.colors.textTertiary,
+                style = Ca.type.footnote,
+            )
+        }
+    }
 }
 
 @Preview
