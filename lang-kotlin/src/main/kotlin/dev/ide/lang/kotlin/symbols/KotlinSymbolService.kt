@@ -1297,8 +1297,20 @@ class KotlinSymbolService(
         return index?.exact<TypeShape>(TYPE_SHAPE, fqn)?.firstOrNull() == null
     }
 
+    /** A type-name completion page plus whether it was capped (more matches exist than [symbols] holds). */
+    class TypeNameCandidates(val symbols: List<KotlinSymbol>, val capped: Boolean)
+
     /** Type-name candidates by prefix: source classes + defaults + the classpath `classNames` index. */
-    fun typeNamesByPrefix(prefix: String, limit: Int = 100): List<KotlinSymbol> {
+    fun typeNamesByPrefix(prefix: String, limit: Int = 100): List<KotlinSymbol> =
+        typeNameCandidates(prefix, limit).symbols
+
+    /** [typeNamesByPrefix] plus whether the classpath `classNames` query was TRUNCATED at [limit] — i.e. more
+     *  types match the prefix than were returned. Completion needs this: the index answers a prefix with the
+     *  top-[limit] fuzzy-scored hits, so a broad prefix (`S`, `St`) returns a capped page that a type like
+     *  `StringBuilder` only scores into at a longer prefix. Marking such a result incomplete makes the engine
+     *  RE-QUERY as the prefix narrows instead of client-side-narrowing the stale page (which permanently hides
+     *  those types until the completion session is restarted). */
+    fun typeNameCandidates(prefix: String, limit: Int = 100): TypeNameCandidates {
         val m = PrefixMatcher(prefix)
         val out = LinkedHashMap<String, KotlinSymbol>()
         model().classByFqn.values.filter { !it.isCompanion && !it.isLocal && (prefix.isEmpty() || m.matches(it.simpleName)) }
@@ -1313,10 +1325,12 @@ class KotlinSymbolService(
         // The classNames segments carry a trigram dictionary, so the fuzzy path answers camel-hump
         // (`NPE`, `mDL`) and case-insensitive queries the byte-prefix scan cannot; the matcher then drops
         // the loose subsequence tier the fuzzy scorer keeps.
+        // Materialized (not a lazy Sequence) so the hit count is available for the cap check below AND the
+        // query runs once, not again per traversal.
         val classHits = index?.let { idx ->
             if (prefix.isEmpty()) idx.prefix<ClassNameValue>(CLASS_NAMES, prefix, limit)
             else idx.fuzzy<ClassNameValue>(CLASS_NAMES, prefix, limit)
-        }
+        }?.toList()
         classHits?.forEach { hit ->
             val v = hit.value
             val simple = v.fqn.substringAfterLast('.')
@@ -1326,7 +1340,10 @@ class KotlinSymbolService(
                 KotlinSymbol(simple, classNameKind(v.kind), typeByFqn(v.fqn), origin = BINARY)
             }
         }
-        return out.values.take(limit)
+        // Capped when the index page filled OR the merged set overflowed the take — either way a matching type
+        // may have been dropped, so the caller must not treat the page as the complete match set.
+        val capped = (classHits?.size ?: 0) >= limit || out.size > limit
+        return TypeNameCandidates(out.values.take(limit), capped)
     }
 
     /** The constructors declared by a classpath type [fqn] (own shape only — constructors aren't inherited),

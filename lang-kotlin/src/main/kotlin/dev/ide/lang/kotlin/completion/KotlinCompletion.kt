@@ -191,10 +191,9 @@ class KotlinCompletion(
                 )
                 // A type slot also carries a few keyword positions (a `where` clause after a generic
                 // signature); KotlinKeywords returns nothing for a plain type reference, so this is safe.
-                CompletionPosition.TypeReference -> PositionResult(
-                    service.typeNamesByPrefix(prefix),
-                    keywordContext = true
-                )
+                CompletionPosition.TypeReference -> service.typeNameCandidates(prefix).let {
+                    PositionResult(it.symbols, keywordContext = true, capped = it.capped)
+                }
 
                 is CompletionPosition.InfixName -> infixCandidates(
                     where.left,
@@ -236,6 +235,7 @@ class KotlinCompletion(
                         grade = matcher.grade(s.name)?.ordinal ?: PrefixMatcher.Grade.entries.size,
                         boosted = composableContext && s.isComposable,
                         group = memberGroup(s),
+                        proximity = proximityOf(s, pos.nameReference),
                     )
                 }
                 .sortedWith(rank())
@@ -277,7 +277,10 @@ class KotlinCompletion(
             .take(MAX_ITEMS)
         return CompletionResult(
             items = items,
-            isIncomplete = raw.size > MAX_ITEMS,
+            // Incomplete when the final set was truncated OR a producer capped its query — either way matches
+            // exist that this page doesn't hold, so the engine must re-query as the prefix narrows instead of
+            // narrowing this page client-side (which would permanently hide, e.g., `StringBuilder` typed from `S`).
+            isIncomplete = raw.size > MAX_ITEMS || pos.capped,
             replacementRange = replaceRange
         )
     }
@@ -313,6 +316,14 @@ class KotlinCompletion(
         /** The candidates are infix functions at an operator slot → insert the `a foo b` form (`foo `), not
          *  the call form `foo()`. */
         val infixInsert: Boolean = false,
+        /** A bare name-reference position (scope symbols ∪ visible types), where a top-level LIBRARY callable
+         *  is no nearer than a library type and so must not outrank a classifier on the proximity key (see
+         *  [proximityOf]). Off for member access / infix, whose candidates are members ranked by callableWeight. */
+        val nameReference: Boolean = false,
+        /** A candidate producer (the classpath type-name index) truncated its result at the query cap, so more
+         *  matches exist than [raw] holds. Forces the result incomplete so the engine re-queries as the prefix
+         *  narrows rather than client-side-narrowing a capped page (see [KotlinSymbolService.typeNameCandidates]). */
+        val capped: Boolean = false,
     )
 
     private fun classifyPosition(
@@ -482,9 +493,12 @@ class KotlinCompletion(
         // The type the context wants → offer literals/enum constants and rank assignable candidates first.
         val expected = resolver.expectedTypeAt(offset)
         expected?.let { extra += expectedExtras(it, matcher, autoImport) }
-        val raw = KotlinPerf.span("scope") { resolver.scopeSymbolsAt(offset, prefix) } +
-                KotlinPerf.span("typeNames") { service.typeNamesByPrefix(prefix) }
-        return PositionResult(raw, extra = extra, expected = expected, keywordContext = true)
+        val types = KotlinPerf.span("typeNames") { service.typeNameCandidates(prefix) }
+        val raw = KotlinPerf.span("scope") { resolver.scopeSymbolsAt(offset, prefix) } + types.symbols
+        return PositionResult(
+            raw, extra = extra, expected = expected, keywordContext = true,
+            nameReference = true, capped = types.capped,
+        )
     }
 
     /** Whether the caret sits on the NAME identifier of a declaration, and if so which kind — so completion can
@@ -694,6 +708,7 @@ class KotlinCompletion(
         val grade: Int,
         val boosted: Boolean,
         val group: Int,
+        val proximity: Int,
     ) {
         fun relevance() = CompletionRelevance(
             fitsExpectedType = fitsExpected,
@@ -701,7 +716,7 @@ class KotlinCompletion(
             callableWeight = group,
             inScope = importEdit.isEmpty(),
             deprecated = symbol.isDeprecated,
-            proximity = KotlinCompletionItems.proximity(symbol.kind),
+            proximity = proximity,
         )
     }
 
@@ -711,10 +726,29 @@ class KotlinCompletion(
         { if (it.boosted) 0 else 1 },                              // @Composable callables first in a @Composable context
         { it.group },                                              // own members > source ext > library ext > universal scope fns > Object methods
         { if (it.importEdit.isEmpty()) 0 else 1 },                 // in-scope (no import) before needs-import
-        { KotlinCompletionItems.proximity(it.symbol.kind) },       // locals/members before library
+        { it.proximity },                                          // locals/members > types > top-level library callables (name ref)
         { it.symbol.name.length },
         { it.symbol.name },
     )
+
+    /**
+     * Ranking proximity for [s]: how "near" the caret it is (locals/params closest, then members, then
+     * types, then library). Delegates to [KotlinCompletionItems.proximity] except in a bare [nameReference]
+     * position, where a top-level LIBRARY callable is no nearer than a library type and so is demoted BELOW
+     * classifiers. Without this, the stdlib `String(stringBuilder: StringBuilder)` factory functions
+     * (top-level `fun String(...)`) sort above the `String`/`StringBuilder` CLASSES purely because
+     * `proximity(METHOD) < proximity(CLASS)`, burying the type the user is spelling out. Members keep their
+     * near proximity (they carry no [KotlinSymbol.packageName] — only a top-level callable does), so a member
+     * access / infix slot is unaffected. Kicks in only after grade ties, so a lowercase function prefix
+     * (`printl` → `println`) still wins on its better match grade, never demoted under a type.
+     */
+    private fun proximityOf(s: KotlinSymbol, nameReference: Boolean): Int {
+        val base = KotlinCompletionItems.proximity(s.kind)
+        if (!nameReference) return base
+        val topLevelCallable =
+            (s.kind == SymbolKind.METHOD || s.kind == SymbolKind.FIELD) && s.packageName != null
+        return if (topLevelCallable) TOP_LEVEL_CALLABLE_PROXIMITY else base
+    }
 
     /**
      * IntelliJ-style grouping for member-access ranking (lower sorts earlier): the receiver's own members
@@ -821,6 +855,11 @@ class KotlinCompletion(
         // Cap on a type's own companion constants offered at an expected-type slot (`Color` has dozens of
         // named colors) so the popup stays readable; the typed prefix narrows them further.
         const val MAX_EXPECTED_CONSTANTS = 12
+
+        // Proximity a top-level LIBRARY callable gets in a name-reference position — just below the classifier
+        // tier (CLASS/INTERFACE/ENUM = 3 in KotlinCompletionItems.proximity), so a type outranks a same-named
+        // top-level factory function (`String` the class over the `String(...)` stdlib factories). See [proximityOf].
+        const val TOP_LEVEL_CALLABLE_PROXIMITY = 4
         val TYPE_KINDS = setOf(
             SymbolKind.CLASS,
             SymbolKind.INTERFACE,
