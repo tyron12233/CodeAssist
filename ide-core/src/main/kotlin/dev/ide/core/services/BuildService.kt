@@ -874,9 +874,11 @@ internal class BuildService(private val ctx: EngineContext) : Disposable {
 
     /** The entry point to launch for console [module]: the user-configured Run override if set (carrying the
      *  instance/static flag from a matching detected entry when known), else the first auto-detected entry
-     *  point in its sources (Java mains before Kotlin). Null when neither exists. */
-    private fun runnableMainFor(module: Module): RunTarget? {
-        val detected = MainClassDetection.detect(ctx, module)
+     *  point in its sources (Java mains before Kotlin). Null when neither exists. With [live], the sources are
+     *  scanned on disk rather than via the index — for the programmatic run-and-capture path, whose sources are
+     *  written straight to disk, so a stale index entry can't misname the class to launch. */
+    private fun runnableMainFor(module: Module, live: Boolean = false): RunTarget? {
+        val detected = if (live) MainClassDetection.detectLive(ctx, module) else MainClassDetection.detect(ctx, module)
         val override = ctx.mainClassOverride(module)
         if (override != null) return detected.firstOrNull { it.mainClass == override } ?: RunTarget(override, instance = false)
         return detected.firstOrNull()
@@ -896,7 +898,10 @@ internal class BuildService(private val ctx: EngineContext) : Disposable {
         runCatching { ctx.ensureKotlinStdlib() }
         val module = ctx.modules().firstOrNull { it.name == moduleName }
             ?: return RunCapture(false, false, "", null, listOf("No module '$moduleName'."))
-        val target = runnableMainFor(module)
+        // Detect the main from the just-flushed disk sources, not the index: this path writes the module's
+        // sources directly (the Learn checker overwrites its `Main` per exercise), so the persisted index can
+        // still name a since-deleted class ("Could not find or load main class com.example.app.Main").
+        val target = runnableMainFor(module, live = true)
             ?: return RunCapture(false, false, "", null, listOf("No runnable main() found in ${module.name}."))
         unresolvedBlocker(module)?.let { return RunCapture(false, false, "", null, listOf(it)) }
         val project = ctx.projectOf(module)
