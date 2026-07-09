@@ -25,6 +25,11 @@ object TypeRendering {
             .toIntOrNull() != null
     }
 
+    /** Whether [simpleName] is the synthetic key a local/anonymous type is registered under (a `$L<ordinal>`
+     *  last segment) — an internal id, never a user-facing name. */
+    fun isSyntheticLocalName(simpleName: String): Boolean =
+        simpleName.length > 2 && simpleName.startsWith("\$L") && simpleName.drop(2).all { it.isDigit() }
+
     fun render(
         fqn: String,
         args: List<String>,
@@ -33,6 +38,11 @@ object TypeRendering {
         isExtensionFunctionType: Boolean = false,
     ): String {
         if (isTypeParameter) return fqn + if (nullable) "?" else ""
+        // A synthetic local/anonymous type key ([SourceIndexBuilder.localTypeFqn] appends a `$L<ordinal>` last
+        // segment) must never leak into display. Without the resolution context to recover a real name this is
+        // the safe fallback; the context-aware path ([KotlinType.toString] → [KotlinTypeContext.
+        // localTypeDisplayName]) refines it to a local class's real name or `<anonymous : Super>`.
+        if (isSyntheticLocalName(fqn.substringAfterLast('.'))) return "<anonymous>" + if (nullable) "?" else ""
         val core = when {
             isFunctionType(fqn) && args.isNotEmpty() -> {
                 val suspend = fqn.substringAfterLast('.').startsWith("SuspendFunction")

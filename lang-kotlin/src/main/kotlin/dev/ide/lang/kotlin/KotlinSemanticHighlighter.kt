@@ -27,6 +27,7 @@ import org.jetbrains.kotlin.psi.KtDeclaration
 import org.jetbrains.kotlin.psi.KtDestructuringDeclaration
 import org.jetbrains.kotlin.psi.KtDestructuringDeclarationEntry
 import org.jetbrains.kotlin.psi.KtEscapeStringTemplateEntry
+import org.jetbrains.kotlin.psi.KtExpressionWithLabel
 import org.jetbrains.kotlin.psi.KtNameReferenceExpression
 import org.jetbrains.kotlin.psi.KtNamedFunction
 import org.jetbrains.kotlin.psi.KtObjectDeclaration
@@ -169,19 +170,30 @@ class KotlinSemanticHighlighter(
 
                 is KtProperty -> {
                     val local = psi.parent is KtBlockExpression
+                    val const = psi.hasModifier(KtTokens.CONST_KEYWORD)
                     val depr =
                         if (isDeprecatedDecl(psi)) setOf(HighlightModifier.DEPRECATED) else emptySet()
                     emit(
                         psi.nameIdentifier?.textRange,
-                        if (local) HighlightKind.LOCAL_VARIABLE else HighlightKind.PROPERTY,
+                        when {
+                            const -> HighlightKind.CONSTANT       // `const val` — a compile-time constant
+                            local -> HighlightKind.LOCAL_VARIABLE
+                            else -> HighlightKind.PROPERTY
+                        },
                         declMods(HighlightModifier.DECLARATION) + mutability(psi.isVar) + extensionIf(
                             psi.receiverTypeReference != null
                         ) + depr
                     )
                 }
 
+                // A primary-constructor `val`/`var` parameter IS a member property (`data class`/`value class`/
+                // regular class) — color it like a property (matching its uses `p.name` and IntelliJ), not a
+                // plain parameter. A plain parameter (no `val`/`var`) stays a parameter.
                 is KtParameter ->
-                    emit(
+                    if (psi.hasValOrVar()) emit(
+                        psi.nameIdentifier?.textRange, HighlightKind.PROPERTY,
+                        declMods(HighlightModifier.DECLARATION) + mutability(psi.isMutable)
+                    ) else emit(
                         psi.nameIdentifier?.textRange, HighlightKind.PARAMETER,
                         declMods(HighlightModifier.DECLARATION) + paramMutability(psi)
                     )
@@ -201,6 +213,20 @@ class KotlinSemanticHighlighter(
                         HighlightKind.TYPE_PARAMETER,
                         setOf(HighlightModifier.DECLARATION)
                     )
+
+                // The `@` of an annotation usage (`@Composable`, `@field:Foo`). The annotation NAME is colored
+                // by classifyTypeRef when the walk descends into the entry; adding just the `@` here (the entry's
+                // range starts at it) makes the whole `@Foo` read as one annotation unit.
+                is KtAnnotationEntry -> {
+                    val at = psi.textRange.startOffset
+                    emit(com.intellij.openapi.util.TextRange(at, at + 1), HighlightKind.ANNOTATION)
+                }
+
+                // A Kotlin label: a definition (`loop@ for …`), a jump target (`break@loop`, `continue@loop`,
+                // `return@loop`), or a labeled `this`/`super` (`this@Outer`). All share KtExpressionWithLabel; we
+                // color its target-label token. Unlabeled `this`/`return`/… have a null target → no token.
+                is KtExpressionWithLabel ->
+                    emit(psi.getTargetLabel()?.textRange, HighlightKind.LABEL)
 
                 // The three resolution-heavy categories get their own [KotlinPerf] bucket so a slow-highlight
                 // trace pins the cost on call-callee resolution vs infix resolution vs member/name inference.
@@ -371,6 +397,15 @@ class KotlinSemanticHighlighter(
         if (parent is KtQualifiedExpression && parent.selectorExpression === ref) {
             classifyMemberSelector(ref, parent, resolver, emit); return
         }
+        // A callable reference `Person::age` / `String::length` / `::topFun`: color the referenced callable
+        // (`age`) like a property/method; a type-denoting receiver (`Person`) reads as a class. An instance
+        // receiver (`instance::foo`) falls through to the local/parameter coloring below.
+        if (parent is org.jetbrains.kotlin.psi.KtCallableReferenceExpression) {
+            if (parent.callableReference === ref) { classifyCallableRef(ref, parent, resolver, emit); return }
+            if (parent.receiverExpression === ref && resolver.typeDenotationFqn(ref) != null) {
+                emit(ref.textRange, HighlightKind.CLASS, emptySet()); return
+            }
+        }
         val name = ref.getReferencedName()
         if (name.isEmpty()) return
         val offset = ref.textRange.startOffset
@@ -408,6 +443,31 @@ class KotlinSemanticHighlighter(
             )
 
             else -> {} // a member / top-level / unresolved name → leave to the lexical layer
+        }
+    }
+
+    /** A callable reference's referenced callable (`Person::age`, `String::length`, `::topFun`): colored as a
+     *  method (function) or property/enum-constant when it resolves off the receiver type or top-level scope.
+     *  Left to the lexer when the parse-only model can't resolve it. */
+    private fun classifyCallableRef(
+        ref: KtNameReferenceExpression,
+        cr: org.jetbrains.kotlin.psi.KtCallableReferenceExpression,
+        resolver: KotlinResolver,
+        emit: (com.intellij.openapi.util.TextRange?, HighlightKind, Set<HighlightModifier>) -> Unit
+    ) {
+        val sym = resolver.callableReferenceTarget(cr) ?: return
+        when (sym.kind) {
+            SymbolKind.METHOD -> {
+                val mods = HashSet<HighlightModifier>(4)
+                if (sym.isComposable) mods += HighlightModifier.COMPOSABLE
+                if (sym.isExtension) mods += HighlightModifier.EXTENSION
+                if (sym.isSuspend) mods += HighlightModifier.SUSPEND
+                if (sym.isDeprecated) mods += HighlightModifier.DEPRECATED
+                emit(ref.textRange, HighlightKind.METHOD, mods)
+            }
+            SymbolKind.FIELD -> emit(ref.textRange, HighlightKind.PROPERTY, deprecationMods(sym))
+            SymbolKind.ENUM_CONSTANT -> emit(ref.textRange, HighlightKind.ENUM_CONSTANT, deprecationMods(sym))
+            else -> {}
         }
     }
 

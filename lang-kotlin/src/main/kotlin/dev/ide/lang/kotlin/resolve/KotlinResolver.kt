@@ -137,6 +137,12 @@ class KotlinResolver(
      *  recurse forever (it hangs editor analysis on nested Compose). Re-entry returns null, breaking the cycle. */
     internal val resolvingCallees = HashSet<KtCallExpression>()
 
+    /** Expression-body functions currently having their return type inferred from their body — a re-entrancy
+     *  guard for the call-site return-type inference ([inferredReturnTypeForCall]). Without it a mutual
+     *  `fun a() = b(); fun b() = a()` (neither declares a return type) would recurse forever; re-entry
+     *  returns null, breaking the cycle. */
+    internal val inferringReturnBodies = HashSet<PsiElement>()
+
     /** Simple name of a parameter's declared type TEXT (`kotlin.Int` / `List<String>` → `Int` / `List`); null
      *  text → null. Type arguments are dropped (JVM erasure forbids overloading on them, so it's safe). */
     internal fun simpleTypeName(text: String?): String? =

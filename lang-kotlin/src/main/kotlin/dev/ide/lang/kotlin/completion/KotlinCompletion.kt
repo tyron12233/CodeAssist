@@ -170,6 +170,12 @@ class KotlinCompletion(
             )
         }
         val nameRef = climbTo<KtNameReferenceExpression>(markerLeaf)
+        // A callable REFERENCE — `::foo`, `receiver::foo`, `this::foo` — completes the name after `::`. A function
+        // there must insert its BARE name (`::foo`), never a call (`::foo()`) or a trailing lambda: a `::` reference
+        // is a function value, not an invocation. Covers the unbound `::name` (a NameReference position) and the
+        // `receiver::name` member reference alike.
+        val callableRef =
+            nameRef?.let { (it.parent as? KtCallableReferenceExpression)?.callableReference === it } == true
         // A type/callable completed by simple name needs an `import` unless already visible; the auto-import
         // context answers that and in-scope candidates rank first, so accepting an unimported symbol imports it.
         val autoImport = KotlinAutoImport(kt, resolver.fileContext)
@@ -243,7 +249,8 @@ class KotlinCompletion(
                 it.importEdit,
                 followingChar,
                 it.relevance(),
-                infix = pos.infixInsert
+                infix = pos.infixInsert,
+                callableRef = callableRef
             )
         }
 

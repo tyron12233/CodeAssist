@@ -123,6 +123,79 @@ class KotlinSemanticHighlightTest {
             toks.any { it.text == "Composable" && it.kind == "annotation" },
             "an annotation usage should be colored as annotation; got $toks",
         )
+        // The leading `@` colors too, so `@Composable` reads as one annotation unit.
+        assertTrue(
+            toks.any { it.text == "@" && it.kind == "annotation" },
+            "the `@` of an annotation should be colored as annotation; got $toks",
+        )
+    }
+
+    @Test
+    fun labelDefinitionAndJumpTargetAreColored() {
+        val code = "fun f() {\n  loop@ for (i in 0..3) {\n    if (i == 2) break@loop\n  }\n}\n"
+        val toks = tokens("Label.kt", code)
+        // The definition (`loop@`) and the `break@loop` target both color as label (≥2 label tokens).
+        assertTrue(
+            toks.count { it.kind == "label" && it.text.contains("loop") } >= 2,
+            "the label definition and jump target should both color as label; got $toks",
+        )
+    }
+
+    @Test
+    fun labeledThisIsColored() {
+        val code = "package demo\nclass Outer {\n  inner class Inner {\n    fun f(): Outer = this@Outer\n  }\n}\n"
+        val toks = tokens("This.kt", code)
+        assertTrue(
+            toks.any { it.kind == "label" && it.text.contains("Outer") },
+            "the label of `this@Outer` should color as label; got $toks",
+        )
+    }
+
+    @Test
+    fun constValIsColoredConstant() {
+        val toks = tokens("Const.kt", "package demo\nconst val MAX = 10\n")
+        assertTrue(
+            toks.any { it.text == "MAX" && it.kind == "constant" && HighlightModifier.DECLARATION in it.mods },
+            "a `const val` declaration should color as constant; got $toks",
+        )
+    }
+
+    @Test
+    fun primaryConstructorPropertiesAreColoredAsProperties() {
+        // A `val`/`var` primary-constructor parameter IS a member property (data/value/regular class) — colored
+        // like a property at its declaration (matching its uses), while a plain parameter stays a parameter.
+        val code = "package demo\n" +
+            "data class Person(val name: String, var age: Int, greeting: String)\n"
+        val toks = tokens("Person.kt", code)
+        assertTrue(
+            toks.any { it.text == "name" && it.kind == "property" && HighlightModifier.READONLY in it.mods },
+            "a `val` primary-constructor property should color as a read-only property; got $toks",
+        )
+        assertTrue(
+            toks.any { it.text == "age" && it.kind == "property" && HighlightModifier.MUTABLE in it.mods },
+            "a `var` primary-constructor property should color as a mutable property; got $toks",
+        )
+        assertTrue(
+            toks.any { it.text == "greeting" && it.kind == "parameter" },
+            "a plain (no val/var) constructor parameter should stay a parameter; got $toks",
+        )
+    }
+
+    @Test
+    fun callableReferenceMemberIsColored() {
+        // `Person::age` — the receiver `Person` reads as a class and the referenced member `age` as a property.
+        val code = "package demo\n" +
+            "data class Person(val name: String, val age: Int)\n" +
+            "fun f() { listOf(Person(\"a\", 1)).maxByOrNull(Person::age) }\n"
+        val toks = tokens("Ref.kt", code)
+        assertTrue(
+            toks.any { it.text == "age" && it.kind == "property" && HighlightModifier.DECLARATION !in it.mods },
+            "the callable-reference member `Person::age` should color as a property; got $toks",
+        )
+        assertTrue(
+            toks.count { it.text == "Person" && it.kind == "class" } >= 1,
+            "the callable-reference receiver `Person` should color as a class; got $toks",
+        )
     }
 
     @Test

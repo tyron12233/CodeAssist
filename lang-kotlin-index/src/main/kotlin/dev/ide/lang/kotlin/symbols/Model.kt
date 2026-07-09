@@ -18,6 +18,12 @@ interface KotlinTypeContext {
     /** Members of [typeFqn], with the receiver's [typeArgs] substituted into generic member signatures. */
     fun membersOf(typeFqn: String, typeArgs: List<TypeRef>, accessibleFrom: Symbol?): List<Symbol>
     fun supertypesOf(typeFqn: String): List<TypeRef>
+
+    /** A user-facing display name for [typeFqn] when it is the synthetic key of a local/anonymous type
+     *  ([SourceIndexBuilder.localTypeFqn] appends a `$L<ordinal>` last segment that must never be shown): a
+     *  local class's real name, or `<anonymous>` / `<anonymous : Super>` for an anonymous object. Null when
+     *  [typeFqn] isn't a synthetic local type known here — the caller then renders it normally. */
+    fun localTypeDisplayName(typeFqn: String): String? = null
 }
 
 class KotlinSymbol(
@@ -241,12 +247,19 @@ class KotlinType(
             isComposable
         )
 
-    override fun toString(): String =
-        TypeRendering.render(
+    override fun toString(): String {
+        // A synthetic local/anonymous type key must never leak into display; prefer the context's friendly name
+        // (a local class's real name, or `<anonymous : Super>` for an anonymous object). The cheap prefix check
+        // keeps normal types off the context lookup; [TypeRendering] renders `<anonymous>` when there's no context.
+        if (!isTypeParameter && TypeRendering.isSyntheticLocalName(qualifiedName.substringAfterLast('.'))) {
+            context?.localTypeDisplayName(qualifiedName)?.let { return it + if (nullable) "?" else "" }
+        }
+        return TypeRendering.render(
             qualifiedName,
             typeArguments.map { it.toString() },
             nullable,
             isTypeParameter,
             isExtensionFunctionType
         )
+    }
 }
