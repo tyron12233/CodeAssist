@@ -1,5 +1,6 @@
 package dev.ide.lang.kotlin.symbols
 
+import dev.ide.lang.kotlin.resolve.approximateEscapingLocalType
 import dev.ide.lang.kotlin.resolve.inferType
 import dev.ide.index.ClassNameValue
 import dev.ide.index.IndexId
@@ -1300,7 +1301,7 @@ class KotlinSymbolService(
     fun typeNamesByPrefix(prefix: String, limit: Int = 100): List<KotlinSymbol> {
         val m = PrefixMatcher(prefix)
         val out = LinkedHashMap<String, KotlinSymbol>()
-        model().classByFqn.values.filter { !it.isCompanion && (prefix.isEmpty() || m.matches(it.simpleName)) }
+        model().classByFqn.values.filter { !it.isCompanion && !it.isLocal && (prefix.isEmpty() || m.matches(it.simpleName)) }
             .forEach { out[it.fqn] = KotlinSymbol(it.simpleName, SymbolKind.CLASS, typeByFqn(it.fqn), origin = SOURCE, declarationNode = it.node) }
         // Top-level synthetic classes (Android `R`/`BuildConfig`, …) complete by simple name like any type.
         synthetic().let { idx ->
@@ -1491,6 +1492,22 @@ class KotlinSymbolService(
     fun sourceClass(fqn: String): RawClass? = model().classByFqn[fqn]
 
     /**
+     * A user-facing display name for a synthetic local/anonymous type key (`$L<ordinal>`): a local
+     * `class`/`object`'s real name, or `<anonymous>` (with its single declared supertype — `<anonymous :
+     * Doc>` — when it has one) for an anonymous `object`. Null when [typeFqn] isn't a known synthetic local
+     * type, so the renderer falls back to its own handling. Keeps the internal ordinal key out of type-mismatch
+     * messages / inlay hints while still naming a `class Local` as `Local`.
+     */
+    override fun localTypeDisplayName(typeFqn: String): String? {
+        val rc = model().classByFqn[typeFqn]?.takeIf { it.isLocal } ?: return null
+        // A local NAMED class/object carries its real simple name; an anonymous object's is the `$L` key.
+        if (rc.simpleName.isNotEmpty() && !TypeRendering.isSyntheticLocalName(rc.simpleName)) return rc.simpleName
+        val superName = rc.superTypeTexts.firstOrNull()
+            ?.substringBefore('<')?.substringAfterLast('.')?.trim()?.removeSuffix("()")?.trim()
+        return if (superName.isNullOrEmpty()) "<anonymous>" else "<anonymous : $superName>"
+    }
+
+    /**
      * Whether [fqn] is a type that CANNOT be created with a constructor call (`Foo()`) — an `interface` or an
      * `abstract`/`sealed` class. Returns `null` when it can't be decided (the type doesn't resolve in any
      * source/classpath/built-in source, or the classpath index is in dumb mode), so the caller MUST back off
@@ -1629,7 +1646,13 @@ class KotlinSymbolService(
         val guard = inferringBody.get()
         if (!guard.add(rc)) return null // re-entrant (self/mutual recursion) → break the cycle, don't cache
         val result = try {
-            dev.ide.lang.kotlin.resolve.KotlinResolver(dom.owner.ktFile, dom.owner, this).inferType(body)
+            val resolver = dev.ide.lang.kotlin.resolve.KotlinResolver(dom.owner.ktFile, dom.owner, this)
+            val inferred = resolver.inferType(body)
+            // An anonymous-object body escaping via a NON-local, NON-private declaration is approximated to its
+            // denotable supertype (Kotlin's rule — the anonymous type isn't nameable outside its scope), so
+            // `fun giveMe() = object { val player = … }` returns `Any` and `giveMe().player` is unresolved.
+            val decl = dom.psi as? org.jetbrains.kotlin.psi.KtDeclaration
+            if (inferred != null && decl != null) resolver.approximateEscapingLocalType(inferred, decl) else inferred
         } catch (t: Throwable) {
             null
         } finally {

@@ -5,6 +5,7 @@ import dev.ide.lang.completion.CompletionItemKind
 import kotlinx.coroutines.runBlocking
 import java.nio.file.Path
 import kotlin.test.Test
+import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertNotNull
 import kotlin.test.assertTrue
@@ -162,10 +163,60 @@ class KotlinAdvancedCompletionTest {
         assertTrue(ls.any { it == "User" }, "a type-argument position should offer classifiers; got $ls")
     }
 
+    // --- default-import built-in type names (no `.class`, so only DEFAULT_SIMPLE_TYPES can surface them) ---
+
+    @Test
+    fun mutableCollectionOfferedAsTypeName() {
+        // `MutableCollection` is a mapped built-in with no `.class` in the stdlib jar, so it never reaches the
+        // classNames index — it must come from Builtins.DEFAULT_SIMPLE_TYPES like its MutableList/Set/Map siblings.
+        val ls = labels("MutColl.kt", "package demo\nfun f(c: MutableColl|) {}")
+        assertTrue("MutableCollection" in ls, "MutableCollection should complete as a type name; got ${ls.take(20)}")
+    }
+
+    @Test
+    fun collectionAndIteratorBuiltinsOfferedAsTypeNames() {
+        assertTrue("MutableIterable" in labels("MutIter.kt", "package demo\nfun f(x: MutableIter|) {}"),
+            "MutableIterable should complete as a type name")
+        assertTrue("MutableIterator" in labels("MutItr.kt", "package demo\nfun f(x: MutableIterat|) {}"),
+            "MutableIterator should complete as a type name")
+        assertTrue("ListIterator" in labels("ListItr.kt", "package demo\nfun f(x: ListIter|) {}"),
+            "ListIterator should complete as a type name")
+    }
+
     @Test
     fun callableReferenceOffersReceiverMembers() {
         val ls = labels("CallableRef.kt", "package demo\nfun f() { val r = User::| }")
         assertTrue(ls.any { it == "name" || it == "age" }, "`User::|` should offer the receiver type's members; got $ls")
+    }
+
+    @Test
+    fun callableReferenceInsertsBareFunctionName() {
+        // `::mkColor` is a function VALUE — the item must insert the bare name, never a call (`::mkColor()`).
+        val item = items("Ref.kt", "package demo\nval r = ::mkC|").firstOrNull { it.symbol?.name == "mkColor" }
+        assertNotNull(item, "`::mkC|` should offer the top-level function `mkColor`")
+        assertEquals("mkColor", item.insertText, "a callable reference inserts the bare name; got '${item.insertText}'")
+    }
+
+    @Test
+    fun plainCallStillInsertsParens() {
+        // Guard: the bare-name insert is scoped to `::` references — a normal call context still appends `()`.
+        val item = items("Call.kt", "package demo\nfun f() { mkC| }").firstOrNull { it.symbol?.name == "mkColor" }
+        assertNotNull(item, "`mkC|` should offer `mkColor`")
+        assertEquals("mkColor()", item.insertText, "a plain call inserts `()`; got '${item.insertText}'")
+    }
+
+    @Test
+    fun samConstructorSingleParamLambdaIsTyped() {
+        // `Mapper<User> { u -> u.<caret> }` — the SAM constructor binds `u: User`, so its members complete.
+        val ls = labels("Sam.kt", "package demo\nval m = Mapper<User> { u -> u.| }")
+        assertTrue("name" in ls && "age" in ls, "SAM-ctor lambda param `u: User` should offer User members; got $ls")
+    }
+
+    @Test
+    fun samConstructorTwoParamLambdaIsTyped() {
+        // Mirrors `Comparator<String> { a, b -> a.length … }`: `a`/`b` are typed from the SAM's params.
+        val ls = labels("Sam2.kt", "package demo\nval c = Comparer<User> { a, b -> a.| }")
+        assertTrue("name" in ls, "two-param SAM-ctor lambda param `a: User` should offer User members; got $ls")
     }
 
     @Test
@@ -184,6 +235,8 @@ class KotlinAdvancedCompletionTest {
                     enum class Color { RED, GREEN, BLUE }
                     fun paint(c: Color) {}
                     fun mkColor(): Color = Color.RED
+                    fun interface Mapper<T> { fun map(value: T): String }
+                    fun interface Comparer<T> { fun compare(a: T, b: T): Int }
                 """.trimIndent(),
                 "Base.kt" to """
                     package demo

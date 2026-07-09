@@ -33,9 +33,22 @@ object DefaultFileIconProvider : FileIconProvider {
 
     override fun iconFor(target: IconTarget): String = when (target) {
         is IconTarget.File -> when {
+            // Exact-name matches first (they'd otherwise be caught by an extension rule).
+            target.fileName == ".gitignore" || target.fileName == ".gitattributes" ||
+                target.fileName == ".gitmodules" || target.fileName == ".gitkeep" -> "git"
+            target.fileName == ".editorconfig" -> "editorconfig"
             target.fileName.endsWith(".java") -> "java"
             target.fileName.endsWith(".kt") || target.fileName.endsWith(".kts") -> "kotlin"
+            target.fileName.endsWith(".gradle") -> "gradle"
             target.fileName.endsWith(".xml") -> "xml"
+            target.fileName.endsWith(".json") -> "json"
+            target.fileName.endsWith(".toml") -> "toml"
+            target.fileName.endsWith(".yaml") || target.fileName.endsWith(".yml") -> "yaml"
+            target.fileName.endsWith(".properties") -> "properties"
+            target.fileName.endsWith(".md") || target.fileName.endsWith(".markdown") -> "markdown"
+            target.fileName.endsWith(".txt") || target.fileName.endsWith(".log") -> "text"
+            target.fileName.endsWith(".png") || target.fileName.endsWith(".jpg") || target.fileName.endsWith(".jpeg") ||
+                target.fileName.endsWith(".gif") || target.fileName.endsWith(".webp") || target.fileName.endsWith(".svg") -> "image"
             else -> "file"
         }
         is IconTarget.SourceRoot -> when {

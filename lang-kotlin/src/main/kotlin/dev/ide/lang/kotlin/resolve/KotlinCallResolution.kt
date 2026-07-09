@@ -71,7 +71,12 @@ internal fun KotlinResolver.computeCallee(call: KtCallExpression): KotlinSymbol?
         // on a matching receiver without an import — same seam completion/diagnostics use.
         val scopeExts = scopeMemberExtensions(call.textRange.startOffset, receiverType, name)
             .filter { it.name == name && it.kind == SymbolKind.METHOD }
-        members + scopeExts
+        // A COMPANION-object function reached through the class name (`MyClass.create()`): the companion is a
+        // distinct classifier the instance member lookup misses. Only for a `Type.` (not instance) receiver.
+        val companionMethods = if (q != null && isTypeReceiver(q.receiverExpression))
+            service.companionMembersFor(receiverType.qualifiedName, name).filter { it.name == name && it.kind == SymbolKind.METHOD }
+        else emptyList()
+        members + scopeExts + companionMethods
     } else {
         // Top-level functions (`Text`, `Column`, `remember`, …) resolve via the cheap exact lookup. Only when
         // none matches do we pay for the scope-aware lookup, which also finds a bare-called scope EXTENSION
@@ -234,7 +239,10 @@ internal fun KotlinResolver.computeCallTargets(call: KtCallExpression): List<Kot
         // extension never leaks onto a receiver outside its declaring scope.
         val scopeExts = scopeMemberExtensions(call.textRange.startOffset, receiverType, name)
             .filter { it.name == name && it.kind == SymbolKind.METHOD }
-        return if (scopeExts.isEmpty()) members else members + scopeExts
+        val companionMethods = if (q != null && isTypeReceiver(q.receiverExpression))
+            service.companionMembersFor(receiverType.qualifiedName, name).filter { it.name == name && it.kind == SymbolKind.METHOD }
+        else emptyList()
+        return members + scopeExts + companionMethods
     }
     val out = ArrayList<KotlinSymbol>()
     // The callee name is known, so push it down as the prefix (it filters to names starting with it, the

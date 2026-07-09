@@ -137,6 +137,11 @@ class RawClass(
     /** True for a `sealed` class/interface — its subclasses are exhaustively enumerable (same-module), driving
      *  the cross-file `when`-exhaustiveness check. */
     val isSealed: Boolean = false,
+    /** True for a LOCAL type: an anonymous object (`object : T { }` / `object { }`) or a class/object declared
+     *  inside a function/initializer body. Its [fqn] is a synthetic, deterministic key ([SourceIndexBuilder.
+     *  localTypeFqn]) that the resolver recomputes from the same PSI, so member enumeration / diagnostics flow
+     *  through the normal FQN machinery. Kept OUT of type-name completion (no one references it by that name). */
+    val isLocal: Boolean = false,
 )
 
 class SourceFile(
@@ -202,11 +207,59 @@ object SourceIndexBuilder {
                 else -> {}
             }
         }
+        // Local + anonymous types (`object : T { }`, `object { }`, a `class`/`object` declared in a body) live
+        // inside expression/statement positions the top-level walk above never enters. Capture each under a
+        // synthetic FQN so its members enumerate + are checked through the normal machinery; the resolver
+        // recomputes the SAME FQN from the same PSI (see [localTypeFqn]).
+        classes += collectLocalTypes(kt, ctx, parsed)
         return SourceFile(ctx, topLevel, extensions, classes, typeAliases)
     }
 
-    private fun rawClass(c: KtClassOrObject, ctx: FileContext, parsed: KotlinParsedFile): RawClass? {
-        val fqn = c.fqName?.asString() ?: return null
+    /** Every local/anonymous [KtClassOrObject] in [kt] (has no reachable `fqName`, and isn't an enum entry) —
+     *  an anonymous object's `object`-declaration, or a class/object declared inside a body. Pre-order
+     *  (document order), so an ordinal over this list is a stable, marker-splice-invariant key ([localTypeFqn]). */
+    private fun localTypeDecls(kt: KtFile): List<KtClassOrObject> =
+        com.intellij.psi.util.PsiTreeUtil.collectElementsOfType(kt, KtClassOrObject::class.java)
+            .filter { it.fqName == null && it !is org.jetbrains.kotlin.psi.KtEnumEntry }
+
+    /** The synthetic, deterministic FQN a local/anonymous type [decl] is registered under. Independent of
+     *  absolute offsets (which the completion marker shifts): it is the nearest NAMED enclosing type's FQN (or
+     *  the file facade when top-level) plus the decl's ordinal among the local types sharing that owner. Both
+     *  this builder and the resolver call it over the same PSI, so the keys match. */
+    fun localTypeFqn(decl: KtClassOrObject): String {
+        val owner = enclosingNamedOwnerFqn(decl)
+        val ordinal = localTypeDecls(decl.containingKtFile)
+            .filter { enclosingNamedOwnerFqn(it) == owner }
+            .indexOfFirst { it === decl }.coerceAtLeast(0)
+        return "$owner.\$L$ordinal"
+    }
+
+    /** The FQN of the nearest enclosing type that HAS one (a normally-named class/object), or the Kotlin file
+     *  facade (`pkg.FileKt`) when [decl] sits at top level of a file — the owner an ordinal is scoped to. */
+    private fun enclosingNamedOwnerFqn(decl: KtClassOrObject): String {
+        var p: com.intellij.psi.PsiElement? = decl.parent
+        while (p != null) {
+            if (p is KtClassOrObject) p.fqName?.asString()?.let { return it }
+            p = p.parent
+        }
+        val file = decl.containingKtFile
+        val pkg = file.packageFqName.asString()
+        val facade = file.name.removeSuffix(".kt").replaceFirstChar { it.uppercase() } + "Kt"
+        return if (pkg.isEmpty()) facade else "$pkg.$facade"
+    }
+
+    private fun collectLocalTypes(kt: KtFile, ctx: FileContext, parsed: KotlinParsedFile): List<RawClass> =
+        localTypeDecls(kt).mapNotNull { rawClass(it, ctx, parsed, fqnOverride = localTypeFqn(it), isLocal = true) }
+
+    private fun rawClass(
+        c: KtClassOrObject,
+        ctx: FileContext,
+        parsed: KotlinParsedFile,
+        /** For a local/anonymous type (no reachable `fqName`): the synthetic key to register it under. */
+        fqnOverride: String? = null,
+        isLocal: Boolean = false,
+    ): RawClass? {
+        val fqn = fqnOverride ?: c.fqName?.asString() ?: return null
         val supers = c.superTypeListEntries.mapNotNull { it.typeReference?.text }
         val members = ArrayList<RawCallable>()
         val ctors = ArrayList<RawCallable>()
@@ -301,7 +354,8 @@ object SourceIndexBuilder {
             isEnum = asClass?.isEnum() == true,
             isAnnotation = asClass?.isAnnotation() == true,
             isAbstract = asClass?.let { it.hasModifier(KtTokens.ABSTRACT_KEYWORD) || it.hasModifier(KtTokens.SEALED_KEYWORD) } == true,
-            isSealed = asClass?.isSealed() == true)
+            isSealed = asClass?.isSealed() == true,
+            isLocal = isLocal)
     }
 
     /** ABSTRACT member detection: an explicit `abstract` modifier, or an interface member with no implementation

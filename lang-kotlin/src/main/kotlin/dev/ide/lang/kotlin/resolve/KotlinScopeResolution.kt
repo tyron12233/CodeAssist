@@ -52,7 +52,17 @@ internal fun KotlinResolver.computeImplicitReceiversAt(offset: Int): List<Kotlin
                 ?.let { (it.typeArguments.firstOrNull() as? KotlinType)?.let(out::add) }
             is KtNamedFunction -> node.receiverTypeReference?.text
                 ?.let { service.typeFromText(it, fileContext) }?.let(out::add)
-            is KtClassOrObject -> node.fqName?.asString()?.let { out += service.typeByFqn(it) }
+            // An enclosing class/object receiver. An ANONYMOUS object (`object : Foo { }`) or a LOCAL
+            // class/object has no reachable `fqName`, so use the synthetic classifier the source model
+            // registered it under — its own + supertype members then become the implicit `this` in the body.
+            // An enum entry with a body isn't a local type (it's excluded from that model bucket), so it keeps
+            // to its own `fqName` and never borrows a synthetic key (which could collide with a real local type).
+            is KtClassOrObject -> {
+                val fqn = node.fqName?.asString()
+                    ?: (node as? org.jetbrains.kotlin.psi.KtObjectDeclaration)?.let { dev.ide.lang.kotlin.symbols.SourceIndexBuilder.localTypeFqn(it) }
+                    ?: (node as? KtClass)?.takeIf { it !is org.jetbrains.kotlin.psi.KtEnumEntry }?.let { dev.ide.lang.kotlin.symbols.SourceIndexBuilder.localTypeFqn(it) }
+                if (fqn != null) out += service.typeByFqn(fqn)
+            }
             else -> {}
         }
         node = node.parent
@@ -81,6 +91,58 @@ fun KotlinResolver.staticMemberNamed(typeFqn: String, name: String): KotlinSymbo
 /** An instance member named [name] on [receiverType] (`obj.prop`), for member-read highlighting. */
 fun KotlinResolver.instanceMemberNamed(receiverType: KotlinType, name: String): KotlinSymbol? =
     service.membersNamed(receiverType.qualifiedName, receiverType.typeArguments, name).firstOrNull()
+
+/**
+ * The callable a `::` reference points at — `Person::age` (a member property/function of the receiver type),
+ * `instance::foo` (a member of the receiver value's type), or `::topFun` (a top-level / local / enclosing
+ * callable). Resolves against the receiver's TYPE denotation first (`Type::member`), then its instance type,
+ * then a same-file (live-buffer) member the disk model may lag, and finally the top-level scope for a
+ * receiver-less reference. Null when the parse-only model can't resolve it (conservative — the caller then
+ * neither colors nor flags it). Used by semantic highlighting and to suppress the bare-name unresolved check
+ * on a callable-reference selector.
+ */
+fun KotlinResolver.callableReferenceTarget(e: org.jetbrains.kotlin.psi.KtCallableReferenceExpression): KotlinSymbol? {
+    val name = e.callableReference.getReferencedName()
+    if (name.isEmpty()) return null
+    val receiver = e.receiverExpression
+    if (receiver != null) {
+        // `Type::member` — a class-name receiver denotes a type: an instance member (an unbound reference
+        // `Person::age`), else a static/companion member, else a same-file (unsaved) member.
+        typeDenotationFqn(receiver)?.let { fqn ->
+            instanceMemberNamed(service.typeByFqn(fqn), name)?.let { return it }
+            staticMemberNamed(fqn, name)?.let { return it }
+            return sameFileTypeMember(fqn, name)
+        }
+        // `value::member` — an instance receiver: resolve the member against its (bound) type.
+        val recvType = inferType(receiver) ?: return null
+        val rt = receiverForMembers(recvType, receiver.textRange.startOffset) ?: return null
+        if (rt.isTypeParameter) return null
+        return instanceMemberNamed(rt, name) ?: sameFileTypeMember(rt.qualifiedName, name)
+    }
+    // `::top` — a receiver-less reference to a top-level / local / enclosing-class callable.
+    scopeSymbolsAt(e.textRange.startOffset, name, exactName = true).firstOrNull { it.name == name }?.let { return it }
+    return service.topLevelByName(name).firstOrNull { it.name == name }
+}
+
+/** A member named [name] of the class [typeFqn] read straight from the LIVE buffer's PSI — for a same-file
+ *  class the disk symbol model hasn't caught up to yet. Covers a primary-constructor `val`/`var` property and
+ *  a class-body property/function. Null when the file has no such class or member. */
+internal fun KotlinResolver.sameFileTypeMember(typeFqn: String, name: String): KotlinSymbol? {
+    val cls = ktFile.declarations.filterIsInstance<KtClassOrObject>()
+        .firstOrNull { it.fqName?.asString() == typeFqn } ?: return null
+    cls.primaryConstructorParameters.firstOrNull { it.hasValOrVar() && it.name == name }?.let { p ->
+        return KotlinSymbol(
+            name, SymbolKind.FIELD, type = paramType(p), origin = SOURCE,
+            declarationNode = runCatching { parsed.adapt(p) }.getOrNull(),
+        )
+    }
+    for (d in cls.declarations) when (d) {
+        is KtProperty -> if (d.name == name && d.receiverTypeReference == null) return sameFileProperty(d, typeFqn)
+        is KtNamedFunction -> if (d.name == name && d.receiverTypeReference == null) return sameFileFunction(d, typeFqn)
+        else -> {}
+    }
+    return null
+}
 
 /** Locals + parameters in scope at [offset] (declared before it). */
 fun KotlinResolver.localsAt(offset: Int): List<KotlinSymbol> {
@@ -251,9 +313,11 @@ fun KotlinResolver.typeDenotationFqn(expr: KtExpression): String? = when (expr) 
         when {
             name.firstOrNull()?.isUpperCase() != true -> null // type names are capitalized
             localsAt(expr.textRange.startOffset).any { it.name == name } -> null // a value shadows the type
-            // An `object` singleton (`CardDefaults`, `MaterialTheme`) is an INSTANCE, not a type — its
-            // members are reached like an instance's, so it is NOT a type/static receiver.
-            else -> service.resolveTypeName(name, fileContext)?.takeIf { service.isKnownType(it) && !service.isObject(it) }
+            // An `object` singleton (`CardDefaults`, `MaterialTheme`, a local `object`) is an INSTANCE, not a
+            // type — its members are reached like an instance's, so it is NOT a type/static receiver. A local
+            // `class Foo` in scope resolves by its synthetic FQN first (it isn't a resolvable type name).
+            else -> (localTypesInScope(expr.textRange.startOffset)[name] ?: service.resolveTypeName(name, fileContext))
+                ?.takeIf { service.isKnownType(it) && !service.isObject(it) }
         }
     }
     is KtQualifiedExpression -> {
@@ -339,6 +403,9 @@ fun KotlinResolver.bareNameResolves(name: String, offset: Int): Boolean {
     if (localsAt(offset).any { it.name == name }) return true
     // A reified type parameter used in expression position (`T::class`) is in scope, not unresolved.
     if (isTypeParameterInScope(name, offset)) return true
+    // A named LOCAL class/object in scope (`class Foo` / `object O` declared in this or an enclosing block):
+    // referenced as `Foo()` / `O.member`, resolvable by simple name only within its scope.
+    if (localTypesInScope(offset).containsKey(name)) return true
     // Top-level declarations in THIS live file (the module index is disk-based and may lag the buffer):
     // functions/properties AND classes/objects/typealiases (a same-file `object Foo` / `class Foo` is a
     // resolvable bare reference — `Foo()` / `Foo.bar` — before the index has caught up to the buffer).
@@ -395,12 +462,62 @@ fun KotlinResolver.companionInScope(offset: Int): Boolean {
     return false
 }
 
+/** Named LOCAL types in scope at [offset] (simple name → the synthetic FQN they were registered under): a
+ *  `class`/`object` declared as a statement in this block or an enclosing one. So a `LocalClass()` / a local
+ *  `object`'s member reference resolves + isn't false-flagged. Anonymous objects (nameless) aren't included —
+ *  they're referenced by the `object … { }` expression, not by name. */
+fun KotlinResolver.localTypesInScope(offset: Int): Map<String, String> {
+    val out = HashMap<String, String>()
+    var node: PsiElement? = elementAt(offset)
+    while (node != null) {
+        if (node is KtBlockExpression) {
+            for (st in node.statements) {
+                if (st is KtClassOrObject && st !is org.jetbrains.kotlin.psi.KtEnumEntry &&
+                    st.fqName == null && st.name != null
+                ) out.putIfAbsent(st.name!!, dev.ide.lang.kotlin.symbols.SourceIndexBuilder.localTypeFqn(st))
+            }
+        }
+        node = node.parent
+    }
+    return out
+}
+
+/** A bare-accessible member of an enclosing class's companion object named [name] (`fun f() = CONST` inside the
+ *  class), resolved through the companion's distinct classifier. Null when no enclosing companion has it. */
+fun KotlinResolver.enclosingCompanionMember(name: String, offset: Int): KotlinSymbol? {
+    if (name.isEmpty()) return null
+    var node: PsiElement? = elementAt(offset)
+    while (node != null) {
+        if (node is KtClassOrObject && node.companionObjects.isNotEmpty()) {
+            node.fqName?.asString()?.let { fqn ->
+                service.companionMembersFor(fqn, name).firstOrNull { it.name == name }?.let { return it }
+            }
+        }
+        node = node.parent
+    }
+    return null
+}
+
+/** All bare-accessible members of every enclosing class's companion object — for completion of an unqualified
+ *  reference inside the class body (`CONST`, a companion `factory()`). */
+internal fun KotlinResolver.enclosingCompanionMembers(offset: Int): List<KotlinSymbol> {
+    val out = ArrayList<KotlinSymbol>()
+    var node: PsiElement? = elementAt(offset)
+    while (node != null) {
+        if (node is KtClassOrObject && node.companionObjects.isNotEmpty())
+            node.fqName?.asString()?.let { out += service.companionMembersFor(it) }
+        node = node.parent
+    }
+    return out
+}
+
 /** A [name] used as a constructor call (a simple `Foo` or a qualified `pkg.Foo`/`Outer.Inner`, its last
  *  segment capitalized) → the resolved type FQN (a known type not shadowed by a local), else null. Drives
  *  constructor-argument validation. */
 fun KotlinResolver.constructorTypeFqn(name: String, offset: Int): String? {
     if (name.substringAfterLast('.').firstOrNull()?.isUpperCase() != true) return null
     if ('.' !in name && localsAt(offset).any { it.name == name }) return null
+    if ('.' !in name) localTypesInScope(offset)[name]?.let { return it } // a local `class Foo` in scope
     return service.resolveTypeName(name, fileContext)?.takeIf { service.isKnownType(it) }
 }
 
@@ -427,6 +544,12 @@ fun KotlinResolver.scopeSymbolsAt(offset: Int, namePrefix: String = "", exactNam
     // Members of every implicit `this` (apply/with/run block, extension fn, enclosing class).
     implicitReceiversAt(offset).forEach { recv ->
         out += service.membersOf(recv.qualifiedName, recv.typeArguments, null).filterIsInstance<KotlinSymbol>()
+    }
+    // Bare-accessible members of an enclosing class's companion object (`CONST`, a companion `factory()`).
+    out += enclosingCompanionMembers(offset)
+    // Named local types in scope (`class Foo` / `object O` in a body) — offered by simple name.
+    localTypesInScope(offset).forEach { (simple, fqn) ->
+        out += KotlinSymbol(simple, SymbolKind.CLASS, type = service.typeByFqn(fqn), origin = SOURCE)
     }
     // Locals/implicit members are small, so filter them here; the classpath top-level universe is large, so
     // [topLevelCallables] filters by prefix itself rather than materializing all of it (empty = all).

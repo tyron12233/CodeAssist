@@ -404,13 +404,20 @@ internal class KotlinSemanticChecks(private val service: KotlinSymbolService) {
 
     /** A constructor call `Type(...)` on an `interface` or `abstract`/`sealed` class — which cannot be created.
      *  Conservative: fires only when [Type] resolves to a known non-instantiable type, has no companion object
-     *  (a companion `invoke` would make the call valid), and is not shadowed by a same-named factory FUNCTION. */
+     *  (a companion `invoke` would make the call valid), is not a SAM conversion, and is not shadowed by a
+     *  same-named factory FUNCTION. */
     private fun abstractInstantiation(call: KtCallExpression, resolver: KotlinResolver): Diagnostic? {
         val callee = call.calleeExpression as? KtNameReferenceExpression ?: return null
         val name = callee.getReferencedName()
         val fqn = service.resolveTypeName(name, resolver.fileContext) ?: return null
         if (service.isNonInstantiableType(fqn) != true) return null
         if (service.typeHasCompanionObject(fqn)) return null
+        // SAM conversion: `Runnable { … }`, `Comparator(::cmp)`, `OnClickListener { … }` build a functional-
+        // interface instance from a single function value — valid Kotlin (any Java single-abstract-method
+        // interface; a Kotlin `fun interface`). Only INTERFACES are SAM-convertible (an abstract class with a
+        // trailing lambda is still an error), so back off only when the callee is an interface invoked with a
+        // lone functional argument.
+        if (service.isInterfaceType(fqn) == true && isSamConversion(call)) return null
         // A factory FUNCTION of the same name (`MutableList(…)`, a user factory) means this is a call, not a
         // constructor — callTargets surfaces it as a METHOD. Only flag a pure constructor call.
         if (runCatching { resolver.callTargets(call) }.getOrDefault(emptyList()).any { it.kind == SymbolKind.METHOD }) return null
@@ -420,6 +427,17 @@ internal class KotlinSemanticChecks(private val service: KotlinSymbolService) {
             "Cannot create an instance of abstract class or interface '$name'",
             KotlinDiagnosticCodes.ABSTRACT_INSTANTIATION,
         )
+    }
+
+    /** A SAM conversion: the call's SOLE argument is a function value — a lambda (`Runnable { … }`), a callable
+     *  reference (`Comparator(::cmp)`), or an anonymous function (`Runnable(fun() { … })`). Those forms are only
+     *  meaningful as a SAM conversion / functional argument, so a functional interface is being constructed. */
+    private fun isSamConversion(call: KtCallExpression): Boolean {
+        val args = call.valueArguments // includes the trailing lambda argument
+        val arg = args.singleOrNull()?.getArgumentExpression() ?: return false
+        return arg is org.jetbrains.kotlin.psi.KtLambdaExpression ||
+            arg is org.jetbrains.kotlin.psi.KtCallableReferenceExpression ||
+            (arg is KtNamedFunction && arg.name == null)
     }
 
     /** The class/object NAME identifier range (for an anonymous object, a short range over its `object` keyword). */
@@ -2236,6 +2254,9 @@ internal class KotlinSemanticChecks(private val service: KotlinSymbolService) {
     )
 
     private fun renderType(t: KotlinType): String {
+        // A synthetic local/anonymous type key must not leak into the message — show `<anonymous …>` / the
+        // local class's real name instead of the internal `$L<ordinal>` id.
+        service.localTypeDisplayName(t.qualifiedName)?.let { return it + if (t.nullable) "?" else "" }
         val simple = t.qualifiedName.substringAfterLast('.')
         val args = if (t.typeArguments.isEmpty()) ""
         else t.typeArguments.joinToString(", ", "<", ">") { it.qualifiedName.substringAfterLast('.') }
@@ -2345,6 +2366,10 @@ internal class KotlinSemanticChecks(private val service: KotlinSymbolService) {
         }
         // `x.foo` / `x.foo()` — the receiver `x` could be a package or a type (static access); back off.
         if (parent is KtQualifiedExpression && parent.receiverExpression === expr) return null
+        // A callable reference `Type::member` / `::top` — its selector resolves against the receiver type or
+        // top-level scope (see [KotlinResolver.callableReferenceTarget]), not the bare-name scope, so it must
+        // never be flagged here (both the receiver and the referenced callable are children of the `::`).
+        if (parent is org.jetbrains.kotlin.psi.KtCallableReferenceExpression) return null
         if (parent is KtValueArgumentName) return null // a named-argument label, not a reference
         // `this`/`super` parse as a KtNameReferenceExpression under a KtInstanceExpressionWithLabel — they are
         // keywords (a receiver, typed by the resolver), never an unresolved name.
@@ -2692,6 +2717,7 @@ internal class KotlinSemanticChecks(private val service: KotlinSymbolService) {
         if (name in localAliases || service.isProjectTypeAlias(name)) return null // a typealias, not a class
         val off = userType.textRange.startOffset
         if (resolver.isTypeParameterInScope(name, off)) return null
+        if (resolver.localTypesInScope(off).containsKey(name)) return null // a local `class Foo` / `object O` in scope
         // In scope (imported / same-package / source / default / builtin / star-imported) → resolves; don't flag.
         val resolved = service.resolveTypeName(name, ctx)
         if (resolved != null && service.isKnownType(resolved)) return null

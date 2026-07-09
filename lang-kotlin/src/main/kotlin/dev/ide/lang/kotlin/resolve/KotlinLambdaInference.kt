@@ -9,6 +9,7 @@ import org.jetbrains.kotlin.psi.KtCallExpression
 import org.jetbrains.kotlin.psi.KtExpression
 import org.jetbrains.kotlin.psi.KtLambdaArgument
 import org.jetbrains.kotlin.psi.KtLambdaExpression
+import org.jetbrains.kotlin.psi.KtNameReferenceExpression
 import org.jetbrains.kotlin.psi.KtValueArgument
 import org.jetbrains.kotlin.psi.KtValueArgumentList
 import org.jetbrains.kotlin.psi.ValueArgument
@@ -53,10 +54,43 @@ fun KotlinResolver.lambdaParameterTypes(lambda: KtLambdaExpression): List<TypeRe
  *  arguments already used to bind the function's type parameters. */
 internal fun KotlinResolver.expectedLambdaShape(lambda: KtLambdaExpression): KotlinSymbolService.FunctionalShape? {
     val (call, argIndex) = enclosingCallAndParamIndex(lambda) ?: return null
-    val sym = resolveCalleeFunction(call) ?: return null
-    val raw = sym.paramTypes.getOrNull(lambdaParamIndex(call, argIndex, sym)) as? KotlinType ?: return null
-    val bound = service.substitute(raw, bindingsFromValueArgs(sym, call)) as? KotlinType ?: return null
+    // A SAM constructor (`Comparator<String> { a, b -> … }`, a project `fun interface`) has no callee FUNCTION —
+    // the lambda IS the interface's single-abstract-method body. Fall back to that method's shape.
+    val sym = resolveCalleeFunction(call) ?: return samConstructorShape(call)
+    val raw = sym.paramTypes.getOrNull(lambdaParamIndex(call, argIndex, sym)) as? KotlinType ?: return samConstructorShape(call)
+    // Bind the function's type params from the NON-lambda value args (`with(x){…}` binds T from x) AND the call's
+    // EXPLICIT type arguments (`Comparator<String> { … }` → T = String — a SAM constructor's only value argument
+    // is the lambda, so value-arg inference alone leaves T unbound), so the block's receiver/params are concrete.
+    val bindings = bindingsFromValueArgs(sym, call) + bindingsFromTypeArgs(sym, call)
+    val bound = service.substitute(raw, bindings) as? KotlinType ?: return null
     return service.functionalShape(bound)
+}
+
+/** Bind a callee's type parameters from the call's EXPLICIT type arguments (`Comparator<String> { … }` →
+ *  `T = String`). Complements [bindingsFromValueArgs] for a call whose only value argument is the lambda itself,
+ *  where value-argument inference has nothing to bind from. */
+internal fun KotlinResolver.bindingsFromTypeArgs(sym: KotlinSymbol, call: KtCallExpression): Map<String, TypeRef> {
+    if (sym.typeParameters.isEmpty()) return emptyMap()
+    val args = call.typeArgumentList?.arguments ?: return emptyMap()
+    val bindings = HashMap<String, TypeRef>()
+    sym.typeParameters.forEachIndexed { i, tp ->
+        args.getOrNull(i)?.typeReference?.text?.let { service.typeFromText(it, fileContext) }?.let { bindings[tp] = it }
+    }
+    return bindings
+}
+
+/** A SAM-constructor call `Interface<Args> { … }` (`Comparator<String> { a, b -> … }`, or a project
+ *  `fun interface`): the callee names a functional interface and the lambda IS its single-abstract-method
+ *  body, so the lambda's parameter/result types are that method's, with the interface's type parameters bound
+ *  from the call's explicit type arguments. Null when the callee doesn't name a (single-abstract-method)
+ *  interface — then it's an ordinary call, not a SAM constructor. */
+internal fun KotlinResolver.samConstructorShape(call: KtCallExpression): KotlinSymbolService.FunctionalShape? {
+    val callee = call.calleeExpression as? KtNameReferenceExpression ?: return null
+    val fqn = service.resolveTypeName(callee.getReferencedName(), fileContext) ?: return null
+    if (service.isInterfaceType(fqn) != true) return null
+    val typeArgs = call.typeArgumentList?.arguments.orEmpty()
+        .mapNotNull { it.typeReference?.text?.let { t -> service.typeFromText(t, fileContext) } }
+    return service.functionalShape(service.typeByFqn(fqn, typeArgs))
 }
 
 /** The call a lambda argument belongs to + its parameter index. `KtCallExpression.valueArguments`
