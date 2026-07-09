@@ -120,10 +120,12 @@ private open class BraceNewlineHandler(
             return RangeEdit(pos, pos, insert, pos + insert.length)
         }
 
-        // A full-line `//` comment continues with a fresh `// ` on the next line — carrying a list bullet
-        // (`// - `, `// 1. `, …) when the comment is a bulleted list.
+        // Splitting a full-line `//` comment in the MIDDLE continues it: the text moved to the next line
+        // stays a comment (a fresh `// `, carrying a list bullet — `// - `, `// 1. `, … — for a bulleted
+        // list). Pressing Enter at the END of a line comment does NOT continue it — matching IntelliJ, the
+        // next line is plain code (fall through to the normal indent rules).
         val lineComment = lineCommentStart(text, lineStart, pos)
-        if (lineComment >= 0) {
+        if (lineComment >= 0 && !isBlankRange(text, pos, lineEndFrom(text, pos))) {
             var c = lineComment + 2
             while (c < pos && (text[c] == ' ' || text[c] == '\t')) c++
             val prefix = "// " + (listMarker(text, c, pos)?.next ?: "")

@@ -6,7 +6,7 @@ import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontStyle
 import dev.ide.ui.theme.SyntaxColors
 
-enum class CodeLanguage { Java, Kotlin, Xml, Proguard, Plain }
+enum class CodeLanguage { Java, Kotlin, Xml, Proguard, Markdown, Plain }
 
 fun languageFor(fileName: String): CodeLanguage = when {
     fileName.endsWith(".java") -> CodeLanguage.Java
@@ -14,6 +14,7 @@ fun languageFor(fileName: String): CodeLanguage = when {
     fileName.endsWith(".xml") -> CodeLanguage.Xml
     // ProGuard/R8 keep-rule files: `proguard-rules.pro`, `consumer-rules.pro`, any `*.pro`.
     fileName.endsWith(".pro") -> CodeLanguage.Proguard
+    fileName.endsWith(".md") || fileName.endsWith(".markdown") -> CodeLanguage.Markdown
     else -> CodeLanguage.Plain
 }
 
@@ -35,6 +36,9 @@ private fun isPunct(c: Char) = c in "{}()[];,.<>=+-*/%&|!?:^~@"
 fun highlight(text: String, language: CodeLanguage, syntax: SyntaxColors): AnnotatedString {
     if (language == CodeLanguage.Xml) return highlightXml(text, syntax)
     if (language == CodeLanguage.Proguard) return highlightProguard(text, syntax)
+    // Markdown has no whole-document scanner (the active editor uses the incremental styleMarkdownLine); the
+    // legacy scanner just renders it uncolored rather than mis-tokenizing prose as Java.
+    if (language == CodeLanguage.Markdown) return AnnotatedString(text)
     return buildAnnotatedString {
         append(text)
         addStyle(SpanStyle(color = syntax.default), 0, text.length)
