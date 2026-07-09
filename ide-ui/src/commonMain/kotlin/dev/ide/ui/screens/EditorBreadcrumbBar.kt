@@ -26,6 +26,7 @@ import dev.ide.ui.IdeUiState
 import dev.ide.ui.OpenFile
 import dev.ide.ui.components.Breadcrumb
 import dev.ide.ui.editor.preview.isLayoutPreviewable
+import dev.ide.ui.editor.preview.isMarkdownPreviewable
 import dev.ide.ui.editor.preview.isPreviewable
 import dev.ide.ui.generated.resources.Res
 import dev.ide.ui.generated.resources.breadcrumb_blocks
@@ -64,7 +65,8 @@ internal fun BreadcrumbBar(
         crumbs = if (structure.isEmpty()) breadcrumbFor(state, active)
         else listOfNotNull(state.backend.files.moduleNameForFile(active.path)) + structure
     }
-    val canPreview = isPreviewable(active.path) || isLayoutPreviewable(active.path) || hasPreview
+    val canPreview = isPreviewable(active.path) || isLayoutPreviewable(active.path) ||
+            isMarkdownPreviewable(active.path) || hasPreview
     Row(
         Modifier.fillMaxWidth()
             .background(Ca.colors.editorBg)

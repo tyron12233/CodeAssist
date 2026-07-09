@@ -148,6 +148,79 @@ class AndroidComposePreviewHost(private val backend: IdeServicesBackend) : Compo
         }
     }
 
+    // A Learn-lesson snippet: lower it through the backend's Compose scratch (no open project) and render
+    // against the bundled Compose-for-Android (loader = null — standard material3/foundation composables serve
+    // from the app runtime). Shares the interpret/render + error-reporting shape with [Preview]; there's no
+    // @Preview variant config, so [dark] alone drives the forced night scheme.
+    @Composable
+    override fun LessonPreview(code: String, dark: Boolean, onProblems: (List<PreviewIssue>) -> Unit, onBusy: (Boolean) -> Unit, modifier: Modifier) {
+        val report by rememberUpdatedState(onProblems)
+        val reportBusy by rememberUpdatedState(onBusy)
+        // tolerateGaps=false so a snippet that fails to dispatch surfaces the reason instead of a blank preview.
+        val renderer = remember { ComposePreviewRenderer(null, tolerateGaps = false) }
+        val state by produceState<PreviewState>(PreviewState.Loading, code) {
+            val lowered = runCatching { backend.lowerLessonComposePreview(code) }.getOrNull()
+            value = if (lowered != null) PreviewState.Ready(lowered) else {
+                val why = runCatching { backend.lessonComposePreviewDiagnostics(code) }
+                    .getOrElse { listOf("couldn't analyze: ${it::class.simpleName}: ${it.message}") }
+                    .ifEmpty { listOf("no reason reported (analysis returned nothing)") }
+                PreviewState.NotInterpretable(why)
+            }
+        }
+        var renderError by remember(code) { mutableStateOf<Throwable?>(null) }
+        var partialError by remember(code) { mutableStateOf<Throwable?>(null) }
+        val partialKey = remember(code) { arrayOfNulls<String>(1) }
+
+        LaunchedEffect(state) { reportBusy(state is PreviewState.Loading) }
+        LaunchedEffect(state, renderError, partialError) {
+            val err = renderError
+            val partial = partialError
+            report(
+                when {
+                    err != null -> listOf(PreviewIssue(PreviewIssueLevel.ERROR, "Preview failed to render", err.message ?: err::class.simpleName ?: "Unknown error"))
+                    partial != null -> listOf(PreviewIssue(PreviewIssueLevel.WARNING, "Preview partially rendered", partial.message ?: partial::class.simpleName ?: "Unknown error"))
+                    state is PreviewState.NotInterpretable -> (state as PreviewState.NotInterpretable).reasons.map { PreviewIssue(PreviewIssueLevel.WARNING, "Preview not interpretable", it) }
+                    else -> emptyList()
+                },
+            )
+        }
+
+        // Force the requested night scheme so a theme reading isSystemInDarkTheme() renders the same either way.
+        val base = LocalConfiguration.current
+        val cfg = remember(base, dark) {
+            Configuration(base).apply {
+                uiMode = (uiMode and Configuration.UI_MODE_NIGHT_MASK.inv()) or
+                    (if (dark) Configuration.UI_MODE_NIGHT_YES else Configuration.UI_MODE_NIGHT_NO)
+            }
+        }
+        CompositionLocalProvider(LocalConfiguration provides cfg) {
+            Box(modifier, contentAlignment = Alignment.Center) {
+                when (val s = state) {
+                    is PreviewState.Loading -> CircularProgressIndicator(Modifier.size(28.dp))
+                    is PreviewState.Ready -> {
+                        val onErr: @Composable (Throwable) -> Unit = { error ->
+                            LaunchedEffect(error.message, error::class) { renderError = error }
+                            PreviewRenderError(error)
+                        }
+                        val onPartial: (Throwable?) -> Unit = { e ->
+                            val key = e?.let { "${it::class.java.name}: ${it.message}" }
+                            if (key != partialKey[0]) {
+                                partialKey[0] = key
+                                if (e != null) log.warn("Compose lesson preview partial render", e)
+                                partialError = e
+                            }
+                        }
+                        PreviewVariants(renderer, s.lowered, onErr, onPartial)
+                    }
+                    is PreviewState.NotInterpretable -> Text(
+                        "Preview not interpretable", color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        fontSize = 12.sp, modifier = Modifier.padding(16.dp),
+                    )
+                }
+            }
+        }
+    }
+
     private sealed interface PreviewState {
         object Loading : PreviewState
         data class Ready(val lowered: LoweredComposePreview) : PreviewState

@@ -47,4 +47,21 @@ class BlockCommentNewlineTest {
         // old check (last `/*` after last `*/`) wrongly fired; the state scan correctly sees code here.
         assertFalse('*' in enter("/* done */\nval s = \"/*\"|"), "closed comment + /* in a string is not open")
     }
+
+    @Test
+    fun enterAtEndOfLineCommentDoesNotContinue() {
+        // IntelliJ: Enter at the END of a `//` line comment drops a plain new line, NOT another `//`.
+        assertFalse("//" in enter("    // im in a comment|"), "end-of-line comment must not continue")
+    }
+
+    @Test
+    fun enterAtEndOfBlankLineCommentDoesNotContinue() {
+        assertFalse("//" in enter("    //|"), "empty line comment must not continue")
+    }
+
+    @Test
+    fun splittingLineCommentMidTextStaysCommented() {
+        // Splitting in the middle keeps the moved text a comment (IntelliJ behavior).
+        assertTrue("//" in enter("    // hello |world"), "mid-comment split must keep the tail commented")
+    }
 }

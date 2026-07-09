@@ -36,10 +36,23 @@ class JdtSemanticHighlightTest {
         assertTrue(toks.any { it.text == "local" && it.kind == "localVariable" }, "local should be a local; got $toks")
         assertTrue(toks.any { it.text == "println" && it.kind == "method" }, "println should be a method; got $toks")
         assertTrue(toks.any { it.text == "System" && it.kind == "class" }, "System should be a class; got $toks")
-        // COUNT is static + final.
+        // COUNT is static + final → a constant (colored apart from a plain field).
         assertTrue(
-            toks.any { it.text == "COUNT" && it.kind == "field" && HighlightModifier.STATIC in it.mods && HighlightModifier.READONLY in it.mods },
-            "COUNT should be a static final field; got $toks",
+            toks.any { it.text == "COUNT" && it.kind == "constant" && HighlightModifier.STATIC in it.mods && HighlightModifier.READONLY in it.mods },
+            "COUNT should be a static final constant; got $toks",
         )
+    }
+
+    @Test
+    fun annotationAtSymbolAndNameAreColored() {
+        val code = """
+            package app;
+            public class Main {
+              @Override public String toString() { return "x"; }
+            }
+        """.trimIndent()
+        val toks = tokens(code)
+        assertTrue(toks.any { it.text == "@" && it.kind == "annotation" }, "the `@` should color as annotation; got $toks")
+        assertTrue(toks.any { it.text == "Override" && it.kind == "annotation" }, "the annotation name should color as annotation; got $toks")
     }
 }

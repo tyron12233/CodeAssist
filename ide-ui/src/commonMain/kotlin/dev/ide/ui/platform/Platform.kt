@@ -17,3 +17,9 @@ expect val isMobilePlatform: Boolean
  * `commonMain` (it's a JVM-only declaration), so it's bridged through expect/actual.
  */
 expect val ioDispatcher: CoroutineDispatcher
+
+/**
+ * Wall-clock time in epoch-ms. Used for relative-time labels (e.g. the project picker's "opened 2h ago").
+ * `System.currentTimeMillis()` isn't visible in `commonMain`, so it's bridged through expect/actual.
+ */
+expect fun nowMillis(): Long

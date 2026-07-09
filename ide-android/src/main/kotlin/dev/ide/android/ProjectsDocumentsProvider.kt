@@ -5,6 +5,7 @@ import android.database.MatrixCursor
 import android.graphics.Point
 import android.os.CancellationSignal
 import android.os.ParcelFileDescriptor
+import android.provider.DocumentsContract
 import android.provider.DocumentsContract.Document
 import android.provider.DocumentsContract.Root
 import android.provider.DocumentsProvider
@@ -80,6 +81,29 @@ class ProjectsDocumentsProvider : DocumentsProvider() {
     override fun isChildDocument(parentDocumentId: String, documentId: String): Boolean {
         val parent = File(parentDocumentId).absolutePath + File.separator
         return File(documentId).absolutePath.startsWith(parent)
+    }
+
+    /**
+     * The chain of document ids from an ancestor down to [childDocumentId] — required (with
+     * [Root.FLAG_SUPPORTS_IS_CHILD]) for DocumentsUI to *navigate into* a folder when another app launches an
+     * `ACTION_VIEW` at a document URI (e.g. "Show in file manager" after an export). Without it DocumentsUI's
+     * `findDocumentPath` call throws `UnsupportedOperationException` and the deep-link silently lands at the
+     * root. Ids are absolute paths, so the chain is just the parent walk from the child up to the stop point
+     * ([parentDocumentId], or the provider root when null — in which case [DocumentsContract.Path.getRootId]
+     * must be set).
+     */
+    override fun findDocumentPath(parentDocumentId: String?, childDocumentId: String): DocumentsContract.Path {
+        val child = resolve(childDocumentId).absoluteFile // validates it stays within the app root
+        val stopAt = parentDocumentId?.let { File(it).absolutePath } ?: rootId
+        val ids = ArrayList<String>()
+        var cur: File? = child
+        while (cur != null) {
+            ids.add(cur.absolutePath)
+            if (cur.absolutePath == stopAt) break
+            cur = cur.parentFile
+        }
+        ids.reverse()
+        return DocumentsContract.Path(if (parentDocumentId == null) rootId else null, ids)
     }
 
     override fun openDocument(

@@ -2,7 +2,9 @@ package dev.ide.core.backend
 
 import dev.ide.android.support.resources.LauncherIcon
 import dev.ide.core.BackendContext
+import dev.ide.core.CaprojFormat
 import dev.ide.core.ProjectIconLocator
+import dev.ide.core.ProjectPackaging
 import dev.ide.model.template.ProjectTemplate
 import dev.ide.model.template.TemplateParameter
 import dev.ide.model.template.TextValidation
@@ -10,6 +12,9 @@ import dev.ide.platform.log.Log
 import dev.ide.ui.backend.ProjectInfo
 import dev.ide.ui.backend.ProjectService
 import dev.ide.ui.backend.UiCompatibilityInfo
+import dev.ide.ui.backend.UiExportOptions
+import dev.ide.ui.backend.UiImportPreview
+import dev.ide.ui.backend.UiPackagedEntry
 import dev.ide.ui.backend.UiProjectIcon
 import dev.ide.ui.backend.UiOpenTabs
 import dev.ide.ui.backend.UiProjectResult
@@ -35,7 +40,7 @@ internal class ProjectBackend(private val ctx: BackendContext) : ProjectService 
     override val projectEpoch: StateFlow<Int> get() = ctx.projectEpoch
 
     override fun projects(): List<ProjectInfo> =
-        ctx.manager?.list()?.map { ProjectInfo(it.name, it.rootPath, it.moduleCount, it.compatibility, it.isAndroid) }
+        ctx.manager?.list()?.map { ProjectInfo(it.name, it.rootPath, it.moduleCount, it.compatibility, it.isAndroid, it.lastOpened) }
             ?: ctx.servicesOrNull?.let {
                 listOf(ProjectInfo(it.projectDisplayName(), it.workspaceRoot.toString(), it.modules().size, runCatching { it.isCompatibilityMode() }.getOrDefault(false)))
             }
@@ -153,6 +158,72 @@ internal class ProjectBackend(private val ctx: BackendContext) : ProjectService 
             }.getOrElse { e ->
                 log.error("Couldn't import the Gradle project at $sourceRootPath", e)
                 UiProjectResult(false, e.message ?: "Failed to import Gradle project")
+            }
+        }
+    }
+
+    // ---- shareable project packages (.caproj) ----
+
+    override suspend fun exportProject(rootPath: String, options: UiExportOptions): String? {
+        val mgr = ctx.manager ?: return null
+        return withContext(Dispatchers.IO) {
+            runCatching {
+                mgr.exportProject(
+                    rootPath,
+                    ProjectPackaging.ExportOptions(
+                        bundleDependencies = options.bundleDependencies,
+                        author = options.author,
+                        description = options.description,
+                    ),
+                ).toString()
+            }.getOrElse { e -> log.error("Couldn't export the project at $rootPath", e); null }
+        }
+    }
+
+    override suspend fun previewImportPackage(archivePath: String): UiImportPreview? {
+        val mgr = ctx.manager ?: return null
+        return withContext(Dispatchers.IO) {
+            runCatching {
+                val preview = mgr.readPackagePreview(archivePath) ?: return@runCatching null
+                val m = preview.manifest
+                val compatible = m.format <= CaprojFormat.FORMAT_VERSION
+                UiImportPreview(
+                    name = m.name,
+                    description = m.description,
+                    author = m.author,
+                    createdBy = m.createdBy,
+                    isAndroid = m.isAndroid,
+                    packageName = m.packageName,
+                    moduleCount = m.moduleCount,
+                    modules = m.modules,
+                    fileCount = m.fileCount,
+                    uncompressedSizeBytes = m.uncompressedSize,
+                    hasBundledDeps = m.hasBundledDeps,
+                    icon = preview.iconBytes?.let { UiProjectIcon.Raster(it) },
+                    files = preview.entries.map { UiPackagedEntry(it.path, it.size) },
+                    compatible = compatible,
+                    incompatibleReason = if (compatible) null
+                    else "This package was created by a newer version of CodeAssist. Update to import it.",
+                    screenshots = preview.screenshots,
+                )
+            }.getOrNull()
+        }
+    }
+
+    override suspend fun importPackage(archivePath: String): UiProjectResult {
+        val mgr = ctx.manager ?: return UiProjectResult(false, "Project import not supported by this backend")
+        return withContext(Dispatchers.IO) {
+            runCatching {
+                val next = mgr.importProject(archivePath)
+                    ?: return@runCatching UiProjectResult(
+                        false,
+                        "That file isn't a CodeAssist project package, or it needs a newer version of CodeAssist.",
+                    )
+                ctx.swapEngine(next)
+                UiProjectResult(true, "Imported ${next.projectDisplayName()}", next.workspaceRoot.toString())
+            }.getOrElse { e ->
+                log.error("Couldn't import the package at $archivePath", e)
+                UiProjectResult(false, e.message ?: "Failed to import project")
             }
         }
     }

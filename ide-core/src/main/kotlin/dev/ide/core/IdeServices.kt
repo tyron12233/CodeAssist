@@ -28,6 +28,7 @@ import dev.ide.lang.incremental.DocumentEdit
 import dev.ide.index.INDEX_EP
 import dev.ide.core.services.BlockService
 import dev.ide.core.services.BuildService
+import dev.ide.core.services.RunCapture
 import dev.ide.core.services.DependencyService
 import dev.ide.core.services.ModuleService
 import dev.ide.core.services.SearchService
@@ -83,10 +84,13 @@ import dev.ide.model.Project
 import dev.ide.model.template.ProjectTemplate
 import dev.ide.model.template.TemplateArgs
 import dev.ide.model.template.TemplateId
+import dev.ide.core.templates.CalculatorSampleTemplate
 import dev.ide.core.templates.JavaConsoleAppTemplate
 import dev.ide.core.templates.JavaLibraryTemplate
 import dev.ide.core.templates.KotlinConsoleAppTemplate
 import dev.ide.core.templates.KotlinLibraryTemplate
+import dev.ide.core.templates.NotesSampleTemplate
+import dev.ide.core.templates.WeatherSampleTemplate
 import dev.ide.platform.Disposable
 import java.util.concurrent.CopyOnWriteArrayList
 import dev.ide.platform.PluginId
@@ -402,8 +406,14 @@ class IdeServices private constructor(
      *  never analysed as Java. */
     private val PROGUARD_LANGUAGE_ID = LanguageId("proguard")
 
-    /** The language of [file] by extension: `.xml` → xml, `.kt` → kotlin, `.pro` → proguard (no analysis
-     *  backend, so it's edited as plain text without being mis-parsed as Java), everything else → java. */
+    /** Language id for Markdown documents. Like [PROGUARD_LANGUAGE_ID] no backend is registered, so a `.md`
+     *  file (even one inside a source root) is edited as plain text and never analysed as Java; its rich-text
+     *  rendering is a UI-side Preview, not an analysis backend. */
+    private val MARKDOWN_LANGUAGE_ID = LanguageId("markdown")
+
+    /** The language of [file] by extension: `.xml` → xml, `.kt` → kotlin, `.pro` → proguard, `.md` → markdown
+     *  (the last two have no analysis backend, so they're edited as plain text without being mis-parsed as
+     *  Java), everything else → java. */
     private fun languageFor(file: Path): LanguageId {
         val name = file.fileName?.toString() ?: return LanguageId("java")
         return when {
@@ -412,6 +422,7 @@ class IdeServices private constructor(
             // ProGuard/R8 keep-rule files have no language backend; routing them off "java" keeps the JDT
             // analyzer from flagging the file as broken Java (the diagnostics engine dispatches by language).
             name.endsWith(".pro") -> PROGUARD_LANGUAGE_ID
+            name.endsWith(".md") || name.endsWith(".markdown") -> MARKDOWN_LANGUAGE_ID
             else -> LanguageId("java")
         }
     }
@@ -566,6 +577,12 @@ class IdeServices private constructor(
     /** Set the Maven version-conflict policy (delegates to the dependency service). Kept here so the settings
      *  surface can reach it through the engine without depending on the service type. */
     fun setConflictPolicy(policy: ConflictPolicy) = dependencies.setConflictPolicy(policy)
+
+    /** Compile [moduleName] and run its detected `main`, capturing stdout + exit code + compile diagnostics —
+     *  the programmatic run used by the Learn exercise checker over a scratch project. Does not touch the
+     *  interactive build/run console state. See [dev.ide.core.services.BuildService.runAndCapture]. */
+    suspend fun runAndCapture(moduleName: String, stdin: String = "", timeoutMs: Long = 60_000): RunCapture =
+        build.runAndCapture(moduleName, stdin, timeoutMs)
 
     init {
         // Publish this engine's per-engine container services (the K2 compiler + this engine's EngineContext)
@@ -1371,7 +1388,15 @@ class IdeServices private constructor(
                 is KotlinSourceAnalyzer -> {
                     // Java/Android interop via the shared `java.classNames` index (type-name completion);
                     // the classpath extension scan persists alongside the index caches.
-                    it.indexService = indexService
+                    // EXCEPTION — the hidden Learn Compose scratch (an `android-library` under `.scratch/`): its
+                    // library composables (`Text`/`Column`/…) must resolve from the ClasspathReader scan, NOT the
+                    // shared `KotlinCallableIndex`. That index reuses content-addressed segments that don't carry
+                    // this throwaway module's AAR top-level callables, so `Text` resolved to 0 candidates and the
+                    // `@Preview` never rendered. index=null routes `topLevelByName` through the (proven) scan.
+                    val isScratch = store.rootPath.toString().replace('\\', '/').contains("/.scratch/")
+                    val scratchCompose = isScratch &&
+                        module.facets.get(dev.ide.android.support.AndroidFacet.KEY) != null
+                    it.indexService = if (scratchCompose) null else indexService
                     it.extensionCacheDir = store.rootPath.resolve(".platform/caches/kotlin-ext")
                     // Synthetic "light" classes (Android R/BuildConfig, …), minus the Kotlin file facades.
                     it.syntheticClassProvider = { kotlinSyntheticClasses(module) }
@@ -3681,6 +3706,12 @@ class IdeServices private constructor(
             templates.register(KotlinConsoleAppTemplate, PluginId("kotlin-support"))
             templates.register(KotlinLibraryTemplate, PluginId("kotlin-support"))
             AndroidSupport.registerTemplates(templates)
+            // Sample projects (complete, runnable examples) — listed under "Sample projects" in the store.
+            templates.register(CalculatorSampleTemplate, PluginId("samples"))
+            templates.register(NotesSampleTemplate, PluginId("samples"))
+            templates.register(WeatherSampleTemplate, PluginId("samples"))
+            // Jetpack Compose sample games (Snake, Tic-Tac-Toe, Memory Match, 2048) — also under "Sample projects".
+            AndroidSupport.registerComposeSamples(templates)
 
             // ---- Stateless, project-independent editor contributions (registered ONCE, app-global) ----
             // These capture no per-project state (their parse hosts are global singletons), so one shared

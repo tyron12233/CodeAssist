@@ -45,6 +45,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.content.FileProvider
 import dev.ide.android.daemon.BuildDaemonProof
+import dev.ide.core.CaprojFormat
 import dev.ide.core.IdeServicesBackend
 import dev.ide.ui.CodeAssistApp
 import dev.ide.ui.backend.FileActions
@@ -161,9 +162,12 @@ class MainActivity : ComponentActivity() {
                     }
 
                     override val canPickFile: Boolean = true
-                    override fun pickFile(onPicked: (String?) -> Unit) {
+                    override fun pickFile(extensions: List<String>, onPicked: (String?) -> Unit) {
                         pendingPick = onPicked
-                        pickLauncher.launch(arrayOf("*/*"))
+                        // Custom extensions (e.g. .caproj) have no registered MIME, so fall back to */* and
+                        // let the caller validate the picked file; known extensions narrow the SAF picker.
+                        val mimes = extensions.mapNotNull { MimeTypeMap.getSingleton().getMimeTypeFromExtension(it) }
+                        pickLauncher.launch(if (mimes.isEmpty()) arrayOf("*/*") else mimes.toTypedArray())
                     }
 
                     override val canShare: Boolean = true
@@ -186,17 +190,27 @@ class MainActivity : ComponentActivity() {
                 }
             }
 
+            // A `.caproj` package handed in via "Open with" opens the import preview (see the branch below);
+            // any other inbound file is copied into the open project's first source root as before.
+            var importPackagePath by remember { mutableStateOf<String?>(null) }
             LaunchedEffect(backend, inbound.value) {
                 val b = backend
                 val uri = inbound.value
                 if (b != null && uri != null) {
-                    val target = firstSourceRoot(b.files.fileTree())
-                    val path = if (target != null) importUri(uri, target, b) else null
-                    Toast.makeText(
-                        this@MainActivity,
-                        if (path != null) "Imported ${File(path).name}" else "Couldn't import file",
-                        Toast.LENGTH_SHORT,
-                    ).show()
+                    val name = queryDisplayName(uri) ?: ""
+                    if (name.endsWith(".${CaprojFormat.EXTENSION}", ignoreCase = true)) {
+                        val path = withContext(Dispatchers.IO) { copyInboundToCache(uri, name) }
+                        if (path != null) importPackagePath = path
+                        else Toast.makeText(this@MainActivity, "Couldn't open the project package", Toast.LENGTH_SHORT).show()
+                    } else {
+                        val target = firstSourceRoot(b.files.fileTree())
+                        val path = if (target != null) importUri(uri, target, b) else null
+                        Toast.makeText(
+                            this@MainActivity,
+                            if (path != null) "Imported ${File(path).name}" else "Couldn't import file",
+                            Toast.LENGTH_SHORT,
+                        ).show()
+                    }
                     inbound.value = null
                 }
             }
@@ -214,6 +228,7 @@ class MainActivity : ComponentActivity() {
                             it
                         )
                     },
+                    importPackagePath = importPackagePath,
                 )
 
                 error != null -> Splash("Failed to start: $error")
@@ -269,6 +284,15 @@ class MainActivity : ComponentActivity() {
         backend.files.createFileBytes(targetDir, name, bytes)
     }.getOrNull()
 
+    /** Copy an inbound (`Open with`) file into a uniquely-named cache path so each hand-off is a distinct
+     *  path (the import preview re-opens on each new path). Returns the real path or null. */
+    private fun copyInboundToCache(uri: Uri, name: String): String? = runCatching {
+        val dest = File(cacheDir, "import-${System.currentTimeMillis()}-$name")
+        contentResolver.openInputStream(uri)
+            ?.use { input -> dest.outputStream().use { input.copyTo(it) } } ?: return null
+        dest.absolutePath
+    }.getOrNull()
+
     /** Copy a picked content:// file into the app cache and return its real path (for keystore import). */
     private fun copyUriToCache(uri: Uri): String? = runCatching {
         val name = queryDisplayName(uri) ?: "keystore-${System.currentTimeMillis()}"
@@ -299,6 +323,7 @@ class MainActivity : ComponentActivity() {
     /** A best-effort content MIME type from the file extension (drives the share-sheet target list). */
     private fun mimeFor(path: String): String = when {
         path.endsWith(".apk") -> "application/vnd.android.package-archive"
+        path.endsWith(".${CaprojFormat.EXTENSION}") -> CaprojFormat.MIME
         path.endsWith(".zip") || path.endsWith(".jar") -> "application/zip"
         path.endsWith(".txt") || path.endsWith(".kt") || path.endsWith(".java") || path.endsWith(".xml") -> "text/plain"
         else -> "application/octet-stream"

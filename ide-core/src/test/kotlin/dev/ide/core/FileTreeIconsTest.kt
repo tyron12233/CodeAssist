@@ -46,6 +46,27 @@ class FileTreeIconsTest {
     }
 
     @Test
+    fun markdownAtWorkspaceRootIsVisibleWithIcon() {
+        val dir = Files.createTempDirectory("ide-tree-md")
+        IdeServices.bootstrapJavaDemo(dir).use { ide ->
+            val backend = IdeServicesBackend(ide)
+            // A top-level README.md (the sample templates put one here) — a workspace-root file that sits
+            // outside every module, so it's only reachable via the workspace node's own children.
+            dir.resolve("README.md").toFile().writeText("# Title\n\nHello.\n")
+
+            val root = backend.files.fileTree()
+            // It appears as a direct child of the workspace node (not only under the All-Files view)...
+            val readme = root.children.firstOrNull { it.name == "README.md" }
+            assertNotNull(readme, "a workspace-root README.md must be visible in the Project tree")
+            // ...with the Markdown icon and an openable file path.
+            assertEquals("markdown", readme.iconId)
+            assertEquals(NodeKind.File, readme.kind)
+            assertNotNull(readme.filePath)
+        }
+        dir.toFile().deleteRecursively()
+    }
+
+    @Test
     fun androidTreeHasResAndModuleIcons() {
         val dir = Files.createTempDirectory("ide-tree-android")
         IdeServices.bootstrapDemo(dir).use { ide ->

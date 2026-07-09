@@ -29,38 +29,42 @@ internal class StoreBackend(private val ctx: BackendContext) : StoreService {
     override fun storeAvailable(): Boolean = templates().isNotEmpty()
 
     override suspend fun catalog(): UiStoreCatalog = withContext(Dispatchers.Default) {
-        val templateItems = templates().map(::toItem)
-        // Featured = the curated highlights, falling back to the first few templates so the carousel is
+        val (sampleTemplates, starterTemplates) = templates().partition { isSample(it) }
+        val starters = starterTemplates.map { toItem(it, UiStoreItemKind.Template) }
+        val samples = sampleTemplates.map { toItem(it, UiStoreItemKind.Sample) }
+        // Featured = the curated highlights, falling back to the first few starters so the carousel is
         // never empty on a host that contributes its own (uncurated) templates.
-        val featured = templateItems.filter { it.featured }.ifEmpty { templateItems.take(3) }
+        val featured = starters.filter { it.featured }.ifEmpty { starters.take(3) }
         val categories = buildList {
-            templateItems.map { it.category }.distinct().forEach(::add)
-            if (SAMPLE_ITEMS.isNotEmpty()) add(CATEGORY_SAMPLES)
+            (starters + samples).map { it.category }.distinct().forEach(::add)
             add(CATEGORY_COMMUNITY)
         }
         val sections = listOf(
-            UiStoreSection("templates", "Starter templates", "Spin up a new project from a curated scaffold", templateItems),
-            UiStoreSection("samples", "Sample projects", "Full example apps to read and run", SAMPLE_ITEMS),
+            UiStoreSection("templates", "Starter templates", "Spin up a new project from a curated scaffold", starters),
+            UiStoreSection("samples", "Sample projects", "Complete, documented example apps you can build and run", samples),
             UiStoreSection("community", "Community", "Projects shared by the community", emptyList()),
         )
         UiStoreCatalog(featured = featured, categories = categories, sections = sections)
     }
 
     override suspend fun search(query: String, category: String?): List<UiStoreItem> = withContext(Dispatchers.Default) {
-        val all = templates().map(::toItem) + SAMPLE_ITEMS
+        val all = templates().map { toItem(it, if (isSample(it)) UiStoreItemKind.Sample else UiStoreItemKind.Template) }
         val q = query.trim().lowercase()
         all.filter { item -> matchesCategory(item, category) && matchesQuery(item, q) }
     }
 
     override suspend fun install(id: String, args: Map<String, String>): UiStoreInstallResult {
-        // Template items are created through the Create-Project flow (the UI routes them there with the
-        // configure form), never here. Sample/community downloads are filled in by the remote-catalog seam.
-        return UiStoreInstallResult(false, "Sample and community projects are coming soon")
+        // Templates AND samples are both created through the Create-Project flow (the UI routes any item with
+        // a templateId there); only the future community downloads would land here.
+        return UiStoreInstallResult(false, "Community projects are coming soon")
     }
+
+    /** Sample projects are registered as `sample-`-prefixed templates so they share the create path but list
+     *  under "Sample projects" rather than "Starter templates". */
+    private fun isSample(t: ProjectTemplate): Boolean = t.id.value.startsWith("sample-")
 
     private fun matchesCategory(item: UiStoreItem, category: String?): Boolean = when (category) {
         null -> true
-        CATEGORY_SAMPLES -> item.kind == UiStoreItemKind.Sample
         CATEGORY_COMMUNITY -> item.kind == UiStoreItemKind.Community
         else -> item.category.equals(category, ignoreCase = true)
     }
@@ -71,11 +75,11 @@ internal class StoreBackend(private val ctx: BackendContext) : StoreService {
         item.category.lowercase().contains(q) ||
         item.tags.any { it.lowercase().contains(q) }
 
-    private fun toItem(t: ProjectTemplate): UiStoreItem {
+    private fun toItem(t: ProjectTemplate, kind: UiStoreItemKind): UiStoreItem {
         val meta = CURATION[t.id.value]
         return UiStoreItem(
-            id = "template:${t.id.value}",
-            kind = UiStoreItemKind.Template,
+            id = "${if (kind == UiStoreItemKind.Sample) "sample" else "template"}:${t.id.value}",
+            kind = kind,
             title = t.displayName,
             summary = t.description,
             category = t.category.displayName,
@@ -83,61 +87,77 @@ internal class StoreBackend(private val ctx: BackendContext) : StoreService {
             tags = meta?.tags ?: listOf(t.category.displayName),
             featured = meta?.featured ?: false,
             accentColor = meta?.accent,
+            installs = meta?.installs ?: -1,
             templateId = t.id.value,
             available = true,
+            highlights = meta?.highlights ?: emptyList(),
+            language = meta?.language ?: t.category.displayName.takeIf { it == "Java" || it == "Kotlin" },
+            previewKey = t.id.value.takeIf { it in PREVIEW_SAMPLES },
         )
     }
 
-    /** Per-template curation layered over the template's own metadata (featured flag, brand accent, tags). */
-    private data class Curation(val featured: Boolean = false, val accent: Long? = null, val tags: List<String> = emptyList())
+    /** Per-template curation layered over the template's own metadata (featured flag, brand accent, tags,
+     *  a soft usage count, "what you get" highlights, and the primary language) — all shown in the store. */
+    private data class Curation(
+        val featured: Boolean = false,
+        val accent: Long? = null,
+        val tags: List<String> = emptyList(),
+        val installs: Int = -1,
+        val highlights: List<String> = emptyList(),
+        val language: String? = null,
+    )
 
     private companion object {
-        const val CATEGORY_SAMPLES = "Samples"
         const val CATEGORY_COMMUNITY = "Community"
 
-        val CURATION: Map<String, Curation> = mapOf(
-            "compose-app" to Curation(featured = true, accent = 0xFF3FBDD9, tags = listOf("Jetpack Compose", "Material 3", "Kotlin")),
-            "android-material-you" to Curation(featured = true, accent = 0xFFB487F7, tags = listOf("Material You", "Views", "Kotlin")),
-            "android-app" to Curation(featured = true, accent = 0xFF3DDC84, tags = listOf("Android", "Activity", "XML layouts")),
-            "kotlin-console" to Curation(tags = listOf("Kotlin", "Console")),
-            "java-console" to Curation(tags = listOf("Java", "Console")),
-            "android-library" to Curation(tags = listOf("Android", "AAR")),
-        )
+        /** Sample template ids that ship a built-in preview screenshot ([UiStoreItem.previewKey]). */
+        val PREVIEW_SAMPLES = setOf("sample-snake", "sample-tictactoe", "sample-memory", "sample-2048")
 
-        // Curated preview samples (browse-only until the remote catalog wires downloads). Marked unavailable
-        // so the detail sheet shows "Coming soon" rather than a working install.
-        val SAMPLE_ITEMS: List<UiStoreItem> = listOf(
-            UiStoreItem(
-                id = "sample:notes", kind = UiStoreItemKind.Sample, title = "Notes",
-                summary = "A Material 3 notes app with a list/detail flow.",
-                description = "A complete note-taking app: a Material 3 list/detail flow, swipe-to-delete, and " +
-                    "local persistence. A good tour of state handling and navigation.",
-                category = "Android", iconId = "module.android", author = "CodeAssist",
-                tags = listOf("Material 3", "CRUD", "Navigation"), accentColor = 0xFF3DDC84, available = false,
+        val CURATION: Map<String, Curation> = mapOf(
+            "compose-app" to Curation(
+                featured = true, accent = 0xFF3FBDD9, tags = listOf("Jetpack Compose", "Material 3", "Kotlin"), installs = 12800, language = "Kotlin",
+                highlights = listOf("Jetpack Compose UI", "Material 3 theming", "A ready-to-run Activity", "Builds to an installable APK"),
             ),
-            UiStoreItem(
-                id = "sample:weather", kind = UiStoreItemKind.Sample, title = "Weather",
-                summary = "Fetches a forecast over HTTP and renders it in Compose.",
-                description = "A small Compose app that loads a forecast over HTTP and renders an hourly + daily " +
-                    "view. Shows networking, loading/error states, and lists.",
-                category = "Android", iconId = "module.android", author = "CodeAssist",
-                tags = listOf("Compose", "Networking", "Coroutines"), accentColor = 0xFF3FBDD9, available = false,
+            "android-material-you" to Curation(
+                featured = true, accent = 0xFFB487F7, tags = listOf("Material You", "Views", "Kotlin"), installs = 6400, language = "Kotlin",
+                highlights = listOf("Material You (dynamic color)", "XML layouts + Views", "A ready-to-run Activity"),
             ),
-            UiStoreItem(
-                id = "sample:snake", kind = UiStoreItemKind.Sample, title = "Snake",
-                summary = "A classic Snake game drawn on a Compose canvas.",
-                description = "The classic Snake game: a game loop, gesture input, and Canvas drawing. A compact " +
-                    "example of frame-driven UI.",
-                category = "Games", iconId = "kotlin", author = "CodeAssist",
-                tags = listOf("Canvas", "Game loop", "Kotlin"), accentColor = 0xFFB487F7, available = false,
+            "android-app" to Curation(
+                featured = true, accent = 0xFF3DDC84, tags = listOf("Android", "Activity", "XML layouts"), installs = 21500, language = "Kotlin",
+                highlights = listOf("An Activity + XML layout", "Resources wired up", "Builds to an installable APK"),
             ),
-            UiStoreItem(
-                id = "sample:calc", kind = UiStoreItemKind.Sample, title = "Calculator",
-                summary = "An expression-parsing calculator, console + tests.",
-                description = "A Java console calculator with an expression parser and a JUnit test suite. A clean " +
-                    "starting point for parsing and unit testing.",
-                category = "Java", iconId = "java", author = "CodeAssist",
-                tags = listOf("Parsing", "JUnit", "Console"), available = false,
+            "kotlin-console" to Curation(tags = listOf("Kotlin", "Console"), installs = 9300, language = "Kotlin", highlights = listOf("A top-level main()", "Full editor intelligence", "Runs in the console")),
+            "java-console" to Curation(tags = listOf("Java", "Console"), installs = 8100, language = "Java", highlights = listOf("A main() entry point", "Full editor intelligence", "Runs in the console")),
+            "android-library" to Curation(tags = listOf("Android", "AAR"), installs = 3200, language = "Kotlin", highlights = listOf("A reusable android-lib module", "Publishes as an AAR")),
+            // Sample projects (complete, runnable examples).
+            "sample-calculator" to Curation(
+                accent = 0xFFF89820, tags = listOf("Java", "Parser", "REPL"), installs = 4200, language = "Java",
+                highlights = listOf("An interactive read-eval-print loop", "A recursive-descent expression parser", "Operator precedence + parentheses", "No dependencies, thoroughly documented"),
+            ),
+            "sample-notes" to Curation(
+                accent = 0xFF7F52FF, tags = listOf("Kotlin", "CRUD", "CLI"), installs = 5600, language = "Kotlin",
+                highlights = listOf("A command loop: add/list/done/rm/find", "Reads input a line at a time", "Model split from view (testable)", "No dependencies, thoroughly documented"),
+            ),
+            "sample-weather" to Curation(
+                accent = 0xFF3FBDD9, tags = listOf("Kotlin", "CLI", "Data"), installs = 3100, language = "Kotlin",
+                highlights = listOf("Type a city, get its forecast", "Reads input in a loop", "Shows how to swap in a real API", "No dependencies"),
+            ),
+            // Jetpack Compose sample games (complete, runnable Compose apps).
+            "sample-snake" to Curation(
+                accent = 0xFF00E676, tags = listOf("Jetpack Compose", "Game", "Canvas"), installs = 7400, language = "Kotlin",
+                highlights = listOf("Canvas rendering + a game loop", "Swipe gesture controls", "Live score + high score", "A neon Material 3 look"),
+            ),
+            "sample-tictactoe" to Curation(
+                accent = 0xFF22D3EE, tags = listOf("Jetpack Compose", "Game", "Material 3"), installs = 5200, language = "Kotlin",
+                highlights = listOf("Two-player game logic", "Animated marks + winning-line highlight", "State hoisting done right", "Material 3 theming"),
+            ),
+            "sample-memory" to Curation(
+                accent = 0xFF7C3AED, tags = listOf("Jetpack Compose", "Game", "Animation"), installs = 4300, language = "Kotlin",
+                highlights = listOf("3D card-flip animation", "Match logic + move/timer counters", "A colorful gradient UI", "A great intro to Compose animation"),
+            ),
+            "sample-2048" to Curation(
+                accent = 0xFFEDC22E, tags = listOf("Jetpack Compose", "Game", "Puzzle"), installs = 6100, language = "Kotlin",
+                highlights = listOf("Swipe-to-merge tile logic", "Animated tile colors", "Score + best tracking", "Clean grid-state modeling"),
             ),
         )
     }

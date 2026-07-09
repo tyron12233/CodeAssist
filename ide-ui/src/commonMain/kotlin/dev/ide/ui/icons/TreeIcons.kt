@@ -86,5 +86,48 @@ object TreeIcons {
         register("xml", TreeIcon.Badge("‹›", Color(0xFF61AFEF)))
         // ProGuard/R8 keep-rule files (`proguard-rules.pro`, `consumer-rules.pro`) — the shrinker config.
         register("proguard", TreeIcon.Badge("R8", Color(0xFF56B6C2)))
+        // Data / config formats — colored letter badges, JSON as the braces glyph (it fits perfectly).
+        register("json", TreeIcon.Glyph(CaIcons.braces, IconTint.Fixed(Color(0xFFC9A227))))
+        register("toml", TreeIcon.Badge("T", Color(0xFFB0703A)))
+        register("yaml", TreeIcon.Badge("Y", Color(0xFFCB4B34)))
+        register("properties", TreeIcon.Badge("=", Color(0xFF8B8D96)))
+        register("editorconfig", TreeIcon.Badge("EC", Color(0xFF8B8D96)))
+        // Docs / text.
+        register("markdown", TreeIcon.Badge("M", Color(0xFF6C9BD1)))
+        register("text", TreeIcon.Glyph(CaIcons.docText, IconTint.Tertiary))
+        // Raster/vector images — the image glyph, theme-blue (a plain image, not the android-green res set).
+        register("image", TreeIcon.Glyph(CaIcons.image, IconTint.Info))
+        // Groovy Gradle scripts (a `.gradle.kts` shows as Kotlin) + VCS metadata.
+        register("gradle", TreeIcon.Badge("G", Color(0xFF6BA84F)))
+        register("git", TreeIcon.Glyph(CaIcons.gitBranch, IconTint.Fixed(Color(0xFFDE6E43))))
     }
+}
+
+/**
+ * The icon id for a file BY NAME — a pure-UI mirror of the engine's file-icon providers (the built-in
+ * `DefaultFileIconProvider` + Android's `AndroidFileIconProvider`, file targets only), so a tab or
+ * breadcrumb can show the SAME icon the file tree does without needing a `TreeNode` or a backend round-trip
+ * (a file opens from many origins — tree, go-to-symbol, console, session restore). The Android rules
+ * (manifest, ProGuard) are checked first, matching the providers' priority order. Resolve the returned id
+ * through [TreeIcons.resolve].
+ */
+fun fileIconId(fileName: String): String = when {
+    // Exact-name matches first (they'd otherwise be caught by an extension rule, e.g. AndroidManifest → xml).
+    fileName == "AndroidManifest.xml" -> "manifest"
+    fileName == ".gitignore" || fileName == ".gitattributes" || fileName == ".gitmodules" || fileName == ".gitkeep" -> "git"
+    fileName == ".editorconfig" -> "editorconfig"
+    fileName.endsWith(".pro") -> "proguard"
+    fileName.endsWith(".java") -> "java"
+    fileName.endsWith(".kt") || fileName.endsWith(".kts") -> "kotlin"
+    fileName.endsWith(".gradle") -> "gradle"
+    fileName.endsWith(".xml") -> "xml"
+    fileName.endsWith(".json") -> "json"
+    fileName.endsWith(".toml") -> "toml"
+    fileName.endsWith(".yaml") || fileName.endsWith(".yml") -> "yaml"
+    fileName.endsWith(".properties") -> "properties"
+    fileName.endsWith(".md") || fileName.endsWith(".markdown") -> "markdown"
+    fileName.endsWith(".txt") || fileName.endsWith(".log") -> "text"
+    fileName.endsWith(".png") || fileName.endsWith(".jpg") || fileName.endsWith(".jpeg") ||
+        fileName.endsWith(".gif") || fileName.endsWith(".webp") || fileName.endsWith(".svg") -> "image"
+    else -> "file"
 }
