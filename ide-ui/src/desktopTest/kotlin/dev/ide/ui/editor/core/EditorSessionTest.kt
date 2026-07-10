@@ -1082,6 +1082,50 @@ class EditorSessionTest {
         assertEquals("    listOf(1, 2\n        \n    )", text)
     }
 
+    @Test
+    fun enterBeforeLoneCloserAlignsCloserToOpenerNotColumnZero() {
+        // The reported bug: a blank line then a lone `}` aligned with `Surface`. Enter before the `}` must keep
+        // the brace at the opener's indent (4) and open a body line one level deeper (8) — NOT dedent it to 0.
+        val src = "    Surface() {\n    \n    }"
+        val caret = src.lastIndexOf('}') // caret right before the closing brace (after its 4-space indent)
+        val s = session(src, caret, CodeLanguage.Kotlin)
+        val (text, c) = enter(s)
+        assertEquals("    Surface() {\n    \n        \n    }", text)
+        assertEquals("    Surface() {\n    \n        ".length, c) // caret on the body line, at 8 spaces
+    }
+
+    @Test
+    fun enterBeforeLoneCloserWithNoBlankLineSplitsAndAligns() {
+        // No pre-existing blank line: `    Surface() {\n    |}` → body line at 8, `}` stays at 4.
+        val src = "    Surface() {\n    }"
+        val caret = src.lastIndexOf('}')
+        val s = session(src, caret, CodeLanguage.Kotlin)
+        val (text, c) = enter(s)
+        assertEquals("    Surface() {\n        \n    }", text)
+        assertEquals("    Surface() {\n        ".length, c)
+    }
+
+    @Test
+    fun enterBeforeLoneCloserReindentsAMisalignedCloser() {
+        // The closer's own line is over-indented (6 spaces) but its opener sits at 4. Enter aligns the `}` to the
+        // opener (4) and the body one deeper (8), regardless of the closer line's stray indentation.
+        val src = "    Surface() {\n      }"
+        val caret = src.lastIndexOf('}')
+        val s = session(src, caret, CodeLanguage.Kotlin)
+        val (text, _) = enter(s)
+        assertEquals("    Surface() {\n        \n    }", text)
+    }
+
+    @Test
+    fun enterBeforeLoneCloserJavaAlignsToOpener() {
+        // Same behavior for Java: a method body's lone `}` stays under its opener.
+        val src = "    void f() {\n    }"
+        val caret = src.lastIndexOf('}')
+        val s = session(src, caret, CodeLanguage.Java)
+        val (text, _) = enter(s)
+        assertEquals("    void f() {\n        \n    }", text)
+    }
+
     // ---- indent-style detection (tabs / 2-space) ----
 
     @Test
