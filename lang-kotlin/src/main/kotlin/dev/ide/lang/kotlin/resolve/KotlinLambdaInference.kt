@@ -6,6 +6,7 @@ import dev.ide.lang.kotlin.symbols.KotlinType
 import dev.ide.lang.kotlin.symbols.TypeRendering
 import dev.ide.lang.resolve.TypeRef
 import org.jetbrains.kotlin.psi.KtCallExpression
+import org.jetbrains.kotlin.psi.KtDotQualifiedExpression
 import org.jetbrains.kotlin.psi.KtExpression
 import org.jetbrains.kotlin.psi.KtLambdaArgument
 import org.jetbrains.kotlin.psi.KtLambdaExpression
@@ -38,9 +39,17 @@ internal fun KotlinResolver.expectedFunctionTypeFor(lambda: KtLambdaExpression):
     val sym = resolveCalleeFunction(call) ?: return null
     val raw = sym.paramTypes.getOrNull(lambdaParamIndex(call, argIndex, sym)) as? KotlinType ?: return null
     if (!TypeRendering.isFunctionType(raw.qualifiedName)) return null
-    // Bind the function's type params from the NON-lambda value args (with(x){…} binds T from x), so the
-    // block's receiver/params are concrete. (Skip lambdas to avoid recursing back into this lambda.)
-    return service.substitute(raw, bindingsFromValueArgs(sym, call)) as? KotlinType
+    // Bind the function's type params from the NON-lambda value args (with(x){…} binds T from x), and — for an
+    // EXTENSION scope function (`x.apply { }`/`x.run { }`, `fun <T> T.apply(T.() -> Unit)`) — the extension
+    // receiver's type param from the actual receiver (T = typeof(x)), so the block's receiver `this` is the
+    // concrete type (`MutableList<Int>`), not an unbound `T`. Without it a member call in the block
+    // (`apply { add(x) }`) can't resolve its receiver. (Skip lambdas to avoid recursing into this lambda.)
+    val bindings = HashMap<String, TypeRef>(bindingsFromValueArgs(sym, call))
+    sym.receiverTypeParam?.let { tp ->
+        val recv = (call.parent as? KtDotQualifiedExpression)?.takeIf { it.selectorExpression === call }?.receiverExpression
+        recv?.let { inferType(it) }?.let { bindings.putIfAbsent(tp, it) }
+    }
+    return service.substitute(raw, bindings) as? KotlinType
 }
 
 /** The value-parameter types a lambda receives (in order), from the functional parameter it fills — for

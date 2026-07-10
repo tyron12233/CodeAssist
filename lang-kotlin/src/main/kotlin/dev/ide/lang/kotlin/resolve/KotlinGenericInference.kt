@@ -64,6 +64,16 @@ internal fun KotlinResolver.methodTypeParamErasure(sym: KotlinSymbol): Map<Strin
 internal fun KotlinResolver.inferTypeArguments(sym: KotlinSymbol, call: KtCallExpression): Map<String, TypeRef> {
     if (sym.typeParameters.isEmpty()) return emptyMap()
     val bindings = HashMap<String, TypeRef>()
+    // Explicit type arguments (`mutableStateOf<List<Int>?>(null)`, `emptyList<String>()`) pin the callee's
+    // type parameters verbatim — Kotlin does NO argument inference when they're spelled out, so a non-binding
+    // value arg (`null`) can't leave `T` free. Take them positionally, mirroring [constructorResultType].
+    call.typeArgumentList?.arguments?.takeIf { it.isNotEmpty() }?.let { targs ->
+        sym.typeParameters.forEachIndexed { i, name ->
+            targs.getOrNull(i)?.typeReference?.text
+                ?.let { service.typeFromText(it, fileContext) }?.let { bindings[name] = it }
+        }
+        return bindings
+    }
     // valueArguments already includes a trailing lambda (its getArgumentExpression() is the lambda). Map each
     // argument to the DECLARED parameter it fills — via [lambdaParamIndex], which honors named arguments and
     // Kotlin's trailing-lambda-fills-the-last-parameter rule — not its positional slot: `async { 42 }` passes

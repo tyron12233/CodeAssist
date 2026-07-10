@@ -1,6 +1,7 @@
 package dev.ide.lang.kotlin.symbols
 
 import dev.ide.lang.kotlin.resolve.approximateEscapingLocalType
+import dev.ide.lang.kotlin.resolve.delegatedValueType
 import dev.ide.lang.kotlin.resolve.inferType
 import dev.ide.index.ClassNameValue
 import dev.ide.index.IndexId
@@ -1654,9 +1655,21 @@ class KotlinSymbolService(
      */
     private fun inferReturnFromBody(rc: RawCallable): KotlinType? {
         val dom = rc.node as? dev.ide.lang.kotlin.parse.KotlinDomNode ?: return null
-        val body: org.jetbrains.kotlin.psi.KtExpression = when (val psi = dom.psi) {
-            is org.jetbrains.kotlin.psi.KtNamedFunction -> if (psi.hasBlockBody()) return null else psi.bodyExpression ?: return null
-            is org.jetbrains.kotlin.psi.KtProperty -> psi.initializer ?: return null
+        // What to type: an expression body / property initializer (inferred directly), or a `by` delegate
+        // (resolved through its `value` member — the State/Lazy convention, matching [KotlinResolver.localVar]
+        // and [sameFileProperty]; the initializer is null on a delegated property, the value lives in `by`).
+        val body: org.jetbrains.kotlin.psi.KtExpression
+        val delegate: org.jetbrains.kotlin.psi.KtExpression?
+        when (val psi = dom.psi) {
+            is org.jetbrains.kotlin.psi.KtNamedFunction -> {
+                if (psi.hasBlockBody()) return null
+                body = psi.bodyExpression ?: return null; delegate = null
+            }
+            is org.jetbrains.kotlin.psi.KtProperty -> {
+                val init = psi.initializer
+                if (init != null) { body = init; delegate = null }
+                else { delegate = psi.delegateExpression ?: return null; body = delegate }
+            }
             else -> return null
         }
         inferredBodyTypeMemo[rc]?.let { return it.value }
@@ -1664,7 +1677,7 @@ class KotlinSymbolService(
         if (!guard.add(rc)) return null // re-entrant (self/mutual recursion) → break the cycle, don't cache
         val result = try {
             val resolver = dev.ide.lang.kotlin.resolve.KotlinResolver(dom.owner.ktFile, dom.owner, this)
-            val inferred = resolver.inferType(body)
+            val inferred = if (delegate != null) resolver.delegatedValueType(delegate) else resolver.inferType(body)
             // An anonymous-object body escaping via a NON-local, NON-private declaration is approximated to its
             // denotable supertype (Kotlin's rule — the anonymous type isn't nameable outside its scope), so
             // `fun giveMe() = object { val player = … }` returns `Any` and `giveMe().player` is unresolved.

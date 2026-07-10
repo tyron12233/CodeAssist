@@ -624,7 +624,11 @@ internal fun KotlinResolver.sameFileProperty(p: KtProperty, ownerFqn: String?): 
     val retText = p.typeReference?.text
     return KotlinSymbol(
         name = p.name ?: "_", kind = SymbolKind.FIELD,
-        type = retText?.let { service.typeFromText(it, fileContext) } ?: inferType(p.initializer),
+        // A `by`-delegated member/top-level property types as its delegate's `value` (the State/Lazy
+        // convention), the same as [localVar] — the value lives in the delegate, not the initializer.
+        type = retText?.let { service.typeFromText(it, fileContext) }
+            ?: inferType(p.initializer)
+            ?: p.delegateExpression?.let(::delegatedValueType),
         owner = ownerFqn?.let { KotlinSymbol(it.substringAfterLast('.'), SymbolKind.CLASS, origin = SOURCE) },
         origin = SOURCE, signature = retText?.let { ": $it" } ?: "",
         isDeprecated = p.annotationEntries.any { it.shortName?.asString() == "Deprecated" },

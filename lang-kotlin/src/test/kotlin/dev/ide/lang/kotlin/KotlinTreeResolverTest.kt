@@ -170,8 +170,9 @@ class KotlinTreeResolverTest {
 
     @Test
     fun unsupportedConstructIsRejectedNotGuessed() {
-        // Indexed assignment (`xs[i] = v`, the `set` operator) is still outside the subset → Unsupported, not a guess.
-        val fn = lower("package demo\nfun f(xs: MutableList<Int>) { xs[0] = 1 }")
+        // A construct outside the subset (a non-Int range) → Unsupported, not a guess. (Indexed assignment is
+        // now supported — see indexedAssignmentLowersToSetOperator.)
+        val fn = lower("package demo\nfun f() { val r = 1L..5L }")
         assertFalse(fn.isComplete, "the function should report an incomplete lowering")
         assertTrue(fn.diagnostics.isNotEmpty(), "the gap should be recorded as a diagnostic")
     }
@@ -448,12 +449,13 @@ class KotlinTreeResolverTest {
     }
 
     @Test
-    fun indexedAssignmentIsRejectedNotMisLowered() {
-        // `xs[i] = v` (the `set` operator) isn't modeled — it must be Unsupported, not a bogus Assign over the
-        // `get` node the LHS would otherwise lower to.
+    fun indexedAssignmentLowersToSetOperator() {
+        // `xs[i] = v` (the `set` operator) lowers to a MEMBER call of `set(index, value)` — the write mirror of
+        // the `get` produced for an indexed read, not a bogus Assign over the `get` node.
         val fn = lower("package demo\nfun f(xs: MutableList<String>) { xs[0] = \"a\" }")
-        assertIs<RNode.Unsupported>(fn.stmts()[0], "indexed assignment must be Unsupported")
-        assertFalse(fn.isComplete)
+        val call = assertIs<RNode.Call>(fn.stmts()[0], "indexed assignment should lower to a set-operator call")
+        assertEquals("set", call.callee.displayName)
+        assertTrue(fn.isComplete, "indexed assignment should lower completely; diags=${fn.diagnostics}")
     }
 
     @Test

@@ -7,6 +7,7 @@ import com.intellij.psi.util.PsiTreeUtil
 import org.jetbrains.kotlin.psi.KtAnnotationEntry
 import org.jetbrains.kotlin.psi.KtFile
 import org.jetbrains.kotlin.psi.KtNamedFunction
+import org.jetbrains.kotlin.psi.KtProperty
 import java.util.concurrent.ConcurrentHashMap
 
 /**
@@ -189,12 +190,29 @@ class KotlinPreviewLowering(
         val resolver by lazy(LazyThreadSafetyMode.NONE) {
             KotlinTreeResolver(parsed.ktFile, parsed, service, cachesFor?.invoke(parsed))
         }
-        val functions = parsed.ktFile.declarations.filterIsInstance<KtNamedFunction>().associate { fn ->
-            val ownHash = fn.text.hashCode()
-            val start = fn.textRange.startOffset
-            val key = "${fn.name}/${fn.valueParameters.size}"
-            val reused = if (sigMatch) prev!!.functions[key]?.takeIf { it.textHash == ownHash && it.startOffset == start } else null
-            key to (reused ?: FnEntry(ownHash, start, lowerOneFunction(resolver, fn)))
+        val functions = buildMap {
+            parsed.ktFile.declarations.filterIsInstance<KtNamedFunction>().forEach { fn ->
+                val ownHash = fn.text.hashCode()
+                val start = fn.textRange.startOffset
+                val key = "${fn.name}/${fn.valueParameters.size}"
+                val reused = if (sigMatch) prev!!.functions[key]?.takeIf { it.textHash == ownHash && it.startOffset == start } else null
+                put(key, reused ?: FnEntry(ownHash, start, lowerOneFunction(resolver, fn)))
+            }
+            // Top-level source `val`/`var` (non-extension, with a value) → a synthetic zero-arg getter `name/0`,
+            // so a read of it (KotlinTreeResolver.nameNode) interprets its initializer instead of reflecting a
+            // non-existent compiled `…Kt` facade. A same-named top-level function keeps priority (can't collide).
+            parsed.ktFile.declarations.filterIsInstance<KtProperty>().forEach { prop ->
+                val name = prop.name ?: return@forEach
+                if (prop.receiverTypeReference != null) return@forEach
+                val hasValue = prop.initializer != null || prop.getter?.bodyExpression != null || prop.getter?.bodyBlockExpression != null
+                if (!hasValue) return@forEach
+                val key = "$name/0"
+                if (containsKey(key)) return@forEach
+                val ownHash = prop.text.hashCode()
+                val start = prop.textRange.startOffset
+                val reused = if (sigMatch) prev!!.functions[key]?.takeIf { it.textHash == ownHash && it.startOffset == start } else null
+                put(key, reused ?: FnEntry(ownHash, start, lowerOneTopLevelProperty(resolver, prop)))
+            }
         }
         val classes = if (sigMatch) prev!!.classes else runCatching { resolver.lowerClasses() }.getOrDefault(emptyList())
         return Lowered(sigHash, functions, classes).also { loweredCache[parsed.file.path] = it }
@@ -217,6 +235,22 @@ class KotlinPreviewLowering(
         ResolvedFunction(
             fn.name ?: "?", params,
             RNode.Unsupported(reason, fn.name ?: "", span),
+            listOf(LoweringDiagnostic(reason, span)),
+        )
+    }
+
+    private fun lowerOneTopLevelProperty(
+        resolver: KotlinTreeResolver,
+        prop: KtProperty,
+    ): ResolvedFunction = try {
+        resolver.lowerTopLevelProperty(prop)
+    } catch (t: Throwable) {
+        // As in lowerOneFunction: a resolver gap that THROWS becomes a diagnostic so the cause is reported.
+        val span = SourceSpan(prop.textRange.startOffset, prop.textRange.endOffset)
+        val reason = "lowering failed (${t::class.java.simpleName}): ${t.message ?: "no message"}"
+        ResolvedFunction(
+            prop.name ?: "?", emptyList(),
+            RNode.Unsupported(reason, prop.name ?: "", span),
             listOf(LoweringDiagnostic(reason, span)),
         )
     }

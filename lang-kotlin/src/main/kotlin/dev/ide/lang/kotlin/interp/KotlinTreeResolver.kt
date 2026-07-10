@@ -233,11 +233,24 @@ class KotlinTreeResolver(
     /** A read of the innermost in-scope receiver whose type is (a subtype of) [fqn] — the scope instance to
      *  dispatch a member extension on, or to use as a bare extension call's receiver. Null when none matches. */
     private fun findScopeReceiver(fqn: String): RNode? {
+        fun scopeNode(rs: ReceiverScope) =
+            RNode.Name(Binding.Local(rs.slot, rs.type.qualifiedName.substringAfterLast('.'), mutable = false), SourceSpan(0, 0))
         for (i in receiverScopes.indices.reversed()) {
             val rs = receiverScopes[i]
             val matches = rs.type.qualifiedName == fqn ||
                 runCatching { service.supertypesOf(rs.type.qualifiedName).any { (it as? KotlinType)?.qualifiedName == fqn } }.getOrDefault(false)
-            if (matches) return RNode.Name(Binding.Local(rs.slot, rs.type.qualifiedName.substringAfterLast('.'), mutable = false), SourceSpan(0, 0))
+            if (matches) return scopeNode(rs)
+        }
+        // Fallback for an UNQUALIFIED declaring name (the resolver records some builtin/mapped-type members like
+        // `MutableList.add` by simple name): match a scope by simple name, so `apply { add(x) }` /
+        // `buildList { add(x) }` dispatch the member ON the scope instance instead of a receiver-less TOP_LEVEL
+        // call (which would try to load a class literally named `MutableList`). Only for a dotless name, so the
+        // normal fully-qualified path is unchanged.
+        if ('.' !in fqn) {
+            for (i in receiverScopes.indices.reversed()) {
+                val rs = receiverScopes[i]
+                if (rs.type.qualifiedName.substringAfterLast('.') == fqn) return scopeNode(rs)
+            }
         }
         return null
     }
@@ -261,6 +274,24 @@ class KotlinTreeResolver(
         }
         scopes.removeLast()
         return ResolvedFunction(fn.name ?: "<anonymous>", params, body, diagnostics.toList(), returnsUnit = returnsUnit(fn))
+    }
+
+    /** Lower a top-level `val`/`var` (`private val XColor = Color(0xFF…)`) as a synthetic zero-arg getter
+     *  keyed `name/0`. A SOURCE top-level property has no compiled `…Kt` facade to reflect, so a read of it
+     *  ([nameNode]) lowers to a TOP_LEVEL call of this. Its body is the initializer (or, for a computed
+     *  top-level property, the getter body). Non-extension only — an extension property needs its receiver. */
+    fun lowerTopLevelProperty(prop: KtProperty): ResolvedFunction {
+        reset()
+        scopes.addLast(HashMap())
+        val getter = prop.getter
+        val body = when {
+            prop.initializer != null -> lower(prop.initializer!!)
+            getter?.hasBlockBody() == true -> getter.bodyBlockExpression?.let { lowerBlock(it) } ?: emptyBlock(prop)
+            getter?.bodyExpression != null -> lower(getter.bodyExpression!!)
+            else -> unsupported("top-level property without a value", prop)
+        }
+        scopes.removeLast()
+        return ResolvedFunction(prop.name ?: "<anonymous>", emptyList(), body, diagnostics.toList())
     }
 
     /** Whether [fn] returns `Unit` — a block body with no explicit return type, or one declared `: Unit`. An
@@ -302,6 +333,12 @@ class KotlinTreeResolver(
         val fqn = qualifiedNameOf(simpleName, decl)
         val primaryKtParams = decl.primaryConstructorParameters
         val bodyProps = decl.declarations.filterIsInstance<KtProperty>()
+        // Computed body properties (`val isDraw get() = …`): no backing field, lowered as zero-arg getter
+        // methods (`name/0`) the interpreter invokes on a read (see Interpreter.readSourceProperty).
+        val computedProps = bodyProps.filter {
+            it.initializer == null && it.delegateExpression == null &&
+                (it.getter?.bodyExpression != null || it.getter?.bodyBlockExpression != null)
+        }
         val memberFns = decl.declarations.filterIsInstance<KtNamedFunction>().filter { it.name != null }
         val ownPropertyNames = buildSet {
             primaryKtParams.filter { it.hasValOrVar() }.forEach { it.name?.let(::add) }
@@ -330,9 +367,16 @@ class KotlinTreeResolver(
         // abstract/bodyless member isn't lowered (it has no implementation to run — a concrete override or an
         // interface default supplies one, found via the supertype walk); it stays in [methodSigs] so a sibling
         // body can still call it by name.
-        val methods = memberFns.filter { it.bodyBlockExpression != null || it.bodyExpression != null }.associate { fn ->
-            val rf = lowerMemberFunction(fn, ctx)
-            "${rf.name}/${rf.params.size}" to rf
+        val methods = buildMap {
+            memberFns.filter { it.bodyBlockExpression != null || it.bodyExpression != null }.forEach { fn ->
+                val rf = lowerMemberFunction(fn, ctx)
+                put("${rf.name}/${rf.params.size}", rf)
+            }
+            // Each computed `val`/`var` getter becomes a `name/0` method (read-only; the setter, if any, is not modeled).
+            computedProps.forEach { p ->
+                val rf = lowerComputedProperty(p, ctx)
+                put("${rf.name}/0", rf)
+            }
         }
 
         // Then the constructor/init pass in one fresh scope; its leftover diagnostics are the class's own.
@@ -364,11 +408,42 @@ class KotlinTreeResolver(
         val enumEntries = if (flavor == ClassFlavor.ENUM) lowerEnumEntries(decl) else emptyList()
         // Body-property initializers + init blocks, interleaved in source order.
         val steps = ArrayList<Pair<Int, RNode>>()
+        val delegatedProps = LinkedHashMap<String, String>() // property name → hidden delegate-object field
         for (prop in bodyProps) {
-            val init = prop.initializer ?: continue
             val pname = prop.name ?: continue
-            steps += prop.textRange.startOffset to
-                RNode.PropertySet(thisRef(ctx, prop), Binding.Property(pname, fqn, backingField = false), lower(init), span(prop))
+            val offset = prop.textRange.startOffset
+            val init = prop.initializer
+            val delegate = prop.delegateExpression
+            val field = Binding.Property(pname, fqn, backingField = false)
+            when {
+                init != null ->
+                    steps += offset to RNode.PropertySet(thisRef(ctx, prop), field, lower(init), span(prop))
+                // `var x by mutableStateOf(v)` — store the DELEGATE OBJECT in a hidden `x$delegate` field;
+                // reads/writes of `x` route through the delegate's `.value` (see Interpreter), so a write hits
+                // the real `MutableState.setValue()` and drives recomposition — the member form of a delegated
+                // local. Any non-`.value` delegate (no State/Lazy convention) is Unsupported (sound).
+                delegate != null -> {
+                    val missing = runCatching { resolver.missingDelegateOperators(prop) }.getOrDefault(emptyList())
+                    val step: RNode = when {
+                        missing.isNotEmpty() ->
+                            unsupported("property delegate operator(s) ${missing.joinToString(", ")} not in scope (import them)", prop)
+                        delegateValueProperty(delegate) == null ->
+                            unsupported("property delegate is not a `.value` delegate (State/Lazy)", prop)
+                        else -> {
+                            val d = lower(delegate)
+                            if (d is RNode.Unsupported) d
+                            else {
+                                val delegateField = "$pname\$delegate"
+                                delegatedProps[pname] = delegateField
+                                RNode.PropertySet(thisRef(ctx, prop), Binding.Property(delegateField, fqn, backingField = false), d, span(prop))
+                            }
+                        }
+                    }
+                    steps += offset to step
+                }
+                // A computed getter (lowered as a method above) or an abstract/bodyless member has no init step.
+                else -> {}
+            }
         }
         for (anon in decl.getAnonymousInitializers()) {
             val body = anon.body ?: continue
@@ -389,7 +464,7 @@ class KotlinTreeResolver(
             isAbstract = decl.modifierList?.text?.contains("abstract") == true,
             primaryParams = primaryParams, initSteps = initSteps, methods = methods,
             receiverSlot = thisSlot, supertypes = supertypes, superCall = superCall, enumEntries = enumEntries,
-            diagnostics = classDiags,
+            diagnostics = classDiags, delegatedProperties = delegatedProps,
         )
     }
 
@@ -413,6 +488,23 @@ class KotlinTreeResolver(
         classStack.removeLast()
         scopes.removeLast()
         return ResolvedFunction(fn.name ?: "<anonymous>", params, body, diagnostics.toList(), receiverSlot = thisSlot, returnsUnit = returnsUnit(fn))
+    }
+
+    /** Lower a computed property's getter (`val isDraw get() = …`) as a zero-arg member function keyed
+     *  `name/0`; a read of the property routes to it (the interpreter invokes it when there's no backing field). */
+    private fun lowerComputedProperty(prop: KtProperty, ctx: ClassContext): ResolvedFunction {
+        reset()
+        scopes.addLast(HashMap())
+        classStack.addLast(ctx)
+        val thisSlot = newSlot() // slot 0
+        val getter = prop.getter
+        val body = when {
+            getter?.hasBlockBody() == true -> getter.bodyBlockExpression?.let { lowerBlock(it) } ?: emptyBlock(prop)
+            else -> getter?.bodyExpression?.let { lower(it) } ?: unsupported("computed property without a getter body", prop)
+        }
+        classStack.removeLast()
+        scopes.removeLast()
+        return ResolvedFunction(prop.name ?: "<anonymous>", emptyList(), body, diagnostics.toList(), receiverSlot = thisSlot)
     }
 
     private fun lowerEnumEntries(decl: KtClassOrObject): List<REnumEntry> =
@@ -652,12 +744,35 @@ class KotlinTreeResolver(
             if (name in ctx.propertyNames)
                 return RNode.PropertyGet(thisRef(ctx, e), Binding.Property(name, ctx.fqn, backingField = false), span(e))
         }
+        // A bare companion-member read (`SIZE` inside the class whose `companion object` declares `const val
+        // SIZE`): companion members are in scope unqualified within the class, so resolve it through the
+        // companion singleton — otherwise it falls through and is mis-read as a type/object reference that then
+        // fails at render ("a project-source object isn't available").
+        for (ctx in classStack.asReversed()) {
+            val companionFqn = "${ctx.fqn}.Companion"
+            val isCompanionMember = runCatching {
+                service.membersForCompletion(companionFqn, emptyList(), name)
+                    .any { it.name == name && it.kind == SymbolKind.FIELD }
+            }.getOrDefault(false)
+            if (isCompanionMember) {
+                return RNode.PropertyGet(
+                    RNode.Name(Binding.ObjectRef(companionFqn, "Companion"), span(e)),
+                    Binding.Property(name, companionFqn, backingField = false), span(e),
+                )
+            }
+        }
         // A bare top-level property (`PI`) reads as a property get with no receiver. Member properties of an
         // enclosing class without an explicit receiver are not yet modeled → Unsupported (sound, not guessed).
         val prop = service.topLevelByName(name).firstOrNull { it.kind == SymbolKind.FIELD }
         if (prop != null) {
-            // A top-level property's getter is a STATIC method on its `…Kt` file facade (`getLocalTextStyle()`),
-            // so the binding records the facade (not the package) as the owner the interpreter reflects into.
+            // A SOURCE top-level `val`/`var` (`private val XColor = Color(…)`) has no compiled `…Kt` facade to
+            // reflect — it is lowered as a synthetic zero-arg getter `name/0` in the program (see
+            // KotlinPreviewLowering); read it as a TOP_LEVEL source call so the interpreter runs its initializer.
+            if (prop.origin.fromSource && !prop.isExtension) {
+                return RNode.Call(toCallable(prop), DispatchKind.TOP_LEVEL, null, emptyList(), CallSiteKey(e.textRange.startOffset), span(e))
+            }
+            // A LIBRARY top-level property's getter is a STATIC method on its `…Kt` file facade
+            // (`getLocalTextStyle()`), so the binding records the facade (not the package) as the reflect owner.
             return RNode.PropertyGet(null, Binding.Property(name, prop.declaringClassFqn ?: prop.packageName, backingField = false), span(e))
         }
         // A bare type name used as a VALUE is its singleton: an `object` (its `INSTANCE`) or a type with a
@@ -909,6 +1024,33 @@ class KotlinTreeResolver(
             }
         }
         checkNamedArguments(call)
+        // A coroutine suspend intrinsic the interpreter models (`delay`/`yield`/`withContext`/`coroutineScope`/
+        // …). These frequently DON'T resolve to a clean Call: `delay`'s overloads are ambiguous across coroutines
+        // artifacts (→ Unsupported → skipped → a `while { delay(); … }` timer busy-loops), and even when they
+        // resolve their owner may be the package rather than a facade the interpreter keys on. Canonicalize a
+        // genuine kotlinx.coroutines intrinsic to a kotlinx.coroutines-owned Call so the interpreter runs it
+        // (`delay` = an interruptible sleep, the scoping ones just run their block) under the coroutine bridge.
+        // Gated on a real kotlinx.coroutines candidate so a same-named user function isn't hijacked.
+        if (receiverNode == null && bareCalleeName in COROUTINE_INTRINSICS) {
+            coroutineIntrinsicOwner(call, bareCalleeName!!)?.let { owner ->
+                val callee = ResolvedCallable.Library(
+                    displayName = bareCalleeName, ownerFqn = owner, methodName = bareCalleeName,
+                    paramTypes = List(call.valueArguments.size) { null }, isStatic = true, isConstructor = false, isInline = false,
+                )
+                return RNode.Call(callee, DispatchKind.TOP_LEVEL, null, lowerArgs(call), CallSiteKey(call.textRange.startOffset), span(call))
+            }
+        }
+        // `flow.collect { action }` / `collectLatest` — the collect extension is `inline` (no JVM method → it
+        // lowers to Unsupported → gets skipped), so canonicalize a genuine `kotlinx.coroutines.flow` collect to a
+        // dispatchable MEMBER Call the interpreter routes to the coroutine bridge (a blocking collect on the
+        // bridge thread). Gated on a real flow-package candidate so a same-named user method isn't hijacked.
+        if (receiverNode != null && bareCalleeName in FLOW_COLLECT_NAMES && call.valueArguments.size == 1 && isFlowCollectCall(call, bareCalleeName!!)) {
+            val callee = ResolvedCallable.Library(
+                displayName = bareCalleeName, ownerFqn = "kotlinx.coroutines.flow.FlowKt", methodName = bareCalleeName,
+                paramTypes = listOf(null), isStatic = false, isConstructor = false, isInline = false,
+            )
+            return RNode.Call(callee, DispatchKind.MEMBER, receiverNode, lowerArgs(call), CallSiteKey(call.textRange.startOffset), span(call))
+        }
         // A generic call whose type arguments can't be inferred (`mutableStateOf()` with no value argument) is
         // invalid Kotlin — the editor flags `kt.cannotInferType`. The arity fallback in `chooseCallee` would
         // still pick the callee and lower a malformed (under-applied) call that crashes the run reflectively;
@@ -1087,9 +1229,9 @@ class KotlinTreeResolver(
         val right = e.right ?: return unsupported("binary without rhs", e)
         val token = e.operationToken
         if (token == KtTokens.EQ) {
-            // Indexed assignment (`xs[i] = v`, the `set` operator) isn't modeled yet — keep it sound rather than
-            // mis-lowering the `get` we'd produce for the LHS into a plain Assign.
-            if (left is KtArrayAccessExpression) return unsupported("indexed assignment (set) not supported", e)
+            // Indexed assignment (`xs[i] = v`, the `set` operator) lowers to the receiver's `set(index…, value)`
+            // member — the write mirror of [arrayAccessNode]'s `get`.
+            if (left is KtArrayAccessExpression) return indexedSetNode(left, right, e)
             // The LHS is a local/param (`i = …` → Assign) or a property (`count.value = …`, a `MutableState`, or a
             // `by`-delegated local — both already lowered to a PropertyGet → write through its setter via PropertySet).
             val lhs = lower(left)
@@ -1097,6 +1239,22 @@ class KotlinTreeResolver(
                 is RNode.Unsupported -> lhs
                 is RNode.PropertyGet -> RNode.PropertySet(lhs.receiver, lhs.binding, lower(right), span(e))
                 else -> RNode.Assign(lhs, lower(right), span(e))
+            }
+        }
+        // Augmented assignment (`count += 1`, `total -= n`) → read-modify-write `a = a.op(b)`: an Assign for a
+        // local/param, a PropertySet for a property (a member, a `by`-delegated `MutableState`, `count.value`) so
+        // the write drives recomposition. Mirrors the `++`/`--` path in [incDecNode]. (Kotlin's `plusAssign`
+        // in-place form is not modeled; the read-modify-write covers numbers/strings, the common state case.)
+        AUGMENTED[token]?.let { op ->
+            val read = lower(left)
+            if (read is RNode.Unsupported) return read
+            val rhs = lower(right)
+            if (rhs is RNode.Unsupported) return rhs
+            val combined = RNode.Call(synthOperator(op), DispatchKind.OPERATOR, read, listOf(RArg(rhs)), CallSiteKey(e.textRange.startOffset), span(e))
+            return when (read) {
+                is RNode.Name -> RNode.Assign(read, combined, span(e))
+                is RNode.PropertyGet -> RNode.PropertySet(read.receiver, read.binding, combined, span(e))
+                else -> unsupported("augmented-assignment target", e)
             }
         }
         // `a && b` / `a || b` → a short-circuiting `if` (the RHS isn't evaluated when the LHS already decides
@@ -1157,14 +1315,19 @@ class KotlinTreeResolver(
                 CallSiteKey(e.textRange.startOffset), span(e),
             )
         }
-        val op = service.membersOf(leftType.qualifiedName, leftType.typeArguments, null)
-            .filterIsInstance<KotlinSymbol>()
-            .firstOrNull { it.name == convention && it.kind == SymbolKind.METHOD && it.paramTypes.size == 1 }
-            ?: return unsupported("no `$convention` on ${leftType.qualifiedName}", e)
-        return RNode.Call(
-            toCallable(op), DispatchKind.OPERATOR, lower(left), listOf(RArg(lower(right))),
-            CallSiteKey(e.textRange.startOffset), span(e),
-        )
+        // Member-first (`Int.plus`, `BigDecimal.plus`): a single-param MEMBER operator → an OPERATOR call on the
+        // receiver. Failing that, an in-scope single-param EXTENSION operator (`List.plus`/`Set.plus`/`Map.plus`
+        // are stdlib `Collection<T>.plus(T)` extensions, NOT members) → an EXTENSION call (a static facade method
+        // taking the receiver first). Mirrors [infixNode]; without the extension branch a `list + x` would be
+        // dispatched as a non-existent instance `plus` on the collection.
+        val leftFqn = leftType.qualifiedName
+        service.membersNamed(leftFqn, leftType.typeArguments, convention)
+            .firstOrNull { it.kind == SymbolKind.METHOD && !it.isExtension && it.paramTypes.size == 1 }
+            ?.let { return RNode.Call(toCallable(it), DispatchKind.OPERATOR, lower(left), listOf(RArg(lower(right))), key, span(e)) }
+        service.extensionsFor(leftFqn, leftType.typeArguments, convention)
+            .firstOrNull { it.name == convention && it.kind == SymbolKind.METHOD && it.paramTypes.size == 1 && extensionInScope(it) }
+            ?.let { return RNode.Call(toCallable(it), DispatchKind.EXTENSION, lower(left), listOf(RArg(lower(right))), key, span(e)) }
+        return unsupported("no `$convention` on $leftFqn", e)
     }
 
     /**
@@ -1213,6 +1376,27 @@ class KotlinTreeResolver(
             ?: return unsupported("no `get` operator (arity ${indices.size}) on ${recvType.qualifiedName}", e)
         val args = indices.map { RArg(lower(it)) }
         return RNode.Call(toCallable(get), DispatchKind.MEMBER, receiver, args, CallSiteKey(e.textRange.startOffset), span(e))
+    }
+
+    /**
+     * `xs[i] = v` → a MEMBER call of the receiver's `set(index…, value)` operator (`cells[index] = current` →
+     * `cells.set(index, current)`). The write mirror of [arrayAccessNode]: the receiver type drives callee
+     * selection and `set` takes the index expression(s) with the value as its LAST argument (arity =
+     * indices + 1). Unknown receiver type / no matching `set` → Unsupported.
+     */
+    private fun indexedSetNode(lhs: KtArrayAccessExpression, valueExpr: KtExpression, e: KtBinaryExpression): RNode {
+        val arrayExpr = lhs.arrayExpression ?: return unsupported("indexed assignment without an array expression", e)
+        val receiver = lower(arrayExpr)
+        if (receiver is RNode.Unsupported) return receiver
+        val recvType = runCatching { resolver.inferType(arrayExpr) }.getOrNull()
+            ?: return unsupported("indexed assignment on an unknown type", e)
+        val indices = lhs.indexExpressions
+        val set = service.membersOf(recvType.qualifiedName, recvType.typeArguments, null)
+            .filterIsInstance<KotlinSymbol>()
+            .firstOrNull { it.name == "set" && it.kind == SymbolKind.METHOD && it.paramTypes.size == indices.size + 1 }
+            ?: return unsupported("no `set` operator (arity ${indices.size + 1}) on ${recvType.qualifiedName}", e)
+        val args = indices.map { RArg(lower(it)) } + RArg(lower(valueExpr))
+        return RNode.Call(toCallable(set), DispatchKind.MEMBER, receiver, args, CallSiteKey(e.textRange.startOffset), span(e))
     }
 
     /**
@@ -1376,6 +1560,29 @@ class KotlinTreeResolver(
     }
 
     // --- callee selection (sound: never guess between live overloads) ---
+
+    /** The owner (declaring facade, else package) of a genuine coroutine/frame suspend intrinsic candidate for
+     *  [name] on [call] — from `kotlinx.coroutines` (delay/yield/withContext/…) or `androidx.compose.runtime`
+     *  (withFrameNanos/withFrameMillis) — or null when none matches (so a same-named user function isn't
+     *  canonicalized to the interpreter intrinsic). Any such prefixed owner makes the interpreter's gate fire. */
+    private fun coroutineIntrinsicOwner(call: KtCallExpression, name: String): String? =
+        runCatching { resolver.callTargets(call) }.getOrDefault(emptyList()).firstNotNullOfOrNull { s ->
+            if (s.name != name) return@firstNotNullOfOrNull null
+            val pkgs = listOf("kotlinx.coroutines", "androidx.compose.runtime")
+            when {
+                pkgs.any { s.declaringClassFqn?.startsWith(it) == true } -> s.declaringClassFqn
+                s.packageName in pkgs -> s.packageName
+                else -> null
+            }
+        }
+
+    /** Whether [call] (named [name]) is a genuine `kotlinx.coroutines.flow` `collect`/`collectLatest` — a
+     *  candidate whose package or declaring facade is in the flow package. Gates canonicalizing the flow-collect
+     *  bridge so a same-named user method isn't hijacked. */
+    private fun isFlowCollectCall(call: KtCallExpression, name: String): Boolean =
+        runCatching { resolver.callTargets(call) }.getOrDefault(emptyList()).any { s ->
+            s.name == name && (s.packageName == "kotlinx.coroutines.flow" || s.declaringClassFqn?.startsWith("kotlinx.coroutines.flow") == true)
+        }
 
     private fun chooseCallee(call: KtCallExpression): KotlinSymbol? {
         val raw = runCatching { resolver.callTargets(call) }.getOrDefault(emptyList())
@@ -1591,9 +1798,25 @@ class KotlinTreeResolver(
     private val strType get() = service.typeByFqn("kotlin.String")
     private val boolType get() = service.typeByFqn("kotlin.Boolean")
 
+    /** The coroutine/frame suspend functions the interpreter models as intrinsics (see [coroutineIntrinsicOwner]
+     *  and the interpreter's `evalInlineIntrinsic`) — canonicalized to a coroutines/compose-runtime-owned Call so
+     *  they run even when overload resolution is ambiguous or their owner isn't a facade. */
+    private val COROUTINE_INTRINSICS = setOf(
+        "delay", "yield", "withContext", "coroutineScope", "supervisorScope", "ensureActive",
+        "withFrameNanos", "withFrameMillis",
+    )
+
+    /** `Flow.collect { }` terminal operators (inline extensions) the coroutine bridge drives. */
+    private val FLOW_COLLECT_NAMES = setOf("collect", "collectLatest")
+
     private val ARITHMETIC = mapOf(
         KtTokens.PLUS to "plus", KtTokens.MINUS to "minus", KtTokens.MUL to "times",
         KtTokens.DIV to "div", KtTokens.PERC to "rem",
+    )
+    /** Augmented-assignment tokens → the arithmetic operator of the read-modify-write they desugar to. */
+    private val AUGMENTED = mapOf(
+        KtTokens.PLUSEQ to "plus", KtTokens.MINUSEQ to "minus", KtTokens.MULTEQ to "times",
+        KtTokens.DIVEQ to "div", KtTokens.PERCEQ to "rem",
     )
     private val COMPARISON = mapOf(
         KtTokens.LT to "lt", KtTokens.GT to "gt", KtTokens.LTEQ to "le", KtTokens.GTEQ to "ge",
