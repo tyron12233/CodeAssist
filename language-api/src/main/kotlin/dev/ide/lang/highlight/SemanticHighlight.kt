@@ -61,8 +61,25 @@ value class HighlightKind(val id: String) {
         val PROPERTY = HighlightKind("property")            // a Kotlin property / accessor-backed member
         val FIELD = HighlightKind("field")                  // a Java field / backing field
         val ENUM_CONSTANT = HighlightKind("enumConstant")
+
+        /** A compile-time / immutable-static constant — Kotlin `const val`, a Java `static final` field.
+         *  Colored apart from a regular property so a constant reads as a constant. */
+        val CONSTANT = HighlightKind("constant")
         val PARAMETER = HighlightKind("parameter")
         val LOCAL_VARIABLE = HighlightKind("localVariable")
+
+        /** A Kotlin label — a definition (`loop@`), a jump target (`break@loop`, `return@loop`), or the
+         *  labeled `this`/`super` qualifier (`this@Outer`). Purely syntactic; the lexer leaves it uncolored. */
+        val LABEL = HighlightKind("label")
+
+        /** A string-template interpolation delimiter — the `$` of `$name`, or the `${`/`}` of `${expr}`.
+         *  Colored distinctly so an interpolation stands out from the surrounding string literal. */
+        val STRING_TEMPLATE_ENTRY = HighlightKind("stringTemplateEntry")
+
+        /** An escape sequence inside a string literal (`\n`, `\t`, `\uXXXX`, `\$`). */
+        val STRING_ESCAPE = HighlightKind("stringEscape")
+
+        val KEYWORD = HighlightKind("keyword")
     }
 }
 

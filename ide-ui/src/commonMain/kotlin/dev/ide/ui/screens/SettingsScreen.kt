@@ -59,11 +59,19 @@ import dev.ide.ui.components.SettingsChoiceRow
 import dev.ide.ui.components.SettingsSliderRow
 import dev.ide.ui.components.SettingsTextRow
 import dev.ide.ui.components.SettingsToggleRow
+import dev.ide.ui.generated.resources.Res
+import dev.ide.ui.generated.resources.back
+import dev.ide.ui.generated.resources.settings_all_settings
+import dev.ide.ui.generated.resources.settings_backup_ready
+import dev.ide.ui.generated.resources.settings_inspections_for_language
+import dev.ide.ui.generated.resources.settings_no_settings_available
+import dev.ide.ui.generated.resources.settings_title
 import dev.ide.ui.icons.CaIcons
 import dev.ide.ui.theme.Ca
 import dev.ide.ui.theme.Motion
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import org.jetbrains.compose.resources.stringResource
 
 private val WIDE_BREAKPOINT = 720.dp
 
@@ -91,7 +99,7 @@ fun SettingsScreen(
     onSettingsChanged: () -> Unit,
     onOpenLogs: () -> Unit,
     view: SettingsView = SettingsView.All,
-    title: String = "Settings",
+    title: String = stringResource(Res.string.settings_title),
     codeFont: FontFamily = FontFamily.Monospace,
     fileActions: FileActions = FileActions.None,
 ) {
@@ -116,6 +124,7 @@ fun SettingsScreen(
     }
     var toast by remember { mutableStateOf<String?>(null) }
     val scope = rememberCoroutineScope()
+    val backupReadyMsg = stringResource(Res.string.settings_backup_ready)
     LaunchedEffect(toast) { if (toast != null) { delay(2400); toast = null } }
 
     val onSet: (String, String, String) -> Unit = { pageId, key, encoded ->
@@ -126,7 +135,7 @@ fun SettingsScreen(
     val onAction: (String, UiSettingControl.Action) -> Unit = { pageId, action ->
         when (action.key) {
             ACTION_VIEW_LOGS -> onOpenLogs()
-            ACTION_BACKUP -> scope.launch { backend.projects.backupProjects()?.let { fileActions.share(it) }; toast = "Backup ready" }
+            ACTION_BACKUP -> scope.launch { backend.projects.backupProjects()?.let { fileActions.share(it) }; toast = backupReadyMsg }
             else -> scope.launch { backend.settings.invokeSettingAction(pageId, action.key)?.let { toast = it } }
         }
     }
@@ -137,7 +146,7 @@ fun SettingsScreen(
             Box(Modifier.fillMaxWidth().height(1.dp).background(Ca.colors.separator))
             if (pages.isEmpty()) {
                 Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                    Text("No settings available.", color = Ca.colors.textTertiary, style = Ca.type.subhead)
+                    Text(stringResource(Res.string.settings_no_settings_available), color = Ca.colors.textTertiary, style = Ca.type.subhead)
                 }
             } else {
                 BoxWithConstraints(Modifier.fillMaxSize()) {
@@ -208,7 +217,7 @@ private fun NarrowLayout(
     } else {
         Column(Modifier.fillMaxSize()) {
             Row(Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 8.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                IconButtonCa(CaIcons.chevronLeft, "All settings", { openId = null })
+                IconButtonCa(CaIcons.chevronLeft, stringResource(Res.string.settings_all_settings), { openId = null })
                 Text(open.title, color = Ca.colors.textPrimary, style = Ca.type.headline, fontWeight = FontWeight.SemiBold)
             }
             PageContent(backend, open, values, codeFont, onSet, onAction, onStructuralChange, Modifier.weight(1f))
@@ -294,7 +303,7 @@ private fun InspectionsCard(backend: IdeBackend) {
     val byLang = inspections.groupBy { it.language }.toList().sortedBy { it.first }
     Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(12.dp)) {
         byLang.forEach { (lang, list) ->
-            SettingsCard("$lang inspections") {
+            SettingsCard(stringResource(Res.string.settings_inspections_for_language, lang)) {
                 list.forEach { insp ->
                     InspectionRow(insp) { enabled, severity ->
                         backend.settings.setInspection(insp.id, enabled, severity)
@@ -352,7 +361,7 @@ private fun SettingsHeader(onBack: () -> Unit, title: String) {
             Modifier.fillMaxWidth().height(56.dp).padding(horizontal = 10.dp),
             verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp),
         ) {
-            IconButtonCa(CaIcons.chevronLeft, "Back", onBack)
+            IconButtonCa(CaIcons.chevronLeft, stringResource(Res.string.back), onBack)
             Icon(CaIcons.gear, null, Modifier.size(20.dp), tint = Ca.colors.accent)
             Text(title, color = Ca.colors.textPrimary, style = Ca.type.headline, fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f))
         }

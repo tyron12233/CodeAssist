@@ -6,10 +6,10 @@ import dev.ide.lang.hints.InlayHintKind
 import dev.ide.lang.hints.InlayHintPart
 import dev.ide.lang.hints.InlayHintService
 import dev.ide.lang.kotlin.parse.KotlinParsedFile
-import dev.ide.lang.kotlin.resolve.KotlinResolver
+import dev.ide.lang.kotlin.resolve.*
 import dev.ide.lang.kotlin.symbols.KotlinType
 import dev.ide.vfs.VirtualFile
-import org.jetbrains.kotlin.com.intellij.psi.PsiElement
+import com.intellij.psi.PsiElement
 import org.jetbrains.kotlin.psi.KtBlockExpression
 import org.jetbrains.kotlin.psi.KtLambdaExpression
 import org.jetbrains.kotlin.psi.KtNameReferenceExpression

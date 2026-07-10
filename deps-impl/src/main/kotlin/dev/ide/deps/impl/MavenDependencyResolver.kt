@@ -48,6 +48,13 @@ class MavenDependencyResolver(
     private val fetcher: ArtifactFetcher = HttpArtifactFetcher(),
     private val searchEndpoint: String = MAVEN_CENTRAL_SEARCH,
     /**
+     * Base URL of Google's Maven repo. Unlike Maven Central it has no Solr search endpoint, but it does
+     * publish a crawlable `master-index.xml` (all group ids) + per-group `group-index.xml` (artifacts +
+     * versions) that [search] reads — it is the ONLY place `androidx.*` / `com.google.android.*` artifacts
+     * live (they are not mirrored to Central), so search would never surface them otherwise.
+     */
+    private val googleMavenBase: String = GOOGLE_MAVEN_BASE,
+    /**
      * Concurrency is split because the two phases have opposite profiles. POM fetches are tiny and
      * latency-bound (the graph walk is a chain of small round-trips), so a high fan-out keeps the pipe full;
      * artifact downloads are bandwidth-bound, where too many parallel large transfers just thrash the link.
@@ -76,6 +83,15 @@ class MavenDependencyResolver(
     /** Gradle Module Metadata (`*.module`) cache, sibling to [effCache] — also immutable once released.
      *  `Optional.empty()` records a coordinate with no `.module` so we don't re-probe (it took the POM path). */
     private val moduleCache = ConcurrentHashMap<Coordinate, Optional<GradleModule>>()
+
+    // ---- Google Maven index-search caches (session-lived; the index is small and changes slowly) ---------
+    /** Google Maven's `master-index.xml` (every group id), fetched once per session. Null until the first
+     *  successful fetch; a failed fetch is NOT memoized so the next search retries. */
+    @Volatile private var googleGroupIds: List<String>? = null
+    /** Parsed `group-index.xml` per group id → its (artifact, versions) list. Only successful fetches cached. */
+    private val googleGroupIndex = ConcurrentHashMap<String, List<Pair<String, List<String>>>>()
+    /** Packaging (`jar`/`aar`) per coordinate, read from its POM. Released POMs are immutable, so this is safe. */
+    private val googlePackaging = ConcurrentHashMap<Coordinate, String>()
 
     override suspend fun resolve(
         coordinates: List<Coordinate>,
@@ -436,10 +452,24 @@ class MavenDependencyResolver(
         return ResolutionResult(resolved, unresolved.toList(), conflicts, retriable = retriable)
     }
 
-    /** Repository index search (Maven Central solr by default) — powers the "Add dependency" picker. */
+    /**
+     * Repository index search powering the "Add dependency" picker. Queries BOTH Maven Central's Solr index
+     * AND Google's Maven repo index, merging the hits (Central first, then Google, deduped by group:name).
+     * The Google side is essential: `androidx.*` / `com.google.android.*` artifacts live only on Google
+     * Maven, so a Central-only search returns nothing for them even though they resolve fine once added.
+     */
     suspend fun search(query: String, limit: Int = 25): List<ArtifactCandidate> {
-        if (query.isBlank()) return emptyList()
-        val url = "$searchEndpoint?q=${URLEncoder.encode(query.trim(), "UTF-8")}&rows=$limit&wt=json"
+        val q = query.trim()
+        if (q.isBlank()) return emptyList()
+        val central = searchCentral(q, limit)
+        val google = searchGoogle(q, limit)
+        val seen = HashSet<GA>()
+        return (central + google).filter { seen.add(it.coordinate.ga) }.take(limit)
+    }
+
+    /** Maven Central's Solr search endpoint (full-text over group/artifact). */
+    private fun searchCentral(query: String, limit: Int): List<ArtifactCandidate> {
+        val url = "$searchEndpoint?q=${URLEncoder.encode(query, "UTF-8")}&rows=$limit&wt=json"
         val bytes = runCatching { fetcher.fetch(url) }.getOrNull() ?: return emptyList()
         val root = runCatching { Json.parse(String(bytes, Charsets.UTF_8)) }.getOrNull() as? Map<*, *> ?: return emptyList()
         val docs = (root["response"] as? Map<*, *>)?.get("docs") as? List<*> ?: return emptyList()
@@ -450,6 +480,101 @@ class MavenDependencyResolver(
             val v = (d["latestVersion"] ?: d["v"]) as? String ?: return@mapNotNull null
             ArtifactCandidate(Coordinate(g, a, v), (d["p"] as? String) ?: "jar")
         }
+    }
+
+    /**
+     * Google Maven "search": there is no Solr endpoint, so match the query against the crawlable index.
+     * Fetch `master-index.xml` (all group ids, cached per session), rank the groups whose id matches the
+     * query's group part (exact > prefix > substring), fetch each matching group's `group-index.xml` for its
+     * artifacts + versions, then resolve each hit's packaging from its POM. All I/O is bounded ([MAX_GROUPS]
+     * groups, [limit] artifacts) and concurrent; the master + per-group indexes and POM packaging are cached.
+     */
+    private suspend fun searchGoogle(query: String, limit: Int): List<ArtifactCandidate> {
+        val groups = fetchGoogleGroupIds() ?: return emptyList()
+        // Accept "group", "group:name", or a fully-typed "group:name:version" (the version is ignored for
+        // matching — the picker defaults to the newest and lets the user change it).
+        val parts = query.lowercase().split(':')
+        val groupNeedle = parts[0].trim()
+        val nameNeedle = parts.getOrNull(1)?.trim()?.takeIf { it.isNotEmpty() }
+        if (groupNeedle.isEmpty() && nameNeedle == null) return emptyList()
+
+        // Rank matching groups: exact(0) > prefix(1) > substring(2); non-matches dropped, shortest id first.
+        val matched = groups.mapNotNull { gid ->
+            val g = gid.lowercase()
+            val score = when {
+                groupNeedle.isEmpty() -> 2
+                g == groupNeedle -> 0
+                g.startsWith(groupNeedle) -> 1
+                g.contains(groupNeedle) -> 2
+                else -> return@mapNotNull null
+            }
+            gid to score
+        }.sortedWith(compareBy({ it.second }, { it.first.length })).take(MAX_GOOGLE_GROUPS)
+        if (matched.isEmpty()) return emptyList()
+
+        val perGroup = coroutineScope {
+            matched.map { (gid, gs) -> async(Dispatchers.IO) { Triple(gid, gs, fetchGoogleGroupIndex(gid)) } }.awaitAll()
+        }
+
+        // Prefer an artifact whose name equals the searched name (or the group's last segment for a bare query).
+        val exactName = nameNeedle ?: groupNeedle.substringAfterLast('.')
+        data class Cand(val coord: Coordinate, val rank: Int)
+        val cands = ArrayList<Cand>()
+        for ((gid, gs, arts) in perGroup) {
+            for ((artifact, versions) in arts) {
+                if (nameNeedle != null && !artifact.lowercase().contains(nameNeedle)) continue
+                val version = newestGoogleVersion(versions) ?: continue
+                val exact = if (artifact.equals(exactName, ignoreCase = true)) 0 else 1
+                cands += Cand(Coordinate(gid, artifact, version), gs * 2 + exact)
+            }
+        }
+        val top = cands.sortedWith(compareBy({ it.rank }, { it.coord.name.length })).take(limit)
+
+        return coroutineScope {
+            top.map { c -> async(Dispatchers.IO) { ArtifactCandidate(c.coord, googlePackagingOf(c.coord)) } }.awaitAll()
+        }
+    }
+
+    /** All group ids from Google Maven's `master-index.xml` (self-closing `<group.id/>` entries), or null on
+     *  a fetch failure (not memoized, so a later online search retries). */
+    private fun fetchGoogleGroupIds(): List<String>? {
+        googleGroupIds?.let { return it }
+        val bytes = runCatching { fetcher.fetch("${googleMavenBase.removeSuffix("/")}/master-index.xml") }.getOrNull()
+            ?: return null
+        val ids = GOOGLE_GROUP_ENTRY.findAll(String(bytes, Charsets.UTF_8)).map { it.groupValues[1] }.toList()
+        return ids.also { googleGroupIds = it }
+    }
+
+    /** A group's `(artifact, versions)` pairs from its `group-index.xml` (`<artifact versions="a,b,c"/>`);
+     *  empty on a fetch failure (not cached). */
+    private fun fetchGoogleGroupIndex(gid: String): List<Pair<String, List<String>>> {
+        googleGroupIndex[gid]?.let { return it }
+        val rel = gid.replace('.', '/') + "/group-index.xml"
+        val bytes = runCatching { fetcher.fetch("${googleMavenBase.removeSuffix("/")}/$rel") }.getOrNull() ?: return emptyList()
+        val arts = GOOGLE_ARTIFACT_ENTRY.findAll(String(bytes, Charsets.UTF_8)).map { m ->
+            m.groupValues[1] to m.groupValues[2].split(',').map { it.trim() }.filter { it.isNotEmpty() }
+        }.toList()
+        return arts.also { if (it.isNotEmpty()) googleGroupIndex[gid] = it }
+    }
+
+    /** Packaging (`jar`/`aar`) read from [coord]'s POM (`<packaging>`, defaulting to `jar` per Maven when the
+     *  element is absent, e.g. `androidx.annotation`). Falls back to `aar` when the POM can't be fetched, since
+     *  Google Maven is overwhelmingly AAR; that guess is not cached so a later online search can correct it. */
+    private fun googlePackagingOf(coord: Coordinate): String {
+        googlePackaging[coord]?.let { return it }
+        val rel = "${coord.group.replace('.', '/')}/${coord.name}/${coord.version}/${coord.name}-${coord.version}.pom"
+        val bytes = runCatching { fetcher.fetch("${googleMavenBase.removeSuffix("/")}/$rel") }.getOrNull() ?: return "aar"
+        val p = GOOGLE_PACKAGING.find(String(bytes, Charsets.UTF_8))?.groupValues?.get(1)?.trim()?.lowercase()
+            ?.ifBlank { null } ?: "jar"
+        return p.also { googlePackaging[coord] = it }
+    }
+
+    /** The newest version to default to: the highest STABLE version (no `-` qualifier) if any, else the
+     *  highest overall — so an artifact with only pre-releases still returns one. */
+    private fun newestGoogleVersion(versions: List<String>): String? {
+        if (versions.isEmpty()) return null
+        val stable = versions.filter { '-' !in it }
+        return (stable.ifEmpty { versions }).maxWithOrNull(MavenVersion)
     }
 
     /**
@@ -890,8 +1015,23 @@ private fun GA.excludedBy(exclusions: Set<GA>): Boolean = exclusions.any {
 
 const val MAVEN_CENTRAL_SEARCH = "https://search.maven.org/solrsearch/select"
 
+/** Base URL of Google's Maven repo — the home of every `androidx.*` / `com.google.android.*` artifact. */
+const val GOOGLE_MAVEN_BASE = "https://dl.google.com/android/maven2"
+
+/** At most this many matching groups are drilled into per Google Maven search (bounds the group-index I/O). */
+private const val MAX_GOOGLE_GROUPS = 12
+
+/** A `master-index.xml` group entry: a self-closing `<group.id/>` (the `<metadata>` root is not self-closing). */
+private val GOOGLE_GROUP_ENTRY = Regex("<([A-Za-z0-9_.-]+)\\s*/>")
+
+/** A `group-index.xml` artifact entry: `<artifact versions="1.0.0,1.1.0,..."/>`. */
+private val GOOGLE_ARTIFACT_ENTRY = Regex("<([A-Za-z0-9_.-]+)\\s+versions=\"([^\"]*)\"\\s*/?>")
+
+/** A POM's `<packaging>` element. */
+private val GOOGLE_PACKAGING = Regex("<packaging>\\s*([^<]+?)\\s*</packaging>")
+
 /** The two repositories almost every Android/Java dependency lives in: Maven Central and Google Maven. */
 val DEFAULT_REPOSITORIES = listOf(
     Repository("Maven Central", "https://repo1.maven.org/maven2"),
-    Repository("Google", "https://dl.google.com/android/maven2"),
+    Repository("Google", GOOGLE_MAVEN_BASE),
 )

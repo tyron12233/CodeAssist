@@ -20,6 +20,24 @@ dependencyResolutionManagement {
     repositories {
         mavenCentral()
         google() // Compose Multiplatform / AndroidX artifacts
+        // :kotlin-compiler-deps only: the unshaded `-for-ide` compiler and the un-relocated IntelliJ platform
+        // it needs. Not on Maven Central; JetBrains-only repos. Scoped so normal resolution never consults them.
+        maven("https://redirector.kotlinlang.org/maven/kotlin-ide-plugin-dependencies") {
+            content { includeGroup("org.jetbrains.kotlin") }
+        }
+        maven("https://packages.jetbrains.team/maven/p/ij/intellij-dependencies") {
+            content {
+                includeGroupByRegex("org\\.jetbrains\\.intellij.*")
+                includeGroup("org.jetbrains.kotlin")
+                includeModule("org.jetbrains.kotlinx", "kotlinx-coroutines-core-jvm") // JB coroutines fork (…-intellij-N)
+            }
+        }
+        maven("https://cache-redirector.jetbrains.com/intellij-repository/releases") {
+            content {
+                includeGroupByRegex("com\\.jetbrains\\.intellij.*")
+                includeModule("org.jetbrains.kotlinx", "kotlinx-coroutines-core-jvm") // JB coroutines fork
+            }
+        }
     }
 }
 
@@ -47,6 +65,8 @@ include(
     ":analysis-impl",
     ":lang-jdt",
     ":lang-xml",
+    ":lang-kotlin-index", // pure, compiler-free Kotlin symbol/index layer shared by the Kotlin editor backend
+    ":kotlin-compiler-deps", // the ONE unshaded Kotlin compiler + IntelliJ platform dependency set (no embeddable)
     ":lang-kotlin", // editor-only Kotlin LanguageBackend (PSI parse + our own symbols/inference/completion)
     ":jvm-build", // JVM-language build system: JavaBuildSystem/JavaPlugin compose lang-jdt+lang-kotlin compile tasks over build-engine
     ":interp-core", // on-device Kotlin interpreter: tree-walks lang-kotlin's ResolvedTree (Compose interpreter, step 3)

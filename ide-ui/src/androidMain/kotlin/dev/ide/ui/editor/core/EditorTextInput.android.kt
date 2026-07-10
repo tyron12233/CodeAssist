@@ -243,6 +243,10 @@ private class EditorImeBridge(
     var monitorToken = NO_MONITOR
     /** Last `requestCursorUpdates` mode (`CURSOR_UPDATE_IMMEDIATE`/`MONITOR` bits), 0 when off. */
     var cursorUpdateMode = 0
+    /** Bumped per [InputConnection] created for this session. After a `restartInput` the framework closes the
+     *  OLD connection only after its replacement is live, so a close must prove it belongs to the newest
+     *  connection before it resets the shared state above ([EditorInputConnection.closeConnection]). */
+    var connectionGeneration = 0
     /** Whether the last full snapshot we pushed was windowed (huge buffer). A per-edit partial update addresses
      *  the IME's mirror with absolute offsets, valid only while the mirror is the whole document; a windowed
      *  mirror is re-based, so we keep pushing full snapshots until it spans the whole buffer from 0 again. */
@@ -311,7 +315,7 @@ private fun ExtractedTextSnapshot.toAndroid(): ExtractedText {
     et.selectionEnd = selectionEnd
     et.partialStartOffset = partialStartOffset
     et.partialEndOffset = partialEndOffset
-    et.flags = 0
+    et.flags = if (selectionStart != selectionEnd) ExtractedText.FLAG_SELECTING else 0
     return et
 }
 
@@ -356,6 +360,7 @@ private class EditorInputConnection(
     private val rawMode: Boolean,
 ) : BaseInputConnection(view, true) {
 
+    private val generation = ++bridge.connectionGeneration
     private var batchDepth = 0
 
     override fun beginBatchEdit(): Boolean {
@@ -413,22 +418,27 @@ private class EditorInputConnection(
     override fun deleteSurroundingTextInCodePoints(beforeLength: Int, afterLength: Int): Boolean {
         if (beforeLength < 0 || afterLength < 0) return false
         val text = session.doc.chars // CharSequence over the rope — no full-string materialization
-        // convert code-point counts to char counts by walking surrogate pairs
+        // Convert code-point counts to char counts by walking surrogate pairs outward from the edges the
+        // session will actually delete at — outside the composing region, matching [EditorSession.imeDeleteSurrounding].
+        val sel = session.selection
+        val comp = session.composing
         var before = 0
-        var i = session.selection.min
-        repeat(beforeLength) {
-            if (i <= 0) return@repeat
+        var i = minOf(sel.min, comp?.min ?: sel.min)
+        var remaining = beforeLength
+        while (remaining > 0 && i > 0) {
             val step = if (i >= 2 && text[i - 1].isLowSurrogate() && text[i - 2].isHighSurrogate()) 2 else 1
             i -= step
             before += step
+            remaining--
         }
         var after = 0
-        var j = session.selection.max
-        repeat(afterLength) {
-            if (j >= text.length) return@repeat
+        var j = maxOf(sel.max, comp?.max ?: sel.max)
+        remaining = afterLength
+        while (remaining > 0 && j < text.length) {
             val step = if (j + 1 < text.length && text[j].isHighSurrogate() && text[j + 1].isLowSurrogate()) 2 else 1
             j += step
             after += step
+            remaining--
         }
         session.imeDeleteSurrounding(before, after)
         return true
@@ -520,9 +530,14 @@ private class EditorInputConnection(
             batchDepth--
             session.endBatch()
         }
-        bridge.monitorToken = NO_MONITOR
-        bridge.cursorUpdateMode = 0
-        session.imeFinishComposing()
+        // Only the newest connection may reset shared IME state: after a restartInput the framework
+        // deactivates the OLD connection last, and that late close must not disarm the monitor /
+        // cursor-update mode the replacement has already armed, nor kill its live composition.
+        if (bridge.connectionGeneration == generation) {
+            bridge.monitorToken = NO_MONITOR
+            bridge.cursorUpdateMode = 0
+            session.imeFinishComposing()
+        }
         super.closeConnection()
     }
 }

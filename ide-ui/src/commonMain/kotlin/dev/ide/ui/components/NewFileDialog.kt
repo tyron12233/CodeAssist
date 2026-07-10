@@ -41,7 +41,67 @@ import dev.ide.ui.backend.PackageSegment
 import dev.ide.ui.backend.TreeNode
 import dev.ide.ui.backend.UiNewFileTemplate
 import dev.ide.ui.backend.UiSourceRootRole
+import dev.ide.ui.generated.resources.Res
+import dev.ide.ui.generated.resources.add
+import dev.ide.ui.generated.resources.cancel
+import dev.ide.ui.generated.resources.create
+import dev.ide.ui.generated.resources.newfile_add_source_root
+import dev.ide.ui.generated.resources.newfile_created_at
+import dev.ide.ui.generated.resources.newfile_custom_folder_hint
+import dev.ide.ui.generated.resources.newfile_file_name
+import dev.ide.ui.generated.resources.newfile_file_name_hint
+import dev.ide.ui.generated.resources.newfile_folder_name
+import dev.ide.ui.generated.resources.newfile_folder_name_hint
+import dev.ide.ui.generated.resources.newfile_help_file
+import dev.ide.ui.generated.resources.newfile_help_folder
+import dev.ide.ui.generated.resources.newfile_in
+import dev.ide.ui.generated.resources.newfile_kind
+import dev.ide.ui.generated.resources.newfile_kind_abstract_class
+import dev.ide.ui.generated.resources.newfile_kind_android_res
+import dev.ide.ui.generated.resources.newfile_kind_annotation
+import dev.ide.ui.generated.resources.newfile_kind_assets
+import dev.ide.ui.generated.resources.newfile_kind_class
+import dev.ide.ui.generated.resources.newfile_kind_data_class
+import dev.ide.ui.generated.resources.newfile_kind_enum
+import dev.ide.ui.generated.resources.newfile_kind_file
+import dev.ide.ui.generated.resources.newfile_kind_interface
+import dev.ide.ui.generated.resources.newfile_kind_object
+import dev.ide.ui.generated.resources.newfile_mode_directory
+import dev.ide.ui.generated.resources.newfile_mode_resource_file
+import dev.ide.ui.generated.resources.newfile_name
+import dev.ide.ui.generated.resources.newfile_new_folder
+import dev.ide.ui.generated.resources.newfile_new_java_class
+import dev.ide.ui.generated.resources.newfile_new_kotlin_file
+import dev.ide.ui.generated.resources.newfile_new_resource_directory
+import dev.ide.ui.generated.resources.newfile_new_resource_title
+import dev.ide.ui.generated.resources.newfile_new_set
+import dev.ide.ui.generated.resources.newfile_package
+import dev.ide.ui.generated.resources.newfile_preset_aidl
+import dev.ide.ui.generated.resources.newfile_preset_custom
+import dev.ide.ui.generated.resources.newfile_preset_java
+import dev.ide.ui.generated.resources.newfile_preset_kotlin
+import dev.ide.ui.generated.resources.newfile_preset_resources
+import dev.ide.ui.generated.resources.newfile_resdir_name
+import dev.ide.ui.generated.resources.newfile_resdir_name_hint
+import dev.ide.ui.generated.resources.newfile_reskind_drawable
+import dev.ide.ui.generated.resources.newfile_reskind_layout
+import dev.ide.ui.generated.resources.newfile_reskind_menu
+import dev.ide.ui.generated.resources.newfile_reskind_values
+import dev.ide.ui.generated.resources.newfile_reskind_xml
+import dev.ide.ui.generated.resources.newfile_res_layout_hint
+import dev.ide.ui.generated.resources.newfile_res_name_hint
+import dev.ide.ui.generated.resources.newfile_role_sources
+import dev.ide.ui.generated.resources.newfile_root_element
+import dev.ide.ui.generated.resources.newfile_set_name_hint
+import dev.ide.ui.generated.resources.newfile_source_java_hint
+import dev.ide.ui.generated.resources.newfile_source_kotlin_hint
+import dev.ide.ui.generated.resources.newfile_source_set
+import dev.ide.ui.generated.resources.newfile_title
+import dev.ide.ui.generated.resources.newfile_to
+import dev.ide.ui.generated.resources.newfile_treat_as
 import dev.ide.ui.theme.Ca
+import org.jetbrains.compose.resources.StringResource
+import org.jetbrains.compose.resources.stringResource
 
 /**
  * What a unified "New…" action creates, and where. [dirLabel] is a short path shown to the user.
@@ -111,27 +171,26 @@ private fun NewEntryPanel(
             .border(1.dp, Ca.colors.glassEdge, RoundedCornerShape(Ca.radius.xl))
             .padding(20.dp),
     ) {
-        Text(if (isFolder) "New folder" else "New file", color = Ca.colors.textPrimary, style = Ca.type.subhead, fontWeight = FontWeight.SemiBold)
+        Text(stringResource(if (isFolder) Res.string.newfile_new_folder else Res.string.newfile_title), color = Ca.colors.textPrimary, style = Ca.type.subhead, fontWeight = FontWeight.SemiBold)
         Spacer(Modifier.height(4.dp))
         val selPkg = req.packages.firstOrNull { it.dirPath == targetDir }?.packageName
-        Text("in ${selPkg ?: req.dirLabel}", color = Ca.colors.textTertiary, style = Ca.type.caption2)
+        Text(stringResource(Res.string.newfile_in, selPkg ?: req.dirLabel), color = Ca.colors.textTertiary, style = Ca.type.caption2)
         Spacer12()
 
         PackageChips(req.packages, targetDir, onSelect = { targetDir = it })
 
-        FieldLabel(if (isFolder) "Folder name" else "File name")
+        FieldLabel(stringResource(if (isFolder) Res.string.newfile_folder_name else Res.string.newfile_file_name))
         DialogField(
             value = name,
             onValueChange = { name = it },
-            placeholder = if (isFolder) "utils  ·  or  com/example/utils" else "Helper.kt  ·  or  res/raw/data.json",
+            placeholder = stringResource(if (isFolder) Res.string.newfile_folder_name_hint else Res.string.newfile_file_name_hint),
             focusRequester = focus,
             onSubmit = ::submit,
             onCancel = onDismiss,
         )
         Spacer8()
         Text(
-            if (isFolder) "Use / to nest folders."
-            else "Use / for nested folders. .java/.kt scaffold a class; .xml a root element; anything else is empty.",
+            stringResource(if (isFolder) Res.string.newfile_help_folder else Res.string.newfile_help_file),
             color = Ca.colors.textTertiary,
             style = Ca.type.caption2,
         )
@@ -139,8 +198,8 @@ private fun NewEntryPanel(
 
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
             Spacer(Modifier.weight(1f))
-            DialogButton("Cancel", primary = false, enabled = true, onClick = onDismiss)
-            DialogButton("Create", primary = true, enabled = valid, onClick = ::submit)
+            DialogButton(stringResource(Res.string.cancel), primary = false, enabled = true, onClick = onDismiss)
+            DialogButton(stringResource(Res.string.create), primary = true, enabled = valid, onClick = ::submit)
         }
     }
 }
@@ -168,7 +227,7 @@ data class NewSourceRequest(
 @Composable
 private fun PackageChips(packages: List<PackageSegment>, selectedDir: String, onSelect: (String) -> Unit) {
     if (packages.size <= 1) return
-    FieldLabel("Package")
+    FieldLabel(stringResource(Res.string.newfile_package))
     FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
         packages.forEach { seg ->
             SelectChip(seg.packageName, selected = seg.dirPath == selectedDir, onClick = { onSelect(seg.dirPath) })
@@ -178,18 +237,18 @@ private fun PackageChips(packages: List<PackageSegment>, selectedDir: String, on
 }
 
 /** A kind offered in the typed-source dialog → the backend template it scaffolds. */
-private enum class SourceKind(val label: String, val template: UiNewFileTemplate) {
-    JClass("Class", UiNewFileTemplate.JavaClass),
-    JInterface("Interface", UiNewFileTemplate.JavaInterface),
-    JEnum("Enum", UiNewFileTemplate.JavaEnum),
-    JAbstract("Abstract Class", UiNewFileTemplate.JavaAbstractClass),
-    JAnnotation("Annotation", UiNewFileTemplate.JavaAnnotation),
-    KClass("Class", UiNewFileTemplate.KotlinClass),
-    KFile("File", UiNewFileTemplate.KotlinFile),
-    KInterface("Interface", UiNewFileTemplate.KotlinInterface),
-    KData("Data Class", UiNewFileTemplate.KotlinDataClass),
-    KEnum("Enum", UiNewFileTemplate.KotlinEnum),
-    KObject("Object", UiNewFileTemplate.KotlinObject),
+private enum class SourceKind(val label: StringResource, val template: UiNewFileTemplate) {
+    JClass(Res.string.newfile_kind_class, UiNewFileTemplate.JavaClass),
+    JInterface(Res.string.newfile_kind_interface, UiNewFileTemplate.JavaInterface),
+    JEnum(Res.string.newfile_kind_enum, UiNewFileTemplate.JavaEnum),
+    JAbstract(Res.string.newfile_kind_abstract_class, UiNewFileTemplate.JavaAbstractClass),
+    JAnnotation(Res.string.newfile_kind_annotation, UiNewFileTemplate.JavaAnnotation),
+    KClass(Res.string.newfile_kind_class, UiNewFileTemplate.KotlinClass),
+    KFile(Res.string.newfile_kind_file, UiNewFileTemplate.KotlinFile),
+    KInterface(Res.string.newfile_kind_interface, UiNewFileTemplate.KotlinInterface),
+    KData(Res.string.newfile_kind_data_class, UiNewFileTemplate.KotlinDataClass),
+    KEnum(Res.string.newfile_kind_enum, UiNewFileTemplate.KotlinEnum),
+    KObject(Res.string.newfile_kind_object, UiNewFileTemplate.KotlinObject),
 }
 
 private fun kindsFor(lang: NewSourceLang): List<SourceKind> = when (lang) {
@@ -250,27 +309,27 @@ private fun NewSourcePanel(
             .padding(20.dp),
     ) {
         Text(
-            if (req.lang == NewSourceLang.Java) "New Java class" else "New Kotlin file",
+            stringResource(if (req.lang == NewSourceLang.Java) Res.string.newfile_new_java_class else Res.string.newfile_new_kotlin_file),
             color = Ca.colors.textPrimary, style = Ca.type.subhead, fontWeight = FontWeight.SemiBold,
         )
         Spacer(Modifier.height(4.dp))
         val selPkg = req.packages.firstOrNull { it.dirPath == targetDir }?.packageName
-        Text("in ${selPkg ?: req.dirLabel}", color = Ca.colors.textTertiary, style = Ca.type.caption2)
+        Text(stringResource(Res.string.newfile_in, selPkg ?: req.dirLabel), color = Ca.colors.textTertiary, style = Ca.type.caption2)
         Spacer12()
 
         PackageChips(req.packages, targetDir, onSelect = { targetDir = it })
 
-        FieldLabel("Kind")
+        FieldLabel(stringResource(Res.string.newfile_kind))
         FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            kinds.forEach { k -> SelectChip(k.label, selected = k == kind, onClick = { kind = k }) }
+            kinds.forEach { k -> SelectChip(stringResource(k.label), selected = k == kind, onClick = { kind = k }) }
         }
         Spacer12()
 
-        FieldLabel("Name")
+        FieldLabel(stringResource(Res.string.newfile_name))
         DialogField(
             value = name,
             onValueChange = { name = it },
-            placeholder = if (req.lang == NewSourceLang.Java) "MyClass" else "MyFile",
+            placeholder = stringResource(if (req.lang == NewSourceLang.Java) Res.string.newfile_source_java_hint else Res.string.newfile_source_kotlin_hint),
             focusRequester = focus,
             onSubmit = ::submit,
             onCancel = onDismiss,
@@ -279,8 +338,8 @@ private fun NewSourcePanel(
 
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
             Spacer(Modifier.weight(1f))
-            DialogButton("Cancel", primary = false, enabled = true, onClick = onDismiss)
-            DialogButton("Create", primary = true, enabled = valid, onClick = ::submit)
+            DialogButton(stringResource(Res.string.cancel), primary = false, enabled = true, onClick = onDismiss)
+            DialogButton(stringResource(Res.string.create), primary = true, enabled = valid, onClick = ::submit)
         }
     }
 }
@@ -300,12 +359,12 @@ fun xmlTargetOf(node: TreeNode): NewXmlTarget? {
 }
 
 /** The kinds of XML resource the dialog can scaffold; [folder] is the `res/<folder>/` it lives in. */
-private enum class XmlResKind(val label: String, val folder: String) {
-    Layout("Layout", "layout"),
-    Values("Values", "values"),
-    Drawable("Drawable", "drawable"),
-    Menu("Menu", "menu"),
-    Xml("XML", "xml"),
+private enum class XmlResKind(val label: StringResource, val folder: String) {
+    Layout(Res.string.newfile_reskind_layout, "layout"),
+    Values(Res.string.newfile_reskind_values, "values"),
+    Drawable(Res.string.newfile_reskind_drawable, "drawable"),
+    Menu(Res.string.newfile_reskind_menu, "menu"),
+    Xml(Res.string.newfile_reskind_xml, "xml"),
 }
 
 /** Map a res folder name (qualifiers stripped, e.g. `layout-land` → `layout`) to its kind, or null. */
@@ -343,7 +402,7 @@ fun NewXmlFileDialog(
     }
 }
 
-private enum class XmlMode(val label: String) { File("Resource file"), Directory("Directory") }
+private enum class XmlMode(val label: StringResource) { File(Res.string.newfile_mode_resource_file), Directory(Res.string.newfile_mode_directory) }
 
 @Composable
 private fun NewXmlPanel(
@@ -390,13 +449,14 @@ private fun NewXmlPanel(
             .border(1.dp, Ca.colors.glassEdge, RoundedCornerShape(Ca.radius.xl))
             .padding(20.dp),
     ) {
-        val title = if (mode == XmlMode.Directory) "New resource directory" else "New ${kind.label.lowercase()} resource"
+        val title = if (mode == XmlMode.Directory) stringResource(Res.string.newfile_new_resource_directory)
+            else stringResource(Res.string.newfile_new_resource_title, stringResource(kind.label).lowercase())
         Text(title, color = Ca.colors.textPrimary, style = Ca.type.subhead, fontWeight = FontWeight.SemiBold)
         Spacer8()
 
         // File vs Directory.
         FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            XmlMode.entries.forEach { m -> SelectChip(m.label, selected = m == mode, onClick = { mode = m }) }
+            XmlMode.entries.forEach { m -> SelectChip(stringResource(m.label), selected = m == mode, onClick = { mode = m }) }
         }
         Spacer12()
 
@@ -404,33 +464,33 @@ private fun NewXmlPanel(
             // Kind selector only when the target is the res root (a specific folder fixes the kind).
             if (fixedKind == null) {
                 FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    XmlResKind.entries.forEach { k -> SelectChip(k.label, selected = k == kind, onClick = { kind = k }) }
+                    XmlResKind.entries.forEach { k -> SelectChip(stringResource(k.label), selected = k == kind, onClick = { kind = k }) }
                 }
                 Spacer12()
             }
-            FieldLabel("Name")
+            FieldLabel(stringResource(Res.string.newfile_name))
             DialogField(
                 value = name,
                 onValueChange = { name = it },
-                placeholder = if (kind == XmlResKind.Layout) "activity_main" else "my_resource",
+                placeholder = stringResource(if (kind == XmlResKind.Layout) Res.string.newfile_res_layout_hint else Res.string.newfile_res_name_hint),
                 focusRequester = focus,
                 onSubmit = ::submit,
                 onCancel = onDismiss,
             )
             if (kind == XmlResKind.Layout) {
                 Spacer12()
-                FieldLabel("Root element")
+                FieldLabel(stringResource(Res.string.newfile_root_element))
                 Spacer(Modifier.height(4.dp))
                 FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     LAYOUT_ROOTS.forEach { r -> SelectChip(r, selected = r == root, onClick = { root = r }) }
                 }
             }
         } else {
-            FieldLabel("Directory name")
+            FieldLabel(stringResource(Res.string.newfile_resdir_name))
             DialogField(
                 value = name,
                 onValueChange = { name = it },
-                placeholder = "drawable-night",
+                placeholder = stringResource(Res.string.newfile_resdir_name_hint),
                 focusRequester = focus,
                 onSubmit = ::submit,
                 onCancel = onDismiss,
@@ -444,8 +504,8 @@ private fun NewXmlPanel(
 
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
             Spacer(Modifier.weight(1f))
-            DialogButton("Cancel", primary = false, enabled = true, onClick = onDismiss)
-            DialogButton("Create", primary = true, enabled = valid, onClick = ::submit)
+            DialogButton(stringResource(Res.string.cancel), primary = false, enabled = true, onClick = onDismiss)
+            DialogButton(stringResource(Res.string.create), primary = true, enabled = valid, onClick = ::submit)
         }
     }
 }
@@ -494,22 +554,22 @@ private fun xmlStub(kind: XmlResKind, root: String): String = when (kind) {
 data class AddSourceRootRequest(val moduleName: String, val sourceSets: List<String>)
 
 /** A preset source-root kind → the leaf folder it creates and the role it carries. [Custom] is free-form. */
-private enum class RootPreset(val label: String, val dirName: String, val role: UiSourceRootRole) {
-    Java("Java", "java", UiSourceRootRole.Source),
-    Kotlin("Kotlin", "kotlin", UiSourceRootRole.Source),
-    Resources("Resources", "resources", UiSourceRootRole.Resource),
-    AndroidRes("Android res", "res", UiSourceRootRole.AndroidRes),
-    Assets("Assets", "assets", UiSourceRootRole.Assets),
-    Aidl("AIDL", "aidl", UiSourceRootRole.Aidl),
-    Custom("Custom", "", UiSourceRootRole.Source),
+private enum class RootPreset(val label: StringResource, val dirName: String, val role: UiSourceRootRole) {
+    Java(Res.string.newfile_preset_java, "java", UiSourceRootRole.Source),
+    Kotlin(Res.string.newfile_preset_kotlin, "kotlin", UiSourceRootRole.Source),
+    Resources(Res.string.newfile_preset_resources, "resources", UiSourceRootRole.Resource),
+    AndroidRes(Res.string.newfile_kind_android_res, "res", UiSourceRootRole.AndroidRes),
+    Assets(Res.string.newfile_kind_assets, "assets", UiSourceRootRole.Assets),
+    Aidl(Res.string.newfile_preset_aidl, "aidl", UiSourceRootRole.Aidl),
+    Custom(Res.string.newfile_preset_custom, "", UiSourceRootRole.Source),
 }
 
-private fun roleLabel(role: UiSourceRootRole): String = when (role) {
-    UiSourceRootRole.Source -> "Sources"
-    UiSourceRootRole.Resource -> "Resources"
-    UiSourceRootRole.AndroidRes -> "Android res"
-    UiSourceRootRole.Assets -> "Assets"
-    UiSourceRootRole.Aidl -> "AIDL"
+private fun roleLabel(role: UiSourceRootRole): StringResource = when (role) {
+    UiSourceRootRole.Source -> Res.string.newfile_role_sources
+    UiSourceRootRole.Resource -> Res.string.newfile_preset_resources
+    UiSourceRootRole.AndroidRes -> Res.string.newfile_kind_android_res
+    UiSourceRootRole.Assets -> Res.string.newfile_kind_assets
+    UiSourceRootRole.Aidl -> Res.string.newfile_preset_aidl
 }
 
 /**
@@ -568,25 +628,25 @@ private fun AddSourceRootPanel(
             .border(1.dp, Ca.colors.glassEdge, RoundedCornerShape(Ca.radius.xl))
             .padding(20.dp),
     ) {
-        Text("Add source root", color = Ca.colors.textPrimary, style = Ca.type.subhead, fontWeight = FontWeight.SemiBold)
+        Text(stringResource(Res.string.newfile_add_source_root), color = Ca.colors.textPrimary, style = Ca.type.subhead, fontWeight = FontWeight.SemiBold)
         Spacer(Modifier.height(4.dp))
-        Text("to ${req.moduleName}", color = Ca.colors.textTertiary, style = Ca.type.caption2)
+        Text(stringResource(Res.string.newfile_to, req.moduleName), color = Ca.colors.textTertiary, style = Ca.type.caption2)
         Spacer12()
 
         // Source-set selector: existing sets + a "New set…" toggle that reveals a name field.
-        FieldLabel("Source set")
+        FieldLabel(stringResource(Res.string.newfile_source_set))
         FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             req.sourceSets.forEach { s ->
                 SelectChip(s, selected = !newSet && s == setName, onClick = { newSet = false; setName = s })
             }
-            SelectChip("New set…", selected = newSet, onClick = { newSet = true; setName = "" })
+            SelectChip(stringResource(Res.string.newfile_new_set), selected = newSet, onClick = { newSet = true; setName = "" })
         }
         if (newSet) {
             Spacer8()
             DialogField(
                 value = setName,
                 onValueChange = { setName = it },
-                placeholder = "e.g. test  ·  debug",
+                placeholder = stringResource(Res.string.newfile_set_name_hint),
                 onSubmit = ::submit,
                 onCancel = onDismiss,
             )
@@ -594,34 +654,33 @@ private fun AddSourceRootPanel(
         Spacer12()
 
         // Kind presets.
-        FieldLabel("Kind")
+        FieldLabel(stringResource(Res.string.newfile_kind))
         FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            RootPreset.entries.forEach { p -> SelectChip(p.label, selected = p == preset, onClick = { preset = p }) }
+            RootPreset.entries.forEach { p -> SelectChip(stringResource(p.label), selected = p == preset, onClick = { preset = p }) }
         }
 
         if (isCustom) {
             Spacer12()
-            FieldLabel("Folder name")
+            FieldLabel(stringResource(Res.string.newfile_folder_name))
             DialogField(
                 value = customName,
                 onValueChange = { customName = it },
-                placeholder = "e.g. proto  ·  templates",
+                placeholder = stringResource(Res.string.newfile_custom_folder_hint),
                 focusRequester = focus,
                 onSubmit = ::submit,
                 onCancel = onDismiss,
             )
             Spacer8()
-            FieldLabel("Treat as")
+            FieldLabel(stringResource(Res.string.newfile_treat_as))
             FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 UiSourceRootRole.entries.forEach { r ->
-                    SelectChip(roleLabel(r), selected = r == customRole, onClick = { customRole = r })
+                    SelectChip(stringResource(roleLabel(r)), selected = r == customRole, onClick = { customRole = r })
                 }
             }
         }
         Spacer8()
         Text(
-            if (isCustom) "Created at src/$effectiveSet/${dirName.ifEmpty { "…" }}"
-            else "Created at src/$effectiveSet/${preset.dirName}",
+            stringResource(Res.string.newfile_created_at, "src/$effectiveSet/${if (isCustom) dirName.ifEmpty { "…" } else preset.dirName}"),
             color = Ca.colors.textTertiary,
             style = Ca.type.caption2,
         )
@@ -629,8 +688,8 @@ private fun AddSourceRootPanel(
 
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
             Spacer(Modifier.weight(1f))
-            DialogButton("Cancel", primary = false, enabled = true, onClick = onDismiss)
-            DialogButton("Add", primary = true, enabled = valid, onClick = ::submit)
+            DialogButton(stringResource(Res.string.cancel), primary = false, enabled = true, onClick = onDismiss)
+            DialogButton(stringResource(Res.string.add), primary = true, enabled = valid, onClick = ::submit)
         }
     }
 }

@@ -33,8 +33,21 @@ import androidx.compose.ui.unit.dp
 import dev.ide.ui.backend.IndexUiStatus
 import dev.ide.ui.backend.IndexWorkItem
 import dev.ide.ui.backend.IndexWorkState
+import dev.ide.ui.generated.resources.Res
+import dev.ide.ui.generated.resources.close
+import dev.ide.ui.generated.resources.index_artifacts
+import dev.ide.ui.generated.resources.index_count_artifacts
+import dev.ide.ui.generated.resources.index_count_files
+import dev.ide.ui.generated.resources.index_current_file
+import dev.ide.ui.generated.resources.index_idle_body
+import dev.ide.ui.generated.resources.index_reindex
+import dev.ide.ui.generated.resources.index_title_building
+import dev.ide.ui.generated.resources.index_title_idle
+import dev.ide.ui.generated.resources.index_up_to_date
+import dev.ide.ui.generated.resources.index_working
 import dev.ide.ui.icons.CaIcons
 import dev.ide.ui.theme.Ca
+import org.jetbrains.compose.resources.stringResource
 
 /**
  * The index-status detail dialog, opened by tapping the top-bar [IndexStatusChip]. While the index is
@@ -70,25 +83,30 @@ fun IndexStatusDialog(
 
 @Composable
 private fun Header(status: IndexUiStatus, onDismiss: () -> Unit) {
-    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(10.dp)
+    ) {
         Icon(
             CaIcons.layers, null, Modifier.size(18.dp),
             tint = if (status.building) Ca.colors.accent else Ca.colors.success,
         )
         Column(Modifier.weight(1f)) {
             Text(
-                if (status.building) "Indexing" else "Index",
-                color = Ca.colors.textPrimary, style = Ca.type.subhead, fontWeight = FontWeight.SemiBold,
+                stringResource(if (status.building) Res.string.index_title_building else Res.string.index_title_idle),
+                color = Ca.colors.textPrimary,
+                style = Ca.type.subhead,
+                fontWeight = FontWeight.SemiBold,
             )
             val sub = when {
                 status.building && status.phase.isNotEmpty() -> status.phase
-                status.building -> "Working…"
-                else -> "Up to date"
+                status.building -> stringResource(Res.string.index_working)
+                else -> stringResource(Res.string.index_up_to_date)
             }
             Text(sub, color = Ca.colors.textTertiary, style = Ca.type.caption)
         }
         Icon(
-            CaIcons.close, "Close", tint = Ca.colors.textTertiary,
+            CaIcons.close, stringResource(Res.string.close), tint = Ca.colors.textTertiary,
             modifier = Modifier
                 .clip(RoundedCornerShape(Ca.radius.sm))
                 .clickable(onClick = onDismiss)
@@ -115,13 +133,23 @@ private fun BuildingBody(status: IndexUiStatus) {
     }
     if (status.total > 0) {
         Spacer(Modifier.height(8.dp))
-        val noun = if (status.phase == "Project source") "files" else "artifacts"
-        Text("${status.processed} / ${status.total} $noun", color = Ca.colors.textTertiary, style = Ca.type.caption)
+        val count = if (status.phase == "Project source")
+            stringResource(Res.string.index_count_files, status.processed, status.total)
+        else stringResource(Res.string.index_count_artifacts, status.processed, status.total)
+        Text(count, color = Ca.colors.textTertiary, style = Ca.type.caption)
     }
     if (status.items.isNotEmpty()) {
         Spacer(Modifier.height(14.dp))
-        val header = if (status.phase == "Project source") "CURRENT FILE" else "ARTIFACTS"
-        Text(header, color = Ca.colors.textTertiary, style = Ca.type.caption2, fontWeight = FontWeight.SemiBold)
+        val header =
+            if (status.phase == "Project source") stringResource(Res.string.index_current_file) else stringResource(
+                Res.string.index_artifacts
+            )
+        Text(
+            header,
+            color = Ca.colors.textTertiary,
+            style = Ca.type.caption2,
+            fontWeight = FontWeight.SemiBold
+        )
         Spacer(Modifier.height(6.dp))
         val listState = rememberLazyListState()
         LazyColumn(
@@ -136,10 +164,13 @@ private fun BuildingBody(status: IndexUiStatus) {
 
 @Composable
 private fun IdleBody() {
-    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(8.dp)
+    ) {
         Icon(CaIcons.check, null, Modifier.size(15.dp), tint = Ca.colors.success)
         Text(
-            "All symbol & completion indexes are up to date.",
+            stringResource(Res.string.index_idle_body),
             color = Ca.colors.textSecondary, style = Ca.type.footnote,
         )
     }
@@ -153,9 +184,25 @@ private fun WorkItemRow(item: IndexWorkItem) {
         horizontalArrangement = Arrangement.spacedBy(8.dp),
     ) {
         when (item.state) {
-            IndexWorkState.DONE -> Icon(CaIcons.check, null, Modifier.size(14.dp), tint = Ca.colors.success)
-            IndexWorkState.ACTIVE -> CircularProgressIndicator(Modifier.size(12.dp), color = Ca.colors.accent, strokeWidth = 2.dp)
-            IndexWorkState.PENDING -> Icon(CaIcons.dot, null, Modifier.size(14.dp), tint = Ca.colors.textTertiary.copy(alpha = 0.5f))
+            IndexWorkState.DONE -> Icon(
+                CaIcons.check,
+                null,
+                Modifier.size(14.dp),
+                tint = Ca.colors.success
+            )
+
+            IndexWorkState.ACTIVE -> CircularProgressIndicator(
+                Modifier.size(12.dp),
+                color = Ca.colors.accent,
+                strokeWidth = 2.dp
+            )
+
+            IndexWorkState.PENDING -> Icon(
+                CaIcons.dot,
+                null,
+                Modifier.size(14.dp),
+                tint = Ca.colors.textTertiary.copy(alpha = 0.5f)
+            )
         }
         Text(
             item.label,
@@ -180,8 +227,11 @@ private fun ReindexButton(onClick: () -> Unit) {
     ) {
         Icon(CaIcons.refresh, null, Modifier.size(15.dp), tint = Ca.colors.accent)
         Text(
-            "Re-index project", color = Ca.colors.accent, style = Ca.type.footnote,
-            fontWeight = FontWeight.SemiBold, textAlign = TextAlign.Center,
+            stringResource(Res.string.index_reindex),
+            color = Ca.colors.accent,
+            style = Ca.type.footnote,
+            fontWeight = FontWeight.SemiBold,
+            textAlign = TextAlign.Center,
         )
     }
 }

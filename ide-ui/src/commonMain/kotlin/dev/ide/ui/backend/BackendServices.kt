@@ -19,6 +19,16 @@ interface FileService {
     /** The workspace as a tree, shaped by [mode] (curated project view or the raw filesystem). */
     fun fileTree(mode: TreeViewMode = TreeViewMode.Project): TreeNode
 
+    /**
+     * The tree-node ids the user last left expanded for [mode], persisted per project, or null if none has
+     * been persisted yet (the caller then applies the default expansion). Ids are the stable, path-based
+     * [TreeNode.id]s from [fileTree], so they survive restarts and refreshes.
+     */
+    fun expandedTreeState(mode: TreeViewMode = TreeViewMode.Project): List<String>? = null
+
+    /** Persist the expanded tree-node [ids] for [mode] (per project) so [fileTree] reopens the same way. */
+    fun saveExpandedTreeState(mode: TreeViewMode, ids: List<String>) {}
+
     /** Read a file's current on-disk text. */
     fun readFile(path: String): String
 
@@ -82,6 +92,10 @@ interface EditorService {
     /** Code completion for the live buffer [text] at [offset]. */
     suspend fun complete(path: String, text: String, offset: Int): UiCompletionResult
 
+    /** Notify that the user ACCEPTED a completion item — feeds the backend's acceptance-frequency
+     *  ranking (frequently picked items float up on later completions). Fire-and-forget; default no-op. */
+    suspend fun completionAccepted(path: String, label: String) {}
+
     /** Diagnostics for the live buffer [text]. May throw [AnalysisPreempted] when completion took priority. */
     suspend fun analyze(path: String, text: String): List<UiDiagnostic>
 
@@ -111,6 +125,14 @@ interface EditorService {
 
     /** Go-to-definition for the symbol/reference at [offset], or null. */
     suspend fun definitionAt(path: String, text: String, offset: Int): UiDefinition? = null
+
+    /** Gutter inheritor ("implementations") markers for [text] — one per inheritable type with direct subtypes.
+     *  Empty for languages/files without the subtype relation indexed. */
+    suspend fun inheritorMarkers(path: String, text: String): List<UiInheritorMarker> = emptyList()
+
+    /** Resolve an inheritor [fqn] (from an [inheritorMarkers] target) to its source location for
+     *  go-to-implementation, relative to [contextPath]'s module. Null when it's classpath-only (no source). */
+    suspend fun implementationLocationOf(contextPath: String, fqn: String): UiDefinition? = null
 
     /** Quick documentation (signature + doc comment) for the symbol at [offset], or null. */
     suspend fun quickDocAt(path: String, text: String, offset: Int): UiQuickDoc? = null
@@ -356,6 +378,15 @@ interface ModuleService {
     suspend fun setBuildFeature(moduleName: String, feature: String, enabled: Boolean): UiConfigResult =
         UiConfigResult(false, "Build features not supported by this backend")
 
+    /** The Android packaging options (Java-resource + native-lib merge rules) for [moduleName], or null when
+     *  it is not an Android module. */
+    suspend fun getPackagingOptions(moduleName: String): UiPackagingOptions? = null
+
+    /** Persist the Android packaging merge rules for [moduleName] (empty lists clear the block). */
+    suspend fun updatePackagingOptions(
+        moduleName: String, resources: UiPackagingRules, jniLibs: UiPackagingRules
+    ): UiConfigResult = UiConfigResult(false, "Packaging options not supported by this backend")
+
     /** For an Android module, the referenced-but-missing module-relative keep-rule files. */
     suspend fun missingProguardFiles(moduleName: String): List<UiMissingProguardFile> = emptyList()
 
@@ -457,6 +488,47 @@ interface ProjectService {
 
     /** Persist the open editor tabs for the active project. */
     fun saveOpenTabs(tabs: UiOpenTabs) {}
+
+    /**
+     * Compatibility details for the currently-open project, or null when it is a native project (not imported
+     * from Gradle). Drives the editor's compatibility-mode notice — see [UiCompatibilityInfo].
+     */
+    fun compatibilityInfo(): UiCompatibilityInfo? = null
+
+    /**
+     * Re-read the open compatibility-mode project's Gradle build scripts into the model (modules, dependencies,
+     * Android config), then re-resolve dependencies and re-index. Slow (parses + network resolution), so it
+     * suspends off the main thread. No-op returning `ok = false` when the project isn't a Gradle import.
+     */
+    suspend fun syncGradle(): UiSyncResult = UiSyncResult(false, "Not a Gradle project")
+
+    /**
+     * Import the Gradle project at [sourceRootPath] into a new native workspace under the projects root and
+     * open it in compatibility mode (bumps [projectEpoch]). Returns a failure result when the folder isn't an
+     * importable Gradle project or no project manager is available.
+     */
+    suspend fun importGradleProject(sourceRootPath: String): UiProjectResult =
+        UiProjectResult(false, "Gradle import not supported by this backend")
+
+    /**
+     * Export the project at [rootPath] to a shareable `.caproj` package and return its path (under the app's
+     * exports dir), or null when packaging failed. The UI then hands the path to [FileActions.share] /
+     * [FileActions.exportFile]. Runs off the main thread.
+     */
+    suspend fun exportProject(rootPath: String, options: UiExportOptions): String? = null
+
+    /**
+     * Read the `.caproj` at [archivePath] for the import preview (manifest, file peek, icon) without
+     * extracting it. Returns null when the file isn't a readable package.
+     */
+    suspend fun previewImportPackage(archivePath: String): UiImportPreview? = null
+
+    /**
+     * Import the `.caproj` at [archivePath] into a new workspace and open it (bumps [projectEpoch]). Returns a
+     * failure result when the package is invalid or its format is unsupported.
+     */
+    suspend fun importPackage(archivePath: String): UiProjectResult =
+        UiProjectResult(false, "Project import not supported by this backend")
 }
 
 // ---------------------------------------------------------------------------
@@ -485,11 +557,92 @@ interface StoreService {
      * ready-made project. A successful create/install bumps [ProjectService.projectEpoch].
      */
     suspend fun install(id: String, args: Map<String, String> = emptyMap()): UiStoreInstallResult =
-        UiStoreInstallResult(false, "The Projects Store is not available in this build")
+        UiStoreInstallResult(false, "Explore is not available in this build")
 
     companion object {
         /** A store that advertises nothing — the default for backends that wire no catalog. */
         val Unsupported: StoreService = object : StoreService {}
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Learn (interactive lesson tracks + auto-checked exercises)
+// ---------------------------------------------------------------------------
+
+/**
+ * The interactive Learn experience: lesson tracks (Kotlin Basics, Java Basics, …), step-by-step content, and
+ * exercises the app compiles + runs + auto-checks. Content is bundled today; the same contract is what a
+ * remote (submission-backed) lesson catalog later implements, so the UI never changes. Progress is persisted
+ * locally through this seam. A backend that wires no content inherits [LearnService.Unsupported] (the Learn
+ * tab then shows only its jumping-off links).
+ *
+ * Exercise answers are checked here, on the backend ([check]) — they never cross to the UI. Quiz correctness
+ * travels in the DTO ([UiLessonStep.Quiz.correctIndex]) and is graded client-side.
+ */
+interface LearnService {
+    /** Whether a lesson catalog is configured. False ⇒ the Learn tab shows only its link cards. */
+    fun learnAvailable(): Boolean = false
+
+    /** The Learn landing payload: the ordered tracks with their lesson summaries. */
+    suspend fun catalog(): UiLearnCatalog = UiLearnCatalog()
+
+    /** The fully-loaded lesson [id] (its ordered steps), or null if unknown. */
+    suspend fun lesson(id: String): UiLesson? = null
+
+    /**
+     * Code completion for an interactive exercise's editor: completes [code] at [offset] against the hidden
+     * scratch project for [language] (`"kotlin"` | `"java"`), so a lesson buffer gets real member/keyword/
+     * stdlib suggestions. Empty when no scratch engine is available.
+     */
+    suspend fun complete(language: String, code: String, offset: Int): UiCompletionResult =
+        UiCompletionResult(emptyList(), offset, offset)
+
+    /** Live diagnostics (errors/warnings) for an interactive exercise's [code], analyzed against the scratch
+     *  project for [language] (`"kotlin"` | `"java"`). Empty when unavailable. */
+    suspend fun analyze(language: String, code: String): List<UiDiagnostic> = emptyList()
+
+    /** Inlay hints (inferred `val`/lambda types, parameter names, chained-call types) for an interactive
+     *  exercise's [code] in `[startOffset, endOffset)`, computed against the scratch project for [language]
+     *  (`"kotlin"` | `"java"`) — the same intelligence the project editor shows. Empty when unavailable. */
+    suspend fun hints(language: String, code: String, startOffset: Int, endOffset: Int): List<UiInlayHint> = emptyList()
+
+    /** Foldable regions for an interactive exercise's [code], computed against the scratch project for
+     *  [language] — the same code-folding the project editor shows. Empty when unavailable. */
+    suspend fun folds(language: String, code: String): List<UiFoldRegion> = emptyList()
+
+    /**
+     * Prepare the scratch project for [language] so a lesson's editor has real intelligence from the first
+     * keystroke: create it (if needed) and wait until its index is built (bounded by a timeout). Returns true
+     * once ready. Call before showing an interactive step.
+     */
+    suspend fun prepare(language: String): Boolean = true
+
+    /** Whether the scratch project for [language] is still building its index (completion/diagnostics are
+     *  limited until it finishes) — drives the lesson editor's "Indexing…" indicator + a re-analyze when done. */
+    suspend fun indexing(language: String): Boolean = false
+
+    /**
+     * Compile + run the learner's [code] for the interactive step [stepId] of lesson [lessonId] and check it
+     * against the exercise's expected result. Cold on the first call (compiler warm-up), fast afterwards.
+     */
+    suspend fun check(lessonId: String, stepId: String, code: String): UiExerciseResult =
+        UiExerciseResult(passed = false, compiled = false, message = "Learning exercises are not available in this build")
+
+    /** The locally-persisted progress (completed step ids per lesson). */
+    fun progress(): UiLearnProgress = UiLearnProgress()
+
+    /** Mark step [stepId] of lesson [lessonId] complete and record it as the resume point. */
+    fun markStepComplete(lessonId: String, stepId: String) {}
+
+    /** Record the learner's current place (for Resume) without marking it complete. */
+    fun recordVisit(lessonId: String, stepIndex: Int) {}
+
+    /** Where "Resume" on the Learn banner should go, or null if nothing has been started. */
+    fun resume(): UiResumePoint? = null
+
+    companion object {
+        /** A Learn service with no content — the default for backends that wire none. */
+        val Unsupported: LearnService = object : LearnService {}
     }
 }
 

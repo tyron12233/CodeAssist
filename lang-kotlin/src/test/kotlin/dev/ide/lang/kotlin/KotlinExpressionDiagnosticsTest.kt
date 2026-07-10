@@ -304,6 +304,79 @@ class KotlinExpressionDiagnosticsTest {
         )
     }
 
+    // --- deprecation usage (2026-07-07) ---
+
+    @Test
+    fun deprecatedCallIsFlagged() {
+        val diags = diagnose("Dep.kt", "package demo\n@Deprecated(\"use bar\") fun old() {}\nfun f() { old() }")
+        assertTrue(
+            diags.any { it.code == "kt.deprecation" && it.message.contains("old") },
+            "a call to a @Deprecated function should warn; got $diags",
+        )
+    }
+
+    @Test
+    fun nonDeprecatedCallIsClean() {
+        val diags = diagnose("Dep2.kt", "package demo\nfun ok() {}\nfun f() { ok() }")
+        assertTrue(diags.none { it.code == "kt.deprecation" }, "a normal call must not warn; got $diags")
+    }
+
+    // --- cast never succeeds (2026-07-07) ---
+
+    @Test
+    fun castBetweenUnrelatedFinalTypesIsFlagged() {
+        val diags = diagnose("Cast1.kt", "package demo\nfun f(s: String) { val x = s as Int }")
+        assertTrue(diags.any { it.code == "kt.castNeverSucceeds" }, "String as Int can never succeed; got $diags")
+    }
+
+    @Test
+    fun narrowingCastIsNotFlaggedAsNeverSucceeds() {
+        // `Any as String` is a legitimate narrowing cast; an interface/open receiver could really be a String.
+        val diags = diagnose("Cast2.kt", "package demo\nfun f(a: Any) { val x = a as String }")
+        assertTrue(diags.none { it.code == "kt.castNeverSucceeds" }, "Any as String can succeed; got $diags")
+    }
+
+    // --- senseless null comparison (2026-07-07) ---
+
+    @Test
+    fun nonNullComparedToNullIsFlagged() {
+        val diags = diagnose("Sns.kt", "package demo\nfun f(s: String) { val b = s == null; val c = s != null }")
+        assertTrue(
+            diags.count { it.code == "kt.senselessComparison" } >= 2,
+            "`s == null` / `s != null` on a non-null String are constant; got $diags",
+        )
+    }
+
+    @Test
+    fun nullableComparedToNullIsClean() {
+        val diags = diagnose("Sns2.kt", "package demo\nfun f(s: String?) { val b = s == null }")
+        assertTrue(diags.none { it.code == "kt.senselessComparison" }, "a nullable value compared to null is legitimate; got $diags")
+    }
+
+    // --- useless is-check (2026-07-07) ---
+
+    @Test
+    fun alwaysTrueIsCheckIsFlagged() {
+        assertTrue(diagnose("Is1.kt", "package demo\nfun f(s: String) { val b = s is String }").any { it.code == "kt.uselessIsCheck" }, "`s is String` for a String is always true")
+        assertTrue(diagnose("Is2.kt", "package demo\nfun f(s: String) { val b = s is CharSequence }").any { it.code == "kt.uselessIsCheck" }, "`s is CharSequence` for a String is always true")
+    }
+
+    @Test
+    fun alwaysFalseIsCheckIsFlagged() {
+        assertTrue(diagnose("Is3.kt", "package demo\nfun f(s: String) { val b = s is Int }").any { it.code == "kt.uselessIsCheck" }, "`s is Int` for a String is always false")
+    }
+
+    @Test
+    fun validIsChecksAreNotFlagged() {
+        val ok = listOf(
+            "fun f(a: Any) { val b = a is String }",       // a real narrowing
+            "fun f(s: String?) { val b = s is String }",   // nullable → could be null
+            "interface I\nfun f(a: Any) { val b = a is I }", // an interface could be implemented
+            "fun <T> f(x: T) { val b = x is String }",     // type parameter
+        )
+        for (o in ok) assertTrue(diagnose("IsOk.kt", "package demo\n$o").none { it.code == "kt.uselessIsCheck" }, "`$o` must not flag; got ${diagnose("IsOk.kt", "package demo\n$o")}")
+    }
+
     companion object {
         val srcDir: Path = tempProject(mapOf("Seed.kt" to "package demo\n"))
         val analyzer = KotlinSourceAnalyzer(fakeContext(srcDir))

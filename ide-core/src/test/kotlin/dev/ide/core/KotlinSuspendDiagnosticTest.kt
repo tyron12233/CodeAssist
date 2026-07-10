@@ -1,5 +1,7 @@
 package dev.ide.core
 
+import kotlinx.coroutines.runBlocking
+
 import java.nio.file.Files
 import java.nio.file.Path
 import kotlin.io.path.createTempDirectory
@@ -42,7 +44,7 @@ class KotlinSuspendDiagnosticTest {
         val s = bootstrap()
         val probe = root.resolve("core/src/main/java/com/example/core/SameFile.kt")
         val text = "package com.example.core\nfun test() { h() }\nsuspend fun h() {}"
-        val diags = s.analyzeDiagnostics(probe, text)
+        val diags = runBlocking { s.analyzeDiagnostics(probe, text) }
         assertTrue(diags.any { it.code == "kt.suspendContext" }, "same-file suspend call must be flagged; got ${diags.map { it.code to it.message }}")
     }
 
@@ -51,7 +53,7 @@ class KotlinSuspendDiagnosticTest {
         val probe = root.resolve("core/src/main/java/com/example/core/CrossFile.kt")
         // `doWork` is the saved/indexed suspend function from Work.kt — resolved via the persistent index.
         val text = "package com.example.core\nfun test() { doWork() }"
-        val diags = s.analyzeDiagnostics(probe, text)
+        val diags = runBlocking { s.analyzeDiagnostics(probe, text) }
         assertTrue(diags.any { it.code == "kt.suspendContext" }, "cross-file (indexed) suspend call must be flagged; got ${diags.map { it.code to it.message }}")
     }
 }

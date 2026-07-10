@@ -16,6 +16,7 @@ import dev.ide.deps.ResolutionResult
 import dev.ide.deps.impl.DEFAULT_REPOSITORIES
 import dev.ide.deps.impl.MavenDependencyResolver
 import dev.ide.deps.impl.ResolverCache
+import dev.ide.deps.impl.VariantRequest
 import dev.ide.lang.jdt.JdtSourceAnalyzer
 import dev.ide.model.Coordinate
 import dev.ide.model.DependencyScope
@@ -83,6 +84,25 @@ internal class DependencyService(private val ctx: EngineContext) : Disposable {
         cache = depsCache,
         fileFor = { p -> ctx.store.vfs.fileFor(p) },
     )
+
+    /**
+     * The JVM-consumer resolver for non-Android (`java-lib` / Kotlin console) modules: it negotiates GMM
+     * variants with a [VariantRequest.JVM] request, so a KMP library resolves to its `-jvm` (standard-jvm)
+     * variant instead of its `-android` one. Shares the on-disk [depsCache] with [depsResolver] (the disk
+     * store keys artifacts by their resolved coordinate, which differs between the two only when the variant
+     * redirects to a differently-named platform module, e.g. `foo-android` vs `foo-jvm`, so they never
+     * collide). [resolverFor] picks between the two per consuming module.
+     */
+    private val jvmDepsResolver = MavenDependencyResolver(
+        cache = depsCache,
+        fileFor = { p -> ctx.store.vfs.fileFor(p) },
+        variantRequest = VariantRequest.JVM,
+    )
+
+    /** The resolver whose GMM variant selection matches [module]'s target: the Android request for an Android
+     *  module (facet or `android-*` type), the JVM request for a plain Java/Kotlin console/library module. */
+    private fun resolverFor(module: Module): MavenDependencyResolver =
+        if (acceptsAar(module)) depsResolver else jvmDepsResolver
 
     private val _depsState = MutableStateFlow(DepsResolveState())
     val depsState: StateFlow<DepsResolveState> get() = _depsState
@@ -341,7 +361,10 @@ internal class DependencyService(private val ctx: EngineContext) : Disposable {
                     if (asm?.changed == true) changedAny = true
                 }
                 if (changedAny) {
-                    ctx.store.save(); ctx.invalidateAnalyzers(); ctx.resyncIndex()
+                    // Publish rather than invalidate directly: resolution artifacts (libraries.json, jars)
+                    // are all on disk now, and the hub's LibrariesChanged reaction runs the coalesced
+                    // invalidate + re-sync (and feeds the out-of-process engines' hints).
+                    ctx.store.save(); ctx.events.librariesChanged()
                 }
                 // Mark reconciled when fully resolved OR when the only failures are hard 404s (not transient):
                 // re-walking won't help those, so don't re-resolve every open. A genuine offline/transient
@@ -407,7 +430,7 @@ internal class DependencyService(private val ctx: EngineContext) : Disposable {
         // declaration's excludes prune only its own subtree (Gradle/Maven per-declaration semantics).
         val exclusions =
             libDeps.filter { it.third.isNotEmpty() }.associate { it.second to it.third }
-        val result = depsResolver.resolve(
+        val result = resolverFor(module).resolve(
             directs.map { it.second },
             currentRepositories(),
             conflictPolicy,
@@ -457,7 +480,7 @@ internal class DependencyService(private val ctx: EngineContext) : Disposable {
             changed = true
         }
         if (changed && finalize) {
-            ctx.store.save(); ctx.invalidateAnalyzers(); ctx.resyncIndex()
+            ctx.store.save(); ctx.events.librariesChanged()
         }
         return ModuleAssembly(changed, result.unresolved, result.resolved.size, retriable = result.retriable)
     }
@@ -523,8 +546,7 @@ internal class DependencyService(private val ctx: EngineContext) : Disposable {
                 }
                 if (changedAny) {
                     ctx.store.save()
-                    ctx.invalidateAnalyzers()
-                    ctx.resyncIndex()
+                    ctx.events.librariesChanged()
                 }
                 // Mark the declared set reconciled when it resolved completely OR the only failures are hard
                 // 404s (not transient): a transient/offline partial leaves the marker absent so the next open
@@ -590,7 +612,7 @@ internal class DependencyService(private val ctx: EngineContext) : Disposable {
                 if (asm?.changed == true) changedAny = true
             }
             if (changedAny) {
-                ctx.store.save(); ctx.invalidateAnalyzers(); ctx.resyncIndex()
+                ctx.store.save(); ctx.events.librariesChanged()
             }
             // As elsewhere: a transient failure leaves the marker absent (retry next open); a hard-404-only
             // result is marked so it won't re-walk every open (the user can Retry again to force a re-probe).
@@ -651,17 +673,36 @@ internal class DependencyService(private val ctx: EngineContext) : Disposable {
         name.split(":").takeIf { it.size >= 3 }?.let { Coordinate(it[0], it[1], it[2]) }
 
     /**
-     * Parse a user-entered dependency coordinate. Accepts `group:name:version` and the versionless
-     * `group:name` form (version filled from an imported platform BOM at resolve time → blank here).
+     * Parse a user-entered dependency coordinate. Accepts:
+     *  - `group:name:version` — a full coordinate.
+     *  - `group:name` (2nd segment NOT version-like) — the versionless form, whose version an imported
+     *    platform BOM fills in at resolve time (blank version here).
+     *  - `name:version` (2nd segment version-like, e.g. `kotlinx-coroutines-core:1.10.2`) — a real version
+     *    with the group omitted; the blank group is inferred from a repository search at resolve time.
      */
     private fun parseInputCoordinate(name: String): Coordinate? =
         name.split(":").map { it.trim() }.let {
-            when (it.size) {
-                2 -> Coordinate(it[0], it[1], "")
-                3 -> Coordinate(it[0], it[1], it[2])
+            when {
+                it.size == 2 && looksLikeVersion(it[1]) -> Coordinate("", it[0], it[1])
+                it.size == 2 -> Coordinate(it[0], it[1], "")
+                it.size == 3 -> Coordinate(it[0], it[1], it[2])
                 else -> null
             }
         }
+
+    /** A coordinate segment "looks like a version" when it starts with a digit (`1.10.2`, `2.0.0-alpha01`) —
+     *  the cue that a 2-part `a:b` is `name:version` (group omitted) rather than a versionless `group:name`. */
+    private fun looksLikeVersion(s: String): Boolean = s.isNotEmpty() && s[0].isDigit()
+
+    /** Resolve the Maven group for a `name:version` coordinate the user typed without its group (e.g.
+     *  `kotlinx-coroutines-core:1.10.2`), by searching the repositories for an artifact whose name matches
+     *  exactly (Central preferred, then Google Maven). Returns the completed `group:name:version`, or null
+     *  when no matching artifact is found. */
+    private suspend fun inferGroup(name: String, version: String): Coordinate? {
+        val hit = runCatching { depsResolver.search(name) }.getOrDefault(emptyList())
+            .firstOrNull { it.coordinate.name.equals(name, ignoreCase = true) } ?: return null
+        return Coordinate(hit.coordinate.group, name, version)
+    }
 
     /** The BOM coordinates [module] imports as platforms — the version source for its versionless deps. */
     private fun declaredPlatforms(module: Module): List<Coordinate> =
@@ -728,7 +769,7 @@ internal class DependencyService(private val ctx: EngineContext) : Disposable {
             _depsState.value =
                 DepsResolveState(resolving = true, message = "Resolving ${module.name}…")
             runCatching {
-                depsResolver.resolve(
+                resolverFor(module).resolve(
                     externalCoords,
                     currentRepositories(),
                     conflictPolicy,
@@ -942,9 +983,17 @@ internal class DependencyService(private val ctx: EngineContext) : Disposable {
         val module = ctx.modules().firstOrNull { it.name == moduleName } ?: return UiAddResult(
             false, "No module '$moduleName'."
         )
-        val coord = parseInputCoordinate(coordinate) ?: return UiAddResult(
+        val parsed = parseInputCoordinate(coordinate) ?: return UiAddResult(
             false, "Invalid coordinate — expected group:name[:version]."
         )
+        // A `name:version` typed without its group (e.g. `kotlinx-coroutines-core:1.10.2`): discover the
+        // group from a repository search so the user doesn't have to know it.
+        val coord = if (parsed.group.isBlank() && parsed.version.isNotBlank())
+            inferGroup(parsed.name, parsed.version) ?: return UiAddResult(
+                false,
+                "Couldn't find the group for ${parsed.name}:${parsed.version} — type the full group:name:version."
+            )
+        else parsed
         val versionless = coord.version.isBlank()
         val platforms = declaredPlatforms(module)
         if (versionless && platforms.isEmpty()) return UiAddResult(
@@ -956,7 +1005,7 @@ internal class DependencyService(private val ctx: EngineContext) : Disposable {
         )
 
         val result = try {
-            depsResolver.resolve(
+            resolverFor(module).resolve(
                 listOf(coord),
                 currentRepositories(),
                 conflictPolicy,
@@ -1159,9 +1208,8 @@ internal class DependencyService(private val ctx: EngineContext) : Disposable {
             module(module.id).removeDependency(entry)
             commit()
         }
+        // The commit above published DependenciesChanged; the hub's reaction already invalidated + re-synced.
         ctx.store.save()
-        ctx.invalidateAnalyzers()
-        ctx.resyncIndex()
         // The removed dep is no longer declared → drop any stale reason and refresh the error state.
         unresolvedReasons.remove(coordinate)
         publishDependencyHealth()
@@ -1299,7 +1347,7 @@ internal class DependencyService(private val ctx: EngineContext) : Disposable {
             // classpath. (Scope/exclusion-only changes keep the same artifact, so no probe is needed.)
             if (versionChanged) {
                 val check = runCatching {
-                    depsResolver.resolve(
+                    resolverFor(module).resolve(
                         listOf(newCoord), currentRepositories(), conflictPolicy, depsProgress(),
                         platforms = declaredPlatforms(module),
                     )
@@ -1426,9 +1474,8 @@ internal class DependencyService(private val ctx: EngineContext) : Disposable {
             )
             commit()
         }
+        // The commit above published DependenciesChanged; the hub's reaction already invalidated + re-synced.
         ctx.store.save()
-        ctx.invalidateAnalyzers()
-        ctx.resyncIndex()
         return UiAddResult(true, "Added $libName", 1)
     }
 
@@ -1546,9 +1593,8 @@ internal class DependencyService(private val ctx: EngineContext) : Disposable {
         } catch (e: Exception) {
             return UiAddResult(false, "Couldn't add: ${e.message}")
         }
+        // The commit above published DependenciesChanged; the hub's reaction already invalidated + re-synced.
         ctx.store.save()
-        ctx.invalidateAnalyzers()
-        ctx.resyncIndex()
         return UiAddResult(true, "Added module dependency on '$targetModule'", 0)
     }
 

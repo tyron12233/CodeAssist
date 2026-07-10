@@ -1,5 +1,7 @@
 package dev.ide.core
 
+import kotlinx.coroutines.runBlocking
+
 import java.nio.file.Files
 import java.nio.file.Path
 import kotlin.io.path.createTempDirectory
@@ -34,7 +36,7 @@ class SyntheticRCompletionTest {
         val text = "package com.example.app;\nclass Probe { void m() { int x = R.string.; } }"
         val offset = text.indexOf("R.string.") + "R.string.".length
 
-        val labels = s.complete(probe, text, offset).items.map { it.insertText.substringBefore('(') }
+        val labels = runBlocking { s.complete(probe, text, offset) }.items.map { it.insertText.substringBefore('(') }
         assertTrue("greeting" in labels, "app's own R.string.greeting expected: $labels")
         assertTrue("feature_title" in labels, "dependency android-lib R.string.feature_title expected: $labels")
     }
@@ -46,7 +48,7 @@ class SyntheticRCompletionTest {
         val text = "package com.example.app;\nclass Probe { void m() { Object o = R.; } }"
         val offset = text.indexOf("R.") + "R.".length
 
-        val labels = s.complete(probe, text, offset).items.map { it.insertText.substringBefore('(') }
+        val labels = runBlocking { s.complete(probe, text, offset) }.items.map { it.insertText.substringBefore('(') }
         assertTrue("string" in labels, "R.string type expected: $labels")
         assertTrue("color" in labels, "R.color (from app colors.xml) expected: $labels")
     }
@@ -62,14 +64,14 @@ class SyntheticRCompletionTest {
 
         val rText = "package com.example.app\nfun m() { val x = R.string. }"
         val rOffset = rText.indexOf("R.string.") + "R.string.".length
-        val rLabels = s.complete(probe, rText, rOffset).items.map { it.symbol?.name ?: it.label }
+        val rLabels = runBlocking { s.complete(probe, rText, rOffset) }.items.map { it.symbol?.name ?: it.label }
         assertTrue("greeting" in rLabels, "Kotlin: app's own R.string.greeting expected: $rLabels")
         assertTrue("feature_title" in rLabels, "Kotlin: dependency R.string.feature_title expected: $rLabels")
 
         // No Kotlin file facade leaks into Kotlin type completion.
         val fText = "package com.example.app\nfun m() { val x = MainActivityK }"
         val fOffset = fText.indexOf("MainActivityK") + "MainActivityK".length
-        val fLabels = s.complete(probe, fText, fOffset).items.map { it.symbol?.name ?: it.label }
+        val fLabels = runBlocking { s.complete(probe, fText, fOffset) }.items.map { it.symbol?.name ?: it.label }
         assertTrue(fLabels.none { it.endsWith("Kt") }, "no Kotlin file facade as a Kotlin type: $fLabels")
     }
 
@@ -108,7 +110,7 @@ class SyntheticRCompletionTest {
 
     private fun kotlinLabels(s: IdeServices, probe: Path, text: String, anchor: String): List<String> {
         val offset = text.indexOf(anchor) + anchor.length
-        return s.complete(probe, text, offset).items.map { it.insertText.substringBefore('(') }
+        return runBlocking { s.complete(probe, text, offset) }.items.map { it.insertText.substringBefore('(') }
     }
 
     private fun awaitIndexed(ide: IdeServices, timeoutMs: Long = 180_000) {
@@ -123,7 +125,7 @@ class SyntheticRCompletionTest {
         val text = "package com.example.app;\nclass Probe { void m() { Object o = BuildConfig.; } }"
         val offset = text.indexOf("BuildConfig.") + "BuildConfig.".length
 
-        val labels = s.complete(probe, text, offset).items.map { it.insertText.substringBefore('(') }
+        val labels = runBlocking { s.complete(probe, text, offset) }.items.map { it.insertText.substringBefore('(') }
         assertTrue("DEBUG" in labels, "BuildConfig.DEBUG expected: $labels")
         assertTrue("APPLICATION_ID" in labels, "BuildConfig.APPLICATION_ID expected: $labels")
     }
@@ -140,7 +142,7 @@ class SyntheticRCompletionTest {
                 android:theme="@android:style/Theme.Material" />
         """.trimIndent()
 
-        val messages = s.analyzeDiagnostics(layout, text).map { it.message }
+        val messages = runBlocking { s.analyzeDiagnostics(layout, text) }.map { it.message }
         assertTrue(messages.any { it.contains("string/does_not_exist") }, "unknown local resource flagged: $messages")
         assertTrue(messages.none { it.contains("greeting") }, "valid local resource not flagged: $messages")
         assertTrue(messages.none { it.contains("Theme.Material") }, "@android: framework ref not flagged: $messages")

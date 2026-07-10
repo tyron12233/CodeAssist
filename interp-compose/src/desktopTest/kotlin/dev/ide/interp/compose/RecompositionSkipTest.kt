@@ -69,7 +69,7 @@ class RecompositionSkipTest {
             dispatcher.composer = currentComposer
             try {
                 // restartable=false → the root always re-runs on recompose (it is NOT the thing under test).
-                runtime.invokeComposable(rootKey, restartable = false, args = emptyList()) {
+                runtime.invokeComposable(rootKey, restartable = false, force = false, args = emptyList()) {
                     CounterHolder.rootRuns++
                     interpreter.call(rootFn, listOf(CounterHolder.state))
                 }

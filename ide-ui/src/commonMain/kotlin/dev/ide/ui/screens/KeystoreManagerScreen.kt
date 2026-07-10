@@ -45,9 +45,39 @@ import dev.ide.ui.backend.IdeBackend
 import dev.ide.ui.backend.UiKeystore
 import dev.ide.ui.backend.UiKeystoreSpec
 import dev.ide.ui.components.IconButtonCa
+import dev.ide.ui.generated.resources.Res
+import dev.ide.ui.generated.resources.back
+import dev.ide.ui.generated.resources.cancel
+import dev.ide.ui.generated.resources.create
+import dev.ide.ui.generated.resources.delete
+import dev.ide.ui.generated.resources.`import`
+import dev.ide.ui.generated.resources.keystore_assign_to_build
+import dev.ide.ui.generated.resources.keystore_cert_unreadable
+import dev.ide.ui.generated.resources.keystore_country
+import dev.ide.ui.generated.resources.keystore_create_button
+import dev.ide.ui.generated.resources.keystore_create_title
+import dev.ide.ui.generated.resources.keystore_deleted
+import dev.ide.ui.generated.resources.keystore_empty
+import dev.ide.ui.generated.resources.keystore_expires
+import dev.ide.ui.generated.resources.keystore_full_name
+import dev.ide.ui.generated.resources.keystore_import_alias
+import dev.ide.ui.generated.resources.keystore_import_key_password
+import dev.ide.ui.generated.resources.keystore_import_password
+import dev.ide.ui.generated.resources.keystore_import_title
+import dev.ide.ui.generated.resources.keystore_key_alias
+import dev.ide.ui.generated.resources.keystore_manager_title
+import dev.ide.ui.generated.resources.keystore_name
+import dev.ide.ui.generated.resources.keystore_organization
+import dev.ide.ui.generated.resources.keystore_password
+import dev.ide.ui.generated.resources.keystore_row_subtitle
+import dev.ide.ui.generated.resources.keystore_section_description
+import dev.ide.ui.generated.resources.keystore_section_title
+import dev.ide.ui.generated.resources.keystore_sha256
+import dev.ide.ui.generated.resources.keystore_validity
 import dev.ide.ui.icons.CaIcons
 import dev.ide.ui.theme.Ca
 import kotlinx.coroutines.launch
+import org.jetbrains.compose.resources.stringResource
 
 /**
  * The global signing-keystore manager: list every registered keystore (with its key certificate summary),
@@ -84,8 +114,8 @@ fun KeystoreManagerScreen(
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(8.dp),
         ) {
-            IconButtonCa(CaIcons.chevronLeft, "Back", onBack, boxSize = 38)
-            Text("Keystore Manager", style = Ca.type.title3, fontWeight = FontWeight.SemiBold, color = Ca.colors.textPrimary, modifier = Modifier.weight(1f))
+            IconButtonCa(CaIcons.chevronLeft, stringResource(Res.string.back), onBack, boxSize = 38)
+            Text(stringResource(Res.string.keystore_manager_title), style = Ca.type.title3, fontWeight = FontWeight.SemiBold, color = Ca.colors.textPrimary, modifier = Modifier.weight(1f))
         }
         status?.let {
             Text(it, style = Ca.type.footnote, color = if (statusError) Ca.colors.error else Ca.colors.accent, modifier = Modifier.padding(horizontal = 16.dp, vertical = 2.dp))
@@ -93,18 +123,17 @@ fun KeystoreManagerScreen(
 
         Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
             KsCard {
-                Text("Signing keystores", style = Ca.type.subhead, fontWeight = FontWeight.SemiBold, color = Ca.colors.textPrimary)
+                Text(stringResource(Res.string.keystore_section_title), style = Ca.type.subhead, fontWeight = FontWeight.SemiBold, color = Ca.colors.textPrimary)
                 Spacer(Modifier.height(4.dp))
                 Text(
-                    "Create or import the keystores you sign release builds with. They're stored once and shared " +
-                        "across projects; assign one to a build type in a module's Signing tab.",
+                    stringResource(Res.string.keystore_section_description),
                     style = Ca.type.footnote, color = Ca.colors.textSecondary,
                 )
                 Spacer(Modifier.height(12.dp))
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    KsButton("Create", CaIcons.plus, accent = true) { onCreate() }
+                    KsButton(stringResource(Res.string.create), CaIcons.plus, accent = true) { onCreate() }
                     if (fileActions.canPickFile) {
-                        KsButton("Import", CaIcons.download, accent = false) {
+                        KsButton(stringResource(Res.string.`import`), CaIcons.download, accent = false) {
                             fileActions.pickFile { path -> if (path != null) onImport(path) }
                         }
                     }
@@ -118,7 +147,7 @@ fun KeystoreManagerScreen(
                         verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp),
                     ) {
                         Icon(CaIcons.layers, null, Modifier.size(15.dp), tint = Ca.colors.accent)
-                        Text("Assign to a build (project signing)", style = Ca.type.footnote, fontWeight = FontWeight.SemiBold, color = Ca.colors.accent)
+                        Text(stringResource(Res.string.keystore_assign_to_build), style = Ca.type.footnote, fontWeight = FontWeight.SemiBold, color = Ca.colors.accent)
                     }
                 }
             }
@@ -126,13 +155,14 @@ fun KeystoreManagerScreen(
             when {
                 loading -> Box(Modifier.fillMaxWidth().padding(24.dp), Alignment.Center) { CircularProgressIndicator(color = Ca.colors.accent) }
                 keystores.isEmpty() -> Text(
-                    "No keystores yet. Create or import one to sign release builds.",
+                    stringResource(Res.string.keystore_empty),
                     style = Ca.type.footnote, color = Ca.colors.textTertiary, modifier = Modifier.padding(4.dp),
                 )
                 else -> keystores.forEach { ks ->
+                    val deletedMsg = stringResource(Res.string.keystore_deleted, ks.name)
                     KeystoreCard(ks) {
                         if (backend.signing.deleteKeystore(ks.id)) {
-                            status = "Deleted ${ks.name}"; statusError = false
+                            status = deletedMsg; statusError = false
                             scope.launch { keystores = runCatching { backend.signing.keystores() }.getOrDefault(emptyList()) }
                         }
                     }
@@ -156,18 +186,18 @@ fun KeystoreCreateScreen(backend: IdeBackend, onBack: () -> Unit, onDone: () -> 
     var busy by remember { mutableStateOf(false) }
     var error by remember { mutableStateOf<String?>(null) }
 
-    FormScaffold("New Keystore", onBack) {
-        KsField("Name", name) { name = it }
-        KsField("Key alias", alias) { alias = it }
-        KsField("Password (≥ 6 chars; protects the store and key)", password, password = true) { password = it }
-        KsField("Full name (CN)", cn) { cn = it }
-        KsField("Organization (optional)", org) { org = it }
-        KsField("Country code (optional)", country) { country = it }
-        KsField("Validity (years)", validity, number = true) { validity = it.filter(Char::isDigit) }
+    FormScaffold(stringResource(Res.string.keystore_create_title), onBack) {
+        KsField(stringResource(Res.string.keystore_name), name) { name = it }
+        KsField(stringResource(Res.string.keystore_key_alias), alias) { alias = it }
+        KsField(stringResource(Res.string.keystore_password), password, password = true) { password = it }
+        KsField(stringResource(Res.string.keystore_full_name), cn) { cn = it }
+        KsField(stringResource(Res.string.keystore_organization), org) { org = it }
+        KsField(stringResource(Res.string.keystore_country), country) { country = it }
+        KsField(stringResource(Res.string.keystore_validity), validity, number = true) { validity = it.filter(Char::isDigit) }
         error?.let { Spacer(Modifier.height(6.dp)); Text(it, style = Ca.type.footnote, color = Ca.colors.error) }
         Spacer(Modifier.height(14.dp))
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
-            KsButton("Create keystore", CaIcons.check, accent = true, enabled = !busy) {
+            KsButton(stringResource(Res.string.keystore_create_button), CaIcons.check, accent = true, enabled = !busy) {
                 error = null; busy = true
                 scope.launch {
                     val r = backend.signing.createKeystore(
@@ -181,7 +211,7 @@ fun KeystoreCreateScreen(backend: IdeBackend, onBack: () -> Unit, onDone: () -> 
                     if (r.success) onDone() else error = r.message
                 }
             }
-            KsButton("Cancel", null, accent = false, enabled = !busy, onClick = onBack)
+            KsButton(stringResource(Res.string.cancel), null, accent = false, enabled = !busy, onClick = onBack)
             if (busy) CircularProgressIndicator(Modifier.size(22.dp), color = Ca.colors.accent, strokeWidth = 2.dp)
         }
     }
@@ -199,17 +229,17 @@ fun KeystoreImportScreen(backend: IdeBackend, path: String, onBack: () -> Unit, 
     var busy by remember(path) { mutableStateOf(false) }
     var error by remember(path) { mutableStateOf<String?>(null) }
 
-    FormScaffold("Import Keystore", onBack) {
+    FormScaffold(stringResource(Res.string.keystore_import_title), onBack) {
         Text(path, style = Ca.type.caption2, color = Ca.colors.textTertiary, maxLines = 1, overflow = TextOverflow.Ellipsis)
         Spacer(Modifier.height(8.dp))
-        KsField("Name", name) { name = it }
-        KsField("Keystore password", password, password = true) { password = it }
-        KsField("Key alias (blank = first)", alias) { alias = it }
-        KsField("Key password (blank = store password)", keyPass, password = true) { keyPass = it }
+        KsField(stringResource(Res.string.keystore_name), name) { name = it }
+        KsField(stringResource(Res.string.keystore_import_password), password, password = true) { password = it }
+        KsField(stringResource(Res.string.keystore_import_alias), alias) { alias = it }
+        KsField(stringResource(Res.string.keystore_import_key_password), keyPass, password = true) { keyPass = it }
         error?.let { Spacer(Modifier.height(6.dp)); Text(it, style = Ca.type.footnote, color = Ca.colors.error) }
         Spacer(Modifier.height(14.dp))
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
-            KsButton("Import", CaIcons.check, accent = true, enabled = !busy) {
+            KsButton(stringResource(Res.string.`import`), CaIcons.check, accent = true, enabled = !busy) {
                 error = null; busy = true
                 scope.launch {
                     val r = backend.signing.importKeystore(path, name.trim(), password, alias.trim(), keyPass)
@@ -217,7 +247,7 @@ fun KeystoreImportScreen(backend: IdeBackend, path: String, onBack: () -> Unit, 
                     if (r.success) onDone() else error = r.message
                 }
             }
-            KsButton("Cancel", null, accent = false, enabled = !busy, onClick = onBack)
+            KsButton(stringResource(Res.string.cancel), null, accent = false, enabled = !busy, onClick = onBack)
             if (busy) CircularProgressIndicator(Modifier.size(22.dp), color = Ca.colors.accent, strokeWidth = 2.dp)
         }
     }
@@ -230,22 +260,24 @@ private fun KeystoreCard(ks: UiKeystore, onDelete: () -> Unit) {
             Icon(CaIcons.key, null, Modifier.size(20.dp), tint = Ca.colors.accent)
             Column(Modifier.weight(1f)) {
                 Text(ks.name, style = Ca.type.subhead, fontWeight = FontWeight.SemiBold, color = Ca.colors.textPrimary, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                Text("${ks.fileName} · key: ${ks.keyAlias}", style = Ca.type.caption2, color = Ca.colors.textTertiary, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                Text(stringResource(Res.string.keystore_row_subtitle, ks.fileName, ks.keyAlias), style = Ca.type.caption2, color = Ca.colors.textTertiary, maxLines = 1, overflow = TextOverflow.Ellipsis)
             }
-            IconButtonCa(CaIcons.close, "Delete ${ks.name}", onDelete, boxSize = 30, iconSize = 15, tint = Ca.colors.textTertiary)
+            IconButtonCa(CaIcons.close, stringResource(Res.string.delete), onDelete, boxSize = 30, iconSize = 15, tint = Ca.colors.textTertiary)
         }
         val subject = ks.certSubject
         if (subject != null) {
             Spacer(Modifier.height(6.dp))
             Text(subject, style = Ca.type.caption2, color = Ca.colors.textSecondary, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            val shaLabel = ks.sha256?.let { stringResource(Res.string.keystore_sha256, it.replace(":", "").take(16) + "…") }
+            val expiresLabel = ks.validUntilEpochMs?.let { stringResource(Res.string.keystore_expires, approxYear(it).toString()) }
             val parts = buildList {
-                ks.sha256?.let { add("SHA-256 " + it.replace(":", "").take(16) + "…") }
-                ks.validUntilEpochMs?.let { add("expires ~" + approxYear(it)) }
+                shaLabel?.let { add(it) }
+                expiresLabel?.let { add(it) }
             }
             if (parts.isNotEmpty()) Text(parts.joinToString("   "), style = Ca.type.caption2, color = Ca.colors.textTertiary)
         } else {
             Spacer(Modifier.height(6.dp))
-            Text("Couldn't read the certificate (password may have changed).", style = Ca.type.caption2, color = Ca.colors.warning)
+            Text(stringResource(Res.string.keystore_cert_unreadable), style = Ca.type.caption2, color = Ca.colors.warning)
         }
     }
 }
@@ -260,7 +292,7 @@ private fun FormScaffold(title: String, onBack: () -> Unit, body: @Composable Co
             Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 8.dp),
             verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp),
         ) {
-            IconButtonCa(CaIcons.chevronLeft, "Back", onBack, boxSize = 38)
+            IconButtonCa(CaIcons.chevronLeft, stringResource(Res.string.back), onBack, boxSize = 38)
             Text(title, style = Ca.type.title3, fontWeight = FontWeight.SemiBold, color = Ca.colors.textPrimary, modifier = Modifier.weight(1f))
         }
         Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp)) {

@@ -1,7 +1,7 @@
 package dev.ide.lang.kotlin
 
 import dev.ide.lang.kotlin.parse.KotlinParserHost
-import org.jetbrains.kotlin.com.intellij.lang.ASTNode
+import com.intellij.lang.ASTNode
 import org.jetbrains.kotlin.psi.KtClassOrObject
 import org.jetbrains.kotlin.psi.KtFile
 import org.jetbrains.kotlin.psi.KtNamedFunction

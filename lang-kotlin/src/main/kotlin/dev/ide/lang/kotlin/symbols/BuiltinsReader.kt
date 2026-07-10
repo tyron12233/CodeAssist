@@ -9,6 +9,7 @@ import org.jetbrains.kotlin.metadata.builtins.BuiltInsBinaryVersion
 import org.jetbrains.kotlin.metadata.deserialization.Flags
 import org.jetbrains.kotlin.metadata.deserialization.NameResolverImpl
 import org.jetbrains.kotlin.metadata.deserialization.TypeTable
+import org.jetbrains.kotlin.metadata.deserialization.receiverType
 import org.jetbrains.kotlin.metadata.deserialization.returnType
 import org.jetbrains.kotlin.metadata.deserialization.supertypes
 import org.jetbrains.kotlin.metadata.deserialization.type
@@ -26,7 +27,7 @@ import java.util.zip.ZipFile
  * `List` has exactly its Kotlin members (no `add`/`remove`), and `Int.` shows its companion's `MAX_VALUE`.
  *
  * The `.kotlin_builtins` format is the common metadata protobuf with a [BuiltInsBinaryVersion] header, read
- * via the compiler's own (unrelocated) `org.jetbrains.kotlin.metadata.*` classes from kotlin-compiler-embeddable.
+ * via the compiler's own (unrelocated) `org.jetbrains.kotlin.metadata.*` classes from the bundled compiler.
  * Companion-object members are tagged [Modifier.STATIC] so the instance/type member filter shows them only on
  * type access (`Int.`).
  *
@@ -43,6 +44,33 @@ class BuiltinsReader(private val jars: List<Path>) {
     /** The built-in shape for [fqn] (members + companion-as-static + supertypes + type params), rebound to
      *  [ctx] so its contained types resolve again; null if [fqn] is not a Kotlin built-in. */
     fun lookup(fqn: String, ctx: KotlinTypeContext?): TypeShape? = byFqn[fqn]?.withContext(ctx)
+
+    /** Every TOP-LEVEL/extension callable declared in the jars' `.kotlin_builtins` fragments — the compiler
+     *  intrinsics (`arrayOf`, `intArrayOf`, `emptyArray`, …) that have NO `.class` file. Used only when NO
+     *  index is wired (standalone / tests); the IDE reads them from the `kotlin.builtinCallables` index. */
+    fun topLevelCallables(): List<KotlinSymbol> = callables
+
+    private val callables: List<KotlinSymbol> by lazy { loadCallables() }
+
+    private fun loadCallables(): List<KotlinSymbol> {
+        val out = ArrayList<KotlinSymbol>()
+        for (jar in jars) {
+            val z = runCatching { ZipFile(jar.toFile()) }.getOrNull() ?: continue
+            z.use {
+                val entries = it.entries()
+                while (entries.hasMoreElements()) {
+                    val e = entries.nextElement()
+                    if (!e.name.endsWith(".kotlin_builtins")) continue
+                    val pkg = e.name.substringBeforeLast('/', "").replace('/', '.')
+                    runCatching {
+                        val bytes = it.getInputStream(e).use { s -> s.readBytes() }
+                        out += callablesFrom(bytes, pkg)
+                    }
+                }
+            }
+        }
+        return out
+    }
 
     private fun load(): Map<String, TypeShape> {
         val out = HashMap<String, TypeShape>()
@@ -130,6 +158,7 @@ class BuiltinsReader(private val jars: List<Path>) {
                 signature = "($params): ${typeText(ret, nr, tp, tt)}",
                 typeParameters = f.typeParameterList.map { nr.getString(it.name) },
                 paramTypes = f.valueParameterList.map { typeRef(it.varargElementType(tt) ?: it.type(tt), nr, tp, tt) },
+                isInfix = Flags.IS_INFIX.get(f.flags),
                 varargParamIndex = f.valueParameterList.indexOfFirst { it.varargElementType(tt) != null },
             )
         }
@@ -152,6 +181,99 @@ class BuiltinsReader(private val jars: List<Path>) {
          *  so implementing a builtin interface requires an override. A member with a default body decodes OPEN. */
         private fun abstractFlag(flags: Int): Set<Modifier> =
             if (Flags.MODALITY.get(flags) == ProtoBuf.Modality.ABSTRACT) setOf(Modifier.ABSTRACT) else emptySet()
+
+        /** Decode the TOP-LEVEL (package-level) callables of one `.kotlin_builtins` fragment — the compiler
+         *  INTRINSICS with NO `.class` file (`arrayOf`, `intArrayOf`, `charArrayOf`, `emptyArray`, …), so neither
+         *  [shapesFrom] (types only) nor the `.class`-scanning `KotlinCallableIndex` ever surfaces them.
+         *  [packageName] is the fragment's Kotlin package (`kotlin`, `kotlin.collections`, …), which the caller
+         *  derives from the entry path. A declaration with a receiver is emitted as an extension (receiver set);
+         *  the rest as top-level. Context-free like [shapesFrom] — the consumer rebinds the context. */
+        fun callablesFrom(bytes: ByteArray, packageName: String): List<KotlinSymbol> = runCatching {
+            val stream = ByteArrayInputStream(bytes)
+            BuiltInsBinaryVersion.readFrom(stream) // consume the version header
+            val frag = ProtoBuf.PackageFragment.parseFrom(stream, BuiltInSerializerProtocol.extensionRegistry)
+            val nr = NameResolverImpl(frag.strings, frag.qualifiedNames)
+            val pkg = frag.getPackage()
+            val tt = TypeTable(pkg.typeTable)
+            val out = ArrayList<KotlinSymbol>(pkg.functionCount + pkg.propertyCount)
+            pkg.functionList.forEach { out += pkgFunc(it, nr, packageName, tt) }
+            pkg.propertyList.forEach { out += pkgProp(it, nr, packageName, tt) }
+            out
+        }.getOrDefault(emptyList())
+
+        private fun pkgFunc(f: ProtoBuf.Function, nr: NameResolverImpl, pkg: String, tt: TypeTable): KotlinSymbol {
+            val tp = f.typeParameterList.associate { it.id to nr.getString(it.name) }
+            val ret = f.returnType(tt)
+            val receiver = f.receiverType(tt)
+            val params = f.valueParameterList.joinToString(", ") { vp ->
+                "${nr.getString(vp.name)}: ${typeText(vp.varargElementType(tt) ?: vp.type(tt), nr, tp, tt)}"
+            }
+            return KotlinSymbol(
+                name = nr.getString(f.name),
+                kind = SymbolKind.METHOD,
+                type = typeRef(ret, nr, tp, tt),
+                modifiers = visibilityMods(f.flags),
+                origin = BINARY,
+                receiverTypeFqn = receiver?.let { receiverFqnOf(it, nr) },
+                signature = "($params): ${typeText(ret, nr, tp, tt)}",
+                typeParameters = f.typeParameterList.map { nr.getString(it.name) },
+                paramTypes = f.valueParameterList.map { typeRef(it.varargElementType(tt) ?: it.type(tt), nr, tp, tt) },
+                paramNames = f.valueParameterList.map { nr.getString(it.name) },
+                receiverTypeArgs = receiverArgs(receiver, nr, tp, tt),
+                receiverTypeParam = receiver?.let { receiverTypeParamOf(it, nr, tp) },
+                packageName = pkg,
+                isInternal = Flags.VISIBILITY.get(f.flags) == ProtoBuf.Visibility.INTERNAL,
+                isInline = Flags.IS_INLINE.get(f.flags),
+                isInfix = Flags.IS_INFIX.get(f.flags),
+                isSuspend = Flags.IS_SUSPEND.get(f.flags),
+                varargParamIndex = f.valueParameterList.indexOfFirst { it.varargElementType(tt) != null },
+                paramHasDefault = f.valueParameterList.map { Flags.DECLARES_DEFAULT_VALUE.get(it.flags) },
+            )
+        }
+
+        private fun pkgProp(p: ProtoBuf.Property, nr: NameResolverImpl, pkg: String, tt: TypeTable): KotlinSymbol {
+            val tp = p.typeParameterList.associate { it.id to nr.getString(it.name) }
+            val ret = p.returnType(tt)
+            val receiver = p.receiverType(tt)
+            return KotlinSymbol(
+                name = nr.getString(p.name),
+                kind = SymbolKind.FIELD,
+                type = typeRef(ret, nr, tp, tt),
+                modifiers = visibilityMods(p.flags),
+                origin = BINARY,
+                receiverTypeFqn = receiver?.let { receiverFqnOf(it, nr) },
+                signature = ": ${typeText(ret, nr, tp, tt)}",
+                typeParameters = p.typeParameterList.map { nr.getString(it.name) },
+                receiverTypeArgs = receiverArgs(receiver, nr, tp, tt),
+                receiverTypeParam = receiver?.let { receiverTypeParamOf(it, nr, tp) },
+                packageName = pkg,
+                isInternal = Flags.VISIBILITY.get(p.flags) == ProtoBuf.Visibility.INTERNAL,
+            )
+        }
+
+        private fun receiverArgs(receiver: ProtoBuf.Type?, nr: NameResolverImpl, tp: Map<Int, String>, tt: TypeTable): List<TypeRef> =
+            receiver?.argumentList?.mapNotNull { a ->
+                if (a.projection == ProtoBuf.Type.Argument.Projection.STAR) null else a.type(tt)?.let { typeRef(it, nr, tp, tt) }
+            } ?: emptyList()
+
+        /** The receiver's class FQN for an extension; a bare type-parameter receiver keys on `kotlin.Any`. */
+        private fun receiverFqnOf(t: ProtoBuf.Type, nr: NameResolverImpl): String? = when {
+            t.hasClassName() -> nr.getQualifiedClassName(t.className).replace('/', '.')
+            t.hasTypeParameter() || t.hasTypeParameterName() -> "kotlin.Any"
+            else -> null
+        }
+
+        private fun receiverTypeParamOf(t: ProtoBuf.Type, nr: NameResolverImpl, tp: Map<Int, String>): String? = when {
+            t.hasTypeParameter() -> tp[t.typeParameter]
+            t.hasTypeParameterName() -> nr.getString(t.typeParameterName)
+            else -> null
+        }
+
+        private fun visibilityMods(flags: Int): Set<Modifier> = when (Flags.VISIBILITY.get(flags)) {
+            ProtoBuf.Visibility.PRIVATE, ProtoBuf.Visibility.PRIVATE_TO_THIS, ProtoBuf.Visibility.LOCAL -> setOf(Modifier.PRIVATE)
+            ProtoBuf.Visibility.PROTECTED -> setOf(Modifier.PROTECTED)
+            else -> emptySet()
+        }
 
         private fun typeRef(t: ProtoBuf.Type, nr: NameResolverImpl, tp: Map<Int, String>, tt: TypeTable): TypeRef? = when {
             t.hasTypeParameter() -> KotlinType(tp[t.typeParameter] ?: "T", nullable = t.nullable, context = null, isTypeParameter = true)

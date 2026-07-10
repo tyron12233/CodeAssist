@@ -10,6 +10,8 @@ import dev.ide.ui.backend.UiModuleConfigEdit
 import dev.ide.ui.backend.UiModuleRef
 import dev.ide.ui.backend.UiModuleTypeOption
 import dev.ide.ui.backend.UiMissingProguardFile
+import dev.ide.ui.backend.UiPackagingOptions
+import dev.ide.ui.backend.UiPackagingRules
 import dev.ide.ui.backend.UiSourceRootRole
 import java.nio.file.Paths
 import kotlinx.coroutines.Dispatchers
@@ -101,6 +103,16 @@ internal class ModuleBackend(private val ctx: BackendContext) : ModuleService {
             ctx.services.moduleService.setBuildFeature(moduleName, feature, enabled)
                 .also { if (it.success) ctx.bumpFileSystemEpoch() }
         }
+
+    override suspend fun getPackagingOptions(moduleName: String): UiPackagingOptions? =
+        withContext(Dispatchers.IO) { ctx.services.moduleService.getPackagingOptions(moduleName) }
+
+    override suspend fun updatePackagingOptions(
+        moduleName: String, resources: UiPackagingRules, jniLibs: UiPackagingRules
+    ): UiConfigResult = withContext(Dispatchers.IO) {
+        ctx.services.moduleService.updatePackagingOptions(moduleName, resources, jniLibs)
+            .also { if (it.success) ctx.bumpFileSystemEpoch() }
+    }
 
     override suspend fun missingProguardFiles(moduleName: String): List<UiMissingProguardFile> =
         withContext(Dispatchers.IO) { ctx.services.moduleService.missingProguardFiles(moduleName) }

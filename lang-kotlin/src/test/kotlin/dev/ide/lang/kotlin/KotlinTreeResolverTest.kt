@@ -33,6 +33,29 @@ class KotlinTreeResolverTest {
 
     private fun ResolvedFunction.stmts(): List<RNode> = assertIs<RNode.Block>(body, "block body expected").statements
 
+    private fun lowerNamed(code: String, name: String): ResolvedFunction {
+        val kt = KotlinParserHost.parse("Use.kt", code)
+        val parsed = KotlinParsedFile(kt, DiskFile(srcDir.resolve("Use.kt")), 0)
+        val resolver = KotlinTreeResolver(kt, parsed, service)
+        val fn = kt.declarations.filterIsInstance<org.jetbrains.kotlin.psi.KtNamedFunction>().first { it.name == name }
+        return resolver.lowerFunction(fn)
+    }
+
+    @Test
+    fun callSiteKeysAreStableWhenAnotherFunctionIsEdited() {
+        // Live edit relies on FUNCTION-RELATIVE call-site keys: editing one function shifts every source offset
+        // after it, but a later function's keys must NOT change (else the Compose runtime re-keys its groups and
+        // discards its state). Edit A (add a call) and confirm B's call-site key is unchanged.
+        val v1 = "package p\nfun A() { listOf(1) }\nfun B() { listOf(2) }"
+        val v2 = "package p\nfun A() { listOf(1); listOf(1) }\nfun B() { listOf(2) }"
+        fun bCallKey(code: String): Int {
+            var key: Int? = null
+            lowerNamed(code, "B").body.walk { if (it is RNode.Call && key == null) key = it.callSiteKey.value }
+            return assertNotNull(key, "B should contain a call")
+        }
+        assertEquals(bCallKey(v1), bCallKey(v2), "editing A must not shift B's call-site keys")
+    }
+
     @Test
     fun localsBindToSlotsAndUsesReferenceThem() {
         val fn = lower("package demo\nfun f() { val x = 1\n  val y = x }")
@@ -170,8 +193,9 @@ class KotlinTreeResolverTest {
 
     @Test
     fun unsupportedConstructIsRejectedNotGuessed() {
-        // Indexed assignment (`xs[i] = v`, the `set` operator) is still outside the subset → Unsupported, not a guess.
-        val fn = lower("package demo\nfun f(xs: MutableList<Int>) { xs[0] = 1 }")
+        // A construct outside the subset (a non-Int range) → Unsupported, not a guess. (Indexed assignment is
+        // now supported — see indexedAssignmentLowersToSetOperator.)
+        val fn = lower("package demo\nfun f() { val r = 1L..5L }")
         assertFalse(fn.isComplete, "the function should report an incomplete lowering")
         assertTrue(fn.diagnostics.isNotEmpty(), "the gap should be recorded as a diagnostic")
     }
@@ -448,12 +472,13 @@ class KotlinTreeResolverTest {
     }
 
     @Test
-    fun indexedAssignmentIsRejectedNotMisLowered() {
-        // `xs[i] = v` (the `set` operator) isn't modeled — it must be Unsupported, not a bogus Assign over the
-        // `get` node the LHS would otherwise lower to.
+    fun indexedAssignmentLowersToSetOperator() {
+        // `xs[i] = v` (the `set` operator) lowers to a MEMBER call of `set(index, value)` — the write mirror of
+        // the `get` produced for an indexed read, not a bogus Assign over the `get` node.
         val fn = lower("package demo\nfun f(xs: MutableList<String>) { xs[0] = \"a\" }")
-        assertIs<RNode.Unsupported>(fn.stmts()[0], "indexed assignment must be Unsupported")
-        assertFalse(fn.isComplete)
+        val call = assertIs<RNode.Call>(fn.stmts()[0], "indexed assignment should lower to a set-operator call")
+        assertEquals("set", call.callee.displayName)
+        assertTrue(fn.isComplete, "indexed assignment should lower completely; diags=${fn.diagnostics}")
     }
 
     @Test

@@ -54,8 +54,8 @@ import kotlinx.coroutines.launch
  * (transform-only, `slow`/`quiet`) so its content is never gated behind opacity — visible even if
  * motion is disabled. Drag handle + glass-thick fill + a `sheet`-radius rounded top edge.
  *
- * On phone, the file navigator and build console dock here (the README's "compact" reflow:
- * navigator/console are **sheets**, nav at the bottom).
+ * On phone, the build console docks here (the compact reflow; the file navigator is the left
+ * [PushDrawer], not a sheet).
  *
  * The sheet opens at [heightFraction] but is **draggable**: dragging the handle up expands it (up to
  * full screen), dragging down collapses it back to the resting height or — past it — dismisses. On

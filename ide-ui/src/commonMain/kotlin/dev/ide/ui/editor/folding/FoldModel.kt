@@ -45,7 +45,8 @@ class FoldModel private constructor(
     private val foldByStartLine: Map<Int, FoldedLineInfo>,
 ) {
     /** Total hidden document lines (== docLineCount - visualLineCount). */
-    val hiddenCount: Int = if (hiddenStart.isEmpty()) 0 else hiddenBefore.last() + (hiddenEnd.last() - hiddenStart.last() + 1)
+    val hiddenCount: Int =
+        if (hiddenStart.isEmpty()) 0 else hiddenBefore.last() + (hiddenEnd.last() - hiddenStart.last() + 1)
 
     /** Number of visual rows after folding. */
     val visualLineCount: Int get() = docLineCount - hiddenCount
@@ -100,7 +101,9 @@ class FoldModel private constructor(
     /** The interval whose start is the greatest ≤ [line], or -1. Linear in interval count (few folds). */
     private fun intervalIndexFor(line: Int): Int {
         var ans = -1
-        for (i in hiddenStart.indices) { if (hiddenStart[i] <= line) ans = i else break }
+        for (i in hiddenStart.indices) {
+            if (hiddenStart[i] <= line) ans = i else break
+        }
         return ans
     }
 
@@ -109,7 +112,9 @@ class FoldModel private constructor(
 
         fun build(doc: EditorDocument, regions: List<FoldRegion>): FoldModel {
             val collapsed = regions.filter { it.collapsed && it.end > it.start }
-            if (collapsed.isEmpty()) return FoldModel(doc.lineCount, IntArray(0), IntArray(0), IntArray(0), emptyMap())
+            if (collapsed.isEmpty()) return FoldModel(
+                doc.lineCount, IntArray(0), IntArray(0), IntArray(0), emptyMap()
+            )
 
             // Drop a region contained in another collapsed region (already hidden); survivors are disjoint.
             val sorted = collapsed.sortedWith(compareBy({ it.start }, { -it.end }))
@@ -128,25 +133,36 @@ class FoldModel private constructor(
                 val startLine = doc.lineForOffset(r.start)
                 val endLine = doc.lineForOffset(r.end)
                 if (endLine <= startLine) continue // single visual line → nothing to hide
-                foldByStart[startLine] = FoldedLineInfo(startLine, endLine, r.start, r.end, r.placeholder)
+                foldByStart[startLine] =
+                    FoldedLineInfo(startLine, endLine, r.start, r.end, r.placeholder)
                 rawStarts.add(startLine + 1)
                 rawEnds.add(endLine)
             }
-            if (rawStarts.isEmpty()) return FoldModel(doc.lineCount, IntArray(0), IntArray(0), IntArray(0), emptyMap())
+            if (rawStarts.isEmpty()) return FoldModel(
+                doc.lineCount, IntArray(0), IntArray(0), IntArray(0), emptyMap()
+            )
 
             // Merge intervals (sorted by start; effective regions are disjoint but their line ranges can touch).
             val order = rawStarts.indices.sortedBy { rawStarts[it] }
-            val mStart = ArrayList<Int>(); val mEnd = ArrayList<Int>()
+            val mStart = ArrayList<Int>();
+            val mEnd = ArrayList<Int>()
             for (idx in order) {
-                val s = rawStarts[idx]; val e = rawEnds[idx]
+                val s = rawStarts[idx];
+                val e = rawEnds[idx]
                 if (mStart.isNotEmpty() && s <= mEnd.last() + 1) {
                     if (e > mEnd.last()) mEnd[mEnd.size - 1] = e
-                } else { mStart.add(s); mEnd.add(e) }
+                } else {
+                    mStart.add(s); mEnd.add(e)
+                }
             }
             val before = IntArray(mStart.size)
             var acc = 0
-            for (i in mStart.indices) { before[i] = acc; acc += mEnd[i] - mStart[i] + 1 }
-            return FoldModel(doc.lineCount, mStart.toIntArray(), mEnd.toIntArray(), before, foldByStart)
+            for (i in mStart.indices) {
+                before[i] = acc; acc += mEnd[i] - mStart[i] + 1
+            }
+            return FoldModel(
+                doc.lineCount, mStart.toIntArray(), mEnd.toIntArray(), before, foldByStart
+            )
         }
     }
 }

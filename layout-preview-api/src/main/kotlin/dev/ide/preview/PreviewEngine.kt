@@ -100,4 +100,13 @@ data class PreviewRequest(
  */
 interface LayoutPreviewBackend {
     suspend fun layoutPreview(path: String, text: String, request: PreviewRequest): LayoutPreviewResult?
+
+    /**
+     * Render a self-contained layout [xml] with the owned engine (built-in + Material widgets + optional system
+     * chrome), independent of any open project — the Learn tab's Android lessons drive this to visualize the
+     * layout they teach with no project context. Always owned rendering (never the real-view/SDK path); keep
+     * the lesson XML self-contained (project `@string`/`@color`/… references won't resolve against the empty
+     * resource table). Null when the host has no Android support wired.
+     */
+    suspend fun layoutPreviewStandalone(xml: String, request: PreviewRequest): LayoutPreviewResult? = null
 }

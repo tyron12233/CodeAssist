@@ -51,6 +51,81 @@ object EntryPointIndex {
     const val KEY = "main"
 }
 
+/**
+ * subtype hit: a DIRECT inheritor of the supertype the index is keyed by — the analog of IntelliJ's
+ * `DirectClassInheritorsIndex` / `KotlinSuperClassIndex`. Keys are the supertype's SHORT name (a
+ * resolution-free source parse can't reliably resolve `extends Foo` to an FQN; IntelliJ keys the same
+ * way); [supertype] carries what the producer knew — the full FQN for a binary, the best-effort resolved
+ * or raw reference text for source — so a consumer can filter exactly or verify through resolution.
+ */
+data class SubtypeValue(
+    /** The SUBTYPE's fully-qualified name. */
+    val fqn: String,
+    /** class / interface / enum / object / annotation. */
+    val kind: String,
+    /** The supertype as the producer knew it (FQN for binaries; resolved-or-raw text for source). */
+    val supertype: String,
+    /** Declaring source file (interned id) for source producers, -1 for binaries. */
+    val fileId: Int = -1,
+)
+
+/**
+ * annotated-declaration hit: a declaration carrying the annotation the index is keyed by — the analog of
+ * `JavaAnnotationIndex` / `KotlinAnnotationsIndex`. Keyed by the annotation's SHORT name (source parses
+ * see `@Composable`, not the FQN); [annotation] carries the producer's best knowledge for exact filtering.
+ */
+data class AnnotatedValue(
+    /** The annotated declaration: a type FQN, or `owner#member` for a member/callable. */
+    val fqn: String,
+    /** class / method / field / function / property. */
+    val kind: String,
+    /** The annotation as the producer knew it (FQN for binaries; resolved-or-raw for source). */
+    val annotation: String,
+    /** Declaring source file (interned id) for source producers, -1 for binaries. */
+    val fileId: Int = -1,
+)
+
+/**
+ * Shared identifiers for the subtype (direct-inheritor) indexes — one per producer language/side, since
+ * each side needs its own parser (ASM for binaries, JDT for Java source, PSI for Kotlin source) and index
+ * ids are one-producer-per-service. Consumers (sealed exhaustiveness, override completion, the K2
+ * `KotlinDirectInheritorsProvider`) query every id and merge.
+ */
+object SubtypeIndex {
+    val BINARY = IndexId("subtypes.binary")
+    val JAVA_SOURCE = IndexId("subtypes.javaSource")
+    val KOTLIN_SOURCE = IndexId("subtypes.kotlinSource")
+    val ALL = listOf(BINARY, JAVA_SOURCE, KOTLIN_SOURCE)
+
+    /** Index key for a supertype: its SHORT name. */
+    fun key(supertypeName: String) = supertypeName.substringAfterLast('.')
+}
+
+/** Shared identifiers for the annotation (annotated-by) indexes; mirrors [SubtypeIndex]'s split. */
+object AnnotationIndex {
+    val BINARY = IndexId("annotations.binary")
+    val JAVA_SOURCE = IndexId("annotations.javaSource")
+    val KOTLIN_SOURCE = IndexId("annotations.kotlinSource")
+    val ALL = listOf(BINARY, JAVA_SOURCE, KOTLIN_SOURCE)
+
+    /** Index key for an annotation: its SHORT name. */
+    fun key(annotationName: String) = annotationName.substringAfterLast('.')
+}
+
+object SubtypeExternalizer : Externalizer<SubtypeValue> {
+    override fun write(out: DataOutput, value: SubtypeValue) {
+        out.writeUTF(value.fqn); out.writeUTF(value.kind); out.writeUTF(value.supertype); out.writeInt(value.fileId)
+    }
+    override fun read(inp: DataInput) = SubtypeValue(inp.readUTF(), inp.readUTF(), inp.readUTF(), inp.readInt())
+}
+
+object AnnotatedExternalizer : Externalizer<AnnotatedValue> {
+    override fun write(out: DataOutput, value: AnnotatedValue) {
+        out.writeUTF(value.fqn); out.writeUTF(value.kind); out.writeUTF(value.annotation); out.writeInt(value.fileId)
+    }
+    override fun read(inp: DataInput) = AnnotatedValue(inp.readUTF(), inp.readUTF(), inp.readUTF(), inp.readInt())
+}
+
 object EntryPointExternalizer : Externalizer<EntryPointValue> {
     override fun write(out: DataOutput, value: EntryPointValue) {
         out.writeUTF(value.fqn); out.writeInt(value.fileId); out.writeBoolean(value.instance)

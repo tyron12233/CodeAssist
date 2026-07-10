@@ -19,10 +19,19 @@ import dev.ide.ui.theme.Ca
 /** Multiply a colour toward black (gradient end for the project tile / colored shadows). */
 fun Color.darken(factor: Float): Color = Color(red * factor, green * factor, blue * factor, alpha)
 
-/** The rounded gradient tile bearing a project's initial (accent → darkened-accent diagonal). */
+/**
+ * The rounded gradient tile bearing a project's initial (base → darkened-base diagonal). [color] overrides
+ * the base tint (null = the app accent) so the picker can give each project a distinct, stable color.
+ */
 @Composable
-fun ProjectTile(initial: String, modifier: Modifier = Modifier, size: Dp = 40.dp, radius: Dp = Ca.radius.md) {
-    val accent = Ca.colors.accent
+fun ProjectTile(
+    initial: String,
+    modifier: Modifier = Modifier,
+    size: Dp = 40.dp,
+    radius: Dp = Ca.radius.md,
+    color: Color? = null,
+) {
+    val accent = color ?: Ca.colors.accent
     Box(
         modifier
             .size(size)

@@ -63,7 +63,7 @@ class ContentLambdaErrorRecoveryTest {
         composeOnce {
             dispatcher.composer = currentComposer
             try {
-                runtime.invokeComposable(0x5ACE, restartable = false, args = emptyList()) {
+                runtime.invokeComposable(0x5ACE, restartable = false, force = false, args = emptyList()) {
                     interpreter.call(root, emptyList())
                 }
             } finally {

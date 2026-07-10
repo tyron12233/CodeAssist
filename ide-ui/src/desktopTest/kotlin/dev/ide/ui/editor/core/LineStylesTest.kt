@@ -90,6 +90,92 @@ class LineStylesTest {
     private fun LineSpanTypeAt(s: LineStyles, line: Int, col: Int): TokenType? =
         s.spansFor(line).firstOrNull { col >= it.start && col < it.end }?.type
 
+    /** Token type covering [col] in a freshly styled [line], or null if the column is left uncolored. */
+    private fun typeAt(line: String, col: Int, language: CodeLanguage): TokenType? =
+        styleLine(line, LexState.CODE, language).spans.firstOrNull { col >= it.start && col < it.end }?.type
+
+    @Test
+    fun kotlinStringInterpolationHighlightsNestedCode() {
+        // The reported bug: keywords + nested strings inside `${…}` were swallowed into the outer string.
+        val line = "    println(\"I \${if (b) \"got\" else \"lost\"} focus.\")"
+        // Anchor by content so the assertions survive if the leading indent changes.
+        fun at(sub: String) = typeAt(line, line.indexOf(sub), CodeLanguage.Kotlin)
+        assertEquals(TokenType.KEYWORD, at("if ("), "`if` inside \${} should be a keyword")
+        assertEquals(TokenType.KEYWORD, at("else "), "`else` inside \${} should be a keyword")
+        assertEquals(TokenType.STRING, typeAt(line, line.indexOf("got"), CodeLanguage.Kotlin), "nested \"got\" should be a string")
+        assertEquals(TokenType.STRING, typeAt(line, line.indexOf("lost"), CodeLanguage.Kotlin), "nested \"lost\" should be a string")
+        assertEquals(TokenType.STRING, typeAt(line, line.indexOf("I \$"), CodeLanguage.Kotlin), "the outer literal `I ` is a string")
+        assertEquals(TokenType.STRING, typeAt(line, line.indexOf(" focus"), CodeLanguage.Kotlin), "the trailing literal is a string")
+        assertEquals(TokenType.FUNC, at("println"), "`println(` is a call")
+        // `b` inside the interpolation is left for the semantic layer (not string-green).
+        assertEquals(null, typeAt(line, line.indexOf("b)"), CodeLanguage.Kotlin), "the interpolated var is uncolored lexically")
+    }
+
+    @Test
+    fun kotlinSimpleInterpolationLeavesNameUncolored() {
+        val line = "val m = \"hi \$name!\""
+        assertEquals(TokenType.STRING, typeAt(line, line.indexOf("hi"), CodeLanguage.Kotlin))
+        assertEquals(null, typeAt(line, line.indexOf("name"), CodeLanguage.Kotlin), "\$name identifier is left for semantics")
+        assertEquals(TokenType.STRING, typeAt(line, line.indexOf("!"), CodeLanguage.Kotlin), "the `!\"` tail is still string")
+        assertEquals(TokenType.KEYWORD, typeAt(line, 0, CodeLanguage.Kotlin), "`val` is a keyword")
+    }
+
+    @Test
+    fun kotlinRawStringCarriesStateAcrossLines() {
+        val doc = EditorDocument.of("val s = \"\"\"abc\ndef\"\"\".trim()")
+        val styles = LineStyles(CodeLanguage.Kotlin)
+        styles.reset(doc)
+        assertIncrementalMatchesFresh(doc, styles, CodeLanguage.Kotlin)
+        assertEquals(LexState.KT_RAW_STRING, styleLine(doc.lineText(0), LexState.CODE, CodeLanguage.Kotlin).exitState)
+        assertEquals(TokenType.STRING, LineSpanTypeAt(styles, 1, 0), "line 1 opens inside the raw string")
+        // `trim` after the closing `"""` on line 1 is back to code.
+        assertEquals(TokenType.FUNC, LineSpanTypeAt(styles, 1, doc.lineText(1).indexOf("trim")))
+    }
+
+    @Test
+    fun kotlinKeywordsHighlightOutsideStrings() {
+        assertEquals(TokenType.KEYWORD, typeAt("fun foo() {}", 0, CodeLanguage.Kotlin))
+        assertEquals(TokenType.KEYWORD, typeAt("when (x) {}", 0, CodeLanguage.Kotlin))
+        assertEquals(TokenType.KEYWORD, typeAt("if (a) b else c", 0, CodeLanguage.Kotlin))
+        assertEquals(TokenType.KEYWORD, typeAt("if (a) b else c", "if (a) b ".length, CodeLanguage.Kotlin))
+    }
+
+    @Test
+    fun kotlinValueClassModifierIsAKeyword() {
+        // `value` is a keyword only in `value class` (a soft keyword); as a plain identifier it stays uncolored.
+        val decl = "value class Password(val v: String)"
+        assertEquals(TokenType.KEYWORD, typeAt(decl, 0, CodeLanguage.Kotlin), "`value` before `class` is a keyword")
+        assertEquals(TokenType.KEYWORD, typeAt(decl, decl.indexOf("class"), CodeLanguage.Kotlin), "`class` is a keyword")
+        // A plain `value` identifier (a common name) must NOT be colored as a keyword.
+        assertEquals(null, typeAt("val value = x.value", "val ".length, CodeLanguage.Kotlin), "`value` as an identifier is not a keyword")
+    }
+
+    @Test
+    fun fuzzKotlinIncrementalEqualsFresh() {
+        val rnd = Random(11)
+        val snippets = listOf(
+            "/*", "*" + "/", "//x", "\"s\"", "\"\"" + "\"", "\${", "}", "if ", "else ", "fun ",
+            "\"a\$x b\${y}c\"", "\n", "}", "{", "a", " ",
+        )
+        var doc = EditorDocument.of(
+            "fun f(b: Boolean) {\n" +
+                "  val s = \"\"\"raw \$b\ntext\"\"\"\n" +
+                "  println(\"I \${if (b) \"got\" else \"lost\"} f\")\n" +
+                "}\n"
+        )
+        val styles = LineStyles(CodeLanguage.Kotlin)
+        styles.reset(doc)
+        repeat(800) {
+            val len = doc.text.length
+            val start = rnd.nextInt(len + 1)
+            val del = rnd.nextInt(6)
+            val end = (start + del).coerceAtMost(len)
+            val ins = if (rnd.nextBoolean()) snippets[rnd.nextInt(snippets.size)] else ""
+            doc = edit(doc, styles, start, end, ins)
+            assertIncrementalMatchesFresh(doc, styles, CodeLanguage.Kotlin)
+        }
+    }
+
     @Test
     fun fuzzIncrementalEqualsFresh() {
         val rnd = Random(7)
@@ -105,6 +191,53 @@ class LineStylesTest {
             val ins = if (rnd.nextBoolean()) snippets[rnd.nextInt(snippets.size)] else ""
             doc = edit(doc, styles, start, end, ins)
             assertIncrementalMatchesFresh(doc, styles, CodeLanguage.Java)
+        }
+    }
+
+    @Test
+    fun markdownConstructsAreTyped() {
+        assertEquals(TokenType.TYPE, typeAt("## Heading", 0, CodeLanguage.Markdown), "heading")
+        assertEquals(TokenType.KEYWORD, typeAt("- item", 0, CodeLanguage.Markdown), "bullet marker")
+        assertEquals(TokenType.KEYWORD, typeAt("12. item", 0, CodeLanguage.Markdown), "ordered marker")
+        assertEquals(null, typeAt("- item", "- ".length, CodeLanguage.Markdown), "list text is uncolored")
+        assertEquals(TokenType.COMMENT, typeAt("> quote", 0, CodeLanguage.Markdown), "block quote")
+        assertEquals(TokenType.PUNCT, typeAt("---", 0, CodeLanguage.Markdown), "thematic break")
+        assertEquals(TokenType.STRING, typeAt("use `code` here", "use ".length, CodeLanguage.Markdown), "inline code")
+        val link = "see [docs](http://x)"
+        assertEquals(TokenType.FUNC, typeAt(link, link.indexOf("[docs]"), CodeLanguage.Markdown), "link text")
+        assertEquals(TokenType.PROPERTY, typeAt(link, link.indexOf("(http"), CodeLanguage.Markdown), "link url")
+        // `#hashtag` (no space) is not a heading; a hyphen inside a word is not a break.
+        assertEquals(null, typeAt("a-b not a rule", 0, CodeLanguage.Markdown))
+    }
+
+    @Test
+    fun markdownFenceCarriesStateAcrossLines() {
+        val doc = EditorDocument.of("```kotlin\nval x = 1\n# not a heading\n```\n# real")
+        val styles = LineStyles(CodeLanguage.Markdown)
+        styles.reset(doc)
+        assertIncrementalMatchesFresh(doc, styles, CodeLanguage.Markdown)
+        assertEquals(LexState.MD_FENCE, styleLine(doc.lineText(0), LexState.CODE, CodeLanguage.Markdown).exitState)
+        assertEquals(TokenType.STRING, LineSpanTypeAt(styles, 1, 0), "code inside the fence")
+        assertEquals(TokenType.STRING, LineSpanTypeAt(styles, 2, 0), "`#` inside the fence is not a heading")
+        assertEquals(LexState.CODE, styleLine(doc.lineText(3), LexState.MD_FENCE, CodeLanguage.Markdown).exitState)
+        assertEquals(TokenType.TYPE, LineSpanTypeAt(styles, 4, 0), "heading after the fence closes")
+    }
+
+    @Test
+    fun fuzzMarkdownIncrementalEqualsFresh() {
+        val rnd = Random(13)
+        val snippets = listOf("```", "~~~", "# ", "> ", "- ", "`x`", "[a](b)", "\n", "text", " ", "---")
+        var doc = EditorDocument.of("# Title\n\ntext with `code`\n\n```\nfenced\n```\n- a\n- b\n")
+        val styles = LineStyles(CodeLanguage.Markdown)
+        styles.reset(doc)
+        repeat(800) {
+            val len = doc.text.length
+            val start = rnd.nextInt(len + 1)
+            val del = rnd.nextInt(6)
+            val end = (start + del).coerceAtMost(len)
+            val ins = if (rnd.nextBoolean()) snippets[rnd.nextInt(snippets.size)] else ""
+            doc = edit(doc, styles, start, end, ins)
+            assertIncrementalMatchesFresh(doc, styles, CodeLanguage.Markdown)
         }
     }
 }

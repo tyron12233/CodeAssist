@@ -24,7 +24,9 @@
          running, so the OS won't kill it if the user switches away mid-build (docs/build-process-isolation.md).
          "specialUse": a code build/run is a long-running, user-initiated task that fits no other FGS category
          (not data sync / media / location / …); the justification is declared on the <service> below for Play.
-         POST_NOTIFICATIONS (API 33+) lets the ongoing "Building…" notification show; the FGS still runs without it. -->
+         POST_NOTIFICATIONS (API 33+) lets the ongoing "Building…" notification show; the FGS still runs without
+         it. Being a runtime permission on API 33+, it must be REQUESTED at launch (MainActivity); declaring it
+         here alone is not enough, and without the grant the OS silently suppresses the notification. -->
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_SPECIAL_USE" />
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
@@ -72,6 +74,27 @@
                 <data android:mimeType="text/*" />
                 <data android:mimeType="application/json" />
                 <data android:mimeType="application/xml" />
+            </intent-filter>
+            <!-- Import a shared CodeAssist project package (.caproj) via "Open with". Best-effort: matches
+                 the application/x-caproj MIME and file:// paths by extension; content:// URIs don't expose an
+                 extension, so those are imported via the in-app Import button instead. Deliberately only VIEW
+                 (open-with), NOT SEND — a SEND filter would list CodeAssist in its own .caproj share sheet. -->
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+
+                <data android:mimeType="application/x-caproj" />
+            </intent-filter>
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+
+                <data android:scheme="file" />
+                <data android:scheme="content" />
+                <data android:host="*" />
+                <data android:mimeType="*/*" />
+                <data android:pathPattern=".*\\.caproj" />
             </intent-filter>
         </activity>
 

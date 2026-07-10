@@ -289,6 +289,75 @@ class EditorSessionTest {
     }
 
     @Test
+    fun deleteSurroundingSkipsTheComposingRegion() {
+        // The framework contract: deleteSurroundingText deletes AROUND the composing text, never inside it,
+        // and the composition survives the edit (shifted). Deleting into the composed word — or clearing the
+        // region — makes the IME's next setComposingText land at the wrong offsets (duplicated text).
+        val s = session("foo ", 4)
+        s.imeSetComposingText("bar", 1)
+        assertEquals("foo bar", s.doc.text)
+        s.imeDeleteSurrounding(1, 0) // must delete the space BEFORE "bar", not the 'r' before the caret
+        assertEquals("foobar", s.doc.text)
+        assertEquals(TextRange(3, 6), s.composing, "composition survives, shifted left")
+        assertEquals(TextRange(6), s.selection)
+        s.imeSetComposingText("bars", 1) // the IME grows its word — must replace the tracked region
+        assertEquals("foobars", s.doc.text)
+    }
+
+    @Test
+    fun deleteSurroundingNoOpStillResyncsTheIme() {
+        // Backspace on an already-aligned closer is deliberately a no-op in the editor — but the IME that sent
+        // deleteSurroundingText(1, 0) believes a char was deleted, so the session must ask it to resync.
+        val code = "class A {\n    fun f() {\n        body()\n    }\n}"
+        val caret = code.indexOf("    }") + 4
+        val s = session(code, caret)
+        var restarts = 0
+        s.imeListener = object : EditorSession.ImeListener {
+            override fun onStateChanged() {}
+            override fun onRestartInput() { restarts++ }
+        }
+        s.imeDeleteSurrounding(1, 0)
+        assertEquals(code, s.doc.text, "aligned closer keeps its indent")
+        assertEquals(1, restarts, "the IME is told its one-char-deleted model is stale")
+    }
+
+    @Test
+    fun smartEditResyncInsideAnImeBatchIsDeferredToItsEnd() {
+        // A pair-aware delete fired from inside an IME batch edit must not restart input between the IME's
+        // batched ops — the restart flushes once when the batch closes.
+        val s = session("foo()", 4)
+        var restarts = 0
+        var restartedMidBatch = false
+        var inBatch = false
+        s.imeListener = object : EditorSession.ImeListener {
+            override fun onStateChanged() {}
+            override fun onRestartInput() {
+                restarts++
+                if (inBatch) restartedMidBatch = true
+            }
+        }
+        s.beginBatch()
+        inBatch = true
+        s.imeDeleteSurrounding(1, 0) // deletes the whole "()" pair — diverges from the IME's model
+        assertEquals("foo", s.doc.text)
+        inBatch = false
+        s.endBatch()
+        assertEquals(1, restarts)
+        assertTrue(!restartedMidBatch, "restartInput must wait for the batch to close")
+    }
+
+    @Test
+    fun hostileImeOffsetsDoNotCrash() {
+        // TextRange rejects negative offsets; raw IME ints must be clamped before construction.
+        val s = session("ab", 0)
+        s.imeSetSelection(-1, -1)
+        assertEquals(TextRange(0), s.selection)
+        s.imeCommitText("x", -5) // caret would land at a negative offset — clamp to 0
+        assertEquals("xab", s.doc.text)
+        assertEquals(TextRange(0), s.selection)
+    }
+
+    @Test
     fun batchedImeEditsPushImeOnce() {
         // The session has no host text mirror to coalesce anymore; what a batch coalesces is the IME push.
         val s = session("x", 1)
@@ -1011,6 +1080,50 @@ class EditorSessionTest {
         val s = session(src, src.length - 1, CodeLanguage.Kotlin)
         val (text, _) = enter(s)
         assertEquals("    listOf(1, 2\n        \n    )", text)
+    }
+
+    @Test
+    fun enterBeforeLoneCloserAlignsCloserToOpenerNotColumnZero() {
+        // The reported bug: a blank line then a lone `}` aligned with `Surface`. Enter before the `}` must keep
+        // the brace at the opener's indent (4) and open a body line one level deeper (8) — NOT dedent it to 0.
+        val src = "    Surface() {\n    \n    }"
+        val caret = src.lastIndexOf('}') // caret right before the closing brace (after its 4-space indent)
+        val s = session(src, caret, CodeLanguage.Kotlin)
+        val (text, c) = enter(s)
+        assertEquals("    Surface() {\n    \n        \n    }", text)
+        assertEquals("    Surface() {\n    \n        ".length, c) // caret on the body line, at 8 spaces
+    }
+
+    @Test
+    fun enterBeforeLoneCloserWithNoBlankLineSplitsAndAligns() {
+        // No pre-existing blank line: `    Surface() {\n    |}` → body line at 8, `}` stays at 4.
+        val src = "    Surface() {\n    }"
+        val caret = src.lastIndexOf('}')
+        val s = session(src, caret, CodeLanguage.Kotlin)
+        val (text, c) = enter(s)
+        assertEquals("    Surface() {\n        \n    }", text)
+        assertEquals("    Surface() {\n        ".length, c)
+    }
+
+    @Test
+    fun enterBeforeLoneCloserReindentsAMisalignedCloser() {
+        // The closer's own line is over-indented (6 spaces) but its opener sits at 4. Enter aligns the `}` to the
+        // opener (4) and the body one deeper (8), regardless of the closer line's stray indentation.
+        val src = "    Surface() {\n      }"
+        val caret = src.lastIndexOf('}')
+        val s = session(src, caret, CodeLanguage.Kotlin)
+        val (text, _) = enter(s)
+        assertEquals("    Surface() {\n        \n    }", text)
+    }
+
+    @Test
+    fun enterBeforeLoneCloserJavaAlignsToOpener() {
+        // Same behavior for Java: a method body's lone `}` stays under its opener.
+        val src = "    void f() {\n    }"
+        val caret = src.lastIndexOf('}')
+        val s = session(src, caret, CodeLanguage.Java)
+        val (text, _) = enter(s)
+        assertEquals("    void f() {\n        \n    }", text)
     }
 
     // ---- indent-style detection (tabs / 2-space) ----

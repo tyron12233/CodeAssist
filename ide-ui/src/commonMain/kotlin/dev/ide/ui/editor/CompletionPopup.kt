@@ -41,9 +41,14 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import dev.ide.ui.backend.UiCompletionItem
 import dev.ide.ui.components.KindBadge
+import dev.ide.ui.generated.resources.Res
+import dev.ide.ui.generated.resources.completion_back_to_suggestions
+import dev.ide.ui.generated.resources.completion_no_suggestions
+import dev.ide.ui.generated.resources.completion_show_documentation
 import dev.ide.ui.icons.CaIcons
 import dev.ide.ui.components.entrancePop
 import dev.ide.ui.theme.Ca
+import org.jetbrains.compose.resources.stringResource
 
 /**
  * The completion list (glass-thick): rows of [KindBadge] + a two-line column — the label (typed prefix bolded
@@ -115,7 +120,7 @@ private fun CompletionListPanel(
     ) {
         if (items.isEmpty()) {
             Text(
-                "No suggestions",
+                stringResource(Res.string.completion_no_suggestions),
                 style = Ca.type.codeSmall,
                 color = Ca.colors.textTertiary,
                 modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp),
@@ -152,7 +157,7 @@ private fun DocPanel(item: UiCompletionItem, doc: String, maxHeight: Dp, modifie
             horizontalArrangement = Arrangement.spacedBy(6.dp),
         ) {
             if (onBack != null) {
-                Icon(CaIcons.chevronLeft, "Back to suggestions", Modifier.size(18.dp).clickable(onClick = onBack), tint = Ca.colors.textSecondary)
+                Icon(CaIcons.chevronLeft, stringResource(Res.string.completion_back_to_suggestions), Modifier.size(18.dp).clickable(onClick = onBack), tint = Ca.colors.textSecondary)
             }
             Text(
                 item.label + (item.detail?.let { "  $it" } ?: ""),
@@ -243,7 +248,7 @@ private fun CompletionRow(
         // accepting the item.
         if (onInfo != null) {
             Spacer(Modifier.width(4.dp))
-            Icon(CaIcons.info, "Show documentation", Modifier.size(18.dp).clickable(onClick = onInfo), tint = Ca.colors.textSecondary)
+            Icon(CaIcons.info, stringResource(Res.string.completion_show_documentation), Modifier.size(18.dp).clickable(onClick = onInfo), tint = Ca.colors.textSecondary)
         }
     }
 }

@@ -152,6 +152,19 @@ class KotlinIncrementalAnalyzeTest {
         assertScopedEqualsFull(v1, v2)
     }
 
+    @Test
+    fun signatureChangeRechecksCallerInAnotherDeclaration() {
+        // `caller` calls `helper()`; changing helper's signature to require an argument makes caller's call
+        // a missing-argument error. caller's own text is unchanged, so it is reused unless the dependency plan
+        // re-checks it as a dependent of helper. `unrelated` must stay reused (it references neither).
+        fun src(helperSig: String) =
+            "package demo\n$helperSig {}\nfun caller() { helper() }\nfun unrelated() { println(\"hi\") }\n"
+        val v1 = src("fun helper()")
+        val v2 = src("fun helper(x: Int)")
+        assertScopedEqualsFull(v1, v2)
+        assertScopedEqualsFull(v2, v1)
+    }
+
     companion object {
         private fun body() = KotlinIncrementalAnalyzeTest().file()
     }

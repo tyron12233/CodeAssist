@@ -16,5 +16,5 @@ dependencies {
     // The interpreter itself is PSI-free (it only walks ResolvedTree). The tests, however, drive lowering by
     // parsing Kotlin source, which needs the compiler's PSI — a test-only dependency (it's `implementation`
     // in :lang-kotlin, so it doesn't leak here).
-    testImplementation(libs.kotlin.compiler.embeddable)
+    testImplementation(project(":kotlin-compiler-deps"))
 }

@@ -1,22 +1,26 @@
 package dev.ide.lang.kotlin
 
 import dev.ide.platform.log.Log
+import dev.ide.platform.log.PerfTrace
 
 /**
- * Lightweight, opt-in per-stage timing for the Kotlin editor hot paths (completion, analyze). A single
- * [trace] wraps a top-level call; [span]s inside it (here or down in the symbol service) attribute time to
- * named buckets. On [trace] exit one line is logged via the platform [Log] facade (so it shows in the
+ * Lightweight, opt-in per-stage timing for the Kotlin editor hot paths (completion, analyze, highlight). A
+ * single [trace] wraps a top-level call; [span]s inside it (here or down in the symbol service) attribute
+ * time to named buckets. On [trace] exit one line is logged via the platform [Log] facade (so it shows in the
  * desktop console and the on-device log ring): `complete total=812ms parse=540ms infer=12ms members=240ms`.
  *
- * Disabled by default — zero cost (no `nanoTime`, no allocation) unless [enabled]. Flip it with the
- * `ide.kotlin.perf` system property (`-Dide.kotlin.perf=true`) or by setting [enabled] at runtime.
+ * Disabled by default — zero cost (no `nanoTime`, no allocation) unless [enabled]. [enabled] is the shared
+ * [PerfTrace] flag, so the "Log analysis timings" setting (or `-Dide.editor.perf=true`) turns this and the
+ * backend's per-pass timing on together.
  *
  * The editor engine runs these calls on a single serialized dispatcher, but completion and a background
  * analyze can still interleave on different threads, so the active trace is held per-thread.
  */
 object KotlinPerf {
-    @Volatile
-    var enabled: Boolean = runCatching { System.getProperty("ide.kotlin.perf")?.toBoolean() == true }.getOrNull() ?: false
+    /** Backed by the shared [PerfTrace] flag so all editor timing toggles as one. */
+    var enabled: Boolean
+        get() = PerfTrace.enabled
+        set(value) { PerfTrace.enabled = value }
 
     private val log = Log.logger("kotlin-perf")
     private val current = ThreadLocal<Trace?>()

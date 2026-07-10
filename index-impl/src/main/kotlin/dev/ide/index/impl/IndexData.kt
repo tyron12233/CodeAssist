@@ -170,26 +170,71 @@ internal class IndexData(matching: MatchingMode) {
     fun fuzzy(pattern: String, out: MutableList<Hit<Any>>, cap: Int) {
         val s = store
         val tg = s.trigrams
-        if (tg == null || pattern.length < 3) { prefix(pattern, out, cap); return }
-        val grams = Scoring.trigramsOf(pattern.lowercase())
-        if (grams.isEmpty()) return
-        // Smallest-postings-first, sorted-merge intersection — no Integer boxing and no HashSet (postings are
-        // ascending docIds). A gram absent from the corpus is SKIPPED, not treated as an empty intersection,
-        // which mirrors [Segment.fuzzy] so a candidate is found identically on both sides.
-        val lists = ArrayList<IntList>(grams.size)
-        for (g in grams) { lists.add(tg[g] ?: continue) }
-        if (lists.isEmpty()) return
-        lists.sortBy { it.size }
-        var acc = lists[0].toIntArray()
-        for (i in 1 until lists.size) {
-            acc = intersectSorted(acc, lists[i])
-            if (acc.isEmpty()) return
+        val hump = Scoring.humpQuery(pattern)
+        val useTrigrams = tg != null && pattern.length >= 3
+        if (!useTrigrams && !hump) {
+            // Below trigram length there is no posting list to intersect; scan the two first-character
+            // windows so a short pattern still matches case-insensitively (prefix tiers only, no noise).
+            if (pattern.isNotEmpty() && pattern.length < 3) {
+                val lo = pattern[0].lowercaseChar()
+                val up = pattern[0].uppercaseChar()
+                windowScan(s, lo, out, cap, null) { t, o -> Scoring.scorePrefixCi(t, pattern, o) }
+                if (up != lo) windowScan(s, up, out, cap, null) { t, o -> Scoring.scorePrefixCi(t, pattern, o) }
+            } else prefix(pattern, out, cap)
+            return
         }
-        for (id in acc) {
-            val v = s.valueById[id] ?: continue
-            val t = s.termById[id] ?: continue
-            val sc = Scoring.scoreFuzzy(t, pattern, s.originById[id])
-            if (sc > 0) { out.add(Hit(t, v, sc)); if (out.size >= cap) return }
+        // A camel-hump match shares no contiguous trigram with the pattern (trigram intersection can never
+        // surface it); every hump match is anchored at the term's first char, so those two windows are
+        // scanned after the trigram pass (skipping ids it already scored) — mirrors [Segment.fuzzy].
+        val seen: MutableSet<Int>? = if (hump && useTrigrams) HashSet() else null
+        if (useTrigrams) {
+            val grams = Scoring.trigramsOf(pattern.lowercase())
+            // Smallest-postings-first, sorted-merge intersection — no Integer boxing and no HashSet (postings are
+            // ascending docIds). A gram absent from the corpus is SKIPPED, not treated as an empty intersection,
+            // which mirrors [Segment.fuzzy] so a candidate is found identically on both sides.
+            val lists = ArrayList<IntList>(grams.size)
+            for (g in grams) { lists.add(tg!![g] ?: continue) }
+            var acc: IntArray? = if (lists.isEmpty()) null else {
+                lists.sortBy { it.size }
+                var a = lists[0].toIntArray()
+                for (i in 1 until lists.size) {
+                    a = intersectSorted(a, lists[i])
+                    if (a.isEmpty()) break
+                }
+                a
+            }
+            for (id in acc ?: IntArray(0)) {
+                seen?.add(id)
+                val v = s.valueById[id] ?: continue
+                val t = s.termById[id] ?: continue
+                val sc = Scoring.scoreFuzzy(t, pattern, s.originById[id])
+                if (sc > 0) { out.add(Hit(t, v, sc)); if (out.size >= cap) return }
+            }
+        }
+        if (hump && out.size < cap) {
+            val lo = pattern[0].lowercaseChar()
+            val up = pattern[0].uppercaseChar()
+            windowScan(s, lo, out, cap, seen) { t, o -> Scoring.scoreFuzzy(t, pattern, o) }
+            if (up != lo) windowScan(s, up, out, cap, seen) { t, o -> Scoring.scoreFuzzy(t, pattern, o) }
+        }
+    }
+
+    /** Scan the window of terms starting with [first], scoring each entry via [score] (skipping [seen] ids). */
+    private inline fun windowScan(
+        s: Store, first: Char, out: MutableList<Hit<Any>>, cap: Int, seen: Set<Int>?,
+        score: (String, IndexOrigin) -> Int,
+    ) {
+        if (out.size >= cap) return
+        val p = first.toString()
+        for ((term, ids) in s.terms.tailMap(p)) {
+            if (!term.startsWith(p)) break
+            for (i in 0 until ids.size) {
+                val id = ids[i]
+                if (seen != null && id in seen) continue
+                val v = s.valueById[id] ?: continue
+                val sc = score(term, s.originById[id])
+                if (sc > 0) { out.add(Hit(term, v, sc)); if (out.size >= cap) return }
+            }
         }
     }
 

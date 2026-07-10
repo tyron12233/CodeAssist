@@ -1,6 +1,7 @@
 package dev.ide.core
 
 import dev.ide.android.support.AndroidFacetCodec
+import dev.ide.android.support.resources.LauncherIcon
 import dev.ide.android.support.tools.KeystoreRegistry
 import dev.ide.build.engine.DexRunner
 import dev.ide.model.LanguageLevel
@@ -32,6 +33,9 @@ data class ProjectSummary(
     val compatibility: Boolean = false,
     /** True when the project has an Android module (the picker then tries to show its launcher icon). */
     val isAndroid: Boolean = false,
+    /** Epoch-ms of the last time the project was opened by the user (0 = never recorded). Drives the
+     *  picker's most-recent-first ordering. */
+    val lastOpened: Long = 0L,
 )
 
 /**
@@ -117,10 +121,15 @@ class ProjectManager private constructor(
     /** Directories a backup sweeps: the live projects, plus any legacy data still on disk. */
     private val backupRoots: List<Path> get() = listOf(projectsRoot) + legacyDataDirs
 
-    /** Existing projects (subdirs of [projectsRoot] holding a saved model), sorted by name. */
+    /**
+     * Existing projects (subdirs of [projectsRoot] holding a saved model), most-recently-opened first
+     * (projects never opened since this was recorded fall to the bottom, ordered by name). The last-opened
+     * timestamps live in the shared prefs file, stamped by [recordOpened] on open/create.
+     */
     fun list(): List<ProjectSummary> {
         if (!Files.isDirectory(projectsRoot)) return emptyList()
         val dirs = Files.newDirectoryStream(projectsRoot).use { it.toList() }
+        val prefs = loadPrefs()
         return dirs
             .filter { Files.isDirectory(it) && ModelPersistence.exists(it) }
             .map { dir ->
@@ -131,9 +140,24 @@ class ProjectManager private constructor(
                     proj?.modules?.size ?: 0,
                     compatibility = GradleImport.isCompatibilityMode(dir),
                     isAndroid = proj?.modules?.any { m -> m.facets.any { it.tomlTable == AndroidFacetCodec.tomlTable } } ?: false,
+                    lastOpened = prefs.getProperty(openedKey(dir))?.toLongOrNull() ?: 0L,
                 )
             }
-            .sortedBy { it.name.lowercase() }
+            .sortedWith(compareByDescending<ProjectSummary> { it.lastOpened }.thenBy { it.name.lowercase() })
+    }
+
+    /** Prefs key holding a project's last-opened timestamp (keyed by its unique workspace directory name). */
+    private fun openedKey(dir: Path): String = "project.opened.${dir.fileName}"
+
+    /**
+     * Stamp [dir] as opened *now*, so the picker floats it to the top. Guarded to a direct child of
+     * [projectsRoot] (scratch/build-daemon dirs live elsewhere and never affect the picker order), and
+     * best-effort — a failed prefs write must never block opening a project.
+     */
+    private fun recordOpened(dir: Path) {
+        val normalized = dir.toAbsolutePath().normalize()
+        if (normalized.parent != projectsRoot.toAbsolutePath().normalize()) return
+        runCatching { setPreference(openedKey(normalized), System.currentTimeMillis().toString()) }
     }
 
     /** True when no project exists yet (first launch / empty state). */
@@ -144,12 +168,58 @@ class ProjectManager private constructor(
         val name = args[TemplateArgs.NAME]?.takeIf { it.isNotBlank() } ?: "Untitled"
         val dir = uniqueProjectDir(name)
         return IdeServices.createProjectAt(dir, templateId, args, sdk(), languageLevel, androidTools, dexRunner, apkInstaller, customViewRuntime, realViewRuntime = realViewRuntime, kotlinPluginLoader = kotlinPluginLoader, sharedCachesRoot = homeDir, env = env)
+            .also { recordOpened(dir) }
     }
 
     /** Open the existing project at [rootPath]; returns the opened engine. [buildOnly] opens a headless
      *  build engine (the `:build` daemon) that skips the editor cold-start — see [IdeServices]. */
     fun open(rootPath: String, buildOnly: Boolean = false): IdeServices =
         IdeServices.openAt(Paths.get(rootPath), sdk(), androidTools, dexRunner, apkInstaller, customViewRuntime, realViewRuntime = realViewRuntime, kotlinPluginLoader = kotlinPluginLoader, sharedCachesRoot = homeDir, env = env, buildOnly = buildOnly)
+            // A build-only daemon open isn't a user "access" — don't let a background build reorder the picker.
+            .also { if (!buildOnly) recordOpened(Paths.get(rootPath)) }
+
+    // --- learning scratch projects (hidden; used to compile + run Learn exercises) ---
+
+    /** Cached hidden scratch engines, keyed by their console template id (`java-console` / `kotlin-console`). */
+    private val scratchEngines = HashMap<String, IdeServices>()
+
+    /**
+     * A hidden, cached single-module project used to compile + run interactive learning exercises. It lives
+     * under `<home>/.scratch/<templateId>` — OUTSIDE [projectsRoot], so it never appears in [list] / the
+     * picker. Created once from the bundled console template ([templateId] = `"java-console"` |
+     * `"kotlin-console"`), then reused across the session and across launches. The Learn checker overwrites
+     * its `Main` source per exercise and runs it through [IdeServices.runAndCapture]; the lesson editor also
+     * completes against it, so it opens as a FULL engine (not build-only) to have the editor/language stack.
+     */
+    fun scratch(key: String, templateId: String = key, args: Map<String, String> = emptyMap()): IdeServices {
+        scratchEngines[key]?.let { return it }
+        val dir = homeDir.resolve(".scratch").resolve(key)
+        val services =
+            if (ModelPersistence.exists(dir)) open(dir.toString())
+            else IdeServices.createProjectAt(
+                dir, templateId, mapOf(TemplateArgs.NAME to key) + args, sdk(), languageLevel, androidTools,
+                dexRunner, apkInstaller, customViewRuntime, realViewRuntime = realViewRuntime,
+                kotlinPluginLoader = kotlinPluginLoader, sharedCachesRoot = homeDir, env = env,
+            )
+        scratchEngines[key] = services
+        return services
+    }
+
+    /**
+     * Import the Gradle project at [sourceDir] into a new workspace under [projectsRoot] (copying its
+     * sources, minus build outputs), build a best-effort compatibility-mode model from its scripts, and open
+     * it. Returns null when [sourceDir] isn't an importable Gradle project or the import fails.
+     */
+    fun importGradleProject(sourceDir: Path): IdeServices? {
+        if (!GradleImport.isGradleProject(sourceDir)) return null
+        val dest = uniqueProjectDir(sourceDir.fileName?.toString() ?: "gradle-project")
+        val ok = runCatching {
+            copyTree(sourceDir, dest)
+            IdeServices.importGradleProjectAt(dest, sdk(), languageLevel)
+        }.getOrDefault(false)
+        if (!ok) { runCatching { deleteTree(dest) }; return null }
+        return open(dest.toString())
+    }
 
     /**
      * Permanently delete the project rooted at [rootPath] from disk. Guarded to a direct child of
@@ -214,6 +284,68 @@ class ProjectManager private constructor(
         val rel = root.relativize(file).toString().replace(File.separatorChar, '/')
         if (rel.contains(".platform/caches/")) return true
         return rel.split('/').any { it == "build" || it == "exports" || it == ".gradle" }
+    }
+
+    // --- shareable project packages (.caproj) ---
+
+    /**
+     * Export the project at [rootPath] to a `.caproj` under `<home>/exports` (a fresh, non-clobbering file
+     * name derived from the project name) and return it. The package carries the project's source-of-truth
+     * plus a [CaprojManifest] and, when [ProjectPackaging.ExportOptions.bundleDependencies] is set, the
+     * resolved dependency cache so the recipient can build offline. See [ProjectPackaging].
+     */
+    internal fun exportProject(rootPath: String, options: ProjectPackaging.ExportOptions): Path {
+        val projectDir = Paths.get(rootPath)
+        val meta = exportMeta(projectDir)
+        val exportsDir = homeDir.resolve("exports").also { Files.createDirectories(it) }
+        val base = slug(meta.name).ifEmpty { "project" }
+        var out = exportsDir.resolve("$base.${CaprojFormat.EXTENSION}")
+        var n = 2
+        while (Files.exists(out)) { out = exportsDir.resolve("$base-$n.${CaprojFormat.EXTENSION}"); n++ }
+        return ProjectPackaging.export(projectDir, out, options, exportIcon(projectDir), meta)
+    }
+
+    /** Read a `.caproj`'s manifest, file peek, and icon for the import preview, without extracting it. */
+    internal fun readPackagePreview(archivePath: String): ProjectPackaging.Preview? =
+        ProjectPackaging.readPreview(Paths.get(archivePath))
+
+    /**
+     * Import the `.caproj` at [archivePath] into a new workspace under [projectsRoot] and open it. Returns
+     * null when the archive isn't a valid package, its format is newer than this build understands, or the
+     * extracted tree isn't a loadable workspace (the half-written directory is cleaned up).
+     */
+    fun importProject(archivePath: String): IdeServices? {
+        val archive = Paths.get(archivePath)
+        val preview = ProjectPackaging.readPreview(archive) ?: return null
+        if (preview.manifest.format > CaprojFormat.FORMAT_VERSION) return null
+        val dest = uniqueProjectDir(preview.manifest.name)
+        val ok = runCatching { ProjectPackaging.unpack(archive, dest) }.isSuccess && ModelPersistence.exists(dest)
+        if (!ok) { runCatching { deleteTree(dest) }; return null }
+        return open(dest.toString())
+    }
+
+    /** Project-derived package metadata: name, module list, and Android app namespace read cheaply from the model. */
+    private fun exportMeta(projectDir: Path): ProjectPackaging.ExportMeta {
+        val project = runCatching { ModelPersistence.load(projectDir) }.getOrNull()?.projects?.firstOrNull()
+        val androidFacets = project?.modules?.mapNotNull { m ->
+            m.facets.firstOrNull { it.tomlTable == AndroidFacetCodec.tomlTable }?.let { AndroidFacetCodec.decode(it.values) }
+        } ?: emptyList()
+        val appFacet = androidFacets.firstOrNull { it.isApplication } ?: androidFacets.firstOrNull()
+        return ProjectPackaging.ExportMeta(
+            name = project?.name ?: projectDir.fileName?.toString() ?: "project",
+            isAndroid = androidFacets.isNotEmpty(),
+            packageName = appFacet?.namespace,
+            modules = project?.modules?.map { it.name } ?: emptyList(),
+            createdBy = CaprojFormat.APP_NAME,
+            exportedAt = System.currentTimeMillis(),
+        )
+    }
+
+    /** The Android launcher icon's raster bytes for the package preview, or null (non-raster icons fall back
+     *  to the initial-letter tile in the importer, matching the picker). */
+    private fun exportIcon(projectDir: Path): ByteArray? {
+        val icon = runCatching { ProjectIconLocator.locate(projectDir) }.getOrNull()
+        return (icon as? LauncherIcon.Raster)?.let { runCatching { Files.readAllBytes(it.path) }.getOrNull() }
     }
 
     // --- legacy project recovery ---
@@ -293,6 +425,8 @@ class ProjectManager private constructor(
     /** Dispose application-scoped services + the app extension registry. Call on app exit, after the open
      *  project is closed. */
     fun dispose() {
+        scratchEngines.values.forEach { runCatching { it.close() } }
+        scratchEngines.clear()
         runCatching { env.close() }
     }
 

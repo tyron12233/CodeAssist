@@ -2,17 +2,24 @@ package dev.ide.core.backend
 
 import dev.ide.android.support.resources.LauncherIcon
 import dev.ide.core.BackendContext
+import dev.ide.core.CaprojFormat
 import dev.ide.core.ProjectIconLocator
+import dev.ide.core.ProjectPackaging
 import dev.ide.model.template.ProjectTemplate
 import dev.ide.model.template.TemplateParameter
 import dev.ide.model.template.TextValidation
 import dev.ide.platform.log.Log
 import dev.ide.ui.backend.ProjectInfo
 import dev.ide.ui.backend.ProjectService
+import dev.ide.ui.backend.UiCompatibilityInfo
+import dev.ide.ui.backend.UiExportOptions
+import dev.ide.ui.backend.UiImportPreview
+import dev.ide.ui.backend.UiPackagedEntry
 import dev.ide.ui.backend.UiProjectIcon
 import dev.ide.ui.backend.UiOpenTabs
 import dev.ide.ui.backend.UiProjectResult
 import dev.ide.ui.backend.UiProjectTemplate
+import dev.ide.ui.backend.UiSyncResult
 import dev.ide.ui.backend.UiTemplateParam
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.StateFlow
@@ -33,8 +40,10 @@ internal class ProjectBackend(private val ctx: BackendContext) : ProjectService 
     override val projectEpoch: StateFlow<Int> get() = ctx.projectEpoch
 
     override fun projects(): List<ProjectInfo> =
-        ctx.manager?.list()?.map { ProjectInfo(it.name, it.rootPath, it.moduleCount, it.compatibility, it.isAndroid) }
-            ?: ctx.servicesOrNull?.let { listOf(ProjectInfo(it.projectDisplayName(), it.workspaceRoot.toString(), it.modules().size)) }
+        ctx.manager?.list()?.map { ProjectInfo(it.name, it.rootPath, it.moduleCount, it.compatibility, it.isAndroid, it.lastOpened) }
+            ?: ctx.servicesOrNull?.let {
+                listOf(ProjectInfo(it.projectDisplayName(), it.workspaceRoot.toString(), it.modules().size, runCatching { it.isCompatibilityMode() }.getOrDefault(false)))
+            }
             ?: emptyList()
 
     // Resolved launcher icon, cached so revisiting the picker doesn't re-read the model + image each time
@@ -105,6 +114,118 @@ internal class ProjectBackend(private val ctx: BackendContext) : ProjectService 
     override suspend fun backupProjects(): String? {
         val mgr = ctx.manager ?: return null
         return withContext(Dispatchers.IO) { runCatching { mgr.exportBackup().toString() }.getOrNull() }
+    }
+
+    // ---- Gradle compatibility mode ----
+
+    override fun compatibilityInfo(): UiCompatibilityInfo? {
+        val svc = ctx.servicesOrNull ?: return null
+        if (!svc.isCompatibilityMode()) return null
+        return UiCompatibilityInfo(
+            summary = "Opened in Gradle compatibility mode. The build scripts were read statically, not run, " +
+                "so dependencies and versions were extracted best-effort — builds and dependency resolution may fail.",
+            notes = runCatching { svc.compatibilityNotes() }.getOrDefault(emptyList()),
+        )
+    }
+
+    override suspend fun syncGradle(): UiSyncResult {
+        val svc = ctx.servicesOrNull ?: return UiSyncResult(false, "No project is open.")
+        return withContext(Dispatchers.IO) {
+            runCatching {
+                val outcome = svc.syncGradleFromScripts()
+                if (outcome.ok) {
+                    // The scripts (re-)declared the model's dependencies; re-resolve them and rebuild the
+                    // index so new modules/sources and changed classpaths take effect in the open project.
+                    svc.dependencies.retryDependencyResolution()
+                    svc.reindex()
+                }
+                UiSyncResult(outcome.ok, outcome.message, outcome.notes)
+            }.getOrElse { e ->
+                log.error("Gradle sync failed", e)
+                UiSyncResult(false, e.message ?: "Gradle sync failed")
+            }
+        }
+    }
+
+    override suspend fun importGradleProject(sourceRootPath: String): UiProjectResult {
+        val mgr = ctx.manager ?: return UiProjectResult(false, "Gradle import not supported by this backend")
+        return withContext(Dispatchers.IO) {
+            runCatching {
+                val next = mgr.importGradleProject(Paths.get(sourceRootPath))
+                    ?: return@runCatching UiProjectResult(false, "That folder isn't an importable Gradle project.")
+                ctx.swapEngine(next)
+                UiProjectResult(true, "Imported ${next.projectDisplayName()}", next.workspaceRoot.toString())
+            }.getOrElse { e ->
+                log.error("Couldn't import the Gradle project at $sourceRootPath", e)
+                UiProjectResult(false, e.message ?: "Failed to import Gradle project")
+            }
+        }
+    }
+
+    // ---- shareable project packages (.caproj) ----
+
+    override suspend fun exportProject(rootPath: String, options: UiExportOptions): String? {
+        val mgr = ctx.manager ?: return null
+        return withContext(Dispatchers.IO) {
+            runCatching {
+                mgr.exportProject(
+                    rootPath,
+                    ProjectPackaging.ExportOptions(
+                        bundleDependencies = options.bundleDependencies,
+                        author = options.author,
+                        description = options.description,
+                    ),
+                ).toString()
+            }.getOrElse { e -> log.error("Couldn't export the project at $rootPath", e); null }
+        }
+    }
+
+    override suspend fun previewImportPackage(archivePath: String): UiImportPreview? {
+        val mgr = ctx.manager ?: return null
+        return withContext(Dispatchers.IO) {
+            runCatching {
+                val preview = mgr.readPackagePreview(archivePath) ?: return@runCatching null
+                val m = preview.manifest
+                val compatible = m.format <= CaprojFormat.FORMAT_VERSION
+                UiImportPreview(
+                    name = m.name,
+                    description = m.description,
+                    author = m.author,
+                    createdBy = m.createdBy,
+                    isAndroid = m.isAndroid,
+                    packageName = m.packageName,
+                    moduleCount = m.moduleCount,
+                    modules = m.modules,
+                    fileCount = m.fileCount,
+                    uncompressedSizeBytes = m.uncompressedSize,
+                    hasBundledDeps = m.hasBundledDeps,
+                    icon = preview.iconBytes?.let { UiProjectIcon.Raster(it) },
+                    files = preview.entries.map { UiPackagedEntry(it.path, it.size) },
+                    compatible = compatible,
+                    incompatibleReason = if (compatible) null
+                    else "This package was created by a newer version of CodeAssist. Update to import it.",
+                    screenshots = preview.screenshots,
+                )
+            }.getOrNull()
+        }
+    }
+
+    override suspend fun importPackage(archivePath: String): UiProjectResult {
+        val mgr = ctx.manager ?: return UiProjectResult(false, "Project import not supported by this backend")
+        return withContext(Dispatchers.IO) {
+            runCatching {
+                val next = mgr.importProject(archivePath)
+                    ?: return@runCatching UiProjectResult(
+                        false,
+                        "That file isn't a CodeAssist project package, or it needs a newer version of CodeAssist.",
+                    )
+                ctx.swapEngine(next)
+                UiProjectResult(true, "Imported ${next.projectDisplayName()}", next.workspaceRoot.toString())
+            }.getOrElse { e ->
+                log.error("Couldn't import the package at $archivePath", e)
+                UiProjectResult(false, e.message ?: "Failed to import project")
+            }
+        }
     }
 
     // Open tabs are persisted per project, alongside the other workspace state under `.platform/`. Format:

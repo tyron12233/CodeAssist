@@ -6,9 +6,9 @@ import dev.ide.lang.formatting.FormattingService
 import dev.ide.lang.incremental.DocumentEdit
 import dev.ide.lang.kotlin.parse.KotlinParserHost
 import dev.ide.vfs.VirtualFile
-import org.jetbrains.kotlin.com.intellij.psi.PsiComment
-import org.jetbrains.kotlin.com.intellij.psi.PsiElement
-import org.jetbrains.kotlin.com.intellij.psi.tree.IElementType
+import com.intellij.psi.PsiComment
+import com.intellij.psi.PsiElement
+import com.intellij.psi.tree.IElementType
 import org.jetbrains.kotlin.kdoc.psi.api.KDoc
 import org.jetbrains.kotlin.lexer.KtTokens
 import org.jetbrains.kotlin.psi.KtBinaryExpression
@@ -16,7 +16,7 @@ import org.jetbrains.kotlin.psi.KtFile
 import org.jetbrains.kotlin.psi.KtStringTemplateExpression
 
 /**
- * Editor-only Kotlin formatter. `kotlin-compiler-embeddable` ships the PSI parser but NOT IntelliJ's
+ * Editor-only Kotlin formatter. The bundled compiler ships the PSI parser but NOT IntelliJ's
  * formatting model, so this is a hand-rolled formatter over the parse-only PSI:
  *  - re-indents each line from its brace/paren/bracket nesting depth (a line that opens with a closer
  *    dedents to the enclosing level);

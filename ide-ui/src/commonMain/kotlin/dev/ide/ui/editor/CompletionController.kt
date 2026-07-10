@@ -48,6 +48,9 @@ internal class CompletionController(
         private set
 
     private var job: Job? = null
+    /** The token start the in-flight [job] is resolving, so a continuation keystroke on the SAME token can
+     *  coalesce into it instead of stacking another round-trip. -1 when nothing is in flight. */
+    private var inFlightTokenStart = -1
     // Set by accept() so the edit it makes — which ends in an identifier char and would otherwise re-trigger
     // completion — leaves the popup closed. Consumed by the text-revision trigger.
     private var suppressNextTrigger = false
@@ -57,9 +60,19 @@ internal class CompletionController(
     /** Debounce (ms) before an auto-popup request fires (Settings → Completion → Advanced). */
     var delayMs: Int = 110
 
-    /** Request completion at the caret (debounced unless [immediate]); cancels any prior in-flight request. */
+    /** Request completion at the caret (debounced unless [immediate]); cancels any prior in-flight request.
+     *
+     *  Coalescing: while a request for the SAME token is still in flight, a continuation keystroke does NOT
+     *  stack another round-trip — the in-flight result is a complete prefix set the popup narrows client-side
+     *  for whatever was typed since. Without this, a backend slower than the inter-keystroke gap (the on-device
+     *  K2/IPC case, ~50-130ms) stacks one full completion PER keystroke because `current` lags behind the caret
+     *  and [canNarrowLocally] keeps failing. Skipped for [immediate] (Ctrl-Space) and on a token change (a
+     *  fresh context — e.g. after `.` — genuinely needs a new query). */
     fun refresh(immediate: Boolean = false) {
+        val tokenStart = tokenStartAt(session.doc.text, session.selection.start)
+        if (!immediate && job?.isActive == true && inFlightTokenStart == tokenStart) return
         job?.cancel()
+        inFlightTokenStart = tokenStart
         job = scope.launch {
             if (!immediate) delay(delayMs.milliseconds)
             val text = session.doc.text
@@ -72,10 +85,26 @@ internal class CompletionController(
         }
     }
 
+    /** Start of the identifier token the caret sits in (walks back over word chars, language-aware via
+     *  [extraWordChars]). Matches [CompletionSession.coversCaret]'s notion of "the same token". */
+    private fun tokenStartAt(text: CharSequence, caret: Int): Int {
+        val extra = extraWordChars(path)
+        var s = caret.coerceIn(0, text.length)
+        while (s > 0 && isIdentifierChar(text[s - 1], extra)) s--
+        return s
+    }
+
+    /** Report an ACCEPTED item so the backend's per-project acceptance stats learn the user's picks
+     *  (frequently accepted items rank higher on later completions). Fire-and-forget. */
+    fun noteAccepted(item: UiCompletionItem) {
+        scope.launch { runCatching { backend.editor.completionAccepted(path, item.label) } }
+    }
+
     /** Close the popup + cancel any in-flight request (Esc / accept / click-away / non-identifier). */
     fun dismiss() {
         dismissed = true
         job?.cancel()
+        inFlightTokenStart = -1
     }
 
     /** Re-arm and request fresh items now (Ctrl-Space, or a trigger char `.`/identifier). */

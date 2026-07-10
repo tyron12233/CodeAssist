@@ -123,6 +123,79 @@ class KotlinSemanticHighlightTest {
             toks.any { it.text == "Composable" && it.kind == "annotation" },
             "an annotation usage should be colored as annotation; got $toks",
         )
+        // The leading `@` colors too, so `@Composable` reads as one annotation unit.
+        assertTrue(
+            toks.any { it.text == "@" && it.kind == "annotation" },
+            "the `@` of an annotation should be colored as annotation; got $toks",
+        )
+    }
+
+    @Test
+    fun labelDefinitionAndJumpTargetAreColored() {
+        val code = "fun f() {\n  loop@ for (i in 0..3) {\n    if (i == 2) break@loop\n  }\n}\n"
+        val toks = tokens("Label.kt", code)
+        // The definition (`loop@`) and the `break@loop` target both color as label (≥2 label tokens).
+        assertTrue(
+            toks.count { it.kind == "label" && it.text.contains("loop") } >= 2,
+            "the label definition and jump target should both color as label; got $toks",
+        )
+    }
+
+    @Test
+    fun labeledThisIsColored() {
+        val code = "package demo\nclass Outer {\n  inner class Inner {\n    fun f(): Outer = this@Outer\n  }\n}\n"
+        val toks = tokens("This.kt", code)
+        assertTrue(
+            toks.any { it.kind == "label" && it.text.contains("Outer") },
+            "the label of `this@Outer` should color as label; got $toks",
+        )
+    }
+
+    @Test
+    fun constValIsColoredConstant() {
+        val toks = tokens("Const.kt", "package demo\nconst val MAX = 10\n")
+        assertTrue(
+            toks.any { it.text == "MAX" && it.kind == "constant" && HighlightModifier.DECLARATION in it.mods },
+            "a `const val` declaration should color as constant; got $toks",
+        )
+    }
+
+    @Test
+    fun primaryConstructorPropertiesAreColoredAsProperties() {
+        // A `val`/`var` primary-constructor parameter IS a member property (data/value/regular class) — colored
+        // like a property at its declaration (matching its uses), while a plain parameter stays a parameter.
+        val code = "package demo\n" +
+            "data class Person(val name: String, var age: Int, greeting: String)\n"
+        val toks = tokens("Person.kt", code)
+        assertTrue(
+            toks.any { it.text == "name" && it.kind == "property" && HighlightModifier.READONLY in it.mods },
+            "a `val` primary-constructor property should color as a read-only property; got $toks",
+        )
+        assertTrue(
+            toks.any { it.text == "age" && it.kind == "property" && HighlightModifier.MUTABLE in it.mods },
+            "a `var` primary-constructor property should color as a mutable property; got $toks",
+        )
+        assertTrue(
+            toks.any { it.text == "greeting" && it.kind == "parameter" },
+            "a plain (no val/var) constructor parameter should stay a parameter; got $toks",
+        )
+    }
+
+    @Test
+    fun callableReferenceMemberIsColored() {
+        // `Person::age` — the receiver `Person` reads as a class and the referenced member `age` as a property.
+        val code = "package demo\n" +
+            "data class Person(val name: String, val age: Int)\n" +
+            "fun f() { listOf(Person(\"a\", 1)).maxByOrNull(Person::age) }\n"
+        val toks = tokens("Ref.kt", code)
+        assertTrue(
+            toks.any { it.text == "age" && it.kind == "property" && HighlightModifier.DECLARATION !in it.mods },
+            "the callable-reference member `Person::age` should color as a property; got $toks",
+        )
+        assertTrue(
+            toks.count { it.text == "Person" && it.kind == "class" } >= 1,
+            "the callable-reference receiver `Person` should color as a class; got $toks",
+        )
     }
 
     @Test
@@ -161,6 +234,132 @@ class KotlinSemanticHighlightTest {
         assertTrue(
             toks.any { it.text == "oldApi" && it.kind == "method" && HighlightModifier.DEPRECATED in it.mods },
             "a call to a cross-file @Deprecated function should be struck through; got $toks",
+        )
+    }
+
+    @Test
+    fun stringTemplateVariableIsColored() {
+        // The core ask: a variable interpolated into a string colors like the variable it is (not string green).
+        val short = tokens("Tpl.kt", "fun f() {\n  val name = \"x\"\n  println(\"hi \$name\")\n}\n")
+        assertTrue(
+            short.count { it.text == "name" && it.kind == "localVariable" } >= 2,
+            "the interpolated `\$name` should color as a localVariable; got $short",
+        )
+        val block = tokens("Tpl.kt", "package demo\nfun f(p: Point) { println(\"x=\${p.x}\") }")
+        assertTrue(
+            block.any { it.text == "p" && it.kind == "parameter" } && block.any { it.text == "x" && it.kind == "property" },
+            "a `\${p.x}` member read should color the receiver + property; got $block",
+        )
+    }
+
+    @Test
+    fun stringTemplateDelimitersAreColored() {
+        val toks = tokens("Tpl.kt", "package demo\nfun f(p: Point) { println(\"a\$p b\${p.x}c\") }")
+        assertTrue(toks.any { it.text == "\$" && it.kind == "stringTemplateEntry" }, "the `\$` of `\$p` should be colored; got $toks")
+        assertTrue(toks.any { it.text == "\${" && it.kind == "stringTemplateEntry" }, "the `\${` should be colored; got $toks")
+        assertTrue(toks.any { it.text == "}" && it.kind == "stringTemplateEntry" }, "the closing `}` should be colored; got $toks")
+    }
+
+    @Test
+    fun escapeSequenceIsColored() {
+        val toks = tokens("Esc.kt", "fun f() { val s = \"tab\\there\\n\" }")
+        assertTrue(toks.any { it.text == "\\t" && it.kind == "stringEscape" }, "`\\t` should color as stringEscape; got $toks")
+        assertTrue(toks.any { it.text == "\\n" && it.kind == "stringEscape" }, "`\\n` should color as stringEscape; got $toks")
+    }
+
+    @Test
+    fun destructuringDeclarationAndUseAreColored() {
+        val toks = tokens("Destr.kt", "package demo\nfun f(p: Point) {\n  val (a, b) = p\n  println(a + b)\n}\n")
+        // Both entries are declared read-only locals, and the later `a`/`b` reads resolve back to them.
+        assertTrue(
+            toks.count { it.text == "a" && it.kind == "localVariable" && HighlightModifier.DECLARATION in it.mods } == 1 &&
+                toks.count { it.text == "a" && it.kind == "localVariable" && HighlightModifier.DECLARATION !in it.mods } >= 1,
+            "the destructured `a` should be a localVariable at both its declaration and use; got $toks",
+        )
+        assertTrue(
+            toks.any { it.text == "b" && it.kind == "localVariable" && HighlightModifier.READONLY in it.mods },
+            "the destructured `b` should be read-only; got $toks",
+        )
+    }
+
+    @Test
+    fun forLoopDestructuringIsColored() {
+        val toks = tokens("ForD.kt", "package demo\nfun f(m: Map<String, Int>) {\n  for ((k, v) in m) { println(k); println(v) }\n}\n")
+        assertTrue(
+            toks.count { it.text == "k" && it.kind == "localVariable" } >= 2 &&
+                toks.count { it.text == "v" && it.kind == "localVariable" } >= 2,
+            "for-loop destructuring `(k, v)` should color both the declaration and the uses; got $toks",
+        )
+    }
+
+    @Test
+    fun propertyAccessorKeywordIsColored() {
+        // `private set` — the visibility modifier is colored by the lexer; the `set`/`get` accessor keyword
+        // is colored semantically (the lexer leaves it uncolored, which reads as "set is not highlighted").
+        val code = "package demo\nclass C {\n  var x = 1\n    private set\n  val y: Int get() = x\n}\n"
+        val toks = tokens("Acc.kt", code)
+        assertTrue(
+            toks.any { it.text == "set" && it.kind == "keyword" },
+            "the `set` accessor keyword should color as a keyword; got $toks",
+        )
+        assertTrue(
+            toks.any { it.text == "get" && it.kind == "keyword" },
+            "the `get` accessor keyword should color as a keyword; got $toks",
+        )
+    }
+
+    @Test
+    fun capturedLocalInAnonymousObjectIsColored() {
+        // A `var` local captured by an anonymous object's overridden method must still color as a mutable local
+        // (the scope walk has to cross the object boundary — anon objects capture enclosing locals).
+        val code = "package demo\n" +
+            "interface L { fun onClick() }\n" +
+            "fun f() {\n" +
+            "  var clickCount = 0\n" +
+            "  val l = object : L {\n" +
+            "    override fun onClick() { clickCount++ }\n" +
+            "  }\n" +
+            "}\n"
+        val toks = tokens("Cap.kt", code)
+        assertTrue(
+            toks.any { it.text == "clickCount" && it.kind == "localVariable" && HighlightModifier.MUTABLE in it.mods },
+            "a captured `var` local should color as a mutable localVariable inside an anon-object method; got $toks",
+        )
+    }
+
+    @Test
+    fun initBlockCtorParamAndPropertyAreColored() {
+        val code = "package demo\n" +
+            "class User constructor(_nickname: String) {\n" +
+            "  val nickname: String\n" +
+            "  init { nickname = _nickname }\n" +
+            "}\n"
+        val toks = tokens("Init.kt", code)
+        assertTrue(
+            toks.any { it.text == "_nickname" && it.kind == "parameter" },
+            "a plain constructor param used in `init` should color as a parameter; got $toks",
+        )
+        assertTrue(
+            toks.any { it.text == "nickname" && it.kind == "property" && HighlightModifier.DECLARATION !in it.mods },
+            "the member property assigned in `init` should color as a property; got $toks",
+        )
+    }
+
+    @Test
+    fun setterValueParamAndFieldKeywordAreColored() {
+        val code = "package demo\n" +
+            "class C {\n" +
+            "  var address = \"\"\n" +
+            "    set(value) { field = value }\n" +
+            "}\n"
+        val toks = tokens("Setter.kt", code)
+        assertTrue(
+            toks.any { it.text == "value" && it.kind == "parameter" },
+            "the setter's `value` parameter should color as a parameter; got $toks",
+        )
+        assertTrue(
+            toks.count { it.text == "field" && it.kind == "keyword" } >= 1,
+            "`field` in an accessor should color as a keyword; got $toks",
         )
     }
 

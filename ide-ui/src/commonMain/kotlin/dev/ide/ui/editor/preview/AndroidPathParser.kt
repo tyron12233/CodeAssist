@@ -38,68 +38,116 @@ object AndroidPathParser {
         fun num(): Float = tokens[i++].toFloat()
 
         while (i < tokens.size) {
-            val cmd = if (tokens[i].length == 1 && tokens[i][0].isLetter()) tokens[i++][0] else prevCmd
+            val cmd =
+                if (tokens[i].length == 1 && tokens[i][0].isLetter()) tokens[i++][0] else prevCmd
             val rel = cmd.isLowerCase()
             when (cmd.uppercaseChar()) {
                 'M' -> {
-                    var x = num(); var y = num()
-                    if (rel) { x += cur.x; y += cur.y }
+                    var x = num();
+                    var y = num()
+                    if (rel) {
+                        x += cur.x; y += cur.y
+                    }
                     path.moveTo(x, y); cur.x = x; cur.y = y; start.x = x; start.y = y
                     // Subsequent implicit pairs after M are treated as L.
                     while (hasNumber(tokens, i)) {
-                        var lx = num(); var ly = num()
-                        if (rel) { lx += cur.x; ly += cur.y }
+                        var lx = num();
+                        var ly = num()
+                        if (rel) {
+                            lx += cur.x; ly += cur.y
+                        }
                         path.lineTo(lx, ly); cur.x = lx; cur.y = ly
                     }
                 }
+
                 'L' -> while (hasNumber(tokens, i)) {
-                    var x = num(); var y = num()
-                    if (rel) { x += cur.x; y += cur.y }
+                    var x = num();
+                    var y = num()
+                    if (rel) {
+                        x += cur.x; y += cur.y
+                    }
                     path.lineTo(x, y); cur.x = x; cur.y = y
                 }
+
                 'H' -> while (hasNumber(tokens, i)) {
                     var x = num(); if (rel) x += cur.x
                     path.lineTo(x, cur.y); cur.x = x
                 }
+
                 'V' -> while (hasNumber(tokens, i)) {
                     var y = num(); if (rel) y += cur.y
                     path.lineTo(cur.x, y); cur.y = y
                 }
+
                 'C' -> while (hasNumber(tokens, i)) {
-                    var x1 = num(); var y1 = num(); var x2 = num(); var y2 = num(); var x = num(); var y = num()
-                    if (rel) { x1 += cur.x; y1 += cur.y; x2 += cur.x; y2 += cur.y; x += cur.x; y += cur.y }
+                    var x1 = num();
+                    var y1 = num();
+                    var x2 = num();
+                    var y2 = num();
+                    var x = num();
+                    var y = num()
+                    if (rel) {
+                        x1 += cur.x; y1 += cur.y; x2 += cur.x; y2 += cur.y; x += cur.x; y += cur.y
+                    }
                     path.cubicTo(x1, y1, x2, y2, x, y)
                     lastCtrlX = x2; lastCtrlY = y2; cur.x = x; cur.y = y
                 }
+
                 'S' -> while (hasNumber(tokens, i)) {
-                    var x2 = num(); var y2 = num(); var x = num(); var y = num()
-                    if (rel) { x2 += cur.x; y2 += cur.y; x += cur.x; y += cur.y }
+                    var x2 = num();
+                    var y2 = num();
+                    var x = num();
+                    var y = num()
+                    if (rel) {
+                        x2 += cur.x; y2 += cur.y; x += cur.x; y += cur.y
+                    }
                     val (rx, ry) = reflect(prevCmd, cur, lastCtrlX, lastCtrlY)
                     path.cubicTo(rx, ry, x2, y2, x, y)
                     lastCtrlX = x2; lastCtrlY = y2; cur.x = x; cur.y = y
                 }
+
                 'Q' -> while (hasNumber(tokens, i)) {
-                    var x1 = num(); var y1 = num(); var x = num(); var y = num()
-                    if (rel) { x1 += cur.x; y1 += cur.y; x += cur.x; y += cur.y }
+                    var x1 = num();
+                    var y1 = num();
+                    var x = num();
+                    var y = num()
+                    if (rel) {
+                        x1 += cur.x; y1 += cur.y; x += cur.x; y += cur.y
+                    }
                     path.quadraticBezierTo(x1, y1, x, y)
                     lastCtrlX = x1; lastCtrlY = y1; cur.x = x; cur.y = y
                 }
+
                 'T' -> while (hasNumber(tokens, i)) {
-                    var x = num(); var y = num()
-                    if (rel) { x += cur.x; y += cur.y }
+                    var x = num();
+                    var y = num()
+                    if (rel) {
+                        x += cur.x; y += cur.y
+                    }
                     val (rx, ry) = reflect(prevCmd, cur, lastCtrlX, lastCtrlY)
                     path.quadraticBezierTo(rx, ry, x, y)
                     lastCtrlX = rx; lastCtrlY = ry; cur.x = x; cur.y = y
                 }
+
                 'A' -> while (hasNumber(tokens, i)) {
-                    val rx = num(); val ry = num(); val rot = num()
-                    val large = num() != 0f; val sweep = num() != 0f
-                    var x = num(); var y = num()
-                    if (rel) { x += cur.x; y += cur.y }
+                    val rx = num();
+                    val ry = num();
+                    val rot = num()
+                    val large = num() != 0f;
+                    val sweep = num() != 0f
+                    var x = num();
+                    var y = num()
+                    if (rel) {
+                        x += cur.x; y += cur.y
+                    }
                     arcTo(path, cur.x, cur.y, rx, ry, rot, large, sweep, x, y)
                     cur.x = x; cur.y = y
                 }
-                'Z' -> { path.close(); cur.x = start.x; cur.y = start.y }
+
+                'Z' -> {
+                    path.close(); cur.x = start.x; cur.y = start.y
+                }
+
                 else -> return // unknown command — stop
             }
             prevCmd = cmd
@@ -107,7 +155,12 @@ object AndroidPathParser {
     }
 
     /** Reflected control point for S/T smooth curves: mirror the last control point about the current point. */
-    private fun reflect(prevCmd: Char, cur: Cursor, lastCtrlX: Float, lastCtrlY: Float): Pair<Float, Float> {
+    private fun reflect(
+        prevCmd: Char,
+        cur: Cursor,
+        lastCtrlX: Float,
+        lastCtrlY: Float
+    ): Pair<Float, Float> {
         val smooth = prevCmd.uppercaseChar() in setOf('C', 'S', 'Q', 'T')
         return if (smooth) (2 * cur.x - lastCtrlX) to (2 * cur.y - lastCtrlY) else cur.x to cur.y
     }
@@ -117,15 +170,22 @@ object AndroidPathParser {
         path: Path, x0: Float, y0: Float, rxIn: Float, ryIn: Float, rotDeg: Float,
         large: Boolean, sweep: Boolean, x: Float, y: Float,
     ) {
-        if (rxIn == 0f || ryIn == 0f) { path.lineTo(x, y); return }
-        var rx = abs(rxIn); var ry = abs(ryIn)
+        if (rxIn == 0f || ryIn == 0f) {
+            path.lineTo(x, y); return
+        }
+        var rx = abs(rxIn);
+        var ry = abs(ryIn)
         val phi = rotDeg * PI.toFloat() / 180f
-        val cosP = cos(phi); val sinP = sin(phi)
-        val dx = (x0 - x) / 2f; val dy = (y0 - y) / 2f
+        val cosP = cos(phi);
+        val sinP = sin(phi)
+        val dx = (x0 - x) / 2f;
+        val dy = (y0 - y) / 2f
         val x1p = cosP * dx + sinP * dy
         val y1p = -sinP * dx + cosP * dy
         var lambda = (x1p * x1p) / (rx * rx) + (y1p * y1p) / (ry * ry)
-        if (lambda > 1f) { val s = sqrt(lambda); rx *= s; ry *= s }
+        if (lambda > 1f) {
+            val s = sqrt(lambda); rx *= s; ry *= s
+        }
         val sign = if (large != sweep) 1f else -1f
         val num = (rx * rx * ry * ry - rx * rx * y1p * y1p - ry * ry * x1p * x1p).coerceAtLeast(0f)
         val den = rx * rx * y1p * y1p + ry * ry * x1p * x1p
@@ -144,8 +204,10 @@ object AndroidPathParser {
         val t = 4f / 3f * sin(delta / 2f) / (1f + cos(delta / 2f))
         var th = theta1
         for (seg in 0 until segments) {
-            val cosTh = cos(th); val sinTh = sin(th)
-            val cosTh2 = cos(th + delta); val sinTh2 = sin(th + delta)
+            val cosTh = cos(th);
+            val sinTh = sin(th)
+            val cosTh2 = cos(th + delta);
+            val sinTh2 = sin(th + delta)
             val e1x = cx + rx * cosP * cosTh - ry * sinP * sinTh
             val e1y = cy + rx * sinP * cosTh + ry * cosP * sinTh
             val e2x = cx + rx * cosP * cosTh2 - ry * sinP * sinTh2
@@ -174,22 +236,36 @@ object AndroidPathParser {
     private fun tokenize(data: String): List<String> {
         val out = ArrayList<String>()
         val sb = StringBuilder()
-        fun flush() { if (sb.isNotEmpty()) { out += sb.toString(); sb.clear() } }
+        fun flush() {
+            if (sb.isNotEmpty()) {
+                out += sb.toString(); sb.clear()
+            }
+        }
+
         var idx = 0
         while (idx < data.length) {
             val c = data[idx]
             when {
-                c.isLetter() -> { flush(); out += c.toString() }
+                c.isLetter() -> {
+                    flush(); out += c.toString()
+                }
+
                 c == ',' || c.isWhitespace() -> flush()
                 c == '-' || c == '+' -> {
                     // A sign starts a new number unless it's an exponent sign (e/E just before).
                     if (sb.isNotEmpty() && (sb.last() == 'e' || sb.last() == 'E')) sb.append(c)
-                    else { flush(); sb.append(c) }
+                    else {
+                        flush(); sb.append(c)
+                    }
                 }
+
                 c == '.' -> {
                     // A second '.' in a token starts a new number (e.g. "1.5.5" → "1.5", ".5").
-                    if (sb.contains('.')) { flush(); sb.append(c) } else sb.append(c)
+                    if (sb.contains('.')) {
+                        flush(); sb.append(c)
+                    } else sb.append(c)
                 }
+
                 else -> sb.append(c)
             }
             idx++

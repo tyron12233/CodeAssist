@@ -4,9 +4,10 @@ import dev.ide.lang.completion.CaretAction
 import dev.ide.lang.completion.CompletionItem
 import dev.ide.lang.completion.CompletionItemKind
 import dev.ide.lang.template.SnippetExpansion
-import org.jetbrains.kotlin.com.intellij.psi.PsiElement
-import org.jetbrains.kotlin.com.intellij.psi.PsiWhiteSpace
+import com.intellij.psi.PsiElement
+import com.intellij.psi.PsiWhiteSpace
 import org.jetbrains.kotlin.lexer.KtTokens
+import org.jetbrains.kotlin.psi.KtBinaryExpression
 import org.jetbrains.kotlin.psi.KtBlockExpression
 import org.jetbrains.kotlin.psi.KtClassBody
 import org.jetbrains.kotlin.psi.KtDoWhileExpression
@@ -15,6 +16,7 @@ import org.jetbrains.kotlin.psi.KtForExpression
 import org.jetbrains.kotlin.psi.KtFunctionLiteral
 import org.jetbrains.kotlin.psi.KtImportDirective
 import org.jetbrains.kotlin.psi.KtNamedFunction
+import org.jetbrains.kotlin.psi.KtOperationReferenceExpression
 import org.jetbrains.kotlin.psi.KtPackageDirective
 import org.jetbrains.kotlin.psi.KtParameter
 import org.jetbrains.kotlin.psi.KtParameterList
@@ -61,7 +63,11 @@ import org.jetbrains.kotlin.psi.psiUtil.getParentOfType
  *
  * A handful of positions the [Place] walk can't classify from ancestry alone (`by` delegation, type-parameter
  * variance, `when`-condition labels, property accessors, `try` continuations, `where` clauses) are detected
- * with dedicated predicates outside the switch.
+ * with dedicated predicates outside the switch. Three of those are *exclusive* — the only keyword the slot
+ * admits is the position's own, so they're offered and returned before the [place] switch (whose enclosing-
+ * block walk would otherwise leak `val`/`do`/`if` into the slot): an import alias (`import a.B █` → `as`),
+ * an infix-operator name (`0 downTo█`, `x as█`, `x in█` — the operation reference of a binary expression),
+ * and a for-loop's `in` (`for (x █`).
  *
  * Keywords surface as `kind = KEYWORD`; the multi-line live templates (`if`, `for`, `fun`, `main`, …) surface
  * as `kind = SNIPPET` and step through tab stops on accept via [CaretAction.ExpandSnippet] — the same machinery
@@ -101,9 +107,23 @@ internal object KotlinKeywords {
         // --- positions the ancestry walk classifies as NONE / STATEMENT / EXPRESSION but which admit their own
         //     keyword, so they're detected explicitly and offered BEFORE the [place] switch ---
 
+        val declRun = precedingDeclRun(precedingText, tokenStart)
+
+        // Exclusive positions — the slot admits ONLY the position's own keyword(s), so they're offered and
+        // returned before the [place] switch (whose enclosing-block walk would otherwise leak `do`/`if`/`val`
+        // into the slot alongside the prefix-matching intent).
+        //
+        //   `import a.b.C █`  → `as` (aliased import). The half-typed alias parses as a PsiErrorElement sibling
+        //                        of the import directive, so it's read from the preceding text like `by`.
+        if (importAliasSpot(declRun)) { kw("as", trailingSpace = true); return out }
+        //   `for (x █`         → `in`, before the loop range's `in` keyword has been typed.
+        if (forLoopInSpot(leaf)) { kw("in", trailingSpace = true); return out }
+        //   `constructor() : █` → `this` / `super`, a secondary constructor's delegation call (the only two
+        //                          things that fit the delegation-reference slot).
+        if (constructorDelegationSpot(leaf, declRun)) { kw("this"); kw("super"); return out }
+
         // `by` delegation: a property-delegation spot (`val x █`) reads as STATEMENT/MEMBER, a supertype list
         // (`class A : I █`) reads as [Place.NONE] — both detected from the preceding declaration text.
-        val declRun = precedingDeclRun(precedingText, tokenStart)
         if (propertyDelegationSpot(declRun) || classDelegationSpot(declRun)) kw("by", trailingSpace = true)
         // Type-parameter variance/`reified` (`class Box<█>`, `inline fun <█>`) — a [Place.NONE] position.
         typeParamSpot(leaf)?.let { ctx ->
@@ -130,6 +150,16 @@ internal object KotlinKeywords {
         if (whenCond != null) {
             kw("else", trailingSpace = true)
             if (whenCond.hasSubject) { kw("is", trailingSpace = true); kw("in", trailingSpace = true); kw("!is", trailingSpace = true); kw("!in", trailingSpace = true) }
+        }
+
+        // Infix-operator slot (`x as█`, `0 downTo█`) — the `as`/`as?`/`in`/`!in`/`is`/`!is` KEYWORD operators;
+        // the infix FUNCTIONS (`downTo`/`step`/user-defined) are type-resolved against the left operand by
+        // KotlinCompletion, not hardcoded here. Checked LAST and only when no continuation predicate above
+        // claimed the slot: a `try { } catch█` / `val x: Int get█` also parses as a binary operation reference,
+        // but its catch / accessor reading (already in [out]) must win.
+        if (out.isEmpty() && infixOperatorSpot(leaf)) {
+            for (op in INFIX_OPERATORS) kw(op, trailingSpace = true)
+            return out
         }
 
         val place = if (whenCond != null) Place.EXPRESSION else placeOf(leaf)
@@ -365,6 +395,53 @@ internal object KotlinKeywords {
     private fun classDelegationSpot(run: String): Boolean =
         CLASS_DELEGATE_RE.matches(run) && !run.contains(BY_WORD)
     private val BY_WORD = Regex("""\bby\b""")
+
+    // --- import alias, infix operators, for-loop `in` (the exclusive positions offered before the switch) ---
+
+    /** An `import a.b.C █` whose imported path is complete and not yet aliased — so `as` completes the alias.
+     *  Detected from the preceding text (like `by`): the half-typed alias parses as a sibling PsiErrorElement,
+     *  not into the import directive. A star import (`import a.*`) can't be aliased, so `*` fails the match. */
+    private val IMPORT_ALIAS_RE = Regex("""import\s+[\w.]+""")
+    private fun importAliasSpot(run: String): Boolean = IMPORT_ALIAS_RE.matches(run)
+
+    /** True when [leaf] is the operation-reference slot of a binary expression (`a foo█`, `0 downTo█`, `x as█`)
+     *  — where an infix function name or the `as`/`in`/`is` operators complete. A right operand (`a + b█`) is a
+     *  plain name reference, not the operation reference, so it doesn't qualify. */
+    private fun infixOperatorSpot(leaf: PsiElement?): Boolean {
+        val ref = leaf?.getParentOfType<KtOperationReferenceExpression>(strict = false) ?: return false
+        return (ref.parent as? KtBinaryExpression)?.operationReference === ref
+    }
+
+    /** The hard-keyword operators admissible at an [infixOperatorSpot] (`x as T`, `x in xs`, `x is T`). These
+     *  are language tokens, not functions — the infix *functions* that also fit the slot are resolved against
+     *  the left operand's type by KotlinCompletion so a user-defined `infix fun` completes too. */
+    private val INFIX_OPERATORS = listOf("in", "!in", "is", "!is", "as", "as?")
+
+    /** True when [leaf] sits after a for-loop's variable but before its range's `in` (`for (x █`), so `in`
+     *  completes the loop header. Excludes still-typing-the-variable (`for (fo█`, marker inside the parameter)
+     *  and a loop whose range/`in` is already present (`for (x in █`, `loopRange` non-null). */
+    private fun forLoopInSpot(leaf: PsiElement?): Boolean {
+        val forE = leaf?.getParentOfType<KtForExpression>(strict = false) ?: return false
+        if (forE.loopRange != null) return false
+        val param = forE.loopParameter ?: return false
+        return leaf.textRange.startOffset > param.textRange.endOffset
+    }
+
+    /**
+     * True at the delegation-reference slot of a SECONDARY constructor (`constructor(…) : █`, before the
+     * `this(…)`/`super(…)` call) — the only position where the `this`/`super` delegation keywords fit.
+     * Detected from the preceding TEXT ([run]) like `by`/`where`: the half-typed delegation reference parses
+     * as a `PsiErrorElement` sibling under the class body, not into a `KtSecondaryConstructor`, so an ancestry
+     * walk can't see it. Requiring a [KtClassBody] ancestor excludes a PRIMARY constructor's `: Base()`
+     * supertype list, which sits in the class HEADER (before `{`); a fully-typed `this(█)`/`super(█)` argument
+     * slot doesn't match the regex (the `(` follows the `:`), so those stay ordinary expression positions.
+     */
+    private fun constructorDelegationSpot(leaf: PsiElement?, run: String): Boolean =
+        CTOR_DELEGATION_RE.matches(run) && leaf?.getParentOfType<KtClassBody>(strict = false) != null
+
+    /** A secondary constructor whose delegation `:` has been opened but not yet delegated (`constructor(…) : `),
+     *  optionally preceded by visibility modifiers. Anchored to the literal `constructor` keyword. */
+    private val CTOR_DELEGATION_RE = Regex("""(?:[a-z]+\s+)*constructor\s*\([^)]*\)\s*:\s*""")
 
     private class TypeParamCtx(val inlineFun: Boolean)
 

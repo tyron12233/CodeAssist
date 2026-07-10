@@ -23,7 +23,27 @@ import androidx.compose.ui.unit.dp
 import dev.ide.ui.backend.IdeBackend
 import dev.ide.ui.backend.UiPermissionDecision
 import dev.ide.ui.backend.UiPermissionRequest
+import dev.ide.ui.generated.resources.Res
+import dev.ide.ui.generated.resources.perm_allow_always
+import dev.ide.ui.generated.resources.perm_allow_once
+import dev.ide.ui.generated.resources.perm_allow_run
+import dev.ide.ui.generated.resources.perm_deny
+import dev.ide.ui.generated.resources.perm_title_default
+import dev.ide.ui.generated.resources.perm_title_exec
+import dev.ide.ui.generated.resources.perm_title_file_read
+import dev.ide.ui.generated.resources.perm_title_file_write
+import dev.ide.ui.generated.resources.perm_title_network
+import dev.ide.ui.generated.resources.perm_title_reflection
+import dev.ide.ui.generated.resources.perm_verb_default
+import dev.ide.ui.generated.resources.perm_verb_exec
+import dev.ide.ui.generated.resources.perm_verb_file_read
+import dev.ide.ui.generated.resources.perm_verb_file_write
+import dev.ide.ui.generated.resources.perm_verb_network
+import dev.ide.ui.generated.resources.perm_verb_reflection
+import dev.ide.ui.generated.resources.perm_wants_to
 import dev.ide.ui.theme.Ca
+import org.jetbrains.compose.resources.StringResource
+import org.jetbrains.compose.resources.stringResource
 
 /**
  * The run sandbox's permission prompt: while a program the IDE runs hits a guarded operation (network /
@@ -57,23 +77,23 @@ private fun PermissionCard(req: UiPermissionRequest, answer: (UiPermissionDecisi
             .border(1.dp, Ca.colors.glassEdge, RoundedCornerShape(Ca.radius.xl))
             .padding(20.dp),
     ) {
-        Text(title, color = Ca.colors.textPrimary, style = Ca.type.subhead, fontWeight = FontWeight.SemiBold)
+        Text(stringResource(title), color = Ca.colors.textPrimary, style = Ca.type.subhead, fontWeight = FontWeight.SemiBold)
         Spacer(Modifier.height(6.dp))
         Text(
-            "The running program wants to $verb:",
+            stringResource(Res.string.perm_wants_to, stringResource(verb)),
             color = Ca.colors.textSecondary, style = Ca.type.footnote,
         )
         Spacer(Modifier.height(2.dp))
         Text(req.detail, color = Ca.colors.textPrimary, style = Ca.type.footnote, fontWeight = FontWeight.Medium)
         Spacer(Modifier.height(16.dp))
 
-        PermButton("Allow once", PermKind.Neutral) { answer(UiPermissionDecision.ALLOW_ONCE) }
+        PermButton(stringResource(Res.string.perm_allow_once), PermKind.Neutral) { answer(UiPermissionDecision.ALLOW_ONCE) }
         Spacer(Modifier.height(8.dp))
-        PermButton("Allow for this run", PermKind.Accent) { answer(UiPermissionDecision.ALLOW_RUN) }
+        PermButton(stringResource(Res.string.perm_allow_run), PermKind.Accent) { answer(UiPermissionDecision.ALLOW_RUN) }
         Spacer(Modifier.height(8.dp))
-        PermButton("Always allow in this project", PermKind.Neutral) { answer(UiPermissionDecision.ALLOW_ALWAYS) }
+        PermButton(stringResource(Res.string.perm_allow_always), PermKind.Neutral) { answer(UiPermissionDecision.ALLOW_ALWAYS) }
         Spacer(Modifier.height(8.dp))
-        PermButton("Deny", PermKind.Danger) { answer(UiPermissionDecision.DENY) }
+        PermButton(stringResource(Res.string.perm_deny), PermKind.Danger) { answer(UiPermissionDecision.DENY) }
     }
 }
 
@@ -105,11 +125,11 @@ private fun PermButton(label: String, kind: PermKind, onClick: () -> Unit) {
 }
 
 /** Title + verb for a guard-category id (matches GuardCategory.name().lowercase()). */
-private fun labelFor(category: String): Pair<String, String> = when (category) {
-    "network" -> "Allow network access?" to "connect to the network"
-    "file_read" -> "Allow reading a file?" to "read the file"
-    "file_write" -> "Allow writing a file?" to "write the file"
-    "reflection" -> "Allow reflection?" to "use reflection on"
-    "exec" -> "Allow running a process?" to "run the process"
-    else -> "Allow this action?" to "perform"
+private fun labelFor(category: String): Pair<StringResource, StringResource> = when (category) {
+    "network" -> Res.string.perm_title_network to Res.string.perm_verb_network
+    "file_read" -> Res.string.perm_title_file_read to Res.string.perm_verb_file_read
+    "file_write" -> Res.string.perm_title_file_write to Res.string.perm_verb_file_write
+    "reflection" -> Res.string.perm_title_reflection to Res.string.perm_verb_reflection
+    "exec" -> Res.string.perm_title_exec to Res.string.perm_verb_exec
+    else -> Res.string.perm_title_default to Res.string.perm_verb_default
 }

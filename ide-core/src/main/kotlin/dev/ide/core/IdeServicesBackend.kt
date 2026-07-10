@@ -11,6 +11,7 @@ import dev.ide.ui.backend.FileService
 import dev.ide.ui.backend.ModuleService
 import dev.ide.ui.backend.SigningService
 import dev.ide.ui.backend.PreviewService
+import dev.ide.ui.backend.LearnService
 import dev.ide.ui.backend.ProjectService
 import dev.ide.ui.backend.SdkService
 import dev.ide.ui.backend.StoreService
@@ -26,9 +27,11 @@ import dev.ide.core.backend.DependencyBackend
 import dev.ide.core.backend.DiagnosticsBackend
 import dev.ide.core.backend.EditorBackend
 import dev.ide.core.backend.stackTraceString
+import dev.ide.core.backend.timedPass
 import dev.ide.core.backend.FileBackend
 import dev.ide.core.backend.ModuleBackend
 import dev.ide.core.backend.PreviewBackend
+import dev.ide.core.backend.LearnBackend
 import dev.ide.core.backend.ProjectBackend
 import dev.ide.core.backend.StoreBackend
 import dev.ide.core.backend.SdkBackend
@@ -157,8 +160,8 @@ class IdeServicesBackend(
      *  3. [preview] — preview rendering/lowering: lowest priority, preempted by both; retries automatically.
      */
     private val scheduler = EngineScheduler(engineDispatcher)
-    override suspend fun <T> interactive(block: () -> T): T = logEditorFailures("completion") { scheduler.interactive(block = block) }
-    override suspend fun <T> background(block: () -> T): T = logEditorFailures("analysis") { scheduler.background(block = block) }
+    override suspend fun <T> interactive(block: suspend () -> T): T = logEditorFailures("completion") { scheduler.interactive(block = block) }
+    override suspend fun <T> background(block: suspend () -> T): T = logEditorFailures("analysis") { scheduler.background(block = block) }
     override suspend fun <T> preview(block: suspend () -> T): T = logEditorFailures("preview") { scheduler.preview(block = block) }
 
     private val editorLog = Log.logger("ide.editor")
@@ -241,6 +244,10 @@ class IdeServicesBackend(
     override val signing: SigningService = SigningBackend(this)
     override val projects: ProjectService = ProjectBackend(this)
     override val store: StoreService = StoreBackend(this)
+    // Held as the concrete type so the Compose preview host can reach its ide-core-only lesson-lowering methods
+    // ([lowerLessonComposePreview]) that return an ide-core type the [LearnService] UI interface can't name.
+    private val learnBackend = LearnBackend(this)
+    override val learn: LearnService = learnBackend
     override val sdk: SdkService = SdkBackend(this)
     override val settings: SettingsService = SettingsBackend(this)
     override val actions: ActionService = ActionBackend(this)
@@ -310,6 +317,7 @@ class IdeServicesBackend(
             name = services.projectDisplayName(),
             rootPath = services.workspaceRoot.toString(),
             moduleCount = services.modules().size,
+            compatibility = runCatching { services.isCompatibilityMode() }.getOrDefault(false),
         )
 
     // ---- Compose preview (LayoutPreviewBackend; aggregator-level, uses the preview lane) ----
@@ -317,23 +325,54 @@ class IdeServicesBackend(
     /** The lowered preview to render — lowest-priority engine work, preempted by analysis and completion,
      *  retries until the engine is free. Returns an ide-core type; on-device preview host calls this. */
     suspend fun lowerComposePreview(path: String, functionName: String, arity: Int, text: String): LoweredComposePreview? =
-        preview { services.lowerComposePreview(Paths.get(path), text, functionName, arity) }
+        timedPass("lower", path, { it?.program?.size ?: 0 }) {
+            preview { services.lowerComposePreview(Paths.get(path), text, functionName, arity) }
+        }
 
     /** Why [functionName] isn't interpretable yet (lowering diagnostics + offending source), for the preview
      *  panel's not-interpretable state. Lowest-priority engine work; preempted by analysis and completion. */
     suspend fun composePreviewDiagnostics(path: String, functionName: String, arity: Int, text: String): List<String> =
         preview { services.composePreviewDiagnostics(Paths.get(path), text, functionName, arity) }
 
+    /** Whether [path]'s module can resolve library composables yet (see [IdeServices.composePreviewReady]).
+     *  The preview host polls this to show a transient "Preparing" state (and retry) instead of latching a
+     *  first-run (index still building) failure into a permanent "unresolved call" error. */
+    suspend fun composePreviewReady(path: String): Boolean =
+        preview { services.composePreviewReady(Paths.get(path)) }
+
     /** The project library inputs for the on-device Compose preview's `DexClassLoader` (see
      *  [IdeServices.composePreviewLibs]). Lowest-priority engine work; preempted by analysis and completion. */
     suspend fun composePreviewLibs(path: String): ComposePreviewLibs? =
         preview { services.composePreviewLibs(Paths.get(path)) }
+
+    /** Lower a self-contained Learn-lesson Compose snippet [code] (with NO open project) through the Learn
+     *  Compose scratch, for the preview host's `LessonPreview`. Rendering uses the bundled Compose runtime, so
+     *  no `composePreviewLibs` is needed. Delegates to [LearnBackend], which resolves `androidx.compose.*` once. */
+    suspend fun lowerLessonComposePreview(code: String): LoweredComposePreview? =
+        learnBackend.lowerCompose(code)
+
+    /** Why a Learn-lesson Compose snippet isn't interpretable yet (for the preview problem chip). */
+    suspend fun lessonComposePreviewDiagnostics(code: String): List<String> =
+        learnBackend.composeDiagnostics(code)
+
+    /** Whether the hidden Learn Compose scratch can resolve library composables yet: the one-time
+     *  `androidx.compose.*` download + attach may still be in flight on first run. The preview host polls this
+     *  to show a transient "Preparing" state (and retry) instead of latching the first failed lower. */
+    suspend fun lessonComposePreviewReady(): Boolean =
+        learnBackend.composeReady()
 
     // The owned XML-layout preview (LayoutPreviewBackend); the preview host calls this directly. Runs on the
     // preview lane so the render (real-view dex-load + resource-context build + inflate/measure/draw, or the
     // owned engine pass) executes off the UI thread and is preempted by analysis and completion.
     override suspend fun layoutPreview(path: String, text: String, request: dev.ide.preview.PreviewRequest): dev.ide.preview.LayoutPreviewResult? =
         preview { services.layoutPreview(Paths.get(path), text, request) }
+
+    // The Learn tab's standalone layout preview: an owned render of a self-contained lesson XML with NO open
+    // project (the learner may be on the Learn tab with nothing open), so it deliberately does NOT go through
+    // `services`. Uses an empty resource table + no theme; built-in + Material renderers do the rest. Off the
+    // UI thread on the shared engine dispatcher (owned rendering is cheap, so no preview-lane priority needed).
+    override suspend fun layoutPreviewStandalone(xml: String, request: dev.ide.preview.PreviewRequest): dev.ide.preview.LayoutPreviewResult? =
+        withContext(Dispatchers.Default) { renderStandaloneLayout(xml, request) }
 
     // ---- usage analytics (opt-in) ----
 
@@ -431,3 +470,24 @@ class IdeServicesBackend(
     }
 
 }
+
+/**
+ * Owned render of a self-contained layout [xml] against an EMPTY resource table + no theme — the Learn tab's
+ * Android-lesson preview, which visualizes a taught layout with no project open. Built-in + Material renderers
+ * handle the tags; unresolved project resources fall back (lesson XML is authored to be self-contained). Never
+ * the real-view path (that needs the SDK + a built project). Returns null on any inflation failure.
+ */
+private fun renderStandaloneLayout(
+    xml: String, request: dev.ide.preview.PreviewRequest
+): dev.ide.preview.LayoutPreviewResult? = runCatching {
+    dev.ide.preview.impl.LayoutPreviewService().preview(
+        xml = xml,
+        repo = dev.ide.android.support.resources.ResourceRepository(emptyList()),
+        themeName = null,
+        title = "",
+        density = request.density,
+        scaledDensity = request.density,
+        showChrome = request.showChrome,
+        night = request.night,
+    )
+}.getOrNull()

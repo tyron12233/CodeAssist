@@ -20,7 +20,7 @@ import dev.ide.model.template.TemplateParameter
  * `JavaPlugin` registers for any module with `.kt`), so these `java-lib` modules build, and a console
  * template's top-level `fun main()` runs.
  */
-private object KotlinTemplateSupport {
+internal object KotlinTemplateSupport {
     /** A `main` source set rooted at `src/main/kotlin` (the Kotlin source-dir convention). */
     private fun mainSources() =
         SourceSetTemplate("main", DependencyScope.IMPLEMENTATION, mapOf("src/main/kotlin" to setOf(ContentRole.SOURCE)))

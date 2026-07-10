@@ -42,7 +42,7 @@ fun smartEnter(text: CharSequence, caret: Int, language: CodeLanguage): RangeEdi
     if (controlFlowNeedsBraces(code)) {
         val open = if (lineText.isEmpty() || lineText.endsWith(" ")) "{" else " {"
         val body = "\n" + indent + unit
-        val insert = open + body + "\n" + indent + "}"
+        val insert = "$open$body\n$indent}"
         return RangeEdit(lineEnd, lineEnd, insert, lineEnd + open.length + body.length)
     }
     val lastCh = code.lastOrNull()
@@ -71,7 +71,28 @@ private fun controlFlowNeedsBraces(code: String): Boolean {
 private val OPEN_TO_CLOSE = mapOf('(' to ')', '[' to ']', '{' to '}')
 private val CLOSE_TO_OPEN = OPEN_TO_CLOSE.entries.associate { (k, v) -> v to k }
 
-private fun CharSequence.charOrNull(i: Int): Char? = if (i in 0 until length) this[i] else null
+private fun CharSequence.charOrNull(i: Int): Char? = if (i in indices) this[i] else null
+
+/**
+ * The leading indent of the line holding the bracket that matches the closer at [closerPos] — so a closer
+ * broken onto its own line lines up with its opener (`}` under the `Surface(…) {` that opened it). A bounded
+ * backward depth scan (ignores strings/comments, like `matchingBracket` and the on-type dedent in EditOps);
+ * null when the closer isn't a bracket or no matching opener is found within the scan window.
+ */
+private fun matchingOpenerIndent(text: CharSequence, closerPos: Int): String? {
+    val closer = text.charOrNull(closerPos) ?: return null
+    val opener = CLOSE_TO_OPEN[closer] ?: return null
+    var depth = 0
+    var i = closerPos
+    val limit = maxOf(0, closerPos - COMMENT_SCAN_LIMIT)
+    while (i >= limit) {
+        val c = text[i]
+        if (c == closer) depth++
+        else if (c == opener) { depth--; if (depth == 0) return leadingIndent(text, lineStartOf(text, i), i) }
+        i--
+    }
+    return null
+}
 
 /** Index of the next non-blank char at or after [pos] on the same line (stops at a newline), or -1. */
 private fun nextNonBlankOnLine(text: CharSequence, pos: Int): Int {
@@ -116,18 +137,27 @@ private open class BraceNewlineHandler(
 
         // Split a string literal across two lines, joined with `+`: `"foo|bar"` → `"foo" +` / `"bar"`.
         if (stringSplits && insideStringLiteral(text, lineStart, pos)) {
-            val insert = "\" +\n" + indent + unit + "\""
+            val insert = "\" +\n$indent$unit\""
             return RangeEdit(pos, pos, insert, pos + insert.length)
         }
 
-        // A full-line `//` comment continues with a fresh `// ` on the next line — carrying a list bullet
-        // (`// - `, `// 1. `, …) when the comment is a bulleted list.
+        // A full-line `//` comment continues onto the next line — carrying a list bullet (`// - `, `// 1. `, …)
+        // when it has one — in two cases: (a) it's SPLIT in the middle, so the moved tail stays a comment; or
+        // (b) the caret is at the END of a NON-EMPTY bulleted item, the way a markdown list keeps going. A plain
+        // comment (or an empty bullet, `// - `) at end-of-line does NOT continue — matching IntelliJ, the next
+        // line is plain code (fall through to the normal indent rules).
         val lineComment = lineCommentStart(text, lineStart, pos)
         if (lineComment >= 0) {
             var c = lineComment + 2
             while (c < pos && (text[c] == ' ' || text[c] == '\t')) c++
-            val prefix = "// " + (listMarker(text, c, pos)?.next ?: "")
-            return RangeEdit(pos, pos, "\n$indent$prefix", pos + 1 + indent.length + prefix.length)
+            val lineEnd = lineEndFrom(text, pos)
+            val marker = listMarker(text, c, pos)
+            val splitting = !isBlankRange(text, pos, lineEnd)
+            val bulletContinues = marker != null && !isBlankRange(text, marker.end, lineEnd)
+            if (splitting || bulletContinues) {
+                val prefix = "// " + (marker?.next ?: "")
+                return RangeEdit(pos, pos, "\n$indent$prefix", pos + 1 + indent.length + prefix.length)
+            }
         }
 
         // Caret inside an empty pair `{|}` / `(|)` / `[|]` → open onto three lines, the closer de-dented.
@@ -158,6 +188,17 @@ private open class BraceNewlineHandler(
             // level deeper. `Column(\n    a = 1,|)` → the `)` falls under `Column`, the caret at the item indent.
             val closer = nextNonBlankOnLine(text, pos)
             if (closer >= 0 && text[closer] in CLOSE_TO_OPEN) {
+                // The caret sits alone in the leading whitespace of a line whose only content is the closer
+                // (`Surface() {\n\n    |}`). The closer already has its own line: keep it there, ALIGNED WITH ITS
+                // OPENER, and open a fresh body line one level deeper — rather than de-denting the closer a level
+                // below its opener (the reported wrong-indent bug, where `}` jumped to column 0). No leading
+                // newline: the current blank line becomes the body line, so no stray blank is left behind. This
+                // mirrors the typing/backspace paths (EditOps), which already snap a lone closer to its opener.
+                if (firstNonWsIndex(text, lineStart, pos) == pos) {
+                    val closerIndent = matchingOpenerIndent(text, closer) ?: indent
+                    val body = closerIndent + unit
+                    return RangeEdit(lineStart, closer, body + "\n" + closerIndent, lineStart + body.length)
+                }
                 // Opener on THIS line → the line is the base; opener on an earlier line → this line is already
                 // a body/item line, so the closer dedents one level below it.
                 val base = if (openBracketBalance(text, lineStart, pos) > 0) indent else dropIndentLevel(indent, unit)
@@ -439,12 +480,41 @@ private fun isOpenStartTagEnd(text: CharSequence, gt: Int): Boolean {
 }
 
 
-/** True when [pos] sits inside an unterminated block comment — its opener is the nearest comment delimiter before it. */
+/**
+ * True when [pos] sits inside an unterminated block comment. A forward scan tracks lexer state so a
+ * block-comment open/close delimiter inside a string, char, or raw-string literal — or inside a `//` line
+ * comment — is NOT mistaken for a real delimiter. (A bare last-open-vs-last-close index comparison was fooled
+ * by an opener sitting inside a string literal, leaving the editor convinced every line was a block comment
+ * and prepending a stray star on each Enter.) Bounded like the other comment scans: past the limit the scan
+ * starts mid-buffer and is best-effort.
+ */
 private fun insideBlockComment(text: CharSequence, pos: Int): Boolean {
-    val open = lastIndexBounded(text, "/*", pos - 1)
-    if (open < 0) return false
-    val close = lastIndexBounded(text, "*/", pos - 1)
-    return open > close
+    var i = if (pos > COMMENT_SCAN_LIMIT) pos - COMMENT_SCAN_LIMIT else 0
+    var inBlock = false
+    var inLine = false
+    var inStr = false
+    var inChar = false
+    var inRaw = false
+    while (i < pos) {
+        val c = text[i]
+        when {
+            inLine -> if (c == '\n') inLine = false
+            inBlock -> if (c == '*' && text.charOrNull(i + 1) == '/') { inBlock = false; i++ }
+            // A raw string (`"""…"""`) is literal — only a closing triple-quote ends it.
+            inRaw -> if (c == '"' && text.charOrNull(i + 1) == '"' && text.charOrNull(i + 2) == '"') { inRaw = false; i += 2 }
+            // A normal string/char literal ends at its closing quote (escapes skip the next char) or at EOL —
+            // an unterminated one can't swallow the rest of the buffer.
+            inStr -> if (c == '\\') i++ else if (c == '"' || c == '\n') inStr = false
+            inChar -> if (c == '\\') i++ else if (c == '\'' || c == '\n') inChar = false
+            c == '/' && text.charOrNull(i + 1) == '*' -> { inBlock = true; i++ }
+            c == '/' && text.charOrNull(i + 1) == '/' -> { inLine = true; i++ }
+            c == '"' && text.charOrNull(i + 1) == '"' && text.charOrNull(i + 2) == '"' -> { inRaw = true; i += 2 }
+            c == '"' -> inStr = true
+            c == '\'' -> inChar = true
+        }
+        i++
+    }
+    return inBlock
 }
 
 /** Continue (or auto-close) a block / doc comment: line up a leading `*`, and finish a freshly-opened comment. */
@@ -454,7 +524,7 @@ private fun continueBlockComment(text: CharSequence, pos: Int, lineStart: Int, i
     // Opening line (`/* …` or `/** …`) that isn't closed yet → drop in a `*` line and the closing `*/`.
     if (firstCh == '/' && indexBounded(text, "*/", pos) < 0) {
         val mid = "\n$indent * "
-        return RangeEdit(pos, pos, mid + "\n$indent */", pos + mid.length)
+        return RangeEdit(pos, pos, "$mid\n$indent */", pos + mid.length)
     }
     if (firstCh != '*') {
         // Opener line without a `*` (rare `/* text`) → align the new star one past the `/`.
@@ -583,7 +653,7 @@ private class ListMarker(val end: Int, val next: String)
 
 /** Detects a `- ` / `* ` / `+ ` bullet or an ordered `N. ` / `N) ` marker beginning at [from] (before [pos]). */
 private fun listMarker(text: CharSequence, from: Int, pos: Int): ListMarker? {
-    if (from < 0 || from >= pos) return null
+    if (from !in 0..<pos) return null
     val c = text[from]
     if ((c == '-' || c == '*' || c == '+') && from + 1 < text.length && text[from + 1] == ' ') {
         return ListMarker(from + 2, "$c ")
@@ -769,20 +839,7 @@ private fun firstNonWsIndex(text: CharSequence, lineStart: Int, pos: Int): Int {
 
 private const val COMMENT_SCAN_LIMIT = 100_000
 
-/** [needle]'s last start index at or before [from], bounded so a delimiter-free prefix can't cost O(N). */
-private fun lastIndexBounded(text: CharSequence, needle: String, from: Int): Int {
-    val limit = maxOf(0, from - COMMENT_SCAN_LIMIT)
-    var i = minOf(from, text.length - needle.length)
-    while (i >= limit) {
-        var k = 0
-        while (k < needle.length && text[i + k] == needle[k]) k++
-        if (k == needle.length) return i
-        i--
-    }
-    return -1
-}
-
-/** [needle]'s first start index at or after [from], bounded for the same reason as [lastIndexBounded]. */
+/** [needle]'s first start index at or after [from], bounded so a delimiter-free suffix can't cost O(N). */
 private fun indexBounded(text: CharSequence, needle: String, from: Int): Int {
     val limit = minOf(text.length - needle.length, from + COMMENT_SCAN_LIMIT)
     var i = maxOf(0, from)

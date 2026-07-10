@@ -23,6 +23,8 @@ import dev.ide.ui.backend.UiCompletionKind
 import dev.ide.ui.backend.UiCompletionResult
 import dev.ide.ui.backend.UiDefinition
 import dev.ide.ui.backend.UiFileSymbol
+import dev.ide.ui.backend.UiInheritorMarker
+import dev.ide.ui.backend.UiInheritorTarget
 import dev.ide.ui.backend.UiQuickDoc
 import dev.ide.ui.backend.UiDiagnostic
 import dev.ide.ui.backend.UiFoldRegion
@@ -54,7 +56,7 @@ internal class EditorBackend(private val ctx: BackendContext) : EditorService {
 
     override suspend fun breadcrumbAt(path: String, text: String, offset: Int): List<String> = try {
         ctx.background { ctx.services.breadcrumbAt(Paths.get(path), text, offset) }
-    } catch (e: EngineCanceledException) {
+    } catch (_: EngineCanceledException) {
         emptyList()
     } // re-runs on the next caret move
 
@@ -71,7 +73,7 @@ internal class EditorBackend(private val ctx: BackendContext) : EditorService {
                 )
             }
         }
-    } catch (e: EngineCanceledException) {
+    } catch (_: EngineCanceledException) {
         emptyList()
     }
 
@@ -81,6 +83,14 @@ internal class EditorBackend(private val ctx: BackendContext) : EditorService {
                 Paths.get(path), text, offset
             )
         }?.let { (p, o) -> UiDefinition(p.toString(), o) }
+
+    override suspend fun inheritorMarkers(path: String, text: String): List<UiInheritorMarker> =
+        withContext(ctx.engineDispatcher) { ctx.services.inheritorMarkers(Paths.get(path), text) }
+            .map { m -> UiInheritorMarker(m.offset, m.isInterface, m.targets.map { UiInheritorTarget(it.fqn, it.kind) }) }
+
+    override suspend fun implementationLocationOf(contextPath: String, fqn: String): UiDefinition? =
+        withContext(ctx.engineDispatcher) { ctx.services.implementationLocation(Paths.get(contextPath), fqn) }
+            ?.let { (p, o) -> UiDefinition(p.toString(), o) }
 
     override suspend fun quickDocAt(path: String, text: String, offset: Int): UiQuickDoc? = try {
         ctx.background {
@@ -95,7 +105,7 @@ internal class EditorBackend(private val ctx: BackendContext) : EditorService {
                 )
             }
         }
-    } catch (e: EngineCanceledException) {
+    } catch (_: EngineCanceledException) {
         null
     }
 
@@ -110,7 +120,9 @@ internal class EditorBackend(private val ctx: BackendContext) : EditorService {
         path: String, text: String, offset: Int, newName: String
     ): UiRenameResult = withContext(ctx.engineDispatcher) {
         val r = ctx.services.rename(Paths.get(path), text, offset, newName)
-        if (r.success) ctx.bumpFileSystemEpoch() // the multi-file edit / file rename changed the tree + other buffers
+        if (r.success) {
+            ctx.bumpFileSystemEpoch() // the multi-file edit / file rename changed the tree + other buffers
+        }
         UiRenameResult(r.success, r.message, r.occurrences, r.filesChanged, r.newPath)
     }
 
@@ -120,8 +132,16 @@ internal class EditorBackend(private val ctx: BackendContext) : EditorService {
     override fun saveFile(path: String, text: String) = ctx.services.save(Paths.get(path), text)
 
     override suspend fun complete(path: String, text: String, offset: Int): UiCompletionResult {
+        // One uniform pipeline for every language: the file's backend publishes its completion as a
+        // contributor, so there is no per-backend routing here. A preemption from inside the pipeline
+        // (a newer keystroke superseded this request) keeps the current popup — the newer request
+        // produces the live list.
         val t0 = System.nanoTime()
-        val result = ctx.interactive { ctx.services.complete(Paths.get(path), text, offset) }
+        val result = try {
+            ctx.interactive { ctx.services.complete(Paths.get(path), text, offset) }
+        } catch (_: EngineCanceledException) {
+            throw AnalysisPreempted()
+        }
         ctx.recordPerf(Events.COMPLETION_PERF, (System.nanoTime() - t0) / 1_000_000)
         return UiCompletionResult(
             items = result.items.map { item ->
@@ -148,14 +168,24 @@ internal class EditorBackend(private val ctx: BackendContext) : EditorService {
         )
     }
 
+    override suspend fun completionAccepted(path: String, label: String) {
+        // A tiny per-project properties write; off the UI dispatcher, never surfaced as an error.
+        withContext(kotlinx.coroutines.Dispatchers.IO) {
+            runCatching { ctx.services.noteCompletionAccepted(label) }
+        }
+    }
+
     override suspend fun analyze(path: String, text: String): List<UiDiagnostic> {
-        // Routes through the full analysis engine: JDT compiler errors + the Java analyzers, merged,
+        // Routes through the full analysis engine for EVERY language: per-language diagnostic providers
+        // (the JDT compiler, the hand-rolled Kotlin checks, the XML lint) plus the analyzers, merged,
         // suppression-filtered, and profile-adjusted into one set. Runs in the preemptible lane so a
         // completion request can cut ahead; a preempted pass surfaces as AnalysisPreempted for the host to retry.
         val t0 = System.nanoTime()
         val diagnostics = try {
-            ctx.background { ctx.services.analyzeDiagnostics(Paths.get(path), text) }
-        } catch (e: EngineCanceledException) {
+            timedPass("diagnostics", path, { it.size }) {
+                ctx.background { ctx.services.analyzeDiagnostics(Paths.get(path), text) }
+            }
+        } catch (_: EngineCanceledException) {
             throw AnalysisPreempted() // preempted: don't record a (misleadingly short) latency sample
         }
         ctx.recordPerf(Events.ANALYSIS_PERF, (System.nanoTime() - t0) / 1_000_000)
@@ -182,14 +212,16 @@ internal class EditorBackend(private val ctx: BackendContext) : EditorService {
         path: String, text: String, startOffset: Int, endOffset: Int
     ): List<UiInlayHint> {
         val hints = try {
-            ctx.background {
-                ctx.services.inlayHints(
-                    Paths.get(path), text, startOffset, endOffset
-                )
+            timedPass("inlay", path, { it.size }) {
+                ctx.background {
+                    ctx.services.inlayHints(
+                        Paths.get(path), text, startOffset, endOffset
+                    )
+                }
             }
-        } catch (e: EngineCanceledException) {
+        } catch (_: EngineCanceledException) {
             // Preempted by a higher-priority call (e.g. completion) on the shared engine thread. Surface it so
-            // the host retries once the buffer settles — returning empty here would CLEAR the hints and they'd
+            // the host retries once the buffer settles — returning empty here would CLEAR the hints, and they'd
             // only reappear on the next edit (the "type a space to get them back" bug).
             throw AnalysisPreempted()
         }
@@ -215,7 +247,7 @@ internal class EditorBackend(private val ctx: BackendContext) : EditorService {
         // the editor re-queries on the next caret move / edit, so swallowing it to null is correct (no retry needed).
         val help = try {
             ctx.background { ctx.services.signatureHelp(Paths.get(path), text, offset) }
-        } catch (e: EngineCanceledException) {
+        } catch (_: EngineCanceledException) {
             return null
         } ?: return null
         return UiSignatureHelp(
@@ -238,8 +270,10 @@ internal class EditorBackend(private val ctx: BackendContext) : EditorService {
 
     override suspend fun semanticTokens(path: String, text: String): List<UiSemanticToken> {
         val tokens = try {
-            ctx.background { ctx.services.semanticTokens(Paths.get(path), text) }
-        } catch (e: EngineCanceledException) {
+            timedPass("semantic", path, { it.size }) {
+                ctx.background { ctx.services.semanticTokens(Paths.get(path), text) }
+            }
+        } catch (_: EngineCanceledException) {
             // Preempted by completion on the shared engine thread — surface it so the host retries and keeps
             // the current coloring meanwhile (returning empty would clear it until the next edit).
             throw AnalysisPreempted()
@@ -256,8 +290,10 @@ internal class EditorBackend(private val ctx: BackendContext) : EditorService {
 
     override suspend fun codeFolds(path: String, text: String): List<UiFoldRegion> {
         val folds = try {
-            ctx.background { ctx.services.codeFolds(Paths.get(path), text) }
-        } catch (e: EngineCanceledException) {
+            timedPass("folds", path, { it.size }) {
+                ctx.background { ctx.services.codeFolds(Paths.get(path), text) }
+            }
+        } catch (_: EngineCanceledException) {
             throw AnalysisPreempted() // preempted by completion — host retries, keeps current folds meanwhile
         }
         return folds.map { f ->
@@ -296,7 +332,9 @@ internal class EditorBackend(private val ctx: BackendContext) : EditorService {
         }.map { UiTextEdit(it.offset, it.offset + it.oldLength, it.newText.toString()) }
     }
 
-    override suspend fun formatRange(path: String, text: String, selStart: Int, selEnd: Int): List<UiTextEdit> {
+    override suspend fun formatRange(
+        path: String, text: String, selStart: Int, selEnd: Int
+    ): List<UiTextEdit> {
         val style = currentFormatStyle(path)
         return withContext(ctx.engineDispatcher) {
             ctx.services.formatRange(Paths.get(path), text, selStart, selEnd, style)
@@ -305,7 +343,9 @@ internal class EditorBackend(private val ctx: BackendContext) : EditorService {
 
     // The active code style, resolved fresh per reformat from the file's language profile (so a settings
     // change applies without restart).
-    private val settingsStore = SettingsStore(get = { ctx.manager?.preference(it) }, set = { _, _ -> })
+    private val settingsStore =
+        SettingsStore(get = { ctx.manager?.preference(it) }, set = { _, _ -> })
+
     private fun currentFormatStyle(path: String): FormatStyle =
         settingsStore.loadCodeStyle(languageIdForPath(path)).toFormatStyle()
 

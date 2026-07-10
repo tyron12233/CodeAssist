@@ -19,7 +19,10 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import dev.ide.ui.generated.resources.Res
+import dev.ide.ui.generated.resources.comingsoon_footnote
 import dev.ide.ui.theme.Ca
+import org.jetbrains.compose.resources.stringResource
 
 /**
  * A placeholder for an unfinished destination: a soft accent-tinted icon medallion, a title, a one-line
@@ -32,7 +35,7 @@ fun ComingSoon(
     title: String,
     description: String,
     modifier: Modifier = Modifier,
-    footnote: String? = "Coming soon",
+    footnote: String? = stringResource(Res.string.comingsoon_footnote),
 ) {
     Box(modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
         Column(

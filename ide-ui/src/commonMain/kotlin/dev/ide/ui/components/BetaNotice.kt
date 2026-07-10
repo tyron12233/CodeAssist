@@ -70,9 +70,16 @@ fun BetaBanner(onSubmit: (() -> Unit)?, modifier: Modifier = Modifier) {
             .padding(14.dp),
         verticalArrangement = Arrangement.spacedBy(10.dp),
     ) {
-        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(10.dp)
+        ) {
             Icon(CaIcons.info, null, Modifier.size(18.dp), tint = Ca.colors.warning)
-            Text(stringResource(Res.string.beta_notice, BetaInfo.LABEL), color = Ca.colors.textPrimary, style = Ca.type.headline)
+            Text(
+                stringResource(Res.string.beta_notice, BetaInfo.LABEL),
+                color = Ca.colors.textPrimary,
+                style = Ca.type.headline
+            )
         }
         Text(
             stringResource(Res.string.beta_notice_content),
@@ -100,7 +107,12 @@ private fun SubmitSuggestionsButton(onClick: () -> Unit) {
         horizontalArrangement = Arrangement.spacedBy(6.dp),
     ) {
         Icon(CaIcons.lightbulb, null, Modifier.size(16.dp), tint = Ca.colors.warning)
-        Text(stringResource(Res.string.submit_suggestion), color = Ca.colors.textPrimary, style = Ca.type.footnote, fontWeight = FontWeight.SemiBold)
+        Text(
+            stringResource(Res.string.submit_suggestion),
+            color = Ca.colors.textPrimary,
+            style = Ca.type.footnote,
+            fontWeight = FontWeight.SemiBold
+        )
     }
 }
 
@@ -114,6 +126,11 @@ fun BetaBadge(modifier: Modifier = Modifier) {
             .padding(horizontal = 8.dp, vertical = 2.dp),
         contentAlignment = Alignment.Center,
     ) {
-        Text(BetaInfo.LABEL.uppercase(), color = Ca.colors.warning, style = Ca.type.caption2, fontWeight = FontWeight.Bold)
+        Text(
+            BetaInfo.LABEL.uppercase(),
+            color = Ca.colors.warning,
+            style = Ca.type.caption2,
+            fontWeight = FontWeight.Bold
+        )
     }
 }

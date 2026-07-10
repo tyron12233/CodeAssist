@@ -39,6 +39,14 @@ class AndroidFacetCodecTest {
         r8FullMode = false,
         coreLibraryDesugaringEnabled = true,
         buildFeatures = BuildFeatures(viewBinding = true, compose = true),
+        packaging = AndroidPackaging(
+            resources = ResourcePackaging(
+                excludes = linkedSetOf("/META-INF/extra.txt"),
+                pickFirsts = linkedSetOf("**/win.properties"),
+                merges = linkedSetOf("/META-INF/custom/**"),
+            ),
+            jniLibs = JniLibsPackaging(pickFirsts = linkedSetOf("**/libpick.so")),
+        ),
     )
 
     @Test
@@ -86,6 +94,24 @@ class AndroidFacetCodecTest {
         assertEquals(null, values["viewBinding"])
         assertEquals(null, values["compose"])
         assertEquals(BuildFeatures(), AndroidFacetCodec.decode(values).buildFeatures)
+    }
+
+    @Test
+    fun packagingRoundTripsAndOmittedWhenDefault() {
+        // Default packaging is an absent key (defaults are applied at build time, not persisted).
+        val plain = AndroidFacetCodec.encode(AndroidFacet(namespace = "com.example.app", compileSdk = 34))
+        assertEquals(null, plain["packaging"])
+        assertEquals(AndroidPackaging(), AndroidFacetCodec.decode(plain).packaging)
+
+        // A configured block persists as a nested inline table and reloads structurally equal.
+        val values = AndroidFacetCodec.encode(richFacet)
+        @Suppress("UNCHECKED_CAST")
+        val pkg = values["packaging"] as Map<String, Any?>
+        @Suppress("UNCHECKED_CAST")
+        val res = pkg["resources"] as Map<String, Any?>
+        assertEquals(listOf("/META-INF/extra.txt"), res["excludes"])
+        assertEquals(listOf("/META-INF/custom/**"), res["merges"])
+        assertEquals(richFacet.packaging, AndroidFacetCodec.decode(values).packaging)
     }
 
     /** Build with a facet, save, reload -> identical. */

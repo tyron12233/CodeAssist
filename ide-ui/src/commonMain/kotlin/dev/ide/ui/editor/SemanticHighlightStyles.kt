@@ -24,8 +24,12 @@ private fun baseColor(kind: String, s: SyntaxColors): Color? = when (kind) {
     "class", "interface", "enum", "annotation", "object", "typeParameter" -> s.type
     "method", "function", "constructor" -> s.func
     "property", "field" -> s.property
-    "enumConstant" -> s.constant
+    "enumConstant", "constant" -> s.constant // enum entry OR a `const val` / `static final` constant
     "parameter", "localVariable" -> s.variable
+    "label" -> s.label                // a Kotlin label: `loop@`, `return@loop`, `this@Outer`
+    "keyword" -> s.keyword            // a keyword the backend colored semantically (e.g. inside `${…}`)
+    "stringTemplateEntry" -> s.keyword // the `$`/`${`/`}` of a Kotlin string interpolation (pops out of the string)
+    "stringEscape" -> s.number        // an escape sequence (`\n`, `\uXXXX`, `\$`) inside a string literal
     "namespace" -> s.default          // a Java/Kotlin package / import segment (muted)
     "xmlNamespace" -> s.keyword       // an XML namespace prefix (android:/app:/tools:) reads like markup
     "xmlReference" -> s.constant      // an @type/name / ?attr/name resource reference in an attribute value
@@ -46,6 +50,10 @@ fun semanticSpanStyle(kind: String, mods: Set<UiHighlightModifier>, syntax: Synt
     if (UiHighlightModifier.Mutable in mods) { color = syntax.mutableVar; underline = true }
     if (UiHighlightModifier.Static in mods) italic = true
     if (UiHighlightModifier.Deprecated in mods) strike = true
+    // A label reads like a marker — italicize it so `loop@` / `return@loop` stand apart from ordinary names.
+    if (kind == "label") italic = true
+    // Emphasize a function/method/constructor DECLARATION over its call sites (which share the same color).
+    if (UiHighlightModifier.Declaration in mods && (kind == "function" || kind == "method" || kind == "constructor")) bold = true
     val deco = when {
         underline && strike -> TextDecoration.combine(listOf(TextDecoration.Underline, TextDecoration.LineThrough))
         underline -> TextDecoration.Underline

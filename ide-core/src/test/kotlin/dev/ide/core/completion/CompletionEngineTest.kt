@@ -8,6 +8,7 @@ import dev.ide.lang.completion.CompletionContributor
 import dev.ide.lang.completion.CompletionItem
 import dev.ide.lang.completion.CompletionItemKind
 import dev.ide.lang.completion.CompletionParams
+import dev.ide.lang.completion.CompletionRelevance
 import dev.ide.lang.completion.CompletionResultSet
 import dev.ide.lang.completion.CompletionTrigger
 import dev.ide.lang.completion.CompletionWeigher
@@ -155,6 +156,84 @@ class CompletionEngineTest {
         )
         val labels = runBlocking { engine.complete(params()) }.items.map { it.label }
         assertEquals(listOf("var", "variable"), labels)
+    }
+
+    @Test
+    fun expectedTypeRelevanceDominatesTheChain() {
+        val fits = CompletionItem(
+            "fits", "fits", CompletionItemKind.METHOD,
+            relevance = CompletionRelevance(fitsExpectedType = true), sortPriority = 100,
+        )
+        val other = CompletionItem("first", "first", CompletionItemKind.METHOD, sortPriority = -100)
+        val (engine, _) = engineWith(
+            CompletionContribution(contributor("a") { _, r -> r.addElement(other); r.addElement(fits) }),
+        )
+        val labels = runBlocking { engine.complete(params()) }.items.map { it.label }
+        assertEquals(listOf("fits", "first"), labels)
+    }
+
+    @Test
+    fun matchGradeRanksPrefixOverHumpOverSubstring() {
+        // Typed prefix "fBar": case-sensitive prefix > camel-hump > substring; a non-match sinks.
+        val p = CompletionParams(
+            document = Doc("fBar"), offset = 4, prefix = "fBar", language = kotlin,
+            trigger = CompletionTrigger.Explicit, replacementRange = TextRange(0, 4),
+            position = N(NodeKind.NAME_REF, "fBar"), parsedFile = null,
+        )
+        val (engine, _) = engineWith(
+            CompletionContribution(contributor("a") { _, r ->
+                r.addElement(item("offBarrier")) // substring ("fBar" at index 2, case-insensitively)
+                r.addElement(item("fooBar"))     // camel-hump (f → B-hump → ar run)
+                r.addElement(item("fBart"))      // case-sensitive prefix
+            }),
+        )
+        val labels = runBlocking { engine.complete(p) }.items.map { it.label }
+        assertEquals("fBart", labels.first())
+        assertTrue(labels.indexOf("fooBar") < labels.indexOf("offBarrier"), "got $labels")
+    }
+
+    @Test
+    fun contextBoostAndDeprecationOrderWithinAGrade() {
+        val boosted = CompletionItem(
+            "boosted", "boosted", CompletionItemKind.METHOD,
+            relevance = CompletionRelevance(contextBoost = true),
+        )
+        val deprecated = CompletionItem(
+            "dead", "dead", CompletionItemKind.METHOD,
+            relevance = CompletionRelevance(deprecated = true),
+        )
+        val plain = CompletionItem("plain", "plain", CompletionItemKind.METHOD)
+        val (engine, _) = engineWith(
+            CompletionContribution(contributor("a") { _, r ->
+                r.addElement(deprecated); r.addElement(plain); r.addElement(boosted)
+            }),
+        )
+        // No typed prefix so match grade is inert; boost first, deprecated last.
+        val p = params().let {
+            CompletionParams(it.document, 0, "", it.language, it.trigger, TextRange(0, 0), it.position, null)
+        }
+        val labels = runBlocking { engine.complete(p) }.items.map { it.label }
+        assertEquals(listOf("boosted", "plain", "dead"), labels)
+    }
+
+    @Test
+    fun statsWeigherOnTheEpFloatsAcceptedItems() {
+        val counts = mapOf("often" to 9)
+        val (engine, reg) = engineWith(
+            CompletionContribution(contributor("a") { _, r ->
+                r.addElement(item("first")); r.addElement(item("often"))
+            }),
+        )
+        reg.register(
+            COMPLETION_WEIGHER_EP,
+            dev.ide.lang.completion.StatsWeigher { counts[it.label] ?: 0 },
+            PluginId("test"),
+        )
+        val p = params().let {
+            CompletionParams(it.document, 0, "", it.language, it.trigger, TextRange(0, 0), it.position, null)
+        }
+        val labels = runBlocking { engine.complete(p) }.items.map { it.label }
+        assertEquals(listOf("often", "first"), labels)
     }
 
     @Test

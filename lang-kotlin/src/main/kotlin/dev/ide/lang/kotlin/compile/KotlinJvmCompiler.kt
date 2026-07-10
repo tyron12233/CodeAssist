@@ -1,32 +1,31 @@
 package dev.ide.lang.kotlin.compile
 
+import com.intellij.openapi.util.Disposer
 import org.jetbrains.kotlin.cli.common.ExitCode
 import org.jetbrains.kotlin.cli.common.arguments.K2JVMCompilerArguments
-import org.jetbrains.kotlin.cli.common.config.addKotlinSourceRoots
 import org.jetbrains.kotlin.cli.common.messages.CompilerMessageSeverity
 import org.jetbrains.kotlin.cli.common.messages.CompilerMessageSourceLocation
+import org.jetbrains.kotlin.cli.common.messages.GroupingMessageCollector
 import org.jetbrains.kotlin.cli.common.messages.MessageCollector
 import org.jetbrains.kotlin.cli.common.messages.OutputMessageUtil
-import org.jetbrains.kotlin.cli.create
 import org.jetbrains.kotlin.cli.jvm.K2JVMCompiler
-import org.jetbrains.kotlin.cli.jvm.compiler.EnvironmentConfigFiles
-import org.jetbrains.kotlin.cli.jvm.compiler.KotlinCoreEnvironment
-import org.jetbrains.kotlin.cli.jvm.compiler.KotlinToJVMBytecodeCompiler
-import org.jetbrains.kotlin.cli.jvm.config.addJavaSourceRoots
-import org.jetbrains.kotlin.cli.jvm.config.addJvmClasspathRoots
-import org.jetbrains.kotlin.com.intellij.openapi.util.Disposer
+import org.jetbrains.kotlin.cli.pipeline.ArgumentsPipelineArtifact
+import org.jetbrains.kotlin.cli.pipeline.jvm.JvmBackendPipelinePhase
+import org.jetbrains.kotlin.cli.pipeline.jvm.JvmConfigurationPipelinePhase
+import org.jetbrains.kotlin.cli.pipeline.jvm.JvmFir2IrPipelinePhase
+import org.jetbrains.kotlin.cli.pipeline.jvm.JvmFrontendPipelinePhase
+import org.jetbrains.kotlin.cli.pipeline.jvm.JvmWriteOutputsPhase
 import org.jetbrains.kotlin.compiler.plugin.CompilerPluginRegistrar
 import org.jetbrains.kotlin.compiler.plugin.ExperimentalCompilerApi
-import org.jetbrains.kotlin.config.CommonConfigurationKeys
-import org.jetbrains.kotlin.config.CompilerConfiguration
-import org.jetbrains.kotlin.config.JVMConfigurationKeys
-import org.jetbrains.kotlin.config.JvmTarget
 import org.jetbrains.kotlin.config.Services
+import org.jetbrains.kotlin.platform.jvm.JvmPlatforms
+import org.jetbrains.kotlin.util.PerformanceManagerImpl
 import java.io.File
 import java.nio.file.Path
 
 /**
- * Kotlin to `.class` codegen for the build. A thin wrapper over the embeddable K2 `K2JVMCompiler`, run
+ * Kotlin to `.class` codegen for the build. A thin wrapper over the in-process K2 `K2JVMCompiler`
+ * (:kotlin-compiler-deps, the unshaded `-for-ide` compiler), run
  * in-process: the same compiler the editor parse-host loads, and one that runs on ART. The build's
  * `compileKotlin` task ([dev.ide.lang.kotlin.build.KotlinCompileTask], via [IncrementalKotlinCompiler])
  * drives it directly; `:build-engine` names no Kotlin compiler.
@@ -127,26 +126,13 @@ class KotlinJvmCompiler(
             )
         }
 
-        val args = K2JVMCompilerArguments().apply {
-            freeArgs = sourcePaths
-            destination = outputDir.toString()
-            if (fullClasspath.isNotEmpty()) this.classpath = fullClasspath.joinToString(File.pathSeparator) { it.toString() }
-            this.jvmTarget = jvmTargetOf(jvmTarget)
-            noStdlib = true     // supplied explicitly above (auto-discovery needs an on-disk kotlin-home)
-            noReflect = true
-            reportOutputFiles = true   // emit OUTPUT messages → source→.class mapping recovered below
-            if (friendPaths.isNotEmpty()) this.friendPaths = friendPaths.map { it.toString() }.toTypedArray()
+        val args = buildArguments(sourcePaths, fullClasspath, outputDir, jvmTarget, onArt, friendPaths).apply {
             // Compiler plugins (e.g. Compose). pluginClasspaths is the `-Xplugin` set; pluginOptions the `-P`
             // `plugin:<id>:<k>=<v>` strings. The plugin jars must exist on disk for kotlinc to read their
             // service descriptors; the host supplies them (bundled assets on ART, resolved jars on desktop).
             val plugins = compilerPlugins.filter { java.nio.file.Files.isRegularFile(it) }
             if (plugins.isNotEmpty()) this.pluginClasspaths = plugins.map { it.toString() }.toTypedArray()
             if (pluginOptions.isNotEmpty()) this.pluginOptions = pluginOptions.toTypedArray()
-            if (onArt) {
-                noJdk = true    // ART has no JDK; the platform is android.jar, folded into the classpath above
-            } else {
-                jdkHome = System.getProperty("java.home")
-            }
         }
 
         val collector = RecordingMessageCollector()
@@ -158,16 +144,19 @@ class KotlinJvmCompiler(
     }
 
     /**
-     * The programmatic-registration compile path (used when [compile] is given runtime plugins). It builds
-     * the configuration the CLI way ([CompilerConfiguration.create] registers the plugin extension storage),
-     * loads each plugin's `CompilerPluginRegistrar` through [pluginLoader] and registers it, then runs codegen
-     * directly via `compileBunchOfSources`. The configuration mirrors the CLI path's (boot/`-no-jdk`, friend
-     * paths, output-file reporting) so the emitted classes and the source->`.class` mapping match.
+     * The programmatic-registration compile path (used when [compile] is given runtime plugins). The K1
+     * `KotlinToJVMBytecodeCompiler.compileBunchOfSources` entry point this used to wrap no longer exists in
+     * the compiler, so it now drives the K2 CLI pipeline's phases directly - the same phases
+     * `K2JVMCompiler.exec` chains (configuration -> frontend -> fir2ir -> backend -> write), with one
+     * difference: between the configuration and frontend phases the plugins' `CompilerPluginRegistrar`s,
+     * loaded through [pluginLoader], are injected into the configuration. The CLI's own `-Xplugin` loading
+     * cannot do that for a runtime-provided jar on ART (a `URLClassLoader` can't define a jar's classes
+     * there); the [pluginLoader] returns a dexed `DexClassLoader` instead.
      *
-     * This is what makes a non-bundled plugin work on ART: the registrar is defined by a dexed `DexClassLoader`
-     * the [pluginLoader] returns, not the CLI's `URLClassLoader` (which can't define a jar's classes there).
+     * The arguments mirror the CLI path's ([buildArguments]: boot/`-no-jdk`, friend paths, output-file
+     * reporting) so the emitted classes and the source->`.class` mapping match.
      */
-    @OptIn(ExperimentalCompilerApi::class, CompilerConfiguration.Internals::class, org.jetbrains.kotlin.K1Deprecation::class)
+    @OptIn(ExperimentalCompilerApi::class)
     private fun compileViaRegistrars(
         kotlinSources: List<Path>,
         javaSources: List<Path>,
@@ -186,32 +175,66 @@ class KotlinJvmCompiler(
             // No registered plugin uses options today, so surface it rather than silently drop it.
             collector.report(CompilerMessageSeverity.WARNING, "plugin options ignored on the registrar path: $pluginOptions", null)
         }
-        val configuration = CompilerConfiguration.create(messageCollector = collector).apply {
-            put(CommonConfigurationKeys.MODULE_NAME, outputDir.fileName?.toString() ?: "main")
-            put(JVMConfigurationKeys.OUTPUT_DIRECTORY, outputDir.toFile())
-            JvmTarget.fromString(jvmTargetOf(jvmTarget))?.let { put(JVMConfigurationKeys.JVM_TARGET, it) }
-            put(CommonConfigurationKeys.REPORT_OUTPUT_FILES, true)
-            addJvmClasspathRoots(fullClasspath.map { it.toFile() })
-            addKotlinSourceRoots(kotlinSources.map { it.toString() })
-            addJavaSourceRoots(javaSources.map { it.toFile() })
-            if (friendPaths.isNotEmpty()) put(JVMConfigurationKeys.FRIEND_PATHS, friendPaths.map { it.toString() })
-            if (onArt) put(JVMConfigurationKeys.NO_JDK, true)
-            else put(JVMConfigurationKeys.JDK_HOME, File(System.getProperty("java.home")))
-            registrars.forEach { add(CompilerPluginRegistrar.COMPILER_PLUGIN_REGISTRARS, it) }
-        }
+        val args = buildArguments(
+            (kotlinSources + javaSources).map { it.toString() }, fullClasspath, outputDir, jvmTarget, onArt, friendPaths,
+        )
+        // GroupingMessageCollector is what the real pipeline wraps the collector in (it defers errors so
+        // related diagnostics group up); flush() in finally hands everything to the recorder.
+        val grouping = GroupingMessageCollector(collector, false, false)
         val disposable = Disposer.newDisposable("kotlin-registrar-compile")
-        val ok = try {
-            val env = KotlinCoreEnvironment.createForProduction(disposable, configuration, EnvironmentConfigFiles.JVM_CONFIG_FILES)
-            runCatching { KotlinToJVMBytecodeCompiler.compileBunchOfSources(env) }
-                .getOrElse { return Result(false, collector.messages + "error: kotlinc threw: ${it.javaClass.name}: ${it.message}", collector.outputs()) }
+        try {
+            val performanceManager = PerformanceManagerImpl(JvmPlatforms.defaultJvmPlatform, "kotlin-registrar-compile")
+            val argsArtifact = ArgumentsPipelineArtifact(args, Services.EMPTY, disposable, grouping, performanceManager)
+            val configArtifact = JvmConfigurationPipelinePhase.executePhase(argsArtifact)
+                ?: return Result(false, collector.messages + "error: kotlinc rejected the compiler arguments", collector.outputs())
+            registrars.forEach { configArtifact.configuration.add(CompilerPluginRegistrar.COMPILER_PLUGIN_REGISTRARS, it) }
+            val frontend = JvmFrontendPipelinePhase.executePhase(configArtifact)
+                ?: return Result(false, collector.messages, collector.outputs())
+            if (grouping.hasErrors()) return Result(false, collector.messages, collector.outputs())
+            val fir2ir = JvmFir2IrPipelinePhase.executePhase(frontend)
+                ?: return Result(false, collector.messages, collector.outputs())
+            val backend = JvmBackendPipelinePhase.executePhase(fir2ir)
+                ?: return Result(false, collector.messages, collector.outputs())
+            JvmWriteOutputsPhase.executePhase(backend)
+        } catch (t: Throwable) {
+            return Result(false, collector.messages + "error: kotlinc threw: ${t.javaClass.name}: ${t.message}", collector.outputs())
         } finally {
+            runCatching { grouping.flush() } // hand any grouped (deferred) diagnostics to the recorder
             Disposer.dispose(disposable)
         }
-        return Result(ok && !collector.hasErrors(), collector.messages, collector.outputs())
+        return Result(!collector.hasErrors(), collector.messages, collector.outputs())
+    }
+
+    /** The CLI argument set shared by both compile paths (classpath, target, `-no-jdk`, friend paths). */
+    private fun buildArguments(
+        sourcePaths: List<String>,
+        fullClasspath: List<Path>,
+        outputDir: Path,
+        jvmTarget: String,
+        onArt: Boolean,
+        friendPaths: List<Path>,
+    ): K2JVMCompilerArguments = K2JVMCompilerArguments().apply {
+        freeArgs = sourcePaths
+        destination = outputDir.toString()
+        if (fullClasspath.isNotEmpty()) classpath = fullClasspath.joinToString(File.pathSeparator) { it.toString() }
+        this.jvmTarget = jvmTargetOf(jvmTarget)
+        noStdlib = true     // supplied explicitly by the caller (auto-discovery needs an on-disk kotlin-home)
+        noReflect = true
+        // Parse via PSI, not LightTree: the `-for-ide` compiler publication deliberately EXCLUDES
+        // `:compiler:fir:raw-fir:light-tree2fir` (the IDE always parses PSI), so the CLI's default
+        // LightTree path would die with NoClassDefFoundError fir/lightTree/LightTree.
+        useFirLT = false
+        reportOutputFiles = true   // emit OUTPUT messages -> source->.class mapping recovered by the collector
+        if (friendPaths.isNotEmpty()) this.friendPaths = friendPaths.map { it.toString() }.toTypedArray()
+        if (onArt) {
+            noJdk = true    // ART has no JDK; the platform is android.jar, folded into the classpath
+        } else {
+            jdkHome = System.getProperty("java.home")
+        }
     }
 
     /**
-     * Pay the compiler's one-time cold-start cost — class-loading the embeddable compiler and standing up its
+     * Pay the compiler's one-time cold-start cost — class-loading the bundled compiler and standing up its
      * application environment — NOW, off the interaction path, so the user's first real build compile is warm.
      * On ART the first in-process Kotlin compile measures ~1s (see `KotlinCompilerArtSpikeTest`) versus ~135ms
      * warm; this front-loads that ~1s, and [KotlinEnvironmentKeepAlive] keeps the environment hot for every

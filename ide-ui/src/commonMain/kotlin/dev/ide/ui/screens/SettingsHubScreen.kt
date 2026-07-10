@@ -28,8 +28,20 @@ import androidx.compose.ui.unit.dp
 import dev.ide.ui.components.GlassMaterial
 import dev.ide.ui.components.GlassSurface
 import dev.ide.ui.components.IconButtonCa
+import dev.ide.ui.generated.resources.Res
+import dev.ide.ui.generated.resources.back
+import dev.ide.ui.generated.resources.settings_code_style
+import dev.ide.ui.generated.resources.settings_code_style_subtitle
+import dev.ide.ui.generated.resources.settings_hub_title
+import dev.ide.ui.generated.resources.settings_keystore_manager
+import dev.ide.ui.generated.resources.settings_keystore_manager_subtitle
+import dev.ide.ui.generated.resources.settings_sdk_manager
+import dev.ide.ui.generated.resources.settings_sdk_manager_subtitle
+import dev.ide.ui.generated.resources.settings_settings
+import dev.ide.ui.generated.resources.settings_settings_subtitle
 import dev.ide.ui.icons.CaIcons
 import dev.ide.ui.theme.Ca
+import org.jetbrains.compose.resources.stringResource
 
 /**
  * The Settings & Tools hub — the single entry to the settings and toolchain managers, reachable both from the
@@ -52,9 +64,9 @@ fun SettingsHubScreen(
                     Modifier.fillMaxWidth().height(56.dp).padding(horizontal = 10.dp),
                     verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp),
                 ) {
-                    IconButtonCa(CaIcons.chevronLeft, "Back", onBack)
+                    IconButtonCa(CaIcons.chevronLeft, stringResource(Res.string.back), onBack)
                     Icon(CaIcons.gear, null, Modifier.size(20.dp), tint = Ca.colors.accent)
-                    Text("Settings & Tools", color = Ca.colors.textPrimary, style = Ca.type.headline, fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f))
+                    Text(stringResource(Res.string.settings_hub_title), color = Ca.colors.textPrimary, style = Ca.type.headline, fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f))
                 }
             }
             Box(Modifier.fillMaxWidth().height(1.dp).background(Ca.colors.separator))
@@ -64,10 +76,10 @@ fun SettingsHubScreen(
                     .padding(horizontal = 16.dp, vertical = 16.dp),
                 verticalArrangement = Arrangement.spacedBy(10.dp),
             ) {
-                HubRow(CaIcons.gear, "Settings", "Appearance, editor, completion & analysis", onOpenGlobalSettings)
-                HubRow(CaIcons.braces, "Code Style", "Per-language formatting profiles & live preview", onOpenCodeStyle)
-                HubRow(CaIcons.pkg, "SDK Manager", "Download Android SDK & JDK sources", onOpenSdkManager)
-                HubRow(CaIcons.key, "Keystore Manager", "Create, import & manage signing keystores", onOpenKeystoreManager)
+                HubRow(CaIcons.gear, stringResource(Res.string.settings_settings), stringResource(Res.string.settings_settings_subtitle), onOpenGlobalSettings)
+                HubRow(CaIcons.braces, stringResource(Res.string.settings_code_style), stringResource(Res.string.settings_code_style_subtitle), onOpenCodeStyle)
+                HubRow(CaIcons.pkg, stringResource(Res.string.settings_sdk_manager), stringResource(Res.string.settings_sdk_manager_subtitle), onOpenSdkManager)
+                HubRow(CaIcons.key, stringResource(Res.string.settings_keystore_manager), stringResource(Res.string.settings_keystore_manager_subtitle), onOpenKeystoreManager)
             }
         }
     }

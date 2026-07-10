@@ -52,6 +52,10 @@ interface IdeBackend {
      *  backend that wires no catalog inherits [StoreService.Unsupported]. */
     val store: StoreService get() = StoreService.Unsupported
 
+    /** The interactive Learn experience: lesson tracks, step-by-step content, auto-checked exercises, and
+     *  local progress. Optional — a backend that wires no content inherits [LearnService.Unsupported]. */
+    val learn: LearnService get() = LearnService.Unsupported
+
     /** The SDK manager (Android SDK + JDK sources/docs). */
     val sdk: SdkService
 
@@ -171,6 +175,15 @@ data class UiStoreItem(
     /** For a [UiStoreItemKind.Template] item: the template id the Create-Project flow opens with. */
     val templateId: String? = null,
     val available: Boolean = true,
+    /** Short "what you get" bullet points, shown on the detail screen. */
+    val highlights: List<String> = emptyList(),
+    /** The project's primary language ("Kotlin" | "Java" | ...), shown in the detail screen's specs. */
+    val language: String? = null,
+    /** A key for a built-in preview screenshot the store renders on the card + detail (null = none). */
+    val previewKey: String? = null,
+    /** Explore screenshots for the detail gallery: built-in preview keys or on-disk image paths. Empty = none.
+     *  Populated from a `.caproj`'s `store` section once the community catalog is wired (hosting is deferred). */
+    val screenshots: List<String> = emptyList(),
 )
 
 /** A titled shelf of store items (e.g. "Starter templates", "Sample projects"). */
@@ -190,6 +203,159 @@ data class UiStoreCatalog(
 
 /** Outcome of installing a store item: [success] + a human message + the new project's root path when created. */
 data class UiStoreInstallResult(val success: Boolean, val message: String, val rootPath: String? = null)
+
+// ---- Learn DTOs ----
+
+/**
+ * The Learn landing payload: the ordered lesson [tracks] (e.g. "Kotlin Basics", "Java Basics"). Neutral to
+ * where the content came from (bundled today, a remote catalog later). The heavy per-lesson step content is
+ * loaded lazily through [LearnService.lesson]; a track here only carries its lesson summaries.
+ */
+data class UiLearnCatalog(val tracks: List<UiLearnTrack> = emptyList())
+
+/**
+ * A learning track: a themed sequence of lessons. [language] is `"kotlin"` | `"java"` | `"none"` (a
+ * concept-only track); [category] groups tracks on the Learn screen ("Kotlin", "Java", "Android", …).
+ * [accentColor] is an optional ARGB brand color for the track card / hero.
+ */
+data class UiLearnTrack(
+    val id: String,
+    val title: String,
+    val subtitle: String,
+    val iconId: String = "lightbulb",
+    val accentColor: Long? = null,
+    val language: String = "none",
+    val category: String = "General",
+    val lessons: List<UiLessonSummary> = emptyList(),
+)
+
+/** One lesson as shown in a track list — light metadata; the steps load on open. */
+data class UiLessonSummary(
+    val id: String,
+    val title: String,
+    val summary: String,
+    val iconId: String = "docText",
+    val estMinutes: Int = 5,
+    val stepCount: Int = 1,
+)
+
+/** A fully-loaded lesson: its ordered [steps]. [language] mirrors the track's for the interactive editor. */
+data class UiLesson(
+    val id: String,
+    val trackId: String,
+    val title: String,
+    val summary: String,
+    val language: String = "none",
+    val steps: List<UiLessonStep> = emptyList(),
+)
+
+/**
+ * One step in a lesson. [Concept] is read-only explanation; [Interactive] is an editable exercise the app
+ * compiles/runs and auto-checks ([LearnService.check]); [Quiz] is a multiple-choice check (graded client-side
+ * against [Quiz.correctIndex]).
+ */
+sealed interface UiLessonStep {
+    val id: String
+    val title: String
+
+    data class Concept(
+        override val id: String,
+        override val title: String,
+        val blocks: List<UiContentBlock> = emptyList(),
+    ) : UiLessonStep
+
+    data class Interactive(
+        override val id: String,
+        override val title: String,
+        val blocks: List<UiContentBlock> = emptyList(),
+        /** The pre-filled buffer the learner edits (a complete, compilable file). */
+        val starterCode: String,
+        /** `"kotlin"` | `"java"` — drives the embedded editor's highlighting. */
+        val language: String,
+        /** Progressive hints, revealed one at a time. */
+        val hints: List<String> = emptyList(),
+        /** A known-good answer, revealable when stuck. */
+        val solution: String = starterCode,
+    ) : UiLessonStep
+
+    data class Quiz(
+        override val id: String,
+        override val title: String,
+        val prompt: String,
+        val options: List<String>,
+        val correctIndex: Int,
+        val explanation: String = "",
+    ) : UiLessonStep
+}
+
+/** A piece of rendered lesson content. [Text] supports tiny inline markup (`**bold**`, `` `code` ``). */
+sealed interface UiContentBlock {
+    data class Text(val md: String) : UiContentBlock
+
+    /** A read-only code sample (syntax-highlighted). [language] is `"kotlin"` | `"java"` | `"xml"` | `"plain"`. */
+    data class Code(val code: String, val language: String = "kotlin") : UiContentBlock
+
+    /** A highlighted aside. [kind] is `"tip"` | `"note"` | `"warn"`. */
+    data class Callout(val kind: String, val text: String) : UiContentBlock
+
+    /**
+     * An embedded, live-rendered Android layout preview — Android lessons use it to *show* the UI they teach,
+     * not just print the XML. [xml] is a self-contained layout fragment (declare `xmlns:android` on the root);
+     * it renders through the owned layout engine (built-in + Material widgets), so it needs no open project or
+     * SDK. When [interactive] the learner gets an editable XML field above the preview and watches it re-render
+     * as they type. [caption] is an optional label shown under the device frame.
+     */
+    data class LayoutPreview(
+        val xml: String,
+        val interactive: Boolean = false,
+        val caption: String = "",
+    ) : UiContentBlock
+
+    /**
+     * An embedded, live-rendered Jetpack Compose preview — Compose lessons use it to *show* the composable
+     * they teach rendering as real UI, not just print the source. [code] is a self-contained Kotlin file with
+     * its `androidx.compose.*` imports, a `@Composable` function, and a `@Preview @Composable` entry; it renders
+     * through the platform [dev.ide.ui.ComposePreviewHost] (the same on-device/desktop interpreter the editor's
+     * Compose preview uses). When [interactive] the learner gets an editable Kotlin field above the frame and
+     * watches it re-render as they type. [caption] is an optional label shown under the frame.
+     *
+     * Unlike [LayoutPreview] (owned engine, no dependencies), lowering Compose needs `androidx.compose.*` on a
+     * classpath, so the backend resolves it once into a hidden scratch project (cached offline afterward) — the
+     * first Compose lesson shows a brief "Preparing" gate. With no host (e.g. a non-launcher build) the block
+     * degrades to a read-only Kotlin code sample.
+     */
+    data class ComposePreview(
+        val code: String,
+        val interactive: Boolean = false,
+        val caption: String = "",
+    ) : UiContentBlock
+}
+
+/**
+ * Outcome of auto-checking an [UiLessonStep.Interactive] exercise. [compiled] false ⇒ the code didn't build
+ * (see [diagnostics]); [passed] ⇒ compiled, ran, and produced the expected result. [output] is the program's
+ * captured stdout (shown to the learner); [message] is human feedback.
+ */
+data class UiExerciseResult(
+    val passed: Boolean,
+    val compiled: Boolean,
+    val output: String = "",
+    val message: String = "",
+    val diagnostics: List<String> = emptyList(),
+)
+
+/** Local learning progress: for each lesson id, the set of completed step ids. */
+data class UiLearnProgress(val completedByLesson: Map<String, Set<String>> = emptyMap())
+
+/** Where to send "Resume" on the Learn banner: the last-visited lesson + step, with display labels + fraction. */
+data class UiResumePoint(
+    val trackId: String,
+    val lessonId: String,
+    val stepIndex: Int,
+    val trackTitle: String,
+    val lessonTitle: String,
+    val fractionComplete: Float,
+)
 
 /**
  * A `@Preview @Composable` target (one variant) in the open editor file. A function with several `@Preview`
@@ -581,6 +747,27 @@ data class UiBuildFeature(
     val note: String? = null,
 )
 
+/**
+ * A module's Android packaging options (AGP's `packaging { }`) — the merge rules the user configures for
+ * how Java resources + native libraries with the same archive path are combined. Null when the module is
+ * not Android. [defaultResourceExcludes]/[defaultResourceMerges] are AGP's always-applied defaults, shown
+ * read-only so the user sees what is already dropped/merged out of the box.
+ */
+data class UiPackagingOptions(
+    val moduleName: String,
+    val resources: UiPackagingRules,
+    val jniLibs: UiPackagingRules,
+    val defaultResourceExcludes: List<String>,
+    val defaultResourceMerges: List<String>,
+)
+
+/** The editable glob-pattern lists for one packaging category. [merges] is unused for native libs (binary). */
+data class UiPackagingRules(
+    val excludes: List<String> = emptyList(),
+    val pickFirsts: List<String> = emptyList(),
+    val merges: List<String> = emptyList(),
+)
+
 // ---------------------------------------------------------------------------
 // Signing keystores
 // ---------------------------------------------------------------------------
@@ -659,12 +846,64 @@ data class ProjectInfo(
     val compatibility: Boolean = false,
     /** True for an Android project; the picker asks the backend for its launcher icon (see [ProjectService.projectIcon]). */
     val isAndroid: Boolean = false,
+    /** Epoch-ms of the last time the user opened this project (0 = unknown). The picker lists most-recent
+     *  first and shows a relative "opened …" label. */
+    val lastOpened: Long = 0L,
 )
+
+/** Options chosen in the Export-project dialog (see [ProjectService.exportProject]). */
+data class UiExportOptions(
+    /** Bundle the resolved dependencies into the package so the recipient can build offline. */
+    val bundleDependencies: Boolean = false,
+    /** Optional author credited in the package manifest (not persisted into the project model). */
+    val author: String = "",
+    /** Optional description shown in the recipient's import preview. */
+    val description: String = "",
+)
+
+/** One file listed in an import preview's peek (path relative to the project root). */
+data class UiPackagedEntry(val path: String, val sizeBytes: Long)
+
+/**
+ * What a `.caproj` package contains, read for the import preview before it is extracted (see
+ * [ProjectService.previewImportPackage]). [icon] reuses the picker's [UiProjectIcon] so the preview renders
+ * it identically; a null [icon] falls back to the name-gradient tile. [compatible] is false when the package
+ * format is newer than this build understands, with the reason in [incompatibleReason].
+ */
+data class UiImportPreview(
+    val name: String,
+    val description: String,
+    val author: String,
+    val createdBy: String,
+    val isAndroid: Boolean,
+    val packageName: String?,
+    val moduleCount: Int,
+    val modules: List<String>,
+    val fileCount: Int,
+    val uncompressedSizeBytes: Long,
+    val hasBundledDeps: Boolean,
+    val icon: UiProjectIcon?,
+    val files: List<UiPackagedEntry>,
+    val compatible: Boolean,
+    val incompatibleReason: String? = null,
+    /** Explore screenshots embedded in the package (raster bytes), in display order; empty when none. */
+    val screenshots: List<ByteArray> = emptyList(),
+)
+
+/**
+ * Details of a Gradle **compatibility-mode** project (see [ProjectService.compatibilityInfo]). The project's
+ * Gradle scripts were read statically, not evaluated, so its model is a best-effort approximation: builds and
+ * dependency resolution may fail, and versions/config the reader couldn't extract are listed in [notes].
+ */
+data class UiCompatibilityInfo(val summary: String, val notes: List<String> = emptyList())
+
+/** The result of re-syncing a compatibility-mode project from its Gradle scripts (see [ProjectService.syncGradle]). */
+data class UiSyncResult(val ok: Boolean, val message: String, val notes: List<String> = emptyList())
 
 /** How the project tree is shaped — a curated module view, or the raw filesystem (see [IdeBackend.fileTree]). */
 enum class TreeViewMode { Project, AllFiles }
 
-/** The kind of a content/source root the user can add to a module (maps to a backend `ContentRole`). */
+/** The kind of content/source root the user can add to a module (maps to a backend `ContentRole`). */
 enum class UiSourceRootRole { Source, Resource, AndroidRes, Assets, Aidl }
 
 /**
@@ -812,6 +1051,13 @@ data class UiCompletionResult(
 
 /** A go-to-definition target: open [path] and move the caret to [offset]. */
 data class UiDefinition(val path: String, val offset: Int)
+
+/** A gutter "implementations / is subclassed" marker: [offset] anchors the type declaration's name;
+ *  [targets] are its direct inheritors. [isInterface] picks the glyph (implemented vs subclassed). */
+data class UiInheritorMarker(val offset: Int, val isInterface: Boolean, val targets: List<UiInheritorTarget>)
+
+/** One inheritor target for the gutter picker: its fully-qualified [fqn] and [kind] label (class/interface/…). */
+data class UiInheritorTarget(val fqn: String, val kind: String)
 
 /** The renameable symbol under the caret: its current [oldName] and a human [kind] label (e.g. "method"). */
 data class UiRenameTarget(val oldName: String, val kind: String)

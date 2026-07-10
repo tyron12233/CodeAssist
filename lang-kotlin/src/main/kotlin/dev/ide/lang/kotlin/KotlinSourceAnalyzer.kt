@@ -16,7 +16,7 @@ import dev.ide.lang.kotlin.completion.KotlinCompletionItems
 import dev.ide.lang.kotlin.parse.KotlinDomNode
 import dev.ide.lang.kotlin.parse.KotlinIncrementalParser
 import dev.ide.lang.kotlin.parse.KotlinParsedFile
-import dev.ide.lang.kotlin.resolve.KotlinResolver
+import dev.ide.lang.kotlin.resolve.*
 import dev.ide.lang.kotlin.symbols.KotlinSymbolService
 import dev.ide.lang.resolve.ResolveResult
 import dev.ide.lang.resolve.Scope
@@ -27,7 +27,24 @@ import dev.ide.platform.Disposable
 import dev.ide.vfs.VirtualFile
 import dev.ide.lang.kotlin.parse.KotlinParserHost
 import dev.ide.lang.kotlin.symbols.KotlinSymbol
-import org.jetbrains.kotlin.com.intellij.psi.PsiElement
+import com.intellij.psi.PsiElement
+import dev.ide.lang.completion.CompletionContribution
+import dev.ide.lang.folding.FoldingService
+import dev.ide.lang.formatting.FormattingService
+import dev.ide.lang.highlight.SemanticHighlightService
+import dev.ide.lang.kotlin.interp.KotlinPreviewLowering
+import dev.ide.lang.kotlin.interp.PreviewDeclProvider
+import dev.ide.lang.kotlin.interp.PreviewInfo
+import dev.ide.lang.kotlin.interp.PreviewModel
+import dev.ide.lang.kotlin.interp.ResolvedClass
+import dev.ide.lang.kotlin.interp.ResolvedFunction
+import dev.ide.lang.resolve.DocFormat
+import dev.ide.lang.resolve.QuickDocInfo
+import dev.ide.lang.resolve.SourceDocProvider
+import dev.ide.lang.resolve.StructureItem
+import dev.ide.lang.resolve.SymbolKind
+import dev.ide.lang.signature.SignatureHelpService
+import dev.ide.lang.synthetic.SyntheticClass
 import org.jetbrains.kotlin.psi.KtClass
 import org.jetbrains.kotlin.psi.KtClassOrObject
 import org.jetbrains.kotlin.psi.KtDeclaration
@@ -67,13 +84,13 @@ class KotlinSourceAnalyzer(ctx: CompilationContext) : SourceAnalyzer, Disposable
      *  ViewBinding, …). The host excludes the Kotlin `<File>Kt` facades (a Kotlin file uses its own top-level
      *  declarations directly). Queried lazily so a resource change is picked up without rebuilding the analyzer. */
     @Volatile
-    var syntheticClassProvider: () -> List<dev.ide.lang.synthetic.SyntheticClass> = { emptyList() }
+    var syntheticClassProvider: () -> List<SyntheticClass> = { emptyList() }
 
     /** Injected by the host: real parameter names + javadoc/KDoc from attached SOURCES (index-backed, with an
      *  on-demand parse fallback). Lets completing a Java/Android/library API from a `.kt` file show real names
      *  and docs instead of `p0`/`p1` and nothing. */
     @Volatile
-    var sourceDocProvider: dev.ide.lang.resolve.SourceDocProvider = dev.ide.lang.resolve.SourceDocProvider.NONE
+    var sourceDocProvider: SourceDocProvider = SourceDocProvider.NONE
 
     /** Injected by the host: the current live editor buffers (VirtualFile path → text) for CROSS-file
      *  freshness — a declaration just typed in ANOTHER open file resolves/completes here before it is saved
@@ -93,7 +110,11 @@ class KotlinSourceAnalyzer(ctx: CompilationContext) : SourceAnalyzer, Disposable
     private fun syncFocal(parsed: KotlinParsedFile) {
         runCatching {
             service.syncFocal(parsed.file.path, parsed.ktFile.text.hashCode()) {
-                dev.ide.lang.kotlin.symbols.SourceIndexBuilder.extractFrom(parsed.ktFile, parsed, parsed.file.path)
+                dev.ide.lang.kotlin.symbols.SourceIndexBuilder.extractFrom(
+                    parsed.ktFile,
+                    parsed,
+                    parsed.file.path
+                )
             }
         }
     }
@@ -105,9 +126,32 @@ class KotlinSourceAnalyzer(ctx: CompilationContext) : SourceAnalyzer, Disposable
             .filter { Files.exists(it) }
 
     private val serviceLazy = lazy {
-        KotlinSymbolService(sourceRoots, classpathJars, indexService, extensionCacheDir, { syntheticClassProvider() }, sourceDocProvider)
+        KotlinSymbolService(
+            sourceRoots,
+            classpathJars,
+            indexService,
+            extensionCacheDir,
+            { syntheticClassProvider() },
+            sourceDocProvider
+        )
     }
     private val service: KotlinSymbolService get() = serviceLazy.value
+
+    /** Whether the classpath symbol model can resolve library symbols yet. False during "dumb mode" (the
+     *  workspace index is still building on first launch), the window in which library callables resolve to
+     *  0 candidates. Mirrors the gate the editor's diagnostics/completion already honor; the Compose preview
+     *  uses it to tell a still-warming classpath from a genuinely unsupported construct. */
+    fun classpathReady(): Boolean = runCatching { service.classpathReady() }.getOrDefault(true)
+
+    /** Whether the Compose runtime is actually on this module's classpath: a top-level `mutableStateOf` from
+     *  `androidx.compose.runtime` resolves. Lets the preview distinguish "the `androidx.compose.*` AARs are
+     *  still attaching" (the Learn scratch's one-time first-run download; show Preparing and retry) from a
+     *  real failure. Defaults to true on any error so it never blocks a working preview. */
+    fun composeRuntimeAttached(): Boolean = runCatching {
+        service.topLevelByName("mutableStateOf").any {
+            (it.packageName ?: it.declaringClassFqn.orEmpty()).startsWith("androidx.compose.runtime")
+        }
+    }.getOrDefault(true)
 
     private val backing = KotlinIncrementalParser()
     private val lastByFile = ConcurrentHashMap<String, KotlinParsedFile>()
@@ -119,15 +163,16 @@ class KotlinSourceAnalyzer(ctx: CompilationContext) : SourceAnalyzer, Disposable
     // entry is unreachable once replaced. Safe: every engine lane runs on EngineScheduler's single serialized
     // worker, so the shared caches are never touched concurrently, and each pass keeps its own transient
     // resolver state (narrowings/reentrancy) — only the pure memo caches are shared.
-    private class CachesEntry(val parsed: KotlinParsedFile, val caches: dev.ide.lang.kotlin.resolve.KotlinResolverCaches)
+    private class CachesEntry(val parsed: KotlinParsedFile, val caches: KotlinResolverCaches)
+
     private val cachesBySnapshot = ConcurrentHashMap<String, CachesEntry>()
 
     /** Diagnostics ALWAYS resolves with a fresh cache: a dependency edit leaves the dependent file's OWN
      *  snapshot unchanged, so reusing a prior cache would stale-serve cross-file results (caught by
      *  `crossFileDependencyEditInvalidatesDependentCache`). The fresh cache is published so the preview lowerer
      *  of the SAME keystroke can reuse it ([reuseCachesFor]). */
-    private fun freshCachesFor(parsed: KotlinParsedFile): dev.ide.lang.kotlin.resolve.KotlinResolverCaches {
-        val c = dev.ide.lang.kotlin.resolve.KotlinResolverCaches()
+    private fun freshCachesFor(parsed: KotlinParsedFile): KotlinResolverCaches {
+        val c = KotlinResolverCaches()
         cachesBySnapshot[parsed.file.path] = CachesEntry(parsed, c)
         return c
     }
@@ -135,7 +180,7 @@ class KotlinSourceAnalyzer(ctx: CompilationContext) : SourceAnalyzer, Disposable
     /** The preview lowerer reuses the cache the diagnostics pass just published for this EXACT snapshot (the
      *  per-keystroke win — no redundant second resolution); absent one (a preview with no diagnostics pass), it
      *  builds and publishes its own. Preview is best-effort and re-renders on change, so reuse is safe here. */
-    private fun reuseCachesFor(parsed: KotlinParsedFile): dev.ide.lang.kotlin.resolve.KotlinResolverCaches {
+    private fun reuseCachesFor(parsed: KotlinParsedFile): KotlinResolverCaches {
         cachesBySnapshot[parsed.file.path]?.let { if (it.parsed === parsed) return it.caches }
         return freshCachesFor(parsed)
     }
@@ -157,16 +202,23 @@ class KotlinSourceAnalyzer(ctx: CompilationContext) : SourceAnalyzer, Disposable
                         .also { lastByFile[snapshot.file.path] = it }
                 }
             }
-            return (backing.parseFull(snapshot) as KotlinParsedFile).also { lastByFile[snapshot.file.path] = it }
+            return (backing.parseFull(snapshot) as KotlinParsedFile).also {
+                lastByFile[snapshot.file.path] = it
+            }
         }
 
-        override fun reparse(previous: ParsedFile, newSnapshot: DocumentSnapshot, edits: List<DocumentEdit>): ReparseResult =
-            backing.reparse(previous, newSnapshot, edits).also { lastByFile[newSnapshot.file.path] = it.tree as KotlinParsedFile }
+        override fun reparse(
+            previous: ParsedFile,
+            newSnapshot: DocumentSnapshot,
+            edits: List<DocumentEdit>
+        ): ReparseResult =
+            backing.reparse(previous, newSnapshot, edits)
+                .also { lastByFile[newSnapshot.file.path] = it.tree as KotlinParsedFile }
     }
 
     private val completionContributor by lazy { KotlinCompletion(service) { refreshOverlay() } }
-    override fun completionContributions(): List<dev.ide.lang.completion.CompletionContribution> =
-        listOf(dev.ide.lang.completion.CompletionContribution(completionContributor))
+    override fun completionContributions(): List<CompletionContribution> =
+        listOf(CompletionContribution(completionContributor))
 
     override val inlayHints: dev.ide.lang.hints.InlayHintService by lazy {
         KotlinInlayHintService(
@@ -175,11 +227,11 @@ class KotlinSourceAnalyzer(ctx: CompilationContext) : SourceAnalyzer, Disposable
         )
     }
 
-    override val signatureHelp: dev.ide.lang.signature.SignatureHelpService by lazy {
+    override val signatureHelp: SignatureHelpService by lazy {
         KotlinSignatureHelpService(service) { refreshOverlay() }
     }
 
-    override val semanticHighlighter: dev.ide.lang.highlight.SemanticHighlightService by lazy {
+    override val semanticHighlighter: SemanticHighlightService by lazy {
         KotlinSemanticHighlighter(
             parsedFor = { lastByFile[it.path] },
             resolverFor = { syncFocal(it); KotlinResolver(it.ktFile, it, service) },
@@ -188,12 +240,12 @@ class KotlinSourceAnalyzer(ctx: CompilationContext) : SourceAnalyzer, Disposable
         )
     }
 
-    override val folding: dev.ide.lang.folding.FoldingService by lazy {
+    override val folding: FoldingService by lazy {
         KotlinCodeFolder(parsedFor = { lastByFile[it.path] })
     }
 
     /** Re-indentation + whitespace cleanup over the parse-only PSI (no IntelliJ formatting model on ART). */
-    override val formatting: dev.ide.lang.formatting.FormattingService = KotlinFormatter()
+    override val formatting: FormattingService = KotlinFormatter()
 
     override suspend fun parsedFile(file: VirtualFile): ParsedFile =
         lastByFile[file.path] ?: incrementalParser.parseFull(EmptyDocument(file))
@@ -201,14 +253,63 @@ class KotlinSourceAnalyzer(ctx: CompilationContext) : SourceAnalyzer, Disposable
     // --- Compose preview (interpreter integration; see docs/compose-interpreter.md) ---
 
     /** PSI→ResolvedTree lowering for the Compose-preview interpreter, with its own per-function memoization. */
-    private val previewLowering by lazy { dev.ide.lang.kotlin.interp.KotlinPreviewLowering(service, ::reuseCachesFor) }
+    private val previewLowering by lazy { KotlinPreviewLowering(service, ::reuseCachesFor) }
 
     /** The `@Preview @Composable` functions in [file]'s last parse — the editor's preview targets. */
-    fun composePreviews(file: VirtualFile): List<dev.ide.lang.kotlin.interp.PreviewInfo> =
+    fun composePreviews(file: VirtualFile): List<PreviewInfo> =
         lastByFile[file.path]?.let { previewLowering.previews(it) } ?: emptyList()
 
+    /**
+     * Gutter "implementations/overrides" markers for [file]'s last parse: one per INHERITABLE type declaration
+     * (an interface, or an `open`/`abstract`/`sealed` class — a `final` class / object / enum / annotation is
+     * skipped, nothing can extend it) that actually has direct inheritors in the [dev.ide.index.SubtypeIndex].
+     * Anchored to the type's name identifier. Only the inheritor FQNs/kinds are collected (cheap — one index
+     * query per type); a click resolves a target's location via [declarationLocation]. Empty until the index
+     * has built the subtype relation (navigation, so the "dumb until indexed" latency is acceptable).
+     */
+    fun inheritorMarkers(file: VirtualFile): List<InheritorMarker> {
+        val parsed = lastByFile[file.path] ?: return emptyList()
+        val out = ArrayList<InheritorMarker>()
+        for (decl in com.intellij.psi.util.PsiTreeUtil.collectElementsOfType(parsed.ktFile, KtClassOrObject::class.java)) {
+            if (!canBeInherited(decl)) continue
+            val fqn = decl.fqName?.asString() ?: continue
+            val anchor = decl.nameIdentifier?.textRange?.startOffset ?: continue
+            val subs = service.directInheritors(fqn)
+            if (subs.isEmpty()) continue
+            out += InheritorMarker(
+                anchor,
+                isInterface = decl is org.jetbrains.kotlin.psi.KtClass && decl.isInterface(),
+                targets = subs.map { InheritorTarget(it.fqn, it.kind) }.sortedBy { it.fqn },
+            )
+        }
+        return out.sortedBy { it.offset }
+    }
+
+    /** Whether a declaration can have subtypes (so an inheritors marker is meaningful): an interface or an
+     *  `open`/`abstract`/`sealed` class. A `final` class (Kotlin's default), object, enum, or annotation cannot. */
+    private fun canBeInherited(d: KtClassOrObject): Boolean {
+        val c = d as? org.jetbrains.kotlin.psi.KtClass ?: return false
+        if (c.isInterface()) return true
+        if (c.isEnum() || c.isAnnotation()) return false
+        return c.hasModifier(org.jetbrains.kotlin.lexer.KtTokens.OPEN_KEYWORD) ||
+            c.hasModifier(org.jetbrains.kotlin.lexer.KtTokens.ABSTRACT_KEYWORD) ||
+            c.hasModifier(org.jetbrains.kotlin.lexer.KtTokens.SEALED_KEYWORD)
+    }
+
+    /** Locate the SOURCE declaration of type [fqn] (file + its name-identifier offset) for go-to-implementation
+     *  navigation, or null when [fqn] isn't declared in project source (a classpath-only inheritor has no
+     *  navigable source). Parses the declaring file once (uncached) to find the offset. */
+    fun declarationLocation(fqn: String): Pair<VirtualFile, Int>? {
+        val psf = service.sourceFileDeclaringType(fqn) ?: return null
+        val kt = dev.ide.lang.kotlin.parse.KotlinParserHost.parse(psf.file.name, psf.text)
+        val decl = com.intellij.psi.util.PsiTreeUtil.collectElementsOfType(kt, KtClassOrObject::class.java)
+            .firstOrNull { it.fqName?.asString() == fqn }
+        val offset = decl?.nameIdentifier?.textRange?.startOffset ?: decl?.textRange?.startOffset ?: 0
+        return psf.file to offset
+    }
+
     /** Whether [file]'s last parse contains syntax errors; a preview must not interpret such a file. See
-     *  [dev.ide.lang.kotlin.interp.KotlinPreviewLowering.hasSyntaxErrors] for why. */
+     *  [KotlinPreviewLowering.hasSyntaxErrors] for why. */
     fun hasSyntaxErrors(file: VirtualFile): Boolean =
         lastByFile[file.path]?.let { previewLowering.hasSyntaxErrors(it) } ?: false
 
@@ -217,21 +318,21 @@ class KotlinSourceAnalyzer(ctx: CompilationContext) : SourceAnalyzer, Disposable
     fun previewProviderFqn(file: VirtualFile, simpleName: String): String? =
         lastByFile[file.path]?.let { previewLowering.typeFqn(it, simpleName) }
 
-    /** Lower every top-level function in [file] to a [dev.ide.lang.kotlin.interp.ResolvedFunction], keyed
+    /** Lower every top-level function in [file] to a [ResolvedFunction], keyed
      *  `"name/arity"` — the program the interpreter runs a preview against (same-file composables included). */
-    fun lowerFile(file: VirtualFile): Map<String, dev.ide.lang.kotlin.interp.ResolvedFunction> =
+    fun lowerFile(file: VirtualFile): Map<String, ResolvedFunction> =
         lastByFile[file.path]?.let { previewLowering.program(it) } ?: emptyMap()
 
-    /** Lower every source class/object/enum in [file] to a [dev.ide.lang.kotlin.interp.ResolvedClass] — the
+    /** Lower every source class/object/enum in [file] to a [ResolvedClass] — the
      *  project-source types a preview's program may construct or reference. */
-    fun lowerFileClasses(file: VirtualFile): List<dev.ide.lang.kotlin.interp.ResolvedClass> =
+    fun lowerFileClasses(file: VirtualFile): List<ResolvedClass> =
         lastByFile[file.path]?.let { previewLowering.classes(it) } ?: emptyList()
 
     /** The cross-file-expanded preview program + classes for [file]: its own program/classes plus every
      *  project-source type/top-level function it transitively reaches in OTHER files (same module), so a
      *  preview that constructs a `data class` or calls a helper declared elsewhere still interprets. Null when
-     *  [file] hasn't been parsed. See [dev.ide.lang.kotlin.interp.KotlinPreviewLowering.crossFileModel]. */
-    fun lowerFileWithDeps(file: VirtualFile): dev.ide.lang.kotlin.interp.PreviewModel? =
+     *  [file] hasn't been parsed. See [KotlinPreviewLowering.crossFileModel]. */
+    fun lowerFileWithDeps(file: VirtualFile): PreviewModel? =
         lastByFile[file.path]?.let { previewLowering.crossFileModel(it) }
 
     /** Cross-MODULE preview model for [file]: seed from [file]'s own lowering, then run the reachable-declaration
@@ -240,9 +341,14 @@ class KotlinSourceAnalyzer(ctx: CompilationContext) : SourceAnalyzer, Disposable
      *  built (find a reached declaration across the dependency-module closure, lower it with its OWNING module's
      *  analyzer). */
     fun lowerFileWithDeps(
-        file: VirtualFile, provider: dev.ide.lang.kotlin.interp.PreviewDeclProvider,
-    ): dev.ide.lang.kotlin.interp.PreviewModel? =
-        lastByFile[file.path]?.let { previewLowering.expand(previewLowering.loweredEntryFile(it), provider) }
+        file: VirtualFile, provider: PreviewDeclProvider,
+    ): PreviewModel? =
+        lastByFile[file.path]?.let {
+            previewLowering.expand(
+                previewLowering.loweredEntryFile(it),
+                provider
+            )
+        }
 
     /** The source file declaring top-level type [fqn] within this module's source model (which spans its own +
      *  dependency-module sources), or null. The cross-module preview dispatcher uses this to LOCATE a reached
@@ -261,13 +367,30 @@ class KotlinSourceAnalyzer(ctx: CompilationContext) : SourceAnalyzer, Disposable
 
     /** The incremental-analyze engine (runs the semantic checks with per-declaration caching). Holds the
      *  per-file analyze cache, so a single instance is kept for the analyzer's lifetime. */
-    private val incrementalAnalysis by lazy { IncrementalSemanticAnalysis(service, ::freshCachesFor) }
-
-    override suspend fun analyze(file: VirtualFile): AnalysisResult = KotlinPerf.trace("kt.analyze") {
-        val parsed = lastByFile[file.path] ?: return@trace AnalysisResult(file, emptyList())
-        KotlinPerf.span("overlay") { refreshOverlay(); syncFocal(parsed) } // cross-file freshness + same-file (the live buffer's own classes)
-        AnalysisResult(file, parsed.diagnostics + KotlinPerf.span("semantic") { incrementalAnalysis.diagnostics(parsed) })
+    private val incrementalAnalysis by lazy {
+        IncrementalSemanticAnalysis(
+            service,
+            ::freshCachesFor
+        )
     }
+
+    override suspend fun analyze(file: VirtualFile): AnalysisResult =
+        KotlinPerf.trace("kt.analyze") {
+            val parsed = lastByFile[file.path] ?: return@trace AnalysisResult(file, emptyList())
+            KotlinPerf.span("overlay") {
+                // cross-file freshness + same-file (the live buffer's own classes)
+                refreshOverlay();
+                syncFocal(parsed)
+            }
+
+            val diagnostics = KotlinPerf.span("semantic") {
+                incrementalAnalysis.diagnostics(parsed)
+            }
+            AnalysisResult(
+                file,
+                parsed.diagnostics + diagnostics
+            )
+        }
 
     /** A single "Import …" code action: its lightbulb [title] and the document [edits] that apply it. */
     class KotlinImportFix(val title: String, val edits: List<DocumentEdit>)
@@ -287,19 +410,28 @@ class KotlinSourceAnalyzer(ctx: CompilationContext) : SourceAnalyzer, Disposable
         val text = parsed.ktFile.text
         val diags = incrementalAnalysis.diagnostics(parsed)
         fun coversCaret(d: Diagnostic) = offset >= d.range.start && offset <= d.range.end
-        val unresolved = diags.filter { it.code == KotlinDiagnosticCodes.UNRESOLVED && coversCaret(it) }
-        val delegateOps = diags.filter { it.code == KotlinDiagnosticCodes.DELEGATE_OPERATOR && coversCaret(it) }
+        val unresolved =
+            diags.filter { it.code == KotlinDiagnosticCodes.UNRESOLVED && coversCaret(it) }
+        val delegateOps =
+            diags.filter { it.code == KotlinDiagnosticCodes.DELEGATE_OPERATOR && coversCaret(it) }
         if (unresolved.isEmpty() && delegateOps.isEmpty()) return emptyList()
         val insertOffset = KotlinImportEdits.insertOffset(parsed.ktFile)
-        val existing = parsed.ktFile.importDirectives.mapNotNull { it.importedFqName?.asString() }.toHashSet()
+        val existing =
+            parsed.ktFile.importDirectives.mapNotNull { it.importedFqName?.asString() }.toHashSet()
         val seen = HashSet<String>()
         val out = ArrayList<KotlinImportFix>()
         fun offer(fqn: String) {
             if (fqn in existing || !seen.add(fqn)) return
-            out += KotlinImportFix("Import $fqn", listOf(DocumentEdit(insertOffset, 0, "import $fqn\n")))
+            out += KotlinImportFix(
+                "Import $fqn",
+                listOf(DocumentEdit(insertOffset, 0, "import $fqn\n"))
+            )
         }
         for (d in unresolved) {
-            val name = text.substring(d.range.start.coerceIn(0, text.length), d.range.end.coerceIn(0, text.length))
+            val name = text.substring(
+                d.range.start.coerceIn(0, text.length),
+                d.range.end.coerceIn(0, text.length)
+            )
             service.importCandidates(name).forEach(::offer)
         }
         if (delegateOps.isNotEmpty()) {
@@ -329,7 +461,8 @@ class KotlinSourceAnalyzer(ctx: CompilationContext) : SourceAnalyzer, Disposable
         val baseIndent = lineIndentOf(text, cls.textRange.startOffset)
         val memberIndent = "$baseIndent    "
         val stubs = missing.joinToString("\n\n") { m ->
-            memberIndent + KotlinCompletionItems.overrideStubText(m).replace("\n", "\n$memberIndent")
+            memberIndent + KotlinCompletionItems.overrideStubText(m)
+                .replace("\n", "\n$memberIndent")
         }
         val body = cls.body
         val edit = if (body != null) {
@@ -343,14 +476,18 @@ class KotlinSourceAnalyzer(ctx: CompilationContext) : SourceAnalyzer, Disposable
 
     /** The innermost class/object enclosing [offset] (the abstract-not-implemented diagnostic anchors on its name). */
     private fun classCovering(ktFile: KtFile, offset: Int): KtClassOrObject? {
-        var n: PsiElement? = ktFile.findElementAt(offset.coerceIn(0, (ktFile.textLength - 1).coerceAtLeast(0)))
-        while (n != null) { if (n is KtClassOrObject) return n; n = n.parent }
+        var n: PsiElement? =
+            ktFile.findElementAt(offset.coerceIn(0, (ktFile.textLength - 1).coerceAtLeast(0)))
+        while (n != null) {
+            if (n is KtClassOrObject) return n; n = n.parent
+        }
         return null
     }
 
     /** The leading whitespace (indent) of the line containing [offset] in [text]. */
     private fun lineIndentOf(text: CharSequence, offset: Int): String {
-        val lineStart = text.lastIndexOf('\n', (offset - 1).coerceAtLeast(0)).let { if (it < 0) 0 else it + 1 }
+        val lineStart =
+            text.lastIndexOf('\n', (offset - 1).coerceAtLeast(0)).let { if (it < 0) 0 else it + 1 }
         var i = lineStart
         while (i < text.length && (text[i] == ' ' || text[i] == '\t')) i++
         return text.subSequence(lineStart, i).toString()
@@ -363,7 +500,9 @@ class KotlinSourceAnalyzer(ctx: CompilationContext) : SourceAnalyzer, Disposable
         fun rec(p: PsiElement) {
             if (p is KtProperty) p.delegateExpression?.textRange?.let { if (offset >= it.startOffset && offset <= it.endOffset) out += p }
             var c = p.firstChild
-            while (c != null) { rec(c); c = c.nextSibling }
+            while (c != null) {
+                rec(c); c = c.nextSibling
+            }
         }
         rec(ktFile)
         return out
@@ -373,29 +512,62 @@ class KotlinSourceAnalyzer(ctx: CompilationContext) : SourceAnalyzer, Disposable
 
     /** The file's classes/objects/functions/properties in document order with nesting depth — for the
      *  structure view and sticky scroll headers. Purely syntactic (PSI), so it's safe before the index is ready. */
-    override fun fileStructure(file: VirtualFile, text: CharSequence): List<dev.ide.lang.resolve.StructureItem> {
+    override fun fileStructure(file: VirtualFile, text: CharSequence): List<StructureItem> {
         val ktFile = KotlinParserHost.parse(file.name, text)
-        val out = ArrayList<dev.ide.lang.resolve.StructureItem>()
+        val out = ArrayList<StructureItem>()
         for (d in ktFile.declarations) collectStructure(d, 0, out)
         return out
     }
 
-    private fun collectStructure(decl: KtDeclaration, depth: Int, out: MutableList<dev.ide.lang.resolve.StructureItem>) {
+    private fun collectStructure(decl: KtDeclaration, depth: Int, out: MutableList<StructureItem>) {
         when (decl) {
-            is KtEnumEntry -> addStructure(decl.name, null, dev.ide.lang.resolve.SymbolKind.ENUM_CONSTANT, decl, depth, out)
+            is KtEnumEntry -> addStructure(
+                decl.name,
+                null,
+                SymbolKind.ENUM_CONSTANT,
+                decl,
+                depth,
+                out
+            )
+
             is KtClassOrObject -> {
                 val kind = when {
-                    decl is KtClass && decl.isInterface() -> dev.ide.lang.resolve.SymbolKind.INTERFACE
-                    decl is KtClass && decl.isEnum() -> dev.ide.lang.resolve.SymbolKind.ENUM
-                    decl is KtClass && decl.isAnnotation() -> dev.ide.lang.resolve.SymbolKind.ANNOTATION_TYPE
-                    else -> dev.ide.lang.resolve.SymbolKind.CLASS
+                    decl is KtClass && decl.isInterface() -> SymbolKind.INTERFACE
+                    decl is KtClass && decl.isEnum() -> SymbolKind.ENUM
+                    decl is KtClass && decl.isAnnotation() -> SymbolKind.ANNOTATION_TYPE
+                    else -> SymbolKind.CLASS
                 }
                 addStructure(decl.name, null, kind, decl, depth, out)
                 for (m in decl.declarations) collectStructure(m, depth + 1, out)
             }
-            is KtNamedFunction -> addStructure(decl.name, "(${paramTypes(decl.valueParameters)})", dev.ide.lang.resolve.SymbolKind.METHOD, decl, depth, out)
-            is KtSecondaryConstructor -> addStructure("constructor", "(${paramTypes(decl.valueParameters)})", dev.ide.lang.resolve.SymbolKind.CONSTRUCTOR, decl, depth, out)
-            is KtProperty -> addStructure(decl.name, decl.typeReference?.text, dev.ide.lang.resolve.SymbolKind.FIELD, decl, depth, out)
+
+            is KtNamedFunction -> addStructure(
+                decl.name,
+                "(${paramTypes(decl.valueParameters)})",
+                SymbolKind.METHOD,
+                decl,
+                depth,
+                out
+            )
+
+            is KtSecondaryConstructor -> addStructure(
+                "constructor",
+                "(${paramTypes(decl.valueParameters)})",
+                SymbolKind.CONSTRUCTOR,
+                decl,
+                depth,
+                out
+            )
+
+            is KtProperty -> addStructure(
+                decl.name,
+                decl.typeReference?.text,
+                SymbolKind.FIELD,
+                decl,
+                depth,
+                out
+            )
+
             else -> {}
         }
     }
@@ -403,15 +575,23 @@ class KotlinSourceAnalyzer(ctx: CompilationContext) : SourceAnalyzer, Disposable
     private fun paramTypes(params: List<org.jetbrains.kotlin.psi.KtParameter>): String =
         params.joinToString(", ") { it.typeReference?.text ?: it.name ?: "" }
 
-    private fun addStructure(name: String?, detail: String?, kind: dev.ide.lang.resolve.SymbolKind, element: KtElement, depth: Int, out: MutableList<dev.ide.lang.resolve.StructureItem>) {
+    private fun addStructure(
+        name: String?,
+        detail: String?,
+        kind: SymbolKind,
+        element: KtElement,
+        depth: Int,
+        out: MutableList<StructureItem>
+    ) {
         val n = name ?: return
-        val nameOffset = (element as? KtNamedDeclaration)?.nameIdentifier?.textRange?.startOffset ?: element.textRange.startOffset
-        out.add(dev.ide.lang.resolve.StructureItem(n, detail, kind, nameOffset, element.textRange.endOffset, depth))
+        val nameOffset = (element as? KtNamedDeclaration)?.nameIdentifier?.textRange?.startOffset
+            ?: element.textRange.startOffset
+        out.add(StructureItem(n, detail, kind, nameOffset, element.textRange.endOffset, depth))
     }
 
     /** Quick documentation for the symbol at [offset]: a declaration the caret sits ON is documented directly
      *  (raw KDoc from its PSI); otherwise the reference under the caret is resolved to a symbol. */
-    override fun quickDoc(file: VirtualFile, text: CharSequence, offset: Int): dev.ide.lang.resolve.QuickDocInfo? {
+    override fun quickDoc(file: VirtualFile, text: CharSequence, offset: Int): QuickDocInfo? {
         val ktFile = KotlinParserHost.parse(file.name, text)
         val off = offset.coerceIn(0, ktFile.textLength)
         val leaf = ktFile.findElementAt(off.coerceAtMost((ktFile.textLength - 1).coerceAtLeast(0)))
@@ -422,39 +602,53 @@ class KotlinSourceAnalyzer(ctx: CompilationContext) : SourceAnalyzer, Disposable
         return symbolDoc(sym)
     }
 
-    private fun symbolDoc(sym: KotlinSymbol): dev.ide.lang.resolve.QuickDocInfo {
-        val sig = sym.signature?.takeIf { it.isNotBlank() }?.let { if (it.startsWith("(")) "${sym.name}$it" else it } ?: sym.name
-        val container = sym.owner?.name ?: sym.packageName ?: sym.declaringClassFqn?.substringAfterLast('.')?.takeIf { it.isNotEmpty() }
+    private fun symbolDoc(sym: KotlinSymbol): QuickDocInfo {
+        val sig = sym.signature?.takeIf { it.isNotBlank() }
+            ?.let { if (it.startsWith("(")) "${sym.name}$it" else it } ?: sym.name
+        val container =
+            sym.owner?.name ?: sym.packageName ?: sym.declaringClassFqn?.substringAfterLast('.')
+                ?.takeIf { it.isNotEmpty() }
         val declPsi = (sym.declaration() as? KotlinDomNode)?.psi
         val rawKdoc = (declPsi as? KtDeclaration)?.docComment?.text?.takeIf { it.isNotBlank() }
-        val (doc, fmt) = if (rawKdoc != null) rawKdoc to dev.ide.lang.resolve.DocFormat.KDOC
-        else sym.documentation() to dev.ide.lang.resolve.DocFormat.PLAIN
-        return dev.ide.lang.resolve.QuickDocInfo(sig, sym.name, sym.kind, container, doc, fmt)
+        val (doc, fmt) = if (rawKdoc != null) rawKdoc to DocFormat.KDOC
+        else sym.documentation() to DocFormat.PLAIN
+        return QuickDocInfo(sig, sym.name, sym.kind, container, doc, fmt)
     }
 
-    private fun declarationDoc(decl: KtNamedDeclaration): dev.ide.lang.resolve.QuickDocInfo {
+    private fun declarationDoc(decl: KtNamedDeclaration): QuickDocInfo {
         val sig: String
-        val kind: dev.ide.lang.resolve.SymbolKind
+        val kind: SymbolKind
         when (decl) {
             is KtNamedFunction -> {
-                sig = "fun ${decl.name}(${paramTypes(decl.valueParameters)})" + (decl.typeReference?.text?.let { ": $it" } ?: "")
-                kind = dev.ide.lang.resolve.SymbolKind.METHOD
+                sig =
+                    "fun ${decl.name}(${paramTypes(decl.valueParameters)})" + (decl.typeReference?.text?.let { ": $it" }
+                        ?: "")
+                kind = SymbolKind.METHOD
             }
+
             is KtProperty -> {
-                sig = "${if (decl.isVar) "var" else "val"} ${decl.name}" + (decl.typeReference?.text?.let { ": $it" } ?: "")
-                kind = dev.ide.lang.resolve.SymbolKind.FIELD
+                sig =
+                    "${if (decl.isVar) "var" else "val"} ${decl.name}" + (decl.typeReference?.text?.let { ": $it" }
+                        ?: "")
+                kind = SymbolKind.FIELD
             }
+
             is KtClass -> {
                 sig = "${if (decl.isInterface()) "interface" else "class"} ${decl.name}"
-                kind = if (decl.isInterface()) dev.ide.lang.resolve.SymbolKind.INTERFACE else dev.ide.lang.resolve.SymbolKind.CLASS
+                kind = if (decl.isInterface()) SymbolKind.INTERFACE else SymbolKind.CLASS
             }
-            else -> { sig = decl.name ?: ""; kind = dev.ide.lang.resolve.SymbolKind.CLASS }
+
+            else -> {
+                sig = decl.name ?: ""; kind = SymbolKind.CLASS
+            }
         }
-        val container = generateSequence(decl.parent) { it.parent }.filterIsInstance<KtClassOrObject>().firstOrNull()?.name
+        val container =
+            generateSequence(decl.parent) { it.parent }.filterIsInstance<KtClassOrObject>()
+                .firstOrNull()?.name
         val raw = decl.docComment?.text?.takeIf { it.isNotBlank() }
-        return dev.ide.lang.resolve.QuickDocInfo(
+        return QuickDocInfo(
             sig, decl.name ?: "", kind, container, raw,
-            if (raw != null) dev.ide.lang.resolve.DocFormat.KDOC else dev.ide.lang.resolve.DocFormat.PLAIN,
+            if (raw != null) DocFormat.KDOC else DocFormat.PLAIN,
         )
     }
 
@@ -468,9 +662,11 @@ class KotlinSourceAnalyzer(ctx: CompilationContext) : SourceAnalyzer, Disposable
         val name = psi.getReferencedName()
         val q = psi.parent as? KtQualifiedExpression
         val sym: Symbol? = if (q != null && q.selectorExpression === psi) {
-            resolver.inferType(q.receiverExpression)?.let { recv ->
-                service.membersNamed(recv.qualifiedName, recv.typeArguments, name).firstOrNull()
-            }
+            // A bare type-parameter receiver (`t.member` where `t: T`, `<T : Bound>`) navigates to the member of
+            // the parameter's upper bound; a normal receiver is unchanged (see receiverForMembers).
+            resolver.inferType(q.receiverExpression)
+                ?.let { resolver.receiverForMembers(it, q.receiverExpression.textRange.startOffset) }
+                ?.let { recv -> service.membersNamed(recv.qualifiedName, recv.typeArguments, name).firstOrNull() }
         } else {
             resolver.scopeSymbolsAt(psi.textRange.startOffset).firstOrNull { it.name == name }
                 ?: service.typeNamesByPrefix(name).firstOrNull { it.name == name }
@@ -495,12 +691,14 @@ class KotlinSourceAnalyzer(ctx: CompilationContext) : SourceAnalyzer, Disposable
         return KotlinResolver(kdn.owner.ktFile, kdn.owner, service).inferType(expr)
     }
 
-    private inner class KotlinScope(private val offset: Int, private val resolver: KotlinResolver) : Scope {
+    private class KotlinScope(private val offset: Int, private val resolver: KotlinResolver) :
+        Scope {
         override val enclosing: Scope? = null
         override fun symbols(filter: SymbolFilter): List<Symbol> {
             val all = resolver.scopeSymbolsAt(offset)
             return if (filter.kinds == null) all else all.filter { it.kind in filter.kinds!! }
         }
+
         override fun resolve(name: String): ResolveResult =
             resolver.scopeSymbolsAt(offset).firstOrNull { it.name == name }
                 ?.let { ResolveResult.Resolved(it) } ?: ResolveResult.Unresolved

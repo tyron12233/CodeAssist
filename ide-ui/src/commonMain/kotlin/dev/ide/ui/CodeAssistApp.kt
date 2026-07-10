@@ -9,6 +9,7 @@ import androidx.compose.foundation.layout.safeContent
 import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -27,14 +28,24 @@ import dev.ide.ui.components.ErrorDialog
 import dev.ide.ui.components.MigrationNotice
 import dev.ide.ui.components.OnboardingSheet
 import dev.ide.ui.components.PermissionDialog
+import dev.ide.ui.components.RunConflictDialog
+import dev.ide.ui.generated.resources.Res
+import dev.ide.ui.generated.resources.import_unrecognized
+import dev.ide.ui.generated.resources.settings_title
 import dev.ide.ui.navigation.ScreenHost
 import dev.ide.ui.platform.PlatformBackHandler
 import dev.ide.ui.screens.CreateProjectScreen
 import dev.ide.ui.screens.CodeStyleScreen
 import dev.ide.ui.screens.EditorScreen
+import dev.ide.ui.screens.ExportProjectScreen
 import dev.ide.ui.screens.HomeScreen
+import dev.ide.ui.screens.ImportErrorDialog
+import dev.ide.ui.screens.ImportPreviewScreen
 import dev.ide.ui.screens.LearnScreen
+import dev.ide.ui.screens.LessonPlayerScreen
+import dev.ide.ui.screens.LessonTrackScreen
 import dev.ide.ui.screens.ProjectsStoreScreen
+import dev.ide.ui.screens.StoreItemScreen
 import dev.ide.ui.screens.KeystoreCreateScreen
 import dev.ide.ui.screens.KeystoreImportScreen
 import dev.ide.ui.screens.KeystoreManagerScreen
@@ -54,6 +65,11 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.drop
 import kotlinx.coroutines.launch
+import org.jetbrains.compose.resources.stringResource
+import kotlin.time.Duration.Companion.milliseconds
+
+/** Preference key remembering the last author entered in the Export-project dialog (not per-project). */
+private const val EXPORT_AUTHOR_PREF = "export.author"
 
 /**
  * Root of the reusable IDE UI. Hosts pick the toolkit (Compose Desktop window, Android activity) and
@@ -71,6 +87,9 @@ fun CodeAssistApp(
     codeFont: FontFamily = rememberJetBrainsMono(),
     fileActions: FileActions = FileActions.None,
     composePreviewHost: ComposePreviewHost? = null,
+    /** A `.caproj` path handed in from outside the app (Android "Open with"). When it changes to a
+     *  non-null value, the import preview opens for it. Null on desktop / normal launch. */
+    importPackagePath: String? = null,
 ) {
     // Persisted IDE settings drive the theme (and seed the editor's live prefs). Re-read after the Settings
     // screen writes; appearance changes then take effect immediately.
@@ -82,6 +101,14 @@ fun CodeAssistApp(
     // A template id to pre-select in the Create-Project flow when it's opened from a Store item (null = the
     // plain New-Project gallery).
     var createTemplateId by remember { mutableStateOf<String?>(null) }
+    // The Learn destination being viewed (a track's lesson list / the step player), plus the player's start
+    // step. Bumping [learnEpoch] on return re-reads progress so the Learn tab + track reflect just-finished work.
+    var currentTrackId by remember { mutableStateOf<String?>(null) }
+    var currentLessonId by remember { mutableStateOf<String?>(null) }
+    var lessonInitialStep by remember { mutableStateOf(0) }
+    var learnEpoch by remember { mutableStateOf(0) }
+    // The store item shown on the full-screen detail page (set when a card is tapped in the Explore tab).
+    var storeItem by remember { mutableStateOf<dev.ide.ui.backend.UiStoreItem?>(null) }
     // The home-screen Projects Store + bottom nav is WIP and ships dark: it appears only when its feature flag
     // is on (or the `feature.projectsStore` preference overrides it). Off ⇒ the picker shows on its own.
     val storeEnabled = remember {
@@ -108,6 +135,14 @@ fun CodeAssistApp(
     var showAnalytics by remember { mutableStateOf(backend.diagnostics.analyticsAvailable() && backend.diagnostics.analyticsConsent() == null) }
     // Bumped after a project is deleted so the picker re-reads the (now-smaller) on-disk project list.
     var projectsRefresh by remember { mutableStateOf(0) }
+    // Project sharing (.caproj): the project whose Export dialog is open, and the picked package being
+    // previewed for import (path + read manifest/peek). Held here so they survive picker recompositions.
+    var exportTarget by remember { mutableStateOf<dev.ide.ui.backend.ProjectInfo?>(null) }
+    var importArchivePath by remember { mutableStateOf<String?>(null) }
+    var importPreview by remember { mutableStateOf<dev.ide.ui.backend.UiImportPreview?>(null) }
+    // Non-null while the "unrecognized file" dialog is up (a picked/opened file wasn't a readable .caproj).
+    var importError by remember { mutableStateOf<String?>(null) }
+    val importUnrecognizedMsg = stringResource(Res.string.import_unrecognized)
     val scope = rememberCoroutineScope()
 
     // Create a project backup zip and hand it to the host's share/save sheet.
@@ -117,23 +152,49 @@ fun CodeAssistApp(
     // The active project changes (create/open) bump the epoch; re-key per-project state on it.
     val epoch by backend.projects.projectEpoch.collectAsState()
     val state = remember(backend, epoch) { IdeUiState(backend, composePreviewHost) }
+    // Cancel the state's async file-read scope when it's replaced (project/backend change) or leaves composition,
+    // so a slow read for an abandoned project can't resolve against the new one.
+    DisposableEffect(state) { onDispose { state.dispose() } }
 
     // Reopen the tabs from the last session with this project; if there were none, land on a sensible first
     // file so entering the editor shows real code. Then persist tab changes (debounced) so they reopen next
     // launch — `drop(1)` skips the just-restored state, and `collectLatest` cancels the pending write when
     // another tab change lands within the debounce window.
     LaunchedEffect(state) {
+        state.ensureTreeLoaded() // build the real file tree off the main thread before it's shown / walked
         if (!state.restoreTabs()) {
             state.defaultFile()?.let { node -> node.filePath?.let { state.open(it, node.name) } }
         }
         snapshotFlow { state.openFiles.map { it.path } to state.activeIndex }.drop(1)
             .collectLatest {
-                delay(300)
+                delay(300.milliseconds)
                 state.backend.projects.saveOpenTabs(state.tabsSnapshot())
+            }
+    }
+
+    // Persist the file-tree expansion (debounced) so the tree reopens the same way next launch — keyed per
+    // project + view mode. `drop(1)` skips the seeded initial state; `collectLatest` coalesces rapid toggles.
+    LaunchedEffect(state) {
+        snapshotFlow { state.treeMode to state.expandedTreeSnapshot() }.drop(1)
+            .collectLatest { (mode, ids) ->
+                delay(300.milliseconds)
+                state.backend.files.saveExpandedTreeState(mode, ids.toList())
             }
     }
     // A successful create/open advances the epoch — land in the editor on the new project.
     LaunchedEffect(epoch) { if (epoch > 0) screen = Screen.Editor }
+
+    // A `.caproj` handed in from outside the app ("Open with"): read its preview and open the import screen.
+    // Keyed on the path (the host makes each hand-off a distinct path) so it fires once per inbound package.
+    LaunchedEffect(importPackagePath) {
+        val path = importPackagePath ?: return@LaunchedEffect
+        val preview = backend.projects.previewImportPackage(path)
+        if (preview != null) {
+            importArchivePath = path; importPreview = preview; screen = Screen.ImportProject
+        } else {
+            importError = importUnrecognizedMsg
+        }
+    }
 
     // Starting a console run (a `run` task) opens a fresh interactive session — keyed on its id, jump to the
     // full-screen Run terminal. Build/assemble tasks leave runConsole null and stay in the build console.
@@ -194,7 +255,17 @@ fun CodeAssistApp(
 
                 screen == Screen.Run || screen == Screen.ModuleConfig -> screen = Screen.Editor
 
+                // The lesson player steps back to its track; the track steps back to the Learn tab (picker).
+                screen == Screen.LessonPlayer -> {
+                    learnEpoch++; screen = if (currentTrackId != null) Screen.LessonTrack else Screen.Projects
+                }
+                screen == Screen.LessonTrack -> { learnEpoch++; screen = Screen.Projects }
+                // The store item detail returns to the Explore tab (still selected on Projects).
+                screen == Screen.StoreItem -> screen = Screen.Projects
+
                 screen == Screen.CreateProject -> screen = Screen.Projects
+                screen == Screen.ImportProject -> { importPreview = null; importArchivePath = null; screen = Screen.Projects }
+                screen == Screen.ExportProject -> { exportTarget = null; screen = Screen.Projects }
                 screen == Screen.Editor -> screen = Screen.Projects
                 // On the home screen, a Store/Learn tab steps back to the project picker before exiting.
                 screen == Screen.Projects && homeTab != HomeTab.Projects -> homeTab = HomeTab.Projects
@@ -219,6 +290,19 @@ fun CodeAssistApp(
                                         },
                                         onNewProject = { createTemplateId = null; screen = Screen.CreateProject },
                                         onDeleteProject = { p -> scope.launch { backend.projects.deleteProject(p.rootPath); projectsRefresh++ } },
+                                        onImportProject = if (fileActions.canPickFile) ({
+                                            fileActions.pickFile(listOf("caproj")) { path ->
+                                                if (path != null) scope.launch {
+                                                    val preview = backend.projects.previewImportPackage(path)
+                                                    if (preview != null) {
+                                                        importArchivePath = path; importPreview = preview; screen = Screen.ImportProject
+                                                    } else {
+                                                        importError = importUnrecognizedMsg
+                                                    }
+                                                }
+                                            }
+                                        }) else null,
+                                        onExportProject = if (fileActions.canShare || fileActions.canExport || fileActions.canReveal) ({ p -> exportTarget = p; screen = Screen.ExportProject }) else null,
                                         onBackup = { scope.launch { backupAndShare() } },
                                         onOpenHub = { hubReturn = Screen.Projects; screen = Screen.Hub },
                                         onSubmitSuggestions = if (fileActions.canOpenUrl) {
@@ -254,19 +338,25 @@ fun CodeAssistApp(
                                     storeContent = {
                                         ProjectsStoreScreen(
                                             backend = backend,
-                                            onCreateFromTemplate = { id -> createTemplateId = id; screen = Screen.CreateProject },
+                                            onOpenItem = { item -> storeItem = item; screen = Screen.StoreItem },
                                             onOpenHub = { hubReturn = Screen.Projects; screen = Screen.Hub },
                                         )
                                     },
                                     learnContent = {
                                         LearnScreen(
+                                            backend = backend,
+                                            epoch = learnEpoch,
+                                            onOpenTrack = { id -> currentTrackId = id; screen = Screen.LessonTrack },
+                                            onResume = { tId, lId, stepIdx ->
+                                                currentTrackId = tId; currentLessonId = lId
+                                                lessonInitialStep = stepIdx; screen = Screen.LessonPlayer
+                                            },
                                             onOpenDocs = if (fileActions.canOpenUrl) {
                                                 { fileActions.openUrl(BetaInfo.REPO_URL) }
                                             } else null,
                                             onJoinDiscord = if (fileActions.canOpenUrl) {
                                                 { fileActions.openUrl(BetaInfo.DISCORD_URL) }
                                             } else null,
-                                            onBrowseSamples = { homeTab = HomeTab.Store },
                                         )
                                     },
                                 )
@@ -280,6 +370,63 @@ fun CodeAssistApp(
                             onCancel = { screen = Screen.Projects },
                             onCreated = { screen = Screen.Editor },
                             initialTemplateId = createTemplateId,
+                        )
+
+                        Screen.ImportProject -> {
+                            val preview = importPreview
+                            val path = importArchivePath
+                            if (preview != null && path != null) {
+                                ImportPreviewScreen(
+                                    backend = backend,
+                                    archivePath = path,
+                                    preview = preview,
+                                    onCancel = { importPreview = null; importArchivePath = null; screen = Screen.Projects },
+                                    onImported = { importPreview = null; importArchivePath = null; screen = Screen.Editor },
+                                )
+                            }
+                        }
+
+                        Screen.ExportProject -> {
+                            val target = exportTarget
+                            if (target != null) {
+                                ExportProjectScreen(
+                                    backend = backend,
+                                    project = target,
+                                    initialAuthor = backend.settings.preference(EXPORT_AUTHOR_PREF) ?: "",
+                                    onAuthorRemembered = { backend.settings.setPreference(EXPORT_AUTHOR_PREF, it) },
+                                    onReveal = if (fileActions.canReveal) ({ path -> fileActions.reveal(path) }) else null,
+                                    onSaveCopy = if (fileActions.canExport) ({ path -> fileActions.exportFile(path) }) else null,
+                                    onShare = if (fileActions.canShare) ({ path -> fileActions.share(path) }) else null,
+                                    onDone = { exportTarget = null; screen = Screen.Projects },
+                                )
+                            }
+                        }
+
+                        Screen.LessonTrack -> LessonTrackScreen(
+                            backend = backend,
+                            trackId = currentTrackId,
+                            epoch = learnEpoch,
+                            onOpenLesson = { id -> currentLessonId = id; lessonInitialStep = 0; screen = Screen.LessonPlayer },
+                            onBack = { learnEpoch++; screen = Screen.Projects },
+                        )
+
+                        Screen.LessonPlayer -> LessonPlayerScreen(
+                            backend = backend,
+                            lessonId = currentLessonId,
+                            initialStep = lessonInitialStep,
+                            inlayHintsEnabled = state.inlayHintsEnabled,
+                            host = state.composePreviewHost,
+                            onExit = {
+                                learnEpoch++
+                                screen = if (currentTrackId != null) Screen.LessonTrack else Screen.Projects
+                            },
+                        )
+
+                        Screen.StoreItem -> StoreItemScreen(
+                            backend = backend,
+                            item = storeItem,
+                            onBack = { screen = Screen.Projects },
+                            onCreateFromTemplate = { id -> createTemplateId = id; screen = Screen.CreateProject },
                         )
 
                         Screen.Editor -> EditorScreen(
@@ -391,7 +538,7 @@ fun CodeAssistApp(
                             // The logs viewer is an editor overlay; only meaningful with a project open.
                             onOpenLogs = { if (epoch > 0) { state.logsOpen = true; screen = Screen.Editor } },
                             view = if (hubReturn == Screen.Editor) SettingsView.All else SettingsView.Global,
-                            title = "Settings",
+                            title = stringResource(Res.string.settings_title),
                             codeFont = codeFont,
                             fileActions = fileActions,
                         )
@@ -429,9 +576,14 @@ fun CodeAssistApp(
             )
             // The run sandbox's permission prompt — overlays everything while a guarded program is blocked.
             PermissionDialog(backend)
+            // "Already running" confirmation — raised when a new Run is requested while a build/program is
+            // still in flight (e.g. a runaway loop); offers Stop-and-Run with a remembered choice.
+            RunConflictDialog(state)
             // IntelliJ-style non-fatal error dialog — overlays everything when the engine reports an
             // unexpected error or an uncaught exception is intercepted (the app keeps running).
             ErrorDialog(backend)
+            // "Unrecognized file" notice when a picked/opened file wasn't a readable .caproj package.
+            ImportErrorDialog(importError) { importError = null }
         }
     }
 }

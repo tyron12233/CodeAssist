@@ -40,16 +40,31 @@ import dev.ide.ui.backend.FileActions
 import dev.ide.ui.backend.IdeBackend
 import dev.ide.ui.backend.UiLogEntry
 import dev.ide.ui.components.PeekTimestampReveal
+import dev.ide.ui.generated.resources.Res
+import dev.ide.ui.generated.resources.logs_copy_all
+import dev.ide.ui.generated.resources.logs_empty
+import dev.ide.ui.generated.resources.logs_filter_all
+import dev.ide.ui.generated.resources.logs_filter_errors
+import dev.ide.ui.generated.resources.logs_filter_hint
+import dev.ide.ui.generated.resources.logs_filter_warnings
+import dev.ide.ui.generated.resources.logs_no_match
+import dev.ide.ui.generated.resources.logs_pause
+import dev.ide.ui.generated.resources.logs_resume
+import dev.ide.ui.generated.resources.logs_title
+import dev.ide.ui.generated.resources.refresh
+import dev.ide.ui.generated.resources.share
 import dev.ide.ui.icons.CaIcons
 import dev.ide.ui.theme.Ca
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import org.jetbrains.compose.resources.StringResource
+import org.jetbrains.compose.resources.stringResource
 
 /** Which severities the Logs viewer shows. */
-private enum class LogFilter(val label: String, val keep: (String) -> Boolean) {
-    All("All", { true }),
-    Warnings("Warnings", { it == "WARN" || it == "ERROR" }),
-    Errors("Errors", { it == "ERROR" }),
+private enum class LogFilter(val labelRes: StringResource, val keep: (String) -> Boolean) {
+    All(Res.string.logs_filter_all, { true }),
+    Warnings(Res.string.logs_filter_warnings, { it == "WARN" || it == "ERROR" }),
+    Errors(Res.string.logs_filter_errors, { it == "ERROR" }),
 }
 
 /**
@@ -96,16 +111,16 @@ fun LogsScreen(
             horizontalArrangement = Arrangement.spacedBy(4.dp),
         ) {
             Icon(CaIcons.terminal, null, Modifier.size(18.dp), tint = Ca.colors.textSecondary)
-            Text("Logs", color = Ca.colors.textPrimary, style = Ca.type.headline, fontWeight = FontWeight.SemiBold)
+            Text(stringResource(Res.string.logs_title), color = Ca.colors.textPrimary, style = Ca.type.headline, fontWeight = FontWeight.SemiBold)
             Text("${shown.size}", color = Ca.colors.textTertiary, style = Ca.type.footnote, modifier = Modifier.padding(start = 4.dp))
             Box(Modifier.weight(1f))
-            HeaderAction(if (paused) CaIcons.play else CaIcons.stop, if (paused) "Resume live tail" else "Pause live tail", paused) { paused = !paused }
-            HeaderAction(CaIcons.refresh, "Refresh") { all = backend.diagnostics.recentLogs() }
-            HeaderAction(CaIcons.copy, "Copy all") {
+            HeaderAction(if (paused) CaIcons.play else CaIcons.stop, if (paused) stringResource(Res.string.logs_resume) else stringResource(Res.string.logs_pause), paused) { paused = !paused }
+            HeaderAction(CaIcons.refresh, stringResource(Res.string.refresh)) { all = backend.diagnostics.recentLogs() }
+            HeaderAction(CaIcons.copy, stringResource(Res.string.logs_copy_all)) {
                 clipboard.setText(AnnotatedString(shown.joinToString("\n\n") { renderForCopy(it) }))
             }
             if (fileActions.canShare) {
-                HeaderAction(CaIcons.share, "Share") {
+                HeaderAction(CaIcons.share, stringResource(Res.string.share)) {
                     scope.launch { backend.diagnostics.exportLogs()?.let { fileActions.share(it) } }
                 }
             }
@@ -122,7 +137,7 @@ fun LogsScreen(
         ) {
             Icon(CaIcons.search, null, Modifier.size(16.dp), tint = Ca.colors.accent)
             Box(Modifier.weight(1f)) {
-                if (query.isEmpty()) Text("Filter logs…", color = Ca.colors.textTertiary, style = Ca.type.subhead)
+                if (query.isEmpty()) Text(stringResource(Res.string.logs_filter_hint), color = Ca.colors.textTertiary, style = Ca.type.subhead)
                 BasicTextField(
                     value = query,
                     onValueChange = { query = it },
@@ -136,7 +151,7 @@ fun LogsScreen(
 
         // Severity filter chips
         Row(Modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = 2.dp), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-            LogFilter.entries.forEach { f -> FilterChip(f.label, f == filter) { filter = f } }
+            LogFilter.entries.forEach { f -> FilterChip(stringResource(f.labelRes), f == filter) { filter = f } }
         }
 
         Box(Modifier.fillMaxWidth().height(1.dp).background(Ca.colors.separator))
@@ -145,7 +160,7 @@ fun LogsScreen(
         if (shown.isEmpty()) {
             Box(Modifier.weight(1f).fillMaxWidth(), contentAlignment = Alignment.Center) {
                 Text(
-                    if (all.isEmpty()) "No logs yet." else "No logs match this filter.",
+                    if (all.isEmpty()) stringResource(Res.string.logs_empty) else stringResource(Res.string.logs_no_match),
                     color = Ca.colors.textTertiary,
                     style = Ca.type.footnote,
                 )

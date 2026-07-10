@@ -29,6 +29,9 @@ object BufferWordsContributor : CompletionContributor {
         while (start > 0 && isWordChar(text[start - 1])) start--
         val prefix = text.substring(start, caret)
         if (prefix.isEmpty()) return
+        // Graded matching (prefix/camel-hump/substring) — hippie words are the pre-index fallback, so
+        // `mDL` must reach a buffer's `myDynamicList` even before the symbol backends know the name.
+        val matcher = dev.ide.lang.completion.PrefixMatcher(prefix)
 
         val existing = HashSet<String>()
         result.elements.forEach { existing.add(it.label) }
@@ -44,7 +47,7 @@ object BufferWordsContributor : CompletionContributor {
                 val isCaretToken = caret in i..j // the very token under the caret — skip it
                 if (!isCaretToken && j - i >= prefix.length) {
                     val word = text.substring(i, j)
-                    if (word !in existing && word.startsWith(prefix, ignoreCase = true)) {
+                    if (word !in existing && matcher.matches(word)) {
                         val dist = if (caret < i) i - caret else caret - j
                         val prev = nearest[word]
                         if (prev == null || dist < prev) nearest[word] = dist

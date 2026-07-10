@@ -22,5 +22,32 @@ interface ComposePreviewHost {
      * host is currently lowering/interpreting vs. settled so the pane can show a loading badge.
      */
     @Composable
-    fun Preview(path: String, preview: UiComposePreview, text: String, dark: Boolean, onProblems: (List<PreviewIssue>) -> Unit, onBusy: (Boolean) -> Unit, modifier: Modifier)
+    fun Preview(
+        path: String,
+        preview: UiComposePreview,
+        text: String,
+        dark: Boolean,
+        onProblems: (List<PreviewIssue>) -> Unit,
+        onBusy: (Boolean) -> Unit,
+        modifier: Modifier
+    )
+
+    /**
+     * Compose a self-contained Learn-lesson snippet [code] (its own imports + a `@Preview @Composable` entry)
+     * as live UI, WITHOUT an open project: the host lowers it through the backend's hidden Compose scratch
+     * (`lowerLessonComposePreview`) and renders the result against the bundled Compose runtime — so standard
+     * material3/foundation composables render everywhere the launcher runs. [dark] selects the Night scheme;
+     * [onProblems]/[onBusy] mirror [Preview] (problems for a chip, busy while lowering). The default is a no-op
+     * so a host that doesn't support lesson previews leaves the block to its read-only code-sample fallback.
+     */
+    @Composable
+    fun LessonPreview(
+        code: String,
+        dark: Boolean,
+        onProblems: (List<PreviewIssue>) -> Unit,
+        onBusy: (Boolean) -> Unit,
+        modifier: Modifier,
+    ) {
+        // Default: unsupported on this host — the caller shows the code-sample fallback instead.
+    }
 }

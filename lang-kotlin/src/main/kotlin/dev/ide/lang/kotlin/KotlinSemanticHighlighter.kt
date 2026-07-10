@@ -6,12 +6,13 @@ import dev.ide.lang.highlight.HighlightModifier
 import dev.ide.lang.highlight.SemanticHighlightService
 import dev.ide.lang.highlight.SemanticToken
 import dev.ide.lang.kotlin.parse.KotlinParsedFile
-import dev.ide.lang.kotlin.resolve.KotlinResolver
+import dev.ide.lang.kotlin.resolve.*
 import dev.ide.lang.resolve.SymbolKind
 import dev.ide.platform.EngineCancellation
 import dev.ide.vfs.VirtualFile
-import org.jetbrains.kotlin.com.intellij.psi.PsiElement
+import com.intellij.psi.PsiElement
 import org.jetbrains.kotlin.lexer.KtTokens
+import org.jetbrains.kotlin.psi.KtAnnotated
 import org.jetbrains.kotlin.psi.KtCallExpression
 import org.jetbrains.kotlin.psi.KtCatchClause
 import org.jetbrains.kotlin.psi.KtClass
@@ -23,12 +24,18 @@ import org.jetbrains.kotlin.psi.KtBinaryExpression
 import org.jetbrains.kotlin.psi.KtBlockExpression
 import org.jetbrains.kotlin.psi.KtConstructorCalleeExpression
 import org.jetbrains.kotlin.psi.KtDeclaration
+import org.jetbrains.kotlin.psi.KtDestructuringDeclaration
+import org.jetbrains.kotlin.psi.KtDestructuringDeclarationEntry
+import org.jetbrains.kotlin.psi.KtEscapeStringTemplateEntry
+import org.jetbrains.kotlin.psi.KtExpressionWithLabel
 import org.jetbrains.kotlin.psi.KtNameReferenceExpression
 import org.jetbrains.kotlin.psi.KtNamedFunction
 import org.jetbrains.kotlin.psi.KtObjectDeclaration
 import org.jetbrains.kotlin.psi.KtParameter
 import org.jetbrains.kotlin.psi.KtProperty
+import org.jetbrains.kotlin.psi.KtPropertyAccessor
 import org.jetbrains.kotlin.psi.KtQualifiedExpression
+import org.jetbrains.kotlin.psi.KtStringTemplateExpression
 import org.jetbrains.kotlin.psi.KtTypeParameter
 import org.jetbrains.kotlin.psi.KtTypeParameterListOwner
 import org.jetbrains.kotlin.psi.KtUserType
@@ -44,7 +51,10 @@ import org.jetbrains.kotlin.psi.psiUtil.getStrictParentOfType
  *  - call sites resolved to a function — with the Kotlin distinctions the user asked for:
  *    `@Composable` (Android-Studio style), extension, and `suspend`;
  *  - local variables / parameters in use, with `var` (mutable) vs `val` (read-only);
- *  - type references, separating a type parameter (`T`) from a class.
+ *  - destructuring bindings (`val (a, b) = …`, `for ((k, v) in …)`, `{ (a, b) -> }`) at declaration and use;
+ *  - type references, separating a type parameter (`T`) from a class;
+ *  - inside string literals: interpolated variables/expressions (`$name`, `${p.x}` — via the normal walk), plus
+ *    the interpolation delimiters (`$`/`${`/`}`) and escape sequences (`\n`, `\uXXXX`) as distinct kinds.
  *
  * Anything it can't resolve cleanly (a member/top-level property read, an unresolved name) is left to the
  * lexical layer — the highlighter never guesses, so it never miscolors. Polls [EngineCancellation] between
@@ -62,41 +72,55 @@ class KotlinSemanticHighlighter(
     // Per-top-level-declaration token cache (see [IncrementalDecls]). An edit re-colors only the changed
     // declaration and reuses every other declaration's tokens, re-anchored to its shifted offset — so a
     // keystroke no longer re-resolves the WHOLE file. One instance per analyzer (this cache is its state).
-    private class DeclTokens(val key: IncrementalDecls.Key, val rel: List<SemanticToken>)
-    private class Snapshot(val importsKey: String, val externalStamp: Long, val decls: List<DeclTokens>)
+    private class DeclTokens(val facts: IncrementalDecls.Facts, val rel: List<SemanticToken>)
+    private class Snapshot(
+        val imports: IncrementalDecls.Imports,
+        val fileText: String,
+        val externalStamp: Long,
+        val decls: List<DeclTokens>
+    )
+
     private val cache = java.util.concurrent.ConcurrentHashMap<String, Snapshot>()
 
-    override suspend fun highlight(file: VirtualFile): List<SemanticToken> {
-        val parsed = parsedFor(file) ?: return emptyList()
-        refresh() // cross-file freshness: a decl just typed in another open file resolves here
-        val resolver = resolverFor(parsed)
+    override suspend fun highlight(file: VirtualFile): List<SemanticToken> = KotlinPerf.trace("kt.highlight") {
+        val parsed = parsedFor(file) ?: return@trace emptyList()
+        KotlinPerf.span("refresh") { refresh() } // cross-file freshness: a decl just typed in another open file resolves here
+        val resolver = KotlinPerf.span("resolver") { resolverFor(parsed) }
         val ktFile = parsed.ktFile
         val out = ArrayList<SemanticToken>(256)
         // Non-declaration top-level children (package / imports / file annotations) — cheap, recomputed each
         // time. They precede every declaration in a Kotlin file, so emitting them first keeps document order.
-        for (child in ktFile.children) if (child !is KtDeclaration) collectInto(child, resolver, out)
+        for (child in ktFile.children) if (child !is KtDeclaration) collectInto(
+            child,
+            resolver,
+            out
+        )
 
         val topDecls = ktFile.declarations
-        val importsKey = IncrementalDecls.importsKey(ktFile)
+        val curImports = IncrementalDecls.importsOf(ktFile)
+        val curFileText = ktFile.text
         val externalStamp = externalStampFor(file.path)
         val prev = cache[file.path]?.takeIf { it.externalStamp == externalStamp }
-        val recompute = IncrementalDecls.recomputeIndices(prev?.decls?.map { it.key }, prev?.importsKey, importsKey, topDecls)
+        // Recompute only the declarations this edit can affect (changed ones + dependents of a signature/import
+        // change); reuse the rest re-anchored. Same dependency plan the diagnostics pass uses (see IncrementalDecls).
+        val plan = KotlinPerf.span("scopeCheck") { IncrementalDecls.plan(prev?.decls?.map { it.facts }, prev?.imports, prev?.fileText, topDecls, curImports, curFileText) }
+        val recompute: Set<Int>? = (plan as? IncrementalDecls.Plan.Partial)?.recompute
         val newEntries = ArrayList<DeclTokens>(topDecls.size)
-        for ((i, d) in topDecls.withIndex()) {
+        KotlinPerf.span("walk") { for ((i, d) in topDecls.withIndex()) {
             val base = d.textRange.startOffset
             if (recompute != null && i !in recompute) {
-                val cached = prev!!.decls[i] // text identical → reuse this declaration's tokens, re-anchored
+                val cached = prev!!.decls[i] // unaffected → reuse this declaration's tokens, re-anchored
                 cached.rel.forEach { out += shift(it, base) }
                 newEntries += cached
             } else {
                 val abs = ArrayList<SemanticToken>()
                 collectInto(d, resolver, abs)
                 out += abs
-                newEntries += DeclTokens(IncrementalDecls.keyOf(d), abs.map { shift(it, -base) })
+                newEntries += DeclTokens(IncrementalDecls.factsOf(d), abs.map { shift(it, -base) })
             }
-        }
-        cache[file.path] = Snapshot(importsKey, externalStamp, newEntries)
-        return out
+        } }
+        cache[file.path] = Snapshot(curImports, curFileText, externalStamp, newEntries)
+        return@trace out
     }
 
     /** Shift a token's range by [delta] (relative⇄absolute re-anchoring; [SemanticToken] has no copy()). */
@@ -105,45 +129,167 @@ class KotlinSemanticHighlighter(
 
     /** Walk [root]'s subtree depth-first, emitting a [SemanticToken] per classifiable identifier into [out] —
      *  the same classification the whole-file pass used, now scoped to a subtree so it runs per declaration. */
-    private fun collectInto(root: PsiElement, resolver: KotlinResolver, out: MutableList<SemanticToken>) {
+    private fun collectInto(
+        root: PsiElement,
+        resolver: KotlinResolver,
+        out: MutableList<SemanticToken>
+    ) {
         var seen = 0
-        fun emit(range: org.jetbrains.kotlin.com.intellij.openapi.util.TextRange?, kind: HighlightKind, mods: Set<HighlightModifier> = emptySet()) {
+        fun emit(
+            range: com.intellij.openapi.util.TextRange?,
+            kind: HighlightKind,
+            mods: Set<HighlightModifier> = emptySet()
+        ) {
             if (range == null) return
             out += SemanticToken(TextRange(range.startOffset, range.endOffset), kind, mods)
         }
+
         fun walk(psi: PsiElement) {
             if (seen++ % 64 == 0) EngineCancellation.checkCanceled()
             when (psi) {
                 is KtObjectDeclaration ->
-                    emit(psi.nameIdentifier?.textRange, HighlightKind.OBJECT, setOf(HighlightModifier.DECLARATION))
+                    emit(
+                        psi.nameIdentifier?.textRange,
+                        HighlightKind.OBJECT,
+                        setOf(HighlightModifier.DECLARATION)
+                    )
+
                 is KtClass ->
-                    emit(psi.nameIdentifier?.textRange, classKind(psi), setOf(HighlightModifier.DECLARATION))
+                    emit(
+                        psi.nameIdentifier?.textRange,
+                        classKind(psi),
+                        setOf(HighlightModifier.DECLARATION)
+                    )
+
                 is KtNamedFunction ->
-                    emit(psi.nameIdentifier?.textRange, HighlightKind.FUNCTION,
-                        declMods(HighlightModifier.DECLARATION) + functionMods(psi) + extensionIf(psi.receiverTypeReference != null))
+                    emit(
+                        psi.nameIdentifier?.textRange, HighlightKind.FUNCTION,
+                        declMods(HighlightModifier.DECLARATION) + functionMods(psi) + extensionIf(
+                            psi.receiverTypeReference != null
+                        )
+                    )
+
                 is KtProperty -> {
                     val local = psi.parent is KtBlockExpression
-                    val depr = if (isDeprecatedDecl(psi)) setOf(HighlightModifier.DEPRECATED) else emptySet()
-                    emit(psi.nameIdentifier?.textRange, if (local) HighlightKind.LOCAL_VARIABLE else HighlightKind.PROPERTY,
-                        declMods(HighlightModifier.DECLARATION) + mutability(psi.isVar) + extensionIf(psi.receiverTypeReference != null) + depr)
+                    val const = psi.hasModifier(KtTokens.CONST_KEYWORD)
+                    val depr =
+                        if (isDeprecatedDecl(psi)) setOf(HighlightModifier.DEPRECATED) else emptySet()
+                    emit(
+                        psi.nameIdentifier?.textRange,
+                        when {
+                            const -> HighlightKind.CONSTANT       // `const val` — a compile-time constant
+                            local -> HighlightKind.LOCAL_VARIABLE
+                            else -> HighlightKind.PROPERTY
+                        },
+                        declMods(HighlightModifier.DECLARATION) + mutability(psi.isVar) + extensionIf(
+                            psi.receiverTypeReference != null
+                        ) + depr
+                    )
                 }
+
+                // A property accessor's `get`/`set` keyword (`var x = 1` then `    private set`). The lexer
+                // colors the visibility modifier (`private`) but leaves the accessor keyword itself uncolored;
+                // emit it as a keyword so `get`/`set` read like keywords (semantic wins over lexical on overlap).
+                is KtPropertyAccessor ->
+                    emit(psi.namePlaceholder.textRange, HighlightKind.KEYWORD)
+
+                // A primary-constructor `val`/`var` parameter IS a member property (`data class`/`value class`/
+                // regular class) — color it like a property (matching its uses `p.name` and IntelliJ), not a
+                // plain parameter. A plain parameter (no `val`/`var`) stays a parameter.
                 is KtParameter ->
-                    emit(psi.nameIdentifier?.textRange, HighlightKind.PARAMETER,
-                        declMods(HighlightModifier.DECLARATION) + paramMutability(psi))
+                    if (psi.hasValOrVar()) emit(
+                        psi.nameIdentifier?.textRange, HighlightKind.PROPERTY,
+                        declMods(HighlightModifier.DECLARATION) + mutability(psi.isMutable)
+                    ) else emit(
+                        psi.nameIdentifier?.textRange, HighlightKind.PARAMETER,
+                        declMods(HighlightModifier.DECLARATION) + paramMutability(psi)
+                    )
+
+                // A destructuring entry `val (a, b) = …` / `for ((k, v) in …)` / `{ (a, b) -> }` — each name is a
+                // local binding (never a class member, so always LOCAL_VARIABLE), read-only unless the `var` form.
+                is KtDestructuringDeclarationEntry ->
+                    emit(
+                        psi.nameIdentifier?.textRange,
+                        HighlightKind.LOCAL_VARIABLE,
+                        declMods(HighlightModifier.DECLARATION) + mutability(psi.isVar)
+                    )
+
                 is KtTypeParameter ->
-                    emit(psi.nameIdentifier?.textRange, HighlightKind.TYPE_PARAMETER, setOf(HighlightModifier.DECLARATION))
-                is KtCallExpression -> classifyCall(psi, resolver, ::emit)
-                is KtBinaryExpression -> classifyInfix(psi, resolver, ::emit)
+                    emit(
+                        psi.nameIdentifier?.textRange,
+                        HighlightKind.TYPE_PARAMETER,
+                        setOf(HighlightModifier.DECLARATION)
+                    )
+
+                // The `@` of an annotation usage (`@Composable`, `@field:Foo`). The annotation NAME is colored
+                // by classifyTypeRef when the walk descends into the entry; adding just the `@` here (the entry's
+                // range starts at it) makes the whole `@Foo` read as one annotation unit.
+                is KtAnnotationEntry -> {
+                    val at = psi.textRange.startOffset
+                    emit(com.intellij.openapi.util.TextRange(at, at + 1), HighlightKind.ANNOTATION)
+                }
+
+                // A Kotlin label: a definition (`loop@ for …`), a jump target (`break@loop`, `continue@loop`,
+                // `return@loop`), or a labeled `this`/`super` (`this@Outer`). All share KtExpressionWithLabel; we
+                // color its target-label token. Unlabeled `this`/`return`/… have a null target → no token.
+                is KtExpressionWithLabel ->
+                    emit(psi.getTargetLabel()?.textRange, HighlightKind.LABEL)
+
+                // The three resolution-heavy categories get their own [KotlinPerf] bucket so a slow-highlight
+                // trace pins the cost on call-callee resolution vs infix resolution vs member/name inference.
+                is KtCallExpression -> KotlinPerf.span("hl.call") { classifyCall(psi, resolver, ::emit) }
+                is KtBinaryExpression -> KotlinPerf.span("hl.infix") { classifyInfix(psi, resolver, ::emit) }
                 // A named-argument label (`foo(name = x)`) is a parameter reference — color it like a parameter.
-                is KtValueArgumentName -> emit(psi.referenceExpression?.textRange, HighlightKind.PARAMETER, emptySet())
+                is KtValueArgumentName -> emit(
+                    psi.referenceExpression.textRange,
+                    HighlightKind.PARAMETER,
+                    emptySet()
+                )
+
                 is KtUserType -> classifyTypeRef(psi, ::emit)
-                is KtNameReferenceExpression -> classifyReference(psi, resolver, ::emit)
+                is KtNameReferenceExpression -> KotlinPerf.span("hl.ref") { classifyReference(psi, resolver, ::emit) }
+                is KtStringTemplateExpression -> classifyStringTemplate(psi, ::emit)
                 else -> {}
             }
             var c = psi.firstChild
-            while (c != null) { walk(c); c = c.nextSibling }
+            while (c != null) {
+                walk(c); c = c.nextSibling
+            }
         }
         walk(root)
+    }
+
+    /** Color a string literal's non-literal parts: escape sequences (`\n`, `\$`, `\uXXXX`) and the interpolation
+     *  delimiters (`$` of `$name`, `${`/`}` of `${expr}`). Every Kotlin string is a template expression, so this
+     *  also covers escapes in plain strings. The interpolated EXPRESSION itself (`name`, `p.x`) is a normal PSI
+     *  subtree the main walk descends into and classifies — so we emit only the delimiters here, never the value. */
+    private fun classifyStringTemplate(
+        psi: KtStringTemplateExpression,
+        emit: (com.intellij.openapi.util.TextRange?, HighlightKind, Set<HighlightModifier>) -> Unit
+    ) {
+        for (entry in psi.entries) {
+            if (entry is KtEscapeStringTemplateEntry) {
+                emit(entry.textRange, HighlightKind.STRING_ESCAPE, emptySet())
+                continue
+            }
+            // A `$name` / `${…}` entry: color just its delimiter leaf tokens (identified by element type, so an
+            // unclosed `${` while typing simply has no end token to color — never a stray brace). A literal-text
+            // entry has none of these tokens, so nothing is emitted for it (the lexical string color shows through).
+            var child = entry.firstChild
+            while (child != null) {
+                when (child.node.elementType) {
+                    KtTokens.SHORT_TEMPLATE_ENTRY_START,
+                    KtTokens.LONG_TEMPLATE_ENTRY_START,
+                    KtTokens.LONG_TEMPLATE_ENTRY_END ->
+                        emit(child.textRange, HighlightKind.STRING_TEMPLATE_ENTRY, emptySet())
+                    in KtTokens.KEYWORDS -> {
+                        emit(child.textRange, HighlightKind.KEYWORD, emptySet())
+                    }
+                    else -> {}
+                }
+                child = child.nextSibling
+            }
+        }
     }
 
     private fun classKind(c: KtClass): HighlightKind = when {
@@ -162,11 +308,13 @@ class KotlinSemanticHighlighter(
     }
 
     /** A declaration carrying `@Deprecated` (by annotation simple name) — its own name renders struck through. */
-    private fun isDeprecatedDecl(d: org.jetbrains.kotlin.psi.KtAnnotated): Boolean =
+    private fun isDeprecatedDecl(d: KtAnnotated): Boolean =
         d.annotationEntries.any { it.shortName?.asString() == "Deprecated" }
 
     private fun declMods(vararg m: HighlightModifier): Set<HighlightModifier> = m.toSet()
-    private fun extensionIf(b: Boolean): Set<HighlightModifier> = if (b) setOf(HighlightModifier.EXTENSION) else emptySet()
+    private fun extensionIf(b: Boolean): Set<HighlightModifier> =
+        if (b) setOf(HighlightModifier.EXTENSION) else emptySet()
+
     private fun mutability(isVar: Boolean): Set<HighlightModifier> =
         setOf(if (isVar) HighlightModifier.MUTABLE else HighlightModifier.READONLY)
 
@@ -179,7 +327,11 @@ class KotlinSemanticHighlighter(
 
     /** Classify a call's callee: a resolved function (+ composable/extension/suspend), or a capitalized
      *  constructor invocation. The callee is also a name reference, so [classifyReference] skips call callees. */
-    private fun classifyCall(call: KtCallExpression, resolver: KotlinResolver, emit: (org.jetbrains.kotlin.com.intellij.openapi.util.TextRange?, HighlightKind, Set<HighlightModifier>) -> Unit) {
+    private fun classifyCall(
+        call: KtCallExpression,
+        resolver: KotlinResolver,
+        emit: (com.intellij.openapi.util.TextRange?, HighlightKind, Set<HighlightModifier>) -> Unit
+    ) {
         val callee = call.calleeExpression as? KtNameReferenceExpression ?: return
         val sym = resolver.calleeFunctionOf(call)
         if (sym != null) {
@@ -191,6 +343,7 @@ class KotlinSemanticHighlighter(
             emit(callee.textRange, HighlightKind.METHOD, mods)
             return
         }
+
         // No function resolved: a capitalized callee is a constructor / object invoke (`Foo(...)`, `Color(...)`).
         if (callee.getReferencedName().firstOrNull()?.isUpperCase() == true) {
             emit(callee.textRange, HighlightKind.CONSTRUCTOR, emptySet())
@@ -199,7 +352,11 @@ class KotlinSemanticHighlighter(
 
     /** An infix call (`a combine b`, `0 until n`): color the operator identifier as the resolved function, with
      *  its extension/suspend/composable facts. Operator-token binaries (`+`, `<`) are left to the lexical layer. */
-    private fun classifyInfix(e: KtBinaryExpression, resolver: KotlinResolver, emit: (org.jetbrains.kotlin.com.intellij.openapi.util.TextRange?, HighlightKind, Set<HighlightModifier>) -> Unit) {
+    private fun classifyInfix(
+        e: KtBinaryExpression,
+        resolver: KotlinResolver,
+        emit: (com.intellij.openapi.util.TextRange?, HighlightKind, Set<HighlightModifier>) -> Unit
+    ) {
         if (e.operationToken != KtTokens.IDENTIFIER) return
         val sym = resolver.resolveInfixFunction(e) ?: return
         val mods = HashSet<HighlightModifier>(3)
@@ -212,7 +369,10 @@ class KotlinSemanticHighlighter(
     /** A type-position name: an annotation usage (`@Foo`), an in-scope type parameter (`T`), or a class. Only
      *  the LEAF of a qualified type (`a.b.C` → `C`) is colored; the qualifier segments (packages/owners) are
      *  KtUserType children visited separately and skipped here, so a package name isn't miscolored as a class. */
-    private fun classifyTypeRef(userType: KtUserType, emit: (org.jetbrains.kotlin.com.intellij.openapi.util.TextRange?, HighlightKind, Set<HighlightModifier>) -> Unit) {
+    private fun classifyTypeRef(
+        userType: KtUserType,
+        emit: (com.intellij.openapi.util.TextRange?, HighlightKind, Set<HighlightModifier>) -> Unit
+    ) {
         if (userType.parent is KtUserType) return // a qualifier segment of an enclosing type
         val ref = userType.referenceExpression ?: return
         val name = ref.getReferencedName()
@@ -232,7 +392,11 @@ class KotlinSemanticHighlighter(
     /** A bare/member reference in value position: locals & parameters (with var/val) from the PSI scope, and now
      *  resolved member reads (`obj.prop`, `Color.RED`, `point.x`) colored as property / field / enum-constant.
      *  Call callees, named-arg labels, type refs, this/super are handled elsewhere. */
-    private fun classifyReference(ref: KtNameReferenceExpression, resolver: KotlinResolver, emit: (org.jetbrains.kotlin.com.intellij.openapi.util.TextRange?, HighlightKind, Set<HighlightModifier>) -> Unit) {
+    private fun classifyReference(
+        ref: KtNameReferenceExpression,
+        resolver: KotlinResolver,
+        emit: (com.intellij.openapi.util.TextRange?, HighlightKind, Set<HighlightModifier>) -> Unit
+    ) {
         val parent = ref.parent
         if (parent is KtCallExpression && parent.calleeExpression === ref) return // a call callee (classifyCall)
         if (parent is KtUserType || parent is KtValueArgumentName) return
@@ -240,34 +404,115 @@ class KotlinSemanticHighlighter(
         if (parent is KtQualifiedExpression && parent.selectorExpression === ref) {
             classifyMemberSelector(ref, parent, resolver, emit); return
         }
+        // A callable reference `Person::age` / `String::length` / `::topFun`: color the referenced callable
+        // (`age`) like a property/method; a type-denoting receiver (`Person`) reads as a class. An instance
+        // receiver (`instance::foo`) falls through to the local/parameter coloring below.
+        if (parent is org.jetbrains.kotlin.psi.KtCallableReferenceExpression) {
+            if (parent.callableReference === ref) { classifyCallableRef(ref, parent, resolver, emit); return }
+            if (parent.receiverExpression === ref && resolver.typeDenotationFqn(ref) != null) {
+                emit(ref.textRange, HighlightKind.CLASS, emptySet()); return
+            }
+        }
         val name = ref.getReferencedName()
         if (name.isEmpty()) return
         val offset = ref.textRange.startOffset
         when (val decl = localOrParamDecl(name, offset, ref)) {
-            is KtParameter -> { emit(ref.textRange, HighlightKind.PARAMETER, paramMutability(decl)); return }
-            is KtProperty -> { emit(ref.textRange, HighlightKind.LOCAL_VARIABLE, mutability(decl.isVar)); return }
+            is KtParameter -> {
+                emit(ref.textRange, HighlightKind.PARAMETER, paramMutability(decl)); return
+            }
+
+            is KtProperty -> {
+                emit(ref.textRange, HighlightKind.LOCAL_VARIABLE, mutability(decl.isVar)); return
+            }
+
+            is KtDestructuringDeclarationEntry -> {
+                emit(ref.textRange, HighlightKind.LOCAL_VARIABLE, mutability(decl.isVar)); return
+            }
         }
         // The implicit lambda parameter `it` (`x.let { it }`, `x.also { it }`) is synthetic — no `KtParameter`,
         // so the PSI scan above misses it. The resolver synthesizes it ONLY when an enclosing no-arg lambda fills
         // a single-value-parameter functional type, so gating on that is sound (it's never a stray `it`). Immutable.
-        if (name == "it" && resolver.localsAt(offset).any { it.name == "it" && it.kind == SymbolKind.PARAMETER }) {
+        if (name == "it" && resolver.localsAt(offset)
+                .any { it.name == "it" && it.kind == SymbolKind.PARAMETER }
+        ) {
             emit(ref.textRange, HighlightKind.PARAMETER, setOf(HighlightModifier.READONLY)); return
+        }
+        // `field` inside a property accessor is the backing-field soft keyword (`get() = field`, `set(v) { field
+        // = v }`). No real local/param named `field` shadowed it above, so color it as a keyword.
+        if (name == "field" && ref.getStrictParentOfType<KtPropertyAccessor>() != null) {
+            emit(ref.textRange, HighlightKind.KEYWORD, emptySet()); return
         }
         // A bare member read resolved through an implicit receiver — the `this` of an `apply`/`with`/`run` block,
         // an enclosing extension receiver, or the enclosing class (`p.apply { x }`). Colored like the qualified
         // form (`p.x`) would be in [classifyMemberSelector]; a method ref without a call is left to the lexer.
-        val member = resolver.implicitReceiverMember(name, offset) ?: return
-        when (member.kind) {
-            SymbolKind.FIELD -> emit(ref.textRange, HighlightKind.PROPERTY, deprecationMods(member))
-            SymbolKind.ENUM_CONSTANT -> emit(ref.textRange, HighlightKind.ENUM_CONSTANT, deprecationMods(member))
-            else -> {} // a member / top-level / unresolved name → leave to the lexical layer
+        val member = resolver.implicitReceiverMember(name, offset)
+        if (member != null) {
+            when (member.kind) {
+                SymbolKind.FIELD -> emit(ref.textRange, HighlightKind.PROPERTY, deprecationMods(member))
+                SymbolKind.ENUM_CONSTANT -> emit(ref.textRange, HighlightKind.ENUM_CONSTANT, deprecationMods(member))
+                else -> {} // a member / top-level / unresolved name → leave to the lexical layer
+            }
+            return
+        }
+        // Fallback (pure PSI): a bare read of an ENCLOSING-CLASS member property through the implicit `this`
+        // (`nickname = _nickname` inside an `init` block). The resolver's implicit-receiver lookup can miss this
+        // where a receiver scope isn't set up (an init block) or before the index is ready; a syntactic match
+        // against the enclosing class's declared members colors it regardless. Runs AFTER the resolver lookup so
+        // a nearer `apply`/`with` receiver member still wins.
+        enclosingClassMemberProperty(name, ref)?.let { isVar ->
+            emit(ref.textRange, HighlightKind.PROPERTY, mutability(isVar))
+        }
+    }
+
+    /** Whether [name] is a property of an enclosing class — a member `val`/`var` or a `val`/`var` primary-
+     *  constructor param — returning its mutability (`var` → true), or null if none. Pure PSI: colors an
+     *  enclosing-class member read even where the resolver's implicit-receiver lookup can't. */
+    private fun enclosingClassMemberProperty(name: String, from: PsiElement): Boolean? {
+        var cls = from.getStrictParentOfType<KtClassOrObject>()
+        while (cls != null) {
+            cls.body?.declarations?.filterIsInstance<KtProperty>()
+                ?.firstOrNull { it.name == name }?.let { return it.isVar }
+            (cls as? KtClass)?.primaryConstructorParameters
+                ?.firstOrNull { it.hasValOrVar() && it.name == name }?.let { return it.isMutable }
+            cls = cls.getStrictParentOfType<KtClassOrObject>()
+        }
+        return null
+    }
+
+    /** A callable reference's referenced callable (`Person::age`, `String::length`, `::topFun`): colored as a
+     *  method (function) or property/enum-constant when it resolves off the receiver type or top-level scope.
+     *  Left to the lexer when the parse-only model can't resolve it. */
+    private fun classifyCallableRef(
+        ref: KtNameReferenceExpression,
+        cr: org.jetbrains.kotlin.psi.KtCallableReferenceExpression,
+        resolver: KotlinResolver,
+        emit: (com.intellij.openapi.util.TextRange?, HighlightKind, Set<HighlightModifier>) -> Unit
+    ) {
+        val sym = resolver.callableReferenceTarget(cr) ?: return
+        when (sym.kind) {
+            SymbolKind.METHOD -> {
+                val mods = HashSet<HighlightModifier>(4)
+                if (sym.isComposable) mods += HighlightModifier.COMPOSABLE
+                if (sym.isExtension) mods += HighlightModifier.EXTENSION
+                if (sym.isSuspend) mods += HighlightModifier.SUSPEND
+                if (sym.isDeprecated) mods += HighlightModifier.DEPRECATED
+                emit(ref.textRange, HighlightKind.METHOD, mods)
+            }
+            SymbolKind.FIELD -> emit(ref.textRange, HighlightKind.PROPERTY, deprecationMods(sym))
+            SymbolKind.ENUM_CONSTANT -> emit(ref.textRange, HighlightKind.ENUM_CONSTANT, deprecationMods(sym))
+            else -> {}
         }
     }
 
     /** A member read `receiver.name` (not a call) resolved off the receiver type: an enum constant, else a
      *  property/field. A type/static receiver (`Color.RED`, `Companion.X`) and an instance receiver
      *  (`point.x`) are both handled; an unresolvable receiver/member is left to the lexical layer. */
-    private fun classifyMemberSelector(ref: KtNameReferenceExpression, q: KtQualifiedExpression, resolver: KotlinResolver, emit: (org.jetbrains.kotlin.com.intellij.openapi.util.TextRange?, HighlightKind, Set<HighlightModifier>) -> Unit) {
+    private fun classifyMemberSelector(
+        ref: KtNameReferenceExpression,
+        q: KtQualifiedExpression,
+        resolver: KotlinResolver,
+        emit: (com.intellij.openapi.util.TextRange?, HighlightKind, Set<HighlightModifier>) -> Unit
+    ) {
         val name = ref.getReferencedName()
         if (name.isEmpty()) return
         val receiver = q.receiverExpression
@@ -278,13 +523,19 @@ class KotlinSemanticHighlighter(
             }
             resolver.staticMemberNamed(typeFqn, name)
         } else {
-            val recvType = resolver.inferType(receiver) ?: return
+            val inferred = resolver.inferType(receiver) ?: return
+            // A bare type-parameter receiver (`t.member` where `t: T`, `<T : Bound>`) highlights its members
+            // against the parameter's upper bound — whether or not the inferred `T` is MARKED (a class field's
+            // `T` is, a function parameter's isn't). Resolve the bound first, then skip a LEAKED (not-in-scope)
+            // type parameter, whose concrete members can't be known.
+            val recvType = resolver.receiverForMembers(inferred, receiver.textRange.startOffset) ?: return
             if (recvType.isTypeParameter) return
             resolver.instanceMemberNamed(recvType, name)
         } ?: return
         // A property/field read (a method ref without a call is rare; leave it to the lexical layer).
         if (member.kind == dev.ide.lang.resolve.SymbolKind.FIELD || member.kind == dev.ide.lang.resolve.SymbolKind.ENUM_CONSTANT) {
-            val kind = if (member.kind == dev.ide.lang.resolve.SymbolKind.ENUM_CONSTANT) HighlightKind.ENUM_CONSTANT else HighlightKind.PROPERTY
+            val kind =
+                if (member.kind == dev.ide.lang.resolve.SymbolKind.ENUM_CONSTANT) HighlightKind.ENUM_CONSTANT else HighlightKind.PROPERTY
             emit(ref.textRange, kind, deprecationMods(member))
         }
     }
@@ -300,11 +551,51 @@ class KotlinSemanticHighlighter(
         while (node != null) {
             when (node) {
                 is KtBlockExpression ->
-                    node.statements.firstOrNull { it is KtProperty && it.name == name && it.textRange.endOffset <= offset }?.let { return it }
-                is KtFunction -> node.valueParameters.firstOrNull { it.name == name }?.let { return it }
-                is KtForExpression -> node.loopParameter?.takeIf { it.name == name }?.let { return it }
-                is KtCatchClause -> node.catchParameter?.takeIf { it.name == name }?.let { return it }
-                is KtClassOrObject -> return null
+                    for (st in node.statements) {
+                        if (st is KtProperty && st.name == name && st.textRange.endOffset <= offset) return st
+                        // `val (a, b) = …` — a destructuring statement binds each of its entries as a local.
+                        if (st is KtDestructuringDeclaration && st.textRange.endOffset <= offset)
+                            st.entries.firstOrNull { it.name == name }?.let { return it }
+                    }
+
+                is KtFunction -> {
+                    node.valueParameters.firstOrNull { it.name == name }?.let { return it }
+                    // A lambda destructuring param `{ (a, b) -> }` — the entries live on the parameter.
+                    node.valueParameters.forEach { p ->
+                        p.destructuringDeclaration?.entries?.firstOrNull { it.name == name }?.let { return it }
+                    }
+                }
+
+                // A property accessor's value parameter (`set(value) { field = value }`) — the setter's `value`.
+                // A `KtPropertyAccessor` is NOT a `KtFunction`, so it needs its own branch.
+                is KtPropertyAccessor ->
+                    node.valueParameters.firstOrNull { it.name == name }?.let { return it }
+
+                is KtForExpression -> {
+                    node.loopParameter?.takeIf { it.name == name }?.let { return it }
+                    // `for ((k, v) in …)` — the loop parameter is itself a destructuring.
+                    node.destructuringDeclaration?.entries?.firstOrNull { it.name == name }?.let { return it }
+                }
+
+                is KtCatchClause -> node.catchParameter?.takeIf { it.name == name }
+                    ?.let { return it }
+
+                is KtClassOrObject -> {
+                    // Plain (non-val/var) primary-constructor params are visible in init blocks / property
+                    // initializers — resolve them here (a val/var param IS a member property, colored via the
+                    // implicit-receiver path, so it is intentionally left to that path).
+                    (node as? KtClass)?.primaryConstructor?.valueParameters
+                        ?.firstOrNull { it.name == name && !it.hasValOrVar() }?.let { return it }
+                    // A local class / anonymous object CAPTURES enclosing-function locals, so keep walking past
+                    // it — unless this class declares a member of the same name (which shadows the outer local;
+                    // that member is colored by the implicit-receiver path). A member/top-level class has no
+                    // enclosing-function locals up its parent chain, so continuing simply finds nothing.
+                    val shadows = node.body?.declarations?.any {
+                        (it is KtProperty && it.name == name) || (it is KtNamedFunction && it.name == name)
+                    } == true ||
+                        (node as? KtClass)?.primaryConstructorParameters?.any { it.hasValOrVar() && it.name == name } == true
+                    if (shadows) return null
+                }
             }
             node = node.parent
         }

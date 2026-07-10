@@ -61,7 +61,8 @@ fun AnalyticsConsentSheet(
                 onAllow = onAllow,
                 onDecline = onDecline,
                 onLearnMore = onLearnMore,
-                modifier = Modifier.fillMaxWidth().widthIn(max = 560.dp).padding(horizontal = 24.dp, vertical = 8.dp),
+                modifier = Modifier.fillMaxWidth().widthIn(max = 560.dp)
+                    .padding(horizontal = 24.dp, vertical = 8.dp),
             )
         }
     } else {
@@ -96,7 +97,12 @@ private fun ConsentBody(
             Icon(CaIcons.info, null, Modifier.size(34.dp), tint = Ca.colors.accent)
         }
         Spacer(Modifier.height(20.dp))
-        Text(stringResource(Res.string.help_improve_codeassist), color = Ca.colors.textPrimary, style = Ca.type.title2, textAlign = TextAlign.Center)
+        Text(
+            stringResource(Res.string.help_improve_codeassist),
+            color = Ca.colors.textPrimary,
+            style = Ca.type.title2,
+            textAlign = TextAlign.Center
+        )
         Spacer(Modifier.height(12.dp))
         Text(
             stringResource(Res.string.help_improve_codeassist_content),
@@ -111,19 +117,31 @@ private fun ConsentBody(
                 color = Ca.colors.accent,
                 style = Ca.type.subhead,
                 modifier = Modifier
-                    .clickable(remember { MutableInteractionSource() }, indication = null, onClick = onLearnMore)
+                    .clickable(
+                        remember { MutableInteractionSource() },
+                        indication = null,
+                        onClick = onLearnMore
+                    )
                     .padding(6.dp),
             )
         }
         Spacer(Modifier.height(24.dp))
-        PrimaryButton(text = stringResource(Res.string.allow), onClick = onAllow, modifier = Modifier.fillMaxWidth())
+        PrimaryButton(
+            text = stringResource(Res.string.allow),
+            onClick = onAllow,
+            modifier = Modifier.fillMaxWidth()
+        )
         Spacer(Modifier.height(8.dp))
         Text(
             stringResource(Res.string.no_thanks),
             color = Ca.colors.textSecondary,
             style = Ca.type.subhead,
             modifier = Modifier
-                .clickable(remember { MutableInteractionSource() }, indication = null, onClick = onDecline)
+                .clickable(
+                    remember { MutableInteractionSource() },
+                    indication = null,
+                    onClick = onDecline
+                )
                 .padding(12.dp),
         )
     }
@@ -131,20 +149,33 @@ private fun ConsentBody(
 
 /** A compact reusable analytics on/off row for a settings surface (the editor's More menu). */
 @Composable
-fun AnalyticsToggleRow(enabled: Boolean, onChange: (Boolean) -> Unit, modifier: Modifier = Modifier) {
+fun AnalyticsToggleRow(
+    enabled: Boolean,
+    onChange: (Boolean) -> Unit,
+    modifier: Modifier = Modifier
+) {
     Row(
         modifier
             .fillMaxWidth()
-            .clickable(remember { MutableInteractionSource() }, indication = null) { onChange(!enabled) }
+            .clickable(
+                remember { MutableInteractionSource() },
+                indication = null
+            ) { onChange(!enabled) }
             .padding(vertical = 10.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(12.dp),
     ) {
         Icon(CaIcons.info, null, Modifier.size(18.dp), tint = Ca.colors.textSecondary)
         Column(Modifier.weight(1f)) {
-            Text(stringResource(Res.string.performance_analytics), color = Ca.colors.textPrimary, style = Ca.type.subhead)
             Text(
-                if (enabled) stringResource(Res.string.sharing_performance_data) else stringResource(Res.string.not_sharing_performance_data),
+                stringResource(Res.string.performance_analytics),
+                color = Ca.colors.textPrimary,
+                style = Ca.type.subhead
+            )
+            Text(
+                if (enabled) stringResource(Res.string.sharing_performance_data) else stringResource(
+                    Res.string.not_sharing_performance_data
+                ),
                 color = Ca.colors.textSecondary,
                 style = Ca.type.caption,
             )
@@ -159,11 +190,17 @@ private fun ConsentToggle(on: Boolean, onToggle: (Boolean) -> Unit) {
     Box(
         Modifier
             .size(width = 44.dp, height = 26.dp)
-            .background(if (on) Ca.colors.accent else Ca.colors.surface3, RoundedCornerShape(Ca.radius.pill))
+            .background(
+                if (on) Ca.colors.accent else Ca.colors.surface3,
+                RoundedCornerShape(Ca.radius.pill)
+            )
             .clickable(remember { MutableInteractionSource() }, indication = null) { onToggle(!on) }
             .padding(3.dp),
         contentAlignment = if (on) Alignment.CenterEnd else Alignment.CenterStart,
     ) {
-        Box(Modifier.size(20.dp).background(Ca.colors.textOnAccent, RoundedCornerShape(Ca.radius.pill)))
+        Box(
+            Modifier.size(20.dp)
+                .background(Ca.colors.textOnAccent, RoundedCornerShape(Ca.radius.pill))
+        )
     }
 }

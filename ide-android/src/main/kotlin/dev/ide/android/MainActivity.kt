@@ -1,9 +1,12 @@
 package dev.ide.android
 
+import android.Manifest
 import android.app.Activity
 import android.content.Context
 import android.content.Intent
+import android.content.pm.PackageManager
 import android.net.Uri
+import android.os.Build
 import android.os.Bundle
 import android.provider.DocumentsContract
 import android.provider.OpenableColumns
@@ -22,8 +25,12 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
+import androidx.compose.material3.darkColorScheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -38,6 +45,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.content.FileProvider
 import dev.ide.android.daemon.BuildDaemonProof
+import dev.ide.core.CaprojFormat
 import dev.ide.core.IdeServicesBackend
 import dev.ide.ui.CodeAssistApp
 import dev.ide.ui.backend.FileActions
@@ -73,16 +81,42 @@ class MainActivity : ComponentActivity() {
             var error by remember { mutableStateOf<String?>(null) }
             LaunchedEffect(Unit) {
                 runCatching { withContext(Dispatchers.IO) { AndroidIde.bootstrap(applicationContext) } }.onSuccess { s ->
-                        session = s; backend = s.backend
-                        // Phase-3a build-process-isolation proof (docs/build-process-isolation.md): bind the
-                        // :build daemon, open the first on-device project there, and run its default build in
-                        // that process — streaming state back over IPC. Verify via `adb logcat -s ide.daemon
-                        // ide.mem`. Started only AFTER bootstrap finishes so the main process provisions the
-                        // shared kotlinc-home/assets first and the daemon takes the no-delete fast path (a
-                        // concurrent first-run provision would race and corrupt the kotlinc-home). Debug-only +
-                        // flag-gated; replaced in Phase 3b by RemoteBuildRunner wired into the UI Run button.
-                        if (BuildConfig.DEBUG && BuildDaemonProof.ENABLED) BuildDaemonProof.run(applicationContext)
-                    }.onFailure { e -> error = e.stackTraceToString() ?: e.toString() }
+                    session = s; backend = s.backend
+                    // Phase-3a build-process-isolation proof (docs/build-process-isolation.md): bind the
+                    // :build daemon, open the first on-device project there, and run its default build in
+                    // that process — streaming state back over IPC. Verify via `adb logcat -s ide.daemon
+                    // ide.mem`. Started only AFTER bootstrap finishes so the main process provisions the
+                    // shared kotlinc-home/assets first and the daemon takes the no-delete fast path (a
+                    // concurrent first-run provision would race and corrupt the kotlinc-home). Debug-only +
+                    // flag-gated; replaced in Phase 3b by RemoteBuildRunner wired into the UI Run button.
+                    if (BuildConfig.DEBUG && BuildDaemonProof.ENABLED) BuildDaemonProof.run(
+                        applicationContext
+                    )
+                }.onFailure { e -> error = e.stackTraceToString() }
+            }
+
+            // POST_NOTIFICATIONS (Android 13+/API 33) is a RUNTIME permission. The build/run daemon promotes
+            // to a foreground service with an ongoing "Building…"/"Running…" notification (BuildDaemonService,
+            // in the :build process); without this grant the OS silently drops that notification, so it never
+            // reaches the shade. The permission is per-app UID, so granting it here in the main process also
+            // lets :build post. The flow is rationale-first: explain why (notifRationale dialog), then fire the
+            // system request; a denial is non-fatal (the FGS still runs, only its notification is hidden), so we
+            // just tell the user where to re-enable it. Below API 33 it was granted at install and skipped.
+            var notifRationale by remember { mutableStateOf(false) }
+            val requestNotifications =
+                rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
+                    if (!granted) Toast.makeText(
+                        this@MainActivity,
+                        "Notifications are off, so build progress won't show. You can enable them anytime in Settings.",
+                        Toast.LENGTH_LONG,
+                    ).show()
+                }
+            LaunchedEffect(Unit) {
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
+                    this@MainActivity.checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED
+                ) {
+                    notifRationale = true
+                }
             }
 
             var pendingTarget by remember { mutableStateOf<String?>(null) }
@@ -128,9 +162,12 @@ class MainActivity : ComponentActivity() {
                     }
 
                     override val canPickFile: Boolean = true
-                    override fun pickFile(onPicked: (String?) -> Unit) {
+                    override fun pickFile(extensions: List<String>, onPicked: (String?) -> Unit) {
                         pendingPick = onPicked
-                        pickLauncher.launch(arrayOf("*/*"))
+                        // Custom extensions (e.g. .caproj) have no registered MIME, so fall back to */* and
+                        // let the caller validate the picked file; known extensions narrow the SAF picker.
+                        val mimes = extensions.mapNotNull { MimeTypeMap.getSingleton().getMimeTypeFromExtension(it) }
+                        pickLauncher.launch(if (mimes.isEmpty()) arrayOf("*/*") else mimes.toTypedArray())
                     }
 
                     override val canShare: Boolean = true
@@ -153,17 +190,27 @@ class MainActivity : ComponentActivity() {
                 }
             }
 
+            // A `.caproj` package handed in via "Open with" opens the import preview (see the branch below);
+            // any other inbound file is copied into the open project's first source root as before.
+            var importPackagePath by remember { mutableStateOf<String?>(null) }
             LaunchedEffect(backend, inbound.value) {
                 val b = backend
                 val uri = inbound.value
                 if (b != null && uri != null) {
-                    val target = firstSourceRoot(b.files.fileTree())
-                    val path = if (target != null) importUri(uri, target, b) else null
-                    Toast.makeText(
-                        this@MainActivity,
-                        if (path != null) "Imported ${File(path).name}" else "Couldn't import file",
-                        Toast.LENGTH_SHORT,
-                    ).show()
+                    val name = queryDisplayName(uri) ?: ""
+                    if (name.endsWith(".${CaprojFormat.EXTENSION}", ignoreCase = true)) {
+                        val path = withContext(Dispatchers.IO) { copyInboundToCache(uri, name) }
+                        if (path != null) importPackagePath = path
+                        else Toast.makeText(this@MainActivity, "Couldn't open the project package", Toast.LENGTH_SHORT).show()
+                    } else {
+                        val target = firstSourceRoot(b.files.fileTree())
+                        val path = if (target != null) importUri(uri, target, b) else null
+                        Toast.makeText(
+                            this@MainActivity,
+                            if (path != null) "Imported ${File(path).name}" else "Couldn't import file",
+                            Toast.LENGTH_SHORT,
+                        ).show()
+                    }
                     inbound.value = null
                 }
             }
@@ -181,10 +228,23 @@ class MainActivity : ComponentActivity() {
                             it
                         )
                     },
+                    importPackagePath = importPackagePath,
                 )
 
                 error != null -> Splash("Failed to start: $error")
                 else -> Splash("Starting CodeAssist…")
+            }
+
+            // The rationale shown before the system notification prompt (see the launcher above). "Allow"
+            // fires the real request; "Not now" backs off silently (the app works fine without it).
+            if (notifRationale) {
+                NotificationRationaleDialog(
+                    onAllow = {
+                        notifRationale = false
+                        requestNotifications.launch(Manifest.permission.POST_NOTIFICATIONS)
+                    },
+                    onDismiss = { notifRationale = false },
+                )
             }
         }
     }
@@ -209,7 +269,13 @@ class MainActivity : ComponentActivity() {
             addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
         }
         startActivity(intent)
-    }.getOrElse { Toast.makeText(this, "Couldn't open the installer for ${File(path).name}", Toast.LENGTH_SHORT).show() }
+    }.getOrElse {
+        Toast.makeText(
+            this,
+            "Couldn't open the installer for ${File(path).name}",
+            Toast.LENGTH_SHORT
+        ).show()
+    }
 
     /** Copy [uri]'s bytes into a new file under [targetDir]; returns the new path or null. */
     private fun importUri(uri: Uri, targetDir: String, backend: IdeBackend): String? = runCatching {
@@ -218,11 +284,21 @@ class MainActivity : ComponentActivity() {
         backend.files.createFileBytes(targetDir, name, bytes)
     }.getOrNull()
 
+    /** Copy an inbound (`Open with`) file into a uniquely-named cache path so each hand-off is a distinct
+     *  path (the import preview re-opens on each new path). Returns the real path or null. */
+    private fun copyInboundToCache(uri: Uri, name: String): String? = runCatching {
+        val dest = File(cacheDir, "import-${System.currentTimeMillis()}-$name")
+        contentResolver.openInputStream(uri)
+            ?.use { input -> dest.outputStream().use { input.copyTo(it) } } ?: return null
+        dest.absolutePath
+    }.getOrNull()
+
     /** Copy a picked content:// file into the app cache and return its real path (for keystore import). */
     private fun copyUriToCache(uri: Uri): String? = runCatching {
         val name = queryDisplayName(uri) ?: "keystore-${System.currentTimeMillis()}"
         val dest = File(cacheDir, "picked-$name")
-        contentResolver.openInputStream(uri)?.use { input -> dest.outputStream().use { input.copyTo(it) } } ?: return null
+        contentResolver.openInputStream(uri)
+            ?.use { input -> dest.outputStream().use { input.copyTo(it) } } ?: return null
         dest.absolutePath
     }.getOrNull()
 
@@ -239,13 +315,15 @@ class MainActivity : ComponentActivity() {
 
     /** Copy [src]'s bytes into the user-chosen document [uri] (the "Save As"/export destination). */
     private fun exportTo(uri: Uri, src: String) = runCatching {
-        contentResolver.openOutputStream(uri)?.use { out -> File(src).inputStream().use { it.copyTo(out) } }
+        contentResolver.openOutputStream(uri)
+            ?.use { out -> File(src).inputStream().use { it.copyTo(out) } }
         Toast.makeText(this, "Exported ${File(src).name}", Toast.LENGTH_SHORT).show()
     }.getOrElse { Toast.makeText(this, "Couldn't export file", Toast.LENGTH_SHORT).show() }
 
     /** A best-effort content MIME type from the file extension (drives the share-sheet target list). */
     private fun mimeFor(path: String): String = when {
         path.endsWith(".apk") -> "application/vnd.android.package-archive"
+        path.endsWith(".${CaprojFormat.EXTENSION}") -> CaprojFormat.MIME
         path.endsWith(".zip") || path.endsWith(".jar") -> "application/zip"
         path.endsWith(".txt") || path.endsWith(".kt") || path.endsWith(".java") || path.endsWith(".xml") -> "text/plain"
         else -> "application/octet-stream"
@@ -260,17 +338,21 @@ class MainActivity : ComponentActivity() {
     private fun openInFiles(path: String?) {
         val auth = "$packageName.documents"
         // Deep-link to the file's containing directory when we can (so "Open in Files" lands near the APK).
-        val dirId = path?.let { p -> File(p).let { if (it.isDirectory) it else it.parentFile }?.absolutePath }
-        val dirUri = dirId?.let { runCatching { DocumentsContract.buildDocumentUri(auth, it) }.getOrNull() }
+        val dirId =
+            path?.let { p -> File(p).let { if (it.isDirectory) it else it.parentFile }?.absolutePath }
+        val dirUri =
+            dirId?.let { runCatching { DocumentsContract.buildDocumentUri(auth, it) }.getOrNull() }
         if (dirUri != null) {
             val viewDir = Intent(Intent.ACTION_VIEW)
                 .setDataAndType(dirUri, "vnd.android.document/directory")
                 .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_WRITE_URI_PERMISSION)
             if (runCatching { startActivity(viewDir); true }.getOrDefault(false)) return
         }
-        val rootUri = DocumentsContract.buildRootUri(auth, AndroidIde.externalHome(this).absolutePath)
-        val viewRoot = Intent(Intent.ACTION_VIEW).setDataAndType(rootUri, "vnd.android.document/root")
-            .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_WRITE_URI_PERMISSION)
+        val rootUri =
+            DocumentsContract.buildRootUri(auth, AndroidIde.externalHome(this).absolutePath)
+        val viewRoot =
+            Intent(Intent.ACTION_VIEW).setDataAndType(rootUri, "vnd.android.document/root")
+                .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_WRITE_URI_PERMISSION)
         if (runCatching { startActivity(viewRoot); true }.getOrDefault(false)) return
         // Fall back to whatever handles the storage/Files browse action, else tell the user where to look.
         val browse = Intent("android.provider.action.BROWSE", rootUri)
@@ -325,7 +407,8 @@ private fun firstSourceRoot(root: TreeNode): String? {
 private class ExportDocumentContract : ActivityResultContract<String, Uri?>() {
     override fun createIntent(context: Context, input: String): Intent {
         val ext = input.substringAfterLast('.', "").lowercase()
-        val mime = MimeTypeMap.getSingleton().getMimeTypeFromExtension(ext) ?: "application/octet-stream"
+        val mime =
+            MimeTypeMap.getSingleton().getMimeTypeFromExtension(ext) ?: "application/octet-stream"
         return Intent(Intent.ACTION_CREATE_DOCUMENT)
             .addCategory(Intent.CATEGORY_OPENABLE)
             .setType(mime)
@@ -358,5 +441,30 @@ private fun Splash(message: String) {
                 modifier = Modifier.padding(horizontal = 32.dp)
             )
         }
+    }
+}
+
+/**
+ * Rationale shown before the POST_NOTIFICATIONS system prompt, explaining why the IDE wants to post
+ * notifications (the ongoing build/run foreground-service notification). Wrapped in a minimal dark theme so
+ * it reads correctly even when it appears over the boot Splash, before CodeAssistApp's theme is available.
+ * [onAllow] proceeds to the real permission request; [onDismiss] backs off (the app runs fine without it).
+ */
+@Composable
+private fun NotificationRationaleDialog(onAllow: () -> Unit, onDismiss: () -> Unit) {
+    MaterialTheme(colorScheme = darkColorScheme(primary = Color(0xFF8B7BF0))) {
+        AlertDialog(
+            onDismissRequest = onDismiss,
+            title = { Text("Show build notifications?") },
+            text = {
+                Text(
+                    "CodeAssist runs builds in a separate process and shows an ongoing notification while a " +
+                            "build or program is running. It keeps Android from killing the build when you switch " +
+                            "away, and lets you follow progress. You can change this later in Settings.",
+                )
+            },
+            confirmButton = { TextButton(onClick = onAllow) { Text("Allow") } },
+            dismissButton = { TextButton(onClick = onDismiss) { Text("Not now") } },
+        )
     }
 }

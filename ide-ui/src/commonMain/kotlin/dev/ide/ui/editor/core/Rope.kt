@@ -44,7 +44,8 @@ internal sealed class Rope : CharSequence {
         return doSub(s, e)
     }
 
-    override fun subSequence(startIndex: Int, endIndex: Int): CharSequence = sub(startIndex, endIndex)
+    override fun subSequence(startIndex: Int, endIndex: Int): CharSequence =
+        sub(startIndex, endIndex)
 
     /** Materialize `[start, end)` into a `String` — O(end - start + log N). */
     fun substring(start: Int, end: Int): String {
@@ -64,7 +65,7 @@ internal sealed class Rope : CharSequence {
     fun replace(start: Int, end: Int, insertion: String): Rope = replace(start, end, of(insertion))
 
     final override fun toString(): String =
-        if (length == 0) "" else StringBuilder(length).also { appendTo(it, 0, length) }.toString()
+        if (isEmpty()) "" else StringBuilder(length).also { appendTo(it, 0, length) }.toString()
 
     /** True when this rope satisfies the Fibonacci balance bound (length ≥ F(depth + 2)). */
     internal val isBalanced: Boolean
@@ -147,6 +148,7 @@ internal sealed class Rope : CharSequence {
                         out.add(rope)
                     }
                 }
+
                 is Branch -> {
                     collectLeaves(rope.left, out)
                     collectLeaves(rope.right, out)
@@ -155,14 +157,15 @@ internal sealed class Rope : CharSequence {
         }
 
         /** Build a height-balanced tree from a contiguous leaf range by divide-and-conquer. */
-        private fun buildBalanced(leaves: List<Leaf>, lo: Int, hi: Int): Rope = when (val n = hi - lo) {
-            0 -> EMPTY
-            1 -> leaves[lo]
-            else -> {
-                val mid = lo + n / 2
-                Branch(buildBalanced(leaves, lo, mid), buildBalanced(leaves, mid, hi))
+        private fun buildBalanced(leaves: List<Leaf>, lo: Int, hi: Int): Rope =
+            when (val n = hi - lo) {
+                0 -> EMPTY
+                1 -> leaves[lo]
+                else -> {
+                    val mid = lo + n / 2
+                    Branch(buildBalanced(leaves, lo, mid), buildBalanced(leaves, mid, hi))
+                }
             }
-        }
     }
 }
 

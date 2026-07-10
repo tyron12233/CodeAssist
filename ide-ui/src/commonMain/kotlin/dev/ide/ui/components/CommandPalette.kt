@@ -54,9 +54,20 @@ import dev.ide.ui.backend.UiActionPlaces
 import dev.ide.ui.ext.BuiltInUiActions
 import dev.ide.ui.ext.UiActionHost
 import dev.ide.ui.ext.UiActionRegistry
+import dev.ide.ui.generated.resources.Res
+import dev.ide.ui.generated.resources.palette_filter_all
+import dev.ide.ui.generated.resources.palette_filter_commands
+import dev.ide.ui.generated.resources.palette_filter_files
+import dev.ide.ui.generated.resources.palette_filter_members
+import dev.ide.ui.generated.resources.palette_filter_symbols
+import dev.ide.ui.generated.resources.palette_hint
+import dev.ide.ui.generated.resources.palette_no_matches
+import dev.ide.ui.generated.resources.palette_type_to_search
 import dev.ide.ui.icons.CaIcons
 import dev.ide.ui.theme.Ca
 import kotlinx.coroutines.launch
+import org.jetbrains.compose.resources.StringResource
+import org.jetbrains.compose.resources.stringResource
 
 class PaletteEntry(val section: String, val label: String, val sub: String?, val run: () -> Unit)
 
@@ -66,12 +77,12 @@ class PaletteEntry(val section: String, val label: String, val sub: String?, val
  * "Symbols" won't bury a class under file-name or command matches. [sections] is the set of [PaletteEntry]
  * section labels this tab keeps (empty = keep all); Tab cycles forward through them.
  */
-enum class PaletteFilter(val label: String, val sections: Set<String>) {
-    All("All", emptySet()),
-    Commands("Commands", setOf("Commands", "Run")),
-    Files("Files", setOf("Files", "Go to")),
-    Symbols("Symbols", setOf("Symbols")),
-    Members("Members", setOf("Members"));
+enum class PaletteFilter(val labelRes: StringResource, val sections: Set<String>) {
+    All(Res.string.palette_filter_all, emptySet()),
+    Commands(Res.string.palette_filter_commands, setOf("Commands", "Run")),
+    Files(Res.string.palette_filter_files, setOf("Files", "Go to")),
+    Symbols(Res.string.palette_filter_symbols, setOf("Symbols")),
+    Members(Res.string.palette_filter_members, setOf("Members"));
 
     fun keeps(section: String): Boolean = sections.isEmpty() || section in sections
     val wantsSymbols: Boolean get() = this == All || this == Symbols
@@ -170,7 +181,7 @@ fun CommandPalette(
             Icon(CaIcons.command, null, Modifier.size(20.dp), tint = Ca.colors.accent)
             Box(Modifier.weight(1f)) {
                 if (query.isEmpty()) {
-                    Text("Run a command, jump to a file or symbol…", color = Ca.colors.textTertiary, style = Ca.type.body)
+                    Text(stringResource(Res.string.palette_hint), color = Ca.colors.textTertiary, style = Ca.type.body)
                 }
                 BasicTextField(
                     value = query,
@@ -204,8 +215,8 @@ fun CommandPalette(
         if (entries.isEmpty()) {
             Box(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 22.dp)) {
                 Text(
-                    if (q.isEmpty() && filter != PaletteFilter.All) "Type to search ${filter.label.lowercase()}…"
-                    else "No matches",
+                    if (q.isEmpty() && filter != PaletteFilter.All) stringResource(Res.string.palette_type_to_search, stringResource(filter.labelRes).lowercase())
+                    else stringResource(Res.string.palette_no_matches),
                     color = Ca.colors.textTertiary, style = Ca.type.subhead,
                 )
             }
@@ -235,7 +246,7 @@ private fun FilterTabs(active: PaletteFilter, onSelect: (PaletteFilter) -> Unit)
                     .padding(horizontal = 12.dp, vertical = 5.dp),
             ) {
                 Text(
-                    f.label,
+                    stringResource(f.labelRes),
                     color = if (selected) Ca.colors.accent else Ca.colors.textSecondary,
                     style = Ca.type.caption,
                     fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Medium,

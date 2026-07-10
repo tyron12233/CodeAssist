@@ -56,6 +56,7 @@ object ArtPatchPasses {
     val ALL: List<ArtPatchPass> = listOf(
         // One pass per confirmed ART breakage, discovered via KotlinCompilerArtSpikeTest.
         ManagementStubPass(),    // java.lang.management.* absent on ART (PerformanceManager + 5 more)
+        UnsafeFindTolerantPass(), // platform Unsafe wrapper's copyMemory handle absent on ART → null, not Error
         PathUtilSelfLocatePass(), // PathUtil.getResourcePathForClass → the runtime-provisioned resource dir
         FastJarCleanerArtPass(),  // enable the mmap-backed fast JAR FS (ART can't unmap → no-op cleaner)
         // The IntelliJ-core icon API (javax.swing.Icon, absent on ART) is NOT patched here — it is fixed by

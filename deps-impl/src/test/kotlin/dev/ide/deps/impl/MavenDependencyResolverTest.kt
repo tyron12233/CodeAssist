@@ -787,6 +787,83 @@ class MavenDependencyResolverTest {
         assertTrue(versions.isEmpty(), "no metadata → no versions: $versions")
     }
 
+    @Test
+    fun searchFindsGoogleMavenArtifactNotOnCentral() {
+        // androidx.* live ONLY on Google Maven (not mirrored to Central), so search must read the Google index.
+        val files = FakeRepo()
+        files.putGoogleMaster("androidx.documentfile", "androidx.core", "androidx.annotation")
+        files.putGoogleGroup("androidx.documentfile", mapOf("documentfile" to listOf("1.0.0", "1.1.0-rc01", "1.1.0")))
+        files.putGooglePom("androidx.documentfile", "documentfile", "1.1.0", "aar")
+
+        val resolver = googleResolver(files)
+        val hits = runBlocking { resolver.search("androidx.documentfile") }
+
+        val hit = hits.single { it.coordinate.group == "androidx.documentfile" }
+        assertEquals("documentfile", hit.coordinate.name)
+        assertEquals("1.1.0", hit.coordinate.version, "newest STABLE, not the -rc01 pre-release")
+        assertEquals("aar", hit.packaging)
+    }
+
+    @Test
+    fun searchReadsPackagingFromPomAndPrefersStable() {
+        // A jar-packaged androidx lib (annotation) must be reported as `jar` (POM has no <packaging>), and the
+        // stable version wins over a newer alpha so the picker defaults to something releasable.
+        val files = FakeRepo()
+        files.putGoogleMaster("androidx.annotation")
+        files.putGoogleGroup("androidx.annotation", mapOf("annotation" to listOf("1.8.0", "1.9.0-alpha01")))
+        files.putGooglePom("androidx.annotation", "annotation", "1.8.0", "jar")
+
+        val resolver = googleResolver(files)
+        val hit = runBlocking { resolver.search("androidx.annotation:annotation") }.single()
+
+        assertEquals("1.8.0", hit.coordinate.version, "stable 1.8.0 preferred over 1.9.0-alpha01")
+        assertEquals("jar", hit.packaging)
+    }
+
+    @Test
+    fun searchMatchesGoogleGroupByBareNameSubstring() {
+        // Typing just the artifact name ("documentfile") matches the group whose id contains it.
+        val files = FakeRepo()
+        files.putGoogleMaster("androidx.documentfile", "androidx.core")
+        files.putGoogleGroup("androidx.documentfile", mapOf("documentfile" to listOf("1.1.0")))
+        files.putGooglePom("androidx.documentfile", "documentfile", "1.1.0", "aar")
+
+        val resolver = googleResolver(files)
+        val hits = runBlocking { resolver.search("documentfile") }
+
+        assertEquals("androidx.documentfile:documentfile:1.1.0", hits.single().coordinate.toString())
+    }
+
+    @Test
+    fun searchAcceptsFullyTypedCoordinateInTheBox() {
+        // Pasting "group:name:version" into the search box still finds the artifact (the version is ignored
+        // for matching; the picker defaults to the newest).
+        val files = FakeRepo()
+        files.putGoogleMaster("androidx.documentfile")
+        files.putGoogleGroup("androidx.documentfile", mapOf("documentfile" to listOf("1.0.0", "1.1.0")))
+        files.putGooglePom("androidx.documentfile", "documentfile", "1.1.0", "aar")
+
+        val resolver = googleResolver(files)
+        val hits = runBlocking { resolver.search("androidx.documentfile:documentfile:1.0.0") }
+
+        assertEquals("androidx.documentfile:documentfile:1.1.0", hits.single().coordinate.toString())
+    }
+
+    @Test
+    fun searchEmptyWhenNoGoogleGroupMatchesAndCentralOffline() {
+        val files = FakeRepo()
+        files.putGoogleMaster("androidx.core", "androidx.appcompat")
+        val resolver = googleResolver(files)
+        val hits = runBlocking { resolver.search("com.squareup.retrofit2") }
+        assertTrue(hits.isEmpty(), "no group matches and Central returns nothing: $hits")
+    }
+
+    private fun googleResolver(files: FakeRepo): MavenDependencyResolver {
+        val tmp = createTempDirectory("deps-search")
+        val lfs = LocalFileSystem(tmp)
+        return MavenDependencyResolver(ResolverCache(tmp), lfs::fileFor, files, googleMavenBase = GOOGLE)
+    }
+
     // ---- fixture helpers ----------------------------------------------------------------------
 
     private fun newResolver(files: FakeRepo): Pair<MavenDependencyResolver, Path> {
@@ -831,6 +908,24 @@ class MavenDependencyResolverTest {
         /** A `pom`-packaged BOM: only a POM with a `<dependencyManagement>` block, no artifact. */
         fun putBom(name: String, version: String, manages: List<Dep>) {
             byUrl[url("g", name, version, "pom")] = pom("g", name, version, "pom", emptyList(), manages).toByteArray()
+        }
+
+        /** Publish Google Maven's `master-index.xml` listing [groups] (self-closing `<group.id/>` entries). */
+        fun putGoogleMaster(vararg groups: String) {
+            val entries = groups.joinToString("\n") { "  <$it/>" }
+            byUrl["$GOOGLE/master-index.xml"] = "<?xml version='1.0' encoding='UTF-8'?>\n<metadata>\n$entries\n</metadata>".toByteArray()
+        }
+
+        /** Publish a group's `group-index.xml` (`<artifact versions="a,b,c"/>` per [artifacts] entry). */
+        fun putGoogleGroup(group: String, artifacts: Map<String, List<String>>) {
+            val body = artifacts.entries.joinToString("\n") { (a, vs) -> "  <$a versions=\"${vs.joinToString(",")}\"/>" }
+            byUrl["$GOOGLE/${group.replace('.', '/')}/group-index.xml"] = "<$group>\n$body\n</$group>".toByteArray()
+        }
+
+        /** Publish a POM under the Google base so [MavenDependencyResolver.search] can read its packaging. */
+        fun putGooglePom(group: String, artifact: String, version: String, packaging: String) {
+            val rel = "${group.replace('.', '/')}/$artifact/$version/$artifact-$version.pom"
+            byUrl["$GOOGLE/$rel"] = pom(group, artifact, version, packaging, emptyList()).toByteArray()
         }
 
         /** Publish a `maven-metadata.xml` listing [versions] for [group]:[name] under [base] (the version index). */
@@ -961,5 +1056,6 @@ class MavenDependencyResolverTest {
 
     private companion object {
         const val BASE = "https://fixture/repo"
+        const val GOOGLE = "https://fixture/google"
     }
 }

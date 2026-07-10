@@ -10,6 +10,8 @@ import dev.ide.ui.backend.UiDiagnostic
 import dev.ide.ui.backend.UiInlayHint
 import dev.ide.ui.backend.UiSemanticToken
 import dev.ide.ui.editor.CodeLanguage
+import dev.ide.ui.editor.folding.FoldModel
+import dev.ide.ui.editor.folding.FoldRegion
 import dev.ide.ui.editor.shiftComposePreviews
 import dev.ide.ui.editor.shiftDiagnostics
 import dev.ide.ui.editor.shiftFoldRegions
@@ -102,24 +104,24 @@ class EditorSession(
      * host refills the authoritative set via [applyCodeFolds], preserving the user's current toggles. The
      * renderer/geometry read [foldModel], rebuilt lazily whenever the regions or the document change.
      */
-    var foldRegions by mutableStateOf<List<dev.ide.ui.editor.folding.FoldRegion>>(emptyList())
+    var foldRegions by mutableStateOf<List<FoldRegion>>(emptyList())
         private set
 
     /** Whether the [collapsedByDefault] folds have been applied once for this file (so a refetch doesn't re-collapse
      *  a region the user has since expanded). */
     private var defaultFoldsApplied = false
 
-    private var foldModelCache: dev.ide.ui.editor.folding.FoldModel? = null
+    private var foldModelCache: FoldModel? = null
     private var foldModelDoc: EditorDocument? = null
-    private var foldModelRegions: List<dev.ide.ui.editor.folding.FoldRegion>? = null
+    private var foldModelRegions: List<FoldRegion>? = null
 
     /** The current folding projection (document ⇄ visual-row mapping + composites), rebuilt only when the
-     *  regions or the document change. [dev.ide.ui.editor.folding.FoldModel.EMPTY]-equivalent when nothing folds. */
-    val foldModel: dev.ide.ui.editor.folding.FoldModel
+     *  regions or the document change. [FoldModel.EMPTY]-equivalent when nothing folds. */
+    val foldModel: FoldModel
         get() {
             val d = doc; val r = foldRegions
             if (foldModelCache == null || foldModelDoc !== d || foldModelRegions !== r) {
-                foldModelCache = dev.ide.ui.editor.folding.FoldModel.build(d, r)
+                foldModelCache = FoldModel.build(d, r)
                 foldModelDoc = d; foldModelRegions = r
             }
             return foldModelCache!!
@@ -168,6 +170,7 @@ class EditorSession(
     private var batchDepth = 0
     private var pendingIme = false // an IME state push was deferred while a batch was open
     private var pendingImeText = false // ...and at least one of those deferred pushes was a text edit
+    private var pendingRestart = false // an IME restart was deferred while a batch was open
     private var goalColumn = -1 // sticky column for consecutive vertical caret moves
 
     // ---- undo / redo ----
@@ -263,7 +266,7 @@ class EditorSession(
      * collapsed. [collapsedByDefault] regions (imports) collapse only the FIRST time they appear for this file
      * (so re-expanding imports survives the next pass). Offsets come straight from the fresh parse.
      */
-    fun applyCodeFolds(fresh: List<dev.ide.ui.editor.folding.FoldRegion>) {
+    fun applyCodeFolds(fresh: List<FoldRegion>) {
         val previouslyCollapsed = foldRegions.filter { it.collapsed }
         foldRegions = fresh.map { r ->
             val keepCollapsed = previouslyCollapsed.any { it.start == r.start && it.end == r.end } ||
@@ -351,7 +354,13 @@ class EditorSession(
                 trimUndo()
                 refreshUndoState()
             }
-            if (pendingIme) {
+            if (pendingRestart) {
+                // A restart supersedes the deferred selection/text pushes — the IME re-reads everything.
+                pendingRestart = false
+                pendingIme = false
+                pendingImeText = false
+                imeListener?.onRestartInput()
+            } else if (pendingIme) {
                 pendingIme = false
                 val l = imeListener
                 if (pendingImeText) { pendingImeText = false; l?.onTextChanged(null) } // null span → full refresh
@@ -497,10 +506,19 @@ class EditorSession(
      * Skipped entirely when an extracted-text monitor is active: that IME is kept exact by the per-edit
      * [ImeListener.onTextChanged] push (a partial `updateExtractedText`), so it never drifts and the restart
      * would be pure churn. The restart remains the fallback for IMEs that don't mirror our text.
+     *
+     * Deferred while a batch is open: a smart edit can fire from *inside* an IME batch (the Gboard
+     * `deleteSurroundingText` fast path routes through [backspace]), and restarting input between the IME's
+     * own batched ops would drop the rest of them. [endBatch] flushes the restart once the batch closes.
      */
     private fun resyncIme() {
         val l = imeListener ?: return
-        if (!l.isSyncingExtractedText()) l.onRestartInput()
+        if (l.isSyncingExtractedText()) return
+        if (batchDepth > 0) {
+            pendingRestart = true
+            return
+        }
+        l.onRestartInput()
     }
 
     // ---- editing ops (keyboard + UI) ----
@@ -874,7 +892,7 @@ class EditorSession(
 
     private fun commentSyntax(): CommentSyntax = when (language) {
         CodeLanguage.Java, CodeLanguage.Kotlin -> CommentSyntax("//", "/*", "*/")
-        CodeLanguage.Xml -> CommentSyntax(null, "<!--", "-->")
+        CodeLanguage.Xml, CodeLanguage.Markdown -> CommentSyntax(null, "<!--", "-->")
         CodeLanguage.Proguard -> CommentSyntax("#", null, null)
         CodeLanguage.Plain -> CommentSyntax(null, null, null)
     }
@@ -1037,24 +1055,43 @@ class EditorSession(
     fun imeDeleteSurrounding(before: Int, after: Int) {
         // the Gboard backspace fast path — and the one place pair-aware delete applies
         if (before == 1 && after == 0 && composing == null && selection.collapsed) {
+            val rev = textRevision
             backspace()
+            // A smart rule that kept the text unchanged (backspace on an already-aligned closer) still looked
+            // like a successful one-char delete to the IME, so its model is now off by one — resync it.
+            if (textRevision == rev) resyncIme()
             return
         }
+        // Deletion happens OUTSIDE the composing region as well as the selection (the framework contract:
+        // deleteSurroundingText never touches the composing text), and the composition survives, shifted.
         beginBatch()
-        val selMax = selection.max
-        val aEnd = (selMax + after).coerceAtMost(doc.length)
-        if (aEnd > selMax) replaceRange(selMax, aEnd, "", TextRange(selection.start, selection.end), composing)
-        val selMin = selection.min
-        val bStart = (selMin - before).coerceAtLeast(0)
-        if (bStart < selMin) {
-            val del = selMin - bStart
-            replaceRange(bStart, selMin, "", TextRange(selection.min - del, selection.max - del), null)
+        val comp = composing
+        val delBeforeEnd = min(selection.min, comp?.min ?: selection.min)
+        val delAfterStart = max(selection.max, comp?.max ?: selection.max)
+        val aEnd = (delAfterStart + after).coerceAtMost(doc.length)
+        if (aEnd > delAfterStart) {
+            replaceRange(delAfterStart, aEnd, "", TextRange(selection.start, selection.end), composing)
+        }
+        val bStart = (delBeforeEnd - before).coerceAtLeast(0)
+        if (bStart < delBeforeEnd) {
+            val del = delBeforeEnd - bStart
+            val sel = selection
+            val c = composing
+            replaceRange(
+                bStart, delBeforeEnd, "",
+                TextRange(sel.start - del, sel.end - del),
+                c?.let { TextRange(it.min - del, it.max - del) },
+            )
         }
         endBatch()
     }
 
     fun imeSetSelection(start: Int, end: Int) {
-        updateSelectionAndComposing(TextRange(start, end), composing)
+        // Clamp before constructing: TextRange itself rejects negative offsets, and a misbehaving IME
+        // sending them must not crash the editor.
+        updateSelectionAndComposing(
+            TextRange(start.coerceIn(0, doc.length), end.coerceIn(0, doc.length)), composing,
+        )
     }
 
     fun imeTextBeforeCursor(n: Int): String {
@@ -1067,9 +1104,11 @@ class EditorSession(
         return doc.substring(start, (start + n.coerceIn(0, MAX_IPC_TEXT)).coerceAtMost(doc.length))
     }
 
+    // Clamped at 0: a large negative newCursorPosition near the document start must not produce a negative
+    // offset (TextRange throws on those). The upper bound is coerced where the TextRange is applied.
     private fun imeCaret(regionStart: Int, insertedLen: Int, newCursorPosition: Int): Int =
-        if (newCursorPosition > 0) regionStart + insertedLen + newCursorPosition - 1
-        else regionStart + newCursorPosition
+        (if (newCursorPosition > 0) regionStart + insertedLen + newCursorPosition - 1
+        else regionStart + newCursorPosition).coerceAtLeast(0)
 
     private companion object {
         /** Cap for IME text queries — never ship megabytes across the binder. */

@@ -1,5 +1,7 @@
 package dev.ide.core
 
+import kotlinx.coroutines.runBlocking
+
 import dev.ide.lang.incremental.DocumentEdit
 import java.nio.file.Files
 import java.nio.file.Path
@@ -51,7 +53,7 @@ class KotlinImplementMembersActionTest {
         awaitIndexReady(s)
 
         val probe: Path = f
-        val diags = s.analyzeDiagnostics(probe, text)
+        val diags = runBlocking { s.analyzeDiagnostics(probe, text) }
         assertTrue(
             diags.any { it.code == "kt.abstractNotImplemented" && it.message.contains("run") },
             "expected a missing-abstract diagnostic naming `run`; got ${diags.map { it.code to it.message }}",

@@ -26,6 +26,10 @@ object LexState {
     const val BLOCK_COMMENT = 1
     /** Inside a double-quoted XML attribute value (XML strings may span lines). */
     const val XML_STRING = 2
+    /** Inside a Kotlin raw string (`"""…"""`), which spans lines. */
+    const val KT_RAW_STRING = 3
+    /** Inside a Markdown fenced code block (``` ``` ``` / `~~~`), which spans lines. */
+    const val MD_FENCE = 4
 }
 
 class StyledLine(val spans: List<LineSpan>, val exitState: Int) {
@@ -41,9 +45,20 @@ private val JAVA_KEYWORDS = setOf(
     "new", "package", "private", "protected", "public", "return", "short", "static", "strictfp",
     "super", "switch", "synchronized", "this", "throw", "throws", "transient", "try", "void",
     "volatile", "while", "true", "false", "null", "var", "record", "sealed", "permits", "yield",
-    // Kotlin extras (shared scanner)
-    "fun", "val", "when", "is", "in", "object", "companion", "data", "override", "open", "internal",
-    "lateinit", "by", "constructor", "init", "suspend", "vararg", "typealias", "as", "out", "reified",
+)
+
+private val KOTLIN_KEYWORDS = setOf(
+    // hard keywords
+    "as", "break", "class", "continue", "do", "else", "false", "for", "fun", "if", "in", "interface",
+    "is", "null", "object", "package", "return", "super", "this", "throw", "true", "try", "typealias",
+    "typeof", "val", "var", "when", "while",
+    // common soft keywords (rarely used as plain identifiers)
+    "by", "catch", "constructor", "finally", "import", "init", "where",
+    // modifier keywords
+    "abstract", "actual", "annotation", "companion", "const", "crossinline", "data", "enum", "expect",
+    "external", "final", "infix", "inline", "inner", "internal", "lateinit", "noinline", "open",
+    "operator", "out", "override", "private", "protected", "public", "reified", "sealed", "suspend",
+    "tailrec", "vararg",
 )
 
 private fun isPunct(c: Char) = c in "{}()[];,.<>=+-*\\/%&|!?:^~@"
@@ -52,7 +67,104 @@ fun styleLine(line: String, entryState: Int, language: CodeLanguage): StyledLine
     CodeLanguage.Plain -> StyledLine.EMPTY
     CodeLanguage.Xml -> styleXmlLine(line, entryState)
     CodeLanguage.Proguard -> styleProguardLine(line)
-    CodeLanguage.Java, CodeLanguage.Kotlin -> styleCodeLine(line, entryState)
+    CodeLanguage.Markdown -> styleMarkdownLine(line, entryState)
+    CodeLanguage.Kotlin -> styleKotlinLine(line, entryState)
+    CodeLanguage.Java -> styleCodeLine(line, entryState)
+}
+
+/**
+ * Markdown line styling: headings, fenced code (``` / ~~~, carried across lines via [LexState.MD_FENCE]),
+ * block quotes, thematic breaks, list markers, and inline code spans / links. Constructs map onto the shared
+ * [TokenType] palette (heading → TYPE, list marker → KEYWORD, quote → COMMENT, code → STRING). Emphasis
+ * (`**bold**`, `*italic*`) is left uncolored — the Preview view shows the real formatting; a color can't.
+ */
+private fun styleMarkdownLine(line: String, entryState: Int): StyledLine {
+    val n = line.length
+    val spans = ArrayList<LineSpan>(8)
+    val indent = line.indexOfFirst { it != ' ' && it != '\t' }.let { if (it < 0) n else it }
+    val trimmed = line.substring(indent)
+
+    // Inside a fenced code block: the whole line is code; a closing fence ends the block.
+    if (entryState == LexState.MD_FENCE) {
+        if (n > 0) spans.add(LineSpan(0, n, TokenType.STRING))
+        val exit = if (trimmed.startsWith("```") || trimmed.startsWith("~~~")) LexState.CODE else LexState.MD_FENCE
+        return StyledLine(spans, exit)
+    }
+    // Opening fence.
+    if (trimmed.startsWith("```") || trimmed.startsWith("~~~")) {
+        if (n > 0) spans.add(LineSpan(0, n, TokenType.STRING))
+        return StyledLine(spans, LexState.MD_FENCE)
+    }
+    // Thematic break (three or more of the same -, *, _), checked before list markers.
+    if (isMdThematicBreak(trimmed)) {
+        spans.add(LineSpan(0, n, TokenType.PUNCT))
+        return StyledLine(spans, LexState.CODE)
+    }
+    // ATX heading — the whole line reads as a heading.
+    if (mdHeadingLevel(trimmed) > 0) {
+        spans.add(LineSpan(0, n, TokenType.TYPE))
+        return StyledLine(spans, LexState.CODE)
+    }
+    // Block quote.
+    if (trimmed.startsWith(">")) {
+        spans.add(LineSpan(0, n, TokenType.COMMENT))
+        return StyledLine(spans, LexState.CODE)
+    }
+    // List marker at the start of the line.
+    var i = indent
+    val marker = mdListMarkerEnd(line, indent)
+    if (marker > indent) {
+        spans.add(LineSpan(indent, marker, TokenType.KEYWORD))
+        i = marker
+    }
+    // Inline: code spans and links.
+    while (i < n) {
+        when (line[i]) {
+            '`' -> {
+                val end = line.indexOf('`', i + 1)
+                if (end < 0) i++ else { spans.add(LineSpan(i, end + 1, TokenType.STRING)); i = end + 1 }
+            }
+            '[' -> {
+                val close = line.indexOf(']', i + 1)
+                if (close in (i + 1) until n && close + 1 < n && line[close + 1] == '(') {
+                    val paren = line.indexOf(')', close + 2)
+                    if (paren > 0) {
+                        spans.add(LineSpan(i, close + 1, TokenType.FUNC))            // [text]
+                        spans.add(LineSpan(close + 1, paren + 1, TokenType.PROPERTY)) // (url)
+                        i = paren + 1
+                    } else i++
+                } else i++
+            }
+            else -> i++
+        }
+    }
+    return StyledLine(spans, LexState.CODE)
+}
+
+/** A thematic break: three or more `-`, `*`, or `_` with only spaces between (e.g. `---`, `***`, `_ _ _`). */
+private fun isMdThematicBreak(trimmed: String): Boolean {
+    val bare = trimmed.replace(" ", "")
+    if (bare.length < 3) return false
+    val c = bare[0]
+    return (c == '-' || c == '*' || c == '_') && bare.all { it == c }
+}
+
+/** ATX heading level 1..6, or 0 if [trimmed] is not a heading. */
+private fun mdHeadingLevel(trimmed: String): Int {
+    var h = 0
+    while (h < trimmed.length && trimmed[h] == '#') h++
+    return if (h in 1..6 && (h == trimmed.length || trimmed[h] == ' ')) h else 0
+}
+
+/** End (exclusive) of a list marker starting at [from] (`- `, `* `, `1. `), or -1 if the line isn't a list
+ *  item. The trailing space is excluded so only the marker glyph is colored. */
+private fun mdListMarkerEnd(line: String, from: Int): Int {
+    val n = line.length
+    if (from + 1 < n && line[from] in "-*+" && line[from + 1] == ' ') return from + 1
+    var j = from
+    while (j < n && line[j].isDigit()) j++
+    if (j > from && j < n && (line[j] == '.' || line[j] == ')') && j + 1 < n && line[j + 1] == ' ') return j + 1
+    return -1
 }
 
 /** ProGuard/R8 keep-rule line styling: `#` comments, `-directives` (keyword), `@`-annotations, quoted
@@ -161,6 +273,234 @@ private fun styleCodeLine(line: String, entryState: Int): StyledLine {
         }
     }
     return StyledLine(spans, LexState.CODE)
+}
+
+/**
+ * Kotlin line styler. Unlike [styleCodeLine] (Java) it understands string **interpolation**: inside a
+ * `"…"` / `"""…"""` string, the code in a `${…}` block (and the identifier of a `$name`) is styled as
+ * code — keywords, nested strings, calls, numbers — instead of being swallowed into the string run, and a
+ * `"…"` nested inside an interpolation is colored as its own string. Raw strings carry [LexState.KT_RAW_STRING]
+ * across lines. Single-line interpolation nests to any depth (the string / interpolation scanners recurse into
+ * each other); a `${…}` or raw string left open at end of line degrades gracefully (no crash, no stale span).
+ * The `${`/`}` delimiters and a `$name` identifier are left uncolored so the semantic layer (which resolves the
+ * interpolated variable/expression) shows through — the same division of labor the rest of the editor uses.
+ */
+private fun styleKotlinLine(line: String, entryState: Int): StyledLine {
+    val n = line.length
+    val spans = ArrayList<LineSpan>(8)
+    var i = 0
+    when (entryState) {
+        LexState.BLOCK_COMMENT -> {
+            val close = line.indexOf("*/")
+            if (close < 0) {
+                if (n > 0) spans.add(LineSpan(0, n, TokenType.COMMENT))
+                return StyledLine(spans, LexState.BLOCK_COMMENT)
+            }
+            spans.add(LineSpan(0, close + 2, TokenType.COMMENT))
+            i = close + 2
+        }
+        LexState.KT_RAW_STRING -> {
+            val next = scanRawStringBody(line, 0, 0, spans)
+            if (next < 0) return StyledLine(spans, LexState.KT_RAW_STRING)
+            i = next
+        }
+    }
+    return StyledLine(spans, scanKotlinCode(line, i, spans))
+}
+
+/** Scan Kotlin code from [start] to end of line; returns the exit [LexState] (a block comment or raw
+ *  string left open at end of line crosses to the next line, exactly like [styleCodeLine]'s comments). */
+private fun scanKotlinCode(line: String, start: Int, spans: MutableList<LineSpan>): Int {
+    val n = line.length
+    var i = start
+    while (i < n) {
+        val c = line[i]
+        when {
+            c == '/' && i + 1 < n && line[i + 1] == '/' -> {
+                spans.add(LineSpan(i, n, TokenType.COMMENT)); return LexState.CODE
+            }
+            c == '/' && i + 1 < n && line[i + 1] == '*' -> {
+                val close = line.indexOf("*/", startIndex = i + 2)
+                if (close < 0) { spans.add(LineSpan(i, n, TokenType.COMMENT)); return LexState.BLOCK_COMMENT }
+                spans.add(LineSpan(i, close + 2, TokenType.COMMENT)); i = close + 2
+            }
+            c == '"' && i + 2 < n && line[i + 1] == '"' && line[i + 2] == '"' -> {
+                val next = scanRawStringBody(line, i + 3, i, spans)
+                if (next < 0) return LexState.KT_RAW_STRING
+                i = next
+            }
+            c == '"' -> i = scanKotlinString(line, i, spans)
+            c == '\'' -> i = scanCharLiteral(line, i, spans)
+            c.isDigit() -> i = scanNumber(line, i, spans)
+            c == '@' -> i = scanAnnotation(line, i, spans)
+            c.isLetter() || c == '_' || c == '`' -> i = scanKotlinWord(line, i, spans)
+            isPunct(c) -> { spans.add(LineSpan(i, i + 1, TokenType.PUNCT)); i++ }
+            else -> i++
+        }
+    }
+    return LexState.CODE
+}
+
+/** A regular `"…"` string from the opening quote at [start]; styles literal runs as STRING and hands each
+ *  `${…}` / `$name` interpolation to code scanning. Returns the index past the closing quote (or the line
+ *  length if the string is unterminated — a regular string can't span lines, so no cross-line state). */
+private fun scanKotlinString(line: String, start: Int, spans: MutableList<LineSpan>): Int {
+    val n = line.length
+    var i = start + 1
+    var litStart = start
+    while (i < n) {
+        val c = line[i]
+        when {
+            c == '\\' -> i += 2 // escape (stays in the literal run; the semantic layer recolors `\n`, `\uXXXX`, …)
+            c == '"' -> { i++; spans.add(LineSpan(litStart, i, TokenType.STRING)); return i }
+            c == '$' && i + 1 < n && line[i + 1] == '{' -> {
+                if (i > litStart) spans.add(LineSpan(litStart, i, TokenType.STRING))
+                i = scanInterpolation(line, i, spans)
+                litStart = i
+            }
+            c == '$' && i + 1 < n && (line[i + 1].isLetter() || line[i + 1] == '_') -> {
+                if (i > litStart) spans.add(LineSpan(litStart, i, TokenType.STRING))
+                i++ // the `$`
+                while (i < n && (line[i].isLetterOrDigit() || line[i] == '_')) i++
+                litStart = i
+            }
+            else -> i++
+        }
+    }
+    if (n > litStart) spans.add(LineSpan(litStart, n, TokenType.STRING))
+    return n
+}
+
+/** Scan a raw-string (`"""…"""`) body from [from], with the current STRING literal run starting at
+ *  [litStart]. Handles `${…}` / `$name` interpolation; raw strings have no escapes. Returns the index past
+ *  the closing `"""`, or -1 if the raw string does not close on this line (the whole tail is string). */
+private fun scanRawStringBody(line: String, from: Int, litStart: Int, spans: MutableList<LineSpan>): Int {
+    val n = line.length
+    var i = from
+    var lit = litStart
+    while (i < n) {
+        val c = line[i]
+        when {
+            c == '"' && i + 2 < n && line[i + 1] == '"' && line[i + 2] == '"' -> {
+                i += 3; spans.add(LineSpan(lit, i, TokenType.STRING)); return i
+            }
+            c == '$' && i + 1 < n && line[i + 1] == '{' -> {
+                if (i > lit) spans.add(LineSpan(lit, i, TokenType.STRING))
+                i = scanInterpolation(line, i, spans)
+                lit = i
+            }
+            c == '$' && i + 1 < n && (line[i + 1].isLetter() || line[i + 1] == '_') -> {
+                if (i > lit) spans.add(LineSpan(lit, i, TokenType.STRING))
+                i++
+                while (i < n && (line[i].isLetterOrDigit() || line[i] == '_')) i++
+                lit = i
+            }
+            else -> i++
+        }
+    }
+    if (n > lit) spans.add(LineSpan(lit, n, TokenType.STRING))
+    return -1
+}
+
+/** Scan a `${…}` interpolation from the `$` at [start]; the inner code is styled as code (keywords, nested
+ *  strings, calls). Returns the index past the matching `}` (or the line length if it's unclosed). The
+ *  `${` and matching `}` are left uncolored so the semantic layer's `stringTemplateEntry` shows through. */
+private fun scanInterpolation(line: String, start: Int, spans: MutableList<LineSpan>): Int {
+    val n = line.length
+    var i = start + 2 // past `${`
+    var depth = 1
+    while (i < n && depth > 0) {
+        val c = line[i]
+        when {
+            c == '{' -> { spans.add(LineSpan(i, i + 1, TokenType.PUNCT)); depth++; i++ }
+            c == '}' -> {
+                depth--
+                if (depth > 0) spans.add(LineSpan(i, i + 1, TokenType.PUNCT)) // an inner `}` (lambda close)
+                i++
+            }
+            c == '"' && i + 2 < n && line[i + 1] == '"' && line[i + 2] == '"' -> {
+                val next = scanRawStringBody(line, i + 3, i, spans)
+                i = if (next < 0) n else next
+            }
+            c == '"' -> i = scanKotlinString(line, i, spans)
+            c == '\'' -> i = scanCharLiteral(line, i, spans)
+            c.isDigit() -> i = scanNumber(line, i, spans)
+            c == '@' -> i = scanAnnotation(line, i, spans)
+            c.isLetter() || c == '_' || c == '`' -> i = scanKotlinWord(line, i, spans)
+            isPunct(c) -> { spans.add(LineSpan(i, i + 1, TokenType.PUNCT)); i++ }
+            else -> i++
+        }
+    }
+    return i
+}
+
+/** An identifier / keyword (or a backtick-quoted identifier). Colors keywords, a Capitalized name as a
+ *  type, and a name directly before `(` as a call. Returns the index past the word. */
+private fun scanKotlinWord(line: String, start: Int, spans: MutableList<LineSpan>): Int {
+    val n = line.length
+    if (line[start] == '`') { // `backtick identifier` — left uncolored (the semantic layer may recolor it)
+        var i = start + 1
+        while (i < n && line[i] != '`') i++
+        if (i < n) i++
+        return i
+    }
+    var i = start + 1
+    while (i < n && (line[i].isLetterOrDigit() || line[i] == '_')) i++
+    val word = line.substring(start, i)
+    val type = when {
+        word in KOTLIN_KEYWORDS -> TokenType.KEYWORD
+        // `value` is a keyword only in `value class` (a soft keyword) — as a plain identifier (`val value`,
+        // `it.value`) it is far too common to color everywhere, so gate it on the following `class`.
+        word == "value" && nextWordIs(line, i, "class") -> TokenType.KEYWORD
+        else -> {
+            var j = i
+            while (j < n && (line[j] == ' ' || line[j] == '\t')) j++
+            when {
+                j < n && line[j] == '(' -> TokenType.FUNC
+                word[0].isUpperCase() -> TokenType.TYPE
+                else -> null
+            }
+        }
+    }
+    if (type != null) spans.add(LineSpan(start, i, type))
+    return i
+}
+
+/** Whether the next word on [line] after [from] (skipping spaces/tabs) is exactly [word] — used to color a
+ *  context-sensitive soft keyword (`value class`) as a keyword only in its keyword position. */
+private fun nextWordIs(line: String, from: Int, word: String): Boolean {
+    val n = line.length
+    var j = from
+    while (j < n && (line[j] == ' ' || line[j] == '\t')) j++
+    if (j + word.length > n || line.regionMatches(j, word, 0, word.length).not()) return false
+    val after = j + word.length
+    return after >= n || !(line[after].isLetterOrDigit() || line[after] == '_')
+}
+
+private fun scanNumber(line: String, start: Int, spans: MutableList<LineSpan>): Int {
+    val n = line.length
+    var i = start + 1
+    while (i < n && (line[i].isLetterOrDigit() || line[i] == '.' || line[i] == '_')) i++
+    spans.add(LineSpan(start, i, TokenType.NUMBER))
+    return i
+}
+
+private fun scanAnnotation(line: String, start: Int, spans: MutableList<LineSpan>): Int {
+    val n = line.length
+    var i = start + 1
+    while (i < n && (line[i].isLetterOrDigit() || line[i] == '_')) i++
+    spans.add(LineSpan(start, i, TokenType.ANNOTATION))
+    return i
+}
+
+private fun scanCharLiteral(line: String, start: Int, spans: MutableList<LineSpan>): Int {
+    val n = line.length
+    var i = start + 1
+    while (i < n && line[i] != '\'') { if (line[i] == '\\') i++; i++ }
+    if (i < n) i++
+    val end = i.coerceAtMost(n)
+    spans.add(LineSpan(start, end, TokenType.STRING))
+    return end
 }
 
 private fun styleXmlLine(line: String, entryState: Int): StyledLine {

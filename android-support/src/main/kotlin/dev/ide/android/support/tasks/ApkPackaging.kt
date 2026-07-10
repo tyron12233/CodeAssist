@@ -32,8 +32,10 @@ internal object ApkPackaging {
 
     /**
      * Build [outApk] from [resourcesAp] plus the dex files in [dexDir], the files under each
-     * [assetsDirs] (mapped to `assets/…`), and the native libs under each [jniLibDirs] (mapped to
-     * `lib/<abi>/…`, e.g. from exploded AARs). Returns the entry names written, for diagnostics.
+     * [assetsDirs] (mapped to `assets/…`), the native libs under each [jniLibDirs] (mapped to
+     * `lib/<abi>/…`), and the merged Java resources in each of [javaResJars] (their entries copied to the
+     * APK root). aapt2's output is written first, so a Java resource can never shadow the manifest /
+     * `resources.arsc` / `res/`. Returns the entry names written, for diagnostics.
      */
     fun assembleApk(
         resourcesAp: Path,
@@ -41,6 +43,7 @@ internal object ApkPackaging {
         assetsDirs: List<Path>,
         jniLibDirs: List<Path>,
         outApk: Path,
+        javaResJars: List<Path> = emptyList(),
     ): List<String> {
         outApk.parent?.let { Files.createDirectories(it) }
         val written = LinkedHashSet<String>()
@@ -85,6 +88,20 @@ internal object ApkPackaging {
                 allFiles(dir).forEach { f ->
                     val name = "lib/" + dir.relativize(f).toString().replace('\\', '/')
                     if (written.add(name)) putDeflated(zos, name, f)
+                }
+            }
+
+            // 5) Java resources (already merged + filtered by MergeJavaResourcesTask): entries copied to the
+            //    APK root. aapt2's output was written first, so it always wins a collision (dedup below).
+            for (jar in javaResJars.filter { Files.isRegularFile(it) }) {
+                ZipFile(jar.toFile()).use { zf ->
+                    val entries = zf.entries().toList().filter { !it.isDirectory }.sortedBy { it.name }
+                    for (e in entries) {
+                        if (!written.add(e.name)) continue
+                        zos.putNextEntry(ZipEntry(e.name).apply { method = ZipEntry.DEFLATED })
+                        zf.getInputStream(e).use { it.copyTo(zos) }
+                        zos.closeEntry()
+                    }
                 }
             }
         }

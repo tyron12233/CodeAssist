@@ -33,7 +33,8 @@ private val QUOTES = setOf('"', '\'')
 internal const val INDENT_UNIT = "    " // 4 spaces
 
 /** Bounded random access for the rope-backed buffer — `null` outside `[0, length)`, never materializes. */
-private fun CharSequence.charOrNull(index: Int): Char? = if (index in 0 until length) this[index] else null
+private fun CharSequence.charOrNull(index: Int): Char? =
+    if (index in indices) this[index] else null
 
 private fun shouldAutoClose(nextChar: Char?): Boolean =
     nextChar == null || nextChar.isWhitespace() || nextChar in ")]},;"
@@ -72,7 +73,13 @@ private fun shouldInsertClosingBracket(text: CharSequence, open: Char): Boolean 
  * Takes a [CharSequence] (the rope) and touches only a handful of chars around the caret, so the per-key
  * smart-edit decision is O(log N) and never copies the whole document.
  */
-fun smartInsert(text: CharSequence, selStart: Int, selEnd: Int, ch: Char, language: CodeLanguage): RangeEdit {
+fun smartInsert(
+    text: CharSequence,
+    selStart: Int,
+    selEnd: Int,
+    ch: Char,
+    language: CodeLanguage
+): RangeEdit {
     if (selStart != selEnd) return RangeEdit(selStart, selEnd, ch.toString(), selStart + 1)
     val pos = selStart
     val nextChar = text.charOrNull(pos)
@@ -102,7 +109,10 @@ fun smartInsert(text: CharSequence, selStart: Int, selEnd: Int, ch: Char, langua
         }
     }
     // 3. Auto-close quotes (not when finishing an identifier, not in plain text files).
-    if (ch in QUOTES && language != CodeLanguage.Plain && shouldAutoClose(nextChar) && !isIdentChar(text.charOrNull(pos - 1))) {
+    if (ch in QUOTES && language != CodeLanguage.Plain && shouldAutoClose(nextChar) && !isIdentChar(
+            text.charOrNull(pos - 1)
+        )
+    ) {
         return RangeEdit(pos, pos, "$ch$ch", pos + 1)
     }
     // 3b. Auto-close XML tags — typing `>` on an open `<Tag …` inserts its matching `</Tag>` and parks the
@@ -122,14 +132,19 @@ fun smartInsert(text: CharSequence, selStart: Int, selEnd: Int, ch: Char, langua
  * The edit for Backspace: deletes the selection; on a collapsed caret deletes the char before it —
  * taking an auto-inserted partner with it when the caret sits inside an empty pair. Null at offset 0.
  */
-fun smartBackspace(text: CharSequence, selStart: Int, selEnd: Int, language: CodeLanguage): RangeEdit? {
+fun smartBackspace(
+    text: CharSequence,
+    selStart: Int,
+    selEnd: Int,
+    language: CodeLanguage
+): RangeEdit? {
     if (selStart != selEnd) return RangeEdit(selStart, selEnd, "", selStart)
     val pos = selStart
     if (pos <= 0) return null
     val deleted = text[pos - 1]
     val next = text.charOrNull(pos)
     val emptyPair = (deleted in OPEN_TO_CLOSE && next == OPEN_TO_CLOSE[deleted]) ||
-        (deleted in QUOTES && next == deleted)
+            (deleted in QUOTES && next == deleted)
     if (emptyPair) return RangeEdit(pos - 1, pos + 1, "", pos - 1)
     // Smart backspace across blank lines: when the caret sits in the leading indent of a line that still has
     // content, and one or more fully-blank lines sit directly above, remove that whole blank gap in ONE press
@@ -151,9 +166,13 @@ fun smartBackspace(text: CharSequence, selStart: Int, selEnd: Int, language: Cod
                 // A line that is itself a closer aligns to its MATCHING OPENER's indent, not the previous line's
                 // (`fun f() {\n    body()\n\n    |}` → `}` under `fun f()`, not under `body()`). Other lines take
                 // the previous line's indent, one level deeper when that line opens a block.
-                val closerIndent = if (startsWithCloser(text, pos, language)) matchingOpenerIndent(text, firstNonBlankFrom(text, pos)) else null
+                val closerIndent = if (startsWithCloser(text, pos, language)) matchingOpenerIndent(
+                    text,
+                    firstNonBlankFrom(text, pos)
+                ) else null
                 val base = closerIndent ?: prevIndent
-                val deeper = closerIndent == null && lineOpensBlock(text, prevLineStart, p, language)
+                val deeper =
+                    closerIndent == null && lineOpensBlock(text, prevLineStart, p, language)
                 val ins = "\n" + base + (if (deeper) detectIndentUnit(text) else "")
                 return RangeEdit(p, pos, ins, p + ins.length)
             }
@@ -172,7 +191,12 @@ fun smartBackspace(text: CharSequence, selStart: Int, selEnd: Int, language: Cod
             val openerIndent = matchingOpenerIndent(text, pos)
             if (openerIndent != null) {
                 val curIndent = pos - lineStart
-                if (openerIndent.length < curIndent) return RangeEdit(lineStart, pos, openerIndent, lineStart + openerIndent.length)
+                if (openerIndent.length < curIndent) return RangeEdit(
+                    lineStart,
+                    pos,
+                    openerIndent,
+                    lineStart + openerIndent.length
+                )
                 if (openerIndent.length == curIndent) return null // already at the opener's indent — keep it
             }
         }
@@ -190,7 +214,8 @@ fun smartBackspace(text: CharSequence, selStart: Int, selEnd: Int, language: Cod
         }
     }
     // don't split a surrogate pair (emoji in string literals)
-    val start = if (deleted.isLowSurrogate() && pos >= 2 && text[pos - 2].isHighSurrogate()) pos - 2 else pos - 1
+    val start =
+        if (deleted.isLowSurrogate() && pos >= 2 && text[pos - 2].isHighSurrogate()) pos - 2 else pos - 1
     return RangeEdit(start, pos, "", start)
 }
 
@@ -204,7 +229,9 @@ private fun lineStartOf(text: CharSequence, pos: Int): Int {
 /** True when `[lineStart, pos)` is only spaces/tabs (the typed closer is the first non-blank on its line). */
 private fun isBlankBefore(text: CharSequence, lineStart: Int, pos: Int): Boolean {
     var i = lineStart
-    while (i < pos) { val c = text[i]; if (c != ' ' && c != '\t') return false; i++ }
+    while (i < pos) {
+        val c = text[i]; if (c != ' ' && c != '\t') return false; i++
+    }
     return true
 }
 
@@ -262,7 +289,9 @@ private fun startsWithCloser(text: CharSequence, pos: Int, language: CodeLanguag
 /** True when `[pos, end-of-line)` is only spaces/tabs — i.e. the caret has no real content after it. */
 private fun isBlankToLineEnd(text: CharSequence, pos: Int): Boolean {
     var i = pos
-    while (i < text.length && text[i] != '\n') { if (text[i] != ' ' && text[i] != '\t') return false; i++ }
+    while (i < text.length && text[i] != '\n') {
+        if (text[i] != ' ' && text[i] != '\t') return false; i++
+    }
     return true
 }
 
@@ -270,7 +299,9 @@ private fun isBlankToLineEnd(text: CharSequence, pos: Int): Boolean {
 private fun countCharIn(text: CharSequence, start: Int, end: Int, ch: Char): Int {
     var n = 0
     var i = start
-    while (i < end) { if (text[i] == ch) n++; i++ }
+    while (i < end) {
+        if (text[i] == ch) n++; i++
+    }
     return n
 }
 

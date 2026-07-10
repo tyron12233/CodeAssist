@@ -59,9 +59,28 @@ import dev.ide.ui.backend.RunStatus
 import dev.ide.ui.backend.UiSeverity
 import dev.ide.ui.components.Chip
 import dev.ide.ui.components.IconButtonCa
+import dev.ide.ui.generated.resources.Res
+import dev.ide.ui.generated.resources.copy
+import dev.ide.ui.generated.resources.run
+import dev.ide.ui.generated.resources.run_back
+import dev.ide.ui.generated.resources.run_building
+import dev.ide.ui.generated.resources.run_building_module
+import dev.ide.ui.generated.resources.run_end_input_eof
+import dev.ide.ui.generated.resources.run_exit_code
+import dev.ide.ui.generated.resources.run_failed
+import dev.ide.ui.generated.resources.run_no_active_run
+import dev.ide.ui.generated.resources.run_no_output
+import dev.ide.ui.generated.resources.run_run_again
+import dev.ide.ui.generated.resources.run_running
+import dev.ide.ui.generated.resources.run_running_module
+import dev.ide.ui.generated.resources.run_send
+import dev.ide.ui.generated.resources.run_stopped
+import dev.ide.ui.generated.resources.run_type_input
+import dev.ide.ui.generated.resources.stop
 import dev.ide.ui.icons.CaIcons
 import dev.ide.ui.platform.isMobilePlatform
 import dev.ide.ui.theme.Ca
+import org.jetbrains.compose.resources.stringResource
 
 /**
  * The full-screen Run terminal: a console run's program output + an input bar so the user can type when
@@ -89,7 +108,7 @@ fun RunScreen(
         )
         if (rc == null) {
             Box(Modifier.fillMaxSize(), Alignment.Center) {
-                Text("No active run.", color = Ca.colors.textTertiary, style = Ca.type.footnote)
+                Text(stringResource(Res.string.run_no_active_run), color = Ca.colors.textTertiary, style = Ca.type.footnote)
             }
             return@Column
         }
@@ -117,11 +136,12 @@ private fun RunTopBar(console: RunConsoleUi?, buildFailed: Boolean, onBack: () -
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(8.dp),
     ) {
-        IconButtonCa(CaIcons.chevronLeft, "Back", onBack, boxSize = iconBox)
+        IconButtonCa(CaIcons.chevronLeft, stringResource(Res.string.run_back), onBack, boxSize = iconBox)
         Icon(CaIcons.terminal, null, Modifier.size(18.dp), tint = Ca.colors.textSecondary)
+        val runLabel = stringResource(Res.string.run)
         Column(Modifier.weight(1f)) {
             Text(
-                console?.moduleName?.ifEmpty { "Run" } ?: "Run",
+                console?.moduleName?.ifEmpty { runLabel } ?: runLabel,
                 style = Ca.type.subhead, fontWeight = FontWeight.SemiBold, color = Ca.colors.textPrimary,
                 maxLines = 1, overflow = TextOverflow.Ellipsis,
             )
@@ -132,25 +152,25 @@ private fun RunTopBar(console: RunConsoleUi?, buildFailed: Boolean, onBack: () -
         if (console != null) RunStatusPill(console, buildFailed)
         if (console != null && console.transcript.isNotEmpty()) {
             IconButtonCa(
-                CaIcons.copy, "Copy output",
+                CaIcons.copy, stringResource(Res.string.copy),
                 onClick = { clipboard.setText(AnnotatedString(console.transcript.joinToString("") { it.text })) },
                 boxSize = iconBox, iconSize = 16, tint = Ca.colors.textSecondary,
             )
         }
-        if (running) IconButtonCa(CaIcons.stop, "Stop", onStop, boxSize = iconBox, iconSize = 16, tint = Ca.colors.error)
-        else IconButtonCa(CaIcons.play, "Run again", onRerun, boxSize = iconBox, iconSize = 16, tint = Ca.colors.run)
+        if (running) IconButtonCa(CaIcons.stop, stringResource(Res.string.stop), onStop, boxSize = iconBox, iconSize = 16, tint = Ca.colors.error)
+        else IconButtonCa(CaIcons.play, stringResource(Res.string.run_run_again), onRerun, boxSize = iconBox, iconSize = 16, tint = Ca.colors.run)
     }
 }
 
 @Composable
 private fun RunStatusPill(console: RunConsoleUi, buildFailed: Boolean) {
     val (text, color) = when (console.phase) {
-        RunPhase.Building -> "Building…" to Ca.colors.accent
-        RunPhase.Running -> "Running" to Ca.colors.run
+        RunPhase.Building -> stringResource(Res.string.run_building) to Ca.colors.accent
+        RunPhase.Running -> stringResource(Res.string.run_running) to Ca.colors.run
         RunPhase.Finished -> when (val c = console.exitCode) {
-            0 -> "Exit 0" to Ca.colors.run
-            null -> if (buildFailed) "Failed" to Ca.colors.error else "Stopped" to Ca.colors.textSecondary
-            else -> "Exit $c" to Ca.colors.error
+            0 -> stringResource(Res.string.run_exit_code, 0) to Ca.colors.run
+            null -> if (buildFailed) stringResource(Res.string.run_failed) to Ca.colors.error else stringResource(Res.string.run_stopped) to Ca.colors.textSecondary
+            else -> stringResource(Res.string.run_exit_code, c) to Ca.colors.error
         }
     }
     Chip(text, fill = color.copy(alpha = 0.16f), textColor = color)
@@ -172,7 +192,7 @@ private fun BuildPhaseStrip(console: RunConsoleUi, build: BuildState, onOpen: (B
                 CircularProgressIndicator(Modifier.size(14.dp), color = Ca.colors.accent, strokeWidth = 2.dp)
                 val done = build.steps.count { it.status.name == "Done" || it.status.name == "UpToDate" }
                 Text(
-                    "Building ${console.moduleName}…" + if (build.steps.isNotEmpty()) "  $done/${build.steps.size}" else "",
+                    stringResource(Res.string.run_building_module, console.moduleName) + if (build.steps.isNotEmpty()) "  $done/${build.steps.size}" else "",
                     color = Ca.colors.textSecondary, style = Ca.type.footnote,
                 )
             }
@@ -227,7 +247,7 @@ private fun Transcript(console: RunConsoleUi, modifier: Modifier) {
     ) {
         if (console.transcript.isEmpty()) {
             Text(
-                if (console.phase == RunPhase.Building) "Building…" else "(no output)",
+                if (console.phase == RunPhase.Building) stringResource(Res.string.run_building) else stringResource(Res.string.run_no_output),
                 color = Ca.colors.textTertiary, style = Ca.type.codeSmall,
             )
         } else {
@@ -257,7 +277,8 @@ fun RunningIndicator(backend: IdeBackend, onClick: () -> Unit, modifier: Modifie
     ) {
         CircularProgressIndicator(Modifier.size(14.dp), color = Ca.colors.accent, strokeWidth = 2.dp)
         Text(
-            (if (console.phase == RunPhase.Building) "Building " else "Running ") + console.moduleName,
+            if (console.phase == RunPhase.Building) stringResource(Res.string.run_building_module, console.moduleName)
+            else stringResource(Res.string.run_running_module, console.moduleName),
             color = Ca.colors.textPrimary, style = Ca.type.footnote, fontWeight = FontWeight.Medium,
         )
         Icon(CaIcons.chevronRight, null, Modifier.size(14.dp), tint = Ca.colors.textTertiary)
@@ -287,7 +308,7 @@ private fun InputBar(onSend: (String) -> Unit, onEof: () -> Unit, modifier: Modi
                 .border(1.dp, Ca.colors.hairline, RoundedCornerShape(Ca.radius.control))
                 .padding(horizontal = 10.dp, vertical = 9.dp),
         ) {
-            if (field.text.isEmpty()) Text("Type input, press Enter…", color = Ca.colors.textTertiary, style = Ca.type.code)
+            if (field.text.isEmpty()) Text(stringResource(Res.string.run_type_input), color = Ca.colors.textTertiary, style = Ca.type.code)
             BasicTextField(
                 value = field,
                 onValueChange = { field = it },
@@ -301,7 +322,7 @@ private fun InputBar(onSend: (String) -> Unit, onEof: () -> Unit, modifier: Modi
                 },
             )
         }
-        IconButtonCa(CaIcons.arrowRight, "Send", { submit() }, boxSize = 38, iconSize = 18, tint = Ca.colors.accent)
-        IconButtonCa(CaIcons.close, "End input (EOF)", onEof, boxSize = 38, iconSize = 16, tint = Ca.colors.textTertiary)
+        IconButtonCa(CaIcons.arrowRight, stringResource(Res.string.run_send), { submit() }, boxSize = 38, iconSize = 18, tint = Ca.colors.accent)
+        IconButtonCa(CaIcons.close, stringResource(Res.string.run_end_input_eof), onEof, boxSize = 38, iconSize = 16, tint = Ca.colors.textTertiary)
     }
 }

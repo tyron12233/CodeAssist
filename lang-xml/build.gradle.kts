@@ -12,8 +12,11 @@ plugins {
 // keeping this module a generic XML backend that an Android layer composes on top of.
 dependencies {
     api(project(":language-api"))
+
     implementation(project(":index-api"))
     implementation(project(":analysis-api")) // owns the XML lint diagnostic provider (host data via XmlResourceHost)
+
+    implementation(project(":plugin-api"))
 
     testImplementation(libs.kotlinx.coroutines.test)
 }

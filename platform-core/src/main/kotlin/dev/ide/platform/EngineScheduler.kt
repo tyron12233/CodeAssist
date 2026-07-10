@@ -60,8 +60,10 @@ class EngineScheduler(
     private val interactivePending = AtomicInteger(0)
     private val backgroundPending = AtomicInteger(0)
 
-    /** Latency-critical engine work (completion): preempts both background and preview lanes. */
-    suspend fun <T> interactive(label: String = "", block: () -> T): T {
+    /** Latency-critical engine work (completion): preempts both background and preview lanes. The block is
+     *  `suspend` so a contributor can hop off the worker for I/O (the K2 completion IPC); the serialized
+     *  worker frees at the suspension point and the block re-queues on it when the I/O completes. */
+    suspend fun <T> interactive(label: String = "", block: suspend () -> T): T {
         observer?.on(EngineLane.INTERACTIVE, EnginePhase.QUEUED, label)
         interactivePending.incrementAndGet()
         backgroundToken?.cancel()
@@ -79,9 +81,12 @@ class EngineScheduler(
     /**
      * Preemptible per-keystroke engine work (analysis/hints/semantic/folding/signature). Preempts the preview
      * lane; throws [EngineCanceledException] when a completion request preempts it — callers map that to their
-     * own "skipped" result (re-run on the next edit, or retried by the host).
+     * own "skipped" result (re-run on the next edit, or retried by the host). The block is `suspend` for the
+     * same reason as [interactive]'s (the K2 diagnostics IPC); the [CancelToken] rides the coroutine context
+     * (see [EngineCancellation.withToken]), so a preemption flipped during the off-worker wait is still seen
+     * at the next [EngineCancellation.checkCanceled] poll after resumption.
      */
-    suspend fun <T> background(label: String = "", block: () -> T): T {
+    suspend fun <T> background(label: String = "", block: suspend () -> T): T {
         observer?.on(EngineLane.BACKGROUND, EnginePhase.QUEUED, label)
         backgroundPending.incrementAndGet()
         previewToken?.cancel()

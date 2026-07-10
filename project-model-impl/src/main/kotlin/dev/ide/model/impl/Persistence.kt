@@ -320,6 +320,7 @@ object ModelPersistence {
         ContentRole.ANDROID_RES -> "res"
         ContentRole.AIDL -> "aidl"
         ContentRole.ASSETS -> "assets"
+        ContentRole.JNI_LIBS -> "jniLibs"
         ContentRole.GENERATED -> "generated"
         ContentRole.EXCLUDED -> "excluded"
     }
@@ -330,6 +331,7 @@ object ModelPersistence {
         "res" -> ContentRole.ANDROID_RES
         "aidl" -> ContentRole.AIDL
         "assets" -> ContentRole.ASSETS
+        "jniLibs" -> ContentRole.JNI_LIBS
         "generated" -> ContentRole.GENERATED
         "excluded" -> ContentRole.EXCLUDED
         else -> null

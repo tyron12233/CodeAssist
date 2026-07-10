@@ -52,8 +52,22 @@ import androidx.compose.ui.window.PopupPositionProvider
 import dev.ide.ui.backend.UiCompletionItem
 import dev.ide.ui.backend.UiQuickDoc
 import dev.ide.ui.backend.UiSeverity
+import dev.ide.ui.generated.resources.Res
+import dev.ide.ui.generated.resources.copy
+import dev.ide.ui.generated.resources.edoverlay_cut
+import dev.ide.ui.generated.resources.edoverlay_go_to_line
+import dev.ide.ui.generated.resources.edoverlay_go_to_line_hint
+import dev.ide.ui.generated.resources.edoverlay_no_documentation
+import dev.ide.ui.generated.resources.edoverlay_paste
+import dev.ide.ui.generated.resources.edoverlay_quick_actions
+import dev.ide.ui.generated.resources.edoverlay_quick_documentation
+import dev.ide.ui.generated.resources.edoverlay_rename_hint
+import dev.ide.ui.generated.resources.edoverlay_rename_kind
+import dev.ide.ui.generated.resources.edoverlay_renaming
+import dev.ide.ui.generated.resources.edoverlay_select_all
 import dev.ide.ui.icons.CaIcons
 import dev.ide.ui.theme.Ca
+import org.jetbrains.compose.resources.stringResource
 
 // Editor overlay chrome: the small Compose surfaces that float over the canvas (rename prompt, inline
 // diagnostic chip, selection toolbar) plus the popup position providers. Stateless leaves that take their
@@ -86,7 +100,7 @@ internal fun RenamePopup(
             .border(1.dp, Ca.colors.glassEdge, RoundedCornerShape(Ca.radius.lg))
             .padding(16.dp),
     ) {
-        Text("Rename ${state.kind}", color = Ca.colors.textSecondary, style = Ca.type.caption, fontWeight = FontWeight.SemiBold)
+        Text(stringResource(Res.string.edoverlay_rename_kind, state.kind), color = Ca.colors.textSecondary, style = Ca.type.caption, fontWeight = FontWeight.SemiBold)
         Spacer(Modifier.size(8.dp))
         Box(
             Modifier.fillMaxWidth().background(Ca.colors.surface2, RoundedCornerShape(Ca.radius.control))
@@ -115,7 +129,7 @@ internal fun RenamePopup(
             Text(error, color = Ca.colors.error, style = Ca.type.caption2)
         }
         Spacer(Modifier.size(6.dp))
-        Text(if (busy) "Renaming…" else "Enter to rename '${state.oldName}', Esc to cancel",
+        Text(if (busy) stringResource(Res.string.edoverlay_renaming) else stringResource(Res.string.edoverlay_rename_hint, state.oldName),
             color = Ca.colors.textTertiary, style = Ca.type.caption2)
     }
 }
@@ -146,7 +160,7 @@ internal fun GoToLinePopup(
             .border(1.dp, Ca.colors.glassEdge, RoundedCornerShape(Ca.radius.lg))
             .padding(16.dp),
     ) {
-        Text("Go to line", color = Ca.colors.textSecondary, style = Ca.type.caption, fontWeight = FontWeight.SemiBold)
+        Text(stringResource(Res.string.edoverlay_go_to_line), color = Ca.colors.textSecondary, style = Ca.type.caption, fontWeight = FontWeight.SemiBold)
         Spacer(Modifier.size(8.dp))
         Box(
             Modifier.fillMaxWidth().background(Ca.colors.surface2, RoundedCornerShape(Ca.radius.control))
@@ -170,7 +184,7 @@ internal fun GoToLinePopup(
             )
         }
         Spacer(Modifier.size(6.dp))
-        Text("Line 1–$lineCount  (line or line:column)", color = Ca.colors.textTertiary, style = Ca.type.caption2)
+        Text(stringResource(Res.string.edoverlay_go_to_line_hint, lineCount), color = Ca.colors.textTertiary, style = Ca.type.caption2)
     }
 }
 
@@ -204,7 +218,7 @@ internal fun QuickDocPopup(doc: UiQuickDoc, modifier: Modifier = Modifier) {
         Spacer(Modifier.size(10.dp))
         Column(Modifier.verticalScroll(rememberScrollState())) {
             if (content == null) {
-                Text("No documentation", style = Ca.type.body, color = Ca.colors.textTertiary)
+                Text(stringResource(Res.string.edoverlay_no_documentation), style = Ca.type.body, color = Ca.colors.textTertiary)
             } else {
                 if (content.description.isNotEmpty()) {
                     Text(content.description, style = Ca.type.body, color = Ca.colors.textSecondary)
@@ -278,18 +292,18 @@ internal fun SelectionToolbar(
         verticalAlignment = Alignment.CenterVertically,
     ) {
         if (hasSelection) {
-            ToolbarAction("Copy", onCopy)
-            ToolbarAction("Cut", onCut)
+            ToolbarAction(stringResource(Res.string.copy), onCopy)
+            ToolbarAction(stringResource(Res.string.edoverlay_cut), onCut)
         }
-        ToolbarAction("Paste", onPaste)
-        ToolbarAction("Select all", onSelectAll)
+        ToolbarAction(stringResource(Res.string.edoverlay_paste), onPaste)
+        ToolbarAction(stringResource(Res.string.edoverlay_select_all), onSelectAll)
         // Quick documentation for the symbol under the caret (the touch path for Ctrl-Q).
         if (onDocs != null) {
             Box(
                 Modifier.clickable(onClick = onDocs).padding(horizontal = 9.dp, vertical = 6.dp),
                 contentAlignment = Alignment.Center,
             ) {
-                Icon(CaIcons.info, "Quick documentation", Modifier.size(16.dp), tint = Ca.colors.textSecondary)
+                Icon(CaIcons.info, stringResource(Res.string.edoverlay_quick_documentation), Modifier.size(16.dp), tint = Ca.colors.textSecondary)
             }
         }
         // Quick-fixes / intentions for the caret position, when any exist.
@@ -300,7 +314,7 @@ internal fun SelectionToolbar(
                     .padding(horizontal = 9.dp, vertical = 6.dp),
                 contentAlignment = Alignment.Center,
             ) {
-                Icon(CaIcons.lightbulb, "Quick actions", Modifier.size(16.dp), tint = Ca.colors.warning)
+                Icon(CaIcons.lightbulb, stringResource(Res.string.edoverlay_quick_actions), Modifier.size(16.dp), tint = Ca.colors.warning)
             }
         }
     }

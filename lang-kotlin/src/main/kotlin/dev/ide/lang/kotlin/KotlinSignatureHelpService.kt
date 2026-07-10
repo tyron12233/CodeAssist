@@ -2,7 +2,7 @@ package dev.ide.lang.kotlin
 
 import dev.ide.lang.kotlin.parse.KotlinParsedFile
 import dev.ide.lang.kotlin.parse.KotlinParserHost
-import dev.ide.lang.kotlin.resolve.KotlinResolver
+import dev.ide.lang.kotlin.resolve.*
 import dev.ide.lang.kotlin.symbols.KotlinSymbol
 import dev.ide.lang.kotlin.symbols.KotlinSymbolService
 import dev.ide.lang.kotlin.symbols.KotlinType
@@ -14,7 +14,7 @@ import dev.ide.lang.signature.SignatureHelpRequest
 import dev.ide.lang.signature.SignatureHelpService
 import dev.ide.lang.signature.SignatureInfo
 import dev.ide.lang.signature.SignatureScan
-import org.jetbrains.kotlin.com.intellij.psi.PsiElement
+import com.intellij.psi.PsiElement
 import org.jetbrains.kotlin.psi.KtCallExpression
 
 /**

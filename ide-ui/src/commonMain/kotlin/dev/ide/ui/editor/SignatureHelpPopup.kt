@@ -30,7 +30,10 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import dev.ide.ui.backend.UiSignature
 import dev.ide.ui.backend.UiSignatureHelp
+import dev.ide.ui.generated.resources.Res
+import dev.ide.ui.generated.resources.sig_more
 import dev.ide.ui.theme.Ca
+import org.jetbrains.compose.resources.stringResource
 
 /**
  * The parameter-info panel (IntelliJ-style), floated above the call. Each applicable overload is one line; the
@@ -87,7 +90,7 @@ fun SignatureHelpPopup(help: UiSignatureHelp, mobile: Boolean = false) {
             }
             if (help.signatures.size > shown.size) {
                 Text(
-                    "+${help.signatures.size - shown.size} more",
+                    stringResource(Res.string.sig_more, help.signatures.size - shown.size),
                     style = Ca.type.codeSmall,
                     color = Ca.colors.textSecondary,
                     modifier = Modifier.padding(top = 2.dp),

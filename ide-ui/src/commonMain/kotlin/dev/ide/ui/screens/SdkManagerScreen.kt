@@ -44,10 +44,38 @@ import dev.ide.ui.backend.UiSdkDownload
 import dev.ide.ui.backend.UiSdkPackage
 import dev.ide.ui.components.IconButtonCa
 import dev.ide.ui.components.pressScale
+import dev.ide.ui.generated.resources.Res
+import dev.ide.ui.generated.resources.back
+import dev.ide.ui.generated.resources.cancel
+import dev.ide.ui.generated.resources.install
+import dev.ide.ui.generated.resources.refresh
+import dev.ide.ui.generated.resources.sdk_android_sources
+import dev.ide.ui.generated.resources.sdk_clear_finished
+import dev.ide.ui.generated.resources.sdk_could_not_load
+import dev.ide.ui.generated.resources.sdk_download_extracting
+import dev.ide.ui.generated.resources.sdk_download_failed
+import dev.ide.ui.generated.resources.sdk_download_installing
+import dev.ide.ui.generated.resources.sdk_downloading
+import dev.ide.ui.generated.resources.sdk_downloading_detail
+import dev.ide.ui.generated.resources.sdk_downloads
+import dev.ide.ui.generated.resources.sdk_installed
+import dev.ide.ui.generated.resources.sdk_jdk
+import dev.ide.ui.generated.resources.sdk_jdk_downloading
+import dev.ide.ui.generated.resources.sdk_jdk_no_sources
+import dev.ide.ui.generated.resources.sdk_jdk_sources
+import dev.ide.ui.generated.resources.sdk_jdk_sources_available
+import dev.ide.ui.generated.resources.sdk_jdk_version
+import dev.ide.ui.generated.resources.sdk_loading_packages
+import dev.ide.ui.generated.resources.sdk_manager_title
+import dev.ide.ui.generated.resources.sdk_no_packages
+import dev.ide.ui.generated.resources.sdk_resume
+import dev.ide.ui.generated.resources.sdk_sources_documentation
+import dev.ide.ui.generated.resources.sdk_sources_documentation_desc
 import dev.ide.ui.icons.CaIcons
 import dev.ide.ui.platform.isMobilePlatform
 import dev.ide.ui.theme.Ca
 import kotlinx.coroutines.launch
+import org.jetbrains.compose.resources.stringResource
 
 /**
  * The SDK / toolchain manager: download **sources and documentation** (Android platform sources, JDK
@@ -66,6 +94,7 @@ fun SdkManagerScreen(backend: IdeBackend, onBack: () -> Unit) {
     var status by remember { mutableStateOf<String?>(null) }
     var statusIsError by remember { mutableStateOf(false) }
     val jdk = remember { runCatching { backend.sdk.jdkInfo() }.getOrNull() }
+    val couldNotLoadMsg = stringResource(Res.string.sdk_could_not_load)
 
     suspend fun reload() {
         loading = true
@@ -73,7 +102,7 @@ fun SdkManagerScreen(backend: IdeBackend, onBack: () -> Unit) {
         val result = runCatching { backend.sdk.sdkPackages() }
         packages = result.getOrDefault(emptyList())
         statusIsError = result.isFailure
-        if (result.isFailure) status = result.exceptionOrNull()?.message ?: "Could not load packages."
+        if (result.isFailure) status = result.exceptionOrNull()?.message ?: couldNotLoadMsg
         loading = false
     }
     LaunchedEffect(Unit) { reload() }
@@ -90,21 +119,19 @@ fun SdkManagerScreen(backend: IdeBackend, onBack: () -> Unit) {
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(8.dp),
         ) {
-            IconButtonCa(CaIcons.chevronLeft, "Back", onBack, boxSize = iconBox)
-            Text("SDK Manager", style = Ca.type.title3, fontWeight = FontWeight.SemiBold, color = Ca.colors.textPrimary, modifier = Modifier.weight(1f))
-            IconButtonCa(CaIcons.refresh, "Refresh", { scope.launch { reload() } }, boxSize = iconBox)
+            IconButtonCa(CaIcons.chevronLeft, stringResource(Res.string.back), onBack, boxSize = iconBox)
+            Text(stringResource(Res.string.sdk_manager_title), style = Ca.type.title3, fontWeight = FontWeight.SemiBold, color = Ca.colors.textPrimary, modifier = Modifier.weight(1f))
+            IconButtonCa(CaIcons.refresh, stringResource(Res.string.refresh), { scope.launch { reload() } }, boxSize = iconBox)
         }
         status?.let { Text(it, style = Ca.type.footnote, color = if (statusIsError) Ca.colors.error else Ca.colors.accent, modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp)) }
 
         Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp), verticalArrangement = Arrangement.spacedBy(18.dp)) {
             // Purpose: these downloads power editor docs, not building.
             Card {
-                Text("Sources & documentation", style = Ca.type.subhead, fontWeight = FontWeight.SemiBold, color = Ca.colors.textPrimary)
+                Text(stringResource(Res.string.sdk_sources_documentation), style = Ca.type.subhead, fontWeight = FontWeight.SemiBold, color = Ca.colors.textPrimary)
                 Spacer(Modifier.height(4.dp))
                 Text(
-                    "Download SDK platform sources and JDK sources so the editor can show javadoc, parameter " +
-                        "names, and go-to-source into the SDK. Downloads continue in the background, so you can " +
-                        "leave this screen and keep working.",
+                    stringResource(Res.string.sdk_sources_documentation_desc),
                     style = Ca.type.footnote, color = Ca.colors.textSecondary,
                 )
             }
@@ -112,10 +139,10 @@ fun SdkManagerScreen(backend: IdeBackend, onBack: () -> Unit) {
             // Active / recent downloads queue.
             if (progress.downloads.isNotEmpty()) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    SectionHeader("Downloads", small = true)
+                    SectionHeader(stringResource(Res.string.sdk_downloads), small = true)
                     Spacer(Modifier.weight(1f))
                     if (progress.downloads.any { it.status == "DONE" || it.status == "FAILED" }) {
-                        PillButton("Clear finished", null, accent = false) { backend.sdk.clearSdkDownloads() }
+                        PillButton(stringResource(Res.string.sdk_clear_finished), null, accent = false) { backend.sdk.clearSdkDownloads() }
                     }
                 }
                 Card {
@@ -127,24 +154,24 @@ fun SdkManagerScreen(backend: IdeBackend, onBack: () -> Unit) {
             }
 
             // JDK sources
-            SectionHeader("JDK")
+            SectionHeader(stringResource(Res.string.sdk_jdk))
             Card {
-                Text("JDK ${jdk?.version ?: "?"}", style = Ca.type.subhead, color = Ca.colors.textPrimary)
+                Text(stringResource(Res.string.sdk_jdk_version, jdk?.version ?: "?"), style = Ca.type.subhead, color = Ca.colors.textPrimary)
                 jdk?.home?.takeIf { it.isNotEmpty() }?.let {
                     Text(it, style = Ca.type.footnote, color = Ca.colors.textTertiary, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.fillMaxWidth())
                 }
                 Spacer(Modifier.height(8.dp))
                 if (jdk?.srcZip != null) {
-                    StatusTag(CaIcons.check, "Sources available — android.* and java.* docs are on.", Ca.colors.run)
+                    StatusTag(CaIcons.check, stringResource(Res.string.sdk_jdk_sources_available), Ca.colors.run)
                 } else {
-                    Text("No JDK sources found. Download a JDK that bundles them:", style = Ca.type.footnote, color = Ca.colors.textSecondary)
+                    Text(stringResource(Res.string.sdk_jdk_no_sources), style = Ca.type.footnote, color = Ca.colors.textSecondary)
                     Spacer(Modifier.height(10.dp))
                     // FlowRow so the buttons wrap onto another line on a narrow phone instead of clipping.
                     FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                         for (feature in listOf(17, 21)) {
                             val downloading = "jdk-$feature" in activeIds
                             PillButton(
-                                if (downloading) "JDK $feature…" else "JDK $feature sources",
+                                if (downloading) stringResource(Res.string.sdk_jdk_downloading, feature) else stringResource(Res.string.sdk_jdk_sources, feature),
                                 if (downloading) null else CaIcons.download,
                                 accent = true, enabled = !downloading,
                             ) { scope.launch { status = backend.sdk.downloadJdkSources(feature) } }
@@ -154,14 +181,14 @@ fun SdkManagerScreen(backend: IdeBackend, onBack: () -> Unit) {
             }
 
             // Android platform sources (the documentation payload). Build tooling is bundled, never downloaded.
-            SectionHeader("Android SDK sources")
+            SectionHeader(stringResource(Res.string.sdk_android_sources))
             if (loading && packages.isEmpty()) {
                 Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     CircularProgressIndicator(Modifier.size(16.dp), strokeWidth = 2.dp, color = Ca.colors.accent)
-                    Text("Loading package list…", style = Ca.type.footnote, color = Ca.colors.textSecondary)
+                    Text(stringResource(Res.string.sdk_loading_packages), style = Ca.type.footnote, color = Ca.colors.textSecondary)
                 }
             } else if (packages.isEmpty()) {
-                Text("No packages. Check your connection, then Refresh.", style = Ca.type.footnote, color = Ca.colors.textTertiary)
+                Text(stringResource(Res.string.sdk_no_packages), style = Ca.type.footnote, color = Ca.colors.textTertiary)
             } else {
                 Card {
                     val sorted = packages.sortedByDescending { it.path }
@@ -209,11 +236,11 @@ private fun DownloadRow(d: UiSdkDownload, onCancel: () -> Unit) {
             Column(Modifier.weight(1f)) {
                 Text(d.label, style = Ca.type.body, color = Ca.colors.textPrimary, maxLines = 1, overflow = TextOverflow.Ellipsis)
                 val sub = when (d.status) {
-                    "DONE" -> "Installed"
-                    "FAILED" -> d.detail.ifEmpty { "Failed" }
-                    "DOWNLOADING" -> "Downloading${if (d.detail.isNotEmpty()) " · ${d.detail}" else ""}"
-                    "EXTRACTING" -> "Extracting…"
-                    "INSTALLING" -> "Installing…"
+                    "DONE" -> stringResource(Res.string.sdk_installed)
+                    "FAILED" -> d.detail.ifEmpty { stringResource(Res.string.sdk_download_failed) }
+                    "DOWNLOADING" -> if (d.detail.isNotEmpty()) stringResource(Res.string.sdk_downloading_detail, d.detail) else stringResource(Res.string.sdk_downloading)
+                    "EXTRACTING" -> stringResource(Res.string.sdk_download_extracting)
+                    "INSTALLING" -> stringResource(Res.string.sdk_download_installing)
                     else -> d.status
                 }
                 Text(
@@ -222,7 +249,7 @@ private fun DownloadRow(d: UiSdkDownload, onCancel: () -> Unit) {
                 )
             }
             Spacer(Modifier.width(10.dp))
-            if (active) PillButton("Cancel", CaIcons.stop, accent = false, onClick = onCancel)
+            if (active) PillButton(stringResource(Res.string.cancel), CaIcons.stop, accent = false, onClick = onCancel)
         }
         if (active) {
             Spacer(Modifier.height(8.dp))
@@ -256,11 +283,11 @@ private fun PackageRow(p: UiSdkPackage, downloading: Boolean, onInstall: () -> U
         when {
             downloading -> Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 CircularProgressIndicator(Modifier.size(18.dp), strokeWidth = 2.dp, color = Ca.colors.accent)
-                IconButtonCa(CaIcons.stop, "Cancel", onCancel, boxSize = if (isMobilePlatform) 40 else 32, iconSize = 18)
+                IconButtonCa(CaIcons.stop, stringResource(Res.string.cancel), onCancel, boxSize = if (isMobilePlatform) 40 else 32, iconSize = 18)
             }
-            p.installed -> StatusTag(CaIcons.check, "Installed", Ca.colors.run)
-            p.incomplete -> PillButton("Resume", CaIcons.refresh, accent = true, enabled = p.installable, onClick = onInstall)
-            else -> PillButton("Install", CaIcons.download, accent = true, enabled = p.installable, onClick = onInstall)
+            p.installed -> StatusTag(CaIcons.check, stringResource(Res.string.sdk_installed), Ca.colors.run)
+            p.incomplete -> PillButton(stringResource(Res.string.sdk_resume), CaIcons.refresh, accent = true, enabled = p.installable, onClick = onInstall)
+            else -> PillButton(stringResource(Res.string.install), CaIcons.download, accent = true, enabled = p.installable, onClick = onInstall)
         }
     }
 }

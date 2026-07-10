@@ -50,6 +50,20 @@ internal object MainClassDetection {
         return out.values.toList()
     }
 
+    /**
+     * The module's runnable entry points found by scanning its sources on disk RIGHT NOW, bypassing the index.
+     * Used by the programmatic run-and-capture path ([BuildService.runAndCapture]) — the Learn exercise checker
+     * writes the module's `Main` straight to disk on each run (not through the save→reindex path), so the
+     * persisted entry-point index can name a stale FQN (e.g. the template's packaged `com.example.app.Main`
+     * after the learner's default-package `Main` replaced it → "Could not find or load main class …"). The
+     * freshly written file is authoritative, so we scan it directly rather than trust the index.
+     */
+    fun detectLive(ctx: EngineContext, module: Module): List<RunTarget> {
+        val roots = ctx.sourceRoots(module).map { it.toAbsolutePath().normalize() }
+        if (roots.isEmpty()) return emptyList()
+        return directScan(roots)
+    }
+
     /** Cold-start fallback: parse the module's sources with the SAME detectors the indexes use. */
     private fun directScan(roots: List<Path>): List<RunTarget> {
         val out = LinkedHashMap<String, RunTarget>()

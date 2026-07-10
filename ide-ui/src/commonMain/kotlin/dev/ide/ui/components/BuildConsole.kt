@@ -76,6 +76,43 @@ import dev.ide.ui.ext.ToolWindowRegistry
 import dev.ide.ui.icons.CaIcons
 import dev.ide.ui.theme.Ca
 import dev.ide.ui.theme.Motion
+import dev.ide.ui.generated.resources.Res
+import dev.ide.ui.generated.resources.buildc_build
+import dev.ide.ui.generated.resources.stop
+import dev.ide.ui.generated.resources.run
+import dev.ide.ui.generated.resources.buildc_collapse
+import dev.ide.ui.generated.resources.buildc_status_idle
+import dev.ide.ui.generated.resources.buildc_status_running
+import dev.ide.ui.generated.resources.buildc_status_succeeded
+import dev.ide.ui.generated.resources.buildc_status_failed
+import dev.ide.ui.generated.resources.buildc_copied
+import dev.ide.ui.generated.resources.buildc_copy
+import dev.ide.ui.generated.resources.buildc_working
+import dev.ide.ui.generated.resources.buildc_tab_problems
+import dev.ide.ui.generated.resources.buildc_tab_log
+import dev.ide.ui.generated.resources.buildc_tab_steps
+import dev.ide.ui.generated.resources.buildc_filter_all
+import dev.ide.ui.generated.resources.buildc_filter_errors
+import dev.ide.ui.generated.resources.buildc_filter_warnings
+import dev.ide.ui.generated.resources.buildc_no_problems
+import dev.ide.ui.generated.resources.buildc_no_problems_match
+import dev.ide.ui.generated.resources.buildc_ungroup
+import dev.ide.ui.generated.resources.buildc_group_by_task
+import dev.ide.ui.generated.resources.buildc_empty_log
+import dev.ide.ui.generated.resources.buildc_no_log_match
+import dev.ide.ui.generated.resources.buildc_general
+import dev.ide.ui.generated.resources.buildc_no_steps
+import dev.ide.ui.generated.resources.buildc_indexing
+import dev.ide.ui.generated.resources.buildc_filter_log
+import dev.ide.ui.generated.resources.buildc_loglevel_all
+import dev.ide.ui.generated.resources.buildc_loglevel_warnings
+import dev.ide.ui.generated.resources.buildc_loglevel_errors
+import dev.ide.ui.generated.resources.buildc_step_up_to_date
+import dev.ide.ui.generated.resources.buildc_step_no_source
+import dev.ide.ui.generated.resources.buildc_step_skipped
+import dev.ide.ui.generated.resources.clear
+import org.jetbrains.compose.resources.StringResource
+import org.jetbrains.compose.resources.stringResource
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlin.time.Duration.Companion.milliseconds
@@ -182,7 +219,7 @@ private fun Header(
     ) {
         Icon(CaIcons.terminal, null, Modifier.size(18.dp), tint = Ca.colors.textSecondary)
         Text(
-            "Build",
+            stringResource(Res.string.buildc_build),
             color = Ca.colors.textPrimary,
             style = Ca.type.subhead,
             fontWeight = FontWeight.SemiBold
@@ -209,11 +246,11 @@ private fun Header(
             )
         }
         StatusPill(state.status)
-        val (copyLabel, copyProvide) = copyForTab(state, tab, pluginActive)
-        if (copyProvide != null) CopyButton(copyLabel, copyProvide)
+        val (copyTab, copyProvide) = copyForTab(state, tab, pluginActive)
+        if (copyProvide != null) CopyButton(copyTab, copyProvide)
         if (running) IconButtonCa(
             CaIcons.stop,
-            "Stop",
+            stringResource(Res.string.stop),
             onStop,
             boxSize = 28,
             iconSize = 16,
@@ -221,13 +258,13 @@ private fun Header(
         )
         else IconButtonCa(
             CaIcons.play,
-            "Run",
+            stringResource(Res.string.run),
             onRun,
             boxSize = 28,
             iconSize = 16,
             tint = Ca.colors.run
         )
-        IconButtonCa(CaIcons.chevronDown, "Collapse", onCollapse, boxSize = 28, iconSize = 16)
+        IconButtonCa(CaIcons.chevronDown, stringResource(Res.string.buildc_collapse), onCollapse, boxSize = 28, iconSize = 16)
     }
 }
 
@@ -248,10 +285,10 @@ private fun MiniCount(icon: ImageVector, count: Int, color: Color) {
 @Composable
 private fun StatusPill(status: RunStatus) {
     val (text, color) = when (status) {
-        RunStatus.Idle -> "Idle" to Ca.colors.textSecondary
-        RunStatus.Running -> "Running…" to Ca.colors.accent
-        RunStatus.Succeeded -> "Succeeded" to Ca.colors.run
-        RunStatus.Failed -> "Failed" to Ca.colors.error
+        RunStatus.Idle -> stringResource(Res.string.buildc_status_idle) to Ca.colors.textSecondary
+        RunStatus.Running -> stringResource(Res.string.buildc_status_running) to Ca.colors.accent
+        RunStatus.Succeeded -> stringResource(Res.string.buildc_status_succeeded) to Ca.colors.run
+        RunStatus.Failed -> stringResource(Res.string.buildc_status_failed) to Ca.colors.error
     }
     Chip(text, fill = color.copy(alpha = 0.16f), textColor = color)
 }
@@ -266,16 +303,16 @@ private fun copyForTab(
     state: BuildState,
     tab: BuildTab,
     pluginActive: Boolean,
-): Pair<String, (() -> String)?> {
-    if (pluginActive) return "" to null
+): Pair<BuildTab, (() -> String)?> {
+    if (pluginActive) return tab to null
     return when (tab) {
-        BuildTab.Problems -> "problems" to (
+        BuildTab.Problems -> tab to (
             if (state.diagnostics.isEmpty()) null
             else fun(): String = renderProblemsForCopy(state.diagnostics))
-        BuildTab.Log -> "log" to (
+        BuildTab.Log -> tab to (
             if (state.log.isEmpty()) null
             else fun(): String = state.log.joinToString("\n", transform = ::renderLogForCopy))
-        BuildTab.Steps -> "steps" to (
+        BuildTab.Steps -> tab to (
             if (state.steps.isEmpty()) null
             else fun(): String = renderStepsForCopy(state.steps))
     }
@@ -287,7 +324,7 @@ private fun copyForTab(
  */
 @OptIn(ExperimentalComposeUiApi::class)
 @Composable
-private fun CopyButton(label: String, provide: () -> String) {
+private fun CopyButton(tab: BuildTab, provide: () -> String) {
     val clipboard = LocalClipboardManager.current
     val scope = rememberCoroutineScope()
     var copied by remember { mutableStateOf(false) }
@@ -296,9 +333,16 @@ private fun CopyButton(label: String, provide: () -> String) {
             delay(1500.milliseconds); copied = false
         }
     }
+    val label = stringResource(
+        when (tab) {
+            BuildTab.Problems -> Res.string.buildc_tab_problems
+            BuildTab.Log -> Res.string.buildc_tab_log
+            BuildTab.Steps -> Res.string.buildc_tab_steps
+        }
+    )
     IconButtonCa(
         if (copied) CaIcons.check else CaIcons.copy,
-        if (copied) "Copied" else "Copy $label",
+        if (copied) stringResource(Res.string.buildc_copied) else stringResource(Res.string.buildc_copy, label),
         onClick = {
             scope.launch { clipboard.setText(AnnotatedString(provide())) }
             copied = true
@@ -390,7 +434,7 @@ private fun RunningStrip(steps: List<BuildStepUi>) {
             horizontalArrangement = Arrangement.spacedBy(8.dp)
         ) {
             Text(
-                current?.let(::shortTask) ?: "Working…",
+                current?.let(::shortTask) ?: stringResource(Res.string.buildc_working),
                 color = Ca.colors.textSecondary, style = Ca.type.caption,
                 maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f),
             )
@@ -430,14 +474,14 @@ private fun ConsoleTabs(
             horizontalArrangement = Arrangement.spacedBy(18.dp),
         ) {
             TabItem(
-                "Problems",
+                stringResource(Res.string.buildc_tab_problems),
                 builtInActive && tab == BuildTab.Problems,
                 badge = (errors + warnings).takeIf { it > 0 }?.toString(),
                 badgeColor = if (errors > 0) Ca.colors.error else Ca.colors.warning
             ) { onSelect(BuildTab.Problems) }
-            TabItem("Log", builtInActive && tab == BuildTab.Log) { onSelect(BuildTab.Log) }
+            TabItem(stringResource(Res.string.buildc_tab_log), builtInActive && tab == BuildTab.Log) { onSelect(BuildTab.Log) }
             TabItem(
-                "Steps",
+                stringResource(Res.string.buildc_tab_steps),
                 builtInActive && tab == BuildTab.Steps,
                 badge = stepsTotal.takeIf { it > 0 }?.let { "$stepsDone/$it" },
                 badgeColor = Ca.colors.textTertiary
@@ -520,20 +564,20 @@ private fun ProblemsTab(diagnostics: List<BuildDiagnosticUi>, onOpen: (BuildDiag
             Modifier.fillMaxWidth().padding(vertical = 6.dp),
             horizontalArrangement = Arrangement.spacedBy(6.dp)
         ) {
-            ConsoleChip("All ${diagnostics.size}", filter == ProblemFilter.All) {
+            ConsoleChip(stringResource(Res.string.buildc_filter_all, diagnostics.size), filter == ProblemFilter.All) {
                 filter = ProblemFilter.All
             }
-            if (errors > 0) ConsoleChip("Errors $errors", filter == ProblemFilter.Errors) {
+            if (errors > 0) ConsoleChip(stringResource(Res.string.buildc_filter_errors, errors), filter == ProblemFilter.Errors) {
                 filter = ProblemFilter.Errors
             }
             if (warnings > 0) ConsoleChip(
-                "Warnings $warnings",
+                stringResource(Res.string.buildc_filter_warnings, warnings),
                 filter == ProblemFilter.Warnings
             ) { filter = ProblemFilter.Warnings }
         }
         if (shown.isEmpty()) {
             EmptyState(
-                if (diagnostics.isEmpty()) "No problems." else "No problems match this filter.",
+                if (diagnostics.isEmpty()) stringResource(Res.string.buildc_no_problems) else stringResource(Res.string.buildc_no_problems_match),
                 Modifier.weight(1f).fillMaxWidth()
             )
         } else {
@@ -683,7 +727,7 @@ private fun LogTab(log: List<BuildLogLine>, running: Boolean) {
         ) {
             SearchField(query, { query = it }, Modifier.weight(1f))
             IconButtonCa(
-                CaIcons.layers, if (grouped) "Ungroup" else "Group by task",
+                CaIcons.layers, if (grouped) stringResource(Res.string.buildc_ungroup) else stringResource(Res.string.buildc_group_by_task),
                 onClick = { grouped = !grouped }, boxSize = 30, iconSize = 16,
                 tint = if (grouped) Ca.colors.accent else Ca.colors.textSecondary,
             )
@@ -692,7 +736,7 @@ private fun LogTab(log: List<BuildLogLine>, running: Boolean) {
             Modifier.fillMaxWidth().padding(bottom = 6.dp),
             horizontalArrangement = Arrangement.spacedBy(6.dp)
         ) {
-            LogLevelFilter.entries.forEach { f -> ConsoleChip(f.label, f == level) { level = f } }
+            LogLevelFilter.entries.forEach { f -> ConsoleChip(stringResource(f.label), f == level) { level = f } }
         }
         Box(
             Modifier.weight(1f).fillMaxWidth()
@@ -702,7 +746,7 @@ private fun LogTab(log: List<BuildLogLine>, running: Boolean) {
         ) {
             if (filtered.isEmpty()) {
                 Text(
-                    if (log.isEmpty()) "Press Run to build & run this module." else "No log lines match.",
+                    if (log.isEmpty()) stringResource(Res.string.buildc_empty_log) else stringResource(Res.string.buildc_no_log_match),
                     color = Ca.colors.textTertiary, style = Ca.type.codeSmall,
                 )
             } else if (grouped) {
@@ -726,10 +770,10 @@ private fun LogTab(log: List<BuildLogLine>, running: Boolean) {
     }
 }
 
-private enum class LogLevelFilter(val label: String, val keep: (UiLogLevel) -> Boolean) {
-    All("All", { true }),
-    Warnings("Warnings", { it == UiLogLevel.Warn || it == UiLogLevel.Error }),
-    Errors("Errors", { it == UiLogLevel.Error }),
+private enum class LogLevelFilter(val label: StringResource, val keep: (UiLogLevel) -> Boolean) {
+    All(Res.string.buildc_loglevel_all, { true }),
+    Warnings(Res.string.buildc_loglevel_warnings, { it == UiLogLevel.Warn || it == UiLogLevel.Error }),
+    Errors(Res.string.buildc_loglevel_errors, { it == UiLogLevel.Error }),
 }
 
 private sealed interface LogDisplay {
@@ -821,7 +865,7 @@ private fun LogGroupHeader(task: String, count: Int, expanded: Boolean, onToggle
             tint = Ca.colors.textTertiary
         )
         Text(
-            task.ifEmpty { "General" },
+            task.ifEmpty { stringResource(Res.string.buildc_general) },
             color = Ca.colors.textSecondary,
             style = Ca.type.codeSmall,
             fontWeight = FontWeight.Medium,
@@ -922,7 +966,7 @@ private fun shortTask(task: String): String = task.substringAfterLast(':').ifEmp
 @Composable
 private fun StepsTab(steps: List<BuildStepUi>) {
     if (steps.isEmpty()) {
-        EmptyState("No build steps yet.", Modifier.fillMaxSize())
+        EmptyState(stringResource(Res.string.buildc_no_steps), Modifier.fillMaxSize())
         return
     }
     SelectionContainer(Modifier.fillMaxSize()) {
@@ -959,7 +1003,7 @@ private fun StepRow(step: BuildStepUi) {
         // The "why it didn't run" tag, Gradle-style: UP-TO-DATE / NO-SOURCE / SKIPPED, dimmed at the right.
         statusTag(step.status)?.let { tag ->
             Spacer(Modifier.weight(1f))
-            Text(tag, color = Ca.colors.textTertiary, style = Ca.type.caption)
+            Text(stringResource(tag), color = Ca.colors.textTertiary, style = Ca.type.caption)
         }
     }
 }
@@ -980,10 +1024,10 @@ private fun runningPulseAlpha(): Float {
     return alpha
 }
 
-private fun statusTag(status: StepStatus): String? = when (status) {
-    StepStatus.UpToDate -> "UP-TO-DATE"
-    StepStatus.NoSource -> "NO-SOURCE"
-    StepStatus.Skipped -> "SKIPPED"
+private fun statusTag(status: StepStatus): StringResource? = when (status) {
+    StepStatus.UpToDate -> Res.string.buildc_step_up_to_date
+    StepStatus.NoSource -> Res.string.buildc_step_no_source
+    StepStatus.Skipped -> Res.string.buildc_step_skipped
     else -> null
 }
 
@@ -1051,7 +1095,7 @@ private fun IndexingSection(status: IndexUiStatus) {
         ) {
             Icon(CaIcons.layers, null, Modifier.size(15.dp), tint = Ca.colors.accent)
             Text(
-                status.message.ifEmpty { "Indexing…" },
+                status.message.ifEmpty { stringResource(Res.string.buildc_indexing) },
                 color = Ca.colors.textSecondary,
                 style = Ca.type.footnote
             )
@@ -1133,7 +1177,7 @@ private fun SearchField(
         Icon(CaIcons.search, null, Modifier.size(14.dp), tint = Ca.colors.accent)
         Box(Modifier.weight(1f)) {
             if (value.isEmpty()) Text(
-                "Filter log…",
+                stringResource(Res.string.buildc_filter_log),
                 color = Ca.colors.textTertiary,
                 style = Ca.type.footnote
             )
@@ -1149,7 +1193,7 @@ private fun SearchField(
         if (value.isNotEmpty()) {
             Icon(
                 CaIcons.close,
-                "Clear",
+                stringResource(Res.string.clear),
                 Modifier.size(14.dp)
                     .clickable(interactionSource, indication = null) { onValueChange("") },
                 tint = Ca.colors.textTertiary

@@ -6,6 +6,7 @@ import kotlinx.coroutines.runBlocking
 import java.nio.file.Path
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
 import kotlin.test.assertNotNull
 import kotlin.test.assertTrue
 
@@ -59,5 +60,17 @@ class KotlinComposePreviewTest {
         var calls = 0
         preview.body.walk { if (it is RNode.Call) calls++ }
         assertTrue(calls >= 1, "the preview body should contain the Card(1) call")
+    }
+
+    @Test
+    fun composeRuntimeNotAttachedWithoutComposeOnClasspath() {
+        // With no androidx.compose.* on the classpath (the Learn scratch's state before its one-time download
+        // attaches the AARs), the runtime reports not-attached. This is the signal the preview host polls to
+        // show a transient "Preparing" state (and retry) rather than latching a first-run "unresolved call"
+        // failure. classpathReady() is trivially true here (no index injected), so this gate is what tells the
+        // scratch apart from a warmed classpath.
+        val (analyzer, _) = analyze("Ui.kt", "package demo\nfun x() {}\n")
+        assertTrue(analyzer.classpathReady(), "no index → classpathReady() is trivially true")
+        assertFalse(analyzer.composeRuntimeAttached(), "no compose on the classpath → runtime not attached")
     }
 }

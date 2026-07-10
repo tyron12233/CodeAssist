@@ -1,5 +1,7 @@
 package dev.ide.platform
 
+import kotlinx.coroutines.asContextElement
+
 /**
  * Cooperative cancellation for editor "engine" work that runs synchronously on the single engine thread.
  *
@@ -16,16 +18,16 @@ package dev.ide.platform
 object EngineCancellation {
     private val current = ThreadLocal<CancelToken?>()
 
-    /** Run [block] on this thread under [token] (restoring any previous token on exit). */
-    suspend fun <T> withToken(token: CancelToken, block: suspend () -> T): T {
-        val prev = current.get()
-        current.set(token)
-        try {
-            return block()
-        } finally {
-            current.set(prev)
-        }
-    }
+    /**
+     * Run [block] under [token]. Installed as a coroutine [kotlinx.coroutines.asContextElement] rather than
+     * a plain thread-local write: a lane block may genuinely suspend mid-run (the K2 IPC hops to
+     * `Dispatchers.IO`) and resume on a DIFFERENT worker thread — a raw `set`/restore pair would then leak
+     * the token on the original thread (poisoning an unrelated later call scheduled there) and lose it on
+     * the resuming one. The context element re-installs/restores the token around every suspension, so
+     * synchronous [checkCanceled] polls deep inside the block keep working wherever the coroutine lands.
+     */
+    suspend fun <T> withToken(token: CancelToken, block: suspend () -> T): T =
+        kotlinx.coroutines.withContext(current.asContextElement(token)) { block() }
 
     /** Throw [EngineCanceledException] if this thread's current call has been preempted; no-op when none. */
     fun checkCanceled() {

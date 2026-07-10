@@ -118,8 +118,12 @@ class JavaBuildSystem(
         for (m in moduleClosure(listOf(module.id), byId)) java.registerModule(tasks, m, byId, withJar = false)
         val base = outputDir(module).resolveSibling("dex-run")
         val dexName = TaskName(":${module.name}:dexRun")
+        // A runner that runs the program out-of-process (forked dalvikvm) is isolated by the process boundary,
+        // so its dex is left un-instrumented (no ExitGuard/SandboxGuard); the in-process DexClassLoader runner
+        // needs the guards to protect the host, so its dex is instrumented.
+        val guarded = !dexRunner.isolatedProcess
         tasks.register(dexName) {
-            JavaDexTask(dexName, { runtimeClasspath(module) }, minApi, base.resolve("staging"), base.resolve("dex"), dexBackend)
+            JavaDexTask(dexName, { runtimeClasspath(module) }, minApi, base.resolve("staging"), base.resolve("dex"), dexBackend, guarded)
         }.configure { dependsOn(TaskName(":${module.name}:classes")) }
         val runName = TaskName(":${module.name}:runDex")
         tasks.register(runName) { DexExecTask(runName, mainClass, base.resolve("dex"), programArgs, dexRunner, programIo) }

@@ -1,5 +1,7 @@
 package dev.ide.core
 
+import kotlinx.coroutines.runBlocking
+
 import dev.ide.android.support.tools.AndroidSdk
 import org.junit.jupiter.api.Assumptions
 import java.nio.file.Files
@@ -22,20 +24,20 @@ class AndroidAnalysisReproTest {
             // a plain-Java module (`core`) with a syntax error — analysis must run (not throw) and flag it
             val calc = dir.resolve("core/src/main/java/com/example/core/Calc.java")
             val calcBroken = Files.readString(calc).replace("return a + b;", "return a + ;")
-            val coreDiags = ide.analyzeDiagnostics(calc, calcBroken).map { it.message }
+            val coreDiags = runBlocking { ide.analyzeDiagnostics(calc, calcBroken) }.map { it.message }
             assertTrue(coreDiags.any { "Syntax error" in it }, "core analysis should flag the syntax error: $coreDiags")
 
             // an Android module file — android.jar types must resolve (no "Missing system library", no
             // bogus "Activity cannot be resolved"); a syntax error is still reported.
             val main = dir.resolve("app/src/main/java/com/example/app/MainActivity.java")
             val valid = Files.readString(main)
-            val validDiags = ide.analyzeDiagnostics(main, valid).map { it.message }
+            val validDiags = runBlocking { ide.analyzeDiagnostics(main, valid) }.map { it.message }
             assertFalse(validDiags.any { "Activity" in it && "resolved" in it }, "android.jar types must resolve: $validDiags")
             assertFalse(validDiags.any { "Missing system library" in it }, "must not fail with missing system library: $validDiags")
 
             val broken = valid.replace("super.onCreate(savedInstanceState);", "super.onCreate(savedInstanceState); int z = ;")
             assertTrue(
-                ide.analyzeDiagnostics(main, broken).any { "Syntax error" in it.message },
+                runBlocking { ide.analyzeDiagnostics(main, broken) }.any { "Syntax error" in it.message },
                 "android-module analysis should flag a syntax error",
             )
         }
@@ -61,7 +63,7 @@ class AndroidAnalysisReproTest {
                 "super.onCreate(savedInstanceState);",
                 "super.onCreate(savedInstanceState); String s = \"hello \" + savedInstanceState;",
             )
-            val diags = ide.analyzeDiagnostics(main, withConcat).map { it.message }
+            val diags = runBlocking { ide.analyzeDiagnostics(main, withConcat) }.map { it.message }
             assertFalse(diags.any { "StringConcatFactory" in it }, "string concat must resolve against the desugar stubs: $diags")
             assertFalse(
                 diags.any { "indirectly referenced from required .class files" in it },

@@ -16,8 +16,11 @@ import dev.ide.android.support.gms.GoogleServices
 import dev.ide.android.support.tasks.BundleTask
 import dev.ide.android.support.tasks.L8DexTask
 import dev.ide.android.support.tasks.ManifestMergeTask
+import dev.ide.android.support.tasks.MergeJavaResourcesTask
+import dev.ide.android.support.tasks.MergeNativeLibsTask
 import dev.ide.android.support.tasks.MergeResourcesTask
 import dev.ide.android.support.tasks.PackageApkTask
+import dev.ide.android.support.tasks.PackagingRules
 import dev.ide.android.support.tasks.ProcessGoogleServicesTask
 import dev.ide.android.support.tasks.R8MinifyTask
 import dev.ide.android.support.tasks.SignApkTask
@@ -384,6 +387,27 @@ class AndroidBuildSystem(
         // and being out of the external scope means a resource edit never re-dexes or re-merges the stable libraries.
         val rJars = listOf(layout.rJar)
 
+        // Packaging merges (AGP's merge<Variant>NativeLibs / merge<Variant>JavaResource). Native libs come from
+        // the app's own `src/*/jniLibs`, each dep android-lib's jniLibs, exploded-AAR `jni/`, and `lib/<abi>/*.so`
+        // inside external jars; ordered app-first so a pickFirst duplicate keeps the app's copy. Java resources
+        // come from `src/*/resources` (app + dep libs) and the non-class entries of the sub-module + external jars.
+        val mergeNativeLibs = step("mergeNativeLibs")
+        val mergeJavaRes = step("mergeJavaResource")
+        val jniDirs = roots(variant, ContentRole.JNI_LIBS) +
+            depAndroidLibs.flatMap { depRoots(it, ContentRole.JNI_LIBS) } + libs.jniLibDirs
+        val javaResDirs = roots(variant, ContentRole.RESOURCE) +
+            depAndroidLibs.flatMap { depRoots(it, ContentRole.RESOURCE) }
+        val nativeLibsFilter = PackagingRules.jniLibsFilter(facet.packaging.jniLibs)
+        val javaResFilter = PackagingRules.resourceFilter(facet.packaging.resources)
+        // externalJars are static (resolved on disk); only the sub-module jars need building first.
+        tasks.task(mergeNativeLibs) {
+            MergeNativeLibsTask(mergeNativeLibs, jniDirs, externalJars, nativeLibsFilter, layout.mergedNativeLibs)
+        }
+        tasks.task(mergeJavaRes, moduleJarProducers) {
+            MergeJavaResourcesTask(mergeJavaRes, javaResDirs, subProjectJars + externalJars, javaResFilter, layout.mergedJavaRes)
+        }
+        val packagingDeps = listOf(mergeNativeLibs, mergeJavaRes)
+
         // Core-library desugaring: extract the config when enabled and the host ships the artifacts. The R8
         // (minify) path emits L8 keep rules and shrinks the runtime; the D8 (debug) path keeps the whole runtime.
         val desugaring = if (facet.coreLibraryDesugaringEnabled) desugarLib else null
@@ -541,6 +565,10 @@ class AndroidBuildSystem(
             pkgDeps = pkgDeps + listOf(l8)
         }
 
+        // The packaging step also waits on the native-lib + Java-resource merges (common to both the APK and
+        // bundle terminals, and to the minify + debug dex paths).
+        pkgDeps = pkgDeps + packagingDeps
+
         // The keystore that signs this variant: the build type's assigned signing config (release keystore),
         // or the default debug keystore when unassigned / dangling. Resolved once for both APK and bundle.
         val variantSigning = signingFor(app, variant.buildTypeName)
@@ -551,7 +579,7 @@ class AndroidBuildSystem(
             val bundleResAp = if (shrinkResources) layout.shrunkProtoAp else layout.protoAp
             val packageBundle = step("packageBundle")
             tasks.task(packageBundle, pkgDeps) {
-                BundleTask(packageBundle, bundleResAp, dexDirs, assetsDirs, libs.jniLibDirs, layout.unsignedAab, layout.baseModuleZip, bundler)
+                BundleTask(packageBundle, bundleResAp, dexDirs, assetsDirs, listOf(layout.mergedNativeLibs), layout.unsignedAab, layout.baseModuleZip, bundler, javaResJars = listOf(layout.mergedJavaRes))
             }
             val signBundle = step("signBundle")
             tasks.task(signBundle, listOf(packageBundle)) {
@@ -562,7 +590,7 @@ class AndroidBuildSystem(
             return
         }
 
-        tasks.task(pkg, pkgDeps) { PackageApkTask(pkg, layout.resourcesAp, dexDirs, assetsDirs, libs.jniLibDirs, layout.unsignedApk) }
+        tasks.task(pkg, pkgDeps) { PackageApkTask(pkg, layout.resourcesAp, dexDirs, assetsDirs, listOf(layout.mergedNativeLibs), layout.unsignedApk, javaResJars = listOf(layout.mergedJavaRes)) }
         tasks.task(sign, listOf(pkg)) { SignApkTask(sign, layout.unsignedApk, layout.signedApk, variantSigning, signer) }
         // Top-level lifecycle aggregate (AGP's `assemble<Variant>`): fronts the signed APK.
         val assemble = step("assemble")
@@ -745,6 +773,9 @@ class AndroidBuildSystem(
         val desugarKeepRules: Path = inter.resolve("l8-keep.pro")    // keep rules R8 emits for the L8 runtime shrink
         val protoAp: Path = inter.resolve("resources-proto.ap_")  // aapt2 proto link (resource-shrinking input)
         val shrunkProtoAp: Path = inter.resolve("resources-proto-shrunk.ap_") // R8-shrunk proto resources
+        // mergeNativeLibs output (`<abi>/*.so`, packaged under lib/); mergeJavaResource output (root-level entries).
+        val mergedNativeLibs: Path = inter.resolve("merged_native_libs")
+        val mergedJavaRes: Path = inter.resolve("merged_java_res").resolve("merged-java-res.jar")
         val unsignedApk: Path = inter.resolve("${module.name}-$variantName-unsigned.apk")
         val signedApk: Path = buildDir.resolve("outputs").resolve("apk").resolve(variantName)
             .resolve("${module.name}-$variantName.apk")

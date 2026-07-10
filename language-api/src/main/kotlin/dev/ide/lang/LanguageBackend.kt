@@ -1,5 +1,6 @@
 package dev.ide.lang
 
+import dev.ide.lang.completion.CompletionContribution
 import dev.ide.platform.ExtensionPoint
 import dev.ide.lang.hints.InlayHintService
 import dev.ide.lang.dom.Diagnostic
@@ -8,6 +9,13 @@ import dev.ide.lang.incremental.IncrementalParser
 import dev.ide.lang.resolve.ResolveResult
 import dev.ide.lang.resolve.Scope
 import dev.ide.lang.dom.DomNode
+import dev.ide.lang.folding.FoldingService
+import dev.ide.lang.formatting.FormattingService
+import dev.ide.lang.highlight.SemanticHighlightService
+import dev.ide.lang.resolve.QuickDocInfo
+import dev.ide.lang.resolve.StructureItem
+import dev.ide.lang.resolve.TypeRef
+import dev.ide.lang.signature.SignatureHelpService
 import dev.ide.model.ClasspathSnapshot
 import dev.ide.model.LanguageLevel
 import dev.ide.vfs.VirtualFile
@@ -34,7 +42,8 @@ interface LanguageBackend {
     fun createAnalyzer(ctx: CompilationContext): SourceAnalyzer
 }
 
-@JvmInline value class LanguageId(val id: String)
+@JvmInline
+value class LanguageId(val id: String)
 
 /**
  * The extension point through which language backends are contributed. The host (ide-core) selects a
@@ -102,22 +111,22 @@ interface SourceAnalyzer {
      * Empty by default — a backend opts in to publish analyzer-aware contributors (e.g. type-driven postfix
      * or scope-driven keyword logic) as first-class engine contributors. See `dev.ide.lang.completion`.
      */
-    fun completionContributions(): List<dev.ide.lang.completion.CompletionContribution> = emptyList()
+    fun completionContributions(): List<CompletionContribution> = emptyList()
 
     /** Parameter-info popup; null if !capabilities.contains(SIGNATURE_HELP). See the signature SPI. */
-    val signatureHelp: dev.ide.lang.signature.SignatureHelpService?
+    val signatureHelp: SignatureHelpService?
         get() = null
 
     /** Type-aware editor coloring; null if !capabilities.contains(SEMANTIC_HIGHLIGHT). See the highlight SPI. */
-    val semanticHighlighter: dev.ide.lang.highlight.SemanticHighlightService?
+    val semanticHighlighter: SemanticHighlightService?
         get() = null
 
     /** Code-folding regions; null if !capabilities.contains(CODE_FOLDING). See the folding SPI. */
-    val folding: dev.ide.lang.folding.FoldingService?
+    val folding: FoldingService?
         get() = null
 
     /** Code reformatting; null if !capabilities.contains(FORMAT). See the formatting SPI. */
-    val formatting: dev.ide.lang.formatting.FormattingService?
+    val formatting: FormattingService?
         get() = null
 
     /** Current tolerant tree for [file] (parsed/incrementally maintained). */
@@ -136,19 +145,19 @@ interface SourceAnalyzer {
      * each with its nesting depth. Empty by default; a backend that can cheaply enumerate declarations
      * (walking its own parse tree) overrides it. [text] is the live buffer so the result matches the editor.
      */
-    fun fileStructure(file: VirtualFile, text: CharSequence): List<dev.ide.lang.resolve.StructureItem> = emptyList()
+    fun fileStructure(file: VirtualFile, text: CharSequence): List<StructureItem> = emptyList()
 
     /**
      * Quick documentation (signature + doc comment) for the symbol at [offset] in [file]'s live buffer [text],
      * or null when nothing resolves there. Default null; a backend that resolves symbols overrides it.
      */
-    fun quickDoc(file: VirtualFile, text: CharSequence, offset: Int): dev.ide.lang.resolve.QuickDocInfo? = null
+    fun quickDoc(file: VirtualFile, text: CharSequence, offset: Int): QuickDocInfo? = null
 
     /** Visible names at a position — the candidate set for name-reference completion. */
     fun scopeAt(file: VirtualFile, offset: Int): Scope
 
     /** Inferred target type at a position, for completion ranking. */
-    fun expectedTypeAt(file: VirtualFile, offset: Int): dev.ide.lang.resolve.TypeRef?
+    fun expectedTypeAt(file: VirtualFile, offset: Int): TypeRef?
 
     /**
      * The type an expression [node] *produces* — e.g. a method call's return type, a `new`'s class, a
@@ -156,7 +165,7 @@ interface SourceAnalyzer {
      * when [node] isn't a resolvable expression. Used by refactorings such as "introduce variable" to name
      * the declared type instead of `var`. Default null so non-resolving backends needn't implement it.
      */
-    fun resolveType(node: DomNode): dev.ide.lang.resolve.TypeRef? = null
+    fun resolveType(node: DomNode): TypeRef? = null
 }
 
 data class AnalysisResult(val file: VirtualFile, val diagnostics: List<Diagnostic>)

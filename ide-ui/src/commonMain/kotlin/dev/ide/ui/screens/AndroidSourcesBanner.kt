@@ -18,8 +18,14 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import dev.ide.ui.IdeUiState
 import dev.ide.ui.backend.UiAndroidSourcesInfo
+import dev.ide.ui.generated.resources.Res
+import dev.ide.ui.generated.resources.sources_download
+import dev.ide.ui.generated.resources.sources_download_failed
+import dev.ide.ui.generated.resources.sources_downloading
+import dev.ide.ui.generated.resources.sources_not_installed
 import dev.ide.ui.theme.Ca
 import kotlinx.coroutines.launch
+import org.jetbrains.compose.resources.stringResource
 
 /**
  * A thin one-time banner offering to download the Android platform sources (so `android.*` APIs get
@@ -32,6 +38,7 @@ internal fun AndroidSourcesBanner(state: IdeUiState) {
     var status by remember { mutableStateOf<String?>(null) }
     var busy by remember { mutableStateOf(false) }
     val scope = rememberCoroutineScope()
+    val downloadFailedTemplate = stringResource(Res.string.sources_download_failed)
     LaunchedEffect(Unit) { info = runCatching { state.backend.sdk.androidSourcesInfo() }.getOrNull() }
 
     val show = status != null || (info?.let { !it.installed && it.downloadable } == true)
@@ -43,18 +50,18 @@ internal fun AndroidSourcesBanner(state: IdeUiState) {
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Text(
-            status ?: "Android platform sources (${info?.platform}) aren't installed — needed for android.* parameter names & docs.",
+            status ?: stringResource(Res.string.sources_not_installed, info?.platform.toString()),
             color = Ca.colors.textSecondary, style = Ca.type.footnote, modifier = Modifier.weight(1f),
         )
         if (status == null) {
             Text(
-                if (busy) "Downloading…" else "Download",
+                if (busy) stringResource(Res.string.sources_downloading) else stringResource(Res.string.sources_download),
                 color = if (busy) Ca.colors.textTertiary else Ca.colors.accent,
                 style = Ca.type.footnote,
                 modifier = Modifier.then(
                     if (busy) Modifier else Modifier.clickable {
                         busy = true
-                        scope.launch { status = runCatching { state.backend.sdk.downloadAndroidSources() }.getOrElse { "Download failed: ${it.message}" } }
+                        scope.launch { status = runCatching { state.backend.sdk.downloadAndroidSources() }.getOrElse { downloadFailedTemplate.replace("%1\$s", it.message.toString()) } }
                     },
                 ),
             )

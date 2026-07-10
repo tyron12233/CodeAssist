@@ -226,13 +226,18 @@ shared by both plugins and processors.
 2. **Runtime-dex plugin loading.** Engine [DONE], device wiring staged.
    - Proven on desktop: `KotlinJvmCompiler` has a programmatic-registration path
      (`compileViaRegistrars`) selected by `runtimePluginClasspaths`, loading each plugin's
-     `CompilerPluginRegistrar` through a `KotlinPluginLoader` and registering it on a
-     `CompilerConfiguration.create()`-built config (which `createForProduction` then processes). The
-     `DefaultKotlinPluginLoader` (`URLClassLoader`) and a real Compose load are verified by
-     `ProgrammaticPluginRegistrationTest`. The path is threaded through `IncrementalKotlinCompiler` and
-     both compile tasks (dormant until a plugin declares `KotlinPluginLoading.RUNTIME_REGISTRAR`).
-   - Key fact: the manual bootstrap must build the config via `CompilerConfiguration.create()` (it calls
-     `registerExtensionStorage()`); a bare `CompilerConfiguration()` silently skips plugin processing. Also
+     `CompilerPluginRegistrar` through a `KotlinPluginLoader`. Since the unshaded-compiler unification
+     (`:kotlin-compiler-deps`, whose `-for-ide` train dropped the K1 `KotlinToJVMBytecodeCompiler`), the
+     path drives the K2 CLI pipeline phases directly: `JvmConfigurationPipelinePhase` builds the config,
+     the loaded registrars are added to `CompilerPluginRegistrar.COMPILER_PLUGIN_REGISTRARS` on it, then
+     `JvmFrontendPipelinePhase -> JvmFir2IrPipelinePhase -> JvmBackendPipelinePhase -> JvmWriteOutputsPhase`
+     run in sequence (the same phases `K2JVMCompiler.exec` chains). The `DefaultKotlinPluginLoader`
+     (`URLClassLoader`) and a real Compose load are verified by `ProgrammaticPluginRegistrationTest`. The
+     path is threaded through `IncrementalKotlinCompiler` and both compile tasks (dormant until a plugin
+     declares `KotlinPluginLoading.RUNTIME_REGISTRAR`).
+   - Key fact: a configuration consumed by the compiler must come from `CompilerConfiguration.create()` /
+     the configuration phase (extension storage registered); a bare `CompilerConfiguration()` now FAILS
+     `createForProduction` with "Extensions storage is not registered". Also
      `CompilerPluginRegistrar.registerExtensions` is a member-extension on `ExtensionStorage` (can't be
      `::`-referenced).
    - The ART `KotlinPluginLoader` is implemented + injected (compile-verified, device-run pending):

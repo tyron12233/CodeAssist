@@ -45,13 +45,29 @@ internal class FileBackend(private val ctx: BackendContext) : FileService {
         }
     }
 
+    // File-tree expansion is remembered per project + view mode in the project's generic settings store
+    // (`.platform/settings.properties`), keyed by the stable path-based TreeNode ids. Empty stored value =
+    // "user collapsed everything" (a real state); absent key = "never persisted" → null → caller defaults.
+    private fun treeStateKey(mode: TreeViewMode) = "tree.expanded.${mode.name}"
+
+    override fun expandedTreeState(mode: TreeViewMode): List<String>? {
+        val raw = ctx.servicesOrNull?.projectPref(treeStateKey(mode)) ?: return null
+        return raw.split('\n').map { it.trim() }.filter { it.isNotEmpty() }
+    }
+
+    override fun saveExpandedTreeState(mode: TreeViewMode, ids: List<String>) {
+        ctx.servicesOrNull?.setProjectPref(treeStateKey(mode), ids.joinToString("\n"))
+    }
+
     /** module-root dir → module name, for surfacing `module.toml` as a "open module settings" node. */
     private fun moduleRoots(): Map<Path, String> =
         ctx.services.modules().mapNotNull { m -> ctx.services.moduleRoot(m)?.let { it.normalize() to m.name } }.toMap()
 
-    /** Curated module view: manifest + code/res/assets roots, plus each module's root config files. */
+    /** Curated module view: manifest + code/res/assets roots, plus each module's root config files, then the
+     *  workspace root's own files (a top-level README/LICENSE/config). */
     private fun projectTree(): TreeNode {
         val root = ctx.services.workspaceRoot
+        val moduleDirs = ctx.services.modules().mapNotNull { ctx.services.moduleRoot(it)?.normalize() }.toSet()
         val moduleNodes = ctx.services.modules().sortedBy { it.name }.map { module ->
             val moduleDir = ctx.services.moduleRoot(module)
             val children = ArrayList<TreeNode>()
@@ -80,13 +96,18 @@ internal class FileBackend(private val ctx: BackendContext) : FileService {
                 dirPath = moduleDir?.toString(),
             )
         }
+        // Files directly at the workspace root (README, LICENSE, top-level config) that aren't already shown
+        // as a module's own root files — so a top-level README/doc is visible in the curated view, not only
+        // under All Files. Skipped when a module IS the workspace root (its `moduleRootFiles` covers them).
+        val rootFiles = if (root.normalize() in moduleDirs) emptyList()
+        else childPartition(root).second.map { fileNode(it, ctx.services.moduleForFile(it)) }
         return TreeNode(
             id = "workspace",
             name = root.fileName?.toString() ?: "workspace",
             kind = NodeKind.Workspace,
             filePath = null,
             iconId = "workspace",
-            children = moduleNodes,
+            children = moduleNodes + rootFiles,
             dirPath = root.toString(),
         )
     }
@@ -378,12 +399,15 @@ internal class FileBackend(private val ctx: BackendContext) : FileService {
             // A conventionally-named folder under a source-set base (e.g. `src/main/resources`) becomes a
             // typed content root automatically, so the build engine + tree icon pick it up immediately.
             ctx.services.moduleService.maybeRegisterSourceRoot(target)
+            ctx.services.events.fileCreated(target) // dir events are no-op locally; remote hints see them
             ctx.bumpFileSystemEpoch()
             target.toString()
         }
     }.getOrNull()
 
-    /** Create `[dirPath]/[fileName]` via [write] (fails if it exists); refresh R on `res/`, bump the fs epoch. */
+    /** Create `[dirPath]/[fileName]` via [write] (fails if it exists); publish the created-file event (the
+     *  hub's reaction refreshes R for `res/`, invalidates analyzers + re-syncs for a source file), bump the
+     *  fs epoch. */
     private fun writeNewFile(dirPath: String, fileName: String, write: (Path) -> Unit): String? = runCatching {
         val dir = Paths.get(dirPath)
         Files.createDirectories(dir)
@@ -391,7 +415,7 @@ internal class FileBackend(private val ctx: BackendContext) : FileService {
         if (Files.exists(target)) null
         else {
             write(target)
-            if (dirPath.replace('\\', '/').contains("/res/")) ctx.services.invalidateSyntheticClasses() // new res → refresh R
+            ctx.services.events.fileCreated(target)
             ctx.bumpFileSystemEpoch()
             target.toString()
         }

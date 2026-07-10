@@ -2,6 +2,9 @@ package dev.ide.core.services
 
 import dev.ide.android.support.AndroidFacet
 import dev.ide.android.support.AndroidFeatureDependencies
+import dev.ide.android.support.AndroidPackaging
+import dev.ide.android.support.JniLibsPackaging
+import dev.ide.android.support.ResourcePackaging
 import dev.ide.core.EngineContext
 import dev.ide.model.ContentRole
 import dev.ide.model.DependencyScope
@@ -22,6 +25,8 @@ import dev.ide.ui.backend.UiModuleConfig
 import dev.ide.ui.backend.UiModuleConfigEdit
 import dev.ide.ui.backend.UiModuleRef
 import dev.ide.ui.backend.UiModuleTypeOption
+import dev.ide.ui.backend.UiPackagingOptions
+import dev.ide.ui.backend.UiPackagingRules
 import dev.ide.ui.backend.UiRunConfig
 import dev.ide.ui.backend.UiSourceSetInfo
 import java.nio.file.Files
@@ -68,7 +73,9 @@ internal class ModuleService(private val ctx: EngineContext) {
             UiFacetConfig(
                 data.tomlTable,
                 titleCase(data.tomlTable),
-                data.values.map { (k, v) -> configFieldFor(k, v) })
+                // `packaging` is a nested table edited on its own tab (and is absent when default) — keep it out
+                // of the generic field list so it isn't rendered as a raw map here.
+                data.values.filterKeys { it != PACKAGING_KEY }.map { (k, v) -> configFieldFor(k, v) })
         }
         val runConfig = if (isConsoleRunModule(module)) {
             val detected = MainClassDetection.detect(ctx, module).map { it.mainClass }
@@ -107,7 +114,13 @@ internal class ModuleService(private val ctx: EngineContext) {
         )
         val facets = ArrayList<dev.ide.model.Facet>()
         for ((table, values) in edit.facetValues) {
-            val facet = ctx.store.facetCodecs.decode(dev.ide.model.impl.FacetData(table, values))
+            // Overlay the UI-sent values on the facet's current encoded values so keys the Settings tab does
+            // not render (e.g. the `packaging` block, edited on its own tab) survive a Settings save.
+            val existing = module.facets.all.firstNotNullOfOrNull { f ->
+                ctx.store.facetCodecs.encode(f)?.takeIf { it.tomlTable == table }?.values
+            } ?: emptyMap()
+            val merged = existing + values
+            val facet = ctx.store.facetCodecs.decode(dev.ide.model.impl.FacetData(table, merged))
                 ?: return UiConfigResult(false, "No codec registered for facet '$table'.")
             facets += facet
         }
@@ -209,6 +222,49 @@ internal class ModuleService(private val ctx: EngineContext) {
         ctx.resyncIndex()
         val verb = if (enabled) "Enabled" else "Disabled"
         return UiConfigResult(true, "$verb $feature on ${module.name}$depNote")
+    }
+
+    /** The Android packaging options of [moduleName] (Java-resource + native-lib merge rules), or null when
+     *  it is not an Android module. Includes AGP's always-applied defaults so the UI can show them read-only. */
+    fun getPackagingOptions(moduleName: String): UiPackagingOptions? {
+        val facet = ctx.modules().firstOrNull { it.name == moduleName }?.facets?.get(AndroidFacet.KEY) ?: return null
+        val p = facet.packaging
+        return UiPackagingOptions(
+            moduleName = moduleName,
+            resources = UiPackagingRules(p.resources.excludes.toList(), p.resources.pickFirsts.toList(), p.resources.merges.toList()),
+            jniLibs = UiPackagingRules(p.jniLibs.excludes.toList(), p.jniLibs.pickFirsts.toList()),
+            defaultResourceExcludes = AndroidPackaging.DEFAULT_RESOURCE_EXCLUDES,
+            defaultResourceMerges = AndroidPackaging.DEFAULT_RESOURCE_MERGES,
+        )
+    }
+
+    /** Persist [moduleName]'s packaging merge rules. Blank patterns are dropped; all-empty clears the block
+     *  (the codec then omits it, so the module falls back to the AGP defaults). */
+    fun updatePackagingOptions(
+        moduleName: String, resources: UiPackagingRules, jniLibs: UiPackagingRules
+    ): UiConfigResult {
+        val module = ctx.modules().firstOrNull { it.name == moduleName }
+            ?: return UiConfigResult(false, "No module '$moduleName'.")
+        val facet = module.facets.get(AndroidFacet.KEY)
+            ?: return UiConfigResult(false, "'$moduleName' is not an Android module.")
+        val project = ctx.projectOf(module) ?: return UiConfigResult(false, "No project owns '$moduleName'.")
+        fun clean(xs: List<String>): Set<String> = xs.map { it.trim() }.filter { it.isNotEmpty() }.toCollection(LinkedHashSet())
+        val packaging = AndroidPackaging(
+            resources = ResourcePackaging(clean(resources.excludes), clean(resources.pickFirsts), clean(resources.merges)),
+            jniLibs = JniLibsPackaging(clean(jniLibs.excludes), clean(jniLibs.pickFirsts)),
+        )
+        if (packaging == facet.packaging) return UiConfigResult(true, "No change.")
+        try {
+            project.beginModification().apply {
+                module(module.id).putFacet(facet.copy(packaging = packaging))
+                commit()
+            }
+        } catch (e: Exception) {
+            return UiConfigResult(false, "Update failed: ${e.message}")
+        }
+        ctx.store.save()
+        ctx.invalidateAnalyzers()
+        return UiConfigResult(true, "Saved packaging options for ${module.name}")
     }
 
     /** Add each of [coordinates] to [moduleName] unless a dependency on the same `group:name` already exists.
@@ -371,14 +427,38 @@ internal class ModuleService(private val ctx: EngineContext) {
             return UiConfigResult(false, "Couldn't create module: ${e.message}")
         }
         ctx.store.save()
-        // Lay down the default source-set directories so the tree shows them immediately.
-        ctx.modules().firstOrNull { it.name == moduleName }?.sourceSets?.forEach { ss ->
-            ss.contentRoots.forEach { cr -> runCatching { Files.createDirectories(Paths.get(cr.dir.path)) } }
+        // Lay down the primary source-set directories so the tree shows them immediately. Only the `main`
+        // source set is materialized — variant source sets (debug/release) and optional roots (a second
+        // language dir, assets/aidl) are left uncreated until the user actually adds code there, so a fresh
+        // module isn't cluttered with a dozen empty folders (they still resolve on demand via New ▸).
+        ctx.modules().firstOrNull { it.name == moduleName }?.let { created ->
+            val primarySets = created.sourceSets.filter { it.name == "main" }.ifEmpty { created.sourceSets }
+            primarySets.forEach { ss ->
+                materializedRoots(ss).forEach { cr -> runCatching { Files.createDirectories(Paths.get(cr.dir.path)) } }
+            }
         }
         ctx.invalidateAnalyzers()
         ctx.invalidateSyntheticClasses()
         ctx.resyncIndex()
         return UiConfigResult(true, "Created module '$moduleName'")
+    }
+
+    /**
+     * The content roots of [sourceSet] worth creating on disk for a freshly-made module: the primary source
+     * dir (the first `SOURCE` root — e.g. `java`, not also an empty `kotlin` sibling) plus any resource / Android
+     * `res` root. Optional roots (a second-language source dir, `assets`, `aidl`, generated) are omitted so the
+     * module tree isn't littered with empty folders; the "New ▸" flow creates them on demand when needed.
+     */
+    private fun materializedRoots(sourceSet: dev.ide.model.SourceSet): List<dev.ide.model.ContentRoot> {
+        val roots = sourceSet.contentRoots
+        val firstSourceDir = roots.firstOrNull { ContentRole.SOURCE in it.roles }?.dir?.path
+        return roots.filter { cr ->
+            when {
+                ContentRole.SOURCE in cr.roles -> cr.dir.path == firstSourceDir
+                ContentRole.ANDROID_RES in cr.roles || ContentRole.RESOURCE in cr.roles -> true
+                else -> false
+            }
+        }
     }
 
     /**
@@ -570,4 +650,9 @@ internal class ModuleService(private val ctx: EngineContext) {
     /** "compileSdk" → "Compile Sdk", "applicationIdSuffix" → "Application Id Suffix". */
     private fun humanizeKey(key: String): String =
         key.replace(Regex("([a-z])([A-Z])"), "$1 $2").replaceFirstChar { it.uppercase() }
+
+    private companion object {
+        /** The `[android]` codec key for the packaging block — edited via the Packaging tab, not the Settings fields. */
+        const val PACKAGING_KEY = "packaging"
+    }
 }

@@ -271,6 +271,11 @@ data class ResolvedClass(
     /** Enum entries in declaration order (empty for non-enums). */
     val enumEntries: List<REnumEntry>,
     val diagnostics: List<LoweringDiagnostic>,
+    /** `by`-delegated member properties: property name → the hidden field holding the delegate OBJECT
+     *  (`current` → `current$delegate`). A read/write of the property routes through the delegate's `.value`
+     *  (`State`/`MutableState`/`Lazy`) so a write hits the real `setValue()` and drives recomposition — the
+     *  member analogue of [Binding.DelegatedLocal]. Empty for a class with no delegated members. */
+    val delegatedProperties: Map<String, String> = emptyMap(),
 ) {
     /** The data-class component property names, in constructor order. */
     val componentNames: List<String> get() = primaryParams.filter { it.isProperty }.map { it.name }

@@ -9,6 +9,7 @@ import dev.ide.lang.kotlin.symbols.KotlinSymbolService
 import dev.ide.platform.ContentHash
 import dev.ide.vfs.VirtualFile
 import org.jetbrains.kotlin.psi.KtNamedFunction
+import org.jetbrains.kotlin.psi.KtProperty
 import java.io.File
 import java.nio.file.Files
 import java.nio.file.Path
@@ -59,9 +60,20 @@ fun lowerProgramFull(code: String): Pair<Map<String, ResolvedFunction>, List<Res
     val kt = KotlinParserHost.parse("Prog.kt", code)
     val parsed = KotlinParsedFile(kt, DiskFile(dir.resolve("Prog.kt")), 0)
     val resolver = KotlinTreeResolver(kt, parsed, service)
-    val functions = kt.declarations.filterIsInstance<KtNamedFunction>().associate { fn ->
-        val f = resolver.lowerFunction(fn)
-        "${f.name}/${f.params.size}" to f
+    val functions = buildMap {
+        kt.declarations.filterIsInstance<KtNamedFunction>().forEach { fn ->
+            val f = resolver.lowerFunction(fn)
+            put("${f.name}/${f.params.size}", f)
+        }
+        // Mirror KotlinPreviewLowering: top-level source `val`/`var` become synthetic `name/0` getters, so a
+        // read of one interprets its initializer (there is no compiled facade to reflect).
+        kt.declarations.filterIsInstance<KtProperty>().forEach { p ->
+            val name = p.name ?: return@forEach
+            if (p.receiverTypeReference != null) return@forEach
+            val hasValue = p.initializer != null || p.getter?.bodyExpression != null || p.getter?.bodyBlockExpression != null
+            if (!hasValue || containsKey("$name/0")) return@forEach
+            put("$name/0", resolver.lowerTopLevelProperty(p))
+        }
     }
     return functions to resolver.lowerClasses()
 }

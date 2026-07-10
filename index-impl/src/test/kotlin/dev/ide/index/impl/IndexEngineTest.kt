@@ -76,6 +76,24 @@ class IndexEngineTest {
     }
 
     @Test
+    fun fuzzyFindsCamelHumpMatchesOverTheRealJdk() {
+        val cache = Files.createTempDirectory("idx")
+        try {
+            val svc = service(cache)
+            runBlocking { svc.ensureUpToDate(IndexScope(jdkHome = jdk())) }
+            val npe = svc.fuzzy<ClassNameValue>(CLASS, "NPE", 200).map { it.value.fqn }.toList()
+            assertTrue("java.lang.NullPointerException" in npe, "NPE should hump-match: ${npe.take(10)}")
+            val aioobe = svc.fuzzy<ClassNameValue>(CLASS, "IOOBE", 200).map { it.value.fqn }.toList()
+            assertTrue(
+                "java.lang.IndexOutOfBoundsException" in aioobe,
+                "IOOBE should hump-match: ${aioobe.take(10)}",
+            )
+        } finally {
+            cache.toFile().deleteRecursively()
+        }
+    }
+
+    @Test
     fun invalidateClearsBuiltDataAndAllowsRebuild() {
         val cache = Files.createTempDirectory("idx")
         try {

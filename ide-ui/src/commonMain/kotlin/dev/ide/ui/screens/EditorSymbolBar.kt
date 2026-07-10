@@ -24,8 +24,14 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import dev.ide.ui.generated.resources.Res
+import dev.ide.ui.generated.resources.symbolbar_duplicate_line
+import dev.ide.ui.generated.resources.symbolbar_move_line_down
+import dev.ide.ui.generated.resources.symbolbar_move_line_up
+import dev.ide.ui.generated.resources.symbolbar_next_problem
 import dev.ide.ui.icons.CaIcons
 import dev.ide.ui.theme.Ca
+import org.jetbrains.compose.resources.stringResource
 
 /**
  * A keyboard accessory bar of common coding symbols, shown above the soft keyboard while typing on touch
@@ -64,11 +70,11 @@ internal fun EditorSymbolBar(
         // Fixed line-action group: comment toggle, move line up/down, duplicate — the editor ops that are
         // otherwise keyboard-only, surfaced for touch.
         SymbolKey("//", onClick = onComment)
-        IconKey(CaIcons.chevronUp, "Move line up", onClick = onMoveLineUp)
-        IconKey(CaIcons.chevronDown, "Move line down", onClick = onMoveLineDown)
-        IconKey(CaIcons.copy, "Duplicate line", onClick = onDuplicateLine)
+        IconKey(CaIcons.chevronUp, stringResource(Res.string.symbolbar_move_line_up), onClick = onMoveLineUp)
+        IconKey(CaIcons.chevronDown, stringResource(Res.string.symbolbar_move_line_down), onClick = onMoveLineDown)
+        IconKey(CaIcons.copy, stringResource(Res.string.symbolbar_duplicate_line), onClick = onDuplicateLine)
         // Jump to the next diagnostic — shown only while the file has any (otherwise it's noise).
-        if (showDiagnosticJump) IconKey(CaIcons.warning, "Next problem", onClick = onNextDiagnostic)
+        if (showDiagnosticJump) IconKey(CaIcons.warning, stringResource(Res.string.symbolbar_next_problem), onClick = onNextDiagnostic)
         Box(Modifier.width(1.dp).fillMaxHeight().background(Ca.colors.separator))
         Row(
             Modifier.weight(1f).horizontalScroll(rememberScrollState()),

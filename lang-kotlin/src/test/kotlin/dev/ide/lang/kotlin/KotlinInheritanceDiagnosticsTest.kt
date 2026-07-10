@@ -144,6 +144,32 @@ class KotlinInheritanceDiagnosticsTest {
         )
     }
 
+    @Test
+    fun samConversionWithTrailingLambdaIsNotFlagged() {
+        // `Action { }` is a SAM conversion of a functional interface — valid Kotlin, not a forbidden constructor.
+        assertFalse(
+            "kt.abstractInstantiation" in codes("S.kt", "package demo\nval a = Action { }"),
+            "a SAM conversion `Action { }` must not be flagged as abstract instantiation",
+        )
+    }
+
+    @Test
+    fun samConversionWithCallableReferenceIsNotFlagged() {
+        assertFalse(
+            "kt.abstractInstantiation" in codes("SR.kt", "package demo\nval a = Action(::doRun)"),
+            "a SAM conversion from a callable reference `Action(::doRun)` must not be flagged",
+        )
+    }
+
+    @Test
+    fun functionalInterfaceNoArgConstructionIsStillFlagged() {
+        // No functional argument → not a SAM conversion; a bare `Action()` is still an illegal interface call.
+        assertTrue(
+            "kt.abstractInstantiation" in codes("SN.kt", "package demo\nval a = Action()"),
+            "`Action()` with no functional argument is not a SAM conversion and should be flagged",
+        )
+    }
+
     // --- implement-members quick-fix ---
 
     @Test
@@ -171,6 +197,8 @@ class KotlinInheritanceDiagnosticsTest {
                     open class Base { open fun render(): String = ""; fun fixed() {} }
                     interface Producer
                     fun Producer(): Producer = object : Producer {}
+                    fun interface Action { fun run() }
+                    fun doRun() {}
                 """.trimIndent(),
             ),
         )

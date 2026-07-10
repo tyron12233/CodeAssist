@@ -146,6 +146,7 @@ plugin's shape:
 mergeResources → aapt2Compile → aapt2Link (+R) → [compileKotlin →] compileJava
   → dexBuilder → {mergeProjectDex, mergeLibDex, mergeExtDex} → packageApk → sign   (debug / no minify)
   → minify<Variant>WithR8 (shrink+optimize+obfuscate+dex, +resource shrink) → [shrinkResources →] packageApk → sign   (release / minify)
+mergeNativeLibs, mergeJavaResource ⇒ packageApk    (run alongside dexing; feed the packager)
 ```
 
 - **Resources.** A real `mergeResources` folds dependency library, AAR, and app resources; aapt2
@@ -221,6 +222,23 @@ mergeResources → aapt2Compile → aapt2Link (+R) → [compileKotlin →] compi
   The config folds into the dex cache key only when enabled, so a no-desugaring build's cache is unchanged.
 - **Library-aware.** JAR and AAR dependencies are routed: code to compile/dex, AAR resources into the
   merged app R, AAR assets and JNI into the package.
+- **Packaging: native libs + Java resources (AGP-faithful).** Two merge tasks feed the packager, mirroring
+  AGP's `merge<Variant>NativeLibs` / `merge<Variant>JavaResource`. `mergeNativeLibs` gathers every `.so` — the
+  module's own `src/<set>/jniLibs`, each dependency android-lib's jniLibs, exploded-AAR `jni`, and the `.so`
+  entries under `lib` inside dependency jars — into one `<abi>`-laid-out directory the packager maps under
+  `lib`. `mergeJavaResource` gathers Java resources — the module's own `src/<set>/resources` and the non-class
+  entries of the sub-module + external dependency jars — into a `merged-java-res.jar` whose entries the packager
+  copies to the APK root; `.class` entries are skipped (they are dexed). Both apply the module's
+  `packaging { }` block (`AndroidPackaging` on the facet) **layered over a faithful set of AGP defaults**: Java
+  resources exclude jar signatures, the per-jar `MANIFEST.MF`, Maven/tooling metadata, licence/notice noise,
+  Kotlin module/metadata files, and the coroutines debug probe, and **concatenate** the `META-INF/services`
+  registrations (ServiceLoader), so a module with no configured packaging still behaves like AGP. Patterns are
+  AGP-style globs relative to the APK root (a double-star crosses a slash, a single star stays within a segment,
+  a leading slash is optional). Conflicts resolve as exclude → merge → pickFirst → first-wins-with-warning
+  (AGP errors on the last case; the on-device IDE is lenient). Sources are offered project-first so a pickFirst
+  or unconfigured duplicate keeps the module's own copy. Native `.so` are packaged as-is: debug-symbol stripping
+  needs the NDK, absent on device (AGP without an NDK does the same). For an app bundle these merges feed the
+  base-module zip too (Java resources under `root/`, `.so` under `lib`).
 - **Decoupled library R.** Each library module gets a non-final R from its own resources (kept out of
   its dexed output, so ids are not inlined); the app generates and dexes the final R for all library
   packages. A library is therefore compiled once, independent of the app, with no duplicate R.
@@ -253,3 +271,50 @@ logic. The strategy is to parse the conventional, declarative majority robustly 
 block-structured parser, tolerate the rest by recording a diagnostic and continuing, and offer explicit
 overrides for values that cannot be extracted. The output is the same project model the native build
 system produces, so once synced a Gradle-imported project and a native project are treated identically.
+
+### Implementation (`ide-core`)
+
+`GradleImport` (with the `dev.ide.core.gradle` reader primitives) is the tolerant, **non-evaluating**
+importer. It is used both to recover legacy Gradle projects into the picker and to re-sync an open
+compatibility-mode project from its scripts.
+
+- **`GradleScript`** — a brace-aware, comment-stripping reader (never throws): locate a named block's body
+  (`android { … }`, `dependencies { … }`, `plugins { … }`) by balanced braces, split a block into its
+  top-level statements, and enumerate a block's direct child blocks (build types, product flavors). All
+  scanning respects string literals, so a brace or `//` inside a quoted string never confuses matching. This
+  replaced the earlier line-by-line regex reader, which missed multi-line declarations, block comments, and
+  nested blocks.
+- **`GradleVersionCatalog`** — reads `gradle/libs.versions.toml` and resolves the type-safe accessors a
+  modern AGP build uses (`libs.androidx.core.ktx`, `libs.bundles.compose`, `libs.plugins.android.application`)
+  back to coordinates / plugin ids. Handles the `[versions]/[libraries]/[plugins]/[bundles]` sections, the
+  `module`/`group`+`name`/shorthand library forms, `version.ref`, and Gradle's accessor normalization (`-`/`_`
+  → `.`). It is a dedicated reader because the shared `module.toml` TOML parser rejects the dotted
+  `version.ref` key catalogs rely on.
+- **`GradleImport`** — composes the two: extracts modules (from `include`), the module type (from the
+  `plugins { }` block / `apply plugin:` / a catalog `alias(...)`, with Kotlin/Compose detection), the
+  `android { }` SDK / namespace / build-types / product-flavors, and the `dependencies { }` declarations.
+  Dependencies cover inline coordinates, `project(...)` module deps, `platform(...)`/`enforcedPlatform(...)`
+  BOMs (→ `PlatformDependency`, not a library), catalog accessors, and `kotlin("stdlib")`. `$var`/`${var}`
+  are interpolated from `gradle.properties` and `ext`/`def`/`val` assignments; a `debugImplementation`/
+  `freeApi`-style configuration maps to the base scope plus the build-variant qualifier the model's
+  `OrderEntry.variant` carries. Anything it can't resolve (an unknown catalog alias, an unresolved version
+  variable) is collected into a **`SyncReport`** rather than silently dropped.
+
+`populate()` authors a fresh workspace from a parsed spec; `reconcile()` re-reads the scripts into an
+**already-open** model (adds new modules, and re-declares each module's dependencies + Android facet from
+the scripts — the scripts are the source of truth, so a user-added dependency not in the scripts is dropped).
+`IdeServices.syncGradleFromScripts()` runs the reconcile + save + rewrites the marker/report;
+`ProjectService.syncGradle()` then re-resolves dependencies (`retryDependencyResolution`) and re-indexes.
+
+### Surfacing compatibility mode
+
+An imported project is flagged with a `.platform/imported-from-gradle` marker (which also stores the
+`SyncReport` notes). `ProjectInfo.compatibility` is populated for the open project, so the editor shows a
+persistent amber **compat chip** in the top bar (`EditorTopBar`) and a dismissible **details banner**
+(`GradleCompatBanner`) explaining the limitations, listing the reader's notes, and offering **Re-sync**. The
+chip re-opens a dismissed banner, so the limitation is never fully out of sight. `ProjectService.
+importGradleProject(sourceRootPath)` imports any Gradle folder (not just the legacy-recovery path) into a new
+compatibility-mode workspace.
+
+Still out of scope (roadmap step 9 proper): a live file-watch sync, and `GRADLE_COMPAT` as a first-class
+`BuildSystem` rather than a one-way import to `NATIVE`.

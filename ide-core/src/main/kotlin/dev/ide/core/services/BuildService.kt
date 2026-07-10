@@ -81,6 +81,8 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.isActive
+import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeoutOrNull
 
 /**
  * WORKSPACE-scoped engine service: build + run orchestration — the native Java/Kotlin + Android build
@@ -872,12 +874,100 @@ internal class BuildService(private val ctx: EngineContext) : Disposable {
 
     /** The entry point to launch for console [module]: the user-configured Run override if set (carrying the
      *  instance/static flag from a matching detected entry when known), else the first auto-detected entry
-     *  point in its sources (Java mains before Kotlin). Null when neither exists. */
-    private fun runnableMainFor(module: Module): RunTarget? {
-        val detected = MainClassDetection.detect(ctx, module)
+     *  point in its sources (Java mains before Kotlin). Null when neither exists. With [live], the sources are
+     *  scanned on disk rather than via the index — for the programmatic run-and-capture path, whose sources are
+     *  written straight to disk, so a stale index entry can't misname the class to launch. */
+    private fun runnableMainFor(module: Module, live: Boolean = false): RunTarget? {
+        val detected = if (live) MainClassDetection.detectLive(ctx, module) else MainClassDetection.detect(ctx, module)
         val override = ctx.mainClassOverride(module)
         if (override != null) return detected.firstOrNull { it.mainClass == override } ?: RunTarget(override, instance = false)
         return detected.firstOrNull()
+    }
+
+    /**
+     * Compile [moduleName] and run its detected `main`, capturing stdout + exit code + compile-error
+     * diagnostics — a self-contained, synchronous variant of [runTask] for programmatic callers (the Learn
+     * exercise checker). It reuses the same run graph ([JavaBuildSystem.createRunGraph] on desktop /
+     * [JavaBuildSystem.createDexRunGraph] on ART) but with a buffering [ProgramIo] and does NOT touch the
+     * interactive [buildState]/[runConsole] flows. [stdin] is fed to the program then EOF'd; the run is
+     * bounded by [timeoutMs]. The run sandbox is auto-allowed for the duration so a lesson snippet never
+     * blocks on a permission prompt.
+     */
+    suspend fun runAndCapture(moduleName: String, stdin: String = "", timeoutMs: Long = 60_000): RunCapture {
+        ctx.flushOpenDocuments()
+        runCatching { ctx.ensureKotlinStdlib() }
+        val module = ctx.modules().firstOrNull { it.name == moduleName }
+            ?: return RunCapture(false, false, "", null, listOf("No module '$moduleName'."))
+        // Detect the main from the just-flushed disk sources, not the index: this path writes the module's
+        // sources directly (the Learn checker overwrites its `Main` per exercise), so the persisted index can
+        // still name a since-deleted class ("Could not find or load main class com.example.app.Main").
+        val target = runnableMainFor(module, live = true)
+            ?: return RunCapture(false, false, "", null, listOf("No runnable main() found in ${module.name}."))
+        unresolvedBlocker(module)?.let { return RunCapture(false, false, "", null, listOf(it)) }
+        val project = ctx.projectOf(module)
+            ?: return RunCapture(false, false, "", null, listOf("No project for ${module.name}."))
+
+        val io = CaptureProgramIo(stdin)
+        val runner = ctx.dexRunner
+        val backend = javaRunDexBackend
+        val graph = if (runner != null && backend != null) {
+            val minApi = ctx.androidTools?.apiLevel ?: 21
+            buildSystem.createDexRunGraph(project, module, target.mainClass, minApi, backend, runner, programIo = io)
+        } else {
+            buildSystem.createRunGraph(project, module, target.mainClass, programIo = io, instanceMain = target.instance)
+        }
+
+        val diags = java.util.Collections.synchronizedList(mutableListOf<String>())
+        val taskCtx = SimpleTaskContext(
+            onDiagnostic = { d -> if (d.severity == BuildSeverity.ERROR) diags.add(diagLine(d)) },
+        )
+        val exec = TaskExecutorImpl(buildCache)
+        val prevBroker = Guards.broker
+        Guards.broker = AllowAllBroker
+        val timedOut: Boolean
+        try {
+            timedOut = withContext(Dispatchers.IO) {
+                withTimeoutOrNull(timeoutMs) { exec.execute(graph, taskCtx, maxParallel = 2) } == null
+            }
+        } catch (c: kotlinx.coroutines.CancellationException) {
+            throw c
+        } catch (e: Throwable) {
+            Guards.broker = prevBroker
+            io.close()
+            return RunCapture(io.started, io.exited, io.output(), io.exitCode, diags + (e.message ?: e.toString()))
+        } finally {
+            if (Guards.broker === AllowAllBroker) Guards.broker = prevBroker
+            io.close()
+        }
+        val extra = if (timedOut && !io.exited) listOf("The program didn't finish within ${timeoutMs / 1000}s.") else emptyList()
+        return RunCapture(io.started, io.exited, io.output(), io.exitCode, diags + extra)
+    }
+
+    /** A build-engine diagnostic → a compact one-line message (with location when known). */
+    private fun diagLine(d: BuildDiagnostic): String {
+        val loc = d.location
+        val where = loc?.let { "${Paths.get(it.path).fileName}${if (it.line > 0) ":${it.line}" else ""}: " } ?: ""
+        return where + d.message
+    }
+
+    /** A [ProgramIo] that buffers stdout, feeds a canned [stdinText] then EOFs, and records lifecycle. */
+    private class CaptureProgramIo(stdinText: String) : ProgramIo {
+        private val buf = StringBuilder()
+        private val stdinStream = java.io.ByteArrayInputStream(stdinText.toByteArray(Charsets.UTF_8))
+        @Volatile var started = false; private set
+        @Volatile var exited = false; private set
+        @Volatile var exitCode: Int? = null; private set
+        override val stdin: InputStream get() = stdinStream
+        override fun stdout(text: String) { synchronized(buf) { if (buf.length < CAPTURE_MAX) buf.append(text) } }
+        override fun started() { started = true }
+        override fun exited(code: Int) { exited = true; exitCode = code }
+        fun output(): String = synchronized(buf) { buf.toString() }
+        fun close() { runCatching { stdinStream.close() } }
+    }
+
+    /** Allow every guarded call — a learning snippet the user typed runs in a trusted sandbox, never prompts. */
+    private object AllowAllBroker : PermissionBroker {
+        override fun check(category: GuardCategory, detail: String): Boolean = true
     }
 
     override fun dispose() {
@@ -897,5 +987,21 @@ internal class BuildService(private val ctx: EngineContext) : Disposable {
          *  program's output is otherwise unbounded. */
         private const val CONSOLE_CHUNK_MAX = 8192
         private const val CONSOLE_TRANSCRIPT_MAX = 1_000_000
+
+        /** Cap the captured stdout of a [runAndCapture] run (a lesson exercise) — plenty for teaching output. */
+        private const val CAPTURE_MAX = 200_000
     }
 }
+
+/**
+ * Outcome of [BuildService.runAndCapture]: whether the program [compiled] (its `main` started), [ran] to
+ * completion, its captured [stdout], its [exitCode] (null if it never finished / timed out), and any
+ * compile-error [diagnostics].
+ */
+data class RunCapture(
+    val compiled: Boolean,
+    val ran: Boolean,
+    val stdout: String,
+    val exitCode: Int?,
+    val diagnostics: List<String>,
+)

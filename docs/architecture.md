@@ -72,7 +72,7 @@ Workspace                         the set of open projects; orchestrates linked 
   if added, is a `JavaFacet` concern.)
 - **SourceSet** groups content roots that compile together under one configuration.
 - **ContentRoot** is a directory tagged with roles (Java source, resources, Android res, aidl, assets,
-  generated, excluded). Roles, rather than fixed fields, keep it extensible.
+  jniLibs (native `.so`), generated, excluded). Roles, rather than fixed fields, keep it extensible.
 - **Facet** attaches domain-specific configuration to a module without the core knowing the domain.
   `AndroidFacet` holds the manifest path, SDK levels, build types, and flavors; `JavaFacet` holds the
   language level and annotation processors.

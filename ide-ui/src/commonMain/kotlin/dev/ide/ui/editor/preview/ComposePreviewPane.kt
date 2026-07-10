@@ -41,9 +41,20 @@ import dev.ide.ui.ComposePreviewHost
 import dev.ide.ui.backend.IdeBackend
 import dev.ide.ui.backend.UiComposePreview
 import dev.ide.ui.components.CaDropdownMenu
+import dev.ide.ui.generated.resources.Res
+import dev.ide.ui.generated.resources.loading
+import dev.ide.ui.generated.resources.preview_choose_preview
+import dev.ide.ui.generated.resources.preview_live
+import dev.ide.ui.generated.resources.preview_no_preview_found
+import dev.ide.ui.generated.resources.preview_paused
+import dev.ide.ui.generated.resources.preview_rebuild
+import dev.ide.ui.generated.resources.preview_renders_on_device
+import dev.ide.ui.generated.resources.preview_resume_live
+import dev.ide.ui.generated.resources.preview_stop_live
 import dev.ide.ui.icons.CaIcons
 import dev.ide.ui.theme.Ca
 import kotlinx.coroutines.delay
+import org.jetbrains.compose.resources.stringResource
 import kotlin.time.Duration.Companion.milliseconds
 
 /** Idle delay before the live buffer is re-interpreted, so a burst of typing settles into one re-composition. */
@@ -171,7 +182,7 @@ fun ComposePreviewPane(
                                 Modifier.size(9.dp), color = Ca.colors.warning, strokeWidth = 1.5.dp
                             )
                             if (!compact) Text(
-                                "Loading",
+                                stringResource(Res.string.loading),
                                 color = Ca.colors.warning,
                                 style = Ca.type.caption,
                                 fontWeight = FontWeight.SemiBold
@@ -184,7 +195,7 @@ fun ComposePreviewPane(
                                     .background(Ca.colors.run, RoundedCornerShape(Ca.radius.pill))
                             )
                             if (!compact) Text(
-                                "Live",
+                                stringResource(Res.string.preview_live),
                                 color = Ca.colors.run,
                                 style = Ca.type.caption,
                                 fontWeight = FontWeight.SemiBold
@@ -198,7 +209,7 @@ fun ComposePreviewPane(
                                 )
                             )
                             if (!compact) Text(
-                                "Paused",
+                                stringResource(Res.string.preview_paused),
                                 color = Ca.colors.textTertiary,
                                 style = Ca.type.caption,
                                 fontWeight = FontWeight.SemiBold
@@ -216,7 +227,7 @@ fun ComposePreviewPane(
                 PillButton({ live = !live }) {
                     Icon(
                         if (live) CaIcons.stop else CaIcons.play,
-                        if (live) "Stop live preview" else "Resume live preview",
+                        if (live) stringResource(Res.string.preview_stop_live) else stringResource(Res.string.preview_resume_live),
                         Modifier.size(15.dp),
                         tint = if (live) Ca.colors.textSecondary else Ca.colors.run,
                     )
@@ -227,7 +238,7 @@ fun ComposePreviewPane(
             PillButton({ renderText = text; nonce++ }) {
                 Icon(
                     CaIcons.refresh,
-                    "Rebuild preview",
+                    stringResource(Res.string.preview_rebuild),
                     Modifier.size(15.dp),
                     tint = Ca.colors.textSecondary
                 )
@@ -271,7 +282,7 @@ fun ComposePreviewPane(
                 else -> {
                     LaunchedEffect(Unit) { problems = emptyList(); busy = false }
                     Text(
-                        if (current == null) "No @Preview found" else "Compose preview renders on device",
+                        if (current == null) stringResource(Res.string.preview_no_preview_found) else stringResource(Res.string.preview_renders_on_device),
                         color = if (state.night) Color(0xFFA0A1AA) else Ca.colors.textTertiary,
                         style = Ca.type.caption,
                         textAlign = TextAlign.Center,
@@ -308,7 +319,7 @@ private fun RowScope.VariantSelector(
                 )
                 Icon(
                     CaIcons.chevronDown,
-                    "Choose preview",
+                    stringResource(Res.string.preview_choose_preview),
                     Modifier.size(13.dp).padding(start = 2.dp),
                     tint = Ca.colors.textTertiary
                 )

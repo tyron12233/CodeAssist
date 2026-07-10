@@ -1,0 +1,24 @@
+# Baseline profile for the installed IDE app (com.tyron.code).
+#
+# AGP compiles this into assets/dexopt/baseline.prof, and the package manager AOT-compiles the listed classes
+# at install time (dex2oat) instead of leaving them to interpret + JIT on first use. It targets the editor +
+# completion HOT PATH — the classes exercised on every keystroke — so typing/completion is fast from the first
+# launch rather than warming up over several sessions.
+#
+# Scope note: this covers only classes in the MAIN app dex. The K2/FIR Analysis-API runtime lives in the
+# separate `aa.apk` asset loaded via DexClassLoader (NOT installed), so a profile cannot AOT it from here; that
+# runtime is warmed instead by KotlinAnalysisService.warmUp() at project open (which seeds ART's JIT profile so
+# background dexopt AOT-compiles the FIR hot path over time). See docs/kotlin-analysis-api.md.
+#
+# HRF wildcard rules (profgen expands them against the APK dex at build time): HSPL = Hot/Startup/Post-startup.
+
+# The Compose code editor: layout, gutter, completion popup + the extracted popup layers, diagnostics chips.
+HSPLdev/ide/ui/editor/**->**(**)**
+# The UI<->engine backend port (completion result mapping, DTOs the editor marshals).
+HSPLdev/ide/ui/backend/**->**(**)**
+# The engine-side completion pipeline + editor backend (runs per keystroke to assemble/rank the popup).
+HSPLdev/ide/core/completion/**->**(**)**
+HSPLdev/ide/core/backend/**->**(**)**
+# The Analysis-API client + neutral DTO/codec that marshal each completion request to the :aa process.
+HSPLdev/ide/lang/kotlin/aa/**->**(**)**
+HSPLdev/ide/android/aa/**->**(**)**

@@ -66,6 +66,10 @@ object BuiltInSettingsPages {
     const val DEX_FORK_CONCURRENCY = "dexForkConcurrency"
     const val DEX_FORK_CONCURRENCY_DEFAULT = 0
 
+    /** Toggle key on the [ANALYSIS] page: write per-pass / per-stage editor timings to the log (diagnostic).
+     *  Applied by the backend — it flips the shared `PerfTrace` flag. */
+    const val PERF_LOGGING = "perfLogging"
+
     // Keys the backend special-cases (routed to a non-generic-store effect).
     const val CONFLICT_POLICY = "conflictPolicy"
     const val ANALYTICS = "analytics"
@@ -146,6 +150,7 @@ object BuiltInSettingsPages {
         listOf(
             SettingControl.Toggle("onTheFly", "Analyze on the fly", "Show diagnostics as you type (off = on build only)", default = d.analyzeOnTheFly),
             SettingControl.IntSlider("reparseDelayMs", "Reparse delay", "Quiet period after a keystroke before re-analysis", default = d.reparseDelayMs, min = IdeSettings.MIN_REPARSE_DELAY_MS, max = IdeSettings.MAX_REPARSE_DELAY_MS, step = 50, unit = "ms", advanced = true),
+            SettingControl.Toggle(PERF_LOGGING, "Log analysis timings", "Diagnostic: write per-pass (semantic / diagnostics / folds / inlay / previews) and per-stage timings to the log so you can find what makes a file slow. Read them in Privacy → View logs. Off by default.", default = d.analysisPerfLogging, advanced = true),
         )
     }
 

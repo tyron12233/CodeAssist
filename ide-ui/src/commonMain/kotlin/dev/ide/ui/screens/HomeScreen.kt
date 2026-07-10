@@ -11,8 +11,13 @@ import androidx.compose.ui.Modifier
 import dev.ide.ui.HomeTab
 import dev.ide.ui.components.BottomNavBar
 import dev.ide.ui.components.BottomNavItem
+import dev.ide.ui.generated.resources.Res
+import dev.ide.ui.generated.resources.home_learn
+import dev.ide.ui.generated.resources.home_store
+import dev.ide.ui.generated.resources.projects
 import dev.ide.ui.icons.CaIcons
 import dev.ide.ui.theme.Motion
+import org.jetbrains.compose.resources.stringResource
 
 /**
  * The home/landing scaffold: the selected [HomeTab]'s content above a [BottomNavBar] that switches between
@@ -44,15 +49,13 @@ fun HomeScreen(
             }
         }
         BottomNavBar(
-            items = NAV_ITEMS,
+            items = listOf(
+                BottomNavItem(HomeTab.Projects.name, stringResource(Res.string.projects), CaIcons.folder),
+                BottomNavItem(HomeTab.Store.name, stringResource(Res.string.home_store), CaIcons.grid),
+                BottomNavItem(HomeTab.Learn.name, stringResource(Res.string.home_learn), CaIcons.lightbulb),
+            ),
             selectedId = tab.name,
             onSelect = { id -> onSelectTab(HomeTab.valueOf(id)) },
         )
     }
 }
-
-private val NAV_ITEMS = listOf(
-    BottomNavItem(HomeTab.Projects.name, "Projects", CaIcons.folder),
-    BottomNavItem(HomeTab.Store.name, "Store", CaIcons.grid),
-    BottomNavItem(HomeTab.Learn.name, "Learn", CaIcons.lightbulb),
-)

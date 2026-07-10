@@ -37,11 +37,13 @@ internal interface BackendContext {
     /** The single serialized worker the editor's language calls run on. */
     val engineDispatcher: CoroutineDispatcher
 
-    /** Highest-priority editor lane (completion): preempts background + preview. */
-    suspend fun <T> interactive(block: () -> T): T
+    /** Highest-priority editor lane (completion): preempts background + preview. The block may suspend
+     *  (a contributor may do out-of-process work off the worker); the worker frees while it waits. */
+    suspend fun <T> interactive(block: suspend () -> T): T
 
-    /** Background editor lane (analysis/hints/semantic/folding): preempts preview, preempted by interactive. */
-    suspend fun <T> background(block: () -> T): T
+    /** Background editor lane (analysis/hints/semantic/folding): preempts preview, preempted by interactive.
+     *  The block may suspend (a provider may do out-of-process work off the worker). */
+    suspend fun <T> background(block: suspend () -> T): T
 
     /** Lowest-priority editor lane (preview rendering/lowering): preempted by both, retries. */
     suspend fun <T> preview(block: suspend () -> T): T

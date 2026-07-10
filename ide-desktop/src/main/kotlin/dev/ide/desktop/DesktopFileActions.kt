@@ -6,6 +6,7 @@ import java.awt.Desktop
 import java.io.File
 import javax.swing.JFileChooser
 import javax.swing.SwingUtilities
+import javax.swing.filechooser.FileNameExtensionFilter
 
 /**
  * Desktop [FileActions] over Swing: import via a [JFileChooser] (copying the chosen files into the
@@ -35,9 +36,14 @@ class DesktopFileActions(private val backend: IdeBackend) : FileActions {
 
     override val canPickFile: Boolean = true
 
-    override fun pickFile(onPicked: (String?) -> Unit) {
+    override fun pickFile(extensions: List<String>, onPicked: (String?) -> Unit) {
         SwingUtilities.invokeLater {
-            val chooser = JFileChooser().apply { dialogTitle = "Choose a keystore" }
+            val chooser = JFileChooser().apply {
+                dialogTitle = "Choose a file"
+                if (extensions.isNotEmpty()) {
+                    fileFilter = FileNameExtensionFilter(extensions.joinToString(", ") { ".$it" }, *extensions.toTypedArray())
+                }
+            }
             val path = if (chooser.showOpenDialog(null) == JFileChooser.APPROVE_OPTION) chooser.selectedFile?.absolutePath else null
             onPicked(path)
         }

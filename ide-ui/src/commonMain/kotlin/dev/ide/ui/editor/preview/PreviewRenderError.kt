@@ -13,8 +13,13 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import dev.ide.ui.generated.resources.Res
+import dev.ide.ui.generated.resources.error
+import dev.ide.ui.generated.resources.preview_render_error
+import dev.ide.ui.generated.resources.preview_render_failed
 import dev.ide.ui.icons.CaIcons
 import dev.ide.ui.theme.Ca
+import org.jetbrains.compose.resources.stringResource
 
 /**
  * Shown inside the preview device frame when the renderer catches a top-level exception while
@@ -33,19 +38,20 @@ fun PreviewRenderError(error: Throwable, modifier: Modifier = Modifier) {
     ) {
         Icon(
             CaIcons.error,
-            contentDescription = "render error",
+            contentDescription = stringResource(Res.string.preview_render_error),
             modifier = Modifier.size(20.dp),
             tint = Ca.colors.error,
         )
         Text(
-            "Preview failed to render",
+            stringResource(Res.string.preview_render_failed),
             color = Ca.colors.error,
             style = Ca.type.body,
             fontWeight = FontWeight.SemiBold,
             textAlign = TextAlign.Center,
         )
+        val errorFallback = stringResource(Res.string.error)
         val detail = buildString {
-            append(error::class.simpleName ?: "Error")
+            append(error::class.simpleName ?: errorFallback)
             val msg = error.message?.trim()?.let { if (it.length > 120) it.take(117) + "…" else it }
             if (!msg.isNullOrEmpty()) append(": $msg")
         }

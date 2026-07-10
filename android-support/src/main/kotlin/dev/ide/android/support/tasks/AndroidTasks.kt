@@ -1736,9 +1736,72 @@ internal class L8DexTask(
     }
 }
 
-/** `packageApk`: assemble the unsigned APK from `resources.ap_` + `classes*.dex` + assets + jni libs. The
- *  [dexDirs] are the merged dex layers (project / lib / external for native multidex, or a single merged
- *  dir for mono-/legacy-multidex); the packager renumbers their `.dex` files into one `classes*.dex` set. */
+/**
+ * `merge<Variant>JavaResource`: gather the module's own Java resources (`src/<set>/resources`) plus the
+ * non-class entries of its sub-module + external dependency jars into one `merged-java-res.jar`, applying
+ * the resources packaging rules (AGP defaults + the module's config; see [JavaResMerger]/[PackagingRules]).
+ * The packager copies that jar's entries into the APK root. Depends on the sub-module jars it reads.
+ */
+internal class MergeJavaResourcesTask(
+    override val name: TaskName,
+    private val resourceDirs: List<Path>,
+    private val jars: List<Path>,
+    private val filter: PackagingRules.Filter,
+    private val outJar: Path,
+) : Task {
+    override val inputs: TaskInputs
+        get() = TaskInputsImpl().apply {
+            dirPaths("res", resourceDirs)
+            filePaths("jars", jars)
+            property("rules", filter.fingerprint)
+        }
+    override val outputs: TaskOutputs get() = TaskOutputsImpl().apply { filePath("jar", outJar) }
+
+    override suspend fun execute(ctx: TaskContext): TaskResult {
+        ctx.checkCanceled()
+        return runCatching {
+            val n = JavaResMerger.merge(resourceDirs, jars, filter, outJar) { ctx.logger()("mergeJavaResource: $it") }
+            ctx.logger()("mergeJavaResource -> ${outJar.fileName} ($n entries)")
+            TaskResult.Success as TaskResult
+        }.getOrElse { TaskResult.Failed("mergeJavaResource failed: ${it.message}", it) }
+    }
+}
+
+/**
+ * `merge<Variant>NativeLibs`: gather every `.so` (the module's `src/<set>/jniLibs`, dependency-library
+ * jniLibs + an AAR's `jni` dir, and the `.so` entries under `lib` inside dependency jars) into one
+ * `<abi>`-laid-out directory the packager maps under `lib`, applying the jniLibs packaging rules
+ * (see [NativeLibsMerger]).
+ */
+internal class MergeNativeLibsTask(
+    override val name: TaskName,
+    private val jniDirs: List<Path>,
+    private val jars: List<Path>,
+    private val filter: PackagingRules.Filter,
+    private val outDir: Path,
+) : Task {
+    override val inputs: TaskInputs
+        get() = TaskInputsImpl().apply {
+            dirPaths("jni", jniDirs)
+            filePaths("jars", jars)
+            property("rules", filter.fingerprint)
+        }
+    override val outputs: TaskOutputs get() = TaskOutputsImpl().apply { dirPath("merged", outDir) }
+
+    override suspend fun execute(ctx: TaskContext): TaskResult {
+        ctx.checkCanceled()
+        return runCatching {
+            val n = NativeLibsMerger.merge(jniDirs, jars, filter, outDir) { ctx.logger()("mergeNativeLibs: $it") }
+            ctx.logger()("mergeNativeLibs -> ${outDir.fileName} ($n libraries)")
+            TaskResult.Success as TaskResult
+        }.getOrElse { TaskResult.Failed("mergeNativeLibs failed: ${it.message}", it) }
+    }
+}
+
+/** `packageApk`: assemble the unsigned APK from `resources.ap_` + `classes*.dex` + assets + jni libs +
+ *  merged Java resources. The [dexDirs] are the merged dex layers (project / lib / external for native
+ *  multidex, or a single merged dir for mono-/legacy-multidex); the packager renumbers their `.dex` files
+ *  into one `classes*.dex` set. [javaResJars] hold non-code entries copied to the APK root. */
 internal class PackageApkTask(
     override val name: TaskName,
     private val resourcesAp: Path,
@@ -1746,6 +1809,7 @@ internal class PackageApkTask(
     private val assetsDirs: List<Path>,
     private val jniLibDirs: List<Path>,
     private val outApk: Path,
+    private val javaResJars: List<Path> = emptyList(),
 ) : Task {
     override val inputs: TaskInputs
         get() = TaskInputsImpl().apply {
@@ -1753,6 +1817,7 @@ internal class PackageApkTask(
             dirPaths("dex", dexDirs)
             dirPaths("assets", assetsDirs)
             dirPaths("jni", jniLibDirs)
+            filePaths("javaRes", javaResJars)
         }
     override val outputs: TaskOutputs get() = TaskOutputsImpl().apply { filePath("apk", outApk) }
 
@@ -1760,7 +1825,7 @@ internal class PackageApkTask(
         ctx.checkCanceled()
         return runCatching {
             val names =
-                ApkPackaging.assembleApk(resourcesAp, dexDirs, assetsDirs, jniLibDirs, outApk)
+                ApkPackaging.assembleApk(resourcesAp, dexDirs, assetsDirs, jniLibDirs, outApk, javaResJars)
             ctx.logger()("packageApk -> ${outApk.fileName} (${names.size} entries)")
             TaskResult.Success as TaskResult
         }.getOrElse { TaskResult.Failed("packageApk failed: ${it.message}", it) }

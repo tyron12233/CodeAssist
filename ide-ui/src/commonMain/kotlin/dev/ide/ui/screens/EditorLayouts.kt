@@ -12,7 +12,14 @@ import androidx.compose.foundation.layout.ime
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableFloatStateOf
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.setValue
+import dev.ide.ui.backend.RunStatus
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.dp
@@ -22,21 +29,29 @@ import dev.ide.ui.backend.BuildState
 import dev.ide.ui.backend.FileActions
 import dev.ide.ui.backend.IndexUiStatus
 import dev.ide.ui.backend.PackageSegment
-import dev.ide.ui.backend.RunStatus
 import dev.ide.ui.backend.TreeNode
 import dev.ide.ui.backend.UiActionContext
 import dev.ide.ui.backend.UiActionPlaces
+import androidx.compose.ui.Alignment
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.height
 import kotlinx.coroutines.launch
-import dev.ide.ui.components.BottomSheet
 import dev.ide.ui.components.BuildConsole
+import dev.ide.ui.components.BuildDock
+import dev.ide.ui.components.DockBarHeight
 import dev.ide.ui.components.FileNavigator
 import dev.ide.ui.components.FileOpKind
 import dev.ide.ui.components.fileOpPath
 import dev.ide.ui.components.GlassMaterial
 import dev.ide.ui.components.GlassSurface
 import dev.ide.ui.components.NewSourceLang
+import dev.ide.ui.components.PushDrawer
 import dev.ide.ui.components.SideRail
+import dev.ide.ui.platform.isMobilePlatform
 import dev.ide.ui.theme.Ca
+
+/** App-global preference marking the dock's one-shot swipe-up teaching bounce as already shown. */
+private const val DOCK_HINT_PREF = "dock.swipeHint.seen"
 
 /**
  * Open a file tapped in the tree. A built `.apk` goes to the platform package installer (or reveal if the
@@ -117,8 +132,10 @@ internal fun ExpandedLayout(
                         canReveal = fileActions.canReveal,
                         onReveal = { node -> node.fileOpPath()?.let { fileActions.reveal(it) } },
                         onOpenInFiles = if (fileActions.canReveal) ({ (state.tree.dirPath ?: state.backend.projects.storageRootPath())?.let { fileActions.reveal(it) } }) else null,
+                        onRefreshTree = { state.refreshTree() },
                         mode = state.treeMode,
                         onModeChange = { state.selectTreeMode(it) },
+                        expandedState = state.treeExpanded,
                     )
                 }
                 VerticalDivider()
@@ -141,7 +158,7 @@ internal fun ExpandedLayout(
                     BuildConsole(
                         buildState = buildState,
                         indexStatus = indexStatus,
-                        onRun = { state.backend.build.runBuild() },
+                        onRun = { state.requestRun { state.backend.build.runBuild() } },
                         onStop = { state.backend.build.stopBuild() },
                         onCollapse = { state.consoleOpen = false },
                         modifier = Modifier.fillMaxSize().padding(14.dp),
@@ -158,8 +175,10 @@ internal fun ExpandedLayout(
 }
 
 /**
- * Phone layout: a single editor pane with a bottom nav, and the navigator / console / destinations as
- * bottom sheets rather than docked panes.
+ * Phone layout: a single editor pane with a bottom nav. The file navigator is a **push drawer** on the
+ * left (the whole pane slides right to reveal it — edge swipe / editor-at-scroll-start swipe / top-bar
+ * toggle); the bottom nav doubles as the collapsed build dock (swipe up for the console); the
+ * destinations stay bottom sheets.
  */
 @Composable
 internal fun CompactLayout(
@@ -184,99 +203,130 @@ internal fun CompactLayout(
     // focus on the code being typed (the nav is one swipe/back away). The IME inset is read raw — directly,
     // not via a consuming modifier — so the app's `safeDrawing` padding doesn't zero it. Always 0 on desktop.
     val keyboardOpen = WindowInsets.ime.getBottom(LocalDensity.current) > 0
+    // The drawer's live open fraction, mirrored by the top bar's sidebar icon (its divider tracks the
+    // drawer edge through a swipe). Float state written per frame; read deferred in the icon's draw.
+    var navProgress by remember { mutableFloatStateOf(0f) }
+    // One-shot swipe-affordance hint: the first build activity that happens with the dock collapsed peeks
+    // the bar up and back so the drag is discoverable; persisted so it never repeats. (Run usually
+    // auto-expands the console, so in practice this fires the first time a build runs or finishes with
+    // the bar down — exactly when there's something under it worth swiping up for.)
+    var dockHint by remember { mutableStateOf(false) }
+    LaunchedEffect(buildState.status) {
+        if (isMobilePlatform && buildState.status != RunStatus.Idle && !state.consoleOpen &&
+            state.backend.settings.preference(DOCK_HINT_PREF) != "true"
+        ) dockHint = true
+    }
     Box(Modifier.fillMaxSize()) {
-        Column(Modifier.fillMaxSize()) {
-            EditorCenter(state, indexStatus, compact = true, Modifier.weight(1f).fillMaxWidth())
-            // While the keyboard is up: a coding-symbol accessory bar sits directly above it (the root's
-            // safeDrawing padding lifts this Column above the IME). It inserts into the active editor; off-
-            // keyboard, the bottom nav takes the slot instead.
-            // No enter/exit animation for now — it read as clunky; the bar just appears with the keyboard.
-            if (keyboardOpen && state.active != null) {
-                EditorSymbolBar(
-                    onTab = { state.active?.session?.indent() },
-                    onSymbol = { sym -> state.active?.session?.commitText(sym) },
-                    onComment = { state.active?.session?.toggleComment() },
-                    onMoveLineUp = { state.active?.session?.moveLines(-1) },
-                    onMoveLineDown = { state.active?.session?.moveLines(1) },
-                    onDuplicateLine = { state.active?.session?.duplicateSelection() },
-                    showDiagnosticJump = state.active?.session?.diagnostics?.isNotEmpty() == true,
-                    onNextDiagnostic = { state.active?.session?.goToDiagnostic(forward = true) },
+        // The navigator is a push drawer: the editor pane (incl. the bottom nav) slides right in place of
+        // the tree rather than being covered by a sheet. Opens by edge swipe, by a rightward swipe once the
+        // editor is at its horizontal start (nested-scroll aware), or from the top-bar toggle.
+        PushDrawer(
+            open = state.navOpen,
+            onOpenChange = { state.navOpen = it },
+            gesturesEnabled = isMobilePlatform,
+            onProgress = { navProgress = it },
+            drawerContent = {
+                FileNavigator(
+                    root = state.tree,
+                    moduleCount = project.moduleCount,
+                    activePath = state.active?.path,
+                    onOpen = { node -> openTreeFile(node, fileActions) { p, n -> state.open(p, n); state.navOpen = false } },
+                    modifier = Modifier.fillMaxSize(),
+                    onNewFile = onNewFile,
+                    onNewFolder = onNewFolder,
+                    onNewResource = onNewResource,
+                    onNewSource = onNewSource,
+                    onViewDependencies = { node -> state.navOpen = false; onOpenDependencies(node.moduleConfigName ?: node.name) },
+                    onConfigureModule = { node -> state.navOpen = false; onOpenModuleConfig(node.moduleConfigName ?: node.name) },
+                    onAddSourceRoot = { node -> state.navOpen = false; state.addSourceRootModule = node.moduleConfigName ?: node.name },
+                    canImport = fileActions.canImport,
+                    onImport = { doImport(state, fileActions) },
+                    onImportInto = { dir -> doImportInto(state, fileActions, dir) },
+                    canShare = fileActions.canShare,
+                    onShare = { node -> node.filePath?.let { fileActions.share(it) } },
+                    canExport = fileActions.canExport,
+                    onExport = { node -> node.filePath?.let { fileActions.exportFile(it) } },
+                    canModify = true,
+                    onRename = { onFileOp(it, FileOpKind.Rename) },
+                    onMove = { onFileOp(it, FileOpKind.Move) },
+                    onCopy = { onFileOp(it, FileOpKind.Copy) },
+                    onDelete = { onFileOp(it, FileOpKind.Delete) },
+                    canReveal = fileActions.canReveal,
+                    onReveal = { node -> node.fileOpPath()?.let { fileActions.reveal(it) } },
+                    contextMenuFor = { node ->
+                        state.backend.actions.menuFor(UiActionContext(place = UiActionPlaces.FILE_CONTEXT, contextPath = node.filePath ?: node.dirPath))
+                    },
+                    onContextAction = { id, node ->
+                        fileCtxScope.launch {
+                            state.dispatchAction(id, UiActionContext(place = UiActionPlaces.FILE_CONTEXT, contextPath = node.filePath ?: node.dirPath))
+                        }
+                    },
+                    onOpenInFiles = if (fileActions.canReveal) ({ (state.tree.dirPath ?: state.backend.projects.storageRootPath())?.let { fileActions.reveal(it) } }) else null,
+                    onRefreshTree = { state.refreshTree() },
+                    mode = state.treeMode,
+                    onModeChange = { state.selectTreeMode(it) },
+                    expandedState = state.treeExpanded,
                 )
-            }
-            if (!keyboardOpen) {
-                BottomNav(
-                    selected = state.rail,
-                    onSelect = state::selectRail,
-                )
+            },
+        ) {
+            Box(Modifier.fillMaxSize()) {
+                Column(Modifier.fillMaxSize()) {
+                    EditorCenter(
+                        state, indexStatus, compact = true, Modifier.weight(1f).fillMaxWidth(),
+                        navFraction = { navProgress },
+                    )
+                    // While the keyboard is up: a coding-symbol accessory bar sits directly above it (the root's
+                    // safeDrawing padding lifts this Column above the IME). It inserts into the active editor; off-
+                    // keyboard, the dock's collapsed bar takes the slot instead.
+                    // No enter/exit animation for now — it read as clunky; the bar just appears with the keyboard.
+                    if (keyboardOpen && state.active != null) {
+                        EditorSymbolBar(
+                            onTab = { state.active?.session?.indent() },
+                            onSymbol = { sym -> state.active?.session?.commitText(sym) },
+                            onComment = { state.active?.session?.toggleComment() },
+                            onMoveLineUp = { state.active?.session?.moveLines(-1) },
+                            onMoveLineDown = { state.active?.session?.moveLines(1) },
+                            onDuplicateLine = { state.active?.session?.duplicateSelection() },
+                            showDiagnosticJump = state.active?.session?.diagnostics?.isNotEmpty() == true,
+                            onNextDiagnostic = { state.active?.session?.goToDiagnostic(forward = true) },
+                        )
+                    }
+                    // Reserve the dock's collapsed-bar slot so the editor column isn't hidden behind it —
+                    // the dock itself is an overlay (below) so its expansion never relayouts the editor.
+                    if (!keyboardOpen) Spacer(Modifier.height(DockBarHeight))
+                }
+                // The bottom nav is the collapsed face of the build dock: swipe it up (or tap its build
+                // chip / the top-bar console toggle) and it expands into the build console — bar → 60% →
+                // full detents, nav items fading out as the console fades in. Replaces the console sheet.
+                BuildDock(
+                    open = state.consoleOpen,
+                    onOpenChange = { state.consoleOpen = it },
+                    buildState = buildState,
+                    hidden = keyboardOpen && !state.consoleOpen,
+                    modifier = Modifier.align(Alignment.BottomCenter),
+                    hint = dockHint,
+                    onHintShown = {
+                        dockHint = false
+                        state.backend.settings.setPreference(DOCK_HINT_PREF, "true")
+                    },
+                    bar = { BottomNav(selected = state.rail, onSelect = state::selectRail) },
+                ) {
+                    BuildConsole(
+                        buildState = buildState,
+                        indexStatus = indexStatus,
+                        onRun = { state.requestRun { state.backend.build.runBuild() } },
+                        onStop = { state.backend.build.stopBuild() },
+                        onCollapse = { state.consoleOpen = false },
+                        modifier = Modifier.fillMaxWidth().weight(1f).padding(14.dp),
+                        // On phone the console covers the editor; jump to the file and collapse the dock.
+                        onOpenDiagnostic = { d -> d.file?.let { state.openAtLine(it, d.line, d.column); state.consoleOpen = false } },
+                        backend = state.backend,
+                        activeFilePath = state.active?.path,
+                    )
+                }
             }
         }
 
-        // File navigator as a bottom sheet — the compact reflow (on phone the navigator is a
-        // sheet, not a side pane). Slides up over a fading scrim; tapping a file opens it and dismisses.
-        BottomSheet(
-            visible = state.navOpen,
-            onDismiss = { state.navOpen = false },
-            heightFraction = 0.7f,
-        ) {
-            FileNavigator(
-                root = state.tree,
-                moduleCount = project.moduleCount,
-                activePath = state.active?.path,
-                onOpen = { node -> openTreeFile(node, fileActions) { p, n -> state.open(p, n); state.navOpen = false } },
-                modifier = Modifier.fillMaxWidth().weight(1f),
-                onNewFile = onNewFile,
-                onNewFolder = onNewFolder,
-                onNewResource = onNewResource,
-                onNewSource = onNewSource,
-                onViewDependencies = { node -> state.navOpen = false; onOpenDependencies(node.moduleConfigName ?: node.name) },
-                onConfigureModule = { node -> state.navOpen = false; onOpenModuleConfig(node.moduleConfigName ?: node.name) },
-                onAddSourceRoot = { node -> state.navOpen = false; state.addSourceRootModule = node.moduleConfigName ?: node.name },
-                canImport = fileActions.canImport,
-                onImport = { doImport(state, fileActions) },
-                onImportInto = { dir -> doImportInto(state, fileActions, dir) },
-                canShare = fileActions.canShare,
-                onShare = { node -> node.filePath?.let { fileActions.share(it) } },
-                canExport = fileActions.canExport,
-                onExport = { node -> node.filePath?.let { fileActions.exportFile(it) } },
-                canModify = true,
-                onRename = { onFileOp(it, FileOpKind.Rename) },
-                onMove = { onFileOp(it, FileOpKind.Move) },
-                onCopy = { onFileOp(it, FileOpKind.Copy) },
-                onDelete = { onFileOp(it, FileOpKind.Delete) },
-                canReveal = fileActions.canReveal,
-                onReveal = { node -> node.fileOpPath()?.let { fileActions.reveal(it) } },
-                contextMenuFor = { node ->
-                    state.backend.actions.menuFor(UiActionContext(place = UiActionPlaces.FILE_CONTEXT, contextPath = node.filePath ?: node.dirPath))
-                },
-                onContextAction = { id, node ->
-                    fileCtxScope.launch {
-                        state.dispatchAction(id, UiActionContext(place = UiActionPlaces.FILE_CONTEXT, contextPath = node.filePath ?: node.dirPath))
-                    }
-                },
-                onOpenInFiles = if (fileActions.canReveal) ({ (state.tree.dirPath ?: state.backend.projects.storageRootPath())?.let { fileActions.reveal(it) } }) else null,
-                mode = state.treeMode,
-                onModeChange = { state.selectTreeMode(it) },
-            )
-        }
-        // Build console as a bottom sheet; a taller detent when a problem is present (design: 0.6 / 0.72).
-        BottomSheet(
-            visible = state.consoleOpen,
-            onDismiss = { state.consoleOpen = false },
-            heightFraction = if (buildState.status == RunStatus.Failed) 0.72f else 0.6f,
-        ) {
-            BuildConsole(
-                buildState = buildState,
-                indexStatus = indexStatus,
-                onRun = { state.backend.build.runBuild() },
-                onStop = { state.backend.build.stopBuild() },
-                onCollapse = { state.consoleOpen = false },
-                modifier = Modifier.fillMaxWidth().weight(1f).padding(14.dp),
-                // On phone the console is a sheet over the editor; jump to the file and dismiss it.
-                onOpenDiagnostic = { d -> d.file?.let { state.openAtLine(it, d.line, d.column); state.consoleOpen = false } },
-                backend = state.backend,
-                activeFilePath = state.active?.path,
-            )
-        }
         DestinationSheets(state, compact = true, onOpenModuleConfig, onToggleTheme, onOpenHub, onCloseProject, fileActions)
         PaletteOverlay(state, onToggleTheme, onOpenHub, onOpenDependencies)
     }

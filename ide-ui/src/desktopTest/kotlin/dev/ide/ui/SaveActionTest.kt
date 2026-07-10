@@ -12,6 +12,7 @@ import dev.ide.ui.backend.UiCompletionResult
 import dev.ide.ui.backend.UiDiagnostic
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.runBlocking
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
@@ -29,7 +30,7 @@ class SaveActionTest {
     private fun openA(): Pair<IdeUiState, FakeBackend> {
         val backend = FakeBackend(mutableMapOf("/p/A.java" to "class A {}"))
         val state = IdeUiState(backend)
-        state.open("/p/A.java", "A.java")
+        runBlocking { state.openSuspend("/p/A.java", "A.java") } // open reads off-thread; await it in the test
         return state to backend
     }
 

@@ -46,15 +46,29 @@ import dev.ide.ui.backend.SymbolHit
 import dev.ide.ui.backend.UiSearchOptions
 import dev.ide.ui.backend.UiTextMatch
 import dev.ide.ui.components.Chip
+import dev.ide.ui.generated.resources.Res
+import dev.ide.ui.generated.resources.search
+import dev.ide.ui.generated.resources.search_find_in_files_hint
+import dev.ide.ui.generated.resources.search_hint
+import dev.ide.ui.generated.resources.search_indexing
+import dev.ide.ui.generated.resources.search_min_chars
+import dev.ide.ui.generated.resources.search_no_members
+import dev.ide.ui.generated.resources.search_no_symbols
+import dev.ide.ui.generated.resources.search_no_text_matches
+import dev.ide.ui.generated.resources.search_tab_members
+import dev.ide.ui.generated.resources.search_tab_symbols
+import dev.ide.ui.generated.resources.search_tab_text
 import dev.ide.ui.icons.CaIcons
 import dev.ide.ui.theme.Ca
 import dev.ide.ui.theme.Motion
 import kotlinx.coroutines.delay
+import org.jetbrains.compose.resources.StringResource
+import org.jetbrains.compose.resources.stringResource
 
-private enum class SearchTab(val label: String, val icon: androidx.compose.ui.graphics.vector.ImageVector) {
-    Symbols("Symbols", CaIcons.code),
-    Members("Members", CaIcons.layers),
-    Text("Text", CaIcons.docText),
+private enum class SearchTab(val labelRes: StringResource, val icon: androidx.compose.ui.graphics.vector.ImageVector) {
+    Symbols(Res.string.search_tab_symbols, CaIcons.code),
+    Members(Res.string.search_tab_members, CaIcons.layers),
+    Text(Res.string.search_tab_text, CaIcons.docText),
 }
 
 /**
@@ -95,7 +109,7 @@ fun SearchScreen(
     Column(modifier.fillMaxSize().background(Ca.colors.bg)) {
         // Title + search field
         Column(Modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = 12.dp)) {
-            Text("Search", color = Ca.colors.textPrimary, style = Ca.type.headline, fontWeight = FontWeight.SemiBold)
+            Text(stringResource(Res.string.search), color = Ca.colors.textPrimary, style = Ca.type.headline, fontWeight = FontWeight.SemiBold)
             Row(
                 Modifier.fillMaxWidth().padding(top = 10.dp)
                     .background(Ca.colors.surface2, RoundedCornerShape(Ca.radius.control))
@@ -107,7 +121,8 @@ fun SearchScreen(
                 Icon(CaIcons.search, null, Modifier.size(18.dp), tint = Ca.colors.accent)
                 Box(Modifier.weight(1f)) {
                     if (query.isEmpty()) {
-                        val hint = if (tab == SearchTab.Text) "Find in files…" else "Search ${tab.label.lowercase()}…"
+                        val hint = if (tab == SearchTab.Text) stringResource(Res.string.search_find_in_files_hint)
+                            else stringResource(Res.string.search_hint, stringResource(tab.labelRes).lowercase())
                         Text(hint, color = Ca.colors.textTertiary, style = Ca.type.subhead)
                     }
                     BasicTextField(
@@ -146,10 +161,10 @@ fun SearchScreen(
         Box(Modifier.weight(1f).fillMaxWidth()) {
             val q = query.trim()
             when {
-                q.length < 2 -> Hint("Type at least 2 characters to search.")
-                tab == SearchTab.Symbols && indexing && symbols.isEmpty() -> Hint("Indexing… symbols appear as the index builds.")
-                tab == SearchTab.Symbols -> SymbolList(symbols, codeFont, navigable = true, onOpenAt = onOpenAt, empty = "No symbols found.", searching = searching)
-                tab == SearchTab.Members -> SymbolList(members, codeFont, navigable = false, onOpenAt = onOpenAt, empty = "No members found.", searching = searching)
+                q.length < 2 -> Hint(stringResource(Res.string.search_min_chars))
+                tab == SearchTab.Symbols && indexing && symbols.isEmpty() -> Hint(stringResource(Res.string.search_indexing))
+                tab == SearchTab.Symbols -> SymbolList(symbols, codeFont, navigable = true, onOpenAt = onOpenAt, empty = stringResource(Res.string.search_no_symbols), searching = searching)
+                tab == SearchTab.Members -> SymbolList(members, codeFont, navigable = false, onOpenAt = onOpenAt, empty = stringResource(Res.string.search_no_members), searching = searching)
                 tab == SearchTab.Text -> TextMatchList(matches, codeFont, onOpenAt, searching)
             }
         }
@@ -193,7 +208,7 @@ private fun SymbolList(
 
 @Composable
 private fun TextMatchList(matches: List<UiTextMatch>, codeFont: FontFamily, onOpenAt: (String, Int) -> Unit, searching: Boolean) {
-    if (matches.isEmpty()) { if (!searching) Hint("No matches in project files."); return }
+    if (matches.isEmpty()) { if (!searching) Hint(stringResource(Res.string.search_no_text_matches)); return }
     val accent = Ca.colors.accent
     val grouped = remember(matches) { matches.groupBy { it.filePath } }
     LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(vertical = 6.dp)) {
@@ -250,7 +265,7 @@ private fun TabPill(tab: SearchTab, active: Boolean, onClick: () -> Unit) {
         verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp),
     ) {
         Icon(tab.icon, null, Modifier.size(14.dp), tint = if (active) Ca.colors.accent else Ca.colors.textSecondary)
-        Text(tab.label, color = if (active) Ca.colors.accent else Ca.colors.textSecondary, style = Ca.type.caption,
+        Text(stringResource(tab.labelRes), color = if (active) Ca.colors.accent else Ca.colors.textSecondary, style = Ca.type.caption,
             fontWeight = if (active) FontWeight.SemiBold else FontWeight.Medium)
     }
 }

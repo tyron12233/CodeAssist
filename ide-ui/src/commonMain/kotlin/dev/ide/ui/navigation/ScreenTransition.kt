@@ -45,18 +45,34 @@ fun ScreenHost(
 private fun androidx.compose.animation.AnimatedContentTransitionScope<Screen>.mobileSharedAxis(): ContentTransform {
     val forward = targetState.ordinal >= initialState.ordinal
     val dir = if (forward) 1 else -1
-    val enter = slideInHorizontally(tween(Motion.BASE, easing = Motion.quiet)) { w -> dir * w / 4 } +
-        fadeIn(tween(Motion.BASE, easing = Motion.soft))
-    val exit = slideOutHorizontally(tween(Motion.BASE, easing = Motion.quiet)) { w -> -dir * w / 4 } +
-        fadeOut(tween(Motion.BASE, easing = Motion.soft))
+    val enter = slideInHorizontally(
+        tween(
+            Motion.BASE,
+            easing = Motion.quiet
+        )
+    ) { w -> dir * w / 4 } + fadeIn(tween(Motion.BASE, easing = Motion.soft))
+    val exit = slideOutHorizontally(
+        tween(
+            Motion.BASE,
+            easing = Motion.quiet
+        )
+    ) { w -> -dir * w / 4 } + fadeOut(tween(Motion.BASE, easing = Motion.soft))
     return enter togetherWith exit
 }
 
 /** Desktop fade-through + slight scale — non-directional, quick. */
 private fun desktopFade(): ContentTransform {
-    val enter = fadeIn(tween(Motion.FAST, easing = Motion.soft)) +
-        scaleIn(tween(Motion.FAST, easing = Motion.soft), initialScale = 0.98f)
-    val exit = fadeOut(tween(Motion.FAST, easing = Motion.soft)) +
-        scaleOut(tween(Motion.FAST, easing = Motion.soft), targetScale = 0.98f)
+    val enter = fadeIn(tween(Motion.FAST, easing = Motion.soft)) + scaleIn(
+        tween(
+            Motion.FAST,
+            easing = Motion.soft
+        ), initialScale = 0.98f
+    )
+    val exit = fadeOut(tween(Motion.FAST, easing = Motion.soft)) + scaleOut(
+        tween(
+            Motion.FAST,
+            easing = Motion.soft
+        ), targetScale = 0.98f
+    )
     return enter togetherWith exit
 }

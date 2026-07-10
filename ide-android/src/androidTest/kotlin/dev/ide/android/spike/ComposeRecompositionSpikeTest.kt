@@ -87,7 +87,7 @@ class ComposeRecompositionSpikeTest {
                         // Wrap the interpreted composable in a restart group; reads of `state` inside subscribe it.
                         // restartable=false → always re-run the body (this spike asserts recomposition fires;
                         // it doesn't exercise the $changed skip path).
-                        runtime.invokeComposable(ROOT_KEY, restartable = false, args = emptyList()) {
+                        runtime.invokeComposable(ROOT_KEY, restartable = false, force = false, args = emptyList()) {
                             runs.incrementAndGet()
                             interpreter.call(ui, listOf(state, Modifier))
                         }
