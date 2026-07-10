@@ -79,6 +79,20 @@ class ReflectiveDispatcherTest {
     }
 
     @Test
+    fun valueClassMemberDispatchesToStaticImpl() {
+        // The reported preview crash `no method copy(1) on java.lang.Long`: `Color` is an inline value class, so
+        // its member `copy` compiles to a STATIC `copy-<hash>` taking the UNBOXED receiver — NOT an instance
+        // method on the receiver's runtime class (a `Long`). A MEMBER call on the unboxed value must route to
+        // that static form. Exercised on stdlib's `kotlin.UInt` (unboxed representation = a plain `Int`):
+        // `UInt.toString` compiles to the static `toString-impl(int)` and prints the UNSIGNED value.
+        val c = call(DispatchKind.MEMBER, lib("kotlin.UInt", "toString"))
+        assertEquals("5", dispatcher.dispatch(c, receiver = 5, args = emptyList()))
+        // The discriminator: `-1` as a UInt is 0xFFFFFFFF. Routed to `UInt.toString-impl` it prints unsigned;
+        // a (wrong) `Integer.toString` instance dispatch would print "-1". So this fails without the fix.
+        assertEquals("4294967295", dispatcher.dispatch(c, receiver = -1, args = emptyList()))
+    }
+
+    @Test
     fun kotlinMappedTypeOwnerResolves() {
         // A Kotlin classifier owner (kotlin.text.StringBuilder) maps to its JVM class for reflection.
         val sb = dispatcher.dispatch(call(DispatchKind.CONSTRUCTOR, lib("kotlin.text.StringBuilder", "StringBuilder", isCtor = true)), null, emptyList())
@@ -301,6 +315,26 @@ class ReflectiveDispatcherTest {
         assertEquals("none", dispatcher.dispatch(call, receiver = Tagger(), args = listOf<Any?>(null)))
     }
 
+    @Test
+    fun collectionOfUnboxedValueClassArgsIsBoxedForAListValueClassParam() {
+        // The reported gradient-preview crash `java.lang.Long cannot be cast to androidx.compose.ui.graphics.Color`:
+        // the interpreter builds `listOf(Color.Red, …)` as a List of UNBOXED value-class values (a value class is
+        // represented by its underlying primitive), then passes it to a `List<Color>` parameter
+        // (`Brush.linearGradient(colors)`). The callee reads the elements back as boxed `Color`s and CCEs at draw.
+        // `Palette.total(tags: List<Tag>)` mirrors it — its body reads each element's `.v`, which fails on a raw
+        // Int. `Tag` is the existing value class (underlying Int). `total` has a defaulted `bonus`, so a one-arg
+        // call routes through the `$default` SYNTHETIC — the exact path `linearGradient(colors)` takes (its
+        // `start`/`end`/`tileMode` are defaulted); a two-arg call takes the plain exact-arity bind. Both must box.
+        val callee = ResolvedCallable.Library(
+            displayName = "total", ownerFqn = Palette::class.java.name, methodName = "total",
+            paramTypes = emptyList(), isStatic = false, isConstructor = false, isInline = false, descriptorPrecise = true,
+        )
+        val call = call(DispatchKind.MEMBER, callee)
+        // args = a List<Int> — the unboxed representation of `listOf(Tag(2), Tag(3), Tag(5))`.
+        assertEquals(10, dispatcher.dispatch(call, receiver = Palette(), args = listOf<Any?>(listOf(2, 3, 5))), "the default-synthetic path must box List<Tag> elements")
+        assertEquals(110, dispatcher.dispatch(call, receiver = Palette(), args = listOf<Any?>(listOf(2, 3, 5), 100)), "the exact-arity bind path must box List<Tag> elements")
+    }
+
     /** A Kotlin class with a mutable `value` property → `getValue()`/`setValue(x)` (a `MutableState` stand-in). */
     class Holder(var value: String)
 
@@ -312,6 +346,28 @@ class ReflectiveDispatcherTest {
      *  boxed by the general reflective path before the invoke. */
     class Tagger {
         fun describe(t: Tag?): String = if (t == null) "none" else "tag${t.v}"
+    }
+
+    @Test
+    fun mapOfUnboxedValueClassValuesIsBoxedForAMapValueClassParam() {
+        // Same value-class-container class as the gradient CCE, narrower container: a `Map<String, Tag>` param
+        // fed a `Map<String, Int>` (unboxed Tags). `Palette.sumByKey` reads each value's `.v`, which CCEs on a
+        // raw Int; the bind must box the map's value-class values.
+        val callee = ResolvedCallable.Library(
+            displayName = "sumByKey", ownerFqn = Palette::class.java.name, methodName = "sumByKey",
+            paramTypes = emptyList(), isStatic = false, isConstructor = false, isInline = false, descriptorPrecise = true,
+        )
+        val call = call(DispatchKind.MEMBER, callee)
+        val map = linkedMapOf<Any?, Any?>("a" to 2, "b" to 3, "c" to 5)
+        assertEquals(10, dispatcher.dispatch(call, receiver = Palette(), args = listOf<Any?>(map)), "Map<String, Tag> values must be boxed")
+    }
+
+    /** A `Brush.linearGradient(colors: List<Color>)` stand-in: `total` reads each `List<Tag>` element's value
+     *  class member, so the list elements must arrive BOXED (not raw Ints). `bonus` is defaulted so a one-arg
+     *  call routes through the default-args synthetic. `sumByKey` is the `Map<String, Tag>` analogue. */
+    class Palette {
+        fun total(tags: List<Tag>, bonus: Int = 0): Int = tags.sumOf { it.v } + bonus
+        fun sumByKey(byKey: Map<String, Tag>): Int = byKey.values.sumOf { it.v }
     }
 
     /** A class with all-defaulted constructor params (and a nullable trailing one) — a `SpanStyle` stand-in for

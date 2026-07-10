@@ -166,6 +166,57 @@ fun composableParamFlags(callee: ResolvedCallable, args: List<Any?>, leadingRece
 }
 
 /**
+ * Host strategy for running an interpreted `suspend` lambda (a `LaunchedEffect { }` / `rememberCoroutineScope()
+ * .launch { }` block, a `pointerInput` handler) as a REAL, cancellable coroutine. Without it a suspend block is
+ * run synchronously on the CALLER thread (the composition/main thread) with any suspend call best-effort/failed
+ * — so `while (!done) { delay(…); … }` becomes a busy loop that hangs the app. The bridge runs [lambda] OFF the
+ * caller thread and resumes the caller's [kotlin.coroutines.Continuation] when it finishes, so the caller
+ * coroutine actually suspends. [args] is the full JVM invoke argument list — its LAST element is the
+ * Continuation; the value/receiver params precede it. Returns the `COROUTINE_SUSPENDED` marker (so the caller
+ * suspends); null falls back to the built-in best-effort synchronous run.
+ */
+interface SuspendBridge {
+    fun runSuspending(lambda: InterpretedLambda, args: List<Any?>): Any?
+
+    /**
+     * Drive `flow.collect { action }` (and `collectLatest`) — the collect extension is `inline` (→ a
+     * `FlowCollector` with a suspend `emit`), so the interpreter can't invoke it reflectively. Called on the
+     * bridge's managed background thread with the runtime [flow] and the interpreted collector [action]; runs the
+     * collection to completion (or until the coroutine is cancelled, for an endless `StateFlow`), invoking
+     * [action] with each emitted value. Blocks the calling (bridge) thread — safe because it is a background
+     * thread, and cancellation interrupts it. Returns Unit.
+     */
+    fun collectFlow(flow: Any, action: InterpretedLambda): Any?
+}
+
+/**
+ * Marks the current thread as executing an interpreted `suspend` block under a [SuspendBridge] — so a suspend
+ * intrinsic that must BLOCK (the `delay` sleep) does so only on the bridge's managed background thread, never on
+ * the caller/main thread (where it would freeze the UI). Outside a managed context those intrinsics refuse to
+ * block (they throw, degrading to the old best-effort behavior). Thread-local because the bridge runs each block
+ * on its own coroutine thread.
+ */
+object SuspendContext {
+    private val active = ThreadLocal.withInitial { false }
+    private val suspends = ThreadLocal.withInitial { 0L }
+    val isActive: Boolean get() = active.get()
+    fun <T> runManaged(block: () -> T): T {
+        active.set(true)
+        try {
+            return block()
+        } finally {
+            active.set(false)
+        }
+    }
+
+    /** A per-thread count of real suspensions performed by interpreted code (a `delay`). The loop guard reads it
+     *  to tell a COOPERATIVE loop (one that actually suspends each pass — a `delay`-driven timer that runs a long
+     *  wall-clock time but isn't runaway) from a BUSY one (which never suspends and must be bounded). */
+    fun suspendTicks(): Long = suspends.get()
+    fun markSuspended() { suspends.set(suspends.get() + 1) }
+}
+
+/**
  * The seam for invoking an interpreted **composable** function body. The interpreter calls this instead of
  * running the body directly when a source callee is `@Composable`, so the Compose host (`interp-compose`)
  * can wrap the body in a restart group and register a recomposition that re-runs [body] — re-implementing
@@ -192,10 +243,23 @@ class ReflectiveDispatcher(
     private val loader: ClassLoader = ReflectiveDispatcher::class.java.classLoader,
     /** Host strategy for proxying interpreted lambdas (the Compose bridge threads a Composer); null = plain. */
     private val lambdaProxies: LambdaProxyStrategy? = null,
+    /** Host strategy for running an interpreted `suspend` block as a real cancellable coroutine (`delay` &c.
+     *  actually suspend). Null → the built-in best-effort synchronous run (suspend calls degrade). */
+    private val suspendBridge: SuspendBridge? = null,
 ) : Dispatcher {
 
     override fun dispatch(call: RNode.Call, receiver: Any?, args: List<Any?>): Any? {
         val callee = call.callee
+        // `flow.collect { action }` / `collectLatest` — the collect extension is `inline` (no reflectable JVM
+        // method), so drive it through the coroutine bridge: a blocking collect on this (bridge-managed) thread,
+        // invoking the interpreted collector per emission. Only under a bridge + a managed suspend context; a
+        // collect elsewhere (or with no bridge) falls through to the honest reflective failure.
+        if (suspendBridge != null && SuspendContext.isActive && receiver != null &&
+            callee.displayName in FLOW_COLLECT_NAMES && isFlow(receiver)
+        ) {
+            (args.firstOrNull { it is InterpretedLambda } as? InterpretedLambda)
+                ?.let { return suspendBridge.collectFlow(receiver, it) }
+        }
         // Bind named arguments back to their declared positions (a no-op for a purely positional call), so a
         // call like `f(b = …, a = …)` or one that omits defaulted params dispatches correctly.
         @Suppress("NAME_SHADOWING")
@@ -206,6 +270,17 @@ class ReflectiveDispatcher(
             // it normally never reaches here; if it does, the only sound thing is a plain instance invocation.
             DispatchKind.MEMBER, DispatchKind.OPERATOR, DispatchKind.INVOKE, DispatchKind.SUPER -> {
                 val target = receiver ?: throw InterpreterException("instance call `${callee.displayName}` has no receiver")
+                // A value-class member (`Color.copy(alpha = …)`, `Dp.coerceIn(…)`): the receiver is the UNBOXED
+                // underlying value (a `Long` for `Color`), and the member compiles to a STATIC `name-<hash>` on
+                // the value class taking that value as its first parameter — NOT an instance method on the
+                // receiver's runtime class. Route it statically with the receiver prepended (receiverCount = 1,
+                // exactly like an extension). Only for MEMBER dispatch; operators have their own handling.
+                if (call.dispatch == DispatchKind.MEMBER) {
+                    unboxedValueClassOwner(target, callee)?.let { ownerJvm ->
+                        val all = listOf(target) + args
+                        return invokeStatic(ownerJvm, callee.displayName, all, composableParamFlags(callee, all, leadingReceiver = true), receiverCount = 1)
+                    }
+                }
                 invokeInstance(target, callee.displayName, args, composableParamFlags(callee, args))
             }
             // A member extension (`RowScope.weight`): `receiver` is the scope instance, the extension receiver is
@@ -269,7 +344,7 @@ class ReflectiveDispatcher(
         if (args.none { it === OmittedArg }) {
             findMethod(target.javaClass, name, args, static = false)?.let { m ->
                 runCatching { m.isAccessible = true }
-                return m.invoke(target, *bindArgs(m.parameterTypes, args, composable))
+                return m.invoke(target, *bindArgs(m.parameterTypes, args, composable, m.genericParameterTypes))
             }
             // No exact-arity match: a vararg method (`fun f(vararg x)`) packs the trailing args into an array.
             findVarargMethod(target.javaClass, name, args, static = false)?.let { return invokeVararg(it, target, args, composable) }
@@ -291,7 +366,7 @@ class ReflectiveDispatcher(
         if (args.none { it === OmittedArg }) {
             findMethod(scope.javaClass, name, args, static = false)?.let { m ->
                 runCatching { m.isAccessible = true }
-                return m.invoke(scope, *bindArgs(m.parameterTypes, args, composable))
+                return m.invoke(scope, *bindArgs(m.parameterTypes, args, composable, m.genericParameterTypes))
             }
             findVarargMethod(scope.javaClass, name, args, static = false)?.let { return invokeVararg(it, scope, args, composable) }
         }
@@ -305,7 +380,7 @@ class ReflectiveDispatcher(
         if (args.none { it === OmittedArg }) {
             findMethod(cls, name, args, static = true)?.let { m ->
                 runCatching { m.isAccessible = true }
-                return m.invoke(null, *bindArgs(m.parameterTypes, args, composable))
+                return m.invoke(null, *bindArgs(m.parameterTypes, args, composable, m.genericParameterTypes))
             }
             findVarargMethod(cls, name, args, static = true)?.let { return invokeVararg(it, null, args, composable) }
         }
@@ -330,6 +405,10 @@ class ReflectiveDispatcher(
         val params = m.parameterTypes
         val n = params.size - 2 // realParams…, int mask, Object marker
         val k = realArgs.size
+        // The `$default` synthetic carries an ERASED signature (no `List<Color>` generic type), so value-class
+        // COLLECTION element boxing must read the generic types off the REAL method instead (same class, same
+        // first-n erased param types). Null when there's no matching real method (then only scalar boxing runs).
+        val realGenericParams = realMethodGenericParams(cls, m, n)
         // After named-arg reordering the args are ALREADY in declaration order (with [OmittedArg] holes), so
         // the trailing-lambda remap must be off and an omitted slot is simply left to its default.
         val ordered = realArgs.any { it === OmittedArg }
@@ -344,7 +423,7 @@ class ReflectiveDispatcher(
             if (slot !in 0 until n) continue
             slots[slot] = if (a is InterpretedLambda)
                 (lambdaProxies?.proxyOrNull(a, params[slot], composable.getOrElse(i) { false }) ?: regularLambdaProxy(a, params[slot]))
-            else a
+            else coerceArg(a, params[slot], realGenericParams?.getOrNull(slot))
             provided[slot] = true
         }
         // A set mask bit i ⇒ use the default for value param i. The receiver(s) precede the value params in
@@ -444,7 +523,7 @@ class ReflectiveDispatcher(
         if (!hasOmitted) {
             cls.declaredConstructors.filter { it.parameterCount == args.size }
                 .firstOrNull { paramsAccept(it.parameterTypes, args) }
-                ?.let { runCatching { it.isAccessible = true }; return it.newInstance(*bindArgs(it.parameterTypes, args, composable)) }
+                ?.let { runCatching { it.isAccessible = true }; return it.newInstance(*bindArgs(it.parameterTypes, args, composable, it.genericParameterTypes)) }
         }
         // A call that omits a defaulted parameter (`SpanStyle(fontWeight = …)`, or a trimmed trailing default
         // that left no hole) has no exact-arity match — Kotlin emits an `<init>$default` synthetic constructor
@@ -453,7 +532,7 @@ class ReflectiveDispatcher(
         // Last resort: an arity match whose types the strict [paramsAccept] rejected (preserves prior behavior).
         if (!hasOmitted) {
             cls.declaredConstructors.firstOrNull { it.parameterCount == args.size }
-                ?.let { runCatching { it.isAccessible = true }; return it.newInstance(*bindArgs(it.parameterTypes, args, composable)) }
+                ?.let { runCatching { it.isAccessible = true }; return it.newInstance(*bindArgs(it.parameterTypes, args, composable, it.genericParameterTypes)) }
         }
         throw InterpreterException("no constructor(${args.count { it !== OmittedArg }}) on $ownerFqn")
     }
@@ -471,6 +550,11 @@ class ReflectiveDispatcher(
         val (ctor, maskCount) = findDefaultConstructor(cls, realArgs, declaredParamCount) ?: return null
         val params = ctor.parameterTypes
         val n = params.size - maskCount - 1 // realParams…, int×maskCount, DefaultConstructorMarker
+        // The synthetic `<init>$default` signature is erased; read value-class COLLECTION element generics off
+        // the REAL constructor (same declaring class, identical first-n erased param types) instead.
+        val realGenericParams = cls.declaredConstructors.firstOrNull { c ->
+            c.parameterCount == n && (0 until n).all { c.parameterTypes[it] == params[it] }
+        }?.genericParameterTypes
         val slots = arrayOfNulls<Any?>(params.size)
         val masks = IntArray(maskCount)
         for (i in 0 until n) {
@@ -479,7 +563,7 @@ class ReflectiveDispatcher(
                 val a = realArgs[i]
                 slots[i] = if (a is InterpretedLambda)
                     (lambdaProxies?.proxyOrNull(a, params[i], composable.getOrElse(i) { false }) ?: regularLambdaProxy(a, params[i]))
-                else boxValueClassIfNeeded(a, params[i])
+                else coerceArg(a, params[i], realGenericParams?.getOrNull(i))
             } else {
                 slots[i] = zeroValue(params[i])
                 masks[i / 32] = masks[i / 32] or (1 shl (i % 32))
@@ -554,6 +638,88 @@ class ReflectiveDispatcher(
         return box.invoke(null, value)
     }
 
+    /**
+     * Coerce a supplied [value] to fit [paramType] for a reflective invoke. Handles the scalar value-class case
+     * ([boxValueClassIfNeeded]) AND the COLLECTION case: the interpreter represents an inline value class
+     * (`Color`, `Dp`, …) UNBOXED, so a `listOf(Color.Red, …)` it builds is a `List<Long>` — but a parameter
+     * typed `List<Color>` (erased to `List`) is read back by the callee as boxed `Color`s (`element as Color`),
+     * so the raw underlying values must be boxed first or the callee ClassCastExceptions at USE (the reported
+     * `Long cannot be cast to androidx.compose.ui.graphics.Color` gradient-brush crash —
+     * `Brush.linearGradient(listOf(Color…))`). [genericType] (the parameter's generic type) pins the element
+     * value class; when it is a `Collection<ValueClass>` and [value] is a collection, returns a copy with each
+     * element boxed (a `List` stays a `List`, a `Set` stays a `Set`).
+     */
+    private fun coerceArg(value: Any?, paramType: Class<*>, genericType: java.lang.reflect.Type?): Any? {
+        val typeArgs = (genericType as? java.lang.reflect.ParameterizedType)?.actualTypeArguments
+        // Collection<VC>: box each element (`List<Color>` built from `listOf(Color.Red, …)`).
+        if (value is Collection<*> && Collection::class.java.isAssignableFrom(paramType)) {
+            valueClassOf(typeArgs?.firstOrNull())?.let { elem ->
+                val boxed = value.map { boxValueClassIfNeeded(it, elem) }
+                return if (value is Set<*>) LinkedHashSet(boxed) else boxed
+            }
+        }
+        // Map<K, VC> / Map<VC, V>: box value-class keys/values (`Map<String, Color>`).
+        if (value is Map<*, *> && Map::class.java.isAssignableFrom(paramType) && typeArgs?.size == 2) {
+            val keyVc = valueClassOf(typeArgs[0])
+            val valVc = valueClassOf(typeArgs[1])
+            if (keyVc != null || valVc != null) {
+                val out = LinkedHashMap<Any?, Any?>(value.size)
+                value.forEach { (k, v) ->
+                    out[if (keyVc != null) boxValueClassIfNeeded(k, keyVc) else k] =
+                        if (valVc != null) boxValueClassIfNeeded(v, valVc) else v
+                }
+                return out
+            }
+        }
+        return boxValueClassIfNeeded(value, paramType)
+    }
+
+    /** The generic parameter types of the REAL method behind a `<name>$default` synthetic [syn] (whose own
+     *  signature is erased — no `List<Color>`), aligned to the synthetic's [n] real slots. The real method is
+     *  either STATIC (its params line up 1:1 with the synthetic's slots — a top-level/extension callable) or an
+     *  INSTANCE method (its `$this` receiver is the synthetic's FIRST slot but implicit in the real method, so
+     *  its params line up with slots 1..n-1). Try both, matching by name + identical erased param types; align
+     *  the found method's generics to synthetic slots (a receiver slot keeps its raw type). Null when neither
+     *  matches (a rarer shape, e.g. a member extension) — the caller then boxes only scalars. */
+    private fun realMethodGenericParams(cls: Class<*>, syn: Method, n: Int): Array<java.lang.reflect.Type>? {
+        val realName = syn.name.removeSuffix("\$default")
+        val synParams = syn.parameterTypes
+        for (offset in intArrayOf(0, 1)) {
+            val realCount = n - offset
+            if (realCount < 0) continue
+            val real = cls.methods.firstOrNull { r ->
+                r.name == realName && !r.name.endsWith("\$default") && r.parameterCount == realCount &&
+                    (0 until realCount).all { r.parameterTypes[it] == synParams[it + offset] }
+            } ?: continue
+            val g = real.genericParameterTypes
+            return Array(n) { s -> if (s < offset) synParams[s] else g.getOrElse(s - offset) { synParams[s] } }
+        }
+        return null
+    }
+
+    /** [t] as an inline VALUE CLASS (one with a static `box-impl`), unwrapping declaration-site `out` variance
+     *  (`? extends Color`). Null for a raw/type-variable type or a non-value-class — no element boxing needed. */
+    private fun valueClassOf(t: java.lang.reflect.Type?): Class<*>? {
+        val c = when (t) {
+            is Class<*> -> t
+            is java.lang.reflect.WildcardType -> t.upperBounds.firstOrNull() as? Class<*>
+            else -> null
+        } ?: return null
+        return if (c.declaredMethods.any { it.name == "box-impl" && Modifier.isStatic(it.modifiers) }) c else null
+    }
+
+    /** When [callee] is a value-class member invoked with the UNBOXED underlying receiver (a `Long` for
+     *  `Color`), the JVM owner whose static `name-<hash>` form the call must go to — else null. Detected by:
+     *  the callee's declared owner loads, is an inline value class (has a static `box-impl`), and the receiver
+     *  is NOT already an instance of it (so it is the unboxed underlying, not a boxed value-class instance). */
+    private fun unboxedValueClassOwner(receiver: Any, callee: ResolvedCallable): String? {
+        val ownerJvm = libraryOwner(callee) ?: return null
+        val cls = runCatching { loadClass(ownerJvm) }.getOrNull() ?: return null
+        if (cls.isInstance(receiver)) return null
+        val isValueClass = cls.declaredMethods.any { it.name == "box-impl" && Modifier.isStatic(it.modifiers) }
+        return if (isValueClass) ownerJvm else null
+    }
+
     /** Whether [paramType] is an inline value class whose underlying type accepts [value] — so an unboxed
      *  value-class value fits a boxed value-class parameter (it'll be boxed by [boxValueClassIfNeeded]). */
     private fun acceptsValueClassUnderlying(paramType: Class<*>, value: Any?): Boolean {
@@ -566,26 +732,41 @@ class ReflectiveDispatcher(
     /** Convert an interpreted lambda arg into a JVM functional-interface proxy of the target parameter type
      *  (composable params route through [lambdaProxies] so the Compose bridge can thread a Composer); pass
      *  everything else through. */
-    private fun bindArgs(params: Array<Class<*>>, args: List<Any?>, composable: List<Boolean>): Array<Any?> =
+    private fun bindArgs(params: Array<Class<*>>, args: List<Any?>, composable: List<Boolean>, genericParams: Array<java.lang.reflect.Type>? = null): Array<Any?> =
         Array(args.size) { i ->
             (args[i] as? InterpretedLambda)?.let { lam ->
                 lambdaProxies?.proxyOrNull(lam, params[i], composable.getOrElse(i) { false })
                     ?: regularLambdaProxy(lam, params[i])
-            } ?: boxValueClassIfNeeded(args[i], params[i])
+            } ?: coerceArg(args[i], params[i], genericParams?.getOrNull(i))
         }
 
-    private fun regularLambdaProxy(lambda: InterpretedLambda, functionalInterface: Class<*>): Any =
-        java.lang.reflect.Proxy.newProxyInstance(
+    private fun regularLambdaProxy(lambda: InterpretedLambda, functionalInterface: Class<*>): Any {
+        // A SUSPEND lambda — a `pointerInput { … }` gesture block, a `LaunchedEffect { … }` body, a coroutine
+        // builder — is invoked with a trailing `Continuation` argument (its JVM `Function.invoke` is erased to
+        // `invoke(Object)`, so suspend can only be seen at CALL time, not from the interface). When a
+        // [suspendBridge] is wired the block runs as a REAL cancellable coroutine OFF the caller thread, so
+        // suspend calls inside it (`delay`, …) actually suspend rather than busy-loop/fail. Without a bridge the
+        // synchronous interpreter can't drive suspension, so a suspend stdlib call it can't thread throws — and
+        // uncaught inside Compose's coroutine that crashes the host; the block is run best-effort, SWALLOWing a
+        // failure so the preview degrades instead of taking down the IDE. A non-suspend invocation (a map/filter
+        // predicate, an `onClick` handler) still propagates, so genuine errors there surface.
+        return java.lang.reflect.Proxy.newProxyInstance(
             functionalInterface.classLoader ?: loader, arrayOf(functionalInterface),
         ) { _, method, callArgs ->
             when (method.name) {
-                "invoke" -> lambda.invoke(callArgs?.toList() ?: emptyList())
+                "invoke" -> {
+                    val a = callArgs?.toList() ?: emptyList()
+                    if (a.lastOrNull() is kotlin.coroutines.Continuation<*>)
+                        suspendBridge?.runSuspending(lambda, a) ?: runCatching { lambda.invoke(a) }.getOrDefault(Unit)
+                    else lambda.invoke(a)
+                }
                 "toString" -> "InterpretedLambda"
                 "hashCode" -> System.identityHashCode(lambda)
                 "equals" -> callArgs?.getOrNull(0) === lambda
                 else -> null
             }
         }
+    }
 
     /** Prefer a method declared on a public type (invokable under the module system) that accepts the args.
      *  Matches a mangled JVM name (`name-<hash>`) too, for functions with inline value-class params. Cached. */
@@ -650,7 +831,7 @@ class ReflectiveDispatcher(
             } ?: boxValueClassIfNeeded(a, componentType)
             java.lang.reflect.Array.set(varargArray, j, v)
         }
-        val leading = bindArgs(m.parameterTypes.copyOfRange(0, fixed), args.subList(0, fixed), composable)
+        val leading = bindArgs(m.parameterTypes.copyOfRange(0, fixed), args.subList(0, fixed), composable, m.genericParameterTypes.copyOfRange(0, fixed))
         val callArgs = arrayOfNulls<Any?>(pc)
         for (i in 0 until fixed) callArgs[i] = leading[i]
         callArgs[fixed] = varargArray
@@ -693,6 +874,21 @@ class ReflectiveDispatcher(
         else -> c
     }
 
+    /** Whether [value]'s runtime type is a `kotlinx.coroutines.flow.Flow` — matched by interface NAME across the
+     *  type hierarchy (no kotlinx dependency in interp-core), so a `StateFlow`/`SharedFlow`/custom flow all pass. */
+    private fun isFlow(value: Any): Boolean {
+        val seen = HashSet<Class<*>>()
+        val queue = ArrayDeque<Class<*>>().apply { add(value.javaClass) }
+        while (queue.isNotEmpty()) {
+            val c = queue.removeFirst()
+            if (!seen.add(c)) continue
+            if (c.name == "kotlinx.coroutines.flow.Flow") return true
+            c.superclass?.let { queue.add(it) }
+            c.interfaces.forEach { queue.add(it) }
+        }
+        return false
+    }
+
     private fun loadClass(fqn: String): Class<*> =
         runCatching { Class.forName(fqn, false, loader) }.getOrElse {
             throw InterpreterException("cannot load class `$fqn`: ${it.message}")
@@ -705,6 +901,10 @@ class ReflectiveDispatcher(
         /** The trailing marker parameter of every Kotlin default-args synthetic constructor — distinguishes it
          *  from the real constructor (which shares the leading parameters) when scanning `declaredConstructors`. */
         const val DEFAULT_CONSTRUCTOR_MARKER = "kotlin.jvm.internal.DefaultConstructorMarker"
+
+        /** The `Flow.collect { }` terminal operators the coroutine bridge drives (inline extensions with no JVM
+         *  method); routed to [SuspendBridge.collectFlow] when the receiver is a `Flow`. */
+        val FLOW_COLLECT_NAMES = setOf("collect", "collectLatest")
 
         // The common Kotlin↔JVM mapped types (enough for constructors/operators on mapped classes).
         val KOTLIN_TO_JVM = mapOf(

@@ -133,10 +133,11 @@ class InterpreterTest {
 
     @Test
     fun unsupportedConstructFailsLoudly() {
-        // Indexed assignment (`xs[i] = v`, the `set` operator) is still outside the subset → the function isn't
-        // complete → the interpreter refuses it rather than producing a wrong result.
-        val code = "package demo\nfun f(xs: MutableList<Int>) { xs[0] = 1 }"
-        val ex = assertFailsWith<InterpreterException> { runProgram(code, "f/1", listOf(mutableListOf(0))) }
+        // A construct outside the interpreter's subset (a non-Int range) makes the function incomplete → the
+        // interpreter refuses it rather than producing a wrong result. (Indexed assignment `xs[i] = v` is now
+        // supported — see SourceClassTest.indexedAssignmentThroughSetOperator.)
+        val code = "package demo\nfun f() { val r = 1L..5L }"
+        val ex = assertFailsWith<InterpreterException> { runProgram(code, "f/0", emptyList()) }
         assertTrue(ex.message?.contains("unsupported") == true, "message=${ex.message}")
     }
 }
