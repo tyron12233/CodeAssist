@@ -16,6 +16,7 @@ import dev.ide.deps.ResolutionResult
 import dev.ide.deps.impl.DEFAULT_REPOSITORIES
 import dev.ide.deps.impl.MavenDependencyResolver
 import dev.ide.deps.impl.ResolverCache
+import dev.ide.deps.impl.VariantRequest
 import dev.ide.lang.jdt.JdtSourceAnalyzer
 import dev.ide.model.Coordinate
 import dev.ide.model.DependencyScope
@@ -83,6 +84,25 @@ internal class DependencyService(private val ctx: EngineContext) : Disposable {
         cache = depsCache,
         fileFor = { p -> ctx.store.vfs.fileFor(p) },
     )
+
+    /**
+     * The JVM-consumer resolver for non-Android (`java-lib` / Kotlin console) modules: it negotiates GMM
+     * variants with a [VariantRequest.JVM] request, so a KMP library resolves to its `-jvm` (standard-jvm)
+     * variant instead of its `-android` one. Shares the on-disk [depsCache] with [depsResolver] (the disk
+     * store keys artifacts by their resolved coordinate, which differs between the two only when the variant
+     * redirects to a differently-named platform module, e.g. `foo-android` vs `foo-jvm`, so they never
+     * collide). [resolverFor] picks between the two per consuming module.
+     */
+    private val jvmDepsResolver = MavenDependencyResolver(
+        cache = depsCache,
+        fileFor = { p -> ctx.store.vfs.fileFor(p) },
+        variantRequest = VariantRequest.JVM,
+    )
+
+    /** The resolver whose GMM variant selection matches [module]'s target: the Android request for an Android
+     *  module (facet or `android-*` type), the JVM request for a plain Java/Kotlin console/library module. */
+    private fun resolverFor(module: Module): MavenDependencyResolver =
+        if (acceptsAar(module)) depsResolver else jvmDepsResolver
 
     private val _depsState = MutableStateFlow(DepsResolveState())
     val depsState: StateFlow<DepsResolveState> get() = _depsState
@@ -410,7 +430,7 @@ internal class DependencyService(private val ctx: EngineContext) : Disposable {
         // declaration's excludes prune only its own subtree (Gradle/Maven per-declaration semantics).
         val exclusions =
             libDeps.filter { it.third.isNotEmpty() }.associate { it.second to it.third }
-        val result = depsResolver.resolve(
+        val result = resolverFor(module).resolve(
             directs.map { it.second },
             currentRepositories(),
             conflictPolicy,
@@ -749,7 +769,7 @@ internal class DependencyService(private val ctx: EngineContext) : Disposable {
             _depsState.value =
                 DepsResolveState(resolving = true, message = "Resolving ${module.name}…")
             runCatching {
-                depsResolver.resolve(
+                resolverFor(module).resolve(
                     externalCoords,
                     currentRepositories(),
                     conflictPolicy,
@@ -985,7 +1005,7 @@ internal class DependencyService(private val ctx: EngineContext) : Disposable {
         )
 
         val result = try {
-            depsResolver.resolve(
+            resolverFor(module).resolve(
                 listOf(coord),
                 currentRepositories(),
                 conflictPolicy,
@@ -1327,7 +1347,7 @@ internal class DependencyService(private val ctx: EngineContext) : Disposable {
             // classpath. (Scope/exclusion-only changes keep the same artifact, so no probe is needed.)
             if (versionChanged) {
                 val check = runCatching {
-                    depsResolver.resolve(
+                    resolverFor(module).resolve(
                         listOf(newCoord), currentRepositories(), conflictPolicy, depsProgress(),
                         platforms = declaredPlatforms(module),
                     )

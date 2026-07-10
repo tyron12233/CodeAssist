@@ -25,6 +25,31 @@ class GmmVariantSelectorTest {
     }
 
     @Test
+    fun jvmConsumerPrefersJvmOverAndroid() {
+        // The console/library (non-Android) counterpart of prefersAndroidOverJvmOverCommon: with a JVM
+        // request the `-jvm` variant must win over `-android`, so a KMP library never contaminates a
+        // non-Android classpath with its android artifact.
+        val m = module(
+            variant("common", "org.gradle.category" to "library", "org.gradle.usage" to "java-api", "org.jetbrains.kotlin.platform.type" to "common"),
+            variant("android", "org.gradle.category" to "library", "org.gradle.usage" to "java-api", "org.jetbrains.kotlin.platform.type" to "androidJvm", "org.gradle.jvm.environment" to "android"),
+            variant("jvm", "org.gradle.category" to "library", "org.gradle.usage" to "java-api", "org.jetbrains.kotlin.platform.type" to "jvm", "org.gradle.jvm.environment" to "standard-jvm"),
+        )
+        assertEquals("jvm", GmmVariantSelector.select(m, VariantRequest.JVM)?.name)
+        // The same module still resolves to -android for the (default) Android consumer.
+        assertEquals("android", GmmVariantSelector.select(m, VariantRequest())?.name)
+    }
+
+    @Test
+    fun jvmConsumerFallsBackToAndroidWhenNoJvmVariant() {
+        // A library that publishes only an -android variant is still resolvable for a JVM consumer (better
+        // than falling through to a POM that may not exist); the android variant is simply the only option.
+        val m = module(
+            variant("android", "org.gradle.category" to "library", "org.gradle.usage" to "java-api", "org.jetbrains.kotlin.platform.type" to "androidJvm", "org.gradle.jvm.environment" to "android"),
+        )
+        assertEquals("android", GmmVariantSelector.select(m, VariantRequest.JVM)?.name)
+    }
+
+    @Test
     fun nonKmpJvmLibraryIsNotPenalizedAgainstAPureJvmKmpVariant() {
         // A plain library variant (no platform.type) ranks above a `-jvm`-only KMP variant — a non-KMP lib
         // must never lose to a pure jvm variant of a different library shape.

@@ -5,13 +5,22 @@ package dev.ide.deps.impl
  * compile/analysis classpath (the IDE's dominant target), which is why a KMP library resolves to its
  * `-android` variant. The Android pipeline dexes the runtime subset separately, so a compile (`java-api`)
  * usage is requested, with a `java-runtime` fallback when a library publishes no api variant.
+ *
+ * A pure-JVM consumer (a `java-lib` / Kotlin console module) uses [JVM] instead, so a KMP library resolves
+ * to its `-jvm` (standard-jvm) variant and its `-android` variant never contaminates a non-Android classpath.
  */
 data class VariantRequest(
     val usage: String = "java-api",
     val category: String = "library",
     val platformType: String = "androidJvm",
     val jvmEnvironment: String = "android",
-)
+) {
+    companion object {
+        /** Consumer attributes for a non-Android (JVM console/library) module: prefer a library's `-jvm`
+         *  (standard-jvm) variant over its `-android` one. */
+        val JVM = VariantRequest(platformType = "jvm", jvmEnvironment = "standard-jvm")
+    }
+}
 
 /**
  * Picks the best [GmmVariant] for a [VariantRequest] using a small slice of Gradle's attribute matching:
@@ -78,13 +87,17 @@ object GmmVariantSelector {
 
     private fun score(v: GmmVariant, request: VariantRequest): Int {
         var s = 0
-        // platform.type — the decisive rule. An absent type (a plain non-KMP JVM lib) ranks above a pure
-        // `-jvm` KMP variant so non-KMP libraries are never penalized.
+        // platform.type: the decisive rule, ranked RELATIVE to the request. The requested platform wins; an
+        // absent type (a plain non-KMP JVM lib) is neutral so it is never penalized; the other concrete
+        // platforms are last-resort fallbacks. So an Android consumer still prefers `androidJvm` (and accepts
+        // `jvm`/`common` when a lib ships no android variant), while a JVM consumer prefers `jvm` and does not
+        // pick `androidJvm`. (For an Android request `request.platformType == "androidJvm"`, this is byte-for-
+        // byte the old ladder: androidJvm 100, null 20, jvm 10, common 5.)
         s += when (v.attributes[PLATFORM_TYPE]) {
-            "androidJvm" -> 100
+            request.platformType -> 100
+            null -> 20
             "jvm" -> 10
             "common" -> 5
-            null -> 20
             else -> 0
         }
         when (v.attributes[JVM_ENVIRONMENT]) {
