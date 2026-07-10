@@ -164,7 +164,10 @@ fun PushDrawer(
                 override suspend fun onPreFling(available: Velocity): Velocity {
                     if (captured) {
                         reset()
-                        settle(available.x)
+                        // Settle on `scope`, not this fling coroutine: it must be queued AFTER the last
+                        // dragBy's snapTo (same single-threaded scope, FIFO) so a stale snap can't cancel
+                        // the settle animation via the Animatable's mutation mutex and leave it stuck.
+                        scope.launch { settle(available.x) }
                         return Velocity(available.x, 0f)
                     }
                     reset()
@@ -190,7 +193,10 @@ fun PushDrawer(
                     closeDrag,
                     Orientation.Horizontal,
                     enabled = gesturesEnabled && drawerVisible,
-                    onDragStopped = { velocity -> settle(velocity) },
+                    // Settle on `scope` so it is ordered after the drag's pending snapTo (see onPreFling):
+                    // running it inline on the draggable coroutine let a stale snap cancel it, leaving the
+                    // drawer stuck mid-swipe on release instead of snapping to the nearer edge.
+                    onDragStopped = { velocity -> scope.launch { settle(velocity) } },
                 )
                 // Edge grab: a drag that *starts* within the left edge zone opens the drawer no matter
                 // what sits under the finger. Watched on the Initial pass so, once claimed (past slop,
