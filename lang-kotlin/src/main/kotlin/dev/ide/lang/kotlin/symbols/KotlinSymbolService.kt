@@ -707,8 +707,14 @@ class KotlinSymbolService(
         }
         // Kotlin built-ins (List/Int/String/…): the real members, preferred over the java.* approximation.
         // These ARE Kotlin types (even though their bytecode is java.lang.String etc.), so NO synthetic Java
-        // bean properties — `"".bytes` is not a Kotlin property of String.
-        builtinShape(fqn)?.let { return membersFromShape(it, typeArgs, visited, synthesizeBeanProps = false) }
+        // bean properties — `"".bytes` is not a Kotlin property of String. A mapped COLLECTION built-in also
+        // gets the JDK methods Kotlin grafts on from its `java.util.*` type but leaves out of `.kotlin_builtins`
+        // (`MutableList.replaceAll`/`sort`, `Map.getOrDefault`, …); see [additionalJvmMembers].
+        builtinShape(fqn)?.let { shape ->
+            val members = membersFromShape(shape, typeArgs, visited, synthesizeBeanProps = false)
+            val extraNames = Builtins.ADDITIONAL_JVM_MEMBERS[fqn] ?: return members
+            return members + additionalJvmMembers(fqn, extraNames, typeArgs, members)
+        }
         // Classpath BINARY (@Metadata Kotlin or plain Java/Android): the type's shape comes from the
         // persistent `kotlin.typeShape` index when built, else a live decode/bytecode read (graceful degrade
         // while indexing). Either way the generic shape is enumerated + bound the same way. Synthesize Java bean
@@ -973,6 +979,30 @@ class KotlinSymbolService(
             ownAndInherited(sub.qualifiedName, sub.typeArguments, visited)
         }
         return own + synthetic + inherited
+    }
+
+    /**
+     * The JDK methods Kotlin's `JvmBuiltInsCustomizer` grafts onto the mapped collection built-in [fqn]
+     * (`MutableList.replaceAll`/`sort`, `MutableMap.putIfAbsent`, `Collection.stream`, …): callable Kotlin, yet
+     * absent from the `.kotlin_builtins` shape, so completion/resolution would otherwise miss them. Pulled by
+     * name ([names], from [Builtins.ADDITIONAL_JVM_MEMBERS]) off the mapped `java.util.*` bytecode shape, bound
+     * to the receiver's [typeArgs] like any inherited member, and deduped by (name, arity) against the built-in
+     * [existing] members so an overload the built-in already declares (`MutableMap.remove(key)`) isn't doubled.
+     * Empty when the java type isn't on the classpath (dumb mode / no SDK) — a graceful degrade, not an error.
+     */
+    private fun additionalJvmMembers(
+        fqn: String,
+        names: Set<String>,
+        typeArgs: List<TypeRef>,
+        existing: List<KotlinSymbol>,
+    ): List<KotlinSymbol> {
+        val shape = typeShape(Builtins.javaTypeFor(fqn) ?: return emptyList()) ?: return emptyList()
+        val bindings = classBindings(shape, typeArgs)
+        val taken = existing.mapTo(HashSet()) { it.name to it.paramTypes.size }
+        return shape.members
+            .filter { it.kind == SymbolKind.METHOD && it.name in names }
+            .map { substituteSymbol(it, if (it.typeParameters.isEmpty()) bindings else bindings - it.typeParameters.toSet()) }
+            .filter { (it.name to it.paramTypes.size) !in taken }
     }
 
     /**

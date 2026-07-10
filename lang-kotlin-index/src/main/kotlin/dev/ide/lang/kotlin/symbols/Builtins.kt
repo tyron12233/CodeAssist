@@ -215,6 +215,28 @@ object Builtins {
         "java.util.ListIterator" to "kotlin.collections.MutableListIterator",
     )
 
+    /**
+     * JDK methods the Kotlin compiler surfaces onto a mapped collection built-in that are NOT declared in its
+     * `.kotlin_builtins` shape — the "additional built-in class members" Kotlin's `JvmBuiltInsCustomizer`
+     * grafts from the mapped `java.util.*` type (`MutableList.replaceAll`/`sort`, `Map.getOrDefault`, …). They
+     * are callable Kotlin but invisible to a pure `.kotlin_builtins` decode, so member enumeration must pull
+     * them from the JVM type ([javaTypeFor]). Keyed by the EXACT Kotlin classifier FQN so a mutating method
+     * lands only on the mutable type (a read-only `List` never inherits `replaceAll`); the non-mutating
+     * `stream`/`spliterator`/`forEach`/`getOrDefault` sit on the read-only type and reach the mutable one by
+     * inheritance. Names only — the consumer reads the actual signatures off the java bytecode shape.
+     */
+    val ADDITIONAL_JVM_MEMBERS: Map<String, Set<String>> = mapOf(
+        "kotlin.collections.Iterable" to setOf("forEach", "spliterator"),
+        "kotlin.collections.Collection" to setOf("stream", "parallelStream"),
+        "kotlin.collections.MutableCollection" to setOf("removeIf"),
+        "kotlin.collections.MutableList" to setOf("replaceAll", "sort"),
+        "kotlin.collections.Map" to setOf("getOrDefault", "forEach"),
+        "kotlin.collections.MutableMap" to setOf(
+            "putIfAbsent", "remove", "replace", "replaceAll", "merge",
+            "compute", "computeIfAbsent", "computeIfPresent",
+        ),
+    )
+
     fun javaTypeFor(kotlinFqn: String): String? = KOTLIN_TO_JAVA[kotlinFqn]
 
     /** The Kotlin classifier a JVM type maps to (`java.lang.String` → `kotlin.String`), or null if unmapped. */
