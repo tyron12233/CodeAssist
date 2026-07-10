@@ -33,6 +33,7 @@ import org.jetbrains.kotlin.psi.KtNamedFunction
 import org.jetbrains.kotlin.psi.KtObjectDeclaration
 import org.jetbrains.kotlin.psi.KtParameter
 import org.jetbrains.kotlin.psi.KtProperty
+import org.jetbrains.kotlin.psi.KtPropertyAccessor
 import org.jetbrains.kotlin.psi.KtQualifiedExpression
 import org.jetbrains.kotlin.psi.KtStringTemplateExpression
 import org.jetbrains.kotlin.psi.KtTypeParameter
@@ -185,6 +186,12 @@ class KotlinSemanticHighlighter(
                         ) + depr
                     )
                 }
+
+                // A property accessor's `get`/`set` keyword (`var x = 1` then `    private set`). The lexer
+                // colors the visibility modifier (`private`) but leaves the accessor keyword itself uncolored;
+                // emit it as a keyword so `get`/`set` read like keywords (semantic wins over lexical on overlap).
+                is KtPropertyAccessor ->
+                    emit(psi.namePlaceholder.textRange, HighlightKind.KEYWORD)
 
                 // A primary-constructor `val`/`var` parameter IS a member property (`data class`/`value class`/
                 // regular class) — color it like a property (matching its uses `p.name` and IntelliJ), not a
@@ -430,20 +437,46 @@ class KotlinSemanticHighlighter(
         ) {
             emit(ref.textRange, HighlightKind.PARAMETER, setOf(HighlightModifier.READONLY)); return
         }
+        // `field` inside a property accessor is the backing-field soft keyword (`get() = field`, `set(v) { field
+        // = v }`). No real local/param named `field` shadowed it above, so color it as a keyword.
+        if (name == "field" && ref.getStrictParentOfType<KtPropertyAccessor>() != null) {
+            emit(ref.textRange, HighlightKind.KEYWORD, emptySet()); return
+        }
         // A bare member read resolved through an implicit receiver — the `this` of an `apply`/`with`/`run` block,
         // an enclosing extension receiver, or the enclosing class (`p.apply { x }`). Colored like the qualified
         // form (`p.x`) would be in [classifyMemberSelector]; a method ref without a call is left to the lexer.
-        val member = resolver.implicitReceiverMember(name, offset) ?: return
-        when (member.kind) {
-            SymbolKind.FIELD -> emit(ref.textRange, HighlightKind.PROPERTY, deprecationMods(member))
-            SymbolKind.ENUM_CONSTANT -> emit(
-                ref.textRange,
-                HighlightKind.ENUM_CONSTANT,
-                deprecationMods(member)
-            )
-
-            else -> {} // a member / top-level / unresolved name → leave to the lexical layer
+        val member = resolver.implicitReceiverMember(name, offset)
+        if (member != null) {
+            when (member.kind) {
+                SymbolKind.FIELD -> emit(ref.textRange, HighlightKind.PROPERTY, deprecationMods(member))
+                SymbolKind.ENUM_CONSTANT -> emit(ref.textRange, HighlightKind.ENUM_CONSTANT, deprecationMods(member))
+                else -> {} // a member / top-level / unresolved name → leave to the lexical layer
+            }
+            return
         }
+        // Fallback (pure PSI): a bare read of an ENCLOSING-CLASS member property through the implicit `this`
+        // (`nickname = _nickname` inside an `init` block). The resolver's implicit-receiver lookup can miss this
+        // where a receiver scope isn't set up (an init block) or before the index is ready; a syntactic match
+        // against the enclosing class's declared members colors it regardless. Runs AFTER the resolver lookup so
+        // a nearer `apply`/`with` receiver member still wins.
+        enclosingClassMemberProperty(name, ref)?.let { isVar ->
+            emit(ref.textRange, HighlightKind.PROPERTY, mutability(isVar))
+        }
+    }
+
+    /** Whether [name] is a property of an enclosing class — a member `val`/`var` or a `val`/`var` primary-
+     *  constructor param — returning its mutability (`var` → true), or null if none. Pure PSI: colors an
+     *  enclosing-class member read even where the resolver's implicit-receiver lookup can't. */
+    private fun enclosingClassMemberProperty(name: String, from: PsiElement): Boolean? {
+        var cls = from.getStrictParentOfType<KtClassOrObject>()
+        while (cls != null) {
+            cls.body?.declarations?.filterIsInstance<KtProperty>()
+                ?.firstOrNull { it.name == name }?.let { return it.isVar }
+            (cls as? KtClass)?.primaryConstructorParameters
+                ?.firstOrNull { it.hasValOrVar() && it.name == name }?.let { return it.isMutable }
+            cls = cls.getStrictParentOfType<KtClassOrObject>()
+        }
+        return null
     }
 
     /** A callable reference's referenced callable (`Person::age`, `String::length`, `::topFun`): colored as a
@@ -533,6 +566,11 @@ class KotlinSemanticHighlighter(
                     }
                 }
 
+                // A property accessor's value parameter (`set(value) { field = value }`) — the setter's `value`.
+                // A `KtPropertyAccessor` is NOT a `KtFunction`, so it needs its own branch.
+                is KtPropertyAccessor ->
+                    node.valueParameters.firstOrNull { it.name == name }?.let { return it }
+
                 is KtForExpression -> {
                     node.loopParameter?.takeIf { it.name == name }?.let { return it }
                     // `for ((k, v) in …)` — the loop parameter is itself a destructuring.
@@ -542,7 +580,22 @@ class KotlinSemanticHighlighter(
                 is KtCatchClause -> node.catchParameter?.takeIf { it.name == name }
                     ?.let { return it }
 
-                is KtClassOrObject -> return null
+                is KtClassOrObject -> {
+                    // Plain (non-val/var) primary-constructor params are visible in init blocks / property
+                    // initializers — resolve them here (a val/var param IS a member property, colored via the
+                    // implicit-receiver path, so it is intentionally left to that path).
+                    (node as? KtClass)?.primaryConstructor?.valueParameters
+                        ?.firstOrNull { it.name == name && !it.hasValOrVar() }?.let { return it }
+                    // A local class / anonymous object CAPTURES enclosing-function locals, so keep walking past
+                    // it — unless this class declares a member of the same name (which shadows the outer local;
+                    // that member is colored by the implicit-receiver path). A member/top-level class has no
+                    // enclosing-function locals up its parent chain, so continuing simply finds nothing.
+                    val shadows = node.body?.declarations?.any {
+                        (it is KtProperty && it.name == name) || (it is KtNamedFunction && it.name == name)
+                    } == true ||
+                        (node as? KtClass)?.primaryConstructorParameters?.any { it.hasValOrVar() && it.name == name } == true
+                    if (shadows) return null
+                }
             }
             node = node.parent
         }

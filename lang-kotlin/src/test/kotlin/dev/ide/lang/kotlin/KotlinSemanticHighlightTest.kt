@@ -292,6 +292,77 @@ class KotlinSemanticHighlightTest {
         )
     }
 
+    @Test
+    fun propertyAccessorKeywordIsColored() {
+        // `private set` — the visibility modifier is colored by the lexer; the `set`/`get` accessor keyword
+        // is colored semantically (the lexer leaves it uncolored, which reads as "set is not highlighted").
+        val code = "package demo\nclass C {\n  var x = 1\n    private set\n  val y: Int get() = x\n}\n"
+        val toks = tokens("Acc.kt", code)
+        assertTrue(
+            toks.any { it.text == "set" && it.kind == "keyword" },
+            "the `set` accessor keyword should color as a keyword; got $toks",
+        )
+        assertTrue(
+            toks.any { it.text == "get" && it.kind == "keyword" },
+            "the `get` accessor keyword should color as a keyword; got $toks",
+        )
+    }
+
+    @Test
+    fun capturedLocalInAnonymousObjectIsColored() {
+        // A `var` local captured by an anonymous object's overridden method must still color as a mutable local
+        // (the scope walk has to cross the object boundary — anon objects capture enclosing locals).
+        val code = "package demo\n" +
+            "interface L { fun onClick() }\n" +
+            "fun f() {\n" +
+            "  var clickCount = 0\n" +
+            "  val l = object : L {\n" +
+            "    override fun onClick() { clickCount++ }\n" +
+            "  }\n" +
+            "}\n"
+        val toks = tokens("Cap.kt", code)
+        assertTrue(
+            toks.any { it.text == "clickCount" && it.kind == "localVariable" && HighlightModifier.MUTABLE in it.mods },
+            "a captured `var` local should color as a mutable localVariable inside an anon-object method; got $toks",
+        )
+    }
+
+    @Test
+    fun initBlockCtorParamAndPropertyAreColored() {
+        val code = "package demo\n" +
+            "class User constructor(_nickname: String) {\n" +
+            "  val nickname: String\n" +
+            "  init { nickname = _nickname }\n" +
+            "}\n"
+        val toks = tokens("Init.kt", code)
+        assertTrue(
+            toks.any { it.text == "_nickname" && it.kind == "parameter" },
+            "a plain constructor param used in `init` should color as a parameter; got $toks",
+        )
+        assertTrue(
+            toks.any { it.text == "nickname" && it.kind == "property" && HighlightModifier.DECLARATION !in it.mods },
+            "the member property assigned in `init` should color as a property; got $toks",
+        )
+    }
+
+    @Test
+    fun setterValueParamAndFieldKeywordAreColored() {
+        val code = "package demo\n" +
+            "class C {\n" +
+            "  var address = \"\"\n" +
+            "    set(value) { field = value }\n" +
+            "}\n"
+        val toks = tokens("Setter.kt", code)
+        assertTrue(
+            toks.any { it.text == "value" && it.kind == "parameter" },
+            "the setter's `value` parameter should color as a parameter; got $toks",
+        )
+        assertTrue(
+            toks.count { it.text == "field" && it.kind == "keyword" } >= 1,
+            "`field` in an accessor should color as a keyword; got $toks",
+        )
+    }
+
     companion object {
         val srcDir: Path = tempProject(mapOf(
             "Seed.kt" to "package demo\n",
