@@ -186,7 +186,12 @@ dependencies {
     api("org.jetbrains.kotlinx:kotlinx-collections-immutable-jvm:0.3.4")
     api("org.jetbrains.kotlinx:kotlinx-serialization-json:1.8.0")
     api("com.google.guava:guava:33.2.0-jre")
-    api("org.jetbrains.intellij.deps:asm-all:9.0")
+    // Relocated ASM (org.jetbrains.org.objectweb.asm.*), the sole ASM on the runtime classpath for BOTH the
+    // IntelliJ platform and the Kotlin compiler. Must match the 251 / Kotlin-2.4 era: the compiler's inliner
+    // (RemappingClassBuilder.newAnnotation) constructs AnnotationRemapper(String, AnnotationVisitor, Remapper),
+    // a constructor that only exists from ASM 9.1 onward. 9.0 lacked it, so inlining any library inline fun on
+    // device (e.g. OkHttp's addInterceptor) died with NoSuchMethodError. 9.6.1 is the platform 251 pin.
+    api("org.jetbrains.intellij.deps:asm-all:9.6.1")
     api("org.codehaus.woodstox:stax2-api:4.2.1") { isTransitive = false }
     api("com.fasterxml:aalto-xml:1.3.0") { isTransitive = false }
     api("com.github.ben-manes.caffeine:caffeine:2.9.3")
