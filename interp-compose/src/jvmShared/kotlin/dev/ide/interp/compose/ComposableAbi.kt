@@ -1,5 +1,6 @@
 package dev.ide.interp.compose
 
+import dev.ide.interp.InterpProfile
 import dev.ide.interp.InterpretedLambda
 import dev.ide.interp.OmittedArg
 import java.lang.reflect.Method
@@ -118,6 +119,7 @@ object ComposableAbi {
         argsInDeclarationOrder: Boolean = false,
         lastArgIsTrailingLambda: Boolean = originalArgs.lastOrNull() is InterpretedLambda,
     ): Any? {
+        InterpProfile.count("composeCall")
         val owner = loadClassNoInit(ownerFqn, loader) ?: Class.forName(ownerFqn)
         // A trailing-lambda remap (last arg → last value parameter) applies ONLY to a syntactic trailing lambda
         // on a purely positional call. Reordered (declaration-order) args bind positionally; an interior
@@ -199,7 +201,7 @@ object ComposableAbi {
         m.isAccessible = true
         // A static facade method ignores the receiver (null); a member composable is invoked on its instance.
         return try {
-            m.invoke(receiver, *args.toTypedArray())
+            InterpProfile.span("composeABI") { m.invoke(receiver, *args.toTypedArray()) }
         } catch (e: IllegalArgumentException) {
             // Surface WHICH argument's runtime type didn't fit its parameter — Java's bare "argument type
             // mismatch" gives no slot, masking a wrong-typed evaluated value (e.g. an enum/object read that
@@ -293,7 +295,8 @@ object ComposableAbi {
         // bundled one). A successful pick is stable; a miss `error`s and isn't cached.
         val cache = transformedCache.getOrPut(owner) { java.util.concurrent.ConcurrentHashMap() }
         val key = "$name|$preferredParamCount|$trailingLambda|${argShape(suppliedArgs)}"
-        cache[key]?.let { return it }
+        cache[key]?.let { InterpProfile.count("composeCacheHit"); return it }
+        InterpProfile.count("composeCacheMiss")
         val k = suppliedArgs.size
         val shaped = owner.methods.filter { m ->
             nameMatches(m.name, name) && composerIndex(m).let { ci ->
@@ -381,24 +384,35 @@ object ComposableAbi {
 
     private const val BITS_PER_DEFAULT_INT = 31
 
-    fun startGroup(composer: Any, key: Int) =
-        groupMethod(composer, setOf("startReplaceableGroup", "startReplaceGroup"), paramCount = 1).invoke(composer, key)
+    fun startGroup(composer: Any, key: Int) = InterpProfile.span("composeGroup") {
+        startGroupCache.getOrPut(composer.javaClass) {
+            groupMethod(composer, setOf("startReplaceableGroup", "startReplaceGroup"), paramCount = 1)
+        }.invoke(composer, key)
+    }
 
-    fun endGroup(composer: Any) =
-        groupMethod(composer, setOf("endReplaceableGroup", "endReplaceGroup"), paramCount = 0).invoke(composer)
+    fun endGroup(composer: Any) = InterpProfile.span("composeGroup") {
+        endGroupCache.getOrPut(composer.javaClass) {
+            groupMethod(composer, setOf("endReplaceableGroup", "endReplaceGroup"), paramCount = 0)
+        }.invoke(composer)
+    }
 
     // --- restart groups (granular recomposition) ---
 
     /** `composer.startRestartGroup(key): Composer` — opens a restartable group and returns the composer to
      *  use inside it. */
-    fun startRestartGroup(composer: Any, key: Int): Any =
-        composer.javaClass.methods.first { it.name == "startRestartGroup" && it.parameterCount == 1 }
-            .invoke(composer, key) ?: error("startRestartGroup returned null")
+    fun startRestartGroup(composer: Any, key: Int): Any = InterpProfile.span("composeGroup") {
+        startRestartGroupCache.getOrPut(composer.javaClass) {
+            composer.javaClass.methods.first { it.name == "startRestartGroup" && it.parameterCount == 1 }
+        }.invoke(composer, key) ?: error("startRestartGroup returned null")
+    }
 
     /** `composer.endRestartGroup(): ScopeUpdateScope?` — the scope whose [updateScope] re-runs this group on
      *  recomposition, or null if nothing observable was read (then it can't recompose). */
-    fun endRestartGroup(composer: Any): Any? =
-        composer.javaClass.methods.first { it.name == "endRestartGroup" && it.parameterCount == 0 }.invoke(composer)
+    fun endRestartGroup(composer: Any): Any? = InterpProfile.span("composeGroup") {
+        endRestartGroupCache.getOrPut(composer.javaClass) {
+            composer.javaClass.methods.first { it.name == "endRestartGroup" && it.parameterCount == 0 }
+        }.invoke(composer)
+    }
 
     // --- $changed skipping (the recomposition fast path) ---
 
@@ -442,13 +456,27 @@ object ComposableAbi {
     private val skippingGetterCache = java.util.concurrent.ConcurrentHashMap<Class<*>, Method>()
     private val skipToGroupEndCache = java.util.concurrent.ConcurrentHashMap<Class<*>, Method>()
 
+    // The group open/close/restart reflection runs on EVERY composable call, every pass — a fresh
+    // `javaClass.methods` scan each time was the dominant preview cost on ART (profiled: ~86% of first render,
+    // ~92% of recompose). Cache the resolved method per composer/scope class (identity-keyed, multi-loader-safe),
+    // exactly like `changedMethodCache`/`skippingGetterCache` above.
+    private val startGroupCache = java.util.concurrent.ConcurrentHashMap<Class<*>, Method>()
+    private val endGroupCache = java.util.concurrent.ConcurrentHashMap<Class<*>, Method>()
+    private val startRestartGroupCache = java.util.concurrent.ConcurrentHashMap<Class<*>, Method>()
+    private val endRestartGroupCache = java.util.concurrent.ConcurrentHashMap<Class<*>, Method>()
+    private val updateScopeCache = java.util.concurrent.ConcurrentHashMap<Class<*>, Method>()
+
     /** Register the recomposition block: when the scope is invalidated (a state it read changed), the real
      *  Recomposer calls [recompose] with a fresh composer. No-op if [scope] is null. */
     fun updateScope(scope: Any?, recompose: (Any) -> Unit) {
         if (scope == null) return
         // The runtime expects a `(Composer, Int) -> Unit`; a Kotlin lambda is a Function2 (generics erase).
         val block: Function2<Any?, Any?, Unit> = { composer, _ -> composer?.let(recompose) }
-        scope.javaClass.methods.first { it.name == "updateScope" && it.parameterCount == 1 }.invoke(scope, block)
+        InterpProfile.span("composeGroup") {
+            updateScopeCache.getOrPut(scope.javaClass) {
+                scope.javaClass.methods.first { it.name == "updateScope" && it.parameterCount == 1 }
+            }.invoke(scope, block)
+        }
     }
 
     private fun groupMethod(composer: Any, names: Set<String>, paramCount: Int): Method =

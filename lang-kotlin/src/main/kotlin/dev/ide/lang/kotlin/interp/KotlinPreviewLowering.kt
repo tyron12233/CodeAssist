@@ -1,5 +1,6 @@
 package dev.ide.lang.kotlin.interp
 
+import dev.ide.lang.kotlin.KotlinPerf
 import dev.ide.lang.kotlin.parse.KotlinParsedFile
 import dev.ide.lang.kotlin.parse.KotlinParserHost
 import dev.ide.lang.kotlin.symbols.KotlinSymbolService
@@ -182,7 +183,7 @@ class KotlinPreviewLowering(
     }
 
     private fun loweredFor(parsed: KotlinParsedFile): Lowered {
-        val sigHash = fileSignatureHash(parsed.ktFile)
+        val sigHash = KotlinPerf.span("sigHash") { fileSignatureHash(parsed.ktFile) }
         val prev = loweredCache[parsed.file.path]
         val sigMatch = prev != null && prev.fileSigHash == sigHash
         // Reuse the classes whole when no signature/class-body changed (only function bodies can change without
@@ -196,7 +197,7 @@ class KotlinPreviewLowering(
                 val start = fn.textRange.startOffset
                 val key = "${fn.name}/${fn.valueParameters.size}"
                 val reused = if (sigMatch) prev!!.functions[key]?.takeIf { it.textHash == ownHash && it.startOffset == start } else null
-                put(key, reused ?: FnEntry(ownHash, start, lowerOneFunction(resolver, fn)))
+                put(key, reused ?: FnEntry(ownHash, start, KotlinPerf.span("lowerFn") { lowerOneFunction(resolver, fn) }))
             }
             // Top-level source `val`/`var` (non-extension, with a value) → a synthetic zero-arg getter `name/0`,
             // so a read of it (KotlinTreeResolver.nameNode) interprets its initializer instead of reflecting a
@@ -211,10 +212,10 @@ class KotlinPreviewLowering(
                 val ownHash = prop.text.hashCode()
                 val start = prop.textRange.startOffset
                 val reused = if (sigMatch) prev!!.functions[key]?.takeIf { it.textHash == ownHash && it.startOffset == start } else null
-                put(key, reused ?: FnEntry(ownHash, start, lowerOneTopLevelProperty(resolver, prop)))
+                put(key, reused ?: FnEntry(ownHash, start, KotlinPerf.span("lowerFn") { lowerOneTopLevelProperty(resolver, prop) }))
             }
         }
-        val classes = if (sigMatch) prev!!.classes else runCatching { resolver.lowerClasses() }.getOrDefault(emptyList())
+        val classes = KotlinPerf.span("lowerClasses") { if (sigMatch) prev!!.classes else runCatching { resolver.lowerClasses() }.getOrDefault(emptyList()) }
         return Lowered(sigHash, functions, classes).also { loweredCache[parsed.file.path] = it }
     }
 
