@@ -75,6 +75,11 @@ fun CreateProjectScreen(
     initialTemplateId: String? = null,
 ) {
     val templates = remember { backend.projects.projectTemplates() }
+    // Sample projects (weather, notes, the Compose games…) belong to the Explore page only; the
+    // Create-Project gallery lists starter templates. They keep the `sample-` id prefix the store
+    // partitions on. A sample can still be created here when deep-linked from Explore, since
+    // `initialTemplateId` resolves against the full list below.
+    val galleryTemplates = remember(templates) { templates.filterNot { it.id.startsWith("sample-") } }
     var selected by remember(initialTemplateId) {
         mutableStateOf(initialTemplateId?.let { id -> templates.firstOrNull { it.id == id } })
     }
@@ -85,7 +90,7 @@ fun CreateProjectScreen(
             val sel = selected
             if (sel == null) {
                 Gallery(
-                    templates = templates,
+                    templates = galleryTemplates,
                     onBack = onCancel,
                     onPick = { selected = it },
                 )
