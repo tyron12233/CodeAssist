@@ -119,11 +119,21 @@ object ComposableAbi {
         lastArgIsTrailingLambda: Boolean = originalArgs.lastOrNull() is InterpretedLambda,
     ): Any? {
         val owner = loadClassNoInit(ownerFqn, loader) ?: Class.forName(ownerFqn)
+        // A trailing-lambda remap (last arg → last value parameter) applies ONLY to a syntactic trailing lambda
+        // on a purely positional call. Reordered (declaration-order) args bind positionally; an interior
+        // OmittedArg hole likewise means the caller already placed the args. Computed HERE (before overload
+        // selection) so that both the overload pick ([transformedMethod]) and the slot binding below use the
+        // SAME rule — otherwise a call whose only supplied args are `value` + an in-parens `onValueChange` lambda
+        // (e.g. `OutlinedTextField(value = …, onValueChange = { … })` after its `label`/`placeholder` were
+        // removed, leaving no interior holes) has selection wrongly remap the lambda onto the last parameter
+        // while binding does not — so selection rejects the real (`String`) overload and falls back to a
+        // sibling (`TextFieldValue`) whose `value` slot the String can't fill, dropping it → `value = null` NPE.
+        val trailingLambda = !argsInDeclarationOrder && lastArgIsTrailingLambda && originalArgs.none { it === OmittedArg }
         // Pick the transformed overload to invoke from the RUNTIME class, then derive the real value-parameter
         // count from its Composer position. We do NOT trust [declaredParamCount] as the count — the resolver
         // sees the project's classpath, which can be a different build of the library than the one loaded here
         // (e.g. project Android Compose vs. the IDE's bundled Desktop Compose); it's only a tie-break hint.
-        val m = transformedMethod(owner, method, originalArgs, declaredParamCount)
+        val m = transformedMethod(owner, method, originalArgs, declaredParamCount, trailingLambda)
         val n = composerIndex(m)
         val paramTypes = m.parameterTypes
         val trailingInts = m.parameterCount - n - 1
@@ -138,10 +148,6 @@ object ComposableAbi {
         // Bind supplied args to parameter slots. After named-arg reordering the args are already in declaration
         // order (with `OmittedArg` holes); otherwise a trailing lambda binds to the last declared parameter.
         val k = originalArgs.size
-        // A trailing-lambda remap (last arg → last value parameter) applies ONLY to a syntactic trailing lambda
-        // on a purely positional call. Reordered (declaration-order) args bind positionally; an interior
-        // OmittedArg hole likewise means the caller already placed the args.
-        val trailingLambda = !argsInDeclarationOrder && lastArgIsTrailingLambda && originalArgs.none { it === OmittedArg }
         val slots = arrayOfNulls<Any?>(n)
         val provided = BooleanArray(n)
         for (i in 0 until k) {
@@ -279,13 +285,14 @@ object ComposableAbi {
      * value-param count is the Composer's index — read off the runtime method, not assumed. Among matches,
      * prefer the one whose count equals [preferredParamCount] (the resolver's pick), else the fewest params.
      */
-    private fun transformedMethod(owner: Class<*>, name: String, suppliedArgs: List<Any?>, preferredParamCount: Int): Method {
+    private fun transformedMethod(owner: Class<*>, name: String, suppliedArgs: List<Any?>, preferredParamCount: Int, trailingLambda: Boolean): Method {
         // This `owner.methods` scan + overload pick runs for every composable call on every recomposition, yet
-        // it's deterministic given the owner, name, the args' runtime-TYPE shape, and the preferred count — so
+        // it's deterministic given the owner, name, the args' runtime-TYPE shape, the preferred count, and
+        // whether the last arg is a trailing lambda (which changes the slot each arg is checked against) — so
         // cache it. Keyed on the Class IDENTITY (a relocated/project-loader Composer build must not alias the
         // bundled one). A successful pick is stable; a miss `error`s and isn't cached.
         val cache = transformedCache.getOrPut(owner) { java.util.concurrent.ConcurrentHashMap() }
-        val key = "$name|$preferredParamCount|${argShape(suppliedArgs)}"
+        val key = "$name|$preferredParamCount|$trailingLambda|${argShape(suppliedArgs)}"
         cache[key]?.let { return it }
         val k = suppliedArgs.size
         val shaped = owner.methods.filter { m ->
@@ -293,7 +300,7 @@ object ComposableAbi {
                 ci >= k && (ci + 1 until m.parameterCount).all { m.parameterTypes[it] == Int::class.javaPrimitiveType }
             }
         }
-        val accepting = shaped.filter { firstParamsAccept(it, suppliedArgs, composerIndex(it)) }.ifEmpty { shaped }
+        val accepting = shaped.filter { firstParamsAccept(it, suppliedArgs, composerIndex(it), trailingLambda) }.ifEmpty { shaped }
         val chosen = accepting
             .sortedWith(compareBy({ if (composerIndex(it) == preferredParamCount) 0 else 1 }, { composerIndex(it) }))
             .firstOrNull()
@@ -318,11 +325,11 @@ object ComposableAbi {
     }
 
     /** Whether the supplied args (bound by position, trailing lambda → last slot) fit a candidate's first [n]
-     *  parameter types — a lambda fits any interface; a null fits any reference type. */
-    private fun firstParamsAccept(m: Method, suppliedArgs: List<Any?>, n: Int): Boolean {
+     *  parameter types — a lambda fits any interface; a null fits any reference type. [trailingLambda] MUST be
+     *  the same value [call] uses to bind, so overload selection and slot binding agree on where the final
+     *  lambda lands (a mismatch picks an overload the binding then can't fill). */
+    private fun firstParamsAccept(m: Method, suppliedArgs: List<Any?>, n: Int, trailingLambda: Boolean): Boolean {
         val k = suppliedArgs.size
-        val ordered = suppliedArgs.any { it === OmittedArg }
-        val trailingLambda = !ordered && suppliedArgs.lastOrNull() is InterpretedLambda
         for (i in 0 until k) {
             val a = suppliedArgs[i]
             if (a === OmittedArg) continue // an omitted slot fits any param (filled from $default)

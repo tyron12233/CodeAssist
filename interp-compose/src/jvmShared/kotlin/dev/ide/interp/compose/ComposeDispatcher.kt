@@ -44,6 +44,9 @@ class ComposeDispatcher(
             // A composable function-type param: thread the Composer; otherwise let the default proxy run.
             if (composable) composableLambdaProxy(lambda, fi) else null
         },
+        // Run interpreted `suspend` blocks (a `LaunchedEffect`/`launch` body) as real, cancellable coroutines
+        // off the caller thread, so `delay`-driven timers actually tick instead of busy-looping the UI thread.
+        suspendBridge = ComposeSuspendBridge(),
     )
 
     /** The live composer for the current composition pass; null outside a composition. */

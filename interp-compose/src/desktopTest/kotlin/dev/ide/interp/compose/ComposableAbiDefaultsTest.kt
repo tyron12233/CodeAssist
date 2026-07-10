@@ -396,6 +396,48 @@ class ComposableAbiDefaultsTest {
     }
 
     @Test
+    fun overloadSelectionUsesTheSameTrailingLambdaRuleAsBinding() {
+        // The reported `OutlinedTextField` freeze: `OutlinedTextField(value = "", onValueChange = { … })` with
+        // its `label`/`placeholder` removed. Two overloads share the `value: String` first parameter shape;
+        // `Field` mirrors it — the intended overload has a NON-interface last parameter (`extra: String`, cf.
+        // OutlinedTextField's `colors: TextFieldColors`), a sibling `Decoy` overload's last parameter is a
+        // lambda. Named-arg reordering drops the omitted trailing params, leaving `["", λ]` with NO interior
+        // holes. OVERLOAD SELECTION used to re-derive its own trailing-lambda rule (last arg is a lambda + no
+        // holes ⇒ remap onto the last parameter) that BINDING did not, so it rejected the real overload (its
+        // last param isn't an interface) and picked the `Decoy` — whose slots the args can't fill, dropping
+        // `value` → a non-null `value` bound null → NPE that unwinds the preview. Selection must use the SAME
+        // trailing-lambda decision as binding (here: an in-parens named lambda ⇒ NO remap ⇒ bind positionally).
+        val facade = "dev.ide.interp.compose.ComposableAbiDefaultsTestKt"
+        val span = dev.ide.lang.kotlin.interp.SourceSpan(0, 0)
+        val lambda = object : dev.ide.interp.InterpretedLambda {
+            override val paramCount = 1
+            override fun invoke(args: List<Any?>): Any? = null
+        }
+        fun arg(name: String, v: dev.ide.lang.kotlin.interp.RNode) = dev.ide.lang.kotlin.interp.RArg(v, name, false, false)
+        val callee = dev.ide.lang.kotlin.interp.ResolvedCallable.Library(
+            displayName = "Field", ownerFqn = facade, methodName = "Field",
+            paramTypes = listOf(
+                dev.ide.lang.kotlin.symbols.KotlinType("kotlin.String"),
+                dev.ide.lang.kotlin.symbols.KotlinType("kotlin.Function1"),
+                dev.ide.lang.kotlin.symbols.KotlinType("kotlin.String"),
+            ),
+            isStatic = true, isConstructor = false, isInline = false, isComposable = true,
+            paramNames = listOf("value", "onValueChange", "extra"),
+        )
+        val call = dev.ide.lang.kotlin.interp.RNode.Call(
+            callee, dev.ide.lang.kotlin.interp.DispatchKind.TOP_LEVEL, receiver = null,
+            args = listOf(arg("value", dev.ide.lang.kotlin.interp.RNode.Const("hi", null, span)), arg("onValueChange", dev.ide.lang.kotlin.interp.RNode.Const(null, null, span))),
+            callSiteKey = dev.ide.lang.kotlin.interp.CallSiteKey(23), source = span,
+        )
+        val dispatcher = ComposeDispatcher()
+        composeOnce {
+            dispatcher.composer = currentComposer
+            dispatcher.dispatch(call, receiver = null, args = listOf<Any?>("hi", lambda))
+        }
+        assertEquals("field:hi", Capture.label, "the `value`-taking overload must be chosen and `value` bound (not dropped → null)")
+    }
+
+    @Test
     fun positionalInParensLambdaDoesNotRemapToLastParam() {
         // The same shape, purely positional through the ABI (`Toggle(true, { })` — the `{ }` is an in-parens
         // value argument, not a trailing lambda): with lastArgIsTrailingLambda = false it binds to `onChange`,
@@ -632,6 +674,22 @@ class Paint(val hue: Hue = Hue(0xFF0000L), val size: Int = 12, val name: String 
 /** A class with a NULLABLE value-class param (cf. `SpanStyle.fontStyle: FontStyle?`): nullability forces the
  *  JVM param to the BOXED `Hue`, so an unboxed supplied value must be boxed before the synthetic invoke. */
 class Banner(val tint: Hue? = null, val text: String = "hi")
+
+/** The `OutlinedTextField` overload shape in miniature: a required non-null `value: String` first parameter
+ *  and a NON-interface LAST parameter (`extra`, cf. `colors: TextFieldColors`). The intended overload the
+ *  reordered `Field(value = "hi", onValueChange = { })` call must resolve to. */
+@Composable
+fun Field(value: String, onValueChange: (String) -> Unit, extra: String = "def") {
+    Capture.label = "field:$value"
+}
+
+/** A sibling `Field` overload whose LAST parameter is a lambda — the decoy a trailing-lambda remap in overload
+ *  selection would wrongly pick (the intended overload's last param isn't an interface, so a remap rejects it).
+ *  Binding never remaps here (an in-parens named lambda), so selection must not either. */
+@Composable
+fun Field(value: String, decoy: () -> Unit = {}) {
+    Capture.label = "decoy"
+}
 
 /** Top-level capture sink (the composable writes here; the test reads it). */
 object Capture {
