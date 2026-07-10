@@ -1927,15 +1927,26 @@ class IdeServices private constructor(
             )
         )
         if (analyzer.hasSyntaxErrors(vf)) return listOf("the file has syntax errors — fix them to preview")
-        val program = previewModelFor(module, vf, analyzer)?.program ?: emptyMap()
+        val model = previewModelFor(module, vf, analyzer)
+        val program = model?.program ?: emptyMap()
         val entry = previewEntry(program, functionName, arity)
             ?: return listOf("`$functionName` not found as a @Composable (lowered: ${program.keys.joinToString()})")
-        entry.diagnostics.map { d ->
+        // Mirror the gate in [lowerComposePreview]: a preview is blocked when the entry OR any source class it
+        // transitively reaches fails to lower. Report BOTH so the reason is never invisible. The entry's own
+        // diagnostics slice from this file's text; a reachable class's offsets are into ANOTHER file (e.g. a
+        // helper `class` in a sibling file), so those are reported by class name + reason without a snippet.
+        val entryProblems = entry.diagnostics.map { d ->
             val snippet = text.substring(
                 d.source.start.coerceIn(0, text.length), d.source.end.coerceIn(0, text.length)
             ).replace('\n', ' ').trim()
             if (snippet.isBlank()) d.reason else "${d.reason}: \"$snippet\""
         }
+        val classes = model?.classes ?: emptyList()
+        val reachable = dev.ide.lang.kotlin.interp.reachableSourceClasses(entry, program, classes)
+        val classProblems = classes.filter { it.fqn in reachable && !it.isComplete }.flatMap { c ->
+            (c.diagnostics + c.methods.values.flatMap { it.diagnostics }).map { "in ${c.simpleName}: ${it.reason}" }
+        }
+        (entryProblems + classProblems)
             .ifEmpty { listOf("`$functionName` lowered with no diagnostics — it may render; if not, the failure is in the render path") }
     } catch (t: Throwable) {
         // NEVER return empty on a failure path — a bare "can't be interpreted" with no reason is useless.
