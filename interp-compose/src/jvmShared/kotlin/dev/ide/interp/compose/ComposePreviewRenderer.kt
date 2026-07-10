@@ -4,6 +4,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.currentComposer
 import androidx.compose.runtime.remember
+import dev.ide.interp.InterpProfile
 import dev.ide.interp.Interpreter
 import dev.ide.lang.kotlin.interp.ResolvedClass
 import dev.ide.lang.kotlin.interp.ResolvedFunction
@@ -86,11 +87,33 @@ class ComposePreviewRenderer(
         onError: @Composable (Throwable) -> Unit = {},
         onPartialError: (Throwable?) -> Unit = {},
     ) {
+        // Live edit: the lowerer REUSES the ResolvedFunction instance for a function whose text is unchanged, so
+        // the set of functions that actually changed since the last render is exactly those whose instance now
+        // differs — an identity diff of consecutive program maps. A changed function always gets a fresh instance
+        // (no false negatives → no stale body); if the pipeline ever copies instances, everything just looks
+        // dirty and re-runs (still correct — state survives via the edit-stable call-site keys). First render:
+        // empty (a fresh composition skips nothing anyway).
+        val prevProgram = remember { arrayOfNulls<Map<String, ResolvedFunction>>(1) }
+        val dirtyCallees = remember(program) {
+            val prev = prevProgram[0]
+            (if (prev == null) emptySet() else program.keys.filterTo(HashSet()) { program[it] !== prev[it] })
+                .also { prevProgram[0] = program }
+        }
         val interpreter = remember(program, classes) {
             // tolerateGaps: a single unsupported construct skips rather than blanking the whole preview (the
             // editor default); a lesson passes false so a gap surfaces as a visible error instead of a blank.
-            Interpreter(program, dispatcher, runtime, classLoader = loader, classes = classes, tolerateGaps = tolerateGaps)
+            Interpreter(program, dispatcher, runtime, classLoader = loader, classes = classes, tolerateGaps = tolerateGaps, dirtyCallees = dirtyCallees)
         }
+        // Phase label for the profiler: the very first composition, an edit that dirtied some functions
+        // (live-edit re-render), or a plain re-render. State-driven recompositions of a single child scope are
+        // measured separately (they don't re-run Render — see ComposeRuntime's updateScope trace).
+        val firstPass = remember { booleanArrayOf(true) }
+        val phase = when {
+            firstPass[0] -> "first"
+            dirtyCallees.isNotEmpty() -> "liveEdit"
+            else -> "render"
+        }
+        firstPass[0] = false
         // We're inside the IDE's composition: thread its composer, then drive the preview through its own
         // restart group so state changes recompose just the preview subtree.
         dispatcher.composer = currentComposer
@@ -98,8 +121,10 @@ class ComposePreviewRenderer(
             // The preview root is never skipped (restartable=false → always re-runs): it only recomposes when
             // state IT read changed, in which case it must run. Skipping is a win for the CHILD composables it
             // invokes (each routed through the interpreter's restartable=returnsUnit path), not the root itself.
-            runtime.invokeComposable(entry.name.hashCode(), restartable = false, args = emptyList()) {
-                interpreter.call(entry, args)
+            InterpProfile.trace("interp.render", phase) {
+                runtime.invokeComposable(entry.name.hashCode(), restartable = false, force = false, args = emptyList()) {
+                    interpreter.call(entry, args)
+                }
             }
             null
         } catch (t: Throwable) {

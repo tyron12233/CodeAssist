@@ -33,6 +33,29 @@ class KotlinTreeResolverTest {
 
     private fun ResolvedFunction.stmts(): List<RNode> = assertIs<RNode.Block>(body, "block body expected").statements
 
+    private fun lowerNamed(code: String, name: String): ResolvedFunction {
+        val kt = KotlinParserHost.parse("Use.kt", code)
+        val parsed = KotlinParsedFile(kt, DiskFile(srcDir.resolve("Use.kt")), 0)
+        val resolver = KotlinTreeResolver(kt, parsed, service)
+        val fn = kt.declarations.filterIsInstance<org.jetbrains.kotlin.psi.KtNamedFunction>().first { it.name == name }
+        return resolver.lowerFunction(fn)
+    }
+
+    @Test
+    fun callSiteKeysAreStableWhenAnotherFunctionIsEdited() {
+        // Live edit relies on FUNCTION-RELATIVE call-site keys: editing one function shifts every source offset
+        // after it, but a later function's keys must NOT change (else the Compose runtime re-keys its groups and
+        // discards its state). Edit A (add a call) and confirm B's call-site key is unchanged.
+        val v1 = "package p\nfun A() { listOf(1) }\nfun B() { listOf(2) }"
+        val v2 = "package p\nfun A() { listOf(1); listOf(1) }\nfun B() { listOf(2) }"
+        fun bCallKey(code: String): Int {
+            var key: Int? = null
+            lowerNamed(code, "B").body.walk { if (it is RNode.Call && key == null) key = it.callSiteKey.value }
+            return assertNotNull(key, "B should contain a call")
+        }
+        assertEquals(bCallKey(v1), bCallKey(v2), "editing A must not shift B's call-site keys")
+    }
+
     @Test
     fun localsBindToSlotsAndUsesReferenceThem() {
         val fn = lower("package demo\nfun f() { val x = 1\n  val y = x }")

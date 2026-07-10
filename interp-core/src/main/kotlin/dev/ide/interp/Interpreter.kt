@@ -44,6 +44,10 @@ class Interpreter(
      *  still renders. Skipping happens BEFORE the node is evaluated, so no Compose group is left open. Off by
      *  default: the console Run (and tests) still fail loudly so a broken program is reported, not half-run. */
     private val tolerateGaps: Boolean = false,
+    /** Live-edit dirty set: the `"name/arity"` keys of source composables whose body CHANGED since the last
+     *  render. Such a call is forced to re-run (its `$changed` skip is overridden) so the edit shows, while
+     *  unchanged composables still skip and keep their state. Empty = a normal (non-incremental) render. */
+    private val dirtyCallees: Set<String> = emptySet(),
 ) {
     /** Source classes indexed by fully-qualified name and by simple name (a constructor callee carries the
      *  simple name; an object/enum reference carries the resolved FQN). */
@@ -164,7 +168,7 @@ class Interpreter(
         is RNode.Break -> throw BreakSignal
         is RNode.Continue -> throw ContinueSignal
         is RNode.Call -> evalCall(node, env)
-        is RNode.Lambda -> Closure(node, env)
+        is RNode.Lambda -> { InterpProfile.count("closures"); Closure(node, env) }
         is RNode.StringConcat -> buildString { node.parts.forEach { append(eval(it, env)?.toString() ?: "null") } }
         is RNode.PropertyGet -> {
             val binding = node.binding
@@ -251,6 +255,7 @@ class Interpreter(
     }
 
     private fun evalCall(call: RNode.Call, env: Env): Any? {
+        InterpProfile.count("calls")
         val callee = call.callee
         // Operators are computed intrinsically: arithmetic/comparison on numbers and structural equality have
         // no JVM method to invoke (a synthetic callee). Arithmetic on a non-number falls through to dispatch.
@@ -288,12 +293,15 @@ class Interpreter(
         // A source function is interpreted recursively (its body is available). A `@Composable` one is run
         // through the composable invoker (restart group + recomposition) when a Compose host is present.
         if (callee is ResolvedCallable.Source && call.dispatch == DispatchKind.TOP_LEVEL) {
+            InterpProfile.count("src")
             val target = functions["${callee.displayName}/${call.args.size}"]
                 ?: throw InterpreterException("no source function `${callee.displayName}/${call.args.size}`")
             val argv = call.args.map { eval(it.value, env) }
             val invoke = { call(target, argv) }
             return if (callee.isComposable && composableInvoker != null) {
-                composableInvoker.invokeComposable(call.callSiteKey.value, target.returnsUnit, argv, invoke)
+                val force = "${callee.displayName}/${call.args.size}" in dirtyCallees
+                if (InterpTrace.enabled) InterpTrace.log("dispatch @Composable ${callee.displayName}/${call.args.size} key=${call.callSiteKey.value} force=$force")
+                composableInvoker.invokeComposable(call.callSiteKey.value, target.returnsUnit, force, argv, invoke)
             } else {
                 invoke()
             }
@@ -905,7 +913,11 @@ class Interpreter(
     private fun readProperty(receiver: Any, name: String): Any? {
         if (receiver is SourceObject) return readSourceProperty(receiver, name)
         val getter = "get" + name.replaceFirstChar { if (it.isLowerCase()) it.titlecase() else it.toString() }
-        (noArgMethod(receiver, getter) ?: noArgMethod(receiver, name))?.let { return it.invoke(receiver) }
+        (noArgMethod(receiver, getter) ?: noArgMethod(receiver, name))?.let {
+            val v = it.invoke(receiver)
+            if (InterpTrace.isComposeState(receiver, name)) InterpTrace.log("read  $name = $v on ${InterpTrace.id(receiver)}")
+            return v
+        }
         // No plain (no-arg) getter — the name may be a nested `object` accessed through its enclosing
         // object/class (`Icons.AutoMirrored`, `Icons.AutoMirrored.Filled`): a nested object compiles to
         // `<Enclosing>$<name>` with its own `INSTANCE`, not a getter on the receiver instance.
@@ -935,6 +947,7 @@ class Interpreter(
         val setter = "set" + name.replaceFirstChar { if (it.isLowerCase()) it.titlecase() else it.toString() }
         val m = (oneArgMethod(receiver, setter) ?: oneArgMethod(receiver, name))
             ?: throw InterpreterException("no writable property `$name` on ${receiver.javaClass.name}")
+        if (InterpTrace.isComposeState(receiver, name)) InterpTrace.log("write $name <- $value on ${InterpTrace.id(receiver)}")
         m.invoke(receiver, value)
     }
 
@@ -1095,6 +1108,7 @@ class Interpreter(
      * the previous `HashMap` allocated a node table plus a node per entry for every scope, every recomposition.
      */
     private class Env(private val parent: Env? = null) {
+        init { InterpProfile.count("env") }
         private var keys: IntArray? = null
         private var values: Array<Any?>? = null
         private var size = 0

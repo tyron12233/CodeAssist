@@ -228,9 +228,15 @@ object SuspendContext {
  * composition, the host may skip [body] entirely (`composer.skipToGroupEnd()`) instead of re-interpreting the
  * whole subtree — the `$changed` fast path. A non-restartable composable always runs [body] (its result is
  * needed), and [args] is ignored.
+ *
+ * [force] overrides the skip for THIS invocation: the callee's body CHANGED since the last render (a live edit),
+ * so it must re-run even if its args are unchanged — otherwise the `$changed` fast path would keep the stale
+ * body. Only the immediate call is forced; a later state-driven recomposition of the same group is not (an edit
+ * is a one-shot). This is what makes incremental live-edit correct: unchanged functions still skip (state
+ * preserved), the edited one re-runs.
  */
 fun interface ComposableInvoker {
-    fun invokeComposable(callSiteKey: Int, restartable: Boolean, args: List<Any?>, body: () -> Any?): Any?
+    fun invokeComposable(callSiteKey: Int, restartable: Boolean, force: Boolean, args: List<Any?>, body: () -> Any?): Any?
 }
 
 /**
@@ -248,7 +254,13 @@ class ReflectiveDispatcher(
     private val suspendBridge: SuspendBridge? = null,
 ) : Dispatcher {
 
-    override fun dispatch(call: RNode.Call, receiver: Any?, args: List<Any?>): Any? {
+    override fun dispatch(call: RNode.Call, receiver: Any?, args: List<Any?>): Any? =
+        InterpProfile.span("reflectDispatch") {
+            InterpProfile.count("reflect")
+            dispatchImpl(call, receiver, args)
+        }
+
+    private fun dispatchImpl(call: RNode.Call, receiver: Any?, args: List<Any?>): Any? {
         val callee = call.callee
         // `flow.collect { action }` / `collectLatest` — the collect extension is `inline` (no reflectable JVM
         // method), so drive it through the coroutine bridge: a blocking collect on this (bridge-managed) thread,
@@ -327,15 +339,18 @@ class ReflectiveDispatcher(
 
     /** A stable key for [args] by runtime type — enough to pick the same overload, distinguishing null,
      *  omitted (default), an interpreted lambda, and each concrete class. */
-    private fun argShape(args: List<Any?>): String = buildString {
-        for (a in args) {
-            when {
-                a == null -> append('∅')
-                a === OmittedArg -> append('_')
-                a is InterpretedLambda -> append('λ')
-                else -> append(a.javaClass.name)
+    private fun argShape(args: List<Any?>): String {
+        InterpProfile.count("argShape")
+        return buildString {
+            for (a in args) {
+                when {
+                    a == null -> append('∅')
+                    a === OmittedArg -> append('_')
+                    a is InterpretedLambda -> append('λ')
+                    else -> append(a.javaClass.name)
+                }
+                append(';')
             }
-            append(';')
         }
     }
 
@@ -445,7 +460,8 @@ class ReflectiveDispatcher(
     private fun findDefaultSynthetic(cls: Class<*>, name: String, realArgs: List<Any?>): Method? {
         val cache = cacheFor(cls)
         val key = "d|$name|${argShape(realArgs)}"
-        cache[key]?.let { return it.method }
+        cache[key]?.let { InterpProfile.count("cacheHit"); return it.method }
+        InterpProfile.count("cacheMiss")
         val m = (cls.methods.asSequence() + interfaceDefaultSynthetics(cls, name))
             .filter { Modifier.isStatic(it.modifiers) && isDefaultSynthetic(it.name, name) && fitsDefaultSynthetic(it, realArgs) }
             .minByOrNull { it.parameterCount }
@@ -773,7 +789,8 @@ class ReflectiveDispatcher(
     private fun findMethod(cls: Class<*>, name: String, args: List<Any?>, static: Boolean): Method? {
         val cache = cacheFor(cls)
         val key = "m|$name|$static|${argShape(args)}"
-        cache[key]?.let { return it.method }
+        cache[key]?.let { InterpProfile.count("cacheHit"); return it.method }
+        InterpProfile.count("cacheMiss")
         return findMethodUncached(cls, name, args, static).also { cache[key] = MethodHolder(it) }
     }
 
@@ -804,7 +821,8 @@ class ReflectiveDispatcher(
     private fun findVarargMethod(cls: Class<*>, name: String, args: List<Any?>, static: Boolean): Method? {
         val cache = cacheFor(cls)
         val key = "v|$name|$static|${argShape(args)}"
-        cache[key]?.let { return it.method }
+        cache[key]?.let { InterpProfile.count("cacheHit"); return it.method }
+        InterpProfile.count("cacheMiss")
         return findVarargMethodUncached(cls, name, args, static).also { cache[key] = MethodHolder(it) }
     }
 
