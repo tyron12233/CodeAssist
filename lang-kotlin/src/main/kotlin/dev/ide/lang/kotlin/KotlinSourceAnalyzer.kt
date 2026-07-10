@@ -137,6 +137,22 @@ class KotlinSourceAnalyzer(ctx: CompilationContext) : SourceAnalyzer, Disposable
     }
     private val service: KotlinSymbolService get() = serviceLazy.value
 
+    /** Whether the classpath symbol model can resolve library symbols yet. False during "dumb mode" (the
+     *  workspace index is still building on first launch), the window in which library callables resolve to
+     *  0 candidates. Mirrors the gate the editor's diagnostics/completion already honor; the Compose preview
+     *  uses it to tell a still-warming classpath from a genuinely unsupported construct. */
+    fun classpathReady(): Boolean = runCatching { service.classpathReady() }.getOrDefault(true)
+
+    /** Whether the Compose runtime is actually on this module's classpath: a top-level `mutableStateOf` from
+     *  `androidx.compose.runtime` resolves. Lets the preview distinguish "the `androidx.compose.*` AARs are
+     *  still attaching" (the Learn scratch's one-time first-run download; show Preparing and retry) from a
+     *  real failure. Defaults to true on any error so it never blocks a working preview. */
+    fun composeRuntimeAttached(): Boolean = runCatching {
+        service.topLevelByName("mutableStateOf").any {
+            (it.packageName ?: it.declaringClassFqn.orEmpty()).startsWith("androidx.compose.runtime")
+        }
+    }.getOrDefault(true)
+
     private val backing = KotlinIncrementalParser()
     private val lastByFile = ConcurrentHashMap<String, KotlinParsedFile>()
 

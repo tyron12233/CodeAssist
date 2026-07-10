@@ -36,7 +36,14 @@ import dev.ide.ui.editor.preview.PreviewIssueLevel
 import dev.ide.ui.editor.preview.PreviewRenderError
 import dev.ide.platform.log.Log
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.withContext
+
+/** Poll cadence + patience while the classpath warms (first-run indexing / scratch dep attach) before the
+ *  preview gives up waiting and surfaces whatever it can lower. ~3 min comfortably covers a cold first-run
+ *  index; the cap only bites the degenerate case where readiness never arrives (e.g. an offline scratch). */
+private const val PREVIEW_READY_POLL_MS = 600L
+private const val PREVIEW_READY_MAX_ATTEMPTS = 300
 
 /**
  * The on-device Compose preview host (the editor's live-pixel renderer). Lowers the open file's `@Preview`
@@ -53,14 +60,27 @@ class AndroidComposePreviewHost(private val backend: IdeServicesBackend) : Compo
         val report by rememberUpdatedState(onProblems)
         val reportBusy by rememberUpdatedState(onBusy)
         val state by produceState<PreviewState>(PreviewState.Loading, path, preview.functionName, preview.arity, text) {
-            val lowered = runCatching { backend.lowerComposePreview(path, preview.functionName, preview.arity, text) }.getOrNull()
-            value = if (lowered != null) PreviewState.Ready(lowered) else {
-                // Surface WHY it isn't interpretable (the unsupported constructs + offending source) instead of
-                // a bare message, so a gap is investigable. Even a thrown error becomes a visible reason.
-                val why = runCatching { backend.composePreviewDiagnostics(path, preview.functionName, preview.arity, text) }
-                    .getOrElse { listOf("couldn't analyze: ${it::class.simpleName}: ${it.message}") }
-                    .ifEmpty { listOf("no reason reported (analysis returned nothing)") }
-                PreviewState.NotInterpretable(why)
+            // First-run resilience: while the workspace index is still building, library composables (`Text`,
+            // `Column`, `remember`) resolve to 0 candidates and the lower fails. Rather than latch that transient
+            // failure into a permanent "unresolved call" error, stay in Loading and re-lower until the classpath
+            // warms (composePreviewReady flips true). Bounded so a genuinely unsupported preview still surfaces
+            // its reason instead of spinning forever.
+            var attempts = 0
+            while (true) {
+                val lowered = runCatching { backend.lowerComposePreview(path, preview.functionName, preview.arity, text) }.getOrNull()
+                if (lowered != null) { value = PreviewState.Ready(lowered); break }
+                val ready = runCatching { backend.composePreviewReady(path) }.getOrDefault(true)
+                if (ready || attempts++ >= PREVIEW_READY_MAX_ATTEMPTS) {
+                    // Surface WHY it isn't interpretable (the unsupported constructs + offending source) instead
+                    // of a bare message, so a gap is investigable. Even a thrown error becomes a visible reason.
+                    val why = runCatching { backend.composePreviewDiagnostics(path, preview.functionName, preview.arity, text) }
+                        .getOrElse { listOf("couldn't analyze: ${it::class.simpleName}: ${it.message}") }
+                        .ifEmpty { listOf("no reason reported (analysis returned nothing)") }
+                    value = PreviewState.NotInterpretable(why)
+                    break
+                }
+                value = PreviewState.Loading
+                delay(PREVIEW_READY_POLL_MS)
             }
         }
         // Dex the project's library closure once (off-thread, cached by dependency fingerprint) and dispatch
@@ -159,12 +179,24 @@ class AndroidComposePreviewHost(private val backend: IdeServicesBackend) : Compo
         // tolerateGaps=false so a snippet that fails to dispatch surfaces the reason instead of a blank preview.
         val renderer = remember { ComposePreviewRenderer(null, tolerateGaps = false) }
         val state by produceState<PreviewState>(PreviewState.Loading, code) {
-            val lowered = runCatching { backend.lowerLessonComposePreview(code) }.getOrNull()
-            value = if (lowered != null) PreviewState.Ready(lowered) else {
-                val why = runCatching { backend.lessonComposePreviewDiagnostics(code) }
-                    .getOrElse { listOf("couldn't analyze: ${it::class.simpleName}: ${it.message}") }
-                    .ifEmpty { listOf("no reason reported (analysis returned nothing)") }
-                PreviewState.NotInterpretable(why)
+            // Same first-run resilience as [Preview]: the hidden Compose scratch's androidx.compose.* download +
+            // attach may still be in flight, so `Text`/`Column`/`remember` don't resolve yet. Stay in Loading
+            // and re-lower until the scratch is ready (lessonComposePreviewReady flips true), bounded so a real
+            // gap still surfaces its reason.
+            var attempts = 0
+            while (true) {
+                val lowered = runCatching { backend.lowerLessonComposePreview(code) }.getOrNull()
+                if (lowered != null) { value = PreviewState.Ready(lowered); break }
+                val ready = runCatching { backend.lessonComposePreviewReady() }.getOrDefault(true)
+                if (ready || attempts++ >= PREVIEW_READY_MAX_ATTEMPTS) {
+                    val why = runCatching { backend.lessonComposePreviewDiagnostics(code) }
+                        .getOrElse { listOf("couldn't analyze: ${it::class.simpleName}: ${it.message}") }
+                        .ifEmpty { listOf("no reason reported (analysis returned nothing)") }
+                    value = PreviewState.NotInterpretable(why)
+                    break
+                }
+                value = PreviewState.Loading
+                delay(PREVIEW_READY_POLL_MS)
             }
         }
         var renderError by remember(code) { mutableStateOf<Throwable?>(null) }

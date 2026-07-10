@@ -273,6 +273,22 @@ internal class LearnBackend(private val ctx: BackendContext) : LearnService {
         }
     }
 
+    /** Whether the Compose scratch can resolve library composables yet: the one-time `androidx.compose.*`
+     *  download + attach may still be in flight on first run, during which `Text`/`Column`/`remember` resolve
+     *  to 0 candidates. The preview host polls this to show a "Preparing" state and retry instead of latching
+     *  the first failed lower into a permanent error. False (still preparing) on any error. */
+    suspend fun composeReady(): Boolean {
+        if (ctx.manager == null) return true
+        return withContext(Dispatchers.Default) {
+            runCatching {
+                val services = scratchFor("kotlin-compose") ?: return@runCatching false
+                val path = mainPathOf(services, "kotlin-compose")
+                ensureMain(services, "kotlin-compose")
+                services.composePreviewReady(path)
+            }.getOrDefault(false)
+        }
+    }
+
     /** Why the lesson [code]'s Compose preview isn't interpretable yet (lowering diagnostics), for the preview
      *  problem chip. Never empty on a failure path — a bare "can't render" with no reason is useless. */
     suspend fun composeDiagnostics(code: String): List<String> {

@@ -1910,6 +1910,26 @@ class IdeServices private constructor(
         )
     }
 
+    /**
+     * Whether [file]'s module can resolve library composables yet. False while the workspace index is still
+     * building on first launch (real project: library composables resolve to 0 candidates until it settles) or
+     * while the hidden Learn Compose scratch's `androidx.compose.*` AARs are still attaching. The preview host
+     * polls this so a first-run failure shows a transient "Preparing" state (and retries once ready) instead of
+     * latching into a permanent `unresolved/ambiguous call` / `not a .value delegate` error.
+     */
+    fun composePreviewReady(file: Path): Boolean {
+        val module = moduleForEditableFile(file) ?: return true
+        val analyzer = analyzerFor(
+            module, KotlinLanguageBackend.LANGUAGE_ID
+        ) as? dev.ide.lang.kotlin.KotlinSourceAnalyzer ?: return true
+        if (!analyzer.classpathReady()) return false
+        // The hidden Learn scratch resolves via the synchronous ClasspathReader (index=null → classpathReady()
+        // is trivially true), so ALSO require the Compose runtime to have attached there (the one-time download
+        // may still be in flight on first run). A real project gates on the index alone.
+        val isScratch = store.rootPath.toString().replace('\\', '/').contains("/.scratch/")
+        return !isScratch || analyzer.composeRuntimeAttached()
+    }
+
     /** Why [functionName] in [file] (buffer [text]) isn't interpretable yet: each lowering diagnostic as
      *  `"reason: \"offending source\""`. Empty when it's fully interpretable (or not found). The preview panel
      *  shows these so an un-renderable preview explains the unsupported construct instead of a bare message. */
@@ -1958,13 +1978,15 @@ class IdeServices private constructor(
      *  on-device render host calls this, then composes [LoweredComposePreview] via the interpreter. */
     fun lowerComposePreview(
         file: Path, text: String, functionName: String, arity: Int = 0
-    ): LoweredComposePreview? {
+    ): LoweredComposePreview? = dev.ide.lang.kotlin.KotlinPerf.trace("kt.lowerPreview") {
         val module = moduleForEditableFile(file) ?: return null
         val analyzer = analyzerFor(
             module, KotlinLanguageBackend.LANGUAGE_ID
         ) as? dev.ide.lang.kotlin.KotlinSourceAnalyzer ?: return null
         val vf = store.vfs.fileFor(file)
-        analyzer.incrementalParser.parseFull(EditorDocument(vf, docVersion.incrementAndGet(), text))
+        dev.ide.lang.kotlin.KotlinPerf.span("parse") {
+            analyzer.incrementalParser.parseFull(EditorDocument(vf, docVersion.incrementAndGet(), text))
+        }
         // A file with syntax errors mis-shapes declarations when parsed error-tolerantly — interpreting it
         // builds a garbage program that crashes the real Compose runtime in a phase nothing can catch. Don't
         // render it; the editor's diagnostics already flag the errors and the preview shows a "fix errors" state.
@@ -1985,7 +2007,7 @@ class IdeServices private constructor(
         val reachable = dev.ide.lang.kotlin.interp.reachableSourceClasses(entry, program, classes)
         if (classes.any { it.fqn in reachable && !it.isComplete }) return null
         val parameter = resolvePreviewParameter(analyzer, vf, functionName, arity, classes)
-        return LoweredComposePreview(entry, program, classes, parameter)
+        LoweredComposePreview(entry, program, classes, parameter)
     }
 
     /** The lowered preview function for [functionName] at [arity] (a `@PreviewParameter` preview has arity > 0);

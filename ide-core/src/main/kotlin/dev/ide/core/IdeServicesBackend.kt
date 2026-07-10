@@ -27,6 +27,7 @@ import dev.ide.core.backend.DependencyBackend
 import dev.ide.core.backend.DiagnosticsBackend
 import dev.ide.core.backend.EditorBackend
 import dev.ide.core.backend.stackTraceString
+import dev.ide.core.backend.timedPass
 import dev.ide.core.backend.FileBackend
 import dev.ide.core.backend.ModuleBackend
 import dev.ide.core.backend.PreviewBackend
@@ -324,12 +325,20 @@ class IdeServicesBackend(
     /** The lowered preview to render — lowest-priority engine work, preempted by analysis and completion,
      *  retries until the engine is free. Returns an ide-core type; on-device preview host calls this. */
     suspend fun lowerComposePreview(path: String, functionName: String, arity: Int, text: String): LoweredComposePreview? =
-        preview { services.lowerComposePreview(Paths.get(path), text, functionName, arity) }
+        timedPass("lower", path, { it?.program?.size ?: 0 }) {
+            preview { services.lowerComposePreview(Paths.get(path), text, functionName, arity) }
+        }
 
     /** Why [functionName] isn't interpretable yet (lowering diagnostics + offending source), for the preview
      *  panel's not-interpretable state. Lowest-priority engine work; preempted by analysis and completion. */
     suspend fun composePreviewDiagnostics(path: String, functionName: String, arity: Int, text: String): List<String> =
         preview { services.composePreviewDiagnostics(Paths.get(path), text, functionName, arity) }
+
+    /** Whether [path]'s module can resolve library composables yet (see [IdeServices.composePreviewReady]).
+     *  The preview host polls this to show a transient "Preparing" state (and retry) instead of latching a
+     *  first-run (index still building) failure into a permanent "unresolved call" error. */
+    suspend fun composePreviewReady(path: String): Boolean =
+        preview { services.composePreviewReady(Paths.get(path)) }
 
     /** The project library inputs for the on-device Compose preview's `DexClassLoader` (see
      *  [IdeServices.composePreviewLibs]). Lowest-priority engine work; preempted by analysis and completion. */
@@ -345,6 +354,12 @@ class IdeServicesBackend(
     /** Why a Learn-lesson Compose snippet isn't interpretable yet (for the preview problem chip). */
     suspend fun lessonComposePreviewDiagnostics(code: String): List<String> =
         learnBackend.composeDiagnostics(code)
+
+    /** Whether the hidden Learn Compose scratch can resolve library composables yet: the one-time
+     *  `androidx.compose.*` download + attach may still be in flight on first run. The preview host polls this
+     *  to show a transient "Preparing" state (and retry) instead of latching the first failed lower. */
+    suspend fun lessonComposePreviewReady(): Boolean =
+        learnBackend.composeReady()
 
     // The owned XML-layout preview (LayoutPreviewBackend); the preview host calls this directly. Runs on the
     // preview lane so the render (real-view dex-load + resource-context build + inflate/measure/draw, or the
