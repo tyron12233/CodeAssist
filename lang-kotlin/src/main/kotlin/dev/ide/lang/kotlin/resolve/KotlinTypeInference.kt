@@ -20,6 +20,7 @@ import org.jetbrains.kotlin.psi.KtNameReferenceExpression
 import org.jetbrains.kotlin.psi.KtNamedFunction
 import org.jetbrains.kotlin.psi.KtObjectLiteralExpression
 import org.jetbrains.kotlin.psi.KtParenthesizedExpression
+import org.jetbrains.kotlin.psi.KtPostfixExpression
 import org.jetbrains.kotlin.psi.KtPrefixExpression
 import org.jetbrains.kotlin.psi.KtQualifiedExpression
 import org.jetbrains.kotlin.psi.KtStringTemplateExpression
@@ -44,9 +45,10 @@ internal val NUMERIC_RANK = mapOf(
 fun KotlinResolver.inferType(expr: KtExpression?): KotlinType? {
     if (expr == null) return null
     if (KotlinResolverStats.enabled) KotlinResolverStats.inferCalls++
-    // A narrowed type is flow-dependent, not a property of the expression alone — bypass the cache so it
-    // can't leak across narrowing scopes.
-    val cacheable = narrowings.isEmpty()
+    // A narrowed type — or a type inferred under a pushed lambda-shape override (bidirectional overload
+    // resolution) — is flow/context-dependent, not a property of the expression alone; bypass the cache so it
+    // can't leak across narrowing scopes or poison a lambda body's real type with a candidate-scoped one.
+    val cacheable = narrowings.isEmpty() && lambdaShapeOverrides.isEmpty()
     if (cacheable && inferCache.containsKey(expr)) return inferCache[expr]
     if (KotlinResolverStats.enabled) KotlinResolverStats.inferComputes++
     val r = when (expr) {
@@ -71,6 +73,7 @@ fun KotlinResolver.inferType(expr: KtExpression?): KotlinType? {
         is KtBinaryExpression -> inferBinaryType(expr)
         is KtBinaryExpressionWithTypeRHS -> castType(expr)
         is KtPrefixExpression -> inferPrefixType(expr)
+        is KtPostfixExpression -> inferPostfixType(expr)
         is KtArrayAccessExpression -> inferArrayGet(expr)
         // `if`/`when` used as an expression: the value is one of the branches, so its type is the common
         // type of the branches — made nullable if any branch is `null` (`fun f(): E? = when(x){ a->E.A;
@@ -106,17 +109,22 @@ internal fun KotlinResolver.inferBinaryType(e: KtBinaryExpression): KotlinType? 
             val convention = ARITHMETIC_CONVENTIONS[token] ?: return null
             val leftType = inferType(e.left) ?: return null
             val rightType = inferType(e.right)
-            if (token == KtTokens.PLUS && leftType.qualifiedName == "kotlin.String") leftType
-            // A custom `operator` whose parameter accepts the RIGHT operand wins over numeric promotion:
-            // `2.dp * 2f` is `Dp.times(Float): Dp`, and `2f * 4.dp` is `Float.times(Dp): Dp` — NOT Float×Float.
-            // Kotlin resolves the operator by the argument type; primitive promotion is only the built-ins' own
-            // signatures (whose return type the model omits, so [arithmeticOperatorReturn] yields null there and
-            // the primitive×primitive case falls through to the synthesized promotion below).
-            else arithmeticOperatorReturn(leftType, convention, rightType)
-                // Primitive numeric arithmetic (`progress * 100`): the result is the WIDER of the two operands
-                // (Double > Float > Long > Int; Byte/Short/Char promote to Int) — Kotlin's promotion. Computed
-                // directly because the builtin `Float.times`/etc. members carry no return type in the model.
-                ?: numericResultType(leftType, rightType)
+            when {
+                token == KtTokens.PLUS && leftType.qualifiedName == "kotlin.String" -> leftType
+                // Two primitive numbers → Kotlin's WIDENING promotion directly (`1 * 1.0` = Double, `1 + 1L` =
+                // Long; Byte/Short/Char promote to Int). NOT [arithmeticOperatorReturn]: its by-argument overload
+                // pick, over the built-in `times`/`plus` set whose numeric parameters accept each other loosely,
+                // wrongly lands on `Int.times(Int): Int` for a `Double` argument — typing `1 * 1.0` as Int.
+                leftType.qualifiedName in NUMERIC_RANK && rightType != null && rightType.qualifiedName in NUMERIC_RANK ->
+                    numericResultType(leftType, rightType)
+                // A custom `operator` whose parameter accepts the RIGHT operand wins over numeric promotion:
+                // `2.dp * 2f` is `Dp.times(Float): Dp`, and `2f * 4.dp` is `Float.times(Dp): Dp` — NOT Float×Float.
+                // Kotlin resolves the operator by the argument type; the primitive×primitive case is handled
+                // above, so this covers a value-class / non-numeric operand, falling back to promotion when the
+                // custom operator's return type is unknown.
+                else -> arithmeticOperatorReturn(leftType, convention, rightType)
+                    ?: numericResultType(leftType, rightType)
+            }
         }
     }
 
@@ -202,6 +210,14 @@ internal fun KotlinResolver.inferPrefixType(e: KtPrefixExpression): KotlinType? 
         else -> return null
     }
     return unaryOperator(operand, name)
+}
+
+/** A postfix expression's type: `x!!` (the not-null assertion) → the operand's type made non-null, so a
+ *  member chain off it (`nullable!!.member`, `map[k]!!.foo()`) resolves; `x++`/`x--` yield the operand's own
+ *  type. Null when the operand can't be typed. */
+internal fun KotlinResolver.inferPostfixType(e: KtPostfixExpression): KotlinType? {
+    val operand = inferType(e.baseExpression) ?: return null
+    return if (e.operationToken == KtTokens.EXCLEXCL) operand.withNullable(false) else operand
 }
 
 /** The return type of a zero-argument unary operator [name] on [type] (member or extension). */
@@ -411,8 +427,24 @@ internal fun KotlinResolver.typeOfCall(
     // Bind the function's OWN type parameters from the arguments (listOf("") -> List<String>; a lambda's
     // result binds R in `(…) -> R`), falling back to each parameter's erased bound when an argument can't
     // pin it (a raw `findViewById(): T` → `View`), then substitute into the return type.
-    val bindings = (methodTypeParamErasure(sym) + inferTypeArguments(sym, call)).toMutableMap()
+    val erasure = methodTypeParamErasure(sym)
+    val inferred = inferTypeArguments(sym, call)
+    val bindings = (erasure + inferred).toMutableMap()
     applyLowerBounds(sym, call, bindings)
+    // Bidirectional constraint inference ([inferCallBindings]) fills any variable the ad-hoc pass above left at
+    // just its erased upper bound (or a bare type variable) — e.g. a lambda result flowing through a nested
+    // generic, or the expected type driving an argument-less generic. Additive: applied ONLY where the ad-hoc
+    // pass didn't confidently pin the variable, so a resolved binding is never overridden.
+    if (sym.typeParameters.isNotEmpty()) {
+        val solved = inferCallBindings(sym, call, expectedTypeAt(call.textRange.startOffset))
+        for ((k, v) in solved) {
+            if ((v as? KotlinType)?.isTypeParameter != false) continue
+            val cur = bindings[k] as? KotlinType
+            val onlyErased = cur == null || cur.isTypeParameter ||
+                (k !in inferred && cur.qualifiedName == (erasure[k] as? KotlinType)?.qualifiedName)
+            if (onlyErased) bindings[k] = v
+        }
+    }
     // The callee's declared return type; when it has none (an expression-body function `fun f() = expr`, whose
     // type neither the same-file symbol nor the disk index carries), infer it from the body.
     val raw = (sym.type as? KotlinType) ?: inferredReturnTypeForCall(call, sym)
@@ -492,6 +524,16 @@ internal fun isLocalDeclaration(decl: org.jetbrains.kotlin.psi.KtDeclaration): B
  * (a partial inference) erases to `Any`.
  */
 internal fun KotlinResolver.constructorResultType(fqn: String, call: KtCallExpression): KotlinType {
+    // `Array(size) { init }` / `Array<T>(size)` — the element type comes from the explicit type argument, else
+    // the init lambda's RESULT (the intrinsic constructor `Array<T>(size: Int, init: (Int) -> T)`). Handled
+    // before the type-parameter check below, which the service leaves empty for the built-in `Array`.
+    if (fqn == "kotlin.Array") {
+        call.typeArgumentList?.arguments?.firstOrNull()?.typeReference?.text
+            ?.let { service.typeFromText(it, fileContext) }?.let { return service.typeByFqn(fqn, listOf(it)) }
+        val initLambda = call.lambdaArguments.firstOrNull()?.getLambdaExpression()
+            ?: call.valueArguments.mapNotNull { it.getArgumentExpression() as? KtLambdaExpression }.lastOrNull()
+        initLambda?.let { inferLambdaResult(it) }?.let { return service.typeByFqn(fqn, listOf(it)) }
+    }
     val tps = service.classTypeParameters(fqn)
     if (tps.isEmpty()) return service.typeByFqn(fqn)
     // Explicit type arguments on the call (`ArrayList<String>()`, `HashMap<String, Int>()`, `Box<Int>()`) are

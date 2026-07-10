@@ -15,6 +15,10 @@ class TypeShape(
     /** Each type parameter's erased upper bound (positional with [typeParameters]); empty when unknown
      *  (the Kotlin-metadata decode doesn't carry bounds — an uncovered parameter is left unbound there). */
     val typeParameterBounds: List<TypeRef>,
+    /** Each type parameter's declaration-site variance (positional with [typeParameters]): `"out"`, `"in"`,
+     *  or `""` (invariant). Empty when unknown (a plain-Java type — no declaration-site variance). Drives
+     *  variance-aware subtyping (`List<out E>` is covariant, `MutableList<E>` invariant). */
+    val typeParameterVariances: List<String> = emptyList(),
     /** Generic supertypes carrying their type arguments (Java bytecode AND the Kotlin `@Metadata` decode), so
      *  a member inherited through a generic supertype substitutes (`CompositionLocal<T>` → `current: TextStyle`). */
     val supertypes: List<TypeRef>,
@@ -41,6 +45,7 @@ class TypeShape(
     fun withContext(ctx: KotlinTypeContext?): TypeShape = TypeShape(
         typeParameters,
         typeParameterBounds.map { it.rebind(ctx) },
+        typeParameterVariances,
         supertypes.map { it.rebind(ctx) },
         members.map { it.rebindTypes(ctx) },
         isObject, companionObjectName, isKotlin, isInterface, isAbstract, sealedSubclasses,
@@ -50,6 +55,7 @@ class TypeShape(
         fun of(js: JavaShape): TypeShape = TypeShape(
             js.typeParameters,
             js.typeParameterBounds,
+            emptyList(), // a plain Java type has no declaration-site variance
             js.superTypes,
             js.members,
             isKotlin = false,
@@ -65,6 +71,7 @@ class TypeShape(
         fun of(d: KotlinMetadata.Decoded, ctx: KotlinTypeContext?): TypeShape = TypeShape(
             d.typeParameters,
             emptyList(),
+            d.typeParameterVariances,
             d.supertypes.map { it.rebind(ctx) },
             d.ownMembers + d.extensions,
             isObject = d.isObject,

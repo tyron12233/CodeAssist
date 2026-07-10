@@ -88,6 +88,31 @@ class KotlinExtDestructuringTest {
         assertTrue("length" in ls, "entry.value should be String (have `length`); got ${ls.take(30)}")
     }
 
+    // --- member-access completion with a trailing lambda already present ---
+
+    @Test
+    fun memberAccessCompletesWithTrailingLambdaPresent() {
+        // `toolbox.<caret> { entry -> }` — the ` { … }` makes the selector a call whose callee is the marker,
+        // so the plain qualified-selector check used to miss it and completion fell through to name/type
+        // candidates. Member access must still resolve the receiver's members (forEach, entries, …).
+        val ls = labels(
+            "Use.kt",
+            "package demo\nfun f() {\n  val toolbox = mutableMapOf(\"Nail\" to \"Hammer\")\n  toolbox.| { entry ->\n  }\n}",
+        )
+        assertTrue(ls.any { it.startsWith("forEach") }, "map members must complete before a trailing lambda; got ${ls.take(30)}")
+        assertTrue(ls.none { it == "Any" || it == "String" }, "type names must not leak into a member-access position; got ${ls.take(30)}")
+    }
+
+    @Test
+    fun memberAccessCompletesWithArgumentListPresent() {
+        // The same call-selector case with a parenthesised argument list (`toolbox.<caret>()`).
+        val ls = labels(
+            "Use.kt",
+            "package demo\nfun f() {\n  val toolbox = mutableMapOf(\"Nail\" to \"Hammer\")\n  toolbox.|()\n}",
+        )
+        assertTrue(ls.any { it.startsWith("get") }, "map members must complete before an argument list; got ${ls.take(30)}")
+    }
+
     // --- destructuring declarations + for-loop destructuring ---
 
     @Test

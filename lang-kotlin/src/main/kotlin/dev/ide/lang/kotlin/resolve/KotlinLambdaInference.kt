@@ -5,15 +5,24 @@ import dev.ide.lang.kotlin.symbols.KotlinSymbolService
 import dev.ide.lang.kotlin.symbols.KotlinType
 import dev.ide.lang.kotlin.symbols.TypeRendering
 import dev.ide.lang.resolve.TypeRef
+import org.jetbrains.kotlin.psi.KtAnnotatedExpression
 import org.jetbrains.kotlin.psi.KtCallExpression
 import org.jetbrains.kotlin.psi.KtDotQualifiedExpression
 import org.jetbrains.kotlin.psi.KtExpression
+import org.jetbrains.kotlin.psi.KtLabeledExpression
 import org.jetbrains.kotlin.psi.KtLambdaArgument
 import org.jetbrains.kotlin.psi.KtLambdaExpression
 import org.jetbrains.kotlin.psi.KtNameReferenceExpression
+import org.jetbrains.kotlin.psi.KtNamedFunction
+import org.jetbrains.kotlin.psi.KtParameter
+import org.jetbrains.kotlin.psi.KtParenthesizedExpression
+import org.jetbrains.kotlin.psi.KtProperty
+import org.jetbrains.kotlin.psi.KtPropertyAccessor
+import org.jetbrains.kotlin.psi.KtReturnExpression
 import org.jetbrains.kotlin.psi.KtValueArgument
 import org.jetbrains.kotlin.psi.KtValueArgumentList
 import org.jetbrains.kotlin.psi.ValueArgument
+import org.jetbrains.kotlin.psi.psiUtil.getStrictParentOfType
 
 /** Lambda inference: expected functional type, receiver and parameter types, and the enclosing-call parameter slot. */
 
@@ -34,7 +43,38 @@ internal fun KotlinResolver.inferLambdaResult(lambda: KtLambdaExpression): TypeR
 fun KotlinResolver.lambdaReceiverType(lambda: KtLambdaExpression): KotlinType? =
     expectedFunctionTypeFor(lambda)?.takeIf { it.isExtensionFunctionType }?.typeArguments?.firstOrNull() as? KotlinType
 
+/**
+ * The functional type a lambda is expected to be from its DECLARED context (not a call argument): the type
+ * annotation of the `val`/`var` it initializes (`val f: (Int) -> Boolean = { it }`), a function/accessor
+ * expression body's declared return type (`fun f(): (Int) -> Boolean = { it }`), a parameter's default value,
+ * or a `return` inside a function with a declared functional return type. This is what types the implicit `it`
+ * (and named params) of a lambda that isn't an argument to a call. Null when the context declares no functional
+ * type. Unwraps enclosing parentheses / labels / annotations first (`= label@{ … }`, `= ({ … })`).
+ */
+internal fun KotlinResolver.contextualFunctionType(lambda: KtLambdaExpression): KotlinType? {
+    var expr: KtExpression = lambda
+    var parent = expr.parent
+    while (parent is KtParenthesizedExpression || parent is KtLabeledExpression || parent is KtAnnotatedExpression) {
+        expr = parent as KtExpression
+        parent = expr.parent
+    }
+    val declaredText: String? = when (val p = parent) {
+        is KtProperty -> if (p.initializer === expr) p.typeReference?.text else null
+        is KtParameter -> if (p.defaultValue === expr) p.typeReference?.text else null
+        is KtNamedFunction -> if (p.bodyExpression === expr) p.typeReference?.text else null
+        is KtPropertyAccessor ->
+            if (p.bodyExpression === expr) p.typeReference?.text ?: p.property.typeReference?.text else null
+        is KtReturnExpression -> p.getStrictParentOfType<KtNamedFunction>()?.typeReference?.text
+        else -> null
+    }
+    val type = service.typeFromText(declaredText, fileContext) ?: return null
+    return type.takeIf { TypeRendering.isFunctionType(it.qualifiedName) }
+}
+
 internal fun KotlinResolver.expectedFunctionTypeFor(lambda: KtLambdaExpression): KotlinType? {
+    // A lambda declared with an explicit functional type (a `val`/param/return annotation) is typed by that
+    // type, not by an enclosing call — so `val f: Scope.() -> Unit = { }` establishes its receiver.
+    contextualFunctionType(lambda)?.let { return it }
     val (call, argIndex) = enclosingCallAndParamIndex(lambda) ?: return null
     val sym = resolveCalleeFunction(call) ?: return null
     val raw = sym.paramTypes.getOrNull(lambdaParamIndex(call, argIndex, sym)) as? KotlinType ?: return null
@@ -62,15 +102,27 @@ fun KotlinResolver.lambdaParameterTypes(lambda: KtLambdaExpression): List<TypeRe
  *  in the enclosing call, resolved to a Kotlin function type or a Java SAM, with the call's non-lambda
  *  arguments already used to bind the function's type parameters. */
 internal fun KotlinResolver.expectedLambdaShape(lambda: KtLambdaExpression): KotlinSymbolService.FunctionalShape? {
+    // A shape pushed TOP-DOWN by bidirectional inference / overload resolution wins — it types the lambda's
+    // parameters from the candidate under evaluation without re-resolving the (mid-resolution) enclosing call.
+    lambdaShapeOverrides[lambda]?.let { return it }
+    // A lambda declared with an explicit functional type (`val isOdd: (Int) -> Boolean = { it % 2 != 0 }`, a
+    // typed parameter default, a function expression body) is typed by that declaration — its `it`/named params
+    // come from the declared `(P…) -> R`, not from an enclosing call (there is none).
+    contextualFunctionType(lambda)?.let { ft -> service.functionalShape(ft)?.let { return it } }
     val (call, argIndex) = enclosingCallAndParamIndex(lambda) ?: return null
     // A SAM constructor (`Comparator<String> { a, b -> … }`, a project `fun interface`) has no callee FUNCTION —
     // the lambda IS the interface's single-abstract-method body. Fall back to that method's shape.
-    val sym = resolveCalleeFunction(call) ?: return samConstructorShape(call)
-    val raw = sym.paramTypes.getOrNull(lambdaParamIndex(call, argIndex, sym)) as? KotlinType ?: return samConstructorShape(call)
+    val sym = resolveCalleeFunction(call) ?: return arrayInitShape(call) ?: samConstructorShape(call)
+    val raw = sym.paramTypes.getOrNull(lambdaParamIndex(call, argIndex, sym)) as? KotlinType
+        ?: return arrayInitShape(call) ?: samConstructorShape(call)
     // Bind the function's type params from the NON-lambda value args (`with(x){…}` binds T from x) AND the call's
     // EXPLICIT type arguments (`Comparator<String> { … }` → T = String — a SAM constructor's only value argument
     // is the lambda, so value-arg inference alone leaves T unbound), so the block's receiver/params are concrete.
-    val bindings = bindingsFromValueArgs(sym, call) + bindingsFromTypeArgs(sym, call)
+    val bindings = HashMap<String, TypeRef>(bindingsFromValueArgs(sym, call) + bindingsFromTypeArgs(sym, call))
+    // Widen a still-free type parameter to its recorded lower bound: `reduce`'s operation is `(acc: S, T) -> S`
+    // with `T : S`, so the receiver binding `T = Int` makes `S ≥ Int` — the block's `acc` is `Int`, not a bare
+    // `S`. Only extensions with a sibling upper bound (`reduce`, `getOrElse`) carry these, so it's a no-op elsewhere.
+    for ((p, lb) in sym.typeParamLowerBounds) bindings.putIfAbsent(p, lb)
     val bound = service.substitute(raw, bindings) as? KotlinType ?: return null
     return service.functionalShape(bound)
 }
@@ -93,6 +145,16 @@ internal fun KotlinResolver.bindingsFromTypeArgs(sym: KotlinSymbol, call: KtCall
  *  body, so the lambda's parameter/result types are that method's, with the interface's type parameters bound
  *  from the call's explicit type arguments. Null when the callee doesn't name a (single-abstract-method)
  *  interface — then it's an ordinary call, not a SAM constructor. */
+/** `Array(size) { init }` — its init lambda is `(index: Int) -> T`. The intrinsic `Array` constructor isn't a
+ *  resolvable function symbol (a constructor, not a top-level fun), so [expectedLambdaShape] special-cases it
+ *  to type the lambda's index parameter (`it` / a named `i`) as `Int` — which then lets the element type
+ *  ([constructorResultType]) infer from a body that uses the index (`Array(n) { i -> i * i }`). */
+internal fun KotlinResolver.arrayInitShape(call: KtCallExpression): KotlinSymbolService.FunctionalShape? {
+    val name = (call.calleeExpression as? KtNameReferenceExpression)?.getReferencedName() ?: return null
+    if (name != "Array" || service.resolveTypeName(name, fileContext) != "kotlin.Array") return null
+    return KotlinSymbolService.FunctionalShape(listOf(service.typeByFqn("kotlin.Int")), null, isExtension = false)
+}
+
 internal fun KotlinResolver.samConstructorShape(call: KtCallExpression): KotlinSymbolService.FunctionalShape? {
     val callee = call.calleeExpression as? KtNameReferenceExpression ?: return null
     val fqn = service.resolveTypeName(callee.getReferencedName(), fileContext) ?: return null

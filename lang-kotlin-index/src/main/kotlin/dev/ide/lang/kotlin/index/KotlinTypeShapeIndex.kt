@@ -84,13 +84,14 @@ object TypeShapeExternalizer : Externalizer<TypeShape> {
      * diligently, `kotlin.builtins` now corrected). Increment FORMAT (never a per-index base) for every future
      * wire-format change here, and only ever increase it.
      */
-    const val FORMAT = 0
+    const val FORMAT = 2 // 1: TypeShape.typeParameterVariances; 2: KotlinType.projection (use-site variance)
 
     private val BINARY = SymbolOrigin(fromSource = false, file = null)
 
     override fun write(out: DataOutput, value: TypeShape) {
         writeStrings(out, value.typeParameters)
         writeTypes(out, value.typeParameterBounds)
+        writeStrings(out, value.typeParameterVariances)
         writeTypes(out, value.supertypes)
         out.writeInt(value.members.size)
         value.members.forEach { writeSymbol(out, it) }
@@ -105,6 +106,7 @@ object TypeShapeExternalizer : Externalizer<TypeShape> {
     override fun read(inp: DataInput): TypeShape {
         val tps = readStrings(inp)
         val bounds = readTypes(inp)
+        val variances = readStrings(inp)
         val supers = readTypes(inp)
         val members = List(inp.readInt()) { readSymbol(inp) }
         val isObject = inp.readBoolean()
@@ -116,6 +118,7 @@ object TypeShapeExternalizer : Externalizer<TypeShape> {
         return TypeShape(
             tps,
             bounds,
+            variances,
             supers,
             members,
             isObject,
@@ -227,6 +230,7 @@ object TypeShapeExternalizer : Externalizer<TypeShape> {
         out.writeBoolean(t.isTypeParameter)
         out.writeBoolean(t.isExtensionFunctionType)
         out.writeBoolean(t.isComposable)
+        out.writeUTF(t.projection)
         out.writeInt(t.typeArguments.size)
         t.typeArguments.forEach { writeType(out, it as? KotlinType) }
     }
@@ -238,6 +242,7 @@ object TypeShapeExternalizer : Externalizer<TypeShape> {
         val isTp = inp.readBoolean()
         val isExtFn = inp.readBoolean()
         val isComposable = inp.readBoolean()
+        val projection = inp.readUTF()
         val args = buildList<TypeRef> { repeat(inp.readInt()) { readType(inp)?.let(::add) } }
         return KotlinType(
             fqn,
@@ -246,7 +251,8 @@ object TypeShapeExternalizer : Externalizer<TypeShape> {
             context = null,
             isTypeParameter = isTp,
             isExtensionFunctionType = isExtFn,
-            isComposable = isComposable
+            isComposable = isComposable,
+            projection = projection
         )
     }
 }

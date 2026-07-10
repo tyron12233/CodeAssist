@@ -188,7 +188,16 @@ class KotlinType(
      *  parameter of this type must be invoked with a threaded `Composer` by the interpreter's Compose bridge —
      *  even when the function it's passed to (e.g. `LazyListScope.items`) is itself NOT `@Composable`. */
     val isComposable: Boolean = false,
+    /** This type's USE-SITE projection WHEN it appears as a type argument: `"out"` (`Array<out Number>`),
+     *  `"in"` (`Comparator<in T>`... a `MutableList<in E>`), `"*"` (star, `List<*>`), or `""` (no projection).
+     *  Combined with the classifier's declaration-site variance to decide subtyping direction per argument. */
+    val projection: String = "",
 ) : TypeRef {
+
+    /** A copy carrying the use-site [p]rojection (`out`/`in`/`*`/``) for when this type sits as a type argument. */
+    fun withProjection(p: String): KotlinType =
+        if (p == projection) this
+        else KotlinType(qualifiedName, typeArguments, nullable, context, isTypeParameter, isExtensionFunctionType, isComposable, p)
 
     override fun isAssignableFrom(other: TypeRef): Boolean {
         if (other.qualifiedName == qualifiedName) return true
@@ -217,7 +226,8 @@ class KotlinType(
             context,
             isTypeParameter,
             isExtensionFunctionType,
-            isComposable
+            isComposable,
+            projection
         )
 
     /** A copy with the classifier [fqn] (same arguments, nullability, context) — for canonicalizing a JVM
@@ -232,7 +242,8 @@ class KotlinType(
             context,
             isTypeParameter,
             isExtensionFunctionType,
-            isComposable
+            isComposable,
+            projection
         )
 
     /** Rebind the resolution [context] through the whole tree (used when reloading a context-free cache). */
@@ -244,22 +255,26 @@ class KotlinType(
             ctx,
             isTypeParameter,
             isExtensionFunctionType,
-            isComposable
+            isComposable,
+            projection
         )
 
     override fun toString(): String {
         // A synthetic local/anonymous type key must never leak into display; prefer the context's friendly name
         // (a local class's real name, or `<anonymous : Super>` for an anonymous object). The cheap prefix check
         // keeps normal types off the context lookup; [TypeRendering] renders `<anonymous>` when there's no context.
+        if (projection == "*") return "*" // a star projection renders as `*`, regardless of the carrier type
         if (!isTypeParameter && TypeRendering.isSyntheticLocalName(qualifiedName.substringAfterLast('.'))) {
             context?.localTypeDisplayName(qualifiedName)?.let { return it + if (nullable) "?" else "" }
         }
-        return TypeRendering.render(
+        val base = TypeRendering.render(
             qualifiedName,
             typeArguments.map { it.toString() },
             nullable,
             isTypeParameter,
             isExtensionFunctionType
         )
+        // A use-site projection prefixes the argument: `out Number`, `in T`.
+        return if (projection.isEmpty()) base else "$projection $base"
     }
 }

@@ -334,14 +334,16 @@ class KotlinCompletion(
         // from the receiver's members, exactly like a `.` access (bound/unbound is the same candidate set).
         val callableRefReceiver =
             nameRef?.let { (it.parent as? KtCallableReferenceExpression)?.takeIf { p -> p.callableReference === it }?.receiverExpression }
+        // The receiver of a `recv.name` / `recv.name(args)` / `recv.name { }` member access at the marker — see
+        // [qualifiedMemberReceiver] for the call-selector (trailing-lambda / argument-list) case.
+        val memberReceiver = nameRef?.let { qualifiedMemberReceiver(it) }
         return when {
             callableRefReceiver != null -> CompletionPosition.MemberAccess(
                 callableRefReceiver,
                 callableRef = true
             )
 
-            nameRef != null && isSelectorOfQualified(nameRef) ->
-                CompletionPosition.MemberAccess((nameRef.parent as KtQualifiedExpression).receiverExpression)
+            memberReceiver != null -> CompletionPosition.MemberAccess(memberReceiver)
 
             inTypePosition(markerLeaf) -> CompletionPosition.TypeReference
             else -> infixOperatorLeft(markerLeaf)?.let { CompletionPosition.InfixName(it) }
@@ -840,6 +842,21 @@ class KotlinCompletion(
     private fun isSelectorOfQualified(nameRef: KtNameReferenceExpression): Boolean {
         val q = nameRef.parent as? KtQualifiedExpression ?: return false
         return q.selectorExpression === nameRef
+    }
+
+    /**
+     * The receiver of the qualified member access whose selector is [nameRef] (the marker), or null when
+     * [nameRef] isn't a member-access selector. Covers `recv.name` (the name IS the selector) AND
+     * `recv.name(args)` / `recv.name { }` — where the argument list / trailing lambda makes the selector a
+     * [KtCallExpression] whose callee is [nameRef], so the plain selector check misses it and completion would
+     * otherwise fall through to name-reference (scope symbols + type names) instead of the receiver's members.
+     */
+    private fun qualifiedMemberReceiver(nameRef: KtNameReferenceExpression): KtExpression? {
+        if (isSelectorOfQualified(nameRef)) return (nameRef.parent as KtQualifiedExpression).receiverExpression
+        val call = nameRef.parent as? KtCallExpression ?: return null
+        if (call.calleeExpression !== nameRef) return null
+        val q = call.parent as? KtQualifiedExpression ?: return null
+        return if (q.selectorExpression === call) q.receiverExpression else null
     }
 
     private fun inTypePosition(leaf: PsiElement?): Boolean = climbTo<KtTypeReference>(leaf) != null

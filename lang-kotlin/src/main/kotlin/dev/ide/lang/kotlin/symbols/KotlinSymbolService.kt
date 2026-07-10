@@ -116,6 +116,12 @@ class KotlinSymbolService(
     private val classpathSupertypeMemo = ConcurrentHashMap<String, List<String>>()
     @Volatile private var sourceSupertypeMemo = ConcurrentHashMap<String, List<String>>()
 
+    // Per-(sub → super) memo of a type's parameterized instantiation of a supertype, expressed as a TEMPLATE
+    // in the sub type's own type-parameter refs (arg-independent, so a receiver's actual args substitute in per
+    // call). Keyed "sub super"; a genuine non-supertype is not cached (rare — the receiver's extension set
+    // only carries extensions whose declared receiver IS a supertype). Powers [receiverSupertypeArgs].
+    private val supertypeArgTemplateMemo = ConcurrentHashMap<String, List<TypeRef>>()
+
     // Per-(receiver-target, name-prefix) memo of the classpath extension-index query. Like the classpath
     // supertype memo, this is session-stable: the persistent `kotlin.callables` index can't gain a project
     // extension (the classpath can't extend your code), and any re-index rebuilds this whole service. The
@@ -1092,13 +1098,26 @@ class KotlinSymbolService(
     }
 
     /** Bind an extension's receiver type params from the actual receiver: `T.also` → T = the receiver type;
-     *  `Iterable<T>.first()` on `List<String>` → T = String (positional from the receiver's args). */
+     *  `Iterable<T>.first()` on `List<String>` → T = String (positional from the receiver's args); a NESTED
+     *  receiver arg (`Iterable<Iterable<T>>.flatten()` on `List<List<Int>>` → T = Int) binds by unifying the
+     *  declared arg against the actual one structurally. */
     private fun bindExtensionReceiver(ext: KotlinSymbol, receiverFqn: String, receiverArgs: List<TypeRef>): KotlinSymbol {
         val bindings = HashMap<String, TypeRef>()
         ext.receiverTypeParam?.let { bindings[it] = typeByFqn(receiverFqn, receiverArgs) } // T.also(): T -> receiver
+        // When the extension is declared on a SUPERTYPE of the actual receiver (`Iterable<T>.forEach` on an
+        // `IntRange` or a `List<String>`), bind its receiver args from the receiver's INSTANTIATION of that
+        // supertype — so a type parameter the receiver's OWN args don't supply positionally (a range carries
+        // none; `IntRange : Iterable<Int>`) still resolves. Falls back to the receiver's own args when the
+        // instantiation is unavailable (dumb mode) or the extension is on the receiver's exact type.
+        val extRecvFqn = ext.receiverTypeFqn?.let { Builtins.kotlinTypeFor(it) ?: it }
+        val recvArgs = if (extRecvFqn != null && extRecvFqn != receiverFqn && ext.receiverTypeArgs.isNotEmpty())
+            receiverSupertypeArgs(receiverFqn, receiverArgs, extRecvFqn) ?: receiverArgs
+        else receiverArgs
         ext.receiverTypeArgs.forEachIndexed { i, ra ->
             val k = ra as? KotlinType ?: return@forEachIndexed
-            if (k.isTypeParameter && i < receiverArgs.size) bindings[k.qualifiedName] = receiverArgs[i]
+            val actual = recvArgs.getOrNull(i) ?: return@forEachIndexed
+            if (k.isTypeParameter) bindings[k.qualifiedName] = actual       // Iterable<T> on List<String> -> T = String
+            else unifyReceiverArg(k, actual, bindings)                      // Iterable<Iterable<T>> on List<List<Int>> -> T = Int
         }
         if (bindings.isEmpty()) return ext
         // `T : R` propagation: a receiver-bound param `T` whose declared upper bound is a sibling param `R`
@@ -1111,6 +1130,53 @@ class KotlinSymbolService(
         }
         val sub = substituteSymbol(ext, bindings)
         return if (lowerBounds.isEmpty()) sub else sub.withTypeParamLowerBounds(lowerBounds)
+    }
+
+    /** Structurally unify a declared extension-receiver argument [declared] (which may nest type parameters,
+     *  e.g. `Iterable<T>`) against the [actual] type argument at that position, recording any type-param
+     *  bindings. Positional over type arguments, so `Iterable<T>` vs `List<String>` binds `T = String` and
+     *  `Iterable<Iterable<T>>` vs `List<List<Int>>` binds `T = Int`. First binding wins (putIfAbsent). */
+    private fun unifyReceiverArg(declared: KotlinType, actual: TypeRef, out: MutableMap<String, TypeRef>) {
+        if (declared.isTypeParameter) { out.putIfAbsent(declared.qualifiedName, actual); return }
+        val a = actual as? KotlinType ?: return
+        declared.typeArguments.forEachIndexed { i, d ->
+            (d as? KotlinType)?.let { dk -> a.typeArguments.getOrNull(i)?.let { av -> unifyReceiverArg(dk, av, out) } }
+        }
+    }
+
+    /**
+     * The type arguments `[subFqn]<[subArgs]>` supplies to its supertype [superFqn] — `IntRange`→`Iterable`
+     * is `[Int]` (via `IntProgression : Iterable<Int>`), `ArrayList<String>`→`Iterable` is `[String]`. Null
+     * when [superFqn] isn't a (transitive) supertype or its shape is unavailable (dumb mode). The walk is
+     * memoized per (sub, super) as a template in [subFqn]'s type parameters; only the final substitution of
+     * [subArgs] varies per receiver, keeping the completion hot path cheap.
+     */
+    internal fun receiverSupertypeArgs(subFqn: String, subArgs: List<TypeRef>, superFqn: String): List<TypeRef>? {
+        val params = (builtinShape(subFqn) ?: typeShape(subFqn))?.typeParameters ?: return null
+        val template = supertypeArgTemplateMemo.getOrPut("$subFqn $superFqn") {
+            val paramRefs = params.map { KotlinType(it, isTypeParameter = true, context = this) }
+            walkSupertypeArgs(subFqn, paramRefs, superFqn, HashSet()) ?: return null // don't cache a non-supertype
+        }
+        if (subArgs.isEmpty() || params.isEmpty()) return template
+        val subst = params.zip(subArgs).toMap()
+        return template.map { substitute(it, subst) }
+    }
+
+    /** DFS over the supertype graph, substituting each level's declared type arguments through the running
+     *  binding, until [superFqn] is reached (then its arguments in terms of the start type's parameters). */
+    private fun walkSupertypeArgs(subFqn: String, subArgs: List<TypeRef>, superFqn: String, visited: MutableSet<String>): List<TypeRef>? {
+        if (subFqn == superFqn) return subArgs
+        if (!visited.add(subFqn)) return null
+        val shape = builtinShape(subFqn) ?: typeShape(subFqn) ?: return null
+        val subst = if (subArgs.isEmpty() || shape.typeParameters.isEmpty()) emptyMap()
+            else shape.typeParameters.zip(subArgs).toMap()
+        for (sup in shape.supertypes) {
+            val supK = sup as? KotlinType ?: continue
+            val supFqn = Builtins.kotlinTypeFor(supK.qualifiedName) ?: supK.qualifiedName
+            val supArgs = if (subst.isEmpty()) supK.typeArguments else supK.typeArguments.map { substitute(it, subst) }
+            walkSupertypeArgs(supFqn, supArgs, superFqn, visited)?.let { return it }
+        }
+        return null
     }
 
     /** Apply type-parameter [bindings] to a symbol's return/param/receiver-arg types. */
@@ -1158,9 +1224,14 @@ class KotlinSymbolService(
     fun substitute(type: TypeRef, bindings: Map<String, TypeRef>): TypeRef {
         if (bindings.isEmpty()) return type
         val kt = type as? KotlinType ?: return type
-        if (kt.isTypeParameter) return bindings[kt.qualifiedName] ?: kt
+        // Substituting a type parameter keeps the USE-SITE projection of its position: `List<out T>` with
+        // `T = Int` is `List<out Int>` — the argument stays `out`, not bare.
+        if (kt.isTypeParameter) {
+            val bound = bindings[kt.qualifiedName] ?: return kt
+            return if (kt.projection.isEmpty()) bound else (bound as? KotlinType)?.withProjection(kt.projection) ?: bound
+        }
         if (kt.typeArguments.isEmpty()) return kt
-        return KotlinType(kt.qualifiedName, kt.typeArguments.map { substitute(it, bindings) }, kt.nullable, this, kt.isTypeParameter, kt.isExtensionFunctionType, kt.isComposable)
+        return KotlinType(kt.qualifiedName, kt.typeArguments.map { substitute(it, bindings) }, kt.nullable, this, kt.isTypeParameter, kt.isExtensionFunctionType, kt.isComposable, kt.projection)
     }
 
     private fun kotlinSupertypes(fqnRaw: String, visited: MutableSet<String>): List<String> {
@@ -1400,12 +1471,29 @@ class KotlinSymbolService(
     }
 
     /** Each type parameter's declaration-site variance (positional with [classTypeParameters]): `"out"`, `"in"`,
-     *  or `""` for invariant. Available only for SOURCE classes (read straight from PSI); a classpath/binary
-     *  class returns an empty list (the Kotlin-metadata decode and type-shape index don't carry variance), so
-     *  the variance/projection checks back off for it. An empty list for a class WITH type arguments means
-     *  "unknown", distinct from a source invariant class (which returns `["", ...]`). */
-    fun classTypeParameterVariance(fqn: String): List<String> =
-        model().classByFqn[fqn]?.typeParameterVariance ?: emptyList()
+     *  or `""` for invariant. From the project source model (PSI), else the Kotlin built-in shape (`List<out E>`,
+     *  `Comparator<in T>` — decoded from `.kotlin_builtins`), else a classpath binary's `@Metadata`/type-shape
+     *  variance. An empty list for a class WITH type arguments means "unknown" (a plain-Java type — Java has no
+     *  declaration-site variance), distinct from an invariant Kotlin class (which returns `["", ...]`); the
+     *  variance-aware subtyping treats "unknown" conservatively (see [KotlinConstraintSystem]). */
+    fun classTypeParameterVariance(fqn: String): List<String> {
+        model().classByFqn[fqn]?.let { return it.typeParameterVariance }
+        // A function type is `FunctionN<in P1..Pn, out R>` (params contravariant, result covariant); its arity
+        // is variable, so it's computed rather than tabled.
+        functionTypeVariance(fqn)?.let { return it }
+        Builtins.DECLARATION_VARIANCE[fqn]?.let { return it }             // JVM-erased variance (Comparator)
+        builtinShape(fqn)?.typeParameterVariances?.takeIf { it.isNotEmpty() }?.let { return it }
+        return typeShape(fqn)?.typeParameterVariances ?: emptyList()
+    }
+
+    /** `kotlin.FunctionN`'s declaration-site variance: `n` contravariant parameter positions then one covariant
+     *  result (`Function1<in P1, out R>`). Null when [fqn] isn't a function type. */
+    private fun functionTypeVariance(fqn: String): List<String>? {
+        val tail = fqn.substringAfterLast('.')
+        if (!tail.startsWith("Function")) return null
+        val n = tail.removePrefix("Function").toIntOrNull() ?: return null
+        return List(n) { "in" } + "out"
+    }
 
     /**
      * The parameter types of the constructor of [fqn] whose arity accepts [argCount] (the unique one when a

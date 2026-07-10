@@ -12,6 +12,7 @@ import com.intellij.psi.PsiElement
 import org.jetbrains.kotlin.psi.KtCallExpression
 import org.jetbrains.kotlin.psi.KtExpression
 import org.jetbrains.kotlin.psi.KtFile
+import org.jetbrains.kotlin.psi.KtLambdaExpression
 import org.jetbrains.kotlin.psi.KtParenthesizedExpression
 
 /** The Compose calling-convention status of a code position (see [KotlinResolver.composableContextAt]). */
@@ -127,6 +128,32 @@ class KotlinResolver(
 
     /** Pop the innermost narrowing scope pushed by [pushNarrowing]. */
     fun popNarrowing() = narrowings.removeLast()
+
+    // Bidirectional inference: a lambda's expected functional shape, pushed TOP-DOWN from the candidate/callee
+    // being evaluated, so the lambda's parameters (`it`/named) type from that shape WITHOUT re-resolving the
+    // enclosing call — which is what breaks the re-entrancy that blocks typing a lambda body during overload
+    // resolution (`sumOf { it }`, where the overloads differ only by the lambda's RETURN type). [expectedLambdaShape]
+    // consults this first; [inferType]'s cache is bypassed while any override is active (a lambda body's type is
+    // then context-dependent, exactly like a smart-cast narrowing, so it must not leak into the shared cache).
+    internal val lambdaShapeOverrides = HashMap<KtLambdaExpression, KotlinSymbolService.FunctionalShape>()
+
+    /** True while overload resolution is SCORING a candidate by typing its lambda body under a pushed shape
+     *  ([lambdaShapeOverrides]). The enclosing call is then mid-resolution, so a nested resolution can be
+     *  provisional (re-entrancy fallback) or context-dependent; the per-snapshot memo caches suspend their
+     *  reads/writes while this holds, so a provisional result never poisons the real (post-scoring) inference. */
+    internal val scoringActive: Boolean get() = lambdaShapeOverrides.isNotEmpty()
+
+    /** Run [body] with [shape] pushed as [lambda]'s expected functional shape (see [lambdaShapeOverrides]),
+     *  restoring the prior binding afterwards. */
+    internal fun <T> withLambdaShape(lambda: KtLambdaExpression, shape: KotlinSymbolService.FunctionalShape, body: () -> T): T {
+        val had = lambdaShapeOverrides.containsKey(lambda)
+        val prev = lambdaShapeOverrides.put(lambda, shape)
+        try {
+            return body()
+        } finally {
+            if (had) lambdaShapeOverrides[lambda] = prev!! else lambdaShapeOverrides.remove(lambda)
+        }
+    }
 
     internal fun unwrapParens(e: KtExpression?): KtExpression? =
         if (e is KtParenthesizedExpression) unwrapParens(e.expression) else e

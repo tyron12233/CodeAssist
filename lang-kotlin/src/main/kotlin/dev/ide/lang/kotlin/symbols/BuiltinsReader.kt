@@ -130,6 +130,7 @@ class BuiltinsReader(private val jars: List<Path>) {
                 out[fqn] = TypeShape(
                     typeParameters = cls.typeParameterList.map { nr.getString(it.name) },
                     typeParameterBounds = emptyList(),
+                    typeParameterVariances = cls.typeParameterList.map { varianceStr(it.variance) },
                     supertypes = supers,
                     members = members,
                     isObject = isObject,
@@ -256,6 +257,13 @@ class BuiltinsReader(private val jars: List<Path>) {
                 if (a.projection == ProtoBuf.Type.Argument.Projection.STAR) null else a.type(tt)?.let { typeRef(it, nr, tp, tt) }
             } ?: emptyList()
 
+        /** A builtin type parameter's declaration-site variance as the model string (`"out"`/`"in"`/`""`). */
+        private fun varianceStr(v: ProtoBuf.TypeParameter.Variance): String = when (v) {
+            ProtoBuf.TypeParameter.Variance.OUT -> "out"
+            ProtoBuf.TypeParameter.Variance.IN -> "in"
+            ProtoBuf.TypeParameter.Variance.INV -> ""
+        }
+
         /** The receiver's class FQN for an extension; a bare type-parameter receiver keys on `kotlin.Any`. */
         private fun receiverFqnOf(t: ProtoBuf.Type, nr: NameResolverImpl): String? = when {
             t.hasClassName() -> nr.getQualifiedClassName(t.className).replace('/', '.')
@@ -285,7 +293,13 @@ class BuiltinsReader(private val jars: List<Path>) {
                 // inference (`list.iterator().next()`) loses the element type.
                 val args = t.argumentList.mapNotNull { a ->
                     if (a.projection == ProtoBuf.Type.Argument.Projection.STAR) null
-                    else a.type(tt)?.let { typeRef(it, nr, tp, tt) }
+                    else (a.type(tt)?.let { typeRef(it, nr, tp, tt) } as? KotlinType)?.let { base ->
+                        when (a.projection) { // capture the USE-SITE projection (`Array<out T>`, `in T`)
+                            ProtoBuf.Type.Argument.Projection.OUT -> base.withProjection("out")
+                            ProtoBuf.Type.Argument.Projection.IN -> base.withProjection("in")
+                            else -> base
+                        }
+                    }
                 }
                 KotlinType(fqn, args, nullable = t.nullable, context = null)
             }

@@ -68,7 +68,7 @@ class KotlinTypeShapeIndexTest {
     @Test
     fun codecRoundTripsSealedSubclasses() {
         val shape = TypeShape(
-            emptyList(), emptyList(), emptyList(), emptyList(),
+            emptyList(), emptyList(), emptyList(), emptyList(), emptyList(),
             isAbstract = true, isKotlin = true, sealedSubclasses = listOf("p.Loading", "p.Done"),
         )
         assertEquals(listOf("p.Loading", "p.Done"), roundTrip(shape).sealedSubclasses, "sealedSubclasses survive the codec")
@@ -115,7 +115,7 @@ class KotlinTypeShapeIndexTest {
         private val served: Map<String, TypeShape> = produce().mapValues { (fqn, shape) ->
             val rt = roundTrip(shape)
             if (fqn != "gen.Txt") rt
-            else TypeShape(rt.typeParameters, rt.typeParameterBounds, rt.supertypes,
+            else TypeShape(rt.typeParameters, rt.typeParameterBounds, rt.typeParameterVariances, rt.supertypes,
                 rt.members + KotlinSymbol("fromIndex", SymbolKind.METHOD, origin = SymbolOrigin(false, null), signature = "(): Txt"))
         }
 

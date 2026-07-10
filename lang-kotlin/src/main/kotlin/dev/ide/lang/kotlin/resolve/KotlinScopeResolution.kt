@@ -40,7 +40,10 @@ import org.jetbrains.kotlin.psi.KtWhenExpression
  * function's receiver, and the enclosing class. Their members are visible without an explicit receiver.
  */
 fun KotlinResolver.implicitReceiversAt(offset: Int): List<KotlinType> =
-    implicitReceiversCache.getOrPut(offset) { computeImplicitReceiversAt(offset) }
+    // Suspend the cache during overload scoring: a scope-function lambda's receiver is resolved via the
+    // (mid-resolution) enclosing call, so a scoring-time value can be provisional and must not be cached.
+    if (scoringActive) computeImplicitReceiversAt(offset)
+    else implicitReceiversCache.getOrPut(offset) { computeImplicitReceiversAt(offset) }
 
 internal fun KotlinResolver.computeImplicitReceiversAt(offset: Int): List<KotlinType> {
     val out = ArrayList<KotlinType>()
