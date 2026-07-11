@@ -23,7 +23,8 @@ import dev.ide.vfs.VirtualFile
  * is deliberately left alone (semantic only wins on overlap). Pure over the DOM, so it stays Android-agnostic
  * and needs no resolution; the kinds are the open string-backed [HighlightKind]s the UI maps to colors.
  */
-class XmlSemanticHighlighter(private val parseOf: suspend (VirtualFile) -> ParsedFile?) : SemanticHighlightService {
+class XmlSemanticHighlighter(private val parseOf: suspend (VirtualFile) -> ParsedFile?) :
+    SemanticHighlightService {
 
     override suspend fun highlight(file: VirtualFile): List<SemanticToken> {
         val parsed = parseOf(file) ?: return emptyList()
@@ -47,7 +48,10 @@ class XmlSemanticHighlighter(private val parseOf: suspend (VirtualFile) -> Parse
         val name = attr.name ?: return null
         val colon = name.indexOf(':')
         if (colon <= 0) return null
-        return SemanticToken(TextRange(attr.startOffset, attr.startOffset + colon), NAMESPACE_PREFIX)
+        return SemanticToken(
+            TextRange(attr.startOffset, attr.startOffset + colon),
+            NAMESPACE_PREFIX
+        )
     }
 
     /** A resource/theme reference filling an attribute value (`@…`, `?…`), as a REFERENCE token over its text. */
@@ -64,6 +68,7 @@ class XmlSemanticHighlighter(private val parseOf: suspend (VirtualFile) -> Parse
     private companion object {
         /** An XML namespace prefix (`android`/`app`/`tools`) before the `:` in an attribute name. */
         val NAMESPACE_PREFIX = HighlightKind("xmlNamespace")
+
         /** A resource / theme reference (`@type/name`, `@+id/name`, `?attr/name`) in an attribute value. */
         val REFERENCE = HighlightKind("xmlReference")
     }

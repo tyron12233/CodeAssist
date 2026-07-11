@@ -25,7 +25,10 @@ class XmlCompletion(
 
     override val id = "xml.completion"
 
-    override suspend fun fillCompletionVariants(params: CompletionParams, result: CompletionResultSet) {
+    override suspend fun fillCompletionVariants(
+        params: CompletionParams,
+        result: CompletionResultSet
+    ) {
         val request = CompletionRequest(params.document, params.offset, params.trigger)
         val text = request.document.text
         val parsed = parseFor(request)
@@ -33,7 +36,8 @@ class XmlCompletion(
         result.setReplacementRange(pos.replacementRange)
         if (pos.kind == XmlCompletionKind.UNKNOWN) return
 
-        val candidates = contributors().flatMap { runCatching { it.contribute(pos) }.getOrDefault(emptyList()) }
+        val candidates =
+            contributors().flatMap { runCatching { it.contribute(pos) }.getOrDefault(emptyList()) }
         val items = candidates
             .filter { matchesPrefix(it, pos.prefix) }
             .sortedWith(compareBy({ it.sortPriority }, { it.label.lowercase() }))
