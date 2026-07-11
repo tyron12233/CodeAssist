@@ -150,6 +150,7 @@ interface Aapt2 {
         proguardRules: Path? = null,    // aapt2 `--proguard`: keep rules for manifest/layout-referenced classes (for R8)
         protoFormat: Boolean = false,   // aapt2 `--proto-format`: emit proto resources (R8 resource shrinking input)
         overlays: List<Path> = emptyList(), // aapt2 `-R` overlays applied on top of [compiled]
+        rTxt: Path? = null,             // aapt2 `--output-text-symbols`: the R symbol table (`R.txt`) for an AAR
     ): ToolResult
 
     /**

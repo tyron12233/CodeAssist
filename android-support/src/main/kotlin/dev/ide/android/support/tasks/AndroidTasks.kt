@@ -274,6 +274,8 @@ internal class GenerateLibraryRTask(
     private val throwawayAp: Path,
     private val synthManifest: Path,
     private val aapt2: Aapt2,
+    /** When set, aapt2 also writes the R symbol table (`R.txt`) here — the AAR ships it for consumers. */
+    private val rTxt: Path? = null,
 ) : Task {
     override val inputs: TaskInputs
         get() = TaskInputsImpl().apply {
@@ -282,7 +284,10 @@ internal class GenerateLibraryRTask(
             property("package", packageName)
             property("androidJar", androidJar.toString())
         }
-    override val outputs: TaskOutputs get() = TaskOutputsImpl().apply { dirPath("R", genDir) }
+    override val outputs: TaskOutputs get() = TaskOutputsImpl().apply {
+        dirPath("R", genDir)
+        rTxt?.let { filePath("rTxt", it) }
+    }
 
     override suspend fun execute(ctx: TaskContext): TaskResult {
         ctx.checkCanceled()
@@ -302,6 +307,7 @@ internal class GenerateLibraryRTask(
             genDir,
             throwawayAp,
             nonFinalIds = true,
+            rTxt = rTxt,
         )
         r.log.forEach(ctx.logger())
         ctx.reportToolDiagnostics("aapt2", r.log, DiagnosticKind.RESOURCE)

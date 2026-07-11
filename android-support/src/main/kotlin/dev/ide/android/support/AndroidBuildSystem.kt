@@ -11,6 +11,7 @@ import dev.ide.android.support.tasks.DexExternalLibsTask
 import dev.ide.android.support.tasks.DexMergeTask
 import dev.ide.android.support.tasks.GenerateLibraryRTask
 import dev.ide.android.support.tasks.GenerateRJarTask
+import dev.ide.android.support.tasks.PackageAarTask
 import dev.ide.android.support.tasks.GenerateViewBindingTask
 import dev.ide.android.support.gms.GoogleServices
 import dev.ide.android.support.tasks.BundleTask
@@ -152,13 +153,16 @@ class AndroidBuildSystem(
 
     override fun tasks(project: Project): List<TaskDescriptor> =
         project.modules.filter { supports(it.type) }.flatMap { m ->
+            val isApp = m.type.id == "android-app"
             AndroidVariants.compute(m).flatMap {
-                listOf(
-                    TaskDescriptor("assemble${it.name.cap()}", "build", "Assemble the ${it.name} APK of :${m.name}"),
+                listOfNotNull(
+                    // Apps assemble an APK; libraries assemble an .aar.
+                    if (isApp) TaskDescriptor("assemble${it.name.cap()}", "build", "Assemble the ${it.name} APK of :${m.name}")
+                    else TaskDescriptor("assembleAar${it.name.cap()}", "build", "Assemble the ${it.name} AAR of :${m.name}"),
                     // Only app modules produce an .aab (a library has no application bundle).
                     TaskDescriptor("bundle${it.name.cap()}", "build", "Bundle the ${it.name} AAB of :${m.name}")
-                        .takeIf { _ -> m.type.id == "android-app" },
-                ).filterNotNull()
+                        .takeIf { _ -> isApp },
+                )
             }
         }.distinctBy { it.name }
 
@@ -172,19 +176,28 @@ class AndroidBuildSystem(
         // (compileJava/processResources/classes/jar); the android tasks are added here and wired to the
         // Java tasks by name (e.g. dexBuilderLib dependsOn `:lib:jar`). The container realizes it at build().
         val tasks = DefaultTaskContainer()
-        val javaPlugin = JavaPlugin(bootClasspath, kotlin, plugins)
+        // Plain library modules pulled into an Android build compile against the Android platform (android.jar)
+        // like the app itself — the same boot classpath for every module in this graph.
+        val javaPlugin = JavaPlugin({ bootClasspath }, kotlin, plugins)
         val withJar = request.goal != BuildGoal.COMPILE_ONLY
         val registered = HashSet<ModuleId>()
-        for (app in targets) {
-            val variant = AndroidVariants.select(app, request.variant.name)
-                ?: AndroidVariants.defaultVariant(app) ?: continue
-            val appFacet = app.facets.get(AndroidFacet.KEY) ?: continue
-            for (m in moduleClosure(app, byId)) {
+        for (target in targets) {
+            val variant = AndroidVariants.select(target, request.variant.name)
+                ?: AndroidVariants.defaultVariant(target) ?: continue
+            val targetFacet = target.facets.get(AndroidFacet.KEY) ?: continue
+            for (m in moduleClosure(target, byId)) {
                 if (!registered.add(m.id)) continue
-                if (m.facets.get(AndroidFacet.KEY) != null) registerAndroidLibrary(tasks, m, byId, withJar, variant, appFacet)
+                if (m.facets.get(AndroidFacet.KEY) != null) registerAndroidLibrary(tasks, m, byId, withJar, variant, targetFacet)
                 else javaPlugin.registerModule(tasks, m, byId, withJar)   // reuse the Java plugin
             }
-            appendApp(tasks, app, variant, request.goal, byId)
+            // An `android-lib` TARGET packages an .aar (assembleAar); an `android-app` builds the APK/AAB.
+            if (target.type.id == "android-lib") {
+                // The library target isn't in its own moduleClosure — register its build tasks, then the AAR.
+                if (registered.add(target.id)) registerAndroidLibrary(tasks, target, byId, withJar = true, variant, targetFacet)
+                appendAar(tasks, target, variant, targetFacet)
+            } else {
+                appendApp(tasks, target, variant, request.goal, byId)
+            }
         }
         return tasks.build()
     }
@@ -548,6 +561,12 @@ class AndroidBuildSystem(
             }
         }
 
+        // Dex-only goal (prepare the layout preview): the `dexBuilder`/scope-merge tasks above have populated the
+        // shared library-dex cache — stop here, before L8 / packaging / signing. This is what the preview's
+        // "prepare libraries" action runs so the (one-time, expensive) library dexing happens as an explicit
+        // build, not silently inside a preview render.
+        if (goal == BuildGoal.DEX) return
+
         // Core-library desugaring runtime (L8): dex `desugar_jdk_libs` into its own layer, packaged alongside
         // the app dex. We keep the WHOLE runtime (L8 keep-all) rather than shrinking it to the app's used APIs:
         // L8 release-shrinking against R8's emitted keep rules drops internal `j$.util.*Conversions` helpers
@@ -637,7 +656,8 @@ class AndroidBuildSystem(
                 rRoot.resolve("gen"),
                 rRoot.resolve("lib.ap_"),
                 rRoot.resolve("AndroidManifest.xml"),
-                aapt2
+                aapt2,
+                rTxt = rRoot.resolve("R.txt"),   // the symbol table an AAR ships (assembleAar reads it)
             )
         }
         // The lib's own (non-final) R as R.jar bytecode — compile-only, kept OUT of the dexed output, so the
@@ -694,6 +714,49 @@ class AndroidBuildSystem(
         if (withJar) {
             val jar = TaskName(":${m.name}:jar")
             tasks.task(jar, listOf(classes)) { JarTask(jar, classDirs, jarPath(m)) }
+        }
+    }
+
+    /**
+     * The `assembleAar` terminal for an android-lib TARGET: package the library's already-registered build
+     * outputs (`:lib:jar` classes + `:lib:generateR` R.txt/res) plus its manifest, assets, jni, and consumer
+     * proguard rules into a `.aar` under `build/outputs/aar/`. AGP's `bundle<Variant>Aar` → `assemble<Variant>`.
+     */
+    private fun appendAar(tasks: TaskContainer, lib: Module, variant: AndroidVariant, facet: AndroidFacet) {
+        val classesOut = Paths.get(lib.outputDir.path)
+        val buildDir = classesOut.parent
+        val moduleDir = buildDir.parent
+        val libVariant = AndroidVariants.matchLibraryVariant(lib, variant, facet)
+        fun srcRoots(role: ContentRole): List<Path> = libVariant?.let { roots(it, role) } ?: moduleRoots(lib, role)
+        val rRoot = buildDir.resolve("intermediates").resolve("r")
+
+        // Consumer keep rules the AAR ships (applied by a consuming app's R8): the build type's
+        // consumerProguardFiles (module-relative) + inline proguardRules.
+        val buildType = facet.buildType(variant.buildTypeName)
+        val consumerProguard = (buildType?.consumerProguardFiles ?: emptyList()).map { moduleDir.resolve(it) }
+        val inlineProguard = buildType?.proguardRules ?: emptyList()
+
+        val bundleAar = TaskName(":${lib.name}:bundleAar")
+        val deps = listOf(TaskName(":${lib.name}:jar"), TaskName(":${lib.name}:generateR"), TaskName(":${lib.name}:classes"))
+        tasks.task(bundleAar, deps) {
+            PackageAarTask(
+                bundleAar,
+                classesJar = jarPath(lib),
+                manifest = moduleDir.resolve(facet.manifest),
+                packageName = facet.namespace,
+                resDirs = srcRoots(ContentRole.ANDROID_RES),
+                rTxt = rRoot.resolve("R.txt"),
+                assetsDirs = srcRoots(ContentRole.ASSETS),
+                jniLibDirs = srcRoots(ContentRole.JNI_LIBS),
+                consumerProguardFiles = consumerProguard,
+                inlineProguardRules = inlineProguard,
+                compileSdk = facet.compileSdk,
+                outAar = aarPath(lib, variant.name),
+            )
+        }
+        val assembleAar = TaskName(":${lib.name}:assembleAar")
+        tasks.task(assembleAar, listOf(bundleAar)) {
+            LifecycleTask(assembleAar, trackedFiles = listOf(aarPath(lib, variant.name)))
         }
     }
 
@@ -805,6 +868,13 @@ class AndroidBuildSystem(
         fun signedAabPath(module: Module, variantName: String): Path {
             val buildDir = Paths.get(module.outputDir.path).parent
             return buildDir.resolve("outputs").resolve("bundle").resolve(variantName).resolve("${module.name}-$variantName.aab")
+        }
+
+        /** The packaged `.aar` output path for an android-lib [module] + [variantName] (`assembleAar`).
+         *  Mirrors AGP's `build/outputs/aar/<module>-<variant>.aar` so a host can locate the artifact. */
+        fun aarPath(module: Module, variantName: String): Path {
+            val buildDir = Paths.get(module.outputDir.path).parent
+            return buildDir.resolve("outputs").resolve("aar").resolve("${module.name}-$variantName.aar")
         }
 
         private fun interDir(module: Module, variantName: String): Path =
