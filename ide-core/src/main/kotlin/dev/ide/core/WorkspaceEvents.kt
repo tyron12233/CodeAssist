@@ -20,7 +20,6 @@ import dev.ide.vfs.VfsListener
 import dev.ide.vfs.VfsTopics
 import java.nio.file.Path
 import java.nio.file.Paths
-import java.security.MessageDigest
 import java.util.concurrent.atomic.AtomicLong
 
 /**
@@ -166,12 +165,7 @@ internal class WorkspaceEventHub(
     }
 
     private fun changedEvent(path: Path, newText: String?): FileChanged =
-        FileChanged(store.vfs.fileFor(path), ContentHash(""), newText?.let(::hashOf) ?: ContentHash(""))
-
-    private fun hashOf(text: String): ContentHash {
-        val digest = MessageDigest.getInstance("SHA-256").digest(text.toByteArray(Charsets.UTF_8))
-        return ContentHash(digest.joinToString("") { "%02x".format(it.toInt() and 0xFF) })
-    }
+        FileChanged(store.vfs.fileFor(path), ContentHash(""), newText?.let { ContentHash.of(it) } ?: ContentHash(""))
 
     // ---- react (coalesced per batch; see the reaction table above) ----
 
