@@ -119,6 +119,8 @@ import dev.ide.ui.generated.resources.modcfg_no_roots
 import dev.ide.ui.generated.resources.modcfg_no_rows_yet
 import dev.ide.ui.generated.resources.modcfg_no_source_sets
 import dev.ide.ui.generated.resources.modcfg_output
+import dev.ide.ui.generated.resources.modcfg_platform_sdk
+import dev.ide.ui.generated.resources.modcfg_platform_sdk_auto
 import dev.ide.ui.generated.resources.modcfg_remove
 import dev.ide.ui.generated.resources.modcfg_remove_named
 import dev.ide.ui.generated.resources.modcfg_remove_module
@@ -836,9 +838,10 @@ private fun ConfigForm(
 ) {
     // Editable state, rebuilt whenever a fresh config is loaded (e.g. after a save).
     var level by remember(config) { mutableStateOf(config.languageLevel) }
+    var sdk by remember(config) { mutableStateOf(config.platformSdk) } // "" = follow the module-type default
     val forms = remember(config) { config.facets.map { it.toForm() } }
     val mainClass = remember(config) { mutableStateOf(config.runConfig?.mainClass ?: "") }
-    val dirty = level != config.languageLevel ||
+    val dirty = level != config.languageLevel || sdk != config.platformSdk ||
         (config.runConfig != null && mainClass.value.trim() != config.runConfig.mainClass)
 
     LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
@@ -854,6 +857,17 @@ private fun ConfigForm(
                 Text(stringResource(Res.string.modcfg_java_version), color = Ca.colors.textSecondary, style = Ca.type.caption, fontWeight = FontWeight.Medium)
                 Row(Modifier.fillMaxWidth().padding(top = 2.dp).horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                     config.languageLevels.forEach { lvl -> LevelChip(prettyLevel(lvl), lvl == level) { level = lvl } }
+                }
+                // Platform SDK: the boot classpath the module compiles/completes against. "Auto" follows the
+                // module type (Java → core-Java, Android → the Android SDK); pinning it is how a console module
+                // is kept off android.jar, or a module is targeted at a specific installed platform.
+                if (config.availableSdks.size > 1) {
+                    Spacer(Modifier.height(6.dp))
+                    Text(stringResource(Res.string.modcfg_platform_sdk), color = Ca.colors.textSecondary, style = Ca.type.caption, fontWeight = FontWeight.Medium)
+                    Row(Modifier.fillMaxWidth().padding(top = 2.dp).horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                        LevelChip(stringResource(Res.string.modcfg_platform_sdk_auto, config.resolvedSdk), sdk == "") { sdk = "" }
+                        config.availableSdks.forEach { opt -> LevelChip(opt.label, sdk == opt.name) { sdk = opt.name } }
+                    }
                 }
             }
         }
@@ -890,6 +904,7 @@ private fun ConfigForm(
                         languageLevel = level,
                         facetValues = forms.associate { it.table to it.toValues() },
                         mainClass = if (config.runConfig != null) mainClass.value.trim() else null,
+                        platformSdk = sdk,
                     ))
                 })
             }

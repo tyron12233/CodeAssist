@@ -12,6 +12,9 @@ import dev.ide.model.LanguageLevel
 import dev.ide.model.LibraryDependency
 import dev.ide.model.Module
 import dev.ide.model.ModuleDependency
+import dev.ide.model.PlatformKind
+import dev.ide.model.SdkRef
+import dev.ide.model.SdkResolution
 import dev.ide.model.SourceSetTemplate
 import dev.ide.model.impl.ModuleTypeRegistry
 import dev.ide.model.module
@@ -28,6 +31,7 @@ import dev.ide.ui.backend.UiModuleTypeOption
 import dev.ide.ui.backend.UiPackagingOptions
 import dev.ide.ui.backend.UiPackagingRules
 import dev.ide.ui.backend.UiRunConfig
+import dev.ide.ui.backend.UiSdkOption
 import dev.ide.ui.backend.UiSourceSetInfo
 import java.nio.file.Files
 import java.nio.file.Path
@@ -97,6 +101,11 @@ internal class ModuleService(private val ctx: EngineContext) {
             },
             facets = facets,
             runConfig = runConfig,
+            platformSdk = module.sdk?.name ?: "",
+            resolvedSdk = SdkResolution.sdkFor(ctx.store.workspace, module)?.name ?: "",
+            availableSdks = ctx.store.workspace.sdkTable.sdks.map {
+                UiSdkOption(it.name, "${it.name} · ${if (it.kind == PlatformKind.ANDROID) "Android" else "Java"}")
+            },
         )
     }
 
@@ -128,6 +137,9 @@ internal class ModuleService(private val ctx: EngineContext) {
             project.beginModification().apply {
                 val mod = module(module.id)
                 if (newLevel != null) mod.languageLevel = newLevel
+                // null = leave unchanged; blank = clear the override (follow the module-type default);
+                // otherwise pin the named platform SDK. Drives which platform the module compiles against.
+                edit.platformSdk?.let { mod.sdk = it.ifBlank { null }?.let(::SdkRef) }
                 facets.forEach { mod.putFacet(it) }
                 commit()
             }

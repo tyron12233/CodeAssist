@@ -41,7 +41,10 @@ import java.nio.file.Paths
  * `:lib:classes`).
  */
 class JavaPlugin(
-    private val bootClasspath: List<Path> = emptyList(),
+    /** The compile boot (platform) classpath for a given module — its platform SDK, resolved per module so
+     *  a `java-*` console module compiles against the core-Java platform and never `android.jar`. Empty →
+     *  the host JRE (the desktop default). */
+    private val bootClasspathFor: (Module) -> List<Path> = { emptyList() },
     private val kotlin: IncrementalKotlinCompiler? = null,
     /** Kotlin compiler plugins applied by the `compileKotlin` tasks (the `platform.kotlinCompilerPlugin`
      *  EP contents; defaults to the built-ins for direct/test wiring). */
@@ -83,6 +86,7 @@ class JavaPlugin(
             gen
         } else null
 
+        val bootClasspath = bootClasspathFor(module)
         if (hasKt) {
             val kc = TaskName(":${module.name}:compileKotlin")
             tasks.register(kc) { KotlinCompileTask(module, kc, bootClasspath, kotlin, plugins) }.configure {

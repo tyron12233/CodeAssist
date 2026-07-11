@@ -69,6 +69,14 @@ interface Module {
     val name: String
     val type: ModuleType
     val languageLevel: LanguageLevel
+
+    /**
+     * Explicit platform-SDK override: an [SdkRef] into [Workspace.sdkTable]. `null` (the default) means
+     * "resolve by [ModuleType.platform]" — pick the first workspace SDK whose [Sdk.kind] matches. Persisted
+     * as `sdk = "<name>"` in the `[module]` table of `module.toml`. Use [SdkResolution.sdkFor] to resolve,
+     * never read the table directly — that helper applies this precedence uniformly for build and editor.
+     */
+    val sdk: SdkRef? get() = null
     val sourceSets: List<SourceSet>
     val dependencies: List<OrderEntry>      // ordered; order matters for classpath search
     val facets: FacetContainer
@@ -130,6 +138,14 @@ interface ProjectSettings {
 // Module types (extension point) and variants
 // ---------------------------------------------------------------------------
 
+/**
+ * The platform (boot-classpath) family a module compiles/analyzes against: the JVM/core-Java platform
+ * (console + library modules) or the Android SDK (android-app/-lib). A module resolves an [Sdk] of the
+ * matching [Sdk.kind]; the two are kept apart so a plain Java/Kotlin module never sees `android.*` and an
+ * Android module never sees a raw JDK. Gradle makes the same split by which plugin is applied.
+ */
+enum class PlatformKind { JVM, ANDROID }
+
 /** Extensible, not an enum: android-support contributes android-app/android-lib, java-support java-lib/java-cli. */
 interface ModuleType {
     val id: String                          // "android-app", "java-lib", ...
@@ -137,6 +153,13 @@ interface ModuleType {
     fun defaultSourceSets(): List<SourceSetTemplate>
     fun defaultFacets(): List<FacetTemplate>
     fun supportedBuildSystems(): Set<BuildSystemId>
+
+    /**
+     * The platform this module type compiles against when a module doesn't override it via [Module.sdk].
+     * Derived from the id prefix (`android-*` → Android, everything else → JVM) so the existing types need
+     * no change; a type may override this to declare its platform explicitly.
+     */
+    val platform: PlatformKind get() = if (id.startsWith("android")) PlatformKind.ANDROID else PlatformKind.JVM
 }
 
 data class SourceSetTemplate(val name: String, val scope: DependencyScope, val roots: Map<String, Set<ContentRole>>)
@@ -307,9 +330,11 @@ interface SdkTable {
 }
 
 interface Sdk {
-    val name: String                        // "android-34", "jdk-17"
-    val bootClasspath: List<VirtualFile>    // android.jar / JDK rt
+    val name: String                        // "android-34", "core-java", "jdk-17"
+    val bootClasspath: List<VirtualFile>    // android.jar / core-Java jar / JDK rt
     val buildToolsPath: VirtualFile?
+    /** JVM (core-Java platform) vs ANDROID (android.jar). A [Module] resolves an SDK of its own kind. */
+    val kind: PlatformKind get() = PlatformKind.JVM
 }
 
 // ---------------------------------------------------------------------------
@@ -334,6 +359,8 @@ interface ProjectModelTransaction {
 
 interface ModifiableModule {
     var languageLevel: LanguageLevel
+    /** The explicit platform-SDK override (see [Module.sdk]); `null` clears it (back to the type default). */
+    var sdk: SdkRef?
     fun addDependency(entry: OrderEntry)
     fun removeDependency(entry: OrderEntry)
     fun addSourceSet(template: SourceSetTemplate)

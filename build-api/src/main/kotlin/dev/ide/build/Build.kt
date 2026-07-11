@@ -44,7 +44,12 @@ data class BuildRequest(
     val goal: BuildGoal,
 )
 
-enum class BuildGoal { COMPILE_ONLY, ASSEMBLE, TEST, LINT, PACKAGE, INSTALL, BUNDLE, CLEAN }
+enum class BuildGoal {
+    COMPILE_ONLY, ASSEMBLE, TEST, LINT, PACKAGE, INSTALL, BUNDLE, CLEAN,
+    /** Compile + dex (populate the shared library-dex cache) but stop before packaging the APK — used to
+     *  prepare a project's libraries for the real-view layout preview without a full assemble. */
+    DEX,
+}
 
 @JvmInline value class VariantSelector(val name: String)
 

@@ -56,6 +56,14 @@ internal interface EngineContext {
      *  build, the analyzer, and the Kotlin compiler warm-up. */
     val compileBootClasspath: List<Path>
 
+    /**
+     * The compile boot (platform) classpath for [module] specifically — its resolved platform SDK
+     * ([dev.ide.model.SdkResolution]): the core-Java platform for a `java-*`/`kotlin-*` module, the Android
+     * SDK for an `android-*` module, so a console app never compiles against `android.jar`. Only existing jar
+     * files are returned; a modular JDK home (desktop) drops to empty → the host JRE, matching the old build.
+     */
+    fun bootClasspathFor(module: Module): List<Path>
+
     /** On-device Android tool ports (android.jar + native tools), or null on the desktop / no SDK. */
     val androidTools: AndroidDeviceTools?
 

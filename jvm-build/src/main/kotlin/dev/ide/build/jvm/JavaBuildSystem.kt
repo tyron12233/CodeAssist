@@ -40,11 +40,12 @@ import java.nio.file.Paths
  *
  * The compile steps are owned by the language modules: [JavaPlugin] wires in lang-jdt's `JdtCompileTask`
  * and (for modules with `.kt`) lang-kotlin's `KotlinCompileTask`, which drive ecj / K2 directly. The only
- * host-specific input is [bootClasspath] (empty on the desktop → the host JRE; `android.jar` + desugar
- * stubs on ART); [kotlin] is the workspace's incremental Kotlin compiler, absent for Java-only setups.
+ * host-specific input is [bootClasspathFor] — the module's platform SDK, resolved **per module** so a
+ * Java/Kotlin console module compiles against the core-Java platform (never `android.jar`); empty → the host
+ * JRE (desktop), a jar → the on-device platform. [kotlin] is the workspace's incremental Kotlin compiler.
  */
 class JavaBuildSystem(
-    private val bootClasspath: List<Path> = emptyList(),
+    private val bootClasspathFor: (Module) -> List<Path> = { emptyList() },
     private val kotlin: IncrementalKotlinCompiler? = null,
     /** Kotlin compiler plugins applied per module (the `platform.kotlinCompilerPlugin` EP contents;
      *  defaults to the built-ins). */
@@ -67,7 +68,7 @@ class JavaBuildSystem(
 
     override fun createBuildGraph(project: Project, request: BuildRequest): TaskGraph {
         val tasks = DefaultTaskContainer()
-        JavaPlugin(bootClasspath, kotlin, plugins, generators).apply(SimpleBuildConfiguration(project, request, tasks))
+        JavaPlugin(bootClasspathFor, kotlin, plugins, generators).apply(SimpleBuildConfiguration(project, request, tasks))
         return tasks.build()
     }
 
@@ -88,7 +89,7 @@ class JavaBuildSystem(
     ): TaskGraph {
         val byId = project.modules.associateBy { it.id }
         val tasks = DefaultTaskContainer()
-        val java = JavaPlugin(bootClasspath, kotlin, plugins, generators)
+        val java = JavaPlugin(bootClasspathFor, kotlin, plugins, generators)
         for (m in moduleClosure(listOf(module.id), byId)) java.registerModule(tasks, m, byId, withJar = false)
         val runName = TaskName(":${module.name}:run")
         tasks.register(runName) { JavaExecTask(runName, mainClass, { runtimeClasspath(module) }, programArgs, javaLauncher, programIo, instanceMain) }
@@ -114,7 +115,7 @@ class JavaBuildSystem(
     ): TaskGraph {
         val byId = project.modules.associateBy { it.id }
         val tasks = DefaultTaskContainer()
-        val java = JavaPlugin(bootClasspath, kotlin, plugins, generators)
+        val java = JavaPlugin(bootClasspathFor, kotlin, plugins, generators)
         for (m in moduleClosure(listOf(module.id), byId)) java.registerModule(tasks, m, byId, withJar = false)
         val base = outputDir(module).resolveSibling("dex-run")
         val dexName = TaskName(":${module.name}:dexRun")

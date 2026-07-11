@@ -7,6 +7,7 @@ import dev.ide.build.engine.DexRunner
 import dev.ide.model.LanguageLevel
 import dev.ide.model.impl.ModelPersistence
 import dev.ide.model.impl.ProjectTemplateRegistry
+import dev.ide.model.PlatformKind
 import dev.ide.model.impl.SdkData
 import dev.ide.model.template.ProjectTemplate
 import dev.ide.model.template.TemplateArgs
@@ -499,7 +500,7 @@ class ProjectManager private constructor(
         ): ProjectManager {
 
 
-            val sdk = SdkData("android", bootClasspath, buildToolsPath = null)
+            val sdk = SdkData("android", bootClasspath, buildToolsPath = null, kind = PlatformKind.ANDROID)
             // android.jar is the first boot entry; later entries (the desugar stubs) join the compile platform.
             val tools = AndroidDeviceTools(Paths.get(bootClasspath.first()), androidToolsDir, debugKeystore, deviceApiLevel,
                 desugarStubs = bootClasspath.drop(1).map { Paths.get(it) }, r8Shrinker = r8Shrinker, r8MergeDexer = r8MergeDexer,

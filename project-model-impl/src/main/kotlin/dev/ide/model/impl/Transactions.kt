@@ -10,6 +10,7 @@ import dev.ide.model.Module
 import dev.ide.model.ModuleId
 import dev.ide.model.ModuleType
 import dev.ide.model.OrderEntry
+import dev.ide.model.SdkRef
 import dev.ide.model.Project
 import dev.ide.model.ProjectId
 import dev.ide.model.ProjectModelTransaction
@@ -153,6 +154,7 @@ internal class ModuleBuilder(
     var settingsChanged = false; private set
 
     private var languageLevelField: LanguageLevel = initial?.languageLevel ?: LanguageLevel.JAVA_17
+    private var sdkField: SdkRef? = initial?.sdk?.let { SdkRef(it) }
     private var outputRelPath: String = initial?.outputRelPath ?: "build/classes"
     private val deps = ArrayList<OrderEntry>(initial?.dependencies ?: emptyList())
     private val sourceSets = ArrayList<SourceSetData>(initial?.sourceSets ?: emptyList())
@@ -162,6 +164,13 @@ internal class ModuleBuilder(
         get() = languageLevelField
         set(value) {
             languageLevelField = value
+            settingsChanged = true
+        }
+
+    override var sdk: SdkRef?
+        get() = sdkField
+        set(value) {
+            sdkField = value
             settingsChanged = true
         }
 
@@ -242,5 +251,6 @@ internal class ModuleBuilder(
         sourceSets = sourceSets.toList(),
         dependencies = deps.toList(),
         facets = facets.values.toList(),
+        sdk = sdkField?.name,
     )
 }

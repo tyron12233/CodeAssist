@@ -4,6 +4,7 @@ import dev.ide.model.ContentRole
 import dev.ide.model.DependencyScope
 import dev.ide.model.Exclusion
 import dev.ide.model.LanguageLevel
+import dev.ide.model.PlatformKind
 import dev.ide.model.LibraryDependency
 import dev.ide.model.LibraryKind
 import dev.ide.model.LibraryRef
@@ -106,18 +107,28 @@ object ModelPersistence {
 
     private fun sdksJson(sdks: List<SdkData>): Map<String, Any?> = linkedMapOf(
         "version" to WORKSPACE_SCHEMA_VERSION,
-        "sdks" to sdks.map { linkedMapOf("name" to it.name, "bootClasspath" to it.bootClasspath, "buildTools" to it.buildToolsPath) },
+        "sdks" to sdks.map {
+            linkedMapOf(
+                "name" to it.name,
+                "bootClasspath" to it.bootClasspath,
+                "buildTools" to it.buildToolsPath,
+                "kind" to it.kind.name,
+            )
+        },
     )
 
     private fun moduleToToml(m: ModuleData): Map<String, Any?> {
         val doc = LinkedHashMap<String, Any?>()
         doc["version"] = MODULE_SCHEMA_VERSION
-        doc["module"] = linkedMapOf(
+        doc["module"] = linkedMapOf<String, Any?>(
             "type" to m.typeId,
             "name" to m.name,
             "languageLevel" to m.languageLevel.name,
             "output" to m.outputRelPath,
-        )
+        ).apply {
+            // Emitted only when set, so a module on the type default stays byte-identical to the v1 format.
+            m.sdk?.let { this["sdk"] = it }
+        }
         if (m.sourceSets.isNotEmpty()) {
             val ssMap = LinkedHashMap<String, Any?>()
             for (ss in m.sourceSets) {
@@ -218,10 +229,17 @@ object ModelPersistence {
         val obj = Json.parse(path.readText()).asObject()
         return (obj["sdks"] as? List<*>)?.map { sAny ->
             val s = sAny.asObject()
+            val name = s["name"] as String
+            val buildTools = s["buildTools"] as String?
+            // Back-compat: a v1 sdks.json has no `kind`. Infer it — an SDK named `android*` or carrying
+            // build-tools is the Android platform; everything else is the JVM/core-Java platform.
+            val kind = (s["kind"] as? String)?.let { PlatformKind.valueOf(it) }
+                ?: if (name.startsWith("android") || buildTools != null) PlatformKind.ANDROID else PlatformKind.JVM
             SdkData(
-                name = s["name"] as String,
+                name = name,
                 bootClasspath = (s["bootClasspath"] as? List<*>)?.map { it as String } ?: emptyList(),
-                buildToolsPath = s["buildTools"] as String?,
+                buildToolsPath = buildTools,
+                kind = kind,
             )
         } ?: emptyList()
     }
@@ -246,6 +264,7 @@ object ModelPersistence {
         val typeId = moduleTable["type"] as String
         val languageLevel = LanguageLevel.valueOf(moduleTable["languageLevel"] as String)
         val output = moduleTable["output"] as String
+        val sdk = moduleTable["sdk"] as String?
 
         val sourceSets = (doc["sourceSets"] as? Map<*, *>)?.map { (ssName, ssTableAny) ->
             val ssTable = ssTableAny.asObject()
@@ -281,7 +300,7 @@ object ModelPersistence {
             .filter { it.key !in RESERVED_TABLES && it.key != "version" && it.value is Map<*, *> }
             .map { e -> FacetData(e.key, (e.value as Map<*, *>).entries.associate { it.key.toString() to it.value }) }
 
-        return ModuleData(id, name, dirRelPath, typeId, languageLevel, output, sourceSets, deps, facets)
+        return ModuleData(id, name, dirRelPath, typeId, languageLevel, output, sourceSets, deps, facets, sdk)
     }
 
     private fun tomlToOrderEntry(item: Any?, scope: DependencyScope, variant: String?): OrderEntry {

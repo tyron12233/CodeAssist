@@ -27,6 +27,7 @@ import dev.ide.model.ProjectModelTransaction
 import dev.ide.model.ProjectSettings
 import dev.ide.model.Sdk
 import dev.ide.model.PlatformDependency
+import dev.ide.model.PlatformKind
 import dev.ide.model.SdkDependency
 import dev.ide.model.SdkRef
 import dev.ide.model.SdkTable
@@ -96,6 +97,7 @@ internal class ModuleImpl(
     override val name = data.name
     override val type: ModuleType get() = store.moduleTypes.resolve(data.typeId)
     override val languageLevel = data.languageLevel
+    override val sdk: SdkRef? = data.sdk?.let { SdkRef(it) }
     override val dependencies: List<OrderEntry> = data.dependencies
     override val facets: FacetContainer = FacetContainerImpl(data.facets, store.facetCodecs)
 
@@ -322,4 +324,5 @@ internal class SdkImpl(private val data: SdkData, private val store: ProjectMode
     override val name = data.name
     override val bootClasspath: List<VirtualFile> get() = data.bootClasspath.map { store.vfs.fileFor(it) }
     override val buildToolsPath: VirtualFile? get() = data.buildToolsPath?.let { store.vfs.fileFor(it) }
+    override val kind: PlatformKind get() = data.kind
 }
