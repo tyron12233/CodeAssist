@@ -23,6 +23,8 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Icon
+import androidx.compose.material3.Switch
+import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -56,6 +58,9 @@ import dev.ide.ui.components.ProjectTile
 import dev.ide.ui.components.StorageAccessCard
 import dev.ide.ui.components.entranceSlideUp
 import dev.ide.ui.components.pressScale
+import dev.ide.ui.ads.LocalAds
+import dev.ide.ui.backend.AdPlacement
+import dev.ide.ui.components.AdSlot
 import dev.ide.ui.generated.resources.Res
 import dev.ide.ui.generated.resources.backup
 import dev.ide.ui.generated.resources.cancel
@@ -82,9 +87,10 @@ import dev.ide.ui.generated.resources.projects
 import dev.ide.ui.generated.resources.recovered_projects
 import dev.ide.ui.generated.resources.recovered_projects_content
 import dev.ide.ui.generated.resources.support_chip_free
-import dev.ide.ui.generated.resources.support_chip_no_ads
 import dev.ide.ui.generated.resources.support_chip_open_source
 import dev.ide.ui.generated.resources.support_content
+import dev.ide.ui.generated.resources.support_show_ads
+import dev.ide.ui.generated.resources.support_show_ads_desc
 import dev.ide.ui.generated.resources.support_sponsor
 import dev.ide.ui.generated.resources.support_star
 import dev.ide.ui.generated.resources.support_title
@@ -208,6 +214,10 @@ fun ProjectPickerScreen(
                     )
                 }
             }
+
+            // A native ad below the project list — an idle "between tasks" spot, never over the actions above.
+            // Renders nothing unless ads are active (host available, enabled, not a supporter).
+            AdSlot(AdPlacement.PROJECTS)
 
             Spacer(Modifier.size(4.dp))
             BetaBanner(onSubmit = onSubmitSuggestions)
@@ -419,6 +429,28 @@ private fun SupportCard(onSponsor: (() -> Unit)?, onStar: (() -> Unit)?) {
             }
         }
         SupportChips()
+
+        // Where an ad network exists (Android), a free on/off switch: removing ads costs nothing, SuperSU-style.
+        // Supporting the project is the separate Sponsor button below.
+        val ads = LocalAds.current
+        if (ads?.manageable == true) {
+            Row(
+                Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(12.dp),
+            ) {
+                Column(Modifier.weight(1f)) {
+                    Text(stringResource(Res.string.support_show_ads), color = Ca.colors.textPrimary, style = Ca.type.subhead)
+                    Text(stringResource(Res.string.support_show_ads_desc), color = Ca.colors.textSecondary, style = Ca.type.caption)
+                }
+                Switch(
+                    checked = ads.adsEnabled,
+                    onCheckedChange = { ads.updateAdsEnabled(it) },
+                    colors = SwitchDefaults.colors(checkedThumbColor = Color.White, checkedTrackColor = SponsorPink),
+                )
+            }
+        }
+
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
             if (onSponsor != null) {
                 SupportButton(stringResource(Res.string.support_sponsor), CaIcons.heart, Modifier.weight(1f), filled = true, onClick = onSponsor)
@@ -430,7 +462,7 @@ private fun SupportCard(onSponsor: (() -> Unit)?, onStar: (() -> Unit)?) {
     }
 }
 
-/** The "100% free / No ads / Open source" reassurance pills; wraps to a second row on narrow screens. */
+/** The "100% free / Open source" reassurance pills; wraps to a second row on narrow screens. */
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun SupportChips() {
@@ -439,7 +471,6 @@ private fun SupportChips() {
         verticalArrangement = Arrangement.spacedBy(8.dp),
     ) {
         SupportChip(stringResource(Res.string.support_chip_free))
-        SupportChip(stringResource(Res.string.support_chip_no_ads))
         SupportChip(stringResource(Res.string.support_chip_open_source))
     }
 }
@@ -523,7 +554,12 @@ private fun ProjectCard(
                 }
             }
             // Type/status tags first (left), then the module count (tags omitted when there's nothing to say).
-            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+            // FlowRow wraps the tags/count onto another line on a narrow (phone) screen instead of squishing them.
+            FlowRow(
+                verticalArrangement = Arrangement.spacedBy(4.dp),
+                horizontalArrangement = Arrangement.spacedBy(6.dp),
+                itemVerticalAlignment = Alignment.CenterVertically,
+            ) {
                 if (project.isAndroid) AndroidTag()
                 if (project.compatibility) CompatibilityChip()
                 Text(
@@ -680,7 +716,7 @@ private fun CompatibilityChip() {
         horizontalArrangement = Arrangement.spacedBy(4.dp),
     ) {
         Icon(CaIcons.warning, null, Modifier.size(12.dp), tint = Ca.colors.warning)
-        Text(stringResource(Res.string.compatibility), color = Ca.colors.warning, style = Ca.type.caption2, fontWeight = FontWeight.SemiBold)
+        Text(stringResource(Res.string.compatibility), color = Ca.colors.warning, style = Ca.type.caption2, fontWeight = FontWeight.SemiBold, maxLines = 1, softWrap = false)
     }
 }
 

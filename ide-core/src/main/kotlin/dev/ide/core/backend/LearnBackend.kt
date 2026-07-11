@@ -397,10 +397,10 @@ internal class LearnBackend(private val ctx: BackendContext) : LearnService {
         val missing = missingConstructs(code, check.requireSource)
         val ok = outputOk && missing.isEmpty()
         val message = when {
-            ok -> "Correct — nicely done!"
+            ok -> "Correct, nicely done!"
             !outputOk && check.expectedOutput != null -> "Not quite. Expected output:\n${check.expectedOutput}"
             !outputOk && check.mustContain.isNotEmpty() -> "Not quite. Your output should include: ${check.mustContain.joinToString(", ")}"
-            !outputOk -> "Not quite — give it another try."
+            !outputOk -> "Not quite. Give it another try."
             // Output matched but a construct is missing → the learner hardcoded the answer.
             else -> "Your output is right, but the exercise wants you to actually use ${missing.joinToString(", ") { "`$it`" }} — not just print the answer."
         }

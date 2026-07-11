@@ -244,6 +244,22 @@ val bundleComposeDrawablesAsset = tasks.register<Copy>("bundleComposeDrawablesAs
     into(layout.buildDirectory.dir("compose-drawables-asset/composeResources/dev.ide.ui.generated.resources/drawable"))
 }
 
+// --- AdMob ids (debug/profile = Google TEST ids; release = your real ids) ------------------------
+// Debug + profile builds ALWAYS use Google's TEST ids: test ads are non-billable and safe to click during
+// development, so there's no risk of an invalid-traffic ban. The release build uses the real ids when supplied
+// via -PADMOB_APP_ID / -PADMOB_NATIVE_UNIT_ID (or the ADMOB_APP_ID / ADMOB_NATIVE_UNIT_ID env vars), falling
+// back to the test ids so a fork builds fine with AdMob unconfigured. The App id reaches the manifest through
+// the `admobAppId` placeholder; the native ad-unit id is a BuildConfig field AndroidAdHost reads. One native
+// ad unit is reused across all four placements. OFFICIAL RELEASES MUST SET BOTH real ids.
+val testAdmobAppId = "ca-app-pub-3940256099942544~3347511713"
+val testAdmobNativeUnitId = "ca-app-pub-3940256099942544/2247696110"
+// The real ids are baked in as the release defaults (AdMob ids are not secret — they ship inside every APK),
+// and stay overridable so a fork can point ads at its own AdMob account instead of the upstream one.
+val realAdmobAppId = (findProperty("ADMOB_APP_ID") as String?) ?: System.getenv("ADMOB_APP_ID")
+    ?: "ca-app-pub-7523005242346905~2985774451"
+val realAdmobNativeUnitId = (findProperty("ADMOB_NATIVE_UNIT_ID") as String?) ?: System.getenv("ADMOB_NATIVE_UNIT_ID")
+    ?: "ca-app-pub-7523005242346905/7440024785"
+
 android {
     namespace = "dev.ide.android"
     compileSdk = 36
@@ -275,6 +291,12 @@ android {
             ?: "sb_publishable_5T14bUAG6fOGz47kwYzG7A_25dj3ap4"
         buildConfigField("String", "ANALYTICS_URL", "\"$analyticsUrl\"")
         buildConfigField("String", "ANALYTICS_KEY", "\"$analyticsKey\"")
+
+        // AdMob defaults = Google TEST ids. Debug inherits these as-is; `release` overrides to the real ids
+        // below, and `profile` (a local perf build) is forced back to test. The App id reaches the manifest
+        // via ${admobAppId}; the native ad-unit id is read from BuildConfig by AndroidAdHost.
+        manifestPlaceholders["admobAppId"] = testAdmobAppId
+        buildConfigField("String", "AD_NATIVE_UNIT_ID", "\"$testAdmobNativeUnitId\"")
     }
 
     buildFeatures {
@@ -327,6 +349,9 @@ android {
             // download size becomes a concern.
             isMinifyEnabled = false
             signingConfig = signingConfigs.findByName("release")
+            // The shipped build serves real AdMob ads (falls back to test ids if none were configured).
+            manifestPlaceholders["admobAppId"] = realAdmobAppId
+            buildConfigField("String", "AD_NATIVE_UNIT_ID", "\"$realAdmobNativeUnitId\"")
         }
         // A release-like, non-debuggable build that's still installable locally (signed with the debug key).
         // Use this — never `debug` — to judge runtime/typing/recomposition performance: a `debuggable` app
@@ -340,6 +365,10 @@ android {
             // locally when no release keystore is present.
             signingConfig = signingConfigs.findByName("release") ?: signingConfigs.getByName("debug")
             matchingFallbacks += listOf("release")
+            // This build is for on-device perf testing, so keep TEST ads (initWith(release) copied the real
+            // ids — undo that) — a tester must never click a live ad.
+            manifestPlaceholders["admobAppId"] = testAdmobAppId
+            buildConfigField("String", "AD_NATIVE_UNIT_ID", "\"$testAdmobNativeUnitId\"")
         }
     }
 
@@ -723,6 +752,13 @@ dependencies {
     implementation(compose.material3)
     implementation(compose.ui)
     implementation(libs.androidx.activity.compose)
+    // AdMob native ads (Android launcher only), rendered through the AdHost seam. Excludes protobuf-lite: this
+    // app already dexes full protobuf (via :android-support's bundletool), and the two share the com.google.
+    // protobuf.* package, so keeping both is a D8 duplicate-class failure. The ads SDK's protobuf touchpoints
+    // are API-compatible with the full runtime already present.
+    implementation(libs.play.services.ads) {
+        exclude(group = "com.google.protobuf", module = "protobuf-javalite")
+    }
     // FileProvider (androidx.core.content.FileProvider) — hands other apps content:// URIs to our
     // app-private project files for Share / "Open with", and grants read access on inbound intents.
     implementation(libs.androidx.core)

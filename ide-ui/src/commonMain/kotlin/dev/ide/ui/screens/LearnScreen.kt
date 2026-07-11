@@ -38,10 +38,12 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import dev.ide.ui.backend.AdPlacement
 import dev.ide.ui.backend.IdeBackend
 import dev.ide.ui.backend.UiLearnCatalog
 import dev.ide.ui.backend.UiLearnTrack
 import dev.ide.ui.backend.UiResumePoint
+import dev.ide.ui.components.AdSlot
 import dev.ide.ui.components.Chip
 import dev.ide.ui.components.darken
 import dev.ide.ui.components.entranceSlideUp
@@ -134,6 +136,9 @@ fun LearnScreen(
                     catalog.tracks.filter { it.category == activeCat }.forEachIndexed { i, track -> trackCard(track, i) }
                 }
             }
+
+            // A native ad between the lesson tracks and the resource links — browse time, not lesson time.
+            AdSlot(AdPlacement.LEARN)
 
             if (onOpenDocs != null || onJoinDiscord != null) {
                 Spacer(Modifier.height(8.dp))
