@@ -26,6 +26,9 @@ dependencies {
     // comes from :kotlin-compiler-deps - the UNSHADED `-for-ide` split over the real IntelliJ platform,
     // replacing kotlin-compiler-embeddable, so there is one PSI/compiler platform in the whole IDE.
     implementation(project(":kotlin-compiler-deps"))
+    // The shared IntelliJ platform environment (KotlinParserHost delegates its env/lock/forceFullParse to it,
+    // so :lang-xml can register XML PSI onto the SAME application environment — one platform in the process).
+    implementation(project(":intellij-psi-host"))
     // Decode Kotlin libraries' @kotlin.Metadata to recover real Kotlin signatures (extension functions,
     // properties, default args, nullability) that plain bytecode erases. Small + compiler-free.
     implementation(libs.kotlin.metadata.jvm)

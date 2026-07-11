@@ -67,6 +67,27 @@ dependencies {
         "com.jetbrains.intellij.java:java-frontback-psi-impl",
         "com.jetbrains.intellij.java:java-psi",
         "com.jetbrains.intellij.java:java-psi-impl",
+        // XML PSI: the real com.intellij.psi.xml.* tree for the XML LanguageBackend (:intellij-psi-host
+        // registers XMLParserDefinition + XmlASTFactory onto the shared core environment). In the 251 module
+        // split these span four jars: xml-parser = the lexers (_XmlLexer) + parsers (XmlParsing); xml-psi =
+        // api (XmlFile/XmlTag/XmlAttribute/XMLLanguage); xml-psi-impl = the PSI impls + XmlASTFactory;
+        // xml-frontback-impl = XMLParserDefinition. The heavier xml-analysis-impl (schema/annotators/AWT) is
+        // deliberately excluded — our analysis is reimplemented directly on PSI instead.
+        "com.jetbrains.intellij.xml:xml-parser",
+        "com.jetbrains.intellij.xml:xml-psi",
+        "com.jetbrains.intellij.xml:xml-psi-impl",
+        "com.jetbrains.intellij.xml:xml-frontback-impl",
+        // xml-psi-impl's XsdRegExpParserDefinition references org.intellij.lang.regexp.* (XSD pattern facets),
+        // pulled in during environment boot — supply the regexp module it depends on.
+        "com.jetbrains.intellij.regexp:regexp",
+        // XmlDocumentImpl.<clinit> uses com.intellij.util.concurrency.AtomicFieldUpdater, which lives in the
+        // platform 'concurrency' module (source: platform/util/concurrency) — not in util/util-base/util-rt,
+        // and platformJars is non-transitive, so it must be listed explicitly.
+        "com.jetbrains.intellij.platform:concurrency",
+        // XmlTagImpl.getSubTags() -> shouldProcessIncludesNow() references com.intellij.util.indexing.FileBasedIndex
+        // (XInclude support). getSubTags is a core traversal op, so the indexing API is required (the lighter
+        // 'indexing' api module, not indexing-impl).
+        "com.jetbrains.intellij.platform:indexing",
     ).forEach { platformJars("$it:$intellijPlatform") }
 
     // --- The `-for-ide` split compiler ---------------------------------------------------------------
