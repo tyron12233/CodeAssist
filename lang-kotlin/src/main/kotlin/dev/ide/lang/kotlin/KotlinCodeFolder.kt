@@ -29,9 +29,16 @@ class KotlinCodeFolder(
     private val parsedFor: (VirtualFile) -> KotlinParsedFile?,
 ) : FoldingService {
 
+    /** Last computed fold set per file, keyed by the exact buffer content. Folding is a pure function of the
+     *  text, so an identical buffer (a preempt-retry of the FOLDS pass, or the daemon's re-run once the index
+     *  finishes) reuses it instead of re-walking the PSI. Bounded by the open files this analyzer serves. */
+    private class Cached(val text: CharSequence, val regions: List<FoldRegion>)
+    private val cache = java.util.concurrent.ConcurrentHashMap<String, Cached>()
+
     override suspend fun folds(file: VirtualFile): List<FoldRegion> {
         val parsed = parsedFor(file) ?: return emptyList()
         val text = parsed.ktFile.text
+        cache[file.path]?.let { if (it.text.contentEquals(text)) return it.regions }
         val out = ArrayList<FoldRegion>(32)
 
         // The import group: from the first import directive to the last, shown as `import ...`.
@@ -56,6 +63,7 @@ class KotlinCodeFolder(
             while (c != null) { walk(c); c = c.nextSibling }
         }
         walk(parsed.ktFile)
+        cache[file.path] = Cached(text, out)
         return out
     }
 

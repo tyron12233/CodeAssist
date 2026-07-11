@@ -26,10 +26,17 @@ import org.eclipse.jdt.core.dom.ImportDeclaration
  */
 class JdtCodeFolder(private val analyzer: JdtSourceAnalyzer) : FoldingService {
 
+    /** Last computed fold set per file, keyed by the exact buffer content. Folding is a pure function of the
+     *  text, so an identical buffer (a preempt-retry of the FOLDS pass, or the daemon's re-run once the index
+     *  finishes) reuses it and — the real win here — SKIPS the JDT `parseSyntactic`. Bounded by open files. */
+    private class Cached(val text: String, val regions: List<FoldRegion>)
+    private val cache = java.util.concurrent.ConcurrentHashMap<String, Cached>()
+
     override suspend fun folds(file: VirtualFile): List<FoldRegion> {
         val text = analyzer.overlayProvider()[analyzer.fqcnFor(file)]?.let { String(it) }
             ?: runCatching { file.readText().toString() }.getOrNull()
             ?: return emptyList()
+        cache[file.path]?.let { if (it.text == text) return it.regions }
         val parsed = analyzer.parseSyntactic(file, text) // folding is structural; no bindings needed
         val cu = parsed.cu
         val out = ArrayList<FoldRegion>(32)
@@ -70,6 +77,7 @@ class JdtCodeFolder(private val analyzer: JdtSourceAnalyzer) : FoldingService {
             if (!c.isBlockComment && !c.isDocComment) continue // line comments don't fold
             addRegion(out, text, c.startPosition, c.startPosition + c.length, if (c.isDocComment) "/**...*/" else "/*...*/", FoldKind.COMMENT)
         }
+        cache[file.path] = Cached(text, out)
         return out
     }
 
