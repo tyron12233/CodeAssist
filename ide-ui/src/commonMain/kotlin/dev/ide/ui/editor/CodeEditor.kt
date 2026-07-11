@@ -335,7 +335,11 @@ private fun CodeEditorContent(
         val noOp = item.insertText == chars.subSequence(mainStart, mainEnd).toString() &&
             item.additionalEdits.isEmpty() && item.caret == null
         val nextIsSpace = mainEnd < len && chars[mainEnd].isWhitespace()
-        val insert = if (noOp && !nextIsSpace) item.insertText + " " else item.insertText
+        // Inside an XML attribute value the token sits in quotes; "acknowledge with a space" is wrong there
+        // (it produces android:x="false "). The caret should hop OUT of the quotes instead (see below), so
+        // suppress the no-op space when the next char is a closing quote in a quote-hopping (XML) language.
+        val nextIsCloseQuote = mainEnd < len && (chars[mainEnd] == '"' || chars[mainEnd] == '\'') && wordExtra.isNotEmpty()
+        val insert = if (noOp && !nextIsSpace && !nextIsCloseQuote) item.insertText + " " else item.insertText
 
         val edits = ArrayList<RangeEdit>()
         edits.add(RangeEdit(mainStart, mainEnd, insert, mainStart + insert.length))

@@ -268,12 +268,17 @@ class EditorSession(
      */
     fun applyCodeFolds(fresh: List<FoldRegion>) {
         val previouslyCollapsed = foldRegions.filter { it.collapsed }
-        foldRegions = fresh.map { r ->
+        val next = fresh.map { r ->
             val keepCollapsed = previouslyCollapsed.any { it.start == r.start && it.end == r.end } ||
                 (r.collapsed && !defaultFoldsApplied) // collapsedByDefault, first time only
             r.copy(collapsed = keepCollapsed)
         }
         defaultFoldsApplied = true
+        // Skip the state write (and the [foldModel] rebuild it forces) when the fresh set is identical to the
+        // current one — the common case while typing inside a block, where the structure is unchanged and the
+        // in-place edit shift already moved the offsets to match. Keeps the same list reference. FoldRegion is a
+        // data class, so this is a value comparison.
+        if (next != foldRegions) foldRegions = next
     }
 
     /** Toggle the fold whose START is on document [line] (the gutter chevron / placeholder click). No-op when

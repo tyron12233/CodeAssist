@@ -36,11 +36,17 @@ class EditorDocument private constructor(
     /** Materialize `[start, end)` directly from the rope — used for line extraction and selection copies. */
     fun substring(start: Int, end: Int): String = buffer.substring(start, end)
 
-    fun lineStart(line: Int): Int = lineStarts[line]
+    // Line accessors coerce the index into range: a renderer can hold a line number captured a frame before
+    // an edit that shortened the document, and read it back after the splice. Clamping to the last line makes
+    // that one-frame-stale read draw a valid line instead of throwing ArrayIndexOutOfBounds; the next
+    // recomposition corrects it. (Was the top on-device editor crash.)
+    fun lineStart(line: Int): Int = lineStarts[line.coerceIn(0, lineStarts.size - 1)]
 
     /** End of [line] excluding the line break (== [lineStart] of the next line minus 1, or text end). */
-    fun lineEnd(line: Int): Int =
-        if (line == lineStarts.size - 1) buffer.length else lineStarts[line + 1] - 1
+    fun lineEnd(line: Int): Int {
+        val l = line.coerceIn(0, lineStarts.size - 1)
+        return if (l == lineStarts.size - 1) buffer.length else lineStarts[l + 1] - 1
+    }
 
     fun lineLength(line: Int): Int = lineEnd(line) - lineStart(line)
 

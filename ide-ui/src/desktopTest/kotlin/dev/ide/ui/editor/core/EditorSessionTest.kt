@@ -215,11 +215,32 @@ class EditorSessionTest {
 
     @Test
     fun backspaceInIndentOfNonBlankLinePeelsOneChar() {
-        // line has real content after the indent — stays a normal single-char delete
+        // caret at a MISALIGNED column (col 3, 4-space unit) → normal single-char delete (fine-tuning)
         val s = session("foo\n    bar", 7)
         s.backspace()
         assertEquals("foo\n   bar", s.doc.text)
         assertEquals(TextRange(6), s.selection)
+    }
+
+    @Test
+    fun backspaceAtIndentStopRemovesWholeLevel() {
+        // caret at a proper indent stop (col 8, 4-space unit) with content after → remove one whole level to col 4
+        val code = "fun f() {\n        body()\n}"
+        val caret = code.indexOf("body()") // col 8
+        val s = session(code, caret, language = CodeLanguage.Kotlin)
+        s.backspace()
+        assertEquals("fun f() {\n    body()\n}", s.doc.text)
+        assertEquals(TextRange(caret - 4), s.selection)
+    }
+
+    @Test
+    fun backspaceUnindentsXmlChildAtIndentStop() {
+        // XML child at col 8 → Backspace removes a level to col 4 (context-aware smart delete)
+        val code = "<a>\n        <b/>\n</a>"
+        val caret = code.indexOf("<b/>") // col 8
+        val s = session(code, caret, language = CodeLanguage.Xml)
+        s.backspace()
+        assertEquals("<a>\n    <b/>\n</a>", s.doc.text)
     }
 
     @Test

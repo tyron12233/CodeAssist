@@ -229,6 +229,7 @@ internal fun EditorCenter(
                             path = active.path,
                             text = active.text,
                             backend = state.backend,
+                            session = active.session,
                             modifier = mod,
                         )
 

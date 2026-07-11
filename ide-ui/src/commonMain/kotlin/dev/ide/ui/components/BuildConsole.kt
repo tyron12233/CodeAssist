@@ -59,6 +59,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.delay
+import dev.ide.ui.backend.AdPlacement
 import dev.ide.ui.backend.BuildDiagnosticUi
 import dev.ide.ui.backend.BuildLogLine
 import dev.ide.ui.backend.BuildState
@@ -187,6 +188,9 @@ fun BuildConsole(
                 BuildTab.Steps -> StepsTab(buildState.steps)
             }
         }
+        // A compact native ad in the console footer, only while nothing is building — a natural pause, never
+        // over a running build. Renders nothing unless ads are active.
+        if (!running) AdSlot(AdPlacement.BUILD_CONSOLE)
     }
 }
 
@@ -344,13 +348,26 @@ private fun CopyButton(tab: BuildTab, provide: () -> String) {
         if (copied) CaIcons.check else CaIcons.copy,
         if (copied) stringResource(Res.string.buildc_copied) else stringResource(Res.string.buildc_copy, label),
         onClick = {
-            scope.launch { clipboard.setText(AnnotatedString(provide())) }
+            scope.launch { clipboard.setText(AnnotatedString(clipForClipboard(provide()))) }
             copied = true
         },
         boxSize = 28,
         iconSize = 16,
         tint = if (copied) Ca.colors.run else Ca.colors.textSecondary,
     )
+}
+
+// Android delivers clipboard data over a Binder transaction whose buffer (~1 MB, shared process-wide) a long
+// build log overflows, throwing TransactionTooLargeException and taking down the app. Cap the copied text well
+// under that, keeping the TAIL (a build's errors and final status live at the end of the log) and noting the
+// drop. Not localized: this is diagnostic clipboard payload, like the log lines themselves, not UI chrome.
+private const val MAX_CLIPBOARD_CHARS = 200_000
+
+internal fun clipForClipboard(text: String): String {
+    if (text.length <= MAX_CLIPBOARD_CHARS) return text
+    val dropped = text.length - MAX_CLIPBOARD_CHARS
+    return "[... $dropped earlier characters truncated to fit the clipboard ...]\n" +
+        text.substring(text.length - MAX_CLIPBOARD_CHARS)
 }
 
 private fun renderLogForCopy(l: BuildLogLine): String = buildString {

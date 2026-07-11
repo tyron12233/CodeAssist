@@ -201,6 +201,21 @@ fun smartBackspace(
             }
         }
     }
+    // Smart backspace to the proper indent (IntelliJ "Unindent"): when the caret sits at a proper indent stop
+    // in a line's leading whitespace (a column that's a multiple of the indent unit) with real content after
+    // it, one Backspace removes a whole level — `\n        |Text` (4-space unit) → `\n    |Text`. A caret at a
+    // misaligned column deletes a single space (fine-tuning), as before. Space indents only (a tab is already
+    // one level); all-space prefix only; the closer-before case is handled above.
+    if (deleted == ' ') {
+        val lineStart = lineStartOf(text, pos)
+        val col = pos - lineStart
+        val unitLen = detectIndentUnit(text).length
+        if (unitLen > 1 && col > 0 && col % unitLen == 0 &&
+            spacesOnly(text, lineStart, pos) && !isBlankToLineEnd(text, pos)
+        ) {
+            return RangeEdit(pos - unitLen, pos, "", pos - unitLen)
+        }
+    }
     // Smart-indent backspace (IntelliJ-style): on a blank, whitespace-only line, a single Backspace
     // removes the whole line (all of its whitespace, including any after the caret) together with the
     // preceding line break, hopping the caret to the end of the previous line — rather than peeling off
@@ -232,6 +247,13 @@ private fun isBlankBefore(text: CharSequence, lineStart: Int, pos: Int): Boolean
     while (i < pos) {
         val c = text[i]; if (c != ' ' && c != '\t') return false; i++
     }
+    return true
+}
+
+/** True when `[lineStart, pos)` is only spaces (no tabs) — the precondition for space-based unindent. */
+private fun spacesOnly(text: CharSequence, lineStart: Int, pos: Int): Boolean {
+    var i = lineStart
+    while (i < pos) { if (text[i] != ' ') return false; i++ }
     return true
 }
 

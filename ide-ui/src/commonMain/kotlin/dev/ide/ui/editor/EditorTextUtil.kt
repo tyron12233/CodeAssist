@@ -30,6 +30,32 @@ internal fun caretInsideCall(chars: CharSequence, caret: Int): Boolean {
     return false
 }
 
+/**
+ * Whether [caret] sits inside an XML attribute value — between an opening quote and its close, within a start
+ * tag (`<Tag attr="|">`). Cheap local scan: find the enclosing `<` without crossing a `>` (else we're in
+ * element content, not a tag), then track quote state up to the caret. Used to arm parameter hints inside `""`.
+ */
+internal fun caretInsideXmlAttributeValue(chars: CharSequence, caret: Int): Boolean {
+    var i = (caret - 1).coerceAtMost(chars.length - 1)
+    var lt = -1
+    var guard = 0
+    while (i >= 0 && guard < 4000) {
+        val c = chars[i]
+        if (c == '>') return false // element content, not a start tag
+        if (c == '<') { lt = i; break }
+        i--; guard++
+    }
+    if (lt < 0) return false
+    var quote: Char? = null
+    var j = lt
+    while (j < caret && j < chars.length) {
+        val c = chars[j]
+        if (quote != null) { if (c == quote) quote = null } else if (c == '"' || c == '\'') quote = c
+        j++
+    }
+    return quote != null
+}
+
 internal fun paletteFor(syntax: SyntaxColors): Array<SpanStyle?> {
     val palette = arrayOfNulls<SpanStyle>(TokenType.entries.size)
     palette[TokenType.KEYWORD.ordinal] = SpanStyle(color = syntax.keyword)
