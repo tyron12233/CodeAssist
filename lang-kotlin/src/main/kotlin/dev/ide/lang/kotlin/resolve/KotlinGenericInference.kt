@@ -21,7 +21,11 @@ import org.jetbrains.kotlin.psi.KtLambdaExpression
  * its lower bound (String), made nullable when the lambda body is `null` → `String?` (Kotlin's LUB of
  * `String` and `Nothing?`). A `let { null }` has NO such bound, so it is untouched (stays the lambda result).
  */
-internal fun KotlinResolver.applyLowerBounds(sym: KotlinSymbol, call: KtCallExpression, bindings: MutableMap<String, TypeRef>) {
+internal fun KotlinResolver.applyLowerBounds(
+    sym: KotlinSymbol,
+    call: KtCallExpression,
+    bindings: MutableMap<String, TypeRef>
+) {
     if (sym.typeParamLowerBounds.isEmpty()) return
     for ((param, lowerRef) in sym.typeParamLowerBounds) {
         val lower = lowerRef as? KotlinType ?: continue
@@ -29,9 +33,12 @@ internal fun KotlinResolver.applyLowerBounds(sym: KotlinSymbol, call: KtCallExpr
         when {
             // Argument inference left R free (its lambda returned `null` → no type) → R = the lower bound,
             // nullable when that lambda body is the `null` literal.
-            cur == null || cur.isTypeParameter -> bindings[param] = if (returnParamGotNullLambda(sym, call, param)) lower.withNullable(true) else lower
+            cur == null || cur.isTypeParameter -> bindings[param] =
+                if (returnParamGotNullLambda(sym, call, param)) lower.withNullable(true) else lower
             // R was bound to `Nothing`/`Nothing?` (a `null`/`throw` lambda) → widen to the lower bound.
-            cur.qualifiedName == "kotlin.Nothing" -> bindings[param] = lower.withNullable(cur.nullable || lower.nullable)
+            cur.qualifiedName == "kotlin.Nothing" -> bindings[param] =
+                lower.withNullable(cur.nullable || lower.nullable)
+
             else -> {} // a concrete lambda result already pinned R (`getOrElse { "x" }` → String) — keep it
         }
     }
@@ -39,13 +46,18 @@ internal fun KotlinResolver.applyLowerBounds(sym: KotlinSymbol, call: KtCallExpr
 
 /** Whether [call] passes a lambda — to the parameter whose functional return type is [param] — whose body is
  *  the `null` literal (so [param] should be nullable). */
-internal fun KotlinResolver.returnParamGotNullLambda(sym: KotlinSymbol, call: KtCallExpression, param: String): Boolean {
+internal fun KotlinResolver.returnParamGotNullLambda(
+    sym: KotlinSymbol,
+    call: KtCallExpression,
+    param: String
+): Boolean {
     call.valueArguments.forEachIndexed { i, arg ->
         val lambda = arg.getArgumentExpression() as? KtLambdaExpression ?: return@forEachIndexed
-        val pt = (sym.paramTypes.getOrNull(i) ?: sym.paramTypes.lastOrNull()) as? KotlinType ?: return@forEachIndexed
+        val pt = (sym.paramTypes.getOrNull(i) ?: sym.paramTypes.lastOrNull()) as? KotlinType
+            ?: return@forEachIndexed
         val ret = service.functionalShape(pt)?.returnType as? KotlinType
         if (ret?.isTypeParameter == true && ret.qualifiedName == param) {
-            val last = lambda.bodyExpression?.statements?.lastOrNull() as? KtExpression
+            val last = lambda.bodyExpression?.statements?.lastOrNull()
             if (last is KtConstantExpression && last.text.trim() == "null") return true
         }
     }
@@ -57,11 +69,16 @@ internal fun KotlinResolver.returnParamGotNullLambda(sym: KotlinSymbol, call: Kt
 internal fun KotlinResolver.methodTypeParamErasure(sym: KotlinSymbol): Map<String, TypeRef> {
     if (sym.typeParameters.isEmpty() || sym.typeParameterBounds.isEmpty()) return emptyMap()
     val out = HashMap<String, TypeRef>(sym.typeParameters.size)
-    sym.typeParameters.forEachIndexed { i, name -> sym.typeParameterBounds.getOrNull(i)?.let { out[name] = it } }
+    sym.typeParameters.forEachIndexed { i, name ->
+        sym.typeParameterBounds.getOrNull(i)?.let { out[name] = it }
+    }
     return out
 }
 
-internal fun KotlinResolver.inferTypeArguments(sym: KotlinSymbol, call: KtCallExpression): Map<String, TypeRef> {
+internal fun KotlinResolver.inferTypeArguments(
+    sym: KotlinSymbol,
+    call: KtCallExpression
+): Map<String, TypeRef> {
     if (sym.typeParameters.isEmpty()) return emptyMap()
     val bindings = HashMap<String, TypeRef>()
     // Explicit type arguments (`mutableStateOf<List<Int>?>(null)`, `emptyList<String>()`) pin the callee's
@@ -83,7 +100,9 @@ internal fun KotlinResolver.inferTypeArguments(sym: KotlinSymbol, call: KtCallEx
     call.valueArguments.forEachIndexed { i, arg ->
         val expr = arg.getArgumentExpression() ?: return@forEachIndexed
         val paramIndex = lambdaParamIndex(call, i, sym)
-        val pt = (sym.paramTypes.getOrNull(paramIndex) ?: sym.paramTypes.lastOrNull()) as? KotlinType ?: return@forEachIndexed
+        val pt =
+            (sym.paramTypes.getOrNull(paramIndex) ?: sym.paramTypes.lastOrNull()) as? KotlinType
+                ?: return@forEachIndexed
         if (expr is KtLambdaExpression) bindLambdaReturn(pt, expr, bindings)
         else inferType(expr)?.let { unify(pt, it, bindings) }
     }
@@ -112,7 +131,7 @@ fun KotlinResolver.uninferableTypeParameters(call: KtCallExpression): List<Strin
     if (sym.typeParameters.isEmpty()) return emptyList()
     val ret = sym.type as? KotlinType ?: return emptyList()
     // A concrete expected type at this position can drive the inference, so it isn't uninferable.
-    (expectedTypeAt(call.textRange.startOffset) as? KotlinType)?.let { exp ->
+    expectedTypeAt(call.textRange.startOffset)?.let { exp ->
         if (!exp.isTypeParameter && service.isKnownType(exp.qualifiedName)) return emptyList()
     }
     val bound = inferTypeArguments(sym, call).keys
@@ -135,13 +154,18 @@ internal fun KotlinResolver.mentionsTypeParam(t: TypeRef?, name: String): Boolea
 /** The declared value-parameter indices that received an argument at [call]: a named argument by its
  *  parameter name, a trailing lambda by Kotlin's trailing-lambda rule (the last parameter), the rest by
  *  position. A named argument whose name matches no parameter contributes nothing. */
-internal fun KotlinResolver.suppliedValueParameterIndices(sym: KotlinSymbol, call: KtCallExpression): Set<Int> {
+internal fun KotlinResolver.suppliedValueParameterIndices(
+    sym: KotlinSymbol,
+    call: KtCallExpression
+): Set<Int> {
     val paramCount = maxOf(sym.paramTypes.size, sym.paramNames.size)
     val out = HashSet<Int>()
     call.valueArguments.forEachIndexed { i, arg ->
         val named = arg.getArgumentName()?.asName?.identifier
         val idx = when {
-            named != null -> sym.paramNames.indexOf(named).takeIf { it >= 0 } ?: return@forEachIndexed
+            named != null -> sym.paramNames.indexOf(named).takeIf { it >= 0 }
+                ?: return@forEachIndexed
+
             arg is KtLambdaArgument -> (paramCount - 1).coerceAtLeast(0)
             else -> i
         }
@@ -185,7 +209,10 @@ fun KotlinResolver.missingRequiredArgument(call: KtCallExpression): String? {
     return report
 }
 
-internal fun KotlinResolver.bindingsFromValueArgs(sym: KotlinSymbol, call: KtCallExpression): Map<String, TypeRef> {
+internal fun KotlinResolver.bindingsFromValueArgs(
+    sym: KotlinSymbol,
+    call: KtCallExpression
+): Map<String, TypeRef> {
     if (sym.typeParameters.isEmpty()) return emptyMap()
     val bindings = HashMap<String, TypeRef>()
     val needed = sym.typeParameters.toHashSet()
@@ -196,14 +223,21 @@ internal fun KotlinResolver.bindingsFromValueArgs(sym: KotlinSymbol, call: KtCal
         if (bindings.keys.containsAll(needed)) return bindings
         val expr = arg.getArgumentExpression() ?: return@forEachIndexed
         if (expr is KtLambdaExpression) return@forEachIndexed
-        val pt = (sym.paramTypes.getOrNull(i) ?: sym.paramTypes.lastOrNull()) as? KotlinType ?: return@forEachIndexed
+        val pt = (sym.paramTypes.getOrNull(i) ?: sym.paramTypes.lastOrNull()) as? KotlinType
+            ?: return@forEachIndexed
         inferType(expr)?.let { unify(pt, it, bindings) }
     }
     return bindings
 }
 
-internal fun KotlinResolver.unify(param: KotlinType, arg: KotlinType, bindings: MutableMap<String, TypeRef>) {
-    if (param.isTypeParameter) { bindings.putIfAbsent(param.qualifiedName, arg); return }
+internal fun KotlinResolver.unify(
+    param: KotlinType,
+    arg: KotlinType,
+    bindings: MutableMap<String, TypeRef>
+) {
+    if (param.isTypeParameter) {
+        bindings.putIfAbsent(param.qualifiedName, arg); return
+    }
     // A vararg parameter (`of(E...)`) is an `Array<E>`; a single scalar argument unifies with the element.
     if (param.qualifiedName == "kotlin.Array" && param.typeArguments.size == 1 &&
         arg.qualifiedName != "kotlin.Array"

@@ -85,7 +85,7 @@ internal class KotlinControlFlow(private val resolver: KotlinResolver) {
         var cur = Liveness.LIVE
         val out = ArrayList<KtExpression>()
         for (st in block.statements) {
-            val e = st as? KtExpression ?: continue
+            val e = st ?: continue
             when (cur) {
                 Liveness.DEAD -> out.add(e)                    // unreachable
                 Liveness.UNKNOWN -> return out                 // can't be sure → stop marking (never over-report)
@@ -132,7 +132,8 @@ internal class KotlinControlFlow(private val resolver: KotlinResolver) {
     /** A call is DEAD when it provably returns `Nothing` (`TODO()`/`error()`/`fail()`, or an inferred `Nothing`
      *  type); otherwise it completes normally → LIVE. (A bare call used as a statement does NOT satisfy a
      *  value-returning function's return requirement — that is exactly the missing-return we want to flag.) */
-    private fun callLiveness(e: KtExpression): Liveness = if (isNothingReturning(e)) Liveness.DEAD else Liveness.LIVE
+    private fun callLiveness(e: KtExpression): Liveness =
+        if (isNothingReturning(e)) Liveness.DEAD else Liveness.LIVE
 
     /** `x ?: <jump>` never falls through the elvis when the left is null (the RHS jumps); but the left may be
      *  non-null, so overall it still completes → LIVE. Only a top-level jump construct deadens (handled above).
@@ -159,11 +160,16 @@ internal class KotlinControlFlow(private val resolver: KotlinResolver) {
         fun rec(p: PsiElement) {
             if (found) return
             when (p) {
-                is KtBreakExpression -> { found = true; return }
+                is KtBreakExpression -> {
+                    found = true; return
+                }
+
                 is KtLoopExpression, is KtFunctionLiteral, is KtNamedFunction -> return // a nested boundary
             }
             var c = p.firstChild
-            while (c != null && !found) { rec(c); c = c.nextSibling }
+            while (c != null && !found) {
+                rec(c); c = c.nextSibling
+            }
         }
         if (body != null) rec(body)
         return found
@@ -213,26 +219,34 @@ internal class KotlinControlFlow(private val resolver: KotlinResolver) {
      *  can be read before initialization. */
     private fun collectUninitLocals(root: PsiElement, out: MutableSet<KtProperty>) {
         fun rec(p: PsiElement) {
-            if (p is KtProperty && p.parent is KtBlockExpression && !p.hasInitializer() && !p.hasDelegate() &&
-                p.getter == null && !p.hasModifier(KtTokens.LATEINIT_KEYWORD) && p.name != null
+            if (p is KtProperty && p.parent is KtBlockExpression && !p.hasInitializer() && !p.hasDelegate() && p.getter == null && !p.hasModifier(
+                    KtTokens.LATEINIT_KEYWORD
+                ) && p.name != null
             ) out.add(p)
             var c = p.firstChild
-            while (c != null) { rec(c); c = c.nextSibling }
+            while (c != null) {
+                rec(c); c = c.nextSibling
+            }
         }
         rec(root)
     }
 
     /** Mark any tracked local assigned inside a loop body or a closure (lambda / local function / object literal)
      *  as "complex" — a back-edge or a deferred/captured write could have initialized it, so we don't flag it. */
-    private fun markLoopOrClosureAssigned(root: PsiElement, tracked: Set<KtProperty>, complex: MutableSet<KtProperty>) {
+    private fun markLoopOrClosureAssigned(
+        root: PsiElement, tracked: Set<KtProperty>, complex: MutableSet<KtProperty>
+    ) {
         fun rec(p: PsiElement, inLoopOrClosure: Boolean) {
-            val here = inLoopOrClosure || p is KtLoopExpression || p is KtFunctionLiteral || p is KtNamedFunction
+            val here =
+                inLoopOrClosure || p is KtLoopExpression || p is KtFunctionLiteral || p is KtNamedFunction
             if (here && p is KtBinaryExpression && p.operationToken in ASSIGN_TOKENS) {
                 assignedLocal(p.left, tracked)?.let { complex.add(it) }
             }
             var c = p.firstChild
             // The root itself isn't a loop/closure; nested ones flip `here` on for their subtree.
-            while (c != null) { rec(c, if (p === root) inLoopOrClosure else here); c = c.nextSibling }
+            while (c != null) {
+                rec(c, if (p === root) inLoopOrClosure else here); c = c.nextSibling
+            }
         }
         rec(root, false)
     }
@@ -257,7 +271,10 @@ internal class KotlinControlFlow(private val resolver: KotlinResolver) {
                 for (st in e.statements) s = flowAssign(st, s, candidates, out)
                 return s
             }
-            is KtProperty -> return flowAssign(e.initializer, inSet, candidates, out) // a local decl with initializer is handled by collect (excluded); a nested one just evaluates its RHS
+
+            is KtProperty -> return flowAssign(
+                e.initializer, inSet, candidates, out
+            ) // a local decl with initializer is handled by collect (excluded); a nested one just evaluates its RHS
             is KtBinaryExpression -> when {
                 e.operationToken in ASSIGN_TOKENS -> {
                     // Evaluate the RHS first (read before the assignment takes effect), then mark the LHS assigned.
@@ -265,8 +282,11 @@ internal class KotlinControlFlow(private val resolver: KotlinResolver) {
                     val target = assignedLocal(e.left, candidates)
                     // A compound assign (`x += …`) also READS the LHS, but that is invalid on an uninitialized
                     // val/var anyway; we conservatively treat it as an assignment only (record no read).
-                    return if (target != null) afterRhs + target else flowAssign(e.left, afterRhs, candidates, out)
+                    return if (target != null) afterRhs + target else flowAssign(
+                        e.left, afterRhs, candidates, out
+                    )
                 }
+
                 e.operationToken == KtTokens.ANDAND || e.operationToken == KtTokens.OROR || e.operationToken == KtTokens.ELVIS -> {
                     // Short-circuit: the RHS is evaluated conditionally, so its assignments are NOT definite. Walk
                     // it for reads (in the LHS-decided state), but return only the LHS's assignments.
@@ -274,8 +294,12 @@ internal class KotlinControlFlow(private val resolver: KotlinResolver) {
                     flowAssign(e.right, l, candidates, out)
                     return l
                 }
-                else -> return flowAssign(e.right, flowAssign(e.left, inSet, candidates, out), candidates, out)
+
+                else -> return flowAssign(
+                    e.right, flowAssign(e.left, inSet, candidates, out), candidates, out
+                )
             }
+
             is KtTryExpression -> {
                 // A catch/finally can be entered before any `try`-body assignment ran, so a catch starts from the
                 // ENTRY set (not the try's out). After the whole try, definitely-assigned = intersection over the
@@ -289,13 +313,18 @@ internal class KotlinControlFlow(private val resolver: KotlinResolver) {
                     if (liveness(cc.catchBody) != Liveness.DEAD) parts.add(co)
                 }
                 var res = if (parts.isEmpty()) inSet else parts.reduce { a, b -> a intersect b }
-                e.finallyBlock?.finalExpression?.let { res = res + flowAssign(it, inSet, candidates, out) }
+                e.finallyBlock?.finalExpression?.let {
+                    res = res + flowAssign(it, inSet, candidates, out)
+                }
                 return res
             }
+
             is KtIfExpression -> {
                 val afterCond = flowAssign(e.condition, inSet, candidates, out)
                 val thenOut = flowAssign(e.then, afterCond, candidates, out)
-                val elseOut = if (e.`else` != null) flowAssign(e.`else`, afterCond, candidates, out) else afterCond
+                val elseOut = if (e.`else` != null) flowAssign(
+                    e.`else`, afterCond, candidates, out
+                ) else afterCond
                 // A branch that always jumps (return/throw) doesn't reach the code after the `if`, so only the
                 // surviving branch(es) define what is assigned there (`if (c) x = 1 else return` ⇒ x assigned after).
                 val thenLive = liveness(e.then) != Liveness.DEAD
@@ -307,6 +336,7 @@ internal class KotlinControlFlow(private val resolver: KotlinResolver) {
                     else -> afterCond // both branches jump → code after is unreachable; set is moot
                 }
             }
+
             is KtWhenExpression -> {
                 val afterSubject = flowAssign(e.subjectExpression, inSet, candidates, out)
                 // Conservative: don't assume any branch ran (a no-match path keeps the entry set). Each branch's
@@ -314,32 +344,43 @@ internal class KotlinControlFlow(private val resolver: KotlinResolver) {
                 e.entries.forEach { flowAssign(it.expression, afterSubject, candidates, out) }
                 return afterSubject
             }
+
             is KtWhileExpression -> {
                 val afterCond = flowAssign(e.condition, inSet, candidates, out)
-                flowAssign(e.body, afterCond, candidates, out) // body reads see the pre-loop set (first iteration)
+                flowAssign(
+                    e.body, afterCond, candidates, out
+                ) // body reads see the pre-loop set (first iteration)
                 return afterCond                               // may run zero times → nothing new definitely assigned
             }
+
             is KtDoWhileExpression -> {
                 val afterBody = flowAssign(e.body, inSet, candidates, out)
-                return flowAssign(e.condition, afterBody, candidates, out) // body runs at least once
+                return flowAssign(
+                    e.condition, afterBody, candidates, out
+                ) // body runs at least once
             }
+
             is KtForExpression -> {
                 val afterRange = flowAssign(e.loopRange, inSet, candidates, out)
                 flowAssign(e.body, afterRange, candidates, out)
                 return afterRange
             }
+
             is KtNameReferenceExpression -> {
                 val decl = boundLocal(e)
                 if (decl != null && decl in candidates && decl !in inSet) out.add(e)
                 return inSet
             }
+
             else -> {
                 // Default: recurse into ALL children left-to-right, threading the assigned set — so reads nested
                 // inside argument lists / qualified expressions / etc. (not just direct KtExpression children) are
                 // recorded in evaluation order.
                 var s: Set<KtProperty> = inSet
-                var c = (e as PsiElement).firstChild
-                while (c != null) { s = flowAssign(c, s, candidates, out); c = c.nextSibling }
+                var c = e.firstChild
+                while (c != null) {
+                    s = flowAssign(c, s, candidates, out); c = c.nextSibling
+                }
                 return s
             }
         }
@@ -364,6 +405,7 @@ internal class KotlinControlFlow(private val resolver: KotlinResolver) {
                 is KtBlockExpression -> node.statements.firstOrNull {
                     it is KtProperty && it.name == name && it.textRange.endOffset <= offset
                 }?.let { return it as KtProperty }
+
                 is KtClassOrObject -> return null // a member scope: not a local
             }
             node = node.parent
@@ -373,7 +415,12 @@ internal class KotlinControlFlow(private val resolver: KotlinResolver) {
 
     private companion object {
         val ASSIGN_TOKENS = setOf(
-            KtTokens.EQ, KtTokens.PLUSEQ, KtTokens.MINUSEQ, KtTokens.MULTEQ, KtTokens.DIVEQ, KtTokens.PERCEQ,
+            KtTokens.EQ,
+            KtTokens.PLUSEQ,
+            KtTokens.MINUSEQ,
+            KtTokens.MULTEQ,
+            KtTokens.DIVEQ,
+            KtTokens.PERCEQ,
         )
     }
 }

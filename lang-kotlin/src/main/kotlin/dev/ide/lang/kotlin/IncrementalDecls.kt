@@ -52,6 +52,7 @@ internal object IncrementalDecls {
     /** Recompute plan for a keystroke: [Full] recompute, or [Partial] naming exactly the indices to recompute. */
     sealed interface Plan {
         object Full : Plan
+
         /**
          * Recompute the declarations at [recompute] (reuse all others, re-anchored). [fineReuse], when non-null,
          * is the single body-only-changed function eligible for intra-function statement reuse; the rest of
@@ -89,6 +90,7 @@ internal object IncrementalDecls {
         is KtClassOrObject -> d.declarations.any {
             it is KtNamedFunction && it.hasModifier(org.jetbrains.kotlin.lexer.KtTokens.OPERATOR_KEYWORD)
         }
+
         else -> false
     }
 
@@ -99,7 +101,9 @@ internal object IncrementalDecls {
         fun rec(p: com.intellij.psi.PsiElement) {
             if (p is KtNameReferenceExpression) p.getReferencedName().let { out += it }
             var c = p.firstChild
-            while (c != null) { rec(c); c = c.nextSibling }
+            while (c != null) {
+                rec(c); c = c.nextSibling
+            }
         }
         rec(d)
         return out
@@ -111,7 +115,9 @@ internal object IncrementalDecls {
         val stars = HashSet<String>()
         for (imp in ktFile.importDirectives) {
             val fqn = imp.importedFqName?.asString() ?: continue
-            if (imp.isAllUnder) stars += fqn else names += (imp.aliasName ?: fqn.substringAfterLast('.'))
+            if (imp.isAllUnder) stars += fqn else names += (imp.aliasName ?: fqn.substringAfterLast(
+                '.'
+            ))
         }
         return Imports(ktFile.packageDirective?.text ?: "", names, stars)
     }
@@ -124,7 +130,9 @@ internal object IncrementalDecls {
         while (start < minLen && old[start] == new[start]) start++
         var oldEnd = old.length
         var newEnd = new.length
-        while (oldEnd > start && newEnd > start && old[oldEnd - 1] == new[newEnd - 1]) { oldEnd--; newEnd-- }
+        while (oldEnd > start && newEnd > start && old[oldEnd - 1] == new[newEnd - 1]) {
+            oldEnd--; newEnd--
+        }
         return intArrayOf(start, newEnd)
     }
 
@@ -147,7 +155,8 @@ internal object IncrementalDecls {
         if (prevImports.packageText != curImports.packageText || prevImports.starPackages != curImports.starPackages) return Plan.Full
 
         val changed = changedDeclIndices(prev, topDecls, prevFileText, curFileText)
-        val importNames = curImports.names.symmetricDifferenceWith(prevImports.names) // added/removed specific imports
+        val importNames =
+            curImports.names.symmetricDifferenceWith(prevImports.names) // added/removed specific imports
         if (changed.isEmpty() && importNames.isEmpty()) return Plan.Partial(emptySet(), null)
 
         // Classify each changed declaration: a body-only change invalidates only itself; a signature change
@@ -182,7 +191,8 @@ internal object IncrementalDecls {
         }
         // Intra-function statement reuse applies only in the pure single-body-edit case (no dependents fired):
         // a dependent's own text is unchanged, so its per-statement cache would wrongly reuse stale results.
-        val fine = if (!multiOrSignature && bodyOnly != null && recompute.size == 1) bodyOnly else null
+        val fine =
+            if (!multiOrSignature && bodyOnly != null && recompute.size == 1) bodyOnly else null
         return Plan.Partial(recompute, fine)
     }
 
@@ -190,7 +200,12 @@ internal object IncrementalDecls {
      *  the rest are byte-identical (guaranteed by [changedRange]) and so unchanged. Index-aligned with [prev].
      *  A pure deletion collapses the new-text span to a point (start == end); the declaration containing that
      *  point still overlaps it, so it is (correctly) compared and flagged. */
-    private fun changedDeclIndices(prev: List<Facts>, topDecls: List<KtDeclaration>, prevText: String, curText: String): Set<Int> {
+    private fun changedDeclIndices(
+        prev: List<Facts>,
+        topDecls: List<KtDeclaration>,
+        prevText: String,
+        curText: String
+    ): Set<Int> {
         if (prevText == curText) return emptySet() // no textual change (a caret-only re-run)
         val (start, end) = changedRange(prevText, curText)
         val out = HashSet<Int>()

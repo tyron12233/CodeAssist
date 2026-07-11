@@ -53,18 +53,42 @@ internal fun KotlinResolver.smartCastTypeAt(name: String, offset: Int): KotlinTy
             // container node, so the use site is matched by RANGE, not by child identity against the
             // (unwrapped) branch.
             is KtIfExpression -> {
-                if (node.then?.textRange?.contains(offset) == true) conditionNarrowing(node.condition, name, whenTrue = true)?.let { return it }
-                if (node.`else`?.textRange?.contains(offset) == true) conditionNarrowing(node.condition, name, whenTrue = false)?.let { return it }
+                if (node.then?.textRange?.contains(offset) == true) conditionNarrowing(
+                    node.condition,
+                    name,
+                    whenTrue = true
+                )?.let { return it }
+                if (node.`else`?.textRange?.contains(offset) == true) conditionNarrowing(
+                    node.condition,
+                    name,
+                    whenTrue = false
+                )?.let { return it }
             }
+
             is KtWhileExpression ->
-                if (node.body?.textRange?.contains(offset) == true) conditionNarrowing(node.condition, name, whenTrue = true)?.let { return it }
+                if (node.body?.textRange?.contains(offset) == true) conditionNarrowing(
+                    node.condition,
+                    name,
+                    whenTrue = true
+                )?.let { return it }
             // The short-circuit RHS of `&&`/`||` sees the LHS's narrowing (`x is T && x.member`,
             // `x !is T || x.member`). Only the RHS; the LHS itself runs unnarrowed (disjoint ranges).
             is KtBinaryExpression -> if (node.right?.textRange?.contains(offset) == true) when (node.operationToken) {
-                KtTokens.ANDAND -> conditionNarrowing(node.left, name, whenTrue = true)?.let { return it }
-                KtTokens.OROR -> conditionNarrowing(node.left, name, whenTrue = false)?.let { return it }
+                KtTokens.ANDAND -> conditionNarrowing(
+                    node.left,
+                    name,
+                    whenTrue = true
+                )?.let { return it }
+
+                KtTokens.OROR -> conditionNarrowing(
+                    node.left,
+                    name,
+                    whenTrue = false
+                )?.let { return it }
+
                 else -> {}
             }
+
             is KtWhenExpression -> whenSubjectNarrowing(node, child, name)?.let { return it }
             is KtBlockExpression -> earlyExitNarrowing(node, child, name)?.let { return it }
         }
@@ -78,24 +102,39 @@ internal fun KotlinResolver.smartCastTypeAt(name: String, offset: Int): KotlinTy
  *  / `name !is T` (false side), conjoined through `&&` on the true side and `||` on the false side. Null when
  *  the condition doesn't narrow [name] or the target won't resolve. Mirrors the lowerer's `conditionNarrowings`,
  *  keyed to one name. */
-internal fun KotlinResolver.conditionNarrowing(cond: KtExpression?, name: String, whenTrue: Boolean): KotlinType? =
+internal fun KotlinResolver.conditionNarrowing(
+    cond: KtExpression?,
+    name: String,
+    whenTrue: Boolean
+): KotlinType? =
     when (val c = unwrapParens(cond)) {
         is KtIsExpression -> {
-            val lhs = (unwrapParens(c.leftHandSide) as? KtNameReferenceExpression)?.getReferencedName()
+            val lhs =
+                (unwrapParens(c.leftHandSide) as? KtNameReferenceExpression)?.getReferencedName()
             if (lhs == name && whenTrue != c.isNegated) typeFromIsTarget(c.typeReference?.text) else null
         }
+
         is KtBinaryExpression -> when (c.operationToken) {
-            KtTokens.ANDAND -> if (whenTrue) conditionNarrowing(c.left, name, true) ?: conditionNarrowing(c.right, name, true) else null
-            KtTokens.OROR -> if (!whenTrue) conditionNarrowing(c.left, name, false) ?: conditionNarrowing(c.right, name, false) else null
+            KtTokens.ANDAND -> if (whenTrue) conditionNarrowing(c.left, name, true)
+                ?: conditionNarrowing(c.right, name, true) else null
+
+            KtTokens.OROR -> if (!whenTrue) conditionNarrowing(c.left, name, false)
+                ?: conditionNarrowing(c.right, name, false) else null
+
             else -> null
         }
+
         else -> null
     }
 
 /** `when (subject) { is T -> ‹here› }` (or a subject `val`) narrows a simple-name subject to `T` inside a
  *  positive single-`is` branch; a subjectless `when { name is T -> … }` narrows via the branch condition.
  *  [fromChild] is the `when`'s child on the path; only a branch entry narrows (not the subject/`else`). */
-internal fun KotlinResolver.whenSubjectNarrowing(whenExpr: KtWhenExpression, fromChild: PsiElement?, name: String): KotlinType? {
+internal fun KotlinResolver.whenSubjectNarrowing(
+    whenExpr: KtWhenExpression,
+    fromChild: PsiElement?,
+    name: String
+): KotlinType? {
     val entry = fromChild as? KtWhenEntry ?: return null
     if (entry.isElse) return null
     val subjectName = whenSubjectName(whenExpr)
@@ -106,7 +145,8 @@ internal fun KotlinResolver.whenSubjectNarrowing(whenExpr: KtWhenExpression, fro
         return if (pattern.isNegated) null else typeFromIsTarget(pattern.typeReference?.text)
     }
     // Subjectless `when { name is T -> … }`: the branch condition is a boolean expression on names.
-    val condExpr = (entry.conditions.singleOrNull() as? KtWhenConditionWithExpression)?.expression ?: return null
+    val condExpr = (entry.conditions.singleOrNull() as? KtWhenConditionWithExpression)?.expression
+        ?: return null
     return conditionNarrowing(condExpr, name, whenTrue = true)
 }
 
@@ -120,7 +160,11 @@ internal fun KotlinResolver.whenSubjectName(whenExpr: KtWhenExpression): String?
 /** The narrowing in effect for [name] after a preceding early-exit guard in [block]: `if (name !is T) return`
  *  makes `name` a `T` for the rest of the block. [fromChild] is the statement on the path to the use site;
  *  only statements before it are guards. The last applicable guard wins. */
-internal fun KotlinResolver.earlyExitNarrowing(block: KtBlockExpression, fromChild: PsiElement?, name: String): KotlinType? {
+internal fun KotlinResolver.earlyExitNarrowing(
+    block: KtBlockExpression,
+    fromChild: PsiElement?,
+    name: String
+): KotlinType? {
     var result: KotlinType? = null
     for (st in block.statements) {
         if (st === fromChild) break
@@ -136,15 +180,17 @@ internal fun KotlinResolver.earlyExitNarrowing(block: KtBlockExpression, fromChi
 /** Whether [branch] unconditionally transfers control out of the enclosing block (so code after the guard
  *  is reached only when the guard's condition was false): a `return`/`throw`/`break`/`continue`, or a block
  *  whose last statement does. */
-internal fun KotlinResolver.branchAlwaysJumps(branch: KtExpression?): Boolean = when (val b = branch) {
-    is KtReturnExpression, is KtThrowExpression, is KtBreakExpression, is KtContinueExpression -> true
-    is KtBlockExpression -> branchAlwaysJumps(b.statements.lastOrNull() as? KtExpression)
-    else -> false
-}
+internal fun KotlinResolver.branchAlwaysJumps(branch: KtExpression?): Boolean =
+    when (val b = branch) {
+        is KtReturnExpression, is KtThrowExpression, is KtBreakExpression, is KtContinueExpression -> true
+        is KtBlockExpression -> branchAlwaysJumps(b.statements.lastOrNull())
+        else -> false
+    }
 
 /** The classifier a smart-cast `is T` narrows to: generic args erased and made non-null. Null when [typeText]
  *  is absent or doesn't resolve. */
 internal fun KotlinResolver.typeFromIsTarget(typeText: String?): KotlinType? {
-    val text = typeText?.substringBefore('<')?.removeSuffix("?")?.trim()?.takeIf { it.isNotEmpty() } ?: return null
+    val text = typeText?.substringBefore('<')?.removeSuffix("?")?.trim()?.takeIf { it.isNotEmpty() }
+        ?: return null
     return runCatching { service.typeFromText(text, fileContext) }.getOrNull()
 }

@@ -29,12 +29,19 @@ enum class SuspendContext { SUSPEND, NON_SUSPEND, UNKNOWN }
  * approximate under concurrency (plain longs); the benchmarks drive them single-threaded.
  */
 object KotlinResolverStats {
-    @Volatile var enabled: Boolean = false
-    @Volatile var inferCalls: Long = 0
-    @Volatile var inferComputes: Long = 0
-    @Volatile var callTargetsCalls: Long = 0
-    @Volatile var callTargetsComputes: Long = 0
-    fun reset() { inferCalls = 0; inferComputes = 0; callTargetsCalls = 0; callTargetsComputes = 0 }
+    @Volatile
+    var enabled: Boolean = false
+    @Volatile
+    var inferCalls: Long = 0
+    @Volatile
+    var inferComputes: Long = 0
+    @Volatile
+    var callTargetsCalls: Long = 0
+    @Volatile
+    var callTargetsComputes: Long = 0
+    fun reset() {
+        inferCalls = 0; inferComputes = 0; callTargetsCalls = 0; callTargetsComputes = 0
+    }
 }
 
 /**
@@ -55,6 +62,7 @@ class KotlinResolverCaches {
     val implicitReceivers = HashMap<Int, List<KotlinType>>()
     val composeCtx = HashMap<PsiElement, ComposableContext>()
     val suspendCtx = HashMap<PsiElement, SuspendContext>()
+
     /** Per-flow-root result of the CFG var-nullability pass: the var references it proves non-null (see
      *  [KotlinVarNullFlow]). Keyed by the analysed body block. */
     val varNonNull = HashMap<PsiElement, Set<PsiElement>>()
@@ -135,7 +143,8 @@ class KotlinResolver(
     // resolution (`sumOf { it }`, where the overloads differ only by the lambda's RETURN type). [expectedLambdaShape]
     // consults this first; [inferType]'s cache is bypassed while any override is active (a lambda body's type is
     // then context-dependent, exactly like a smart-cast narrowing, so it must not leak into the shared cache).
-    internal val lambdaShapeOverrides = HashMap<KtLambdaExpression, KotlinSymbolService.FunctionalShape>()
+    internal val lambdaShapeOverrides =
+        HashMap<KtLambdaExpression, KotlinSymbolService.FunctionalShape>()
 
     /** True while overload resolution is SCORING a candidate by typing its lambda body under a pushed shape
      *  ([lambdaShapeOverrides]). The enclosing call is then mid-resolution, so a nested resolution can be
@@ -145,7 +154,11 @@ class KotlinResolver(
 
     /** Run [body] with [shape] pushed as [lambda]'s expected functional shape (see [lambdaShapeOverrides]),
      *  restoring the prior binding afterwards. */
-    internal fun <T> withLambdaShape(lambda: KtLambdaExpression, shape: KotlinSymbolService.FunctionalShape, body: () -> T): T {
+    internal fun <T> withLambdaShape(
+        lambda: KtLambdaExpression,
+        shape: KotlinSymbolService.FunctionalShape,
+        body: () -> T
+    ): T {
         val had = lambdaShapeOverrides.containsKey(lambda)
         val prev = lambdaShapeOverrides.put(lambda, shape)
         try {

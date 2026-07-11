@@ -70,6 +70,9 @@ import java.nio.file.Paths
  * with [indexService] injected by the host after construction (it powers type-NAME completion via
  * `java.classNames`; members come from bytecode).
  */
+/** Android framework FQN prefixes hidden from index-backed type-name completion in a non-Android module. */
+private val ANDROID_TYPE_PREFIXES = listOf("android.", "androidx.", "com.android.", "com.google.android.", "dalvik.")
+
 class KotlinSourceAnalyzer(ctx: CompilationContext) : SourceAnalyzer, Disposable {
 
     /** Injected by the host (ide-core's `analyzerFor`). */
@@ -125,6 +128,10 @@ class KotlinSourceAnalyzer(ctx: CompilationContext) : SourceAnalyzer, Disposable
             .mapNotNull { runCatching { Paths.get(it.root.path) }.getOrNull() }
             .filter { Files.exists(it) }
 
+    /** True when `android.jar` is this module's platform. A non-Android module hides `android.*` from
+     *  index-backed type-name completion (the shared index holds every module's classpath). */
+    private val isAndroidPlatform: Boolean = classpathJars.any { it.fileName?.toString() == "android.jar" }
+
     private val serviceLazy = lazy {
         KotlinSymbolService(
             sourceRoots,
@@ -132,7 +139,8 @@ class KotlinSourceAnalyzer(ctx: CompilationContext) : SourceAnalyzer, Disposable
             indexService,
             extensionCacheDir,
             { syntheticClassProvider() },
-            sourceDocProvider
+            sourceDocProvider,
+            excludedTypePrefixes = if (isAndroidPlatform) emptyList() else ANDROID_TYPE_PREFIXES,
         )
     }
     private val service: KotlinSymbolService get() = serviceLazy.value

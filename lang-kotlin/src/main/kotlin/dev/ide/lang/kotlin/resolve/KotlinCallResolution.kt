@@ -59,20 +59,23 @@ internal fun KotlinResolver.resolveCalleeFunction(call: KtCallExpression): Kotli
  * confident one. Deliberately NOT cached: the outer (full) resolution still computes and caches the real result.
  */
 internal fun KotlinResolver.reentrantCalleeFallback(call: KtCallExpression): KotlinSymbol? {
-    val name = (call.calleeExpression as? KtNameReferenceExpression)?.getReferencedName() ?: return null
+    val name =
+        (call.calleeExpression as? KtNameReferenceExpression)?.getReferencedName() ?: return null
     val argCount = call.valueArguments.size
     val byName = service.topLevelByName(name).filter { it.kind == SymbolKind.METHOD }
     return byName.singleOrNull { it.paramTypes.size == argCount } ?: byName.singleOrNull()
 }
 
 internal fun KotlinResolver.computeCallee(call: KtCallExpression): KotlinSymbol? {
-    val name = (call.calleeExpression as? KtNameReferenceExpression)?.getReferencedName() ?: return null
+    val name =
+        (call.calleeExpression as? KtNameReferenceExpression)?.getReferencedName() ?: return null
     val argCount = call.valueArguments.size // already includes the trailing lambda
     val q = call.parent as? KtQualifiedExpression
     val receiverType = if (q != null && q.selectorExpression === call) memberReceiverOf(q) else null
     val candidates = if (receiverType != null) {
-        val members = service.membersNamed(receiverType.qualifiedName, receiverType.typeArguments, name)
-            .filter { it.kind == SymbolKind.METHOD }
+        val members =
+            service.membersNamed(receiverType.qualifiedName, receiverType.typeArguments, name)
+                .filter { it.kind == SymbolKind.METHOD }
         // A member-extension declared in an enclosing scope (`fun Map<…>.printMap()` in this class) resolves
         // on a matching receiver without an import — same seam completion/diagnostics use.
         val scopeExts = scopeMemberExtensions(call.textRange.startOffset, receiverType, name)
@@ -80,7 +83,8 @@ internal fun KotlinResolver.computeCallee(call: KtCallExpression): KotlinSymbol?
         // A COMPANION-object function reached through the class name (`MyClass.create()`): the companion is a
         // distinct classifier the instance member lookup misses. Only for a `Type.` (not instance) receiver.
         val companionMethods = if (q != null && isTypeReceiver(q.receiverExpression))
-            service.companionMembersFor(receiverType.qualifiedName, name).filter { it.name == name && it.kind == SymbolKind.METHOD }
+            service.companionMembersFor(receiverType.qualifiedName, name)
+                .filter { it.name == name && it.kind == SymbolKind.METHOD }
         else emptyList()
         members + scopeExts + companionMethods
     } else {
@@ -89,7 +93,13 @@ internal fun KotlinResolver.computeCallee(call: KtCallExpression): KotlinSymbol?
         // (`itemsIndexed(...)` inside `LazyColumn { }`, on the implicit `LazyListScope`) so its `itemContent`
         // function type + receiver is seen. This keeps the common path off the expensive recursive walk.
         service.topLevelByName(name).filter { it.kind == SymbolKind.METHOD }
-            .ifEmpty { scopeSymbolsAt(call.textRange.startOffset, name, exactName = true).filter { it.name == name && it.kind == SymbolKind.METHOD } }
+            .ifEmpty {
+                scopeSymbolsAt(
+                    call.textRange.startOffset,
+                    name,
+                    exactName = true
+                ).filter { it.name == name && it.kind == SymbolKind.METHOD }
+            }
     }
     // Prefer exact arity; then functions with MORE params than supplied args (defaulted params the caller
     // omits — `Box(modifier){…}` with 4-param Box, `items(list,key){…}` vs all-4-param overloads); then
@@ -99,9 +109,11 @@ internal fun KotlinResolver.computeCallee(call: KtCallExpression): KotlinSymbol?
     // over the `TextFieldValue` one when `value` is a String.
     val exact = candidates.filter { it.paramTypes.size == argCount }
     if (exact.isNotEmpty()) return bestOverload(exact, call, receiverType)
-    val moreParams = candidates.filter { it.paramTypes.isNotEmpty() && it.paramTypes.size > argCount }
+    val moreParams =
+        candidates.filter { it.paramTypes.isNotEmpty() && it.paramTypes.size > argCount }
     if (moreParams.isNotEmpty()) return bestOverload(moreParams, call, receiverType)
-    val fewerParams = candidates.filter { it.paramTypes.isNotEmpty() && it.paramTypes.size < argCount }
+    val fewerParams =
+        candidates.filter { it.paramTypes.isNotEmpty() && it.paramTypes.size < argCount }
     if (fewerParams.isNotEmpty()) return bestOverload(fewerParams, call, receiverType)
     return candidates.firstOrNull()
 }
@@ -119,7 +131,11 @@ internal fun KotlinResolver.computeCallee(call: KtCallExpression): KotlinSymbol?
  * for a `List` argument, the `String` `TextField(value=…)` overload over the `TextFieldValue` one, and the
  * `sumOf`/`maxOf` selector-return disambiguation all fall out of discarding the contradicting candidates.
  */
-internal fun KotlinResolver.bestOverload(candidates: List<KotlinSymbol>, call: KtCallExpression, receiverType: KotlinType?): KotlinSymbol {
+internal fun KotlinResolver.bestOverload(
+    candidates: List<KotlinSymbol>,
+    call: KtCallExpression,
+    receiverType: KotlinType?
+): KotlinSymbol {
     if (candidates.size == 1) return candidates.first()
     val applicable = candidates.filter { isApplicable(it, call, receiverType) }
     val pool = applicable.ifEmpty { candidates }
@@ -132,7 +148,9 @@ internal fun KotlinResolver.bestOverload(candidates: List<KotlinSymbol>, call: K
             (key.first == bestKey.first && key.second > bestKey.second) ||
             (key.first == bestKey.first && key.second == bestKey.second && key.third > bestKey.third) ||
             (key == bestKey && paramMoreSpecific(c, best))
-        ) { best = c; bestKey = key }
+        ) {
+            best = c; bestKey = key
+        }
     }
     return best
 }
@@ -140,8 +158,15 @@ internal fun KotlinResolver.bestOverload(candidates: List<KotlinSymbol>, call: K
 /** The most-specific ranking key for [sym] at [call] (higher is more specific): function-type parameter over
  *  a Java SAM, then lambda-return specificity, then receiver specificity. Parameter specificity
  *  ([paramMoreSpecific]) is the final tiebreak, applied in [bestOverload] since it's a pairwise relation. */
-private fun KotlinResolver.specificityKey(sym: KotlinSymbol, call: KtCallExpression, receiverType: KotlinType?): Triple<Int, Int, Int> =
-    Triple(functionTypeBonus(sym, call), lambdaReturnSpecificity(sym, call), receiverType?.let { receiverSpecificity(sym, it) } ?: 0)
+private fun KotlinResolver.specificityKey(
+    sym: KotlinSymbol,
+    call: KtCallExpression,
+    receiverType: KotlinType?
+): Triple<Int, Int, Int> =
+    Triple(
+        functionTypeBonus(sym, call),
+        lambdaReturnSpecificity(sym, call),
+        receiverType?.let { receiverSpecificity(sym, it) } ?: 0)
 
 /** Whether [a]'s value-parameter types are strictly more specific than [b]'s — each is [b]'s type or a subtype,
  *  and at least one is a strict subtype. The most-specific-overload tiebreak; conservative (an unknown or
@@ -155,7 +180,8 @@ internal fun KotlinResolver.paramMoreSpecific(a: KotlinSymbol, b: KotlinSymbol):
         if (ap.isTypeParameter || bp.isTypeParameter) return false
         when {
             ap.qualifiedName == bp.qualifiedName -> {}
-            bp.isAssignableFrom(ap) -> strict = true      // a's param is a subtype of b's → more specific here
+            bp.isAssignableFrom(ap) -> strict =
+                true      // a's param is a subtype of b's → more specific here
             else -> return false                          // a's param is not a subtype of b's → not more specific
         }
     }
@@ -173,7 +199,8 @@ internal fun KotlinResolver.receiverSpecificity(sym: KotlinSymbol, receiverType:
     val recv = sym.receiverTypeFqn?.let { Builtins.kotlinTypeFor(it) ?: it } ?: return 0
     val actual = Builtins.kotlinTypeFor(receiverType.qualifiedName) ?: receiverType.qualifiedName
     if (recv == actual) return RECEIVER_EXACT
-    val idx = service.supertypesOf(actual).indexOfFirst { (Builtins.kotlinTypeFor(it.qualifiedName) ?: it.qualifiedName) == recv }
+    val idx = service.supertypesOf(actual)
+        .indexOfFirst { (Builtins.kotlinTypeFor(it.qualifiedName) ?: it.qualifiedName) == recv }
     return if (idx >= 0) RECEIVER_EXACT - 1 - idx else 0
 }
 
@@ -188,7 +215,11 @@ internal fun KotlinResolver.receiverSpecificity(sym: KotlinSymbol, receiverType:
  * and [bestOverload] falls back to the full set if every candidate is (wrongly) rejected, so a call never
  * fails to resolve.
  */
-internal fun KotlinResolver.isApplicable(sym: KotlinSymbol, call: KtCallExpression, receiverType: KotlinType?): Boolean {
+internal fun KotlinResolver.isApplicable(
+    sym: KotlinSymbol,
+    call: KtCallExpression,
+    receiverType: KotlinType?
+): Boolean {
     if (sym.typeParameters.isEmpty() && call.typeArgumentList == null) {
         // Non-generic candidate: no type variables, so applicability is just per-argument concrete subtyping.
         val cs = KotlinConstraintSystem(service)
@@ -202,18 +233,25 @@ internal fun KotlinResolver.isApplicable(sym: KotlinSymbol, call: KtCallExpressi
 
 /** Add each argument's `argType <: paramType` constraint to [cs] (a lambda's body result to the parameter's
  *  functional return, typed top-down). Shared by applicability and (via the driver) type-argument inference. */
-private fun KotlinResolver.addArgumentConstraints(sym: KotlinSymbol, call: KtCallExpression, cs: KotlinConstraintSystem) {
+private fun KotlinResolver.addArgumentConstraints(
+    sym: KotlinSymbol,
+    call: KtCallExpression,
+    cs: KotlinConstraintSystem
+) {
     call.valueArguments.forEachIndexed { i, arg ->
         if (cs.hasContradiction) return
         val expr = arg.getArgumentExpression() ?: return@forEachIndexed
         if (expr is KtLambdaExpression || arg is KtLambdaArgument) {
-            val pt = sym.paramTypes.getOrNull(lambdaParamIndex(call, i, sym)) as? KotlinType ?: return@forEachIndexed
+            val pt = sym.paramTypes.getOrNull(lambdaParamIndex(call, i, sym)) as? KotlinType
+                ?: return@forEachIndexed
             val shape = service.functionalShape(pt) ?: return@forEachIndexed
             val lambda = expr as? KtLambdaExpression ?: return@forEachIndexed
-            val bodyResult = withLambdaShape(lambda, shape) { inferLambdaResult(lambda) as? KotlinType }
+            val bodyResult =
+                withLambdaShape(lambda, shape) { inferLambdaResult(lambda) as? KotlinType }
             if (bodyResult != null) cs.addSubtypeConstraint(bodyResult, shape.returnType)
         } else {
-            val pt = sym.paramTypes.getOrNull(argParamIndex(arg, i, sym)) as? KotlinType ?: return@forEachIndexed
+            val pt = sym.paramTypes.getOrNull(argParamIndex(arg, i, sym)) as? KotlinType
+                ?: return@forEachIndexed
             inferType(expr)?.takeIf { !it.isTypeParameter }?.let { cs.addSubtypeConstraint(it, pt) }
         }
     }
@@ -232,7 +270,8 @@ internal fun KotlinResolver.functionTypeBonus(sym: KotlinSymbol, call: KtCallExp
     call.valueArguments.forEachIndexed { i, arg ->
         val expr = arg.getArgumentExpression()
         if (arg is KtLambdaArgument || expr is KtLambdaExpression) {
-            val pt = sym.paramTypes.getOrNull(lambdaParamIndex(call, i, sym)) as? KotlinType ?: return@forEachIndexed
+            val pt = sym.paramTypes.getOrNull(lambdaParamIndex(call, i, sym)) as? KotlinType
+                ?: return@forEachIndexed
             if (TypeRendering.isFunctionType(pt.qualifiedName) || pt.isExtensionFunctionType || pt.isComposable) score += 1
         }
     }
@@ -248,15 +287,20 @@ internal fun KotlinResolver.functionTypeBonus(sym: KotlinSymbol, call: KtCallExp
  * classpath (so `Int <: BigDecimal` can't be *confirmed* contradictory — the exact `Int` match still wins).
  * No penalty: rejection is [isApplicable]'s job, so this only ever promotes the more specific overload.
  */
-internal fun KotlinResolver.lambdaReturnSpecificity(sym: KotlinSymbol, call: KtCallExpression): Int {
+internal fun KotlinResolver.lambdaReturnSpecificity(
+    sym: KotlinSymbol,
+    call: KtCallExpression
+): Int {
     var score = 0
     call.valueArguments.forEachIndexed { i, arg ->
         val expr = arg.getArgumentExpression() as? KtLambdaExpression ?: return@forEachIndexed
-        val pt = sym.paramTypes.getOrNull(lambdaParamIndex(call, i, sym)) as? KotlinType ?: return@forEachIndexed
+        val pt = sym.paramTypes.getOrNull(lambdaParamIndex(call, i, sym)) as? KotlinType
+            ?: return@forEachIndexed
         val shape = service.functionalShape(pt) ?: return@forEachIndexed
         val ret = shape.returnType as? KotlinType ?: return@forEachIndexed
         if (ret.isTypeParameter || ret.qualifiedName == "kotlin.Unit" || !service.isKnownType(ret.qualifiedName)) return@forEachIndexed
-        val body = withLambdaShape(expr, shape) { inferLambdaResult(expr) as? KotlinType } ?: return@forEachIndexed
+        val body = withLambdaShape(expr, shape) { inferLambdaResult(expr) as? KotlinType }
+            ?: return@forEachIndexed
         if (body.isTypeParameter) return@forEachIndexed
         score += when {
             body.qualifiedName == ret.qualifiedName -> 2
@@ -269,14 +313,21 @@ internal fun KotlinResolver.lambdaReturnSpecificity(sym: KotlinSymbol, call: KtC
 
 /** The declared parameter index a non-lambda value argument fills: a NAMED argument by its name (else its
  *  positional index). The trailing-lambda variant is [lambdaParamIndex]. */
-internal fun KotlinResolver.argParamIndex(arg: ValueArgument, argIndex: Int, sym: KotlinSymbol): Int {
-    arg.getArgumentName()?.asName?.identifier?.let { n -> sym.paramNames.indexOf(n).takeIf { it >= 0 }?.let { return it } }
+internal fun KotlinResolver.argParamIndex(
+    arg: ValueArgument,
+    argIndex: Int,
+    sym: KotlinSymbol
+): Int {
+    arg.getArgumentName()?.asName?.identifier?.let { n ->
+        sym.paramNames.indexOf(n).takeIf { it >= 0 }?.let { return it }
+    }
     return argIndex
 }
 
 /** The function a [call] resolves to (the single best overload by arity), exposed for callers that need to
  *  inspect the callee — e.g. the Compose calling-convention check (is the callee `@Composable`?). */
-fun KotlinResolver.calleeFunctionOf(call: KtCallExpression): KotlinSymbol? = resolveCalleeFunction(call)
+fun KotlinResolver.calleeFunctionOf(call: KtCallExpression): KotlinSymbol? =
+    resolveCalleeFunction(call)
 
 /** The infix function a binary `left <name> right` resolves to — a custom `infix fun`, `to`, `until`, … : a
  *  single-param member of the left type (member-first), else a single-param extension. Null for an
@@ -287,7 +338,12 @@ fun KotlinResolver.resolveInfixFunction(e: KtBinaryExpression): KotlinSymbol? {
     val leftType = inferType(e.left) ?: return null
     return service.membersNamed(leftType.qualifiedName, leftType.typeArguments, name)
         .firstOrNull { it.kind == SymbolKind.METHOD && !it.isExtension && it.paramTypes.size == 1 }
-        ?: service.extensionsFor(leftType.qualifiedName, leftType.typeArguments, name, exactName = true)
+        ?: service.extensionsFor(
+            leftType.qualifiedName,
+            leftType.typeArguments,
+            name,
+            exactName = true
+        )
             .firstOrNull { it.name == name && it.kind == SymbolKind.METHOD && it.paramTypes.size == 1 }
 }
 
@@ -303,12 +359,14 @@ fun KotlinResolver.callTargets(call: KtCallExpression): List<KotlinSymbol> {
 }
 
 internal fun KotlinResolver.computeCallTargets(call: KtCallExpression): List<KotlinSymbol> {
-    val name = (call.calleeExpression as? KtNameReferenceExpression)?.getReferencedName() ?: return emptyList()
+    val name = (call.calleeExpression as? KtNameReferenceExpression)?.getReferencedName()
+        ?: return emptyList()
     val q = call.parent as? KtQualifiedExpression
     val receiverType = if (q != null && q.selectorExpression === call) memberReceiverOf(q) else null
     if (receiverType != null) {
-        val members = service.membersNamed(receiverType.qualifiedName, receiverType.typeArguments, name)
-            .filter { it.kind == SymbolKind.METHOD }
+        val members =
+            service.membersNamed(receiverType.qualifiedName, receiverType.typeArguments, name)
+                .filter { it.kind == SymbolKind.METHOD }
         // Member-extensions of an in-scope implicit receiver: `Modifier.weight(…)` resolves inside `Row { }`
         // because `RowScope` (the content lambda's receiver) declares `fun Modifier.weight()`, and a
         // `fun Map<…>.printMap()` declared in the enclosing class resolves on a `Map`. Scope-gated, so the
@@ -316,25 +374,38 @@ internal fun KotlinResolver.computeCallTargets(call: KtCallExpression): List<Kot
         val scopeExts = scopeMemberExtensions(call.textRange.startOffset, receiverType, name)
             .filter { it.name == name && it.kind == SymbolKind.METHOD }
         val companionMethods = if (q != null && isTypeReceiver(q.receiverExpression))
-            service.companionMembersFor(receiverType.qualifiedName, name).filter { it.name == name && it.kind == SymbolKind.METHOD }
+            service.companionMembersFor(receiverType.qualifiedName, name)
+                .filter { it.name == name && it.kind == SymbolKind.METHOD }
         else emptyList()
         return members + scopeExts + companionMethods
     }
     val out = ArrayList<KotlinSymbol>()
     // The callee name is known, so push it down as the prefix (it filters to names starting with it, the
     // exact match included) — avoids scanning the whole top-level universe just to keep one name.
-    out += scopeSymbolsAt(call.textRange.startOffset, name, exactName = true).filter { it.name == name && it.kind == SymbolKind.METHOD }
+    out += scopeSymbolsAt(
+        call.textRange.startOffset,
+        name,
+        exactName = true
+    ).filter { it.name == name && it.kind == SymbolKind.METHOD }
     // A capitalized callee is a constructor call (`Foo(…)`): its parameters come from the type's constructors.
     if (name.firstOrNull()?.isUpperCase() == true) {
         service.resolveTypeName(name, fileContext)?.let { fqn ->
             out += service.constructorsOf(fqn)
-            service.sourceClass(fqn)?.constructors?.forEach { rc -> out += sourceCtorSymbol(rc, fqn) }
+            service.sourceClass(fqn)?.constructors?.forEach { rc ->
+                out += sourceCtorSymbol(
+                    rc,
+                    fqn
+                )
+            }
         }
     }
     return out
 }
 
-internal fun KotlinResolver.sourceCtorSymbol(rc: dev.ide.lang.kotlin.symbols.RawCallable, fqn: String): KotlinSymbol = KotlinSymbol(
+internal fun KotlinResolver.sourceCtorSymbol(
+    rc: dev.ide.lang.kotlin.symbols.RawCallable,
+    fqn: String
+): KotlinSymbol = KotlinSymbol(
     name = fqn.substringAfterLast('.'),
     kind = SymbolKind.CONSTRUCTOR,
     origin = SOURCE,
@@ -379,7 +450,14 @@ fun KotlinResolver.annotationParameters(entry: KtAnnotationEntry): List<ParamInf
         }
     }
     addParams(service.constructorsOf(fqn))
-    service.sourceClass(fqn)?.constructors?.let { ctors -> addParams(ctors.map { sourceCtorSymbol(it, fqn) }) }
+    service.sourceClass(fqn)?.constructors?.let { ctors ->
+        addParams(ctors.map {
+            sourceCtorSymbol(
+                it,
+                fqn
+            )
+        })
+    }
     if (out.isEmpty()) {
         // Java annotation: its elements are 0-arg methods (`name()`, `widthDp()`), the method name = the param.
         for (m in service.membersForCompletion(fqn, emptyList(), "")) {

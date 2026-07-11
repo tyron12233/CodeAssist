@@ -53,6 +53,9 @@ class KotlinSymbolService(
     /** Optional: real parameter names + javadoc/KDoc from attached SOURCES, used to enrich binary symbols
      *  (Java bytecode strips parameter names; neither bytecode nor `@Metadata` carries doc comments). */
     private val sourceDoc: dev.ide.lang.resolve.SourceDocProvider = dev.ide.lang.resolve.SourceDocProvider.NONE,
+    /** FQN prefixes hidden from index-backed type-NAME completion — the Android namespaces for a non-Android
+     *  (JVM/console) module, so the shared `java.classNames` index never offers `android.*` to auto-import. */
+    private val excludedTypePrefixes: List<String> = emptyList(),
 ) : KotlinTypeContext, Closeable {
 
     // Kotlin's stdlib is an IMPLICIT dependency of every Kotlin file (like java.lang for Java). Always
@@ -1437,6 +1440,8 @@ class KotlinSymbolService(
             val v = hit.value
             val simple = v.fqn.substringAfterLast('.')
             if (prefix.isNotEmpty() && !m.matches(simple)) return@forEach
+            // Don't offer `android.*` to auto-import in a non-Android module (the shared index holds it).
+            if (excludedTypePrefixes.any { v.fqn.startsWith(it) }) return@forEach
             if (v.origin != IndexOrigin.SOURCE && isKotlinFacade(v.fqn, simple)) return@forEach
             out.getOrPut(v.fqn) {
                 KotlinSymbol(simple, classNameKind(v.kind), typeByFqn(v.fqn), origin = BINARY)

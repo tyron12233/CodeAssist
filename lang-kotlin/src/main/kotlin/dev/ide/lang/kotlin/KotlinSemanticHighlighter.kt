@@ -229,9 +229,18 @@ class KotlinSemanticHighlighter(
                     emit(com.intellij.openapi.util.TextRange(at, at + 1), HighlightKind.ANNOTATION)
                 }
 
+                // `this` / `super` (optionally labeled, `this@Outer`): color the keyword itself so it reads as a
+                // keyword even inside a string template (`"$this"` / `"${this}"`), where the lexer colored the
+                // whole literal as a string and left the `this` uncolored. The label (if any) is colored too.
+                // More specific than the generic KtExpressionWithLabel branch below, so it must precede it.
+                is org.jetbrains.kotlin.psi.KtInstanceExpressionWithLabel -> {
+                    emit(psi.instanceReference.textRange, HighlightKind.KEYWORD)
+                    psi.getTargetLabel()?.let { emit(it.textRange, HighlightKind.LABEL) }
+                }
+
                 // A Kotlin label: a definition (`loop@ for …`), a jump target (`break@loop`, `continue@loop`,
-                // `return@loop`), or a labeled `this`/`super` (`this@Outer`). All share KtExpressionWithLabel; we
-                // color its target-label token. Unlabeled `this`/`return`/… have a null target → no token.
+                // `return@loop`). All share KtExpressionWithLabel; we color its target-label token. Unlabeled
+                // `return`/… have a null target → no token. (`this`/`super` handled by the branch above.)
                 is KtExpressionWithLabel ->
                     emit(psi.getTargetLabel()?.textRange, HighlightKind.LABEL)
 

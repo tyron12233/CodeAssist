@@ -363,6 +363,31 @@ class KotlinSemanticHighlightTest {
         )
     }
 
+    @Test
+    fun implicitItTypedFromDeclaredFunctionType() {
+        // `val f: (Int) -> Boolean = { it }` — the lambda isn't a call argument, so its `it` is typed from the
+        // property's DECLARED functional type. Coloring `it` as a parameter proves the expected-shape derivation
+        // ran (a single-value-param functional type synthesizes the implicit `it`).
+        val code = "val isOdd: (Int) -> Boolean = { it % 2 != 0 }\n"
+        val toks = tokens("It.kt", code)
+        assertTrue(
+            toks.any { it.text == "it" && it.kind == "parameter" },
+            "implicit `it` of a lambda with a declared functional type should color as a parameter; got $toks",
+        )
+    }
+
+    @Test
+    fun thisKeywordInStringTemplateIsColored() {
+        // `fun String.singleQuoted() = "$this"` — the `this` in the string template was left string-colored by
+        // the lexer; semantic highlighting now colors the `this` keyword.
+        val code = "fun String.singleQuoted() = \"\$this\"\n"
+        val toks = tokens("This.kt", code)
+        assertTrue(
+            toks.any { it.text == "this" && it.kind == "keyword" },
+            "`this` inside a string template should color as a keyword; got $toks",
+        )
+    }
+
     companion object {
         val srcDir: Path = tempProject(mapOf(
             "Seed.kt" to "package demo\n",

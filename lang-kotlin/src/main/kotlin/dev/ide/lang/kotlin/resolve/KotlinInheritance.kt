@@ -23,13 +23,18 @@ fun KotlinResolver.overridableMembersAt(offset: Int): List<KotlinSymbol> {
     }
     if (superFqns.isEmpty()) return emptyList()
     val declared = cls.declarations.mapNotNull { d ->
-        when (d) { is KtNamedFunction -> d.name; is KtProperty -> d.name; else -> null }
+        when (d) {
+            is KtNamedFunction -> d.name; is KtProperty -> d.name; else -> null
+        }
     }.toHashSet()
     val seen = HashSet<String>()
     val out = ArrayList<KotlinSymbol>()
     for (fqn in superFqns) {
         service.membersOf(fqn, emptyList(), null).filterIsInstance<KotlinSymbol>().forEach { m ->
-            if (isOverridable(m) && m.name !in declared && seen.add(m.name + "#" + (m.signature ?: ""))) out += m
+            if (isOverridable(m) && m.name !in declared && seen.add(
+                    m.name + "#" + (m.signature ?: "")
+                )
+            ) out += m
         }
     }
     return out
@@ -56,7 +61,8 @@ internal fun KotlinResolver.resolvedSupertypeMembers(cls: KtClassOrObject): List
     val entries = cls.superTypeListEntries
     if (entries.isEmpty()) return null
     if (entries.any { it is KtDelegatedSuperTypeEntry }) return null // `: Foo by delegate` supplies members
-    val fqns = entries.map { it.typeReference?.text?.let { t -> service.resolveTypeName(t, fileContext) } }
+    val fqns =
+        entries.map { it.typeReference?.text?.let { t -> service.resolveTypeName(t, fileContext) } }
     if (fqns.any { it == null }) return null // an unresolved supertype → we can't see the whole picture
     return fqns.filterNotNull().distinct()
         .flatMap { service.membersOf(it, emptyList(), null).filterIsInstance<KotlinSymbol>() }
@@ -71,7 +77,10 @@ class InheritanceReport(
     val needsOverride: List<Pair<KtCallableDeclaration, KotlinSymbol>>,
 ) {
     val isEmpty: Boolean get() = missing.isEmpty() && overridesNothing.isEmpty() && needsOverride.isEmpty()
-    companion object { val EMPTY = InheritanceReport(emptyList(), emptyList(), emptyList()) }
+
+    companion object {
+        val EMPTY = InheritanceReport(emptyList(), emptyList(), emptyList())
+    }
 }
 
 /**
@@ -109,12 +118,24 @@ fun KotlinResolver.inheritanceProblems(cls: KtClassOrObject, concrete: Boolean):
 fun KotlinResolver.unimplementedAbstractMembers(cls: KtClassOrObject): List<KotlinSymbol> =
     unimplementedFrom(cls, resolvedSupertypeMembers(cls) ?: return emptyList())
 
-internal fun KotlinResolver.unimplementedFrom(cls: KtClassOrObject, closure: List<KotlinSymbol>): List<KotlinSymbol> {
+internal fun KotlinResolver.unimplementedFrom(
+    cls: KtClassOrObject,
+    closure: List<KotlinSymbol>
+): List<KotlinSymbol> {
     val provided = HashSet(ownMemberKeys(cls))
-    closure.forEach { if (it.isImplementableMember() && Modifier.ABSTRACT !in it.modifiers) provided += memberKey(it) }
+    closure.forEach {
+        if (it.isImplementableMember() && Modifier.ABSTRACT !in it.modifiers) provided += memberKey(
+            it
+        )
+    }
     val required = LinkedHashMap<String, KotlinSymbol>()
     closure.forEach { m ->
-        if (m.isImplementableMember() && Modifier.ABSTRACT in m.modifiers) memberKey(m).let { if (it !in provided) required.putIfAbsent(it, m) }
+        if (m.isImplementableMember() && Modifier.ABSTRACT in m.modifiers) memberKey(m).let {
+            if (it !in provided) required.putIfAbsent(
+                it,
+                m
+            )
+        }
     }
     return required.values.toList()
 }
@@ -129,15 +150,19 @@ private fun KotlinSymbol.isImplementableMember(): Boolean =
  *  function on arity + param simple-type names (so a genuine overload `f(String)` vs inherited `f(Int)` does
  *  NOT match) and backs off on a `final`/`static` match (a different error). [sameName] = closure members
  *  sharing the name. */
-internal fun KotlinResolver.hiddenSupertypeMember(member: KtCallableDeclaration, sameName: List<KotlinSymbol>): KotlinSymbol? {
+internal fun KotlinResolver.hiddenSupertypeMember(
+    member: KtCallableDeclaration,
+    sameName: List<KotlinSymbol>
+): KotlinSymbol? {
     if (sameName.isEmpty()) return null
     val isFun = member is KtNamedFunction
-    val localParams = if (member is KtNamedFunction) member.valueParameters.map { simpleTypeName(it.typeReference?.text) } else emptyList()
+    val localParams =
+        if (member is KtNamedFunction) member.valueParameters.map { simpleTypeName(it.typeReference?.text) } else emptyList()
     val matches = sameName.filter { m ->
         (m.kind == SymbolKind.METHOD) == isFun &&
-            if (isFun) m.paramTypes.size == localParams.size &&
-                m.paramTypes.indices.all { i -> paramSimpleName(m.paramTypes[i]) == localParams[i] }
-            else true
+                if (isFun) m.paramTypes.size == localParams.size &&
+                        m.paramTypes.indices.all { i -> paramSimpleName(m.paramTypes[i]) == localParams[i] }
+                else true
     }
     if (matches.isEmpty()) return null
     if (matches.any { Modifier.FINAL in it.modifiers || Modifier.STATIC in it.modifiers }) return null

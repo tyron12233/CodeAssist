@@ -58,7 +58,8 @@ fun KotlinResolver.delegateOperatorImportCandidates(property: KtProperty): List<
             .filter { it.kind == SymbolKind.METHOD }
         if (candidates.any { !it.isExtension || extensionInScope(it) }) continue // already satisfied
         candidates.filter { it.isExtension && !extensionInScope(it) }.forEach { ext ->
-            val pkg = ext.packageName ?: ext.declaringClassFqn?.substringBeforeLast('.', "")?.ifEmpty { null }
+            val pkg = ext.packageName ?: ext.declaringClassFqn?.substringBeforeLast('.', "")
+                ?.ifEmpty { null }
             if (pkg != null) out += "$pkg.$op"
         }
     }
@@ -71,9 +72,13 @@ internal fun KotlinResolver.delegateContainsUninferableCall(delegate: KtExpressi
     var found = false
     fun rec(e: PsiElement) {
         if (found) return
-        if (e is KtCallExpression && uninferableTypeParameters(e).isNotEmpty()) { found = true; return }
+        if (e is KtCallExpression && uninferableTypeParameters(e).isNotEmpty()) {
+            found = true; return
+        }
         var c = e.firstChild
-        while (c != null && !found) { rec(c); c = c.nextSibling }
+        while (c != null && !found) {
+            rec(c); c = c.nextSibling
+        }
     }
     rec(delegate)
     return found
@@ -101,10 +106,16 @@ internal fun KotlinResolver.delegatedValueType(delegate: KtExpression): KotlinTy
  * class's Nth property, a `Pair`/`Triple`, a `Map.Entry`'s key/value, etc. An entry with an explicit type
  * (`(a: Int, b) = …`) keeps it; an entry whose component can't be typed stays untyped (never invents one).
  */
-internal fun KotlinResolver.destructuringLocals(d: KtDestructuringDeclaration, sourceType: KotlinType?): List<KotlinSymbol> =
+internal fun KotlinResolver.destructuringLocals(
+    d: KtDestructuringDeclaration,
+    sourceType: KotlinType?
+): List<KotlinSymbol> =
     d.entries.mapIndexedNotNull { i, e ->
         e.name?.let { name ->
-            val t = service.typeFromText(e.typeReference?.text, fileContext) ?: componentType(sourceType, i)
+            val t = service.typeFromText(e.typeReference?.text, fileContext) ?: componentType(
+                sourceType,
+                i
+            )
             KotlinSymbol(
                 name, SymbolKind.LOCAL_VARIABLE, type = t, origin = SOURCE,
                 declarationNode = runCatching { parsed.adapt(e) }.getOrNull(),
@@ -121,7 +132,11 @@ internal fun KotlinResolver.destructuringLocals(d: KtDestructuringDeclaration, s
 fun KotlinResolver.destructuringSourceType(d: KtDestructuringDeclaration): KotlinType? {
     d.initializer?.let { return inferType(it) }
     val param = d.parent as? KtParameter ?: return null
-    (param.parent as? KtForExpression)?.let { f -> if (f.loopParameter === param) return iterationElementType(inferType(f.loopRange)) }
+    (param.parent as? KtForExpression)?.let { f ->
+        if (f.loopParameter === param) return iterationElementType(
+            inferType(f.loopRange)
+        )
+    }
     val literal = (param.parent as? KtParameterList)?.parent as? KtFunctionLiteral
     val lambda = literal?.parent as? KtLambdaExpression ?: return null
     val idx = literal.valueParameters.indexOf(param)
@@ -130,7 +145,8 @@ fun KotlinResolver.destructuringSourceType(d: KtDestructuringDeclaration): Kotli
 
 /** The destructuring component type for entry [index] (0-based) of [sourceType] — the `componentN()` return
  *  type, or null when that operator isn't modeled. Public counterpart of [componentType] for diagnostics. */
-fun KotlinResolver.componentTypeFor(sourceType: KotlinType, index: Int): KotlinType? = componentType(sourceType, index)
+fun KotlinResolver.componentTypeFor(sourceType: KotlinType, index: Int): KotlinType? =
+    componentType(sourceType, index)
 
 /** The type of the [index]-th (0-based) destructuring component of [sourceType]: the return type of its
  *  `componentN()` operator (member or extension, receiver type-args already bound). Null when the component

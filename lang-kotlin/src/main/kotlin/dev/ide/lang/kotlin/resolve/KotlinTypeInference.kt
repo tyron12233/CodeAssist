@@ -142,11 +142,19 @@ internal fun KotlinResolver.arithmeticOperatorReturn(
     convention: String,
     rightType: KotlinType?,
 ): KotlinType? {
-    val candidates = service.membersNamed(leftType.qualifiedName, leftType.typeArguments, convention)
-        .filter { it.kind == SymbolKind.METHOD && it.paramTypes.size == 1 }
+    val candidates =
+        service.membersNamed(leftType.qualifiedName, leftType.typeArguments, convention)
+            .filter { it.kind == SymbolKind.METHOD && it.paramTypes.size == 1 }
     if (candidates.isEmpty()) return null
     val chosen = if (rightType == null) candidates.firstOrNull()
-    else candidates.firstOrNull { c -> (c.paramTypes.first() as? KotlinType)?.let { paramAcceptsArg(it, rightType) } == true }
+    else candidates.firstOrNull { c ->
+        (c.paramTypes.first() as? KotlinType)?.let {
+            paramAcceptsArg(
+                it,
+                rightType
+            )
+        } == true
+    }
     return chosen?.type as? KotlinType
 }
 
@@ -243,7 +251,8 @@ internal fun KotlinResolver.numericResultType(left: KotlinType, right: KotlinTyp
     // A KNOWN non-numeric right operand isn't primitive arithmetic — its operator (if any) was already tried by
     // [arithmeticOperatorReturn]; don't force a numeric result here (that made `2f * 4.dp` read as Float, not Dp).
     if (right != null && !right.isTypeParameter && right.qualifiedName !in NUMERIC_RANK &&
-        service.isKnownType(right.qualifiedName)) return null
+        service.isKnownType(right.qualifiedName)
+    ) return null
     val rr = right?.qualifiedName?.let { NUMERIC_RANK[it] } ?: -1
     val rank = maxOf(lr, rr).coerceAtLeast(NUMERIC_RANK.getValue("kotlin.Int"))
     return service.typeByFqn(NUMERIC_RANK.entries.first { it.value == rank }.key)
@@ -252,7 +261,7 @@ internal fun KotlinResolver.numericResultType(left: KotlinType, right: KotlinTyp
 /** The value of an `if`/`when` branch: a bare expression as-is, or the last statement of a `{ … }` block
  *  branch (so `if (c) { x } else { y }` still types). Null when the branch is absent or not an expression. */
 internal fun KotlinResolver.branchExpr(branch: KtExpression?): KtExpression? = when (branch) {
-    is KtBlockExpression -> branch.statements.lastOrNull() as? KtExpression
+    is KtBlockExpression -> branch.statements.lastOrNull()
     else -> branch
 }
 
@@ -441,7 +450,7 @@ internal fun KotlinResolver.typeOfCall(
             if ((v as? KotlinType)?.isTypeParameter != false) continue
             val cur = bindings[k] as? KotlinType
             val onlyErased = cur == null || cur.isTypeParameter ||
-                (k !in inferred && cur.qualifiedName == (erasure[k] as? KotlinType)?.qualifiedName)
+                    (k !in inferred && cur.qualifiedName == (erasure[k] as? KotlinType)?.qualifiedName)
             if (onlyErased) bindings[k] = v
         }
     }
@@ -460,13 +469,17 @@ internal fun KotlinResolver.typeOfCall(
  * types as `Any` (public) rather than the non-denotable anonymous type. Null when the callee isn't a
  * resolvable same-file expression-body function.
  */
-internal fun KotlinResolver.inferredReturnTypeForCall(call: KtCallExpression, sym: KotlinSymbol): KotlinType? {
+internal fun KotlinResolver.inferredReturnTypeForCall(
+    call: KtCallExpression,
+    sym: KotlinSymbol
+): KotlinType? {
     (sym.declaration() as? dev.ide.lang.kotlin.parse.KotlinDomNode)?.psi?.let { psi ->
         (psi as? KtNamedFunction)?.let { return inferredExpressionBodyType(it) }
     }
     // A member call is resolved elsewhere; only a bare top-level call needs the live-file by-name fallback.
     if ((call.parent as? KtQualifiedExpression)?.selectorExpression === call) return null
-    val name = (call.calleeExpression as? KtNameReferenceExpression)?.getReferencedName() ?: return null
+    val name =
+        (call.calleeExpression as? KtNameReferenceExpression)?.getReferencedName() ?: return null
     val matches = ktFile.declarations.filterIsInstance<KtNamedFunction>()
         .filter { it.name == name && it.receiverTypeReference == null && it.typeReference == null && !it.hasBlockBody() }
     return matches.singleOrNull()?.let { inferredExpressionBodyType(it) }
@@ -507,7 +520,8 @@ internal fun KotlinResolver.approximateEscapingLocalType(
 
 /** Whether [fqn] is the synthetic key a local/anonymous type is registered under ([SourceIndexBuilder.
  *  localTypeFqn] appends a `$L<ordinal>` last segment). */
-internal fun isSyntheticLocalTypeFqn(fqn: String): Boolean = fqn.substringAfterLast('.').startsWith("\$L")
+internal fun isSyntheticLocalTypeFqn(fqn: String): Boolean =
+    fqn.substringAfterLast('.').startsWith("\$L")
 
 /** Whether [decl] is declared inside a body (not a top-level or class-member declaration) — an anonymous
  *  type it returns stays denotable in its enclosing scope, so no escape approximation applies. */
@@ -529,9 +543,11 @@ internal fun KotlinResolver.constructorResultType(fqn: String, call: KtCallExpre
     // before the type-parameter check below, which the service leaves empty for the built-in `Array`.
     if (fqn == "kotlin.Array") {
         call.typeArgumentList?.arguments?.firstOrNull()?.typeReference?.text
-            ?.let { service.typeFromText(it, fileContext) }?.let { return service.typeByFqn(fqn, listOf(it)) }
+            ?.let { service.typeFromText(it, fileContext) }
+            ?.let { return service.typeByFqn(fqn, listOf(it)) }
         val initLambda = call.lambdaArguments.firstOrNull()?.getLambdaExpression()
-            ?: call.valueArguments.mapNotNull { it.getArgumentExpression() as? KtLambdaExpression }.lastOrNull()
+            ?: call.valueArguments.mapNotNull { it.getArgumentExpression() as? KtLambdaExpression }
+                .lastOrNull()
         initLambda?.let { inferLambdaResult(it) }?.let { return service.typeByFqn(fqn, listOf(it)) }
     }
     val tps = service.classTypeParameters(fqn)

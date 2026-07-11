@@ -22,14 +22,19 @@ import org.jetbrains.kotlin.psi.KtThisExpression
  * the arguments underdetermine. The constraint system ([KotlinConstraintSystem]) decomposes and incorporates
  * these, then fixes each variable. Returns only the variables it solved; the caller merges them additively.
  */
-internal fun KotlinResolver.inferCallBindings(sym: KotlinSymbol, call: KtCallExpression, expected: KotlinType?): Map<String, TypeRef> {
+internal fun KotlinResolver.inferCallBindings(
+    sym: KotlinSymbol,
+    call: KtCallExpression,
+    expected: KotlinType?
+): Map<String, TypeRef> {
     if (sym.typeParameters.isEmpty()) return emptyMap()
     val erasure = methodTypeParamErasure(sym)
     val cs = newConstraintSystem(sym)
 
     call.typeArgumentList?.arguments?.takeIf { it.isNotEmpty() }?.let { targs ->
         sym.typeParameters.forEachIndexed { i, name ->
-            (targs.getOrNull(i)?.typeReference?.text?.let { service.typeFromText(it, fileContext) } as? KotlinType)?.let { cs.fix(name, it) }
+            targs.getOrNull(i)?.typeReference?.text?.let { service.typeFromText(it, fileContext) }
+                ?.let { cs.fix(name, it) }
         }
         return cs.solve(erasure)
     }
@@ -37,17 +42,31 @@ internal fun KotlinResolver.inferCallBindings(sym: KotlinSymbol, call: KtCallExp
     // Expected return type (top-down): `emptyList<T>() : List<String>` ⇒ T = String. The return must be
     // assignable to the expected type, so `returnType <: expected` bounds the return-position variables.
     val ret = sym.type as? KotlinType
-    if (expected != null && !expected.isTypeParameter && ret != null) cs.addSubtypeConstraint(ret, expected)
+    if (expected != null && !expected.isTypeParameter && ret != null) cs.addSubtypeConstraint(
+        ret,
+        expected
+    )
 
     call.valueArguments.forEachIndexed { i, arg ->
         val expr = arg.getArgumentExpression() ?: return@forEachIndexed
-        val pt = (sym.paramTypes.getOrNull(lambdaParamIndex(call, i, sym)) ?: sym.paramTypes.lastOrNull()) as? KotlinType
+        val pt = (sym.paramTypes.getOrNull(lambdaParamIndex(call, i, sym))
+            ?: sym.paramTypes.lastOrNull()) as? KotlinType
             ?: return@forEachIndexed
         if (expr is KtLambdaExpression) {
             val shape = service.functionalShape(pt) ?: return@forEachIndexed
             val partial = cs.solve() // earlier args' bindings inform this lambda's parameter types
-            val inputs = shape.parameterTypes.map { p -> (p as? KotlinType)?.let { service.substitute(it, partial) } }
-            val bodyResult = withLambdaShape(expr, KotlinSymbolService.FunctionalShape(inputs, shape.returnType, shape.isExtension)) {
+            val inputs = shape.parameterTypes.map { p ->
+                (p as? KotlinType)?.let {
+                    service.substitute(
+                        it,
+                        partial
+                    )
+                }
+            }
+            val bodyResult = withLambdaShape(
+                expr,
+                KotlinSymbolService.FunctionalShape(inputs, shape.returnType, shape.isExtension)
+            ) {
                 inferLambdaResult(expr) as? KotlinType
             }
             cs.addSubtypeConstraint(bodyResult, shape.returnType) // body result ≤ functional return
@@ -76,8 +95,13 @@ internal fun KotlinResolver.inferCallBindings(sym: KotlinSymbol, call: KtCallExp
  * infers `E = Int`. Bounded to the body's top-level bare/`this.` calls (the idiomatic builder shape); a builder
  * whose element type is only observable through more elaborate flow degrades to unbound, never wrong.
  */
-private fun KotlinResolver.inferBuilderVars(receiverType: KotlinType, lambda: KtLambdaExpression, cs: KotlinConstraintSystem) {
+private fun KotlinResolver.inferBuilderVars(
+    receiverType: KotlinType,
+    lambda: KtLambdaExpression,
+    cs: KotlinConstraintSystem
+) {
     val body = lambda.bodyExpression ?: return
+
     // Every bare (or `this.`) call ON the builder receiver anywhere in the body constrains its variables — not
     // just top-level statements, so `for (x in xs) add(x)`, `if (c) add(1)`, and inline `repeat(n) { add(it) }`
     // all count. A call with a non-`this` explicit receiver (`other.add(x)`) is NOT on the builder, so skipped.
@@ -88,14 +112,19 @@ private fun KotlinResolver.inferBuilderVars(receiverType: KotlinType, lambda: Kt
                     .firstOrNull { it.kind == SymbolKind.METHOD && it.paramTypes.size == e.valueArguments.size }
                     ?.let { member ->
                         e.valueArguments.forEachIndexed { i, arg ->
-                            val pt = member.paramTypes.getOrNull(i) as? KotlinType ?: return@forEachIndexed
-                            arg.getArgumentExpression()?.let { inferType(it) }?.takeIf { !it.isTypeParameter }?.let { cs.addSubtypeConstraint(it, pt) }
+                            val pt = member.paramTypes.getOrNull(i) as? KotlinType
+                                ?: return@forEachIndexed
+                            arg.getArgumentExpression()?.let { inferType(it) }
+                                ?.takeIf { !it.isTypeParameter }
+                                ?.let { cs.addSubtypeConstraint(it, pt) }
                         }
                     }
             }
         }
         var c = e.firstChild
-        while (c != null) { visit(c); c = c.nextSibling }
+        while (c != null) {
+            visit(c); c = c.nextSibling
+        }
     }
     visit(body)
 }

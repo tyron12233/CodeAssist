@@ -16,8 +16,9 @@ import org.jetbrains.kotlin.psi.KtProperty
 /** Whether a `getValue`/`setValue` operator named [op] is available for a delegate of type [delegateType]:
  *  a plain member, or an in-scope extension. Returns true (don't flag) when none is modeled at all. */
 internal fun KotlinResolver.delegateOperatorInScope(delegateType: KotlinType, op: String): Boolean {
-    val candidates = service.membersNamed(delegateType.qualifiedName, delegateType.typeArguments, op)
-        .filter { it.kind == SymbolKind.METHOD }
+    val candidates =
+        service.membersNamed(delegateType.qualifiedName, delegateType.typeArguments, op)
+            .filter { it.kind == SymbolKind.METHOD }
     if (candidates.isEmpty()) return true // operator not modeled on the classpath → conservative
     return candidates.any { !it.isExtension || extensionInScope(it) }
 }
@@ -25,8 +26,13 @@ internal fun KotlinResolver.delegateOperatorInScope(delegateType: KotlinType, op
 /** Whether the extension [sym] is in scope here — imported (explicit/star), same-package, or
  *  default-imported. No package info → don't guess a rejection. Mirrors `KotlinSourceAnalyzer.extensionInScope`. */
 internal fun KotlinResolver.extensionInScope(sym: KotlinSymbol): Boolean {
-    val pkg = sym.packageName ?: sym.declaringClassFqn?.substringBeforeLast('.', "")?.ifEmpty { null } ?: return true
-    if (pkg == fileContext.packageName || dev.ide.lang.kotlin.symbols.DefaultImports.isDefaultImported(pkg)) return true
+    val pkg =
+        sym.packageName ?: sym.declaringClassFqn?.substringBeforeLast('.', "")?.ifEmpty { null }
+        ?: return true
+    if (pkg == fileContext.packageName || dev.ide.lang.kotlin.symbols.DefaultImports.isDefaultImported(
+            pkg
+        )
+    ) return true
     return fileContext.imports.any { imp -> if (imp.isStar) imp.packageName == pkg else imp.fqn == "$pkg.${sym.name}" }
 }
 
@@ -40,10 +46,16 @@ internal fun KotlinResolver.extensionInScope(sym: KotlinSymbol): Boolean {
  * saved / cross-file declaring class, or a `with(x){}` block receiver). Kept scope-gated for soundness, so
  * the extension never leaks onto a receiver outside its declaring scope. [namePrefix] empty = all.
  */
-fun KotlinResolver.scopeMemberExtensions(offset: Int, receiverType: KotlinType, namePrefix: String = ""): List<KotlinSymbol> {
+fun KotlinResolver.scopeMemberExtensions(
+    offset: Int,
+    receiverType: KotlinType,
+    namePrefix: String = ""
+): List<KotlinSymbol> {
     if (receiverType.isTypeParameter) return emptyList()
-    val recvTargets = (listOf(receiverType.qualifiedName) + service.supertypesOf(receiverType.qualifiedName)
-        .filterIsInstance<KotlinType>().map { it.qualifiedName }).toHashSet()
+    val recvTargets =
+        (listOf(receiverType.qualifiedName) + service.supertypesOf(receiverType.qualifiedName)
+            .filterIsInstance<KotlinType>().map { it.qualifiedName }).toHashSet()
+
     fun matches(n: String) = namePrefix.isEmpty() || n.startsWith(namePrefix, ignoreCase = true)
     val out = ArrayList<KotlinSymbol>()
     val liveOwners = HashSet<String>()
@@ -57,9 +69,15 @@ fun KotlinResolver.scopeMemberExtensions(offset: Int, receiverType: KotlinType, 
                 if (d !is KtCallableDeclaration || d.receiverTypeReference == null) continue
                 val name = d.name ?: continue
                 if (!matches(name)) continue
-                val recvFqn = service.resolveTypeName(d.receiverTypeReference!!.text, fileContext) ?: continue
+                val recvFqn =
+                    service.resolveTypeName(d.receiverTypeReference!!.text, fileContext) ?: continue
                 if (recvFqn !in recvTargets) continue
-                sameFileMemberExtension(d, recvFqn)?.let { out += bindMemberExtensionReceiver(it, receiverType) }
+                sameFileMemberExtension(d, recvFqn)?.let {
+                    out += bindMemberExtensionReceiver(
+                        it,
+                        receiverType
+                    )
+                }
             }
         }
         node = node.parent
@@ -77,21 +95,31 @@ fun KotlinResolver.scopeMemberExtensions(offset: Int, receiverType: KotlinType, 
 
 /** Bind a member-extension's receiver type parameters from the actual [receiverType] (`fun <T> List<T>.x()`
  *  on `List<String>` → T = String), so its return/param types resolve concretely. */
-internal fun KotlinResolver.bindMemberExtensionReceiver(ext: KotlinSymbol, receiverType: KotlinType): KotlinSymbol {
+internal fun KotlinResolver.bindMemberExtensionReceiver(
+    ext: KotlinSymbol,
+    receiverType: KotlinType
+): KotlinSymbol {
     val bindings = HashMap<String, TypeRef>()
     ext.receiverTypeParam?.let { bindings[it] = receiverType }
     ext.receiverTypeArgs.forEachIndexed { i, ra ->
         val k = ra as? KotlinType ?: return@forEachIndexed
-        if (k.isTypeParameter && i < receiverType.typeArguments.size) bindings[k.qualifiedName] = receiverType.typeArguments[i]
+        if (k.isTypeParameter && i < receiverType.typeArguments.size) bindings[k.qualifiedName] =
+            receiverType.typeArguments[i]
     }
     return if (bindings.isEmpty()) ext else service.substituteSymbol(ext, bindings)
 }
 
 /** A symbol for a member-extension declared in the LIVE buffer (`fun Map<…>.printMap()` inside a class),
  *  with its extension [receiverFqn] and receiver type-args set so it resolves/binds like an indexed one. */
-internal fun KotlinResolver.sameFileMemberExtension(d: KtCallableDeclaration, receiverFqn: String): KotlinSymbol? {
+internal fun KotlinResolver.sameFileMemberExtension(
+    d: KtCallableDeclaration,
+    receiverFqn: String
+): KotlinSymbol? {
     val name = d.name ?: return null
-    val recvArgs = (service.typeFromText(d.receiverTypeReference?.text, fileContext) as? KotlinType)?.typeArguments ?: emptyList()
+    val recvArgs = service.typeFromText(
+        d.receiverTypeReference?.text,
+        fileContext
+    )?.typeArguments ?: emptyList()
     val declNode = runCatching { parsed.adapt(d) }.getOrNull()
     return when (d) {
         is KtNamedFunction -> {
@@ -101,7 +129,8 @@ internal fun KotlinResolver.sameFileMemberExtension(d: KtCallableDeclaration, re
                 name = name, kind = SymbolKind.METHOD,
                 type = retText?.let { service.typeFromText(it, fileContext) },
                 origin = SOURCE, receiverTypeFqn = receiverFqn,
-                signature = "(" + params.joinToString(", ") { (n, t) -> "$n: ${t ?: "?"}" } + ")" + (retText?.let { ": $it" } ?: ""),
+                signature = "(" + params.joinToString(", ") { (n, t) -> "$n: ${t ?: "?"}" } + ")" + (retText?.let { ": $it" }
+                    ?: ""),
                 paramTypes = params.map { (_, t) -> service.typeFromText(t, fileContext) },
                 paramNames = params.map { (n, _) -> n },
                 paramHasDefault = d.valueParameters.map { it.hasDefaultValue() },
@@ -111,6 +140,7 @@ internal fun KotlinResolver.sameFileMemberExtension(d: KtCallableDeclaration, re
                 declarationNode = declNode,
             )
         }
+
         is KtProperty -> KotlinSymbol(
             name = name, kind = SymbolKind.FIELD,
             type = d.typeReference?.text?.let { service.typeFromText(it, fileContext) },
@@ -119,6 +149,7 @@ internal fun KotlinResolver.sameFileMemberExtension(d: KtCallableDeclaration, re
             receiverTypeArgs = recvArgs,
             declarationNode = declNode,
         )
+
         else -> null
     }
 }

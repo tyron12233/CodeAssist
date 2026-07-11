@@ -61,9 +61,16 @@ internal class KotlinConstraintSystem(private val service: KotlinSymbolService) 
         val av = variable(a)
         when {
             bv != null && av != null -> {} // variable <: variable: skip (rare; both stay open, fixation handles)
-            bv != null -> { bv.lower.add(a); check(bv) }          // b ≥ a
-            av != null -> { av.upper.add(b); check(av) }          // a ≤ b
-            else -> checkConcrete(a, b)                           // both concrete → decompose + check
+            bv != null -> {
+                bv.lower.add(a); check(bv)
+            }          // b ≥ a
+            av != null -> {
+                av.upper.add(b); check(av)
+            }          // a ≤ b
+            else -> checkConcrete(
+                a,
+                b
+            ) // both concrete → decompose + check
         }
     }
 
@@ -73,15 +80,22 @@ internal class KotlinConstraintSystem(private val service: KotlinSymbolService) 
         if (b.qualifiedName == "kotlin.Any" || b.qualifiedName == "java.lang.Object") return
         if (a.qualifiedName == "kotlin.Nothing") return // Nothing <: everything
         // A non-null upper cannot accept a nullable value (`String? <: String` is false).
-        if (a.nullable && !b.nullable) { hasContradiction = true; return }
-        if (a.qualifiedName == b.qualifiedName) { decompose(b.qualifiedName, a.typeArguments, b.typeArguments); return }
+        if (a.nullable && !b.nullable) {
+            hasContradiction = true; return
+        }
+        if (a.qualifiedName == b.qualifiedName) {
+            decompose(b.qualifiedName, a.typeArguments, b.typeArguments); return
+        }
         // Project A onto B's classifier (A's instantiation of the supertype B). Found → decompose those args.
         val proj = service.receiverSupertypeArgs(a.qualifiedName, a.typeArguments, b.qualifiedName)
-        if (proj != null) { decompose(b.qualifiedName, proj, b.typeArguments); return }
+        if (proj != null) {
+            decompose(b.qualifiedName, proj, b.typeArguments); return
+        }
         // B is a supertype of A by classifier (args unknown / raw) → satisfiable, no arg constraints.
         if (isClassifierSubtype(a.qualifiedName, b.qualifiedName)) return
         // Neither classifier-related nor projectable, and both are genuine known types → A is NOT a subtype of B.
-        if (service.isKnownType(a.qualifiedName) && service.isKnownType(b.qualifiedName)) hasContradiction = true
+        if (service.isKnownType(a.qualifiedName) && service.isKnownType(b.qualifiedName)) hasContradiction =
+            true
     }
 
     /** Pairwise decomposition of type arguments by their EFFECTIVE variance: the target argument's USE-SITE
@@ -103,9 +117,17 @@ internal class KotlinConstraintSystem(private val service: KotlinSymbolService) 
                 else -> variances.getOrNull(i)
             }
             when (effective) {
-                "in" -> addSubtypeConstraint(sup, sub)                                     // contravariant
-                "" -> { addSubtypeConstraint(sub, sup); addSubtypeConstraint(sup, sub) }   // invariant: equality
-                else -> addSubtypeConstraint(sub, sup)                                     // covariant / unknown
+                "in" -> addSubtypeConstraint(
+                    sup,
+                    sub
+                )                                     // contravariant
+                "" -> {
+                    addSubtypeConstraint(sub, sup); addSubtypeConstraint(sup, sub)
+                }   // invariant: equality
+                else -> addSubtypeConstraint(
+                    sub,
+                    sup
+                )                                     // covariant / unknown
             }
         }
     }
@@ -114,7 +136,8 @@ internal class KotlinConstraintSystem(private val service: KotlinSymbolService) 
     private fun isClassifierSubtype(subFqn: String, superFqn: String): Boolean {
         if (subFqn == superFqn) return true
         val target = Builtins.kotlinTypeFor(superFqn) ?: superFqn
-        return service.supertypesOf(subFqn).any { (Builtins.kotlinTypeFor(it.qualifiedName) ?: it.qualifiedName) == target }
+        return service.supertypesOf(subFqn)
+            .any { (Builtins.kotlinTypeFor(it.qualifiedName) ?: it.qualifiedName) == target }
     }
 
     /** Re-check a variable's lower bounds against its upper bounds after a bound was added. */
@@ -156,7 +179,9 @@ internal class KotlinConstraintSystem(private val service: KotlinSymbolService) 
         val nullable = types.any { it.nullable }
         if (distinct.size == 1) return distinct[0].withNullable(nullable)
         val first = distinct[0]
-        val chain = listOf(first) + service.supertypesOf(first.qualifiedName).filterIsInstance<KotlinType>()
-        return chain.firstOrNull { cand -> distinct.all { cand.isAssignableFrom(it) } }?.withNullable(nullable)
+        val chain =
+            listOf(first) + service.supertypesOf(first.qualifiedName).filterIsInstance<KotlinType>()
+        return chain.firstOrNull { cand -> distinct.all { cand.isAssignableFrom(it) } }
+            ?.withNullable(nullable)
     }
 }

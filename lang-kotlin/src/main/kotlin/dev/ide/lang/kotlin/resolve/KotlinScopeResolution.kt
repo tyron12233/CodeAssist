@@ -8,6 +8,7 @@ import dev.ide.lang.resolve.SymbolKind
 import com.intellij.psi.PsiElement
 import com.intellij.psi.util.PsiTreeUtil
 import dev.ide.lang.completion.PrefixMatcher
+import dev.ide.lang.kotlin.symbols.DefaultImports
 import org.jetbrains.kotlin.psi.KtAnonymousInitializer
 import org.jetbrains.kotlin.psi.KtBlockExpression
 import org.jetbrains.kotlin.psi.KtCatchClause
@@ -53,6 +54,7 @@ internal fun KotlinResolver.computeImplicitReceiversAt(offset: Int): List<Kotlin
             is KtLambdaExpression -> expectedFunctionTypeFor(node)
                 ?.takeIf { it.isExtensionFunctionType }
                 ?.let { (it.typeArguments.firstOrNull() as? KotlinType)?.let(out::add) }
+
             is KtNamedFunction -> node.receiverTypeReference?.text
                 ?.let { service.typeFromText(it, fileContext) }?.let(out::add)
             // An enclosing class/object receiver. An ANONYMOUS object (`object : Foo { }`) or a LOCAL
@@ -62,10 +64,16 @@ internal fun KotlinResolver.computeImplicitReceiversAt(offset: Int): List<Kotlin
             // to its own `fqName` and never borrows a synthetic key (which could collide with a real local type).
             is KtClassOrObject -> {
                 val fqn = node.fqName?.asString()
-                    ?: (node as? org.jetbrains.kotlin.psi.KtObjectDeclaration)?.let { dev.ide.lang.kotlin.symbols.SourceIndexBuilder.localTypeFqn(it) }
-                    ?: (node as? KtClass)?.takeIf { it !is org.jetbrains.kotlin.psi.KtEnumEntry }?.let { dev.ide.lang.kotlin.symbols.SourceIndexBuilder.localTypeFqn(it) }
+                    ?: (node as? org.jetbrains.kotlin.psi.KtObjectDeclaration)?.let {
+                        dev.ide.lang.kotlin.symbols.SourceIndexBuilder.localTypeFqn(
+                            it
+                        )
+                    }
+                    ?: (node as? KtClass)?.takeIf { it !is org.jetbrains.kotlin.psi.KtEnumEntry }
+                        ?.let { dev.ide.lang.kotlin.symbols.SourceIndexBuilder.localTypeFqn(it) }
                 if (fqn != null) out += service.typeByFqn(fqn)
             }
+
             else -> {}
         }
         node = node.parent
@@ -83,7 +91,8 @@ fun KotlinResolver.implicitReceiverMember(name: String, offset: Int): KotlinSymb
 }
 
 /** The simple names of [typeFqn]'s enum constants — for highlighting `Color.RED` as an enum constant. */
-fun KotlinResolver.enumConstantNames(typeFqn: String): Set<String> = service.enumConstantsOf(typeFqn).mapTo(HashSet()) { it.name }
+fun KotlinResolver.enumConstantNames(typeFqn: String): Set<String> =
+    service.enumConstantsOf(typeFqn).mapTo(HashSet()) { it.name }
 
 /** A static/companion member named [name] on type [typeFqn] (`MaterialTheme.colorScheme`, `Type.CONST`),
  *  for member-read highlighting. */
@@ -123,7 +132,8 @@ fun KotlinResolver.callableReferenceTarget(e: org.jetbrains.kotlin.psi.KtCallabl
         return instanceMemberNamed(rt, name) ?: sameFileTypeMember(rt.qualifiedName, name)
     }
     // `::top` — a receiver-less reference to a top-level / local / enclosing-class callable.
-    scopeSymbolsAt(e.textRange.startOffset, name, exactName = true).firstOrNull { it.name == name }?.let { return it }
+    scopeSymbolsAt(e.textRange.startOffset, name, exactName = true).firstOrNull { it.name == name }
+        ?.let { return it }
     return service.topLevelByName(name).firstOrNull { it.name == name }
 }
 
@@ -140,8 +150,16 @@ internal fun KotlinResolver.sameFileTypeMember(typeFqn: String, name: String): K
         )
     }
     for (d in cls.declarations) when (d) {
-        is KtProperty -> if (d.name == name && d.receiverTypeReference == null) return sameFileProperty(d, typeFqn)
-        is KtNamedFunction -> if (d.name == name && d.receiverTypeReference == null) return sameFileFunction(d, typeFqn)
+        is KtProperty -> if (d.name == name && d.receiverTypeReference == null) return sameFileProperty(
+            d,
+            typeFqn
+        )
+
+        is KtNamedFunction -> if (d.name == name && d.receiverTypeReference == null) return sameFileFunction(
+            d,
+            typeFqn
+        )
+
         else -> {}
     }
     return null
@@ -153,18 +171,26 @@ fun KotlinResolver.localsAt(offset: Int): List<KotlinSymbol> {
     var node: PsiElement? = elementAt(offset)
     while (node != null) {
         when (node) {
-            is KtBlockExpression -> node.statements.filter { it.textRange.endOffset <= offset }.forEach { st ->
-                when (st) {
-                    is KtProperty -> out += localVar(st)
-                    is KtDestructuringDeclaration -> out += destructuringLocals(st, inferType(st.initializer))
-                    is KtNamedFunction -> out += KotlinSymbol(
-                        st.name ?: "_", SymbolKind.METHOD,
-                        type = service.typeFromText(st.typeReference?.text, fileContext), origin = SOURCE,
-                        declarationNode = runCatching { parsed.adapt(st) }.getOrNull(),
-                    )
-                    else -> {}
+            is KtBlockExpression -> node.statements.filter { it.textRange.endOffset <= offset }
+                .forEach { st ->
+                    when (st) {
+                        is KtProperty -> out += localVar(st)
+                        is KtDestructuringDeclaration -> out += destructuringLocals(
+                            st,
+                            inferType(st.initializer)
+                        )
+
+                        is KtNamedFunction -> out += KotlinSymbol(
+                            st.name ?: "_",
+                            SymbolKind.METHOD,
+                            type = service.typeFromText(st.typeReference?.text, fileContext),
+                            origin = SOURCE,
+                            declarationNode = runCatching { parsed.adapt(st) }.getOrNull(),
+                        )
+
+                        else -> {}
+                    }
                 }
-            }
             // A lambda's value parameters are handled by the KtLambdaExpression branch below (which types
             // `it`/named params from the functional parameter the lambda fills). Skip the KtFunctionLiteral
             // here — it IS a KtFunction, and adding its params via param() (type-from-text only) would
@@ -186,6 +212,7 @@ fun KotlinResolver.localsAt(offset: Int): List<KotlinSymbol> {
                     else out += loopParam(lp, element)
                 }
             }
+
             is KtCatchClause -> node.catchParameter?.let { out += param(it) }
             is KtWhenExpression -> node.subjectVariable?.let { out += localVar(it) }
             is KtLambdaExpression -> {
@@ -198,11 +225,17 @@ fun KotlinResolver.localsAt(offset: Int): List<KotlinSymbol> {
                 if (params.isEmpty()) {
                     // The implicit `it` exists only for a single-value-parameter functional type.
                     if (inputs.size == 1) {
-                        out += KotlinSymbol("it", SymbolKind.PARAMETER, type = inputs.first(), origin = SOURCE)
+                        out += KotlinSymbol(
+                            "it",
+                            SymbolKind.PARAMETER,
+                            type = inputs.first(),
+                            origin = SOURCE
+                        )
                     }
                 } else {
                     params.forEachIndexed { i, p ->
-                        val t = service.typeFromText(p.typeReference?.text, fileContext) ?: inputs.getOrNull(i)
+                        val t = service.typeFromText(p.typeReference?.text, fileContext)
+                            ?: inputs.getOrNull(i)
                         // A destructuring lambda parameter (`forEach { (k, v) -> }`) binds its entries by
                         // componentN of the parameter's type (the Map.Entry / Pair / data class it receives),
                         // not a single `_`.
@@ -218,6 +251,7 @@ fun KotlinResolver.localsAt(offset: Int): List<KotlinSymbol> {
                     }
                 }
             }
+
             else -> {}
         }
         node = node.parent
@@ -239,9 +273,11 @@ fun KotlinResolver.localsAt(offset: Int): List<KotlinSymbol> {
  * one, its initializer (a `field`-referencing property without either doesn't compile, so that gap is moot).
  */
 internal fun KotlinResolver.accessorScopeLocals(offset: Int): List<KotlinSymbol> {
-    val accessor = PsiTreeUtil.getParentOfType(elementAt(offset), KtPropertyAccessor::class.java) ?: return emptyList()
+    val accessor = PsiTreeUtil.getParentOfType(elementAt(offset), KtPropertyAccessor::class.java)
+        ?: return emptyList()
     val prop = accessor.parent as? KtProperty ?: return emptyList()
-    val propType = service.typeFromText(prop.typeReference?.text, fileContext) ?: inferType(prop.initializer)
+    val propType =
+        service.typeFromText(prop.typeReference?.text, fileContext) ?: inferType(prop.initializer)
     val out = ArrayList<KotlinSymbol>(2)
     out += KotlinSymbol(
         "field", SymbolKind.FIELD, type = propType, origin = SOURCE,
@@ -249,8 +285,10 @@ internal fun KotlinResolver.accessorScopeLocals(offset: Int): List<KotlinSymbol>
     )
     accessor.valueParameters.firstOrNull()?.let { p ->
         out += KotlinSymbol(
-            p.name ?: "value", SymbolKind.PARAMETER,
-            type = service.typeFromText(p.typeReference?.text, fileContext) ?: propType, origin = SOURCE,
+            p.name ?: "value",
+            SymbolKind.PARAMETER,
+            type = service.typeFromText(p.typeReference?.text, fileContext) ?: propType,
+            origin = SOURCE,
             declarationNode = runCatching { parsed.adapt(p) }.getOrNull(),
         )
     }
@@ -319,20 +357,32 @@ fun KotlinResolver.typeDenotationFqn(expr: KtExpression): String? = when (expr) 
             // An `object` singleton (`CardDefaults`, `MaterialTheme`, a local `object`) is an INSTANCE, not a
             // type — its members are reached like an instance's, so it is NOT a type/static receiver. A local
             // `class Foo` in scope resolves by its synthetic FQN first (it isn't a resolvable type name).
-            else -> (localTypesInScope(expr.textRange.startOffset)[name] ?: service.resolveTypeName(name, fileContext))
+            else -> (localTypesInScope(expr.textRange.startOffset)[name] ?: service.resolveTypeName(
+                name,
+                fileContext
+            ))
                 ?.takeIf { service.isKnownType(it) && !service.isObject(it) }
         }
     }
+
     is KtQualifiedExpression -> {
         val sel = (expr.selectorExpression as? KtNameReferenceExpression)?.getReferencedName()
         when {
             sel == null -> null
             // (a) fully-qualified type by its own text: `java.util.Locale` (but not a qualified `object`)
-            sel.firstOrNull()?.isUpperCase() == true && service.isKnownType(expr.text) && !service.isObject(expr.text) -> expr.text
+            sel.firstOrNull()
+                ?.isUpperCase() == true && service.isKnownType(expr.text) && !service.isObject(expr.text) -> expr.text
             // (b) nested type through a resolved outer: `R.layout`, `Outer.Inner`
-            else -> typeDenotationFqn(expr.receiverExpression)?.let { "$it.$sel".takeIf { f -> service.isKnownType(f) } }
+            else -> typeDenotationFqn(expr.receiverExpression)?.let {
+                "$it.$sel".takeIf { f ->
+                    service.isKnownType(
+                        f
+                    )
+                }
+            }
         }
     }
+
     else -> null // calls, literals, `this`, `super` → instances
 }
 
@@ -356,7 +406,11 @@ fun KotlinResolver.isTypeParameterInScope(name: String, offset: Int): Boolean {
  * Returns null when [name] is not a type parameter in scope, has no explicit bound, or the bound is itself
  * unresolvable — the caller then enumerates no members (a bare unbounded `T` has only `Any?`'s, as before).
  */
-fun KotlinResolver.typeParameterUpperBound(name: String, offset: Int, seen: MutableSet<String> = HashSet()): KotlinType? {
+fun KotlinResolver.typeParameterUpperBound(
+    name: String,
+    offset: Int,
+    seen: MutableSet<String> = HashSet()
+): KotlinType? {
     if (!seen.add(name)) return null // guard a cyclic `<T : R, R : T>`
     var node: PsiElement? = elementAt(offset)
     while (node != null) {
@@ -366,14 +420,22 @@ fun KotlinResolver.typeParameterUpperBound(name: String, offset: Int, seen: Muta
                 val boundTexts = buildList {
                     tp.extendsBound?.text?.let { add(it) }
                     node.typeConstraints.forEach { c ->
-                        if (c.subjectTypeParameterName?.getReferencedName() == name) c.boundTypeReference?.text?.let { add(it) }
+                        if (c.subjectTypeParameterName?.getReferencedName() == name) c.boundTypeReference?.text?.let {
+                            add(
+                                it
+                            )
+                        }
                     }
                 }
                 for (text in boundTexts) {
                     val t = service.typeFromText(text, fileContext) ?: continue
                     if (service.isKnownType(t.qualifiedName)) return t
                     // The bound is itself a type parameter (`<R, T : R>`) → resolve THAT one's bound.
-                    if (isTypeParameterInScope(t.qualifiedName, offset)) typeParameterUpperBound(t.qualifiedName, offset, seen)?.let { return it }
+                    if (isTypeParameterInScope(
+                            t.qualifiedName,
+                            offset
+                        )
+                    ) typeParameterUpperBound(t.qualifiedName, offset, seen)?.let { return it }
                 }
                 return null // declared here (an inner owner shadows an outer one) but no resolvable bound
             }
@@ -396,7 +458,9 @@ fun KotlinResolver.receiverForMembers(type: KotlinType, offset: Int): KotlinType
 
 internal fun KotlinResolver.enclosingClassOrObject(offset: Int): KtClassOrObject? {
     var node: PsiElement? = elementAt(offset)
-    while (node != null) { if (node is KtClassOrObject) return node; node = node.parent }
+    while (node != null) {
+        if (node is KtClassOrObject) return node; node = node.parent
+    }
     return null
 }
 
@@ -435,8 +499,10 @@ fun KotlinResolver.bareNameResolves(name: String, offset: Int): Boolean {
  * extension-visibility rule in [KotlinSourceAnalyzer.extensionInScope].
  */
 internal fun KotlinResolver.topLevelInScope(sym: KotlinSymbol, ctx: FileContext): Boolean {
-    val pkg = sym.packageName ?: sym.declaringClassFqn?.substringBeforeLast('.', "")?.ifEmpty { null } ?: return true
-    if (pkg == ctx.packageName || dev.ide.lang.kotlin.symbols.DefaultImports.isDefaultImported(pkg)) return true
+    val pkg =
+        sym.packageName ?: sym.declaringClassFqn?.substringBeforeLast('.', "")?.ifEmpty { null }
+        ?: return true
+    if (pkg == ctx.packageName || DefaultImports.isDefaultImported(pkg)) return true
     return ctx.imports.any { imp -> if (imp.isStar) imp.packageName == pkg else imp.fqn == "$pkg.${sym.name}" }
 }
 
@@ -477,7 +543,10 @@ fun KotlinResolver.localTypesInScope(offset: Int): Map<String, String> {
             for (st in node.statements) {
                 if (st is KtClassOrObject && st !is org.jetbrains.kotlin.psi.KtEnumEntry &&
                     st.fqName == null && st.name != null
-                ) out.putIfAbsent(st.name!!, dev.ide.lang.kotlin.symbols.SourceIndexBuilder.localTypeFqn(st))
+                ) out.putIfAbsent(
+                    st.name!!,
+                    dev.ide.lang.kotlin.symbols.SourceIndexBuilder.localTypeFqn(st)
+                )
             }
         }
         node = node.parent
@@ -493,7 +562,8 @@ fun KotlinResolver.enclosingCompanionMember(name: String, offset: Int): KotlinSy
     while (node != null) {
         if (node is KtClassOrObject && node.companionObjects.isNotEmpty()) {
             node.fqName?.asString()?.let { fqn ->
-                service.companionMembersFor(fqn, name).firstOrNull { it.name == name }?.let { return it }
+                service.companionMembersFor(fqn, name).firstOrNull { it.name == name }
+                    ?.let { return it }
             }
         }
         node = node.parent
@@ -536,7 +606,11 @@ fun KotlinResolver.enclosingClassFqn(offset: Int): String? {
 /** The candidate set for a bare name-reference completion: locals, enclosing members, top-level.
  *  [exactName] is the RESOLUTION-probe mode (a call target's known name): equality filtering plus the
  *  exact top-level lookup, so the probe never materializes the graded matcher's wider candidate net. */
-fun KotlinResolver.scopeSymbolsAt(offset: Int, namePrefix: String = "", exactName: Boolean = false): List<KotlinSymbol> {
+fun KotlinResolver.scopeSymbolsAt(
+    offset: Int,
+    namePrefix: String = "",
+    exactName: Boolean = false
+): List<KotlinSymbol> {
     val out = ArrayList<KotlinSymbol>()
     out += localsAt(offset)
     // Same-file declarations from the LIVE buffer — a just-typed `fun helper()` / `val x` / `class Foo`.
@@ -546,13 +620,19 @@ fun KotlinResolver.scopeSymbolsAt(offset: Int, namePrefix: String = "", exactNam
     out += sameFileScopeSymbols(offset)
     // Members of every implicit `this` (apply/with/run block, extension fn, enclosing class).
     implicitReceiversAt(offset).forEach { recv ->
-        out += service.membersOf(recv.qualifiedName, recv.typeArguments, null).filterIsInstance<KotlinSymbol>()
+        out += service.membersOf(recv.qualifiedName, recv.typeArguments, null)
+            .filterIsInstance<KotlinSymbol>()
     }
     // Bare-accessible members of an enclosing class's companion object (`CONST`, a companion `factory()`).
     out += enclosingCompanionMembers(offset)
     // Named local types in scope (`class Foo` / `object O` in a body) — offered by simple name.
     localTypesInScope(offset).forEach { (simple, fqn) ->
-        out += KotlinSymbol(simple, SymbolKind.CLASS, type = service.typeByFqn(fqn), origin = SOURCE)
+        out += KotlinSymbol(
+            simple,
+            SymbolKind.CLASS,
+            type = service.typeByFqn(fqn),
+            origin = SOURCE
+        )
     }
     // Locals/implicit members are small, so filter them here; the classpath top-level universe is large, so
     // [topLevelCallables] filters by prefix itself rather than materializing all of it (empty = all).
@@ -562,7 +642,9 @@ fun KotlinResolver.scopeSymbolsAt(offset: Int, namePrefix: String = "", exactNam
         exactName -> out.filter { it.name == namePrefix }
         else -> out.filter { m.matches(it.name) }
     }
-    return scoped + (if (exactName) service.topLevelByName(namePrefix) else service.topLevelCallables(namePrefix))
+    return scoped + (if (exactName) service.topLevelByName(namePrefix) else service.topLevelCallables(
+        namePrefix
+    ))
 }
 
 /**
@@ -584,15 +666,29 @@ internal fun KotlinResolver.sameFileScopeSymbols(offset: Int): List<KotlinSymbol
         if (node is KtClassOrObject) {
             val ownerFqn = node.fqName?.asString()
             for (d in node.declarations) when (d) {
-                is KtNamedFunction -> if (d.receiverTypeReference == null) out += sameFileFunction(d, ownerFqn)
-                is KtProperty -> if (d.receiverTypeReference == null) out += sameFileProperty(d, ownerFqn)
+                is KtNamedFunction -> if (d.receiverTypeReference == null) out += sameFileFunction(
+                    d,
+                    ownerFqn
+                )
+
+                is KtProperty -> if (d.receiverTypeReference == null) out += sameFileProperty(
+                    d,
+                    ownerFqn
+                )
+
                 else -> {}
             }
             node.primaryConstructorParameters.filter { it.hasValOrVar() }.forEach { p ->
                 out += KotlinSymbol(
                     p.name ?: "_", SymbolKind.FIELD,
                     type = paramType(p), origin = SOURCE,
-                    owner = ownerFqn?.let { KotlinSymbol(it.substringAfterLast('.'), SymbolKind.CLASS, origin = SOURCE) },
+                    owner = ownerFqn?.let {
+                        KotlinSymbol(
+                            it.substringAfterLast('.'),
+                            SymbolKind.CLASS,
+                            origin = SOURCE
+                        )
+                    },
                     declarationNode = runCatching { parsed.adapt(p) }.getOrNull(),
                 )
             }
@@ -605,11 +701,19 @@ internal fun KotlinResolver.sameFileScopeSymbols(offset: Int): List<KotlinSymbol
 internal fun KotlinResolver.sameFileFunction(fn: KtNamedFunction, ownerFqn: String?): KotlinSymbol {
     val params = fn.valueParameters.map { (it.name ?: "_") to it.typeReference?.text }
     val retText = fn.typeReference?.text
-    val sig = "(" + params.joinToString(", ") { (n, t) -> "$n: ${t ?: "?"}" } + ")" + (retText?.let { ": $it" } ?: "")
+    val sig =
+        "(" + params.joinToString(", ") { (n, t) -> "$n: ${t ?: "?"}" } + ")" + (retText?.let { ": $it" }
+            ?: "")
     return KotlinSymbol(
         name = fn.name ?: "_", kind = SymbolKind.METHOD,
         type = retText?.let { service.typeFromText(it, fileContext) },
-        owner = ownerFqn?.let { KotlinSymbol(it.substringAfterLast('.'), SymbolKind.CLASS, origin = SOURCE) },
+        owner = ownerFqn?.let {
+            KotlinSymbol(
+                it.substringAfterLast('.'),
+                SymbolKind.CLASS,
+                origin = SOURCE
+            )
+        },
         origin = SOURCE, signature = sig,
         paramTypes = params.map { (_, t) -> service.typeFromText(t, fileContext) },
         paramNames = params.map { (n, _) -> n },
@@ -632,7 +736,13 @@ internal fun KotlinResolver.sameFileProperty(p: KtProperty, ownerFqn: String?): 
         type = retText?.let { service.typeFromText(it, fileContext) }
             ?: inferType(p.initializer)
             ?: p.delegateExpression?.let(::delegatedValueType),
-        owner = ownerFqn?.let { KotlinSymbol(it.substringAfterLast('.'), SymbolKind.CLASS, origin = SOURCE) },
+        owner = ownerFqn?.let {
+            KotlinSymbol(
+                it.substringAfterLast('.'),
+                SymbolKind.CLASS,
+                origin = SOURCE
+            )
+        },
         origin = SOURCE, signature = retText?.let { ": $it" } ?: "",
         isDeprecated = p.annotationEntries.any { it.shortName?.asString() == "Deprecated" },
         packageName = if (ownerFqn == null) fileContext.packageName.ifEmpty { null } else null,
