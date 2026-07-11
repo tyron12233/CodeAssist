@@ -49,8 +49,7 @@ class SharedLibraryDexer(
 
     /** A cache key for the desugaring config: empty when disabled (byte-identical namespaces to a
      *  no-desugaring build), a content hash when enabled (toggling busts stale dex). */
-    fun desugarConfigKey(): String =
-        desugaredLibConfig?.takeIf { Files.exists(it) }?.let { DexArchives.fileHash(it) } ?: ""
+    fun desugarConfigKey(): String = desugarConfigKey(desugaredLibConfig)
 
     /**
      * Build the desugaring universe for [libJars] (the sub+ext scope jars, or the preview's library classpath).
@@ -66,30 +65,8 @@ class SharedLibraryDexer(
      * would re-key the whole shared cache each time `R` changed, re-dexing every stable library under a fresh
      * namespace; excluding it means only `R.jar` itself re-dexes on a resource edit.
      */
-    fun computeUniverse(libJars: List<Path>, hashCacheDir: Path, extraDexJars: List<Path> = emptyList()): Universe {
-        val libUniverse = libJars.filter { Files.exists(it) && Files.size(it) > 0L }
-        val extra = extraDexJars.filter { Files.exists(it) && Files.size(it) > 0L }
-        val hashCache = DexArchives.HashCache(hashCacheDir)
-        val hashOf = (libUniverse + extra).associateWith { hashCache.hashOf(it) }
-        hashCache.flush()
-        val universeByHash = LinkedHashMap<String, Path>()   // content hash -> representative jar (desugaring universe only)
-        for (j in libUniverse) hashOf[j]?.let { universeByHash.putIfAbsent(it, j) }
-        val cfgKey = desugarConfigKey()
-        val desugaringNeeded = minApi < 26 || cfgKey.isNotEmpty()
-        val classesOf =
-            if (desugaringNeeded) universeByHash.values.associateWith { DexArchives.classNamesOf(it) } else emptyMap()
-        // When no desugaring applies, D8 never consults the classpath, so a library's dex depends ONLY on its own
-        // bytes — key the cache on own-content alone (empty digest → no `-cp` component), AGP's
-        // `DexingNoClasspathTransform`, so a library is dexed once and shared across ALL projects regardless of
-        // their classpaths. When desugaring DOES apply, the output can depend on the classpath, so the digest
-        // covers the (scope-appropriate) library universe — AGP's `DexingWithClasspathTransform`. R.jar and the
-        // app's own classes are never in this universe (see [extraDexJars]), so an app/resource edit can't bust it.
-        val desugarDigest = if (!desugaringNeeded) "" else {
-            val desugarExtra = if (cfgKey.isEmpty()) emptyList() else listOf("cfg:$cfgKey")
-            DexArchives.digestOf(universeByHash.keys + desugarExtra)
-        }
-        return Universe(hashOf, universeByHash, classesOf, desugarDigest, desugaringNeeded)
-    }
+    fun computeUniverse(libJars: List<Path>, hashCacheDir: Path, extraDexJars: List<Path> = emptyList()): Universe =
+        computeUniverse(libJars, hashCacheDir, minApi, desugaredLibConfig, extraDexJars)
 
     /**
      * Archive each of [jars] into `<root>/<contentHash>/`. Three tiers of reuse, then dex only the true misses,
@@ -206,11 +183,64 @@ class SharedLibraryDexer(
      *  the `-cp` component entirely, so the key is own-content-only (AGP's `DexingNoClasspathTransform`) and a
      *  library is shared across projects with different classpaths. Byte-identical to the build's key so the
      *  build and the preview share buckets. */
-    fun cacheTag(desugarDigest: String): String =
-        "minApi$minApi-${if (release) "release" else "debug"}-$DEX_CACHE_FORMAT" +
-            if (desugarDigest.isEmpty()) "" else "-cp$desugarDigest"
+    fun cacheTag(desugarDigest: String): String = cacheTag(minApi, release, desugarDigest)
 
     companion object {
+        /**
+         * Static [computeUniverse] — builds the desugaring universe with no [Dexer]/instance. The layout-preview
+         * readiness check ([undexedLibraries]) calls this; the instance overload delegates here, so the universe
+         * (and therefore the shared-cache key) is byte-identical between build, preview, and readiness check.
+         */
+        fun computeUniverse(
+            libJars: List<Path>, hashCacheDir: Path, minApi: Int, desugaredLibConfig: Path?,
+            extraDexJars: List<Path> = emptyList(),
+        ): Universe {
+            val libUniverse = libJars.filter { Files.exists(it) && Files.size(it) > 0L }
+            val extra = extraDexJars.filter { Files.exists(it) && Files.size(it) > 0L }
+            val hashCache = DexArchives.HashCache(hashCacheDir)
+            val hashOf = (libUniverse + extra).associateWith { hashCache.hashOf(it) }
+            hashCache.flush()
+            val universeByHash = LinkedHashMap<String, Path>()
+            for (j in libUniverse) hashOf[j]?.let { universeByHash.putIfAbsent(it, j) }
+            val cfgKey = desugarConfigKey(desugaredLibConfig)
+            val desugaringNeeded = minApi < 26 || cfgKey.isNotEmpty()
+            val classesOf =
+                if (desugaringNeeded) universeByHash.values.associateWith { DexArchives.classNamesOf(it) } else emptyMap()
+            val desugarDigest = if (!desugaringNeeded) "" else {
+                val desugarExtra = if (cfgKey.isEmpty()) emptyList() else listOf("cfg:$cfgKey")
+                DexArchives.digestOf(universeByHash.keys + desugarExtra)
+            }
+            return Universe(hashOf, universeByHash, classesOf, desugarDigest, desugaringNeeded)
+        }
+
+        fun desugarConfigKey(desugaredLibConfig: Path?): String =
+            desugaredLibConfig?.takeIf { Files.exists(it) }?.let { DexArchives.fileHash(it) } ?: ""
+
+        fun cacheTag(minApi: Int, release: Boolean, desugarDigest: String): String =
+            "minApi$minApi-${if (release) "release" else "debug"}-$DEX_CACHE_FORMAT" +
+                if (desugarDigest.isEmpty()) "" else "-cp$desugarDigest"
+
+        /**
+         * The [jars] whose per-class dex is NOT yet in the shared cache under [dexCacheRoot] — the ones
+         * [dexScope] would have to D8-dex. Pure (no dexing, no [Dexer]); it consults the SAME bucket key
+         * [dexOneLibrary] reuses from, so an empty result means the layout preview can class-load with zero
+         * dexing (all libraries already dexed by a build or a prior preview). [u] is from [computeUniverse].
+         */
+        fun undexedLibraries(jars: List<Path>, u: Universe, dexCacheRoot: Path, minApi: Int, release: Boolean): List<Path> {
+            val tag = cacheTag(minApi, release, u.desugarDigest)
+            val out = ArrayList<Path>()
+            val seen = HashSet<String>()
+            for (jar in jars) {
+                val h = u.hashOf[jar] ?: continue
+                if (!seen.add(h)) continue                    // content-identical jars share one bucket
+                val cls = DexArchives.classNamesOf(jar)
+                if (cls.isEmpty()) continue                   // a resource-only jar dexes to nothing → never "undexed"
+                // NB `out += jar` binds List<Path>.plus(Iterable) since a Path IS Iterable<Path> — use add().
+                if (!DexArchives.bucketComplete(dexCacheRoot.resolve(tag).resolve(h), cls)) out.add(jar)
+            }
+            return out
+        }
+
         /**
          * Content-hash each existing file in [files], cached by (path, size, mtime) in the `.hashcache` sidecar
          * under [hashCacheDir] so an unchanged file isn't re-read byte-for-byte. This is the SAME content hash

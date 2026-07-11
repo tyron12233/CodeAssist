@@ -38,6 +38,18 @@ class AndroidSdkMetadata(
     /** Whether [tag] is a known widget (a View subclass from the SDK) — used to decide layout-param inspections. */
     fun isWidgetTag(tag: String): Boolean = widgetTags.contains(tag.substringAfterLast('.'))
 
+    /**
+     * A copy of this (framework) metadata whose class hierarchy is augmented with [extra] — a custom/library
+     * View subclass ancestry (simple name → super simple name, e.g. `MaterialButton → AppCompatButton → Button`,
+     * from [CustomViewScanner] and the project-source scan). It lets attribute completion for a custom-view tag
+     * walk up into the FRAMEWORK styleables and inherit the superclass's `android:` attributes (`android:text`
+     * from `Button`, `android:gravity` from `TextView`, …), exactly as Android Studio does. Framework entries
+     * win over [extra] on a key clash; a no-op when [extra] is empty.
+     */
+    fun withCustomHierarchy(extra: Map<String, String>): AndroidSdkMetadata =
+        if (extra.isEmpty()) this
+        else AndroidSdkMetadata(apiLevel, attrs, styleables, extra + superclass, widgetList, attrPrefix, viewSubstitutions)
+
     override fun childTagsFor(parentTag: String?): List<Widget> =
         widgetList.map { Widget(it.simpleName, it.isViewGroup) }
 
