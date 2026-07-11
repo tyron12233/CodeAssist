@@ -104,6 +104,22 @@ class AnalyticsTest {
     }
 
     @Test
+    fun crashWithoutOwnTopFrameStillPinsACauseFrame() {
+        // A deep framework crash: the thrown exception's own trace is all foreign (Compose/Android), but our
+        // code is on the cause chain. The scrubber must still surface that own frame (was empty before).
+        val cause = RuntimeException("root").apply {
+            stackTrace = arrayOf(StackTraceElement("dev.ide.core.Foo", "bar", "Foo.kt", 42))
+        }
+        val top = RuntimeException("wrap", cause).apply {
+            stackTrace = arrayOf(
+                StackTraceElement("androidx.compose.runtime.Recomposer", "run", "Recomposer.kt", 1),
+                StackTraceElement("android.os.Handler", "dispatchMessage", "Handler.java", 99),
+            )
+        }
+        assertEquals("dev.ide.core.Foo.bar:42", dev.ide.analytics.CrashScrub.ownFrames(top))
+    }
+
+    @Test
     fun analyticsLogSinkForwardsErrorsScrubbedAndThrottled() {
         val sink = FakeSink()
         val svc = DefaultAnalyticsService("i", "s", device, sink, initialConsent = true, batchSize = 100)

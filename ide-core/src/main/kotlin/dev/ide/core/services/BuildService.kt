@@ -37,6 +37,7 @@ import dev.ide.build.engine.ProgramIo
 import dev.ide.build.engine.SimpleTaskContext
 import dev.ide.build.engine.TaskExecutorImpl
 import dev.ide.build.engine.TaskStatus
+import dev.ide.build.engine.jarPath
 import dev.ide.build.jvm.JavaBuildSystem
 import dev.ide.core.EngineContext
 import dev.ide.core.MemSample
@@ -128,11 +129,12 @@ internal class BuildService(private val ctx: EngineContext) : Disposable {
         ctx.platform.extensions.extensions(SOURCE_GENERATOR_EP)
 
     // The native Java/Kotlin build system (`:jvm-build`): JavaPlugin wires each module's own compile task
-    // (lang-jdt's JdtCompileTask, lang-kotlin's KotlinCompileTask), which drive ecj / K2 directly. The only
-    // host inputs are the boot classpath ([ctx.compileBootClasspath]: empty on desktop → host JRE; android.jar +
-    // desugar stubs on ART), the incremental Kotlin compiler, the Kotlin compiler plugins, and source generators.
+    // (lang-jdt's JdtCompileTask, lang-kotlin's KotlinCompileTask), which drive ecj / K2 directly. The boot
+    // classpath is resolved PER MODULE ([ctx.bootClasspathFor]: the core-Java platform for a console module,
+    // the Android SDK for an android module, empty on desktop → host JRE) so a Java/Kotlin console app never
+    // compiles against android.jar. Plus the incremental Kotlin compiler, compiler plugins, source generators.
     private val buildSystem = JavaBuildSystem(
-        ctx.compileBootClasspath, incrementalKotlin, kotlinCompilerPlugins, sourceGenerators
+        { ctx.bootClasspathFor(it) }, incrementalKotlin, kotlinCompilerPlugins, sourceGenerators
     )
 
     /**
@@ -437,14 +439,12 @@ internal class BuildService(private val ctx: EngineContext) : Disposable {
      *  `assemble<Variant>`. A module is runnable when its Run configuration names a main class, or one is
      *  auto-detected in its sources (see [runnableMainFor]). */
     fun runTasks(): List<RunTaskOption> = buildList {
+        // Console (Java/Kotlin) modules: a `run` when a main is found, plus a `build` (assemble the jar) that
+        // every such module offers — so a library module (no main) is still buildable from the Run picker.
         for (m in ctx.modules()) {
             if (!isConsoleRunModule(m)) continue
-            if (runnableMainFor(m) == null) continue
-            add(
-                RunTaskOption(
-                    "run:${m.name}", "Run ${m.name}", "run"
-                )
-            )
+            if (runnableMainFor(m) != null) add(RunTaskOption("run:${m.name}", "Run ${m.name}", "run"))
+            add(RunTaskOption("build:${m.name}", "Build ${m.name}", "build"))
         }
         for (m in ctx.modules().filter { it.type.id == "android-app" }) {
             for (v in AndroidVariants.compute(m)) {
@@ -466,6 +466,13 @@ internal class BuildService(private val ctx: EngineContext) : Disposable {
                         "bundle:${m.name}:${v.name}", "bundle$cap (.aab) · ${m.name}", "android"
                     )
                 )
+            }
+        }
+        // Android libraries package an .aar (per variant) — visible from Run like any other module's task.
+        for (m in ctx.modules().filter { it.type.id == "android-lib" }) {
+            for (v in AndroidVariants.compute(m)) {
+                val cap = v.name.replaceFirstChar { it.uppercase() }
+                add(RunTaskOption("assembleAar:${m.name}:${v.name}", "assembleAar$cap (.aar) · ${m.name}", "android"))
             }
         }
     }
@@ -559,6 +566,59 @@ internal class BuildService(private val ctx: EngineContext) : Disposable {
                         "> bundle $variant (.aab) · ${module.name}",
                         firstBuildDexBanner(module)
                     ) { log -> log("Signed bundle: $aab") }
+                }
+
+                id.startsWith("assembleAar:") -> {
+                    val parts = id.removePrefix("assembleAar:").split(":")
+                    val module = ctx.modules().firstOrNull { it.name == parts[0] }
+                        ?: return fail("No module '${parts[0]}'.")
+                    val variant = parts.getOrNull(1) ?: ctx.activeVariant(module)
+                    unresolvedBlocker(module)?.let { return fail(it) }
+                    val android = androidBuild
+                        ?: return fail("Android SDK (platform + build-tools) not found — install one to assemble Android modules.")
+                    val project = ctx.projectOf(module) ?: return
+                    val graph = android.createBuildGraph(
+                        project, BuildRequest(listOf(module.id), VariantSelector(variant), BuildGoal.ASSEMBLE)
+                    )
+                    val aar = AndroidBuildSystem.aarPath(module, variant)
+                    launch(
+                        module.name, graph, "> assembleAar $variant (.aar) · ${module.name}", firstBuildDexBanner(module)
+                    ) { log -> log("Packaged AAR: $aar") }
+                }
+
+                // Prepare the layout preview: compile + dex (populate the shared library-dex cache) but stop
+                // before packaging. The real-view preview no longer dexes libraries itself; this is the one-time
+                // (per library set) build it prompts for. minSdk<21 has no per-lib shared buckets, but the debug
+                // variant is what the preview loads, so DEX always targets debug.
+                id.startsWith("prepareDex:") -> {
+                    val parts = id.removePrefix("prepareDex:").split(":")
+                    val module = ctx.modules().firstOrNull { it.name == parts[0] }
+                        ?: return fail("No module '${parts[0]}'.")
+                    val variant = parts.getOrNull(1) ?: ctx.activeVariant(module)
+                    unresolvedBlocker(module)?.let { return fail(it) }
+                    val android = androidBuild
+                        ?: return fail("Android SDK (platform + build-tools) not found — install one to prepare the preview.")
+                    val project = ctx.projectOf(module) ?: return
+                    val graph = android.createBuildGraph(
+                        project, BuildRequest(listOf(module.id), VariantSelector(variant), BuildGoal.DEX)
+                    )
+                    launch(module.name, graph, "> prepare libraries (dex) $variant · ${module.name}", firstBuildDexBanner(module)) { log ->
+                        log("Libraries prepared — the layout preview can now render.")
+                    }
+                }
+
+                // Build (assemble the jar of) a plain Java/Kotlin module — a library has no `main`, so this is
+                // the only way to build it from the Run picker.
+                id.startsWith("build:") -> {
+                    val moduleName = id.removePrefix("build:")
+                    val module = ctx.modules().firstOrNull { it.name == moduleName }
+                        ?: return fail("No module '$moduleName'.")
+                    unresolvedBlocker(module)?.let { return fail(it) }
+                    val project = ctx.projectOf(module) ?: return
+                    val graph = buildSystem.createBuildGraph(
+                        project, BuildRequest(listOf(module.id), VariantSelector(ctx.activeVariant(module)), BuildGoal.ASSEMBLE)
+                    )
+                    launch(module.name, graph, "> build ${module.name}") { log -> log("Built: ${jarPath(module)}") }
                 }
 
                 id.startsWith("androidRun:") -> {
