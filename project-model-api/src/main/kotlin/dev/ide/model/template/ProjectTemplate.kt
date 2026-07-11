@@ -159,4 +159,9 @@ interface ProjectScaffold {
 
     /** Write a UTF-8 text file at [relPath] relative to [rootDir], creating intermediate directories. */
     fun writeText(relPath: String, content: String)
+
+    /** Write raw [bytes] verbatim at [relPath] (byte-exact — no charset decode, no trim, no appended
+     *  newline), creating intermediate directories. Use for binary assets (PNG/WebP/fonts/…); [writeText]
+     *  would corrupt them by round-tripping through UTF-8. */
+    fun writeBytes(relPath: String, bytes: ByteArray)
 }

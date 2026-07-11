@@ -51,4 +51,20 @@ class AndroidDemoTest {
         }
         dir.toFile().deleteRecursively()
     }
+
+    /** The Run picker surfaces tasks from EVERY module, not just the app: an android-lib packages an .aar,
+     *  and a plain-Java library (no main) still offers a build task. Enumeration is SDK-independent. */
+    @Test
+    fun runPickerOffersLibraryBuildAndAarTasks() {
+        val dir = Files.createTempDirectory("ide-android-run-lib")
+        IdeServices.bootstrapDemo(dir).use { ide ->
+            val ids = IdeServicesBackend(ide).build.runTasks().map { it.id }.toSet()
+            // The android-lib ("feature") packages an .aar per variant — visible from Run.
+            assertTrue("assembleAar:feature:debug" in ids, "Run picker should offer the android-lib AAR: $ids")
+            assertTrue("assembleAar:feature:release" in ids, "Run picker should offer the android-lib AAR (release): $ids")
+            // The plain-Java library ("core") builds even though it has no main().
+            assertTrue("build:core" in ids, "Run picker should offer building the java-lib: $ids")
+        }
+        dir.toFile().deleteRecursively()
+    }
 }

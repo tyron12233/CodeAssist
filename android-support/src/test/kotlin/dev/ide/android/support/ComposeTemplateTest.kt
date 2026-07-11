@@ -60,6 +60,11 @@ class ComposeTemplateTest {
                     Files.createDirectories(file.parent)
                     file.writeText(content.trimIndent() + "\n")
                 }
+                override fun writeBytes(relPath: String, bytes: ByteArray) {
+                    val file = store.rootPath.resolve(relPath)
+                    Files.createDirectories(file.parent)
+                    Files.write(file, bytes)
+                }
             }
             body(scaffold, store.rootPath)
         } finally {

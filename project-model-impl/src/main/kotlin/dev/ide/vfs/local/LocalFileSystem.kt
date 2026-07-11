@@ -6,7 +6,6 @@ import dev.ide.vfs.VirtualFile
 import dev.ide.vfs.VirtualFileSystem
 import java.nio.file.Files
 import java.nio.file.Path
-import java.security.MessageDigest
 import java.nio.file.Paths
 import java.util.stream.Collectors
 
@@ -68,8 +67,7 @@ class LocalVirtualFile internal constructor(
 
     override fun contentHash(): ContentHash {
         if (!exists || isDirectory) return ContentHash("")
-        val digest = MessageDigest.getInstance("SHA-256").digest(readBytes())
-        return ContentHash(digest.joinToString("") { "%02x".format(it.toInt() and 0xFF) })
+        return ContentHash.of(readBytes())
     }
 
     override fun readBytes(): ByteArray = Files.readAllBytes(nioPath)

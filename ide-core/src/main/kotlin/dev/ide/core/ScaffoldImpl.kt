@@ -29,4 +29,10 @@ internal class ScaffoldImpl(
         // trimIndent() drops the leading/trailing blank lines of a triple-quoted literal + common indent.
         file.writeText(content.trimIndent() + "\n")
     }
+
+    override fun writeBytes(relPath: String, bytes: ByteArray) {
+        val file = store.rootPath.resolve(relPath)
+        Files.createDirectories(file.parent)
+        Files.write(file, bytes) // byte-exact: no trim/newline mutation, so binary assets survive
+    }
 }
