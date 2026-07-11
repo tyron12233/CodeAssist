@@ -56,7 +56,6 @@
     <string name="support_title">支持 CodeAssist</string>
     <string name="support_content">这是我利用业余时间开发的，并且对所有人免费。如果它对你有帮助，赞助或点亮 Star 对我意义重大。</string>
     <string name="support_chip_free">完全免费</string>
-    <string name="support_chip_no_ads">无广告</string>
     <string name="support_chip_open_source">开源</string>
     <string name="support_sponsor">赞助</string>
     <string name="support_star">在 GitHub 点 Star</string>

@@ -167,14 +167,30 @@ class IdeUiState(
     var runConflict by mutableStateOf<PendingRun?>(null)
         private set
 
+    /** Non-null while the first-build notification-permission gate is deciding; holds the run waiting behind
+     *  it. `BuildNotificationGate` renders the prompt/explanation and resolves it via [resolveNotifGate]. */
+    var notifGate by mutableStateOf<PendingRun?>(null)
+        private set
+
     /**
-     * Funnel every Run/task launch through this. If nothing is running, [action] fires immediately. If a
+     * Funnel every Run/task launch through this. On the very first build (mobile only, until
+     * [NOTIF_BUILD_PROMPT_RESOLVED_PREF] is set) it defers to `BuildNotificationGate`, which asks for the
+     * notification permission the isolated build process needs; the gate then re-enters via [resolveNotifGate]
+     * → [proceedRun]. Otherwise it proceeds straight to [proceedRun].
+     */
+    fun requestRun(action: () -> Unit) {
+        if (isMobilePlatform && !notifPromptResolved) { notifGate = PendingRun(action); return }
+        proceedRun(action)
+    }
+
+    /**
+     * Start [action] once the notification gate is clear. If nothing is running, it fires immediately. If a
      * build or program is already in progress, the user must confirm — either automatically (they earlier
      * chose "don't ask again", which remembers Stop-and-Run) or via the confirmation dialog. This guards a
      * runaway program (e.g. an infinite loop) from being silently shadowed by a second run that can never
      * start (the engine drops a run request while one is already Running).
      */
-    fun requestRun(action: () -> Unit) {
+    private fun proceedRun(action: () -> Unit) {
         if (backend.build.buildState.value.status != RunStatus.Running) {
             action(); return
         }
@@ -182,6 +198,20 @@ class IdeUiState(
             stopThenRun(action); return
         }
         runConflict = PendingRun(action)
+    }
+
+    /** Whether the one-time first-build notification prompt has already run (persisted app-globally). */
+    private val notifPromptResolved: Boolean
+        get() = backend.settings.preference(NOTIF_BUILD_PROMPT_RESOLVED_PREF)?.toBooleanStrictOrNull() == true
+
+    /** `BuildNotificationGate` calls this once it has prompted (granted, denied, or dismissed): remember that
+     *  the one-time prompt is done, then start the deferred run (which now runs in-process when notifications
+     *  were declined — see IdeServicesBackend.separateBuildProcessEnabled). */
+    fun resolveNotifGate() {
+        backend.settings.setPreference(NOTIF_BUILD_PROMPT_RESOLVED_PREF, "true")
+        val pending = notifGate
+        notifGate = null
+        pending?.let { proceedRun(it.action) }
     }
 
     /** The user chose "Stop and Run" in the conflict dialog. [remember] persists that choice so future runs
@@ -626,6 +656,10 @@ class IdeUiState(
         /** App preference: "true" once the user checks "don't ask again" on the run-conflict dialog — future
          *  runs then stop the current build/program and start automatically, without prompting. */
         const val RUN_CONFLICT_ALWAYS_STOP_PREF = "run.conflict.alwaysStop"
+
+        /** App preference: "true" once the first-build notification-permission prompt has been shown (see
+         *  `BuildNotificationGate`), so later builds don't re-prompt. Re-request from Settings → Build Runtime. */
+        const val NOTIF_BUILD_PROMPT_RESOLVED_PREF = "notif.buildPromptResolved"
     }
 }
 

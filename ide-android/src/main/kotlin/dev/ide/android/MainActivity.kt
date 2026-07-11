@@ -1,12 +1,9 @@
 package dev.ide.android
 
-import android.Manifest
 import android.app.Activity
 import android.content.Context
 import android.content.Intent
-import android.content.pm.PackageManager
 import android.net.Uri
-import android.os.Build
 import android.os.Bundle
 import android.provider.DocumentsContract
 import android.provider.OpenableColumns
@@ -25,12 +22,8 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
-import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
-import androidx.compose.material3.darkColorScheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -76,6 +69,10 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         inbound.value = extractStream(intent)
 
+        // Initialize the AdMob SDK once (idempotent, async). Ads only render if the user hasn't turned them
+        // off / isn't a supporter; the SDK app-id is declared in the manifest (test id for now).
+        com.google.android.gms.ads.MobileAds.initialize(this)
+
         setContent {
             var backend by remember { mutableStateOf<IdeBackend?>(null) }
             var error by remember { mutableStateOf<String?>(null) }
@@ -95,30 +92,10 @@ class MainActivity : ComponentActivity() {
                 }.onFailure { e -> error = e.stackTraceToString() }
             }
 
-            // POST_NOTIFICATIONS (Android 13+/API 33) is a RUNTIME permission. The build/run daemon promotes
-            // to a foreground service with an ongoing "Building…"/"Running…" notification (BuildDaemonService,
-            // in the :build process); without this grant the OS silently drops that notification, so it never
-            // reaches the shade. The permission is per-app UID, so granting it here in the main process also
-            // lets :build post. The flow is rationale-first: explain why (notifRationale dialog), then fire the
-            // system request; a denial is non-fatal (the FGS still runs, only its notification is hidden), so we
-            // just tell the user where to re-enable it. Below API 33 it was granted at install and skipped.
-            var notifRationale by remember { mutableStateOf(false) }
-            val requestNotifications =
-                rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
-                    if (!granted) Toast.makeText(
-                        this@MainActivity,
-                        "Notifications are off, so build progress won't show. You can enable them anytime in Settings.",
-                        Toast.LENGTH_LONG,
-                    ).show()
-                }
-            LaunchedEffect(Unit) {
-                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
-                    this@MainActivity.checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED
-                ) {
-                    notifRationale = true
-                }
-            }
-
+            // POST_NOTIFICATIONS (Android 13+/API 33) is asked for at the FIRST build, not here at launch, so
+            // the request lands in context — see BuildNotificationGate (:ide-ui), which prompts and falls back
+            // to in-process builds if declined. It's driven through the shared UI (the permission is per-app
+            // UID, so the grant reaches the :build process too), so there's nothing to request in this activity.
             var pendingTarget by remember { mutableStateOf<String?>(null) }
             var pendingCallback by remember { mutableStateOf<((List<String>) -> Unit)?>(null) }
             val importLauncher =
@@ -190,6 +167,9 @@ class MainActivity : ComponentActivity() {
                 }
             }
 
+            // Android advertising bridge (native ads + "remove ads" flow). Phase 1 = house ads + donation link.
+            val adHost = remember { AndroidAdHost { url -> openInBrowser(url) } }
+
             // A `.caproj` package handed in via "Open with" opens the import preview (see the branch below);
             // any other inbound file is copied into the open project's first source root as before.
             var importPackagePath by remember { mutableStateOf<String?>(null) }
@@ -220,6 +200,7 @@ class MainActivity : ComponentActivity() {
                 b != null -> CodeAssistApp(
                     b,
                     fileActions = fileActions,
+                    adHost = adHost,
                     // On-device Compose preview: render @Preview composables through the interpreter. The
                     // backend instance is stable across project switches (it swaps services internally), so
                     // one host suffices.
@@ -233,18 +214,6 @@ class MainActivity : ComponentActivity() {
 
                 error != null -> Splash("Failed to start: $error")
                 else -> Splash("Starting CodeAssist…")
-            }
-
-            // The rationale shown before the system notification prompt (see the launcher above). "Allow"
-            // fires the real request; "Not now" backs off silently (the app works fine without it).
-            if (notifRationale) {
-                NotificationRationaleDialog(
-                    onAllow = {
-                        notifRationale = false
-                        requestNotifications.launch(Manifest.permission.POST_NOTIFICATIONS)
-                    },
-                    onDismiss = { notifRationale = false },
-                )
             }
         }
     }
@@ -441,30 +410,5 @@ private fun Splash(message: String) {
                 modifier = Modifier.padding(horizontal = 32.dp)
             )
         }
-    }
-}
-
-/**
- * Rationale shown before the POST_NOTIFICATIONS system prompt, explaining why the IDE wants to post
- * notifications (the ongoing build/run foreground-service notification). Wrapped in a minimal dark theme so
- * it reads correctly even when it appears over the boot Splash, before CodeAssistApp's theme is available.
- * [onAllow] proceeds to the real permission request; [onDismiss] backs off (the app runs fine without it).
- */
-@Composable
-private fun NotificationRationaleDialog(onAllow: () -> Unit, onDismiss: () -> Unit) {
-    MaterialTheme(colorScheme = darkColorScheme(primary = Color(0xFF8B7BF0))) {
-        AlertDialog(
-            onDismissRequest = onDismiss,
-            title = { Text("Show build notifications?") },
-            text = {
-                Text(
-                    "CodeAssist runs builds in a separate process and shows an ongoing notification while a " +
-                            "build or program is running. It keeps Android from killing the build when you switch " +
-                            "away, and lets you follow progress. You can change this later in Settings.",
-                )
-            },
-            confirmButton = { TextButton(onClick = onAllow) { Text("Allow") } },
-            dismissButton = { TextButton(onClick = onDismiss) { Text("Not now") } },
-        )
     }
 }

@@ -184,6 +184,36 @@ interface PreviewService {
     /** Run the `@Preview` composable [functionName] through the on-device interpreter. */
     suspend fun runComposePreview(path: String, text: String, functionName: String): UiPreviewResult =
         UiPreviewResult(ok = false, message = "Compose preview is not available")
+
+    // ---- Real-view layout attribute editor ----
+    // Backs the Preview's editable attribute sheet: it edits the layout XML source (the same buffer the Code
+    // view shows) driven by the SAME allowed-attribute metadata + completion the XML editor uses. [sourceOffset]
+    // comes from the tapped view's `PreviewViewNode.sourceOffset`.
+
+    // [id] (the tapped view's `@id/…` entry name, or null) anchors the element robustly: the raw [sourceOffset]
+    // from the captured tree can lag the live buffer after an edit shifts offsets, so an id'd element is
+    // re-located by id in the current [text]; un-id'd views fall back to the offset.
+
+    /** The editable model for the layout element at [sourceOffset] (or [id]) in [path]'s live buffer [text] — its
+     *  set attributes plus the allowed-but-unset attributes for that view. Null when it isn't an editable element. */
+    suspend fun layoutElementAt(path: String, text: String, sourceOffset: Int, id: String?): UiLayoutElement? = null
+
+    /** Value completion for [attrName] on the element at [sourceOffset]/[id], as if [fieldText] (caret at [caret])
+     *  were typed into the value — the same candidates the XML editor gives. Ranges are field-relative. */
+    suspend fun completeLayoutAttributeValue(
+        path: String, text: String, sourceOffset: Int, id: String?, attrName: String, fieldText: String, caret: Int
+    ): UiCompletionResult = UiCompletionResult(emptyList(), 0, 0)
+
+    /** Edits that set [attrName]="[value]" on the element at [sourceOffset]/[id] (replace if present, else insert +
+     *  auto-declare its `xmlns`). Apply them to the shared buffer to update both the Code view and the preview. */
+    suspend fun setLayoutAttribute(
+        path: String, text: String, sourceOffset: Int, id: String?, attrName: String, value: String
+    ): List<UiTextEdit> = emptyList()
+
+    /** Edits that remove [attrName] from the element at [sourceOffset]/[id]. */
+    suspend fun removeLayoutAttribute(
+        path: String, text: String, sourceOffset: Int, id: String?, attrName: String
+    ): List<UiTextEdit> = emptyList()
 }
 
 /** A stage of the real-view layout-render pipeline, shown in the floating status chip. [stage] is a short

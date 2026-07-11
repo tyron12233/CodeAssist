@@ -66,6 +66,13 @@ object AndroidIde {
                     appContext, svc
                 )
             },
+            // The `:build` daemon posts a foreground-service progress notification; if notifications are off
+            // (POST_NOTIFICATIONS denied on API 33+, or disabled in system settings) the isolated build is
+            // pointless, so fall back to in-process builds. The first-build prompt (BuildNotificationGate) asks
+            // for the grant; this is the live check the runner selection reads. See docs/build-process-isolation.md.
+            notificationsAllowed = {
+                androidx.core.app.NotificationManagerCompat.from(appContext).areNotificationsEnabled()
+            },
         )
         // Process-wide uncaught-exception handler: report app_crash + surface the non-fatal dialog + keep the
         // app alive (the MainActivity main-thread guard handles the UI looper). See IdeServicesBackend.

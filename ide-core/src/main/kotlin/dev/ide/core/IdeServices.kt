@@ -1,20 +1,11 @@
 package dev.ide.core
 
-import dev.ide.lang.AnalysisResult
-import dev.ide.lang.SourceAnalyzer
-import dev.ide.lang.completion.COMPLETION_CONTRIBUTOR_EP
-import dev.ide.lang.completion.CompletionContribution
-import dev.ide.lang.completion.CompletionParams
-import dev.ide.lang.completion.CompletionResult
-import dev.ide.lang.completion.CompletionTrigger
-import dev.ide.core.completion.BufferWordsContributor
-import dev.ide.lang.dom.TextRange
-import dev.ide.lang.dom.ParsedFile
-import dev.ide.lang.LanguageId
-import dev.ide.lang.incremental.DocumentSnapshot
 import dev.ide.analysis.ACTION_PROVIDER_EP
 import dev.ide.analysis.ANALYZER_EP
+import dev.ide.analysis.AnalysisProfile
 import dev.ide.analysis.AnalysisTarget
+import dev.ide.analysis.Analyzer
+import dev.ide.analysis.AnalyzerId
 import dev.ide.analysis.DIAGNOSTIC_PROVIDER_EP
 import dev.ide.analysis.ProjectAnalysisScope
 import dev.ide.analysis.QUICK_FIX_PROVIDER_EP
@@ -22,98 +13,19 @@ import dev.ide.analysis.WorkspaceEdit
 import dev.ide.analysis.impl.AnalysisEngine
 import dev.ide.analysis.impl.AnalysisEnvironment
 import dev.ide.android.support.AndroidBuildConfigProvider
-import dev.ide.block.BLOCK_MAPPING_EP
-import dev.ide.block.impl.JavaBlockMapping
-import dev.ide.lang.incremental.DocumentEdit
-import dev.ide.index.INDEX_EP
-import dev.ide.core.services.BlockService
-import dev.ide.core.services.BuildService
-import dev.ide.core.services.RunCapture
-import dev.ide.core.services.DependencyService
-import dev.ide.core.services.ModuleService
-import dev.ide.core.services.SearchService
-import dev.ide.core.services.SigningService
-import dev.ide.index.IndexScope
-import dev.ide.index.IndexService
 import dev.ide.android.support.AndroidFacet
 import dev.ide.android.support.AndroidRClassProvider
-import dev.ide.android.support.AndroidViewBindingProvider
 import dev.ide.android.support.AndroidSupport
+import dev.ide.android.support.AndroidVariants
+import dev.ide.android.support.AndroidViewBindingProvider
 import dev.ide.android.support.SampleAndroidProject
-import dev.ide.android.support.tools.AndroidSdk
-import dev.ide.android.support.tools.KeystoreRegistry
-import dev.ide.build.engine.DexRunner
-import dev.ide.index.impl.IndexServiceImpl
-import dev.ide.lang.jdt.compile.JdtBatchCompiler
-import dev.ide.lang.jdt.JdtLanguageBackend
-import dev.ide.lang.jdt.JdtSourceAnalyzer
-import dev.ide.lang.LanguageBackend
-import dev.ide.lang.LANGUAGE_BACKEND_EP
-import dev.ide.lang.kotlin.KotlinLanguageBackend
-import dev.ide.lang.kotlin.KotlinSourceAnalyzer
-import dev.ide.lang.kotlin.compile.BundledKotlinStdlib
-import dev.ide.lang.kotlin.compile.DefaultKotlinPluginLoader
-import dev.ide.lang.kotlin.compile.KotlinJvmCompiler
-import dev.ide.lang.kotlin.compile.KotlinPluginLoader
-import dev.ide.lang.xml.XmlLanguageBackend
-import dev.ide.lang.xml.XmlSourceAnalyzer
-import dev.ide.lang.jdt.context.ModuleCompilationContext
-import dev.ide.lang.jdt.rename.JdtRename
-import dev.ide.lang.jdt.index.JavaClassNamesIndex
-import dev.ide.lang.jdt.index.JavaMainIndex
-import dev.ide.lang.jdt.index.JavaMembersByOwnerIndex
-import dev.ide.lang.jdt.index.JavaMembersIndex
-import dev.ide.lang.jdt.index.JavaPackageTypesIndex
-import dev.ide.lang.jdt.index.JavaPackagesIndex
-import dev.ide.lang.jdt.index.JavaSourceIndexer
-import dev.ide.lang.jdt.index.JavaSourceSymbolsIndex
-import dev.ide.model.ContentRole
-import dev.ide.model.IconTarget
-import dev.ide.model.Module
-import dev.ide.model.impl.DefaultFileIconProvider
-import dev.ide.model.impl.FacetCodecRegistry
-import dev.ide.model.impl.FileIconRegistry
-import dev.ide.model.impl.ModuleTypeRegistry
-import dev.ide.model.impl.ProjectModel
-import dev.ide.model.impl.ProjectModelStore
-import dev.ide.model.impl.ProjectTemplateRegistry
-import dev.ide.model.impl.SdkData
-import dev.ide.model.impl.jdk.JdkSdkProvider
-import dev.ide.model.LanguageLevel
-import dev.ide.model.Project
-import dev.ide.model.template.ProjectTemplate
-import dev.ide.model.template.TemplateArgs
-import dev.ide.model.template.TemplateId
-import dev.ide.core.templates.CalculatorSampleTemplate
-import dev.ide.core.templates.JavaConsoleAppTemplate
-import dev.ide.core.templates.JavaLibraryTemplate
-import dev.ide.core.templates.KotlinConsoleAppTemplate
-import dev.ide.core.templates.KotlinLibraryTemplate
-import dev.ide.core.templates.NotesSampleTemplate
-import dev.ide.core.templates.WeatherSampleTemplate
-import dev.ide.platform.Disposable
-import java.util.concurrent.CopyOnWriteArrayList
-import dev.ide.platform.PluginId
-import dev.ide.platform.SERVICE_EP
-import dev.ide.platform.ServiceDescriptor
-import dev.ide.platform.ServiceFactory
-import dev.ide.platform.ExtensionRegistry
-import dev.ide.platform.ServiceKey
-import dev.ide.platform.ServiceScopeLevel
-import dev.ide.model.DependencyScope
-import dev.ide.model.LibraryDependency
-import dev.ide.model.LibraryKind
-import dev.ide.model.LibraryRef
-import dev.ide.model.module
-import dev.ide.platform.impl.PlatformCore
-import dev.ide.deps.ConflictPolicy
-import dev.ide.model.ModuleDependency
-import dev.ide.model.ModuleId
-import dev.ide.android.support.resources.AndroidResources
-import dev.ide.android.support.resources.DrawableXmlCatalog
-import dev.ide.android.support.resources.ResourceReferences
-import dev.ide.android.support.resources.ResourceRepository
-import dev.ide.android.support.resources.ResourceType
+import dev.ide.android.support.index.AndroidResourceIndex
+import dev.ide.android.support.index.ResourceDeclValue
+import dev.ide.android.support.metadata.AndroidSdkMetadata
+import dev.ide.android.support.metadata.AttrEntry
+import dev.ide.android.support.metadata.AttrsXmlParser
+import dev.ide.android.support.metadata.SdkMetadataCodec
+import dev.ide.android.support.metadata.StyleableEntry
 import dev.ide.android.support.preview.AndroidColor
 import dev.ide.android.support.preview.ColorEntry
 import dev.ide.android.support.preview.ColorResources
@@ -121,36 +33,98 @@ import dev.ide.android.support.preview.DrawablePreview
 import dev.ide.android.support.preview.DrawablePreviewParser
 import dev.ide.android.support.preview.DrawableResolver
 import dev.ide.android.support.preview.ResolvedDrawable
-import dev.ide.android.support.metadata.AndroidSdkMetadata
-import dev.ide.android.support.metadata.AttrEntry
-import dev.ide.android.support.metadata.AttrsXmlParser
-import dev.ide.android.support.metadata.SdkMetadataCodec
-import dev.ide.android.support.metadata.StyleableEntry
-import dev.ide.android.support.index.AndroidResourceIndex
-import dev.ide.android.support.index.ResourceDeclValue
+import dev.ide.android.support.resources.AndroidResources
+import dev.ide.android.support.resources.DrawableXmlCatalog
+import dev.ide.android.support.resources.ResourceReferences
+import dev.ide.android.support.resources.ResourceRepository
+import dev.ide.android.support.resources.ResourceType
+import dev.ide.android.support.tools.AndroidSdk
+import dev.ide.android.support.tools.KeystoreRegistry
+import dev.ide.block.BLOCK_MAPPING_EP
+import dev.ide.block.impl.JavaBlockMapping
+import dev.ide.build.engine.DexRunner
+import dev.ide.core.IdeServices.Companion.PARSER_WARMUP_MIN_FREE_BYTES
+import dev.ide.core.IdeServices.Companion.openStore
+import dev.ide.core.IdeServices.Companion.registerActiveEnginePlugins
+import dev.ide.core.IdeServices.Companion.registerStaticPlugins
 import dev.ide.core.actions.BuiltInActions
+import dev.ide.core.completion.BufferWordsContributor
 import dev.ide.core.completion.CompletionEngine
 import dev.ide.core.completion.CompletionOptions
 import dev.ide.core.completion.CompletionStats
 import dev.ide.core.completion.PostfixContributor
+import dev.ide.core.services.BlockService
+import dev.ide.core.services.BuildService
+import dev.ide.core.services.DependencyService
+import dev.ide.core.services.ModuleService
+import dev.ide.core.services.RunCapture
+import dev.ide.core.services.SearchService
+import dev.ide.core.services.SigningService
+import dev.ide.core.settings.BuiltInSettingsPages
+import dev.ide.core.templates.CalculatorSampleTemplate
+import dev.ide.core.templates.JavaConsoleAppTemplate
+import dev.ide.core.templates.JavaLibraryTemplate
+import dev.ide.core.templates.KotlinConsoleAppTemplate
+import dev.ide.core.templates.KotlinLibraryTemplate
+import dev.ide.core.templates.NotesSampleTemplate
+import dev.ide.core.templates.WeatherSampleTemplate
+import dev.ide.deps.ConflictPolicy
+import dev.ide.index.INDEX_EP
 import dev.ide.index.IndexItemState
+import dev.ide.index.IndexScope
+import dev.ide.index.IndexService
+import dev.ide.index.impl.IndexServiceImpl
+import dev.ide.lang.AnalysisResult
+import dev.ide.lang.LANGUAGE_BACKEND_EP
+import dev.ide.lang.LanguageBackend
+import dev.ide.lang.LanguageId
+import dev.ide.lang.SourceAnalyzer
+import dev.ide.lang.completion.COMPLETION_CONTRIBUTOR_EP
+import dev.ide.lang.completion.CompletionContribution
 import dev.ide.lang.completion.CompletionContributor
-import dev.ide.lang.completion.CompletionItem
+import dev.ide.lang.completion.CompletionParams
+import dev.ide.lang.completion.CompletionResult
+import dev.ide.lang.completion.TextEdit
+import dev.ide.lang.completion.CompletionTrigger
+import dev.ide.lang.dom.ParsedFile
+import dev.ide.lang.dom.Severity
+import dev.ide.lang.dom.TextRange
+import dev.ide.lang.incremental.DocumentEdit
+import dev.ide.lang.incremental.DocumentSnapshot
+import dev.ide.lang.jdt.JdtLanguageBackend
+import dev.ide.lang.jdt.JdtSourceAnalyzer
+import dev.ide.lang.jdt.compile.JdtBatchCompiler
+import dev.ide.lang.jdt.context.ModuleCompilationContext
 import dev.ide.lang.jdt.index.JavaClassLocatorIndex
+import dev.ide.lang.jdt.index.JavaClassNamesIndex
+import dev.ide.lang.jdt.index.JavaMainIndex
+import dev.ide.lang.jdt.index.JavaMembersByOwnerIndex
+import dev.ide.lang.jdt.index.JavaMembersIndex
+import dev.ide.lang.jdt.index.JavaPackageTypesIndex
+import dev.ide.lang.jdt.index.JavaPackagesIndex
 import dev.ide.lang.jdt.index.JavaSourceAnnotationIndex
 import dev.ide.lang.jdt.index.JavaSourceDocIndex
+import dev.ide.lang.jdt.index.JavaSourceIndexer
 import dev.ide.lang.jdt.index.JavaSourceSubtypeIndex
+import dev.ide.lang.jdt.index.JavaSourceSymbolsIndex
+import dev.ide.lang.jdt.rename.JdtRename
 import dev.ide.lang.jdt.synthetic.SyntheticJavaSource
+import dev.ide.lang.kotlin.KotlinLanguageBackend
+import dev.ide.lang.kotlin.KotlinSourceAnalyzer
+import dev.ide.lang.kotlin.compile.BundledKotlinStdlib
+import dev.ide.lang.kotlin.compile.DefaultKotlinPluginLoader
+import dev.ide.lang.kotlin.compile.KotlinJvmCompiler
+import dev.ide.lang.kotlin.compile.KotlinPluginLoader
 import dev.ide.lang.kotlin.completion.KotlinPostfixTemplates
 import dev.ide.lang.kotlin.index.BinaryAnnotationIndex
 import dev.ide.lang.kotlin.index.BinarySubtypeIndex
 import dev.ide.lang.kotlin.index.KotlinBuiltinCallableIndex
 import dev.ide.lang.kotlin.index.KotlinBuiltinsIndex
 import dev.ide.lang.kotlin.index.KotlinCallableIndex
-import dev.ide.lang.kotlin.index.KotlinSourceCallableIndex
-import dev.ide.lang.kotlin.index.KotlinPackageDeclIndex
 import dev.ide.lang.kotlin.index.KotlinMainIndex
+import dev.ide.lang.kotlin.index.KotlinPackageDeclIndex
 import dev.ide.lang.kotlin.index.KotlinSourceAnnotationIndex
+import dev.ide.lang.kotlin.index.KotlinSourceCallableIndex
 import dev.ide.lang.kotlin.index.KotlinSourceDocIndex
 import dev.ide.lang.kotlin.index.KotlinSourceSubtypeIndex
 import dev.ide.lang.kotlin.index.KotlinTypeShapeIndex
@@ -158,31 +132,82 @@ import dev.ide.lang.kotlin.interp.ResolvedClass
 import dev.ide.lang.kotlin.interp.ResolvedFunction
 import dev.ide.lang.kotlin.parse.KotlinParserHost
 import dev.ide.lang.kotlin.synthetic.KotlinSyntheticClassProvider
+import dev.ide.lang.resolve.SourceDocProvider
 import dev.ide.lang.synthetic.SYNTHETIC_CLASS_EP
 import dev.ide.lang.synthetic.SyntheticClass
 import dev.ide.lang.synthetic.SyntheticClassContext
+import dev.ide.lang.xml.XmlLanguageBackend
+import dev.ide.lang.xml.XmlNode
+import dev.ide.lang.xml.XmlNodeKinds
+import dev.ide.lang.xml.XmlParsedFile
+import dev.ide.lang.xml.XmlSourceAnalyzer
+import dev.ide.lang.xml.completion.XmlCompletion
+import dev.ide.lang.xml.completion.XmlContextScanner
+import dev.ide.lang.xml.hints.XmlResourceValueResolver
+import dev.ide.model.ContentRole
+import dev.ide.model.DependencyScope
+import dev.ide.model.IconTarget
+import dev.ide.model.LanguageLevel
+import dev.ide.model.LibraryDependency
+import dev.ide.model.LibraryKind
+import dev.ide.model.LibraryRef
+import dev.ide.model.Module
+import dev.ide.model.ModuleDependency
+import dev.ide.model.ModuleId
+import dev.ide.model.Project
+import dev.ide.model.impl.DefaultFileIconProvider
+import dev.ide.model.impl.FacetCodecRegistry
+import dev.ide.model.impl.FileIconRegistry
 import dev.ide.model.impl.ModelPersistence
+import dev.ide.model.impl.ModuleTypeRegistry
+import dev.ide.model.impl.ProjectModel
+import dev.ide.model.impl.ProjectModelStore
+import dev.ide.model.impl.ProjectTemplateRegistry
+import dev.ide.model.impl.SdkData
+import dev.ide.model.impl.jdk.CorePlatformProvider
+import dev.ide.model.impl.jdk.JdkSdkProvider
+import dev.ide.model.PlatformKind
+import dev.ide.model.SdkResolution
+import dev.ide.model.module
+import dev.ide.model.template.ProjectTemplate
+import dev.ide.model.template.TemplateArgs
+import dev.ide.model.template.TemplateId
+import dev.ide.platform.Disposable
+import dev.ide.platform.EngineCanceledException
+import dev.ide.platform.ExtensionRegistry
+import dev.ide.platform.PluginId
+import dev.ide.platform.SERVICE_EP
+import dev.ide.platform.ServiceDescriptor
+import dev.ide.platform.ServiceKey
+import dev.ide.platform.ServiceScopeLevel
+import dev.ide.platform.impl.PlatformCore
 import dev.ide.platform.log.Log
+import dev.ide.platform.settings.SETTINGS_PAGE_EP
+import dev.ide.platform.settings.SettingsPage
 import dev.ide.plugin.impl.ActionManager
+import dev.ide.preview.impl.CustomViewRuntime
+import dev.ide.preview.impl.RealViewRuntime
 import dev.ide.ui.backend.IndexUiStatus
 import dev.ide.ui.backend.IndexWorkItem
 import dev.ide.ui.backend.IndexWorkState
+import dev.ide.ui.backend.PreviewProgress
 import dev.ide.vfs.VirtualFile
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.delay
-import kotlinx.coroutines.isActive
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
-import kotlinx.coroutines.flow.update
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import java.nio.file.Files
 import java.nio.file.Path
+import java.nio.file.Paths
 import java.util.concurrent.ConcurrentHashMap
+import java.util.concurrent.CopyOnWriteArrayList
 import java.util.concurrent.atomic.AtomicLong
 import java.util.stream.Collectors
 import kotlin.coroutines.Continuation
@@ -191,7 +216,6 @@ import kotlin.coroutines.startCoroutine
 import kotlin.io.path.readText
 import kotlin.io.path.writeText
 import kotlin.time.Duration.Companion.milliseconds
-import java.nio.file.Paths
 
 /**
  * The UI-agnostic façade that wires the whole framework together: platform-core (extension registry,
@@ -229,15 +253,15 @@ class AndroidDeviceTools(
      *  heap above the app cap. Null → the in-process merge. Supplied by :ide-android; self-falls-back. */
     val r8MergeDexer: dev.ide.android.support.tools.Dexer? = null,
     /** Max class-dex merged in one batch on a large app (the "Dex merge batch size" setting). Read per build so
-     *  a change applies on the next build; defaults to [dev.ide.core.settings.BuiltInSettingsPages.DEX_MERGE_BATCH_DEFAULT]. */
-    val mergeChunkProvider: () -> Int = { dev.ide.core.settings.BuiltInSettingsPages.DEX_MERGE_BATCH_DEFAULT },
+     *  a change applies on the next build; defaults to [BuiltInSettingsPages.DEX_MERGE_BATCH_DEFAULT]. */
+    val mergeChunkProvider: () -> Int = { BuiltInSettingsPages.DEX_MERGE_BATCH_DEFAULT },
 )
 
 /**
  * Installs (and then launches) a freshly built APK: the on-device "Run" for an android-app. Supplied by
  * :ide-android (it needs Android's `PackageInstaller` + the OS install-confirmation UI); null on the
  * desktop, where the android task stops at producing the signed artifact. [installAndLaunch] returns once
- * the install is initiated and streams progress + the eventual launch to [log].
+ * the installation is initiated and streams progress + the eventual launch to [log].
  */
 interface ApkInstaller {
     suspend fun installAndLaunch(apk: Path, packageName: String, log: (String) -> Unit): Boolean
@@ -326,6 +350,12 @@ private val BUILD_SERVICE = ServiceKey<BuildService>("ide.service.build")
 internal val APP_SDK_MANAGER = ServiceKey<SdkManagerService>("ide.app.sdkManager")
 internal val APP_KEYSTORE_REGISTRY = ServiceKey<KeystoreRegistry>("ide.app.keystoreRegistry")
 
+/** A file above this size, or with a NUL byte in its first block, is treated as non-text: the editor shows
+ *  a placeholder instead of loading it (see [dev.ide.core.backend.FileBackend.readFile]), and an editor
+ *  overlay is never written back over it ([IdeServices.save]/[IdeServices.flushOpenDocuments]). Mirrors
+ *  FileBackend's own MAX_TEXT_BYTES so the read and write sides agree on what "text" is. */
+private const val MAX_EDITOR_TEXT_BYTES = 5_000_000L
+
 class IdeServices private constructor(
     val platform: PlatformCore,
     val store: ProjectModelStore,
@@ -337,9 +367,9 @@ class IdeServices private constructor(
     /** Non-null only on-device (supplied by :ide-android): installs + launches a built APK (the android Run). */
     private val apkInstaller: ApkInstaller? = null,
     /** Optional platform runtime that renders *live* custom views in the layout preview (device dex / desktop shim). */
-    private val customViewRuntime: dev.ide.preview.impl.CustomViewRuntime? = null,
+    private val customViewRuntime: CustomViewRuntime? = null,
     /** Optional device-only runtime that renders the layout with the REAL Android view stack (layoutlib-on-device). */
-    private val realViewRuntime: dev.ide.preview.impl.RealViewRuntime? = null,
+    private val realViewRuntime: RealViewRuntime? = null,
     /** Non-null only on-device (supplied by :ide-android): loads runtime (non-bundled) Kotlin compiler plugins
      *  via D8-dex + `DexClassLoader`. Null → the desktop `DefaultKotlinPluginLoader` (URLClassLoader). */
     private val kotlinPluginLoader: KotlinPluginLoader? = null,
@@ -463,8 +493,8 @@ class IdeServices private constructor(
     val indexStatus: StateFlow<IndexUiStatus> get() = _indexStatus
 
     // Live stage of the real-view layout render (relink → render), for the floating status chip; null = idle.
-    private val _realViewProgress = MutableStateFlow<dev.ide.ui.backend.PreviewProgress?>(null)
-    val realViewProgress: StateFlow<dev.ide.ui.backend.PreviewProgress?> get() = _realViewProgress
+    private val _realViewProgress = MutableStateFlow<PreviewProgress?>(null)
+    val realViewProgress: StateFlow<PreviewProgress?> get() = _realViewProgress
 
     // The narrow shared-infrastructure view ([EngineContext]) handed to this engine's decomposed concern
     // services, so each one depends on the surface it needs rather than the whole engine. An inner object so
@@ -482,6 +512,7 @@ class IdeServices private constructor(
         override val dependencies get() = this@IdeServices.dependencies
         override val kotlinJvmCompiler get() = this@IdeServices.kotlinJvmCompiler
         override val compileBootClasspath get() = this@IdeServices.compileBootClasspath
+        override fun bootClasspathFor(module: Module) = this@IdeServices.bootClasspathFor(module)
         override val androidTools get() = this@IdeServices.androidTools
         override val dexRunner get() = this@IdeServices.dexRunner
         override val apkInstaller get() = this@IdeServices.apkInstaller
@@ -774,7 +805,7 @@ class IdeServices private constructor(
             // Material/AndroidX resource set (a ~600 KB merged values.xml + hundreds of files) is parsed once
             // and read on demand rather than re-scanned into the heap every launch.
             resourceRoots = modules().flatMap { m ->
-                if (m.facets.get(dev.ide.android.support.AndroidFacet.KEY) != null) runCatching {
+                if (m.facets.get(AndroidFacet.KEY) != null) runCatching {
                     AndroidResources.projectResourceDirs(
                         m, store.workspace
                     )
@@ -782,7 +813,7 @@ class IdeServices private constructor(
                 else resourceRoots(m)
             }.distinct(),
             libraryResourceRoots = modules().flatMap { m ->
-                if (m.facets.get(dev.ide.android.support.AndroidFacet.KEY) != null) runCatching {
+                if (m.facets.get(AndroidFacet.KEY) != null) runCatching {
                     AndroidResources.libraryResourceDirs(
                         m, store.workspace
                     )
@@ -849,6 +880,19 @@ class IdeServices private constructor(
      */
     val compileBootClasspath: List<Path> =
         listOfNotNull(androidTools?.androidJar) + (androidTools?.desugarStubs ?: emptyList())
+
+    /**
+     * The compile boot classpath for a SINGLE module — its resolved platform SDK ([SdkResolution]) rather
+     * than the one workspace-global [compileBootClasspath]. A `java-*`/`kotlin-*` module resolves the
+     * core-Java platform (so `android.*` never reaches its compile/analysis), an `android-*` module the
+     * Android SDK. Only existing **jar files** are kept: a modular JDK home (the desktop core-Java SDK's
+     * boot entry) is a directory the batch compiler can't take as `-bootclasspath`, so it drops to empty and
+     * the build falls back to the host JRE — byte-for-byte the pre-change desktop behavior.
+     */
+    fun bootClasspathFor(module: Module): List<Path> =
+        (SdkResolution.sdkFor(store.workspace, module)?.bootClasspath ?: emptyList())
+            .map { Paths.get(it.path) }
+            .filter { Files.isRegularFile(it) }
 
     /**
      * Provision the bundled kotlin-stdlib as a real project dependency for every module with `.kt` sources
@@ -965,6 +1009,10 @@ class IdeServices private constructor(
      *  the [events] hub's [FileChanged][dev.ide.vfs.FileChanged] reaction, not inline here. */
     fun save(file: Path, text: String) {
         val path = file.toAbsolutePath().normalize()
+        // A binary/oversized file opened in the editor is shown as a read-only placeholder (FileBackend
+        // .readFile), so `text` here is that placeholder, not the file's real content. Writing it would
+        // destroy the asset (an opened PNG becomes ~150 bytes of text). Leave such a file untouched.
+        if (isBinaryOnDisk(path)) return
         openDocuments[path] = text
         path.parent?.let { Files.createDirectories(it) }
         path.writeText(text)
@@ -985,6 +1033,10 @@ class IdeServices private constructor(
     fun flushOpenDocuments() {
         for ((path, content) in openDocuments) {
             runCatching {
+                // Same guard as save(): an opened binary/oversized file lives in the overlay as placeholder
+                // text (its bytes never differ from that placeholder), so flushing it before a build would
+                // overwrite the real bytes on disk. Skip it — this is the frequent PNG-corruption path.
+                if (isBinaryOnDisk(path)) return@runCatching
                 if (!Files.exists(path) || path.readText() != content) {
                     path.parent?.let { Files.createDirectories(it) }
                     path.writeText(content)
@@ -992,6 +1044,23 @@ class IdeServices private constructor(
             }
         }
     }
+
+    /**
+     * True if [path] currently exists on disk as content the editor treats as non-text — a binary file (a
+     * NUL byte within the first block) or one larger than [MAX_EDITOR_TEXT_BYTES]. This is the write-side
+     * counterpart to [dev.ide.core.backend.FileBackend.readFile]'s binary sniff: a file that read-side
+     * refuses to load as text must never be written back from an editor overlay. Errors sniff as "not
+     * binary" so a genuine text file is never silently skipped.
+     */
+    private fun isBinaryOnDisk(path: Path): Boolean = runCatching {
+        if (!Files.isRegularFile(path)) return@runCatching false
+        if (Files.size(path) > MAX_EDITOR_TEXT_BYTES) return@runCatching true
+        Files.newInputStream(path).use { ins ->
+            val buf = ByteArray(8000)
+            val n = ins.read(buf)
+            n > 0 && (0 until n).any { buf[it].toInt() == 0 }
+        }
+    }.getOrDefault(false)
 
     // Synthetic ("light") classes (e.g. Android R) contributed via `platform.syntheticClass`, rendered to
     // Java source and merged into the overlay so they resolve for completion AND analysis like real types.
@@ -1109,18 +1178,18 @@ class IdeServices private constructor(
         CompletionOptions()
 
     /** Settings pages contributed by plugins (the built-in pages are assembled by the backend). */
-    fun settingsPages(): List<dev.ide.platform.settings.SettingsPage> =
-        platform.extensions.extensions(dev.ide.platform.settings.SETTINGS_PAGE_EP)
+    fun settingsPages(): List<SettingsPage> =
+        platform.extensions.extensions(SETTINGS_PAGE_EP)
 
     /** Every registered analyzer — the inspection catalogue for the Analysis settings list. */
-    fun registeredAnalyzers(): List<dev.ide.analysis.Analyzer> =
+    fun registeredAnalyzers(): List<Analyzer> =
         platform.extensions.extensions(ANALYZER_EP)
 
     @Volatile
-    private var inspectionProfileState: dev.ide.analysis.AnalysisProfile = loadInspectionProfile()
+    private var inspectionProfileState: AnalysisProfile = loadInspectionProfile()
 
     /** The active inspection profile (enable/disable + severity overrides), persisted per project. */
-    fun inspectionProfile(): dev.ide.analysis.AnalysisProfile = inspectionProfileState
+    fun inspectionProfile(): AnalysisProfile = inspectionProfileState
 
     /**
      * Enable/disable inspection [id] and override its severity ([severity] null = no override, use the
@@ -1128,13 +1197,13 @@ class IdeServices private constructor(
      * (which re-publishes diagnostics for open files).
      */
     fun setInspection(
-        id: dev.ide.analysis.AnalyzerId, enabled: Boolean, severity: dev.ide.lang.dom.Severity?
+        id: AnalyzerId, enabled: Boolean, severity: Severity?
     ) {
         val cur = inspectionProfileState
         val disabled = cur.disabled.toMutableSet().apply { if (enabled) remove(id) else add(id) }
         val overrides = cur.severityOverrides.toMutableMap()
             .apply { if (severity != null) put(id, severity) else remove(id) }
-        val next = dev.ide.analysis.AnalysisProfile(disabled, overrides)
+        val next = AnalysisProfile(disabled, overrides)
         inspectionProfileState = next
         persistInspectionProfile(next)
         analysisEngine.configure(next)
@@ -1161,12 +1230,12 @@ class IdeServices private constructor(
     /** The active build-variant name for [module] (its persisted choice, else the default variant, else "main"). */
     fun activeVariant(module: Module): String =
         projectPref(variantPrefKey(module))
-            ?: dev.ide.android.support.AndroidVariants.defaultVariant(module)?.name
+            ?: AndroidVariants.defaultVariant(module)?.name
             ?: "main"
 
     /** All selectable build-variant names for [module] (empty for a non-Android module). */
     fun listVariants(module: Module): List<String> =
-        dev.ide.android.support.AndroidVariants.compute(module).map { it.name }
+        AndroidVariants.compute(module).map { it.name }
 
     /** Select [variantName] as [module]'s active variant; re-analyzes + re-indexes if it changed (the hub's
      *  `variant.*` settings reaction; a variant switch changes the variant-filtered classpath). */
@@ -1174,7 +1243,7 @@ class IdeServices private constructor(
         if (activeVariant(module) == variantName) return
         setProjectPref(variantPrefKey(module), variantName)
         events.settingChanged(
-            dev.ide.core.settings.BuiltInSettingsPages.BUILD, variantPrefKey(module), projectScoped = true,
+            BuiltInSettingsPages.BUILD, variantPrefKey(module), projectScoped = true,
         )
     }
 
@@ -1196,9 +1265,9 @@ class IdeServices private constructor(
 
     /** The active variant's dependency config-name set for [module] (null = non-Android → no variant filter). */
     private fun activeConfigs(module: Module): Set<String>? =
-        dev.ide.android.support.AndroidVariants.select(module, activeVariant(module))?.configurations
+        AndroidVariants.select(module, activeVariant(module))?.configurations
 
-    private fun persistInspectionProfile(profile: dev.ide.analysis.AnalysisProfile) {
+    private fun persistInspectionProfile(profile: AnalysisProfile) {
         // "<id>=off" disables; "<id>=<SEVERITY>" overrides; an enabled-default analyzer is simply omitted.
         val props = java.util.Properties()
         for (id in profile.disabled) props.setProperty(id.value, "off")
@@ -1208,18 +1277,18 @@ class IdeServices private constructor(
         storeProps(inspectionsFile, props, "CodeAssist inspection profile")
     }
 
-    private fun loadInspectionProfile(): dev.ide.analysis.AnalysisProfile {
+    private fun loadInspectionProfile(): AnalysisProfile {
         val props = loadProps(inspectionsFile)
-        if (props.isEmpty) return dev.ide.analysis.AnalysisProfile.DEFAULT
-        val disabled = mutableSetOf<dev.ide.analysis.AnalyzerId>()
-        val overrides = mutableMapOf<dev.ide.analysis.AnalyzerId, dev.ide.lang.dom.Severity>()
+        if (props.isEmpty) return AnalysisProfile.DEFAULT
+        val disabled = mutableSetOf<AnalyzerId>()
+        val overrides = mutableMapOf<AnalyzerId, Severity>()
         for (name in props.stringPropertyNames()) {
             val v = props.getProperty(name)
-            if (v.equals("off", ignoreCase = true)) disabled.add(dev.ide.analysis.AnalyzerId(name))
-            else runCatching { dev.ide.lang.dom.Severity.valueOf(v) }.getOrNull()
-                ?.let { overrides[dev.ide.analysis.AnalyzerId(name)] = it }
+            if (v.equals("off", ignoreCase = true)) disabled.add(AnalyzerId(name))
+            else runCatching { Severity.valueOf(v) }.getOrNull()
+                ?.let { overrides[AnalyzerId(name)] = it }
         }
-        return dev.ide.analysis.AnalysisProfile(disabled, overrides)
+        return AnalysisProfile(disabled, overrides)
     }
 
     private fun loadProps(file: Path): java.util.Properties = java.util.Properties().apply {
@@ -1331,7 +1400,7 @@ class IdeServices private constructor(
      * (derived from the output dir's `build/classes` convention).
      */
     fun manifestPath(module: Module): Path? {
-        val facet = module.facets.get(dev.ide.android.support.AndroidFacet.KEY) ?: return null
+        val facet = module.facets.get(AndroidFacet.KEY) ?: return null
         val moduleDir = Paths.get(module.outputDir.path).parent?.parent ?: return null
         return moduleDir.resolve(facet.manifest)
     }
@@ -1383,6 +1452,13 @@ class IdeServices private constructor(
                     it.indexService = indexService
                     // A downloaded JDK's src.zip (if any) → JDK names/javadoc for the editor.
                     sdkManager.jdkSourceOverride()?.let { zip -> it.addSourceJars(listOf(zip)) }
+                    // SDK-Manager-installed Android framework sources → android.* param names + javadoc. On
+                    // device the bundled android.jar is a flat asset, so the analyzer can't derive the sources
+                    // dir from its path; attach it explicitly from the SDK-Manager install root (matched to the
+                    // module's compileSdk). Deduped, so it's a no-op on desktop where `configure` already found it.
+                    module.facets.get(AndroidFacet.KEY)?.let { facet ->
+                        sdkManager.androidSourcesDir(facet.compileSdk)?.let { dir -> it.addSourceDirs(listOf(dir)) }
+                    }
                 }
 
                 is KotlinSourceAnalyzer -> {
@@ -1395,7 +1471,7 @@ class IdeServices private constructor(
                     // `@Preview` never rendered. index=null routes `topLevelByName` through the (proven) scan.
                     val isScratch = store.rootPath.toString().replace('\\', '/').contains("/.scratch/")
                     val scratchCompose = isScratch &&
-                        module.facets.get(dev.ide.android.support.AndroidFacet.KEY) != null
+                        module.facets.get(AndroidFacet.KEY) != null
                     it.indexService = if (scratchCompose) null else indexService
                     it.extensionCacheDir = store.rootPath.resolve(".platform/caches/kotlin-ext")
                     // Synthetic "light" classes (Android R/BuildConfig, …), minus the Kotlin file facades.
@@ -1405,7 +1481,7 @@ class IdeServices private constructor(
                     // Android sources) as the live parse fallback before the index has built.
                     val jdtFallback =
                         (analyzerFor(module) as? JdtSourceAnalyzer)?.sourceMethodResolver
-                            ?: dev.ide.lang.resolve.SourceDocProvider.NONE
+                            ?: SourceDocProvider.NONE
                     it.sourceDocProvider = IndexBackedSourceDocs(indexService, jdtFallback)
                     // Live editor buffers (path → text) so cross-file completion/resolution/diagnostics see
                     // unsaved edits in OTHER open .kt files before they're saved + reindexed.
@@ -1420,25 +1496,32 @@ class IdeServices private constructor(
                     // One bytecode scan feeds both: the custom-view tags AND the ancestry that lets a custom/
                     // library view inherit its base classes' app: attributes (+ AppCompat substitutions).
                     val scan = runCatching { customViewScan(module) }.getOrNull()
-                    val custom = runCatching {
-                        customAttrsMetadata(
-                            module, scan?.superNames ?: emptyMap()
-                        )
-                    }.getOrNull()
-                    val customViews = scan?.widgets ?: emptyList()
-                    it.contributors = listOf(
-                        AndroidXmlContributor(
-                            resources = { type -> resourceCandidatesFor(module, type) },
-                            layout = { sdkLayoutMetadata() },
-                            customAttrs = { custom },
-                            customViews = { customViews },
-                            frameworkResources = { type -> frameworkResources(type) },
-                        )
+                    val srcScan = runCatching { sourceCustomViewScan() }.getOrNull()
+                    // Library/AAR custom views (compiled) PLUS the project's own source View subclasses, and the
+                    // merged ancestry (simple → super simple) that lets each inherit its framework superclass's
+                    // android: attributes (android:text from Button, …), exactly as Android Studio does.
+                    val customSupers = (scan?.superNames ?: emptyMap()) + (srcScan?.superNames ?: emptyMap())
+                    val custom = runCatching { customAttrsMetadata(module, customSupers) }.getOrNull()
+                    val customViews = ((scan?.widgets ?: emptyList()) + (srcScan?.widgets ?: emptyList()))
+                        .distinctBy { it.tag }
+                    val androidXml = AndroidXmlContributor(
+                        resources = { type -> resourceCandidatesFor(module, type) },
+                        // Augment the framework hierarchy with the custom/library/source view ancestry, so a
+                        // custom view (MaterialButton → AppCompatButton → Button, or a project MyButton → Button)
+                        // inherits its framework superclass's android: attributes, exactly as Android Studio does.
+                        layout = { sdkLayoutMetadata().withCustomHierarchy(customSupers) },
+                        customAttrs = { custom },
+                        customViews = { customViews },
+                        frameworkResources = { type -> frameworkResources(type) },
                     )
+                    it.contributors = listOf(androidXml)
+                    // Parameter hints: when the caret is inside `="…"`, describe the attribute's accepted values
+                    // (enum/flags/boolean/@refs) from the same Android schema completion uses.
+                    it.valueHintProvider = { pos -> androidXml.describeValue(pos) }
                     // Inlay hints: resolve a local `@type/name` to its value straight from the resource index
                     // (the value field carried on each declaration); no repository, no per-keystroke parse.
                     it.inlayResourceResolver =
-                        dev.ide.lang.xml.hints.XmlResourceValueResolver { rClass, name ->
+                        XmlResourceValueResolver { rClass, name ->
                             ResourceType.byRClass(rClass)?.let { resourceHintValue(it, name) }
                         }
                 }
@@ -1527,7 +1610,7 @@ class IdeServices private constructor(
             completionEngine.complete(params, analyzer?.completionContributions() ?: emptyList(), completionOptions)
         } catch (e: kotlinx.coroutines.CancellationException) {
             throw e
-        } catch (e: dev.ide.platform.EngineCanceledException) {
+        } catch (e: EngineCanceledException) {
             throw e
         } catch (e: Throwable) {
             System.err.println("[IdeServices] completion failed for $file (${lang.id}): ${e.stackTraceToString()}")
@@ -1620,7 +1703,7 @@ class IdeServices private constructor(
     fun formatRange(file: Path, text: String, start: Int, end: Int, style: dev.ide.lang.formatting.FormatStyle): List<DocumentEdit> {
         val service = formattingServiceFor(file) ?: return emptyList()
         val vf = store.vfs.fileFor(file)
-        val range = dev.ide.lang.dom.TextRange(start, end)
+        val range = TextRange(start, end)
         return runCatching { runSync { service.formatRange(vf, text, range, style) } }.getOrDefault(emptyList())
     }
 
@@ -1740,7 +1823,7 @@ class IdeServices private constructor(
             actionProviders = platform.extensions.extensions(ACTION_PROVIDER_EP),
         ).also { engine ->
             // Apply the persisted per-project inspection profile (disabled checks + severity overrides).
-            if (inspectionProfileState != dev.ide.analysis.AnalysisProfile.DEFAULT) engine.configure(
+            if (inspectionProfileState != AnalysisProfile.DEFAULT) engine.configure(
                 inspectionProfileState
             )
         }
@@ -1753,7 +1836,7 @@ class IdeServices private constructor(
     //
     // Tracked PER LANGUAGE: now that one engine serves Java/Kotlin/XML, a LinkageError from one backend
     // (in practice only JDT's ASTParser) must disable *that* language alone — never silence the others.
-    private val analysisUnavailable = java.util.concurrent.ConcurrentHashMap.newKeySet<LanguageId>()
+    private val analysisUnavailable = ConcurrentHashMap.newKeySet<LanguageId>()
 
     /** Whether analysis for [file]'s language has been disabled by a prior unrecoverable error. */
     private fun analysisDisabled(file: Path): Boolean = languageFor(file) in analysisUnavailable
@@ -1787,7 +1870,7 @@ class IdeServices private constructor(
         val module = moduleForEditableFile(file) ?: return emptyList()
         val analyzer = analyzerFor(
             module, KotlinLanguageBackend.LANGUAGE_ID
-        ) as? dev.ide.lang.kotlin.KotlinSourceAnalyzer ?: return emptyList()
+        ) as? KotlinSourceAnalyzer ?: return emptyList()
         val vf = store.vfs.fileFor(file)
         analyzer.incrementalParser.parseFull(EditorDocument(vf, docVersion.incrementAndGet(), text))
         return analyzer.composePreviews(vf)
@@ -1800,7 +1883,7 @@ class IdeServices private constructor(
         val module = moduleForEditableFile(file) ?: return emptyList()
         val analyzer = analyzerFor(
             module, KotlinLanguageBackend.LANGUAGE_ID
-        ) as? dev.ide.lang.kotlin.KotlinSourceAnalyzer ?: return emptyList()
+        ) as? KotlinSourceAnalyzer ?: return emptyList()
         val vf = store.vfs.fileFor(file)
         analyzer.incrementalParser.parseFull(EditorDocument(vf, docVersion.incrementAndGet(), text))
         return analyzer.inheritorMarkers(vf)
@@ -1813,7 +1896,7 @@ class IdeServices private constructor(
         val module = moduleForEditableFile(contextFile) ?: return null
         val analyzer = analyzerFor(
             module, KotlinLanguageBackend.LANGUAGE_ID
-        ) as? dev.ide.lang.kotlin.KotlinSourceAnalyzer ?: return null
+        ) as? KotlinSourceAnalyzer ?: return null
         return analyzer.declarationLocation(fqn)?.let { (vf, off) -> Paths.get(vf.path) to off }
     }
 
@@ -1832,7 +1915,7 @@ class IdeServices private constructor(
      * analyzer models its module from disk + overlay, so it lowers a file even when that file was never opened.
      */
     private fun previewModelFor(
-        module: Module, vf: VirtualFile, entry: dev.ide.lang.kotlin.KotlinSourceAnalyzer,
+        module: Module, vf: VirtualFile, entry: KotlinSourceAnalyzer,
     ): dev.ide.lang.kotlin.interp.PreviewModel? {
         // The entry module first, then its transitive dependency modules — both for LOCATING a declaration
         // (try the entry's view first) and for OWNERSHIP routing (a file under a module's own source roots is
@@ -1840,7 +1923,7 @@ class IdeServices private constructor(
         val kotlinModules = moduleBuildClosure(module).mapNotNull { m ->
             (analyzerFor(
                 m, KotlinLanguageBackend.LANGUAGE_ID
-            ) as? dev.ide.lang.kotlin.KotlinSourceAnalyzer)?.let {
+            ) as? KotlinSourceAnalyzer)?.let {
                 Triple(
                     m,
                     it,
@@ -1886,7 +1969,7 @@ class IdeServices private constructor(
             moduleForEditableFile(file) ?: return PreviewRunResult(false, "No module for this file")
         val analyzer = analyzerFor(
             module, KotlinLanguageBackend.LANGUAGE_ID
-        ) as? dev.ide.lang.kotlin.KotlinSourceAnalyzer ?: return PreviewRunResult(
+        ) as? KotlinSourceAnalyzer ?: return PreviewRunResult(
             false, "Not a Kotlin file"
         )
         val vf = store.vfs.fileFor(file)
@@ -1921,7 +2004,7 @@ class IdeServices private constructor(
         val module = moduleForEditableFile(file) ?: return true
         val analyzer = analyzerFor(
             module, KotlinLanguageBackend.LANGUAGE_ID
-        ) as? dev.ide.lang.kotlin.KotlinSourceAnalyzer ?: return true
+        ) as? KotlinSourceAnalyzer ?: return true
         if (!analyzer.classpathReady()) return false
         // The hidden Learn scratch resolves via the synchronous ClasspathReader (index=null → classpathReady()
         // is trivially true), so ALSO require the Compose runtime to have attached there (the one-time download
@@ -1939,7 +2022,7 @@ class IdeServices private constructor(
         val module = moduleForEditableFile(file) ?: return listOf("no module owns this file")
         val analyzer = analyzerFor(
             module, KotlinLanguageBackend.LANGUAGE_ID
-        ) as? dev.ide.lang.kotlin.KotlinSourceAnalyzer ?: return listOf("not a Kotlin file")
+        ) as? KotlinSourceAnalyzer ?: return listOf("not a Kotlin file")
         val vf = store.vfs.fileFor(file)
         analyzer.incrementalParser.parseFull(
             EditorDocument(
@@ -1982,7 +2065,7 @@ class IdeServices private constructor(
         val module = moduleForEditableFile(file) ?: return null
         val analyzer = analyzerFor(
             module, KotlinLanguageBackend.LANGUAGE_ID
-        ) as? dev.ide.lang.kotlin.KotlinSourceAnalyzer ?: return null
+        ) as? KotlinSourceAnalyzer ?: return null
         val vf = store.vfs.fileFor(file)
         dev.ide.lang.kotlin.KotlinPerf.span("parse") {
             analyzer.incrementalParser.parseFull(EditorDocument(vf, docVersion.incrementAndGet(), text))
@@ -2020,7 +2103,7 @@ class IdeServices private constructor(
     /** Resolve the `@PreviewParameter` provider for [functionName]/[arity] (if any) to something the renderer
      *  can instantiate: the lowered source [ResolvedClass] when it's project source, else a best-effort FQN. */
     private fun resolvePreviewParameter(
-        analyzer: dev.ide.lang.kotlin.KotlinSourceAnalyzer,
+        analyzer: KotlinSourceAnalyzer,
         vf: VirtualFile, functionName: String, arity: Int,
         classes: List<ResolvedClass>,
     ): LoweredPreviewParameter? {
@@ -2244,7 +2327,7 @@ class IdeServices private constructor(
 
     /** Re-point open-document overlays from [from] (a file or directory) to [to] after a move/rename. */
     private fun rekeyOverlays(from: Path, to: Path) {
-        val f = normPath(from);
+        val f = normPath(from)
         val t = normPath(to)
         for (k in openDocuments.keys.filter { it == f || it.startsWith(f) }) {
             val dest = if (k == f) t else t.resolve(f.relativize(k))
@@ -2412,7 +2495,7 @@ class IdeServices private constructor(
 
     /** Move a file or directory into [destDir]. Returns the new path, or null on conflict/failure. */
     fun movePath(target: Path, destDir: Path): Path? {
-        val abs = normPath(target);
+        val abs = normPath(target)
         val dir = normPath(destDir)
         val dest = dir.resolve(abs.fileName)
         if (Files.exists(dest) || dest == abs || dir == abs || dir.startsWith(abs)) return null // no overwrite / move-into-self
@@ -2430,7 +2513,7 @@ class IdeServices private constructor(
 
     /** Copy a file or directory into [destDir]. Returns the new path, or null on conflict/failure. */
     fun copyPath(target: Path, destDir: Path): Path? {
-        val abs = normPath(target);
+        val abs = normPath(target)
         val dir = normPath(destDir)
         val dest = dir.resolve(abs.fileName)
         if (Files.exists(dest) || dest.startsWith(abs)) return null
@@ -2454,7 +2537,7 @@ class IdeServices private constructor(
             runCatching {
                 Files.walk(root).use { s ->
                     // Collectors.toList, not Stream.toList: the latter is Java 16+, absent on ART/API 26.
-                    s.filter { Files.isRegularFile(it) }.collect(java.util.stream.Collectors.toList())
+                    s.filter { Files.isRegularFile(it) }.collect(Collectors.toList())
                 }
             }.getOrDefault(listOf(root))
         } else {
@@ -2569,6 +2652,26 @@ class IdeServices private constructor(
     }
 
     /**
+     * Project-SOURCE custom `View` subclasses (uncompiled `.java`/`.kt`), discovered via the direct-inheritor
+     * `SubtypeIndex` (source producers) seeded from the framework widgets — the source-side complement of
+     * [customViewScan] (compiled library/AAR jars). Returns the same [dev.ide.android.support.metadata.CustomViewScanner.Scan]
+     * shape (FQN tags + ancestry). Empty until the source subtype index has built ("dumb until indexed").
+     */
+    private fun sourceCustomViewScan(): dev.ide.android.support.metadata.CustomViewScanner.Scan {
+        val empty = dev.ide.android.support.metadata.CustomViewScanner.Scan(emptyList(), emptyMap())
+        val seeds = runCatching {
+            sdkLayoutMetadata().childTagsFor(null).associate { it.tag to it.isViewGroup }
+        }.getOrDefault(emptyMap()).toMutableMap().apply { put("View", false); put("ViewGroup", true) }
+        if (seeds.isEmpty()) return empty
+        return runCatching {
+            dev.ide.android.support.metadata.SourceCustomViewResolver.resolve(
+                seeds,
+                { id, key -> indexService.exact<dev.ide.index.SubtypeValue>(id, key) },
+            )
+        }.getOrDefault(empty)
+    }
+
+    /**
      * The host the XML lint provider ([dev.ide.lang.xml.lint.XmlDiagnosticProvider]) calls for the data that
      * lives in ide-core, not lang-xml: the SDK widget catalog, the Android resource index/repository, and the
      * `res/` filesystem. Resolves the module per file via [moduleForEditableFile] (XML files live under `res/`,
@@ -2623,7 +2726,7 @@ class IdeServices private constructor(
     }
 
     /** True when [target]'s module library classpath includes AppCompat, so its `app:` compat attrs resolve. */
-    private fun moduleUsesAppCompat(target: dev.ide.analysis.AnalysisTarget): Boolean =
+    private fun moduleUsesAppCompat(target: AnalysisTarget): Boolean =
         runCatching {
             ModuleCompilationContext.create(store.workspace, target.module, activeConfigs(target.module)).classpath.entries.any {
                 it.root.path.contains("appcompat", ignoreCase = true)
@@ -2664,7 +2767,7 @@ class IdeServices private constructor(
         val target = valuesDir.resolve(valuesFileName(type))
         val existing =
             runCatching { if (Files.exists(target)) target.readText() else null }.getOrNull()
-        var unique = name;
+        var unique = name
         var i = 1
         while (existing != null && Regex("name\\s*=\\s*\"${Regex.escape(unique)}\"").containsMatchIn(
                 existing
@@ -2740,7 +2843,7 @@ class IdeServices private constructor(
         val isXml = file.fileName?.toString()?.endsWith(".xml") == true
         val module =
             (if (isXml) moduleForResourceFile(file) else moduleForFile(file)) ?: return null
-        if (module.facets.get(dev.ide.android.support.AndroidFacet.KEY) == null) return null
+        if (module.facets.get(AndroidFacet.KEY) == null) return null
         val (type, name) = (if (isXml) xmlResourceRefAt(text, offset) else rClassRefAt(
             text, offset
         )) ?: return null
@@ -2837,7 +2940,7 @@ class IdeServices private constructor(
     /** Build the owned render tree + chrome (the cross-platform path), optionally appending [extraProblem]. */
     private fun ownedPreview(
         module: Module,
-        repo: dev.ide.android.support.resources.ResourceRepository,
+        repo: ResourceRepository,
         fingerprint: String,
         themeName: String?,
         title: String,
@@ -2870,7 +2973,7 @@ class IdeServices private constructor(
      *  edited (or newly added) layout renders. Null when no Android tooling is wired (desktop). */
     private val previewResourceLinker: dev.ide.android.support.PreviewResourceLinker? by lazy {
         val t = androidTools ?: return@lazy null
-        val sdk = dev.ide.android.support.tools.AndroidSdk.forDevice(t.androidJar, t.nativeLibDir)
+        val sdk = AndroidSdk.forDevice(t.androidJar, t.nativeLibDir)
             .takeIf { it.hasNativeTools() } ?: return@lazy null
         val cache = (sharedCachesRoot ?: store.rootPath).resolve("caches").resolve("preview-res")
         dev.ide.android.support.PreviewResourceLinker(
@@ -2888,7 +2991,7 @@ class IdeServices private constructor(
      */
     private fun realViewPreview(
         module: Module,
-        repo: dev.ide.android.support.resources.ResourceRepository,
+        repo: ResourceRepository,
         fingerprint: String,
         themeName: String?,
         title: String,
@@ -2899,7 +3002,7 @@ class IdeServices private constructor(
         val runtime = realViewRuntime ?: return ownedPreview(module, repo, fingerprint, themeName, title, text, request, null)
         val facet = module.facets.get(AndroidFacet.KEY)
             ?: return ownedPreview(module, repo, fingerprint, themeName, title, text, request, null)
-        val activeVariant = dev.ide.android.support.AndroidVariants.defaultVariant(module)
+        val activeVariant = AndroidVariants.defaultVariant(module)
         val variant = activeVariant?.name ?: "debug"
         // Relink the live buffer over the project's resources so the preview reflects the edited (or newly
         // added) layout. The linker self-builds its base from the live res tree, so a prior successful build
@@ -2907,7 +3010,7 @@ class IdeServices private constructor(
         val moduleDir = Paths.get(module.outputDir.path).parent.parent
         val manifestPath = dev.ide.android.support.AndroidBuildSystem.mergedManifestPath(module, variant)
             .takeIf { Files.exists(it) } ?: moduleDir.resolve(facet.manifest)
-        val resDirs = dev.ide.android.support.resources.AndroidResources.resourceDirs(module, store.workspace)
+        val resDirs = AndroidResources.resourceDirs(module, store.workspace)
         // The runtime library set + the AAR package names, resolved once. Must be the RUNTIME set (what the APK
         // packages), NOT the compile classpath: a Material widget's `implementation` transitives (e.g.
         // androidx.emoji2, pulled in by AppCompatTextView's EmojiCompat) are on the runtime path but absent from
@@ -2934,7 +3037,7 @@ class IdeServices private constructor(
         val linked = previewResourceLinker?.link(
             module, variant, resDirs, file, text, manifestPath, facet.namespace, facet.minSdk, facet.targetSdk,
             extraPackages = extraPackages,
-            progress = { _realViewProgress.value = dev.ide.ui.backend.PreviewProgress(it) },
+            progress = { _realViewProgress.value = PreviewProgress(it) },
         )
         // The resources.ap_ to render against: the live relink, else the build's own, else owned rendering.
         val resourcesAp = linked?.resourcesAp
@@ -2955,6 +3058,31 @@ class IdeServices private constructor(
         val libs = dev.ide.model.MavenClasspath.dedupeForAndroidDex(
             (runtimeLibs + moduleOutputs).filter { Files.exists(it) && it.toString().endsWith(".jar") }.distinct()
         )
+
+        // Dex-readiness gate: the preview NO LONGER dexes libraries itself (the cold ~30s D8 pass). If any runtime
+        // library isn't already in the shared dex cache — a fresh project, or a newly-added dependency — don't
+        // render (which would trigger that dexing); return the owned fallback flagged `buildRequired` so the UI
+        // prompts a one-time "prepare libraries" build. Once every library is dexed (by that build or a prior
+        // one) the check passes and the real render proceeds with only cheap cache copies + the merge.
+        val dexCacheRoot = (sharedCachesRoot ?: store.rootPath).resolve("caches").resolve("dex")
+        val undexed = runCatching {
+            val hashDir = (sharedCachesRoot ?: store.rootPath).resolve("caches").resolve("preview-dexcheck")
+            Files.createDirectories(hashDir)
+            val universe = dev.ide.android.support.tasks.SharedLibraryDexer
+                .computeUniverse(libs, hashDir, facet.minSdk, desugaredLibConfig = null)
+            dev.ide.android.support.tasks.SharedLibraryDexer
+                .undexedLibraries(libs, universe, dexCacheRoot, facet.minSdk, release = false)
+        }.getOrDefault(emptyList())
+        if (undexed.isNotEmpty()) {
+            _realViewProgress.value = null
+            val base = ownedPreview(module, repo, fingerprint, themeName, title, text, request, extraProblem = null)
+            return (base ?: dev.ide.preview.LayoutPreviewResult(
+                dev.ide.preview.RenderNode().apply { renderer = dev.ide.preview.PlaceholderRenderer; tag = "real-view" },
+                dev.ide.preview.impl.ProjectPreviewResources(repo, request.density, request.density, night = request.night, themeName = themeName),
+                request.density, request.density,
+            )).apply { buildRequired = true; undexedCount = undexed.size }
+        }
+
         val classpath = libs + listOfNotNull(rJar)
         val req = dev.ide.preview.impl.RealViewRequest(
             layoutName = file.fileName.toString().substringBeforeLast('.'),
@@ -2964,9 +3092,9 @@ class IdeServices private constructor(
             minApi = facet.minSdk,
         ).apply {
             // Fine render stages ("Dexing"/"Inflating"/"Drawing") from the runtime drive the status chip.
-            stageListener = { _realViewProgress.value = dev.ide.ui.backend.PreviewProgress(it) }
+            stageListener = { _realViewProgress.value = PreviewProgress(it) }
         }
-        _realViewProgress.value = dev.ide.ui.backend.PreviewProgress("Rendering")
+        _realViewProgress.value = PreviewProgress("Rendering")
         val result = runCatching { runtime.render(req) }.getOrElse { t ->
             dev.ide.preview.impl.RealViewResult(null, error = t.message ?: t.javaClass.simpleName)
         }
@@ -2981,11 +3109,196 @@ class IdeServices private constructor(
             repo, request.density, request.density, night = request.night, themeName = themeName
         )
         val root = dev.ide.preview.RenderNode().apply { renderer = dev.ide.preview.PlaceholderRenderer; tag = "real-view" }
+        // Trace each captured view back to its `<Tag …>` in the live buffer (stamping sourceOffset) so the
+        // Preview can open the editable attribute editor on tap. Best-effort — a failure leaves the tree
+        // unstamped (read-only), never breaking the render.
+        val viewTree = result?.viewTree?.let { vt ->
+            runCatching { LayoutSourceMapper.stamp(vt, parseLayoutXml(file, text)) }.getOrDefault(vt)
+        }
         return dev.ide.preview.LayoutPreviewResult(
             root, resources, request.density, request.density, renderedImage = png, renderedNativeImage = nativeImage,
-            viewTree = result?.viewTree,
+            viewTree = viewTree,
         )
     }
+
+    /** Parse the live layout buffer into the tolerant XML DOM (with source offsets) for the attribute editor. */
+    private fun parseLayoutXml(file: Path, text: String): XmlParsedFile =
+        dev.ide.lang.xml.XmlIncrementalParser()
+            .parseFull(EditorDocument(store.vfs.fileFor(file), docVersion.incrementAndGet(), text)) as XmlParsedFile
+
+    // ---- Real-view layout attribute editor -----------------------------------------------------------------
+    // The Preview's editable attribute panel. It edits the layout XML source (the same file the Code view
+    // shows), driven by the SAME metadata + resource index the XML editor's completion uses, so only attributes
+    // valid for the tapped view are offered and value completion is byte-for-byte the editor's.
+
+    /**
+     * The attribute-editor model for the layout element at [sourceOffset] in [file]'s live buffer [text] — its
+     * currently-set attributes (from the source DOM) plus the allowed-but-unset attributes for the view (from
+     * the SDK metadata, hierarchy-aware, incl. custom-view `app:` attrs). Null when [file] isn't an editable
+     * layout element.
+     */
+    fun layoutElement(file: Path, text: String, sourceOffset: Int, id: String?): LayoutElementInfo? {
+        val module = moduleForResourceFile(file) ?: return null
+        val contributor = androidXmlContributor(module) ?: return null
+        val tag = resolveElement(parseLayoutXml(file, text), sourceOffset, id) ?: return null
+        val parentTag = (tag.parent as? XmlNode)?.takeIf { it.kind == XmlNodeKinds.TAG }?.name
+        val allowed = contributor.allowedAttributes(tag.name, parentTag)
+        val bySpec = allowed.associateBy { it.name }
+        val setAttrs = tag.attributes.mapNotNull { a ->
+            val name = a.name ?: return@mapNotNull null
+            if (name == "xmlns" || name.startsWith("xmlns:")) return@mapNotNull null
+            val spec = bySpec[name]
+            LayoutAttrInfo(
+                name = name,
+                value = a.valueNode?.text()?.toString() ?: "",
+                boolean = spec?.boolean ?: false,
+                enumValues = spec?.enumValues ?: emptyList(),
+                flagValues = spec?.flags ?: emptyList(),
+                resourceRClasses = spec?.resourceTypes?.map { it.rClass } ?: emptyList(),
+            )
+        }
+        val present = setAttrs.mapTo(HashSet()) { it.name }
+        val addable = allowed.filter { it.name !in present }.map {
+            LayoutAttrInfo(it.name, null, it.boolean, it.enumValues, it.flags, it.resourceTypes.map { r -> r.rClass })
+        }
+        return LayoutElementInfo(tag.name ?: "", elementId(tag), tag.startOffset, setAttrs, addable)
+    }
+
+    /**
+     * Value completion for [attrName] on the layout element at [sourceOffset], as if [fieldText] (caret at
+     * [caret]) were typed into the attribute's value — the exact candidates the XML editor offers, since it runs
+     * the same [XmlContextScanner] + [AndroidXmlContributor] over a synthetic buffer that carries the in-progress
+     * value. Returned replacement range is field-relative (so the caller can splice into its text field).
+     */
+    fun completeLayoutAttributeValue(
+        file: Path, text: String, sourceOffset: Int, id: String?, attrName: String, fieldText: String, caret: Int
+    ): CompletionResult {
+        val empty = CompletionResult(emptyList(), false, TextRange(0, 0))
+        val module = moduleForResourceFile(file) ?: return empty
+        val analyzer = analyzerFor(module, languageFor(file)) as? XmlSourceAnalyzer ?: return empty
+        val tag = resolveElement(parseLayoutXml(file, text), sourceOffset, id) ?: return empty
+        val (synthText, valueStart) = spliceAttributeValue(text, tag, attrName, fieldText) ?: return empty
+        val synthCaret = valueStart + caret.coerceIn(0, fieldText.length)
+        val parsed = parseLayoutXml(file, synthText)
+        val pos = XmlContextScanner.scan(synthText, synthCaret, parsed, file.toString())
+        val items = analyzer.contributors
+            .flatMap { runCatching { it.contribute(pos) }.getOrDefault(emptyList()) }
+            .filter { XmlCompletion.nameMatches(it.label, pos.prefix) || XmlCompletion.nameMatches(it.insertText, pos.prefix) }
+            .sortedWith(compareBy({ it.sortPriority }, { it.label.lowercase() }))
+        val relStart = (pos.replacementRange.start - valueStart).coerceIn(0, fieldText.length)
+        val relEnd = (pos.replacementRange.end - valueStart).coerceIn(relStart, fieldText.length)
+        return CompletionResult(items, false, TextRange(relStart, relEnd))
+    }
+
+    /** Text edits that set [attrName]="[value]" on the element at [sourceOffset] (replacing the value if it is
+     *  already present, else inserting the attribute + auto-declaring its `xmlns` when needed). */
+    fun setLayoutAttributeEdits(file: Path, text: String, sourceOffset: Int, id: String?, attrName: String, value: String): List<TextEdit> {
+        val parsed = parseLayoutXml(file, text)
+        val tag = resolveElement(parsed, sourceOffset, id) ?: return emptyList()
+        val escaped = escapeXmlAttrValue(value)
+        val existing = tag.attributes.firstOrNull { it.name == attrName }
+        if (existing != null) {
+            val vn = existing.valueNode
+            // No-op guard: setting an attribute to the value it already has produces NO edit, so a redundant
+            // commit (e.g. a control re-emitting its current value) can't churn the buffer or wedge the editor.
+            if (vn != null && vn.text().toString() == value) return emptyList()
+            return if (vn != null) listOf(TextEdit(TextRange(vn.startOffset, vn.endOffset), escaped))
+            else listOf(TextEdit(TextRange(existing.startOffset, existing.endOffset), "$attrName=\"$escaped\""))
+        }
+        val edits = ArrayList<TextEdit>()
+        val at = attributeInsertOffset(tag)
+        edits.add(TextEdit(TextRange(at, at), " $attrName=\"$escaped\""))
+        namespaceDeclarationEdit(attrName, parsed)?.let { edits.add(it) }
+        return edits
+    }
+
+    /** Text edits that remove [attrName] from the element at [sourceOffset] (with one leading whitespace). */
+    fun removeLayoutAttributeEdits(file: Path, text: String, sourceOffset: Int, id: String?, attrName: String): List<TextEdit> {
+        val tag = resolveElement(parseLayoutXml(file, text), sourceOffset, id) ?: return emptyList()
+        val existing = tag.attributes.firstOrNull { it.name == attrName } ?: return emptyList()
+        var start = existing.startOffset
+        if (start > 0 && text[start - 1].isWhitespace()) start--
+        return listOf(TextEdit(TextRange(start, existing.endOffset), ""))
+    }
+
+    /** The module's Android XML completion contributor (allowed attributes + value candidates), or null. */
+    private fun androidXmlContributor(module: Module): AndroidXmlContributor? =
+        (analyzerFor(module, LanguageId("xml")) as? XmlSourceAnalyzer)?.contributors
+            ?.filterIsInstance<AndroidXmlContributor>()?.firstOrNull()
+
+    /**
+     * The element the editor is anchored to in the freshly-parsed [parsed] — located by [id] when the view has
+     * one (robust: the raw [sourceOffset] from the captured tree can lag the live buffer after an edit that
+     * shifts offsets, e.g. an auto-declared root `xmlns`), else the enclosing tag at [sourceOffset].
+     */
+    private fun resolveElement(parsed: XmlParsedFile, sourceOffset: Int, id: String?): XmlNode? {
+        if (id != null) rootTagOf(parsed)?.let { findById(it, id) }?.let { return it }
+        return enclosingTag(parsed, sourceOffset)
+    }
+
+    /** The element in the [tag] subtree whose `@+id/…`/`@id/…` entry name is [id], or null. */
+    private fun findById(tag: XmlNode, id: String): XmlNode? {
+        val here = tag.attributes.firstOrNull { it.name == "android:id" }?.valueNode?.text()?.toString()
+            ?.substringAfterLast('/')
+        if (here == id) return tag
+        for (child in tag.childTags) findById(child, id)?.let { return it }
+        return null
+    }
+
+    /** The nearest enclosing element (TAG) at [offset], or null. */
+    private fun enclosingTag(parsed: XmlParsedFile, offset: Int): XmlNode? {
+        var node: dev.ide.lang.dom.DomNode? = parsed.nodeAt(offset)
+        while (node != null && !(node is XmlNode && node.kind == XmlNodeKinds.TAG)) node = node.parent
+        return node as? XmlNode
+    }
+
+    /** The `@+id/…`/`@id/…` entry name declared on [tag], or null. */
+    private fun elementId(tag: XmlNode): String? =
+        tag.attributes.firstOrNull { it.name == "android:id" }?.valueNode?.text()?.toString()
+            ?.substringAfterLast('/')?.ifEmpty { null }
+
+    /** Where a new attribute is spliced into [tag]'s start tag — after the last attribute, else after the
+     *  tag name (always before the closing `>`/`/>`). */
+    private fun attributeInsertOffset(tag: XmlNode): Int {
+        tag.attributes.maxByOrNull { it.endOffset }?.let { return it.endOffset }
+        return tag.startOffset + 1 + (tag.name?.length ?: 0)
+    }
+
+    /** Splice [fieldText] into [attrName]'s value on [tag] in a synthetic copy of [text] (adding the attribute
+     *  when absent), returning the new text + the offset where the value begins. Null when it can't be placed. */
+    private fun spliceAttributeValue(text: String, tag: XmlNode, attrName: String, fieldText: String): Pair<String, Int>? {
+        val vn = tag.attributes.firstOrNull { it.name == attrName }?.valueNode
+        if (vn != null) {
+            return (text.substring(0, vn.startOffset) + fieldText + text.substring(vn.endOffset)) to vn.startOffset
+        }
+        val at = attributeInsertOffset(tag)
+        val prefix = " $attrName=\""
+        return (text.substring(0, at) + prefix + fieldText + "\"" + text.substring(at)) to (at + prefix.length)
+    }
+
+    /** The edit declaring [attrName]'s namespace on the root when it's a known prefix that isn't declared. */
+    private fun namespaceDeclarationEdit(attrName: String, parsed: XmlParsedFile): TextEdit? {
+        val prefix = attrName.substringBefore(':', "")
+        val uri = AndroidXmlContributor.NAMESPACE_URIS[prefix] ?: return null
+        val root = rootTagOf(parsed) ?: return null
+        val declared = root.attributes.mapNotNull { it.name }.filter { it.startsWith("xmlns:") }
+            .mapTo(HashSet()) { it.removePrefix("xmlns:") }
+        if (prefix in declared) return null
+        val at = root.startOffset + 1 + (root.name?.length ?: 0)
+        return TextEdit(TextRange(at, at), " xmlns:$prefix=\"$uri\"")
+    }
+
+    private fun rootTagOf(parsed: XmlParsedFile): XmlNode? {
+        fun find(node: dev.ide.lang.dom.DomNode): XmlNode? {
+            if (node is XmlNode && node.kind == XmlNodeKinds.TAG) return node
+            for (child in node.children) find(child)?.let { return it }
+            return null
+        }
+        return find(parsed)
+    }
+
+    private fun escapeXmlAttrValue(v: String): String =
+        v.replace("&", "&amp;").replace("<", "&lt;").replace("\"", "&quot;")
 
     /** Fully-qualified view tags in a layout (`<lower.pkg.Upper …>`) — candidate custom views. */
     private val customViewTagRegex = Regex("""<([a-z][\w.]*\.[A-Z]\w*)[\s/>]""")
@@ -3014,7 +3327,7 @@ class IdeServices private constructor(
     // a layout hits the cache; saving a res or .java file changes the fingerprint and rebuilds.
 
     private class CachedRepo(
-        val fingerprint: String, val repo: dev.ide.android.support.resources.ResourceRepository
+        val fingerprint: String, val repo: ResourceRepository
     )
 
     private val repoCache = ConcurrentHashMap<String, CachedRepo>()
@@ -3053,7 +3366,7 @@ class IdeServices private constructor(
     }
 
     /** The shared merged repository instance for [module] (see [resourceRepository]), or null. */
-    private fun resourceRepo(module: Module): dev.ide.android.support.resources.ResourceRepository? =
+    private fun resourceRepo(module: Module): ResourceRepository? =
         resourceRepository(module)?.repo
 
     /**
@@ -3063,7 +3376,7 @@ class IdeServices private constructor(
      */
     private fun cachedCustomViewFactory(
         module: Module,
-        repo: dev.ide.android.support.resources.ResourceRepository,
+        repo: ResourceRepository,
         repoFingerprint: String
     ): dev.ide.preview.impl.CustomViewFactory? {
         val sourceFp = filesFingerprint(modules().flatMap { sourceRoots(it) }, ".java")
@@ -3103,19 +3416,19 @@ class IdeServices private constructor(
     /**
      * Preview-compile the module's Java sources + synthetic `R`/`BuildConfig` against `android.jar`, instrument
      * each class with [dev.ide.preview.impl.BridgeRemapper], and hand the result to the platform
-     * [dev.ide.preview.impl.CustomViewRuntime] to produce a live custom-view factory. Null when there's no
+     * [CustomViewRuntime] to produce a live custom-view factory. Null when there's no
      * runtime, no `android.jar`, or compilation fails (the inflater then shows placeholders).
      */
     private fun buildCustomViewFactory(
-        module: Module, repo: dev.ide.android.support.resources.ResourceRepository
-    ): dev.ide.preview.impl.CustomViewFactory? {
+        module: Module, repo: ResourceRepository
+    ): dev.ide.preview.impl.CustomViewFactory {
         val runtime = customViewRuntime
             ?: return failingCustomViewFactory("no custom-view preview runtime on this platform")
         val androidJar = previewAndroidJar()
             ?: return failingCustomViewFactory("no android.jar available for the preview compile")
         return runCatching {
             val work = store.rootPath.resolve(".platform/caches/preview/${module.id.value}")
-            val srcDir = work.resolve("src");
+            val srcDir = work.resolve("src")
             val outDir = work.resolve("classes")
             outDir.toFile()
                 .deleteRecursively(); Files.createDirectories(srcDir); Files.createDirectories(
@@ -3230,7 +3543,7 @@ class IdeServices private constructor(
 
     /** Map a project attr's declared `format` (or an inference) to a preview [dev.ide.preview.ValueFormat]. */
     private fun attrFormatOf(
-        repo: dev.ide.android.support.resources.ResourceRepository, name: String
+        repo: ResourceRepository, name: String
     ): dev.ide.preview.ValueFormat = when (repo.attrFormat(name)) {
         "color" -> dev.ide.preview.ValueFormat.COLOR
         "dimension" -> dev.ide.preview.ValueFormat.DIMENSION
@@ -3244,12 +3557,12 @@ class IdeServices private constructor(
 
     /** The `android.jar` for the preview compile — the device's bundled jar, else a detected desktop SDK's. */
     private fun previewAndroidJar(): Path? =
-        androidTools?.androidJar ?: (dev.ide.android.support.tools.AndroidSdk.findSdkRoot()
-            ?.let { dev.ide.android.support.tools.AndroidSdk.detect(it) }?.androidJar)
+        androidTools?.androidJar ?: (AndroidSdk.findSdkRoot()
+            ?.let { AndroidSdk.detect(it) }?.androidJar)
 
     /** The activity/application theme name (raw dotted, sans `@style/`) and window title from the manifest. */
     private fun manifestThemeAndLabel(
-        module: Module, repo: dev.ide.android.support.resources.ResourceRepository
+        module: Module, repo: ResourceRepository
     ): Pair<String?, String> {
         val manifest = manifestPath(module)?.let { runCatching { it.readText() }.getOrNull() } ?: ""
         val themeName =
@@ -3395,7 +3708,7 @@ class IdeServices private constructor(
     private fun moduleForResourceFile(file: Path): Module? {
         val target = file.toAbsolutePath().normalize()
         return modules().firstOrNull { m ->
-            m.facets.get(dev.ide.android.support.AndroidFacet.KEY) != null && resourceRoots(m).any {
+            m.facets.get(AndroidFacet.KEY) != null && resourceRoots(m).any {
                 target.startsWith(
                     it.toAbsolutePath().normalize()
                 )
@@ -3429,7 +3742,7 @@ class IdeServices private constructor(
             )
         }
 
-        override fun languageOf(file: VirtualFile): LanguageId? = languageFor(Paths.get(file.path))
+        override fun languageOf(file: VirtualFile): LanguageId = languageFor(Paths.get(file.path))
 
         override fun projectScope(): ProjectAnalysisScope = IdeProjectScope()
 
@@ -3602,7 +3915,7 @@ class IdeServices private constructor(
             Files.createDirectories(root)
             val env = ApplicationEnvironment()
             val (platform, store) = openStore(root, env)
-            store.replaceSdks(listOf(detectAndroidSdk() ?: JdkSdkProvider.detect()))
+            ensureSdks(store, detectAndroidSdk() ?: JdkSdkProvider.detect(), sharedCachesRoot ?: root)
             val types = ModuleTypeRegistry(platform.extensions)
             SampleAndroidProject.generate(
                 store,
@@ -3626,7 +3939,7 @@ class IdeServices private constructor(
             val env = ApplicationEnvironment()
             val (platform, store) = openStore(root, env)
             try {
-                store.replaceSdks(listOf(detectAndroidSdk() ?: JdkSdkProvider.detect()))
+                ensureSdks(store, detectAndroidSdk() ?: JdkSdkProvider.detect(), root)
                 val types = ModuleTypeRegistry(platform.extensions)
                 SampleAndroidProject.generate(
                     store,
@@ -3665,14 +3978,47 @@ class IdeServices private constructor(
                 listOf(sdk.androidJar.toString()) + listOfNotNull(sdk.coreLambdaStubs.takeIf {
                     Files.exists(it)
                 }?.toString())
-            return SdkData("android", boot, sdk.buildToolsDir.toString())
+            return SdkData("android", boot, sdk.buildToolsDir.toString(), kind = PlatformKind.ANDROID)
+        }
+
+        /**
+         * Install the workspace SDK table so BOTH platforms are present: the injected [primary] (the Android
+         * SDK on-device / android-or-JDK on desktop) AND a JVM "core-Java" SDK, so a plain Java/Kotlin module
+         * resolves a non-Android platform ([SdkResolution]) instead of the one android.jar. Idempotent and
+         * migration-safe: it also augments an OLDER workspace whose sdks.json holds only the Android SDK
+         * (adds the missing core-Java SDK on reopen). [baseDir] roots the filtered-jar cache on-device.
+         */
+        private fun ensureSdks(store: ProjectModelStore, primary: SdkData?, baseDir: Path) {
+            val current = store.data.sdks.toMutableList()
+            if (current.isEmpty()) primary?.let { current.add(it) }
+            if (current.none { it.kind == PlatformKind.JVM }) {
+                val androidLike = current.firstOrNull { it.kind == PlatformKind.ANDROID } ?: primary
+                coreJavaSdkFor(androidLike, baseDir)?.let { core ->
+                    if (current.none { it.name == core.name }) current.add(core)
+                }
+            }
+            if (current != store.data.sdks) store.replaceSdks(current)
+        }
+
+        /**
+         * The JVM "core-Java" platform SDK. On the desktop that is the real host JDK; on ART (no JDK) it is
+         * android.jar filtered down to the standard `java.*`/`javax.*` surface ([CorePlatformProvider]), the
+         * desugar stubs carried over from [primary]. Null when neither is available.
+         */
+        private fun coreJavaSdkFor(primary: SdkData?, baseDir: Path): SdkData? {
+            val host = JdkSdkProvider.detect()
+            if (host.name != "synthetic") return host.copy(name = CorePlatformProvider.SDK_NAME, kind = PlatformKind.JVM)
+            if (primary == null || primary.kind != PlatformKind.ANDROID) return null
+            val androidJar = primary.bootClasspath.firstOrNull()?.let { Paths.get(it) } ?: return null
+            val stubs = primary.bootClasspath.drop(1).map { Paths.get(it) }
+            return CorePlatformProvider.coreJavaSdk(androidJar, stubs, baseDir.resolve(".platform/caches/core-platform"))
         }
 
         /** Open an existing workspace at [root] (used by the "Open Project…" picker). */
         fun open(root: Path): IdeServices {
             val env = ApplicationEnvironment()
             val (platform, store) = openStore(root, env)
-            if (store.workspace.sdkTable.sdks.isEmpty()) store.replaceSdks(listOf(JdkSdkProvider.detect()))
+            ensureSdks(store, defaultDesktopSdk(), root)
             return IdeServices(platform, store, env = env)
         }
 
@@ -3971,9 +4317,9 @@ class IdeServices private constructor(
             dexRunner: DexRunner? = null,
             apkInstaller: ApkInstaller? = null,
             /** On-device live custom-view runtime (from :ide-android) — dex + Bridge classloader for the layout preview. */
-            customViewRuntime: dev.ide.preview.impl.CustomViewRuntime? = null,
+            customViewRuntime: CustomViewRuntime? = null,
             /** On-device real-view layout renderer (from :ide-android) — the layoutlib-on-device preview path. */
-            realViewRuntime: dev.ide.preview.impl.RealViewRuntime? = null,
+            realViewRuntime: RealViewRuntime? = null,
             /** On-device Kotlin compiler-plugin loader (from :ide-android): D8-dex + DexClassLoader. */
             kotlinPluginLoader: KotlinPluginLoader? = null,
             /** App-level shared download cache (projects-root parent); null → per-project. */
@@ -3983,7 +4329,7 @@ class IdeServices private constructor(
         ): IdeServices {
             Files.createDirectories(root)
             val (platform, store) = openStore(root, env)
-            store.replaceSdks(listOf(sdk))
+            ensureSdks(store, sdk, sharedCachesRoot ?: root)
             val template = ProjectTemplateRegistry(platform.extensions).byId(TemplateId(templateId))
                 ?: error("Unknown project template '$templateId'")
             val templateArgs = TemplateArgs(args)
@@ -4021,9 +4367,9 @@ class IdeServices private constructor(
             dexRunner: DexRunner? = null,
             apkInstaller: ApkInstaller? = null,
             /** On-device live custom-view runtime (from :ide-android) — dex + Bridge classloader for the layout preview. */
-            customViewRuntime: dev.ide.preview.impl.CustomViewRuntime? = null,
+            customViewRuntime: CustomViewRuntime? = null,
             /** On-device real-view layout renderer (from :ide-android) — the layoutlib-on-device preview path. */
-            realViewRuntime: dev.ide.preview.impl.RealViewRuntime? = null,
+            realViewRuntime: RealViewRuntime? = null,
             /** On-device Kotlin compiler-plugin loader (from :ide-android): D8-dex + DexClassLoader. */
             kotlinPluginLoader: KotlinPluginLoader? = null,
             /** App-level shared download cache (projects-root parent); null → per-project. */
@@ -4034,9 +4380,7 @@ class IdeServices private constructor(
             buildOnly: Boolean = false,
         ): IdeServices {
             val (platform, store) = openStore(root, env)
-            if (store.workspace.sdkTable.sdks.isEmpty()) {
-                store.replaceSdks(listOf(sdk))
-            }
+            ensureSdks(store, sdk, sharedCachesRoot ?: root)
             return IdeServices(
                 platform,
                 store,
@@ -4061,7 +4405,7 @@ class IdeServices private constructor(
         fun importGradleProjectAt(root: Path, sdk: SdkData, languageLevel: LanguageLevel): Boolean {
             val spec = GradleImport.parse(root) ?: return false
             val (_, store) = openStore(root)
-            store.replaceSdks(listOf(sdk))
+            ensureSdks(store, sdk, root)
             GradleImport.populate(store, spec, languageLevel)
             store.save()
             GradleImport.markCompatibilityMode(root, spec.report.notes)
@@ -4115,7 +4459,7 @@ private class IdeAnalysisTarget(
     override val parsed: ParsedFile,
     override val documentVersion: Long,
     override val resolver: SourceAnalyzer,
-    override val index: dev.ide.index.IndexService,
+    override val index: IndexService,
     override val module: Module,
 ) : AnalysisTarget {
     // The engine polls this between analyzers; delegate to the editor-thread cancel token so a completion

@@ -89,7 +89,16 @@ class IdeServicesBackend(
      * each engine's own [IdeServices.buildRunner]. See docs/build-process-isolation.md.
      */
     private val buildRunnerFactory: ((IdeServices) -> BuildRunner)? = null,
+    /**
+     * Whether the host currently permits notifications (Android: the POST_NOTIFICATIONS grant / app toggle).
+     * The isolated `:build` process posts an ongoing progress notification via a foreground service, so with
+     * notifications off we fall back to in-process builds — see [separateBuildProcessEnabled]. Defaults to
+     * `true` (desktop / tests, where it's not gated); the on-device host injects the live check.
+     */
+    private val notificationsAllowed: () -> Boolean = { true },
 ) : IdeBackend, LayoutPreviewBackend, BackendContext {
+
+    override val separateProcessBuildsSupported: Boolean get() = buildRunnerFactory != null
 
     /** Per-engine build-runner cache: the chosen runner (remote daemon OR in-process) is decided once per
      *  engine and memoized, so [engineFlow]'s selector and the imperative methods always agree on the same
@@ -105,12 +114,15 @@ class IdeServicesBackend(
             }
         }
 
-    /** The app-global "Build in a separate process" setting (default ON; see [BuiltInSettingsPages]). Read once
-     *  per engine (the cache above freezes the choice), so toggling it applies on the next project open —
-     *  which keeps the build-state flow and the build methods bound to one consistent runner. */
+    /** The app-global "Build in a separate process" setting (default ON; see [BuiltInSettingsPages]) AND-ed
+     *  with [notificationsAllowed]: the isolated process shows an ongoing foreground-service notification, so
+     *  without the notification permission we run in-process instead (the user is asked at the first build —
+     *  see BuildNotificationGate — and can re-enable it from Settings). Read once per engine (the cache above
+     *  freezes the choice), so a change applies on the next project open, keeping the build-state flow and the
+     *  build methods bound to one consistent runner. */
     private fun separateBuildProcessEnabled(): Boolean =
-        manager?.preference("settings.${dev.ide.core.settings.BuiltInSettingsPages.BUILD_RUNTIME}.${dev.ide.core.settings.BuiltInSettingsPages.SEPARATE_PROCESS}")
-            ?.toBooleanStrictOrNull() ?: true
+        (manager?.preference("settings.${dev.ide.core.settings.BuiltInSettingsPages.BUILD_RUNTIME}.${dev.ide.core.settings.BuiltInSettingsPages.SEPARATE_PROCESS}")
+            ?.toBooleanStrictOrNull() ?: true) && notificationsAllowed()
 
     @Volatile
     private var activeServices: IdeServices? = initial
@@ -303,7 +315,12 @@ class IdeServicesBackend(
                                     "min_headroom_mb" to it.headroomMb.toString(),
                                     "heap_max_mb" to it.maxMb.toString(),
                                 )
-                            } ?: emptyMap()),
+                            } ?: emptyMap())
+                            // On failure, categorize WHY (compile vs resource vs tool vs oom vs no-diagnostic):
+                            // the ok=false bit alone can't tell a user's compile error from our pipeline throwing.
+                            + (if (bs.status == dev.ide.ui.backend.RunStatus.Failed)
+                                mapOf("failure_kind" to BuildFailureKind.classify(bs.diagnostics, bs.log))
+                              else emptyMap()),
                         )
                     }
                     prev = bs.status
@@ -433,7 +450,9 @@ class IdeServicesBackend(
                     dev.ide.analytics.AnalyticsEvent(
                         dev.ide.analytics.Events.APP_CRASH,
                         dev.ide.analytics.EventCategory.CRASH,
-                        dev.ide.analytics.CrashScrub.scrub(t) + ("thread" to thread.name),
+                        // Heap state at the crash: lets OOM-adjacent crashes (the 43 OutOfMemoryErrors, plus
+                        // any that fail from memory pressure without saying so) be told apart from logic bugs.
+                        dev.ide.analytics.CrashScrub.scrub(t) + ("thread" to thread.name) + MemSample.now().props(),
                     )
                 )
                 analytics.flush()

@@ -687,7 +687,19 @@ data class UiModuleConfig(
     /** The console Run configuration (which main class to launch), or null for a module that runs through
      *  the APK pipeline rather than a `main` (Android app/library). */
     val runConfig: UiRunConfig? = null,
+    /** The module's explicit platform-SDK override name, or "" when it follows the module-type default. This
+     *  is what determines whether a Java/Kotlin module compiles/completes against the core-Java platform or
+     *  the Android SDK — the fix for a console app pulling in `android.*`. */
+    val platformSdk: String = "",
+    /** The platform SDK actually in effect (the override, or the type default when none). For display so the
+     *  "Auto" option can show what it resolves to. */
+    val resolvedSdk: String = "",
+    /** The platform SDKs installed in the workspace, offered in the picker (plus an implicit "Auto"). */
+    val availableSdks: List<UiSdkOption> = emptyList(),
 )
+
+/** A selectable platform SDK: [name] is the value persisted to `module.toml`, [label] the display text. */
+data class UiSdkOption(val name: String, val label: String)
 
 data class UiSourceSetInfo(val name: String, val scope: String, val roots: List<String>)
 
@@ -728,6 +740,9 @@ data class UiModuleConfigEdit(
     /** The console Run main-class override to persist: null = leave unchanged, blank = clear (auto-detect),
      *  otherwise the FQN to launch. */
     val mainClass: String? = null,
+    /** The platform-SDK override to persist: null = leave unchanged, blank = clear (follow the module-type
+     *  default), otherwise the SDK name to pin. */
+    val platformSdk: String? = null,
 )
 
 data class UiConfigResult(val success: Boolean, val message: String)
@@ -1047,6 +1062,42 @@ data class UiCompletionResult(
      * so it keeps re-querying the backend per keystroke instead of only filtering the cached set in place.
      */
     val isIncomplete: Boolean = false,
+)
+
+/**
+ * How an editable layout attribute's value should be entered — picks the touch control the attribute editor
+ * shows (a completion-backed text field is always the fallback). [DIMENSION] carries the size keywords
+ * (`wrap_content`/`match_parent`) in [UiLayoutAttribute.enumValues] alongside a dp field.
+ */
+enum class UiAttrKind { ENUM, FLAGS, BOOLEAN, DIMENSION, COLOR, REFERENCE, STRING, INTEGER, PLAIN }
+
+/**
+ * One attribute in the real-view layout attribute editor. [name] is the attribute as written in the layout
+ * (`android:text`, `app:srcCompat`, or an unprefixed `layout_width`); [value] is the current value, or null for
+ * an addable-but-unset attribute. [kind] + [enumValues]/[flagValues]/[resourceRClasses] describe what it accepts
+ * so the sheet renders chips / a switch / a dp field / a color-or-reference field.
+ */
+data class UiLayoutAttribute(
+    val name: String,
+    val value: String?,
+    val kind: UiAttrKind,
+    val enumValues: List<String> = emptyList(),
+    val flagValues: List<String> = emptyList(),
+    /** Accepted `@type/…` reference classes (`color`, `drawable`, `string`, `id`, …). */
+    val resourceRClasses: List<String> = emptyList(),
+)
+
+/**
+ * The tapped layout view's editable model: its [tag] + optional [id], the [sourceOffset] anchoring it in the
+ * live buffer, the attributes currently [setAttributes] on it (source order), and the allowed-but-unset
+ * [addable] attributes (the "only valid attributes" add list).
+ */
+data class UiLayoutElement(
+    val tag: String,
+    val id: String?,
+    val sourceOffset: Int,
+    val setAttributes: List<UiLayoutAttribute>,
+    val addable: List<UiLayoutAttribute>,
 )
 
 /** A go-to-definition target: open [path] and move the caret to [offset]. */

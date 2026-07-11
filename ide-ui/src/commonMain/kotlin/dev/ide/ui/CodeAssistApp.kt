@@ -9,6 +9,7 @@ import androidx.compose.foundation.layout.safeContent
 import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -20,10 +21,14 @@ import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontFamily
+import dev.ide.ui.ads.AdController
+import dev.ide.ui.ads.LocalAds
+import dev.ide.ui.backend.AdHost
 import dev.ide.ui.backend.FileActions
 import dev.ide.ui.backend.IdeBackend
 import dev.ide.ui.components.AnalyticsConsentSheet
 import dev.ide.ui.components.BetaInfo
+import dev.ide.ui.components.BuildNotificationGate
 import dev.ide.ui.components.ErrorDialog
 import dev.ide.ui.components.MigrationNotice
 import dev.ide.ui.components.OnboardingSheet
@@ -86,6 +91,8 @@ fun CodeAssistApp(
     uiFont: FontFamily = FontFamily.SansSerif,
     codeFont: FontFamily = rememberJetBrainsMono(),
     fileActions: FileActions = FileActions.None,
+    /** Platform advertising bridge (AdMob on Android, [AdHost.None] on desktop). Ads render only through this. */
+    adHost: AdHost = AdHost.None,
     composePreviewHost: ComposePreviewHost? = null,
     /** A `.caproj` path handed in from outside the app (Android "Open with"). When it changes to a
      *  non-null value, the import preview opens for it. Null on desktop / normal launch. */
@@ -114,6 +121,8 @@ fun CodeAssistApp(
     val storeEnabled = remember {
         backend.settings.preference("feature.projectsStore")?.toBooleanStrictOrNull() ?: FeatureFlags.PROJECTS_STORE
     }
+    // Ad gating + state, shared with every screen through [LocalAds]. Recreated only if the host swaps.
+    val adController = remember(backend, adHost) { AdController(backend, adHost) }
     var configModule by remember { mutableStateOf<String?>(null) }
     var modulesTab by remember { mutableStateOf(ModulesTab.Settings) }
     var keystoreImportPath by remember { mutableStateOf<String?>(null) }
@@ -274,6 +283,7 @@ fun CodeAssistApp(
         }
         // The brand background fills the whole window edge-to-edge (behind the system bars); content is
         // then inset by `safeDrawing`. On desktop these insets are empty, so this is a no-op there.
+        CompositionLocalProvider(LocalAds provides adController) {
         Box(Modifier.fillMaxSize().background(Ca.colors.bg)) {
             Box(Modifier.fillMaxSize().windowInsetsPadding(WindowInsets.safeDrawing)) {
                 ScreenHost(screen, Modifier.fillMaxSize()) { s ->
@@ -576,6 +586,10 @@ fun CodeAssistApp(
             )
             // The run sandbox's permission prompt — overlays everything while a guarded program is blocked.
             PermissionDialog(backend)
+            // First-build notification-permission gate — asks for the notification permission the isolated
+            // build process needs when the user starts their first build, and falls back to in-process builds
+            // (with an explanation) if declined. No-op after the one-time prompt.
+            BuildNotificationGate(state)
             // "Already running" confirmation — raised when a new Run is requested while a build/program is
             // still in flight (e.g. a runaway loop); offers Stop-and-Run with a remembered choice.
             RunConflictDialog(state)
@@ -584,6 +598,7 @@ fun CodeAssistApp(
             ErrorDialog(backend)
             // "Unrecognized file" notice when a picked/opened file wasn't a readable .caproj package.
             ImportErrorDialog(importError) { importError = null }
+        }
         }
     }
 }
