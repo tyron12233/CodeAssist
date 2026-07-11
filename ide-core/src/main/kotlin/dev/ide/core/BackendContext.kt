@@ -34,6 +34,11 @@ internal interface BackendContext {
      *  every build/run call through. See docs/build-process-isolation.md. */
     fun buildRunnerFor(services: IdeServices): BuildRunner
 
+    /** Whether this host can run builds in a separate OS process (the `:build` daemon) — true only when a
+     *  build-runner factory was injected (Android). Gates host-specific Build Runtime settings such as the
+     *  build-notification permission action, which is meaningless where builds are always in-process. */
+    val separateProcessBuildsSupported: Boolean
+
     /** The single serialized worker the editor's language calls run on. */
     val engineDispatcher: CoroutineDispatcher
 

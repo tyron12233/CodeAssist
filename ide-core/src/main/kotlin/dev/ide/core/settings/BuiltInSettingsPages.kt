@@ -27,6 +27,11 @@ object BuiltInSettingsPages {
     /** Toggle key on the [BUILD_RUNTIME] page: route builds/runs through the isolated `:build` process. */
     const val SEPARATE_PROCESS = "separateProcess"
 
+    /** Action key on the [BUILD_RUNTIME] page (separate-process-capable hosts only): re-request the runtime
+     *  notification permission the isolated build process needs. Handled UI-side (needs the platform permission
+     *  launcher) — the SettingsScreen mirrors this key; there's no engine-side effect here. */
+    const val BUILD_NOTIFICATIONS = "buildNotifications"
+
     /** IntSlider key on the [BUILD_RUNTIME] page: the heap (MB) the on-device R8 (release/minify) pass runs
      *  with in a forked VM — larger than the app's own heap cap. Read by `ForkedR8Shrinker` (:ide-android),
      *  which steps down + warns in the build log if the device can't grant it. Android-only effect. */

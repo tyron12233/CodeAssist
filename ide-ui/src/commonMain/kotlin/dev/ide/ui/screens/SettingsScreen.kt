@@ -61,12 +61,14 @@ import dev.ide.ui.components.SettingsTextRow
 import dev.ide.ui.components.SettingsToggleRow
 import dev.ide.ui.generated.resources.Res
 import dev.ide.ui.generated.resources.back
+import dev.ide.ui.generated.resources.build_notif_enabled
 import dev.ide.ui.generated.resources.settings_all_settings
 import dev.ide.ui.generated.resources.settings_backup_ready
 import dev.ide.ui.generated.resources.settings_inspections_for_language
 import dev.ide.ui.generated.resources.settings_no_settings_available
 import dev.ide.ui.generated.resources.settings_title
 import dev.ide.ui.icons.CaIcons
+import dev.ide.ui.platform.rememberNotificationPermissionController
 import dev.ide.ui.theme.Ca
 import dev.ide.ui.theme.Motion
 import kotlinx.coroutines.delay
@@ -78,6 +80,9 @@ private val WIDE_BREAKPOINT = 720.dp
 /** Keys the screen handles with a UI flow rather than [IdeBackend.invokeSettingAction] (built-in Privacy). */
 private const val ACTION_VIEW_LOGS = "viewLogs"
 private const val ACTION_BACKUP = "backup"
+/** Build Runtime page action: re-request the runtime notification permission (mirrors
+ *  `BuiltInSettingsPages.BUILD_NOTIFICATIONS`). Needs the platform permission launcher, so it's handled here. */
+private const val ACTION_BUILD_NOTIFICATIONS = "buildNotifications"
 
 /**
  * The Settings screen. Pages come from [IdeBackend.settingsPages] — built-in categories plus any a plugin
@@ -125,6 +130,9 @@ fun SettingsScreen(
     var toast by remember { mutableStateOf<String?>(null) }
     val scope = rememberCoroutineScope()
     val backupReadyMsg = stringResource(Res.string.settings_backup_ready)
+    val notifEnabledMsg = stringResource(Res.string.build_notif_enabled)
+    // The build-notification permission re-request (Build Runtime page); the launcher lives in composition.
+    val notifController = rememberNotificationPermissionController()
     LaunchedEffect(toast) { if (toast != null) { delay(2400); toast = null } }
 
     val onSet: (String, String, String) -> Unit = { pageId, key, encoded ->
@@ -136,6 +144,12 @@ fun SettingsScreen(
         when (action.key) {
             ACTION_VIEW_LOGS -> onOpenLogs()
             ACTION_BACKUP -> scope.launch { backend.projects.backupProjects()?.let { fileActions.share(it) }; toast = backupReadyMsg }
+            // Re-request the notification permission; if the OS won't re-prompt (permanently denied), route to
+            // the app's notification settings so the user can still enable it. Isolated builds resume on the
+            // next project open (same as toggling "Build in a separate process" — see BuildNotificationGate).
+            ACTION_BUILD_NOTIFICATIONS -> notifController.request { granted ->
+                if (granted) toast = notifEnabledMsg else notifController.openSettings()
+            }
             else -> scope.launch { backend.settings.invokeSettingAction(pageId, action.key)?.let { toast = it } }
         }
     }

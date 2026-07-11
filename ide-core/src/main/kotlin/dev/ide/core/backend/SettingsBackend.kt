@@ -237,9 +237,20 @@ internal class SettingsBackend(private val ctx: BackendContext) : SettingsServic
         val out = ArrayList<UiSettingControl>()
         out += UiSettingControl.Toggle(
             BuiltInSettingsPages.SEPARATE_PROCESS, "Build in a separate process",
-            "Run builds and your program in an isolated process so an out-of-memory crash can't take down the IDE. Off = build in-process (uses less memory, no isolation). Takes effect the next time you open a project.",
+            "Run builds and your program in an isolated process so an out-of-memory crash can't take down the IDE. Off = build in-process (uses less memory, no isolation). Needs notification permission (the isolated process shows a progress notification); without it, builds run in-process. Takes effect the next time you open a project.",
             sepOn, false, null,
         )
+
+        // Re-request the notification permission the isolated build process needs. Shown only where separate-
+        // process builds are possible (Android); handled entirely in the SettingsScreen (it needs the platform
+        // permission launcher), so this descriptor carries no engine-side effect.
+        if (ctx.separateProcessBuildsSupported) {
+            out += UiSettingControl.Action(
+                BuiltInSettingsPages.BUILD_NOTIFICATIONS, "Build notifications",
+                "Show a progress notification while a build or your program runs in the separate process. Required for isolated builds; if it's off, builds run inside the app.",
+                "Enable", false, false, null,
+            )
+        }
 
         val modeDesc = when {
             mode == BuiltInSettingsPages.R8_MODE_INPROCESS ->
