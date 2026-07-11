@@ -1,13 +1,19 @@
 package dev.ide.core.backend
 
 import dev.ide.core.BackendContext
+import dev.ide.core.LayoutAttrInfo
 import dev.ide.ui.backend.PreviewProgress
 import dev.ide.ui.backend.PreviewService
+import dev.ide.ui.backend.UiAttrKind
 import dev.ide.ui.backend.UiColorEntry
 import dev.ide.ui.backend.UiComposePreview
+import dev.ide.ui.backend.UiCompletionResult
 import dev.ide.ui.backend.UiDrawable
+import dev.ide.ui.backend.UiLayoutAttribute
+import dev.ide.ui.backend.UiLayoutElement
 import dev.ide.ui.backend.UiPreviewConfig
 import dev.ide.ui.backend.UiPreviewResult
+import dev.ide.ui.backend.UiTextEdit
 import dev.ide.lang.kotlin.interp.PreviewInfo
 import dev.ide.platform.EngineCanceledException
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -51,6 +57,58 @@ internal class PreviewBackend(private val ctx: BackendContext) : PreviewService 
 
     override suspend fun resourceImageBytes(path: String): ByteArray? =
         ctx.services.resourceBytes(Paths.get(path))
+
+    // ---- Real-view layout attribute editor ----
+
+    override suspend fun layoutElementAt(path: String, text: String, sourceOffset: Int, id: String?): UiLayoutElement? =
+        ctx.background { ctx.services.layoutElement(Paths.get(path), text, sourceOffset, id) }?.let { e ->
+            UiLayoutElement(
+                tag = e.tag, id = e.id, sourceOffset = e.sourceOffset,
+                setAttributes = e.setAttributes.map(::toUiAttr),
+                addable = e.addable.map(::toUiAttr),
+            )
+        }
+
+    override suspend fun completeLayoutAttributeValue(
+        path: String, text: String, sourceOffset: Int, id: String?, attrName: String, fieldText: String, caret: Int
+    ): UiCompletionResult = try {
+        ctx.interactive {
+            ctx.services.completeLayoutAttributeValue(Paths.get(path), text, sourceOffset, id, attrName, fieldText, caret)
+        }.toUi()
+    } catch (_: EngineCanceledException) {
+        UiCompletionResult(emptyList(), 0, fieldText.length)
+    }
+
+    override suspend fun setLayoutAttribute(
+        path: String, text: String, sourceOffset: Int, id: String?, attrName: String, value: String
+    ): List<UiTextEdit> =
+        ctx.background { ctx.services.setLayoutAttributeEdits(Paths.get(path), text, sourceOffset, id, attrName, value) }
+            .map { UiTextEdit(it.range.start, it.range.end, it.newText) }
+
+    override suspend fun removeLayoutAttribute(
+        path: String, text: String, sourceOffset: Int, id: String?, attrName: String
+    ): List<UiTextEdit> =
+        ctx.background { ctx.services.removeLayoutAttributeEdits(Paths.get(path), text, sourceOffset, id, attrName) }
+            .map { UiTextEdit(it.range.start, it.range.end, it.newText) }
+
+    private fun toUiAttr(a: LayoutAttrInfo): UiLayoutAttribute =
+        UiLayoutAttribute(
+            name = a.name, value = a.value, kind = attrKind(a),
+            enumValues = a.enumValues, flagValues = a.flagValues, resourceRClasses = a.resourceRClasses,
+        )
+
+    /** Pick the value control for an attribute from its schema shape. Dimension wins over enum so `layout_width`
+     *  shows the `wrap_content`/`match_parent` chips + a dp field (its enum keywords ride in [enumValues]). */
+    private fun attrKind(a: LayoutAttrInfo): UiAttrKind = when {
+        a.boolean -> UiAttrKind.BOOLEAN
+        "dimen" in a.resourceRClasses -> UiAttrKind.DIMENSION
+        a.flagValues.isNotEmpty() -> UiAttrKind.FLAGS
+        a.enumValues.isNotEmpty() -> UiAttrKind.ENUM
+        a.resourceRClasses.isNotEmpty() && a.resourceRClasses.all { it == "color" } -> UiAttrKind.COLOR
+        a.resourceRClasses == listOf("integer") -> UiAttrKind.INTEGER
+        a.resourceRClasses.isNotEmpty() -> UiAttrKind.REFERENCE
+        else -> UiAttrKind.PLAIN
+    }
 
     private fun toUiPreview(p: PreviewInfo): UiComposePreview {
         val c = p.config

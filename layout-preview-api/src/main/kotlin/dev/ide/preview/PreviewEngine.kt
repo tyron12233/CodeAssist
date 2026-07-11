@@ -77,6 +77,15 @@ class LayoutPreviewResult(
      * rendered image). Device-only; desktop never sets it.
      */
     val viewTree: PreviewViewNode? = null,
+    /**
+     * Real-view (device) only: true when the layout can't render because the project's libraries aren't dexed
+     * yet — the one-time, expensive step the preview no longer does silently. The UI shows a "prepare libraries"
+     * prompt (with [undexedCount] the number of not-yet-dexed libraries) and a build action instead of rendering;
+     * [root]/[renderedImage] may still carry an owned fallback behind the prompt. False once every library is
+     * dexed (a fresh dependency flips it back true until the next prepare).
+     */
+    var buildRequired: Boolean = false,
+    var undexedCount: Int = 0,
 )
 
 /** A node the preview couldn't render as intended; [tag] is the widget/structural tag, [message] the reason. */

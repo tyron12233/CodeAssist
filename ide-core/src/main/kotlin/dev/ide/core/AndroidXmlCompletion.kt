@@ -13,6 +13,7 @@ import dev.ide.lang.completion.CompletionItem
 import dev.ide.lang.completion.CompletionItemKind
 import dev.ide.lang.completion.TextEdit
 import dev.ide.lang.dom.TextRange
+import dev.ide.lang.signature.SignatureInfo
 import dev.ide.lang.xml.completion.XmlCompletionContributor
 import dev.ide.lang.xml.completion.XmlCompletionKind
 import dev.ide.lang.xml.completion.XmlCompletionPosition
@@ -45,12 +46,7 @@ class AndroidXmlContributor(
 ) : XmlCompletionContributor {
 
     override fun contribute(position: XmlCompletionPosition): List<CompletionItem> {
-        val path = position.filePath.replace('\\', '/')
-        val flavor = when {
-            path.endsWith("AndroidManifest.xml") -> Flavor.MANIFEST
-            DrawableXmlCatalog.appliesTo(path) -> Flavor.DRAWABLE
-            else -> Flavor.LAYOUT
-        }
+        val flavor = flavorOf(position.filePath)
         return when (position.kind) {
             XmlCompletionKind.TAG_NAME -> when (flavor) {
                 Flavor.MANIFEST -> manifestTagItems(position)
@@ -81,14 +77,7 @@ class AndroidXmlContributor(
                     // A `tools:` attribute's value: its curated spec, else the android:/app: attribute it overrides.
                     flavor == Flavor.LAYOUT && an != null && an.startsWith("tools:") ->
                         toolsValueSpec(position, an)?.let { valueItemsFor(it, position.prefix) } ?: emptyList()
-                    else -> {
-                        val spec = when (flavor) {
-                            Flavor.MANIFEST -> AndroidManifestCatalog.attribute(position.tag, an)
-                            Flavor.DRAWABLE -> DrawableXmlCatalog.attribute(position.tag, an)
-                            Flavor.LAYOUT -> mergedAttributes(position).firstOrNull { it.name == an }
-                        }
-                        spec?.let { valueItemsFor(it, position.prefix) } ?: emptyList()
-                    }
+                    else -> attributeSpecFor(position, flavor)?.let { valueItemsFor(it, position.prefix) } ?: emptyList()
                 }
             }
             else -> emptyList()
@@ -103,11 +92,70 @@ class AndroidXmlContributor(
         }
 
     /** Framework (SDK or curated) attributes for the tag + its custom-view attributes, deduped by name. */
-    private fun mergedAttributes(pos: XmlCompletionPosition): List<AttributeSpec> {
-        val framework = layout().attributesFor(pos.tag, pos.parentTag)
-        val custom = customAttrs()?.attributesFor(pos.tag, pos.parentTag).orEmpty()
+    private fun mergedAttributes(pos: XmlCompletionPosition): List<AttributeSpec> =
+        allowedAttributes(pos.tag, pos.parentTag)
+
+    /**
+     * The full set of attributes valid on a [tag] (as written in the layout) under [parentTag] — the framework
+     * SDK attributes for the view (hierarchy-aware, incl. AppCompat/Material substitutions) plus the parent's
+     * `layout_*` params plus the module's custom-view (`app:`) attributes, deduped by name. This is the exact
+     * "only allowed attributes" set the layout attribute editor offers; it is the same computation layout
+     * ATTRIBUTE_NAME completion uses.
+     */
+    fun allowedAttributes(tag: String?, parentTag: String?): List<AttributeSpec> {
+        val framework = layout().attributesFor(tag, parentTag)
+        val custom = customAttrs()?.attributesFor(tag, parentTag).orEmpty()
         return (framework + custom).distinctBy { it.name }
     }
+
+    private fun flavorOf(filePath: String): Flavor {
+        val path = filePath.replace('\\', '/')
+        return when {
+            path.endsWith("AndroidManifest.xml") -> Flavor.MANIFEST
+            DrawableXmlCatalog.appliesTo(path) -> Flavor.DRAWABLE
+            else -> Flavor.LAYOUT
+        }
+    }
+
+    /** The schema spec for the attribute [pos] names — the flavor's catalog, or the merged layout attributes. */
+    private fun attributeSpecFor(pos: XmlCompletionPosition, flavor: Flavor): AttributeSpec? {
+        val an = pos.attributeName ?: return null
+        return when (flavor) {
+            Flavor.MANIFEST -> AndroidManifestCatalog.attribute(pos.tag, an)
+            Flavor.DRAWABLE -> DrawableXmlCatalog.attribute(pos.tag, an)
+            Flavor.LAYOUT -> mergedAttributes(pos).firstOrNull { it.name == an }
+        }
+    }
+
+    /**
+     * Signature help / parameter hint for the attribute value the caret sits in (`android:x="|"`): a one-line
+     * description of what the attribute accepts (`true | false`, an enum's members, `@string/…`, …). Null when
+     * the caret isn't inside a value; a bare name when the schema doesn't describe it (so the panel still names
+     * the attribute).
+     */
+    fun describeValue(pos: XmlCompletionPosition): SignatureInfo? {
+        if (pos.kind != XmlCompletionKind.ATTRIBUTE_VALUE) return null
+        val an = pos.attributeName ?: return null
+        if (an.startsWith("xmlns:")) return SignatureInfo("$an = namespace URI", emptyList())
+        val flavor = flavorOf(pos.filePath)
+        val spec = if (flavor == Flavor.LAYOUT && an.startsWith("tools:")) toolsValueSpec(pos, an)
+        else attributeSpecFor(pos, flavor)
+        return SignatureInfo(label = spec?.let { describeSpec(an, it) } ?: an, parameters = emptyList())
+    }
+
+    /** A compact `name = a | b | @type/…` rendering of an attribute's accepted values, for the hint panel. */
+    private fun describeSpec(name: String, spec: AttributeSpec): String {
+        val parts = buildList {
+            if (spec.boolean) add("true | false")
+            if (spec.enumValues.isNotEmpty()) add(capped(spec.enumValues).joinToString(" | "))
+            if (spec.flags.isNotEmpty()) add(capped(spec.flags).joinToString(" | ") + " (combine with |)")
+            spec.resourceTypes.forEach { add("@${it.rClass}/…") }
+            if (spec.resourceTypes.isNotEmpty()) add("?attr/…")
+        }
+        return if (parts.isEmpty()) name else "$name = ${parts.joinToString("  |  ")}"
+    }
+
+    private fun capped(vs: List<String>, n: Int = 12): List<String> = if (vs.size <= n) vs else vs.take(n) + "…"
 
     /** `tools:` items: the curated design-time attributes plus a `tools:`-prefixed override of every
      *  `android:`/`app:` attribute the element accepts (`tools:text`, `tools:visibility`, …). */
@@ -230,6 +278,25 @@ class AndroidXmlContributor(
                 out += CompletionItem(ref, ref, CompletionItemKind.FIELD, detail = "android")
             }
         }
+
+        // Theme attribute references (`?attr/name` / `?android:attr/name`). A theme attr can supply whatever
+        // typed value the attribute expects, so they're offered for any attribute that accepts a resource
+        // reference — but only once the user opts in by typing `?` (theme attrs are numerous), mirroring the
+        // `@android` gate for framework resources. The app/library theme attrs come from the resource index
+        // (`<attr>` declarations, incl. AppCompat/Material's `colorPrimary`, `colorSurface`, …); the framework
+        // ones (`android.R.attr`, thousands) stay behind the extra `?android` opt-in.
+        if (spec.resourceTypes.isNotEmpty() && prefix.startsWith("?")) {
+            for (c in runCatching { resources(ResourceType.ATTR) }.getOrDefault(emptyList())) {
+                val ref = "?attr/${c.name}"
+                out += CompletionItem(ref, ref, CompletionItemKind.FIELD, detail = "theme attr")
+            }
+            if (prefix.startsWith("?android", ignoreCase = true)) {
+                for (name in runCatching { frameworkResources(ResourceType.ATTR) }.getOrDefault(emptyList())) {
+                    val ref = "?android:attr/$name"
+                    out += CompletionItem(ref, ref, CompletionItemKind.FIELD, detail = "android theme attr")
+                }
+            }
+        }
         return out
     }
 
@@ -249,7 +316,7 @@ class AndroidXmlContributor(
         else -> null
     }
 
-    private companion object {
+    companion object {
         /** The standard Android namespace URIs, by conventional prefix — for auto-declaring a missing xmlns. */
         val NAMESPACE_URIS = mapOf(
             "android" to "http://schemas.android.com/apk/res/android",

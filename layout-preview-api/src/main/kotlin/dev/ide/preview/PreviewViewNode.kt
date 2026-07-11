@@ -10,6 +10,12 @@ package dev.ide.preview
  * [left]/[top]/[right]/[bottom] are laid-out pixels RELATIVE to the render root's origin (0,0 = top-left of the
  * rendered bitmap), so they line up 1:1 with the returned image for hit-testing and the selection outline.
  * [properties] are read-only inspected attributes grouped for display (Layout / Appearance / Text / …).
+ *
+ * [sourceOffset] is the start offset of the `<Tag …>` this view was inflated from, in the live layout XML
+ * buffer — filled in by the host after render (by aligning this captured tree to the parsed source), or null
+ * when the view can't be traced back to an editable element (window-decor chrome, framework-synthesized
+ * internals, an `<include>`d layout's body). A non-null offset is what lets the Preview open the editable
+ * attribute editor for the tapped view; null means read-only.
  */
 class PreviewViewNode(
     /** The view's fully-qualified class name (e.g. `com.google.android.material.button.MaterialButton`). */
@@ -22,6 +28,7 @@ class PreviewViewNode(
     val bottom: Int,
     val properties: List<PreviewViewProperty>,
     val children: List<PreviewViewNode>,
+    val sourceOffset: Int? = null,
 ) {
     /** The class's simple name for compact display (`MaterialButton`). */
     val simpleName: String get() = className.substringAfterLast('.')
