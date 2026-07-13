@@ -37,8 +37,8 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.content.FileProvider
-import dev.ide.android.daemon.BuildDaemonProof
 import dev.ide.core.CaprojFormat
+import dev.ide.platform.log.Log
 import dev.ide.core.IdeServicesBackend
 import dev.ide.ui.CodeAssistApp
 import dev.ide.ui.backend.FileActions
@@ -70,8 +70,24 @@ class MainActivity : ComponentActivity() {
         inbound.value = extractStream(intent)
 
         // Initialize the AdMob SDK once (idempotent, async). Ads only render if the user hasn't turned them
-        // off / isn't a supporter; the SDK app-id is declared in the manifest (test id for now).
-        com.google.android.gms.ads.MobileAds.initialize(this)
+        // off / isn't a supporter; the SDK app-id is declared in the manifest (test id for now). The
+        // completion callback logs each mediation adapter's state: the AdMob adapter reports READY only when
+        // Google Play services can broker ad serving, so a non-READY state here is why even test ads fail to
+        // fill (e.g. a device/emulator image without Play services).
+        //
+        // Guarded: play-services-ads reads the WebView user-agent during initialize(), which throws
+        // MissingWebViewPackageException on a device/emulator image with no WebView installed. Ads are
+        // optional, so a failed init must never take down the IDE — swallow it and carry on.
+        runCatching {
+            com.google.android.gms.ads.MobileAds.initialize(this) { status ->
+                val adapters = status.adapterStatusMap.entries.joinToString { (name, s) ->
+                    "$name=${s.initializationState}(${s.description})"
+                }
+                Log.logger("ide.ads").info("MobileAds initialized: $adapters")
+            }
+        }.onFailure { e ->
+            Log.logger("ide.ads").warn("MobileAds init skipped: ${e.message}", e)
+        }
 
         setContent {
             var backend by remember { mutableStateOf<IdeBackend?>(null) }
@@ -79,16 +95,6 @@ class MainActivity : ComponentActivity() {
             LaunchedEffect(Unit) {
                 runCatching { withContext(Dispatchers.IO) { AndroidIde.bootstrap(applicationContext) } }.onSuccess { s ->
                     session = s; backend = s.backend
-                    // Phase-3a build-process-isolation proof (docs/build-process-isolation.md): bind the
-                    // :build daemon, open the first on-device project there, and run its default build in
-                    // that process — streaming state back over IPC. Verify via `adb logcat -s ide.daemon
-                    // ide.mem`. Started only AFTER bootstrap finishes so the main process provisions the
-                    // shared kotlinc-home/assets first and the daemon takes the no-delete fast path (a
-                    // concurrent first-run provision would race and corrupt the kotlinc-home). Debug-only +
-                    // flag-gated; replaced in Phase 3b by RemoteBuildRunner wired into the UI Run button.
-                    if (BuildConfig.DEBUG && BuildDaemonProof.ENABLED) BuildDaemonProof.run(
-                        applicationContext
-                    )
                 }.onFailure { e -> error = e.stackTraceToString() }
             }
 

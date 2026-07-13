@@ -23,7 +23,9 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalConfiguration
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.dp
+import dev.ide.interp.PreviewResourceResolver
 import androidx.compose.ui.unit.sp
 import dev.ide.core.IdeServicesBackend
 import dev.ide.core.LoweredComposePreview
@@ -91,7 +93,27 @@ class AndroidComposePreviewHost(private val backend: IdeServicesBackend) : Compo
                 backend.composePreviewLibs(path)?.let { withContext(Dispatchers.IO) { ComposeLibraryLoader.loaderFor(it) } }
             }.getOrNull()
         }
-        val renderer = remember(loader) { ComposePreviewRenderer(loader) }
+        // Interpreter-mediated project resources: fetch the module's res off-thread, then build a resolver with
+        // the previewed density + night baked in (see [AndroidPreviewResources]) so `stringResource(R.string.x)`
+        // / `colorResource`/`painterResource`/… resolve against the project (not the IDE app's own Resources).
+        // Null while it builds / for a non-Android module → the renderer falls back to no resource resolution.
+        val night = dark || (preview.config.nightMode == true)
+        val density = LocalDensity.current.density
+        // The resolver loads async (off-thread res parse). Track "settled" so the render WAITS for it — else the
+        // first render fires with a null resolver (before this completes), `stringResource(R.string.x)` throws
+        // "no resource resolver", and that error latches (`renderError` never clears on a later good render).
+        // `.first` = the resolver (or genuine null for a non-Android module); `.second` = load finished.
+        val resLoad by produceState(null as PreviewResourceResolver? to false, path, night, density) {
+            val resolver = runCatching {
+                val res = backend.composePreviewResources(path)
+                if (res == null) log.warn("no preview resources for $path — R.string/colorResource/… won't resolve (module has no Android namespace or an empty resource repo)")
+                res?.let { withContext(Dispatchers.IO) { AndroidPreviewResources(it.repo, it.namespace, density, night) } }
+            }.onFailure { log.warn("building preview resources for $path failed: ${it.javaClass.name}: ${it.message}", it) }.getOrNull()
+            value = resolver to true
+        }
+        val resources = resLoad.first
+        val resourcesReady = resLoad.second
+        val renderer = remember(loader, resources) { ComposePreviewRenderer(loader, resources = resources) }
         var renderError by remember(path, preview.variantId, text) { mutableStateOf<Throwable?>(null) }
         var partialError by remember(path, preview.variantId, text) { mutableStateOf<Throwable?>(null) }
         // The interpreter re-runs on every recomposition pass, so a content lambda that fails deterministically
@@ -125,8 +147,8 @@ class AndroidComposePreviewHost(private val backend: IdeServicesBackend) : Compo
         // Force the requested night mode so a theme reading isSystemInDarkTheme() (i.e. LocalConfiguration's
         // uiMode) renders the same preview Light or Dark. The effective night is the surface's Night toggle OR
         // the variant's own @Preview(uiMode = UI_MODE_NIGHT_YES). A @Preview(locale=...) overrides the locale
-        // so a localized string/resource resolves the way that variant declares.
-        val night = dark || (preview.config.nightMode == true)
+        // so a localized string/resource resolves the way that variant declares. (`night` is computed above,
+        // where the resource resolver is built.)
         val locale = preview.config.locale?.takeIf { it.isNotBlank() }
         val base = LocalConfiguration.current
         val cfg = remember(base, night, locale) {
@@ -141,7 +163,9 @@ class AndroidComposePreviewHost(private val backend: IdeServicesBackend) : Compo
             Box(modifier, contentAlignment = Alignment.Center) {
                 when (val s = state) {
                     is PreviewState.Loading -> CircularProgressIndicator(Modifier.size(28.dp))
-                    is PreviewState.Ready -> {
+                    // Wait for the resource load to settle before the first render, so `stringResource`/`R.*`
+                    // have their resolver (else the first pass fails "no resolver" and that error latches).
+                    is PreviewState.Ready -> if (!resourcesReady) CircularProgressIndicator(Modifier.size(28.dp)) else {
                         // Key the capture on the error's identity, not the instance: the interpreter throws a
                         // fresh Throwable each pass, so keying on it would relaunch + rewrite state every
                         // recomposition → a render loop. Same message/type ⇒ same key ⇒ captured once.

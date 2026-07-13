@@ -19,21 +19,25 @@ class PreviewRenderClient(context: Context) {
     private val log = Log.logger("ide.preview")
     private val lock = Object()
 
-    @Volatile private var daemon: IPreviewRenderer? = null
-    @Volatile private var bindRequested = false
+    @Volatile
+    private var daemon: IPreviewRenderer? = null
+
+    @Volatile
+    private var bindRequested = false
 
     /** Fine render-stage updates from the daemon ("Dexing"/"Inflating"/"Drawing"), on a Binder thread. */
-    @Volatile var onStage: ((String) -> Unit)? = null
+    @Volatile
+    var onStage: ((String) -> Unit)? = null
 
     private val stageCallback = object : IPreviewStageCallback.Stub() {
-        override fun onStage(stage: String?) { stage?.let { onStage?.invoke(it) } }
+        override fun onStage(stage: String?) {
+            stage?.let { onStage?.invoke(it) }
+        }
     }
 
-    private val deathRecipient = object : IBinder.DeathRecipient {
-        override fun binderDied() {
-            log.warn("ui(pid=${Process.myPid()}): :preview died (binderDied) — IDE SURVIVED, falling back in-process.")
-            synchronized(lock) { daemon = null }
-        }
+    private val deathRecipient = IBinder.DeathRecipient {
+        log.warn("ui(pid=${Process.myPid()}): :preview died (binderDied). IDE SURVIVED, falling back in-process.")
+        synchronized(lock) { daemon = null }
     }
 
     private val connection = object : ServiceConnection {
@@ -42,7 +46,13 @@ class PreviewRenderClient(context: Context) {
             runCatching { service?.linkToDeath(deathRecipient, 0) }
             runCatching { d.registerStageCallback(stageCallback) }
             synchronized(lock) { daemon = d; lock.notifyAll() }
-            log.info("ui(pid=${Process.myPid()}): connected to :preview(pid=${runCatching { d.pid() }.getOrDefault(-1)})")
+            log.info(
+                "ui(pid=${Process.myPid()}): connected to :preview(pid=${
+                    runCatching { d.pid() }.getOrDefault(
+                        -1
+                    )
+                })"
+            )
         }
 
         override fun onServiceDisconnected(name: ComponentName?) {
@@ -54,7 +64,11 @@ class PreviewRenderClient(context: Context) {
         if (bindRequested) return
         bindRequested = true
         runCatching {
-            appContext.bindService(Intent(appContext, PreviewRenderService::class.java), connection, Context.BIND_AUTO_CREATE)
+            appContext.bindService(
+                Intent(appContext, PreviewRenderService::class.java),
+                connection,
+                Context.BIND_AUTO_CREATE
+            )
         }.onFailure { bindRequested = false }
     }
 
@@ -78,12 +92,33 @@ class PreviewRenderClient(context: Context) {
     /** Render in `:preview`; returns the daemon's result string ("ok\t<w>\t<h>" / "err\t…"), or null if the
      *  daemon couldn't be reached (→ the caller renders in-process). */
     fun render(
-        layoutName: String, widthPx: Int, heightPx: Int, density: Float, night: Boolean,
-        resourcesAp: String, classpath: Array<String>, packageName: String, themeName: String?, minApi: Int, outFile: String,
+        layoutName: String,
+        widthPx: Int,
+        heightPx: Int,
+        density: Float,
+        night: Boolean,
+        resourcesAp: String,
+        classpath: Array<String>,
+        packageName: String,
+        themeName: String?,
+        minApi: Int,
+        outFile: String,
     ): String? {
         val d = awaitDaemon(BIND_TIMEOUT_MS) ?: return null
         return runCatching {
-            d.render(layoutName, widthPx, heightPx, density, night, resourcesAp, classpath, packageName, themeName, minApi, outFile)
+            d.render(
+                layoutName,
+                widthPx,
+                heightPx,
+                density,
+                night,
+                resourcesAp,
+                classpath,
+                packageName,
+                themeName,
+                minApi,
+                outFile
+            )
         }.getOrNull()
     }
 

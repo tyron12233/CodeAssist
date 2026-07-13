@@ -10,11 +10,10 @@ import dev.ide.platform.log.Log
 
 /**
  * UI-process client for [BuildDaemonService]. Binds the `:build` daemon, registers a stream-back callback,
- * and — the load-bearing part for build-process isolation — links an [IBinder.DeathRecipient] so that when
+ * and the load-bearing part for build-process isolation, links an [IBinder.DeathRecipient] so that when
  * the daemon dies (e.g. a build OOM) the UI is NOTIFIED and keeps running instead of crashing with it. The
  * callback deltas are surfaced through the [onOpened]/[onStatus]/[onStep]/[onLog] hooks, invoked on Binder
- * threads. In Phase 3b this becomes the core of `RemoteBuildRunner` (reassembling a `StateFlow<BuildState>`);
- * for now it also drives the Phase-3a proof ([BuildDaemonProof]).
+ * threads.
  */
 class BuildDaemonClient(
     context: Context,

@@ -31,9 +31,14 @@ class DexCustomViewRuntime(
     private val minApi: Int,
 ) : CustomViewRuntime {
 
-    override fun createFactory(classesDir: Path, deps: List<Path>, styled: StyledAttrResolver): CustomViewFactory? {
+    override fun createFactory(
+        classesDir: Path,
+        deps: List<Path>,
+        styled: StyledAttrResolver
+    ): CustomViewFactory {
         val inputs = ArrayList<Path>()
-        Files.walk(classesDir).use { w -> w.filter { it.toString().endsWith(".class") }.forEach { inputs.add(it) } }
+        Files.walk(classesDir)
+            .use { w -> w.filter { it.toString().endsWith(".class") }.forEach { inputs.add(it) } }
         deps.filter { it.toString().endsWith(".jar") }.forEach { inputs.add(it) }
         if (inputs.isEmpty()) throw CustomViewPreviewException("nothing to dex for preview (no compiled classes)")
 
@@ -41,10 +46,29 @@ class DexCustomViewRuntime(
         // Cap at D8's max supported API: a newer device level (e.g. 37) only earns a "not supported … use 36 or
         // earlier" warning and adds noise to any real failure. The dex is debug-only and loads on any level.
         val dexApi = minOf(minApi, MAX_D8_API)
-        val result = runCatching { D8InProcessDexer().dex(inputs, androidJar, dexApi, false, dexOut.toPath()) }
-            .getOrElse { throw CustomViewPreviewException("D8 dexing of preview classes threw: ${it.message ?: it.javaClass.simpleName}", it) }
+        val result = runCatching {
+            D8InProcessDexer().dex(
+                inputs,
+                androidJar,
+                dexApi,
+                false,
+                dexOut.toPath()
+            )
+        }
+            .getOrElse {
+                throw CustomViewPreviewException(
+                    "D8 dexing of preview classes threw: ${it.message ?: it.javaClass.simpleName}",
+                    it
+                )
+            }
         if (!result.success) {
-            throw CustomViewPreviewException("D8 dexing of preview classes failed: ${result.log.takeLast(3).joinToString(" / ").ifBlank { "(no diagnostics)" }}")
+            throw CustomViewPreviewException(
+                "D8 dexing of preview classes failed: ${
+                    result.log.takeLast(
+                        3
+                    ).joinToString(" / ").ifBlank { "(no diagnostics)" }
+                }"
+            )
         }
 
         val dexFiles = dexOut.walkTopDown().filter { it.extension == "dex" }.toList()
@@ -54,10 +78,19 @@ class DexCustomViewRuntime(
         dexFiles.forEach { it.setWritable(false, false) }
         val dexes = dexFiles.map { it.absolutePath }
         val optimized = File(cacheDir, "preview-oat").apply { mkdirs() }
-        val loader = DexClassLoader(dexes.joinToString(File.pathSeparator), optimized.absolutePath, null, javaClass.classLoader)
+        val loader = DexClassLoader(
+            dexes.joinToString(File.pathSeparator),
+            optimized.absolutePath,
+            null,
+            javaClass.classLoader
+        )
 
         return object : CustomViewFactory {
-            override fun create(fqName: String, attrs: AttrReader, ctx: RenderContext): RenderNode? {
+            override fun create(
+                fqName: String,
+                attrs: AttrReader,
+                ctx: RenderContext
+            ): RenderNode? {
                 val rawAttrs = HashMap<String, String>()
                 for (i in 0 until attrs.count) rawAttrs[attrs.name(i)] = attrs.value(i)
                 Bridges.styledResolver.set(styled)
@@ -65,18 +98,27 @@ class DexCustomViewRuntime(
                     val cls = try {
                         loader.loadClass(fqName)
                     } catch (e: Throwable) {
-                        throw CustomViewPreviewException("class $fqName not found in preview dex (${e.javaClass.simpleName})", e)
+                        throw CustomViewPreviewException(
+                            "class $fqName not found in preview dex (${e.javaClass.simpleName})",
+                            e
+                        )
                     }
                     val ctor = try {
                         cls.getConstructor(Context::class.java, AttributeSet::class.java)
                     } catch (e: NoSuchMethodException) {
-                        throw CustomViewPreviewException("$fqName has no (Context, AttributeSet) constructor", e)
+                        throw CustomViewPreviewException(
+                            "$fqName has no (Context, AttributeSet) constructor",
+                            e
+                        )
                     }
                     val instance = try {
                         ctor.newInstance(context, BridgeAttributeSet(rawAttrs))
                     } catch (e: InvocationTargetException) {
                         val cause = e.targetException ?: e
-                        throw CustomViewPreviewException("$fqName constructor threw ${cause.javaClass.simpleName}: ${cause.message ?: "(no message)"}", cause)
+                        throw CustomViewPreviewException(
+                            "$fqName constructor threw ${cause.javaClass.simpleName}: ${cause.message ?: "(no message)"}",
+                            cause
+                        )
                     }
                     val view = instance as? BridgeView
                         ?: throw CustomViewPreviewException("$fqName is not a bridged View subclass (got ${instance.javaClass.name}) — its base may not have been instrumented")

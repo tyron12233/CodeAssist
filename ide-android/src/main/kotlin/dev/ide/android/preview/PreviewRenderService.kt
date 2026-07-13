@@ -35,10 +35,17 @@ class PreviewRenderService : Service() {
         // The build's shared library-dex cache (`<appHome>/caches/dex`), so the preview dexes into — and reuses
         // from — the SAME cache the build uses.
         val dexCacheRoot = File(AndroidIde.appHomeDir(applicationContext), "caches/dex").toPath()
-        AndroidRealViewRuntime(applicationContext, androidJar, File(cacheDir, "preview-render-rt"), Build.VERSION.SDK_INT, dexCacheRoot)
+        AndroidRealViewRuntime(
+            applicationContext,
+            androidJar,
+            File(cacheDir, "preview-render-rt"),
+            Build.VERSION.SDK_INT,
+            dexCacheRoot
+        )
     }
 
-    @Volatile private var stageCallback: IPreviewStageCallback? = null
+    @Volatile
+    private var stageCallback: IPreviewStageCallback? = null
 
     private val binder = object : IPreviewRenderer.Stub() {
         override fun pid(): Int = Process.myPid()
@@ -48,8 +55,17 @@ class PreviewRenderService : Service() {
         }
 
         override fun render(
-            layoutName: String?, widthPx: Int, heightPx: Int, density: Float, night: Boolean,
-            resourcesAp: String?, classpath: Array<out String>?, packageName: String?, themeName: String?, minApi: Int, outFile: String?,
+            layoutName: String?,
+            widthPx: Int,
+            heightPx: Int,
+            density: Float,
+            night: Boolean,
+            resourcesAp: String?,
+            classpath: Array<out String>?,
+            packageName: String?,
+            themeName: String?,
+            minApi: Int,
+            outFile: String?,
         ): String {
             return runCatching {
                 val req = RealViewRequest(
@@ -62,15 +78,13 @@ class PreviewRenderService : Service() {
                     themeName = themeName,
                     minApi = minApi,
                 ).apply {
-                    // Stream fine stages ("Dexing"/"Inflating"/"Drawing") back to the UI over the callback.
                     stageListener = { stage -> runCatching { stageCallback?.onStage(stage) } }
                 }
                 val result = runtime.render(req)
                 val bmp = result.nativeBitmap as? Bitmap
                     ?: return@runCatching "err\t${result.error ?: "no image"}"
                 writePixels(bmp, File(outFile!!))
-                // Hand the captured view hierarchy back as a text sidecar next to the pixels (control over
-                // Binder, bulk on the shared filesystem), for the UI's hierarchy + tap-to-inspect panels.
+
                 result.viewTree?.let { tree ->
                     runCatching { File("$outFile.tree").writeText(PreviewViewTreeCodec.encode(tree)) }
                 }

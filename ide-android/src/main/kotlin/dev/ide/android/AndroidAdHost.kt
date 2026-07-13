@@ -23,11 +23,26 @@ import com.google.android.gms.ads.AdRequest
 import com.google.android.gms.ads.LoadAdError
 import com.google.android.gms.ads.nativead.NativeAd
 import com.google.android.gms.ads.nativead.NativeAdView
+import dev.ide.platform.log.Log
 import dev.ide.ui.backend.AdHost
 import dev.ide.ui.backend.AdPlacement
 import dev.ide.ui.components.BetaInfo
 import dev.ide.ui.components.HouseAd
 import dev.ide.ui.theme.Ca
+
+private val adLog = Log.logger("ide.ads")
+
+/**
+ * Whether this device has a system WebView provider. AdMob can't render without one — building an
+ * [AdLoader] (and `MobileAds.initialize`) reads the WebView user-agent, which throws
+ * `MissingWebViewPackageException` on device/emulator images with no WebView installed. Checked once
+ * (the provider doesn't change over a process lifetime) so the ad slots quietly fall back to the house
+ * ad instead of crashing the IDE. `getCurrentWebViewPackage()` (API 26+, our minSdk) returns null when
+ * absent without loading the provider; the guard also covers any unexpected throw.
+ */
+private val webViewAvailable: Boolean by lazy {
+    runCatching { android.webkit.WebView.getCurrentWebViewPackage() != null }.getOrDefault(false)
+}
 
 /**
  * Android advertising bridge for the shared UI (see [AdHost]).
@@ -51,17 +66,36 @@ class AndroidAdHost(
         var ad by remember(placement) { mutableStateOf<NativeAd?>(null) }
 
         DisposableEffect(placement) {
-            val loader = AdLoader.Builder(context, BuildConfig.AD_NATIVE_UNIT_ID)
-                .forNativeAd { loaded ->
-                    ad?.destroy()
-                    ad = loaded
-                }
-                .withAdListener(object : AdListener() {
-                    // Leave `ad` null on failure → the house ad stays, so the slot is never blank.
-                    override fun onAdFailedToLoad(error: LoadAdError) = Unit
-                })
-                .build()
-            loader.loadAd(AdRequest.Builder().build())
+            // Guard the whole load: AdLoader.Builder reads the system WebView user-agent as it's built (and
+            // loadAd needs it too), so on an image with no WebView provider it throws
+            // MissingWebViewPackageException. `webViewAvailable` short-circuits that common case so we don't
+            // throw-and-catch on every slot; the runCatching backstops any other SDK failure. On failure `ad`
+            // stays null → the house ad shows, so the slot is never blank and the IDE never crashes.
+            if (webViewAvailable) runCatching {
+                val loader = AdLoader.Builder(context, BuildConfig.AD_NATIVE_UNIT_ID)
+                    .forNativeAd { loaded ->
+                        ad?.destroy()
+                        ad = loaded
+                        adLog.info("native ad loaded for $placement (unit ${BuildConfig.AD_NATIVE_UNIT_ID})")
+                    }
+                    .withAdListener(object : AdListener() {
+                        // Leave `ad` null on failure → the house ad stays, so the slot is never blank. Log the
+                        // error (don't swallow it) so a stuck house-ad state is diagnosable from logcat: code 3
+                        // is NO_FILL (expected for hours/days on a brand-new real unit), while other codes point
+                        // at a config/network/Play-services problem (the reason even test ads may not fill).
+                        override fun onAdFailedToLoad(error: LoadAdError) {
+                            adLog.warn(
+                                "native ad failed for $placement (unit ${BuildConfig.AD_NATIVE_UNIT_ID}): " +
+                                    "code=${error.code} domain=${error.domain} message=${error.message} " +
+                                    "response=${error.responseInfo}"
+                            )
+                        }
+                    })
+                    .build()
+                loader.loadAd(AdRequest.Builder().build())
+            }.onFailure { e ->
+                adLog.warn("native ad load skipped for $placement (no WebView / SDK unavailable): ${e.message}")
+            }
             onDispose {
                 ad?.destroy()
                 ad = null
