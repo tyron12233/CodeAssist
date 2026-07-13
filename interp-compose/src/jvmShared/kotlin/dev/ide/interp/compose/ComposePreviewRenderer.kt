@@ -6,6 +6,7 @@ import androidx.compose.runtime.currentComposer
 import androidx.compose.runtime.remember
 import dev.ide.interp.InterpProfile
 import dev.ide.interp.Interpreter
+import dev.ide.interp.PreviewResourceResolver
 import dev.ide.lang.kotlin.interp.ResolvedClass
 import dev.ide.lang.kotlin.interp.ResolvedFunction
 import java.util.logging.Logger
@@ -39,9 +40,12 @@ class ComposePreviewRenderer(
      *  a visible error instead of a silently-empty preview (used by Learn lessons, whose snippets we author
      *  and want to fail loudly if a construct doesn't dispatch). */
     private val tolerateGaps: Boolean = true,
+    /** Resolves the previewed project's resources (`R.string.x`, `stringResource(…)`, …). Null (desktop/lessons)
+     *  leaves resource access degrading as before. */
+    private val resources: PreviewResourceResolver? = null,
 ) {
 
-    private val dispatcher = ComposeDispatcher(loader = loader)
+    private val dispatcher = ComposeDispatcher(loader = loader, resources = resources)
     private val runtime = ComposeRuntime(dispatcher)
     private val log = Logger.getLogger("ComposePreviewRenderer")
 
@@ -69,7 +73,7 @@ class ComposePreviewRenderer(
         classes: List<ResolvedClass>,
         binding: PreviewParameterBinding,
     ): List<Any?> = runCatching {
-        Interpreter(program, dispatcher, runtime, classLoader = loader, classes = classes, tolerateGaps = tolerateGaps)
+        Interpreter(program, dispatcher, runtime, classLoader = loader, classes = classes, tolerateGaps = tolerateGaps, resources = resources)
             .previewParameterValues(binding.providerClass, binding.providerFqn, binding.limit)
     }.getOrElse {
         log.warning("Compose preview @PreviewParameter resolution failed: ${it::class.simpleName}: ${it.message}")
@@ -102,7 +106,7 @@ class ComposePreviewRenderer(
         val interpreter = remember(program, classes) {
             // tolerateGaps: a single unsupported construct skips rather than blanking the whole preview (the
             // editor default); a lesson passes false so a gap surfaces as a visible error instead of a blank.
-            Interpreter(program, dispatcher, runtime, classLoader = loader, classes = classes, tolerateGaps = tolerateGaps, dirtyCallees = dirtyCallees)
+            Interpreter(program, dispatcher, runtime, classLoader = loader, classes = classes, tolerateGaps = tolerateGaps, dirtyCallees = dirtyCallees, resources = resources)
         }
         // Phase label for the profiler: the very first composition, an edit that dirtied some functions
         // (live-edit re-render), or a plain re-render. State-driven recompositions of a single child scope are

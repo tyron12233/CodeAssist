@@ -30,6 +30,10 @@ internal fun loadClassAcross(fqn: String, initialize: Boolean, preferred: ClassL
 internal fun mangledNameMatches(jvmName: String, kotlinName: String): Boolean =
     jvmName == kotlinName || (jvmName.startsWith("$kotlinName-") && '$' !in jvmName)
 
+/** Bound on how deep a value class can nest another (`Color`→`ULong`→`long`) when unboxing to a primitive
+ *  param — real chains are 1–2 deep; the cap just stops a pathological/cyclic case. */
+private const val MAX_VALUE_CLASS_NESTING = 8
+
 /**
  * Find an instance method `name`/[argCount] declared on a **public** class or interface of [cls], so it is
  * invokable without `setAccessible` — a concrete impl like `java.util.Arrays$ArrayList` isn't open under the
@@ -645,13 +649,40 @@ class ReflectiveDispatcher(
      *  expression evaluates to the unboxed underlying value, so the boxed parameter needs the synthetic static
      *  `box-impl` applied first. Anything already the right type, a null, or a primitive param passes through. */
     private fun boxValueClassIfNeeded(value: Any?, paramType: Class<*>): Any? {
-        if (value == null || paramType.isPrimitive || paramType.isInstance(value)) return value
+        if (value == null || paramType.isInstance(value)) return value
+        // Inverse of boxing: a BOXED value-class instance (a `Dp`, `Color`, `TextUnit`, …) reaching a parameter
+        // typed as its UNBOXED underlying — a mangled `offset-<hash>(…, float, float)` wants the `Dp`'s float, not
+        // the boxed `Dp`. The interpreter normally keeps value classes unboxed, but some library calls hand one
+        // back boxed; unbox it here so the reflective invoke doesn't fail with "argument N has type float, got Dp".
+        unboxToUnderlying(value, paramType)?.let { return it }
+        if (paramType.isPrimitive) return value
         val box = paramType.methods.firstOrNull {
             it.name == "box-impl" && Modifier.isStatic(it.modifiers) &&
                 it.parameterCount == 1 && wrap(it.parameterTypes[0]).isInstance(value)
         } ?: return value
         runCatching { box.isAccessible = true }
         return box.invoke(null, value)
+    }
+
+    /** If [value] is a BOXED inline value class (its class has a static `box-impl`) and [paramType] wants the
+     *  unboxed underlying (a primitive, or the underlying's type — NOT the value class itself, which
+     *  [boxValueClassIfNeeded] already short-circuits), unbox via the instance `unbox-impl` until it fits
+     *  [paramType]; else null. RECURSIVE because a value class can wrap another value class: `Color`'s underlying
+     *  is `ULong` (itself a value class over `long`), so `colorResource(...)` reaching a mangled `long` param
+     *  needs Color → ULong → long, not a single unbox. */
+    private fun unboxToUnderlying(value: Any, paramType: Class<*>): Any? {
+        var current: Any = value
+        repeat(MAX_VALUE_CLASS_NESTING) {
+            val cls = current.javaClass
+            if (cls.declaredMethods.none { it.name == "box-impl" && Modifier.isStatic(it.modifiers) }) return null
+            val unbox = cls.methods.firstOrNull {
+                it.name == "unbox-impl" && it.parameterCount == 0 && !Modifier.isStatic(it.modifiers)
+            } ?: return null
+            runCatching { unbox.isAccessible = true }
+            current = runCatching { unbox.invoke(current) }.getOrNull() ?: return null
+            if (wrap(paramType).isInstance(current)) return current
+        }
+        return null
     }
 
     /**

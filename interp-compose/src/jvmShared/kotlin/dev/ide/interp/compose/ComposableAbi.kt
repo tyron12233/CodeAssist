@@ -4,6 +4,8 @@ import dev.ide.interp.InterpProfile
 import dev.ide.interp.InterpretedLambda
 import dev.ide.interp.OmittedArg
 import java.lang.reflect.Method
+import java.lang.reflect.Modifier
+import java.util.concurrent.ConcurrentHashMap
 
 /**
  * Reflective adapter for the Compose compiler's call ABI (validated on device by
@@ -20,7 +22,7 @@ object ComposableAbi {
 
     private const val COMPOSER_CLASS = "androidx.compose.runtime.Composer"
 
-    private val composableFormCache = java.util.concurrent.ConcurrentHashMap<String, Boolean>()
+    private val composableFormCache = ConcurrentHashMap<String, Boolean>()
 
     /**
      * Whether [ownerFqn] declares a [method] in the Compose-transformed shape (it takes a `Composer`
@@ -39,7 +41,12 @@ object ComposableAbi {
         // Not loadable here yet (e.g. project deps still resolving) → don't cache; it may load later.
         val owner = loadClassNoInit(ownerFqn, loader) ?: return false
         val result = runCatching {
-            owner.methods.any { m -> nameMatches(m.name, method) && m.parameterTypes.any { isComposerType(it) } }
+            owner.methods.any { m ->
+                nameMatches(
+                    m.name,
+                    method
+                ) && m.parameterTypes.any { isComposerType(it) }
+            }
         }.getOrDefault(false)
         composableFormCache[key] = result // class loaded → answer is stable
         return result
@@ -54,7 +61,8 @@ object ComposableAbi {
 
     /** A `Composer` parameter — matched by simple name as a fallback too, in case a relocated/shaded build
      *  reports a package-qualified name we don't expect (we still want to detect the composer slot). */
-    private fun isComposerType(c: Class<*>): Boolean = c.name == COMPOSER_CLASS || c.simpleName == "Composer"
+    private fun isComposerType(c: Class<*>): Boolean =
+        c.name == COMPOSER_CLASS || c.simpleName == "Composer"
 
     private fun loadClassNoInit(fqn: String, loader: ClassLoader? = null): Class<*>? {
         val loaders = listOfNotNull(
@@ -63,7 +71,15 @@ object ComposableAbi {
             Thread.currentThread().contextClassLoader,
             ClassLoader.getSystemClassLoader(),
         ).distinct()
-        return loaders.firstNotNullOfOrNull { l -> runCatching { Class.forName(fqn, false, l) }.getOrNull() }
+        return loaders.firstNotNullOfOrNull { l ->
+            runCatching {
+                Class.forName(
+                    fqn,
+                    false,
+                    l
+                )
+            }.getOrNull()
+        }
     }
 
     /**
@@ -76,9 +92,10 @@ object ComposableAbi {
             ?: return " [composer-path skipped: class `$ownerFqn` is not loadable from the IDE runtime here]"
         val named = owner.methods.filter { nameMatches(it.name, method) }
         val withComposer = named.count { m -> m.parameterTypes.any { isComposerType(it) } }
-        val sigs = named.take(4).joinToString(" ; ") { m -> m.parameterTypes.joinToString(",") { it.simpleName } }
+        val sigs = named.take(4)
+            .joinToString(" ; ") { m -> m.parameterTypes.joinToString(",") { it.simpleName } }
         return " [composer-path skipped: `$ownerFqn` loaded; ${named.size} `$method` overload(s), " +
-            "$withComposer with a Composer param; param-types: $sigs]"
+                "$withComposer with a Composer param; param-types: $sigs]"
     }
 
     /**
@@ -130,7 +147,8 @@ object ComposableAbi {
         // removed, leaving no interior holes) has selection wrongly remap the lambda onto the last parameter
         // while binding does not — so selection rejects the real (`String`) overload and falls back to a
         // sibling (`TextFieldValue`) whose `value` slot the String can't fill, dropping it → `value = null` NPE.
-        val trailingLambda = !argsInDeclarationOrder && lastArgIsTrailingLambda && originalArgs.none { it === OmittedArg }
+        val trailingLambda =
+            !argsInDeclarationOrder && lastArgIsTrailingLambda && originalArgs.none { it === OmittedArg }
         // Pick the transformed overload to invoke from the RUNTIME class, then derive the real value-parameter
         // count from its Composer position. We do NOT trust [declaredParamCount] as the count — the resolver
         // sees the project's classpath, which can be a different build of the library than the one loaded here
@@ -157,7 +175,10 @@ object ComposableAbi {
             if (a === OmittedArg) continue
             val slot = if (trailingLambda && i == k - 1) n - 1 else i
             if (slot !in 0 until n) continue
-            val value = if (a is InterpretedLambda) lambdaProxy(a, paramTypes[slot]) else boxValueClassIfNeeded(a, paramTypes[slot])
+            val value = if (a is InterpretedLambda) lambdaProxy(
+                a,
+                paramTypes[slot]
+            ) else boxValueClassIfNeeded(a, paramTypes[slot])
             // A supplied value that can't fit its parameter would make the reflective invoke throw an
             // argument-type mismatch that unwinds the WHOLE composition (a hard "preview failed" instead of a
             // partial render) — e.g. a value-class `long` landing on the typed `Modifier` slot (a placeholder/
@@ -185,7 +206,8 @@ object ComposableAbi {
         } else {
             // Omitted parameters → set their bits in the trailing `$default` ints (the LAST ints; one bit per
             // value parameter, 31 per int). The `$changed` ints before them stay 0.
-            val defaultIntCount = (valueParamCount + BITS_PER_DEFAULT_INT - 1) / BITS_PER_DEFAULT_INT
+            val defaultIntCount =
+                (valueParamCount + BITS_PER_DEFAULT_INT - 1) / BITS_PER_DEFAULT_INT
             val changedIntCount = trailingInts - defaultIntCount
             require(changedIntCount >= 0) { "unexpected ABI for `$method`: $trailingInts trailing ints, n=$n" }
             repeat(changedIntCount) { args.add(0) }
@@ -193,7 +215,8 @@ object ComposableAbi {
                 var mask = 0
                 for (i in receiverCount until n) {
                     val vp = i - receiverCount
-                    if (!provided[i] && vp / BITS_PER_DEFAULT_INT == intIdx) mask = mask or (1 shl (vp % BITS_PER_DEFAULT_INT))
+                    if (!provided[i] && vp / BITS_PER_DEFAULT_INT == intIdx) mask =
+                        mask or (1 shl (vp % BITS_PER_DEFAULT_INT))
                 }
                 args.add(mask)
             }
@@ -203,12 +226,12 @@ object ComposableAbi {
         return try {
             InterpProfile.span("composeABI") { m.invoke(receiver, *args.toTypedArray()) }
         } catch (e: IllegalArgumentException) {
-            // Surface WHICH argument's runtime type didn't fit its parameter — Java's bare "argument type
+            // Surface WHICH argument's runtime type didn't fit its parameter, Java's bare "argument type
             // mismatch" gives no slot, masking a wrong-typed evaluated value (e.g. an enum/object read that
             // produced the wrong type, or a value class left unboxed) deep in a composition.
             throw IllegalArgumentException(
                 "ABI invoke mismatch for ${m.declaringClass.name}.${m.name}: " +
-                    "params=${m.parameterTypes.map { it.simpleName }} args=${args.map { it?.javaClass?.name ?: "null" }}",
+                        "params=${m.parameterTypes.map { it.simpleName }} args=${args.map { it?.javaClass?.name ?: "null" }}",
                 e,
             )
         }
@@ -225,10 +248,11 @@ object ComposableAbi {
      * aware and the Composer matched by name, mirroring [isComposableCall].
      */
     fun readComposableProperty(receiver: Any, propertyName: String, composer: Any): Any? {
-        val getter = "get" + propertyName.replaceFirstChar { if (it.isLowerCase()) it.titlecase() else it.toString() }
+        val getter =
+            "get" + propertyName.replaceFirstChar { if (it.isLowerCase()) it.titlecase() else it.toString() }
         val m = receiver.javaClass.methods.firstOrNull { method ->
             nameMatches(method.name, getter) && composerIndex(method) == 0 &&
-                (1 until method.parameterCount).all { method.parameterTypes[it] == Int::class.javaPrimitiveType }
+                    (1 until method.parameterCount).all { method.parameterTypes[it] == Int::class.javaPrimitiveType }
         } ?: return NotComposableProperty
         // Shape: (Composer, $changed…) — no value params. Thread the composer, zero the trailing $changed ints.
         val args = ArrayList<Any?>(m.parameterCount)
@@ -253,13 +277,38 @@ object ComposableAbi {
      * already of the right type, nulls, and unboxed-primitive parameters pass through unchanged.
      */
     private fun boxValueClassIfNeeded(value: Any?, paramType: Class<*>): Any? {
-        if (value == null || paramType.isPrimitive || paramType.isInstance(value)) return value
+        if (value == null || paramType.isInstance(value)) return value
+        // Inverse of boxing: a BOXED value-class instance reaching a parameter typed as its UNBOXED underlying —
+        // a mangled `RecordColor-…(long, …)` / `padding-…(…, float)` wants the primitive, not the boxed value
+        // class. `colorResource`/`dimensionResource` hand back pre-built boxed `Color`/`Dp`, so unbox to fit the
+        // param; RECURSIVE because `Color` wraps `ULong` wraps `long`. Found on ART (this is a SEPARATE copy from
+        // the reflective dispatcher's [dev.ide.interp] boxValueClassIfNeeded — the composable path is bound here).
+        unboxToUnderlying(value, paramType)?.let { return it }
+        if (paramType.isPrimitive) return value
         val box = paramType.methods.firstOrNull {
-            it.name == "box-impl" && java.lang.reflect.Modifier.isStatic(it.modifiers) &&
-                it.parameterCount == 1 && boxed(it.parameterTypes[0]).isInstance(value)
+            it.name == "box-impl" && Modifier.isStatic(it.modifiers) &&
+                    it.parameterCount == 1 && boxed(it.parameterTypes[0]).isInstance(value)
         } ?: return value
         box.isAccessible = true
         return box.invoke(null, value)
+    }
+
+    /** If [value] is a BOXED inline value class and [paramType] wants the unboxed underlying (a primitive), unbox
+     *  via `unbox-impl` until it fits — recursively, since a value class can wrap another (`Color`→`ULong`→`long`).
+     *  Null when [value] isn't a value-class box or can't be unboxed to [paramType]. */
+    private fun unboxToUnderlying(value: Any, paramType: Class<*>): Any? {
+        var current: Any = value
+        repeat(8) {
+            val cls = current.javaClass
+            if (cls.declaredMethods.none { it.name == "box-impl" && Modifier.isStatic(it.modifiers) }) return null
+            val unbox = cls.methods.firstOrNull {
+                it.name == "unbox-impl" && it.parameterCount == 0 && !Modifier.isStatic(it.modifiers)
+            } ?: return null
+            runCatching { unbox.isAccessible = true }
+            current = runCatching { unbox.invoke(current) }.getOrNull() ?: return null
+            if (boxed(paramType).isInstance(current)) return current
+        }
+        return null
     }
 
     /** A JVM-valid placeholder for an omitted (defaulted) parameter — the composable ignores it because its
@@ -287,13 +336,19 @@ object ComposableAbi {
      * value-param count is the Composer's index — read off the runtime method, not assumed. Among matches,
      * prefer the one whose count equals [preferredParamCount] (the resolver's pick), else the fewest params.
      */
-    private fun transformedMethod(owner: Class<*>, name: String, suppliedArgs: List<Any?>, preferredParamCount: Int, trailingLambda: Boolean): Method {
+    private fun transformedMethod(
+        owner: Class<*>,
+        name: String,
+        suppliedArgs: List<Any?>,
+        preferredParamCount: Int,
+        trailingLambda: Boolean
+    ): Method {
         // This `owner.methods` scan + overload pick runs for every composable call on every recomposition, yet
         // it's deterministic given the owner, name, the args' runtime-TYPE shape, the preferred count, and
         // whether the last arg is a trailing lambda (which changes the slot each arg is checked against) — so
         // cache it. Keyed on the Class IDENTITY (a relocated/project-loader Composer build must not alias the
         // bundled one). A successful pick is stable; a miss `error`s and isn't cached.
-        val cache = transformedCache.getOrPut(owner) { java.util.concurrent.ConcurrentHashMap() }
+        val cache = transformedCache.getOrPut(owner) { ConcurrentHashMap() }
         val key = "$name|$preferredParamCount|$trailingLambda|${argShape(suppliedArgs)}"
         cache[key]?.let { InterpProfile.count("composeCacheHit"); return it }
         InterpProfile.count("composeCacheMiss")
@@ -303,15 +358,21 @@ object ComposableAbi {
                 ci >= k && (ci + 1 until m.parameterCount).all { m.parameterTypes[it] == Int::class.javaPrimitiveType }
             }
         }
-        val accepting = shaped.filter { firstParamsAccept(it, suppliedArgs, composerIndex(it), trailingLambda) }.ifEmpty { shaped }
+        val accepting =
+            shaped.filter { firstParamsAccept(it, suppliedArgs, composerIndex(it), trailingLambda) }
+                .ifEmpty { shaped }
         val chosen = accepting
-            .sortedWith(compareBy({ if (composerIndex(it) == preferredParamCount) 0 else 1 }, { composerIndex(it) }))
+            .sortedWith(
+                compareBy(
+                    { if (composerIndex(it) == preferredParamCount) 0 else 1 },
+                    { composerIndex(it) })
+            )
             .firstOrNull()
             ?: error("no transformed `$name` (Composer-form) accepting $k arg(s) on ${owner.name}")
         return chosen.also { cache[key] = it }
     }
 
-    private val transformedCache = java.util.concurrent.ConcurrentHashMap<Class<*>, java.util.concurrent.ConcurrentHashMap<String, Method>>()
+    private val transformedCache = ConcurrentHashMap<Class<*>, ConcurrentHashMap<String, Method>>()
 
     /** A stable key for [args] by runtime type — enough to reselect the same overload (distinguishing null, an
      *  omitted/default slot, an interpreted lambda, and each concrete class). */
@@ -331,7 +392,12 @@ object ComposableAbi {
      *  parameter types — a lambda fits any interface; a null fits any reference type. [trailingLambda] MUST be
      *  the same value [call] uses to bind, so overload selection and slot binding agree on where the final
      *  lambda lands (a mismatch picks an overload the binding then can't fill). */
-    private fun firstParamsAccept(m: Method, suppliedArgs: List<Any?>, n: Int, trailingLambda: Boolean): Boolean {
+    private fun firstParamsAccept(
+        m: Method,
+        suppliedArgs: List<Any?>,
+        n: Int,
+        trailingLambda: Boolean
+    ): Boolean {
         val k = suppliedArgs.size
         for (i in 0 until k) {
             val a = suppliedArgs[i]
@@ -343,7 +409,11 @@ object ComposableAbi {
                 is InterpretedLambda -> if (!p.isInterface) return false
                 null -> if (p.isPrimitive) return false
                 // A boxed value-class parameter (`TextAlign?`) accepts the unboxed underlying value too.
-                else -> if (!boxed(p).isInstance(a) && !acceptsValueClassUnderlying(p, a)) return false
+                else -> if (!boxed(p).isInstance(a) && !acceptsValueClassUnderlying(
+                        p,
+                        a
+                    )
+                ) return false
             }
         }
         return true
@@ -365,7 +435,7 @@ object ComposableAbi {
      *  value-class value fits a boxed value-class parameter (it'll be boxed by [boxValueClassIfNeeded]). */
     private fun acceptsValueClassUnderlying(paramType: Class<*>, value: Any?): Boolean {
         val box = paramType.methods.firstOrNull {
-            it.name == "box-impl" && java.lang.reflect.Modifier.isStatic(it.modifiers) && it.parameterCount == 1
+            it.name == "box-impl" && Modifier.isStatic(it.modifiers) && it.parameterCount == 1
         } ?: return false
         return boxed(box.parameterTypes[0]).isInstance(value)
     }
@@ -384,13 +454,17 @@ object ComposableAbi {
 
     private const val BITS_PER_DEFAULT_INT = 31
 
-    fun startGroup(composer: Any, key: Int) = InterpProfile.span("composeGroup") {
+    fun startGroup(composer: Any, key: Int): Unit = InterpProfile.span("composeGroup") {
         startGroupCache.getOrPut(composer.javaClass) {
-            groupMethod(composer, setOf("startReplaceableGroup", "startReplaceGroup"), paramCount = 1)
+            groupMethod(
+                composer,
+                setOf("startReplaceableGroup", "startReplaceGroup"),
+                paramCount = 1
+            )
         }.invoke(composer, key)
     }
 
-    fun endGroup(composer: Any) = InterpProfile.span("composeGroup") {
+    fun endGroup(composer: Any): Unit = InterpProfile.span("composeGroup") {
         endGroupCache.getOrPut(composer.javaClass) {
             groupMethod(composer, setOf("endReplaceableGroup", "endReplaceGroup"), paramCount = 0)
         }.invoke(composer)
@@ -452,19 +526,19 @@ object ComposableAbi {
         }.invoke(composer)
     }
 
-    private val changedMethodCache = java.util.concurrent.ConcurrentHashMap<Class<*>, Method>()
-    private val skippingGetterCache = java.util.concurrent.ConcurrentHashMap<Class<*>, Method>()
-    private val skipToGroupEndCache = java.util.concurrent.ConcurrentHashMap<Class<*>, Method>()
+    private val changedMethodCache = ConcurrentHashMap<Class<*>, Method>()
+    private val skippingGetterCache = ConcurrentHashMap<Class<*>, Method>()
+    private val skipToGroupEndCache = ConcurrentHashMap<Class<*>, Method>()
 
     // The group open/close/restart reflection runs on EVERY composable call, every pass — a fresh
     // `javaClass.methods` scan each time was the dominant preview cost on ART (profiled: ~86% of first render,
     // ~92% of recompose). Cache the resolved method per composer/scope class (identity-keyed, multi-loader-safe),
     // exactly like `changedMethodCache`/`skippingGetterCache` above.
-    private val startGroupCache = java.util.concurrent.ConcurrentHashMap<Class<*>, Method>()
-    private val endGroupCache = java.util.concurrent.ConcurrentHashMap<Class<*>, Method>()
-    private val startRestartGroupCache = java.util.concurrent.ConcurrentHashMap<Class<*>, Method>()
-    private val endRestartGroupCache = java.util.concurrent.ConcurrentHashMap<Class<*>, Method>()
-    private val updateScopeCache = java.util.concurrent.ConcurrentHashMap<Class<*>, Method>()
+    private val startGroupCache = ConcurrentHashMap<Class<*>, Method>()
+    private val endGroupCache = ConcurrentHashMap<Class<*>, Method>()
+    private val startRestartGroupCache = ConcurrentHashMap<Class<*>, Method>()
+    private val endRestartGroupCache = ConcurrentHashMap<Class<*>, Method>()
+    private val updateScopeCache = ConcurrentHashMap<Class<*>, Method>()
 
     /** Register the recomposition block: when the scope is invalidated (a state it read changed), the real
      *  Recomposer calls [recompose] with a fresh composer. No-op if [scope] is null. */

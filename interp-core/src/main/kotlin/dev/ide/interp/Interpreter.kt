@@ -4,6 +4,7 @@ import dev.ide.lang.kotlin.interp.Binding
 import dev.ide.lang.kotlin.interp.ClassFlavor
 import dev.ide.lang.kotlin.interp.DispatchKind
 import dev.ide.lang.kotlin.interp.RNode
+import dev.ide.lang.kotlin.interp.RParam
 import dev.ide.lang.kotlin.interp.ResolvedCallable
 import dev.ide.lang.kotlin.interp.ResolvedClass
 import dev.ide.lang.kotlin.interp.ResolvedFunction
@@ -48,6 +49,9 @@ class Interpreter(
      *  render. Such a call is forced to re-run (its `$changed` skip is overridden) so the edit shows, while
      *  unchanged composables still skip and keep their state. Empty = a normal (non-incremental) render. */
     private val dirtyCallees: Set<String> = emptySet(),
+    /** Resolves the previewed project's resources (`R.string.x` ids, `@string`/`@color`/… values). Null (the
+     *  default, and on desktop/lessons) leaves resource access degrading as before. */
+    private val resources: PreviewResourceResolver? = null,
 ) {
     /** Source classes indexed by fully-qualified name and by simple name (a constructor callee carries the
      *  simple name; an object/enum reference carries the resolved FQN). */
@@ -58,19 +62,92 @@ class Interpreter(
     /** Lazily-materialized singletons: one per source `object`/`companion`, and one per enum entry. */
     private val singletons = HashMap<String, SourceObject>()
 
+    /**
+     * Per-thread guard state for the runaway bounds. The one [Interpreter] instance runs re-entrantly on BOTH
+     * the composition (UI) thread and the suspend-bridge thread (a `LaunchedEffect` body), so this must be
+     * thread-local rather than an instance field. [depth] bounds interpreted recursion (a StackOverflow in a
+     * `@Composable` body would crash the app, not just the preview); [deadlineNanos] bounds one whole render
+     * pass (0 = disarmed — set so on the managed bridge thread, where a cooperative `delay`-driven timer runs a
+     * long wall-clock time and is bounded by the cooperative loop guard instead).
+     */
+    private class Frame {
+        var depth = 0
+        var deadlineNanos = 0L
+    }
+
+    private val frame = ThreadLocal.withInitial { Frame() }
+
+    /** Bind [args] to [params]: a supplied argument fills its slot; an omitted one (fewer args than params, or
+     *  an [OmittedArg] sentinel left by named-argument reordering) takes the parameter's default expression —
+     *  evaluated in [env], so a default may read an earlier parameter (Kotlin's rule) — else null. This is how
+     *  a call that omits a defaulted argument (`Greeting("x")` for `fun Greeting(name, modifier = Modifier)`)
+     *  gets the declared default instead of a null hole. */
+    private fun bindParams(env: Env, params: List<RParam>, args: List<Any?>) {
+        params.forEachIndexed { i, p ->
+            val supplied = i < args.size && args[i] !== OmittedArg
+            env.define(p.slot, if (supplied) args[i] else p.default?.let { eval(it, env) })
+        }
+    }
+
+    /** The declared value-parameter count the resolver pinned for [callee] (a source callee carries it in its
+     *  `declId`, a library callee in its `paramTypes`) — the authoritative arity to look a source target up by,
+     *  since a call may supply FEWER arguments than that when it omits defaulted parameters. */
+    private fun declaredArity(callee: ResolvedCallable): Int? = when (callee) {
+        is ResolvedCallable.Source -> callee.declId.substringAfterLast('/').toIntOrNull()
+        is ResolvedCallable.Library -> callee.paramTypes.size
+    }
+
+    /** The lowered source function [callee] targets: the resolver-chosen overload (by declared arity) first, so
+     *  an omitted-defaults call finds the full declaration rather than a same-named shorter overload; the exact
+     *  call-arity key is the fallback when the declared arity isn't recorded. */
+    private fun sourceFunctionFor(callee: ResolvedCallable, argCount: Int): ResolvedFunction? =
+        declaredArity(callee)?.let { functions["${callee.displayName}/$it"] }
+            ?: functions["${callee.displayName}/$argCount"]
+
     fun call(fn: ResolvedFunction, args: List<Any?>): Any? {
         // A function with unsupported nodes is refused outright — UNLESS gap tolerance is on (the preview path),
         // where it runs and skips the gaps (see [tolerateGaps]).
         if (!tolerateGaps && !fn.isComplete) {
             throw InterpreterException("function `${fn.name}` has unsupported nodes: ${fn.diagnostics}")
         }
+        val f = frame.get()
+        // Recursion guard: an interpreted `fun f() = f()` (or mutual recursion) would otherwise StackOverflow the
+        // in-process host thread — an app crash. Bound the interpreted call depth and throw first, so the preview
+        // surfaces an error. The bound gives a clean early abort on a large-stack thread (the composition/main
+        // thread); a smaller-stack thread (recompose/bridge) can overflow sooner, so the real backstop is the
+        // StackOverflowError catch below — the depth guard can't be a single value safe across every stack size.
+        if (++f.depth > MAX_CALL_DEPTH) {
+            f.depth--
+            throw InterpreterException("call depth exceeded $MAX_CALL_DEPTH frames (unbounded recursion) — aborting to avoid crashing the preview")
+        }
+        // Arm a whole-pass wall-clock deadline at the outermost interpreted call. The per-loop guard bounds any
+        // single loop; this additionally bounds a broad/deep call tree, many sequential loops, or heavy library
+        // work that no single loop guard sees — so the composition thread can't freeze past an ANR. Disarmed on
+        // the managed bridge thread (a legitimate long-running cooperative timer lives there).
+        if (f.depth == 1) f.deadlineNanos = if (SuspendContext.isActive) 0L else System.nanoTime() + MAX_RENDER_NANOS
+        else checkDeadline(f)
         val env = Env()
-        fn.params.forEachIndexed { i, p -> env.define(p.slot, args.getOrNull(i)) }
+        bindParams(env, fn.params, args)
         return try {
             eval(fn.body, env)
         } catch (r: ReturnSignal) {
             r.value
+        } catch (so: StackOverflowError) {
+            // Backstop below the depth guard: on a smaller stack the real overflow fires before MAX_CALL_DEPTH.
+            // Convert it to a bounded InterpreterException so the preview shows an error instead of an Error
+            // propagating (and, on an untracked thread, crashing the app). A pre-allocated instance is thrown so
+            // no allocation is attempted while the stack is exhausted.
+            throw RECURSION_ABORT
+        } finally {
+            f.depth--
         }
+    }
+
+    /** Trip the whole-pass deadline (see [call]) if armed and elapsed. Cheap enough to call per interpreted call. */
+    private fun checkDeadline(f: Frame) {
+        val dl = f.deadlineNanos
+        if (dl != 0L && System.nanoTime() > dl)
+            throw InterpreterException("preview interpretation ran longer than ${MAX_RENDER_NANOS / 1_000_000}ms — aborting to avoid hanging the preview")
     }
 
     /**
@@ -175,6 +252,25 @@ class Interpreter(
             val receiverNode = node.receiver
             // A source enum entry (`Color.RED`) or a source object/companion member (`Config.name`) addressed
             // through a bare type reference — resolve before evaluating the (non-value) type-qualifier receiver.
+            // `R.<type>.<name>` (a project resource id): the read's binding owner is the nested synthetic R class
+            // (`<ns>.R.string`), which has no bytecode to reflect. Resolve the aapt-shaped id from the injected
+            // resolver BEFORE touching the receiver — evaluating the synthetic R chain (`PropertyGet(ObjectRef(
+            // "<ns>.R"), "string")`) would fail. Null for a non-R property → falls through to normal handling.
+            resourceFieldId(binding)?.let { return it }
+            if (isRResourceRead(binding)) {
+                // A resolver is wired but couldn't map this field (unknown name/namespace): degrade to an
+                // unresolved id (0) — the downstream `stringResource(0)`/… is intercepted (→ empty) rather than
+                // crashing the preview on the bytecode-less synthetic `R`.
+                if (resources != null) return 0
+                // No resolver at all: `id 0` would reach the REAL resource call and throw opaquely, so surface a
+                // clear, actionable reason naming the resource instead of the generic "can't load R" object error.
+                val owner = (binding as? Binding.Property)?.ownerFqn
+                val rType = owner?.substringAfterLast('.')
+                throw InterpreterException(
+                    "can't resolve resource `R.$rType.${binding.name}` — the preview has no project resource " +
+                        "resolver (the module's resources didn't load), so `stringResource`/`colorResource`/… can't resolve"
+                )
+            }
             sourceQualifierMember(receiverNode, binding.name)?.let { return it.value }
             val staticHolder = staticHolderReceiver(receiverNode)
             when {
@@ -294,13 +390,20 @@ class Interpreter(
         // through the composable invoker (restart group + recomposition) when a Compose host is present.
         if (callee is ResolvedCallable.Source && call.dispatch == DispatchKind.TOP_LEVEL) {
             InterpProfile.count("src")
-            val target = functions["${callee.displayName}/${call.args.size}"]
+            // Look the target up by its DECLARED arity, not the call's argument count: a call that omits
+            // trailing defaulted parameters (`Greeting("Compose")` for `fun Greeting(name, modifier = Modifier)`)
+            // has fewer args than the function's declared arity, and would otherwise miss (`no source function
+            // Greeting/1`). Named arguments are reordered into declared positions and omitted defaults filled
+            // by [bindParams].
+            val target = sourceFunctionFor(callee, call.args.size)
                 ?: throw InterpreterException("no source function `${callee.displayName}/${call.args.size}`")
-            val argv = call.args.map { eval(it.value, env) }
+            val argv = reorderNamedArgs(target.params.map { it.name }, call.args, call.args.map { eval(it.value, env) })
             val invoke = { call(target, argv) }
             return if (callee.isComposable && composableInvoker != null) {
-                val force = "${callee.displayName}/${call.args.size}" in dirtyCallees
-                if (InterpTrace.enabled) InterpTrace.log("dispatch @Composable ${callee.displayName}/${call.args.size} key=${call.callSiteKey.value} force=$force")
+                // The dirty set is keyed by declared `name/arity` (the program keys), so use the target's.
+                val key = "${callee.displayName}/${target.params.size}"
+                val force = key in dirtyCallees
+                if (InterpTrace.enabled) InterpTrace.log("dispatch @Composable $key key=${call.callSiteKey.value} force=$force")
                 composableInvoker.invokeComposable(call.callSiteKey.value, target.returnsUnit, force, argv, invoke)
             } else {
                 invoke()
@@ -342,8 +445,15 @@ class Interpreter(
             val receiver = call.receiver?.let { eval(it, env) }
             if (receiver is SourceObject) {
                 val lexical = (callee as? ResolvedCallable.Source)?.declId?.substringBeforeLast('/')?.substringBeforeLast('.')
-                val m = lexical?.let { superMethod(it, "${callee.displayName}/${call.args.size}") }
-                if (m != null) return callMethod(m, receiver, call.args.map { eval(it.value, env) })
+                val m = lexical?.let {
+                    // By declared arity first (an omitted-defaults super call), then the exact call arity.
+                    (declaredArity(callee)?.let { a -> superMethod(it, "${callee.displayName}/$a") }
+                        ?: superMethod(it, "${callee.displayName}/${call.args.size}"))
+                }
+                if (m != null) {
+                    val argv = reorderNamedArgs(m.params.map { it.name }, call.args, call.args.map { eval(it.value, env) })
+                    return callMethod(m, receiver, argv)
+                }
                 // A binary/library superclass method (`Activity.onCreate`, `Object.toString`): there is no source
                 // body and a SourceObject isn't a real subclass instance to reflect a `super` call into. No-op it
                 // — an override that calls `super.foo()` still lowers and runs; the preview never needs the
@@ -439,6 +549,16 @@ class Interpreter(
                 for (i in 0 until times) { action.invoke(listOf(i)); guardLoop(budget) }
                 Handled(Unit)
             }
+            // `key(vararg keys, block)` — an inline @Composable that wraps `block` in a movable group keyed by
+            // `keys` so changing a key resets the subtree's state. There is no reflectively-invocable form here:
+            // it is @InlineOnly, and its vararg `keys` compiles to a NON-last `Object[]` the compiler packs at the
+            // call site (which ComposableAbi can't bind — the key lands in the array slot as a scalar → an
+            // "ABI invoke mismatch"). Run the block in the ambient composition, like `repeat` runs its action; the
+            // block's composables thread the current composer. The movable-group identity isn't modeled (the keys
+            // are pure identity markers, not evaluated) — an acceptable preview degradation vs. crashing. Returns
+            // the block's value (`key(a) { … }` can be used for its result).
+            name == "key" && call.dispatch == DispatchKind.TOP_LEVEL && args.isNotEmpty() ->
+                Handled(lambda(args.last().value).invoke(emptyList()))
             // `delay(millis)` — the coroutines suspend function has no reflectable synchronous form (its JVM
             // shape takes a `Continuation`). Under a [SuspendBridge]-managed block it runs on a background
             // coroutine thread, so an interruptible sleep gives the REAL timing (a `while { delay(); tick() }`
@@ -768,7 +888,7 @@ class Interpreter(
     private fun callMethod(fn: ResolvedFunction, receiver: SourceObject, args: List<Any?>): Any? {
         val env = Env()
         fn.receiverSlot?.let { env.define(it, receiver) }
-        fn.params.forEachIndexed { i, p -> env.define(p.slot, args.getOrNull(i)) }
+        bindParams(env, fn.params, args)
         return try {
             eval(fn.body, env)
         } catch (r: ReturnSignal) {
@@ -778,8 +898,14 @@ class Interpreter(
 
     private fun dispatchSourceMember(receiver: SourceObject, name: String, call: RNode.Call, env: Env): Any? {
         val arity = call.args.size
-        findSourceMethod(receiver.cls, "$name/$arity")?.let { m ->
-            return callMethod(m, receiver, call.args.map { eval(it.value, env) })
+        // Prefer the resolver's declared arity so an omitted-defaults member call (`obj.f()` for `fun f(x = 0)`)
+        // finds the full declaration; the exact call arity is the fallback. Named args are reordered and omitted
+        // defaults filled by [callMethod]'s [bindParams].
+        val m = declaredArity(call.callee)?.let { findSourceMethod(receiver.cls, "$name/$it") }
+            ?: findSourceMethod(receiver.cls, "$name/$arity")
+        if (m != null) {
+            val argv = reorderNamedArgs(m.params.map { it.name }, call.args, call.args.map { eval(it.value, env) })
+            return callMethod(m, receiver, argv)
         }
         synthesizedMember(receiver, name, call, env)?.let { return it.value }
         throw InterpreterException("no member `$name/$arity` on source class ${receiver.cls.fqn}")
@@ -883,6 +1009,25 @@ class Interpreter(
         val cls = loadClassAcross(ref.fqn, initialize = true, preferred = classLoader) ?: return null
         val hasSingleton = runCatching { cls.getField("INSTANCE") }.getOrNull() != null || companionField(cls) != null
         return if (hasSingleton) null else cls
+    }
+
+    /** The resource id an `R.<type>.<name>` read denotes, via the injected [resources] resolver. The read lowers
+     *  to a nested `PropertyGet` whose binding owner is the synthetic R subclass (`com.example.R.string`) — which
+     *  has no runtime class here — so the id is resolved from the binding's owner + field name. Null when there is
+     *  no resolver, the binding isn't a property with a known owner, or it isn't a known project resource. */
+    private fun resourceFieldId(binding: Binding): Int? {
+        val r = resources ?: return null
+        val owner = (binding as? Binding.Property)?.ownerFqn ?: return null
+        return r.rClassField(owner, binding.name)
+    }
+
+    /** Whether [binding] reads a field off a synthetic `R` resource sub-class — its owner is `<pkg>.R.<type>`
+     *  (`com.example.R.string`). Used to degrade an unresolved resource read to id 0 instead of crashing on the
+     *  bytecode-less `R`. Independent of the resolver, so it holds even when none is wired. */
+    private fun isRResourceRead(binding: Binding): Boolean {
+        val owner = (binding as? Binding.Property)?.ownerFqn ?: return false
+        val rClass = owner.substringBeforeLast('.', "") // `<pkg>.R`
+        return rClass.isNotEmpty() && rClass.substringAfterLast('.') == "R"
     }
 
     /** Read a static member `name` off [cls]: a public static field (`System.out`, `Integer.MAX_VALUE`) first,
@@ -1177,11 +1322,14 @@ class Interpreter(
     }
 
     /** Per-loop budget for the runaway guard. Reset whenever the loop cooperates (suspends via `delay`), so only
-     *  CONSECUTIVE non-suspending iterations count. Allocated once per loop entry (not per iteration). */
-    private class LoopBudget {
+     *  CONSECUTIVE non-suspending iterations count. Allocated once per loop entry (not per iteration). Captures
+     *  the enclosing pass deadline once ([call] arms it before any loop runs) so [guardLoop] needs no per-iteration
+     *  thread-local read. */
+    private inner class LoopBudget {
         var iterations = 0
         var startNanos = System.nanoTime()
         var seenSuspends = SuspendContext.suspendTicks()
+        val deadlineNanos = frame.get().deadlineNanos
     }
 
     /**
@@ -1209,9 +1357,16 @@ class Interpreter(
         }
         if (++b.iterations >= MAX_LOOP_ITERATIONS)
             throw InterpreterException("loop exceeded $MAX_LOOP_ITERATIONS iterations — aborting to avoid hanging the preview")
-        // Sample the clock only occasionally (nanoTime isn't free) — enough to bound wall-clock well under an ANR.
-        if (b.iterations and LOOP_CLOCK_MASK == 0 && System.nanoTime() - b.startNanos > MAX_LOOP_NANOS)
+        // Check wall-clock EVERY iteration: a loop of few iterations but with an expensive body (nested work,
+        // heavy reflective dispatch) would slip a sampled check and freeze far past the budget. A pure spin loop
+        // trips the iteration count first, so the added nanoTime cost only lands on loops doing real work, where
+        // the body dominates it. Bound by BOTH the per-loop budget and the captured whole-pass deadline (so
+        // several sequential loops in one pass can't sum past an ANR).
+        val now = System.nanoTime()
+        if (now - b.startNanos > MAX_LOOP_NANOS)
             throw InterpreterException("loop ran longer than ${MAX_LOOP_NANOS / 1_000_000}ms — aborting to avoid hanging the preview")
+        if (b.deadlineNanos != 0L && now > b.deadlineNanos)
+            throw InterpreterException("preview interpretation ran longer than ${MAX_RENDER_NANOS / 1_000_000}ms — aborting to avoid hanging the preview")
     }
 
     /** Carries a non-`Throwable` value thrown by interpreted `throw` (e.g. a source exception object), so a
@@ -1223,8 +1378,16 @@ class Interpreter(
          *  them, tight enough that a runaway loop can't hang the app past an ANR. */
         const val MAX_LOOP_ITERATIONS = 1_000_000
         const val MAX_LOOP_NANOS = 3_000_000_000L // 3s wall-clock — well under Android's 5s input-dispatch ANR
-        const val LOOP_CLOCK_MASK = 0x3FF // sample the clock every 1024 iterations
         const val FRAME_MILLIS = 16L // simulated ~60fps cadence for `withFrameNanos`/`withFrameMillis`
+
+        /** Recursion + whole-pass bounds (see [call]). [MAX_CALL_DEPTH] gives a clean early abort on a large-stack
+         *  thread; the StackOverflowError catch in [call] is the backstop for smaller stacks. */
+        const val MAX_CALL_DEPTH = 500
+        const val MAX_RENDER_NANOS = 4_000_000_000L // 4s per render pass — under the 5s input-dispatch ANR
+
+        /** Pre-allocated (no allocation once the stack is exhausted) for the StackOverflowError backstop in [call].
+         *  Reused across threads/renders — safe, since it is thrown, not mutated. */
+        val RECURSION_ABORT = InterpreterException("call stack overflowed (unbounded recursion) — aborting to avoid crashing the preview")
 
         val ARITHMETIC = setOf("plus", "minus", "times", "div", "rem")
         val COMPARISON = setOf("lt", "le", "gt", "ge")

@@ -132,6 +132,45 @@ class InterpreterTest {
     }
 
     @Test
+    fun omittedTrailingDefaultArgumentIsFilled() {
+        // The Compose-template shape: `Greeting("Compose")` calls `fun Greeting(name, modifier = Modifier)` with
+        // the trailing defaulted parameter omitted. The call has FEWER args than the declared arity, so it must
+        // (a) still find the function — the reported `no source function Greeting/1` — and (b) fill the default.
+        val code = "package demo\n" +
+            "fun greet(name: String, greeting: String = \"Hi \"): String = greeting + name\n" +
+            "fun caller(): String = greet(\"Bob\")"
+        // Direct call with the trailing default omitted → the default is substituted at bind time.
+        assertEquals("Hi Bob", runProgram(code, "greet/2", listOf("Bob")))
+        // Through a caller whose body calls `greet` with one argument → the TOP_LEVEL lookup resolves the
+        // 2-parameter declaration by its declared arity rather than missing on `greet/1`.
+        assertEquals("Hi Bob", runProgram(code, "caller/0", emptyList()))
+    }
+
+    @Test
+    fun namedArgumentsBindByNameAndFillOmittedDefaults() {
+        // A source top-level call with NAMED arguments must reorder them into the declared parameter order
+        // (previously they bound positionally — `greeting` landed in `name`), and an omitted defaulted parameter
+        // still takes its default.
+        val code = "package demo\n" +
+            "fun greet(name: String, greeting: String = \"Hi \"): String = greeting + name\n" +
+            "fun reordered(): String = greet(greeting = \"Yo \", name = \"Al\")\n" +
+            "fun defaulted(): String = greet(name = \"Al\")"
+        assertEquals("Yo Al", runProgram(code, "reordered/0", emptyList()))
+        assertEquals("Hi Al", runProgram(code, "defaulted/0", emptyList()))
+    }
+
+    @Test
+    fun defaultReferencingAnEarlierParameterIsEvaluatedInTheCalleeFrame() {
+        // A default expression may read an earlier parameter (`fun f(a, b = a + 1)`); it must evaluate in the
+        // callee's frame where `a` is already bound, not blow up or read null.
+        val code = "package demo\n" +
+            "fun f(a: Int, b: Int = a + 1): Int = a + b\n" +
+            "fun g(): Int = f(10)"
+        assertEquals(21, runProgram(code, "f/2", listOf(10)))
+        assertEquals(21, runProgram(code, "g/0", emptyList()))
+    }
+
+    @Test
     fun unsupportedConstructFailsLoudly() {
         // A construct outside the interpreter's subset (a non-Int range) makes the function incomplete → the
         // interpreter refuses it rather than producing a wrong result. (Indexed assignment `xs[i] = v` is now
