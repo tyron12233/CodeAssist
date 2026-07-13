@@ -21,10 +21,12 @@ import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import dev.ide.core.IdeServicesBackend
 import dev.ide.core.LoweredComposePreview
+import dev.ide.interp.PreviewResourceResolver
 import dev.ide.interp.compose.ComposePreviewRenderer
 import dev.ide.interp.compose.PreviewParameterBinding
 import dev.ide.platform.log.Log
@@ -67,7 +69,22 @@ class DesktopComposePreviewHost(private val backend: IdeServicesBackend) : Compo
         val loader by produceState<ClassLoader?>(null, path) {
             value = runCatching { backend.composePreviewLibs(path)?.let { DesktopComposeLibraryLoader.loaderFor(it) } }.getOrNull()
         }
-        val renderer = remember(loader) { ComposePreviewRenderer(loader) }
+        // Interpreter-mediated project resources so `stringResource(R.string.x)`/`colorResource`/… resolve
+        // against the project's `res/` instead of crashing on the bytecode-less synthetic `R`. The Android host
+        // does the same with `AndroidPreviewResources`; on desktop drawables aren't decoded (see
+        // [DesktopPreviewResources]). Null while it builds / for a non-Android module → no resource resolution.
+        val density = LocalDensity.current.density
+        // The resolver loads async; track "settled" so the render WAITS for it (else the first render fires with
+        // a null resolver, `stringResource(R.string.x)` throws "no resolver", and that error latches).
+        val resLoad by produceState(null as PreviewResourceResolver? to false, path, density) {
+            val resolver = runCatching {
+                backend.composePreviewResources(path)?.let { DesktopPreviewResources(it.repo, it.namespace, density) }
+            }.getOrNull()
+            value = resolver to true
+        }
+        val resources = resLoad.first
+        val resourcesReady = resLoad.second
+        val renderer = remember(loader, resources) { ComposePreviewRenderer(loader, resources = resources) }
         val state by produceState<PreviewState>(PreviewState.Loading, path, preview.functionName, preview.arity, text) {
             // First-run resilience: while the workspace index is still building, library composables (`Text`,
             // `Column`, `remember`) resolve to 0 candidates and the lower fails. Rather than latch that transient
@@ -125,7 +142,9 @@ class DesktopComposePreviewHost(private val backend: IdeServicesBackend) : Compo
         Box(modifier, contentAlignment = Alignment.Center) {
             when (val s = state) {
                 is PreviewState.Loading -> CircularProgressIndicator(Modifier.size(28.dp))
-                is PreviewState.Ready -> {
+                // Wait for the resource load to settle before the first render so `stringResource`/`R.*` have
+                // their resolver (else the first pass fails "no resolver" and that error latches).
+                is PreviewState.Ready -> if (!resourcesReady) CircularProgressIndicator(Modifier.size(28.dp)) else {
                     // Key the capture on the error's identity, not the instance: the interpreter throws a fresh
                     // Throwable each pass, so keying on it would relaunch + rewrite state every recomposition →
                     // a render loop. Same message/type ⇒ same key ⇒ captured once.
