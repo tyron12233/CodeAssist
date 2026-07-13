@@ -66,13 +66,18 @@ class IncrementalKotlinCompiler(private val compiler: KotlinJvmCompiler = Kotlin
             return full(kt, javaSources, classpath, outputDir, jvmTarget, bootClasspath, context, srcHash, compilerPlugins, pluginOptions, runtimePluginClasspaths)
         }
 
-        val dirty = kt.filter { prev.srcHash[it] != srcHash[it] }
-        if (dirty.isEmpty()) {
-            // No source changed, so the task re-ran for an unrelated reason. Skip only if the output dir still
-            // holds exactly what was last produced; if a `.class` was deleted/tampered, rebuild to restore it.
-            if (currentClasses(outputDir).toSet() == prev.abi.keys) return Result(true, emptyList(), Mode.NOOP)
+        // The manifest must describe exactly what is in the output dir. If a prior run left them out of sync —
+        // a full compile that CLEARED the output then failed (leaving it wiped/partial), or an external
+        // delete/tamper — the incremental fast path would derive its "clean" binary classpath ([cleanDir]) from
+        // the wrong output set and a recompiled file would fail to resolve a cross-file symbol it actually
+        // depends on (a spurious "unresolved reference"). A full rebuild is the only safe move. (Generalizes the
+        // old dirty-empty-only tamper check to every path.)
+        if (currentClasses(outputDir).toSet() != prev.abi.keys) {
             return full(kt, javaSources, classpath, outputDir, jvmTarget, bootClasspath, context, srcHash, compilerPlugins, pluginOptions, runtimePluginClasspaths)
         }
+
+        val dirty = kt.filter { prev.srcHash[it] != srcHash[it] }
+        if (dirty.isEmpty()) return Result(true, emptyList(), Mode.NOOP) // nothing changed; output matches the manifest
 
         return incremental(kt, dirty, javaSources, classpath, outputDir, jvmTarget, bootClasspath, context, srcHash, prev, compilerPlugins, pluginOptions, runtimePluginClasspaths)
             ?: full(kt, javaSources, classpath, outputDir, jvmTarget, bootClasspath, context, srcHash, compilerPlugins, pluginOptions, runtimePluginClasspaths)
@@ -88,7 +93,14 @@ class IncrementalKotlinCompiler(private val compiler: KotlinJvmCompiler = Kotlin
         Files.createDirectories(outputDir)
         val r = compiler.compile(kt, javaSources, classpath, outputDir, jvmTarget, bootClasspath,
             compilerPlugins = compilerPlugins, pluginOptions = pluginOptions, runtimePluginClasspaths = runtimePluginClasspaths)
-        if (!r.success) return Result(false, r.messages, Mode.FULL, kt)
+        if (!r.success) {
+            // The output dir was just cleared and the compile failed, so it now holds a wiped/partial class set.
+            // Drop the (now-stale) manifest: leaving it would let the NEXT build take the incremental fast path
+            // against this broken output and mis-resolve cross-file references (the reported spurious
+            // "unresolved reference"). With no manifest the next build is a clean full rebuild — correct recovery.
+            state(outputDir).delete()
+            return Result(false, r.messages, Mode.FULL, kt)
+        }
         val srcToOut = relativizeMapping(r.outputs, outputDir, srcHash.keys)
         val abi = snapshotAll(outputDir)
         state(outputDir).write(State(context, srcHash, srcToOut, abi))
@@ -141,7 +153,13 @@ class IncrementalKotlinCompiler(private val compiler: KotlinJvmCompiler = Kotlin
             friendPaths = listOf(cleanDir),
             compilerPlugins = compilerPlugins, pluginOptions = pluginOptions, runtimePluginClasspaths = runtimePluginClasspaths,
         )
-        if (!r.success) { clearDir(cleanDir); clearDir(stagingDir); return Result(false, r.messages, Mode.INCREMENTAL, dirty) }
+        // A staging (dirty-only) compile failure is NOT reported as the build's failure — fall back to [full]
+        // (the caller's `?: full(...)`), which is always correct. Recompiling one file against the rest as a
+        // binary classpath is more fragile than a whole-module compile (a warm/shared Kotlin environment that
+        // saw a now-clean file as SOURCE in a prior compile can fail to resolve it as a BINARY here — see
+        // `kotlin-compile-speed-art`); a real user error still surfaces from the full recompile. Never hard-fail
+        // here, or such a false negative becomes a spurious "unresolved reference" with no recovery.
+        if (!r.success) { clearDir(cleanDir); clearDir(stagingDir); return null }
 
         val newMapping = relativizeMapping(r.outputs, stagingDir, dirty.toSet())
         val produced = currentClasses(stagingDir)
