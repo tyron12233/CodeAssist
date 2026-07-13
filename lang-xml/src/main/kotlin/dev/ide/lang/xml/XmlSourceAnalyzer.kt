@@ -61,12 +61,9 @@ class XmlSourceAnalyzer : SourceAnalyzer {
             backing.parseFull(snapshot).also { lastByFile[snapshot.file.path] = it }
 
         override fun reparse(
-            previous: ParsedFile,
-            newSnapshot: DocumentSnapshot,
-            edits: List<DocumentEdit>
-        ): ReparseResult =
-            backing.reparse(previous, newSnapshot, edits)
-                .also { lastByFile[newSnapshot.file.path] = it.tree }
+            previous: ParsedFile, newSnapshot: DocumentSnapshot, edits: List<DocumentEdit>
+        ): ReparseResult = backing.reparse(previous, newSnapshot, edits)
+            .also { lastByFile[newSnapshot.file.path] = it.tree }
     }
 
     private val completionContributor = XmlCompletion(contributors = { contributors })
@@ -77,8 +74,7 @@ class XmlSourceAnalyzer : SourceAnalyzer {
     override val semanticHighlighter = XmlSemanticHighlighter(::parsedFile)
 
     /** Code folding (element bodies + comments), always on — ranges come straight from the PSI. */
-    override val folding: FoldingService =
-        XmlFoldingService(::parsedFile)
+    override val folding: FoldingService = XmlFoldingService(::parsedFile)
 
     /** Parameter hints inside an attribute value — available only once the host wires the schema resolver. */
     override val signatureHelp: SignatureHelpService?

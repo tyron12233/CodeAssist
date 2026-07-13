@@ -12,4 +12,7 @@ plugins {
 // (KotlinParserHost) and `:lang-xml` register their `ParserDefinition` additively onto it and parse through it.
 dependencies {
     api(project(":kotlin-compiler-deps"))
+    // The Log facade only (perf instrumentation of the one-time environment standup). platform-core has no
+    // domain knowledge and no upward deps, so this stays acyclic.
+    implementation(project(":platform-core"))
 }

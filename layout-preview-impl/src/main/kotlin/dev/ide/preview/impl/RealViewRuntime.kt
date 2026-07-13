@@ -26,7 +26,11 @@ class RealViewRequest(
     /** The `resources.ap_` to render against (binary manifest + `resources.arsc` + compiled res XML): the
      *  build's compiled resources relinked with [layoutText], or the build's own if the relink was unavailable. */
     val resourcesAp: Path,
-    /** Library jars + the build's `R.jar` to dex onto the `DexClassLoader` (framework/library/R classes). */
+    /** What to load onto the `DexClassLoader`, as a mixed list the runtime splits by kind:
+     *  - library `.jar`s (framework/library classes) → dexed via the shared cache + merged (stable layer),
+     *  - the `R.jar` (`R.jar`/`preview-r.jar`, matched by name) → the volatile R layer,
+     *  - the project's own PRE-DEXED `.dex` files (the build's `project-dex`/`lib-dex`, app + module code) →
+     *    added directly (no re-dex) so a project-source custom view resolves at inflate time. */
     val classpath: List<Path>,
     /** The app package (the `R` package the linked resources live under). */
     val packageName: String,

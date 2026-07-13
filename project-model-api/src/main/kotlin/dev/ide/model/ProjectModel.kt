@@ -18,12 +18,18 @@ import dev.ide.vfs.VirtualFile
 // Identity & shared value types
 // ---------------------------------------------------------------------------
 
-@JvmInline value class ProjectId(val value: String)
-@JvmInline value class ModuleId(val value: String)
-@JvmInline value class VariantId(val value: String)
+@JvmInline
+value class ProjectId(val value: String)
+
+@JvmInline
+value class ModuleId(val value: String)
+
+@JvmInline
+value class VariantId(val value: String)
 
 /** Which build system owns a [Project]. The binding is on the Project so linked projects can mix systems. */
-@JvmInline value class BuildSystemId(val value: String) {
+@JvmInline
+value class BuildSystemId(val value: String) {
     companion object {
         val NATIVE = BuildSystemId("native")
         val GRADLE_COMPAT = BuildSystemId("gradle-compat")
@@ -89,7 +95,9 @@ interface Module {
      * any [OrderEntry] whose [OrderEntry.variant] qualifier isn't in it (a shared, unqualified entry always
      * stays). The same set filters the module-dependency closure.
      */
-    fun classpath(scope: DependencyScope, transitive: Boolean = true, variant: Set<String>? = null): ClasspathSnapshot
+    fun classpath(
+        scope: DependencyScope, transitive: Boolean = true, variant: Set<String>? = null
+    ): ClasspathSnapshot
 
     /** This module's MODULE-scoped service for [key], falling back to the workspace then application scope. */
     fun <T : Any> service(key: ServiceKey<T>): T
@@ -99,8 +107,8 @@ interface Module {
 val WORKSPACE_SERVICE = ServiceKey<Workspace>("model.workspace")
 
 /** The [Module] a MODULE-scoped service factory is bound to. */
-fun ServiceScope.module(): Module =
-    scopeObject as? Module ?: error("module() is only valid in a MODULE-scoped service (scope=$level)")
+fun ServiceScope.module(): Module = scopeObject as? Module
+    ?: error("module() is only valid in a MODULE-scoped service (scope=$level)")
 
 /** The [Workspace] above a workspace- or module-scoped service factory. */
 fun ServiceScope.workspace(): Workspace = getService(WORKSPACE_SERVICE)
@@ -118,15 +126,12 @@ interface ContentRoot {
 
 enum class ContentRole {
     SOURCE,
+
     /** Java/JVM resources (`src/<set>/resources`) — non-code files packaged into the jar/APK root. */
-    RESOURCE,
-    ANDROID_RES,
-    AIDL,
-    ASSETS,
+    RESOURCE, ANDROID_RES, AIDL, ASSETS,
+
     /** Prebuilt native libraries (`src/<set>/jniLibs`), laid out `<abi>/lib*.so`, packaged under `lib/`. */
-    JNI_LIBS,
-    GENERATED,
-    EXCLUDED,
+    JNI_LIBS, GENERATED, EXCLUDED,
 }
 
 interface ProjectSettings {
@@ -162,7 +167,10 @@ interface ModuleType {
     val platform: PlatformKind get() = if (id.startsWith("android")) PlatformKind.ANDROID else PlatformKind.JVM
 }
 
-data class SourceSetTemplate(val name: String, val scope: DependencyScope, val roots: Map<String, Set<ContentRole>>)
+data class SourceSetTemplate(
+    val name: String, val scope: DependencyScope, val roots: Map<String, Set<ContentRole>>
+)
+
 data class FacetTemplate(val key: FacetKey<*>, val defaults: Map<String, Any?>)
 
 /** A resolved build configuration: for Android, the cross-product of build types and flavors. */
@@ -203,8 +211,10 @@ interface FacetContainer {
 
 sealed interface OrderEntry {
     val scope: DependencyScope
+
     /** true == Gradle `api` semantics: visible to downstream modules' compile classpath. */
     val exported: Boolean
+
     /**
      * Build-variant config name this entry is scoped to — the Gradle `debugImplementation` /
      * `freeImplementation` semantics (the config name is a build type, a flavor, or a full variant name).
@@ -272,9 +282,16 @@ data class PlatformDependency(
 
 enum class DependencyScope(val onCompile: Boolean, val onRuntime: Boolean, val onTest: Boolean) {
     API(true, true, true),
+
     IMPLEMENTATION(true, true, true),
-    COMPILE_ONLY(true, false, true),
+
+    COMPILE_ONLY(
+        true,
+        false,
+        true
+    ),
     RUNTIME_ONLY(false, true, true),
+
     TEST_IMPLEMENTATION(false, false, true),
 }
 
@@ -299,8 +316,11 @@ enum class ClasspathEntryKind { MODULE_OUTPUT, LIBRARY, SDK_BOOTCLASSPATH }
 // Library & SDK tables (interned, referenced by name)
 // ---------------------------------------------------------------------------
 
-@JvmInline value class LibraryRef(val name: String)
-@JvmInline value class SdkRef(val name: String)
+@JvmInline
+value class LibraryRef(val name: String)
+
+@JvmInline
+value class SdkRef(val name: String)
 
 interface LibraryTable {
     val libraries: List<Library>
@@ -333,6 +353,7 @@ interface Sdk {
     val name: String                        // "android-34", "core-java", "jdk-17"
     val bootClasspath: List<VirtualFile>    // android.jar / core-Java jar / JDK rt
     val buildToolsPath: VirtualFile?
+
     /** JVM (core-Java platform) vs ANDROID (android.jar). A [Module] resolves an SDK of its own kind. */
     val kind: PlatformKind get() = PlatformKind.JVM
 }
@@ -352,6 +373,7 @@ interface ProjectModelTransaction {
     fun addModule(name: String, type: ModuleType): ModifiableModule
     fun removeModule(id: ModuleId)
     fun module(id: ModuleId): ModifiableModule
+
     /** Atomic: swaps in a new snapshot and publishes typed events on the message bus. */
     fun commit()
     fun dispose()
@@ -359,14 +381,17 @@ interface ProjectModelTransaction {
 
 interface ModifiableModule {
     var languageLevel: LanguageLevel
+
     /** The explicit platform-SDK override (see [Module.sdk]); `null` clears it (back to the type default). */
     var sdk: SdkRef?
     fun addDependency(entry: OrderEntry)
     fun removeDependency(entry: OrderEntry)
     fun addSourceSet(template: SourceSetTemplate)
+
     /** Append a typed content root to the [sourceSetName] source set (creating the set if it doesn't
      *  exist). [dirRelPath] is relative to the module dir; re-adding the same dir merges [roles]. */
     fun addContentRoot(sourceSetName: String, dirRelPath: String, roles: Set<ContentRole>)
+
     /** Drop the content root at [dirRelPath] from [sourceSetName] (model-only; doesn't touch disk). */
     fun removeContentRoot(sourceSetName: String, dirRelPath: String)
     fun <T : Facet> putFacet(facet: T)

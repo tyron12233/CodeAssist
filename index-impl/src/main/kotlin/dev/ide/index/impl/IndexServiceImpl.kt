@@ -5,9 +5,11 @@ import dev.ide.index.Externalizer
 import dev.ide.index.IndexExtension
 import dev.ide.index.IndexId
 import dev.ide.index.IndexInput
+import dev.ide.index.IndexBuildStats
 import dev.ide.index.IndexItem
 import dev.ide.index.IndexItemState
 import dev.ide.index.IndexOrigin
+import dev.ide.index.IndexerStat
 import dev.ide.index.IndexScope
 import dev.ide.index.IndexService
 import dev.ide.index.IndexStatus
@@ -17,6 +19,7 @@ import dev.ide.platform.Disposable
 import dev.ide.platform.log.Log
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.withPermit
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.yield
 import java.io.BufferedInputStream
@@ -31,10 +34,12 @@ import java.nio.file.FileSystems
 import java.nio.file.Files
 import java.nio.file.Path
 import java.nio.file.StandardCopyOption
+import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.ConcurrentLinkedQueue
 import java.util.concurrent.CopyOnWriteArrayList
 import java.util.concurrent.atomic.AtomicInteger
 import java.util.concurrent.atomic.AtomicLong
+import java.util.concurrent.atomic.LongAdder
 import java.util.stream.Collectors
 import java.util.zip.ZipFile
 import java.nio.file.Paths
@@ -287,27 +292,38 @@ class IndexServiceImpl(
                 }
             }
             val total = artifacts.size + 1
-            // Index artifacts in parallel (bounded). Each artifact is independent — it scans its own jar and
-            // writes its own per-(ext,hash) segment file; the only shared state is each State's `segments`
-            // (CopyOnWrite) and `openHashes` (concurrent set, distinct key per artifact). Sequential, this was
-            // the dominant first-load cost gating the first completion/diagnostics on a `.kt` file.
-            // Each parallel builder holds a whole artifact's index entries in RAM until its segment is
-            // written, so N-way parallelism keeps N big-jar accumulators live at once. On a constrained
-            // (tight-heap) host, serialize - one accumulator at a time - to cut the artifact-phase peak.
-            val concurrency = if (constrained) 2 else minOf(
-                4, maxOf(1, Runtime.getRuntime().availableProcessors() - 1)
-            )
+            // Index artifacts in parallel. Each artifact is independent — it scans its own jar and writes its
+            // own per-(ext,hash) segment file; the only shared state is each State's `segments` (CopyOnWrite)
+            // and `openHashes` (concurrent set, distinct key per artifact). Sequential, this was the dominant
+            // first-load cost gating the first completion/diagnostics on a `.kt` file.
+            //
+            // TWO different limits, because the two paths cost differently:
+            //  - REOPEN (cache hit): just opens each extension's prebuilt `.seg` (a FileChannel + footer read),
+            //    holds no accumulator, is pure I/O. A warm re-open is ~all cache hits — 156 artifacts × ~10
+            //    extension segments = ~1.5k tiny file opens — so it is bounded by I/O parallelism, not memory.
+            //  - BUILD (cache miss): streams a whole artifact's entries through per-(ext) SegmentWriters, so N
+            //    concurrent builds keep N big-jar accumulators live; on a constrained (tight-heap) host that
+            //    peak is what must be bounded.
+            // So run the artifact coroutines at a HIGH I/O width but gate the build section with a small
+            // semaphore. On a warm cache nothing takes a permit and all opens run wide (the ~10s reopen the
+            // old flat concurrency=2 caused drops ~I/O-parallelism-fold); a cold build stays memory-bounded.
+            val cores = Runtime.getRuntime().availableProcessors()
+            val ioConcurrency = minOf(8, maxOf(4, cores))
+            val buildPermits = if (constrained) 2 else minOf(4, maxOf(1, cores - 1))
+            val buildGate = kotlinx.coroutines.sync.Semaphore(buildPermits)
             val done = AtomicInteger(0)
             // Artifacts dropped by the per-artifact catch below (an unreadable/corrupt jar, or a failed segment
             // write). A skipped artifact leaves its classes out of the index, so the index is NOT a complete
             // superset of the classpath and ready must be withheld (see the ready gate at the end of this build).
             val skipped = AtomicInteger(0)
-            val buildDispatcher = Dispatchers.IO.limitedParallelism(concurrency)
             // Per-artifact worklist for the index-status dialog (PENDING → ACTIVE → DONE). Mutated from the
             // parallel builders under [worklistLock]; each status emit publishes an immutable snapshot.
             val worklist =
                 artifacts.mapTo(ArrayList()) { IndexItem(it.label, IndexItemState.PENDING) }
             val worklistLock = Any()
+            // Per-indexer time/entry accumulator for this build. Snapshotted into every status emit so the
+            // detail view watches each index's cost grow live (and keeps the final breakdown when idle).
+            val timer = BuildTimer()
             fun emitArtifacts(message: String) {
                 val items = synchronized(worklistLock) { worklist.toList() }
                 val d = done.get()
@@ -319,7 +335,8 @@ class IndexServiceImpl(
                         phase = "Libraries & SDK",
                         items = items,
                         processed = d,
-                        total = artifacts.size
+                        total = artifacts.size,
+                        breakdown = timer.snapshot(),
                     )
                 )
             }
@@ -334,6 +351,7 @@ class IndexServiceImpl(
             fun samplePeak() {
                 val u = usedHeapBytes(); peakHeap.updateAndGet { maxOf(it, u) }
             }
+            val buildDispatcher = Dispatchers.IO.limitedParallelism(ioConcurrency)
             kotlinx.coroutines.coroutineScope {
                 for ((i, art) in artifacts.withIndex()) {
                     launch(buildDispatcher) {
@@ -342,7 +360,7 @@ class IndexServiceImpl(
                         }
                         emitArtifacts("Indexing ${art.label}")
                         try {
-                            val probe = indexArtifact(art)
+                            val probe = indexArtifact(art, buildGate, timer)
                             probes.add(probe)
                             samplePeak()
                             // Surface the costly artifacts (built, or a slow open) at INFO; quiet otherwise, so a
@@ -383,7 +401,7 @@ class IndexServiceImpl(
                 )
             )
             val srcProbe = indexSource(
-                scope.sourceRoots, scope.resourceRoots
+                scope.sourceRoots, scope.resourceRoots, timer = timer
             ) { current, processed, totalFiles ->
                 setStatus(
                     IndexStatus(
@@ -393,7 +411,8 @@ class IndexServiceImpl(
                         phase = "Project source",
                         items = listOf(IndexItem(current, IndexItemState.ACTIVE)),
                         processed = processed,
-                        total = totalFiles
+                        total = totalFiles,
+                        breakdown = timer.snapshot(),
                     )
                 )
             }
@@ -408,7 +427,7 @@ class IndexServiceImpl(
                     elapsedMs(
                         buildStart
                     )
-                }ms; concurrency=$concurrency; " + "heap peak ${peakHeap.get() / mb}MB / max ${
+                }ms; io=$ioConcurrency build=$buildPermits; " + "heap peak ${peakHeap.get() / mb}MB / max ${
                     Runtime.getRuntime().maxMemory() / mb
                 }MB" + if (skipped.get() > 0) "; skipped=${skipped.get()}" else ""
             )
@@ -425,7 +444,24 @@ class IndexServiceImpl(
                 missing > 0 -> "Indexed (partial: $missing segment(s) not built yet)"
                 else -> "Indexed (partial: ${skipped.get()} artifact(s) skipped)"
             }
-            setStatus(IndexStatus(false, msg, 1.0, ready = complete))
+            // Terminal status carries the last build's per-indexer breakdown + aggregate stats. It stays the
+            // current status (the flow's latest value) until the next build, so the detail view + the analytics
+            // watcher can read "what took the time" after the fact, not just live.
+            setStatus(
+                IndexStatus(
+                    false, msg, 1.0, ready = complete,
+                    breakdown = timer.snapshot(),
+                    stats = IndexBuildStats(
+                        libMs = libMs,
+                        sourceMs = srcProbe.ms,
+                        artifacts = artifacts.size,
+                        artifactsBuilt = built,
+                        artifactsReused = reused,
+                        sourceFiles = srcProbe.walked,
+                        sourceParsed = srcProbe.parsed,
+                    ),
+                )
+            )
         } catch (t: Throwable) {
             setStatus(IndexStatus(false, "Indexing failed: ${t.message}", 1.0))
             throw t
@@ -494,17 +530,38 @@ class IndexServiceImpl(
     /** The source phase's contribution: files [walked], of which [parsed] (new/changed) and [removed] (gone). */
     private class SourceProbe(val walked: Int, val parsed: Int, val removed: Int, val ms: Long)
 
+    /** Accumulates per-indexer ([IndexExtension]) time + entry counts across ONE [ensureUpToDate] build, so the
+     *  status can answer "which index is taking the time". Thread-safe: the artifact phase runs [indexArtifact]
+     *  on several coroutines at once, all recording into the same extension buckets ([LongAdder] eats the
+     *  contention). A `null` timer (the incremental [reindexSource] path) records nothing. */
+    private class BuildTimer {
+        private val nanos = ConcurrentHashMap<IndexId, LongAdder>()
+        private val entries = ConcurrentHashMap<IndexId, LongAdder>()
+
+        fun record(id: IndexId, elapsedNanos: Long, produced: Int) {
+            nanos.computeIfAbsent(id) { LongAdder() }.add(elapsedNanos)
+            if (produced > 0) entries.computeIfAbsent(id) { LongAdder() }.add(produced.toLong())
+        }
+
+        /** Immutable snapshot, slowest indexer first. Cheap (~one entry per registered extension). */
+        fun snapshot(): List<IndexerStat> =
+            nanos.entries
+                .map { (id, adder) -> IndexerStat(id.value, adder.sum() / 1_000_000L, entries[id]?.sum() ?: 0L) }
+                .sortedByDescending { it.indexMs }
+    }
+
     private fun elapsedMs(startNanos: Long): Long = (System.nanoTime() - startNanos) / 1_000_000L
     private fun usedHeapBytes(): Long {
         val rt = Runtime.getRuntime(); return rt.totalMemory() - rt.freeMemory()
     }
 
-    private suspend fun indexArtifact(art: Artifact): ArtifactProbe {
+    private suspend fun indexArtifact(art: Artifact, buildGate: kotlinx.coroutines.sync.Semaphore, timer: BuildTimer? = null): ArtifactProbe {
         val t0 = System.nanoTime()
         val hash = art.contentHash()
         val key = sanitize(hash.value)
 
-        // Already built on a prior run? Just open the segment — no re-indexing, nothing loaded into RAM.
+        // Already built on a prior run? Just open the segment — no re-indexing, nothing loaded into RAM. This
+        // is the warm-cache path; it holds no accumulator, so it runs ungated at the full I/O concurrency.
         var reused = 0
         for (st in states.values) {
             if (key in st.openHashes) continue
@@ -530,6 +587,18 @@ class IndexServiceImpl(
             return ArtifactProbe(art.label, reused, 0, 0, elapsedMs(t0), missing = needBuild.size)
         }
 
+        // Cache MISS → build. This holds a whole artifact's SegmentWriters (accumulators) live, so gate it:
+        // only [buildPermits] artifacts build concurrently, bounding the heap peak on a tight-heap host. The
+        // reopen path above never reaches here, so a warm cache never takes a permit.
+        return buildGate.withPermit { buildArtifact(art, hash, key, needBuild, reused, timer, t0) }
+    }
+
+    /** Build (index) an artifact's missing per-extension segments. Called only under [indexArtifact]'s build
+     *  gate (a cache miss), so the concurrent count of these live accumulators stays bounded. */
+    private suspend fun buildArtifact(
+        art: Artifact, hash: ContentHash, key: String, needBuild: List<State>, reused: Int,
+        timer: BuildTimer?, t0: Long,
+    ): ArtifactProbe {
         // Stream each extension's entries straight into a per-(ext) [SegmentWriter] rather than buffering the
         // whole artifact's entries in an ArrayList. A large artifact (android.jar holds ~95k entries × every
         // extension) used to keep all of that resident until the segment was written, driving the build-time
@@ -542,12 +611,17 @@ class IndexServiceImpl(
                     for (st in needBuild) {
                         @Suppress("UNCHECKED_CAST") val e = st.ext as IndexExtension<Any, Any>
                         if (!e.inputFilter.accepts(input)) continue
+                        val extStart = System.nanoTime()
+                        var produced = 0
                         runCatching {
                             for ((k, vs) in e.index(input)) {
                                 val term = e.keyDescriptor.asTerm(k)
-                                for (v in vs) writers.getValue(st).add(term, v, input.origin)
+                                for (v in vs) {
+                                    writers.getValue(st).add(term, v, input.origin); produced++
+                                }
                             }
                         }
+                        timer?.record(st.ext.id, System.nanoTime() - extStart, produced)
                     }
                     yield()
                 }
@@ -578,6 +652,8 @@ class IndexServiceImpl(
     private suspend fun indexSource(
         roots: List<Path>,
         resourceRoots: List<Path> = emptyList(),
+        /** Per-indexer accumulator for this build (null on the incremental save path). */
+        timer: BuildTimer? = null,
         /** Reports the (relative) file currently indexed plus a running count, for the index-status dialog. */
         progress: (current: String, processed: Int, total: Int) -> Unit = { _, _, _ -> },
     ): SourceProbe {
@@ -625,7 +701,7 @@ class IndexServiceImpl(
         var processed = 0
         for (d in dirty) {
             runCatching { d.file.readText() }.getOrNull()
-                ?.let { indexSourceFile(d.file, it, d.root, d.id) }
+                ?.let { indexSourceFile(d.file, it, d.root, d.id, timer) }
             fileIds.setSig(d.id, d.sig)
             processed++
             // The source phase can be thousands of small files, so throttle status churn: report every 16th
@@ -653,7 +729,7 @@ class IndexServiceImpl(
     private class Dirty(val file: Path, val root: Path, val id: Int, val sig: SourceSig)
 
     @Suppress("UNCHECKED_CAST")
-    private fun indexSourceFile(file: Path, text: String, root: Path?, id: Int) {
+    private fun indexSourceFile(file: Path, text: String, root: Path?, id: Int, timer: BuildTimer? = null) {
         val input = SourceInput(file, root, text, parse, id)
         for (st in states.values) {
             val e = st.ext as IndexExtension<Any, Any>
@@ -661,12 +737,14 @@ class IndexServiceImpl(
                 st.source.removeFile(id); continue
             }
             val entries = ArrayList<IndexEntry>()
+            val extStart = System.nanoTime()
             runCatching {
                 for ((k, vs) in e.index(input)) {
                     val term = e.keyDescriptor.asTerm(k)
                     for (v in vs) entries.add(IndexEntry(term, v, IndexOrigin.SOURCE))
                 }
             }
+            timer?.record(st.ext.id, System.nanoTime() - extStart, entries.size)
             st.source.setFile(id, entries)
         }
     }

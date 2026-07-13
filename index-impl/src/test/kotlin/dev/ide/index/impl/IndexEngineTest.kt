@@ -62,6 +62,34 @@ class IndexEngineTest {
         }
     }
 
+    /** A completed build records the per-indexer breakdown + aggregate stats on the terminal status, so the
+     *  detail view + analytics can answer "which index took the time". */
+    @Test
+    fun buildRecordsPerIndexerBreakdownAndStats() {
+        val cache = Files.createTempDirectory("idx")
+        try {
+            val svc = service(cache)
+            runBlocking { svc.ensureUpToDate(IndexScope(jdkHome = jdk())) }
+            val st = svc.status
+            assertTrue(!st.building, "build should have finished")
+
+            val stats = st.stats
+            assertTrue(stats != null, "expected aggregate build stats on the terminal status")
+            assertTrue(stats!!.artifacts >= 1, "expected at least the JRT artifact, got ${stats.artifacts}")
+            // On a fresh cache every artifact is built (a cache miss), and built + reused always sums to total.
+            assertEquals(stats.artifacts, stats.artifactsBuilt + stats.artifactsReused)
+            assertTrue(stats.artifactsBuilt >= 1, "fresh cache should build the JRT, got ${stats.artifactsBuilt}")
+
+            // The breakdown names our one indexer by its stable id and counts the entries it produced.
+            val mine = st.breakdown.firstOrNull { it.id == CLASS.value }
+            assertTrue(mine != null, "expected a breakdown entry for ${CLASS.value}, got ${st.breakdown.map { it.id }}")
+            assertTrue(mine!!.entries > 0, "expected indexed entries recorded, got ${mine.entries}")
+            assertTrue(mine.indexMs >= 0, "index time must be non-negative")
+        } finally {
+            cache.toFile().deleteRecursively()
+        }
+    }
+
     @Test
     fun fuzzyFindsArrayList() {
         val cache = Files.createTempDirectory("idx")
