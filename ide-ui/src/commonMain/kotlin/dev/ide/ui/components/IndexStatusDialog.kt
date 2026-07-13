@@ -4,9 +4,12 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
@@ -30,16 +33,23 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import dev.ide.ui.backend.IndexUiBuildStats
 import dev.ide.ui.backend.IndexUiStatus
 import dev.ide.ui.backend.IndexWorkItem
 import dev.ide.ui.backend.IndexWorkState
+import dev.ide.ui.backend.IndexerUiStat
 import dev.ide.ui.generated.resources.Res
 import dev.ide.ui.generated.resources.close
 import dev.ide.ui.generated.resources.index_artifacts
+import dev.ide.ui.generated.resources.index_build_cache
+import dev.ide.ui.generated.resources.index_build_phases
 import dev.ide.ui.generated.resources.index_count_artifacts
 import dev.ide.ui.generated.resources.index_count_files
 import dev.ide.ui.generated.resources.index_current_file
 import dev.ide.ui.generated.resources.index_idle_body
+import dev.ide.ui.generated.resources.index_indexers
+import dev.ide.ui.generated.resources.index_more
+import dev.ide.ui.generated.resources.index_ms
 import dev.ide.ui.generated.resources.index_reindex
 import dev.ide.ui.generated.resources.index_title_building
 import dev.ide.ui.generated.resources.index_title_idle
@@ -75,6 +85,13 @@ fun IndexStatusDialog(
             Header(status, onDismiss)
             Spacer(Modifier.height(14.dp))
             if (status.building) BuildingBody(status) else IdleBody()
+            // Per-indexer breakdown: which index cost the most (live while building, last build's when idle),
+            // plus a summary of the phase split + cache reuse. Only the indexers that took real time (≥1ms).
+            val breakdown = status.breakdown.filter { it.indexMs >= 1 }
+            if (breakdown.isNotEmpty() || status.stats != null) {
+                Spacer(Modifier.height(16.dp))
+                IndexerBreakdown(breakdown, status.stats)
+            }
             Spacer(Modifier.height(16.dp))
             ReindexButton { onReindex(); onDismiss() }
         }
@@ -210,6 +227,71 @@ private fun WorkItemRow(item: IndexWorkItem) {
             style = Ca.type.caption, maxLines = 1, overflow = TextOverflow.Ellipsis,
             modifier = Modifier.weight(1f),
         )
+    }
+}
+
+/** The per-indexer time breakdown: a mini bar chart of each index's cost (slowest first) plus a one-line
+ *  summary of the build's phase split + cache reuse. Answers "which index is taking the time". */
+@Composable
+private fun IndexerBreakdown(breakdown: List<IndexerUiStat>, stats: IndexUiBuildStats?) {
+    stats?.let { s ->
+        Text(
+            stringResource(Res.string.index_build_cache, s.artifacts, s.artifactsReused),
+            color = Ca.colors.textTertiary, style = Ca.type.caption,
+        )
+        if (s.libMs > 0 || s.sourceMs > 0) {
+            Text(
+                stringResource(Res.string.index_build_phases, s.libMs.toInt(), s.sourceMs.toInt()),
+                color = Ca.colors.textTertiary, style = Ca.type.caption,
+            )
+        }
+    }
+    if (breakdown.isNotEmpty()) {
+        if (stats != null) Spacer(Modifier.height(12.dp))
+        Text(
+            stringResource(Res.string.index_indexers),
+            color = Ca.colors.textTertiary, style = Ca.type.caption2, fontWeight = FontWeight.SemiBold,
+        )
+        Spacer(Modifier.height(6.dp))
+        val maxMs = breakdown.maxOf { it.indexMs }.coerceAtLeast(1L)
+        val shown = breakdown.take(12)
+        Column(verticalArrangement = Arrangement.spacedBy(3.dp)) {
+            shown.forEach { IndexerRow(it, maxMs) }
+        }
+        if (breakdown.size > shown.size) {
+            Spacer(Modifier.height(6.dp))
+            Text(
+                stringResource(Res.string.index_more, breakdown.size - shown.size),
+                color = Ca.colors.textTertiary, style = Ca.type.caption2,
+            )
+        }
+    }
+}
+
+/** One indexer row: the index id, its time, and a proportional bar (relative to the slowest index). */
+@Composable
+private fun IndexerRow(stat: IndexerUiStat, maxMs: Long) {
+    val shape = RoundedCornerShape(Ca.radius.sm)
+    val fraction = (stat.indexMs.toFloat() / maxMs.toFloat()).coerceIn(0.04f, 1f)
+    Box(
+        Modifier.fillMaxWidth().height(22.dp).clip(shape).background(Ca.colors.surface2),
+    ) {
+        Box(Modifier.fillMaxWidth(fraction).fillMaxHeight().clip(shape).background(Ca.colors.accentSoft))
+        Row(
+            Modifier.fillMaxSize().padding(horizontal = 8.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            Text(
+                stat.id,
+                color = Ca.colors.textSecondary, style = Ca.type.caption,
+                maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f),
+            )
+            Text(
+                stringResource(Res.string.index_ms, stat.indexMs.toInt()),
+                color = Ca.colors.textPrimary, style = Ca.type.caption2, fontWeight = FontWeight.Medium,
+            )
+        }
     }
 }
 

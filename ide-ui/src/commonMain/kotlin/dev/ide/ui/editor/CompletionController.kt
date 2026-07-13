@@ -48,15 +48,18 @@ internal class CompletionController(
         private set
 
     private var job: Job? = null
+
     /** The token start the in-flight [job] is resolving, so a continuation keystroke on the SAME token can
      *  coalesce into it instead of stacking another round-trip. -1 when nothing is in flight. */
     private var inFlightTokenStart = -1
+
     // Set by accept() so the edit it makes — which ends in an identifier char and would otherwise re-trigger
     // completion — leaves the popup closed. Consumed by the text-revision trigger.
     private var suppressNextTrigger = false
 
     /** Whether typing auto-opens the popup (Settings → Completion). When off, only explicit triggers open it. */
     var autoPopupEnabled: Boolean = true
+
     /** Debounce (ms) before an auto-popup request fires (Settings → Completion → Advanced). */
     var delayMs: Int = 110
 
@@ -77,7 +80,8 @@ internal class CompletionController(
             if (!immediate) delay(delayMs.milliseconds)
             val text = session.doc.text
             val caret = session.selection.start
-            val res = runCatching { backend.editor.complete(path, text, caret) }.getOrNull() ?: return@launch
+            val res = runCatching { backend.editor.complete(path, text, caret) }.getOrNull()
+                ?: return@launch
             val sameToken = res.replaceStart == current?.tokenStart
             current = CompletionSession.from(res)
             if (!sameToken) selected = 0
@@ -114,7 +118,9 @@ internal class CompletionController(
     }
 
     /** accept() is about to insert an identifier; swallow the resulting re-trigger so the popup stays closed. */
-    fun suppressNext() { suppressNextTrigger = true }
+    fun suppressNext() {
+        suppressNextTrigger = true
+    }
 
     /** In the text-revision trigger: true when this revision is accept()'s own edit (then keep it closed). */
     fun consumeSuppressedTrigger(): Boolean {

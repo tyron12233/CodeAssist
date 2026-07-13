@@ -94,10 +94,10 @@ We never collect your code, file or project names, which features you use, or an
     <string name="support_sponsor">Sponsor</string>
     <string name="support_star">Star on GitHub</string>
     <string name="support_show_ads">Show ads</string>
-    <string name="support_show_ads_desc">Ads help support development. Turn them off any time, supporting is always optional.</string>
+    <string name="support_show_ads_desc">Show ads in the app. You can turn them off at any time.</string>
     <string name="ad_label">Ad</string>
     <string name="house_ad_support_title">Enjoying CodeAssist?</string>
-    <string name="house_ad_support_content">Support development and remove ads.</string>
+    <string name="house_ad_support_content">Support the project on GitHub Sponsors.</string>
     <string name="no_project_yet">No projects yet. Create one to get started.</string>
     <string name="your_projects">Your projects</string>
     <string name="project_kind_android">Android</string>
@@ -611,6 +611,11 @@ We never collect your code, file or project names, which features you use, or an
     <string name="index_artifacts">ARTIFACTS</string>
     <string name="index_idle_body">All symbol &amp; completion indexes are up to date.</string>
     <string name="index_reindex">Re-index project</string>
+    <string name="index_indexers">INDEXERS</string>
+    <string name="index_ms">%1$d ms</string>
+    <string name="index_build_cache">%1$d artifacts · %2$d from cache</string>
+    <string name="index_build_phases">libraries %1$d ms · source %2$d ms</string>
+    <string name="index_more">+%1$d more</string>
 
     <!-- dialogs: PermissionDialog (roleLabel/labelFor return StringResource) -->
     <string name="perm_wants_to">The running program wants to %1$s:</string>

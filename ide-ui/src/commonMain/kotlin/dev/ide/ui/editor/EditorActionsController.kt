@@ -60,16 +60,20 @@ internal class EditorActionsController(
         delay(250.milliseconds)
         if (!focused) { available = emptyList(); caretDiagnostic = null; return }
         val sel = session.selection
-        // When the caret sits on a line a diagnostic covers, resolve (and later apply) the actions at the
-        // diagnostic's range — so its quick-fixes are the offered actions and the lightbulb has something to
-        // do. Otherwise resolve caret intentions (reachable via Alt-Enter; no proactive lightbulb).
         val diag = diagnosticCoveringLine(session.doc.lineForOffset(sel.min))
+        caretDiagnostic = diag
+        // Resolve actions PROACTIVELY only when the caret is on a diagnostic (the lightbulb case). Resolving
+        // off-diagnostic "caret intentions" here ran on every caret move / on file open — and for Kotlin that
+        // triggers a full-file diagnostics analysis (the unresolved-ref scan behind import fixes), which on a
+        // deeply-nested Compose file is a cold multi-SECOND inference (profiled: `pass=actions` = 110s on open,
+        // returning zero actions — it froze the editor and drove the GC storm). Off-diagnostic intentions are
+        // now resolved ON DEMAND in [openMenu] (Alt-Enter), matching IntelliJ (no proactive lightbulb there).
+        if (diag == null) { available = emptyList(); menuOpen = false; return }
         val len = session.doc.length
-        availStart = diag?.startOffset?.coerceIn(0, len) ?: sel.min
-        availEnd = diag?.endOffset?.coerceIn(availStart, len) ?: sel.max
+        availStart = diag.startOffset.coerceIn(0, len)
+        availEnd = diag.endOffset.coerceIn(availStart, len)
         val result = runCatching { backend.editor.actionsAt(path, session.doc.text, availStart, availEnd) }.getOrNull().orEmpty()
         available = result
-        caretDiagnostic = diag
         when {
             result.isEmpty() -> menuOpen = false
             menuSelected >= result.size -> menuSelected = 0
@@ -96,6 +100,20 @@ internal class EditorActionsController(
         dismissCompletion()
         menuSelected = 0
         menuOpen = true
+        // Off-diagnostic intentions are no longer pre-resolved (see [refreshAvailability]), so resolve them now,
+        // on explicit request. When the caret IS on a diagnostic, [available] is already populated — reuse it.
+        if (available.isEmpty() && caretDiagnostic == null) {
+            val sel = session.selection
+            val len = session.doc.length
+            availStart = sel.min.coerceIn(0, len)
+            availEnd = sel.max.coerceIn(availStart, len)
+            scope.launch {
+                available = runCatching {
+                    backend.editor.actionsAt(path, session.doc.text, availStart, availEnd)
+                }.getOrNull().orEmpty()
+                if (available.isEmpty()) menuOpen = false
+            }
+        }
     }
 
     fun closeMenu() { menuOpen = false }

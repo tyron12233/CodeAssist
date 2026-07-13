@@ -661,7 +661,7 @@ private fun BuildRequiredPanel(undexedCount: Int, running: Boolean, onPrepare: (
         Text(
             buildString {
                 append("The real-view preview renders with your project's real libraries, which have to be prepared (dexed) once. ")
-                append("It's a one-time step per library set — after it, editing and previewing are fast. ")
+                append("It's a one-time step per library set. After it, editing and previewing are fast. ")
                 if (undexedCount > 0) append("$undexedCount ${if (undexedCount == 1) "library needs" else "libraries need"} preparing.")
             },
             style = Ca.type.footnote, color = Ca.colors.textSecondary, textAlign = TextAlign.Center,
@@ -683,7 +683,7 @@ private fun BuildRequiredPanel(undexedCount: Int, running: Boolean, onPrepare: (
             }
         }
         Text(
-            "Runs a build up to dexing — it doesn't package an APK.",
+            "Runs a build up to dexing. It doesn't package an APK.",
             style = Ca.type.caption2, color = Ca.colors.textTertiary, textAlign = TextAlign.Center,
         )
     }

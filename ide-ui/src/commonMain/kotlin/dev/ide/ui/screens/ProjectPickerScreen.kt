@@ -23,8 +23,6 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Icon
-import androidx.compose.material3.Switch
-import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -58,7 +56,6 @@ import dev.ide.ui.components.ProjectTile
 import dev.ide.ui.components.StorageAccessCard
 import dev.ide.ui.components.entranceSlideUp
 import dev.ide.ui.components.pressScale
-import dev.ide.ui.ads.LocalAds
 import dev.ide.ui.backend.AdPlacement
 import dev.ide.ui.components.AdSlot
 import dev.ide.ui.generated.resources.Res
@@ -89,8 +86,6 @@ import dev.ide.ui.generated.resources.recovered_projects_content
 import dev.ide.ui.generated.resources.support_chip_free
 import dev.ide.ui.generated.resources.support_chip_open_source
 import dev.ide.ui.generated.resources.support_content
-import dev.ide.ui.generated.resources.support_show_ads
-import dev.ide.ui.generated.resources.support_show_ads_desc
 import dev.ide.ui.generated.resources.support_sponsor
 import dev.ide.ui.generated.resources.support_star
 import dev.ide.ui.generated.resources.support_title
@@ -428,29 +423,9 @@ private fun SupportCard(onSponsor: (() -> Unit)?, onStar: (() -> Unit)?) {
                 Text(stringResource(Res.string.support_content), color = Ca.colors.textSecondary, style = Ca.type.footnote)
             }
         }
-        SupportChips()
 
-        // Where an ad network exists (Android), a free on/off switch: removing ads costs nothing, SuperSU-style.
-        // Supporting the project is the separate Sponsor button below.
-        val ads = LocalAds.current
-        if (ads?.manageable == true) {
-            Row(
-                Modifier.fillMaxWidth(),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(12.dp),
-            ) {
-                Column(Modifier.weight(1f)) {
-                    Text(stringResource(Res.string.support_show_ads), color = Ca.colors.textPrimary, style = Ca.type.subhead)
-                    Text(stringResource(Res.string.support_show_ads_desc), color = Ca.colors.textSecondary, style = Ca.type.caption)
-                }
-                Switch(
-                    checked = ads.adsEnabled,
-                    onCheckedChange = { ads.updateAdsEnabled(it) },
-                    colors = SwitchDefaults.colors(checkedThumbColor = Color.White, checkedTrackColor = SponsorPink),
-                )
-            }
-        }
-
+        // The ads on/off switch used to live here; it moved to Settings → Privacy & Data. This card is now
+        // just the support actions (Sponsor / Star), kept separate from ads.
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
             if (onSponsor != null) {
                 SupportButton(stringResource(Res.string.support_sponsor), CaIcons.heart, Modifier.weight(1f), filled = true, onClick = onSponsor)
@@ -462,18 +437,6 @@ private fun SupportCard(onSponsor: (() -> Unit)?, onStar: (() -> Unit)?) {
     }
 }
 
-/** The "100% free / Open source" reassurance pills; wraps to a second row on narrow screens. */
-@OptIn(ExperimentalLayoutApi::class)
-@Composable
-private fun SupportChips() {
-    FlowRow(
-        horizontalArrangement = Arrangement.spacedBy(8.dp),
-        verticalArrangement = Arrangement.spacedBy(8.dp),
-    ) {
-        SupportChip(stringResource(Res.string.support_chip_free))
-        SupportChip(stringResource(Res.string.support_chip_open_source))
-    }
-}
 
 @Composable
 private fun SupportChip(text: String) {

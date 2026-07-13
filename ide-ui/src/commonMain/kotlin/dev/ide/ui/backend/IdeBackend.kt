@@ -604,6 +604,22 @@ enum class IndexWorkState { PENDING, ACTIVE, DONE }
  *  currently being scanned. */
 data class IndexWorkItem(val label: String, val state: IndexWorkState = IndexWorkState.PENDING)
 
+/** One indexer's contribution to the current/last build, mirrored from the engine for the index-status
+ *  dialog: cumulative time spent in that index and the entries it produced. [id] is the stable index-kind
+ *  identifier (e.g. `java.classNames`), never a file/project name. */
+data class IndexerUiStat(val id: String, val indexMs: Long, val entries: Long)
+
+/** Aggregate stats for the last completed index build, mirrored from the engine for the index-status dialog. */
+data class IndexUiBuildStats(
+    val libMs: Long = 0,
+    val sourceMs: Long = 0,
+    val artifacts: Int = 0,
+    val artifactsBuilt: Int = 0,
+    val artifactsReused: Int = 0,
+    val sourceFiles: Int = 0,
+    val sourceParsed: Int = 0,
+)
+
 data class IndexUiStatus(
     val building: Boolean = false,
     val message: String = "",
@@ -615,6 +631,11 @@ data class IndexUiStatus(
     /** Units finished / total in the current phase (0 total ⇒ unknown). */
     val processed: Int = 0,
     val total: Int = 0,
+    /** Per-indexer time/entry breakdown (slowest first). Grows live during a build; stays populated with the
+     *  last build's breakdown when idle. */
+    val breakdown: List<IndexerUiStat> = emptyList(),
+    /** Aggregate stats for the last completed build (non-null once one has finished). */
+    val stats: IndexUiBuildStats? = null,
 )
 
 /** A search hit. For go-to-symbol [filePath]/[offset] are set (navigable); for members they're null. */

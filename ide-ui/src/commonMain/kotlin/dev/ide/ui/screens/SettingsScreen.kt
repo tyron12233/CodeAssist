@@ -41,6 +41,7 @@ import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import dev.ide.ui.ads.LocalAds
 import dev.ide.ui.backend.FileActions
 import dev.ide.ui.backend.IdeBackend
 import dev.ide.ui.backend.UiInspection
@@ -67,6 +68,8 @@ import dev.ide.ui.generated.resources.settings_backup_ready
 import dev.ide.ui.generated.resources.settings_inspections_for_language
 import dev.ide.ui.generated.resources.settings_no_settings_available
 import dev.ide.ui.generated.resources.settings_title
+import dev.ide.ui.generated.resources.support_show_ads
+import dev.ide.ui.generated.resources.support_show_ads_desc
 import dev.ide.ui.icons.CaIcons
 import dev.ide.ui.platform.rememberNotificationPermissionController
 import dev.ide.ui.theme.Ca
@@ -83,6 +86,11 @@ private const val ACTION_BACKUP = "backup"
 /** Build Runtime page action: re-request the runtime notification permission (mirrors
  *  `BuiltInSettingsPages.BUILD_NOTIFICATIONS`). Needs the platform permission launcher, so it's handled here. */
 private const val ACTION_BUILD_NOTIFICATIONS = "buildNotifications"
+/** The ads on/off toggle is injected UI-side onto the Privacy page and routed to the [dev.ide.ui.ads.AdController]
+ *  (persisted under its own `ads.enabled` pref), not the backend settings store — ads are a host concern the
+ *  backend doesn't know about. [PRIVACY_PAGE_ID] mirrors `BuiltInSettingsPages.PRIVACY`. */
+private const val PRIVACY_PAGE_ID = "privacy"
+private const val SHOW_ADS_KEY = "showAds"
 
 /**
  * The Settings screen. Pages come from [IdeBackend.settingsPages] — built-in categories plus any a plugin
@@ -112,12 +120,23 @@ fun SettingsScreen(
     // control's value (e.g. Build Runtime hides the R8 heap slider in In-process mode). Sliders/text don't
     // bump it, so a slider drag never triggers a costly per-step re-fetch.
     var structuralRefresh by remember { mutableStateOf(0) }
-    val pages = remember(view, structuralRefresh) {
-        backend.settings.settingsPages().filter {
+    // The ads on/off control (moved off the picker's support card). Shown only where an ad network exists
+    // (AdController.manageable, i.e. Android, never desktop) and prepended to the Privacy & Data page; its
+    // writes route to the controller below, not the backend store.
+    val ads = LocalAds.current
+    val showAdsTitle = stringResource(Res.string.support_show_ads)
+    val showAdsDesc = stringResource(Res.string.support_show_ads_desc)
+    val pages = remember(view, structuralRefresh, ads?.manageable, showAdsTitle, showAdsDesc) {
+        val base = backend.settings.settingsPages().filter {
             when (view) {
                 SettingsView.All -> true
                 SettingsView.Global -> it.scope == "app"
             }
+        }
+        if (ads?.manageable != true) base
+        else base.map { page ->
+            if (page.id != PRIVACY_PAGE_ID) page
+            else page.copy(controls = listOf(UiSettingControl.Toggle(SHOW_ADS_KEY, showAdsTitle, showAdsDesc, ads.adsEnabled)) + page.controls)
         }
     }
     // Local mirror of each control's value (keyed "pageId.controlKey"), seeded from the descriptors. Controls
@@ -137,8 +156,13 @@ fun SettingsScreen(
 
     val onSet: (String, String, String) -> Unit = { pageId, key, encoded ->
         values["$pageId.$key"] = encoded
-        backend.settings.setSetting(pageId, key, encoded)
-        onSettingsChanged()
+        if (ads != null && pageId == PRIVACY_PAGE_ID && key == SHOW_ADS_KEY) {
+            // The injected ads toggle: persist through the controller (its own `ads.enabled` pref), not the store.
+            ads.updateAdsEnabled(encoded.toBooleanStrictOrNull() ?: true)
+        } else {
+            backend.settings.setSetting(pageId, key, encoded)
+            onSettingsChanged()
+        }
     }
     val onAction: (String, UiSettingControl.Action) -> Unit = { pageId, action ->
         when (action.key) {
