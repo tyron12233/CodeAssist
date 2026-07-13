@@ -431,7 +431,21 @@ class AndroidBuildSystem(
         // classpath to indexed dex in ONE forked big-heap pass instead of per-lib archive + merge (~2.6x faster
         // fresh on a high-RAM device; self-falls-back to in-process). minSdk >= 26 (no desugaring) keeps per-lib
         // buckets for cross-project per-library reuse. Native multidex only (mono-dex merges everything as one).
-        val dexExtOnePass = facet.minSdk in 21..25 && externalJars.isNotEmpty() && !minify
+        //
+        // EXCEPT the `prepareDex` (BuildGoal.DEX) goal: it exists only to seed the layout preview's per-library dex
+        // buckets (`SharedLibraryDexer`), which the readiness gate + real-view render read. The one-pass path writes
+        // an `ext-indexed` MERGED dex instead of those buckets, so with it the gate never flips — a minSdk 21-25
+        // project would show "prepare libraries" forever even after a successful prepare. Force the per-lib archive
+        // path for DEX so prepare seeds exactly what the preview consumes; the APK build keeps the faster one-pass.
+        //
+        // AND only when the merge dexer runs OFF the app heap ([Dexer.runsOffHeap]): the one-pass is a single
+        // monolithic D8 program over the whole classpath — a big win in a forked/subprocess VM's large heap, but
+        // pathological in-process on a low-memory device (GC-bound, hundreds of seconds, killable before it
+        // caches). When the on-device forked dexer has fallen back to in-process, drop to bounded per-library
+        // archiving (the !dexExtOnePass branch): each library dexes with a capped working set and banks to the
+        // shared cache as it completes, so progress survives a low-memory-killer stop.
+        val dexExtOnePass =
+            facet.minSdk in 21..25 && externalJars.isNotEmpty() && !minify && goal != BuildGoal.DEX && mergeDexer.runsOffHeap()
 
         // The merged dex layers the packager assembles (renumbered into one classes*.dex set) + packageApk's deps.
         var dexDirs: List<Path>
@@ -890,6 +904,17 @@ class AndroidBuildSystem(
          *  [resourcesApPath]'s arsc, so library views' `R.styleable.*` resolve correctly at inflate time. */
         fun rJarPath(module: Module, variantName: String): Path =
             interDir(module, variantName).resolve("compile_and_runtime_not_namespaced_r_class_jar").resolve("R.jar")
+
+        /** The merged PROJECT dex dir (`mergeProjectDex` output, matches [Layout.projectDex]) — the app module's
+         *  own compiled code (Java + Kotlin), already dexed. The on-device real-view preview adds these
+         *  `classes*.dex` to its `DexClassLoader` so a project-source custom view resolves at inflate time.
+         *  Produced by any build/assemble AND by the `prepareDex` ([BuildGoal.DEX]) goal. */
+        fun projectDexPath(module: Module, variantName: String): Path = interDir(module, variantName).resolve("project-dex")
+
+        /** The merged sub-module dex dir (`mergeLibDex` output, matches [Layout.libDex]) — dependency-MODULE code,
+         *  already dexed. Exists only for a multi-module project. The real-view preview adds these too so a custom
+         *  view declared in a dependency module also resolves. */
+        fun libDexPath(module: Module, variantName: String): Path = interDir(module, variantName).resolve("lib-dex")
 
         /** The aapt2-compiled resource archives dir for [module]+[variantName] (matches [Layout.compiledRes]) —
          *  the per-directory `res-*.zip` flats the link consumes. Reused as the base for the real-view preview's

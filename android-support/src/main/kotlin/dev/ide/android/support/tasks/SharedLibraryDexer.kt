@@ -152,9 +152,17 @@ class SharedLibraryDexer(
             return true
         }
         DexArchives.clearDir(bucket); Files.createDirectories(bucket)
-        val r =
-            if (offHeap != null) offHeap.dexArchiveOffHeap(jar, classpath, androidJar, minApi, release, bucket, threads, desugaredLibConfig)
-            else dexer.dexArchive(listOf(jar), classpath, androidJar, minApi, release, bucket, threads, desugaredLibConfig)
+        // Strip @kotlin.Metadata from a Kotlin library before dexing so the bundled D8's older kotlin-metadata
+        // parser doesn't warn per class (and can't hit the rewriter drop path); a pure-Java jar passes through
+        // untouched. Keyed by the ORIGINAL jar's content hash (the class SET is unchanged — only an annotation is
+        // removed), so the bucket and its completeness check are identical. Only reached on a miss.
+        val program = DexArchives.strippedJar(jar, bucket.resolveSibling("${bucket.fileName}.stripped.jar"))
+        val r = try {
+            offHeap?.dexArchiveOffHeap(program, classpath, androidJar, minApi, release, bucket, threads, desugaredLibConfig)
+                ?: dexer.dexArchive(listOf(program), classpath, androidJar, minApi, release, bucket, threads, desugaredLibConfig)
+        } finally {
+            if (program != jar) runCatching { Files.deleteIfExists(program) }
+        }
         r.log.forEach(log)
         reportDiagnostics(r.log)
         if (!r.success) {
@@ -239,6 +247,66 @@ class SharedLibraryDexer(
                 if (!DexArchives.bucketComplete(dexCacheRoot.resolve(tag).resolve(h), cls)) out.add(jar)
             }
             return out
+        }
+
+        /**
+         * The build's dex-scope universes for the layout preview's library classpath, split EXACTLY as the
+         * [dev.ide.android.support.tasks.DexArchiveBuilderTask] does: an EXTERNAL library desugars against the
+         * external set ALONE (deps point down — it never sees your modules), a dependency-MODULE output against
+         * sub+ext. The preview MUST reuse this same split. A single combined universe over (external + module)
+         * hashes to a different [Universe.desugarDigest] — and therefore a different cache tag — whenever
+         * desugaring is active (minApi < 26, or core-library desugaring), so the build's buckets are missed and
+         * the "prepare libraries" gate never flips after a successful build. Second element is null when there
+         * are no module outputs (the common single-app case). Both readiness ([undexedForPreview]) and the
+         * on-device render derive their universes here so the two can never drift.
+         */
+        fun previewScopeUniverses(
+            externalJars: List<Path>, moduleJars: List<Path>, hashCacheDir: Path, minApi: Int, desugaredLibConfig: Path?,
+        ): Pair<Universe, Universe?> {
+            val ext = computeUniverse(externalJars, hashCacheDir, minApi, desugaredLibConfig)
+            val sub = if (moduleJars.isEmpty()) null
+            else computeUniverse(moduleJars + externalJars, hashCacheDir, minApi, desugaredLibConfig)
+            return ext to sub
+        }
+
+        /**
+         * The layout preview's dex-readiness gate: [undexedLibraries] over the build-faithful
+         * [previewScopeUniverses], so an empty result means a build (or a prior preview) already dexed every
+         * library and the real-view render can class-load with zero dexing. Replaces a single combined-universe
+         * scan, which missed the build's scoped buckets below API 26.
+         */
+        fun undexedForPreview(
+            externalJars: List<Path>, moduleJars: List<Path>, hashCacheDir: Path, minApi: Int,
+            desugaredLibConfig: Path?, dexCacheRoot: Path,
+        ): List<Path> = previewDexStatus(externalJars, moduleJars, hashCacheDir, minApi, desugaredLibConfig, dexCacheRoot).undexed
+
+        /** [undexed] libraries the render would still have to D8-dex, plus [dexed] — how many DEXABLE libraries ARE
+         *  already in the shared cache. The count lets the caller tell a truly COLD cache (dexed == 0 → prompt the
+         *  one-time "prepare libraries") from a few STRAGGLERS (dexed > 0 → let the render dex the rest, which shows
+         *  progress and seeds the cache, so the gate self-heals rather than looping when a prepare left a mismatch). */
+        class PreviewDexStatus(val undexed: List<Path>, val dexed: Int)
+
+        fun previewDexStatus(
+            externalJars: List<Path>, moduleJars: List<Path>, hashCacheDir: Path, minApi: Int,
+            desugaredLibConfig: Path?, dexCacheRoot: Path,
+        ): PreviewDexStatus {
+            val (ext, sub) = previewScopeUniverses(externalJars, moduleJars, hashCacheDir, minApi, desugaredLibConfig)
+            val undexed = ArrayList<Path>()
+            var dexed = 0
+            fun scan(jars: List<Path>, u: Universe) {
+                val tag = cacheTag(minApi, release = false, u.desugarDigest)
+                val seen = HashSet<String>()
+                for (jar in jars) {
+                    val h = u.hashOf[jar] ?: continue
+                    if (!seen.add(h)) continue                    // content-identical jars share one bucket
+                    val cls = DexArchives.classNamesOf(jar)
+                    if (cls.isEmpty()) continue                   // a resource-only jar dexes to nothing → neither
+                    if (DexArchives.bucketComplete(dexCacheRoot.resolve(tag).resolve(h), cls)) dexed++ else undexed.add(jar)
+                }
+            }
+            scan(externalJars, ext)
+            if (sub != null) scan(moduleJars, sub)
+            return PreviewDexStatus(undexed, dexed)
         }
 
         /**

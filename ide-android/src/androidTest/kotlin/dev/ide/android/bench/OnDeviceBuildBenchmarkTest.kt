@@ -27,6 +27,10 @@ import dev.ide.deps.ConflictPolicy
 import dev.ide.deps.Repository
 import dev.ide.deps.impl.MavenDependencyResolver
 import dev.ide.deps.impl.ResolverCache
+import dev.ide.lang.kotlin.compile.ComposeCompilerPlugin
+import dev.ide.lang.kotlin.compile.IncrementalKotlinCompiler
+import dev.ide.lang.kotlin.compile.KotlinCompilerPlugin
+import dev.ide.lang.kotlin.compile.KotlinJvmCompiler
 import dev.ide.model.BuildSystemId
 import dev.ide.model.Coordinate
 import dev.ide.model.DependencyScope
@@ -50,6 +54,7 @@ import java.nio.file.Files
 import java.nio.file.Path
 import java.nio.file.Paths
 import java.util.concurrent.ConcurrentHashMap
+import java.util.zip.ZipInputStream
 
 /**
  * On-device build benchmark: opens a real Android project already present on this device, forces a **fresh**
@@ -279,6 +284,140 @@ class OnDeviceBuildBenchmarkTest {
         Log.i(TAG, "dexer A/B RESULT (${libJars.size} libs): in-process=${aMs}ms(ok=${ra.getOrNull()?.success}) forked-big-heap=${bMs}ms(ok=${rb.getOrNull()?.success})")
     }
 
+    /**
+     * The headline case: a **Jetpack Compose (Material3)** app — the classpath that makes `dexExtLibs`/
+     * `mergeExtDex` the on-device bottleneck. It seeds a Compose app (Kotlin `MainActivity` + a `@Composable`,
+     * `activity-compose` + `material3` + `compose-ui`), resolves the ~60-80-artifact Compose/AndroidX graph, then
+     * times a fresh `assembleDebug` per task so the external-library dexing cost is directly visible. It wires the
+     * REAL on-device toolchain the app uses for Compose: the in-process K2 compiler ([KotlinJvmCompiler]) with the
+     * bundled Compose compiler plugin ([ComposeCompilerPlugin]), and the forked big-heap D8 ([ForkedD8Dexer]) for
+     * both archive and merge — so the number includes Kotlin+Compose compilation and the actual dex path
+     * (one-pass vs. bounded per-library, decided by [ForkedD8Dexer.runsOffHeap] from available RAM).
+     *
+     *     ./gradlew :ide-android:connectedDebugAndroidTest \
+     *       -Pandroid.testInstrumentationRunnerArguments.class=dev.ide.android.bench.OnDeviceBuildBenchmarkTest#freshComposeBuild
+     *     adb logcat -s BuildBench
+     *
+     * Instrumentation args (all optional):
+     *   -e minSdk    <n>          app minSdk (default 24). 21..25 forces on-device desugaring + the `dexExtLibs`
+     *                             one-pass (the slow path); 26+ turns desugaring off + uses per-library
+     *                             cross-project dex buckets — run both to measure the minSdk-26 speedup.
+     *   -e coldLibs  true|false   true (default) = throwaway dex cache → dexes the whole Compose classpath fresh
+     *                             (the cost being measured); false = reuse the shared cache (measures warm reuse).
+     *   -e forkedD8  true|false   true (default) = the app's real forked big-heap D8; false = in-process D8.
+     *   -e rounds    <n>          build n times (default 1); round 0 is the reported fresh build, later rounds are
+     *                             warm-cache observations (round 1 with an unchanged dep set should be a cache hit).
+     *   -e maxParallel <n>        task-graph parallelism (default 2, matching the app).
+     */
+    @Test
+    fun freshComposeBuild() {
+        val ctx = InstrumentationRegistry.getInstrumentation().targetContext
+        val args = InstrumentationRegistry.getArguments()
+        val minSdk = args.getString("minSdk")?.toIntOrNull() ?: 24
+        val coldLibs = args.getString("coldLibs")?.toBoolean() ?: true
+        val forkedD8 = args.getString("forkedD8")?.toBoolean() ?: true
+        val rounds = args.getString("rounds")?.toIntOrNull() ?: 1
+        val maxParallel = args.getString("maxParallel")?.toIntOrNull() ?: 2
+
+        val home = File(ctx.getExternalFilesDir(null) ?: ctx.filesDir, "codeassist")
+        val projectsRoot = File(home, "projects").apply { mkdirs() }
+        val work = File(ctx.filesDir, "build-bench").apply { mkdirs() }
+
+        // SDK bits: android.jar (asset) + native aapt2/zipalign (extracted lib dir) + desugar stubs + keystore.
+        val androidJar = copyAsset(ctx, "android.jar", File(work, "android.jar")).toPath()
+        val stubs = copyAsset(ctx, "core-lambda-stubs.jar", File(work, "core-lambda-stubs.jar")).toPath()
+        val debugKeystore = copyAsset(ctx, "debug.keystore", File(work, "debug.keystore")).toPath()
+        val nativeLibDir = File(ctx.applicationInfo.nativeLibraryDir).toPath()
+        val sdk = AndroidSdk.forDevice(androidJar, nativeLibDir)
+        assumeTrue("Native aapt2/zipalign not extracted at $nativeLibDir — can't build here", sdk.hasNativeTools())
+        val signing = SigningConfig(debugKeystore, DebugKeystore.STORE_PASS, DebugKeystore.KEY_ALIAS, DebugKeystore.KEY_PASS)
+
+        // On-device kotlinc needs its resource dir on a real filesystem path (IntelliJ-core reads EP XML from
+        // there) + the app-env keepalive the real build uses. Set before the first KotlinCoreEnvironment.
+        System.setProperty("kotlin.environment.keepalive", "true")
+        System.setProperty("kotlinc.art.home", provisionKotlincHome(ctx, File(work, "kotlinc-home")).absolutePath)
+
+        // Per-minSdk project dir: the seed reuses an on-disk project (only refreshing sources), so a shared dir
+        // would keep the first run's minSdk. A suffixed dir gives each minSdk its own correctly-configured project.
+        val workspaceRoot = seedComposeProject(File(projectsRoot, "bench-compose-min$minSdk"), minSdk)
+        Log.i(TAG, "compose project = ${workspaceRoot.name} minSdk=$minSdk coldLibs=$coldLibs forkedD8=$forkedD8 rounds=$rounds")
+
+        val report = StringBuilder()
+        report.appendLine("== compose-build-bench ${workspaceRoot.name} minSdk=$minSdk coldLibs=$coldLibs forkedD8=$forkedD8 ==")
+
+        // The Kotlin+Compose toolchain: one warm K2 compiler (as the app keeps it app-scoped) + the bundled
+        // Compose plugin (its registrar is dexed into the app, so the default plugin loader resolves it).
+        val kotlin = IncrementalKotlinCompiler(KotlinJvmCompiler())
+        val plugins: List<KotlinCompilerPlugin> = listOf(ComposeCompilerPlugin)
+
+        repeat(rounds) { round ->
+            val platform = PlatformCore()
+            try {
+                AndroidSupport.register(ModuleTypeRegistry(platform.extensions), FacetCodecRegistry())
+                val store = ProjectModel.open(workspaceRoot.toPath(), platform, FacetCodecRegistry().register(AndroidFacetCodec))
+                val project = store.workspace.projects.firstOrNull { p -> p.modules.any { it.type.id == "android-app" } }
+                    ?: throw AssertionError("workspace has no android-app module")
+                val app = project.modules.first { it.type.id == "android-app" }
+
+                clearBuildDirs(workspaceRoot)
+                val dexCache = if (coldLibs) File(work, "dexcache-compose-$round").apply { deleteRecursively() }.toPath()
+                else File(home, "caches/dex").toPath()
+
+                val d8: Dexer? = if (forkedD8) ForkedD8Dexer(ctx.applicationContext) else null
+                val build = AndroidBuildSystem.inProcess(
+                    sdk, signing,
+                    bootClasspath = listOf(androidJar, stubs),
+                    kotlin = kotlin,
+                    plugins = plugins,
+                    dexCacheRoot = dexCache,
+                    dexer = d8,
+                    mergeDexer = d8,
+                )
+                val graph = build.createBuildGraph(
+                    project, BuildRequest(listOf(app.id), VariantSelector("debug"), BuildGoal.PACKAGE),
+                )
+
+                val starts = ConcurrentHashMap<String, Long>()
+                val took = ConcurrentHashMap<String, Long>()
+                val exec = TaskExecutorImpl(BuildCache(File(work, "buildcache-compose-$round").toPath())) { name: TaskName, status: TaskStatus ->
+                    when (status) {
+                        TaskStatus.Running -> starts[name.value] = System.nanoTime()
+                        TaskStatus.Succeeded, TaskStatus.Failed, TaskStatus.UpToDate ->
+                            starts.remove(name.value)?.let { took[name.value] = (System.nanoTime() - it) / 1_000_000 }
+                        else -> {}
+                    }
+                }
+
+                val log = StringBuilder()
+                val startNs = System.nanoTime()
+                val outcome = runBlocking {
+                    exec.execute(graph, SimpleTaskContext(log = { line ->
+                        log.appendLine(line)
+                        if ("dexScope" in line || "dexExtLibs" in line || "one-pass" in line) Log.i(TAG, "  $line")
+                    }), maxParallel)
+                }
+                val totalMs = (System.nanoTime() - startNs) / 1_000_000
+
+                val header = "-- round $round: ${if (outcome.succeeded) "OK" else "FAILED"} total=${totalMs}ms --"
+                Log.i(TAG, header); report.appendLine(header)
+                took.entries.sortedByDescending { it.value }.forEach { (task, ms) ->
+                    val line = "  %6d ms  %s".format(ms, task)
+                    Log.i(TAG, line); report.appendLine(line)
+                }
+                if (!outcome.succeeded) {
+                    Log.e(TAG, "build log:\n$log")
+                    report.appendLine(log.toString().lines().takeLast(40).joinToString("\n"))
+                }
+                if (round == 0) assertTrue("fresh compose build failed — see logcat -s $TAG", outcome.succeeded)
+            } finally {
+                platform.dispose()
+            }
+        }
+
+        runCatching { File(home, "compose-build-bench-report.txt").writeText(report.toString()) }
+        Log.i(TAG, "report written to ${File(home, "compose-build-bench-report.txt")}")
+    }
+
     /** The workspace with the requested [name], else the first one containing an android-app module. */
     private fun pickProject(projectsRoot: File, name: String?): File? {
         val candidates = if (name != null) listOfNotNull(File(projectsRoot, name).takeIf { it.isDirectory })
@@ -367,6 +506,96 @@ class OnDeviceBuildBenchmarkTest {
         write(File(ws, "app/src/main/res/values/strings.xml"), STRINGS)
     }
 
+    /**
+     * Seed a self-contained Jetpack Compose (Material3) android-app under [ws] at [minSdk] and resolve the
+     * `activity-compose` + `material3` + `compose-ui` graph (~60-80 AndroidX/Compose artifacts) from the network
+     * into [ws]/.platform, so the benchmark runs on a fresh/wiped emulator. Reused across runs once resolved (the
+     * download cache + libraries.json persist). The whole graph goes into one aggregate library the app depends
+     * on; the app uses a framework theme so aapt2 links without needing the Compose AARs' own themes (the code is
+     * on the dex classpath either way — the point of the benchmark).
+     */
+    private fun seedComposeProject(ws: File, minSdk: Int): File {
+        val stackName = "androidx.compose:bench-compose-stack:1.0"
+        if (File(ws, "app/module.toml").exists() && File(ws, ".platform/libraries.json").exists()) {
+            writeComposeAppSources(ws)
+            Log.i(TAG, "reusing seeded+resolved compose project at $ws (sources refreshed)"); return ws
+        }
+        Log.i(TAG, "seeding + resolving compose project at $ws (first run downloads ~70 deps)")
+        ws.deleteRecursively(); ws.mkdirs()
+
+        val platform = PlatformCore()
+        try {
+            val types = ModuleTypeRegistry(platform.extensions)
+            AndroidSupport.register(types, FacetCodecRegistry())
+            val store = ProjectModel.open(ws.toPath(), platform, FacetCodecRegistry().register(AndroidFacetCodec))
+
+            store.workspace.beginModification().apply { addProject("bench", BuildSystemId.NATIVE, store.vfs.root()); commit() }
+            store.workspace.projects.first { it.name == "bench" }.beginModification().apply {
+                addModule("app", types.resolve("android-app")).apply {
+                    languageLevel = LanguageLevel.JAVA_8
+                    putFacet(AndroidFacet(namespace = "com.example.compose", compileSdk = 34, minSdk = minSdk, targetSdk = 34))
+                    addDependency(LibraryDependency(LibraryRef(stackName), DependencyScope.IMPLEMENTATION))
+                }
+                commit()
+            }
+            writeComposeAppSources(ws)
+
+            val lfs = LocalFileSystem(ws.toPath())
+            val resolver = MavenDependencyResolver(ResolverCache(ws.toPath()), { p -> lfs.fileFor(p) })
+            val repos = listOf(
+                Repository("Google", "https://dl.google.com/android/maven2"),
+                Repository("Maven Central", "https://repo1.maven.org/maven2"),
+            )
+            // A representative Compose app classpath: activity integration + Material3 + the compose-ui/foundation/
+            // runtime/animation graph they pull transitively — the heavy, mostly-Kotlin classpath that dominates
+            // dexExtLibs. Pinned versions so resolution is deterministic and offline after the first run.
+            val coords = listOf(
+                Coordinate("androidx.activity", "activity-compose", "1.9.3"),
+                Coordinate("androidx.compose.material3", "material3", "1.3.1"),
+                Coordinate("androidx.compose.ui", "ui-tooling-preview", "1.7.5"),
+            )
+            val result = runBlocking { resolver.resolve(coords, repos, ConflictPolicy.NEWEST, NoopProgress) }
+            Log.i(TAG, "resolved ${result.resolved.size} artifacts (unresolved=${result.unresolved})")
+            assumeTrue("dependency resolution failed (network?): unresolved=${result.unresolved}", result.resolved.isNotEmpty() && result.unresolved.isEmpty())
+            store.workspace.libraryTable.create(stackName).apply {
+                kind = if (result.resolved.any { it.kind == ArtifactKind.AAR }) LibraryKind.AAR else LibraryKind.JAR
+                result.resolved.forEach { a -> addClassesRoot(a.classesRoot); a.extraClassesRoots.forEach { addClassesRoot(it) } }
+                commit()
+            }
+            store.save()
+        } finally {
+            platform.dispose()
+        }
+        return ws
+    }
+
+    private fun writeComposeAppSources(ws: File) {
+        write(File(ws, "app/src/main/kotlin/com/example/compose/MainActivity.kt"), MAIN_ACTIVITY_KT)
+        write(File(ws, "app/src/main/AndroidManifest.xml"), COMPOSE_MANIFEST)
+        write(File(ws, "app/src/main/res/values/strings.xml"), STRINGS)
+    }
+
+    /** Extract the kotlinc-resources.zip asset (the compiler's non-class resources) into [home] — the
+     *  `kotlinc.art.home` the ASM-patched PathUtil reads so IntelliJ-core finds its EP descriptors on ART. */
+    private fun provisionKotlincHome(ctx: Context, home: File): File {
+        home.deleteRecursively(); home.mkdirs()
+        val canonicalHome = home.canonicalPath + File.separator
+        ctx.assets.open("kotlinc-resources.zip").use { input ->
+            ZipInputStream(input).use { zis ->
+                var entry = zis.nextEntry
+                while (entry != null) {
+                    val outFile = File(home, entry.name)
+                    if (outFile.canonicalPath.startsWith(canonicalHome)) {          // zip-slip guard
+                        if (entry.isDirectory) outFile.mkdirs()
+                        else { outFile.parentFile?.mkdirs(); outFile.outputStream().use { zis.copyTo(it) } }
+                    }
+                    entry = zis.nextEntry
+                }
+            }
+        }
+        return home
+    }
+
     private fun write(f: File, content: String) { f.parentFile?.mkdirs(); f.writeText(content.trimIndent() + "\n") }
 
     private object NoopProgress : ProgressReporter {
@@ -401,6 +630,45 @@ class OnDeviceBuildBenchmarkTest {
             <resources>
                 <string name="app_name">Bench Material</string>
             </resources>
+        """
+
+        // Kotlin activity + a @Composable: exercises the K2 compile AND the Compose plugin transform (setContent
+        // lambda + the restartable Greeting), and references material3.Text / activity-compose / runtime.Composable
+        // from the resolved classpath — so the build compiles Kotlin+Compose and then dexes the whole graph.
+        val MAIN_ACTIVITY_KT = """
+            package com.example.compose
+
+            import android.os.Bundle
+            import androidx.activity.ComponentActivity
+            import androidx.activity.compose.setContent
+            import androidx.compose.material3.Text
+            import androidx.compose.runtime.Composable
+
+            class MainActivity : ComponentActivity() {
+                override fun onCreate(savedInstanceState: Bundle?) {
+                    super.onCreate(savedInstanceState)
+                    setContent { Greeting("Compose") }
+                }
+            }
+
+            @Composable
+            fun Greeting(name: String) {
+                Text("Hello, " + name)
+            }
+        """
+
+        val COMPOSE_MANIFEST = """
+            <?xml version="1.0" encoding="utf-8"?>
+            <manifest xmlns:android="http://schemas.android.com/apk/res/android" package="com.example.compose">
+                <application android:label="@string/app_name" android:theme="@android:style/Theme.Material.Light.NoActionBar">
+                    <activity android:name="com.example.compose.MainActivity" android:exported="true">
+                        <intent-filter>
+                            <action android:name="android.intent.action.MAIN" />
+                            <category android:name="android.intent.category.LAUNCHER" />
+                        </intent-filter>
+                    </activity>
+                </application>
+            </manifest>
         """
     }
 }
