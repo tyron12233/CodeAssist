@@ -288,9 +288,13 @@ class Interpreter(
                 else -> {
                     val receiver = eval(receiverNode, env)
                         ?: throw InterpreterException("cannot read property `${binding.name}` on a null receiver")
-                    val extOwner = (binding as? Binding.Property)?.takeIf { it.isExtension }?.ownerFqn
-                    if (extOwner != null) readExtensionProperty(receiver, extOwner, binding.name)
-                    else readProperty(receiver, binding.name)
+                    // The receiver evaluated to a CLASS
+                    if (receiver is Class<*>) readStaticMember(receiver, binding.name)
+                    else {
+                        val extOwner = (binding as? Binding.Property)?.takeIf { it.isExtension }?.ownerFqn
+                        if (extOwner != null) readExtensionProperty(receiver, extOwner, binding.name)
+                        else readProperty(receiver, binding.name)
+                    }
                 }
             }
         }
@@ -1040,6 +1044,10 @@ class Interpreter(
         cls.methods.firstOrNull {
             java.lang.reflect.Modifier.isStatic(it.modifiers) && it.parameterCount == 0 && mangledNameMatches(it.name, getter)
         }?.let { runCatching { it.isAccessible = true }; return it.invoke(null) }
+        // Not a static field/getter — but `name` may be a NESTED CLASS reached through its enclosing type
+        // (`Build.VERSION`, `Build.VERSION_CODES`); return that Class so a further static read off it resolves
+        // (`Build.VERSION.SDK_INT`). The PropertyGet handler treats a Class-valued receiver as a static holder.
+        loadClassAcross("${cls.name}\$$name", initialize = true, preferred = classLoader)?.let { return it }
         throw InterpreterException("no static member `$name` on ${cls.name}")
     }
 
