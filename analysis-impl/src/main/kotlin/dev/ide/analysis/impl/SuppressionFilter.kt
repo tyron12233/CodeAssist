@@ -8,6 +8,9 @@ import dev.ide.lang.dom.TextRange
 
 /**
  * Inline suppression, checked centrally before any diagnostic is published. Honors:
+ *  - `@file:Suppress("code", …)` — a Kotlin FILE annotation, scoped to the WHOLE file (so
+ *    `@file:Suppress("kt.unusedImport")` silences every unused-import warning in the file, imports included,
+ *    which no declaration-scoped directive can reach).
  *  - `@Suppress("code", …)` — scoped to the enclosing declaration, located via the DOM
  *    (`nodeAt` → climb to the nearest class/method/field/local node).
  *  - `// noinspection code …` (or `//noinspection …`) — scoped to the following line.
@@ -32,6 +35,9 @@ internal class SuppressionFilter private constructor(private val scopes: List<Sc
             NodeKind.CLASS_DECL, NodeKind.METHOD_DECL, NodeKind.FIELD_DECL, NodeKind.LOCAL_VAR, NodeKind.PARAMETER,
         )
         private val NOINSPECTION = Regex("""//\s*noinspection\s+([^\r\n]*)""")
+        // A Kotlin file annotation (`@file:Suppress(...)`) — whole-file scope. Matched before [SUPPRESS], whose
+        // `@Suppress` pattern never matches this (the `@` here is followed by `file:`, not `Suppress`).
+        private val FILE_SUPPRESS = Regex("""@file\s*:\s*Suppress\s*\(([^)]*)\)""")
         private val SUPPRESS = Regex("""@Suppress\s*\(([^)]*)\)""")
         private val STRING_LIT = Regex("\"([^\"]*)\"")
         private val EMPTY = SuppressionFilter(emptyList())
@@ -45,6 +51,13 @@ internal class SuppressionFilter private constructor(private val scopes: List<Sc
             for (m in NOINSPECTION.findAll(text)) {
                 val codes = parseIds(m.groupValues[1])
                 nextLineRange(text, m.range.last)?.let { scopes += Scope(codes, it) }
+            }
+            // `@file:Suppress(...)` covers the whole file — the only way to reach diagnostics that sit outside
+            // any declaration (unused imports, the package line). Handled before the declaration-scoped
+            // `@Suppress` pass, which doesn't match the `@file:` form.
+            for (m in FILE_SUPPRESS.findAll(text)) {
+                val codes = STRING_LIT.findAll(m.groupValues[1]).map { it.groupValues[1] }.toSet().ifEmpty { null }
+                scopes += Scope(codes, parsed.range)
             }
             for (m in SUPPRESS.findAll(text)) {
                 val codes = STRING_LIT.findAll(m.groupValues[1]).map { it.groupValues[1] }.toSet().ifEmpty { null }
