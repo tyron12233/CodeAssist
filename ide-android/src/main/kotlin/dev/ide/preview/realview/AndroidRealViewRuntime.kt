@@ -23,6 +23,7 @@ import java.nio.file.Files
 import java.nio.file.Path
 import java.util.concurrent.CountDownLatch
 import androidx.core.graphics.createBitmap
+import dev.ide.android.support.tasks.SharedLibraryDexer
 
 /**
  * On-device [RealViewRuntime] — the "layoutlib-on-device" preview. Reuses the host-relinked aapt2
@@ -285,7 +286,7 @@ class AndroidRealViewRuntime(
         ).also { contextCache = key to it }
     }
 
-    /** A CONTENT signature for a set of jars (jars OR a prebuilt apk/dex) — computed separately for the library
+    /** A CONTENT signature for a set of library jars — computed separately for the library
      *  layer and the R layer (see [renderInternal]) to key the disk dex cache, the in-memory loader cache, and the
      *  preview context cache. Content-based (via [SharedLibraryDexer.contentHashes], the same hashing the dexer
      *  uses), NOT mtime: the build regenerates `R.jar` and the module-output jars on every build, so an mtime key
@@ -297,8 +298,8 @@ class AndroidRealViewRuntime(
      *  NOT thread-safe (shared sidecar) — callers hold [lock]. */
     private fun classpathSig(classpath: List<Path>): String {
         val jars =
-            classpath.filter { it.toString().endsWith(".jar") || it.toString().endsWith(".apk") }
-        val hashes = dev.ide.android.support.tasks.SharedLibraryDexer.contentHashes(
+            classpath.filter { it.toString().endsWith(".jar") }
+        val hashes = SharedLibraryDexer.contentHashes(
             jars, hashCacheDir.toPath()
         )
         return jars.mapNotNull { j -> hashes[j]?.let { "$j:$it" } }.sorted().joinToString("|")
@@ -425,7 +426,7 @@ class AndroidRealViewRuntime(
             val dexer = D8InProcessDexer()
             // 1) Dex each library into the shared cache (or reuse the build's bucket), matching the build's key
             //    (minApi, debug, desugaring universe) so the buckets are shared.
-            val libDexer = dev.ide.android.support.tasks.SharedLibraryDexer(
+            val libDexer = SharedLibraryDexer(
                 dexer, androidJar, minApi, release = false, dexCacheRoot = dexCacheRoot,
                 log = { log.info(it) },
             )

@@ -10,7 +10,6 @@ import dev.ide.core.IdeServicesBackend
 import dev.ide.core.ProjectManager
 import dev.ide.core.settings.BuiltInSettingsPages
 import dev.ide.platform.log.Log.addSink
-import dev.ide.preview.bridge.DexCustomViewRuntime
 import java.io.File
 import java.nio.file.Path
 import java.util.zip.ZipInputStream
@@ -134,11 +133,13 @@ object AndroidIde {
             if (forkRunner.available()) forkRunner else DexClassLoaderRunner(File(context.cacheDir, "dexrun"))
         // Installs + launches a built APK (the android Run) via the system package installer.
         val apkInstaller = ApkInstallerImpl(context)
-        // Renders live custom views in the layout preview: D8-dex the instrumented classes + DexClassLoader.
-        val previewRuntime = DexCustomViewRuntime(
-            context.applicationContext, androidJar.toPath(),
-            File(context.cacheDir, "preview"), Build.VERSION.SDK_INT,
-        )
+        // Custom user views in the layout preview are DISABLED at this time: rendering them means D8-dexing the
+        // user's compiled classes and loading them via DexClassLoader, which Google Play's Device-and-Network-
+        // Abuse "DDL" scorer flags. Null → the owned preview shows placeholders for `<com.example.MyView/>`.
+        // To re-enable, restore:
+        //   DexCustomViewRuntime(context.applicationContext, androidJar.toPath(),
+        //       File(context.cacheDir, "preview"), Build.VERSION.SDK_INT)
+        val previewRuntime: dev.ide.preview.impl.CustomViewRuntime? = null
         // Loads runtime (non-bundled) Kotlin compiler plugins on ART: D8-dex the plugin classpath + DexClassLoader.
         val kotlinPluginLoader = ArtKotlinPluginLoader(
             androidJar.toPath(),

@@ -3270,24 +3270,15 @@ class IdeServices private constructor(
             ?: AndroidBuildSystem.rJarPath(module, variant)
                 .takeIf { Files.exists(it) }
         val runtimeLibs = resolved?.dexJars ?: emptyList()
-        // The app's (and dependency modules') OWN compiled+dexed code, so a project-SOURCE custom view
-        // (`<com.example.app.MyView/>`) resolves at inflate time — without it inflation fails with
-        // ClassNotFoundException and the render falls back to owned. The build already produces these ALREADY
-        // DEXED under `project-dex` (app Java + Kotlin) and `lib-dex` (dependency modules); the real-view loader
-        // adds them as a project layer directly (no re-dex — AndroidRealViewRuntime routes `.dex` entries on the
-        // classpath to that layer). They exist after any build/assemble or the `prepareDex` goal, which the
-        // readiness gate below already requires for the libraries — so a project that passes the gate has them too.
-        // (This replaces the old `ModuleCompilationContext` MODULE_OUTPUT scan, which never emitted MODULE_OUTPUT
-        // entries and whose class-DIRECTORY outputs the `.jar`-only dex filter dropped anyway.)
-        val projectDexes = listOf(
-            AndroidBuildSystem.projectDexPath(module, variant),
-            AndroidBuildSystem.libDexPath(module, variant),
-        ).flatMap { dir ->
-            runCatching {
-                if (!Files.isDirectory(dir)) emptyList()
-                else Files.list(dir).use { s -> s.filter { it.toString().endsWith(".dex") }.toList() }
-            }.getOrDefault(emptyList())
-        }
+        // Custom user views in the preview are DISABLED at this time. Loading the project's OWN compiled+dexed
+        // code (`project-dex`/`lib-dex`) into the real-view DexClassLoader is what let a project-SOURCE custom
+        // view (`<com.example.app.MyView/>`) resolve at inflate time, but Google Play's Device-and-Network-Abuse
+        // "DDL" scorer flags loading the user's own compiled code (the `net/http/response/apk` call chain). With
+        // no project dex, such a tag fails to inflate and the render falls back to owned placeholders, while
+        // framework/library layouts still render normally. To re-enable, restore the project-dex/lib-dex scan:
+        //   listOf(AndroidBuildSystem.projectDexPath(module, variant), AndroidBuildSystem.libDexPath(module, variant))
+        //     .flatMap { dir -> if (Files.isDirectory(dir)) Files.list(dir).use { it.filter { p -> p.toString().endsWith(".dex") }.toList() } else emptyList() }
+        val projectDexes = emptyList<Path>()
         // EXTERNAL libraries (the maven/AAR runtime set) are dexed via the shared cache; the project's own code
         // arrives PRE-DEXED (above) and needs no re-dex. The readiness gate + the render must key the shared cache
         // the SAME way the build does — an external lib desugars against the external set alone. A single combined
