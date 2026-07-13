@@ -4,6 +4,7 @@
 // kotlin-android plugin); Compose comes from the Compose Multiplatform + Compose-compiler plugins.
 import com.android.build.gradle.internal.tasks.factory.dependsOn
 import dev.ide.build.RelocateTypesInJar
+import org.gradle.api.attributes.java.TargetJvmEnvironment
 // Imported (not fully-qualified) because the Java plugin's `java` project extension shadows the `java.*`
 // package inside a build script — `java.io.File` would parse as `(java extension).io`.
 import java.io.File
@@ -640,6 +641,19 @@ configurations.configureEach {
         exclude(group = "org.jetbrains.intellij.deps.jna", module = "jna")
         exclude(group = "org.jetbrains.intellij.deps.jna", module = "jna-platform")
     }
+    // Force guava's JRE flavor over its Android flavor. The `implementation(libs.guava)` edge below requests
+    // `org.gradle.jvm.environment = standard-jvm`, which makes guava's `jreRuntimeElements` a candidate
+    // alongside the `androidRuntimeElements` the transitive (bundletool) edges pull in this Android app; both
+    // provide the `com.google.guava:guava` capability, so they conflict. Resolve that conflict to the JRE
+    // variant: its `com.google.common.base.Predicate` extends `java.util.function.Predicate` (the Android
+    // flavor's does not), which the dexed bundletool relies on when it filters streams with guava predicates
+    // — otherwise ART throws `IncompatibleClassChangeError` building an .aab. See the guava dependency below.
+    resolutionStrategy.capabilitiesResolution.withCapability("com.google.guava:guava") {
+        candidates.firstOrNull { "jre" in it.variantName }?.let { jre ->
+            select(jre)
+            because("guava JRE flavor: Predicate extends java.util.function.Predicate (dexed bundletool needs it on ART)")
+        }
+    }
 }
 
 dependencies {
@@ -743,6 +757,26 @@ dependencies {
     // compileOnly+test. NOTE: dexing bundletool's closure into the app is new ground — if assembleDebug hits
     // a duplicate-class / mergeJavaResource clash, add the offending entry to the packaging{} block above.
     implementation(libs.android.bundletool)
+
+    // Force the JRE flavor of guava (not the Android flavor). In an Android application the runtime
+    // classpath requests `org.gradle.jvm.environment = android`, so guava's Gradle module metadata
+    // resolves its coordinate (e.g. `33.2.0-jre`) to the `androidRuntimeElements` variant, which is
+    // `available-at` the `guava-*-android.jar`. That Android flavor's `com.google.common.base.Predicate`
+    // does NOT extend `java.util.function.Predicate` (it targets pre-24 Android), whereas the JRE flavor's
+    // does. bundletool is compiled against the JRE flavor and passes guava `Predicate`s into
+    // `java.util.stream.Stream.filter(java.util.function.Predicate)`; with the Android flavor dexed in, ART
+    // throws `IncompatibleClassChangeError` ("Predicates$NotPredicate does not implement
+    // java.util.function.Predicate") when a user builds an .aab. minSdk is 26, so `java.util.function.*`
+    // is native and the JRE flavor runs fine — pin the environment attribute to standard-jvm so the JRE
+    // jar is the one dexed.
+    implementation(libs.guava) {
+        attributes {
+            attribute(
+                TargetJvmEnvironment.TARGET_JVM_ENVIRONMENT_ATTRIBUTE,
+                objects.named(TargetJvmEnvironment::class.java, TargetJvmEnvironment.STANDARD_JVM),
+            )
+        }
+    }
 
     // Core-library desugaring runtime (temporarily enabled — see isCoreLibraryDesugaringEnabled above).
     coreLibraryDesugaring(libs.desugar.jdk.libs)
