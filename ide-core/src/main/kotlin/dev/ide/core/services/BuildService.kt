@@ -694,10 +694,23 @@ internal class BuildService(private val ctx: EngineContext) : Disposable {
         val depCount = runCatching {
             module.classpath(DependencyScope.RUNTIME_ONLY).entries.count { it.kind == ClasspathEntryKind.LIBRARY }
         }.getOrDefault(0)
-        if (depCount < FIRST_BUILD_DEX_BANNER_THRESHOLD) return null
+        val notes = ArrayList<String>()
         val dexCache = (ctx.sharedCachesRoot ?: ctx.store.rootPath).resolve("caches").resolve("dex")
-        if (dexCacheHasEntries(dexCache)) return null
-        return "First build — dexing $depCount libraries from scratch (there's no dex cache yet), so this " + "build is slower than usual. The next build reuses the cached dex and will be much faster."
+        if (depCount >= FIRST_BUILD_DEX_BANNER_THRESHOLD && !dexCacheHasEntries(dexCache)) {
+            notes += "First build — dexing $depCount libraries from scratch (there's no dex cache yet), so this " +
+                "build is slower than usual. The next build reuses the cached dex and will be much faster."
+        }
+        // Desugaring hint: below API 26, D8 must desugar every library on-device and the library dex cache is
+        // keyed by the whole classpath, so a big (e.g. Compose) project re-dexes all its libraries whenever a
+        // dependency changes. At minSdk 26+ desugaring is off and each library dexes once into a reusable
+        // cross-project bucket. Surfaced once per build so the user can weigh raising minSdk.
+        val minSdk = module.facets.get(AndroidFacet.KEY)?.minSdk
+        if (minSdk != null && minSdk in 21..25 && depCount >= FIRST_BUILD_DEX_BANNER_THRESHOLD) {
+            notes += "This module's minSdk is $minSdk. Below API 26, on-device dexing must desugar the whole " +
+                "library classpath, which is significantly slower and re-dexes every library when dependencies " +
+                "change. If your app can require API 26+, raising minSdk makes library dexing far faster and cacheable."
+        }
+        return notes.takeIf { it.isNotEmpty() }?.joinToString("\n\n")
     }
 
     /** Whether the shared dex cache already holds any dexed output (so a build isn't the cold first one). */

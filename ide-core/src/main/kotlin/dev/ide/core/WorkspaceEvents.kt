@@ -186,7 +186,15 @@ internal class WorkspaceEventHub(
                     if (reactions.isResourcePath(p)) {
                         synthetic = true
                         if (p.toString().endsWith(".xml")) reactions.reindexSourceAsync(p)
-                    } else if (isKotlin(p)) synthetic = true
+                    } else if (isSource(p)) {
+                        // Keep the source index current on SAVE so a query against it sees the edit — e.g. a newly
+                        // declared `View` subclass must appear as a custom-view tag in XML-layout completion. This is
+                        // a single-file incremental reindex (O(this file)); it deliberately does NOT invalidate
+                        // analyzers (disposing every module container on each save would evict the warm Kotlin/JDT
+                        // caches — too heavy). Consumers that snapshot the index refresh off its generation stamp.
+                        reactions.reindexSourceAsync(p)
+                        if (isKotlin(p)) synthetic = true
+                    }
                 }
 
                 is FileCreated -> if (!e.file.isDirectory) {

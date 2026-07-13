@@ -19,6 +19,10 @@ private val editorPerfLog = Log.logger("editor-perf")
  */
 internal suspend fun <T> timedPass(pass: String, path: String, count: (T) -> Int, body: suspend () -> T): T {
     if (!PerfTrace.enabled) return body()
+    val file = path.substringAfterLast('/')
+    // Log the START too, not just the end: during a pathological hang the end line never arrives, so the last
+    // `STARTED` with no matching `took=` at a given (e.g. GC) timestamp names the operation that is stuck.
+    editorPerfLog.info("pass=$pass file=$file STARTED")
     val t0 = System.nanoTime()
     var n = -1
     try {
@@ -27,7 +31,7 @@ internal suspend fun <T> timedPass(pass: String, path: String, count: (T) -> Int
         return r
     } finally {
         editorPerfLog.info(
-            "pass=$pass file=${path.substringAfterLast('/')} " +
+            "pass=$pass file=$file " +
                 "took=${(System.nanoTime() - t0) / 1_000_000}ms " +
                 (if (n >= 0) "items=$n" else "(preempted/incomplete)")
         )

@@ -53,22 +53,32 @@ class AndroidXmlContributor(
                 Flavor.DRAWABLE -> drawableTagItems(position)
                 Flavor.LAYOUT -> tagItems(position)
             }
+
             XmlCompletionKind.ATTRIBUTE_NAME -> when {
                 // Declaring a namespace: `xmlns:|` offers the undeclared standard namespaces (android/app/tools).
-                position.prefix.startsWith("xmlns", ignoreCase = true) -> namespaceDeclItems(position)
+                position.prefix.startsWith("xmlns", ignoreCase = true) -> namespaceDeclItems(
+                    position
+                )
+
                 else -> {
                     val specs = when (flavor) {
                         Flavor.MANIFEST -> AndroidManifestCatalog.attributesFor(position.tag)
                         Flavor.DRAWABLE -> DrawableXmlCatalog.attributesFor(position.tag)
                         Flavor.LAYOUT -> mergedAttributes(position)
                     }
-                    val base = specs.filter { it.name !in position.existingAttributes }.map { attributeItem(it, position) }
+                    val base = specs.filter { it.name !in position.existingAttributes }
+                        .map { attributeItem(it, position) }
                     // `tools:` design-time attributes (layouts) once the user is typing the tools namespace.
-                    val tools = if (flavor == Flavor.LAYOUT && position.prefix.startsWith("tools", ignoreCase = true))
+                    val tools = if (flavor == Flavor.LAYOUT && position.prefix.startsWith(
+                            "tools",
+                            ignoreCase = true
+                        )
+                    )
                         toolsAttributeItems(position) else emptyList()
                     base + tools
                 }
             }
+
             XmlCompletionKind.ATTRIBUTE_VALUE -> {
                 val an = position.attributeName
                 when {
@@ -76,10 +86,18 @@ class AndroidXmlContributor(
                     an != null && an.startsWith("xmlns:") -> namespaceUriItems(an)
                     // A `tools:` attribute's value: its curated spec, else the android:/app: attribute it overrides.
                     flavor == Flavor.LAYOUT && an != null && an.startsWith("tools:") ->
-                        toolsValueSpec(position, an)?.let { valueItemsFor(it, position.prefix) } ?: emptyList()
-                    else -> attributeSpecFor(position, flavor)?.let { valueItemsFor(it, position.prefix) } ?: emptyList()
+                        toolsValueSpec(position, an)?.let { valueItemsFor(it, position.prefix) }
+                            ?: emptyList()
+
+                    else -> attributeSpecFor(position, flavor)?.let {
+                        valueItemsFor(
+                            it,
+                            position.prefix
+                        )
+                    } ?: emptyList()
                 }
             }
+
             else -> emptyList()
         }
     }
@@ -88,7 +106,12 @@ class AndroidXmlContributor(
 
     private fun drawableTagItems(pos: XmlCompletionPosition): List<CompletionItem> =
         DrawableXmlCatalog.childrenOf(pos.parentTag).map { tag ->
-            CompletionItem(label = tag, insertText = tag, kind = CompletionItemKind.CLASS, detail = "drawable")
+            CompletionItem(
+                label = tag,
+                insertText = tag,
+                kind = CompletionItemKind.CLASS,
+                detail = "drawable"
+            )
         }
 
     /** Framework (SDK or curated) attributes for the tag + its custom-view attributes, deduped by name. */
@@ -140,7 +163,8 @@ class AndroidXmlContributor(
         val flavor = flavorOf(pos.filePath)
         val spec = if (flavor == Flavor.LAYOUT && an.startsWith("tools:")) toolsValueSpec(pos, an)
         else attributeSpecFor(pos, flavor)
-        return SignatureInfo(label = spec?.let { describeSpec(an, it) } ?: an, parameters = emptyList())
+        return SignatureInfo(label = spec?.let { describeSpec(an, it) } ?: an,
+            parameters = emptyList())
     }
 
     /** A compact `name = a | b | @type/…` rendering of an attribute's accepted values, for the hint panel. */
@@ -155,7 +179,8 @@ class AndroidXmlContributor(
         return if (parts.isEmpty()) name else "$name = ${parts.joinToString("  |  ")}"
     }
 
-    private fun capped(vs: List<String>, n: Int = 12): List<String> = if (vs.size <= n) vs else vs.take(n) + "…"
+    private fun capped(vs: List<String>, n: Int = 12): List<String> =
+        if (vs.size <= n) vs else vs.take(n) + "…"
 
     /** `tools:` items: the curated design-time attributes plus a `tools:`-prefixed override of every
      *  `android:`/`app:` attribute the element accepts (`tools:text`, `tools:visibility`, …). */
@@ -167,7 +192,10 @@ class AndroidXmlContributor(
         for (spec in mergedAttributes(pos)) {
             val toolsName = "tools:" + spec.name.substringAfter(':', spec.name)
             if (toolsName in pos.existingAttributes || AndroidToolsCatalog.attribute(toolsName) != null) continue
-            out += attributeItem(spec.copy(name = toolsName), pos) // reuse the override's value shape under tools:
+            out += attributeItem(
+                spec.copy(name = toolsName),
+                pos
+            ) // reuse the override's value shape under tools:
         }
         return out
     }
@@ -221,7 +249,12 @@ class AndroidXmlContributor(
 
     private fun manifestTagItems(pos: XmlCompletionPosition): List<CompletionItem> =
         AndroidManifestCatalog.childrenOf(pos.parentTag).map { tag ->
-            CompletionItem(label = tag, insertText = tag, kind = CompletionItemKind.CLASS, detail = "manifest")
+            CompletionItem(
+                label = tag,
+                insertText = tag,
+                kind = CompletionItemKind.CLASS,
+                detail = "manifest"
+            )
         }
 
     private fun attributeItem(spec: AttributeSpec, pos: XmlCompletionPosition): CompletionItem {
@@ -242,7 +275,10 @@ class AndroidXmlContributor(
     /** The edit (if any) that declares the [prefix] namespace on the root element, when a namespaced attribute
      *  is being accepted and that namespace isn't declared yet. Empty for an unprefixed/unknown prefix or when
      *  it's already declared (or there's no root to attach it to). */
-    private fun namespaceDeclarationEdit(prefix: String, pos: XmlCompletionPosition): List<TextEdit> {
+    private fun namespaceDeclarationEdit(
+        prefix: String,
+        pos: XmlCompletionPosition
+    ): List<TextEdit> {
         val uri = NAMESPACE_URIS[prefix] ?: return emptyList()
         if (prefix in pos.declaredNamespaces || pos.namespaceInsertOffset < 0) return emptyList()
         val at = pos.namespaceInsertOffset
@@ -265,15 +301,27 @@ class AndroidXmlContributor(
         for (type in spec.resourceTypes) {
             if (type == ResourceType.ID) {
                 // An id attribute almost always declares a new id.
-                out += CompletionItem("@+id/", "@+id/", CompletionItemKind.SNIPPET, detail = "new id")
+                out += CompletionItem(
+                    "@+id/",
+                    "@+id/",
+                    CompletionItemKind.SNIPPET,
+                    detail = "new id"
+                )
             }
             for (c in runCatching { resources(type) }.getOrDefault(emptyList())) {
                 val ref = "@${type.rClass}/${c.name}"
                 // Show the resolved value as the hint (@string/app_name → "CodeAssist", @color/primary → #6200EE)
                 // so the right resource is pickable at a glance; fall back to the resource type for file resources.
-                out += CompletionItem(ref, ref, CompletionItemKind.FIELD, detail = c.value?.let(::valuePreview) ?: type.rClass)
+                out += CompletionItem(
+                    ref,
+                    ref,
+                    CompletionItemKind.FIELD,
+                    detail = c.value?.let(::valuePreview) ?: type.rClass
+                )
             }
-            if (wantFramework) for (name in runCatching { frameworkResources(type) }.getOrDefault(emptyList())) {
+            if (wantFramework) for (name in runCatching { frameworkResources(type) }.getOrDefault(
+                emptyList()
+            )) {
                 val ref = "@android:${type.rClass}/$name"
                 out += CompletionItem(ref, ref, CompletionItemKind.FIELD, detail = "android")
             }
@@ -291,9 +339,16 @@ class AndroidXmlContributor(
                 out += CompletionItem(ref, ref, CompletionItemKind.FIELD, detail = "theme attr")
             }
             if (prefix.startsWith("?android", ignoreCase = true)) {
-                for (name in runCatching { frameworkResources(ResourceType.ATTR) }.getOrDefault(emptyList())) {
+                for (name in runCatching { frameworkResources(ResourceType.ATTR) }.getOrDefault(
+                    emptyList()
+                )) {
                     val ref = "?android:attr/$name"
-                    out += CompletionItem(ref, ref, CompletionItemKind.FIELD, detail = "android theme attr")
+                    out += CompletionItem(
+                        ref,
+                        ref,
+                        CompletionItemKind.FIELD,
+                        detail = "android theme attr"
+                    )
                 }
             }
         }

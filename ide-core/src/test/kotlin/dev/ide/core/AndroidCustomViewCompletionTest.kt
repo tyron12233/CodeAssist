@@ -65,4 +65,55 @@ class AndroidCustomViewCompletionTest {
         val attrLabels = runBlocking { s.complete(layout, attrText, attrOffset) }.items.map { it.label }
         assertTrue("android:text" in attrLabels, "inherited android:text expected on the source custom view; got $attrLabels")
     }
+
+    /**
+     * The bug this fixes: a custom `View` created AFTER a layout's XML analyzer was built never appeared in
+     * tag completion, because the analyzer's custom-view list was a one-time snapshot and a source SAVE neither
+     * reindexed source nor rebuilt the analyzer. Now a `.java`/`.kt` save incrementally reindexes source and the
+     * analyzer re-queries the (source-index-generation-keyed) custom-view list live — so the new view shows up
+     * WITHOUT `reindex()` or reopening the layout.
+     */
+    @Test
+    fun customViewSavedAfterAnalyzerBuiltAppearsWithoutReindex() {
+        val s = IdeServices.bootstrapDemo(root).also { services = it }
+        awaitIndexed(s)
+
+        val layout = root.resolve("app/src/main/res/layout/probe.xml")
+        Files.createDirectories(layout.parent)
+        val tagText = "<LinearLayout xmlns:android=\"http://schemas.android.com/apk/res/android\">\n  <TestVie\n</LinearLayout>"
+        val tagOffset = tagText.indexOf("<TestVie") + "<TestVie".length
+
+        // Build the XML analyzer BEFORE the custom view exists — it must NOT be offered yet.
+        val before = runBlocking { s.complete(layout, tagText, tagOffset) }.items.map { it.insertText }
+        assertTrue(before.none { it == "com.example.app.TestView" }, "TestView not expected before creation; got $before")
+
+        // Author + SAVE a new custom View (a FileChanged → incremental source reindex, NO analyzer rebuild).
+        val srcDir = root.resolve("app/src/main/java/com/example/app")
+        Files.createDirectories(srcDir)
+        s.save(
+            srcDir.resolve("TestView.java"),
+            """
+            package com.example.app;
+            import android.content.Context;
+            import android.util.AttributeSet;
+            import android.view.View;
+            public class TestView extends View {
+                public TestView(Context c, AttributeSet a) { super(c, a); }
+            }
+            """.trimIndent(),
+        )
+
+        // The incremental reindex is async; the tag must appear on the SAME analyzer (live-queried list), so poll.
+        val deadline = System.currentTimeMillis() + 60_000
+        var labels: List<String?> = emptyList()
+        while (System.currentTimeMillis() < deadline) {
+            labels = runBlocking { s.complete(layout, tagText, tagOffset) }.items.map { it.insertText }
+            if (labels.any { it == "com.example.app.TestView" }) break
+            Thread.sleep(50)
+        }
+        assertTrue(
+            labels.any { it == "com.example.app.TestView" },
+            "source custom view tag expected after save without reindex; got $labels",
+        )
+    }
 }

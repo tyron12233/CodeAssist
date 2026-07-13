@@ -268,8 +268,9 @@ class IdeServicesBackend(
     init {
         Log.addSink(errorDialogSink)
 
-        // index_perf: time each index build (building → not building) and emit its duration. Low-volume
-        // (once per build/reindex). Re-subscribes per project (collectLatest on the epoch).
+        // index_perf: time each index build (building → not building) and emit its duration + a per-indexer
+        // breakdown, so the fleet reveals WHICH index (and which phase) dominates. Low-volume (once per
+        // build/reindex). Re-subscribes per project (collectLatest on the epoch).
         analyticsScope.launch {
             projectEpoch.collectLatest {
                 val svc = activeServices ?: return@collectLatest
@@ -279,12 +280,31 @@ class IdeServicesBackend(
                     if (st.building && !building) { building = true; startNs = System.nanoTime() }
                     else if (!st.building && building) {
                         building = false
-                        // Heap at index completion (Phase-0 build-isolation instrumentation) so the index
-                        // phase's memory footprint is comparable to a build's peak across the fleet.
-                        track(
-                            dev.ide.analytics.Events.INDEX_PERF,
-                            mapOf("duration_ms" to ((System.nanoTime() - startNs) / 1_000_000).toString()) + MemSample.now().props(),
-                        )
+                        val props = buildMap {
+                            put("duration_ms", ((System.nanoTime() - startNs) / 1_000_000).toString())
+                            // Phase split + cache effectiveness + source-diff counts: is the wall time in the
+                            // library phase or the source phase, and how much came from the on-disk segment
+                            // cache vs. a fresh build. All counts/times — no names or paths.
+                            st.stats?.let { s ->
+                                put("lib_ms", s.libMs.toString())
+                                put("src_ms", s.sourceMs.toString())
+                                put("artifacts", s.artifacts.toString())
+                                put("artifacts_built", s.artifactsBuilt.toString())
+                                put("artifacts_reused", s.artifactsReused.toString())
+                                put("src_files", s.sourceFiles.toString())
+                                put("src_parsed", s.sourceParsed.toString())
+                            }
+                            // Per-indexer time (the "which index is slow" signal), keyed by the stable index
+                            // id (e.g. idx.java.classNames.ms) — never a file/artifact/project name. Skip the
+                            // trivially-fast ones (<1ms) to keep the row bounded.
+                            for (b in st.breakdown) if (b.indexMs >= 1) {
+                                put("idx.${b.id}.ms", b.indexMs.toString())
+                            }
+                            // Heap at index completion (Phase-0 build-isolation instrumentation) so the index
+                            // phase's memory footprint is comparable to a build's peak across the fleet.
+                            putAll(MemSample.now().props())
+                        }
+                        track(dev.ide.analytics.Events.INDEX_PERF, props)
                     }
                 }
             }
@@ -361,6 +381,12 @@ class IdeServicesBackend(
      *  [IdeServices.composePreviewLibs]). Lowest-priority engine work; preempted by analysis and completion. */
     suspend fun composePreviewLibs(path: String): ComposePreviewLibs? =
         preview { services.composePreviewLibs(Paths.get(path)) }
+
+    /** The previewed module's resources + R package for interpreter-mediated resource resolution
+     *  (`stringResource`/`R.string.x`/…); the launcher builds a `PreviewResourceResolver` from it. Off the UI
+     *  thread (the first `ResourceRepository` build parses all dependency/AAR res). */
+    suspend fun composePreviewResources(path: String): ComposePreviewResources? =
+        preview { services.composePreviewResources(Paths.get(path)) }
 
     /** Lower a self-contained Learn-lesson Compose snippet [code] (with NO open project) through the Learn
      *  Compose scratch, for the preview host's `LessonPreview`. Rendering uses the bundled Compose runtime, so

@@ -217,7 +217,7 @@ internal class LearnBackend(private val ctx: BackendContext) : LearnService {
             // from an earlier build isn't reopened as the wrong (JVM) module type — this makes a fresh dir.
             "kotlin-compose" -> manager.scratch(
                 "compose-android", "android-library",
-                mapOf("packageName" to "dev.ide.learn.compose", "language" to "kotlin", "minSdk" to "21"),
+                mapOf("packageName" to "dev.ide.learn.compose", "language" to "kotlin", "minSdk" to "26"),
             ).also { ensureCompose(it) }
             "kotlin" -> manager.scratch("kotlin-console")
             else -> manager.scratch("java-console")

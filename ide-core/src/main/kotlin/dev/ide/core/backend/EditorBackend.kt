@@ -132,10 +132,6 @@ internal class EditorBackend(private val ctx: BackendContext) : EditorService {
     override fun saveFile(path: String, text: String) = ctx.services.save(Paths.get(path), text)
 
     override suspend fun complete(path: String, text: String, offset: Int): UiCompletionResult {
-        // One uniform pipeline for every language: the file's backend publishes its completion as a
-        // contributor, so there is no per-backend routing here. A preemption from inside the pipeline
-        // (a newer keystroke superseded this request) keeps the current popup — the newer request
-        // produces the live list.
         val t0 = System.nanoTime()
         val result = try {
             ctx.interactive { ctx.services.complete(Paths.get(path), text, offset) }
@@ -311,10 +307,12 @@ internal class EditorBackend(private val ctx: BackendContext) : EditorService {
 
     override suspend fun actionsAt(
         path: String, text: String, selStart: Int, selEnd: Int
-    ): List<UiAction> = withContext(ctx.engineDispatcher) {
-        ctx.services.editorActions(
-            Paths.get(path), text, selStart, selEnd
-        )
+    ): List<UiAction> = timedPass("actions", path, { it.size }) {
+        // Timed like a daemon pass because a CPU trace showed THIS (lightbulb / import quick-fixes → full
+        // diagnostics → deep inference) as a heavy entry point, yet it was invisible in the perf timeline.
+        withContext(ctx.engineDispatcher) {
+            ctx.services.editorActions(Paths.get(path), text, selStart, selEnd)
+        }
     }.mapIndexed { i, fix -> UiAction(i, fix.title, mapActionKind(fix.kind)) }
 
     override suspend fun applyAction(

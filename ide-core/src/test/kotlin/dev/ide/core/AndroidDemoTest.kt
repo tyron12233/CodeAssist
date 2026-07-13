@@ -2,8 +2,11 @@ package dev.ide.core
 
 import dev.ide.ui.backend.TreeNode
 import java.nio.file.Files
+import java.nio.file.Paths
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertNotNull
+import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 /**
@@ -48,6 +51,34 @@ class AndroidDemoTest {
             assertTrue("assemble:app:release" in ids, "Run picker should offer assemble release: $ids")
             // reindex is a fire-and-forget background action; it must at least not throw.
             ide.reindex()
+        }
+        dir.toFile().deleteRecursively()
+    }
+
+    /**
+     * A file under `res/` maps to its owning module through the backend's [moduleNameForFile] — the resolver
+     * the layout-preview "prepare libraries" action ([onPrepare]) uses to build for the previewed file. The
+     * source-only [moduleForFile] misses a resource file (its `res/` root is not a SOURCE root), so before the
+     * fix that action silently no-op'd on a layout: it pressed but no build started. [moduleForEditableFile]
+     * (source → res → manifest) resolves it.
+     */
+    @Test
+    fun resourceFileResolvesToItsModuleForBuildActions() {
+        val dir = Files.createTempDirectory("ide-android-resmod")
+        IdeServices.bootstrapDemo(dir).use { ide ->
+            val backend = IdeServicesBackend(ide)
+            fun flatten(n: TreeNode): List<TreeNode> = listOf(n) + n.children.flatMap { flatten(it) }
+            // A real editable resource in the demo (`res/values/strings.xml`), sitting under an ANDROID_RES root.
+            val resFile = flatten(backend.files.fileTree()).first { it.name == "strings.xml" }.filePath
+            assertNotNull(resFile, "the demo must surface an editable res file")
+            val resPath = Paths.get(resFile)
+
+            // The source-only lookup can't see a res file — this is exactly why onPrepare used to do nothing.
+            assertNull(ide.moduleForFile(resPath), "a res/ file has no source root, so moduleForFile misses it")
+            // The editable-file resolver (and the backend API that now delegates to it) resolves it.
+            val module = ide.moduleForEditableFile(resPath)
+            assertNotNull(module, "moduleForEditableFile must resolve a res file to its module")
+            assertEquals(module.name, backend.files.moduleNameForFile(resFile), "moduleNameForFile must agree")
         }
         dir.toFile().deleteRecursively()
     }
