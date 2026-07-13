@@ -100,6 +100,11 @@ sealed interface ResolvedCallable {
          *  (`Text(text = …, modifier = …)`) back to their parameter positions before dispatch. Empty when the
          *  symbol model didn't carry them (then only positional binding is possible). */
         val paramNames: List<String> = emptyList(),
+        /** The index of the `vararg` value parameter, or -1 if none. A NON-last vararg (`key(vararg keys, block)`,
+         *  `CompositionLocalProvider(vararg values, content)`) compiles to a plain `Object[]`/`ProvidedValue[]`
+         *  the compiler packs at the call site — so the reflective invoke needs the loose args packed into that
+         *  array, which only this index makes possible. */
+        val varargParamIndex: Int = -1,
     ) : ResolvedCallable
 
     /** A project-source target — its body is available to interpret. [declId] locates the declaration. */
@@ -124,8 +129,10 @@ data class RArg(
     val trailingLambda: Boolean = false,
 )
 
-/** A lambda/function parameter slot. */
-data class RParam(val slot: SlotId, val name: String, val type: KotlinType?)
+/** A lambda/function parameter slot. [default] is the lowered default-value expression for a function
+ *  parameter that declares one (`modifier: Modifier = Modifier`), evaluated in the callee's frame when a call
+ *  omits the argument; null for a required parameter, a lambda parameter, or a default that couldn't lower. */
+data class RParam(val slot: SlotId, val name: String, val type: KotlinType?, val default: RNode? = null)
 
 /** A node of the resolved tree. Sealed + total: the only "I can't" is [Unsupported]. */
 sealed interface RNode {
@@ -354,8 +361,11 @@ fun reachableSourceClasses(
                             reachClass(owner)
                         } else {
                             // A top-level source function (`Greeting(...)`) is keyed `name/arity` in the program;
-                            // a member/super call carries its declaring class as `owner` (`pkg.Type.name`).
-                            program["${callee.displayName}/${node.args.size}"]?.let { addBody(it.body) }
+                            // a member/super call carries its declaring class as `owner` (`pkg.Type.name`). Key by
+                            // the callee's DECLARED arity (from `declId`) so a call that omits trailing defaulted
+                            // arguments still follows the function's body (else its reachable classes are missed).
+                            val declaredArity = callee.declId.substringAfterLast('/').toIntOrNull() ?: node.args.size
+                            program["${callee.displayName}/$declaredArity"]?.let { addBody(it.body) }
                             if ('.' in owner) reachClass(owner.substringBeforeLast('.'))
                         }
                     }
@@ -480,7 +490,10 @@ fun expandPreviewModel(seed: PreviewFileModel, maxFiles: Int, provider: PreviewD
                         val owner = callee.declId.substringBeforeLast('/')
                         when {
                             callee.isConstructor -> requestType(callee.displayName) // carries the simple name
-                            node.dispatch == DispatchKind.TOP_LEVEL -> requestFn(callee.displayName, node.args.size)
+                            // Key by the callee's DECLARED arity so an omitted-defaults call's `already in program`
+                            // short-circuit matches the registered `name/declaredArity` key.
+                            node.dispatch == DispatchKind.TOP_LEVEL ->
+                                requestFn(callee.displayName, callee.declId.substringAfterLast('/').toIntOrNull() ?: node.args.size)
                             '.' in owner -> requestType(owner.substringBeforeLast('.')) // a member's owner FQN
                         }
                     }

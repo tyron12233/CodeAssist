@@ -25,6 +25,14 @@ object KotlinPerf {
     private val log = Log.logger("kotlin-perf")
     private val current = ThreadLocal<Trace?>()
 
+    /** Global count of callee-resolution / applicability work units (bumped by the resolver's hottest path via
+     *  [bump]). Surfaced as `resolveOps=N` in each [trace] summary so an exponential overload/inference blowup
+     *  is a visible NUMBER (millions on one file), not just a slow wall time. Only bumped while [enabled]. */
+    private val resolveOps = java.util.concurrent.atomic.AtomicLong(0)
+
+    /** Bump the resolve-work counter (cheap; only when timing is on). Called from the hot resolver path. */
+    fun bump() { if (PerfTrace.enabled) resolveOps.incrementAndGet() }
+
     /** Time [block] as a top-level path called [label]; logs the stage breakdown on exit (when [enabled]). */
     inline fun <T> trace(label: String, block: () -> T): T {
         if (!enabled) return block()
@@ -51,6 +59,9 @@ object KotlinPerf {
 
     fun begin(label: String): Trace? {
         val outer = current.get()
+        // START marker: during a hang the summary line never arrives, so this names the Kotlin pass that is
+        // stuck at a given (GC) timestamp.
+        log.info("$label STARTED")
         current.set(Trace(label))
         return outer
     }
@@ -67,6 +78,7 @@ object KotlinPerf {
 
     class Trace(private val label: String) {
         private val start = System.nanoTime()
+        private val opsStart = resolveOps.get()
         private val buckets = LinkedHashMap<String, Long>()
         fun add(name: String, nanos: Long) {
             buckets[name] = (buckets[name] ?: 0L) + nanos
@@ -75,6 +87,7 @@ object KotlinPerf {
             val total = System.nanoTime() - start
             val sb = StringBuilder("$label total=${ms(total)}")
             for ((n, ns) in buckets) sb.append(' ').append(n).append('=').append(ms(ns))
+            sb.append(" resolveOps=").append(resolveOps.get() - opsStart)
             return sb.toString()
         }
     }

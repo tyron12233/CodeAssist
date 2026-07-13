@@ -17,9 +17,10 @@ import org.jetbrains.kotlin.psi.KtFile
  * `PsiErrorElement`s and recovers on broken input, so a `KtFile` always covers the whole file, satisfying the
  * DOM's error-tolerance contract (essential because completion fires mid-edit).
  *
- * Threading: [parse]/[tryReparse] serialize under [IntellijPsiHost.parseLock] and fully materialize the tree
- * ([IntellijPsiHost.forceFullParse]) while holding it, so no `buildTree` ever runs during the unlocked,
- * possibly-concurrent traversal that follows — a native SIGSEGV on ART otherwise (see [IntellijPsiHost]).
+ * Threading: [parse]/[tryReparse] serialize under the shared parse lock ([IntellijPsiHost.withParseLock]) and
+ * fully materialize the tree ([IntellijPsiHost.forceFullParse]) while holding it, so no `buildTree` ever runs
+ * during the unlocked, possibly-concurrent traversal that follows — a native SIGSEGV on ART otherwise (see
+ * [IntellijPsiHost]).
  */
 object KotlinParserHost {
 
@@ -38,10 +39,10 @@ object KotlinParserHost {
      * the existing PSI (only the changed span is re-lexed/re-parsed). Returns the same (now-mutated) [file] on
      * success, or null when incremental reparse isn't applicable / failed — the caller then [parse]s fresh
      * (a failed reparse may leave [file] partially mutated, so it must be discarded). Serialized under the
-     * same [IntellijPsiHost.parseLock] as [parse], so it never races a parse on a background index thread.
+     * same parse lock as [parse], so it never races a parse on a background index thread.
      */
     fun tryReparse(file: KtFile, newText: CharSequence): KtFile? =
-        synchronized(IntellijPsiHost.parseLock) {
+        IntellijPsiHost.withParseLock {
             KotlinPsiMutation.reparse(file, newText)?.also { IntellijPsiHost.forceFullParse(it) }
         }
 

@@ -117,7 +117,11 @@ fun KotlinResolver.lambdaParameterTypes(lambda: KtLambdaExpression): List<TypeRe
 internal fun KotlinResolver.expectedLambdaShape(lambda: KtLambdaExpression): KotlinSymbolService.FunctionalShape? {
     // A shape pushed TOP-DOWN by bidirectional inference / overload resolution wins — it types the lambda's
     // parameters from the candidate under evaluation without re-resolving the (mid-resolution) enclosing call.
-    lambdaShapeOverrides[lambda]?.let { return it }
+    // This is the ONE place [lambdaShapeOverrides] is read, so record the consult for the dependency-tracked
+    // scoring-time callee cache (see [KotlinResolver.scoringCalleeCache]).
+    val override = lambdaShapeOverrides[lambda]
+    recordOverrideConsult(lambda, override)
+    override?.let { return it }
     // A lambda declared with an explicit functional type (`val isOdd: (Int) -> Boolean = { it % 2 != 0 }`, a
     // typed parameter default, a function expression body) is typed by that declaration — its `it`/named params
     // come from the declared `(P…) -> R`, not from an enclosing call (there is none).

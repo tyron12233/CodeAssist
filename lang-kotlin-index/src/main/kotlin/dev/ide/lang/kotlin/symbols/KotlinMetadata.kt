@@ -211,6 +211,19 @@ object KotlinMetadata {
                 origin = BINARY,
             )
         }
+
+        // nested classes support
+        km.nestedClasses.forEach { nested ->
+            if (nested == km.companionObject) return@forEach
+            own += KotlinSymbol(
+                name = nested,
+                kind = SymbolKind.CLASS,
+                type = KotlinType("$classFqn.$nested", context = ctx),
+                owner = owner,
+                modifiers = setOf(Modifier.STATIC), // a nested type is reached statically via the outer
+                origin = BINARY,
+            )
+        }
         return Decoded(
             classFqn,
             km.supertypes.mapNotNull { typeRef(it, ctx, classTp) },

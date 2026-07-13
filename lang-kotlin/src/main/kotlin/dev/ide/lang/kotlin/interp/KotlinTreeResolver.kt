@@ -262,18 +262,45 @@ class KotlinTreeResolver(
     fun lowerFunction(fn: KtNamedFunction): ResolvedFunction {
         reset(fn.textRange.startOffset)
         scopes.addLast(HashMap())
-        val params = fn.valueParameters.map { p ->
-            val slot = newSlot()
-            val name = p.name ?: "_"
-            bind(name, Binding.Param(slot, name))
-            RParam(slot, name, service.typeFromText(p.typeReference?.text, resolver.fileContext))
-        }
+        val params = loweredValueParams(fn.valueParameters)
         val body = when {
             fn.hasBlockBody() -> fn.bodyBlockExpression?.let { lowerBlock(it) } ?: emptyBlock(fn)
             else -> fn.bodyExpression?.let { lower(it) } ?: unsupported("empty body", fn)
         }
         scopes.removeLast()
         return ResolvedFunction(fn.name ?: "<anonymous>", params, body, diagnostics.toList(), returnsUnit = returnsUnit(fn))
+    }
+
+    /** Lower a function's value parameters: bind each (so the body and each default may reference the others),
+     *  then capture each parameter's default-value expression so a call that omits a defaulted argument
+     *  (`Greeting("x")` for `fun Greeting(name: String, modifier: Modifier = Modifier)`) can fill it at call
+     *  time. All parameters are bound BEFORE any default lowers so a default may reference a sibling; a default
+     *  that doesn't lower cleanly is dropped (its diagnostics rolled back), so an unused, un-interpretable
+     *  default never blocks the whole function. */
+    private fun loweredValueParams(valueParameters: List<KtParameter>): List<RParam> {
+        val bound = valueParameters.map { p ->
+            val slot = newSlot()
+            val name = p.name ?: "_"
+            bind(name, Binding.Param(slot, name))
+            Triple(slot, name, p)
+        }
+        return bound.map { (slot, name, p) ->
+            RParam(slot, name, service.typeFromText(p.typeReference?.text, resolver.fileContext),
+                default = p.defaultValue?.let { lowerParamDefault(it) })
+        }
+    }
+
+    /** Lower a parameter default, returning null (and rolling back any diagnostics it produced) when it can't
+     *  lower cleanly — an omitted argument then falls back to `null`, exactly as before defaults were modeled,
+     *  rather than marking the whole function incomplete over a default the call may never use. */
+    private fun lowerParamDefault(expr: KtExpression): RNode? {
+        val before = diagnostics.size
+        val node = lower(expr)
+        if (diagnostics.size > before) {
+            while (diagnostics.size > before) diagnostics.removeAt(diagnostics.size - 1)
+            return null
+        }
+        return node
     }
 
     /** Lower a top-level `val`/`var` (`private val XColor = Color(0xFF…)`) as a synthetic zero-arg getter
@@ -475,12 +502,7 @@ class KotlinTreeResolver(
         scopes.addLast(HashMap())
         classStack.addLast(ctx)
         val thisSlot = newSlot() // slot 0
-        val params = fn.valueParameters.map { p ->
-            val slot = newSlot()
-            val name = p.name ?: "_"
-            bind(name, Binding.Param(slot, name))
-            RParam(slot, name, service.typeFromText(p.typeReference?.text, resolver.fileContext))
-        }
+        val params = loweredValueParams(fn.valueParameters)
         val body = when {
             fn.hasBlockBody() -> fn.bodyBlockExpression?.let { lowerBlock(it) } ?: emptyBlock(fn)
             else -> fn.bodyExpression?.let { lower(it) } ?: unsupported("empty body", fn)
@@ -1790,6 +1812,7 @@ class KotlinTreeResolver(
             isComposable = sym.isComposable,
             descriptorPrecise = sym.declaringClassFqn != null,
             paramNames = sym.paramNames,
+            varargParamIndex = sym.varargParamIndex,
         )
     }
 

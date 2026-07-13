@@ -46,6 +46,9 @@ class KotlinComposeBinaryShapeTest {
         "dev/ide/fakecompose/FakeModifierKt.class",
         "dev/ide/fakecompose/FakeDefaults.class",
         "dev/ide/fakecompose/FakeTheme.class",
+        "dev/ide/fakecompose/FakeGridCells.class",
+        "dev/ide/fakecompose/FakeGridCells\$Fixed.class",
+        "dev/ide/fakecompose/FakeGridCells\$Adaptive.class",
     )
 
     private fun jar(): Path {
@@ -93,6 +96,18 @@ class KotlinComposeBinaryShapeTest {
             "it must render as a `suspend (…) -> R` type; got ${block}")
         assertTrue(dev.ide.lang.kotlin.symbols.TypeRendering.isSuspendFunctionType(block.qualifiedName),
             "isSuspendFunctionType must recognise it")
+    }
+
+    @Test
+    fun nestedClassesOfAKotlinTypeAreInTheBinaryTypeShape() {
+        // `GridCells.Fixed`/`Adaptive` shape: a Kotlin `@Metadata` type's nested classes must survive the
+        // persistent `kotlin.typeShape` index round-trip as STATIC CLASS members, so `Owner.` completion and a
+        // `Owner.Nested` selector reach them (the Java-bytecode path already did; the metadata path didn't).
+        val members = service.membersOf("dev.ide.fakecompose.FakeGridCells", emptyList(), null)
+            .filterIsInstance<KotlinSymbol>()
+        val nested = members.filter { it.kind == dev.ide.lang.resolve.SymbolKind.CLASS }.map { it.name }
+        assertTrue("Fixed" in nested && "Adaptive" in nested,
+            "the interface's nested classes must be STATIC CLASS members of its shape; got $nested")
     }
 
     @Test

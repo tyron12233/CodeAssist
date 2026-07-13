@@ -79,6 +79,56 @@ class KotlinComposeContextTest {
     }
 
     @Test
+    fun composableCallNestedTwoContentLambdasDeepIsOk() {
+        // The reported false positive: `Card { Box { Column() } }` — a @Composable call inside a content lambda
+        // that is ITSELF inside another content lambda. The context walk must find the innermost @Composable
+        // content slot rather than falsely deciding non-composable. `FakeRow` mirrors `Box`/`Card` (a defaulted
+        // leading param + a `@Composable FakeScope.() -> Unit` content).
+        val diags = diagnose("Nested.kt", "package demo\n@Composable fun F() { FakeRow { FakeRow { FakeText(\"x\") } } }")
+        assertTrue(!hasComposableError(diags), "a composable call nested two content lambdas deep must not be flagged; got $diags")
+    }
+
+    @Test
+    fun composableCallNestedInPlainContentLambdasIsOk() {
+        val diags = diagnose("NestedPlain.kt", "package demo\n@Composable fun F() { FakeColumn { FakeColumn { FakeText(\"x\") } } }")
+        assertTrue(!hasComposableError(diags), "a composable call nested two plain content lambdas deep must not be flagged; got $diags")
+    }
+
+    @Test
+    fun composableCallInsideAnOverloadedComposablesContentLambdaIsOk() {
+        // `FakeBox` has a content-less overload (`Box(modifier)`) PLUS a content overload — the real `Box`/`Card`
+        // shape. `FakeBox { }` must resolve to the CONTENT overload so its @Composable slot is seen.
+        val diags = diagnose("InBox.kt", "package demo\n@Composable fun F() { FakeBox { FakeText(\"x\") } }")
+        assertTrue(!hasComposableError(diags), "a composable call inside an overloaded composable's content lambda must not be flagged; got $diags")
+    }
+
+    @Test
+    fun composableCallNestedInOverloadedContentLambdasIsOk() {
+        // The EXACT reported shape `Card { Box { Column() } }` — nested content lambdas of OVERLOADED composables.
+        val diags = diagnose("NestedBox.kt", "package demo\n@Composable fun F() { FakeBox { FakeBox { FakeText(\"x\") } } }")
+        assertTrue(!hasComposableError(diags), "a composable call nested in overloaded composables' content lambdas must not be flagged; got $diags")
+    }
+
+    @Test
+    fun composableCallDeeplyNestedInOverloadedContentLambdasIsOk() {
+        // The FREEZE repro: a deeply nested tree of OVERLOADED composables (`FakeBox { FakeBox { … } }`, each
+        // with a content-less + a content overload). Overload scoring re-resolves every nested call once per
+        // candidate per level, so without the dependency-tracked scoring-callee cache this is
+        // ∏(candidate)-exponential — on a real Compose screen it pegged the CPU + GC for ~110s and froze the
+        // editor. The cache collapses it to O(calls); this asserts the resolution is still CORRECT at depth (a
+        // poisoned cache would misresolve an overload and mis-flag the innermost @Composable call). Runs fast
+        // only because the collapse holds.
+        val depth = 12
+        var body = "FakeText(\"x\")"
+        repeat(depth) { body = "FakeBox { $body }" }
+        val diags = diagnose("DeepNested.kt", "package demo\n@Composable fun F() { $body }")
+        assertTrue(
+            !hasComposableError(diags),
+            "a composable call nested $depth overloaded content lambdas deep must not be flagged; got $diags",
+        )
+    }
+
+    @Test
     fun plainCallIsNeverFlagged() {
         val diags = diagnose("PlainCall.kt", "package demo\nfun f() { plainHelper(1) }")
         assertTrue(!hasComposableError(diags), "a non-composable call must never be flagged; got $diags")

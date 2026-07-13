@@ -50,40 +50,62 @@ fun KotlinResolver.inferType(expr: KtExpression?): KotlinType? {
     // can't leak across narrowing scopes or poison a lambda body's real type with a candidate-scoped one.
     val cacheable = narrowings.isEmpty() && lambdaShapeOverrides.isEmpty()
     if (cacheable && inferCache.containsKey(expr)) return inferCache[expr]
+    // During overload SCORING the ordinary [inferCache] is bypassed (a type inferred under a pushed lambda-shape
+    // override is context-dependent). But `isApplicable` and `lambdaReturnSpecificity` re-type the SAME lambda
+    // body, and every candidate re-types the SAME non-lambda arguments, so a large Compose file re-infers the
+    // same expressions O(candidates) times per level — the allocation-heavy work behind the semantic pass's GC
+    // storm. Memoize here too, dependency-tracked by exactly the OUTER overrides consulted (see
+    // [KotlinResolver.scoringInferCache] / [resolveCalleeFunction]); skipped while narrowings are active.
+    val scoringMemoable = scoringActive && narrowings.isEmpty()
+    if (scoringMemoable) {
+        scoringInferCache[expr]?.let { e ->
+            if (overridesMatch(e.deps)) { propagateDeps(e.deps); return e.result }
+        }
+    }
+    // Re-entrancy guard (see [KotlinResolver.inferringTypes]): a cycle that re-enters the SAME expression while
+    // it is mid-inference can't be served from the cache (written only below), so break it with null.
+    if (!inferringTypes.add(expr)) return null
     if (KotlinResolverStats.enabled) KotlinResolverStats.inferComputes++
-    val r = when (expr) {
-        is KtParenthesizedExpression -> inferType(expr.expression)
-        is KtConstantExpression -> constType(expr)
-        is KtStringTemplateExpression -> service.typeByFqn("kotlin.String")
-        is KtNameReferenceExpression -> typeOfName(
-            expr.getReferencedName(),
-            expr.textRange.startOffset
-        )
+    val frame = if (scoringMemoable) ScoringDepFrame().also { scoringDepFrames.addLast(it) } else null
+    val r = try {
+        when (expr) {
+            is KtParenthesizedExpression -> inferType(expr.expression)
+            is KtConstantExpression -> constType(expr)
+            is KtStringTemplateExpression -> service.typeByFqn("kotlin.String")
+            is KtNameReferenceExpression -> typeOfName(
+                expr.getReferencedName(),
+                expr.textRange.startOffset
+            )
 
-        is KtCallExpression -> typeOfCall(expr, null)
-        is KtQualifiedExpression -> typeOfQualified(expr)
-        is KtClassLiteralExpression -> classLiteralType(expr)
-        // An anonymous object (`object : Foo { }` / `object { }`): typed to the synthetic classifier the source
-        // model registered its declaration under, so its own + supertype members enumerate + are checked.
-        is KtObjectLiteralExpression -> objectLiteralType(expr)
-        // An anonymous function (`fun(x: Int): Int = …`) used as a value → its `(P…) -> R` function type.
-        is KtNamedFunction -> if (expr.name == null) anonymousFunctionType(expr) else null
-        is KtThisExpression -> thisType(expr)
-        is KtSuperExpression -> superType(expr)
-        is KtBinaryExpression -> inferBinaryType(expr)
-        is KtBinaryExpressionWithTypeRHS -> castType(expr)
-        is KtPrefixExpression -> inferPrefixType(expr)
-        is KtPostfixExpression -> inferPostfixType(expr)
-        is KtArrayAccessExpression -> inferArrayGet(expr)
-        // `if`/`when` used as an expression: the value is one of the branches, so its type is the common
-        // type of the branches — made nullable if any branch is `null` (`fun f(): E? = when(x){ a->E.A;
-        // else->null }`). (A common Compose pattern: `Icon(if (selected) IconA else IconB, …)` — typing the
-        // arg disambiguate the overload.)
-        is KtIfExpression -> inferBranchUnion(listOf(expr.then, expr.`else`))
-        is KtWhenExpression -> inferBranchUnion(expr.entries.map { it.expression })
-        else -> null
+            is KtCallExpression -> typeOfCall(expr, null)
+            is KtQualifiedExpression -> typeOfQualified(expr)
+            is KtClassLiteralExpression -> classLiteralType(expr)
+            // An anonymous object (`object : Foo { }` / `object { }`): typed to the synthetic classifier the source
+            // model registered its declaration under, so its own + supertype members enumerate + are checked.
+            is KtObjectLiteralExpression -> objectLiteralType(expr)
+            // An anonymous function (`fun(x: Int): Int = …`) used as a value → its `(P…) -> R` function type.
+            is KtNamedFunction -> if (expr.name == null) anonymousFunctionType(expr) else null
+            is KtThisExpression -> thisType(expr)
+            is KtSuperExpression -> superType(expr)
+            is KtBinaryExpression -> inferBinaryType(expr)
+            is KtBinaryExpressionWithTypeRHS -> castType(expr)
+            is KtPrefixExpression -> inferPrefixType(expr)
+            is KtPostfixExpression -> inferPostfixType(expr)
+            is KtArrayAccessExpression -> inferArrayGet(expr)
+            // `if`/`when` used as an expression: the value is one of the branches, so its type is the common
+            // type of the branches — made nullable if any branch is `null` (`fun f(): E? = when(x){ a->E.A;
+            // else->null }`). (A common Compose pattern: `Icon(if (selected) IconA else IconB, …)` — typing the
+            // arg disambiguate the overload.)
+            is KtIfExpression -> inferBranchUnion(listOf(expr.then, expr.`else`))
+            is KtWhenExpression -> inferBranchUnion(expr.entries.map { it.expression })
+            else -> null
+        }
+    } finally {
+        if (frame != null) scoringDepFrames.removeLast()
+        inferringTypes.remove(expr)
     }
     if (cacheable) inferCache[expr] = r
+    else if (frame != null) scoringInferCache[expr] = ScoringEntry(r, frame.deps)
     return r
 }
 

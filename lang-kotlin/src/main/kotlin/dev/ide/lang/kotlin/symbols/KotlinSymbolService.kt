@@ -111,6 +111,25 @@ class KotlinSymbolService(
     private val inferredBodyTypeMemo = java.util.Collections.synchronizedMap(java.util.IdentityHashMap<RawCallable, Holder<KotlinType>>())
     private val inferringBody = ThreadLocal.withInitial { java.util.Collections.newSetFromMap(java.util.IdentityHashMap<RawCallable, Boolean>()) }
 
+    // FQNs of source classes with a member whose type is currently being inferred ([inferReturnFromBody]), as a
+    // per-thread reference count (a member inference nests into its class's other members). While a class is in
+    // here, enumerating ITS OWN members ([ownAndInheritedCached]) sees the in-flight member come back
+    // re-entrant-null, so that (partial) list must not be pinned in the session cache — but OTHER classes
+    // enumerated during the same inference are complete and stay cached. Scoping the bypass to the owner class
+    // (not every source class) keeps member enumeration O(members), not O(members × delegates).
+    private val inferringMemberOwners = ThreadLocal.withInitial { HashMap<String, Int>() }
+
+    private fun pushInferringOwner(fqn: String) {
+        val m = inferringMemberOwners.get(); m[fqn] = (m[fqn] ?: 0) + 1
+    }
+
+    private fun popInferringOwner(fqn: String) {
+        val m = inferringMemberOwners.get(); val n = (m[fqn] ?: 0) - 1
+        if (n <= 0) m.remove(fqn) else m[fqn] = n
+    }
+
+    private fun isInferringOwner(fqn: String): Boolean = inferringMemberOwners.get().containsKey(fqn)
+
     // Per-receiver-FQN memo of the (recursively-walked) Kotlin supertype chain — the expensive part of
     // `extensionsFor`/`supertypesOf`, recomputed on every member-access keystroke otherwise. Split by origin:
     // a classpath/builtin type's chain CANNOT depend on project source (the classpath can't extend your code),
@@ -154,6 +173,14 @@ class KotlinSymbolService(
     // stable, dropped on build-start via [classpathCacheUsable]); a SOURCE type's change on edit.
     private val classpathOwnMembersMemo = ConcurrentHashMap<String, List<KotlinSymbol>>()
     @Volatile private var sourceOwnMembersMemo = ConcurrentHashMap<String, List<KotlinSymbol>>()
+    // Per-name memo of [topLevelByName]'s two DISK-SEGMENT-backed callable-index scans (library + Kotlin
+    // builtins). These are the `Segment.exact` queries a CPU trace showed being re-run once per node of the
+    // deep call/overload-inference recursion on a Compose file (every `Text`/`Column`/`remember` re-queried
+    // per inference step) — a segment-read storm that pegged CPU and churned the heap. Session-stable exactly
+    // like the sibling classpath memos (dropped on a (re)build via [classpathCacheUsable]); the PROJECT-SOURCE
+    // callable query stays live (in-memory + edit-sensitive), so a source top-level edit is still seen at once.
+    private val topLevelLibMemo = ConcurrentHashMap<String, List<KotlinSymbol>>()
+    private val topLevelBuiltinMemo = ConcurrentHashMap<String, List<KotlinSymbol>>()
     // Tracks the index's last-seen build state so the classpath memos above are dropped the moment a (re)build
     // STARTS — a rebuilt index can carry different members/extensions (a dependency was added), and a query
     // mid-build sees only a partial index, so partial results must never be cached.
@@ -164,7 +191,7 @@ class KotlinSymbolService(
         val status = idx.status
         val building = status.building
         if (building && !extMemoBuilding) {
-            classpathExtMemo.clear(); checkMembersMemo.clear(); companionMembersMemo.clear(); classpathTypeExistsMemo.clear(); classpathOwnMembersMemo.clear()
+            classpathExtMemo.clear(); checkMembersMemo.clear(); companionMembersMemo.clear(); classpathTypeExistsMemo.clear(); classpathOwnMembersMemo.clear(); topLevelLibMemo.clear(); topLevelBuiltinMemo.clear()
         }
         extMemoBuilding = building
         // Not ready ⇒ queries return PARTIAL results (whatever segments are open) for progressive completion;
@@ -674,7 +701,13 @@ class KotlinSymbolService(
         val kfqn = Builtins.kotlinTypeFor(fqn) ?: fqn
         val idx = index
         return when {
-            model().classByFqn.containsKey(kfqn) -> sourceOwnMembersMemo.getOrPut(kfqn) { ownAndInherited(fqn, emptyList(), HashSet()) }
+            // While THIS class has a member whose type is mid-inference ([isInferringOwner]), enumerating its own
+            // members returns that member re-entrant-null; pinning the partial list would leave it stuck untyped
+            // for the session (`var x by mutableStateOf(emptyList<T>())`). Compute uncached in that window (only
+            // for the owner class — other classes stay cached), like the mid-build partial-shape guard below.
+            model().classByFqn.containsKey(kfqn) ->
+                if (isInferringOwner(kfqn)) ownAndInherited(fqn, emptyList(), HashSet())
+                else sourceOwnMembersMemo.getOrPut(kfqn) { ownAndInherited(fqn, emptyList(), HashSet()) }
             idx != null && !classpathCacheUsable(idx) -> ownAndInherited(fqn, emptyList(), HashSet()) // mid-build: don't pin a partial shape
             else -> classpathOwnMembersMemo.getOrPut(kfqn) { ownAndInherited(fqn, emptyList(), HashSet()) }
         }
@@ -838,6 +871,10 @@ class KotlinSymbolService(
      *  bytecode (so not flagged `internal`) but are never user-facing API, so they must not appear in
      *  completion / member resolution. */
     private fun isImplementationCallable(s: KotlinSymbol): Boolean {
+        // Perf counter: this is the CPU trace's #1 app frame — cheap per call but called per scored
+        // extension/overload candidate, so its count is a direct readout of an overload-scoring blowup
+        // (surfaced as `resolveOps=N` in the kotlin-perf trace lines). No-op unless timing is enabled.
+        dev.ide.lang.kotlin.KotlinPerf.bump()
         val pkg = s.packageName ?: s.declaringClassFqn?.substringBeforeLast('.', "")?.takeIf { it.isNotEmpty() } ?: return false
         return IMPLEMENTATION_PACKAGES.any { pkg == it || pkg.startsWith("$it.") }
     }
@@ -1344,14 +1381,26 @@ class KotlinSymbolService(
         val cp = if (idx != null) {
             // Index only — the stdlib (`println`, `listOf`) is indexed alongside every other library jar.
             // While building this sees the already-open segments (partial, progressive); resolution-driven
-            // NEGATIVE conclusions gate on [classpathReady] separately.
-            idx.exact<CallableShape>(KotlinCallableIndex.id, KotlinCallableIndex.topKey(name)).map { it.toSymbol(this) }.toList() +
-                idx.exact<CallableShape>(KotlinSourceCallableIndex.id, KotlinCallableIndex.topKey(name)).map { it.toSymbol(this, SOURCE) }.toList() +
-                idx.exact<CallableShape>(KotlinBuiltinCallableIndex.id, KotlinCallableIndex.topKey(name)).map { it.toSymbol(this) }.toList()
+            // NEGATIVE conclusions gate on [classpathReady] separately. The library + builtin scans hit disk
+            // segments and are session-stable, so memoize them (the hot re-query under inference recursion);
+            // the project-source scan is in-memory + edit-sensitive, so it stays live. Order is preserved.
+            val usable = classpathCacheUsable(idx)
+            val lib = if (usable) topLevelLibMemo.getOrPut(name) { topLevelLibScan(idx, name) } else topLevelLibScan(idx, name)
+            val srcIdx = idx.exact<CallableShape>(KotlinSourceCallableIndex.id, KotlinCallableIndex.topKey(name)).map { it.toSymbol(this, SOURCE) }.toList()
+            val bi = if (usable) topLevelBuiltinMemo.getOrPut(name) { topLevelBuiltinScan(idx, name) } else topLevelBuiltinScan(idx, name)
+            lib + srcIdx + bi
         } else reader.scan(this).topLevelByName[name].orEmpty() +
             builtins.topLevelCallables().filter { it.receiverTypeFqn == null && it.name == name }
         return src + cp
     }
+
+    /** The library callable-index (`kotlin.callables`) half of [topLevelByName] — a disk-segment `exact` scan. */
+    private fun topLevelLibScan(idx: IndexService, name: String): List<KotlinSymbol> =
+        idx.exact<CallableShape>(KotlinCallableIndex.id, KotlinCallableIndex.topKey(name)).map { it.toSymbol(this) }.toList()
+
+    /** The Kotlin-builtins callable-index half of [topLevelByName] — a disk-segment `exact` scan. */
+    private fun topLevelBuiltinScan(idx: IndexService, name: String): List<KotlinSymbol> =
+        idx.exact<CallableShape>(KotlinBuiltinCallableIndex.id, KotlinCallableIndex.topKey(name)).map { it.toSymbol(this) }.toList()
 
     /**
      * Completion candidates under a dotted package prefix [packageFqn]: its immediate sub-packages + the
@@ -1721,7 +1770,7 @@ class KotlinSymbolService(
         val type = markTypeParameters(
             typeFromText(rc.returnText, rc.ctx)
                 ?: inferInitializerType(rc.initializerText, rc.ctx)
-                ?: inferReturnFromBody(rc),
+                ?: inferReturnFromBody(rc, ownerFqn),
             tps,
         )
         val receiverFqn = rc.receiverText?.let { resolveTypeName(it, rc.ctx) }
@@ -1776,7 +1825,7 @@ class KotlinSymbolService(
      * result is memoized; a re-entrant request (a body whose own type is needed to type it — self/mutual
      * recursion, which Kotlin rejects) returns null to break the cycle without caching a misleading value.
      */
-    private fun inferReturnFromBody(rc: RawCallable): KotlinType? {
+    private fun inferReturnFromBody(rc: RawCallable, ownerFqn: String? = null): KotlinType? {
         val dom = rc.node as? dev.ide.lang.kotlin.parse.KotlinDomNode ?: return null
         // What to type: an expression body / property initializer (inferred directly), or a `by` delegate
         // (resolved through its `value` member — the State/Lazy convention, matching [KotlinResolver.localVar]
@@ -1798,6 +1847,9 @@ class KotlinSymbolService(
         inferredBodyTypeMemo[rc]?.let { return it.value }
         val guard = inferringBody.get()
         if (!guard.add(rc)) return null // re-entrant (self/mutual recursion) → break the cycle, don't cache
+        // Mark this member's owner in-flight so enumerating that class's OWN members ([ownAndInheritedCached])
+        // doesn't pin a partial list in which this member is re-entrant-null (the generic-delegate case).
+        if (ownerFqn != null) pushInferringOwner(ownerFqn)
         val result = try {
             val resolver = dev.ide.lang.kotlin.resolve.KotlinResolver(dom.owner.ktFile, dom.owner, this)
             val inferred = if (delegate != null) resolver.delegatedValueType(delegate) else resolver.inferType(body)
@@ -1810,6 +1862,7 @@ class KotlinSymbolService(
             null
         } finally {
             guard.remove(rc)
+            if (ownerFqn != null) popInferringOwner(ownerFqn)
         }
         inferredBodyTypeMemo[rc] = Holder(result)
         return result

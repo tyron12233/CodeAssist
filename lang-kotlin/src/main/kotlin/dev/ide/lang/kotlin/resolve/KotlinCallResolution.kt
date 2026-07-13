@@ -32,19 +32,50 @@ private const val RECEIVER_EXACT = 1 shl 20
 /** Resolve a call's callee to the best-fitting function overload (member/extension via its receiver, or
  *  top-level), with receiver type params already bound by [KotlinSymbolService.membersOf]. */
 internal fun KotlinResolver.resolveCalleeFunction(call: KtCallExpression): KotlinSymbol? {
-    // While a lambda-shape override is active (overload SCORING — [isApplicable]/[lambdaReturnSpecificity]
-    // typing a candidate's lambda body), the surrounding call is mid-resolution, so a nested resolution can
-    // hit the re-entrancy fallback and produce a context-dependent, provisional result. Bypass the cache so
-    // that provisional result never leaks into the real (post-scoring) inference (see [scoringActive]).
-    val cache = !scoringActive
-    if (cache && calleeCache.containsKey(call)) return calleeCache[call]
+    // Not scoring: the ordinary per-snapshot [calleeCache] (a resolution is pure for the immutable parse).
+    if (!scoringActive) {
+        if (calleeCache.containsKey(call)) return calleeCache[call]
+        if (!resolvingCallees.add(call)) return reentrantCalleeFallback(call) // re-entrant → break the cycle (don't cache)
+        val result = try {
+            computeCallee(call)
+        } finally {
+            resolvingCallees.remove(call)
+        }
+        calleeCache[call] = result
+        return result
+    }
+    // SCORING (a lambda-shape override is active — [isApplicable]/[lambdaReturnSpecificity] typing a candidate's
+    // lambda body): the surrounding call is mid-resolution, so a nested resolution can hit the re-entrancy
+    // fallback and produce a context-dependent, provisional result. The ordinary [calleeCache] therefore stays
+    // bypassed (that provisional result must not leak into the real post-scoring inference). But WITHOUT any
+    // cache the same nested callee is re-resolved once per outer candidate per level — the ∏(candidate) blowup
+    // that froze the editor on a deep Compose builder (`Column{Row{Surface{…}}}`). So cache it in a SEPARATE,
+    // dependency-tracked map keyed by exactly the OUTER lambda-shape overrides this computation consults (via
+    // [ScoringDepFrame]) — the only per-candidate-varying input to a callee resolution. An entry with no such
+    // deps (the common builder case) is provably identical across sibling candidates and reused, collapsing the
+    // tree to O(calls). Skipped while smart-cast narrowings are active (the lowerer), which add a flow
+    // dependency this key does not capture.
+    val useCache = narrowings.isEmpty()
+    if (useCache) {
+        scoringCalleeCache[call]?.let { e ->
+            if (overridesMatch(e.deps)) {
+                propagateDeps(e.deps) // reusing computation now transitively depends on whatever this entry did
+                return e.result
+            }
+        }
+    }
     if (!resolvingCallees.add(call)) return reentrantCalleeFallback(call) // re-entrant → break the cycle (don't cache)
+    val frame = ScoringDepFrame()
+    scoringDepFrames.addLast(frame)
     val result = try {
         computeCallee(call)
     } finally {
+        scoringDepFrames.removeLast()
         resolvingCallees.remove(call)
     }
-    if (cache) calleeCache[call] = result
+    // frame.deps now holds the outer overrides consulted during this computation ([recordOverrideConsult] also
+    // recorded them into every enclosing frame, so an outer resolution's key stays correct too).
+    if (useCache) scoringCalleeCache[call] = ScoringEntry(result, frame.deps)
     return result
 }
 
@@ -107,15 +138,38 @@ internal fun KotlinResolver.computeCallee(call: KtCallExpression): KotlinSymbol?
     // well every non-lambda argument (positional AND named) fits each candidate. That picks `items(List<T>…)`
     // over `items(Int…)` when the arg is a `List<Project>`, and the String `TextField(value=…)` overload
     // over the `TextFieldValue` one when `value` is a String.
-    val exact = candidates.filter { it.paramTypes.size == argCount }
+    // A syntactic trailing lambda can bind ONLY to a function-type parameter, so drop any overload whose
+    // trailing-lambda slot is a confidently NON-functional param. Otherwise `Box { }` (1 arg) matches the
+    // content-LESS `Box(modifier)` (1 param) as an EXACT-arity hit and wins here — before the real
+    // `Box(…, content)` overload (more params, defaulted) is ever considered — so the content lambda's
+    // `@Composable`-ness is missed and a call inside it is falsely flagged as outside a composable context (the
+    // reported `Card { Box { Column() } }`). Conservative: keep ALL candidates when none has a functional
+    // trailing slot (an uncertain/generic/unresolved slot never over-filters), so a call never fails to resolve.
+    val viable = candidates.filter { trailingLambdaSlotIsFunctional(it, call) }.ifEmpty { candidates }
+    val exact = viable.filter { it.paramTypes.size == argCount }
     if (exact.isNotEmpty()) return bestOverload(exact, call, receiverType)
     val moreParams =
-        candidates.filter { it.paramTypes.isNotEmpty() && it.paramTypes.size > argCount }
+        viable.filter { it.paramTypes.isNotEmpty() && it.paramTypes.size > argCount }
     if (moreParams.isNotEmpty()) return bestOverload(moreParams, call, receiverType)
     val fewerParams =
-        candidates.filter { it.paramTypes.isNotEmpty() && it.paramTypes.size < argCount }
+        viable.filter { it.paramTypes.isNotEmpty() && it.paramTypes.size < argCount }
     if (fewerParams.isNotEmpty()) return bestOverload(fewerParams, call, receiverType)
-    return candidates.firstOrNull()
+    return viable.firstOrNull()
+}
+
+/** Whether the parameter a SYNTACTIC trailing lambda in [call] would fill on [sym] is a function-type (or a Java
+ *  SAM / `@Composable`) parameter — a lambda argument can bind only to such a slot. True when [call] has no
+ *  trailing lambda, or the slot is a type parameter / unresolved (uncertain — never over-filter). This is what
+ *  lets a `Box { }` call skip the content-LESS `Box(modifier)` overload for the real `Box(…, content)` one. */
+private fun KotlinResolver.trailingLambdaSlotIsFunctional(sym: KotlinSymbol, call: KtCallExpression): Boolean {
+    val lastIdx = call.valueArguments.lastIndex
+    if (lastIdx < 0) return true
+    val last = call.valueArguments[lastIdx]
+    if (last !is KtLambdaArgument && last.getArgumentExpression() !is KtLambdaExpression) return true
+    val pt = sym.paramTypes.getOrNull(lambdaParamIndex(call, lastIdx, sym)) as? KotlinType ?: return true
+    if (pt.isTypeParameter) return true
+    return TypeRendering.isFunctionType(pt.qualifiedName) || pt.isExtensionFunctionType || pt.isComposable ||
+        service.functionalShape(pt) != null
 }
 
 /**

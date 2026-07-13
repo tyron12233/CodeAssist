@@ -11,6 +11,7 @@ import org.jetbrains.kotlin.psi.KtClassOrObject
 import org.jetbrains.kotlin.psi.KtContinueExpression
 import org.jetbrains.kotlin.psi.KtDoWhileExpression
 import org.jetbrains.kotlin.psi.KtDotQualifiedExpression
+import org.jetbrains.kotlin.psi.KtLambdaExpression
 import org.jetbrains.kotlin.psi.KtExpression
 import org.jetbrains.kotlin.psi.KtForExpression
 import org.jetbrains.kotlin.psi.KtFunctionLiteral
@@ -141,14 +142,25 @@ internal class KotlinControlFlow(private val resolver: KotlinResolver) {
     private fun binaryLiveness(e: KtBinaryExpression): Liveness = Liveness.LIVE
 
     private fun isNothingReturning(e: KtExpression): Boolean {
-        if (resolver.inferType(e)?.qualifiedName == "kotlin.Nothing") return true
         val call = when (e) {
             is KtCallExpression -> e
             is KtDotQualifiedExpression -> e.selectorExpression as? KtCallExpression
             else -> null
-        } ?: return false
-        val callee = (call.calleeExpression as? KtNameReferenceExpression)?.getReferencedName()
-        return callee == "TODO" || callee == "error" || callee == "fail"
+        }
+        // The common Nothing-returning calls are recognized by NAME — no type inference needed.
+        val callee = (call?.calleeExpression as? KtNameReferenceExpression)?.getReferencedName()
+        if (callee == "TODO" || callee == "error" || callee == "fail") return true
+        // A call taking a lambda is a builder/scope call (Compose's `Column { … }`, `Surface { … }`, `remember
+        // { … }`): treat it as non-Nothing WITHOUT inferring its type. This is the hot fix — `inferType` on a
+        // deeply-nested Compose builder statement drives exponential overload+lambda RE-inference (the inference
+        // cache is bypassed during overload scoring), which a CPU profile showed as the entry point of a
+        // multi-minute editor freeze on Compose files. Skipping it is a benign dead-code false-NEGATIVE (a
+        // `run { throw }` won't flag following code unreachable), never a wrong diagnostic. Leaf calls with no
+        // lambda (`Text(...)`, `Spacer(...)`) still infer precisely below — those are shallow + memoized.
+        if (call != null && (call.lambdaArguments.isNotEmpty() ||
+                call.valueArguments.any { it.getArgumentExpression() is KtLambdaExpression })
+        ) return false
+        return resolver.inferType(e)?.qualifiedName == "kotlin.Nothing"
     }
 
     private fun isTrueLiteral(cond: KtExpression?): Boolean = unwrap(cond)?.text?.trim() == "true"

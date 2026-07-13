@@ -35,6 +35,17 @@ fun fakeForEach(block: (Int) -> Unit) {
 fun FakeRow(pad: Int = 0, content: @Composable FakeScope.() -> Unit) {
 }
 
+/** Mirrors Compose's `Box`/`Card`: a content-LESS overload (`Box(modifier)`) AND a content overload with the
+ *  same leading defaulted param. `FakeBox { }` (a trailing lambda) must resolve to the CONTENT overload so its
+ *  `@Composable FakeScope.() -> Unit` slot is seen — otherwise the content lambda reads as non-composable and a
+ *  call inside it is falsely flagged (the reported `Card { Box { Column() } }` COMPOSABLE_INVOCATION false
+ *  positive, which single-overload fakes never surfaced). */
+@Composable
+fun FakeBox(modifier: FakeModifier = FakeModifier) {}
+
+@Composable
+fun FakeBox(modifier: FakeModifier = FakeModifier, content: @Composable FakeScope.() -> Unit) {}
+
 /** Like Compose's `remember`: `@Composable`, inline, returns the calculation's result type `T`. */
 @Composable
 inline fun <T> fakeRemember(calculation: () -> T): T = calculation()
@@ -102,6 +113,15 @@ object FakeIcons {
     object AutoMirrored {
         object Filled
     }
+}
+
+/** Mirrors `androidx.compose.foundation.lazy.grid.GridCells`: an INTERFACE with nested CLASSES that carry
+ *  constructors (`GridCells.Fixed(count)`, `GridCells.Adaptive(minSize)`). Kotlin `@Metadata` keeps a class's
+ *  nested classes in a separate `nestedClasses` list, NOT among its members, so `FakeGridCells.` completion
+ *  only offers `Fixed`/`Adaptive` when that list is decoded into the type shape (the reported gap). */
+interface FakeGridCells {
+    class Fixed(count: Int) : FakeGridCells
+    class Adaptive(minSize: Int) : FakeGridCells
 }
 
 /** An icon as an EXTENSION property on the deepest nested object — the `Icons.AutoMirrored.Filled.List`

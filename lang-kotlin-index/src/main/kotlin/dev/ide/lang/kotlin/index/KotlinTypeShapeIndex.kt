@@ -37,9 +37,11 @@ import java.io.DataOutput
  */
 object KotlinTypeShapeIndex : IndexExtension<String, TypeShape> {
     override val id = IndexId("kotlin.typeShape")
-    // Base 16 (v16: + isInfix on members) + the shared-codec FORMAT, so a TypeShapeExternalizer format change
-    // invalidates this index and kotlin.builtins together (see TypeShapeExternalizer.FORMAT).
-    override val version = 16 + TypeShapeExternalizer.FORMAT
+    // Base 17 (v16: + isInfix on members; v17: Kotlin @Metadata nested classes surfaced as STATIC CLASS members)
+    // + the shared-codec FORMAT, so a TypeShapeExternalizer format change invalidates this index and
+    // kotlin.builtins together (see TypeShapeExternalizer.FORMAT). The base bump (no wire-format change here —
+    // members were always serialized) forces a rebuild so stored shapes gain the nested-class members.
+    override val version = 17 + TypeShapeExternalizer.FORMAT
     override val keyDescriptor: KeyDescriptor<String> = StringKeyDescriptor
     override val valueExternalizer = TypeShapeExternalizer
     override val matching = MatchingMode.PREFIX_ONLY // queried only by exact owner FQN

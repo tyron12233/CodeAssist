@@ -34,6 +34,7 @@ import dev.ide.lang.formatting.FormattingService
 import dev.ide.lang.highlight.SemanticHighlightService
 import dev.ide.lang.kotlin.interp.KotlinPreviewLowering
 import dev.ide.lang.kotlin.interp.PreviewDeclProvider
+import dev.ide.lang.kotlin.interp.PreviewFileModel
 import dev.ide.lang.kotlin.interp.PreviewInfo
 import dev.ide.lang.kotlin.interp.PreviewModel
 import dev.ide.lang.kotlin.interp.ResolvedClass
@@ -164,33 +165,33 @@ class KotlinSourceAnalyzer(ctx: CompilationContext) : SourceAnalyzer, Disposable
     private val backing = KotlinIncrementalParser()
     private val lastByFile = ConcurrentHashMap<String, KotlinParsedFile>()
 
-    // A keystroke resolves the same snapshot twice — the diagnostics pass (incrementalAnalysis) AND, when the
-    // preview is open, the Compose preview lowerer — each through its own KotlinResolver, recomputing inference
-    // + overload resolution from cold (measured: ~1100 inferType + 654 callTargets duplicated per keystroke).
-    // The lowerer reuses the diagnostics pass's per-snapshot memo caches instead. Keyed by file path; the prior
-    // entry is unreachable once replaced. Safe: every engine lane runs on EngineScheduler's single serialized
-    // worker, so the shared caches are never touched concurrently, and each pass keeps its own transient
-    // resolver state (narrowings/reentrancy) — only the pure memo caches are shared.
-    private class CachesEntry(val parsed: KotlinParsedFile, val caches: KotlinResolverCaches)
+    // A single keystroke resolves the SAME snapshot from several passes — diagnostics (incrementalAnalysis),
+    // semantic highlight (callee classification), inlay hints, and the Compose preview lowerer — each through its
+    // own KotlinResolver. Each pass recomputes inference + overload resolution + member enumeration from cold
+    // (measured on-device: highlight's `hl.call` alone ~800ms on a member-heavy file, most of it re-resolving
+    // callees the diagnostics pass already resolved). Sharing the per-snapshot memo caches across those passes
+    // means only the FIRST pays; the rest hit the memos. Keyed by file path; the prior entry is unreachable once
+    // replaced. Safe: every engine lane runs on EngineScheduler's single serialized worker, so the shared caches
+    // are never touched concurrently, and each pass keeps its own transient resolver state (narrowings/
+    // reentrancy) — only the pure memo caches are shared.
+    private class CachesEntry(val parsed: KotlinParsedFile, val externalStamp: Long, val caches: KotlinResolverCaches)
 
     private val cachesBySnapshot = ConcurrentHashMap<String, CachesEntry>()
 
-    /** Diagnostics ALWAYS resolves with a fresh cache: a dependency edit leaves the dependent file's OWN
-     *  snapshot unchanged, so reusing a prior cache would stale-serve cross-file results (caught by
-     *  `crossFileDependencyEditInvalidatesDependentCache`). The fresh cache is published so the preview lowerer
-     *  of the SAME keystroke can reuse it ([reuseCachesFor]). */
-    private fun freshCachesFor(parsed: KotlinParsedFile): KotlinResolverCaches {
+    /**
+     * The per-snapshot resolver memo caches shared across a keystroke's passes. Reuse is gated on snapshot
+     * IDENTITY *and* the external content stamp: a cross-file dependency edit leaves this file's own snapshot
+     * unchanged (same [parsed] object) but bumps the stamp, so it forces a fresh cache — the resolution memos
+     * would otherwise stale-serve the old cross-file shape (caught by
+     * `crossFileDependencyEditInvalidatesDependentCache`). Within one keystroke (same snapshot, same stamp) every
+     * pass reuses the one cache; the first to run builds it.
+     */
+    private fun sharedCachesFor(parsed: KotlinParsedFile): KotlinResolverCaches {
+        val stamp = service.externalContentStamp(parsed.file.path)
+        cachesBySnapshot[parsed.file.path]?.let { if (it.parsed === parsed && it.externalStamp == stamp) return it.caches }
         val c = KotlinResolverCaches()
-        cachesBySnapshot[parsed.file.path] = CachesEntry(parsed, c)
+        cachesBySnapshot[parsed.file.path] = CachesEntry(parsed, stamp, c)
         return c
-    }
-
-    /** The preview lowerer reuses the cache the diagnostics pass just published for this EXACT snapshot (the
-     *  per-keystroke win — no redundant second resolution); absent one (a preview with no diagnostics pass), it
-     *  builds and publishes its own. Preview is best-effort and re-renders on change, so reuse is safe here. */
-    private fun reuseCachesFor(parsed: KotlinParsedFile): KotlinResolverCaches {
-        cachesBySnapshot[parsed.file.path]?.let { if (it.parsed === parsed) return it.caches }
-        return freshCachesFor(parsed)
     }
 
     override val incrementalParser: IncrementalParser = object : IncrementalParser {
@@ -231,7 +232,7 @@ class KotlinSourceAnalyzer(ctx: CompilationContext) : SourceAnalyzer, Disposable
     override val inlayHints: dev.ide.lang.hints.InlayHintService by lazy {
         KotlinInlayHintService(
             parsedFor = { lastByFile[it.path] },
-            resolverFor = { syncFocal(it); KotlinResolver(it.ktFile, it, service) },
+            resolverFor = { syncFocal(it); KotlinResolver(it.ktFile, it, service, sharedCachesFor(it)) },
         )
     }
 
@@ -242,7 +243,7 @@ class KotlinSourceAnalyzer(ctx: CompilationContext) : SourceAnalyzer, Disposable
     override val semanticHighlighter: SemanticHighlightService by lazy {
         KotlinSemanticHighlighter(
             parsedFor = { lastByFile[it.path] },
-            resolverFor = { syncFocal(it); KotlinResolver(it.ktFile, it, service) },
+            resolverFor = { syncFocal(it); KotlinResolver(it.ktFile, it, service, sharedCachesFor(it)) },
             refresh = { refreshOverlay() },
             externalStampFor = { service.externalContentStamp(it) },
         )
@@ -261,7 +262,7 @@ class KotlinSourceAnalyzer(ctx: CompilationContext) : SourceAnalyzer, Disposable
     // --- Compose preview (interpreter integration; see docs/compose-interpreter.md) ---
 
     /** PSI→ResolvedTree lowering for the Compose-preview interpreter, with its own per-function memoization. */
-    private val previewLowering by lazy { KotlinPreviewLowering(service, ::reuseCachesFor) }
+    private val previewLowering by lazy { KotlinPreviewLowering(service, ::sharedCachesFor) }
 
     /** The `@Preview @Composable` functions in [file]'s last parse — the editor's preview targets. */
     fun composePreviews(file: VirtualFile): List<PreviewInfo> =
@@ -286,7 +287,7 @@ class KotlinSourceAnalyzer(ctx: CompilationContext) : SourceAnalyzer, Disposable
             if (subs.isEmpty()) continue
             out += InheritorMarker(
                 anchor,
-                isInterface = decl is org.jetbrains.kotlin.psi.KtClass && decl.isInterface(),
+                isInterface = decl is KtClass && decl.isInterface(),
                 targets = subs.map { InheritorTarget(it.fqn, it.kind) }.sortedBy { it.fqn },
             )
         }
@@ -296,7 +297,7 @@ class KotlinSourceAnalyzer(ctx: CompilationContext) : SourceAnalyzer, Disposable
     /** Whether a declaration can have subtypes (so an inheritors marker is meaningful): an interface or an
      *  `open`/`abstract`/`sealed` class. A `final` class (Kotlin's default), object, enum, or annotation cannot. */
     private fun canBeInherited(d: KtClassOrObject): Boolean {
-        val c = d as? org.jetbrains.kotlin.psi.KtClass ?: return false
+        val c = d as? KtClass ?: return false
         if (c.isInterface()) return true
         if (c.isEnum() || c.isAnnotation()) return false
         return c.hasModifier(org.jetbrains.kotlin.lexer.KtTokens.OPEN_KEYWORD) ||
@@ -370,7 +371,7 @@ class KotlinSourceAnalyzer(ctx: CompilationContext) : SourceAnalyzer, Disposable
 
     /** Lower a single source file (located via [findDeclaringTypeFile]/[findDeclaringFunctionFiles]) with THIS
      *  module's analyzer — so a dependency module's file resolves against ITS OWN classpath. */
-    fun loweredFile(pf: KotlinSymbolService.PreviewSourceFile): dev.ide.lang.kotlin.interp.PreviewFileModel? =
+    fun loweredFile(pf: KotlinSymbolService.PreviewSourceFile): PreviewFileModel? =
         previewLowering.loweredFile(pf)
 
     /** The incremental-analyze engine (runs the semantic checks with per-declaration caching). Holds the
@@ -378,7 +379,7 @@ class KotlinSourceAnalyzer(ctx: CompilationContext) : SourceAnalyzer, Disposable
     private val incrementalAnalysis by lazy {
         IncrementalSemanticAnalysis(
             service,
-            ::freshCachesFor
+            ::sharedCachesFor
         )
     }
 
