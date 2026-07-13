@@ -61,9 +61,11 @@ private val FlingCommit = 320.dp
  * Gestures (when [gesturesEnabled]) are nested-scroll aware, so they never fight the code editor:
  *  - a swipe **starting at the left screen edge** always drags the drawer open (intercepted before the
  *    editor sees it);
- *  - elsewhere, a rightward drag opens the drawer only once the content underneath has **consumed all it
- *    can** — i.e. the editor is already at its horizontal start — and only when the gesture is
- *    horizontal-dominant, so free 2D panning with a little x-drift never creeps the drawer out;
+ *  - elsewhere, a rightward drag opens the drawer only when the content underneath consumed **no
+ *    horizontal scroll for the whole gesture** — i.e. the editor was already at its horizontal start when
+ *    the finger went down — and only when the gesture is horizontal-dominant. A gesture that starts by
+ *    scrolling the editor sideways keeps the axis: if it later reaches the editor's left edge, the drawer
+ *    stays put (you have to lift and swipe again), so a scroll never turns into a drawer mid-stroke;
  *  - with the drawer open, the pushed content is covered by a tap-to-close catcher and a horizontal drag
  *    anywhere (drawer or content) moves the drawer; release settles to the nearer edge, flings commit.
  *
@@ -137,7 +139,12 @@ fun PushDrawer(
                 private var sumY = 0f
                 private var leakX = 0f
                 private var captured = false
-                private fun reset() { sumX = 0f; sumY = 0f; leakX = 0f; captured = false }
+                // Set the moment the child eats ANY horizontal scroll this gesture: the finger is panning
+                // the editor sideways, so the editor owns the horizontal axis for the rest of the stroke.
+                // A later boundary-hit in the same gesture must NOT creep the drawer out — the user has to
+                // lift and swipe again (with the editor now at its left edge) to open it.
+                private var childOwnsX = false
+                private fun reset() { sumX = 0f; sumY = 0f; leakX = 0f; captured = false; childOwnsX = false }
 
                 override fun onPreScroll(available: Offset, source: NestedScrollSource): Offset {
                     if (!gesturesEnabled || source != NestedScrollSource.UserInput) return Offset.Zero
@@ -150,7 +157,8 @@ fun PushDrawer(
                     if (!gesturesEnabled || source != NestedScrollSource.UserInput) return Offset.Zero
                     sumX += consumed.x + available.x
                     sumY += consumed.y + available.y
-                    if (!captured && offset.value == 0f) {
+                    if (consumed.x != 0f) childOwnsX = true
+                    if (!captured && !childOwnsX && offset.value == 0f) {
                         leakX = (leakX + available.x).coerceAtLeast(0f)
                         if (leakX > touchSlop && abs(sumX) > abs(sumY)) {
                             captured = true
