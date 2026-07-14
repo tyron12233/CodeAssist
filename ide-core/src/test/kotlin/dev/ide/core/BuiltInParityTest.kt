@@ -5,6 +5,8 @@ import dev.ide.lang.FILE_TYPE_EP
 import dev.ide.lang.LANGUAGE_BACKEND_EP
 import dev.ide.lang.LanguageId
 import dev.ide.lang.jdt.JdtLanguageBackend
+import dev.ide.lang.kotlin.compile.ComposeCompilerPlugin
+import dev.ide.lang.kotlin.compile.KOTLIN_COMPILER_PLUGIN_EP
 import dev.ide.lang.synthetic.SYNTHETIC_CLASS_EP
 import dev.ide.platform.SERVICE_EP
 import dev.ide.platform.ServiceScopeLevel
@@ -76,5 +78,13 @@ class BuiltInParityTest {
         assertEquals(LanguageId("markdown"), langOf("README.md"))
         assertEquals(LanguageId("java"), langOf("Main.java"))
         assertNull(langOf("Makefile"), "an unmapped file falls through to the host's Java default")
+    }
+
+    @Test
+    fun `the Compose kotlin-compiler plugin is contributed on the EP by a built-in plugin`() {
+        assertTrue(
+            ext.extensions(KOTLIN_COMPILER_PLUGIN_EP).contains(ComposeCompilerPlugin),
+            "kotlin-support must contribute Compose so BuildService (a pure consumer) reads it off the EP",
+        )
     }
 }

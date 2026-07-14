@@ -43,7 +43,6 @@ import dev.ide.core.EngineContext
 import dev.ide.core.MemSample
 import dev.ide.core.PermissionPolicy
 import dev.ide.lang.kotlin.compile.BundledKotlinStdlib
-import dev.ide.lang.kotlin.compile.ComposeCompilerPlugin
 import dev.ide.lang.kotlin.compile.IncrementalKotlinCompiler
 import dev.ide.lang.kotlin.compile.KOTLIN_COMPILER_PLUGIN_EP
 import dev.ide.lang.kotlin.compile.KotlinCompilerPlugin
@@ -56,7 +55,6 @@ import dev.ide.model.LibraryRef
 import dev.ide.model.Module
 import dev.ide.model.module
 import dev.ide.platform.Disposable
-import dev.ide.platform.PluginId
 import dev.ide.ui.backend.BuildDiagnosticUi
 import dev.ide.ui.backend.BuildLogLine
 import dev.ide.ui.backend.BuildState
@@ -113,14 +111,11 @@ internal class BuildService(private val ctx: EngineContext) : Disposable {
     private val incrementalKotlin = IncrementalKotlinCompiler(ctx.kotlinJvmCompiler)
 
     // Kotlin compiler plugins are contributed through the `platform.kotlinCompilerPlugin` EP and applied
-    // per module by the build's compileKotlin tasks. Compose is the built-in (registered here); a plugin
-    // adds more by contributing to the EP. Captured once for the build systems (Compose is registered eagerly).
-    private val kotlinCompilerPlugins: List<KotlinCompilerPlugin> = run {
-        ctx.platform.extensions.register(
-            KOTLIN_COMPILER_PLUGIN_EP, ComposeCompilerPlugin, PluginId("kotlin-support")
-        )
+    // per module by the build's compileKotlin tasks. Compose is contributed by the kotlin-support built-in
+    // plugin (like every other built-in); this service is purely a consumer — it reads the EP. A plugin adds
+    // more by contributing to the EP.
+    private val kotlinCompilerPlugins: List<KotlinCompilerPlugin> =
         ctx.platform.extensions.extensions(KOTLIN_COMPILER_PLUGIN_EP)
-    }
 
     // Build-time source generators contributed through `platform.sourceGenerator` (a KSP runner, ViewBinding
     // emitter, …); the build runs them into a module's GENERATED root ahead of compilation. Empty until a

@@ -50,6 +50,8 @@ import dev.ide.lang.jdt.index.JavaSourceSubtypeIndex
 import dev.ide.lang.jdt.index.JavaSourceSymbolsIndex
 import dev.ide.lang.kotlin.KotlinLanguageBackend
 import dev.ide.lang.kotlin.analysis.KotlinAnalysisSupport
+import dev.ide.lang.kotlin.compile.ComposeCompilerPlugin
+import dev.ide.lang.kotlin.compile.KOTLIN_COMPILER_PLUGIN_EP
 import dev.ide.lang.kotlin.completion.KotlinPostfixTemplates
 import dev.ide.lang.kotlin.index.BinaryAnnotationIndex
 import dev.ide.lang.kotlin.index.BinarySubtypeIndex
@@ -169,11 +171,13 @@ private class JavaSupportPlugin : Plugin {
     }
 }
 
-/** Kotlin support: the Kotlin-interop synthetic classes + Kotlin Create-Project templates. */
+/** Kotlin support: the Kotlin-interop synthetic classes, Kotlin Create-Project templates, and the built-in
+ *  Compose Kotlin-compiler plugin (the build's compileKotlin tasks read it off the EP). */
 private class KotlinSupportPlugin : Plugin {
     override val manifest = PluginManifest(id = "kotlin-support", name = "Kotlin Support")
     override fun register(reg: PluginRegistration) {
         reg.register(SYNTHETIC_CLASS_EP, KotlinSyntheticClassProvider())
+        reg.register(KOTLIN_COMPILER_PLUGIN_EP, ComposeCompilerPlugin)
         reg.contributeVia { ext, pid ->
             val templates = ProjectTemplateRegistry(ext)
             templates.register(KotlinConsoleAppTemplate, pid)
