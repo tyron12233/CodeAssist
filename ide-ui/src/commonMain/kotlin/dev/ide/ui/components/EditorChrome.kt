@@ -122,7 +122,7 @@ import dev.ide.ui.icons.CaIcons
 import dev.ide.ui.icons.TreeIcon
 import dev.ide.ui.icons.TreeIcons
 import dev.ide.ui.icons.fileIconId
-import dev.ide.ui.icons.resolveTint
+import dev.ide.ui.theme.resolveTint
 import dev.ide.ui.platform.secondaryClickable
 import dev.ide.ui.icons.actionIcon
 import dev.ide.ui.theme.Ca

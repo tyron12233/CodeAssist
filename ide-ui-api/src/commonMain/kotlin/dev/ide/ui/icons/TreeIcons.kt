@@ -1,10 +1,8 @@
 package dev.ide.ui.icons
 
-import androidx.compose.runtime.Composable
 import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
-import dev.ide.ui.theme.Ca
 
 /** How a tree node is drawn, once its icon id is resolved by [TreeIcons]. */
 sealed interface TreeIcon {
@@ -30,19 +28,6 @@ sealed interface IconTint {
     object Error : IconTint
     object Info : IconTint
     data class Fixed(val color: Color) : IconTint
-}
-
-@Composable
-fun resolveTint(tint: IconTint): Color = when (tint) {
-    IconTint.Accent -> Ca.colors.accent
-    IconTint.Primary -> Ca.colors.textPrimary
-    IconTint.Secondary -> Ca.colors.textSecondary
-    IconTint.Tertiary -> Ca.colors.textTertiary
-    IconTint.Success -> Ca.colors.success
-    IconTint.Warning -> Ca.colors.warning
-    IconTint.Error -> Ca.colors.error
-    IconTint.Info -> Ca.colors.info
-    is IconTint.Fixed -> tint.color
 }
 
 /**

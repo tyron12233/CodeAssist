@@ -52,7 +52,7 @@ import dev.ide.ui.generated.resources.rename
 import dev.ide.ui.icons.CaIcons
 import dev.ide.ui.icons.TreeIcon
 import dev.ide.ui.icons.TreeIcons
-import dev.ide.ui.icons.resolveTint
+import dev.ide.ui.theme.resolveTint
 import dev.ide.ui.theme.Ca
 import org.jetbrains.compose.resources.stringResource
 

@@ -65,7 +65,7 @@ import dev.ide.ui.generated.resources.store_use_template
 import dev.ide.ui.icons.CaIcons
 import dev.ide.ui.icons.TreeIcon
 import dev.ide.ui.icons.TreeIcons
-import dev.ide.ui.icons.resolveTint
+import dev.ide.ui.theme.resolveTint
 import dev.ide.ui.theme.Ca
 import kotlinx.coroutines.launch
 import org.jetbrains.compose.resources.stringResource

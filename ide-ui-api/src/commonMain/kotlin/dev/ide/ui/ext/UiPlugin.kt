@@ -1,5 +1,8 @@
 package dev.ide.ui.ext
 
+import dev.ide.ui.icons.TreeIcon
+import dev.ide.ui.icons.TreeIcons
+
 /**
  * The single surface a UI plugin contributes its Compose-bearing UI through — unifying what used to be four
  * separate process-global registries (UI actions, tool windows, screens, editor view modes) behind one scope.
@@ -18,6 +21,10 @@ interface UiContributionScope {
     fun toolWindow(toolWindow: ToolWindowContribution): Registration
     fun screen(screen: ScreenContribution): Registration
     fun viewMode(mode: EditorViewModeContribution): Registration
+
+    /** Register (or override) the file-tree icon for [iconId]. Tree icons are a persistent lookup, so the
+     *  returned handle is a no-op today (nothing unregisters an icon). */
+    fun treeIcon(iconId: String, icon: TreeIcon): Registration
 }
 
 /**
@@ -59,5 +66,9 @@ object UiPluginHost {
             ToolWindowRegistry.register(toolWindow)
         override fun screen(screen: ScreenContribution): Registration = ScreenRegistry.register(screen)
         override fun viewMode(mode: EditorViewModeContribution): Registration = ViewModeRegistry.register(mode)
+        override fun treeIcon(iconId: String, icon: TreeIcon): Registration {
+            TreeIcons.register(iconId, icon)
+            return Registration {}
+        }
     }
 }
