@@ -37,10 +37,10 @@ class ApplicationEnvironment : AutoCloseable {
     /** Process-global application service container over [platform]'s registry; parents every project's. */
     val container: ApplicationContainer = ApplicationContainer(platform.extensions)
 
-    /** Facet codecs — still the one non-EP-backed registry (folded into an EP in a later phase). The env owns
-     *  the single instance and injects it into the android built-in plugin, which registers the AndroidFacet
-     *  codec; every opened project reuses it to decode `module.toml`. */
-    val codecs: FacetCodecRegistry = FacetCodecRegistry()
+    /** Facet codecs, now [FACET_CODEC_EP]-backed over the app registry (like the module-type / file-icon /
+     *  template registries). The android built-in plugin registers the AndroidFacet codec through it; every
+     *  opened project reuses it to decode `module.toml`. */
+    val codecs: FacetCodecRegistry = FacetCodecRegistry(platform.extensions)
 
     /** The currently-open project's engine, or null. Set by the backend on project swap; read by app-level
      *  extension callbacks (e.g. command actions) that fire outside any project's service scope. */
