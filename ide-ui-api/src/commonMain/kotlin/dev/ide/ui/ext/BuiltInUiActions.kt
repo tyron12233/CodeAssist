@@ -3,23 +3,19 @@ package dev.ide.ui.ext
 import dev.ide.ui.backend.UiActionPlaces
 
 /**
- * The app's built-in UI-side actions, registered through [UiActionRegistry] the same way an in-UI plugin
- * would. Currently the "More" menu's secondary actions; the command palette's UI-navigation commands and the
- * top-bar's stateful buttons move here in later increments.
+ * The IDE's built-in UI contributions (the "More" menu + command-palette UI-navigation commands), contributed
+ * through the [UiPlugin] model the same way an in-UI plugin would — the IDE dogfooding its own UI-contribution
+ * API. Loaded once per process by [UiPluginHost].
  */
-object BuiltInUiActions {
-    private var registered = false
+object BuiltInUiPlugin : UiPlugin {
+    override val id = "ide-ui"
 
-    /** Idempotent: registers the built-ins once for the process. */
-    fun ensureRegistered() {
-        if (registered) return
-        registered = true
-
+    override fun contributeUi(scope: UiContributionScope) {
         val more = setOf(UiActionPlaces.MORE_MENU)
         val palette = UiActionPlaces.COMMAND_PALETTE
         val moreAndPalette = setOf(UiActionPlaces.MORE_MENU, palette)
 
-        UiActionRegistry.register(
+        scope.action(
             SimpleUiAction(
                 "ui.hub",
                 "Settings & Tools",
@@ -31,7 +27,7 @@ object BuiltInUiActions {
                 it.navigate(UiDestinations.HUB)
             },
         )
-        UiActionRegistry.register(
+        scope.action(
             SimpleUiAction(
                 "ui.modules",
                 "Modules",
@@ -43,7 +39,7 @@ object BuiltInUiActions {
                 it.navigate(UiDestinations.MODULES)
             },
         )
-        UiActionRegistry.register(
+        scope.action(
             SimpleUiAction(
                 "ui.dependencies",
                 "Manage dependencies",
@@ -54,7 +50,7 @@ object BuiltInUiActions {
                 it.navigate(UiDestinations.DEPENDENCIES)
             },
         )
-        UiActionRegistry.register(
+        scope.action(
             SimpleUiAction(
                 "ui.reindex",
                 "Re-index project",
@@ -66,7 +62,7 @@ object BuiltInUiActions {
                 it.backend.search.reindex()
             },
         )
-        UiActionRegistry.register(
+        scope.action(
             SimpleUiAction(
                 "ui.logs",
                 "View logs",
@@ -78,7 +74,7 @@ object BuiltInUiActions {
                 it.navigate(UiDestinations.LOGS)
             },
         )
-        UiActionRegistry.register(
+        scope.action(
             SimpleUiAction(
                 "ui.toggleTheme",
                 "Toggle theme",
@@ -90,7 +86,7 @@ object BuiltInUiActions {
                 it.toggleTheme()
             },
         )
-        UiActionRegistry.register(
+        scope.action(
             SimpleUiAction(
                 "ui.closeProject",
                 "Close project",

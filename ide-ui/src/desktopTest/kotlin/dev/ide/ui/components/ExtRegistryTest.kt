@@ -23,7 +23,7 @@ import dev.ide.ui.backend.UiActionPlaces
 import dev.ide.ui.backend.UiCompletionResult
 import dev.ide.ui.backend.UiDiagnostic
 import dev.ide.ui.StubBackend
-import dev.ide.ui.ext.BuiltInUiActions
+import dev.ide.ui.ext.UiPluginHost
 import dev.ide.ui.ext.ToolWindowAnchor
 import dev.ide.ui.ext.ToolWindowContribution
 import dev.ide.ui.ext.ToolWindowRegistry
@@ -57,7 +57,7 @@ class ExtRegistryTest {
 
     @Test
     fun paletteUiCommandsResolveFromRegistry() {
-        BuiltInUiActions.ensureRegistered()
+        UiPluginHost.ensureLoaded()
         val ids = UiActionRegistry.forPlace(UiActionPlaces.COMMAND_PALETTE, RecordingHost(FakeBackend())).map { it.id }
         assertEquals(
             listOf("ui.hub", "ui.dependencies", "ui.toggleTheme"),

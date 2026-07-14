@@ -51,7 +51,7 @@ import dev.ide.ui.backend.TreeNode
 import dev.ide.ui.backend.UiActionContext
 import dev.ide.ui.backend.UiActionEffect
 import dev.ide.ui.backend.UiActionPlaces
-import dev.ide.ui.ext.BuiltInUiActions
+import dev.ide.ui.ext.UiPluginHost
 import dev.ide.ui.ext.UiActionHost
 import dev.ide.ui.ext.UiActionRegistry
 import dev.ide.ui.generated.resources.Res
@@ -115,7 +115,7 @@ fun CommandPalette(
     // The palette merges two command sources, both from the action registries:
     //  - engine commands (Run/Stop/Re-index + any dex plugin) via IdeBackend.actionsFor (data-driven), and
     //  - UI-navigation commands (Settings/Dependencies/SDK/Toggle theme + in-UI plugins) via UiActionRegistry.
-    BuiltInUiActions.ensureRegistered()
+    UiPluginHost.ensureLoaded()
     val pluginCommands = remember { backend.actions.actionsFor(UiActionContext(place = UiActionPlaces.COMMAND_PALETTE)) }
     val uiCommands = UiActionRegistry.forPlace(UiActionPlaces.COMMAND_PALETTE, uiHost)
     fun runCommand(id: String) {
