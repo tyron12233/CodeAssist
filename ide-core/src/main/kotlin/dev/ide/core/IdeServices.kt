@@ -387,8 +387,6 @@ private const val MAX_EDITOR_TEXT_BYTES = 5_000_000L
 class IdeServices private constructor(
     val platform: PlatformCore,
     val store: ProjectModelStore,
-    /** Optional device-only runtime that renders the layout with the REAL Android view stack (layoutlib-on-device). */
-    private val realViewRuntime: RealViewRuntime? = null,
     /**
      * Where the resolved-dependency cache lives. Null → per-project (`<workspace>/.platform/...`); a host
      * passes a shared app-level dir (the projects-root parent) so every project reuses one another's
@@ -423,6 +421,7 @@ class IdeServices private constructor(
     private val apkInstaller: ApkInstaller? = env.container.getServiceOrNull(APK_INSTALLER)
     private val customViewRuntime: CustomViewRuntime? = env.container.getServiceOrNull(CUSTOM_VIEW_RUNTIME)
     private val kotlinPluginLoader: KotlinPluginLoader? = env.container.getServiceOrNull(KOTLIN_PLUGIN_LOADER)
+    private val realViewRuntime: RealViewRuntime? = env.container.getServiceOrNull(REAL_VIEW_RUNTIME)
 
     /** The build/run seam ([BuildRunner]): today an in-process runner; a future remote runner swaps in for
      *  the separate-process build (docs/build-process-isolation.md). [dev.ide.core.backend.BuildBackend]
@@ -4449,8 +4448,6 @@ class IdeServices private constructor(
             args: Map<String, String>,
             sdk: SdkData,
             languageLevel: LanguageLevel,
-            /** On-device real-view layout renderer (from :ide-android) — the layoutlib-on-device preview path. */
-            realViewRuntime: RealViewRuntime? = null,
             /** App-level shared download cache (projects-root parent); null → per-project. */
             sharedCachesRoot: Path? = null,
             /** The host's application environment, so app-scoped substrate + services are shared across projects.
@@ -4469,7 +4466,6 @@ class IdeServices private constructor(
             val services = IdeServices(
                 platform,
                 store,
-                realViewRuntime,
                 sharedCachesRoot,
                 env = env,
             )
@@ -4489,8 +4485,6 @@ class IdeServices private constructor(
         fun openAt(
             root: Path,
             sdk: SdkData,
-            /** On-device real-view layout renderer (from :ide-android) — the layoutlib-on-device preview path. */
-            realViewRuntime: RealViewRuntime? = null,
             /** App-level shared download cache (projects-root parent); null → per-project. */
             sharedCachesRoot: Path? = null,
             /** The host's application environment; the self-contained platform ports are resolved from its container. */
@@ -4503,7 +4497,6 @@ class IdeServices private constructor(
             return IdeServices(
                 platform,
                 store,
-                realViewRuntime,
                 sharedCachesRoot,
                 buildOnly = buildOnly,
                 env = env,

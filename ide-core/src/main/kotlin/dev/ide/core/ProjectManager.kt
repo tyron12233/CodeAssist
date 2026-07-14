@@ -91,6 +91,7 @@ class ProjectManager private constructor(
         apkInstaller?.let { i -> env.container.registerServiceIfAbsent(APK_INSTALLER) { i } }
         customViewRuntime?.let { c -> env.container.registerServiceIfAbsent(CUSTOM_VIEW_RUNTIME) { c } }
         kotlinPluginLoader?.let { l -> env.container.registerServiceIfAbsent(KOTLIN_PLUGIN_LOADER) { l } }
+        realViewRuntime?.let { rv -> env.container.registerServiceIfAbsent(REAL_VIEW_RUNTIME) { rv } }
     }
 
     /** The process-global application service container (see [env]); parents every project container. */
@@ -179,14 +180,14 @@ class ProjectManager private constructor(
     fun create(templateId: String, args: Map<String, String>): IdeServices {
         val name = args[TemplateArgs.NAME]?.takeIf { it.isNotBlank() } ?: "Untitled"
         val dir = uniqueProjectDir(name)
-        return IdeServices.createProjectAt(dir, templateId, args, sdk(), languageLevel, realViewRuntime = realViewRuntime, sharedCachesRoot = homeDir, env = env)
+        return IdeServices.createProjectAt(dir, templateId, args, sdk(), languageLevel, sharedCachesRoot = homeDir, env = env)
             .also { recordOpened(dir) }
     }
 
     /** Open the existing project at [rootPath]; returns the opened engine. [buildOnly] opens a headless
      *  build engine (the `:build` daemon) that skips the editor cold-start — see [IdeServices]. */
     fun open(rootPath: String, buildOnly: Boolean = false): IdeServices =
-        IdeServices.openAt(Paths.get(rootPath), sdk(), realViewRuntime = realViewRuntime, sharedCachesRoot = homeDir, env = env, buildOnly = buildOnly)
+        IdeServices.openAt(Paths.get(rootPath), sdk(), sharedCachesRoot = homeDir, env = env, buildOnly = buildOnly)
             // A build-only daemon open isn't a user "access" — don't let a background build reorder the picker.
             .also { if (!buildOnly) recordOpened(Paths.get(rootPath)) }
 
@@ -210,7 +211,7 @@ class ProjectManager private constructor(
             if (ModelPersistence.exists(dir)) open(dir.toString())
             else IdeServices.createProjectAt(
                 dir, templateId, mapOf(TemplateArgs.NAME to key) + args, sdk(), languageLevel,
-                realViewRuntime = realViewRuntime, sharedCachesRoot = homeDir, env = env,
+                sharedCachesRoot = homeDir, env = env,
             )
         scratchEngines[key] = services
         return services
