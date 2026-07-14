@@ -86,6 +86,7 @@ class ProjectManager private constructor(
         // The launcher-supplied platform ports become APPLICATION services on the shared container, so every
         // opened engine resolves them there rather than by constructor injection. Absent (desktop) → not
         // registered → the engine falls back to its in-process default.
+        androidTools?.let { t -> env.container.registerServiceIfAbsent(ANDROID_DEVICE_TOOLS) { t } }
         dexRunner?.let { r -> env.container.registerServiceIfAbsent(DEX_RUNNER) { r } }
         apkInstaller?.let { i -> env.container.registerServiceIfAbsent(APK_INSTALLER) { i } }
         customViewRuntime?.let { c -> env.container.registerServiceIfAbsent(CUSTOM_VIEW_RUNTIME) { c } }
@@ -178,14 +179,14 @@ class ProjectManager private constructor(
     fun create(templateId: String, args: Map<String, String>): IdeServices {
         val name = args[TemplateArgs.NAME]?.takeIf { it.isNotBlank() } ?: "Untitled"
         val dir = uniqueProjectDir(name)
-        return IdeServices.createProjectAt(dir, templateId, args, sdk(), languageLevel, androidTools, realViewRuntime = realViewRuntime, sharedCachesRoot = homeDir, env = env)
+        return IdeServices.createProjectAt(dir, templateId, args, sdk(), languageLevel, realViewRuntime = realViewRuntime, sharedCachesRoot = homeDir, env = env)
             .also { recordOpened(dir) }
     }
 
     /** Open the existing project at [rootPath]; returns the opened engine. [buildOnly] opens a headless
      *  build engine (the `:build` daemon) that skips the editor cold-start — see [IdeServices]. */
     fun open(rootPath: String, buildOnly: Boolean = false): IdeServices =
-        IdeServices.openAt(Paths.get(rootPath), sdk(), androidTools, realViewRuntime = realViewRuntime, sharedCachesRoot = homeDir, env = env, buildOnly = buildOnly)
+        IdeServices.openAt(Paths.get(rootPath), sdk(), realViewRuntime = realViewRuntime, sharedCachesRoot = homeDir, env = env, buildOnly = buildOnly)
             // A build-only daemon open isn't a user "access" — don't let a background build reorder the picker.
             .also { if (!buildOnly) recordOpened(Paths.get(rootPath)) }
 
@@ -208,7 +209,7 @@ class ProjectManager private constructor(
         val services =
             if (ModelPersistence.exists(dir)) open(dir.toString())
             else IdeServices.createProjectAt(
-                dir, templateId, mapOf(TemplateArgs.NAME to key) + args, sdk(), languageLevel, androidTools,
+                dir, templateId, mapOf(TemplateArgs.NAME to key) + args, sdk(), languageLevel,
                 realViewRuntime = realViewRuntime, sharedCachesRoot = homeDir, env = env,
             )
         scratchEngines[key] = services
