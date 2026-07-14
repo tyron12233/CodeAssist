@@ -58,8 +58,10 @@ object AndroidIde {
         // is the app-global "Build in a separate process" setting (default ON), checked in
         // IdeServicesBackend.buildRunnerFor. A build OOM then kills only that process, not the IDE.
         val appContext = context.applicationContext
+        // Analytics is an application-scoped host service now; register it before the backend resolves it.
+        manager.applicationContainer.registerServiceIfAbsent(dev.ide.core.ANALYTICS_SERVICE) { analytics }
         val backend = IdeServicesBackend(
-            initial = null, manager = manager, analytics = analytics,
+            initial = null, manager = manager,
             buildRunnerFactory = { svc ->
                 dev.ide.android.daemon.RemoteBuildRunner(
                     appContext, svc

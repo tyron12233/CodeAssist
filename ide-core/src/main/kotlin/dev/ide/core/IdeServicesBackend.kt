@@ -78,12 +78,6 @@ class IdeServicesBackend(
     initial: IdeServices? = null,
     override val manager: ProjectManager? = null,
     /**
-     * Opt-in usage analytics. Defaults to the no-op service (desktop, or when no transport is configured);
-     * the on-device host injects a [dev.ide.analytics.impl.DefaultAnalyticsService] backed by Supabase. The
-     * backend gates it on the persisted consent preference — see [analyticsConsent]/[setAnalyticsConsent].
-     */
-    private val analytics: AnalyticsService = dev.ide.analytics.NoopAnalyticsService,
-    /**
      * Host-injected factory for an out-of-process build runner (the `:build` daemon, supplied by
      * :ide-android). Null → in-process builds (desktop, or when the separate-process build is off), i.e.
      * each engine's own [IdeServices.buildRunner]. See docs/build-process-isolation.md.
@@ -97,6 +91,12 @@ class IdeServicesBackend(
      */
     private val notificationsAllowed: () -> Boolean = { true },
 ) : IdeBackend, LayoutPreviewBackend, BackendContext {
+
+    /** Opt-in usage analytics, resolved from the application service container (the on-device host registers a
+     *  Supabase-backed [dev.ide.analytics.impl.DefaultAnalyticsService]); absent (desktop / tests) → the no-op
+     *  service. Gated on the persisted consent preference — see [analyticsConsent]/[setAnalyticsConsent]. */
+    private val analytics: AnalyticsService =
+        manager?.applicationContainer?.getServiceOrNull(ANALYTICS_SERVICE) ?: dev.ide.analytics.NoopAnalyticsService
 
     override val separateProcessBuildsSupported: Boolean get() = buildRunnerFactory != null
 

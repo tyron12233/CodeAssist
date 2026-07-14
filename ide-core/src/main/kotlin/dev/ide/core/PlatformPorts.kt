@@ -1,5 +1,6 @@
 package dev.ide.core
 
+import dev.ide.analytics.AnalyticsService
 import dev.ide.build.engine.DexRunner
 import dev.ide.lang.kotlin.compile.KotlinPluginLoader
 import dev.ide.platform.ServiceKey
@@ -29,3 +30,8 @@ internal val CUSTOM_VIEW_RUNTIME = ServiceKey<CustomViewRuntime>("platform.custo
 internal val KOTLIN_PLUGIN_LOADER = ServiceKey<KotlinPluginLoader>("platform.kotlinPluginLoader")
 internal val ANDROID_DEVICE_TOOLS = ServiceKey<AndroidDeviceTools>("platform.androidDeviceTools")
 internal val REAL_VIEW_RUNTIME = ServiceKey<RealViewRuntime>("platform.realViewRuntime")
+
+/** Opt-in usage analytics. Registered by the launcher (`:ide-android`) rather than [ProjectManager], because
+ *  it is built from the baked-in transport config *after* the manager exists — hence public, unlike the ports
+ *  above. Absent (desktop / tests) resolves to the no-op service. Resolved on `IdeServicesBackend`. */
+val ANALYTICS_SERVICE = ServiceKey<AnalyticsService>("platform.analytics")
