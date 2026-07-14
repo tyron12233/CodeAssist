@@ -389,18 +389,8 @@ class IdeServices private constructor(
     val store: ProjectModelStore,
     /** Non-null only on-device; selects the in-process Android build over desktop SDK detection. */
     private val androidTools: AndroidDeviceTools? = null,
-    /** Non-null only on-device (supplied by :ide-android): runs a dexed console app via `DexClassLoader`,
-     *  so a Java `run` works on ART where forking `java` is not possible. */
-    private val dexRunner: DexRunner? = null,
-    /** Non-null only on-device (supplied by :ide-android): installs + launches a built APK (the android Run). */
-    private val apkInstaller: ApkInstaller? = null,
-    /** Optional platform runtime that renders *live* custom views in the layout preview (device dex / desktop shim). */
-    private val customViewRuntime: CustomViewRuntime? = null,
     /** Optional device-only runtime that renders the layout with the REAL Android view stack (layoutlib-on-device). */
     private val realViewRuntime: RealViewRuntime? = null,
-    /** Non-null only on-device (supplied by :ide-android): loads runtime (non-bundled) Kotlin compiler plugins
-     *  via D8-dex + `DexClassLoader`. Null → the desktop `DefaultKotlinPluginLoader` (URLClassLoader). */
-    private val kotlinPluginLoader: KotlinPluginLoader? = null,
     /**
      * Where the resolved-dependency cache lives. Null → per-project (`<workspace>/.platform/...`); a host
      * passes a shared app-level dir (the projects-root parent) so every project reuses one another's
@@ -425,6 +415,14 @@ class IdeServices private constructor(
     @Volatile
     internal var lastOpenPeak: MemSample? = null
     private val memLog = Log.logger("ide.mem")
+
+    // Platform ports resolved from the application service container the host ([ProjectManager]) registered
+    // them on — not constructor-injected. Absent (desktop / a standalone test with no host) → null → the
+    // in-process default. Declared early so any init-time reader sees the resolved value.
+    private val dexRunner: DexRunner? = env.container.getServiceOrNull(DEX_RUNNER)
+    private val apkInstaller: ApkInstaller? = env.container.getServiceOrNull(APK_INSTALLER)
+    private val customViewRuntime: CustomViewRuntime? = env.container.getServiceOrNull(CUSTOM_VIEW_RUNTIME)
+    private val kotlinPluginLoader: KotlinPluginLoader? = env.container.getServiceOrNull(KOTLIN_PLUGIN_LOADER)
 
     /** The build/run seam ([BuildRunner]): today an in-process runner; a future remote runner swaps in for
      *  the separate-process build (docs/build-process-isolation.md). [dev.ide.core.backend.BuildBackend]
@@ -4452,17 +4450,13 @@ class IdeServices private constructor(
             sdk: SdkData,
             languageLevel: LanguageLevel,
             androidTools: AndroidDeviceTools? = null,
-            dexRunner: DexRunner? = null,
-            apkInstaller: ApkInstaller? = null,
-            /** On-device live custom-view runtime (from :ide-android) — dex + Bridge classloader for the layout preview. */
-            customViewRuntime: CustomViewRuntime? = null,
             /** On-device real-view layout renderer (from :ide-android) — the layoutlib-on-device preview path. */
             realViewRuntime: RealViewRuntime? = null,
-            /** On-device Kotlin compiler-plugin loader (from :ide-android): D8-dex + DexClassLoader. */
-            kotlinPluginLoader: KotlinPluginLoader? = null,
             /** App-level shared download cache (projects-root parent); null → per-project. */
             sharedCachesRoot: Path? = null,
-            /** The host's application environment, so app-scoped substrate + services are shared across projects. */
+            /** The host's application environment, so app-scoped substrate + services are shared across projects.
+             *  The self-contained platform ports (dexRunner/apkInstaller/customViewRuntime/kotlinPluginLoader)
+             *  are resolved from its container, registered there by the host. */
             env: ApplicationEnvironment = ApplicationEnvironment(),
         ): IdeServices {
             Files.createDirectories(root)
@@ -4477,11 +4471,7 @@ class IdeServices private constructor(
                 platform,
                 store,
                 androidTools,
-                dexRunner,
-                apkInstaller,
-                customViewRuntime,
                 realViewRuntime,
-                kotlinPluginLoader,
                 sharedCachesRoot,
                 env = env,
             )
@@ -4502,17 +4492,11 @@ class IdeServices private constructor(
             root: Path,
             sdk: SdkData,
             androidTools: AndroidDeviceTools? = null,
-            dexRunner: DexRunner? = null,
-            apkInstaller: ApkInstaller? = null,
-            /** On-device live custom-view runtime (from :ide-android) — dex + Bridge classloader for the layout preview. */
-            customViewRuntime: CustomViewRuntime? = null,
             /** On-device real-view layout renderer (from :ide-android) — the layoutlib-on-device preview path. */
             realViewRuntime: RealViewRuntime? = null,
-            /** On-device Kotlin compiler-plugin loader (from :ide-android): D8-dex + DexClassLoader. */
-            kotlinPluginLoader: KotlinPluginLoader? = null,
             /** App-level shared download cache (projects-root parent); null → per-project. */
             sharedCachesRoot: Path? = null,
-            /** The host's application environment, so app-scoped substrate + services are shared across projects. */
+            /** The host's application environment; the self-contained platform ports are resolved from its container. */
             env: ApplicationEnvironment = ApplicationEnvironment(),
             /** Headless build-only engine (the :build daemon): skip the editor cold-start. See [buildOnly]. */
             buildOnly: Boolean = false,
@@ -4523,11 +4507,7 @@ class IdeServices private constructor(
                 platform,
                 store,
                 androidTools,
-                dexRunner,
-                apkInstaller,
-                customViewRuntime,
                 realViewRuntime,
-                kotlinPluginLoader,
                 sharedCachesRoot,
                 buildOnly = buildOnly,
                 env = env,
