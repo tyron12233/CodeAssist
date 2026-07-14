@@ -55,6 +55,10 @@ interface ExtensionRegistry {
 
     /** All current contributions to [ep], in registration order. */
     fun <T : Any> extensions(ep: ExtensionPoint<T>): List<T>
+
+    /** Remove every contribution made by [plugin]. The bulk-unregister path a plugin unload takes: a plugin
+     *  contributing through a facade that discards its per-registration [Disposable] is still fully removed. */
+    fun unregisterAll(plugin: PluginId)
 }
 
 /** A scoped service locator (workspace- or project-scoped, depending on the key's origin). */

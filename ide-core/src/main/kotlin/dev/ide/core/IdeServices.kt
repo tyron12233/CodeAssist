@@ -50,8 +50,6 @@ import dev.ide.block.impl.JavaBlockMapping
 import dev.ide.build.engine.DexRunner
 import dev.ide.core.IdeServices.Companion.PARSER_WARMUP_MIN_FREE_BYTES
 import dev.ide.core.IdeServices.Companion.openStore
-import dev.ide.core.IdeServices.Companion.registerActiveEnginePlugins
-import dev.ide.core.IdeServices.Companion.registerStaticPlugins
 import dev.ide.core.actions.BuiltInActions
 import dev.ide.core.completion.BufferWordsContributor
 import dev.ide.core.completion.CompletionEngine
@@ -80,6 +78,8 @@ import dev.ide.index.IndexScope
 import dev.ide.index.IndexService
 import dev.ide.index.impl.IndexServiceImpl
 import dev.ide.lang.AnalysisResult
+import dev.ide.lang.FILE_TYPE_EP
+import dev.ide.lang.FileTypeMapping
 import dev.ide.lang.LANGUAGE_BACKEND_EP
 import dev.ide.lang.LanguageBackend
 import dev.ide.lang.LanguageId
@@ -348,24 +348,24 @@ interface ComposePreviewRunner {
 /** WORKSPACE-scoped: this engine's [EngineContext] (the shared-infrastructure surface). Registered on the
  *  engine's own workspace container so app-global service factories can resolve the per-project engine through
  *  the scope (MODULE → WORKSPACE) rather than closure-capturing it. */
-private val ENGINE_CONTEXT = ServiceKey<EngineContext>("ide.engineContext")
+internal val ENGINE_CONTEXT = ServiceKey<EngineContext>("ide.engineContext")
 
 /** APPLICATION-scoped: the warm K2 compiler shared across every opened project. */
 private val KOTLIN_JVM_COMPILER = ServiceKey<KotlinJvmCompiler>("ide.kotlin.jvmCompiler")
 
 /** MODULE-scoped: the per-module source analyzer for each language. */
-private val ANALYZER_JAVA = ServiceKey<SourceAnalyzer>("ide.analyzer.java")
-private val ANALYZER_KOTLIN = ServiceKey<SourceAnalyzer>("ide.analyzer.kotlin")
-private val ANALYZER_XML = ServiceKey<SourceAnalyzer>("ide.analyzer.xml")
+internal val ANALYZER_JAVA = ServiceKey<SourceAnalyzer>("ide.analyzer.java")
+internal val ANALYZER_KOTLIN = ServiceKey<SourceAnalyzer>("ide.analyzer.kotlin")
+internal val ANALYZER_XML = ServiceKey<SourceAnalyzer>("ide.analyzer.xml")
 
 /** WORKSPACE-scoped: this engine's decomposed concern services, resolved from the workspace container. */
-private val SIGNING_SERVICE = ServiceKey<SigningService>("ide.service.signing")
-private val SEARCH_SERVICE = ServiceKey<SearchService>("ide.service.search")
-private val BLOCK_SERVICE = ServiceKey<BlockService>("ide.service.blocks")
-private val ACTION_MANAGER = ServiceKey<ActionManager>("ide.service.actions")
-private val DEPENDENCY_SERVICE = ServiceKey<DependencyService>("ide.service.dependencies")
-private val MODULE_SERVICE = ServiceKey<ModuleService>("ide.service.modules")
-private val BUILD_SERVICE = ServiceKey<BuildService>("ide.service.build")
+internal val SIGNING_SERVICE = ServiceKey<SigningService>("ide.service.signing")
+internal val SEARCH_SERVICE = ServiceKey<SearchService>("ide.service.search")
+internal val BLOCK_SERVICE = ServiceKey<BlockService>("ide.service.blocks")
+internal val ACTION_MANAGER = ServiceKey<ActionManager>("ide.service.actions")
+internal val DEPENDENCY_SERVICE = ServiceKey<DependencyService>("ide.service.dependencies")
+internal val MODULE_SERVICE = ServiceKey<ModuleService>("ide.service.modules")
+internal val BUILD_SERVICE = ServiceKey<BuildService>("ide.service.build")
 
 /**
  * APPLICATION-scoped shared toolchain services — reachable with no project open (the picker's Settings &
@@ -459,30 +459,20 @@ class IdeServices private constructor(
     private fun backendFor(language: LanguageId): LanguageBackend =
         languageBackends.firstOrNull { language in it.languages } ?: languageBackends.first()
 
-    /** Language id for ProGuard/R8 keep-rule files. No backend is registered for it: editing falls back to
-     *  plain text and the diagnostics engine (which dispatches by language) runs nothing, so a `.pro` file is
-     *  never analysed as Java. */
-    private val PROGUARD_LANGUAGE_ID = LanguageId("proguard")
+    /** File-name-suffix → [LanguageId] mappings contributed via [FILE_TYPE_EP] (built-ins in [BuiltInPlugins]),
+     *  priority-sorted and cached. Every built-in plugin registers before any engine is built, so the lazy
+     *  snapshot is complete. This replaces the old hardcoded extension `when`: a language's file association is
+     *  now a registration, not an edit here. */
+    private val fileTypeMappings: List<FileTypeMapping> by lazy {
+        platform.extensions.extensions(FILE_TYPE_EP).sortedBy { it.order }
+    }
 
-    /** Language id for Markdown documents. Like [PROGUARD_LANGUAGE_ID] no backend is registered, so a `.md`
-     *  file (even one inside a source root) is edited as plain text and never analysed as Java; its rich-text
-     *  rendering is a UI-side Preview, not an analysis backend. */
-    private val MARKDOWN_LANGUAGE_ID = LanguageId("markdown")
-
-    /** The language of [file] by extension: `.xml` → xml, `.kt` → kotlin, `.pro` → proguard, `.md` → markdown
-     *  (the last two have no analysis backend, so they're edited as plain text without being mis-parsed as
-     *  Java), everything else → java. */
+    /** The language of [file] by its registered [FileTypeMapping], else Java. A mapping may target a language
+     *  with no [LanguageBackend] (ProGuard, Markdown): that file is edited as plain text and, because the
+     *  analysis pipeline dispatches by language, is never analysed as Java. */
     private fun languageFor(file: Path): LanguageId {
         val name = file.fileName?.toString() ?: return LanguageId("java")
-        return when {
-            name.endsWith(".xml") -> XmlLanguageBackend.LANGUAGE_ID
-            name.endsWith(".kt") || name.endsWith(".kts") -> KotlinLanguageBackend.LANGUAGE_ID
-            // ProGuard/R8 keep-rule files have no language backend; routing them off "java" keeps the JDT
-            // analyzer from flagging the file as broken Java (the diagnostics engine dispatches by language).
-            name.endsWith(".pro") -> PROGUARD_LANGUAGE_ID
-            name.endsWith(".md") || name.endsWith(".markdown") -> MARKDOWN_LANGUAGE_ID
-            else -> LanguageId("java")
-        }
+        return fileTypeMappings.firstOrNull { it.matches(name) }?.language ?: LanguageId("java")
     }
 
     private fun isKotlin(file: Path): Boolean =
@@ -2720,7 +2710,7 @@ class IdeServices private constructor(
     @Volatile
     private var sdkMetadata: AndroidSdkMetadata? = null
 
-    private fun sdkLayoutMetadata(): AndroidSdkMetadata {
+    internal fun sdkLayoutMetadata(): AndroidSdkMetadata {
         sdkMetadata?.let { return it }
         val path = store.rootPath.resolve(".platform/android-sdk-metadata.txt")
         val md = runCatching {
@@ -2875,7 +2865,7 @@ class IdeServices private constructor(
     }
 
     /** True when [target]'s module library classpath includes AppCompat, so its `app:` compat attrs resolve. */
-    private fun moduleUsesAppCompat(target: AnalysisTarget): Boolean =
+    internal fun moduleUsesAppCompat(target: AnalysisTarget): Boolean =
         runCatching {
             ModuleCompilationContext.create(
                 store.workspace,
@@ -3746,7 +3736,7 @@ class IdeServices private constructor(
     }
 
     /** The shared merged repository instance for [module] (see [resourceRepository]), or null. */
-    private fun resourceRepo(module: Module): ResourceRepository? =
+    internal fun resourceRepo(module: Module): ResourceRepository? =
         resourceRepository(module)?.repo
 
     /**
@@ -4446,286 +4436,6 @@ class IdeServices private constructor(
             return platform to store
         }
 
-        /**
-         * Register the **project-independent** plugin contributions on [platform]'s extension registry:
-         * module types, facet codecs, synthetic-class providers, file icons, and the Create-Project
-         * templates. These are static (read once into cached registries, never mutated at runtime), so the
-         * same set is registered both per-project (via [openStore]) and once at **application** scope (by
-         * [ProjectManager], over its own app-level [PlatformCore]) — letting the picker enumerate templates
-         * without an open project. Returns the [ModuleTypeRegistry]/[FacetCodecRegistry] the model needs.
-         */
-        internal fun registerStaticPlugins(
-            extensions: ExtensionRegistry,
-            env: ApplicationEnvironment,
-        ): Pair<ModuleTypeRegistry, FacetCodecRegistry> {
-            val moduleTypes = ModuleTypeRegistry(extensions)
-            moduleTypes.register(JavaLibModuleType, PluginId("java-support"))
-            val codecs = FacetCodecRegistry()
-            // android-support: register android-app/-lib module types + the AndroidFacet codec so
-            // `module.toml` files of type android-* load with a resolvable type and a decodable facet.
-            AndroidSupport.register(moduleTypes, codecs)
-            // platform.syntheticClass: the light Android `R` is registered per-project from the IdeServices
-            // INSTANCE ([registerInstanceSyntheticClasses]) so it can share that instance's fingerprint-cached
-            // resource repository — re-parsing every dependency `res/` per completion/analysis pass OOM'd a
-            // tight device. Only the project-independent stand-ins (BuildConfig) register here.
-            extensions.register(
-                SYNTHETIC_CLASS_EP, AndroidBuildConfigProvider(), PluginId("android-support")
-            )
-            // ViewBinding: `<namespace>.databinding.<Layout>Binding` per layout, generated from the module's OWN
-            // layouts (small, no dependency res), so it needs no shared repo cache and registers statically too.
-            extensions.register(
-                SYNTHETIC_CLASS_EP, AndroidViewBindingProvider(), PluginId("android-support")
-            )
-            // Kotlin interop: a module's top-level `fun`/`val` become a `<File>Kt` facade and its classes/
-            // objects become types, so Java code (and JDT completion/analysis) resolves them before a build.
-            extensions.register(
-                SYNTHETIC_CLASS_EP, KotlinSyntheticClassProvider(), PluginId("kotlin-support")
-            )
-            // platform.fileIcon: the built-in classifier + the Android plugin's res/assets/manifest icons.
-            val fileIcons = FileIconRegistry(extensions)
-            fileIcons.register(DefaultFileIconProvider, PluginId("platform"))
-            AndroidSupport.registerIcons(fileIcons)
-            // platform.projectTemplate: the Create-Project gallery — built-in Java + Kotlin templates + Android plugin's.
-            val templates = ProjectTemplateRegistry(extensions)
-            templates.register(JavaConsoleAppTemplate, PluginId("java-support"))
-            templates.register(JavaLibraryTemplate, PluginId("java-support"))
-            templates.register(KotlinConsoleAppTemplate, PluginId("kotlin-support"))
-            templates.register(KotlinLibraryTemplate, PluginId("kotlin-support"))
-            AndroidSupport.registerTemplates(templates)
-            // Sample projects (complete, runnable examples) — listed under "Sample projects" in the store.
-            templates.register(CalculatorSampleTemplate, PluginId("samples"))
-            templates.register(NotesSampleTemplate, PluginId("samples"))
-            templates.register(WeatherSampleTemplate, PluginId("samples"))
-            // Jetpack Compose sample games (Snake, Tic-Tac-Toe, Memory Match, 2048) — also under "Sample projects".
-            AndroidSupport.registerComposeSamples(templates)
-
-            // ---- Stateless, project-independent editor contributions (registered ONCE, app-global) ----
-            // These capture no per-project state (their parse hosts are global singletons), so one shared
-            // instance per app is correct, and the per-project child registry inherits them via the hierarchy.
-
-            // platform.languageBackend: Java (JDT) first as the default fallback, then XML + Kotlin. The
-            // hierarchical registry returns app (parent) contributions before any project-local ones, so this
-            // app-global order IS the resolution order (JDT-as-fallback must precede the others).
-            val langPlugin = PluginId("language-backends")
-            extensions.register(LANGUAGE_BACKEND_EP, JdtLanguageBackend(), langPlugin)
-            extensions.register(LANGUAGE_BACKEND_EP, XmlLanguageBackend(), langPlugin)
-            extensions.register(LANGUAGE_BACKEND_EP, KotlinLanguageBackend(), langPlugin)
-
-            // platform.completionContributor / platform.postfixTemplate: the cross-cutting completion
-            // contributors + the generic postfix-template driver + Kotlin's built-in postfix templates.
-            val completionPlugin = PluginId("completion-builtins")
-            extensions.register(
-                COMPLETION_CONTRIBUTOR_EP,
-                CompletionContribution(
-                    BufferWordsContributor,
-                    order = BufferWordsContributor.ORDER
-                ),
-                completionPlugin,
-            )
-            extensions.register(
-                COMPLETION_CONTRIBUTOR_EP,
-                CompletionContribution(
-                    PostfixContributor(extensions),
-                    order = PostfixContributor.ORDER,
-                ),
-                completionPlugin,
-            )
-            KotlinPostfixTemplates.all().forEach {
-                extensions.register(dev.ide.lang.postfix.POSTFIX_TEMPLATE_EP, it, completionPlugin)
-            }
-
-            // platform.index: the built-in symbol/member/resource index extensions.
-            val indexPlugin = PluginId("indexing")
-            listOf(
-                JavaClassNamesIndex,
-                JavaPackagesIndex,
-                JavaPackageTypesIndex,
-                JavaClassLocatorIndex, // fqcn -> owning jar, for the index-backed JDT name environment
-                JavaSourceSymbolsIndex,
-                JavaMembersIndex,
-                JavaMembersByOwnerIndex, // cross-language: a Kotlin file enumerating a Java SOURCE class's members
-                KotlinTypeShapeIndex, // Kotlin backend: persistent owner-keyed member shapes
-                KotlinBuiltinsIndex, // Kotlin backend: intrinsic List/Int/String shapes (.kotlin_builtins)
-                KotlinCallableIndex, // Kotlin backend: persistent extensions + top-level callables
-                KotlinBuiltinCallableIndex, // Kotlin backend: top-level intrinsics (arrayOf/intArrayOf/… in .kotlin_builtins)
-                KotlinSourceCallableIndex, // same key scheme over project .kt (cross-file source extensions)
-                KotlinPackageDeclIndex, // per-package top-level classifiers + callables
-                JavaSourceDocIndex, // param names + javadoc from attached Java sources
-                KotlinSourceDocIndex, // param names + KDoc from attached Kotlin sources
-                JavaMainIndex, // runnable entry points in Java source (the Run picker)
-                KotlinMainIndex, // runnable entry points in Kotlin source (the Run picker)
-                AndroidResourceIndex, // Android resource declarations
-                // Direct inheritors + annotated-by (the parity plan's Phase 1.3/1.4), keyed by SHORT name
-                // across all three producer sides; consumers merge SubtypeIndex.ALL / AnnotationIndex.ALL.
-                BinarySubtypeIndex,
-                BinaryAnnotationIndex,
-                KotlinSourceSubtypeIndex,
-                KotlinSourceAnnotationIndex,
-                JavaSourceSubtypeIndex,
-                JavaSourceAnnotationIndex,
-            ).forEach { extensions.register(INDEX_EP, it, indexPlugin) }
-
-            // platform.blockMapping: the built-in Java block decomposition.
-            extensions.register(BLOCK_MAPPING_EP, JavaBlockMapping, PluginId("java-support"))
-
-            // The STATELESS analysis support (analyzers/diagnostic providers/quick-fix providers that capture no
-            // per-project state). The XML analysis support is NOT here — it captures a per-project resource host
-            // and is registered app-global via the active engine (see [registerActiveEnginePlugins]).
-            dev.ide.lang.jdt.analysis.JdtAnalysisSupport.register(extensions)
-            dev.ide.lang.kotlin.analysis.KotlinAnalysisSupport.register(extensions)
-
-            // platform.service: this engine family's scoped services. Registered ONCE on the app registry; each
-            // factory resolves the per-project engine through the scope ([ENGINE_CONTEXT], published on every
-            // engine's own workspace container) rather than closure-capturing it — so one app-global descriptor
-            // set serves every opened project. A MODULE/WORKSPACE container resolves the right engine by walking
-            // up to where its workspace published ENGINE_CONTEXT.
-            registerEngineServices(extensions)
-
-            // The capturing app-level extensions (synthetic-R, command actions, the XML resource host) that have
-            // no service scope to resolve through: registered ONCE here, deriving the open engine from [env].
-            registerActiveEnginePlugins(extensions, env)
-
-            return moduleTypes to codecs
-        }
-
-        /** The `platform.service` descriptors for this engine family's MODULE analyzers + WORKSPACE concern
-         *  services. Each factory resolves the per-project engine via [ENGINE_CONTEXT] (the scope walks
-         *  MODULE → WORKSPACE to the engine that published it), so a single app-global registration serves every
-         *  opened project — no per-project closure capture. */
-        private fun registerEngineServices(extensions: ExtensionRegistry) {
-            val plugin = PluginId("ide-core-services")
-            // MODULE-scoped per-language analyzers: built (and cached/disposed) by each module's container.
-            extensions.register(
-                SERVICE_EP, ServiceDescriptor(
-                    ANALYZER_JAVA, ServiceScopeLevel.MODULE,
-                    { getService(ENGINE_CONTEXT).buildAnalyzer(module(), LanguageId("java")) },
-                    plugin
-                ), plugin
-            )
-            extensions.register(
-                SERVICE_EP, ServiceDescriptor(
-                    ANALYZER_KOTLIN, ServiceScopeLevel.MODULE,
-                    {
-                        getService(ENGINE_CONTEXT).buildAnalyzer(
-                            module(),
-                            KotlinLanguageBackend.LANGUAGE_ID
-                        )
-                    },
-                    plugin
-                ), plugin
-            )
-            extensions.register(
-                SERVICE_EP, ServiceDescriptor(
-                    ANALYZER_XML, ServiceScopeLevel.MODULE,
-                    {
-                        getService(ENGINE_CONTEXT).buildAnalyzer(
-                            module(),
-                            XmlLanguageBackend.LANGUAGE_ID
-                        )
-                    },
-                    plugin
-                ), plugin
-            )
-            // WORKSPACE-scoped concern services carved out of the engine. Each pulls its engine's [EngineContext]
-            // from the workspace scope it resolves in (the engine published it there in registerScopedServices).
-            extensions.register(
-                SERVICE_EP, ServiceDescriptor(
-                    SIGNING_SERVICE, ServiceScopeLevel.WORKSPACE,
-                    { SigningService(getService(ENGINE_CONTEXT)) }, plugin
-                ), plugin
-            )
-            extensions.register(
-                SERVICE_EP, ServiceDescriptor(
-                    SEARCH_SERVICE, ServiceScopeLevel.WORKSPACE,
-                    { SearchService(getService(ENGINE_CONTEXT)) }, plugin
-                ), plugin
-            )
-            extensions.register(
-                SERVICE_EP, ServiceDescriptor(
-                    BLOCK_SERVICE, ServiceScopeLevel.WORKSPACE,
-                    { BlockService(getService(ENGINE_CONTEXT)) }, plugin
-                ), plugin
-            )
-            // The action surface is the workspace's ActionManager itself, resolving the toolbar/menu/palette EPs
-            // against the resolving engine's own (hierarchical) registry — so it sees app + project contributions.
-            extensions.register(
-                SERVICE_EP, ServiceDescriptor(
-                    ACTION_MANAGER, ServiceScopeLevel.WORKSPACE,
-                    { ActionManager(getService(ENGINE_CONTEXT).platform.extensions) }, plugin
-                ), plugin
-            )
-            extensions.register(
-                SERVICE_EP, ServiceDescriptor(
-                    DEPENDENCY_SERVICE, ServiceScopeLevel.WORKSPACE,
-                    { DependencyService(getService(ENGINE_CONTEXT)) }, plugin
-                ), plugin
-            )
-            extensions.register(
-                SERVICE_EP, ServiceDescriptor(
-                    MODULE_SERVICE, ServiceScopeLevel.WORKSPACE,
-                    { ModuleService(getService(ENGINE_CONTEXT)) }, plugin
-                ), plugin
-            )
-            extensions.register(
-                SERVICE_EP, ServiceDescriptor(
-                    BUILD_SERVICE, ServiceScopeLevel.WORKSPACE,
-                    { BuildService(getService(ENGINE_CONTEXT)) }, plugin
-                ), plugin
-            )
-        }
-
-        /**
-         * Register the app-level extension callbacks that have no service scope to resolve through — they fire
-         * outside any project's container (the command palette, the synthetic-class resolver, the XML diagnostic
-         * pipeline). Registered ONCE on the app registry; each resolves the open project lazily through
-         * [ApplicationEnvironment.activeEngine] at callback time, so the single registration serves every project.
-         */
-        private fun registerActiveEnginePlugins(
-            extensions: ExtensionRegistry,
-            env: ApplicationEnvironment
-        ) {
-            // Built-in command-palette actions (Run/Stop build, Re-index): act on the active engine.
-            BuiltInActions.register(extensions, env)
-
-            // platform.syntheticClass: the light Android `R`, resolved from the active engine's SHARED
-            // fingerprint-cached resource repository (so it reuses the SAME parsed resource set as the
-            // preview/value/go-to-def paths). The per-project repository cache is the engine's; this provider
-            // is app-global and reaches it through the active engine.
-            extensions.register(
-                SYNTHETIC_CLASS_EP,
-                AndroidRClassProvider { m, _ -> env.activeEngine?.resourceRepo(m) },
-                PluginId("android-support"),
-            )
-
-            // platform.completionWeigher: the acceptance-frequency stats weigher (IntelliJ's `stats`) —
-            // app-global like every weigher, counting through the ACTIVE engine's per-project counters.
-            extensions.register(
-                dev.ide.lang.completion.COMPLETION_WEIGHER_EP,
-                dev.ide.lang.completion.StatsWeigher { item ->
-                    env.activeEngine?.completionStats?.countFor(CompletionStats.keyOf(item.label))
-                        ?: 0
-                },
-                PluginId("completion-builtins"),
-            )
-
-            // The XML editor diagnostics: the resource host + Android attribute schema + the app-compat
-            // intention, all delegating to the active engine's per-project state.
-            dev.ide.lang.xml.lint.XmlAnalysisSupport.register(
-                extensions,
-                ActiveEngineXmlResourceHost(env),
-                AndroidXmlChecker(layout = {
-                    env.activeEngine?.sdkLayoutMetadata() ?: AndroidSdkMetadata.bundled()
-                }),
-            )
-            extensions.register(
-                ACTION_PROVIDER_EP,
-                AndroidXmlActionProvider { target ->
-                    env.activeEngine?.moduleUsesAppCompat(target) ?: false
-                },
-                PluginId("android-xml"),
-            )
-        }
-
         /** Desktop default SDK: an installed Android SDK's `android.jar` if present, else a detected JDK. */
         internal fun defaultDesktopSdk(): SdkData = detectAndroidSdk() ?: JdkSdkProvider.detect()
 
@@ -4852,7 +4562,7 @@ data class TreeRootInfo(val path: Path, val sourceSetName: String, val roles: Se
  * open it returns the quiet defaults (nothing is view-like, no references, nothing flagged), so the XML
  * pipeline never false-positives before/between projects.
  */
-private class ActiveEngineXmlResourceHost(private val env: ApplicationEnvironment) :
+internal class ActiveEngineXmlResourceHost(private val env: ApplicationEnvironment) :
     dev.ide.lang.xml.lint.XmlResourceHost {
     private val host get() = env.activeEngine?.xmlResourceHost
 
