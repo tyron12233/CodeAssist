@@ -915,7 +915,7 @@ private fun LogLineRow(
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
             ) {
                 if (showTask && !line.task.isNullOrEmpty()) Text(
-                    shortTask(line.task),
+                    shortTask(line.task!!),
                     color = Ca.colors.accent.copy(alpha = 0.85f),
                     style = Ca.type.caption2,
                     maxLines = 1,
@@ -950,7 +950,7 @@ private fun LogLineRow(
         )
         if (showTask && !line.task.isNullOrEmpty()) {
             Text(
-                shortTask(line.task),
+                shortTask(line.task!!),
                 color = Ca.colors.accent.copy(alpha = 0.85f),
                 style = Ca.type.caption2,
                 maxLines = 1

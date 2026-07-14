@@ -233,7 +233,7 @@ private fun CompletionRow(
                     )
                     if (item.detail != null) {
                         Text(
-                            item.detail,
+                            item.detail!!,
                             style = detailStyle,
                             color = Ca.colors.textTertiary,
                             maxLines = 1,

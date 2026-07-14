@@ -219,7 +219,7 @@ private fun LogRow(entry: UiLogEntry, reveal: (() -> Float)?, slotPx: Float) {
             }
             if (expanded && entry.stackTrace != null) {
                 Text(
-                    entry.stackTrace,
+                    entry.stackTrace!!,
                     color = Ca.colors.textSecondary,
                     style = Ca.type.codeSmall,
                     modifier = Modifier.fillMaxWidth().padding(top = 6.dp, start = 4.dp)

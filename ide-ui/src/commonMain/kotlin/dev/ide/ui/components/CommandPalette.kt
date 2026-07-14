@@ -149,7 +149,7 @@ fun CommandPalette(
         } else {
             symbols.forEach { s ->
                 add(PaletteEntry("Symbols", s.name, s.detail) {
-                    if (s.filePath != null && s.offset != null) onOpenAt(s.filePath, s.offset)
+                    if (s.filePath != null && s.offset != null) onOpenAt(s.filePath!!, s.offset!!)
                 })
             }
             files.filter { it.name.contains(q, ignoreCase = true) }.take(8)

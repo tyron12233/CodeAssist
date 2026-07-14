@@ -681,7 +681,7 @@ private fun TreeRowContent(
                 node.gitStatus != null ->
                     Box(
                         Modifier.size(6.dp).background(
-                            gitColor(node.gitStatus),
+                            gitColor(node.gitStatus!!),
                             RoundedCornerShape(Ca.radius.pill)
                         )
                     )

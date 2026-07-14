@@ -842,7 +842,7 @@ private fun ConfigForm(
     val forms = remember(config) { config.facets.map { it.toForm() } }
     val mainClass = remember(config) { mutableStateOf(config.runConfig?.mainClass ?: "") }
     val dirty = level != config.languageLevel || sdk != config.platformSdk ||
-        (config.runConfig != null && mainClass.value.trim() != config.runConfig.mainClass)
+        (config.runConfig != null && mainClass.value.trim() != config.runConfig!!.mainClass)
 
     LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
         // ---- General ----

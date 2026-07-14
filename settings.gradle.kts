@@ -92,6 +92,7 @@ include(
 if (System.getenv("CI_CORE_ONLY") != "true") {
     include(
         ":interp-compose", // Compose bridge + render surface (KMP: desktop+android) — needs the Compose plugin
+        ":ide-ui-api", // neutral IdeBackend port + DTOs + UI-contribution model, shared by :ide-ui and :ide-core
         ":ide-ui",
         ":ide-core",
         ":ide-desktop",
