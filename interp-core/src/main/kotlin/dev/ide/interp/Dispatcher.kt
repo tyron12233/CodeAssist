@@ -832,8 +832,17 @@ class ReflectiveDispatcher(
             mangledNameMatches(m.name, name) && !m.isVarArgs && m.parameterCount == args.size && (Modifier.isStatic(m.modifiers) == static)
         }
         val accepting = byArity.filter { paramsAccept(it.parameterTypes, args) }
-        val chosen = accepting.firstOrNull { Modifier.isPublic(it.declaringClass.modifiers) }
-            ?: accepting.firstOrNull()
+        // Prefer the MOST SPECIFIC applicable overload (Java/Kotlin overload resolution) rather than whichever
+        // getMethods() lists first — that order is JVM-dependent, so an ambiguous set would resolve differently
+        // across runtimes. e.g. RangesKt.rangeTo(Float, Float) fits BOTH rangeTo(float, float) ->
+        // ClosedFloatingPointRange and the generic rangeTo(Comparable, Comparable) -> ClosedRange; the float
+        // overload must win (else 0f..50f is typed as its ClosedRange supertype and a Slider valueRange gets the
+        // wrong type). "Most specific" = every (boxed) parameter is a subtype of the others'; ties/incomparable
+        // sets fall back to the accepting order.
+        val ranked = accepting.filter { cand -> accepting.all { notLessSpecific(cand.parameterTypes, it.parameterTypes) } }
+            .ifEmpty { accepting }
+        val chosen = ranked.firstOrNull { Modifier.isPublic(it.declaringClass.modifiers) }
+            ?: ranked.firstOrNull()
             ?: byArity.firstOrNull { Modifier.isPublic(it.declaringClass.modifiers) }
             ?: byArity.firstOrNull()
             ?: return null
@@ -910,6 +919,12 @@ class ReflectiveDispatcher(
                 else -> wrap(p).isInstance(a) || acceptsValueClassUnderlying(p, a)
             }
         }
+
+    /** Whether method params [a] are not-less-specific than [b] (each boxed param of a is assignable to the
+     *  corresponding boxed param of b) — the "more specific" relation from Java overload resolution, used to
+     *  pick the tightest applicable overload deterministically (not by JVM getMethods() order). */
+    private fun notLessSpecific(a: Array<Class<*>>, b: Array<Class<*>>): Boolean =
+        a.size == b.size && a.indices.all { wrap(b[it]).isAssignableFrom(wrap(a[it])) }
 
     private fun wrap(c: Class<*>): Class<*> = when (c) {
         Int::class.javaPrimitiveType -> Integer::class.java
