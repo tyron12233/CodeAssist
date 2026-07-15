@@ -136,6 +136,9 @@ internal interface EngineContext {
     /** True if [s] is a valid Java identifier (and not a reserved word) — the rename validator. */
     fun isValidJavaIdentifier(s: String): Boolean
 
+    /** The injected on-device Compose preview renderer, or null when none is wired (the interpret-only path). */
+    val composePreviewRunner: ComposePreviewRunner?
+
     /** The per-(module, language) analyzer for editor features, resolved + cached as a MODULE-scoped service. */
     fun analyzerFor(module: Module, language: dev.ide.lang.LanguageId): dev.ide.lang.SourceAnalyzer
 

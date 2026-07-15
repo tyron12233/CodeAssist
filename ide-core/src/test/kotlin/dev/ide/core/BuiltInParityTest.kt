@@ -58,9 +58,9 @@ class BuiltInParityTest {
             "ide.service.signing", "ide.service.search", "ide.service.blocks", "ide.service.actions",
             "ide.service.dependencies", "ide.service.modules", "ide.service.build",
             "ide.service.languageFeatures", "ide.service.androidResources", "ide.service.refactor",
-            "ide.service.kotlinEditor",
+            "ide.service.kotlinEditor", "ide.service.composePreview",
         )
-        assertEquals(moduleAnalyzers + workspaceServices, byId.keys, "exactly the 14 engine services")
+        assertEquals(moduleAnalyzers + workspaceServices, byId.keys, "exactly the 15 engine services")
         moduleAnalyzers.forEach { assertEquals(ServiceScopeLevel.MODULE, byId.getValue(it).level, it) }
         workspaceServices.forEach { assertEquals(ServiceScopeLevel.WORKSPACE, byId.getValue(it).level, it) }
     }

@@ -59,6 +59,7 @@ import dev.ide.core.completion.PostfixContributor
 import dev.ide.core.services.AndroidResourceService
 import dev.ide.core.services.BlockService
 import dev.ide.core.services.BuildService
+import dev.ide.core.services.ComposePreviewService
 import dev.ide.core.services.DependencyService
 import dev.ide.core.services.KotlinEditorService
 import dev.ide.core.services.LanguageFeatureService
@@ -376,6 +377,7 @@ internal val ANDROID_RESOURCE_SERVICE =
     ServiceKey<AndroidResourceService>("ide.service.androidResources")
 internal val REFACTOR_SERVICE = ServiceKey<RefactorService>("ide.service.refactor")
 internal val KOTLIN_EDITOR_SERVICE = ServiceKey<KotlinEditorService>("ide.service.kotlinEditor")
+internal val COMPOSE_PREVIEW_SERVICE = ServiceKey<ComposePreviewService>("ide.service.composePreview")
 
 /**
  * APPLICATION-scoped shared toolchain services — reachable with no project open (the picker's Settings &
@@ -569,6 +571,7 @@ class IdeServices private constructor(
 
         override fun projectJavaFiles() = this@IdeServices.projectJavaFiles()
         override fun isValidJavaIdentifier(s: String) = this@IdeServices.isValidJavaIdentifier(s)
+        override val composePreviewRunner get() = this@IdeServices.composePreviewRunner
         override fun analyzerFor(module: Module, language: LanguageId) =
             this@IdeServices.analyzerFor(module, language)
 
@@ -696,6 +699,10 @@ class IdeServices private constructor(
     /** WORKSPACE-scoped Kotlin editor queries (@Preview discovery, inheritor markers, go-to-implementation). */
     internal val kotlinEditor: KotlinEditorService
         get() = store.workspaceContainer.getService(KOTLIN_EDITOR_SERVICE)
+
+    /** WORKSPACE-scoped Compose @Preview interpreter (lower / diagnostics / run / readiness). */
+    internal val composePreview: ComposePreviewService
+        get() = store.workspaceContainer.getService(COMPOSE_PREVIEW_SERVICE)
 
     /** Set the Maven version-conflict policy (delegates to the dependency service). Kept here so the settings
      *  surface can reach it through the engine without depending on the service type. */
@@ -1976,97 +1983,12 @@ class IdeServices private constructor(
         kotlinEditor.implementationLocation(contextFile, fqn)
 
     /**
-     * The cross-MODULE-expanded preview model for [vf] (already parsed in [entry]'s analyzer): seed from the
-     * entry file, then run the reachable-declaration expansion across [module] PLUS its transitive dependency
-     * MODULES — so a `data class`/helper declared in a dependency module is lowered + merged and the interpreter
-     * can construct/call it (not just same-module siblings).
-     *
-     * Resolution is OWNERSHIP-routed: a module's source model already spans its dependency modules' sources (see
-     * [ModuleCompilationContext]), so several modules' analyzers can SEE the same dependency file. We LOCATE a
-     * reached declaration via any module that can see it (the entry module first), then LOWER it with the
-     * analyzer of the module that actually OWNS the file (its own source root contains it) — so a dependency
-     * file resolves against ITS module's full classpath (incl. that module's implementation-only deps), not the
-     * entry module's narrower view. Each module's analyzer is the warm, cached one; a dependency module's
-     * analyzer models its module from disk + overlay, so it lowers a file even when that file was never opened.
-     */
-    private fun previewModelFor(
-        module: Module, vf: VirtualFile, entry: KotlinSourceAnalyzer,
-    ): dev.ide.lang.kotlin.interp.PreviewModel? {
-        // The entry module first, then its transitive dependency modules — both for LOCATING a declaration
-        // (try the entry's view first) and for OWNERSHIP routing (a file under a module's own source roots is
-        // lowered by that module's analyzer).
-        val kotlinModules = moduleBuildClosure(module).mapNotNull { m ->
-            (analyzerFor(
-                m, KotlinLanguageBackend.LANGUAGE_ID
-            ) as? KotlinSourceAnalyzer)?.let {
-                Triple(
-                    m,
-                    it,
-                    sourceRoots(m).map { r -> r.normalize() })
-            }
-        }
-
-        fun lowerByOwner(pf: dev.ide.lang.kotlin.symbols.KotlinSymbolService.PreviewSourceFile): dev.ide.lang.kotlin.interp.PreviewFileModel? {
-            val path = runCatching { Paths.get(pf.file.path).normalize() }.getOrNull()
-            // The module whose OWN source root contains the file lowers it; fall back to the entry analyzer
-            // when no module claims it (a path-shape mismatch must never silently drop a declaration).
-            val owner = path?.let { p ->
-                kotlinModules.firstOrNull { (_, _, roots) ->
-                    roots.any {
-                        p.startsWith(it)
-                    }
-                }?.second
-            }
-            return (owner ?: entry).loweredFile(pf)
-        }
-
-        val provider = object : dev.ide.lang.kotlin.interp.PreviewDeclProvider {
-            override fun fileDeclaringType(fqn: String): dev.ide.lang.kotlin.interp.PreviewFileModel? =
-                kotlinModules.firstNotNullOfOrNull { (_, a, _) -> a.findDeclaringTypeFile(fqn) }
-                    ?.let(::lowerByOwner)
-
-            override fun filesDeclaringFunction(name: String): List<dev.ide.lang.kotlin.interp.PreviewFileModel> =
-                kotlinModules.flatMap { (_, a, _) -> a.findDeclaringFunctionFiles(name) }
-                    .distinctBy { it.file.path }.mapNotNull(::lowerByOwner)
-        }
-        return entry.lowerFileWithDeps(vf, provider)
-    }
-
-    /**
      * Run the `@Preview` composable [functionName] in [file] (buffer [text]): lower the file, verify the
      * preview is fully interpretable, then render it through the injected [composePreviewRunner] (on device)
      * — or, with no runner wired, report that it is interpretable.
      */
-    suspend fun runComposePreview(
-        file: Path, text: String, functionName: String
-    ): PreviewRunResult {
-        val module =
-            moduleForEditableFile(file) ?: return PreviewRunResult(false, "No module for this file")
-        val analyzer = analyzerFor(
-            module, KotlinLanguageBackend.LANGUAGE_ID
-        ) as? KotlinSourceAnalyzer ?: return PreviewRunResult(
-            false, "Not a Kotlin file"
-        )
-        val vf = store.vfs.fileFor(file)
-        analyzer.incrementalParser.parseFull(EditorDocument(vf, docVersion.incrementAndGet(), text))
-        if (analyzer.hasSyntaxErrors(vf)) return PreviewRunResult(
-            false, "the file has syntax errors — fix them to preview"
-        )
-        val model = previewModelFor(module, vf, analyzer)
-        val program = model?.program ?: emptyMap()
-        val entry = previewEntry(program, functionName, 0) ?: return PreviewRunResult(
-            false, "`$functionName` not found as a @Composable"
-        )
-        if (!entry.isComplete) {
-            val why = entry.diagnostics.joinToString("; ") { it.reason }
-                .ifBlank { "unsupported constructs" }
-            return PreviewRunResult(false, "Cannot preview `$functionName`: $why")
-        }
-        composePreviewRunner?.let { return it.render(entry, program) }
-        return PreviewRunResult(
-            true, "`$functionName` is interpretable — on-device rendering coming soon"
-        )
-    }
+    suspend fun runComposePreview(file: Path, text: String, functionName: String): PreviewRunResult =
+        composePreview.runComposePreview(file, text, functionName)
 
     /**
      * Whether [file]'s module can resolve library composables yet. False while the workspace index is still
@@ -2075,131 +1997,21 @@ class IdeServices private constructor(
      * polls this so a first-run failure shows a transient "Preparing" state (and retries once ready) instead of
      * latching into a permanent `unresolved/ambiguous call` / `not a .value delegate` error.
      */
-    fun composePreviewReady(file: Path): Boolean {
-        val module = moduleForEditableFile(file) ?: return true
-        val analyzer = analyzerFor(
-            module, KotlinLanguageBackend.LANGUAGE_ID
-        ) as? KotlinSourceAnalyzer ?: return true
-        if (!analyzer.classpathReady()) return false
-        // The hidden Learn scratch resolves via the synchronous ClasspathReader (index=null → classpathReady()
-        // is trivially true), so ALSO require the Compose runtime to have attached there (the one-time download
-        // may still be in flight on first run). A real project gates on the index alone.
-        val isScratch = store.rootPath.toString().replace('\\', '/').contains("/.scratch/")
-        return !isScratch || analyzer.composeRuntimeAttached()
-    }
+    fun composePreviewReady(file: Path): Boolean = composePreview.composePreviewReady(file)
 
     /** Why [functionName] in [file] (buffer [text]) isn't interpretable yet: each lowering diagnostic as
      *  `"reason: \"offending source\""`. Empty when it's fully interpretable (or not found). The preview panel
      *  shows these so an un-renderable preview explains the unsupported construct instead of a bare message. */
     fun composePreviewDiagnostics(
         file: Path, text: String, functionName: String, arity: Int = 0
-    ): List<String> = try {
-        val module = moduleForEditableFile(file) ?: return listOf("no module owns this file")
-        val analyzer = analyzerFor(
-            module, KotlinLanguageBackend.LANGUAGE_ID
-        ) as? KotlinSourceAnalyzer ?: return listOf("not a Kotlin file")
-        val vf = store.vfs.fileFor(file)
-        analyzer.incrementalParser.parseFull(
-            EditorDocument(
-                vf, docVersion.incrementAndGet(), text
-            )
-        )
-        if (analyzer.hasSyntaxErrors(vf)) return listOf("the file has syntax errors — fix them to preview")
-        val model = previewModelFor(module, vf, analyzer)
-        val program = model?.program ?: emptyMap()
-        val entry = previewEntry(program, functionName, arity)
-            ?: return listOf("`$functionName` not found as a @Composable (lowered: ${program.keys.joinToString()})")
-        // Mirror the gate in [lowerComposePreview]: a preview is blocked when the entry OR any source class it
-        // transitively reaches fails to lower. Report BOTH so the reason is never invisible. The entry's own
-        // diagnostics slice from this file's text; a reachable class's offsets are into ANOTHER file (e.g. a
-        // helper `class` in a sibling file), so those are reported by class name + reason without a snippet.
-        val entryProblems = entry.diagnostics.map { d ->
-            val snippet = text.substring(
-                d.source.start.coerceIn(0, text.length), d.source.end.coerceIn(0, text.length)
-            ).replace('\n', ' ').trim()
-            if (snippet.isBlank()) d.reason else "${d.reason}: \"$snippet\""
-        }
-        val classes = model?.classes ?: emptyList()
-        val reachable = dev.ide.lang.kotlin.interp.reachableSourceClasses(entry, program, classes)
-        val classProblems = classes.filter { it.fqn in reachable && !it.isComplete }.flatMap { c ->
-            (c.diagnostics + c.methods.values.flatMap { it.diagnostics }).map { "in ${c.simpleName}: ${it.reason}" }
-        }
-        (entryProblems + classProblems)
-            .ifEmpty { listOf("`$functionName` lowered with no diagnostics — it may render; if not, the failure is in the render path") }
-    } catch (t: Throwable) {
-        // NEVER return empty on a failure path — a bare "can't be interpreted" with no reason is useless.
-        listOf("analysis failed: ${t::class.java.simpleName}: ${t.message ?: "no message"}")
-    }
+    ): List<String> = composePreview.composePreviewDiagnostics(file, text, functionName, arity)
 
     /** Lower the `@Preview` composable [functionName] in [file] (buffer [text]) to a renderable tree + the
      *  file's program (for its source calls), or null when not found / not fully interpretable. The
      *  on-device render host calls this, then composes [LoweredComposePreview] via the interpreter. */
     fun lowerComposePreview(
         file: Path, text: String, functionName: String, arity: Int = 0
-    ): LoweredComposePreview? = dev.ide.lang.kotlin.KotlinPerf.trace("kt.lowerPreview") {
-        val module = moduleForEditableFile(file) ?: return null
-        val analyzer = analyzerFor(
-            module, KotlinLanguageBackend.LANGUAGE_ID
-        ) as? KotlinSourceAnalyzer ?: return null
-        val vf = store.vfs.fileFor(file)
-        dev.ide.lang.kotlin.KotlinPerf.span("parse") {
-            analyzer.incrementalParser.parseFull(
-                EditorDocument(
-                    vf,
-                    docVersion.incrementAndGet(),
-                    text
-                )
-            )
-        }
-        // A file with syntax errors mis-shapes declarations when parsed error-tolerantly — interpreting it
-        // builds a garbage program that crashes the real Compose runtime in a phase nothing can catch. Don't
-        // render it; the editor's diagnostics already flag the errors and the preview shows a "fix errors" state.
-        if (analyzer.hasSyntaxErrors(vf)) return null
-        // Cross-file AND cross-module: the program + classes include every project-source type/top-level
-        // function the preview transitively reaches in OTHER files — same module or a dependency module — so a
-        // `data class`/helper declared elsewhere is constructible/callable rather than crashing the render with
-        // a missing class.
-        val model = previewModelFor(module, vf, analyzer) ?: return null
-        val program = model.program
-        val entry =
-            previewEntry(program, functionName, arity)?.takeIf { it.isComplete } ?: return null
-        // Every source type the preview can actually REACH must lower cleanly too (a malformed `data class` it
-        // constructs would otherwise build wrong-typed instances). Scope the check to reachable types only — an
-        // unrelated class in the same file (e.g. a `MainActivity` whose `onCreate` uses a construct the
-        // interpreter doesn't model) is never instantiated by the preview, so it must not block rendering.
-        val classes = model.classes
-        val reachable = dev.ide.lang.kotlin.interp.reachableSourceClasses(entry, program, classes)
-        if (classes.any { it.fqn in reachable && !it.isComplete }) return null
-        val parameter = resolvePreviewParameter(analyzer, vf, functionName, arity, classes)
-        LoweredComposePreview(entry, program, classes, parameter)
-    }
-
-    /** The lowered preview function for [functionName] at [arity] (a `@PreviewParameter` preview has arity > 0);
-     *  falls back to any arity of that name so a stale arity still resolves. */
-    private fun previewEntry(
-        program: Map<String, ResolvedFunction>, functionName: String, arity: Int,
-    ): ResolvedFunction? = program["$functionName/$arity"] ?: program["$functionName/0"]
-    ?: program.entries.firstOrNull { it.key.substringBeforeLast('/') == functionName }?.value
-
-    /** Resolve the `@PreviewParameter` provider for [functionName]/[arity] (if any) to something the renderer
-     *  can instantiate: the lowered source [ResolvedClass] when it's project source, else a best-effort FQN. */
-    private fun resolvePreviewParameter(
-        analyzer: KotlinSourceAnalyzer,
-        vf: VirtualFile, functionName: String, arity: Int,
-        classes: List<ResolvedClass>,
-    ): LoweredPreviewParameter? {
-        val info = analyzer.composePreviews(vf)
-            .firstOrNull { it.functionName == functionName && it.arity == arity }?.parameter
-            ?: return null
-        val source =
-            classes.firstOrNull { it.simpleName == info.providerName || it.fqn == info.providerName }
-        return LoweredPreviewParameter(
-            providerSimpleName = info.providerName,
-            providerFqn = source?.fqn ?: analyzer.previewProviderFqn(vf, info.providerName),
-            providerClass = source,
-            limit = info.limit,
-        )
-    }
+    ): LoweredComposePreview? = composePreview.lowerComposePreview(file, text, functionName, arity)
 
     /**
      * The project library inputs the on-device Compose preview needs to make the user's library composables
