@@ -160,7 +160,8 @@ private class XmlLanguagePlugin : Plugin {
     override val manifest = PluginManifest(
         id = "xml-language",
         name = "XML Language",
-        dependsOn = listOf("jdt-language")
+        description = "XML editing for Android layouts, values, manifest, and drawables (tolerant parser + completion).",
+        dependsOn = listOf("jdt-language"),
     )
 
     override fun register(reg: PluginRegistration) {
@@ -174,8 +175,8 @@ private class KotlinLanguagePlugin : Plugin {
     override val manifest = PluginManifest(
         id = "kotlin-language",
         name = "Kotlin Language",
-        description = "",
-        dependsOn = listOf("jdt-language")
+        description = "Kotlin editing: parsing, code completion, and navigation (editor-only).",
+        dependsOn = listOf("jdt-language"),
     )
 
     override fun register(reg: PluginRegistration) {
@@ -189,7 +190,10 @@ private class KotlinLanguagePlugin : Plugin {
 
 /** Java support: the java-library module type, Java Create-Project templates, and the block decomposition. */
 private class JavaSupportPlugin : Plugin {
-    override val manifest = PluginManifest(id = "java-support", name = "Java Support")
+    override val manifest = PluginManifest(
+        id = "java-support", name = "Java Support",
+        description = "Java-library module type, Java Create-Project templates, and block-editor decomposition.",
+    )
     override fun register(reg: PluginRegistration) {
         reg.contributeVia { ext, pid ->
             ModuleTypeRegistry(ext).register(JavaLibModuleType, pid)
@@ -230,7 +234,10 @@ private class AndroidSupportPlugin(
     private val env: ApplicationEnvironment,
     private val codecs: FacetCodecRegistry,
 ) : Plugin {
-    override val manifest = PluginManifest(id = "android-support", name = "Android Support")
+    override val manifest = PluginManifest(
+        id = "android-support", name = "Android Support",
+        description = "Android module types, the AndroidFacet + its module.toml codec, variants, resource icons, templates, and synthetic R / BuildConfig / ViewBinding classes.",
+    )
     override fun register(reg: PluginRegistration) {
         reg.contributeVia { ext, _ ->
             AndroidSupport.register(ModuleTypeRegistry(ext), codecs)
@@ -250,7 +257,10 @@ private class AndroidSupportPlugin(
 
 /** The bundled sample projects (Calculator, Notes, Weather) in the Create-Project gallery. */
 private class SamplesPlugin : Plugin {
-    override val manifest = PluginManifest(id = "samples", name = "Sample Projects")
+    override val manifest = PluginManifest(
+        id = "samples", name = "Sample Projects",
+        description = "Bundled sample projects (Calculator, Notes, Weather) in the Create-Project gallery.",
+    )
     override fun register(reg: PluginRegistration) {
         reg.contributeVia { ext, pid ->
             val templates = ProjectTemplateRegistry(ext)
@@ -264,8 +274,10 @@ private class SamplesPlugin : Plugin {
 /** Cross-cutting completion: buffer-words + postfix contributors, Kotlin postfix templates, and the
  *  acceptance-frequency stats weigher (which counts through the active engine's per-project stats). */
 private class CompletionBuiltinsPlugin(private val env: ApplicationEnvironment) : Plugin {
-    override val manifest =
-        PluginManifest(id = "completion-builtins", name = "Completion Built-ins")
+    override val manifest = PluginManifest(
+        id = "completion-builtins", name = "Completion Built-ins",
+        description = "Cross-language completion: buffer words, postfix templates, and acceptance-frequency ranking.",
+    )
 
     override fun register(reg: PluginRegistration) {
         reg.register(
@@ -291,7 +303,10 @@ private class CompletionBuiltinsPlugin(private val env: ApplicationEnvironment) 
 
 /** All built-in symbol/member/resource index extensions. */
 private class IndexingPlugin : Plugin {
-    override val manifest = PluginManifest(id = "indexing", name = "Indexing")
+    override val manifest = PluginManifest(
+        id = "indexing", name = "Indexing",
+        description = "Symbol, member, and Android-resource indexes powering completion, go-to, and search.",
+    )
     override fun register(reg: PluginRegistration) {
         listOf(
             JavaClassNamesIndex,
@@ -327,7 +342,8 @@ private class JdtAnalysisPlugin : Plugin {
     override val manifest = PluginManifest(
         id = "jdt-analysis",
         name = "Java Analysis",
-        dependsOn = listOf("jdt-language")
+        description = "Java diagnostics, compiler errors, quick-fixes, and editor intentions (Eclipse JDT).",
+        dependsOn = listOf("jdt-language"),
     )
 
     override fun register(reg: PluginRegistration) {
@@ -341,7 +357,8 @@ private class KotlinAnalysisPlugin : Plugin {
         PluginManifest(
             id = "kotlin-analysis",
             name = "Kotlin Analysis",
-            dependsOn = listOf("kotlin-language")
+            description = "Kotlin diagnostics plus import and implement-members code actions.",
+            dependsOn = listOf("kotlin-language"),
         )
 
     override fun register(reg: PluginRegistration) {
@@ -358,7 +375,8 @@ private class XmlAnalysisPlugin(private val env: ApplicationEnvironment) : Plugi
         PluginManifest(
             id = "xml-analysis",
             name = "XML Analysis",
-            dependsOn = listOf("xml-language")
+            description = "XML/Android resource diagnostics and quick-fixes (unresolved references, hardcoded strings, missing attributes).",
+            dependsOn = listOf("xml-language"),
         )
 
     override fun register(reg: PluginRegistration) {
@@ -376,7 +394,10 @@ private class XmlAnalysisPlugin(private val env: ApplicationEnvironment) : Plugi
 
 /** The Android app-compat XML intention (delegates the "uses appcompat?" check to the active engine). */
 private class AndroidXmlPlugin(private val env: ApplicationEnvironment) : Plugin {
-    override val manifest = PluginManifest(id = "android-xml", name = "Android XML")
+    override val manifest = PluginManifest(
+        id = "android-xml", name = "Android XML",
+        description = "Android XML intentions, such as the AppCompat migration action.",
+    )
     override fun register(reg: PluginRegistration) {
         reg.register(
             ACTION_PROVIDER_EP,
@@ -459,7 +480,10 @@ private class IdeCoreServicesPlugin : Plugin {
 
 /** The built-in command-palette actions (Run / Stop build, Re-index) that act on the active engine. */
 private class IdeCoreActionsPlugin(private val env: ApplicationEnvironment) : Plugin {
-    override val manifest = PluginManifest(id = "ide-core-actions", name = "IDE Core Actions")
+    override val manifest = PluginManifest(
+        id = "ide-core-actions", name = "IDE Core Actions",
+        description = "Built-in command-palette actions: Run, Stop build, and Re-index.",
+    )
     override fun register(reg: PluginRegistration) {
         reg.contributeVia { ext, _ -> BuiltInActions.register(ext, env) }
     }
