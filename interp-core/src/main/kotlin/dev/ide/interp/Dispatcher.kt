@@ -373,6 +373,14 @@ class ReflectiveDispatcher(
         // receiver is not numbered in the `$default` mask → receiverCount = 1).
         invokeViaDefaultSynthetic(target.javaClass, name, listOf(target) + args, listOf(false) + composable, receiverCount = 1)
             ?.let { return it.value }
+        // Last resort (see [invokeStatic]): a same-arity method coerceArg can satisfy (value-class (un)boxing),
+        // AFTER the $default synthetic so a defaulted overload wins over a non-coercible same-arity sibling.
+        if (args.none { it === OmittedArg }) {
+            findByArity(target.javaClass, name, args, static = false)?.let { m ->
+                runCatching { m.isAccessible = true }
+                return m.invoke(target, *bindArgs(m.parameterTypes, args, composable, m.genericParameterTypes))
+            }
+        }
         throw InterpreterException("no method `$name`(${args.size}) on ${target.javaClass.name}")
     }
 
@@ -404,6 +412,15 @@ class ReflectiveDispatcher(
             findVarargMethod(cls, name, args, static = true)?.let { return invokeVararg(it, null, args, composable) }
         }
         invokeViaDefaultSynthetic(cls, name, args, composable, receiverCount)?.let { return it.value }
+        // Last resort: a same-arity overload none ACCEPTS as-is but [bindArgs]/coerceArg can satisfy (value-class
+        // (un)boxing). AFTER the $default synthetic so a defaulted overload wins over a non-coercible same-arity
+        // sibling (`Color(Float,Float,Float)` -> the Float `Color$default`, not `Color(Int,Int,Int)`).
+        if (args.none { it === OmittedArg }) {
+            findByArity(cls, name, args, static = true)?.let { m ->
+                runCatching { m.isAccessible = true }
+                return m.invoke(null, *bindArgs(m.parameterTypes, args, composable, m.genericParameterTypes))
+            }
+        }
         throw InterpreterException("no static `$name`(${args.size}) on $ownerFqn")
     }
 
@@ -825,6 +842,19 @@ class ReflectiveDispatcher(
         return findMethodUncached(cls, name, args, static).also { cache[key] = MethodHolder(it) }
     }
 
+    /** A same-arity method to attempt as a LAST RESORT when no overload accepts the args as-is (see
+     *  [findMethodUncached]): [bindArgs]/coerceArg may still satisfy it (value-class (un)boxing). Prefers a
+     *  public-declaring method; for an instance call re-resolves a non-public match to a public supertype so it
+     *  is invokable under the JDK module system. Callers try this only AFTER the `$default` synthetic. */
+    private fun findByArity(cls: Class<*>, name: String, args: List<Any?>, static: Boolean): Method? {
+        val byArity = cls.methods.filter { m ->
+            mangledNameMatches(m.name, name) && !m.isVarArgs && m.parameterCount == args.size && (Modifier.isStatic(m.modifiers) == static)
+        }
+        val m = byArity.firstOrNull { Modifier.isPublic(it.declaringClass.modifiers) } ?: byArity.firstOrNull() ?: return null
+        if (!static && !Modifier.isPublic(m.declaringClass.modifiers)) publicMethod(cls, m.name, m.parameterCount)?.let { return it }
+        return m
+    }
+
     private fun findMethodUncached(cls: Class<*>, name: String, args: List<Any?>, static: Boolean): Method? {
         // Vararg methods are excluded here (`!isVarArgs`) and handled by [findVarargMethod]/[invokeVararg]:
         // their JVM arity counts the array as ONE param, so an exact-arity match would mis-bind the scalar args.
@@ -841,10 +871,13 @@ class ReflectiveDispatcher(
         // sets fall back to the accepting order.
         val ranked = accepting.filter { cand -> accepting.all { notLessSpecific(cand.parameterTypes, it.parameterTypes) } }
             .ifEmpty { accepting }
+        // Return null when NO same-arity overload actually accepts the args (ranked is empty iff accepting is):
+        // invoking a non-accepting overload only throws an argument-type mismatch, and it hides the real target —
+        // a DEFAULTED overload reached via its `$default` synthetic (`Color(Float, Float, Float)` -> the 5-param
+        // Float `Color$default`, when a same-arity `Color(Int, Int, Int)` exists but can't take Floats). Returning
+        // null lets [invokeStatic]/[invoke] fall through to that synthetic path instead of crashing.
         val chosen = ranked.firstOrNull { Modifier.isPublic(it.declaringClass.modifiers) }
             ?: ranked.firstOrNull()
-            ?: byArity.firstOrNull { Modifier.isPublic(it.declaringClass.modifiers) }
-            ?: byArity.firstOrNull()
             ?: return null
         // The match may be declared on a NON-public type that `getMethods()` surfaced as the only override —
         // e.g. `java.util.Arrays$ArrayList.get` (the result of `listOf(…)`): not invokable under the JDK module
