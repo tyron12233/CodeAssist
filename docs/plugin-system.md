@@ -84,8 +84,9 @@ The extension points the built-ins contribute to (all `platform.*`) include: lan
 (`languageBackend`), file-type mappings (`fileType`), completion (`completionContributor` / `completionWeigher`
 / `postfixTemplate`), indexes (`index`), analysis (`analyzer` / `diagnosticProvider` / `quickFixProvider` /
 `actionProvider`), synthetic classes (`syntheticClass`), block mapping (`blockMapping`), module types
-(`moduleType`), project templates (`projectTemplate`), file icons (`fileIcon`), Kotlin compiler plugins
-(`kotlinCompilerPlugin`), settings pages (`settingsPage`), UI actions (`uiAction` / `actionGroup`), and scoped
+(`moduleType`), project templates (`projectTemplate`), file icons (`fileIcon`), facet codecs (`facetCodec`),
+Kotlin compiler plugins (`kotlinCompilerPlugin`), build systems (`buildSystem`), run-task providers
+(`runTaskProvider`), settings pages (`settingsPage`), UI actions (`uiAction` / `actionGroup`), and scoped
 services (`service`).
 
 ### File-to-language routing
@@ -94,6 +95,16 @@ A file's `LanguageId` is resolved through `FILE_TYPE_EP` (`FileTypeMapping`, in 
 hardcoded `when` in the host, so associating a language with a file suffix is a registration. A mapping may
 target a language with no registered backend (ProGuard, Markdown); such a file is edited as plain text and,
 because the analysis pipeline dispatches by language, is never analysed as Java.
+
+### Build-system and run-task selection
+
+The build service picks a module's build system by `BuildSystem.supports(moduleType)` — its own built-in
+Java/Android systems first, then `BUILD_SYSTEM_EP`, so a plugin can add support for a new module type without a
+host edit. The built-ins stay concrete engine fields rather than extensions on purpose: they are per-project
+and context-heavy (the Android one defers SDK detection), so the point is the seam for *additions*, not the
+registry the built-ins themselves flow through. Extra Run-picker options come from `RUN_TASK_PROVIDER_EP`
+(`RunTaskProvider` → `RunTaskSpec`), merged after the built-in enumeration; id dispatch stays host-side, so a
+provider reuses a built-in id prefix (`build:` / `run:` / `assemble:`) to execute through the existing pipeline.
 
 ## Platform ports as host services
 
