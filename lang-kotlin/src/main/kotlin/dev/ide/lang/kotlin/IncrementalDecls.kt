@@ -158,6 +158,15 @@ internal object IncrementalDecls {
         val importNames =
             curImports.names.symmetricDifferenceWith(prevImports.names) // added/removed specific imports
         if (changed.isEmpty() && importNames.isEmpty()) return Plan.Partial(emptySet(), null)
+        // An added/removed import whose simple name is a Kotlin OPERATOR-convention function
+        // (getValue/setValue for a `by` delegate, plus/get/set/… for `+`/`a[i]`, componentN for destructuring,
+        // iterator/hasNext/next for `for`-in) can change the resolution of a symbol invoked BY CONVENTION —
+        // which carries no name reference the per-declaration name-scoping below could match. So it can't be
+        // scoped; recompute the whole file. This is the common "auto-import `androidx.compose.runtime.getValue`
+        // for `var x by mutableStateOf(0)`" case: without this the stale "no getValue operator" error lingers
+        // until the next keystroke (which changes the declaration text and forces its recompute). Rare event
+        // (a per-accept/per-import-edit keystroke); a plain class/function import stays name-scoped (below).
+        if (importNames.any(::isOperatorConventionName)) return Plan.Full
 
         // Classify each changed declaration: a body-only change invalidates only itself; a signature change
         // (header or provided-name-set differs, and any class edit, since a class's header is its whole text)
@@ -218,4 +227,23 @@ internal object IncrementalDecls {
 
     private fun Set<String>.symmetricDifferenceWith(other: Set<String>): Set<String> =
         (this - other) + (other - this)
+
+    /** The fixed set of Kotlin operator-convention function names — the functions a call site can reach BY
+     *  CONVENTION (a symbol/keyword) rather than by a name reference: arithmetic/comparison/range/`in`/indexed-
+     *  access/invoke/augmented-assign/increment-decrement/unary operators, plus `by`-delegate accessors and
+     *  `provideDelegate`, and the iterator protocol. `componentN` (destructuring) is matched separately (it has a
+     *  numeric suffix). Importing an extension with one of these names can bring a convention-invoked operator
+     *  into scope, so an import of such a name can't be name-scoped by [plan]. */
+    private val OPERATOR_CONVENTION_NAMES = setOf(
+        "plus", "minus", "times", "div", "rem", "mod", "rangeTo", "rangeUntil", "contains",
+        "get", "set", "invoke", "compareTo", "equals",
+        "plusAssign", "minusAssign", "timesAssign", "divAssign", "remAssign", "modAssign",
+        "inc", "dec", "unaryPlus", "unaryMinus", "not",
+        "iterator", "hasNext", "next", "getValue", "setValue", "provideDelegate",
+    )
+
+    /** Whether [name] is a Kotlin operator-convention function name (incl. any `componentN`). */
+    private fun isOperatorConventionName(name: String): Boolean =
+        name in OPERATOR_CONVENTION_NAMES ||
+            (name.startsWith("component") && name.length > 9 && name.substring(9).all { it.isDigit() })
 }
