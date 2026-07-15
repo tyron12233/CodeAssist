@@ -60,6 +60,7 @@ import dev.ide.core.services.AndroidResourceService
 import dev.ide.core.services.BlockService
 import dev.ide.core.services.BuildService
 import dev.ide.core.services.DependencyService
+import dev.ide.core.services.KotlinEditorService
 import dev.ide.core.services.LanguageFeatureService
 import dev.ide.core.services.ModuleService
 import dev.ide.core.services.RefactorService
@@ -374,6 +375,7 @@ internal val LANGUAGE_FEATURE_SERVICE =
 internal val ANDROID_RESOURCE_SERVICE =
     ServiceKey<AndroidResourceService>("ide.service.androidResources")
 internal val REFACTOR_SERVICE = ServiceKey<RefactorService>("ide.service.refactor")
+internal val KOTLIN_EDITOR_SERVICE = ServiceKey<KotlinEditorService>("ide.service.kotlinEditor")
 
 /**
  * APPLICATION-scoped shared toolchain services — reachable with no project open (the picker's Settings &
@@ -690,6 +692,10 @@ class IdeServices private constructor(
     /** WORKSPACE-scoped Java rename refactoring (prepare + apply across the project). */
     internal val refactor: RefactorService
         get() = store.workspaceContainer.getService(REFACTOR_SERVICE)
+
+    /** WORKSPACE-scoped Kotlin editor queries (@Preview discovery, inheritor markers, go-to-implementation). */
+    internal val kotlinEditor: KotlinEditorService
+        get() = store.workspaceContainer.getService(KOTLIN_EDITOR_SERVICE)
 
     /** Set the Maven version-conflict policy (delegates to the dependency service). Kept here so the settings
      *  surface can reach it through the engine without depending on the service type. */
@@ -1954,39 +1960,20 @@ class IdeServices private constructor(
     var composePreviewRunner: ComposePreviewRunner? = null
 
     /** The `@Preview @Composable` functions in [file]'s live buffer [text] — the editor's preview targets. */
-    fun composePreviews(file: Path, text: String): List<dev.ide.lang.kotlin.interp.PreviewInfo> {
-        val module = moduleForEditableFile(file) ?: return emptyList()
-        val analyzer = analyzerFor(
-            module, KotlinLanguageBackend.LANGUAGE_ID
-        ) as? KotlinSourceAnalyzer ?: return emptyList()
-        val vf = store.vfs.fileFor(file)
-        analyzer.incrementalParser.parseFull(EditorDocument(vf, docVersion.incrementAndGet(), text))
-        return analyzer.composePreviews(vf)
-    }
+    fun composePreviews(file: Path, text: String): List<dev.ide.lang.kotlin.interp.PreviewInfo> =
+        kotlinEditor.composePreviews(file, text)
 
     /** Gutter inheritor ("implementations / is subclassed") markers for [file]'s live buffer — one per
      *  inheritable Kotlin type that has direct subtypes in the index. Empty for non-Kotlin files or before
      *  the subtype index has built. */
-    fun inheritorMarkers(file: Path, text: String): List<dev.ide.lang.kotlin.InheritorMarker> {
-        val module = moduleForEditableFile(file) ?: return emptyList()
-        val analyzer = analyzerFor(
-            module, KotlinLanguageBackend.LANGUAGE_ID
-        ) as? KotlinSourceAnalyzer ?: return emptyList()
-        val vf = store.vfs.fileFor(file)
-        analyzer.incrementalParser.parseFull(EditorDocument(vf, docVersion.incrementAndGet(), text))
-        return analyzer.inheritorMarkers(vf)
-    }
+    fun inheritorMarkers(file: Path, text: String): List<dev.ide.lang.kotlin.InheritorMarker> =
+        kotlinEditor.inheritorMarkers(file, text)
 
     /** Resolve an inheritor type [fqn] (from an [inheritorMarkers] target) to its source location for
      *  go-to-implementation, bound to [contextFile]'s module (whose source model spans its dependency
      *  modules). Null when [fqn] is classpath-only — no navigable project source. */
-    fun implementationLocation(contextFile: Path, fqn: String): Pair<Path, Int>? {
-        val module = moduleForEditableFile(contextFile) ?: return null
-        val analyzer = analyzerFor(
-            module, KotlinLanguageBackend.LANGUAGE_ID
-        ) as? KotlinSourceAnalyzer ?: return null
-        return analyzer.declarationLocation(fqn)?.let { (vf, off) -> Paths.get(vf.path) to off }
-    }
+    fun implementationLocation(contextFile: Path, fqn: String): Pair<Path, Int>? =
+        kotlinEditor.implementationLocation(contextFile, fqn)
 
     /**
      * The cross-MODULE-expanded preview model for [vf] (already parsed in [entry]'s analyzer): seed from the

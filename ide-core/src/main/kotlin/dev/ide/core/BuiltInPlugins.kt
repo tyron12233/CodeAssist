@@ -17,6 +17,7 @@ import dev.ide.core.services.AndroidResourceService
 import dev.ide.core.services.BlockService
 import dev.ide.core.services.BuildService
 import dev.ide.core.services.DependencyService
+import dev.ide.core.services.KotlinEditorService
 import dev.ide.core.services.LanguageFeatureService
 import dev.ide.core.services.ModuleService
 import dev.ide.core.services.RefactorService
@@ -486,6 +487,9 @@ private class IdeCoreServicesPlugin : Plugin {
         }
         reg.service(REFACTOR_SERVICE, ServiceScopeLevel.WORKSPACE) {
             RefactorService(getService(ENGINE_CONTEXT))
+        }
+        reg.service(KOTLIN_EDITOR_SERVICE, ServiceScopeLevel.WORKSPACE) {
+            KotlinEditorService(getService(ENGINE_CONTEXT))
         }
     }
 }
