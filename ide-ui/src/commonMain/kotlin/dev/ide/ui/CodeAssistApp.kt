@@ -26,14 +26,8 @@ import dev.ide.ui.ads.LocalAds
 import dev.ide.ui.backend.AdHost
 import dev.ide.ui.backend.FileActions
 import dev.ide.ui.backend.IdeBackend
-import dev.ide.ui.components.AnalyticsConsentSheet
 import dev.ide.ui.components.BetaInfo
-import dev.ide.ui.components.BuildNotificationGate
-import dev.ide.ui.components.ErrorDialog
-import dev.ide.ui.components.MigrationNotice
 import dev.ide.ui.components.OnboardingSheet
-import dev.ide.ui.components.PermissionDialog
-import dev.ide.ui.components.RunConflictDialog
 import dev.ide.ui.generated.resources.Res
 import dev.ide.ui.generated.resources.import_unrecognized
 import dev.ide.ui.generated.resources.settings_title
@@ -44,7 +38,6 @@ import dev.ide.ui.screens.CodeStyleScreen
 import dev.ide.ui.screens.EditorScreen
 import dev.ide.ui.screens.ExportProjectScreen
 import dev.ide.ui.screens.HomeScreen
-import dev.ide.ui.screens.ImportErrorDialog
 import dev.ide.ui.screens.ImportPreviewScreen
 import dev.ide.ui.screens.LearnScreen
 import dev.ide.ui.screens.LessonPlayerScreen
@@ -563,49 +556,29 @@ fun CodeAssistApp(
                     }
                 }
             }
-            // Upgrade notice first (the build-system migration warning), then the feature tour — both over
-            // the picker only, one at a time.
-            MigrationNotice(
-                visible = showMigration && screen == Screen.Projects && homeTab == HomeTab.Projects,
+            AppOverlays(
+                backend = backend,
+                state = state,
+                fileActions = fileActions,
+                onPicker = screen == Screen.Projects && homeTab == HomeTab.Projects,
+                showMigration = showMigration,
                 onBackup = backupAndShare,
-                onDismiss = {
+                onDismissMigration = {
                     showMigration = false
                     backend.settings.setPreference("migration.acknowledged", "true")
                 },
-            )
-            OnboardingSheet(
-                visible = showOnboarding && !showMigration && screen == Screen.Projects && homeTab == HomeTab.Projects,
-                // Final CTA: send the user straight into the Create-Project flow (the same screen the picker's
-                // "New Project" card opens) so the tour ends on a concrete action.
+                showOnboarding = showOnboarding,
                 onGetStarted = { screen = Screen.CreateProject },
-                onFinish = {
+                onFinishOnboarding = {
                     showOnboarding = false
                     backend.settings.setPreference("onboarding.seen", "true")
                 },
+                showAnalytics = showAnalytics,
+                onAllowAnalytics = { showAnalytics = false; backend.diagnostics.setAnalyticsConsent(true) },
+                onDeclineAnalytics = { showAnalytics = false; backend.diagnostics.setAnalyticsConsent(false) },
+                importError = importError,
+                onDismissImportError = { importError = null },
             )
-            // Opt-in analytics consent — last of the first-launch sheets, after onboarding/migration.
-            AnalyticsConsentSheet(
-                visible = showAnalytics && !showOnboarding && !showMigration && screen == Screen.Projects && homeTab == HomeTab.Projects,
-                onAllow = { showAnalytics = false; backend.diagnostics.setAnalyticsConsent(true) },
-                onDecline = { showAnalytics = false; backend.diagnostics.setAnalyticsConsent(false) },
-                onLearnMore = if (fileActions.canOpenUrl) {
-                    { fileActions.openUrl(BetaInfo.PRIVACY_URL) }
-                } else null,
-            )
-            // The run sandbox's permission prompt — overlays everything while a guarded program is blocked.
-            PermissionDialog(backend)
-            // First-build notification-permission gate — asks for the notification permission the isolated
-            // build process needs when the user starts their first build, and falls back to in-process builds
-            // (with an explanation) if declined. No-op after the one-time prompt.
-            BuildNotificationGate(state)
-            // "Already running" confirmation — raised when a new Run is requested while a build/program is
-            // still in flight (e.g. a runaway loop); offers Stop-and-Run with a remembered choice.
-            RunConflictDialog(state)
-            // IntelliJ-style non-fatal error dialog — overlays everything when the engine reports an
-            // unexpected error or an uncaught exception is intercepted (the app keeps running).
-            ErrorDialog(backend)
-            // "Unrecognized file" notice when a picked/opened file wasn't a readable .caproj package.
-            ImportErrorDialog(importError) { importError = null }
         }
         }
     }
