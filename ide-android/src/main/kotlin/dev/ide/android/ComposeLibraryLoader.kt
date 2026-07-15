@@ -2,6 +2,7 @@ package dev.ide.android
 
 import dalvik.system.DexClassLoader
 import dev.ide.android.support.tools.D8InProcessDexer
+import dev.ide.android.support.tools.DexInputPrep
 import dev.ide.core.ComposePreviewLibs
 import java.io.File
 import java.util.concurrent.ConcurrentHashMap
@@ -41,9 +42,17 @@ object ComposeLibraryLoader {
 
         if (!marker.exists()) {
             dexDir.deleteRecursively(); dexDir.mkdirs()
+            // The bundled in-process D8 DROPS a whole dex invocation when it can't rewrite Kotlin 2.4
+            // `@kotlin.Metadata` (it logs a warning but returns "success"), silently omitting classes such as
+            // material-icons-extended's `<Icon>Kt` facades → "cannot load facade …RemoveKt" at render. Strip
+            // `@Metadata` from the (Kotlin) library jars first, exactly as the APK build's library dexer does
+            // (see the d8-kotlin-metadata-drop fix). Cached: this runs only on a dex MISS.
+            val stripDir = File(base, "stripped").apply { deleteRecursively(); mkdirs() }
+            val inputs = runCatching { DexInputPrep.stripKotlinMetadata(libs.jars, stripDir.toPath()) }.getOrDefault(libs.jars)
             val result = runCatching {
-                D8InProcessDexer().dex(libs.jars, libs.androidJar!!, libs.minApi, false, dexDir.toPath())
-            }.getOrElse { return null }
+                D8InProcessDexer().dex(inputs, libs.androidJar!!, libs.minApi, false, dexDir.toPath())
+            }.getOrElse { stripDir.deleteRecursively(); return null }
+            stripDir.deleteRecursively() // the stripped jars were only D8 inputs
             if (!result.success) return null
             runCatching { marker.writeText(libs.fingerprint) }
         }
