@@ -120,6 +120,22 @@ internal interface EngineContext {
     /** The Android module owning [file] under one of its `res/` roots, or null. */
     fun moduleForResourceFile(file: Path): Module?
 
+    /** True when the language backend for [file] was marked unavailable (a JDT LinkageError); editor features
+     *  skip it rather than repeatedly crash. */
+    fun analysisDisabled(file: Path): Boolean
+
+    /** Mark [language]'s analysis unavailable after a backend LinkageError (see [analysisDisabled]). */
+    fun markAnalysisUnavailable(language: dev.ide.lang.LanguageId)
+
+    /** Remove and return [path]'s live editor overlay (for a rename that moves the backing file). */
+    fun removeOverlay(path: Path): String?
+
+    /** Every project `.java` file across all modules' source roots — the rename reference-sweep candidates. */
+    fun projectJavaFiles(): List<Path>
+
+    /** True if [s] is a valid Java identifier (and not a reserved word) — the rename validator. */
+    fun isValidJavaIdentifier(s: String): Boolean
+
     /** The per-(module, language) analyzer for editor features, resolved + cached as a MODULE-scoped service. */
     fun analyzerFor(module: Module, language: dev.ide.lang.LanguageId): dev.ide.lang.SourceAnalyzer
 

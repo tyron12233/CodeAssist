@@ -62,6 +62,7 @@ import dev.ide.core.services.BuildService
 import dev.ide.core.services.DependencyService
 import dev.ide.core.services.LanguageFeatureService
 import dev.ide.core.services.ModuleService
+import dev.ide.core.services.RefactorService
 import dev.ide.core.services.RunCapture
 import dev.ide.core.services.SearchService
 import dev.ide.core.services.SigningService
@@ -372,6 +373,7 @@ internal val LANGUAGE_FEATURE_SERVICE =
     ServiceKey<LanguageFeatureService>("ide.service.languageFeatures")
 internal val ANDROID_RESOURCE_SERVICE =
     ServiceKey<AndroidResourceService>("ide.service.androidResources")
+internal val REFACTOR_SERVICE = ServiceKey<RefactorService>("ide.service.refactor")
 
 /**
  * APPLICATION-scoped shared toolchain services — reachable with no project open (the picker's Settings &
@@ -555,6 +557,16 @@ class IdeServices private constructor(
         override fun moduleForFile(file: Path) = this@IdeServices.moduleForFile(file)
         override fun moduleForEditableFile(file: Path) = this@IdeServices.moduleForEditableFile(file)
         override fun moduleForResourceFile(file: Path) = this@IdeServices.moduleForResourceFile(file)
+        override fun analysisDisabled(file: Path) = this@IdeServices.analysisDisabled(file)
+        override fun markAnalysisUnavailable(language: LanguageId) {
+            this@IdeServices.analysisUnavailable.add(language)
+        }
+
+        override fun removeOverlay(path: Path) =
+            this@IdeServices.openDocuments.remove(path.toAbsolutePath().normalize())
+
+        override fun projectJavaFiles() = this@IdeServices.projectJavaFiles()
+        override fun isValidJavaIdentifier(s: String) = this@IdeServices.isValidJavaIdentifier(s)
         override fun analyzerFor(module: Module, language: LanguageId) =
             this@IdeServices.analyzerFor(module, language)
 
@@ -674,6 +686,10 @@ class IdeServices private constructor(
     /** WORKSPACE-scoped Android resource navigation + preview (go-to-def, drawable/color preview). */
     internal val resources: AndroidResourceService
         get() = store.workspaceContainer.getService(ANDROID_RESOURCE_SERVICE)
+
+    /** WORKSPACE-scoped Java rename refactoring (prepare + apply across the project). */
+    internal val refactor: RefactorService
+        get() = store.workspaceContainer.getService(REFACTOR_SERVICE)
 
     /** Set the Maven version-conflict policy (delegates to the dependency service). Kept here so the settings
      *  surface can reach it through the engine without depending on the service type. */
@@ -2295,17 +2311,9 @@ class IdeServices private constructor(
     // ---- rename refactoring ----------------------------------------------------------------------
 
     /** The renameable symbol under the caret (its current name + a kind label), or null. Java only. */
-    fun prepareRename(file: Path, text: String, offset: Int): RenameInfo? {
-        if (!file.toString().endsWith(".java") || analysisDisabled(file)) return null
-        val module = moduleForFile(file) ?: return null
-        val analyzer = analyzerFor(module) as? JdtSourceAnalyzer ?: return null
-        return try {
-            JdtRename.targetAt(analyzer.parse(store.vfs.fileFor(file), text), offset)
-                ?.let { RenameInfo(it.oldName, it.kind) }
-        } catch (e: LinkageError) {
-            analysisUnavailable.add(languageFor(file)); null
-        }
-    }
+    /** The rename target under [offset] in [file]'s buffer (old name + kind), or null when not renameable. */
+    fun prepareRename(file: Path, text: String, offset: Int): RenameInfo? =
+        refactor.prepareRename(file, text, offset)
 
     /**
      * Rename the symbol under the caret to [newName] across the whole project: resolve the target, find every
@@ -2314,102 +2322,8 @@ class IdeServices private constructor(
      * top-level public type whose name matches its file is renamed, the backing `.java` file is renamed too
      * (its new path is returned so the editor can reopen it). Re-indexes and invalidates analyzers.
      */
-    suspend fun rename(file: Path, text: String, offset: Int, newName: String): RenameOutcome {
-        val name = newName.trim()
-        if (!isValidJavaIdentifier(name)) return RenameOutcome(
-            false, "'$newName' is not a valid Java identifier."
-        )
-        if (analysisDisabled(file)) return RenameOutcome(false, "Java analysis is unavailable.")
-        val module = moduleForFile(file) ?: return RenameOutcome(
-            false, "This file is not in a source module."
-        )
-        val analyzer = analyzerFor(module) as? JdtSourceAnalyzer ?: return RenameOutcome(
-            false, "Rename is only supported for Java."
-        )
-        val fileAbs = file.toAbsolutePath().normalize()
-
-        val target: dev.ide.lang.jdt.rename.RenameTarget
-        val editsByPath = LinkedHashMap<Path, List<DocumentEdit>>()
-        var occurrences = 0
-        try {
-            val parsed = analyzer.parse(store.vfs.fileFor(file), text)
-            target = JdtRename.targetAt(parsed, offset) ?: return RenameOutcome(
-                false, "Place the caret on a symbol to rename."
-            )
-            if (name == target.oldName) return RenameOutcome(
-                false, "The new name is the same as the current one."
-            )
-
-            fun editsFor(ranges: List<TextRange>) =
-                ranges.map { DocumentEdit(it.start, it.end - it.start, name) }
-            if (target.fileLocal) {
-                val ranges = JdtRename.referencesIn(parsed, target)
-                if (ranges.isNotEmpty()) {
-                    editsByPath[fileAbs] = editsFor(ranges); occurrences += ranges.size
-                }
-            } else {
-                for (cand in projectJavaFiles()) {
-                    val candAbs = cand.toAbsolutePath().normalize()
-                    val candText =
-                        openDocuments[candAbs] ?: runCatching { cand.readText() }.getOrNull()
-                        ?: continue
-                    if (!candText.contains(target.oldName)) continue // cheap pre-filter before the binding parse
-                    val candParsed = if (candAbs == fileAbs) parsed else {
-                        val m = moduleForFile(cand) ?: continue
-                        val a = analyzerFor(m) as? JdtSourceAnalyzer ?: continue
-                        a.parse(store.vfs.fileFor(cand), candText)
-                    }
-                    val ranges = JdtRename.referencesIn(candParsed, target)
-                    if (ranges.isNotEmpty()) {
-                        editsByPath[candAbs] = editsFor(ranges); occurrences += ranges.size
-                    }
-                }
-            }
-        } catch (e: LinkageError) {
-            analysisUnavailable.add(languageFor(file))
-            return RenameOutcome(false, "Java analysis is unavailable.")
-        }
-        if (editsByPath.isEmpty()) return RenameOutcome(
-            false, "No occurrences of '${target.oldName}' found."
-        )
-
-        // Apply each file's edits descending (offsets stay valid), writing disk + the live overlay together.
-        for ((path, edits) in editsByPath) {
-            val current =
-                openDocuments[path] ?: runCatching { path.readText() }.getOrNull() ?: continue
-            val sb = StringBuilder(current)
-            for (e in edits.sortedByDescending { it.offset }) {
-                val s = e.offset.coerceIn(0, sb.length)
-                val en = (e.offset + e.oldLength).coerceIn(s, sb.length)
-                sb.replace(s, en, e.newText.toString())
-            }
-            val updated = sb.toString()
-            openDocuments[path] = updated
-            runCatching { path.parent?.let { Files.createDirectories(it) }; path.writeText(updated) }
-        }
-
-        // Rename the backing file when a top-level public type's name matched the file name (Java convention).
-        var newPath: Path? = null
-        if (target.isType && fileAbs.fileName?.toString() == "${target.oldName}.java") {
-            val dest = fileAbs.resolveSibling("$name.java")
-            if (!Files.exists(dest)) runCatching {
-                Files.move(fileAbs, dest)
-                openDocuments.remove(fileAbs)?.let { openDocuments[dest] = it }
-                newPath = dest
-            }
-        }
-
-        // One batched mutation event: the hub coalesces the reaction (a multi-file edit / file rename
-        // invalidates analyzers + synthetics and re-syncs the index exactly once).
-        events.filesMutated(editsByPath.keys.toList(), newPath?.let { fileAbs to it })
-        return RenameOutcome(
-            true,
-            "Renamed '${target.oldName}' to '$name'",
-            occurrences,
-            editsByPath.size,
-            newPath?.toString()
-        )
-    }
+    suspend fun rename(file: Path, text: String, offset: Int, newName: String): RenameOutcome =
+        refactor.rename(file, text, offset, newName)
 
     // ---- file & package operations (delete / rename / move / copy), for files AND directories/packages ----
 

@@ -19,6 +19,7 @@ import dev.ide.core.services.BuildService
 import dev.ide.core.services.DependencyService
 import dev.ide.core.services.LanguageFeatureService
 import dev.ide.core.services.ModuleService
+import dev.ide.core.services.RefactorService
 import dev.ide.core.services.SearchService
 import dev.ide.core.services.SigningService
 import dev.ide.core.templates.CalculatorSampleTemplate
@@ -482,6 +483,9 @@ private class IdeCoreServicesPlugin : Plugin {
         }
         reg.service(ANDROID_RESOURCE_SERVICE, ServiceScopeLevel.WORKSPACE) {
             AndroidResourceService(getService(ENGINE_CONTEXT))
+        }
+        reg.service(REFACTOR_SERVICE, ServiceScopeLevel.WORKSPACE) {
+            RefactorService(getService(ENGINE_CONTEXT))
         }
     }
 }
