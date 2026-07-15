@@ -17,6 +17,7 @@ import dev.ide.android.support.tools.D8InProcessDexer
 import dev.ide.android.support.tools.DebugKeystore
 import dev.ide.android.support.tools.RunDexer
 import dev.ide.android.support.tools.SigningConfig
+import dev.ide.build.BUILD_SYSTEM_EP
 import dev.ide.build.BuildDiagnostic
 import dev.ide.build.BuildGoal
 import dev.ide.build.BuildLogEntry
@@ -24,6 +25,7 @@ import dev.ide.build.BuildLogLevel
 import dev.ide.build.BuildRequest
 import dev.ide.build.BuildSeverity
 import dev.ide.build.CyclicTaskDependencyException
+import dev.ide.build.RUN_TASK_PROVIDER_EP
 import dev.ide.build.SOURCE_GENERATOR_EP
 import dev.ide.build.SourceGenerator
 import dev.ide.build.TaskGraph
@@ -430,6 +432,17 @@ internal class BuildService(private val ctx: EngineContext) : Disposable {
         if (_permissionRequest.value?.id == id) pendingAnswer?.offer(decision)
     }
 
+    /**
+     * The build system for [moduleType]: the engine's own built-ins first (they are per-project and
+     * context-heavy — held as fields, not extensions), then any plugin-contributed [BUILD_SYSTEM_EP] system.
+     * Selection is by [dev.ide.build.BuildSystem.supports], so supporting a new module type is a plugin
+     * registration rather than a host edit here.
+     */
+    internal fun buildSystemFor(moduleType: dev.ide.model.ModuleType): dev.ide.build.BuildSystem? =
+        buildSystem.takeIf { it.supports(moduleType) }
+            ?: androidBuild?.takeIf { it.supports(moduleType) }
+            ?: ctx.platform.extensions.extensions(BUILD_SYSTEM_EP).firstOrNull { it.supports(moduleType) }
+
     /** Tasks the UI's Run picker offers: a `run` for each runnable console (Java/Kotlin) module + Android
      *  `assemble<Variant>`. A module is runnable when its Run configuration names a main class, or one is
      *  auto-detected in its sources (see [runnableMainFor]). */
@@ -469,6 +482,12 @@ internal class BuildService(private val ctx: EngineContext) : Disposable {
                 val cap = v.name.replaceFirstChar { it.uppercase() }
                 add(RunTaskOption("assembleAar:${m.name}:${v.name}", "assembleAar$cap (.aar) · ${m.name}", "android"))
             }
+        }
+        // Plugin-contributed run-task options (RUN_TASK_PROVIDER_EP), merged after the built-ins. A provider
+        // reuses a built-in id prefix (build:/run:/assemble:) to execute through the existing id dispatch below.
+        val providers = ctx.platform.extensions.extensions(RUN_TASK_PROVIDER_EP)
+        for (m in ctx.modules()) {
+            for (spec in providers.flatMap { it.tasksFor(m) }) add(RunTaskOption(spec.id, spec.label, spec.group))
         }
     }
 
@@ -610,7 +629,9 @@ internal class BuildService(private val ctx: EngineContext) : Disposable {
                         ?: return fail("No module '$moduleName'.")
                     unresolvedBlocker(module)?.let { return fail(it) }
                     val project = ctx.projectOf(module) ?: return
-                    val graph = buildSystem.createBuildGraph(
+                    val bs = buildSystemFor(module.type)
+                        ?: return fail("No build system supports module type '${module.type.id}'.")
+                    val graph = bs.createBuildGraph(
                         project, BuildRequest(listOf(module.id), VariantSelector(ctx.activeVariant(module)), BuildGoal.ASSEMBLE)
                     )
                     launch(module.name, graph, "> build ${module.name}") { log -> log("Built: ${jarPath(module)}") }
