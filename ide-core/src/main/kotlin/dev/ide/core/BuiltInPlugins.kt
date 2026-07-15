@@ -122,7 +122,10 @@ object BuiltInPlugins {
 
 /** The platform baseline: the default file-icon classifier. */
 private class PlatformPlugin : Plugin {
-    override val manifest = PluginManifest(id = "platform", name = "Platform")
+    override val manifest = PluginManifest(
+        id = "platform", name = "Platform", essential = true,
+        description = "Core file-icon classifier and base file-type mappings.",
+    )
     override fun register(reg: PluginRegistration) {
         reg.contributeVia { ext, pid -> FileIconRegistry(ext).register(DefaultFileIconProvider, pid) }
         // Markdown has no language backend; the mapping keeps a .md file from being analysed as Java.
@@ -132,7 +135,10 @@ private class PlatformPlugin : Plugin {
 
 /** Java (JDT) language backend — registered first so it is the `backendFor` fallback. */
 private class JdtLanguagePlugin : Plugin {
-    override val manifest = PluginManifest(id = "jdt-language", name = "Java Language")
+    override val manifest = PluginManifest(
+        id = "jdt-language", name = "Java Language", essential = true,
+        description = "Java editing via the Eclipse JDT backend; also the resolution fallback other backends build on.",
+    )
     override fun register(reg: PluginRegistration) {
         reg.register(LANGUAGE_BACKEND_EP, JdtLanguageBackend())
         reg.register(FILE_TYPE_EP, FileTypeMapping(listOf(".java"), LanguageId("java")))
@@ -339,7 +345,10 @@ private class AndroidXmlPlugin(private val env: ApplicationEnvironment) : Plugin
  * opened project.
  */
 private class IdeCoreServicesPlugin : Plugin {
-    override val manifest = PluginManifest(id = "ide-core-services", name = "IDE Core Services")
+    override val manifest = PluginManifest(
+        id = "ide-core-services", name = "IDE Core Services", essential = true,
+        description = "The engine's scoped services (analyzers, build, module, search, dependencies, signing).",
+    )
     override fun register(reg: PluginRegistration) {
         reg.service(ANALYZER_JAVA, ServiceScopeLevel.MODULE) {
             getService(ENGINE_CONTEXT).buildAnalyzer(module(), LanguageId("java"))

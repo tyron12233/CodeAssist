@@ -21,6 +21,12 @@ data class PluginManifest(
     val apiVersion: Int = 1,
     /** Ids of plugins that must load before this one. Drives the topological load order. */
     val dependsOn: List<String> = emptyList(),
+    /** One-line human-readable summary, shown in the Plugins settings UI. */
+    val description: String = "",
+    /** An essential plugin cannot be disabled — the IDE cannot function without it (the platform substrate,
+     *  the default language backend + resolution fallback, the engine's core scoped services). Essentials and
+     *  everything they transitively depend on stay loaded regardless of the user's disabled set. */
+    val essential: Boolean = false,
 
     // Inert until the external/dex tier (parsed + carried now, enforced by that tier's loader):
     val entryPoints: List<String> = emptyList(),
