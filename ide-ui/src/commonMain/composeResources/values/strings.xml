@@ -652,6 +652,11 @@ We never collect your code, file or project names, which features you use, or an
     <string name="settings_sdk_manager_subtitle">Download Android SDK &amp; JDK sources</string>
     <string name="settings_keystore_manager">Keystore Manager</string>
     <string name="settings_keystore_manager_subtitle">Create, import &amp; manage signing keystores</string>
+    <string name="settings_plugins">Plugins</string>
+    <string name="settings_plugins_subtitle">Enable or disable built-in plugins</string>
+    <string name="plugins_restart_hint">Restart to apply your plugin changes.</string>
+    <string name="plugins_required">Required</string>
+    <string name="plugins_requires">Requires %1$s</string>
 
     <!-- keystore (KeystoreManagerScreen) -->
     <string name="keystore_manager_title">Keystore Manager</string>

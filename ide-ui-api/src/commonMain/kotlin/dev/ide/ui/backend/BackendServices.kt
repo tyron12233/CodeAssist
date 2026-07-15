@@ -714,6 +714,20 @@ interface SdkService {
 // Settings / inspections / preferences
 // ---------------------------------------------------------------------------
 
+/**
+ * One built-in plugin in the Plugins settings screen. [essential] plugins are shown locked (the IDE can't run
+ * without them). [enabled] is the user's persisted choice; changes apply on the next launch (restart-apply).
+ */
+data class UiPluginInfo(
+    val id: String,
+    val name: String,
+    val version: String,
+    val description: String,
+    val essential: Boolean,
+    val enabled: Boolean,
+    val dependsOn: List<String> = emptyList(),
+)
+
 /** IDE settings, the extensible settings pages, the inspection catalogue, and app preferences. */
 interface SettingsService {
     /** App-global settings the editor applies live (theme, accent, font, inlay). */
@@ -748,6 +762,13 @@ interface SettingsService {
 
     /** Persist an app-global preference. */
     fun setPreference(key: String, value: String) {}
+
+    /** The built-in plugins for the Plugins settings screen (all, with enabled/essential state). */
+    fun pluginCatalog(): List<UiPluginInfo> = emptyList()
+
+    /** Enable or disable built-in plugin [id]. Persisted app-globally and applied on the next launch; a no-op
+     *  for an essential plugin. */
+    fun setPluginEnabled(id: String, enabled: Boolean) {}
 }
 
 // ---------------------------------------------------------------------------

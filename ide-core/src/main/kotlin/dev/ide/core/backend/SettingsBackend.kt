@@ -17,6 +17,7 @@ import dev.ide.ui.backend.SettingsService
 import dev.ide.ui.backend.UiAccent
 import dev.ide.ui.backend.UiCodeStyle
 import dev.ide.ui.backend.UiInspection
+import dev.ide.ui.backend.UiPluginInfo
 import dev.ide.ui.backend.UiSeverity
 import dev.ide.ui.backend.UiSettingControl
 import dev.ide.ui.backend.UiSettings
@@ -36,6 +37,28 @@ internal class SettingsBackend(private val ctx: BackendContext) : SettingsServic
 
     override fun setPreference(key: String, value: String) {
         ctx.manager?.setPreference(key, value)
+    }
+
+    override fun pluginCatalog(): List<UiPluginInfo> {
+        val manager = ctx.manager ?: return emptyList()
+        val catalog = manager.env.pluginCatalog
+        val disabled = manager.disabledPlugins()
+        return catalog.all
+            .map { m ->
+                UiPluginInfo(
+                    id = m.id, name = m.name, version = m.version, description = m.description,
+                    essential = m.essential, enabled = m.essential || m.id !in disabled, dependsOn = m.dependsOn,
+                )
+            }
+            .sortedWith(compareByDescending<UiPluginInfo> { it.essential }.thenBy { it.name.lowercase() })
+    }
+
+    override fun setPluginEnabled(id: String, enabled: Boolean) {
+        val manager = ctx.manager ?: return
+        if (manager.env.pluginCatalog.isEssential(id)) return  // essentials can't be disabled
+        val disabled = manager.disabledPlugins().toMutableSet()
+        if (enabled) disabled.remove(id) else disabled.add(id)
+        manager.setDisabledPlugins(disabled)
     }
 
     private val settingsStore = SettingsStore(
