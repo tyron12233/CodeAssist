@@ -199,13 +199,18 @@ internal fun KotlinResolver.binaryConventionReturn(
     val leftType = inferType(e.left) ?: return null
     val member = service.membersNamed(leftType.qualifiedName, leftType.typeArguments, name)
         .firstOrNull { it.kind == SymbolKind.METHOD && !it.isExtension && it.paramTypes.size == 1 }
-    val callable = member ?: service.extensionsFor(
-        leftType.qualifiedName,
-        leftType.typeArguments,
-        name,
-        exactName = true
-    )
-        .firstOrNull { it.name == name && it.kind == SymbolKind.METHOD && it.paramTypes.size == 1 }
+    val exts = service.extensionsFor(leftType.qualifiedName, leftType.typeArguments, name, exactName = true)
+        .filter { it.name == name && it.kind == SymbolKind.METHOD && it.paramTypes.size == 1 }
+    // Prefer the extension declared on the EXACT left type over one on a supertype / type-parameter bound —
+    // Kotlin's most-specific-receiver overload resolution. `10f..3f` sees BOTH the generic
+    // `Comparable<T>.rangeTo(T): ClosedRange<T>` and the specific `Float.rangeTo(Float):
+    // ClosedFloatingPointRange<Float>` (float ranges are floating-point ranges, defined as an extension in
+    // stdlib `Ranges.kt`, not a class member like `Int.rangeTo`). The specific one must win, else the range
+    // is mis-typed as its `ClosedRange` supertype and `val r: ClosedFloatingPointRange<Float> = 10f..3f` is
+    // false-flagged a type mismatch. Without the tiebreak the first match (the generic one) wins arbitrarily.
+    val callable = member
+        ?: exts.firstOrNull { it.receiverTypeFqn == leftType.qualifiedName }
+        ?: exts.firstOrNull()
     val raw = callable?.type as? KotlinType
     if (raw == null || callable.typeParameters.isEmpty()) return raw
     val bindings = HashMap<String, TypeRef>()

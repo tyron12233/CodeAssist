@@ -56,6 +56,21 @@ class KotlinOperatorResolutionTest {
         assertTrue(labels(preamble + "(1..10).firs| }").any { it.startsWith("first") }, "`1..10` should be an IntRange")
     }
 
+    @Test fun floatRangeToIsClosedFloatingPointRange() {
+        // `10f..3f` is `Float.rangeTo(Float)` → ClosedFloatingPointRange<Float>, NOT the generic
+        // `Comparable<T>.rangeTo` → ClosedRange<T>. Assigning it to a ClosedFloatingPointRange<Float> must not
+        // be a type mismatch (the member must win over the extension).
+        val diags = diagnose(preamble + "val r: ClosedFloatingPointRange<Float> = 10f..3f }")
+        assertTrue(diags.none { it.code == "kt.typeMismatch" },
+            "10f..3f is a ClosedFloatingPointRange<Float>; got ${diags.filter { it.code == "kt.typeMismatch" }}")
+    }
+
+    @Test fun doubleRangeToIsClosedFloatingPointRange() {
+        val diags = diagnose(preamble + "val r: ClosedFloatingPointRange<Double> = 1.0..3.0 }")
+        assertTrue(diags.none { it.code == "kt.typeMismatch" },
+            "1.0..3.0 is a ClosedFloatingPointRange<Double>; got ${diags.filter { it.code == "kt.typeMismatch" }}")
+    }
+
     @Test fun customOperatorsNotFalseFlagged() {
         val diags = diagnose(preamble + "val c = a + b; val d = a combine b; val e = a * 2; val f = -a; val g = a scale 2 }")
         assertTrue(diags.none { it.code == "kt.unresolved" || it.code == "kt.notCallable" || it.code == "kt.typeMismatch" },
