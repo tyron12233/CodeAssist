@@ -1117,6 +1117,23 @@ class KotlinTreeResolver(
                 val callee = ResolvedCallable.Source(callName, "${srcCls.fqn}.$callName/$arity", emptyList(), isConstructor = false)
                 return RNode.Call(callee, DispatchKind.MEMBER, receiverNode, lowerArgs(call), csk(call.textRange.startOffset), span(call))
             }
+            // A qualified call `Type.Nested(args)` on a TYPE receiver whose selector is a NESTED CLASS is a
+            // CONSTRUCTOR of that nested class (`GridCells.Fixed(2)`) — not a member of the outer type, so
+            // chooseCallee finds no candidate. Recover it from the receiver's `ObjectRef` (a bare type used as a
+            // value lowers to one): a source nested class in this file builds a SourceObject; a library nested
+            // class is reflected (its JVM name joins outer+nested with `$`, not `.`).
+            val outerFqn = ((receiverNode as? RNode.Name)?.binding as? Binding.ObjectRef)?.fqn
+            if (callName != null && outerFqn != null && callName.first().isUpperCase()) {
+                val nestedDotted = "$outerFqn.$callName"
+                fileClasses[callName]?.takeIf { it.fqn == nestedDotted && it.flavor == ClassFlavor.CLASS }?.let {
+                    val callee = ResolvedCallable.Source(callName, "$nestedDotted/$arity", emptyList(), isConstructor = true)
+                    return RNode.Call(callee, DispatchKind.CONSTRUCTOR, null, lowerArgs(call), csk(call.textRange.startOffset), span(call))
+                }
+                if (service.isKnownType(nestedDotted) && !service.isObject(nestedDotted)) {
+                    val ctor = ResolvedCallable.Library(callName, "$outerFqn\$$callName", "<init>", List(arity) { null }, isStatic = false, isConstructor = true, isInline = false)
+                    return RNode.Call(ctor, DispatchKind.CONSTRUCTOR, null, lowerArgs(call), csk(call.textRange.startOffset), span(call))
+                }
+            }
             // A bare capitalized call the editor resolver didn't surface a constructor for. A source class
             // (e.g. one with an implicit no-arg constructor) builds a [SourceObject]; otherwise a stdlib/library
             // type (`IllegalArgumentException("x")`) is instantiated reflectively.
@@ -1305,14 +1322,32 @@ class KotlinTreeResolver(
             val contains = RNode.Call(synthMember("contains"), DispatchKind.MEMBER, lower(right), listOf(RArg(lower(left))), key, span(e))
             return if (token == KtTokens.NOT_IN) negate(contains, span(e)) else contains
         }
-        // `a..b` → an `IntRange` (the only range modeled); other element types hit the honest boundary.
+        // `a..b` → a range. The integral/char element types have a modeled range CONSTRUCTED directly (their
+        // member `rangeTo` is a primitive member the reflective interpreter can't invoke); every other element
+        // type — `Float`/`Double` (`ClosedFloatingPointRange`, e.g. a Slider's `valueRange = 0f..50f`) or a user
+        // `Comparable` — resolves through its in-scope `rangeTo` EXTENSION (`RangesKt.rangeTo(a, b)`), which is
+        // how Kotlin declares those.
         if (token == KtTokens.RANGE) {
             val lt = runCatching { resolver.inferType(left) }.getOrNull()
-            if (lt == null || lt.qualifiedName == "kotlin.Int") {
-                val ctor = ResolvedCallable.Library("IntRange", "kotlin.ranges.IntRange", "<init>", listOf(null, null), isStatic = false, isConstructor = true, isInline = false)
-                return RNode.Call(ctor, DispatchKind.CONSTRUCTOR, null, listOf(RArg(lower(left)), RArg(lower(right))), key, span(e))
+            val lowLeft = lower(left)
+            val lowRight = lower(right)
+            fun rangeCtor(fqn: String) = RNode.Call(
+                ResolvedCallable.Library(fqn.substringAfterLast('.'), fqn, "<init>", listOf(null, null), isStatic = false, isConstructor = true, isInline = false),
+                DispatchKind.CONSTRUCTOR, null, listOf(RArg(lowLeft), RArg(lowRight)), key, span(e),
+            )
+            when (lt?.qualifiedName) {
+                null, "kotlin.Int" -> return rangeCtor("kotlin.ranges.IntRange") // null = the common `0..n`
+                "kotlin.Long" -> return rangeCtor("kotlin.ranges.LongRange")
+                "kotlin.Char" -> return rangeCtor("kotlin.ranges.CharRange")
             }
-            return unsupported("range over ${lt.qualifiedName}", e)
+            val elem = lt!!.qualifiedName
+            service.extensionsFor(elem, lt.typeArguments, "rangeTo")
+                .firstOrNull { it.name == "rangeTo" && it.kind == SymbolKind.METHOD && it.paramTypes.size == 1 && extensionInScope(it) }
+                ?.let { return RNode.Call(toCallable(it), DispatchKind.EXTENSION, lowLeft, listOf(RArg(lowRight)), key, span(e)) }
+            service.membersNamed(elem, lt.typeArguments, "rangeTo")
+                .firstOrNull { it.kind == SymbolKind.METHOD && !it.isExtension && it.paramTypes.size == 1 && it.declaringClassFqn != null }
+                ?.let { return RNode.Call(toCallable(it), DispatchKind.MEMBER, lowLeft, listOf(RArg(lowRight)), key, span(e)) }
+            return unsupported("range over $elem", e)
         }
         // Comparison / equality desugar to an OPERATOR call the interpreter evaluates intrinsically (the
         // callee is synthetic — these need no library method to invoke).

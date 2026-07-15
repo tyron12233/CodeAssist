@@ -172,10 +172,10 @@ class InterpreterTest {
 
     @Test
     fun unsupportedConstructFailsLoudly() {
-        // A construct outside the interpreter's subset (a non-Int range) makes the function incomplete → the
-        // interpreter refuses it rather than producing a wrong result. (Indexed assignment `xs[i] = v` is now
-        // supported — see SourceClassTest.indexedAssignmentThroughSetOperator.)
-        val code = "package demo\nfun f() { val r = 1L..5L }"
+        // A construct outside the interpreter's subset (a labeled break) makes the function incomplete → the
+        // interpreter refuses it rather than producing a wrong result. (Non-Int ranges and indexed assignment
+        // `xs[i] = v` are now supported.)
+        val code = "package demo\nfun f() { loop@ for (i in 1..3) { break@loop } }"
         val ex = assertFailsWith<InterpreterException> { runProgram(code, "f/0", emptyList()) }
         assertTrue(ex.message?.contains("unsupported") == true, "message=${ex.message}")
     }

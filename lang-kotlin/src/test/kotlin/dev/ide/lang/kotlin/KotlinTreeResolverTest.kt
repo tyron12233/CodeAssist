@@ -193,9 +193,9 @@ class KotlinTreeResolverTest {
 
     @Test
     fun unsupportedConstructIsRejectedNotGuessed() {
-        // A construct outside the subset (a non-Int range) → Unsupported, not a guess. (Indexed assignment is
-        // now supported — see indexedAssignmentLowersToSetOperator.)
-        val fn = lower("package demo\nfun f() { val r = 1L..5L }")
+        // A construct outside the subset (a labeled break) → Unsupported, not a guess. (Non-Int ranges and
+        // indexed assignment are now supported — see RangeLoweringTest / indexedAssignmentLowersToSetOperator.)
+        val fn = lower("package demo\nfun f() { loop@ for (i in 1..3) { break@loop } }")
         assertFalse(fn.isComplete, "the function should report an incomplete lowering")
         assertTrue(fn.diagnostics.isNotEmpty(), "the gap should be recorded as a diagnostic")
     }
