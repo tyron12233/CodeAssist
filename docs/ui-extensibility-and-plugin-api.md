@@ -1,5 +1,14 @@
 # UI extensibility and the plugin API
 
+> **Status — the unified internal plugin system is delivered.** The IDE now has one plugin system: a `Plugin`
+> SPI + `PluginManager`, with the built-ins as its first consumers. See [`plugin-system.md`](plugin-system.md)
+> for what ships. The UI-extensibility model this document specifies is delivered as `UiPlugin` /
+> `UiContributionScope` in `:ide-ui-api` (tool windows, screens, view modes, tree icons, and data-driven
+> actions all plug in through the one model). What remains **future** is the *external tier* this document also
+> designs: dex-loaded, separately-built, trust-gated third-party plugins (on-disk manifest discovery,
+> `DexClassLoader` isolation, a permission model). Read the sections below as the design for that external tier;
+> read `plugin-system.md` for the internal model in use today.
+
 This document specifies how the IDE's **UI** becomes extensible the same way its **engine** already is: through
 the IntelliJ-style extension-point registry in `platform-core`. Today the engine is a plugin platform (language
 backends, analyzers, indexes, templates, settings pages all plug in), but the UI is almost entirely hardcoded:
