@@ -5,6 +5,7 @@ import dev.ide.model.impl.ProjectTemplateRegistry
 import dev.ide.platform.ServiceKey
 import dev.ide.platform.impl.ApplicationContainer
 import dev.ide.platform.impl.PlatformCore
+import dev.ide.plugin.impl.PluginCatalog
 import dev.ide.plugin.impl.PluginManager
 
 /** APPLICATION-scoped Create-Project template registry key (resolved from [ApplicationEnvironment.container]
@@ -29,7 +30,7 @@ internal val PROJECT_TEMPLATES = ServiceKey<ProjectTemplateRegistry>("ide.projec
  *
  * This is the home for application bootstrap, so [ProjectManager] can be purely about *managing* projects.
  */
-class ApplicationEnvironment : AutoCloseable {
+class ApplicationEnvironment(disabledPluginIds: Set<String> = emptySet()) : AutoCloseable {
 
     /** The app substrate: app-global extension registry + message bus + model lock. */
     val platform: PlatformCore = PlatformCore()
@@ -50,12 +51,23 @@ class ApplicationEnvironment : AutoCloseable {
     /** Drives the IDE's built-in plugins onto [platform]'s app-global registry. */
     private val pluginManager = PluginManager(platform.extensions)
 
+    /**
+     * The built-in plugin catalog: every built-in plus which are active, given the host's persisted disabled
+     * set (passed into this constructor). Only the enabled subset is loaded; enabling/disabling a plugin is
+     * applied on the next launch (the manager loads once here, it does not hot-swap). The Plugins settings UI
+     * reads this to render toggles.
+     */
+    val pluginCatalog: PluginCatalog
+
     init {
-        // Load every built-in contribution ONCE on the app registry, in dependency order. The capturing
-        // plugins (command actions, synthetic-R, the XML resource host) resolve the open project lazily
-        // through [activeEngine] at callback time — safe to pass `this` mid-construction (it is dereferenced
-        // only later, never during a plugin's register()).
-        pluginManager.loadAll(BuiltInPlugins.assemble(this, codecs))
+        // Load every ENABLED built-in contribution ONCE on the app registry, in dependency order. The catalog
+        // keeps essentials (and their transitive dependencies) on regardless of the disabled set, and drops a
+        // disabled plugin's dependents so the load graph stays valid. The capturing plugins (command actions,
+        // synthetic-R, the XML resource host) resolve the open project lazily through [activeEngine] at callback
+        // time — safe to pass `this` mid-construction (it is dereferenced only later, never during register()).
+        val allPlugins = BuiltInPlugins.assemble(this, codecs)
+        pluginCatalog = PluginCatalog(allPlugins.map { it.manifest }, disabledPluginIds)
+        pluginManager.loadAll(allPlugins.filter { pluginCatalog.isEnabled(it.manifest.id) })
         container.registerServiceIfAbsent(PROJECT_TEMPLATES) { ProjectTemplateRegistry(platform.extensions) }
     }
 

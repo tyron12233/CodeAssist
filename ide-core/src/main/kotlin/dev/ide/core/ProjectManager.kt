@@ -80,7 +80,7 @@ class ProjectManager private constructor(
      * project's workspace container), and the host plugin registrations. All application *bootstrap* lives in
      * [ApplicationEnvironment], so this manager is purely about *managing* projects. Disposed by [dispose].
      */
-    val env: ApplicationEnvironment = ApplicationEnvironment()
+    val env: ApplicationEnvironment = ApplicationEnvironment(disabledPluginIds = readDisabledPlugins())
 
     init {
         // The launcher-supplied platform ports become APPLICATION services on the shared container, so every
@@ -255,6 +255,20 @@ class ProjectManager private constructor(
         val props = loadPrefs().apply { setProperty(key, value) }
         Files.createDirectories(prefsFile.parent)
         Files.newOutputStream(prefsFile).use { props.store(it, "CodeAssist preferences") }
+    }
+
+    // --- built-in plugin enable/disable (app-global; applied on the next launch) ---
+
+    /** The persisted ids of disabled built-in plugins. Read once at startup to gate [env]'s plugin load; the
+     *  Plugins settings screen edits it via [setDisabledPlugins] and prompts for a restart. */
+    fun disabledPlugins(): Set<String> = readDisabledPlugins()
+
+    private fun readDisabledPlugins(): Set<String> =
+        preference(DISABLED_PLUGINS_KEY)?.split(",")?.mapNotNull { it.trim().ifEmpty { null } }?.toSet() ?: emptySet()
+
+    /** Persist [ids] as the disabled built-in plugins; takes effect on the next launch. */
+    fun setDisabledPlugins(ids: Set<String>) {
+        setPreference(DISABLED_PLUGINS_KEY, ids.sorted().joinToString(","))
     }
 
     private fun loadPrefs(): Properties = Properties().apply {
@@ -457,6 +471,7 @@ class ProjectManager private constructor(
 
     companion object {
         private const val LEGACY_IMPORTED_PREF = "legacy.projects.imported"
+        private const val DISABLED_PLUGINS_KEY = "plugins.disabled"
 
         /** Desktop host: an installed Android SDK if present (so `android.*` resolves), else a detected JDK; Java 17. */
         fun desktop(projectsRoot: Path, legacyDataDirs: List<Path> = emptyList()): ProjectManager =
