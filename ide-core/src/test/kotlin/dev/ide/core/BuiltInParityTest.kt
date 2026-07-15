@@ -57,8 +57,9 @@ class BuiltInParityTest {
         val workspaceServices = setOf(
             "ide.service.signing", "ide.service.search", "ide.service.blocks", "ide.service.actions",
             "ide.service.dependencies", "ide.service.modules", "ide.service.build",
+            "ide.service.languageFeatures",
         )
-        assertEquals(moduleAnalyzers + workspaceServices, byId.keys, "exactly the 10 engine services")
+        assertEquals(moduleAnalyzers + workspaceServices, byId.keys, "exactly the 11 engine services")
         moduleAnalyzers.forEach { assertEquals(ServiceScopeLevel.MODULE, byId.getValue(it).level, it) }
         workspaceServices.forEach { assertEquals(ServiceScopeLevel.WORKSPACE, byId.getValue(it).level, it) }
     }

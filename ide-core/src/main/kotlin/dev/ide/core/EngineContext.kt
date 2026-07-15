@@ -110,6 +110,26 @@ internal interface EngineContext {
      *  factory calls this through the scope-resolved engine; the module container caches and disposes it. */
     fun buildAnalyzer(module: Module, language: dev.ide.lang.LanguageId): dev.ide.lang.SourceAnalyzer
 
+    /** The module owning [file] by source root, or null (narrower than [moduleForEditableFile]). */
+    fun moduleForFile(file: Path): Module?
+
+    /** The module owning [file] for editing — a source/generated root, an Android `res/` tree, or the
+     *  module's manifest. Broader than [moduleForFile]. */
+    fun moduleForEditableFile(file: Path): Module?
+
+    /** The per-(module, language) analyzer for editor features, resolved + cached as a MODULE-scoped service. */
+    fun analyzerFor(module: Module, language: dev.ide.lang.LanguageId): dev.ide.lang.SourceAnalyzer
+
+    /** The editor language id for [file] (from `FILE_TYPE_EP`; the Java default for an unmapped file). */
+    fun languageFor(file: Path): dev.ide.lang.LanguageId
+
+    /** Push [file]'s live editor buffer [text] into the overlay so analyzers see the unsaved edits. */
+    fun updateDocument(file: Path, text: String)
+
+    /** Reparse [file]'s live buffer [text] through [analyzer]'s incremental parser (bumping the shared
+     *  document version), so a subsequent query on that same analyzer reflects the buffer. */
+    fun refreshParse(analyzer: dev.ide.lang.SourceAnalyzer, file: Path, text: String)
+
     /** The module's merged Android resource repository (fingerprint-cached, shared with the editor's synthetic-R
      *  provider / layout preview / reference resolution), or null when the module has no Android resources. The
      *  app-global synthetic-R provider resolves this through the active engine. */

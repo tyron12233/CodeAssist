@@ -16,6 +16,7 @@ import dev.ide.core.completion.PostfixContributor
 import dev.ide.core.services.BlockService
 import dev.ide.core.services.BuildService
 import dev.ide.core.services.DependencyService
+import dev.ide.core.services.LanguageFeatureService
 import dev.ide.core.services.ModuleService
 import dev.ide.core.services.SearchService
 import dev.ide.core.services.SigningService
@@ -474,6 +475,9 @@ private class IdeCoreServicesPlugin : Plugin {
                     ENGINE_CONTEXT
                 )
             )
+        }
+        reg.service(LANGUAGE_FEATURE_SERVICE, ServiceScopeLevel.WORKSPACE) {
+            LanguageFeatureService(getService(ENGINE_CONTEXT))
         }
     }
 }

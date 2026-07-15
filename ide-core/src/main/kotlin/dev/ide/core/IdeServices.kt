@@ -59,6 +59,7 @@ import dev.ide.core.completion.PostfixContributor
 import dev.ide.core.services.BlockService
 import dev.ide.core.services.BuildService
 import dev.ide.core.services.DependencyService
+import dev.ide.core.services.LanguageFeatureService
 import dev.ide.core.services.ModuleService
 import dev.ide.core.services.RunCapture
 import dev.ide.core.services.SearchService
@@ -366,6 +367,8 @@ internal val ACTION_MANAGER = ServiceKey<ActionManager>("ide.service.actions")
 internal val DEPENDENCY_SERVICE = ServiceKey<DependencyService>("ide.service.dependencies")
 internal val MODULE_SERVICE = ServiceKey<ModuleService>("ide.service.modules")
 internal val BUILD_SERVICE = ServiceKey<BuildService>("ide.service.build")
+internal val LANGUAGE_FEATURE_SERVICE =
+    ServiceKey<LanguageFeatureService>("ide.service.languageFeatures")
 
 /**
  * APPLICATION-scoped shared toolchain services — reachable with no project open (the picker's Settings &
@@ -546,6 +549,21 @@ class IdeServices private constructor(
         override fun buildAnalyzer(module: Module, language: LanguageId) =
             this@IdeServices.buildAnalyzer(module, language)
 
+        override fun moduleForFile(file: Path) = this@IdeServices.moduleForFile(file)
+        override fun moduleForEditableFile(file: Path) = this@IdeServices.moduleForEditableFile(file)
+        override fun analyzerFor(module: Module, language: LanguageId) =
+            this@IdeServices.analyzerFor(module, language)
+
+        override fun languageFor(file: Path) = this@IdeServices.languageFor(file)
+        override fun updateDocument(file: Path, text: String) =
+            this@IdeServices.updateDocument(file, text)
+
+        override fun refreshParse(analyzer: SourceAnalyzer, file: Path, text: String) {
+            analyzer.incrementalParser.parseFull(
+                EditorDocument(store.vfs.fileFor(file), docVersion.incrementAndGet(), text)
+            )
+        }
+
         override fun resourceRepo(module: Module) = this@IdeServices.resourceRepo(module)
         override fun invalidateSyntheticClasses() = this@IdeServices.invalidateSyntheticClasses()
         override fun projectPref(key: String) = this@IdeServices.projectPref(key)
@@ -644,6 +662,10 @@ class IdeServices private constructor(
 
     /** WORKSPACE-scoped build + run orchestration (the BuildRunner's in-process arm delegates here). */
     internal val build: BuildService get() = store.workspaceContainer.getService(BUILD_SERVICE)
+
+    /** WORKSPACE-scoped editor language features (folding, formatting, breadcrumb, structure, quick-doc). */
+    internal val languageFeatures: LanguageFeatureService
+        get() = store.workspaceContainer.getService(LANGUAGE_FEATURE_SERVICE)
 
     /** Set the Maven version-conflict policy (delegates to the dependency service). Kept here so the settings
      *  surface can reach it through the engine without depending on the service type. */
@@ -1770,16 +1792,8 @@ class IdeServices private constructor(
     }
 
     /** Foldable regions for [file]'s live buffer — imports, type/function bodies, block comments. */
-    fun codeFolds(file: Path, text: String): List<dev.ide.lang.folding.FoldRegion> {
-        val module = moduleForEditableFile(file) ?: return emptyList()
-        updateDocument(file, text) // the live buffer feeds the analyzer's overlay
-        val analyzer = analyzerFor(module, languageFor(file))
-        val service = analyzer.folding ?: return emptyList()
-        val vf = store.vfs.fileFor(file)
-        // Refresh the analyzer's parse of the live buffer (the folder reads the last parse).
-        analyzer.incrementalParser.parseFull(EditorDocument(vf, docVersion.incrementAndGet(), text))
-        return runCatching { runSync { service.folds(vf) } }.getOrDefault(emptyList())
-    }
+    fun codeFolds(file: Path, text: String): List<dev.ide.lang.folding.FoldRegion> =
+        languageFeatures.codeFolds(file, text)
 
     /** Reformat the whole live buffer of [file] to [style]; minimal edits, or empty if the language has no
      *  formatter / the buffer is already formatted / can't be safely formatted. */
@@ -1787,11 +1801,7 @@ class IdeServices private constructor(
         file: Path,
         text: String,
         style: dev.ide.lang.formatting.FormatStyle
-    ): List<DocumentEdit> {
-        val service = formattingServiceFor(file) ?: return emptyList()
-        val vf = store.vfs.fileFor(file)
-        return runCatching { runSync { service.format(vf, text, style) } }.getOrDefault(emptyList())
-    }
+    ): List<DocumentEdit> = languageFeatures.formatDocument(file, text, style)
 
     /** Reformat only the text overlapping `[start, end)` of [file]'s live buffer. */
     fun formatRange(
@@ -1800,83 +1810,28 @@ class IdeServices private constructor(
         start: Int,
         end: Int,
         style: dev.ide.lang.formatting.FormatStyle
-    ): List<DocumentEdit> {
-        val service = formattingServiceFor(file) ?: return emptyList()
-        val vf = store.vfs.fileFor(file)
-        val range = TextRange(start, end)
-        return runCatching { runSync { service.formatRange(vf, text, range, style) } }.getOrDefault(
-            emptyList()
-        )
-    }
-
-    private fun formattingServiceFor(file: Path): dev.ide.lang.formatting.FormattingService? {
-        val module = moduleForEditableFile(file) ?: return null
-        return analyzerFor(module, languageFor(file)).formatting
-    }
+    ): List<DocumentEdit> = languageFeatures.formatRange(file, text, start, end, style)
 
     /** Format the built-in code sample for [languageId] with [style] and return the result — for the Code
      *  Style screen's live preview. Module-independent: it builds a standalone formatter, so it works with no
      *  file open. Returns the sample unchanged if formatting fails. */
-    fun formatStylePreview(languageId: String, style: dev.ide.lang.formatting.FormatStyle): String {
-        val sample = dev.ide.core.settings.CodeStyleSamples.forLanguage(languageId)
-        val edits = runCatching {
-            when (languageId) {
-                dev.ide.core.settings.CodeStyleSettings.LANG_KOTLIN ->
-                    dev.ide.lang.kotlin.KotlinFormatter.reformat(
-                        "Preview.kt",
-                        sample,
-                        style,
-                        0,
-                        sample.length
-                    )
-
-                else ->
-                    // A high default compliance so newer Java syntax in the sample parses; the preview is not
-                    // tied to any module.
-                    dev.ide.lang.jdt.formatting.JdtFormattingService("17").formatText(sample, style)
-            }
-        }.getOrDefault(emptyList())
-        if (edits.isEmpty()) return sample
-        val sb = StringBuilder(sample)
-        for (e in edits.sortedByDescending { it.offset }) {
-            val s = e.offset.coerceIn(0, sb.length)
-            val en = (e.offset + e.oldLength).coerceIn(s, sb.length)
-            sb.replace(s, en, e.newText.toString())
-        }
-        return sb.toString()
-    }
+    fun formatStylePreview(languageId: String, style: dev.ide.lang.formatting.FormatStyle): String =
+        languageFeatures.formatStylePreview(languageId, style)
 
     /** Enclosing declarations (type/method names, outer→inner) at [offset] in [file]'s buffer — for the
      *  cursor-tracking breadcrumb. Empty if the file is outside the project or not JDT-backed. */
-    fun breadcrumbAt(file: Path, text: String, offset: Int): List<String> {
-        val module = moduleForFile(file) ?: return emptyList()
-        updateDocument(file, text)
-        val analyzer = analyzerFor(module) as? JdtSourceAnalyzer ?: return emptyList()
-        return runCatching {
-            analyzer.enclosingStructure(
-                store.vfs.fileFor(file), text, offset
-            )
-        }.getOrDefault(emptyList())
-    }
+    fun breadcrumbAt(file: Path, text: String, offset: Int): List<String> =
+        languageFeatures.breadcrumbAt(file, text, offset)
 
     /** The file's declarations (for the structure/outline view + sticky scroll headers), via the language
      *  analyzer's structure walk. Empty if the file is outside the project or the backend doesn't support it. */
-    fun fileStructure(file: Path, text: String): List<dev.ide.lang.resolve.StructureItem> {
-        val module = moduleForEditableFile(file) ?: return emptyList()
-        val analyzer = analyzerFor(module, languageFor(file))
-        val vf = store.vfs.fileFor(file)
-        return runCatching { analyzer.fileStructure(vf, text) }.getOrDefault(emptyList())
-    }
+    fun fileStructure(file: Path, text: String): List<dev.ide.lang.resolve.StructureItem> =
+        languageFeatures.fileStructure(file, text)
 
     /** Quick documentation (signature + doc comment) for the symbol at [offset] in [file]'s buffer, or null.
      *  Resolves through the live overlay so cross-file references reach their declaration. */
-    fun quickDocAt(file: Path, text: String, offset: Int): dev.ide.lang.resolve.QuickDocInfo? {
-        val module = moduleForEditableFile(file) ?: return null
-        updateDocument(file, text)
-        val analyzer = analyzerFor(module, languageFor(file))
-        val vf = store.vfs.fileFor(file)
-        return runCatching { runSync { analyzer.quickDoc(vf, text, offset) } }.getOrNull()
-    }
+    fun quickDocAt(file: Path, text: String, offset: Int): dev.ide.lang.resolve.QuickDocInfo? =
+        languageFeatures.quickDocAt(file, text, offset)
 
     /** Diagnostics for [text], bound to [file]'s module (empty if outside the project). */
     fun analyze(file: Path, text: String): AnalysisResult? {
@@ -4584,7 +4539,7 @@ private class IdeAnalysisTarget(
 }
 
 /** Drives a `suspend` SPI call to completion synchronously (the analyzer never actually suspends). */
-private fun <T> runSync(block: suspend () -> T): T {
+internal fun <T> runSync(block: suspend () -> T): T {
     var result: Result<T>? = null
     block.startCoroutine(Continuation(EmptyCoroutineContext) { result = it })
     return result!!.getOrThrow()
