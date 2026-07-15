@@ -1691,7 +1691,13 @@ class KotlinTreeResolver(
         if (byArity.size == 1) return byArity.single()
         // Tie-break by argument types: keep candidates whose params accept the (inferred) argument types,
         // each arg compared against the param it binds to (named → by name, positional → by position).
+        // Then drop overloads with an UNBOUND non-defaulted parameter (Kotlin applicability): Material3's
+        // clickable `Card(onClick, …)`/`Button(onClick, …)` would otherwise win the positional most-complete
+        // tie-break over the plain `Card { }`, leaving its required `onClick` null → a spuriously-clickable
+        // preview node that NPEs on tap. Backs off to the unfiltered set if that would leave nothing (defaults
+        // unknown for every candidate — Java bytecode / old cache), so a rejection is never guessed.
         val typed = byArity.filter { c -> argsBindable(c, valueArgs, exact = false) }
+            .let { t -> t.filter { requiredParamsSatisfied(it, valueArgs) }.ifEmpty { t } }
         typed.singleOrNull()?.let { return it }
         if (typed.isEmpty()) return null // nothing applicable → genuine no-match, never guess
         // More than one applicable overload. Prefer the MOST SPECIFIC: candidates whose parameter types
@@ -1800,6 +1806,22 @@ class KotlinTreeResolver(
             result[i] = idx
         }
         return result
+    }
+
+    /** Whether every declared parameter the call does NOT supply is optional — defaulted, the vararg, or (for a
+     *  suspend/composable callee) a synthetic trailing param the ABI fills — Kotlin's applicability rule. An
+     *  overload with an UNBOUND, non-defaulted value parameter is not a candidate for this call (e.g. Material3's
+     *  clickable `Card(onClick, …)` for a plain `Card { }`: its required `onClick` is unfilled). Backs off
+     *  (returns true) when defaults are UNKNOWN (`paramHasDefault` empty — Java bytecode / an old cache), so a
+     *  rejection is never guessed. */
+    private fun requiredParamsSatisfied(callee: KotlinSymbol, valueArgs: List<KtValueArgument>): Boolean {
+        val defaults = callee.paramHasDefault
+        if (defaults.isEmpty()) return true // unknown → never guess a rejection
+        val bound = bindIndices(callee, valueArgs) ?: return false
+        val boundSet = bound.toHashSet()
+        return defaults.indices.all { i ->
+            i in boundSet || i == callee.varargParamIndex || defaults[i]
+        }
     }
 
     /** Whether every (inferred) argument type is assignable to — or, when [exact], equal to — the type of the

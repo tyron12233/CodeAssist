@@ -24,7 +24,53 @@ class ComposableAbiDefaultsTest {
 
     @BeforeTest
     fun reset() {
-        Capture.label = null; Capture.count = -1; Capture.flag = null
+        Capture.label = null; Capture.count = -1; Capture.flag = null; Capture.pendingClick = null
+    }
+
+    @Test
+    fun cardOnClickBindsToANonNullProxyInvocableAfterComposition() {
+        // The reported `Card(onClick = { … }) { content }` crash: tapping the card NPEs "Function0.invoke() on a
+        // null object reference". onClick is a REQUIRED plain `() -> Unit` first param alongside a trailing
+        // @Composable content lambda. It must bind to a non-null proxy that runs at TAP time (invoked here AFTER
+        // the composition settles, exactly like a tap outside a composition pass).
+        var ran = false
+        val onClick = object : dev.ide.interp.InterpretedLambda {
+            override val paramCount = 0
+            override fun invoke(args: List<Any?>): Any? { ran = true; return null }
+        }
+        val content = object : dev.ide.interp.InterpretedLambda {
+            override val paramCount = 0
+            override fun invoke(args: List<Any?>): Any? = null
+        }
+        val facade = "dev.ide.interp.compose.ComposableAbiDefaultsTestKt"
+        val span = dev.ide.lang.kotlin.interp.SourceSpan(0, 0)
+        val callee = dev.ide.lang.kotlin.interp.ResolvedCallable.Library(
+            displayName = "CardLike", ownerFqn = facade, methodName = "CardLike",
+            paramTypes = listOf(
+                dev.ide.lang.kotlin.symbols.KotlinType("kotlin.Function0"),
+                dev.ide.lang.kotlin.symbols.KotlinType("kotlin.Boolean"),
+                dev.ide.lang.kotlin.symbols.KotlinType("kotlin.Function0"),
+            ),
+            isStatic = true, isConstructor = false, isInline = false, isComposable = true,
+            paramNames = listOf("onClick", "enabled", "content"),
+        )
+        // `CardLike(onClick = { … }) { content }` — onClick named (in-parens), content the trailing lambda.
+        val call = dev.ide.lang.kotlin.interp.RNode.Call(
+            callee, dev.ide.lang.kotlin.interp.DispatchKind.TOP_LEVEL, receiver = null,
+            args = listOf(
+                dev.ide.lang.kotlin.interp.RArg(dev.ide.lang.kotlin.interp.RNode.Const(null, null, span), "onClick", false, false),
+                dev.ide.lang.kotlin.interp.RArg(dev.ide.lang.kotlin.interp.RNode.Const(null, null, span), null, false, true),
+            ),
+            callSiteKey = dev.ide.lang.kotlin.interp.CallSiteKey(41), source = span,
+        )
+        val dispatcher = ComposeDispatcher()
+        composeOnce {
+            dispatcher.composer = currentComposer
+            dispatcher.dispatch(call, receiver = null, args = listOf<Any?>(onClick, content))
+        }
+        assertEquals(true, Capture.pendingClick != null, "onClick must bind to a non-null proxy, not leave the Card's onClick null")
+        Capture.pendingClick?.invoke() // the tap, outside the composition pass
+        assertEquals(true, ran, "the interpreted onClick must run when the card is tapped")
     }
 
     @Test
@@ -753,9 +799,19 @@ fun BoxLike(modifier: PseudoModifier) {
     Capture.label = "contentless:" + modifier.describe()
 }
 
+/** The `Card(onClick = …) { content }` shape: a REQUIRED `onClick: () -> Unit` (a plain, non-composable lambda)
+ *  as the first parameter, with a trailing `@Composable` content lambda. Stores onClick so a test can invoke it
+ *  AFTER composition (a tap fires outside a composition pass). */
+@Composable
+fun CardLike(onClick: () -> Unit, enabled: Boolean = true, content: @Composable () -> Unit) {
+    Capture.pendingClick = onClick
+    content()
+}
+
 /** Top-level capture sink (the composable writes here; the test reads it). */
 object Capture {
     var label: String? = null
     var count: Int = -1
     var flag: Boolean? = null
+    var pendingClick: (() -> Unit)? = null
 }
