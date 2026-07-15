@@ -314,11 +314,13 @@ class KotlinSymbolService(
         return previewSourceFile(raw?.ctx?.path)
     }
 
-    /** The source files declaring a top-level function named [name] — for cross-file preview lowering of a call
-     *  to a function defined in another file. Distinct by path. */
+    /** The source files declaring a top-level CALLABLE named [name] — a function OR a (non-extension) top-level
+     *  property — for cross-file preview lowering. A property read lowers to a `name/0` TOP_LEVEL source call
+     *  (its synthetic zero-arg getter), so a preview referencing a `val` defined in another file (e.g. a theme
+     *  color `Purple80`) must follow it here too, not just functions. Distinct by path. */
     fun sourceFilesDeclaringFunction(name: String): List<PreviewSourceFile> =
         model().topLevel.asSequence()
-            .filter { it.isFunction && it.receiverText == null && it.name == name }
+            .filter { it.receiverText == null && it.name == name }
             .mapNotNull { previewSourceFile(it.ctx.path) }
             .distinctBy { it.file.path }
             .toList()

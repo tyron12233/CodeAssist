@@ -83,6 +83,30 @@ class KotlinCrossFilePreviewTest {
     }
 
     @Test
+    fun readsATopLevelPropertyDeclaredInAnotherFile() {
+        // The reported "Preview failed to render: no source function `Purple80/0`": a top-level `val` (a theme
+        // color) defined in a sibling file, read from the entry (`Text(color = Purple80)` in miniature). A
+        // top-level property read lowers to a `Purple80/0` TOP_LEVEL call (its synthetic zero-arg getter), so the
+        // declaring file must be merged into the program like a function, not skipped as "not a function".
+        val entry = """
+            package com.example.compose
+            fun useColor(): Int = Purple80
+        """.trimIndent()
+        val (service, dir) = serviceOver(
+            mapOf(
+                "Theme.kt" to "package com.example.compose\n\nval Purple80 = 0xFF0000\n",
+                "Use.kt" to entry,
+            ),
+        )
+        val model = lowerCrossFile(service, dir, "Use.kt", entry)
+        assertTrue(model.program["useColor/0"]?.isComplete == true, "useColor should lower; diags=${model.program["useColor/0"]?.diagnostics}")
+        assertNotNull(
+            model.program["Purple80/0"],
+            "the cross-file top-level property's synthetic getter must be merged; got ${model.program.keys}",
+        )
+    }
+
+    @Test
     fun pullsADataClassAndHelperFromAnotherModule() {
         // Two modules: `core` (a dependency) declares the data class + a helper; `app` (the entry) constructs/
         // calls them. `app`'s analyzer spans `core`'s sources (a module dependency folds the dep's source roots
