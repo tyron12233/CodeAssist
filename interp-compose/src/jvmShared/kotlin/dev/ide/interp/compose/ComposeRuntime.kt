@@ -19,6 +19,10 @@ class ComposeRuntime(private val dispatcher: ComposeDispatcher) : ComposableInvo
 
     override fun invokeComposable(callSiteKey: Int, restartable: Boolean, force: Boolean, args: List<Any?>, body: () -> Any?): Any? {
         val outer = dispatcher.composer ?: return body() // no composition in progress → just run it
+        // Capture the composer position before opening the restart group, so a body that throws mid-composition
+        // (a library composable that failed with a node still open) can be unwound to here rather than leaving a
+        // dangling node that crashes the enclosing composition — see [ComposableAbi.endToMarker].
+        val marker = ComposableAbi.currentMarker(outer)
         val group = ComposableAbi.startRestartGroup(outer, callSiteKey)
         dispatcher.composer = group
         val result: Any?
@@ -42,10 +46,12 @@ class ComposeRuntime(private val dispatcher: ComposeDispatcher) : ComposableInvo
             }
             scope = ComposableAbi.endRestartGroup(group)
         } catch (t: Throwable) {
-            // The body failed mid-composition (e.g. an interpreter error). Balance the restart group we opened
-            // so the slot table isn't left corrupt, then rethrow for the caller (the preview renderer) to
-            // surface as an error view rather than aborting the whole composition.
-            runCatching { ComposableAbi.endRestartGroup(group) }
+            // The body failed mid-composition (e.g. an interpreter error, or a library composable that threw
+            // with a node still open). Unwind to the pre-restart-group marker so any dangling group/node is
+            // closed and the slot table isn't left corrupt, then rethrow for the caller (the preview renderer)
+            // to surface as an error view rather than aborting — and, critically, so the IDE's own composition
+            // around the preview doesn't crash on its next `endNode`.
+            runCatching { ComposableAbi.endToMarker(outer, marker) }
             throw t
         } finally {
             dispatcher.composer = outer

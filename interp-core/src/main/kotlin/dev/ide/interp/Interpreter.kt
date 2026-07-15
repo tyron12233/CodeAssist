@@ -85,8 +85,42 @@ class Interpreter(
     private fun bindParams(env: Env, params: List<RParam>, args: List<Any?>) {
         params.forEachIndexed { i, p ->
             val supplied = i < args.size && args[i] !== OmittedArg
-            env.define(p.slot, if (supplied) args[i] else p.default?.let { eval(it, env) })
+            env.define(p.slot, if (supplied) args[i] else defaultValue(p, env))
         }
+    }
+
+    /**
+     * Evaluate parameter [p]'s default expression, or null when it has none. In gap-tolerant mode (the Compose
+     * preview path) a default that THROWS must not abort the whole render — a `@Preview` entry's parameters are
+     * placeholders whose defaults the preview supplies, and a default like `Build.VERSION.SDK_INT` can't be
+     * evaluated off-device (no `android.os.Build` on the desktop classpath), yet the body typically never reads
+     * the parameter. So a throwing default degrades to a type-appropriate zero/null and the preview still renders;
+     * outside gap tolerance (console Run, tests) the throw propagates so a genuinely broken program is reported.
+     */
+    private fun defaultValue(p: RParam, env: Env): Any? {
+        val default = p.default ?: return null
+        if (!tolerateGaps) return eval(default, env)
+        return try {
+            eval(default, env)
+        } catch (ce: kotlin.coroutines.cancellation.CancellationException) {
+            throw ce // recomposition cancellation is control flow — never swallow it
+        } catch (e: Exception) {
+            zeroForType(p.type?.qualifiedName)
+        }
+    }
+
+    /** A benign stand-in for a parameter whose default couldn't be evaluated (gap-tolerant mode): the zero of a
+     *  primitive type so a later arithmetic/boolean read doesn't NPE on unboxing, else null. */
+    private fun zeroForType(qualifiedName: String?): Any? = when (qualifiedName) {
+        "kotlin.Int" -> 0
+        "kotlin.Long" -> 0L
+        "kotlin.Short" -> 0.toShort()
+        "kotlin.Byte" -> 0.toByte()
+        "kotlin.Char" -> '\u0000'
+        "kotlin.Double" -> 0.0
+        "kotlin.Float" -> 0f
+        "kotlin.Boolean" -> false
+        else -> null
     }
 
     /** The declared value-parameter count the resolver pinned for [callee] (a source callee carries it in its

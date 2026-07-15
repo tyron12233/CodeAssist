@@ -406,7 +406,13 @@ object ComposableAbi {
             if (slot !in 0 until n) return false
             val p = m.parameterTypes[slot]
             when (a) {
-                is InterpretedLambda -> if (!p.isInterface) return false
+                // A lambda fits only a FUNCTIONAL interface (a `kotlin.Function*` / SAM) — NOT any interface. A
+                // trailing content lambda (`Box { … }`) must not be considered a fit for a non-functional interface
+                // parameter like `Modifier` (an interface with several abstract methods): that would let the
+                // content-less `Box(modifier: Modifier)` overload "accept" the lambda and win the fewest-params
+                // tiebreak over the real content-taking `Box(…, content)`, binding the lambda onto the `modifier`
+                // slot → `materializeModifier` calls `.all(…)` on the proxy, which returns null → NPE (`Box.kt`).
+                is InterpretedLambda -> if (!isFunctionalInterface(p)) return false
                 null -> if (p.isPrimitive) return false
                 // A boxed value-class parameter (`TextAlign?`) accepts the unboxed underlying value too.
                 else -> if (!boxed(p).isInstance(a) && !acceptsValueClassUnderlying(
@@ -430,6 +436,22 @@ object ComposableAbi {
         paramType.isInstance(value) -> true
         else -> acceptsValueClassUnderlying(paramType, value)
     }
+
+    /** Whether [c] is a FUNCTIONAL interface an interpreted lambda can be proxied into — a Kotlin function type
+     *  (`kotlin.Function*` / `kotlin.jvm.functions.Function*`, the shape a transformed `@Composable` content
+     *  lambda takes) or any single-abstract-method (SAM) interface. A non-functional interface with several
+     *  abstract methods (e.g. `androidx.compose.ui.Modifier`) is NOT one: a lambda proxy of it returns null for
+     *  every method the caller invokes, which crashes deep in the library (see [firstParamsAccept]). Cached. */
+    private fun isFunctionalInterface(c: Class<*>): Boolean {
+        if (!c.isInterface) return false
+        return functionalInterfaceCache.getOrPut(c) {
+            val n = c.name
+            if (n.startsWith("kotlin.Function") || n.startsWith("kotlin.jvm.functions.Function")) true
+            else c.methods.count { Modifier.isAbstract(it.modifiers) && !Modifier.isStatic(it.modifiers) } == 1
+        }
+    }
+
+    private val functionalInterfaceCache = ConcurrentHashMap<Class<*>, Boolean>()
 
     /** Whether [paramType] is an inline value class whose underlying type accepts [value] — so an unboxed
      *  value-class value fits a boxed value-class parameter (it'll be boxed by [boxValueClassIfNeeded]). */
@@ -469,6 +491,30 @@ object ComposableAbi {
             groupMethod(composer, setOf("endReplaceableGroup", "endReplaceGroup"), paramCount = 0)
         }.invoke(composer)
     }
+
+    // --- composition recovery (unwind a composable that threw mid-composition) ---
+
+    /** `composer.getCurrentMarker(): Int` — an opaque token for the composer's current group/node position.
+     *  Captured before invoking a composable so [endToMarker] can restore this exact position if the
+     *  composable throws while it has groups/nodes open. */
+    fun currentMarker(composer: Any): Int =
+        currentMarkerCache.getOrPut(composer.javaClass) {
+            composer.javaClass.methods.first { it.name == "getCurrentMarker" && it.parameterCount == 0 }
+        }.invoke(composer) as Int
+
+    /** `composer.endToMarker(marker)` — end every group/node opened since [marker] was captured, restoring the
+     *  composer to that position. The interpreter calls this when a composable throws mid-composition (leaving a
+     *  node/group dangling), so the ENCLOSING composition — the IDE's own UI around the preview — is not left
+     *  corrupted (which surfaces as "Cannot end node insertion" when the host closes its own node). Best-effort:
+     *  a throw between `startReusableNode` and `createNode` can't be fully unwound, so callers guard it. */
+    fun endToMarker(composer: Any, marker: Int) {
+        endToMarkerCache.getOrPut(composer.javaClass) {
+            composer.javaClass.methods.first { it.name == "endToMarker" && it.parameterCount == 1 }
+        }.invoke(composer, marker)
+    }
+
+    private val currentMarkerCache = ConcurrentHashMap<Class<*>, Method>()
+    private val endToMarkerCache = ConcurrentHashMap<Class<*>, Method>()
 
     // --- restart groups (granular recomposition) ---
 

@@ -467,6 +467,40 @@ class ComposableAbiDefaultsTest {
         assertEquals("nullsource", Capture.label, "`source` defaults — the lambda bound to `onChange`")
     }
 
+    @Test
+    fun contentOnlyCallPicksTheContentOverloadNotAContentlessOneWithAnInterfaceParam() {
+        // The `Box { … }` crash: `Box` has a content-taking overload AND a content-less `Box(modifier: Modifier)`.
+        // `Modifier` is an INTERFACE (with several abstract methods), so the trailing content lambda used to be
+        // considered a fit for the content-less overload's `modifier` param — which then won the fewest-params
+        // tiebreak, binding the lambda onto `modifier`; the library then called a Modifier method on the lambda
+        // proxy (→ null → NPE in `materializeModifier`). `BoxLike` mirrors the shape: [PseudoModifier] is a
+        // non-functional interface. The content-only call must pick the CONTENT overload, run the content, and let
+        // `modifier` default — never bind the lambda to the interface `modifier` slot.
+        var ran = false
+        val lambda = object : dev.ide.interp.InterpretedLambda {
+            override val paramCount = 0
+            override fun invoke(args: List<Any?>): Any? { ran = true; return null }
+        }
+        composeOnce {
+            val composer: Any = currentComposer
+            ComposableAbi.startGroup(composer, KEY)
+            try {
+                ComposableAbi.call(
+                    ownerFqn = "dev.ide.interp.compose.ComposableAbiDefaultsTestKt",
+                    method = "BoxLike",
+                    originalArgs = listOf<Any?>(lambda),
+                    composer = composer,
+                    declaredParamCount = 2, // resolver's content overload
+                    lambdaProxy = ::contentProxy,
+                )
+            } finally {
+                ComposableAbi.endGroup(composer)
+            }
+        }
+        assertEquals(true, ran, "the content overload must be chosen and its content lambda invoked")
+        assertEquals("default", Capture.label, "`modifier` must default (not be bound to the content lambda proxy)")
+    }
+
     /** A general proxy: wrap an interpreted lambda as any single-method functional interface. */
     private fun anyProxy(lambda: dev.ide.interp.InterpretedLambda, fi: Class<*>): Any =
         java.lang.reflect.Proxy.newProxyInstance(fi.classLoader, arrayOf(fi)) { _, m, a ->
@@ -689,6 +723,34 @@ fun Field(value: String, onValueChange: (String) -> Unit, extra: String = "def")
 @Composable
 fun Field(value: String, decoy: () -> Unit = {}) {
     Capture.label = "decoy"
+}
+
+/** A NON-functional interface (several abstract methods, cf. `androidx.compose.ui.Modifier`) — a lambda must
+ *  NOT be considered a fit for a parameter of this type during overload selection. */
+interface PseudoModifier {
+    fun combine(other: PseudoModifier): PseudoModifier
+    fun describe(): String
+}
+
+/** The default [PseudoModifier] (cf. `Modifier` the companion) an omitted `modifier` argument falls back to. */
+object EmptyPseudoModifier : PseudoModifier {
+    override fun combine(other: PseudoModifier): PseudoModifier = other
+    override fun describe(): String = "default"
+}
+
+/** The `Box` shape: a content-taking overload whose `modifier` defaults, alongside a content-LESS
+ *  `BoxLike(modifier)` whose only parameter is the non-functional interface [PseudoModifier]. A `BoxLike { … }`
+ *  call (only a trailing content lambda) must resolve to THIS overload, not the content-less sibling. */
+@Composable
+fun BoxLike(modifier: PseudoModifier = EmptyPseudoModifier, content: @Composable () -> Unit) {
+    Capture.label = modifier.describe()
+    content()
+}
+
+/** The content-less `Box(modifier: Modifier)` sibling — the decoy the trailing content lambda must NOT bind to. */
+@Composable
+fun BoxLike(modifier: PseudoModifier) {
+    Capture.label = "contentless:" + modifier.describe()
 }
 
 /** Top-level capture sink (the composable writes here; the test reads it). */

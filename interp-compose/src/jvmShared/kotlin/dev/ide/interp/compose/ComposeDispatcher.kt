@@ -120,7 +120,15 @@ class ComposeDispatcher(
     /** Drive the caller-side group the plugin would emit (keyed by call site), then invoke the composable with
      *  the threaded composer — so it sits in a stable slot across recompositions. */
     private fun invokeComposable(call: RNode.Call, callee: ResolvedCallable.Library, composer: Any, receiver: Any?, args: List<Any?>): Any? {
+        // Capture the composer position BEFORE opening the call-site group. If the composable throws while it
+        // has a node/group open (e.g. a library composable like `Image` whose reflective invocation fails
+        // mid-emission), unwinding to this marker closes those dangling opens — so the ENCLOSING composition
+        // (the IDE's own UI around the preview) isn't corrupted, which otherwise surfaces on the host's next
+        // `endNode` as "Cannot end node insertion, there are no pending operations". On the normal path we close
+        // exactly the group we opened.
+        val marker = ComposableAbi.currentMarker(composer)
         ComposableAbi.startGroup(composer, call.callSiteKey.value)
+        var completed = false
         try {
             // Bind named arguments back to their declared positions before the ABI binds them to JVM slots
             // (`Text(text = …, modifier = …, textAlign = …)`); interior omissions become `OmittedArg` holes the
@@ -147,7 +155,7 @@ class ComposeDispatcher(
             val lastArgIsTrailingLambda = packed == null && call.args.lastOrNull()?.trailingLambda == true
             val effectiveArgs = if (isExtension) listOf(receiver) + bound else bound
             // The resolver knows the full value-parameter count; omitted args (defaults) are filled by the ABI.
-            return ComposableAbi.call(
+            val result = ComposableAbi.call(
                 callee.ownerFqn!!, callee.methodName, effectiveArgs, composer,
                 declaredParamCount = callee.paramTypes.size + if (isExtension) 1 else 0,
                 lambdaProxy = ::composableLambdaProxy,
@@ -157,8 +165,13 @@ class ComposeDispatcher(
                 argsInDeclarationOrder = argsInDeclarationOrder,
                 lastArgIsTrailingLambda = lastArgIsTrailingLambda,
             )
+            completed = true
+            return result
         } finally {
-            ComposableAbi.endGroup(composer)
+            // Normal completion: close exactly the call-site group. Failure: unwind to the pre-call marker so
+            // a composable that died with a node/group still open can't corrupt the surrounding composition.
+            if (completed) ComposableAbi.endGroup(composer)
+            else runCatching { ComposableAbi.endToMarker(composer, marker) }
         }
     }
 
