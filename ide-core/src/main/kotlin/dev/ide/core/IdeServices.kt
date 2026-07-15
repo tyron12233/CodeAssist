@@ -56,6 +56,7 @@ import dev.ide.core.completion.CompletionEngine
 import dev.ide.core.completion.CompletionOptions
 import dev.ide.core.completion.CompletionStats
 import dev.ide.core.completion.PostfixContributor
+import dev.ide.core.services.AndroidResourceService
 import dev.ide.core.services.BlockService
 import dev.ide.core.services.BuildService
 import dev.ide.core.services.DependencyService
@@ -369,6 +370,8 @@ internal val MODULE_SERVICE = ServiceKey<ModuleService>("ide.service.modules")
 internal val BUILD_SERVICE = ServiceKey<BuildService>("ide.service.build")
 internal val LANGUAGE_FEATURE_SERVICE =
     ServiceKey<LanguageFeatureService>("ide.service.languageFeatures")
+internal val ANDROID_RESOURCE_SERVICE =
+    ServiceKey<AndroidResourceService>("ide.service.androidResources")
 
 /**
  * APPLICATION-scoped shared toolchain services — reachable with no project open (the picker's Settings &
@@ -551,6 +554,7 @@ class IdeServices private constructor(
 
         override fun moduleForFile(file: Path) = this@IdeServices.moduleForFile(file)
         override fun moduleForEditableFile(file: Path) = this@IdeServices.moduleForEditableFile(file)
+        override fun moduleForResourceFile(file: Path) = this@IdeServices.moduleForResourceFile(file)
         override fun analyzerFor(module: Module, language: LanguageId) =
             this@IdeServices.analyzerFor(module, language)
 
@@ -666,6 +670,10 @@ class IdeServices private constructor(
     /** WORKSPACE-scoped editor language features (folding, formatting, breadcrumb, structure, quick-doc). */
     internal val languageFeatures: LanguageFeatureService
         get() = store.workspaceContainer.getService(LANGUAGE_FEATURE_SERVICE)
+
+    /** WORKSPACE-scoped Android resource navigation + preview (go-to-def, drawable/color preview). */
+    internal val resources: AndroidResourceService
+        get() = store.workspaceContainer.getService(ANDROID_RESOURCE_SERVICE)
 
     /** Set the Maven version-conflict policy (delegates to the dependency service). Kept here so the settings
      *  surface can reach it through the engine without depending on the service type. */
@@ -2934,75 +2942,24 @@ class IdeServices private constructor(
      * an `R.type.name` access in Java — resolved against the module's merged resources to its declaration
      * (file + offset). Local references only; framework (`@android:`) / other-namespace refs return null.
      */
-    fun definitionAt(file: Path, text: String, offset: Int): Pair<Path, Int>? {
-        val isXml = file.fileName?.toString()?.endsWith(".xml") == true
-        val module =
-            (if (isXml) moduleForResourceFile(file) else moduleForFile(file)) ?: return null
-        if (module.facets.get(AndroidFacet.KEY) == null) return null
-        val (type, name) = (if (isXml) xmlResourceRefAt(text, offset) else rClassRefAt(
-            text, offset
-        )) ?: return null
-        // Resolved purely through the resource index, which carries the declaring file + offset. No repository
-        // fallback: an as-yet-unindexed resource simply has no go-to target until the index catches up.
-        return indexDefinition(type, name)
-    }
-
-    /** The local resource reference under [offset] in res XML (`@type/name`), as (type, R-field name). */
-    private fun xmlResourceRefAt(text: String, offset: Int): Pair<ResourceType, String>? {
-        val ref = ResourceReferences.scan(text).firstOrNull { offset in it.range } ?: return null
-        val type = ref.type
-        if (!ref.isLocal || ref.create || type == null) return null
-        return type to sanitizeResName(ref.name)
-    }
-
-    /** An `R.type.name` access under [offset] in Java, as (type, name) — tolerant of where in it the caret is. */
-    private fun rClassRefAt(text: String, offset: Int): Pair<ResourceType, String>? {
-        val n = text.length
-        if (offset < 0 || offset > n) return null
-        fun part(c: Char) = c.isLetterOrDigit() || c == '_' || c == '.' || c == '$'
-        var s = offset.coerceIn(0, n)
-        var e = offset.coerceIn(0, n)
-        while (s > 0 && part(text[s - 1])) s--
-        while (e < n && part(text[e])) e++
-        val segs = text.substring(s, e).split('.').filter { it.isNotEmpty() }
-        val ri = segs.indexOf("R")
-        if (ri < 0 || ri + 2 >= segs.size) return null
-        return (ResourceType.byRClass(segs[ri + 1]) ?: return null) to segs[ri + 2]
-    }
-
-    /** Resolve a resource to its declaration (file + offset) via the resource index, or null. */
-    private fun indexDefinition(type: ResourceType, name: String): Pair<Path, Int>? =
-        indexService.exact<ResourceDeclValue>(
-            AndroidResourceIndex.id, AndroidResourceIndex.key(type.rClass, name)
-        ).firstOrNull()?.let { Paths.get(it.filePath) to it.offset }
+    /** Go-to-definition for the `@type/name` (res XML) or `R.type.name` (Java) resource reference under
+     *  [offset] in [file]'s live buffer, resolved through the resource index. */
+    fun definitionAt(file: Path, text: String, offset: Int): Pair<Path, Int>? =
+        resources.definitionAt(file, text, offset)
 
     // --- resource preview ------------------------------------------------------------------------------
 
-    /**
-     * A render-ready model of the drawable XML in [file] ([text] is the live buffer), with every
-     * `@color`/`@dimen`/`@drawable` reference resolved against the module's merged resources. Null for a
-     * non-Android module or a file that isn't a drawable/color/mipmap resource.
-     */
-    fun drawablePreview(file: Path, text: String): DrawablePreview? {
-        if (!DrawableXmlCatalog.appliesTo(file.toString())) return null
-        val module = moduleForResourceFile(file) ?: return null
-        if (module.facets.get(AndroidFacet.KEY) == null) return null
-        return runCatching {
-            DrawablePreviewParser.parse(
-                text, drawableResolver(module)
-            )
-        }.getOrNull()
-    }
+    /** A render-ready model of the drawable XML in [file] ([text] = live buffer), colors/dimens/drawables
+     *  resolved against the module's merged resources. Null for a non-Android module or a non-drawable file. */
+    fun drawablePreview(file: Path, text: String): DrawablePreview? =
+        resources.drawablePreview(file, text)
 
     /** The `<color>` entries of a `res/values` XML [file] ([text] = live buffer), resolved to ARGB for swatches. */
-    fun colorResources(file: Path, text: String): List<ColorEntry> {
-        val resolver =
-            moduleForResourceFile(file)?.let { drawableResolver(it) } ?: DrawableResolver.NONE
-        return runCatching { ColorResources.parse(text, resolver) }.getOrDefault(emptyList())
-    }
+    fun colorResources(file: Path, text: String): List<ColorEntry> =
+        resources.colorResources(file, text)
 
     /** Raw bytes of a resource file (for bitmap preview); null if unreadable. */
-    fun resourceBytes(file: Path): ByteArray? = runCatching { Files.readAllBytes(file) }.getOrNull()
+    fun resourceBytes(file: Path): ByteArray? = resources.resourceBytes(file)
 
     /**
      * Build the owned render tree + system chrome for a layout XML [file] (live buffer [text]) at the given
@@ -3907,56 +3864,6 @@ class IdeServices private constructor(
         }
         return themeName to title
     }
-
-    /** A [DrawableResolver] backed by [module]'s merged resource repository (colors/dimens/nested drawables). */
-    private fun drawableResolver(module: Module): DrawableResolver {
-        val repo = resourceRepo(module) ?: return DrawableResolver.NONE
-        return object : DrawableResolver {
-            override fun resolveColor(ref: String): Long? = resolveColorRef(ref, repo, 0)
-
-            override fun resolveDimenDp(ref: String): Float? {
-                val name = sanitizeResName(ref.substringAfterLast('/'))
-                val v =
-                    repo.definitions(ResourceType.DIMEN, name).firstOrNull()?.value ?: return null
-                return DIMEN_LITERAL.find(v)?.groupValues?.get(1)?.toFloatOrNull()
-            }
-
-            override fun resolveDrawable(ref: String): ResolvedDrawable? {
-                val name = sanitizeResName(ref.substringAfterLast('/'))
-                // A @color used where a drawable is expected resolves to a flat fill — let the color path handle it.
-                if (ref.contains("color") && repo.has(ResourceType.COLOR, name)) return null
-                val item =
-                    repo.definitions(ResourceType.DRAWABLE, name).firstOrNull() ?: repo.definitions(
-                        ResourceType.MIPMAP, name
-                    ).firstOrNull() ?: return null
-                val src = item.source ?: return null
-                val p = src.toString()
-                return if (p.endsWith(".xml")) {
-                    runCatching { src.readText() }.getOrNull()?.let { ResolvedDrawable.Xml(it) }
-                } else {
-                    ResolvedDrawable.BitmapFile(item.type.rClass, name, p)
-                }
-            }
-        }
-    }
-
-    /** Resolve `@color/x` (transitively through `@color` indirection) to ARGB; `@android:color/x` via the table. */
-    private fun resolveColorRef(ref: String, repo: ResourceRepository, depth: Int): Long? {
-        if (depth > 8) return null
-        val raw = ref.trim()
-        if (raw.startsWith("#")) return AndroidColor.parseHex(raw)
-        if (raw.contains("android:")) return AndroidColor.framework(raw.substringAfterLast('/'))
-        if (!raw.startsWith("@")) return null
-        val name = sanitizeResName(raw.substringAfterLast('/'))
-        val v = repo.definitions(ResourceType.COLOR, name).firstOrNull()?.value ?: return null
-        return when {
-            v.startsWith("#") -> AndroidColor.parseHex(v)
-            v.startsWith("@") -> resolveColorRef(v, repo, depth + 1)
-            else -> null
-        }
-    }
-
-    private val DIMEN_LITERAL = Regex("""(-?\d+(?:\.\d+)?)""")
 
     /**
      * Resource candidates (name + value hint) of [type] for completion, **straight from the incremental

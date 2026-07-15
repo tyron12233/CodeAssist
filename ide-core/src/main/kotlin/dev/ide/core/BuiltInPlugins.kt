@@ -13,6 +13,7 @@ import dev.ide.core.actions.BuiltInActions
 import dev.ide.core.completion.BufferWordsContributor
 import dev.ide.core.completion.CompletionStats
 import dev.ide.core.completion.PostfixContributor
+import dev.ide.core.services.AndroidResourceService
 import dev.ide.core.services.BlockService
 import dev.ide.core.services.BuildService
 import dev.ide.core.services.DependencyService
@@ -478,6 +479,9 @@ private class IdeCoreServicesPlugin : Plugin {
         }
         reg.service(LANGUAGE_FEATURE_SERVICE, ServiceScopeLevel.WORKSPACE) {
             LanguageFeatureService(getService(ENGINE_CONTEXT))
+        }
+        reg.service(ANDROID_RESOURCE_SERVICE, ServiceScopeLevel.WORKSPACE) {
+            AndroidResourceService(getService(ENGINE_CONTEXT))
         }
     }
 }

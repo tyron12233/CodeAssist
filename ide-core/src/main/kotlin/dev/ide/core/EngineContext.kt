@@ -117,6 +117,9 @@ internal interface EngineContext {
      *  module's manifest. Broader than [moduleForFile]. */
     fun moduleForEditableFile(file: Path): Module?
 
+    /** The Android module owning [file] under one of its `res/` roots, or null. */
+    fun moduleForResourceFile(file: Path): Module?
+
     /** The per-(module, language) analyzer for editor features, resolved + cached as a MODULE-scoped service. */
     fun analyzerFor(module: Module, language: dev.ide.lang.LanguageId): dev.ide.lang.SourceAnalyzer
 
