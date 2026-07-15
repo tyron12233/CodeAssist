@@ -1375,6 +1375,17 @@ class KotlinSymbolService(
         return out.sorted()
     }
 
+    /**
+     * Whether the classpath carries a LIBRARY (binary) type with simple [name] — one a file could `import` but
+     * may not have. Distinguishes a genuine missing-import reference (`FontWeight.Bold` with no
+     * `import androidx.compose.ui.text.font.FontWeight`) from a package segment (`androidx.…` — no such type) or
+     * a same-module SOURCE / synthetic class (Android `R`/`BuildConfig`), which resolve without an import and so
+     * must never be flagged unresolved. Exact (not fuzzy), so it needs no built trigram dictionary.
+     */
+    fun hasLibraryType(name: String): Boolean =
+        name.isNotEmpty() &&
+            index?.exact<ClassNameValue>(CLASS_NAMES, name)?.any { it.origin == IndexOrigin.LIBRARY } == true
+
     fun topLevelByName(name: String): List<KotlinSymbol> {
         val src = model().topLevel.filter { it.name == name }.map { toSymbol(it, null) }
         val idx = index

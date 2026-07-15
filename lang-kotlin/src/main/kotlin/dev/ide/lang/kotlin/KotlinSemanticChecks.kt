@@ -126,7 +126,13 @@ internal class KotlinSemanticChecks(private val service: KotlinSymbolService) {
         KotlinChecker(KtNameReferenceExpression::class.java) { psi ->
             psi as KtNameReferenceExpression
             KotlinPerf.span("sem.nameRef") {
-                if (resolveReady) report(unresolvedMember(psi, resolver) ?: unresolvedBareReference(psi, resolver))
+                if (resolveReady) {
+                    val unresolved = unresolvedMember(psi, resolver) ?: unresolvedBareReference(psi, resolver)
+                    report(unresolved)
+                    // Only when the reference DOES resolve (to a classifier): a class used as a value must be
+                    // initialized (`GridCells.Fixed` → `GridCells.Fixed(2)`).
+                    if (unresolved == null) report(classifierUsedAsValue(psi, resolver))
+                }
             }
         },
         KotlinChecker(KtUserType::class.java) { psi ->
@@ -438,6 +444,72 @@ internal class KotlinSemanticChecks(private val service: KotlinSymbolService) {
         return arg is org.jetbrains.kotlin.psi.KtLambdaExpression ||
             arg is org.jetbrains.kotlin.psi.KtCallableReferenceExpression ||
             (arg is KtNamedFunction && arg.name == null)
+    }
+
+    /**
+     * A CLASSIFIER (a class/interface) used as a VALUE without being initialized — the reported `columns =
+     * GridCells.Fixed` (where `Fixed` is a `class Fixed(count: Int)`), or a bare `val x = Foo`. A class name in
+     * value position is not itself a value: it must be instantiated (`GridCells.Fixed(2)`); only a class WITH a
+     * companion object refers to that companion. The compiler's "Classifier 'X' does not have a companion object,
+     * and thus must be initialized here". Conservative — fires only when the reference CONFIDENTLY resolves to a
+     * known classifier that is neither an object, a companion, nor a companion-bearing class, sits in a plain
+     * value position (not a constructor call, a further `.member`/`::` access, a type reference, or an import),
+     * and — for a bare name — is not shadowed by a value binding in scope.
+     */
+    private fun classifierUsedAsValue(ref: KtNameReferenceExpression, resolver: KotlinResolver): Diagnostic? {
+        val name = ref.getReferencedName()
+        // Classifiers are conventionally capitalized; the gate keeps this off the hot path for the many lowercase
+        // value reads (locals, properties, calls) that can never be a classifier.
+        if (name.isEmpty() || !name[0].isUpperCase() || name == "Companion") return null
+        if (inImportOrPackage(ref) || inTypeReference(ref)) return null
+        if (ref.parent is org.jetbrains.kotlin.psi.KtInstanceExpressionWithLabel) return null // this/super
+        if (hasAncestor(ref) { it is org.jetbrains.kotlin.psi.KtAnnotationEntry }) return null
+
+        // The full value expression + the name to resolve: for `Outer.Inner` it's the enclosing dot-qualified
+        // expression ("Outer.Inner"); for a bare `Foo` it's the reference itself.
+        val parent = ref.parent
+        val full: KtExpression
+        val qualifiedName: String
+        when {
+            parent is KtDotQualifiedExpression && parent.selectorExpression === ref -> { full = parent; qualifiedName = parent.text }
+            parent is KtQualifiedExpression && parent.selectorExpression === ref -> return null // `a?.X` selector
+            parent is KtQualifiedExpression && parent.receiverExpression === ref -> return null // `X.member` — X is a receiver
+            else -> { full = ref; qualifiedName = name }
+        }
+        // Value-position guards on the FULL expression: not a call callee, a further-member receiver, a `::`
+        // reference, or inside a type reference.
+        val fp = full.parent
+        if (fp is KtCallExpression && fp.calleeExpression === full) return null              // `Foo(...)` / `X.Y(...)`
+        if (fp is KtQualifiedExpression && fp.receiverExpression === full) return null        // `X.Y.more`
+        if (fp is org.jetbrains.kotlin.psi.KtDoubleColonExpression) return null               // `Foo::class` / `Foo::member`
+        if (inTypeReference(full)) return null
+
+        // Resolve to a classifier; back off unless it is confidently a known class that is NOT a valid value.
+        val fqn = runCatching { service.resolveTypeName(qualifiedName, resolver.fileContext) }.getOrNull() ?: return null
+        if (!service.isKnownType(fqn)) return null
+        if (service.isObject(fqn) || service.typeHasCompanionObject(fqn)) return null
+        if (fqn.substringAfterLast('.') == "Companion") return null
+
+        // A bare name might be shadowed by a value in scope (a local/param, an enclosing member, an in-scope
+        // top-level value/function, or a local type) — then it's a legitimate value read, not a classifier. A
+        // qualified `X.Y` can't be shadowed this way.
+        if (full === ref) {
+            val off = ref.textRange.startOffset
+            if (resolver.localsAt(off).any { it.name == name }) return null
+            if (resolver.enclosingClassMembersContain(off, name)) return null
+            if (resolver.localTypesInScope(off).containsKey(name)) return null
+            if (service.topLevelByName(name).any {
+                    (it.kind == SymbolKind.FIELD || it.kind == SymbolKind.METHOD) && resolver.topLevelInScope(it, resolver.fileContext)
+                }
+            ) return null
+        }
+
+        val r = full.textRange
+        return Diagnostic(
+            TextRange(r.startOffset, r.endOffset), Severity.ERROR,
+            "Classifier '$name' does not have a companion object, and thus must be initialized here",
+            KotlinDiagnosticCodes.CLASSIFIER_AS_VALUE,
+        )
     }
 
     /** The class/object NAME identifier range (for an anonymous object, a short range over its `object` keyword). */
@@ -2364,8 +2436,14 @@ internal class KotlinSemanticChecks(private val service: KotlinSymbolService) {
         if (parent is KtCallExpression && parent.calleeExpression === expr) {
             (parent.parent as? KtQualifiedExpression)?.let { if (it.selectorExpression === parent) return null }
         }
-        // `x.foo` / `x.foo()` — the receiver `x` could be a package or a type (static access); back off.
-        if (parent is KtQualifiedExpression && parent.receiverExpression === expr) return null
+        // `x.foo` / `x.foo()` — the receiver `x` of a qualified expression. Usually left alone: it may be a
+        // package segment (`androidx.compose.…`) or a not-yet-built same-package class (Android `R`/`BuildConfig`),
+        // neither of which is an error. But it may ALSO be a TYPE the file forgot to import, used for companion/
+        // static access (`FontWeight.Bold` with no `import …FontWeight`) — which Kotlin reports as "Unresolved
+        // reference", and which the selector's [unresolvedMember] can't flag (it can't type the unresolved
+        // receiver, so it backs off). Defer the decision: flag such a receiver ONLY if it's confidently a known,
+        // unimported LIBRARY type (the gate near the end) — never a package/generated-class receiver.
+        val isQualifiedReceiver = parent is KtQualifiedExpression && parent.receiverExpression === expr
         // A callable reference `Type::member` / `::top` — its selector resolves against the receiver type or
         // top-level scope (see [KotlinResolver.callableReferenceTarget]), not the bare-name scope, so it must
         // never be flagged here (both the receiver and the referenced callable are children of the `::`).
@@ -2381,6 +2459,10 @@ internal class KotlinSemanticChecks(private val service: KotlinSymbolService) {
         if (name == "field" && hasAncestor(expr) { it is KtPropertyAccessor }) return null
         val off = expr.textRange.startOffset
         if (resolver.companionInScope(off) || resolver.bareNameResolves(name, off)) return null
+        // A qualified-expression receiver (see above) is flagged only when it's confidently a known, unimported
+        // LIBRARY type — a real missing import — never a package segment or a generated/same-package class the
+        // index doesn't hold as a library type.
+        if (isQualifiedReceiver && !service.hasLibraryType(name)) return null
         val r = expr.textRange
         return Diagnostic(TextRange(r.startOffset, r.endOffset), Severity.ERROR, "Unresolved reference: $name", KotlinDiagnosticCodes.UNRESOLVED)
     }
