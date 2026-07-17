@@ -32,7 +32,6 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.input.key.KeyEventType
@@ -231,10 +230,21 @@ private fun Transcript(console: RunConsoleUi, modifier: Modifier) {
     val total = console.transcript.sumOf { it.text.length }
     // Follow the tail as output (and echoed input) arrives.
     LaunchedEffect(total) { scroll.scrollTo(scroll.maxValue) }
-    val text = remember(total, console.transcript.size) {
+    // Theme-aware transcript colors so they read on BOTH the dark and the light [consoleBg]. (OUTPUT used to be
+    // a hardcoded near-white — invisible on the light-theme console.) Keyed into the remember so the transcript
+    // re-styles on a theme switch.
+    val outputColor = Ca.colors.textPrimary
+    val inputColor = Ca.colors.accent
+    val systemColor = Ca.colors.textTertiary
+    val text = remember(total, console.transcript.size, outputColor, inputColor, systemColor) {
         buildAnnotatedString {
             for (chunk in console.transcript) {
-                withStyle(SpanStyle(color = chunkColor(chunk.kind))) { append(chunk.text) }
+                val color = when (chunk.kind) {
+                    ConsoleChunkKind.OUTPUT -> outputColor
+                    ConsoleChunkKind.INPUT -> inputColor
+                    ConsoleChunkKind.SYSTEM -> systemColor
+                }
+                withStyle(SpanStyle(color = color)) { append(chunk.text) }
             }
         }
     }
@@ -283,12 +293,6 @@ fun RunningIndicator(backend: IdeBackend, onClick: () -> Unit, modifier: Modifie
         )
         Icon(CaIcons.chevronRight, null, Modifier.size(14.dp), tint = Ca.colors.textTertiary)
     }
-}
-
-private fun chunkColor(kind: ConsoleChunkKind): Color = when (kind) {
-    ConsoleChunkKind.OUTPUT -> Color(0xFFE6E6E6)
-    ConsoleChunkKind.INPUT -> Color(0xFF7FB4FF)
-    ConsoleChunkKind.SYSTEM -> Color(0xFF8A8A8A)
 }
 
 /** Bottom input row: type a line and Enter/Send feeds it to the program's stdin; EOF closes the stream. */
