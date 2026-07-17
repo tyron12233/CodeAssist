@@ -18,6 +18,8 @@ import dev.ide.platform.ContentHash
 import dev.ide.platform.Disposable
 import dev.ide.platform.log.Log
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.async
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.withPermit
 import kotlinx.coroutines.withContext
@@ -607,21 +609,19 @@ class IndexServiceImpl(
         try {
             val (inputs, closeable) = art.open()
             try {
-                for (input in inputs) {
-                    for (st in needBuild) {
-                        @Suppress("UNCHECKED_CAST") val e = st.ext as IndexExtension<Any, Any>
-                        if (!e.inputFilter.accepts(input)) continue
-                        val extStart = System.nanoTime()
-                        var produced = 0
-                        runCatching {
-                            for ((k, vs) in e.index(input)) {
-                                val term = e.keyDescriptor.asTerm(k)
-                                for (v in vs) {
-                                    writers.getValue(st).add(term, v, input.origin); produced++
-                                }
-                            }
+                // Parse inputs in PARALLEL per batch (the parse dominates and is concurrent-safe on the primed
+                // read lock; `async` inherits this coroutine's buildDispatcher, so total width stays capped by
+                // its limitedParallelism), but WRITE each input's entries to the per-ext SegmentWriters on THIS
+                // coroutine in INPUT ORDER. So the writers — and the resulting segment bytes — are byte-identical
+                // to the old serial build; only the parse is parallelized. This lets one big LIBRARY_SOURCE
+                // artifact (`sources-android-NN`, thousands of large files) use the idle cores instead of a
+                // single thread. The batch bounds resident inputs + their entries.
+                inputs.chunked(PARALLEL_BATCH).forEach { batch ->
+                    coroutineScope {
+                        val computed = batch.map { input -> async { computeEntries(input, needBuild, timer) } }
+                        for (d in computed) {
+                            for (op in d.await()) writers.getValue(op.state).add(op.term, op.value, op.origin)
                         }
-                        timer?.record(st.ext.id, System.nanoTime() - extStart, produced)
                     }
                     yield()
                 }
@@ -647,6 +647,33 @@ class IndexServiceImpl(
             writers.values.forEach { runCatching { it.close() } }
         }
     }
+
+    /** Run every [needBuild] extension over ONE [input] — the parse-heavy, side-effect-free work that
+     *  [buildArtifact] fans out across the build dispatcher. Returns the input's entries in extension order;
+     *  the caller writes them to the SegmentWriters (in input order) on its own coroutine, so nothing here
+     *  touches shared writer state. [BuildTimer.record] is thread-safe (LongAdder), so timing is accumulated
+     *  here directly. */
+    @Suppress("UNCHECKED_CAST")
+    private fun computeEntries(input: IndexInput, needBuild: List<State>, timer: BuildTimer?): List<WriteOp> {
+        val out = ArrayList<WriteOp>()
+        for (st in needBuild) {
+            val e = st.ext as IndexExtension<Any, Any>
+            if (!e.inputFilter.accepts(input)) continue
+            val extStart = System.nanoTime()
+            var produced = 0
+            runCatching {
+                for ((k, vs) in e.index(input)) {
+                    val term = e.keyDescriptor.asTerm(k)
+                    for (v in vs) { out.add(WriteOp(st, term, v, input.origin)); produced++ }
+                }
+            }
+            timer?.record(st.ext.id, System.nanoTime() - extStart, produced)
+        }
+        return out
+    }
+
+    /** One extension entry produced for an input, pending a write into that extension's SegmentWriter. */
+    private class WriteOp(val state: State, val term: String, val value: Any, val origin: IndexOrigin)
 
     @Suppress("UNCHECKED_CAST")
     private suspend fun indexSource(
@@ -1126,6 +1153,19 @@ class IndexServiceImpl(
         override fun bytes(): ByteArray = bytes
         override fun text(): String = bytes.decodeToString()
         override fun dom(): ParsedFile? = null
+
+        // Per-file memo, matching SourceInput: every extension for this file runs on the SAME coroutine
+        // (buildArtifact fans out per INPUT, and computeEntries runs a file's extensions sequentially), so any
+        // extension sharing a structural parse via `IndexInput.shared` reuses it instead of re-parsing. The
+        // current LIBRARY_SOURCE set has a single consumer (`java.sourceDoc`), so this is parity/future-proofing
+        // rather than a live dedup; the real SDK-sources speedup is buildArtifact parsing the inputs in parallel.
+        private val memo = HashMap<String, Any?>()
+
+        @Suppress("UNCHECKED_CAST")
+        override fun <T> shared(key: String, compute: () -> T): T {
+            if (memo.containsKey(key)) return memo[key] as T
+            val v = compute(); memo[key] = v; return v
+        }
     }
 
     private class SourceInput(
@@ -1158,6 +1198,10 @@ class IndexServiceImpl(
     }
 
     companion object {
+        /** Inputs parsed in parallel per batch inside one artifact build (see [buildArtifact]). Bounds the
+         *  resident inputs + their entries while keeping the (≤8-wide) build dispatcher fed. */
+        private const val PARALLEL_BATCH = 64
+
         /** File-format sentinel for the persisted source cache (manifest + per-ext entry partitions); a
          *  mismatch (older format) is treated as a corrupt cache → discarded → full source rebuild. */
         private const val SOURCE_CACHE_MAGIC = 0x53524331 // "SRC1"

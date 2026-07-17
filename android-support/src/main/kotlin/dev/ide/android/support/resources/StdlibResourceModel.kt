@@ -70,7 +70,19 @@ object StdlibResourceModel : ResourceModel {
         attrFormats: MutableMap<String, String>,
     ) {
         val handler = ValuesHandler(file, qualifier, out, styleableAttrs, styles, attrFormats)
-        runCatching { Files.newInputStream(file).use { newSaxParser().parse(it, handler) } }
+        val before = out.size
+        val ok = runCatching { Files.newInputStream(file).use { newSaxParser().parse(it, handler) } }.isSuccess
+        if (!ok) {
+            // Malformed XML: SAX abandons the file at the first error. Drop its partial emission for this file
+            // and recover ALL declarations leniently (see [LenientValuesScan]) so a single broken values file
+            // (a stray tag while editing) doesn't wipe R.string/R.color/… completion. The structured extras
+            // (styleable attr arrays, style items) aren't recovered — the resource NAMES the R class needs are.
+            while (out.size > before) out.removeAt(out.size - 1)
+            val text = runCatching { String(Files.readAllBytes(file), Charsets.UTF_8) }.getOrNull()
+            if (text != null) LenientValuesScan.scan(file.toString(), text).forEach {
+                out += ResourceItem(it.type, it.name, source = file, qualifier = qualifier)
+            }
+        }
     }
 
     /**

@@ -21,9 +21,11 @@ import dev.ide.platform.log.Log
 import org.jetbrains.kotlin.config.CommonConfigurationKeys
 import org.jetbrains.kotlin.config.CompilerConfiguration
 import org.jetbrains.kotlin.diagnostics.impl.BaseDiagnosticsCollector
+import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.atomic.AtomicBoolean
-import java.util.concurrent.locks.ReentrantLock
-import kotlin.concurrent.withLock
+import java.util.concurrent.locks.ReentrantReadWriteLock
+import kotlin.concurrent.read
+import kotlin.concurrent.write
 
 /**
  * The single, process-wide IntelliJ platform host every language backend parses against.
@@ -54,14 +56,30 @@ import kotlin.concurrent.withLock
  */
 object IntellijPsiHost {
 
-    /** The coarse, FAIR lock every parse (Kotlin, XML, …) and every language registration serializes under.
-     *  Private + accessed only via [withParseLock] so a caller can never accidentally `synchronized(...)` on it
-     *  (which would take the object monitor, NOT this lock, and silently break mutual exclusion → SIGSEGV). */
-    private val parseLock = ReentrantLock(/* fair = */ true)
+    // ONE fair read/write lock, modeling IntelliJ's read-action concurrency:
+    //   • concurrent READS  — structural index parses ([parseStructural]/[parseConcurrent], shared read lock);
+    //   • exclusive WRITES  — full editor parse ([parse]), language registration, incremental reparse (via
+    //                         [withParseLock]/[writeAction]).
+    // Reads and writes are on the SAME lock, so an index read never overlaps a full parse / registration /
+    // reparse. Concurrent reads are safe on ART only AFTER a single-threaded prime per language (the ART
+    // concurrent-`buildTree` SIGSEGV is first-touch lazy init; validated safe post-prime on device by
+    // JavaPsiConcurrentArtSpikeTest — 300 concurrent structural parses, 0 errors, Android 8.0). Full parses
+    // stay exclusive because concurrent full parse (body materialization) is NOT validated on ART; the win is
+    // that the many structural index parses now overlap each other (and binary indexing was already parallel).
+    private val rwLock = ReentrantReadWriteLock(/* fair = */ true)
 
-    /** Run [block] holding the parse lock (fair FIFO). Reentrant. Every PSI parse/registration goes through
-     *  this so background index parsing can't starve an interactive editor parse. */
-    fun <T> withParseLock(block: () -> T): T = parseLock.withLock(block)
+    /** Exclusive action (fair). Full parse, language registration, incremental reparse (PSI mutation) all use
+     *  this, so none of them overlap a concurrent structural read. Reentrant. */
+    fun <T> withParseLock(block: () -> T): T = rwLock.write(block)
+
+    /** Alias of [withParseLock] — the exclusive (write) action, by its read/write-model name. */
+    fun <T> writeAction(block: () -> T): T = rwLock.write(block)
+
+    /** Shared (concurrent) read action — structural index parses run concurrently under it. */
+    fun <T> readAction(block: () -> T): T = rwLock.read(block)
+
+    /** Languages already primed (one single-threaded full parse) so their concurrent reads are ART-safe. */
+    private val primedLanguages = ConcurrentHashMap.newKeySet<String>()
 
     // Held for the JVM lifetime; createForProduction roots an application-level environment kept alive.
     private val disposable = Disposer.newDisposable("intellij-psi-host")
@@ -204,6 +222,36 @@ object IntellijPsiHost {
                 file
             }
         }
+
+    /**
+     * The light, CONCURRENT path for INDEXING: parse [text] and run [extract] over the [PsiFile] under a
+     * SHARED read lock (so many index parses overlap), WITHOUT [forceFullParse]. An index reads only the
+     * declaration structure (types/methods/fields/imports/supertypes), never statement bodies, and Java/Kotlin
+     * bodies are lazy (`CODE_BLOCK` reparseable) — skipping full materialization avoids parsing every method
+     * body (the bulk of the cost, worst for library source like the JDK `src.zip`).
+     *
+     * [extract] MUST return plain data — no PSI element may escape, because the tree isn't fully materialized
+     * and must not be traversed after the read lock is released. Concurrent `buildTree` here is ART-safe only
+     * after a single-threaded PRIME of [language] (one full parse forcing first-touch lazy init); this method
+     * does that prime once per language under the write lock before switching the language to the concurrent
+     * read path. Full parses / registration / reparse take the write lock, so none overlap these reads.
+     */
+    fun <T> parseStructural(name: String, language: Language, text: CharSequence, extract: (PsiFile) -> T): T {
+        if (language.id !in primedLanguages) {
+            // First parse of this language: prime lazy init single-threaded (exclusive) before any concurrent
+            // read. The double-check under the write lock makes concurrent first callers prime exactly once.
+            writeAction {
+                if (primedLanguages.add(language.id)) {
+                    forceFullParse(fileFactory.createFileFromText(name, language, text))
+                }
+            }
+        }
+        return readAction { extract(fileFactory.createFileFromText(name, language, text)) }
+    }
+
+    /** Alias of [parseStructural] — the concurrent structural read path, by its parallelism-focused name. */
+    fun <T> parseConcurrent(name: String, language: Language, text: CharSequence, extract: (PsiFile) -> T): T =
+        parseStructural(name, language, text, extract)
 
     /**
      * Materialize [file]'s entire AST now, under [parseLock]. `createFileFromText`/incremental reparse leave

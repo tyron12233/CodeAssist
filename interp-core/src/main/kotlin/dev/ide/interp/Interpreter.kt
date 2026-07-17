@@ -138,7 +138,15 @@ class Interpreter(
         declaredArity(callee)?.let { functions["${callee.displayName}/$it"] }
             ?: functions["${callee.displayName}/$argCount"]
 
-    fun call(fn: ResolvedFunction, args: List<Any?>): Any? {
+    fun call(fn: ResolvedFunction, args: List<Any?>): Any? = invokeFunction(fn, NO_RECEIVER, args)
+
+    /** Marker for [invokeFunction]: no receiver to bind (a plain call), distinct from a genuine `null` receiver
+     *  (a nullable extension receiver, `fun String?.f()` called on null). */
+    private val NO_RECEIVER = Any()
+
+    /** Run [fn]'s body with [args] bound to its parameters and, when [receiver] is not [NO_RECEIVER], the
+     *  receiver value bound to its [ResolvedFunction.receiverSlot] (an extension receiver / member `this`). */
+    private fun invokeFunction(fn: ResolvedFunction, receiver: Any?, args: List<Any?>): Any? {
         // A function with unsupported nodes is refused outright — UNLESS gap tolerance is on (the preview path),
         // where it runs and skips the gaps (see [tolerateGaps]).
         if (!tolerateGaps && !fn.isComplete) {
@@ -161,6 +169,7 @@ class Interpreter(
         if (f.depth == 1) f.deadlineNanos = if (SuspendContext.isActive) 0L else System.nanoTime() + MAX_RENDER_NANOS
         else checkDeadline(f)
         val env = Env()
+        if (receiver !== NO_RECEIVER) fn.receiverSlot?.let { env.define(it, receiver) }
         bindParams(env, fn.params, args)
         return try {
             eval(fn.body, env)
@@ -361,6 +370,19 @@ class Interpreter(
                 else -> v
             }
         }
+        is RNode.ClassLiteral -> {
+            val recvNode = node.receiver
+            val cls: Class<*> = if (recvNode != null) {
+                (eval(recvNode, env) ?: throw InterpreterException("cannot take `::class` of a null value")).javaClass
+            } else {
+                // Try the resolved type then its supertypes; a project-source type isn't on the preview
+                // classpath, so a reflectable supertype stands in (the value is only ever a class token).
+                node.typeCandidates.firstNotNullOfOrNull { loadClassAcross(it, initialize = false, preferred = classLoader) }
+                    ?: if (tolerateGaps) Any::class.java
+                    else throw InterpreterException("cannot resolve class literal `${node.typeCandidates.firstOrNull() ?: "?"}::class` (not on the preview classpath)")
+            }
+            if (node.asJava) cls else cls.kotlin
+        }
         is RNode.Throw -> {
             val v = eval(node.value, env)
             if (v is Throwable) throw v else throw KotlinThrow(v)
@@ -446,6 +468,18 @@ class Interpreter(
             } else {
                 invoke()
             }
+        }
+        // A project-source top-level EXTENSION function is interpreted (its body is available). The extension
+        // receiver value is bound to the function's receiver slot; the value args to its parameters. A LIBRARY
+        // extension carries its `…Kt` facade owner and is reflected by the dispatcher instead — only a Source
+        // extension reaches here (without this it fell through to reflection → "extension has no owner").
+        if (callee is ResolvedCallable.Source && call.dispatch == DispatchKind.EXTENSION) {
+            InterpProfile.count("src")
+            val target = sourceFunctionFor(callee, call.args.size)
+                ?: throw InterpreterException("no source extension `${callee.displayName}/${call.args.size}`")
+            val recv = call.receiver?.let { eval(it, env) }
+            val argv = reorderNamedArgs(target.params.map { it.name }, call.args, call.args.map { eval(it.value, env) })
+            return invokeFunction(target, recv, argv)
         }
         // A handful of stdlib functions are `@kotlin.internal.InlineOnly` — they have NO callable JVM method
         // (they exist only to be inlined), so the reflective dispatcher can never find them. We execute them as

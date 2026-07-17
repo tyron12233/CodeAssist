@@ -8,6 +8,8 @@ import dev.ide.lang.dom.TextRange
 import dev.ide.lang.incremental.DocumentEdit
 import dev.ide.lang.jdt.JdtSourceAnalyzer
 import dev.ide.lang.jdt.rename.JdtRename
+import dev.ide.lang.java.JavaSourceAnalyzer
+import dev.ide.model.Module
 import java.nio.file.Files
 import java.nio.file.Path
 import kotlin.io.path.readText
@@ -22,14 +24,45 @@ import kotlin.io.path.writeText
  */
 internal class RefactorService(private val ctx: EngineContext) {
 
+    /** A rename target distilled from either backend: name/kind for the UI, the flags the orchestration needs,
+     *  and the opaque backend-specific [token] fed back to [renameRefsIn]. */
+    private data class RenameHit(
+        val oldName: String, val kind: String, val fileLocal: Boolean, val isType: Boolean, val token: Any,
+    )
+
+    /** The rename target under [offset] in [file]/[text], via whichever Java backend edits it (JDT or the
+     *  IntelliJ-PSI backend), or null when not renameable. */
+    private fun renameHitAt(module: Module, file: Path, text: String, offset: Int): RenameHit? {
+        val vf = ctx.store.vfs.fileFor(file)
+        val name = file.fileName?.toString() ?: "Renamed.java"
+        return when (val a = ctx.analyzerFor(module, LanguageId("java"))) {
+            is JdtSourceAnalyzer -> JdtRename.targetAt(a.parse(vf, text), offset)
+                ?.let { RenameHit(it.oldName, it.kind, it.fileLocal, it.isType, it) }
+            is JavaSourceAnalyzer -> a.renameTargetAt(name, text, offset)
+                ?.let { RenameHit(it.oldName, it.kind, it.fileLocal, it.isType, it) }
+            else -> null
+        }
+    }
+
+    /** Reference ranges in [file]/[text] for [token] (from [renameHitAt]), via the file's Java backend. */
+    private fun renameRefsIn(module: Module, file: Path, text: String, token: Any): List<TextRange> {
+        val vf = ctx.store.vfs.fileFor(file)
+        val name = file.fileName?.toString() ?: "Renamed.java"
+        return when (val a = ctx.analyzerFor(module, LanguageId("java"))) {
+            is JdtSourceAnalyzer ->
+                (token as? dev.ide.lang.jdt.rename.RenameTarget)?.let { JdtRename.referencesIn(a.parse(vf, text), it) } ?: emptyList()
+            is JavaSourceAnalyzer ->
+                (token as? dev.ide.lang.java.rename.JavaRenameTarget)?.let { a.renameReferencesIn(name, text, it) } ?: emptyList()
+            else -> emptyList()
+        }
+    }
+
     /** The rename target under [offset] in [file]'s buffer (old name + kind), or null when not renameable. */
     fun prepareRename(file: Path, text: String, offset: Int): RenameInfo? {
         if (!file.toString().endsWith(".java") || ctx.analysisDisabled(file)) return null
         val module = ctx.moduleForFile(file) ?: return null
-        val analyzer = ctx.analyzerFor(module, LanguageId("java")) as? JdtSourceAnalyzer ?: return null
         return try {
-            JdtRename.targetAt(analyzer.parse(ctx.store.vfs.fileFor(file), text), offset)
-                ?.let { RenameInfo(it.oldName, it.kind) }
+            renameHitAt(module, file, text, offset)?.let { RenameInfo(it.oldName, it.kind) }
         } catch (e: LinkageError) {
             ctx.markAnalysisUnavailable(ctx.languageFor(file)); null
         }
@@ -47,22 +80,19 @@ internal class RefactorService(private val ctx: EngineContext) {
         if (!ctx.isValidJavaIdentifier(name)) return RenameOutcome(false, "'$newName' is not a valid Java identifier.")
         if (ctx.analysisDisabled(file)) return RenameOutcome(false, "Java analysis is unavailable.")
         val module = ctx.moduleForFile(file) ?: return RenameOutcome(false, "This file is not in a source module.")
-        val analyzer = ctx.analyzerFor(module, LanguageId("java")) as? JdtSourceAnalyzer
-            ?: return RenameOutcome(false, "Rename is only supported for Java.")
         val fileAbs = file.toAbsolutePath().normalize()
 
-        val target: dev.ide.lang.jdt.rename.RenameTarget
+        val target: RenameHit
         val editsByPath = LinkedHashMap<Path, List<DocumentEdit>>()
         var occurrences = 0
         try {
-            val parsed = analyzer.parse(ctx.store.vfs.fileFor(file), text)
-            target = JdtRename.targetAt(parsed, offset)
+            target = renameHitAt(module, file, text, offset)
                 ?: return RenameOutcome(false, "Place the caret on a symbol to rename.")
             if (name == target.oldName) return RenameOutcome(false, "The new name is the same as the current one.")
 
             fun editsFor(ranges: List<TextRange>) = ranges.map { DocumentEdit(it.start, it.end - it.start, name) }
             if (target.fileLocal) {
-                val ranges = JdtRename.referencesIn(parsed, target)
+                val ranges = renameRefsIn(module, file, text, target.token)
                 if (ranges.isNotEmpty()) {
                     editsByPath[fileAbs] = editsFor(ranges); occurrences += ranges.size
                 }
@@ -71,12 +101,8 @@ internal class RefactorService(private val ctx: EngineContext) {
                     val candAbs = cand.toAbsolutePath().normalize()
                     val candText = ctx.overlayText(candAbs) ?: runCatching { cand.readText() }.getOrNull() ?: continue
                     if (!candText.contains(target.oldName)) continue // cheap pre-filter before the binding parse
-                    val candParsed = if (candAbs == fileAbs) parsed else {
-                        val m = ctx.moduleForFile(cand) ?: continue
-                        val a = ctx.analyzerFor(m, LanguageId("java")) as? JdtSourceAnalyzer ?: continue
-                        a.parse(ctx.store.vfs.fileFor(cand), candText)
-                    }
-                    val ranges = JdtRename.referencesIn(candParsed, target)
+                    val m = ctx.moduleForFile(cand) ?: continue
+                    val ranges = renameRefsIn(m, cand, candText, target.token)
                     if (ranges.isNotEmpty()) {
                         editsByPath[candAbs] = editsFor(ranges); occurrences += ranges.size
                     }

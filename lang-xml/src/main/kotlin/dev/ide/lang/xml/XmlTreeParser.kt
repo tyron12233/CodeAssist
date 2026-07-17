@@ -17,4 +17,11 @@ class XmlTreeParser(private val snapshot: DocumentSnapshot) {
 
     fun parse(): Pair<XmlNode, List<Diagnostic>> =
         PsiXmlProjection.parse(snapshot.file.path, snapshot.text)
+
+    companion object {
+        /** Parse raw [text] (named [path]) with the error-tolerant XML PSI, returning just the DOM root — for
+         *  callers that have a string, not a [DocumentSnapshot] (e.g. recovering resource declarations from a
+         *  malformed `values` file). PSI always yields a whole-file tree, so this never throws on broken XML. */
+        fun parse(path: String, text: CharSequence): XmlNode = PsiXmlProjection.parse(path, text).first
+    }
 }

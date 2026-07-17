@@ -35,19 +35,29 @@ object MavenClasspath {
      */
     fun dedupeForAndroidDex(jars: List<java.nio.file.Path>): List<java.nio.file.Path> {
         val parsed = jars.map { path -> val c = dexCoordinate(path); ParsedJar(path, c?.first, c?.second) }
-        // Per artifact (keyed by its exact name, no platform-suffix folding), the newest version wins.
-        val winner = HashMap<String, String>()
+        // Per artifact (keyed by its exact name, no platform-suffix folding), the newest version wins — but
+        // preferring jars that EXIST on disk. A missing jar contributes no classes to the dex, so it must never
+        // win an artifact's dex slot and evict a real, present version: the IDE's bundled
+        // `.platform/kotlin-stdlib-<v>.jar` failing to extract would otherwise supersede the project's real
+        // Maven `kotlin-stdlib` (newest-wins), leaving kotlin-stdlib un-dexed — the runtime
+        // `NoClassDefFoundError: kotlin/collections/CollectionsKt` on launch (Firebase init). Only when NO
+        // version of an artifact is present does the newest (still-missing) one win, preserving prior behavior.
+        val winnerExisting = HashMap<String, String>()
+        val winnerAny = HashMap<String, String>()
         for (j in parsed) {
             val base = j.base ?: continue
-            val cur = winner[base]
-            if (cur == null || isNewer(j.version!!, cur)) winner[base] = j.version!!
+            val v = j.version!!
+            fun bump(m: HashMap<String, String>) { val cur = m[base]; if (cur == null || isNewer(v, cur)) m[base] = v }
+            bump(winnerAny)
+            if (java.nio.file.Files.exists(j.path)) bump(winnerExisting)
         }
         val emitted = HashSet<String>()
         val out = ArrayList<java.nio.file.Path>(jars.size)
         for (j in parsed) {
-            if (j.base == null) { out.add(j.path); continue }     // no coordinate (dir / odd path) → keep
-            if (j.version != winner[j.base]) continue              // a superseded version → drop
-            if (emitted.add(j.base)) out.add(j.path)              // the winner; first path of it wins
+            if (j.base == null) { out.add(j.path); continue }             // no coordinate (dir / odd path) → keep
+            val win = winnerExisting[j.base] ?: winnerAny[j.base] ?: continue
+            if (j.version != win) continue                                // a superseded (or missing) version → drop
+            if (emitted.add(j.base)) out.add(j.path)                     // the winner; first path of it wins
         }
         return out
     }

@@ -40,19 +40,19 @@ import dev.ide.lang.completion.COMPLETION_CONTRIBUTOR_EP
 import dev.ide.lang.completion.COMPLETION_WEIGHER_EP
 import dev.ide.lang.completion.CompletionContribution
 import dev.ide.lang.completion.StatsWeigher
-import dev.ide.lang.jdt.JdtLanguageBackend
+import dev.ide.lang.java.JavaLanguageBackend
 import dev.ide.lang.jdt.analysis.JdtAnalysisSupport
-import dev.ide.lang.jdt.index.JavaClassLocatorIndex
-import dev.ide.lang.jdt.index.JavaClassNamesIndex
-import dev.ide.lang.jdt.index.JavaMainIndex
-import dev.ide.lang.jdt.index.JavaMembersByOwnerIndex
-import dev.ide.lang.jdt.index.JavaMembersIndex
-import dev.ide.lang.jdt.index.JavaPackageTypesIndex
-import dev.ide.lang.jdt.index.JavaPackagesIndex
-import dev.ide.lang.jdt.index.JavaSourceAnnotationIndex
-import dev.ide.lang.jdt.index.JavaSourceDocIndex
-import dev.ide.lang.jdt.index.JavaSourceSubtypeIndex
-import dev.ide.lang.jdt.index.JavaSourceSymbolsIndex
+import dev.ide.lang.java.index.JavaClassLocatorIndex
+import dev.ide.lang.java.index.JavaClassNamesIndex
+import dev.ide.lang.java.index.JavaMainIndex
+import dev.ide.lang.java.index.JavaMembersByOwnerIndex
+import dev.ide.lang.java.index.JavaMembersIndex
+import dev.ide.lang.java.index.JavaPackageTypesIndex
+import dev.ide.lang.java.index.JavaPackagesIndex
+import dev.ide.lang.java.index.JavaSourceAnnotationIndex
+import dev.ide.lang.java.index.JavaSourceDocIndex
+import dev.ide.lang.java.index.JavaSourceSubtypeIndex
+import dev.ide.lang.java.index.JavaSourceSymbolsIndex
 import dev.ide.lang.kotlin.KotlinLanguageBackend
 import dev.ide.lang.kotlin.analysis.KotlinAnalysisSupport
 import dev.ide.lang.kotlin.compile.ComposeCompilerPlugin
@@ -96,9 +96,9 @@ import dev.ide.plugin.impl.ActionManager
  * 1:1 to the [dev.ide.platform.PluginId] it contributed under before, so the resolved registry is identical.
  *
  * What used to be implicit registration *sequencing* is now declared load-order:
- *  - `jdt-language` has no dependency and therefore loads first, so `JdtLanguageBackend` is index 0 on
- *    [LANGUAGE_BACKEND_EP] — the resolution fallback `backendFor` relies on (the other language + analysis
- *    plugins `dependsOn` it).
+ *  - `jdt-language` (the `.java` file type + ecj compiler) has no dependency and loads first; the language
+ *    backends `dependsOn` it. `java-psi-language` loads next, so `JavaLanguageBackend` is index 0 on
+ *    [LANGUAGE_BACKEND_EP] — the resolution fallback `backendFor` relies on. Both are essential.
  *
  * Contributions that must reach the currently-open project (synthetic-R, the acceptance-stats weigher, the XML
  * resource host, the app-compat action, the command actions) take [ApplicationEnvironment] and read
@@ -108,6 +108,7 @@ object BuiltInPlugins {
     fun assemble(env: ApplicationEnvironment, codecs: FacetCodecRegistry): List<Plugin> = listOf(
         PlatformPlugin(),
         JdtLanguagePlugin(),
+        JavaPsiLanguagePlugin(),
         XmlLanguagePlugin(),
         KotlinLanguagePlugin(),
         JavaSupportPlugin(),
@@ -117,6 +118,7 @@ object BuiltInPlugins {
         CompletionBuiltinsPlugin(env),
         IndexingPlugin(),
         JdtAnalysisPlugin(),
+        JavaPsiAnalysisPlugin(),
         KotlinAnalysisPlugin(),
         XmlAnalysisPlugin(env),
         AndroidXmlPlugin(env),
@@ -147,16 +149,49 @@ private class PlatformPlugin : Plugin {
     }
 }
 
-/** Java (JDT) language backend — registered first so it is the `backendFor` fallback. */
+/**
+ * The `.java` file-type owner. JDT is no longer the `.java` EDITOR backend (that is [JavaPsiLanguagePlugin]);
+ * ecj lives on as the build compiler ([dev.ide.lang.jdt.build] / `:jvm-build`) and as the `.java` compile-level
+ * [dev.ide.analysis.DiagnosticProvider] + quick-fixes ([JdtAnalysisPlugin]). This plugin just registers the
+ * `.java → java` file-type association (kept here as the historical/essential owner). It stays first so it
+ * loads before the language backends that `dependsOn` it.
+ */
 private class JdtLanguagePlugin : Plugin {
     override val manifest = PluginManifest(
-        id = "jdt-language", name = "Java Language", essential = true,
-        description = "Java editing via the Eclipse JDT backend; also the resolution fallback other backends build on.",
+        id = "jdt-language", name = "Java (file type + compiler)", essential = true,
+        description = "Owns the .java file type; ecj remains the Java build compiler and compile-level diagnostic provider.",
     )
 
     override fun register(reg: PluginRegistration) {
-        reg.register(LANGUAGE_BACKEND_EP, JdtLanguageBackend())
         reg.register(FILE_TYPE_EP, FileTypeMapping(listOf(".java"), LanguageId("java")))
+    }
+}
+
+/**
+ * The IntelliJ-PSI Java backend (`:lang-java`) — THE `.java` editor backend: IntelliJ's Java parser + native
+ * resolution/inference for completion, navigation, folding/highlight/signature/inlay, rename, and
+ * unresolved-symbol diagnostics. It is the only backend claiming `LanguageId("java")`, so `backendFor("java")`
+ * resolves to it and the module's `ANALYZER_JAVA` builds a `JavaSourceAnalyzer`. `dependsOn` jdt-language so
+ * the `.java` file type + the ecj diagnostic/quick-fix providers are registered first. `essential` because it
+ * is the sole Java editor backend and the first registrant on [LANGUAGE_BACKEND_EP] — the resolution fallback
+ * `backendFor` relies on — so it must not be disablable.
+ *
+ * Formatting is covered at the host level (`LanguageFeatureService` reuses JDT's `CodeFormatter` for `.java`).
+ * Not-yet-covered vs the old JDT editor (see docs): compile-level diagnostics beyond unresolved references
+ * (type mismatch, missing return, …) — those still come from the ecj `CompilerDiagnosticProvider` only when it
+ * can reconcile via a JDT analyzer, so they are currently absent under this backend.
+ */
+private class JavaPsiLanguagePlugin : Plugin {
+    override val manifest = PluginManifest(
+        id = "java-psi-language",
+        name = "Java Language (IntelliJ PSI)",
+        essential = true,
+        description = "Java editing via IntelliJ's Java PSI parser and native resolution/inference (the .java editor backend).",
+        dependsOn = listOf("jdt-language"),
+    )
+
+    override fun register(reg: PluginRegistration) {
+        reg.register(LANGUAGE_BACKEND_EP, JavaLanguageBackend())
     }
 }
 
@@ -353,6 +388,25 @@ private class JdtAnalysisPlugin : Plugin {
 
     override fun register(reg: PluginRegistration) {
         reg.contributeVia { ext, pid -> JdtAnalysisSupport.register(ext, pid) }
+    }
+}
+
+/**
+ * The IntelliJ-PSI Java backend's native quick-fixes, keyed on its own diagnostic codes (type mismatch →
+ * change variable type; unhandled exception → add to `throws` / surround with try-catch). `dependsOn`
+ * java-psi-language (the backend that emits those codes). The JDT "Add import" fix (keyed on the neutral
+ * `UNRESOLVED_REFERENCE`) still fires for this backend via jdt-analysis; this adds the ecj-free rest.
+ */
+private class JavaPsiAnalysisPlugin : Plugin {
+    override val manifest = PluginManifest(
+        id = "java-psi-analysis",
+        name = "Java Analysis (IntelliJ PSI)",
+        description = "Native Java quick-fixes for the IntelliJ-PSI backend (type mismatch, unhandled exception).",
+        dependsOn = listOf("java-psi-language"),
+    )
+
+    override fun register(reg: PluginRegistration) {
+        reg.contributeVia { ext, pid -> dev.ide.lang.java.analysis.JavaPsiAnalysisSupport.register(ext, pid) }
     }
 }
 

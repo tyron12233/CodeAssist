@@ -86,6 +86,7 @@ import dev.ide.lang.AnalysisResult
 import dev.ide.lang.FILE_TYPE_EP
 import dev.ide.lang.FileTypeMapping
 import dev.ide.lang.LANGUAGE_BACKEND_EP
+import dev.ide.lang.JvmIndexScopeProvider
 import dev.ide.lang.LanguageBackend
 import dev.ide.lang.LanguageId
 import dev.ide.lang.SourceAnalyzer
@@ -105,18 +106,18 @@ import dev.ide.lang.jdt.JdtLanguageBackend
 import dev.ide.lang.jdt.JdtSourceAnalyzer
 import dev.ide.lang.jdt.compile.JdtBatchCompiler
 import dev.ide.lang.jdt.context.ModuleCompilationContext
-import dev.ide.lang.jdt.index.JavaClassLocatorIndex
-import dev.ide.lang.jdt.index.JavaClassNamesIndex
-import dev.ide.lang.jdt.index.JavaMainIndex
-import dev.ide.lang.jdt.index.JavaMembersByOwnerIndex
-import dev.ide.lang.jdt.index.JavaMembersIndex
-import dev.ide.lang.jdt.index.JavaPackageTypesIndex
-import dev.ide.lang.jdt.index.JavaPackagesIndex
-import dev.ide.lang.jdt.index.JavaSourceAnnotationIndex
-import dev.ide.lang.jdt.index.JavaSourceDocIndex
-import dev.ide.lang.jdt.index.JavaSourceIndexer
-import dev.ide.lang.jdt.index.JavaSourceSubtypeIndex
-import dev.ide.lang.jdt.index.JavaSourceSymbolsIndex
+import dev.ide.lang.java.index.JavaClassLocatorIndex
+import dev.ide.lang.java.index.JavaClassNamesIndex
+import dev.ide.lang.java.index.JavaMainIndex
+import dev.ide.lang.java.index.JavaMembersByOwnerIndex
+import dev.ide.lang.java.index.JavaMembersIndex
+import dev.ide.lang.java.index.JavaPackageTypesIndex
+import dev.ide.lang.java.index.JavaPackagesIndex
+import dev.ide.lang.java.index.JavaSourceAnnotationIndex
+import dev.ide.lang.java.index.JavaSourceDocIndex
+import dev.ide.lang.java.index.JavaSourceIndexer
+import dev.ide.lang.java.index.JavaSourceSubtypeIndex
+import dev.ide.lang.java.index.JavaSourceSymbolsIndex
 import dev.ide.lang.jdt.rename.JdtRename
 import dev.ide.lang.jdt.synthetic.SyntheticJavaSource
 import dev.ide.lang.kotlin.KotlinLanguageBackend
@@ -900,7 +901,9 @@ class IdeServices private constructor(
     }
 
     private fun buildIndexScope(): IndexScope {
-        val jdt = modules().map { analyzerFor(it) }.filterIsInstance<JdtSourceAnalyzer>()
+        // Read the index roots through the neutral JvmIndexScopeProvider, not a concrete analyzer type, so the
+        // scope survives swapping the .java editor backend (JDT ↔ IntelliJ-PSI); both analyzers implement it.
+        val jdt = modules().map { analyzerFor(it) }.filterIsInstance<JvmIndexScopeProvider>()
         val libraryJars =
             (jdt.flatMap { it.classpathJarPaths } + listOfNotNull(BundledKotlinStdlib.jar())).distinct()
         return IndexScope(
@@ -1033,15 +1036,30 @@ class IdeServices private constructor(
             .filter { (_, m) -> moduleHasKotlin(m) }
         if (kotlinModules.isEmpty()) return
 
-        if (store.workspace.libraryTable.byName(libName) == null) {
-            val jar = BundledKotlinStdlib.extractTo(store.rootPath.resolve(".platform"))
-                ?: BundledKotlinStdlib.hostJar() ?: return
-            store.workspace.libraryTable.create(libName).apply {
-                kind = LibraryKind.JAR
-                addClassesRoot(store.vfs.fileFor(jar))
-                commit()
+        // Ensure the bundled jar is actually on disk AND the `kotlin-stdlib` library points at it. [extractTo]
+        // is idempotent — it reuses a present current-version copy and RE-EXTRACTS a missing one — so a
+        // `.platform` that was cleared, or a CodeAssist update that renamed the jar to a new version, heals
+        // here instead of leaving a persisted classpath entry that dangles ("non-existent location:
+        // …/kotlin-stdlib-<v>.jar"). A dangling entry silently drops the stdlib from the compile/dex classpaths
+        // (the runtime `NoClassDefFoundError: kotlin/collections/CollectionsKt`); previously the library was
+        // created ONLY when absent and never re-verified, so a since-deleted jar was never re-extracted.
+        val existing = store.workspace.libraryTable.byName(libName)
+        val jar = BundledKotlinStdlib.extractTo(store.rootPath.resolve(".platform")) ?: BundledKotlinStdlib.hostJar()
+        if (jar != null) {
+            val want = store.vfs.fileFor(jar)
+            val healthy = existing != null && existing.classesRoots.map { it.path } == listOf(want.path) &&
+                runCatching { Files.exists(Paths.get(want.path)) }.getOrDefault(false)
+            if (!healthy) {
+                store.workspace.libraryTable.create(libName).apply {
+                    kind = LibraryKind.JAR
+                    addClassesRoot(want)
+                    commit()
+                }
             }
+        } else if (existing == null) {
+            return // no bundled resource, no host jar, and nothing declared yet → can't provision
         }
+        // else: extraction unavailable but a library already exists — leave it untouched (don't clobber it).
 
         var changed = false
         for ((project, modules) in kotlinModules.groupBy({ it.first }, { it.second })) {
@@ -1568,6 +1586,29 @@ class IdeServices private constructor(
         return modules().firstOrNull { module -> sourceRoots(module).any { target.startsWith(it) } }
     }
 
+    /** Transitive subtypes of [superFqn] from the workspace subtype index (binary + Java/Kotlin source), for
+     *  `new`-position completion. Bounded BFS (budget-capped, visited-guarded) over [dev.ide.index.SubtypeIndex];
+     *  the index is keyed by simple name, so a same-named unrelated type may slip in (harmless for completion). */
+    private fun javaSubtypesOf(superFqn: String): List<dev.ide.lang.java.completion.JavaCompletion.IndexedType> {
+        val out = LinkedHashMap<String, dev.ide.lang.java.completion.JavaCompletion.IndexedType>()
+        val seen = HashSet<String>().apply { add(superFqn) }
+        val queue = ArrayDeque<String>().apply { add(superFqn) }
+        var budget = 300
+        while (queue.isNotEmpty() && budget-- > 0) {
+            val key = dev.ide.index.SubtypeIndex.key(queue.removeFirst())
+            for (id in dev.ide.index.SubtypeIndex.ALL) {
+                val hits = runCatching { indexService.exact<dev.ide.index.SubtypeValue>(id, key) }.getOrNull() ?: emptySequence()
+                for (v in hits) {
+                    if (seen.add(v.fqn)) {
+                        out[v.fqn] = dev.ide.lang.java.completion.JavaCompletion.IndexedType(v.fqn, v.kind)
+                        queue.add(v.fqn)
+                    }
+                }
+            }
+        }
+        return out.values.toList()
+    }
+
     /** The per-(module, language) analyzer, resolved (and cached) as a MODULE-scoped service. */
     private fun analyzerFor(
         module: Module, language: LanguageId = LanguageId("java")
@@ -1582,6 +1623,25 @@ class IdeServices private constructor(
             )
         ).also {
             when (it) {
+                is dev.ide.lang.java.JavaSourceAnalyzer -> {
+                    // The IntelliJ-PSI Java backend (when `.java` is routed to it): give it the workspace index
+                    // for unimported-type / auto-import completion + go-to-symbol, plus JDK/Android source
+                    // archives for parameter names + javadoc (same composition as the JDT branch).
+                    it.indexService = indexService
+                    // Synthetic classes (Android R/BuildConfig, ViewBinding, …) + the open-buffer overlay, served
+                    // by the env's injected element finder so the facade resolves them like real types. This is
+                    // what the JDT backend gets via its own syntheticProvider/overlayProvider seams.
+                    it.syntheticClassProvider = { kotlinSyntheticClasses(module) }
+                    it.overlayProvider = ::overlay
+                    // `new <caret>` subtype completion: a supertype FQN → its concrete implementations, via a
+                    // bounded BFS over the subtype index (same index find-implementations uses).
+                    it.subtypeIndexQuery = ::javaSubtypesOf
+                    sdkManager.jdkSourceOverride()?.let { zip -> it.addSourceJars(listOf(zip)) }
+                    module.facets.get(AndroidFacet.KEY)?.let { facet ->
+                        sdkManager.androidSourcesDir(facet.compileSdk)?.let { dir -> it.addSourceDirs(listOf(dir)) }
+                    }
+                }
+
                 is JdtSourceAnalyzer -> {
                     it.overlayProvider = ::overlay
                     it.indexService = indexService

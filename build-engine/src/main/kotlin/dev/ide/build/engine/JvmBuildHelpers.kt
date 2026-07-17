@@ -8,8 +8,11 @@ import dev.ide.model.Module
 import java.nio.file.Files
 import java.nio.file.Path
 import java.nio.file.Paths
+import java.util.jar.Attributes
 import java.util.jar.JarEntry
+import java.util.jar.JarFile
 import java.util.jar.JarOutputStream
+import java.util.jar.Manifest
 import java.util.stream.Collectors
 
 /**
@@ -50,16 +53,30 @@ fun levelOf(level: LanguageLevel): String = when (level) {
 }
 
 /** Jar [classesDir], optionally rewriting each entry's bytes via [transform] (entryName, bytes) — used by
- *  the `jar` lifecycle task. The default identity transform is plain jarring. */
-internal fun writeJar(classesDir: Path, jarPath: Path, transform: (String, ByteArray) -> ByteArray = { _, b -> b }) =
-    writeJar(listOf(classesDir), jarPath, transform)
+ *  the `jar` lifecycle task. The default identity transform is plain jarring. [mainClass], when set, becomes
+ *  the manifest's `Main-Class` so the jar runs standalone (`java -jar`). */
+internal fun writeJar(classesDir: Path, jarPath: Path, mainClass: String? = null, transform: (String, ByteArray) -> ByteArray = { _, b -> b }) =
+    writeJar(listOf(classesDir), jarPath, mainClass, transform)
 
-/** Jar one or more [classesDirs] (Java + Kotlin output) into [jarPath]. Later dirs win on a name clash; each
- *  entry's bytes pass through [transform]. Directory entries and duplicate names are dropped. */
-internal fun writeJar(classesDirs: List<Path>, jarPath: Path, transform: (String, ByteArray) -> ByteArray = { _, b -> b }) {
+/**
+ * Jar one or more [classesDirs] (Java + Kotlin output) into [jarPath]. Later dirs win on a name clash; each
+ * entry's bytes pass through [transform]. Directory entries and duplicate names are dropped.
+ *
+ * A `META-INF/MANIFEST.MF` is ALWAYS written (as the archive's leading entry) — a jar with no manifest can't
+ * be `java -jar`'d ("no main manifest attribute in <jar>") and an entry-less jar throws `ZipException: No
+ * entries` on ART. [mainClass], when non-blank, is recorded as the manifest's `Main-Class` so the built jar is
+ * directly runnable outside the app.
+ */
+internal fun writeJar(classesDirs: List<Path>, jarPath: Path, mainClass: String? = null, transform: (String, ByteArray) -> ByteArray = { _, b -> b }) {
     jarPath.parent?.let { Files.createDirectories(it) }
-    val seen = HashSet<String>()
-    JarOutputStream(Files.newOutputStream(jarPath)).use { jos ->
+    val manifest = Manifest().apply {
+        mainAttributes[Attributes.Name.MANIFEST_VERSION] = "1.0"
+        mainClass?.takeIf { it.isNotBlank() }?.let { mainAttributes[Attributes.Name.MAIN_CLASS] = it }
+    }
+    // The manifest is emitted by the JarOutputStream(out, manifest) constructor; guard against a second copy
+    // arriving from a class dir (none normally do, but a stray one would be a duplicate-entry error).
+    val seen = hashSetOf(JarFile.MANIFEST_NAME)
+    JarOutputStream(Files.newOutputStream(jarPath), manifest).use { jos ->
         for (dir in classesDirs.filter { Files.isDirectory(it) }) {
             Files.walk(dir).use { stream ->
                 stream.filter { Files.isRegularFile(it) }.sorted().forEach { f ->
@@ -71,16 +88,5 @@ internal fun writeJar(classesDirs: List<Path>, jarPath: Path, transform: (String
                 }
             }
         }
-        jos.ensureNonEmpty(seen.isEmpty())
     }
-}
-
-/** A [JarOutputStream] closed with ZERO entries throws `ZipException: No entries` on ART (the desktop JVM
- *  writes a valid empty archive). A module/scope with no class files would hit that, so write a benign
- *  `META-INF/MANIFEST.MF` when [empty] — the jar stays valid everywhere and dexes/loads to nothing. */
-private fun JarOutputStream.ensureNonEmpty(empty: Boolean) {
-    if (!empty) return
-    putNextEntry(JarEntry("META-INF/MANIFEST.MF"))
-    write("Manifest-Version: 1.0\r\n\r\n".toByteArray())
-    closeEntry()
 }

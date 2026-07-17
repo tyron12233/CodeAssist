@@ -131,8 +131,19 @@ internal class BuildService(private val ctx: EngineContext) : Disposable {
     // the Android SDK for an android module, empty on desktop → host JRE) so a Java/Kotlin console app never
     // compiles against android.jar. Plus the incremental Kotlin compiler, compiler plugins, source generators.
     private val buildSystem = JavaBuildSystem(
-        { ctx.bootClasspathFor(it) }, incrementalKotlin, kotlinCompilerPlugins, sourceGenerators
+        { ctx.bootClasspathFor(it) }, incrementalKotlin, kotlinCompilerPlugins, sourceGenerators,
+        mainClassFor = { jarMainClass(it) },
     )
+
+    /** The `Main-Class` for [module]'s packaged jar — the SAME entry point the Run action launches
+     *  ([runnableMainFor]: the module-settings main-class override if set, else the first auto-detected main),
+     *  so a built jar runs standalone exactly like Run does. Only a STATIC main can be a manifest `Main-Class`
+     *  (an instance `main` needs the reflective launcher, so it's omitted). Null for a library / Android module
+     *  → a plain library jar. Best-effort: a resolution failure just omits `Main-Class`. */
+    private fun jarMainClass(module: Module): String? {
+        if (!isConsoleRunModule(module)) return null
+        return runCatching { runnableMainFor(module) }.getOrNull()?.takeIf { !it.instance }?.mainClass
+    }
 
     /**
      * The native Android build. On-device ([ctx.androidTools] non-null) it is the in-process wiring (D8/R8/

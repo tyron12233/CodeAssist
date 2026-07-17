@@ -5,12 +5,13 @@ import dev.ide.core.runSync
 import dev.ide.core.settings.CodeStyleSamples
 import dev.ide.core.settings.CodeStyleSettings
 import dev.ide.lang.LanguageId
+import dev.ide.model.LanguageLevel
 import dev.ide.lang.dom.TextRange
 import dev.ide.lang.folding.FoldRegion
 import dev.ide.lang.formatting.FormatStyle
 import dev.ide.lang.formatting.FormattingService
 import dev.ide.lang.incremental.DocumentEdit
-import dev.ide.lang.jdt.JdtSourceAnalyzer
+import dev.ide.lang.resolve.SymbolKind
 import dev.ide.lang.jdt.formatting.JdtFormattingService
 import dev.ide.lang.kotlin.KotlinFormatter
 import dev.ide.lang.resolve.QuickDocInfo
@@ -26,6 +27,14 @@ import java.nio.file.Path
  * incremental reparse of the live buffer.
  */
 internal class LanguageFeatureService(private val ctx: EngineContext) {
+
+    private companion object {
+        /** Declaration kinds that form a breadcrumb chain (enclosing types + the enclosing method/constructor). */
+        val BREADCRUMB_KINDS = setOf(
+            SymbolKind.CLASS, SymbolKind.INTERFACE, SymbolKind.ENUM, SymbolKind.RECORD,
+            SymbolKind.ANNOTATION_TYPE, SymbolKind.METHOD, SymbolKind.CONSTRUCTOR,
+        )
+    }
 
     /** Foldable regions for [file]'s live buffer — imports, type/function bodies, block comments. */
     fun codeFolds(file: Path, text: String): List<FoldRegion> {
@@ -57,7 +66,19 @@ internal class LanguageFeatureService(private val ctx: EngineContext) {
 
     private fun formattingServiceFor(file: Path): FormattingService? {
         val module = ctx.moduleForEditableFile(file) ?: return null
-        return ctx.analyzerFor(module, ctx.languageFor(file)).formatting
+        ctx.analyzerFor(module, ctx.languageFor(file)).formatting?.let { return it }
+        // The IntelliJ-PSI Java backend (now the `.java` editor default) ships no formatter; reuse JDT's proven
+        // CodeFormatter for `.java` — the same engine the Code Style preview uses — at the module's compliance.
+        if (file.fileName.toString().endsWith(".java"))
+            return JdtFormattingService(jdtComplianceOf(module.languageLevel))
+        return null
+    }
+
+    private fun jdtComplianceOf(level: LanguageLevel): String = when (level) {
+        LanguageLevel.JAVA_8 -> "1.8"
+        LanguageLevel.JAVA_11 -> "11"
+        LanguageLevel.JAVA_17 -> "17"
+        LanguageLevel.JAVA_21 -> "21"
     }
 
     /** Format the built-in code sample for [languageId] with [style] and return the result — for the Code
@@ -88,9 +109,14 @@ internal class LanguageFeatureService(private val ctx: EngineContext) {
     fun breadcrumbAt(file: Path, text: String, offset: Int): List<String> {
         val module = ctx.moduleForFile(file) ?: return emptyList()
         ctx.updateDocument(file, text)
-        val analyzer = ctx.analyzerFor(module, LanguageId("java")) as? JdtSourceAnalyzer ?: return emptyList()
+        // Backend-neutral: derive the enclosing type/method chain from the SPI `fileStructure` (both the JDT
+        // and IntelliJ-PSI Java backends implement it), so this isn't tied to a concrete analyzer type.
+        val analyzer = ctx.analyzerFor(module, ctx.languageFor(file))
         return runCatching {
-            analyzer.enclosingStructure(ctx.store.vfs.fileFor(file), text, offset)
+            analyzer.fileStructure(ctx.store.vfs.fileFor(file), text)
+                .filter { it.kind in BREADCRUMB_KINDS && offset in it.nameOffset..it.endOffset }
+                .sortedBy { it.depth }
+                .map { it.name }
         }.getOrDefault(emptyList())
     }
 

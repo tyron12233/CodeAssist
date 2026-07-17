@@ -17,6 +17,7 @@ dependencies {
     implementation(project(":lang-kotlin"))     // IncrementalKotlinCompiler + ComposeCompilerPlugin — drive K2 directly
     implementation(project(":project-model-impl")) // FacetCodec / FacetCodecRegistry / ModuleTypeRegistry
     implementation(project(":language-api"))   // SyntheticClassProvider — the light `R` class for completion/analysis
+    implementation(project(":lang-xml"))        // XmlTreeParser — error-tolerant PSI recovery for a malformed values file
     implementation(project(":index-api"))       // resource-declaration IndexExtension
     implementation(libs.ow2.asm)                 // ClassReader — scan the classpath for custom View subclasses (no class loading)
     implementation(libs.kotlinx.coroutines.core)

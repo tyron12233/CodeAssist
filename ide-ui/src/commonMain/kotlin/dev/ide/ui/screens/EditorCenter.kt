@@ -217,7 +217,9 @@ internal fun EditorCenter(
                         },
                     )
                 }
-                val previewSurface: @Composable (Modifier) -> Unit = { mod ->
+                // `split` is true only in the Split view (editor + preview together): the Compose preview then
+                // hides its chrome bars and fits to width so dragging the divider doesn't rescale it.
+                val previewSurface: @Composable (Modifier, Boolean) -> Unit = { mod, split ->
                     when {
                         isMarkdownPreviewable(active.path) -> MarkdownPreviewPane(
                             path = active.path,
@@ -247,6 +249,7 @@ internal fun EditorCenter(
                             host = state.composePreviewHost,
                             modifier = mod,
                             selected = active.previewTarget,
+                            split = split,
                         )
                     }
                 }
@@ -258,12 +261,12 @@ internal fun EditorCenter(
                         modifier = Modifier.weight(1f).fillMaxWidth(),
                     )
 
-                    EditorViewMode.Preview -> previewSurface(Modifier.weight(1f).fillMaxWidth())
+                    EditorViewMode.Preview -> previewSurface(Modifier.weight(1f).fillMaxWidth(), false)
                     // Edit + watch at once: stacked on a phone (the only way both fit), side-by-side when wide.
                     EditorViewMode.Split -> SplitEditorPreview(
                         stacked = compact,
                         editor = codeSurface,
-                        preview = previewSurface,
+                        preview = { previewSurface(it, true) },
                         modifier = Modifier.weight(1f).fillMaxWidth(),
                     )
 

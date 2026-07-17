@@ -2,7 +2,7 @@ package dev.ide.lang.jdt.env
 
 import dev.ide.index.IndexId
 import dev.ide.index.IndexService
-import dev.ide.lang.jdt.index.normalizedJarKey
+import dev.ide.index.normalizedJarKey
 import dev.ide.platform.Disposable
 import java.net.URI
 import java.nio.file.FileSystem

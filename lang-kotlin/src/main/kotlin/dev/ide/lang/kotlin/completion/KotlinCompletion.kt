@@ -30,6 +30,7 @@ import org.jetbrains.kotlin.psi.KtBlockStringTemplateEntry
 import org.jetbrains.kotlin.psi.KtCallExpression
 import org.jetbrains.kotlin.psi.KtCallableReferenceExpression
 import org.jetbrains.kotlin.psi.KtClassBody
+import org.jetbrains.kotlin.psi.KtConstructorDelegationCall
 import org.jetbrains.kotlin.psi.KtExpression
 import org.jetbrains.kotlin.psi.KtFile
 import org.jetbrains.kotlin.psi.KtImportDirective
@@ -47,6 +48,7 @@ import org.jetbrains.kotlin.psi.KtQualifiedExpression
 import org.jetbrains.kotlin.psi.KtSimpleNameStringTemplateEntry
 import org.jetbrains.kotlin.psi.KtStringTemplateEntry
 import org.jetbrains.kotlin.psi.KtStringTemplateExpression
+import org.jetbrains.kotlin.psi.KtSuperTypeCallEntry
 import org.jetbrains.kotlin.psi.KtSuperTypeList
 import org.jetbrains.kotlin.psi.KtTypeParameter
 import org.jetbrains.kotlin.psi.KtTypeReference
@@ -54,6 +56,8 @@ import org.jetbrains.kotlin.psi.KtAnnotationEntry
 import org.jetbrains.kotlin.psi.KtValueArgument
 import org.jetbrains.kotlin.psi.KtValueArgumentList
 import org.jetbrains.kotlin.psi.KtValueArgumentName
+import org.jetbrains.kotlin.psi.KtWhenConditionIsPattern
+import org.jetbrains.kotlin.psi.KtWhenExpression
 
 /**
  * Kotlin code completion, using the completion-token technique: splice a dummy identifier at the caret on a
@@ -179,7 +183,19 @@ class KotlinCompletion(
                 // A type slot also carries a few keyword positions (a `where` clause after a generic
                 // signature); KotlinKeywords returns nothing for a plain type reference, so this is safe.
                 CompletionPosition.TypeReference -> service.typeNameCandidates(prefix).let {
-                    PositionResult(it.symbols, keywordContext = true, capped = it.capped)
+                    // At an annotation NAME (`@Comp…`) only annotation classes belong — restrict to them so the
+                    // popup isn't every classifier (IntelliJ's `@` filter). Non-annotation position → all types.
+                    val syms = if (inAnnotationNamePosition(markerLeaf))
+                        it.symbols.filter { s -> s.kind == SymbolKind.ANNOTATION_TYPE } else it.symbols
+                    // `when (subject) { is <caret> }` on a SEALED subject → surface its subclasses. They're
+                    // assignable to the subject type, so passing it as `expected` floats them above every other
+                    // classifier (the rank's fits-expected key); adding them explicitly guarantees they appear
+                    // even past the type-name cap. A non-sealed / subjectless `when` keeps the plain type list.
+                    val sealedSubject = sealedWhenSubject(markerLeaf, resolver)
+                    if (sealedSubject != null) {
+                        val subs = service.sealedSubtypeCandidates(sealedSubject.qualifiedName, prefix).orEmpty()
+                        PositionResult(subs + syms, expected = sealedSubject, keywordContext = true, capped = it.capped)
+                    } else PositionResult(syms, keywordContext = true, capped = it.capped)
                 }
 
                 is CompletionPosition.InfixName -> infixCandidates(
@@ -424,11 +440,21 @@ class KotlinCompletion(
         autoImport: KotlinAutoImport,
     ): PositionResult {
         val prefix = matcher.prefix
+        // A bare `import <caret>` (no dot yet): offer the top-level package roots (`androidx`, `kotlin`, …), NOT
+        // scope symbols / types. `packageCompletion = true` inserts the bare segment with NO auto-import edit —
+        // otherwise accepting a type here injected a second `import` statement while editing an import. (A dotted
+        // `import a.b.<caret>` is a member-access position, already served by packageMembers.)
+        if (climbTo<KtImportDirective>(markerLeaf) != null) {
+            return PositionResult(service.rootPackages(prefix), packageCompletion = true)
+        }
         val extra = ArrayList<CompletionItem>()
-        // Member-declaration position in a class body → offer overridable inherited members as stubs.
+        // Member-declaration position in a class body → offer overridable inherited members as stubs. The stub
+        // carries the member line's indent (so its body lines up) and the range of any `override`/`fun`/`val`
+        // already typed before the name (so accepting REPLACES it rather than duplicating `override fun`).
         if (isOverridePosition(markerLeaf)) {
+            val (indent, leadingDelete) = overrideInsertContext(markerLeaf, offset)
             resolver.overridableMembersAt(offset).filter { matcher.matches(it.name) }
-                .forEach { extra += KotlinCompletionItems.overrideItem(it) }
+                .forEach { extra += KotlinCompletionItems.overrideItem(it, indent, leadingDelete) }
         }
         // Primary-constructor parameter position → offer the inherited open PROPERTIES as `override val name: T`
         // stubs (a ctor parameter can override a supertype property, never a function). When `override` is
@@ -449,6 +475,16 @@ class KotlinCompletion(
             val editingName = climbTo<KtValueArgumentName>(markerLeaf) != null
             val supplied = suppliedArgNames(call)
             resolver.callParameters(call)
+                .filter { it.name !in supplied && matcher.matches(it.name) }
+                .forEach { extra += KotlinCompletionItems.namedArgItem(it, bareName = editingName) }
+        }
+        // Inside a constructor-DELEGATION call the KtCallExpression path above can't see: a supertype call in a
+        // class header (`class X : Base(<caret>)`) or a secondary ctor's `: this(<caret>)` / `: super(<caret>)`.
+        // The target constructor's parameters resolve to named-arg offers exactly as a normal call's do.
+        delegationArgListOf(markerLeaf)?.let { list ->
+            val editingName = climbTo<KtValueArgumentName>(markerLeaf) != null
+            val supplied = list.arguments.mapNotNull { it.getArgumentName()?.asName?.identifier }.toHashSet()
+            resolver.delegationCallParameters(markerLeaf)
                 .filter { it.name !in supplied && matcher.matches(it.name) }
                 .forEach { extra += KotlinCompletionItems.namedArgItem(it, bareName = editingName) }
         }
@@ -495,6 +531,46 @@ class KotlinCompletion(
 
     // --- override / named-argument / expected-type extras ---
 
+    /**
+     * The insert context for an override stub at [leaf]: the member line's leading indentation (prepended to
+     * the stub's continuation lines so a nested member's body/`}` align to its column), and — when [leaf] is
+     * the NAME of a declaration the user has already begun (`override fun onCr|`) — the range of the
+     * `override`/`fun`/`val` + modifiers before the name, so accepting the stub REPLACES that text instead of
+     * inserting a duplicate `override fun` next to it. Indentation is read from the (marker-spliced) buffer;
+     * the marker sits at the caret, so the line's leading whitespace is intact.
+     */
+    private fun overrideInsertContext(leaf: PsiElement?, offset: Int): Pair<String, TextRange?> {
+        val text = leaf?.containingFile?.text ?: return "" to null
+        var lineStart = offset.coerceIn(0, text.length)
+        while (lineStart > 0 && text[lineStart - 1] != '\n') lineStart--
+        var i = lineStart
+        while (i < text.length && (text[i] == ' ' || text[i] == '\t')) i++
+        val indent = text.substring(lineStart, i)
+        val decl = leaf.parent as? KtNamedDeclaration
+        val leadingDelete = if (decl != null && decl.nameIdentifier === leaf) {
+            val nameStart = leaf.textRange.startOffset
+            // Delete from the `override`/`fun`/`val`/`var` keyword (NOT the declaration's textRange start, which
+            // would also swallow a leading annotation like `@Composable`) up to the partial name.
+            val kwStart = declKeywordStart(decl)
+            if (kwStart != null && kwStart < nameStart) TextRange(kwStart, nameStart) else null
+        } else null
+        return indent to leadingDelete
+    }
+
+    /** The earliest offset of the `override` modifier or the `fun`/`val`/`var` keyword of [decl] — where the
+     *  stub-replacing deletion should begin, leaving any preceding annotations untouched. Null when none is
+     *  present (a bare name with no keywords typed yet → nothing to replace). */
+    private fun declKeywordStart(decl: KtNamedDeclaration): Int? {
+        val offsets = ArrayList<Int>(2)
+        decl.modifierList?.getModifier(KtTokens.OVERRIDE_KEYWORD)?.textRange?.startOffset?.let { offsets += it }
+        when (decl) {
+            is KtNamedFunction -> decl.funKeyword?.textRange?.startOffset?.let { offsets += it }
+            is KtProperty -> decl.valOrVarKeyword?.textRange?.startOffset?.let { offsets += it }
+            else -> {}
+        }
+        return offsets.minOrNull()
+    }
+
     /** True at a member-declaration spot inside a class body (not within a function body, initializer,
      *  parameter list, supertype list, or type) — where `override` members should be offered. */
     private fun isOverridePosition(leaf: PsiElement?): Boolean {
@@ -536,6 +612,27 @@ class KotlinCompletion(
         val arg = climbTo<KtValueArgument>(leaf) ?: return null
         val list = arg.parent as? KtValueArgumentList ?: return null
         return list.parent as? KtCallExpression
+    }
+
+    /** The argument list of a constructor-DELEGATION call whose IMMEDIATE arguments contain [leaf] — a
+     *  supertype call (`: Base(…)`, [KtSuperTypeCallEntry]) or a secondary-ctor delegation (`: this(…)` /
+     *  `: super(…)`, [KtConstructorDelegationCall]) — or null. Keys on the nearest argument's list owner, so a
+     *  nested call inside a delegation argument (`: Base(foo(<caret>))`) is correctly excluded. */
+    private fun delegationArgListOf(leaf: PsiElement?): KtValueArgumentList? {
+        val arg = climbTo<KtValueArgument>(leaf) ?: return null
+        val list = arg.parent as? KtValueArgumentList ?: return null
+        return if (list.parent is KtSuperTypeCallEntry || list.parent is KtConstructorDelegationCall) list else null
+    }
+
+    /** The SEALED subject type of the enclosing `when` when [leaf] sits at an `is <caret>` type pattern (the
+     *  position where only the subject's subclasses are relevant), else null — not an `is` pattern, a
+     *  subjectless `when`, an unresolved subject, or a subject that is not a known sealed type. */
+    private fun sealedWhenSubject(leaf: PsiElement?, resolver: KotlinResolver): KotlinType? {
+        climbTo<KtWhenConditionIsPattern>(leaf) ?: return null
+        val whenExpr = climbTo<KtWhenExpression>(leaf) ?: return null
+        val subject = whenExpr.subjectExpression ?: return null
+        val t = resolver.inferType(subject) ?: return null
+        return if (service.sealedSubclassesOf(t.qualifiedName) != null) t else null
     }
 
     private fun suppliedArgNames(call: KtCallExpression): Set<String> =
@@ -810,6 +907,11 @@ class KotlinCompletion(
     }
 
     private fun inTypePosition(leaf: PsiElement?): Boolean = climbTo<KtTypeReference>(leaf) != null
+
+    /** The marker sits on an annotation's NAME (`@Comp…`, `@field:Inj…`, a type-use `@…`) — a type reference
+     *  under a [KtAnnotationEntry], where only annotation classes belong. Checked only in the type-reference
+     *  branch (so it can't misfire on an annotation's VALUE arguments, which are a name-reference position). */
+    private fun inAnnotationNamePosition(leaf: PsiElement?): Boolean = climbTo<KtAnnotationEntry>(leaf) != null
 
     private companion object {
         // The classic completion dummy identifier; unlikely to collide with real code.

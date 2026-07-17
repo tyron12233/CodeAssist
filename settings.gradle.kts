@@ -64,6 +64,7 @@ include(
     ":analysis-api",
     ":analysis-impl",
     ":lang-jdt",
+    ":lang-java", // IntelliJ-PSI Java LanguageBackend: IntelliJ Java parser + native resolution/inference (replaces lang-jdt in the editor)
     ":lang-xml",
     ":lang-kotlin-index", // pure, compiler-free Kotlin symbol/index layer shared by the Kotlin editor backend
     ":kotlin-compiler-deps", // the ONE unshaded Kotlin compiler + IntelliJ platform dependency set (no embeddable)

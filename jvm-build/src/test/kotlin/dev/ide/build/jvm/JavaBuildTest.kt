@@ -35,6 +35,7 @@ import java.io.File
 import java.nio.file.Files
 import java.nio.file.Path
 import kotlin.test.Test
+import kotlin.test.assertEquals
 import kotlin.test.assertTrue
 
 /**
@@ -104,6 +105,44 @@ class JavaBuildTest {
 
             val again = runBlocking { exec.execute(graph, SimpleTaskContext(), 2) }
             assertTrue(again.ranTasks.isEmpty(), "re-build must be up-to-date, ran=${again.ranTasks.map { it.value }}")
+        } finally {
+            platform.dispose(); dir.toFile().deleteRecursively()
+        }
+    }
+
+    @Test
+    fun packagedJarHasARunnableManifestAndRunsStandalone() {
+        // The reported bug: a built .jar had no META-INF/MANIFEST.MF, so it couldn't run outside the app.
+        // A single self-contained module now packages a manifest with Main-Class and runs via `java -jar`.
+        val dir = Files.createTempDirectory("jarmanifest")
+        val platform = PlatformCore()
+        try {
+            ModuleTypeRegistry(platform.extensions).register(JavaLib(), PluginId("java-support"))
+            val store = ProjectModel.open(dir, platform, FacetCodecRegistry())
+            val javaLib = ModuleTypeRegistry(platform.extensions).resolve("java-lib")
+            store.workspace.beginModification().apply { addProject("demo", BuildSystemId.NATIVE, store.vfs.root()); commit() }
+            store.workspace.projects.single().beginModification().apply {
+                addModule("solo", javaLib).addSourceSet(mainSources()); commit()
+            }
+            write(dir, "solo/src/main/java/com/example/solo/App.java", SOLO)
+            val project = store.workspace.projects.single()
+
+            // Wire the host's main-class resolver (here a fixed value) — as BuildService does from its Run config.
+            val bs = JavaBuildSystem(mainClassFor = { "com.example.solo.App" })
+            val graph = bs.createBuildGraph(
+                project, BuildRequest(listOf(ModuleId("solo")), VariantSelector("main"), BuildGoal.PACKAGE),
+            )
+            val exec = TaskExecutorImpl(BuildCache(dir.resolve(".caches/build")))
+            val log = StringBuilder()
+            assertTrue(runBlocking { exec.execute(graph, SimpleTaskContext(log = { log.appendLine(it) }), 2) }.succeeded, "build failed:\n$log")
+
+            val jar = jarPath(project.modules.single { it.name == "solo" })
+            java.util.jar.JarFile(jar.toFile()).use { jf ->
+                val mf = jf.manifest ?: error("jar has no META-INF/MANIFEST.MF")
+                assertEquals("1.0", mf.mainAttributes.getValue("Manifest-Version"))
+                assertEquals("com.example.solo.App", mf.mainAttributes.getValue("Main-Class"), "Main-Class must name the module's entry point")
+            }
+            assertTrue("STANDALONE OK" in runJar(jar), "the jar must run standalone via `java -jar`")
         } finally {
             platform.dispose(); dir.toFile().deleteRecursively()
         }
@@ -253,6 +292,15 @@ class JavaBuildTest {
         return text.trim()
     }
 
+    /** Run a jar STANDALONE (`java -jar <jar>`) — relies on the jar's manifest `Main-Class`, no `-cp`. */
+    private fun runJar(jar: Path): String {
+        val javaBin = Path.of(System.getProperty("java.home"), "bin", "java").toString()
+        val proc = ProcessBuilder(javaBin, "-jar", jar.toString()).redirectErrorStream(true).start()
+        val text = proc.inputStream.bufferedReader().readText()
+        proc.waitFor()
+        return text.trim()
+    }
+
     private companion object {
         val GREETER = """
             package com.example.core;
@@ -275,6 +323,12 @@ class JavaBuildTest {
                 public static void main(String[] args) {
                     System.out.println(new Formatter().format("World"));
                 }
+            }
+        """
+        val SOLO = """
+            package com.example.solo;
+            public class App {
+                public static void main(String[] args) { System.out.println("STANDALONE OK"); }
             }
         """
         val ECHO = """

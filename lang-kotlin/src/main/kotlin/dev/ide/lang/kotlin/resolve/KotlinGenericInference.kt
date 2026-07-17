@@ -245,7 +245,17 @@ internal fun KotlinResolver.unify(
         (param.typeArguments.first() as? KotlinType)?.let { unify(it, arg, bindings) }
         return
     }
-    param.typeArguments.zip(arg.typeArguments).forEach { (p, a) ->
+    // Match the argument's type arguments against the parameter's. When the argument is a SUBTYPE of the
+    // parameter's generic classifier — e.g. `StartActivityForResult` (no type args of its own) passed for a
+    // `ActivityResultContract<I, O>` parameter — project it onto that classifier first, so a type parameter
+    // nested in the parameter binds from the supertype's instantiation
+    // (`ActivityResultContract<Intent, ActivityResult>` ⇒ O = ActivityResult). Without this the positional zip
+    // against the subtype's own (fewer / differently-ordered) arguments misses O, leaving the callback lambda's
+    // parameter an unbound type parameter — the `registerForActivityResult { result -> result.data }` case.
+    val argArgs = if (param.qualifiedName != arg.qualifiedName && param.typeArguments.isNotEmpty())
+        service.receiverSupertypeArgs(arg.qualifiedName, arg.typeArguments, param.qualifiedName) ?: arg.typeArguments
+    else arg.typeArguments
+    param.typeArguments.zip(argArgs).forEach { (p, a) ->
         if (p is KotlinType && a is KotlinType) unify(p, a, bindings)
     }
 }

@@ -590,7 +590,8 @@ internal class KotlinSemanticChecks(private val service: KotlinSymbolService) {
                 }
                 is KtProperty -> {
                     val name = d.name
-                    if (d.nameIdentifier != null && name != null)
+                    // `val _ = …` is the ignore hole (a discarded value), never a real binding — never conflicts.
+                    if (d.nameIdentifier != null && name != null && name != "_")
                         record("P:${d.receiverTypeReference?.text ?: ""}:$name", d)
                 }
                 is KtNamedFunction -> {
@@ -604,13 +605,17 @@ internal class KotlinSemanticChecks(private val service: KotlinSymbolService) {
         return conflicts(byKey.values)
     }
 
-    /** Duplicate parameter names within one parameter list (`fun f(x: Int, x: String)`, `{ a, a -> }`). */
+    /** Duplicate parameter names within one parameter list (`fun f(x: Int, x: String)`, `{ a, a -> }`). The
+     *  `_` placeholder (an unused lambda parameter, `{ _, _ -> … }`) is the ignore hole, not a real binding, so
+     *  repeats of it never conflict. */
     private fun duplicateParams(list: KtParameterList): List<Diagnostic> {
         if (list.parameters.size < 2) return emptyList()
         val byName = LinkedHashMap<String, MutableList<KtNamedDeclaration>>()
         for (p in list.parameters) {
             if (p.nameIdentifier == null) continue
-            byName.getOrPut(p.name ?: continue) { ArrayList() }.add(p)
+            val name = p.name ?: continue
+            if (name == "_") continue
+            byName.getOrPut(name) { ArrayList() }.add(p)
         }
         return conflicts(byName.values)
     }

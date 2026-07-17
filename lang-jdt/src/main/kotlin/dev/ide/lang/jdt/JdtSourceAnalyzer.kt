@@ -2,6 +2,7 @@ package dev.ide.lang.jdt
 
 import dev.ide.lang.AnalysisResult
 import dev.ide.lang.CompilationContext
+import dev.ide.lang.JvmIndexScopeProvider
 import dev.ide.lang.SourceAnalyzer
 import dev.ide.lang.completion.CompletionContribution
 import dev.ide.lang.dom.DomNode
@@ -69,16 +70,16 @@ import java.nio.file.Paths
  * from the boot classpath. Re-reading the sourcepath each parse means edits saved to dependency files
  * are picked up immediately.
  */
-class JdtSourceAnalyzer(ctx: CompilationContext) : SourceAnalyzer, Disposable {
+class JdtSourceAnalyzer(ctx: CompilationContext) : SourceAnalyzer, Disposable, JvmIndexScopeProvider {
 
     /** Project source roots only (this module + dependencies) — for unit-name/FQCN derivation. */
-    val sourceRootPaths: List<Path> =
+    override val sourceRootPaths: List<Path> =
         ctx.sourceRoots.mapNotNull { runCatching { Paths.get(it.path) }.getOrNull() }.filter { Files.isDirectory(it) }
 
     /** Source roots for the name environment: project roots + any synthetic-stub platform dir. */
     val completionSourceRoots: List<Path>
-    val classpathJarPaths: List<Path>
-    val jdkHome: Path?
+    override val classpathJarPaths: List<Path>
+    override val jdkHome: Path?
     val complianceLevel: Long
 
     /**
@@ -97,7 +98,7 @@ class JdtSourceAnalyzer(ctx: CompilationContext) : SourceAnalyzer, Disposable {
 
     /** Immutable library/SDK SOURCE archives + dirs (`-sources.jar`, JDK `src.zip`, Android `sources/`) — no
      *  project source. The host feeds these to the source-doc index ([IndexScope.sourceArchives]). */
-    var librarySourceArchives: List<Path> = emptyList()
+    override var librarySourceArchives: List<Path> = emptyList()
         private set
 
     /** Live editor buffers (FQCN -> source) for in-memory completion; set by the host (e.g. IdeServices). */

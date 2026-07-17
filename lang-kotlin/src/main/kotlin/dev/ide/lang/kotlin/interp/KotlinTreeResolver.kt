@@ -19,6 +19,7 @@ import org.jetbrains.kotlin.psi.KtCallableReferenceExpression
 import org.jetbrains.kotlin.psi.KtContinueExpression
 import org.jetbrains.kotlin.psi.KtCallExpression
 import org.jetbrains.kotlin.psi.KtClass
+import org.jetbrains.kotlin.psi.KtClassLiteralExpression
 import org.jetbrains.kotlin.psi.KtClassOrObject
 import org.jetbrains.kotlin.psi.KtConstantExpression
 import org.jetbrains.kotlin.psi.KtDeclaration
@@ -262,13 +263,25 @@ class KotlinTreeResolver(
     fun lowerFunction(fn: KtNamedFunction): ResolvedFunction {
         reset(fn.textRange.startOffset)
         scopes.addLast(HashMap())
+        // An EXTENSION function binds its receiver to slot 0 (like a member's `this`) and registers it as an
+        // implicit receiver scope, so `this` and bare-member access in the body resolve to it — and the
+        // interpreter binds the actual receiver value to that slot on an EXTENSION-dispatch call. Without this a
+        // project-source top-level extension had no receiver slot, and the interpreter fell through to the
+        // reflective dispatcher (which can't reflect an uncompiled source function → "extension has no owner").
+        val recvType = fn.receiverTypeReference?.text?.let { service.typeFromText(it, resolver.fileContext) }
+        val receiverSlot = if (fn.receiverTypeReference != null) newSlot() else null // slot 0 when present
+        var pushedReceiver = false
+        if (receiverSlot != null && recvType != null) {
+            receiverScopes.addLast(ReceiverScope(receiverSlot, recvType)); pushedReceiver = true
+        }
         val params = loweredValueParams(fn.valueParameters)
         val body = when {
             fn.hasBlockBody() -> fn.bodyBlockExpression?.let { lowerBlock(it) } ?: emptyBlock(fn)
             else -> fn.bodyExpression?.let { lower(it) } ?: unsupported("empty body", fn)
         }
+        if (pushedReceiver) receiverScopes.removeLast()
         scopes.removeLast()
-        return ResolvedFunction(fn.name ?: "<anonymous>", params, body, diagnostics.toList(), returnsUnit = returnsUnit(fn))
+        return ResolvedFunction(fn.name ?: "<anonymous>", params, body, diagnostics.toList(), receiverSlot = receiverSlot, returnsUnit = returnsUnit(fn))
     }
 
     /** Lower a function's value parameters: bind each (so the body and each default may reference the others),
@@ -569,6 +582,7 @@ class KotlinTreeResolver(
         is KtReturnExpression -> RNode.Return(e.returnedExpression?.let { lower(it) }, span(e))
         is KtBinaryExpression -> binaryNode(e)
         is KtBinaryExpressionWithTypeRHS -> castNode(e)
+        is KtClassLiteralExpression -> classLiteralNode(e, asJava = false)
         is KtCallableReferenceExpression -> callableRefNode(e)
         is KtArrayAccessExpression -> arrayAccessNode(e)
         is KtPostfixExpression -> incDecNode(e)
@@ -809,6 +823,14 @@ class KotlinTreeResolver(
 
     private fun qualifiedNode(e: KtDotQualifiedExpression): RNode {
         if (e.receiverExpression is KtSuperExpression) return superNode(e)
+        // `X::class.java` / `expr::class.java` — the compiler lowers `::class.java` straight to the JVM class
+        // constant, so fold the `.java` selector into the class literal (yielding a `Class` not a `KClass`)
+        // rather than lowering `X::class` to a KClass and then modeling `KClass.java` at eval.
+        val recvExpr = e.receiverExpression
+        val sel0 = e.selectorExpression
+        if (recvExpr is KtClassLiteralExpression && sel0 is KtNameReferenceExpression &&
+            (sel0.getReferencedName() == "java" || sel0.getReferencedName() == "javaObjectType")
+        ) return classLiteralNode(recvExpr, asJava = true)
         val receiver = lower(e.receiverExpression)
         if (receiver is RNode.Unsupported) return receiver
         return when (val sel = e.selectorExpression) {
@@ -816,6 +838,46 @@ class KotlinTreeResolver(
             is KtNameReferenceExpression -> propertyGet(sel.getReferencedName(), receiver, e.receiverExpression, e)
             else -> unsupported("qualified selector ${sel?.let { it::class.simpleName }}", e)
         }
+    }
+
+    /**
+     * `Foo::class` (a type literal) or `expr::class` (an instance literal). A receiver that denotes a TYPE
+     * lowers to a [RNode.ClassLiteral] carrying the resolved FQN plus its loadable supertype FQNs (a
+     * project-source type isn't compiled at preview time, so a reflectable supertype stands in for it); any
+     * other receiver is a value whose runtime class is taken. [asJava] is set by [qualifiedNode] when the
+     * `.java` selector is applied.
+     */
+    private fun classLiteralNode(e: KtClassLiteralExpression, asJava: Boolean): RNode {
+        val recvExpr = e.receiverExpression ?: return unsupported("class literal without a receiver", e)
+        val typeFqn = runCatching { resolver.typeDenotationFqn(recvExpr) }.getOrNull()
+        if (typeFqn != null) {
+            return RNode.ClassLiteral(receiver = null, typeCandidates = classLoadCandidates(typeFqn), asJava = asJava, source = span(e))
+        }
+        // An instance class literal `expr::class` — the runtime class of the evaluated receiver (also the path
+        // for a bare `object` reference, whose singleton materializes and gives its class).
+        val recv = lower(recvExpr)
+        if (recv is RNode.Unsupported) return recv
+        return RNode.ClassLiteral(receiver = recv, typeCandidates = emptyList(), asJava = asJava, source = span(e))
+    }
+
+    /** [fqn] followed by its transitive supertype FQNs (bounded) — the ordered candidates the interpreter tries
+     *  to load at eval. A mapped Kotlin type (`kotlin.String`, `kotlin.collections.List`) has no `.class` under
+     *  its Kotlin FQN, so its JVM type (`java.lang.String`, `java.util.List`) is listed first; a project-source
+     *  class (uncompiled at preview time) has no loadable class of its own, so its nearest reflectable supertype
+     *  stands in. */
+    private fun classLoadCandidates(fqn: String): List<String> {
+        val candidates = LinkedHashSet<String>()
+        val visited = HashSet<String>()
+        fun add(f: String, depth: Int) {
+            if (depth > 6 || !visited.add(f)) return
+            dev.ide.lang.kotlin.symbols.Builtins.javaTypeFor(f)?.let { candidates += it } // JVM form preferred
+            candidates += f
+            runCatching { service.supertypesOf(f) }.getOrNull()?.forEach { st ->
+                (st as? KotlinType)?.qualifiedName?.let { add(it, depth + 1) }
+            }
+        }
+        add(fqn, 0)
+        return candidates.toList()
     }
 
     /**

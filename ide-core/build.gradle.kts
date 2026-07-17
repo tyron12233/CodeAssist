@@ -15,6 +15,7 @@ dependencies {
     implementation(project(":project-model-impl"))
     implementation(project(":language-api"))
     implementation(project(":lang-jdt"))
+    implementation(project(":lang-java")) // IntelliJ-PSI Java backend (native resolution/inference); JDT is still the .java default
     implementation(project(":lang-xml")) // XML language backend (Android layouts/values/manifest)
     implementation(project(":lang-kotlin")) // editor-only Kotlin language backend (PSI parse + own completion)
     implementation(project(":index-api"))

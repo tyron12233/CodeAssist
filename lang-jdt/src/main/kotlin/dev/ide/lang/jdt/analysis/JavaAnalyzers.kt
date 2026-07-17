@@ -97,14 +97,18 @@ class UnusedImportAnalyzer : FileAnalyzer {
  * `source = `[DiagnosticSource.Compiler] and a stable [Codes] join key, so fixes can be attached by
  * code. From here it is indistinguishable from analyzer output. Scoped to `{java}` so it no longer runs
  * on Kotlin/XML targets now that every language flows through the one pipeline.
+ *
+ * When JDT is the editor backend the diagnostics come from its cached in-memory compiler; under the
+ * IntelliJ-PSI editor backend the target's parsed tree already carries resolution-derived diagnostics, so
+ * those are used directly (no JDT dependency in the `.java` diagnostic path).
  */
 class CompilerDiagnosticProvider(override val id: String = "jdt") : DiagnosticProvider {
     override val languages = setOf(JAVA)
 
     override suspend fun diagnose(target: AnalysisTarget): List<Diagnostic> {
-        // Binding-level diagnostics come from the JDT analyzer's cached in-memory compiler (no disk
+        // With a JDT editor resolver, diagnostics come from its cached in-memory compiler (no disk
         // environment scan, no shadow-file move), reusing the target's already-parsed syntactic tree for
-        // noise filtering. A non-JDT resolver falls back to whatever diagnostics its parsed tree carries.
+        // noise filtering. Otherwise (IntelliJ-PSI backend) the parsed tree carries its own diagnostics.
         val analyzer = target.resolver as? JdtSourceAnalyzer
         val diagnostics = if (analyzer != null) analyzer.diagnose(target.file, target.parsed.text(), target.parsed)
         else target.parsed.diagnostics

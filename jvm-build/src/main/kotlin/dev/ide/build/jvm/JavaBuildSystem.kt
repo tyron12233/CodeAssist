@@ -53,6 +53,9 @@ class JavaBuildSystem(
     /** Build-time source generators (the `platform.sourceGenerator` EP contents), run into a module's
      *  `ContentRole.GENERATED` root ahead of compilation. Empty by default. */
     private val generators: List<SourceGenerator> = emptyList(),
+    /** The module's runnable entry point → the packaged jar's manifest `Main-Class` (so the built jar runs
+     *  standalone). Null / blank for a library module. The host wires this to its main-class detection. */
+    private val mainClassFor: (Module) -> String? = { null },
 ) : BuildSystem {
 
     override val id: BuildSystemId = BuildSystemId.NATIVE
@@ -68,7 +71,7 @@ class JavaBuildSystem(
 
     override fun createBuildGraph(project: Project, request: BuildRequest): TaskGraph {
         val tasks = DefaultTaskContainer()
-        JavaPlugin(bootClasspathFor, kotlin, plugins, generators).apply(SimpleBuildConfiguration(project, request, tasks))
+        JavaPlugin(bootClasspathFor, kotlin, plugins, generators, mainClassFor).apply(SimpleBuildConfiguration(project, request, tasks))
         return tasks.build()
     }
 

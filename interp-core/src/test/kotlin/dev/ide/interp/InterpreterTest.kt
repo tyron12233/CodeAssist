@@ -115,6 +115,28 @@ class InterpreterTest {
     }
 
     @Test
+    fun typeClassLiteralEvaluatesToTheJvmClass() {
+        // `X::class.java` yields the `java.lang.Class` token — the `Intent(context, X::class.java)` argument the
+        // Compose preview used to crash on (`KtClassLiteralExpression` was Unsupported). A mapped Kotlin type
+        // (`String`) resolves to its JVM class.
+        assertEquals(java.lang.String::class.java, runProgram("package demo\nfun f(): Any = String::class.java", "f/0", emptyList()))
+    }
+
+    @Test
+    fun instanceClassLiteralEvaluatesToTheRuntimeClass() {
+        // `value::class.java` — the runtime class of the evaluated receiver.
+        assertEquals(java.lang.String::class.java, runProgram("package demo\nfun f(): Any = \"hi\"::class.java", "f/0", emptyList()))
+    }
+
+    @Test
+    fun bareClassLiteralEvaluatesToAKClass() {
+        // `X::class` (no `.java`) yields a KClass whose `.java` is the JVM class.
+        val v = runProgram("package demo\nfun f(): Any = String::class", "f/0", emptyList())
+        assertTrue(v is kotlin.reflect.KClass<*>, "a bare `::class` must yield a KClass; got ${v?.javaClass}")
+        assertEquals(java.lang.String::class.java, (v as kotlin.reflect.KClass<*>).java)
+    }
+
+    @Test
     fun whenExpressionWithSubject() {
         // `when (x) { 1 -> ; 2 -> ; else -> }` → if/else chain comparing the subject (evaluated once).
         val code = "package demo\nfun label(x: Int): String = when (x) { 1 -> \"one\"\n  2 -> \"two\"\n  else -> \"many\" }"

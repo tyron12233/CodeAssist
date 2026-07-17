@@ -17,6 +17,9 @@ dependencies {
 
     // Tests build a real workspace to exercise the Module -> CompilationContext bridge.
     testImplementation(project(":project-model-impl"))
+    // The Java workspace indexes now live in :lang-java (ASM + PSI); the JDT compile name-env test consumes
+    // that (neutral) class-locator index, proving the ecj name-env resolves against the IntelliJ-produced index.
+    testImplementation(project(":lang-java"))
     // Opt-in regression suites (`regressionTest`): shared benchmark/baseline/memory harness + quality scorer.
     testImplementation(project(":bench-support"))
 }

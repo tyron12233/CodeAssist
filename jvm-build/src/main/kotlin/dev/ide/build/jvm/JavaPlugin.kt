@@ -52,6 +52,9 @@ class JavaPlugin(
     /** Build-time source generators (the `platform.sourceGenerator` EP contents). When a module declares a
      *  `ContentRole.GENERATED` root, a `generateSources` task runs them into it ahead of compilation. */
     private val generators: List<SourceGenerator> = emptyList(),
+    /** The module's runnable entry point → the packaged jar's manifest `Main-Class`, so the jar runs
+     *  standalone (`java -jar`). Null / blank for a library module → a manifest with no `Main-Class`. */
+    private val mainClassFor: (Module) -> String? = { null },
 ) : Plugin {
 
     /** The module's `ContentRole.GENERATED` source roots (where a [GenerateSourcesTask] emits). */
@@ -112,7 +115,7 @@ class JavaPlugin(
 
         if (withJar) {
             val jar = TaskName(":${module.name}:jar")
-            tasks.register(jar) { JarTask(jar, classOutputs(module), jarPath(module)) }.configure { dependsOn(classes) }
+            tasks.register(jar) { JarTask(jar, classOutputs(module), jarPath(module), { mainClassFor(module) }) }.configure { dependsOn(classes) }
         }
     }
 }

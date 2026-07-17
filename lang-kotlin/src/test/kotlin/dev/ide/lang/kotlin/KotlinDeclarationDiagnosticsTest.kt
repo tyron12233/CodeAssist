@@ -212,6 +212,36 @@ class KotlinDeclarationDiagnosticsTest {
         )
     }
 
+    @Test
+    fun repeatedUnderscoreLambdaParamsAreNotFlagged() {
+        // `{ _, _ -> }` — two ignore holes, not real bindings, so they must not be flagged as conflicting.
+        val diags = diagnose("Lam.kt", "package demo\nfun f() { val g: (Int, Int) -> Unit = { _, _ -> } }")
+        assertTrue(
+            diags.none { it.code == "kt.conflictingDeclaration" },
+            "`{ _, _ -> }` (repeated ignore holes) must not be flagged as conflicting; got $diags",
+        )
+    }
+
+    @Test
+    fun duplicateNamedLambdaParamsAreStillFlagged() {
+        // Positive control: two REAL same-named lambda params still conflict.
+        val diags = diagnose("Lam2.kt", "package demo\nfun f() { val g: (Int, Int) -> Unit = { a, a -> } }")
+        assertTrue(
+            diags.count { it.code == "kt.conflictingDeclaration" && it.message.contains("'a'") } >= 2,
+            "`{ a, a -> }` should flag both params as conflicting; got $diags",
+        )
+    }
+
+    @Test
+    fun repeatedUnderscoreLocalValsAreNotFlagged() {
+        // `val _ = …` is a discarded value (the ignore hole), so repeats never conflict.
+        val diags = diagnose("ValUnderscore.kt", "package demo\nfun f() {\n  val _ = 1\n  val _ = 2\n}\n")
+        assertTrue(
+            diags.none { it.code == "kt.conflictingDeclaration" },
+            "two `val _` (discarded values) must not be flagged as conflicting; got $diags",
+        )
+    }
+
     // --- function without a body must be abstract (2026-07-07) ---
 
     @Test

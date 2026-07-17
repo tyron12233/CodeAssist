@@ -1,7 +1,7 @@
 package dev.ide.core
 
 import dev.ide.lang.LANGUAGE_BACKEND_EP
-import dev.ide.lang.jdt.JdtLanguageBackend
+import dev.ide.lang.java.JavaLanguageBackend
 import dev.ide.lang.kotlin.KotlinLanguageBackend
 import kotlin.test.Test
 import kotlin.test.assertFalse
@@ -32,16 +32,19 @@ class PluginGatingTest {
             assertFalse(backends(env).contains(KotlinLanguageBackend::class), "kotlin backend gone when disabled")
             // kotlin-analysis dependsOn kotlin-language, so it drops too — no dangling load edge.
             assertFalse(env.pluginCatalog.isEnabled("kotlin-analysis"))
-            // The essential JDT backend is untouched.
-            assertTrue(backends(env).contains(JdtLanguageBackend::class))
+            // The essential Java (IntelliJ-PSI) editor backend is untouched.
+            assertTrue(backends(env).contains(JavaLanguageBackend::class))
         }
     }
 
     @Test
     fun `an essential plugin cannot be disabled`() {
-        ApplicationEnvironment(disabledPluginIds = setOf("jdt-language")).use { env ->
+        // java-psi-language is the essential `.java` editor backend + the LANGUAGE_BACKEND_EP resolution
+        // fallback; it (and the jdt-language file-type/compiler owner it depends on) cannot be disabled.
+        ApplicationEnvironment(disabledPluginIds = setOf("java-psi-language", "jdt-language")).use { env ->
             assertTrue(env.pluginCatalog.isEnabled("jdt-language"), "jdt-language is essential")
-            assertTrue(backends(env).contains(JdtLanguageBackend::class), "the fallback backend stays loaded")
+            assertTrue(env.pluginCatalog.isEnabled("java-psi-language"), "java-psi-language is essential")
+            assertTrue(backends(env).contains(JavaLanguageBackend::class), "the fallback backend stays loaded")
         }
     }
 }

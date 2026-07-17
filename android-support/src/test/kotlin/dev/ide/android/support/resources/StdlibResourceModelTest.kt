@@ -73,6 +73,38 @@ class StdlibResourceModelTest {
         assertTrue(StdlibResourceModel.parse(emptyList()).isEmpty())
     }
 
+    @Test
+    fun recoversAllResourceNamesFromAMalformedValuesFile() {
+        // A malformed values file (here an unescaped `&`) makes SAX abandon the file at the error, losing every
+        // declaration after it — which would empty R.string. The lenient fallback recovers ALL declarations
+        // regardless of well-formedness, so completion + the synthetic R survive a broken file.
+        val res = createTempDirectory("res-broken")
+        write(res, "values/strings.xml", """
+            <resources>
+              <string name="first">A & B</string>
+              <string name="second">C</string>
+              <color name="accent">#FF0000</color>
+            </resources>
+        """)
+        val repo = StdlibResourceModel.parse(listOf(res))
+        assertEquals(setOf("first", "second"), repo.names(ResourceType.STRING),
+            "a broken values file must still yield ALL its string names, not just those before the error")
+        assertTrue(repo.has(ResourceType.COLOR, "accent"), "resources after the parse error are recovered too")
+    }
+
+    @Test
+    fun oneBrokenFileDoesNotWipeOtherFilesResources() {
+        // A broken strings.xml must not take down R.layout / another values file — the repository stays usable.
+        val res = createTempDirectory("res-mixed")
+        write(res, "layout/activity_main.xml", """<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"/>""")
+        write(res, "values/strings.xml", """<resources><string name="ok">A & B</string></resources>""")
+        write(res, "values/colors.xml", """<resources><color name="brand">#123456</color></resources>""")
+        val repo = StdlibResourceModel.parse(listOf(res))
+        assertEquals(setOf("activity_main"), repo.names(ResourceType.LAYOUT))
+        assertTrue(repo.has(ResourceType.STRING, "ok"), "the broken file's own resource is recovered")
+        assertTrue(repo.has(ResourceType.COLOR, "brand"), "a sibling well-formed file is unaffected")
+    }
+
     private fun write(root: Path, rel: String, content: String) {
         val f = root.resolve(rel)
         Files.createDirectories(f.parent)

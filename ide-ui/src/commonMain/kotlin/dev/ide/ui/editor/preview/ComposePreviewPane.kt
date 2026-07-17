@@ -79,6 +79,9 @@ fun ComposePreviewPane(
     modifier: Modifier,
     /** Which `@Preview` function to render (chosen from the editor gutter); null/unknown → the first one. */
     selected: String? = null,
+    /** Rendered in the editor's Split view: hides the surface's chrome bars and fits the preview to width so
+     *  dragging the split divider doesn't rescale it (see [PreviewSurface]). */
+    split: Boolean = false,
 ) {
     val state = rememberPreviewSurfaceState(path)
     var previews by remember(path) { mutableStateOf<List<UiComposePreview>>(emptyList()) }
@@ -136,6 +139,7 @@ fun ComposePreviewPane(
         state = state,
         deviceOverride = deviceOverride,
         wrapContent = wrap,
+        split = split,
         cardColor = cardBg,
         cardBorderColor = Ca.colors.separatorStrong,
         overlays = {

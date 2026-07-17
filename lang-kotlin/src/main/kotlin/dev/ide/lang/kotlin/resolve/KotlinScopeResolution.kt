@@ -480,8 +480,16 @@ fun KotlinResolver.bareNameResolves(name: String, offset: Int): Boolean {
     // Members of an ENCLOSING class of the live buffer — the symbol service indexes disk, not the file
     // being edited, so a same-file member (`field`, `helper()`) won't appear in membersOf() below.
     if (enclosingClassMembersContain(offset, name)) return true
+    // A member (or inherited member) of an implicit `this` receiver resolves bare; an EXTENSION on that
+    // receiver only resolves when it is actually in scope (imported / same-package / default) — Kotlin
+    // requires a top-level extension to be imported even when its receiver type IS the implicit `this`
+    // (`ComponentActivity.setContent` inside a `ComponentActivity` still needs `import
+    // androidx.activity.compose.setContent`). Without this gate an un-imported extension was treated as
+    // resolved, so no `kt.unresolved` diagnostic (and thus no "Import" quick-fix) fired, yet the code didn't
+    // compile. Mirrors the member-access rule in [KotlinSemanticChecks.unresolvedMember] (`16.dp`).
     if (implicitReceiversAt(offset).any { recv ->
-            service.membersNamed(recv.qualifiedName, recv.typeArguments, name).isNotEmpty()
+            service.membersNamed(recv.qualifiedName, recv.typeArguments, name)
+                .any { !it.isExtension || extensionInScope(it) }
         }
     ) return true
     // A top-level callable (`remember`, `mutableStateOf`) resolves bare only when it is actually in

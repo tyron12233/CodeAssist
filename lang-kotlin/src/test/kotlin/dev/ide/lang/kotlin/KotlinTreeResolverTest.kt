@@ -762,6 +762,39 @@ class KotlinTreeResolverTest {
         assertFalse(fn.isComplete)
     }
 
+    @Test
+    fun typeClassLiteralDotJavaLowersToClassLiteral() {
+        // `Greeter::class.java` — a `KtClassLiteralExpression` used to fall through to Unsupported, so
+        // `Intent(context, X::class.java)` blanked the whole preview. It now lowers to a ClassLiteral that
+        // yields a `java.lang.Class`, with the resolved type FQN as the first load candidate.
+        val fn = lower("package demo\nfun f() { val c = Greeter::class.java }")
+        val lit = assertIs<RNode.ClassLiteral>(assertIs<RNode.LocalVar>(fn.stmts()[0]).initializer)
+        assertTrue(lit.asJava, "`.java` yields a Class, not a KClass")
+        assertEquals(null, lit.receiver, "a type literal has no value receiver")
+        assertEquals("demo.Greeter", lit.typeCandidates.firstOrNull(), "the resolved type is the first load candidate")
+        assertTrue(fn.isComplete, "a class literal must lower completely; diags=${fn.diagnostics}")
+    }
+
+    @Test
+    fun bareTypeClassLiteralLowersToKClass() {
+        // `Greeter::class` (no `.java`) yields a KClass.
+        val fn = lower("package demo\nfun f() { val c = Greeter::class }")
+        val lit = assertIs<RNode.ClassLiteral>(assertIs<RNode.LocalVar>(fn.stmts()[0]).initializer)
+        assertFalse(lit.asJava, "a bare `::class` yields a KClass")
+        assertTrue(fn.isComplete, "diags=${fn.diagnostics}")
+    }
+
+    @Test
+    fun instanceClassLiteralCarriesItsReceiver() {
+        // `g::class.java` — an INSTANCE class literal takes the runtime class of the evaluated receiver.
+        val fn = lower("package demo\nfun f(g: Greeter) { val c = g::class.java }")
+        val lit = assertIs<RNode.ClassLiteral>(assertIs<RNode.LocalVar>(fn.stmts()[0]).initializer)
+        assertTrue(lit.asJava)
+        assertIs<RNode.Name>(lit.receiver, "an instance literal carries its receiver expression")
+        assertTrue(lit.typeCandidates.isEmpty(), "an instance literal resolves its class at runtime, not from candidates")
+        assertTrue(fn.isComplete, "diags=${fn.diagnostics}")
+    }
+
     companion object {
         val srcDir: Path = tempProject(
             mapOf(

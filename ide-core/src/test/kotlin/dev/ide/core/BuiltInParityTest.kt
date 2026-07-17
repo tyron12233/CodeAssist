@@ -4,7 +4,7 @@ import dev.ide.index.INDEX_EP
 import dev.ide.lang.FILE_TYPE_EP
 import dev.ide.lang.LANGUAGE_BACKEND_EP
 import dev.ide.lang.LanguageId
-import dev.ide.lang.jdt.JdtLanguageBackend
+import dev.ide.lang.java.JavaLanguageBackend
 import dev.ide.lang.kotlin.compile.ComposeCompilerPlugin
 import dev.ide.lang.kotlin.compile.KOTLIN_COMPILER_PLUGIN_EP
 import dev.ide.lang.synthetic.SYNTHETIC_CLASS_EP
@@ -34,10 +34,15 @@ class BuiltInParityTest {
     }
 
     @Test
-    fun `JDT language backend loads first so it is the backendFor fallback`() {
+    fun `the IntelliJ-PSI Java backend is the java editor backend`() {
         val backends = ext.extensions(LANGUAGE_BACKEND_EP)
-        assertEquals(3, backends.size, "JDT + XML + Kotlin backends")
-        assertTrue(backends.first() is JdtLanguageBackend, "JDT must resolve first (the fallback)")
+        // Java(IntelliJ-PSI) + XML + Kotlin. JDT is no longer an editor backend (ecj is compile-only + the
+        // .java compile-level diagnostic provider); `.java` now routes to the IntelliJ-PSI backend.
+        assertEquals(3, backends.size, "Java(IntelliJ-PSI) + XML + Kotlin backends")
+        assertTrue(
+            backends.singleOrNull { LanguageId("java") in it.languages } is JavaLanguageBackend,
+            "the sole backend for LanguageId(java) must be the IntelliJ-PSI JavaLanguageBackend",
+        )
     }
 
     @Test

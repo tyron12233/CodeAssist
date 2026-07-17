@@ -6,14 +6,19 @@ import dev.ide.lang.kotlin.symbols.KotlinType
 import dev.ide.lang.kotlin.symbols.TypeRendering
 import dev.ide.lang.resolve.Modifier
 import dev.ide.lang.resolve.SymbolKind
+import com.intellij.psi.PsiElement
+import com.intellij.psi.util.PsiTreeUtil
 import org.jetbrains.kotlin.lexer.KtTokens
 import org.jetbrains.kotlin.psi.KtBinaryExpression
 import org.jetbrains.kotlin.psi.KtCallExpression
+import org.jetbrains.kotlin.psi.KtClassOrObject
+import org.jetbrains.kotlin.psi.KtConstructorDelegationCall
 import org.jetbrains.kotlin.psi.KtLambdaArgument
 import org.jetbrains.kotlin.psi.KtLambdaExpression
 import org.jetbrains.kotlin.psi.KtNameReferenceExpression
 import org.jetbrains.kotlin.psi.KtQualifiedExpression
 import org.jetbrains.kotlin.psi.KtAnnotationEntry
+import org.jetbrains.kotlin.psi.KtSuperTypeCallEntry
 import org.jetbrains.kotlin.psi.ValueArgument
 
 /** Call resolution: callee binding, overload selection, call-target enumeration, and value/annotation parameter shapes. */
@@ -478,6 +483,52 @@ fun KotlinResolver.callParameters(call: KtCallExpression): List<ParamInfo> {
             }
         }
     }
+    return out.values.toList()
+}
+
+/** The value parameters of the constructor a DELEGATION call targets — for named-argument completion the
+ *  [callParameters] (KtCallExpression) path can't reach. A supertype constructor call in a class header
+ *  (`class X : Base(<caret>)`, [KtSuperTypeCallEntry]) resolves the named supertype; a secondary-constructor
+ *  delegation ([KtConstructorDelegationCall]) resolves the enclosing class for `this(<caret>)` and its
+ *  superclass for `super(<caret>)` (unioning across supertypes — an interface contributes no constructor
+ *  params, so only the real superclass appears, without any class-vs-interface discrimination). */
+fun KotlinResolver.delegationCallParameters(marker: PsiElement?): List<ParamInfo> {
+    marker ?: return emptyList()
+    PsiTreeUtil.getParentOfType(marker, KtSuperTypeCallEntry::class.java)?.let { entry ->
+        val text = entry.typeReference?.text ?: return emptyList()
+        val fqn = service.resolveTypeName(text.substringBefore('<').trim(), fileContext) ?: return emptyList()
+        return constructorParams(fqn)
+    }
+    PsiTreeUtil.getParentOfType(marker, KtConstructorDelegationCall::class.java)?.let { call ->
+        val cls = PsiTreeUtil.getParentOfType(call, KtClassOrObject::class.java) ?: return emptyList()
+        if (call.isCallToThis) {
+            return cls.fqName?.asString()?.let { constructorParams(it) } ?: emptyList()
+        }
+        val out = LinkedHashMap<String, ParamInfo>()
+        for (e in cls.superTypeListEntries) {
+            val text = e.typeReference?.text ?: continue
+            val fqn = service.resolveTypeName(text.substringBefore('<').trim(), fileContext) ?: continue
+            for (p in constructorParams(fqn)) out.getOrPut(p.name) { p }
+        }
+        return out.values.toList()
+    }
+    return emptyList()
+}
+
+/** The distinct value parameters across a type [fqn]'s constructors — binary via [KotlinSymbolService.
+ *  constructorsOf], source via its [dev.ide.lang.kotlin.symbols.RawClass] constructors (incl. the primary) —
+ *  synthetic `p0` names dropped. Shared by delegation-call parameter completion. */
+private fun KotlinResolver.constructorParams(fqn: String): List<ParamInfo> {
+    val out = LinkedHashMap<String, ParamInfo>()
+    fun add(symbols: List<KotlinSymbol>) {
+        for (s in symbols) s.paramNames.forEachIndexed { i, n ->
+            if (n.isNotEmpty() && !isSyntheticParamName(n)) {
+                out.getOrPut(n) { ParamInfo(n, s.paramTypes.getOrNull(i) as? KotlinType) }
+            }
+        }
+    }
+    add(service.constructorsOf(fqn))
+    service.sourceClass(fqn)?.constructors?.let { ctors -> add(ctors.map { sourceCtorSymbol(it, fqn) }) }
     return out.values.toList()
 }
 

@@ -1,5 +1,6 @@
 package dev.ide.android.support.index
 
+import dev.ide.android.support.resources.LenientValuesScan
 import dev.ide.android.support.resources.ResourceType
 import dev.ide.index.Externalizer
 import dev.ide.index.IndexExtension
@@ -123,7 +124,13 @@ object ResourceFileScanner {
         val base = folder.substringBefore('-')
         val out = ArrayList<ResourceDeclValue>()
         if (base == "values") {
-            runCatching { parse(text, ValuesHandler(filePath, text, out)) }
+            // SAX abandons a malformed file at its first error, losing every declaration after it. On failure,
+            // drop its partial emission and recover ALL declarations leniently so a broken values file still
+            // resolves/completes its `@string/…`, `@color/…`, … references (see [LenientValuesScan]).
+            if (runCatching { parse(text, ValuesHandler(filePath, text, out)) }.isFailure) {
+                out.clear()
+                LenientValuesScan.scan(filePath, text).forEach { out += ResourceDeclValue(it.type.rClass, it.name, filePath, it.offset) }
+            }
         } else {
             val type = ResourceType.fromFolder(base) ?: return out
             out += ResourceDeclValue(type.rClass, baseName(filePath), filePath, 0)

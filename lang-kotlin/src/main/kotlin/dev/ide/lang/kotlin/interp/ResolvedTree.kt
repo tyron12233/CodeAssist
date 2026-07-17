@@ -173,6 +173,19 @@ sealed interface RNode {
      *  instead), while an unresolvable [typeFqn] (a type parameter / unmapped type) is trusted and passed
      *  through. [nullable] is the `?` on the target type (`as T?`) — it lets a null pass an unsafe cast. */
     data class Cast(val value: RNode, val typeFqn: String, val safe: Boolean, val nullable: Boolean, override val source: SourceSpan) : RNode
+    /** A class literal — `Foo::class` (a TYPE literal, [receiver] null) or `expr::class` (a runtime-class
+     *  literal of the evaluated [receiver]). Yields a `kotlin.reflect.KClass` normally, or a `java.lang.Class`
+     *  when [asJava] is set (the `::class.java` selector, folded in here so the interpreter needn't model
+     *  `KClass.java`). For the type form, [typeCandidates] is the resolved receiver type FQN followed by its
+     *  loadable supertype FQNs: a project-source type isn't compiled at preview time, so its nearest
+     *  reflectable supertype stands in (the resulting `Class`/`KClass` is only ever a token — e.g. the second
+     *  argument to `Intent(context, X::class.java)` — so the supertype is a sound stand-in). */
+    data class ClassLiteral(
+        val receiver: RNode?,
+        val typeCandidates: List<String>,
+        val asJava: Boolean,
+        override val source: SourceSpan,
+    ) : RNode
 
     // --- statements ---
     /** `try { … } catch (e: T) { … } … finally { … }`. The interpreter runs [body]; if it throws, the first
@@ -394,6 +407,7 @@ fun RNode.children(): List<RNode> = when (this) {
     is RNode.NotNull -> listOf(value)
     is RNode.TypeCheck -> listOf(value)
     is RNode.Cast -> listOf(value)
+    is RNode.ClassLiteral -> listOfNotNull(receiver)
     is RNode.Try -> listOf(body) + catches.map { it.body } + listOfNotNull(finallyBlock)
     is RNode.LocalVar -> listOfNotNull(initializer)
     is RNode.Assign -> listOf(target, value)

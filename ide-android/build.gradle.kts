@@ -827,4 +827,9 @@ dependencies {
     androidTestCompileOnly(project(":project-model-impl"))
     androidTestCompileOnly(project(":deps-impl"))
     androidTestCompileOnly(project(":deps-api"))
+    // JavaPsiConcurrentArtSpikeTest drives the IntelliJ-PSI Java indexer (JavaSourceIndexer) + the shared PSI
+    // host's concurrent read path (IntellijPsiHost.parseConcurrent) on ART. Both reach the app only
+    // transitively via :ide-core, so compile against them here; the app's dexed copies provide them at runtime.
+    androidTestCompileOnly(project(":lang-java"))
+    androidTestCompileOnly(project(":intellij-psi-host"))
 }

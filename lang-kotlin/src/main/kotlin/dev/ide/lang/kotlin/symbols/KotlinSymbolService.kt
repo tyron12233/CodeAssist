@@ -1449,6 +1449,26 @@ class KotlinSymbolService(
         return out.values.take(limit)
     }
 
+    /** Top-level package segments (`androidx`, `kotlin`, `com`, `java`, …) matching [prefix] — the candidates
+     *  for a bare `import <caret>` (before any dot). Drilling into one (`androidx.<caret>`) then routes through
+     *  [packageMembers]. */
+    fun rootPackages(prefix: String, limit: Int = 200): List<KotlinSymbol> {
+        val m = PrefixMatcher(prefix)
+        val out = LinkedHashMap<String, KotlinSymbol>()
+        index?.prefix<String>(PACKAGES, m.indexPrefix, 1000)?.forEach { hit ->
+            val seg = hit.value.substringBefore('.')
+            if (seg.isNotEmpty() && (prefix.isEmpty() || m.matches(seg)))
+                out.getOrPut(seg) { KotlinSymbol(seg, SymbolKind.PACKAGE, origin = BINARY) }
+        }
+        // Same-project source packages (the index lags the live buffer).
+        model().classByFqn.keys.forEach { fqn ->
+            val seg = fqn.substringBefore('.')
+            if (seg.isNotEmpty() && seg != fqn && (prefix.isEmpty() || m.matches(seg)))
+                out.getOrPut(seg) { KotlinSymbol(seg, SymbolKind.PACKAGE, origin = SOURCE) }
+        }
+        return out.values.take(limit)
+    }
+
     /**
      * Whether a BINARY classpath class [fqn] is a Kotlin file/multi-file **facade** (`FooKt`, `StringsKt`,
      * `StringsKt__StringsJVMKt`) — the synthetic class top-level functions/properties compile into. It is not a
@@ -1481,7 +1501,7 @@ class KotlinSymbolService(
         val m = PrefixMatcher(prefix)
         val out = LinkedHashMap<String, KotlinSymbol>()
         model().classByFqn.values.filter { !it.isCompanion && !it.isLocal && (prefix.isEmpty() || m.matches(it.simpleName)) }
-            .forEach { out[it.fqn] = KotlinSymbol(it.simpleName, SymbolKind.CLASS, typeByFqn(it.fqn), origin = SOURCE, declarationNode = it.node) }
+            .forEach { out[it.fqn] = KotlinSymbol(it.simpleName, rawClassKind(it), typeByFqn(it.fqn), origin = SOURCE, declarationNode = it.node) }
         // Top-level synthetic classes (Android `R`/`BuildConfig`, …) complete by simple name like any type.
         synthetic().let { idx ->
             idx.topLevelFqns.filter { prefix.isEmpty() || m.matches(it.substringAfterLast('.')) }
@@ -1513,6 +1533,15 @@ class KotlinSymbolService(
         // may have been dropped, so the caller must not treat the page as the complete match set.
         val capped = (classHits?.size ?: 0) >= limit || out.size > limit
         return TypeNameCandidates(out.values.take(limit), capped)
+    }
+
+    /** The [SymbolKind] a project-source [rc] completes as — so type-name completion (and its annotation-only
+     *  filter for `@…`) and the item icon reflect enum/interface/annotation instead of a blanket CLASS. */
+    private fun rawClassKind(rc: RawClass): SymbolKind = when {
+        rc.isAnnotation -> SymbolKind.ANNOTATION_TYPE
+        rc.isEnum -> SymbolKind.ENUM
+        rc.isInterface -> SymbolKind.INTERFACE
+        else -> SymbolKind.CLASS
     }
 
     /** The constructors declared by a classpath type [fqn] (own shape only — constructors aren't inherited),
@@ -1626,6 +1655,23 @@ class KotlinSymbolService(
         // A LIBRARY (classpath) sealed type: its direct subclasses come from the `@Metadata` `sealedSubclasses`
         // (decoded into the type shape). Non-empty ⟹ it is sealed (only sealed types carry the list).
         return typeShape(fqn)?.sealedSubclasses?.takeIf { it.isNotEmpty() }
+    }
+
+    /** The sealed subtypes of [fqn] as type-name completion candidates — name/kind/type/import shape identical
+     *  to [typeNameCandidates] (source classes carry their declaration node + real kind, library ones a plain
+     *  CLASS), prefix-filtered. Null when [fqn] is not a known sealed type (mirrors [sealedSubclassesOf]). Drives
+     *  `when (subject) { is <caret> }` on a sealed subject. */
+    fun sealedSubtypeCandidates(fqn: String, prefix: String): List<KotlinSymbol>? {
+        val subs = sealedSubclassesOf(fqn) ?: return null
+        val m = model()
+        val matcher = PrefixMatcher(prefix)
+        return subs.mapNotNull { sub ->
+            val simple = sub.substringAfterLast('.')
+            if (prefix.isNotEmpty() && !matcher.matches(simple)) return@mapNotNull null
+            val rc = m.classByFqn[sub]
+            if (rc != null) KotlinSymbol(rc.simpleName, rawClassKind(rc), typeByFqn(rc.fqn), origin = SOURCE, declarationNode = rc.node)
+            else KotlinSymbol(simple, SymbolKind.CLASS, typeByFqn(sub), origin = BINARY)
+        }
     }
 
     /**

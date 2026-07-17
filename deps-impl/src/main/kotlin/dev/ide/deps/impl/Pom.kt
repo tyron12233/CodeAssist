@@ -28,6 +28,14 @@ data class PomDependency(
 data class ManagedDep(val ga: GA, val version: String?, val scope: String?)
 
 /**
+ * A `<distributionManagement><relocation>` — the artifact has moved to a new coordinate (a rename/split).
+ * Any field the relocation omits keeps the current POM's value (Maven semantics), so `com.itextpdf:itext7-core`
+ * relocating with only `<artifactId>itext-core</artifactId>` means same group + version, new name. Consumers
+ * should resolve the target instead of the (usually artifact-less) stub.
+ */
+data class PomRelocation(val groupId: String?, val artifactId: String?, val version: String?)
+
+/**
  * One POM parsed verbatim (no parent merge, no property substitution yet). The resolver walks the
  * [parent] chain to build the *effective* POM (merged properties + dependencyManagement) before reading
  * [dependencies] — exactly the data needed to resolve transitives.
@@ -41,6 +49,7 @@ data class RawPom(
     val properties: Map<String, String>,
     val managed: List<ManagedDep>,
     val dependencies: List<PomDependency>,
+    val relocation: PomRelocation? = null,
 ) {
     /** The coordinate of this POM, falling back to the parent's group/version where the child omits them. */
     fun coordinate(): Coordinate? {
@@ -91,6 +100,10 @@ object PomParser {
             ?.map { dep -> readDependency(dep) }
             ?: emptyList()
 
+        val relocation = child(project, "distributionManagement")
+            ?.let { child(it, "relocation") }
+            ?.let { PomRelocation(text(it, "groupId"), text(it, "artifactId"), text(it, "version")) }
+
         return RawPom(
             groupId = text(project, "groupId"),
             artifactId = text(project, "artifactId"),
@@ -100,6 +113,7 @@ object PomParser {
             properties = properties,
             managed = managed,
             dependencies = dependencies,
+            relocation = relocation,
         )
     }
 

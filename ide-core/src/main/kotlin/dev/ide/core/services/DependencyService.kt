@@ -189,11 +189,15 @@ internal class DependencyService(private val ctx: EngineContext) : Disposable {
         m.dependencies.any { it is LibraryDependency && parseCoordinate(it.library.name) != null }
     }
 
-    /** Fingerprint of the declared library-dependency set (the reconcile marker's contents). */
-    private fun reconcileFingerprint(mods: List<Module>): String = mods.flatMap { m ->
-        m.dependencies.filterIsInstance<LibraryDependency>()
-            .map { "${m.id.value}|${it.library.name}|${it.variant ?: ""}" }
-    }.sorted().joinToString("\n")
+    /** Fingerprint of the declared library-dependency set (the reconcile marker's contents). The AAR-explosion
+     *  layout version is folded in so that bumping it (a change to WHAT the resolver unpacks from an AAR, e.g.
+     *  its `res/`) invalidates every marker → a one-time reconcile re-resolves on the next open, re-extracting
+     *  any stale exploded dir that predates the change (which would otherwise be reused missing its resources). */
+    private fun reconcileFingerprint(mods: List<Module>): String =
+        "v=${dev.ide.deps.impl.AAR_EXPLODE_VERSION}\n" + mods.flatMap { m ->
+            m.dependencies.filterIsInstance<LibraryDependency>()
+                .map { "${m.id.value}|${it.library.name}|${it.variant ?: ""}" }
+        }.sorted().joinToString("\n")
 
     /** Record that the current declared set has been fully resolved, so the next open skips the re-walk. */
     private fun markReconciled(fingerprint: String) = runCatching {

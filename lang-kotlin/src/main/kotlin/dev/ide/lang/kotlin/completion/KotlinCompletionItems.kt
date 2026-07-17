@@ -5,6 +5,7 @@ import dev.ide.lang.completion.CompletionItem
 import dev.ide.lang.completion.CompletionItemKind
 import dev.ide.lang.completion.CompletionRelevance
 import dev.ide.lang.completion.TextEdit
+import dev.ide.lang.dom.TextRange
 import dev.ide.lang.kotlin.resolve.*
 import dev.ide.lang.kotlin.symbols.KotlinSymbol
 import dev.ide.lang.kotlin.symbols.KotlinType
@@ -122,11 +123,20 @@ internal object KotlinCompletionItems {
         return if (m.kind == SymbolKind.METHOD) "$header {\n    $todo\n}" else "$header\n    get() = $todo"
     }
 
-    /** An `override fun/val …` stub for an inherited member, body `TODO(...)`, with the caret selecting the TODO. */
-    fun overrideItem(m: KotlinSymbol): CompletionItem {
+    /**
+     * An `override fun/val …` stub for an inherited member, body `TODO(...)`, with the caret selecting the TODO.
+     * [indent] is the member line's leading whitespace, prepended to the stub's continuation lines so a nested
+     * member's body and closing brace align to its column (the raw stub is indent-relative, and the editor
+     * inserts completion text verbatim without re-indenting). [leadingDelete] is the span of any
+     * `override`/`fun`/`val` + modifiers the user already typed before the name — supplied so accepting after
+     * `override fun onCr|` REPLACES that text instead of inserting a second `override fun` beside it.
+     */
+    fun overrideItem(m: KotlinSymbol, indent: String = "", leadingDelete: TextRange? = null): CompletionItem {
         val header = overrideHeader(m)
-        val insert = overrideStubText(m)
         val todo = "TODO(\"Not yet implemented\")"
+        // Re-indent the stub's continuation lines to the member's column (the same way the implement-members
+        // quick-fix does), since the editor inserts completion text verbatim without re-indenting.
+        val insert = overrideStubText(m).replace("\n", "\n$indent")
         val sel = insert.indexOf(todo)
         return CompletionItem(
             label = header,
@@ -135,6 +145,7 @@ internal object KotlinCompletionItems {
             detail = "override",
             sortPriority = -2,
             symbol = m,
+            additionalEdits = leadingDelete?.let { listOf(TextEdit(it, "")) } ?: emptyList(),
             caret = if (sel >= 0) CaretAction.Select(sel, todo.length) else CaretAction.AtEnd,
         )
     }
