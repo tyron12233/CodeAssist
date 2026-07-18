@@ -96,6 +96,14 @@ class KotlinSourceAnalyzer(ctx: CompilationContext) : SourceAnalyzer, Disposable
     @Volatile
     var sourceDocProvider: SourceDocProvider = SourceDocProvider.NONE
 
+    /** Injected by the host: whether this module targets Android (has an `AndroidFacet`). Authoritative when
+     *  set — an Android module keeps `android.*`/`androidx.*` type names in completion; a non-Android one hides
+     *  them (the shared index holds every module's classpath). Falls back to the [isAndroidPlatform] filename
+     *  sniff only when the host doesn't inject it (tests / non-ide-core hosts), because that sniff misses an
+     *  android.jar bundled under another name (on device) or a module typed `kotlin-*` that still uses Compose. */
+    @Volatile
+    var isAndroidModule: Boolean? = null
+
     /** Injected by the host: the current live editor buffers (VirtualFile path → text) for CROSS-file
      *  freshness — a declaration just typed in ANOTHER open file resolves/completes here before it is saved
      *  and reindexed. Pushed into the symbol model at each analyze/complete/resolve; the model diffs the
@@ -141,7 +149,7 @@ class KotlinSourceAnalyzer(ctx: CompilationContext) : SourceAnalyzer, Disposable
             extensionCacheDir,
             { syntheticClassProvider() },
             sourceDocProvider,
-            excludedTypePrefixes = if (isAndroidPlatform) emptyList() else ANDROID_TYPE_PREFIXES,
+            excludedTypePrefixes = if (isAndroidModule ?: isAndroidPlatform) emptyList() else ANDROID_TYPE_PREFIXES,
         )
     }
     private val service: KotlinSymbolService get() = serviceLazy.value

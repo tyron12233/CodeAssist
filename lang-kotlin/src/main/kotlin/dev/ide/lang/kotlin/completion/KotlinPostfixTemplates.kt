@@ -38,6 +38,9 @@ object KotlinPostfixTemplates {
             s.endsWith("Array") || s.endsWith("Sequence") || s == "Iterable" || s == "Iterator"
     }
 
+    private fun isArray(ctx: PostfixContext): Boolean =
+        ctx.type?.qualifiedName?.substringAfterLast('.')?.endsWith("Array") == true
+
     private fun template(
         key: String,
         example: String,
@@ -99,6 +102,30 @@ object KotlinPostfixTemplates {
         },
         template("print", "expr.print → print(expr)", "Print the expression") { c ->
             snippet { text("print(${c.expressionText})"); finalHere() }
+        },
+        template("when", "expr.when → when (expr) { }", "Wrap in a when") { c ->
+            snippet { text("when (${c.expressionText}) {\n    "); finalHere(); text("\n}") }
+        },
+        template("par", "expr.par → (expr)", "Wrap in parentheses") { c ->
+            snippet { text("(${c.expressionText})"); finalHere() }
+        },
+        template("cast", "expr.cast → expr as T", "Cast to a type") { c ->
+            snippet { text("${c.expressionText} as "); stop(1, "Type"); finalHere() }
+        },
+        template("try", "expr.try → try { expr } catch (e) { }", "Wrap in try/catch") { c ->
+            snippet {
+                text("try {\n    ${c.expressionText}\n} catch ("); stop(1, "e"); text(": Exception) {\n    ")
+                finalHere(); text("\n}")
+            }
+        },
+        template("takeIf", "expr.takeIf → expr.takeIf { }", "Keep the value when a predicate holds", ::isReference) { c ->
+            snippet { text("${c.expressionText}.takeIf { "); finalHere(); text(" }") }
+        },
+        template("takeUnless", "expr.takeUnless → expr.takeUnless { }", "Keep the value unless a predicate holds", ::isReference) { c ->
+            snippet { text("${c.expressionText}.takeUnless { "); finalHere(); text(" }") }
+        },
+        template("spread", "arr.spread → *arr", "Spread an array into a vararg", ::isArray) { c ->
+            snippet { text("*${c.expressionText}"); finalHere() }
         },
     )
 }

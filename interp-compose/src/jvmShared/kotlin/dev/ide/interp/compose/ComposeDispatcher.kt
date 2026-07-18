@@ -80,6 +80,18 @@ class ComposeDispatcher(
             val res = resolveResourceCall(callee, args)
             if (res !== NOT_A_RESOURCE) return res
         }
+        // Windowed composables (`Popup`/`Dialog`, and the Material components built on them — `DropdownMenu`,
+        // `AlertDialog`, `ModalBottomSheet`, …) open a REAL OS window (WindowManager/Dialog) anchored to the
+        // composable. The in-app preview has no host window to give them, so on device `DropdownMenu(expanded =
+        // true)` hangs the preview (window churn every recomposition) and headless it throws. Neither `Popup`
+        // nor Material honors `LocalInspectionMode`, so render the component's CONTENT INLINE here instead — the
+        // menu/dialog body composes in place (real Material items, just no window), which is what a static
+        // preview should show. Strictly additive: any uncertainty (unknown composable, no content lambda) falls
+        // through to normal dispatch, so this only fixes the intercepted cases and never regresses others.
+        if (c != null && callee is ResolvedCallable.Library) {
+            val inlined = renderWindowedInline(call, callee, c, args)
+            if (inlined !== NOT_WINDOWED) return inlined
+        }
         // A composable can be called top-level (`Text(…)`), as a member of an object/companion
         // (`CardDefaults.cardColors(…)`), or as an EXTENSION on a scope (`RowScope.NavigationBarItem(…)` inside a
         // `NavigationBar { }`). All transform to a `Composer`-taking method: top-level/extension are static on a
@@ -250,6 +262,54 @@ class ComposeDispatcher(
         }
 
     /**
+     * A windowed composable we render INLINE in the preview: its [method] on an owner in [ownerPrefix], whose
+     * trailing `@Composable` content lambda takes the receiver named by [contentReceiverFqn] (an object's
+     * `INSTANCE`, e.g. `ColumnScopeInstance` for a menu) or none.
+     */
+    private data class Windowed(val ownerPrefix: String, val method: String, val contentReceiverFqn: String?)
+
+    /**
+     * Windowed composables the preview renders inline instead of opening a real OS window. `Popup`/`Dialog` are
+     * the primitives; `DropdownMenu` is the common Material component (its content is a `ColumnScope` lambda).
+     * Multi-slot dialogs (`AlertDialog`) aren't here — they have no single content lambda to inline.
+     */
+    private val windowed = listOf(
+        Windowed("androidx.compose.material3", "DropdownMenu", "androidx.compose.foundation.layout.ColumnScopeInstance"),
+        Windowed("androidx.compose.ui.window", "Popup", null),
+        Windowed("androidx.compose.ui.window", "Dialog", null),
+    )
+
+    /**
+     * If [call] is a windowed composable ([windowed]), compose its trailing content lambda INLINE under the
+     * call-site group (so it shows in the preview without a real window) and return `Unit`; otherwise return
+     * [NOT_WINDOWED] so the caller dispatches normally. The content is the last interpreted lambda in
+     * declaration order (a menu's `onDismissRequest` lambda precedes it). Balances its group on throw so a
+     * failure surfaces as the preview's error view rather than corrupting the surrounding composition.
+     */
+    private fun renderWindowedInline(call: RNode.Call, callee: ResolvedCallable.Library, composer: Any, args: List<Any?>): Any? {
+        val owner = callee.ownerFqn ?: return NOT_WINDOWED
+        val spec = windowed.firstOrNull { it.method == callee.methodName && owner.startsWith(it.ownerPrefix) } ?: return NOT_WINDOWED
+        val ordered = reorderNamedArgs(callee.paramNames, call.args, args)
+        val content = ordered.lastOrNull { it is InterpretedLambda } as? InterpretedLambda ?: return NOT_WINDOWED
+        // The content lambda's receiver (a menu's ColumnScope), best-effort: absent → invoke with none (a body
+        // that doesn't use the receiver still composes).
+        val receiver = spec.contentReceiverFqn?.let { fqn ->
+            runCatching { Class.forName(fqn, false, loader ?: javaClass.classLoader).getField("INSTANCE").get(null) }.getOrNull()
+        }
+        val marker = ComposableAbi.currentMarker(composer)
+        ComposableAbi.startGroup(composer, call.callSiteKey.value)
+        var completed = false
+        try {
+            content.invoke(listOfNotNull(receiver))
+            completed = true
+            return Unit
+        } finally {
+            if (completed) ComposableAbi.endGroup(composer)
+            else runCatching { ComposableAbi.endToMarker(composer, marker) }
+        }
+    }
+
+    /**
      * Resolve a `androidx.compose.ui.res.*` resource composable against [resources], or [NOT_A_RESOURCE] when the
      * call isn't one we mediate / the resolver has no value (so the caller proceeds normally). Covers the String
      * family (`stringResource` with optional `vararg` format args, `stringArrayResource`, `pluralStringResource`;
@@ -290,5 +350,9 @@ class ComposeDispatcher(
         /** Sentinel: [resolveResourceCall] returns this when the call isn't a mediated resource function (a real
          *  resolved value is never null, so `!== NOT_A_RESOURCE` cleanly distinguishes the two). */
         val NOT_A_RESOURCE = Any()
+
+        /** Sentinel: [renderWindowedInline] returns this when the call isn't an inlined windowed composable, so
+         *  the caller dispatches it normally. */
+        val NOT_WINDOWED = Any()
     }
 }

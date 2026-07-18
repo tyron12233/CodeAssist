@@ -23,17 +23,26 @@ import dev.ide.lang.kotlin.symbols.KotlinType
 import dev.ide.lang.resolve.Modifier
 import dev.ide.lang.resolve.SymbolKind
 import com.intellij.psi.PsiElement
+import org.jetbrains.kotlin.kdoc.psi.api.KDoc
 import org.jetbrains.kotlin.lexer.KtTokens
 import org.jetbrains.kotlin.psi.KtBinaryExpression
 import org.jetbrains.kotlin.psi.KtBlockExpression
 import org.jetbrains.kotlin.psi.KtBlockStringTemplateEntry
+import org.jetbrains.kotlin.psi.KtBreakExpression
 import org.jetbrains.kotlin.psi.KtCallExpression
 import org.jetbrains.kotlin.psi.KtCallableReferenceExpression
 import org.jetbrains.kotlin.psi.KtClassBody
+import org.jetbrains.kotlin.psi.KtClassOrObject
 import org.jetbrains.kotlin.psi.KtConstructorDelegationCall
+import org.jetbrains.kotlin.psi.KtContinueExpression
 import org.jetbrains.kotlin.psi.KtExpression
 import org.jetbrains.kotlin.psi.KtFile
 import org.jetbrains.kotlin.psi.KtImportDirective
+import org.jetbrains.kotlin.psi.KtLabelReferenceExpression
+import org.jetbrains.kotlin.psi.KtLabeledExpression
+import org.jetbrains.kotlin.psi.KtLambdaArgument
+import org.jetbrains.kotlin.psi.KtLambdaExpression
+import org.jetbrains.kotlin.psi.KtLoopExpression
 import org.jetbrains.kotlin.psi.KtNameReferenceExpression
 import org.jetbrains.kotlin.psi.KtNamedDeclaration
 import org.jetbrains.kotlin.psi.KtNamedFunction
@@ -48,7 +57,9 @@ import org.jetbrains.kotlin.psi.KtQualifiedExpression
 import org.jetbrains.kotlin.psi.KtSimpleNameStringTemplateEntry
 import org.jetbrains.kotlin.psi.KtStringTemplateEntry
 import org.jetbrains.kotlin.psi.KtStringTemplateExpression
+import org.jetbrains.kotlin.psi.KtSuperExpression
 import org.jetbrains.kotlin.psi.KtSuperTypeCallEntry
+import org.jetbrains.kotlin.psi.KtThisExpression
 import org.jetbrains.kotlin.psi.KtSuperTypeList
 import org.jetbrains.kotlin.psi.KtTypeParameter
 import org.jetbrains.kotlin.psi.KtTypeReference
@@ -57,6 +68,7 @@ import org.jetbrains.kotlin.psi.KtValueArgument
 import org.jetbrains.kotlin.psi.KtValueArgumentList
 import org.jetbrains.kotlin.psi.KtValueArgumentName
 import org.jetbrains.kotlin.psi.KtWhenConditionIsPattern
+import org.jetbrains.kotlin.psi.KtWhenConditionWithExpression
 import org.jetbrains.kotlin.psi.KtWhenExpression
 
 /**
@@ -163,6 +175,18 @@ class KotlinCompletion(
             return CompletionResult(
                 emptyList(), isIncomplete = false, replacementRange = replaceRange
             )
+        }
+        // Inside a KDoc `/** */`: offer doc tags (`@param`, `@return`, …) / the documented declaration's
+        // parameter names after `@param`, and otherwise NOTHING — never the scope symbols/keywords a plain
+        // name-ref classification would wrongly leak into a doc comment.
+        kdocCompletion(markerLeaf, original, offset, prefix, matcher)?.let { kdocItems ->
+            return CompletionResult(kdocItems, isIncomplete = false, replacementRange = replaceRange)
+        }
+        // A label reference (`return@<caret>`, `break@`/`continue@<caret>`, `this@`/`super@<caret>`): offer the
+        // enclosing labels, NOT scope locals + type names — which is what a plain name-ref classification would
+        // wrongly surface here (a jump target is never a local or a type).
+        labelCompletion(markerLeaf, matcher)?.let { labelItems ->
+            return CompletionResult(labelItems, isIncomplete = false, replacementRange = replaceRange)
         }
         val nameRef = climbTo<KtNameReferenceExpression>(markerLeaf)
         // A callable REFERENCE — `::foo`, `receiver::foo`, `this::foo` — completes the name after `::`. A function
@@ -280,7 +304,12 @@ class KotlinCompletion(
             // Incomplete when the final set was truncated OR a producer capped its query — either way matches
             // exist that this page doesn't hold, so the engine must re-query as the prefix narrows instead of
             // narrowing this page client-side (which would permanently hide, e.g., `StringBuilder` typed from `S`).
-            isIncomplete = raw.size > MAX_ITEMS || pos.capped, replacementRange = replaceRange
+            // Also incomplete while the classpath index is still BUILDING: this page was served from whatever
+            // segments are open so far, so a classpath type (`Modifier`, …) that indexes moments later is absent
+            // — force a re-query on each keystroke until the index is ready, otherwise the editor caches this
+            // pre-index page as complete and a fast typist never sees the type appear (cf. LearnBackend).
+            isIncomplete = raw.size > MAX_ITEMS || pos.capped || !service.classpathReady(),
+            replacementRange = replaceRange,
         )
     }
 
@@ -390,7 +419,11 @@ class KotlinCompletion(
                 // `membersForCompletion` (which surfaces `values()`/`valueOf()`/`entries`) never lists them.
                 val enumConstants = service.enumConstantsOf(recvType.qualifiedName)
                     .filter { matcher.matches(it.name) }
-                members + enumConstants + service.companionMembersFor(
+                // The companion object itself (`Test.Companion`), reached statically through the type — offered
+                // alongside its members (`Test.rainbowColors`). Named companions appear under their given name.
+                val companion = service.companionObjectSymbol(recvType.qualifiedName)
+                    ?.takeIf { matcher.matches(it.name) }
+                members + enumConstants + listOfNotNull(companion) + service.companionMembersFor(
                     recvType.qualifiedName, prefix
                 ).filter { memberVisibleOn(it, typeReceiver = false) }
             } else {
@@ -444,7 +477,7 @@ class KotlinCompletion(
         // scope symbols / types. `packageCompletion = true` inserts the bare segment with NO auto-import edit —
         // otherwise accepting a type here injected a second `import` statement while editing an import. (A dotted
         // `import a.b.<caret>` is a member-access position, already served by packageMembers.)
-        if (climbTo<KtImportDirective>(markerLeaf) != null) {
+        if (climbTo<KtImportDirective>(markerLeaf) != null || climbTo<KtPackageDirective>(markerLeaf) != null) {
             return PositionResult(service.rootPackages(prefix), packageCompletion = true)
         }
         val extra = ArrayList<CompletionItem>()
@@ -491,6 +524,9 @@ class KotlinCompletion(
         // Inside an annotation's argument list → its parameter names (ranked first), plus the enum-ish constants
         // for @Preview's uiMode/device which aren't recoverable from the parameter type alone.
         extra += annotationArgExtras(markerLeaf, matcher, resolver)
+        // At a `when (subject) { <caret> }` branch slot on a SEALED/ENUM subject → a single "add remaining
+        // branches" item that fills every not-yet-covered case (IntelliJ's exhaustive-when fill).
+        whenAddBranchesItem(markerLeaf, offset, resolver)?.let { extra += it }
         // The marker IS the NAME being given to a declaration (`val foo`, `fun bar`, a parameter) — an
         // identifier the user is inventing, so scope symbols / type names / auto-imports don't belong here.
         // (Any override / ctor-property / named-argument stubs above still apply: they're the *right* offers at
@@ -605,6 +641,121 @@ class KotlinCompletion(
             n = n.parent
         }
         return false
+    }
+
+    /** A single "add remaining branches" item at a `when (subject) { <caret> }` branch slot when the subject is
+     *  a SEALED type or an enum and some cases aren't covered yet — inserts one branch per missing case
+     *  (`is Circle -> TODO()` / `Color.RED -> TODO()`), indented to the branch column. Null otherwise (not a
+     *  branch-condition slot, an unresolved/non-exhaustible subject, or every case already covered). */
+    private fun whenAddBranchesItem(leaf: PsiElement?, offset: Int, resolver: KotlinResolver): CompletionItem? {
+        climbTo<KtWhenConditionWithExpression>(leaf) ?: return null // a branch-condition slot (not a branch body)
+        val whenExpr = climbTo<KtWhenExpression>(leaf) ?: return null
+        val subject = whenExpr.subjectExpression ?: return null
+        val fqn = (resolver.inferType(subject) ?: return null).qualifiedName
+        val covered = HashSet<String>()
+        for (entry in whenExpr.entries) for (cond in entry.conditions) when (cond) {
+            is KtWhenConditionIsPattern ->
+                cond.typeReference?.text?.substringBefore('<')?.substringAfterLast('.')?.trim()?.let { covered += it }
+            is KtWhenConditionWithExpression ->
+                cond.expression?.text?.substringAfterLast('.')?.trim()?.let { if (MARKER !in it) covered += it }
+        }
+        val branches = service.sealedSubclassesOf(fqn)?.let { subs ->
+            subs.map { it.substringAfterLast('.') }.filter { it !in covered }.map { "is $it -> TODO()" }
+        } ?: service.enumConstantsOf(fqn).map { it.name }.filter { it !in covered }.let { missing ->
+            val simple = fqn.substringAfterLast('.')
+            missing.map { "$simple.$it -> TODO()" }
+        }
+        if (branches.isEmpty()) return null
+        val indent = lineIndentAt(leaf?.containingFile?.text ?: "", offset)
+        return CompletionItem(
+            label = "Add remaining branches",
+            insertText = branches.joinToString("\n$indent"),
+            kind = CompletionItemKind.KEYWORD,
+            detail = "when",
+            sortPriority = -3,
+        )
+    }
+
+    /** The leading whitespace of the line containing [offset] in [text]. */
+    private fun lineIndentAt(text: CharSequence, offset: Int): String {
+        var start = offset.coerceIn(0, text.length)
+        while (start > 0 && text[start - 1] != '\n') start--
+        var i = start
+        while (i < text.length && (text[i] == ' ' || text[i] == '\t')) i++
+        return text.substring(start, i)
+    }
+
+    /** Completion inside a KDoc comment, or null when [leaf] isn't in one. `@param <caret>` → the documented
+     *  declaration's parameter names; `@<caret>` → the standard doc tags; anywhere else in the doc → an EMPTY
+     *  list (suppresses the scope/keyword completion that would otherwise leak into prose). */
+    private fun kdocCompletion(
+        leaf: PsiElement?, original: String, offset: Int, prefix: String, matcher: PrefixMatcher
+    ): List<CompletionItem>? {
+        climbTo<KDoc>(leaf) ?: return null
+        val lineStart = original.lastIndexOf('\n', (offset - 1).coerceAtLeast(0)).let { if (it < 0) 0 else it + 1 }
+        val linePrefix = original.substring(lineStart, offset)
+        if (KDOC_PARAM_RE.containsMatchIn(linePrefix)) {
+            val params = climbTo<KtNamedFunction>(leaf)?.valueParameters?.mapNotNull { it.name }
+                ?: climbTo<KtClassOrObject>(leaf)?.primaryConstructorParameters?.mapNotNull { it.name }
+                ?: emptyList()
+            return params.filter { matcher.matches(it) }
+                .map { CompletionItem(it, it, CompletionItemKind.FIELD, sortPriority = -1) }
+        }
+        // A tag only right after `@` (the `@` is already typed, so insert the name without it, space-terminated).
+        if (original.getOrNull(offset - prefix.length - 1) == '@') {
+            return KDOC_TAGS.filter { matcher.matches(it) }
+                .map { CompletionItem("@$it", "$it ", CompletionItemKind.KEYWORD, sortPriority = -1) }
+        }
+        return emptyList()
+    }
+
+    /** Label candidates at a label reference [leaf] (`@<caret>` in return/break/continue/this/super), or null
+     *  when the caret isn't at a label. A jump's valid targets differ by kind: `break`/`continue` take only
+     *  labeled LOOPS; `return` takes enclosing lambda implicit labels (the call's name — `forEach`, `let`,
+     *  `Composable`), explicit `label@` names, and enclosing function names; `this`/`super` take enclosing class
+     *  names + receiver-lambda labels. */
+    private fun labelCompletion(leaf: PsiElement?, matcher: PrefixMatcher): List<CompletionItem>? {
+        if (climbTo<KtLabelReferenceExpression>(leaf) == null) return null
+        val labels = LinkedHashSet<String>()
+        when {
+            climbTo<KtBreakExpression>(leaf) != null || climbTo<KtContinueExpression>(leaf) != null ->
+                forEachAncestor(leaf) { n -> if (n is KtLoopExpression) (n.parent as? KtLabeledExpression)?.getLabelName()?.let { labels += it } }
+
+            climbTo<KtThisExpression>(leaf) != null || climbTo<KtSuperExpression>(leaf) != null ->
+                forEachAncestor(leaf) { n ->
+                    when (n) {
+                        is KtClassOrObject -> n.name?.let { labels += it }
+                        is KtLambdaExpression -> lambdaImplicitLabel(n)?.let { labels += it }
+                        is KtLabeledExpression -> n.getLabelName()?.let { labels += it }
+                    }
+                }
+
+            else -> forEachAncestor(leaf) { n -> // return@ (or a bare label)
+                when (n) {
+                    is KtLambdaExpression -> lambdaImplicitLabel(n)?.let { labels += it }
+                    is KtLabeledExpression -> n.getLabelName()?.let { labels += it }
+                    is KtNamedFunction -> n.name?.let { labels += it } // `return@funName` returns from it
+                }
+            }
+        }
+        return labels.filter { matcher.matches(it) }
+            .map { CompletionItem(it, it, CompletionItemKind.KEYWORD, sortPriority = -1) }
+    }
+
+    /** The implicit label of a lambda that is a call argument — the callee's name (`list.forEach { }` →
+     *  `forEach`, `run { }` → `run`), which `return@forEach` / `this@run` target. Null for a non-argument lambda. */
+    private fun lambdaImplicitLabel(lambda: KtLambdaExpression): String? {
+        val call = when (val p = lambda.parent) {
+            is KtLambdaArgument -> p.parent as? KtCallExpression
+            is KtValueArgument -> (p.parent as? KtValueArgumentList)?.parent as? KtCallExpression
+            else -> null
+        } ?: return null
+        return (call.calleeExpression as? KtNameReferenceExpression)?.getReferencedName()
+    }
+
+    private inline fun forEachAncestor(leaf: PsiElement?, action: (PsiElement) -> Unit) {
+        var n: PsiElement? = leaf
+        while (n != null) { action(n); n = n.parent }
     }
 
     /** The call whose argument list contains [leaf] (for named-argument completion), or null. */
@@ -729,6 +880,42 @@ class KotlinCompletion(
                 relevance = fits,
             )
         }
+        // The SHORT form of an enum constant (`RED` rather than `Color.RED`), importing the entry — what
+        // IntelliJ floats first at an enum slot. Ranked above the qualified form (which stays as a no-import
+        // fallback). Offered only for a true enum entry (a companion constant isn't cleanly entry-importable).
+        fun shortEnumItem(c: KotlinSymbol) {
+            out += CompletionItem(
+                label = c.name,
+                insertText = c.name,
+                kind = CompletionItemKind.ENUM_CONSTANT,
+                detail = simple,
+                sortPriority = -2,
+                symbol = c,
+                additionalEdits = autoImport.editForType("${expected.qualifiedName}.${c.name}"),
+                relevance = fits,
+            )
+        }
+        // The expected type used AS a value by its own name — the companion-object idiom: `Modifier`'s bare
+        // reference IS its companion object (an empty `Modifier`), so `modifier = Modifier` is valid. Android
+        // Studio floats this at an expected-`Modifier` slot; offer it here (resolved from the type SHAPE, so it
+        // appears even when the class-names index page capped the type out). Guarded to types whose companion
+        // IS-A the expected type (so `String`, whose companion is NOT a String, isn't offered as a value).
+        service.companionObjectSymbol(expected.qualifiedName)?.let { comp ->
+            val compType = comp.type as? KotlinType
+            if (matcher.matches(simple) && compType != null &&
+                runCatching { expected.isAssignableFrom(compType) }.getOrDefault(false)
+            ) {
+                out += CompletionItem(
+                    label = simple,
+                    insertText = simple,
+                    kind = CompletionItemKind.CLASS,
+                    detail = simple,
+                    sortPriority = -2,
+                    additionalEdits = autoImport.editForType(expected.qualifiedName),
+                    relevance = fits,
+                )
+            }
+        }
         if (expected.qualifiedName == "kotlin.Boolean") {
             for (b in listOf("true", "false")) {
                 if (matcher.matches(b)) {
@@ -741,7 +928,7 @@ class KotlinCompletion(
         val consts = service.enumConstantsOf(expected.qualifiedName)
         if (consts.isNotEmpty()) {
             consts.filter { matcher.matches(it.name) }
-                .forEach { constItem(it, CompletionItemKind.ENUM_CONSTANT) }
+                .forEach { shortEnumItem(it); constItem(it, CompletionItemKind.ENUM_CONSTANT) }
         } else {
             // Not an enum — offer the type's companion constants OF that type (`val Transparent: Color` on
             // `Color`'s companion), the value-class / object-constant idiom. Capped so a large palette (Color
@@ -916,6 +1103,16 @@ class KotlinCompletion(
     private companion object {
         // The classic completion dummy identifier; unlikely to collide with real code.
         const val MARKER = "IntellijIdeaRulezzz"
+
+        /** Standard KDoc block tags offered after `@` inside a `/** */` comment (names without the `@`). */
+        val KDOC_TAGS = listOf(
+            "param", "return", "throws", "exception", "property", "constructor", "receiver",
+            "see", "sample", "since", "suppress", "author",
+        )
+
+        /** Matches a `@param ` (optionally with a partial name) at the end of the current KDoc line — the spot
+         *  where the documented declaration's parameter names are offered. */
+        val KDOC_PARAM_RE = Regex("@param\\s+\\w*$")
 
         /**
          * The candidate ordering, hand-written as one stateless comparator instead of `compareBy(8 selectors)`:

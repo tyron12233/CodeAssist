@@ -3,6 +3,7 @@ package dev.ide.lang.kotlin.resolve
 import dev.ide.lang.kotlin.symbols.KotlinType
 import com.intellij.psi.PsiElement
 import org.jetbrains.kotlin.lexer.KtTokens
+import org.jetbrains.kotlin.psi.KtAnnotationEntry
 import org.jetbrains.kotlin.psi.KtBinaryExpression
 import org.jetbrains.kotlin.psi.KtCallExpression
 import org.jetbrains.kotlin.psi.KtDoWhileExpression
@@ -96,6 +97,16 @@ internal fun KotlinResolver.enclosingFunctionReturnType(from: PsiElement): Kotli
 
 internal fun KotlinResolver.expectedArgType(arg: KtValueArgument): KotlinType? {
     val argList = arg.parent as? KtValueArgumentList ?: return null
+    // An ANNOTATION argument (`@Foo(mode = <caret>)`): resolve against the annotation's parameter types so an
+    // enum-typed argument offers its constants — the annotation's arg list parent is a KtAnnotationEntry, not a
+    // KtCallExpression, so the call path below can't reach it.
+    (argList.parent as? KtAnnotationEntry)?.let { entry ->
+        val params = annotationParameters(entry)
+        val argName = arg.getArgumentName()?.asName?.identifier
+        val p = if (argName != null) params.firstOrNull { it.name == argName }
+        else params.getOrNull(argList.arguments.indexOf(arg))
+        return p?.type
+    }
     val call = argList.parent as? KtCallExpression ?: return null
     val targets = callTargets(call)
     if (targets.isEmpty()) return null

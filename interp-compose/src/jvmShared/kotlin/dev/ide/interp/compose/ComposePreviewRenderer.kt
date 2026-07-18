@@ -1,9 +1,11 @@
 package dev.ide.interp.compose
 
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.currentComposer
 import androidx.compose.runtime.remember
+import androidx.compose.ui.platform.LocalInspectionMode
 import dev.ide.interp.InterpProfile
 import dev.ide.interp.Interpreter
 import dev.ide.interp.PreviewResourceResolver
@@ -121,19 +123,30 @@ class ComposePreviewRenderer(
         // We're inside the IDE's composition: thread its composer, then drive the preview through its own
         // restart group so state changes recompose just the preview subtree.
         dispatcher.composer = currentComposer
-        val failure: Throwable? = try {
-            // The preview root is never skipped (restartable=false → always re-runs): it only recomposes when
-            // state IT read changed, in which case it must run. Skipping is a win for the CHILD composables it
-            // invokes (each routed through the interpreter's restartable=returnsUnit path), not the root itself.
-            InterpProfile.trace("interp.render", phase) {
-                runtime.invokeComposable(entry.name.hashCode(), restartable = false, force = false, args = emptyList()) {
-                    interpreter.call(entry, args)
+        // Render under LocalInspectionMode = true, exactly as Android Studio's @Preview / ComposeViewAdapter do.
+        // Inspection-aware components then behave for tooling instead of for a live device: a Popup / Dialog /
+        // DropdownMenu composes its content INLINE rather than opening a real OS window (which the in-composition
+        // preview has no host window for — it froze/threw), AndroidView shows a placeholder, and animations
+        // settle to their target. Without it, `DropdownMenu(expanded = true)` tried to open a real popup window
+        // and hung the preview. The try/catch lives INSIDE the provider (Compose forbids it AROUND a composable
+        // call like CompositionLocalProvider); `invokeComposable` itself is a plain function, so wrapping it is
+        // fine.
+        var failure: Throwable? = null
+        CompositionLocalProvider(LocalInspectionMode provides true) {
+            failure = try {
+                // The preview root is never skipped (restartable=false → always re-runs): it only recomposes when
+                // state IT read changed, in which case it must run. Skipping is a win for the CHILD composables it
+                // invokes (each routed through the interpreter's restartable=returnsUnit path), not the root itself.
+                InterpProfile.trace("interp.render", phase) {
+                    runtime.invokeComposable(entry.name.hashCode(), restartable = false, force = false, args = emptyList()) {
+                        interpreter.call(entry, args)
+                    }
                 }
+                null
+            } catch (t: Throwable) {
+                log.warning("Compose preview render failed: ${t::class.simpleName}: ${t.message}")
+                t
             }
-            null
-        } catch (t: Throwable) {
-            log.warning("Compose preview render failed: ${t::class.simpleName}: ${t.message}")
-            t
         }
         // After each composition pass, drain the content-lambda error (LazyColumn/Scaffold bodies that threw
         // mid-subcompose, outside this try/catch). Reset the field so the NEXT pass starts clean; always call
@@ -146,6 +159,7 @@ class ComposePreviewRenderer(
             }
             onPartialError(partial)
         }
-        if (failure != null) onError(failure)
+        val f = failure
+        if (f != null) onError(f)
     }
 }

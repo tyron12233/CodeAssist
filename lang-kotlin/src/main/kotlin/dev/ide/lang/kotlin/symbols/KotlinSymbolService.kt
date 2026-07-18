@@ -905,6 +905,21 @@ class KotlinSymbolService(
             .filter { it.name !in OBJECT_METHODS }
     }
 
+    /** The companion object of [typeFqnRaw] as a completion candidate — its declared simple name (`Companion`
+     *  by default, or a named companion's name), reached statically through the type (`Test.Companion`). Null
+     *  when the type has no companion object. Offered at a `Type.` reference alongside the companion's members. */
+    fun companionObjectSymbol(typeFqnRaw: String): KotlinSymbol? {
+        val companionFqn = companionObjectFqn(typeFqnRaw) ?: return null
+        val fqn = Builtins.kotlinTypeFor(typeFqnRaw) ?: typeFqnRaw
+        return KotlinSymbol(
+            name = companionFqn.substringAfterLast('.'),
+            kind = SymbolKind.CLASS,
+            type = typeByFqn(companionFqn),
+            modifiers = setOf(Modifier.STATIC),
+            origin = if (sourceClass(fqn) != null) SOURCE else BINARY,
+        )
+    }
+
     /**
      * Whether [typeFqnRaw] is a Kotlin `object` singleton (`CardDefaults`, `MaterialTheme`). A bare reference
      * to it denotes the INSTANCE, so completion off `Obj.` lists its members like an instance's rather than

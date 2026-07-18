@@ -44,7 +44,14 @@ kotlin {
             dependsOn(getByName("commonMain"))
             // `api`: :interp-core re-exports :lang-kotlin's ResolvedFunction, which appears in the renderer's
             // public signature, so consumers (the hosts) need it on their compile classpath.
-            dependencies { api(project(":interp-core")) }
+            dependencies {
+                api(project(":interp-core"))
+                // compileOnly: the renderer provides `LocalInspectionMode = true` around the preview (so
+                // Popup/Dialog/DropdownMenu render inline and tooling-aware components behave, exactly as a real
+                // @Preview does). LocalInspectionMode lives in compose.ui; keep it OFF the runtime artifact so it
+                // still resolves against whichever Compose the host bundles (the module's host-agnostic contract).
+                compileOnly(compose.ui)
+            }
         }
         getByName("desktopMain").dependsOn(jvmShared)
         getByName("androidMain").dependsOn(jvmShared)
