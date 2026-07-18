@@ -73,6 +73,9 @@ internal interface EngineContext {
     /** On-device APK install+launch port (the Android Run), or null on the desktop. */
     val apkInstaller: ApkInstaller?
 
+    /** On-device app-log channel (receives a running debug app's forwarded logs), or null on the desktop. */
+    val appLogChannel: AppLogChannel?
+
     /** [module] plus its transitive in-project module-dependency closure (the modules a build compiles/links). */
     fun moduleBuildClosure(module: Module): List<Module>
 

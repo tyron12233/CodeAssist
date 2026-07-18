@@ -278,6 +278,12 @@ class AndroidDeviceTools(
     /** Max class-dex merged in one batch on a large app (the "Dex merge batch size" setting). Read per build so
      *  a change applies on the next build; defaults to [BuiltInSettingsPages.DEX_MERGE_BATCH_DEFAULT]. */
     val mergeChunkProvider: () -> Int = { BuiltInSettingsPages.DEX_MERGE_BATCH_DEFAULT },
+    /** The bundled `:applog-runtime` jar (extracted from assets), woven into DEBUG builds so the running app
+     *  forwards its logs to the IDE's Logcat tab. Null → no instrumentation. */
+    val appLogRuntimeJar: Path? = null,
+    /** Whether app-log forwarding is enabled (the "Forward app logs" setting; read per build so a toggle
+     *  applies on the next build). Default on. Only consulted when [appLogRuntimeJar] is present. */
+    val appLogEnabled: () -> Boolean = { true },
 )
 
 /**
@@ -432,6 +438,7 @@ class IdeServices private constructor(
     private val androidTools: AndroidDeviceTools? = env.container.getServiceOrNull(ANDROID_DEVICE_TOOLS)
     private val dexRunner: DexRunner? = env.container.getServiceOrNull(DEX_RUNNER)
     private val apkInstaller: ApkInstaller? = env.container.getServiceOrNull(APK_INSTALLER)
+    private val appLogChannel: AppLogChannel? = env.container.getServiceOrNull(APP_LOG_CHANNEL)
     private val customViewRuntime: CustomViewRuntime? = env.container.getServiceOrNull(CUSTOM_VIEW_RUNTIME)
     private val kotlinPluginLoader: KotlinPluginLoader? = env.container.getServiceOrNull(KOTLIN_PLUGIN_LOADER)
     private val realViewRuntime: RealViewRuntime? = env.container.getServiceOrNull(REAL_VIEW_RUNTIME)
@@ -520,6 +527,10 @@ class IdeServices private constructor(
     private val _indexStatus = MutableStateFlow(IndexUiStatus())
     val indexStatus: StateFlow<IndexUiStatus> get() = _indexStatus
 
+    /** The running debug app's forwarded logs (the [AppLogChannel] port; the empty no-op flow when unwired —
+     *  desktop). Surfaced to the UI's "Logcat" console tab through [dev.ide.core.backend.BuildBackend]. */
+    val appLogState: StateFlow<AppLogSnapshot> get() = (appLogChannel ?: NoopAppLogChannel).logs
+
     // Live stage of the real-view layout render (relink → render), for the floating status chip; null = idle.
     private val _realViewProgress = MutableStateFlow<PreviewProgress?>(null)
     val realViewProgress: StateFlow<PreviewProgress?> get() = _realViewProgress
@@ -544,6 +555,7 @@ class IdeServices private constructor(
         override val androidTools get() = this@IdeServices.androidTools
         override val dexRunner get() = this@IdeServices.dexRunner
         override val apkInstaller get() = this@IdeServices.apkInstaller
+        override val appLogChannel get() = this@IdeServices.appLogChannel
         override fun modules() = this@IdeServices.modules()
         override fun projectOf(module: Module) = this@IdeServices.projectOf(module)
         override fun moduleRoot(module: Module) = this@IdeServices.moduleRoot(module)
@@ -1149,7 +1161,13 @@ class IdeServices private constructor(
 
     /** Called by the editor on every change so cross-file analysis sees the latest text. */
     fun updateDocument(file: Path, text: String) {
-        openDocuments[file.toAbsolutePath().normalize()] = text
+        val norm = file.toAbsolutePath().normalize()
+        val changed = openDocuments.put(norm, text) != text
+        // An UNSAVED edit to a `res/` file must make the synthetic `R` (code `R.string.*`) reflect it before
+        // save — drop the synthetic caches + nudge the live Java analyzers so the next analyze/complete
+        // regenerates `R` from the now-buffer-aware resource repository (its fingerprint includes open res
+        // buffers). Cheap cache-drops; the lazy repo rebuild is fingerprint-gated (only when content changed).
+        if (changed && isResourcePath(norm)) invalidateSyntheticClasses()
     }
 
     /** Persist a single editor buffer to disk and keep it as the live overlay (it now equals disk). The
@@ -1264,6 +1282,15 @@ class IdeServices private constructor(
         // dropped here: it is fingerprint-keyed on the res files, so a resource edit invalidates it on its own,
         // while an unrelated .kt edit (which also calls this) must not throw away the parsed resource set.
         syntheticCache = null; kotlinSyntheticCache.clear()
+        // The lang-java analyzers hold a LIVE IntelliJ env whose facade caches the resolved synthetic `R` by
+        // modification count — clearing the ide-core caches above regenerates the R SOURCE, but the Java env
+        // keeps resolving the stale class until its PSI caches are dropped. Resource edits deliberately don't
+        // dispose these analyzers (to keep the warm classpath env), so nudge each live one to drop its caches.
+        // (The Kotlin symbol service re-reads the freshly-swapped synthetic list by identity, so it needs no
+        // equivalent nudge.)
+        store.liveModuleContainers().forEach {
+            (it.peekService(ANALYZER_JAVA) as? dev.ide.lang.java.JavaSourceAnalyzer)?.invalidateSyntheticClasses()
+        }
     }
 
     /** The open buffers as an FQCN -> source overlay for the name environment, plus synthetic light classes. */
@@ -3407,18 +3434,33 @@ class IdeServices private constructor(
      */
     private fun resourceRepository(module: Module): CachedRepo? {
         val key = module.id.value
-        val fp = filesFingerprint(runCatching {
-            AndroidResources.resourceDirs(
-                module, store.workspace
-            )
-        }.getOrDefault(emptyList()), ".xml")
+        val resDirs = runCatching { AndroidResources.resourceDirs(module, store.workspace) }.getOrDefault(emptyList())
+        // Fingerprint the res FILES on disk PLUS any open editor buffer of a res `.xml` under those dirs — so an
+        // UNSAVED edit (a just-typed `<string>`) produces a fresh fingerprint and rebuilds the repository, and
+        // the synthetic `R` sees the new resource before the file is saved (matching the live XML `@string/` path).
+        val fp = filesFingerprint(resDirs, ".xml") + resourceBufferFingerprint(resDirs)
         repoCache[key]?.let { if (it.fingerprint == fp) return it }
         return synchronized(repoBuildLock) {
             val cur = repoCache[key]
             if (cur != null && cur.fingerprint == fp) cur
-            else runCatching { AndroidResources.repository(module, store.workspace) }.getOrNull()
-                ?.let { CachedRepo(fp, it).also { c -> repoCache[key] = c } }
+            else runCatching { AndroidResources.repository(module, store.workspace, textOverride = ::resourceBufferText) }
+                .getOrNull()?.let { CachedRepo(fp, it).also { c -> repoCache[key] = c } }
         }
+    }
+
+    /** The live editor-buffer text of an open `res/` file, or null (the parser then reads disk). */
+    private fun resourceBufferText(file: Path): String? = openDocuments[file.toAbsolutePath().normalize()]
+
+    /** A fingerprint fragment for every open `.xml` buffer under [resDirs] (path + content hash), so an unsaved
+     *  resource edit invalidates the repository cache. Empty when nothing under res/ is open. */
+    private fun resourceBufferFingerprint(resDirs: List<Path>): String {
+        if (resDirs.isEmpty() || openDocuments.isEmpty()) return ""
+        val norm = resDirs.map { it.toAbsolutePath().normalize() }
+        return openDocuments.entries.asSequence()
+            .filter { (p, _) -> p.toString().endsWith(".xml") && norm.any { p.startsWith(it) } }
+            .map { (p, text) -> "$p:${dev.ide.platform.ContentHash.of(text).value}" }
+            .sorted().joinToString("|", prefix = "|buf:")
+            .takeIf { it != "|buf:" } ?: ""
     }
 
     /** The shared merged repository instance for [module] (see [resourceRepository]), or null. */

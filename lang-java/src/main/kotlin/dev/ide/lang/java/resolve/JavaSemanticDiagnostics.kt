@@ -222,7 +222,10 @@ internal object JavaSemanticDiagnostics {
         // Report only the ROOT unresolved reference: if the qualifier itself doesn't resolve / has no type,
         // that qualifier is the real error and this one is a cascade — skip it.
         if (!qualifierResolvable(ref.qualifier)) return
-        if (ref.resolve() != null) return
+        // `multiResolve`, not `resolve`: an OVERLOADED method call with no applicable overload (e.g. `Math.max(1)`)
+        // has `resolve() == null` even though the name IS a known method — that is an applicability error
+        // (checkApplicability), NOT an unresolved symbol. Only an EMPTY candidate set means the name is unknown.
+        if (ref.multiResolve(false).isNotEmpty()) return
         val nameEl = ref.referenceNameElement ?: return
         val name = ref.referenceName ?: return
         out += diag(nameEl, "Cannot resolve symbol '$name'", JavaDiagnosticCodes.UNRESOLVED)
@@ -363,22 +366,29 @@ internal object JavaSemanticDiagnostics {
     // --- argument applicability ("cannot be applied to …") ------------------------------------------------
 
     /**
-     * When a call's name resolves to a method but the arguments don't fit it, report it — deferring the
-     * VERDICT to the resolver's own `isValidResult` (not a hand-rolled applicability judgement). Guarded to be
-     * false-positive-free: only when the name resolves (so the unresolved-ref check doesn't also fire), the
-     * method is non-generic and the call has no explicit type args, no argument is a poly / target-typed / not-
-     * yet-resolved expression, and the argument list is syntactically complete.
+     * When a call's name refers to a method (one or more overloads) but NO overload applies to the given
+     * arguments — wrong arity or incompatible types — report it, deferring the applicability VERDICT to the
+     * resolver (`ResolveResult.isValidResult`) rather than judging by hand. Uses `multiResolve` so the
+     * OVERLOADED case works: `resolve()` is null when several overloads match by name but none applies, which
+     * previously slipped past both this check and the unresolved-ref check. Guarded to be false-positive-free:
+     * the name must have candidates (an empty set is a genuine unresolved symbol, owned by [reportUnresolved]);
+     * no candidate may be generic and the call may carry no explicit type args; no argument may be a poly /
+     * target-typed / not-yet-resolved expression; and the argument list must be syntactically complete.
      */
     private fun checkApplicability(call: PsiMethodCallExpression, anchor: PsiElement, out: MutableList<Diagnostic>) {
-        if (call.methodExpression.resolve() == null) return // unresolved-ref check owns a missing name
-        val result = call.resolveMethodGenerics()
-        val method = result.element as? PsiMethod ?: return
-        if (result.isValidResult) return
-        if (method.hasTypeParameters() || call.typeArgumentList.typeArguments.isNotEmpty()) return
+        val candidates = call.methodExpression.multiResolve(false)
+        if (candidates.isEmpty()) return                 // unknown name → unresolved-ref check owns it
+        if (candidates.any { it.isValidResult }) return  // some overload applies → fine
+        val methods = candidates.mapNotNull { it.element as? PsiMethod }
+        if (methods.isEmpty()) return
+        // Generics/inference are inferred from arguments — skip if any candidate is generic (avoids FPs where
+        // the resolver is stricter than javac about inference), or the call has explicit type args.
+        if (methods.any { it.hasTypeParameters() } || call.typeArgumentList.typeArguments.isNotEmpty()) return
         val argList = call.argumentList
         if (PsiTreeUtil.findChildOfType(argList, PsiErrorElement::class.java) != null) return
         if (argList.expressions.any { it.type == null || isPoly(it) }) return
-        out += diag(anchor, "'${method.name}' cannot be applied to the given arguments", JavaDiagnosticCodes.CANNOT_APPLY)
+        val name = call.methodExpression.referenceName ?: return
+        out += diag(anchor, "'$name' cannot be applied to the given arguments", JavaDiagnosticCodes.CANNOT_APPLY)
     }
 
     // --- operator operand types ("operator '-' cannot be applied to 'String'") ----------------------------

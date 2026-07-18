@@ -278,6 +278,13 @@ interface BuildService {
     /** Answer the pending [permissionRequest] [id] with [decision]. */
     fun answerPermission(id: Int, decision: UiPermissionDecision) {}
 
+    /** Live logcat-style logs forwarded by the running (debug) app, for the "Logcat" console tab. Empty off
+     *  device / when app-log forwarding is unavailable. */
+    val appLog: StateFlow<AppLogUi> get() = MutableStateFlow(AppLogUi())
+
+    /** Clear the app-log buffer shown in the Logcat tab. */
+    fun clearAppLog() {}
+
     /** Selectable build-variant names for [moduleName] (e.g. `freeDebug`), empty for a non-Android module. */
     fun listVariants(moduleName: String): List<String> = emptyList()
 

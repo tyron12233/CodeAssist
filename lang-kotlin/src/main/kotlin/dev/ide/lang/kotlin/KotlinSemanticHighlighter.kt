@@ -527,9 +527,10 @@ class KotlinSemanticHighlighter(
         }
     }
 
-    /** Whether [name] is a property of an enclosing class — a member `val`/`var` or a `val`/`var` primary-
-     *  constructor param — returning its mutability (`var` → true), or null if none. Pure PSI: colors an
-     *  enclosing-class member read even where the resolver's implicit-receiver lookup can't. */
+    /** Whether [name] is a property of an enclosing class — a member `val`/`var`, a `val`/`var` primary-
+     *  constructor param, or a property of an enclosing class's COMPANION object (companion members are bare-
+     *  accessible inside the class) — returning its mutability (`var` → true), or null if none. Pure PSI: colors
+     *  an enclosing-class / companion member read even where the resolver's implicit-receiver lookup can't. */
     private fun enclosingClassMemberProperty(name: String, from: PsiElement): Boolean? {
         var cls = from.getStrictParentOfType<KtClassOrObject>()
         while (cls != null) {
@@ -537,6 +538,12 @@ class KotlinSemanticHighlighter(
                 ?.firstOrNull { it.name == name }?.let { return it.isVar }
             (cls as? KtClass)?.primaryConstructorParameters
                 ?.firstOrNull { it.hasValOrVar() && it.name == name }?.let { return it.isMutable }
+            // A companion object's members are accessible bare from the enclosing class (`rainbowColors` inside
+            // a member fun refers to the companion's `val rainbowColors`).
+            for (comp in cls.companionObjects) {
+                comp.body?.declarations?.filterIsInstance<KtProperty>()
+                    ?.firstOrNull { it.name == name }?.let { return it.isVar }
+            }
             cls = cls.getStrictParentOfType<KtClassOrObject>()
         }
         return null

@@ -13,6 +13,7 @@ import dev.ide.android.support.tasks.GenerateLibraryRTask
 import dev.ide.android.support.tasks.GenerateRJarTask
 import dev.ide.android.support.tasks.PackageAarTask
 import dev.ide.android.support.tasks.GenerateViewBindingTask
+import dev.ide.android.support.tasks.InjectAppLogProviderTask
 import dev.ide.android.support.gms.GoogleServices
 import dev.ide.android.support.tasks.BundleTask
 import dev.ide.android.support.tasks.L8DexTask
@@ -28,6 +29,7 @@ import dev.ide.android.support.tasks.SignApkTask
 import dev.ide.android.support.tasks.SignBundleTask
 import dev.ide.android.support.tools.Aapt2
 import dev.ide.android.support.tools.Aapt2Subprocess
+import dev.ide.android.support.tools.AndroidAppLogRuntime
 import dev.ide.android.support.tools.AndroidSdk
 import dev.ide.android.support.tools.ApkSigner
 import dev.ide.android.support.tools.ApkSignerTool
@@ -134,6 +136,11 @@ class AndroidBuildSystem(
      *  large app's merge is split into chunks of this size so its working set stays bounded ([DexMergeTask]).
      *  Read once per [createBuildGraph]; defaults to [DexMergeTask.DEFAULT_MERGE_CHUNK]. */
     private val mergeChunk: () -> Int = { DexMergeTask.DEFAULT_MERGE_CHUNK },
+    /** The IDE log-bridge runtime woven into DEBUG builds (never release/minify). Evaluated per build graph so
+     *  the host can gate it on a setting live; returns null (default) to not instrument — the build is then
+     *  byte-identical to before. `:ide-android` supplies the bundled runtime when the "Forward app logs"
+     *  setting is on. See [AndroidAppLogRuntime]. */
+    private val appLogRuntime: () -> AndroidAppLogRuntime? = { null },
 ) : BuildSystem {
 
     override val id: BuildSystemId = BuildSystemId.NATIVE
@@ -244,6 +251,11 @@ class AndroidBuildSystem(
         val minify = bt?.minifyEnabled == true
         // shrinkResources requires minify (R8's reachable-code analysis drives it); ignored otherwise (AGP errors).
         val shrinkResources = minify && bt.shrinkResources
+        // Debug-only IDE log bridge: on a debuggable, non-minified build the host-supplied runtime is woven in
+        // (its ContentProvider registered in the manifest + its classes added to the external dex scope), so
+        // the running app forwards its logs back to the IDE. Never touches release/minify builds; the DEX goal
+        // (layout-preview dex-prepare) is excluded so its dex-bucket seeding stays byte-identical.
+        val appLog = appLogRuntime()?.takeIf { bt?.debuggable == true && !minify && goal != BuildGoal.DEX }
         // An app bundle (.aab) is built from PROTO resources, so force proto linking for the bundle goal too.
         val bundle = goal == BuildGoal.BUNDLE
         val protoResources = shrinkResources || bundle
@@ -324,14 +336,30 @@ class AndroidBuildSystem(
         tasks.task(processManifest, listOf(checkAarMeta)) {
             ManifestMergeTask(processManifest, layout.manifest(facet), libraryManifests, manifestPlaceholders, facet.minSdk, facet.targetSdk, layout.mergedManifest)
         }
+        // On a debug build, splice the log-bridge <provider> into the merged manifest before linking; aapt2
+        // then links the instrumented copy. Non-debug builds link the plain merged manifest directly.
+        val linkManifest: Path
+        val manifestDep: TaskName
+        if (appLog != null) {
+            val injectAppLogTask = step("injectAppLogProvider")
+            val authority = "$applicationId.${appLog.authoritySuffix}"
+            tasks.task(injectAppLogTask, listOf(processManifest)) {
+                InjectAppLogProviderTask(injectAppLogTask, layout.mergedManifest, appLog.providerClassName, authority, layout.instrumentedManifest)
+            }
+            linkManifest = layout.instrumentedManifest
+            manifestDep = injectAppLogTask
+        } else {
+            linkManifest = layout.mergedManifest
+            manifestDep = processManifest
+        }
         tasks.task(aapt2Compile, listOf(mergeRes)) { Aapt2CompileTask(aapt2Compile, listOf(layout.mergedRes), layout.compiledRes, aapt2) }
         // A minify build needs aapt2's manifest/layout keep rules so R8 does not strip XML-referenced classes;
         // a shrinkResources build additionally links proto resources (R8's resource-shrinker input form).
-        tasks.task(aapt2Link, listOf(aapt2Compile, processManifest)) {
+        tasks.task(aapt2Link, listOf(aapt2Compile, manifestDep)) {
             Aapt2LinkTask(
                 aapt2Link,
                 layout.compiledRes,
-                layout.mergedManifest,
+                linkManifest,
                 sdk.androidJar,
                 facet.namespace,
                 extraPackages,
@@ -394,7 +422,9 @@ class AndroidBuildSystem(
         // Inputs to dex, by AGP scope: sub-module `jar` artifacts (consumed BY NAME) and external libraries.
         val subProjectJars = closure.map { jarPath(it) }
         val moduleJarProducers = closure.map { TaskName(":${it.name}:jar") }
-        val externalJars = libs.dexJars
+        // The debug-only log-bridge runtime rides the external dex scope (its immutable jar is content-hashed,
+        // so it's dexed once and cached like any library); null on release/non-instrumented builds.
+        val externalJars = libs.dexJars + (appLog?.let { listOf(it.runtimeJar) } ?: emptyList())
         // The app's R.jar (generateRFile): dexed in its OWN scope (rArchives) and merged into the PROJECT dex layer,
         // where AGP keeps R — NOT the external scope. Content-hashed, so it re-dexes only when resources change,
         // and being out of the external scope means a resource edit never re-dexes or re-merges the stable libraries.
@@ -444,8 +474,10 @@ class AndroidBuildSystem(
         // caches). When the on-device forked dexer has fallen back to in-process, drop to bounded per-library
         // archiving (the !dexExtOnePass branch): each library dexes with a capped working set and banks to the
         // shared cache as it completes, so progress survives a low-memory-killer stop.
+        // Keyed on the REAL external libraries (libs.dexJars), not the log-bridge runtime we may have appended:
+        // a dep-less app shouldn't flip to the forked one-pass just because instrumentation added one tiny jar.
         val dexExtOnePass =
-            facet.minSdk in 21..25 && externalJars.isNotEmpty() && !minify && goal != BuildGoal.DEX && mergeDexer.runsOffHeap()
+            facet.minSdk in 21..25 && libs.dexJars.isNotEmpty() && !minify && goal != BuildGoal.DEX && mergeDexer.runsOffHeap()
 
         // The merged dex layers the packager assembles (renumbered into one classes*.dex set) + packageApk's deps.
         var dexDirs: List<Path>
@@ -822,6 +854,8 @@ class AndroidBuildSystem(
         val explodedAar: Path = inter.resolve("exploded-aar")
         val aarMetadataCheck: Path = inter.resolve("aar-metadata-check").resolve("check.stamp") // checkAarMetadata marker
         val mergedManifest: Path = inter.resolve("merged-manifest").resolve("AndroidManifest.xml")
+        // The merged manifest + the debug-only log-bridge <provider> — what aapt2 links on an instrumented build.
+        val instrumentedManifest: Path = inter.resolve("instrumented-manifest").resolve("AndroidManifest.xml")
         val generatedGmsRes: Path = buildDir.resolve("generated").resolve("res").resolve("google-services").resolve(variantName)
         val genJava: Path = inter.resolve("gen")
         // AGP's compile_and_runtime_not_namespaced_r_class_jar: the R classes as bytecode, not compiled R.java.
@@ -949,8 +983,8 @@ class AndroidBuildSystem(
          * Desktop wiring: every tool is a subprocess over an installed SDK (`java -cp d8.jar …`,
          * `java -jar apksigner.jar …`, native aapt2/zipalign). No statically-linked tool jars needed.
          */
-        fun subprocess(sdk: AndroidSdk, signing: SigningConfig, bootClasspath: List<Path> = emptyList(), kotlin: IncrementalKotlinCompiler? = null, plugins: List<KotlinCompilerPlugin> = BUILTIN_KOTLIN_COMPILER_PLUGINS, dexCacheRoot: Path? = null, desugarLib: DesugarLib? = null, signingResolver: ((Module, String) -> SigningConfig?)? = null): AndroidBuildSystem =
-            AndroidBuildSystem(sdk, signing, bootClasspath, kotlin = kotlin, plugins = plugins, dexCacheRoot = dexCacheRoot, desugarLib = desugarLib, signingResolver = signingResolver)
+        fun subprocess(sdk: AndroidSdk, signing: SigningConfig, bootClasspath: List<Path> = emptyList(), kotlin: IncrementalKotlinCompiler? = null, plugins: List<KotlinCompilerPlugin> = BUILTIN_KOTLIN_COMPILER_PLUGINS, dexCacheRoot: Path? = null, desugarLib: DesugarLib? = null, signingResolver: ((Module, String) -> SigningConfig?)? = null, appLogRuntime: () -> AndroidAppLogRuntime? = { null }): AndroidBuildSystem =
+            AndroidBuildSystem(sdk, signing, bootClasspath, kotlin = kotlin, plugins = plugins, dexCacheRoot = dexCacheRoot, desugarLib = desugarLib, signingResolver = signingResolver, appLogRuntime = appLogRuntime)
 
         /**
          * On-device-shaped wiring: the native tools (aapt2, zipalign) run as subprocesses against the
@@ -959,7 +993,7 @@ class AndroidBuildSystem(
          * ART (where `java -jar` is impossible); the desktop test runs it too, so the on-device dex/sign
          * code path is exercised on the host.
          */
-        fun inProcess(sdk: AndroidSdk, signing: SigningConfig, bootClasspath: List<Path> = emptyList(), kotlin: IncrementalKotlinCompiler? = null, plugins: List<KotlinCompilerPlugin> = BUILTIN_KOTLIN_COMPILER_PLUGINS, dexCacheRoot: Path? = null, desugarLib: DesugarLib? = null, signingResolver: ((Module, String) -> SigningConfig?)? = null, shrinker: Shrinker? = null, dexer: Dexer? = null, mergeDexer: Dexer? = null, mergeChunk: () -> Int = { DexMergeTask.DEFAULT_MERGE_CHUNK }): AndroidBuildSystem =
+        fun inProcess(sdk: AndroidSdk, signing: SigningConfig, bootClasspath: List<Path> = emptyList(), kotlin: IncrementalKotlinCompiler? = null, plugins: List<KotlinCompilerPlugin> = BUILTIN_KOTLIN_COMPILER_PLUGINS, dexCacheRoot: Path? = null, desugarLib: DesugarLib? = null, signingResolver: ((Module, String) -> SigningConfig?)? = null, shrinker: Shrinker? = null, dexer: Dexer? = null, mergeDexer: Dexer? = null, mergeChunk: () -> Int = { DexMergeTask.DEFAULT_MERGE_CHUNK }, appLogRuntime: () -> AndroidAppLogRuntime? = { null }): AndroidBuildSystem =
             AndroidBuildSystem(
                 sdk, signing, bootClasspath,
                 // The dexBuilder ARCHIVE dexer. The host can inject a forked-VM D8 (an [OffHeapArchiveDexer]) so a
@@ -979,6 +1013,7 @@ class AndroidBuildSystem(
                 desugarLib = desugarLib,
                 signingResolver = signingResolver,
                 mergeChunk = mergeChunk,
+                appLogRuntime = appLogRuntime,
             )
 
         /** A debug-signed [subprocess] build system, creating the shared debug keystore on demand. */

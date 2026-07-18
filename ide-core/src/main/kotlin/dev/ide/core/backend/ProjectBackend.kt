@@ -16,6 +16,7 @@ import dev.ide.ui.backend.UiExportOptions
 import dev.ide.ui.backend.UiImportPreview
 import dev.ide.ui.backend.UiPackagedEntry
 import dev.ide.ui.backend.UiProjectIcon
+import dev.ide.ui.backend.UiOpenTab
 import dev.ide.ui.backend.UiOpenTabs
 import dev.ide.ui.backend.UiProjectResult
 import dev.ide.ui.backend.UiProjectTemplate
@@ -27,6 +28,9 @@ import kotlinx.coroutines.withContext
 import java.nio.file.Files
 import java.nio.file.Path
 import java.nio.file.Paths
+
+/** Marker on line 1 of `.platform/open-tabs.txt` for the caret/scroll/view-mode-aware tab format (see below). */
+private const val TAB_FORMAT_V2 = "#v2"
 
 /**
  * [ProjectService]: the project picker + create/open/delete, the Create-Project template gallery, and the
@@ -228,9 +232,13 @@ internal class ProjectBackend(private val ctx: BackendContext) : ProjectService 
         }
     }
 
-    // Open tabs are persisted per project, alongside the other workspace state under `.platform/`. Format:
-    // line 1 = active index, each following line = one open file path (tab order). Best-effort — a missing or
-    // unreadable file just means "no remembered tabs". Kept out of `.platform/caches/` so a backup includes it.
+    // Open tabs are persisted per project, alongside the other workspace state under `.platform/`. Kept out of
+    // `.platform/caches/` so a backup includes it. Best-effort — a missing or unreadable file just means "no
+    // remembered tabs". Two on-disk formats, both line-based:
+    //   v1 (legacy):  line 1 = active index, each following line = one open file path (tab order).
+    //   v2 (current): line 1 = "#v2" marker, line 2 = active index, then one `path\tcaret\tscrollLine\tviewMode`
+    //                 per tab — so a reopened tab restores its caret, scroll, and view surface, not just its
+    //                 path. A v1 first line is always an integer, so the "#v2" marker disambiguates on read.
     private val openTabsFile: Path? get() = ctx.servicesOrNull?.workspaceRoot?.resolve(".platform/open-tabs.txt")
 
     override fun openTabs(): UiOpenTabs {
@@ -238,10 +246,30 @@ internal class ProjectBackend(private val ctx: BackendContext) : ProjectService 
         if (!file.exists()) return UiOpenTabs()
         return runCatching {
             val lines = file.readText().split('\n')
-            val active = lines.firstOrNull()?.trim()?.toIntOrNull() ?: -1
-            val paths = lines.drop(1).map { it.trim() }.filter { it.isNotEmpty() }
-            UiOpenTabs(paths, active)
+            if (lines.firstOrNull()?.trim() == TAB_FORMAT_V2) {
+                val active = lines.getOrNull(1)?.trim()?.toIntOrNull() ?: -1
+                val tabs = lines.drop(2).mapNotNull { parseTabLine(it) }
+                UiOpenTabs(tabs, active)
+            } else {
+                // Legacy v1: active index + bare paths.
+                val active = lines.firstOrNull()?.trim()?.toIntOrNull() ?: -1
+                val paths = lines.drop(1).map { it.trim() }.filter { it.isNotEmpty() }
+                UiOpenTabs.ofPaths(paths, active)
+            }
         }.getOrDefault(UiOpenTabs())
+    }
+
+    /** Parse one v2 tab line (`path\tcaret\tscrollLine\tviewMode`); null for a blank/pathless line. */
+    private fun parseTabLine(line: String): UiOpenTab? {
+        val fields = line.split('\t')
+        val path = fields.getOrNull(0)?.trim().orEmpty()
+        if (path.isEmpty()) return null
+        return UiOpenTab(
+            path = path,
+            caret = fields.getOrNull(1)?.trim()?.toIntOrNull() ?: 0,
+            scrollLine = fields.getOrNull(2)?.trim()?.toIntOrNull() ?: 0,
+            viewMode = fields.getOrNull(3)?.trim()?.takeIf { it.isNotEmpty() } ?: "text",
+        )
     }
 
     override fun saveOpenTabs(tabs: UiOpenTabs) {
@@ -250,8 +278,16 @@ internal class ProjectBackend(private val ctx: BackendContext) : ProjectService 
             Files.createDirectories(file.parent)
             file.toFile().writeText(
                 buildString {
+                    append(TAB_FORMAT_V2).append('\n')
                     append(tabs.activeIndex).append('\n')
-                    tabs.paths.forEach { append(it).append('\n') }
+                    // Tab/newline separate the fields/rows, so strip them from the path (real paths never carry
+                    // either) rather than let a stray one corrupt the record.
+                    tabs.tabs.forEach { t ->
+                        append(t.path.replace('\t', ' ').replace('\n', ' ')).append('\t')
+                        append(t.caret).append('\t')
+                        append(t.scrollLine).append('\t')
+                        append(t.viewMode).append('\n')
+                    }
                 },
             )
         }

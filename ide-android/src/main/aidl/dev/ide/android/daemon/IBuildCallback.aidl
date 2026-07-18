@@ -24,4 +24,10 @@ interface IBuildCallback {
     // :build, but firing the installed app's activity from that background process is blocked by Android's
     // background-activity-launch rules — the UI has a foreground activity, so it can.
     oneway void onLaunchPackage(String packageName);
+
+    // --- App-log forwarding (the Logcat tab). The debug app's log bridge connects to a LocalServerSocket in
+    // :build; these stream the received lines + connection state to the UI. [level] is a UiLogLevel ordinal.
+    oneway void onAppLog(int level, String tag, int pid, int tid, String message, long timestampMs);
+    // Session/connection change. reset = true means clear the buffer (a new run started); packageName may be empty.
+    oneway void onAppLogState(boolean connected, String packageName, boolean reset);
 }

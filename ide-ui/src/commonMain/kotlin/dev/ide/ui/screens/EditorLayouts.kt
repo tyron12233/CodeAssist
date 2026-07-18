@@ -13,6 +13,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
@@ -155,6 +156,9 @@ internal fun ExpandedLayout(
             if (state.consoleOpen) {
                 VerticalDivider()
                 GlassSurface(Modifier.width(380.dp).fillMaxHeight(), GlassMaterial.Regular) {
+                    // Collected here (not threaded from the parent) so ~10/s app-log updates recompose only
+                    // the console subtree, not the whole editor layout.
+                    val appLog by state.backend.build.appLog.collectAsState()
                     BuildConsole(
                         buildState = buildState,
                         indexStatus = indexStatus,
@@ -165,6 +169,7 @@ internal fun ExpandedLayout(
                         onOpenDiagnostic = { d -> d.file?.let { state.openAtLine(it, d.line, d.column) } },
                         backend = state.backend,
                         activeFilePath = state.active?.path,
+                        appLog = appLog,
                     )
                 }
             }
@@ -311,6 +316,7 @@ internal fun CompactLayout(
                     },
                     bar = { BottomNav(selected = state.rail, onSelect = state::selectRail) },
                 ) {
+                    val appLog by state.backend.build.appLog.collectAsState()
                     BuildConsole(
                         buildState = buildState,
                         indexStatus = indexStatus,
@@ -322,6 +328,7 @@ internal fun CompactLayout(
                         onOpenDiagnostic = { d -> d.file?.let { state.openAtLine(it, d.line, d.column); state.consoleOpen = false } },
                         backend = state.backend,
                         activeFilePath = state.active?.path,
+                        appLog = appLog,
                     )
                 }
             }

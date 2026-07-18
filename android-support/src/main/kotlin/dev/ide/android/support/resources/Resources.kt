@@ -69,7 +69,10 @@ class ResourceRepository(
  * (or a future aapt2-`R.txt` one) without touching callers.
  */
 interface ResourceModel {
-    fun parse(resDirs: List<Path>): ResourceRepository
+    /** Parse [resDirs] into a repository. [textOverride] supplies the live editor-buffer text of an open
+     *  `res/` file (keyed by its absolute path), so an unsaved edit is reflected before it is written to
+     *  disk; returns null for a file with no override (the parser then reads disk as usual). */
+    fun parse(resDirs: List<Path>, textOverride: (Path) -> String? = { null }): ResourceRepository
 
     companion object {
         /** The default, dependency-free model used on desktop and ART alike. */

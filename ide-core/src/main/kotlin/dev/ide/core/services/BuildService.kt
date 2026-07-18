@@ -12,6 +12,7 @@ import kotlinx.coroutines.launch
 import dev.ide.android.support.AndroidBuildSystem
 import dev.ide.android.support.AndroidFacet
 import dev.ide.android.support.AndroidVariants
+import dev.ide.android.support.tools.AndroidAppLogRuntime
 import dev.ide.android.support.tools.AndroidSdk
 import dev.ide.android.support.tools.D8InProcessDexer
 import dev.ide.android.support.tools.DebugKeystore
@@ -79,8 +80,16 @@ import java.nio.file.Paths
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
+import dev.ide.core.AppLogEntry
+import dev.ide.core.AppLogLevel
+import dev.ide.core.AppLogSnapshot
+import dev.ide.ui.backend.AppLogLineUi
+import dev.ide.ui.backend.AppLogUi
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
@@ -199,6 +208,14 @@ internal class BuildService(private val ctx: EngineContext) : Disposable {
                 dexer = t.r8MergeDexer,
                 // The "Dex merge batch size" setting (app-scoped); read per build via the host's provider.
                 mergeChunk = t.mergeChunkProvider,
+                // Debug-only IDE log bridge: when the host bundled the runtime jar AND the "Forward app logs"
+                // setting is on, weave it into debug builds so the running app forwards its logs to the IDE.
+                // Evaluated per build graph, so toggling the setting takes effect on the next build (no restart).
+                appLogRuntime = {
+                    t.appLogRuntimeJar?.takeIf { t.appLogEnabled() }?.let {
+                        AndroidAppLogRuntime(it, AndroidAppLogRuntime.DEFAULT_PROVIDER_CLASS, AndroidAppLogRuntime.DEFAULT_AUTHORITY_SUFFIX)
+                    }
+                },
             )
         }
         val sdk =
@@ -232,6 +249,16 @@ internal class BuildService(private val ctx: EngineContext) : Disposable {
     private val buildCache = BuildCache(ctx.store.rootPath.resolve(".platform/caches/build"))
     private val _buildState = MutableStateFlow(BuildState())
     val buildState: StateFlow<BuildState> get() = _buildState
+
+    /** Logcat-style logs from the running debug app, mapped from the [dev.ide.core.AppLogChannel] port's
+     *  snapshot to the UI DTO. Empty flow off-device. Coalesced upstream (~10/s), so the per-emit list map is
+     *  bounded by the channel's ring-buffer cap. */
+    val appLog: StateFlow<AppLogUi> = (ctx.appLogChannel?.logs ?: MutableStateFlow(AppLogSnapshot()))
+        .map { it.toUi() }
+        .stateIn(buildScope, SharingStarted.Eagerly, AppLogUi())
+
+    /** Clear the app-log buffer (the Logcat tab's Clear action). */
+    fun clearAppLog() { ctx.appLogChannel?.clear() }
 
     @Volatile
     private var buildCtx: SimpleTaskContext? = null
@@ -666,6 +693,9 @@ internal class BuildService(private val ctx: EngineContext) : Disposable {
                         )
                     )
                     val apk = AndroidBuildSystem.signedApkPath(module, variant)
+                    // Start a fresh app-log capture session for this package before launching, so the injected
+                    // bridge's LocalServerSocket is listening by the time the app boots. No-op off-device.
+                    ctx.appLogChannel?.start(pkg)
                     // On a successful build, install + launch (the OS shows its own install-confirmation).
                     launch(
                         module.name,
@@ -945,6 +975,24 @@ internal class BuildService(private val ctx: EngineContext) : Disposable {
             else -> UiLogLevel.Info
         }
     }
+
+    private fun AppLogSnapshot.toUi(): AppLogUi =
+        AppLogUi(lines = entries.map { it.toUi() }, connected = connected, packageName = packageName)
+
+    private fun AppLogEntry.toUi(): AppLogLineUi = AppLogLineUi(
+        message = message,
+        level = when (level) {
+            AppLogLevel.VERBOSE, AppLogLevel.DEBUG -> UiLogLevel.Debug
+            AppLogLevel.INFO -> UiLogLevel.Info
+            AppLogLevel.WARN -> UiLogLevel.Warn
+            AppLogLevel.ERROR -> UiLogLevel.Error
+        },
+        tag = tag,
+        pid = pid,
+        tid = tid,
+        timeLabel = buildLogTimeLabel(timestampMs),
+        timestampMs = timestampMs,
+    )
 
     /** Local time-of-day label (HH:mm:ss.SSS) for a build-log line's epoch-millis timestamp. */
     private fun buildLogTimeLabel(ms: Long): String = runCatching {

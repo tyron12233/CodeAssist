@@ -33,6 +33,7 @@ import dev.ide.ui.generated.resources.import_unrecognized
 import dev.ide.ui.generated.resources.settings_title
 import dev.ide.ui.navigation.ScreenHost
 import dev.ide.ui.platform.PlatformBackHandler
+import dev.ide.ui.platform.ioDispatcher
 import dev.ide.ui.screens.CreateProjectScreen
 import dev.ide.ui.screens.CodeStyleScreen
 import dev.ide.ui.screens.EditorScreen
@@ -64,11 +65,23 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.drop
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import org.jetbrains.compose.resources.stringResource
 import kotlin.time.Duration.Companion.milliseconds
 
 /** Preference key remembering the last author entered in the Export-project dialog (not per-project). */
 private const val EXPORT_AUTHOR_PREF = "export.author"
+
+/** App preference holding the workspace root of the project on screen when the app was last used, so a process
+ *  kill (or a normal relaunch) resumes back into it instead of the picker. Blank = the picker was showing. */
+private const val LAST_PROJECT_PREF = "session.lastProject"
+
+/** App preference gating the resume-last-project behavior. Unset/anything-but-"false" = on (the default). */
+private const val REOPEN_LAST_PROJECT_PREF = "session.reopenLastProject"
+
+/** The open-tab session bits that, when any change, should reschedule the debounced tab save (so the persisted
+ *  session tracks the caret / scroll / view surface, not just which files are open). */
+private data class TabSessionKey(val path: String, val caret: Int, val scrollLine: Int, val viewMode: EditorViewMode)
 
 /**
  * Root of the reusable IDE UI. Hosts pick the toolkit (Compose Desktop window, Android activity) and
@@ -148,6 +161,15 @@ fun CodeAssistApp(
     val importUnrecognizedMsg = stringResource(Res.string.import_unrecognized)
     val scope = rememberCoroutineScope()
 
+    // Session resume across a process kill: the project that was on screen last run (captured up-front, before
+    // any effect runs, so the maintenance effect below can't clear it before the resume effect reads it) and
+    // whether resume is enabled (default on). [lastPersistedProject] mirrors the last value written so the
+    // maintenance effect writes only on an actual picker ⇆ project change; it starts at the picker sentinel so
+    // the brief "picker → resumed project" startup window never rewrites (and so can't clear) the on-disk pref.
+    val resumeProject = remember { backend.settings.preference(LAST_PROJECT_PREF)?.takeIf { it.isNotBlank() } }
+    val reopenLast = remember { backend.settings.preference(REOPEN_LAST_PROJECT_PREF)?.toBooleanStrictOrNull() != false }
+    var lastPersistedProject by remember { mutableStateOf("") }
+
     // Create a project backup zip and hand it to the host's share/save sheet.
     val backupAndShare: suspend () -> Unit =
         { backend.projects.backupProjects()?.let { fileActions.share(it) } }
@@ -168,11 +190,19 @@ fun CodeAssistApp(
         if (!state.restoreTabs()) {
             state.defaultFile()?.let { node -> node.filePath?.let { state.open(it, node.name) } }
         }
-        snapshotFlow { state.openFiles.map { it.path } to state.activeIndex }.drop(1)
-            .collectLatest {
-                delay(300.milliseconds)
-                state.backend.projects.saveOpenTabs(state.tabsSnapshot())
-            }
+        snapshotFlow {
+            // Re-emit when the tab set, the active tab, OR any tab's caret / scroll / view mode changes, so the
+            // persisted session records where the user is — not only which files are open. `drop(1)` skips the
+            // just-restored state; `collectLatest` + the debounce coalesce a burst of edits/scrolls into one
+            // write once the user settles.
+            state.openFiles.map {
+                TabSessionKey(it.path, it.session.selection.start, it.session.viewportTopLine, it.viewMode)
+            } to state.activeIndex
+        }.drop(1).collectLatest {
+            delay(600.milliseconds)
+            val snapshot = state.tabsSnapshot() // read the Compose session state on the main thread…
+            withContext(ioDispatcher) { state.backend.projects.saveOpenTabs(snapshot) } // …write off it
+        }
     }
 
     // Persist the file-tree expansion (debounced) so the tree reopens the same way next launch — keyed per
@@ -186,6 +216,34 @@ fun CodeAssistApp(
     }
     // A successful create/open advances the epoch — land in the editor on the new project.
     LaunchedEffect(epoch) { if (epoch > 0) screen = Screen.Editor }
+
+    // Resume the last project on a cold launch: reopen whatever project was on screen when the app was last
+    // used, so a background kill (or a normal relaunch) comes back into the editor instead of the picker.
+    // One-shot; opening bumps the epoch → the effect above lands in the editor and `restoreTabs()` reopens the
+    // tabs where the user left them. A deleted/missing project just falls through to the picker.
+    LaunchedEffect(Unit) {
+        val last = resumeProject
+        if (!reopenLast || last == null) return@LaunchedEffect
+        if (backend.projects.projectEpoch.value > 0) return@LaunchedEffect // already in a project
+        val exists = withContext(ioDispatcher) { backend.projects.projects().any { it.rootPath == last } }
+        if (exists) backend.projects.openProject(last)
+    }
+
+    // Track which project (if any) is on screen for the resume effect above: clear it on the picker (so quitting
+    // from the picker reopens to the picker), otherwise record the active project's root while any of its screens
+    // is shown (Editor, Settings, Run, Dependencies…). Compares against the in-memory mirror so it writes only on
+    // a real picker ⇆ project transition, never per navigation.
+    LaunchedEffect(screen, epoch) {
+        val target = when {
+            screen == Screen.Projects -> ""
+            epoch > 0 -> backend.project.rootPath
+            else -> return@LaunchedEffect
+        }
+        if (target != lastPersistedProject) {
+            lastPersistedProject = target
+            backend.settings.setPreference(LAST_PROJECT_PREF, target)
+        }
+    }
 
     // A `.caproj` handed in from outside the app ("Open with"): read its preview and open the import screen.
     // Keyed on the path (the host makes each hand-off a distinct path) so it fires once per inbound package.

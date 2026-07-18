@@ -30,4 +30,5 @@ interface IBuildDaemon {
     void sendRunInput(String text);   // feed one line of stdin to the running program
     void closeRunInput();             // EOF the program's stdin
     void answerPermission(int id, int decision); // answer a pending sandbox prompt (UiPermissionDecision ordinal)
+    void clearAppLog();               // clear the app-log (Logcat) buffer
 }

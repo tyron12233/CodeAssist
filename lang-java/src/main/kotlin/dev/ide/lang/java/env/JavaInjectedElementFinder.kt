@@ -50,6 +50,11 @@ internal class JavaInjectedElementFinder(
     private fun parseCached(text: String, name: String): PsiJavaFile =
         cache.getOrPut(ContentHash.of(text).value) { parse(name, text) }
 
+    /** Drop parsed synthetic/overlay files (their content-hash keying makes a changed class parse fresh anyway,
+     *  but a resource/synthetic change also needs the FACADE's class-resolution cache dropped — see
+     *  [JavaEnvironment.dropCaches]; this clears the now-dead entries so they don't accumulate). */
+    fun clearCache() = cache.clear()
+
     private fun declares(c: SyntheticClass, fqn: String): Boolean =
         c.fqName == fqn || c.nestedClasses.any { declares(it, fqn) }
 

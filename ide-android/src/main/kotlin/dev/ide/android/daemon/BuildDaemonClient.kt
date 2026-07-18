@@ -27,6 +27,10 @@ class BuildDaemonClient(
     private val onPermission: (reqId: Int, category: String, detail: String) -> Unit = { _, _, _ -> },
     /** The daemon installed an android-app APK; launch it here in the UI process (foreground-activity rules). */
     private val onLaunchPackage: (packageName: String) -> Unit = {},
+    /** One forwarded app-log (Logcat) line; [level] is a UiLogLevel ordinal. */
+    private val onAppLog: (level: Int, tag: String, pid: Int, tid: Int, message: String, timestampMs: Long) -> Unit = { _, _, _, _, _, _ -> },
+    /** App-log session/connection change; [reset] means clear the buffer for a new run. */
+    private val onAppLogState: (connected: Boolean, packageName: String, reset: Boolean) -> Unit = { _, _, _ -> },
     /** Fires on EVERY (re)connect — including the auto-restart after the daemon dies — so a client can
      *  re-drive in-flight work. (Distinct from [bind]'s one-shot `onReady`, which fires only the first time.) */
     private val onConnected: () -> Unit = {},
@@ -60,6 +64,10 @@ class BuildDaemonClient(
         override fun onConsoleChunk(runId: Int, text: String?, kind: Int) = onConsoleChunk.invoke(runId, text ?: "", kind)
         override fun onPermission(reqId: Int, category: String?, detail: String?) = onPermission.invoke(reqId, category ?: "", detail ?: "")
         override fun onLaunchPackage(packageName: String?) = onLaunchPackage.invoke(packageName ?: "")
+        override fun onAppLog(level: Int, tag: String?, pid: Int, tid: Int, message: String?, timestampMs: Long) =
+            onAppLog.invoke(level, tag ?: "", pid, tid, message ?: "", timestampMs)
+        override fun onAppLogState(connected: Boolean, packageName: String?, reset: Boolean) =
+            onAppLogState.invoke(connected, packageName ?: "", reset)
     }
 
     private val connection = object : ServiceConnection {
@@ -103,5 +111,6 @@ class BuildDaemonClient(
     fun sendRunInput(text: String) = runCatching { daemon?.sendRunInput(text) }
     fun closeRunInput() = runCatching { daemon?.closeRunInput() }
     fun answerPermission(id: Int, decision: Int) = runCatching { daemon?.answerPermission(id, decision) }
+    fun clearAppLog() = runCatching { daemon?.clearAppLog() }
     fun unbind() = runCatching { appContext.unbindService(connection) }
 }

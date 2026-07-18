@@ -13,6 +13,7 @@ import androidx.compose.runtime.Stable
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.IntSize
@@ -21,6 +22,8 @@ import dev.ide.ui.editor.core.EditorCaretGeometry
 import dev.ide.ui.editor.core.EditorImeHandle
 import dev.ide.ui.editor.core.EditorSession
 import dev.ide.ui.editor.core.WrapModel
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.collectLatest
 import kotlin.math.floor
 import kotlin.math.max
 
@@ -401,6 +404,33 @@ internal fun rememberEditorGeometry(
             if (caretX < hOffset.floatValue + margin) hOffset.floatValue = (caretX - margin).coerceIn(0f, state.maxH())
             else if (caretX > hOffset.floatValue + textViewW - margin) {
                 hOffset.floatValue = (caretX - textViewW + margin).coerceIn(0f, state.maxH())
+            }
+        }
+    }
+
+    // ---- restore + track the persisted scroll position (see EditorSession.viewportTopLine) ----
+    // The restore target is captured ONCE at first composition, so the live tracker below can't clobber it
+    // before it's applied. Once the viewport is first measured, scroll so that saved first-visible line sits at
+    // the top. Declared AFTER the bring-caret-into-view effect so, in the rare case the caret was off-screen, it
+    // wins the tie and honors the saved viewport. Best-effort — folds/wrap can shift it a little.
+    val restoreScrollLine = remember(session) { session.viewportTopLine }
+    val scrollRestored = remember(session) { mutableStateOf(false) }
+    LaunchedEffect(session, state.viewport.value) {
+        if (scrollRestored.value || state.viewport.value == IntSize.Zero) return@LaunchedEffect
+        if (restoreScrollLine > 0) {
+            val top = metrics.padTop + state.vlayout.topRow(restoreScrollLine) * metrics.lineHeight
+            vOffset.floatValue = top.coerceIn(0f, state.maxV())
+        }
+        scrollRestored.value = true
+    }
+    // Keep the session's scroll anchor current as the user scrolls, so the next session save persists it. A
+    // fling changes vOffset every frame; debounce to the settled top line (a plain snapshot Int write, no
+    // per-frame cost, and it only re-emits the host's save when the top line actually changes).
+    LaunchedEffect(session) {
+        snapshotFlow { vOffset.floatValue }.collectLatest {
+            delay(200)
+            if (state.viewport.value != IntSize.Zero) {
+                session.viewportTopLine = state.lineAtY(0f).coerceAtLeast(0)
             }
         }
     }

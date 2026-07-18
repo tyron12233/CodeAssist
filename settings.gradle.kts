@@ -58,6 +58,8 @@ include(
     ":build-engine",
     ":android-support",
     ":android-sdk-metadata", // build-time generator: SDK attrs.xml + android.jar → bundled metadata asset
+    ":applog-runtime", // tiny Java runtime injected into DEBUG apps: a ContentProvider that forwards the app's logs to the IDE
+
     ":language-api",
     ":index-api",
     ":index-impl",

@@ -66,6 +66,29 @@ class JavaEnvironment private constructor(
     var syntheticProvider: () -> List<dev.ide.lang.synthetic.SyntheticClass> = { emptyList() }
     var overlayProvider: () -> Map<String, CharArray> = { emptyMap() }
 
+    /** The injected finder (kept so its parsed-class cache can be cleared on a synthetic/resource change). */
+    private var injectedFinder: JavaInjectedElementFinder? = null
+
+    /**
+     * Drop cached resolution of synthetic + overlay classes after they change (an Android `R` regenerated on a
+     * resource edit, an open buffer edited). The facade caches `findClass` results keyed on the PSI modification
+     * count, so it must be bumped ([PsiManager.dropPsiCaches]) or a code file keeps resolving the STALE `R`
+     * (e.g. a just-added `R.string.foo` stays unresolved); the finder's own content-keyed cache is cleared too.
+     */
+    fun dropCaches() {
+        runCatching { injectedFinder?.clearCache() }
+        val pm = com.intellij.psi.PsiManager.getInstance(project)
+        runCatching { pm.dropResolveCaches() }
+        runCatching { pm.dropPsiCaches() }
+        // The facade caches `findClass` on the PSI modification count; `dropPsiCaches` doesn't reliably bump it
+        // in this minimal core, so a re-resolved `R` kept returning the stale class. Bump it explicitly so the
+        // facade's cached synthetic-class lookups recompute (re-consulting the injected finder → fresh `R`).
+        runCatching {
+            (com.intellij.psi.util.PsiModificationTracker.getInstance(project) as? com.intellij.psi.impl.PsiModificationTrackerImpl)
+                ?.incCounter()
+        }
+    }
+
     /**
      * Parse [text] into a [PsiJavaFile] belonging to THIS project (so [facade] resolution sees the classpath +
      * source roots), named [name]. Never throws on invalid input — broken regions become `PsiErrorElement`s.
@@ -135,6 +158,7 @@ class JavaEnvironment private constructor(
                 overlay = { overlayProvider() },
                 parse = { name, text -> parse(name, text) },
             )
+            injectedFinder = finder
             com.intellij.psi.PsiElementFinder.EP.getPoint(project)
                 .registerExtension(finder, com.intellij.openapi.extensions.LoadingOrder.FIRST, disposable)
         }

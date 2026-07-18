@@ -22,6 +22,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.lazy.LazyColumn
@@ -29,6 +30,7 @@ import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.selection.SelectionContainer
@@ -60,6 +62,8 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.delay
 import dev.ide.ui.backend.AdPlacement
+import dev.ide.ui.backend.AppLogLineUi
+import dev.ide.ui.backend.AppLogUi
 import dev.ide.ui.backend.BuildDiagnosticUi
 import dev.ide.ui.backend.BuildLogLine
 import dev.ide.ui.backend.BuildState
@@ -92,6 +96,11 @@ import dev.ide.ui.generated.resources.buildc_working
 import dev.ide.ui.generated.resources.buildc_tab_problems
 import dev.ide.ui.generated.resources.buildc_tab_log
 import dev.ide.ui.generated.resources.buildc_tab_steps
+import dev.ide.ui.generated.resources.buildc_tab_logcat
+import dev.ide.ui.generated.resources.buildc_logcat_empty
+import dev.ide.ui.generated.resources.buildc_logcat_connected
+import dev.ide.ui.generated.resources.buildc_logcat_waiting
+import dev.ide.ui.generated.resources.buildc_logcat_idle
 import dev.ide.ui.generated.resources.buildc_filter_all
 import dev.ide.ui.generated.resources.buildc_filter_errors
 import dev.ide.ui.generated.resources.buildc_filter_warnings
@@ -141,6 +150,8 @@ fun BuildConsole(
     /** Backend for plugin BOTTOM tool-window tabs; null hides them (e.g. backends/tests without one). */
     backend: IdeBackend? = null,
     activeFilePath: String? = null,
+    /** Live logcat-style logs from the running (debug) app, shown in the Logcat tab. */
+    appLog: AppLogUi = AppLogUi(),
 ) {
     val running = buildState.status == RunStatus.Running
     val errors = buildState.diagnostics.count { it.severity == UiSeverity.Error }
@@ -167,7 +178,7 @@ fun BuildConsole(
         buildState.banner?.let { FirstBuildBanner(it) }
         if (running) RunningStrip(buildState.steps)
         ConsoleTabs(
-            tab, errors, warnings, done, buildState.steps.size, pluginTabs, activePluginTab,
+            tab, errors, warnings, done, buildState.steps.size, appLog, pluginTabs, activePluginTab,
             onSelect = { tab = it; activePluginTab = null },
             onSelectPlugin = { activePluginTab = it },
         )
@@ -186,6 +197,7 @@ fun BuildConsole(
                 BuildTab.Problems -> ProblemsTab(buildState.diagnostics, onOpenDiagnostic)
                 BuildTab.Log -> LogTab(buildState.log, running)
                 BuildTab.Steps -> StepsTab(buildState.steps)
+                BuildTab.Logcat -> LogcatTab(appLog) { backend?.build?.clearAppLog() }
             }
         }
         // A compact native ad in the console footer, only while nothing is building — a natural pause, never
@@ -194,7 +206,7 @@ fun BuildConsole(
     }
 }
 
-private enum class BuildTab { Problems, Log, Steps }
+private enum class BuildTab { Problems, Log, Steps, Logcat }
 
 /** True for a step that has settled (won't change again this build) — for the running-progress fraction. */
 private val StepStatus.isSettled: Boolean
@@ -319,6 +331,9 @@ private fun copyForTab(
         BuildTab.Steps -> tab to (
             if (state.steps.isEmpty()) null
             else fun(): String = renderStepsForCopy(state.steps))
+        // The Logcat tab has its own live buffer (not in BuildState) and is selectable in place, so no
+        // header copy-all button — return no provider (which hides it).
+        BuildTab.Logcat -> tab to null
     }
 }
 
@@ -342,6 +357,7 @@ private fun CopyButton(tab: BuildTab, provide: () -> String) {
             BuildTab.Problems -> Res.string.buildc_tab_problems
             BuildTab.Log -> Res.string.buildc_tab_log
             BuildTab.Steps -> Res.string.buildc_tab_steps
+            BuildTab.Logcat -> Res.string.buildc_tab_logcat
         }
     )
     IconButtonCa(
@@ -477,6 +493,7 @@ private fun ConsoleTabs(
     warnings: Int,
     stepsDone: Int,
     stepsTotal: Int,
+    appLog: AppLogUi,
     pluginTabs: List<ToolWindowContribution>,
     activePluginTab: String?,
     onSelect: (BuildTab) -> Unit,
@@ -503,6 +520,13 @@ private fun ConsoleTabs(
                 badge = stepsTotal.takeIf { it > 0 }?.let { "$stepsDone/$it" },
                 badgeColor = Ca.colors.textTertiary
             ) { onSelect(BuildTab.Steps) }
+            // A green dot when a debug app is connected, else the line count once any logs have arrived.
+            TabItem(
+                stringResource(Res.string.buildc_tab_logcat),
+                builtInActive && tab == BuildTab.Logcat,
+                badge = if (appLog.connected) "●" else appLog.lines.size.takeIf { it > 0 }?.toString(),
+                badgeColor = if (appLog.connected) Ca.colors.success else Ca.colors.textTertiary,
+            ) { onSelect(BuildTab.Logcat) }
             // Plugin-contributed BOTTOM tool windows.
             pluginTabs.forEach { tw ->
                 TabItem(tw.title, activePluginTab == tw.id) { onSelectPlugin(tw.id) }
@@ -975,6 +999,166 @@ private fun logColor(level: UiLogLevel, message: String): Color = when (level) {
 
 /** ":app:compileJava" → "compileJava" — the leaf step name, for compact line/strip labels. */
 private fun shortTask(task: String): String = task.substringAfterLast(':').ifEmpty { task }
+
+// ---------------------------------------------------------------------------
+// Logcat tab (live logs forwarded from the running debug app)
+// ---------------------------------------------------------------------------
+
+@Composable
+private fun LogcatTab(appLog: AppLogUi, onClear: () -> Unit) {
+    var level by remember { mutableStateOf(LogLevelFilter.All) }
+    var query by remember { mutableStateOf("") }
+    val q = query.trim()
+    val filtered = remember(appLog.lines, level, q) {
+        appLog.lines.filter {
+            level.keep(it.level) && (q.isEmpty() || it.message.contains(q, true) || it.tag.contains(q, true))
+        }
+    }
+
+    Column(Modifier.fillMaxSize()) {
+        Row(
+            Modifier.fillMaxWidth().padding(vertical = 6.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            LogcatStatus(appLog)
+            SearchField(query, { query = it }, Modifier.weight(1f))
+            IconButtonCa(
+                CaIcons.close, stringResource(Res.string.clear), onClick = onClear,
+                boxSize = 30, iconSize = 16, tint = Ca.colors.textSecondary,
+            )
+        }
+        Row(
+            Modifier.fillMaxWidth().padding(bottom = 6.dp),
+            horizontalArrangement = Arrangement.spacedBy(6.dp),
+        ) {
+            LogLevelFilter.entries.forEach { f -> ConsoleChip(stringResource(f.label), f == level) { level = f } }
+        }
+        Box(
+            Modifier.weight(1f).fillMaxWidth()
+                .background(Ca.colors.consoleBg, RoundedCornerShape(Ca.radius.md))
+                .border(1.dp, Ca.colors.separator, RoundedCornerShape(Ca.radius.md))
+                .padding(10.dp),
+        ) {
+            if (filtered.isEmpty()) {
+                Text(
+                    if (appLog.lines.isEmpty()) stringResource(Res.string.buildc_logcat_empty)
+                    else stringResource(Res.string.buildc_no_log_match),
+                    color = Ca.colors.textTertiary, style = Ca.type.codeSmall,
+                )
+            } else {
+                LogcatList(filtered, appLog.connected)
+            }
+        }
+    }
+}
+
+/** A colored dot + a short status: connected (green, package name) / waiting / idle. */
+@Composable
+private fun LogcatStatus(appLog: AppLogUi) {
+    val color = if (appLog.connected) Ca.colors.success else Ca.colors.textTertiary
+    val text = when {
+        appLog.connected -> appLog.packageName ?: stringResource(Res.string.buildc_logcat_connected)
+        appLog.packageName != null -> stringResource(Res.string.buildc_logcat_waiting)
+        else -> stringResource(Res.string.buildc_logcat_idle)
+    }
+    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(5.dp)) {
+        Box(Modifier.size(8.dp).background(color, CircleShape))
+        Text(text, color = Ca.colors.textSecondary, style = Ca.type.caption, maxLines = 1)
+    }
+}
+
+@Composable
+private fun LogcatList(lines: List<AppLogLineUi>, connected: Boolean) {
+    val listState = rememberLazyListState()
+    // Tail while an app is connected; once it disconnects, leave the scroll where the user put it.
+    LaunchedEffect(lines.size, connected) {
+        if (connected && lines.isNotEmpty()) runCatching { listState.animateScrollToItem(lines.lastIndex) }
+    }
+    // Same gesture as the build Log tab: on mobile the timestamp is hidden and revealed by dragging rows
+    // sideways (reclaims width for the message); desktop keeps it inline. See [PeekTimestampReveal].
+    PeekTimestampReveal(TimeSlotWidth, Modifier.fillMaxSize()) { reveal, slotPx ->
+        SelectionContainer {
+            LazyColumn(state = listState, modifier = Modifier.fillMaxSize()) {
+                items(lines) { LogcatRow(it, reveal, slotPx) }
+            }
+        }
+    }
+}
+
+/**
+ * One Android-Studio-style Logcat row: `time  PID-TID  <level chip>  tag  message`, the message tinted by
+ * level. On mobile the timestamp is parked off the left edge and slides in on drag (see [PeekTimestampReveal]).
+ */
+@Composable
+private fun LogcatRow(line: AppLogLineUi, reveal: (() -> Float)?, slotPx: Float) {
+    if (reveal != null) {
+        Box(Modifier.fillMaxWidth().padding(start = 14.dp, top = 1.dp, bottom = 1.dp)) {
+            LogcatRowBody(line, Modifier.fillMaxWidth().graphicsLayer { translationX = reveal() })
+            if (line.timeLabel.isNotEmpty()) Text(
+                line.timeLabel,
+                color = Ca.colors.textTertiary,
+                style = Ca.type.caption2,
+                maxLines = 1,
+                modifier = Modifier.align(Alignment.TopStart)
+                    .graphicsLayer { translationX = reveal() - slotPx },
+            )
+        }
+        return
+    }
+    Row(
+        Modifier.fillMaxWidth().padding(start = 14.dp, top = 1.dp, bottom = 1.dp),
+        verticalAlignment = Alignment.Top,
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        if (line.timeLabel.isNotEmpty()) Text(line.timeLabel, color = Ca.colors.textTertiary, style = Ca.type.caption2)
+        LogcatRowBody(line, Modifier.weight(1f))
+    }
+}
+
+/** The columns after the timestamp: PID-TID, the colored level chip, the tag, and the level-tinted message. */
+@Composable
+private fun LogcatRowBody(line: AppLogLineUi, modifier: Modifier) {
+    Row(modifier, verticalAlignment = Alignment.Top, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        if (line.pid > 0) Text(
+            "${line.pid}-${line.tid}", color = Ca.colors.textTertiary, style = Ca.type.caption2, maxLines = 1,
+        )
+        LevelChip(line.level)
+        if (line.tag.isNotEmpty()) Text(
+            line.tag, color = Ca.colors.textSecondary, style = Ca.type.codeSmall, maxLines = 1,
+            overflow = TextOverflow.Ellipsis, modifier = Modifier.widthIn(max = 120.dp),
+        )
+        Text(line.message, color = logcatColor(line.level), style = Ca.type.codeSmall, modifier = Modifier.weight(1f))
+    }
+}
+
+/** The single-letter level indicator on a tinted rounded chip (Android Studio Logcat style). */
+@Composable
+private fun LevelChip(level: UiLogLevel) {
+    val c = logcatColor(level)
+    Box(
+        Modifier.size(16.dp).background(c.copy(alpha = 0.18f), RoundedCornerShape(3.dp)),
+        contentAlignment = Alignment.Center,
+    ) {
+        Text(logLevelLetter(level).toString(), color = c, style = Ca.type.caption2, fontWeight = FontWeight.Bold)
+    }
+}
+
+/** Android-Studio-faithful message tint per level: error red, warn amber, info default, debug/verbose muted. */
+@Composable
+private fun logcatColor(level: UiLogLevel): Color = when (level) {
+    UiLogLevel.Error -> Ca.colors.error
+    UiLogLevel.Warn -> Ca.colors.warning
+    UiLogLevel.Info -> Ca.colors.textPrimary
+    UiLogLevel.Debug -> Ca.colors.textSecondary
+}
+
+private fun logLevelLetter(level: UiLogLevel): Char = when (level) {
+    UiLogLevel.Debug -> 'D'
+    UiLogLevel.Info -> 'I'
+    UiLogLevel.Warn -> 'W'
+    UiLogLevel.Error -> 'E'
+}
 
 // ---------------------------------------------------------------------------
 // Steps tab

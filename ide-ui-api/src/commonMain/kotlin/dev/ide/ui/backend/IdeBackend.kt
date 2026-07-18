@@ -89,8 +89,32 @@ data class UiLogEntry(
 
 // ---- editor-session DTOs ----
 
-/** The editor tabs persisted for a project: the open file paths in tab order + the active tab's index (-1 if none). */
-data class UiOpenTabs(val paths: List<String> = emptyList(), val activeIndex: Int = -1)
+/**
+ * One persisted editor tab: the file [path] plus the per-tab view state to restore next launch — the caret
+ * [caret] (a document offset), the [scrollLine] to scroll back to (0-based first-visible document line;
+ * best-effort), and the [viewMode] surface (`"text"` | `"blocks"` | `"preview"` | `"split"`). The extra
+ * fields default to "top of file, plain text", so a bare-path tab (or an old session file) restores sensibly.
+ */
+data class UiOpenTab(
+    val path: String,
+    val caret: Int = 0,
+    val scrollLine: Int = 0,
+    val viewMode: String = "text",
+)
+
+/**
+ * The editor tabs persisted for a project: the open [tabs] in tab order + the active tab's index (-1 if none).
+ * [paths] is a convenience view over [tabs] for callers that only care about the open-file set.
+ */
+data class UiOpenTabs(val tabs: List<UiOpenTab> = emptyList(), val activeIndex: Int = -1) {
+    val paths: List<String> get() = tabs.map { it.path }
+
+    companion object {
+        /** Build a session from bare file [paths] (no per-tab view state) — the pre-caret/scroll shape. */
+        fun ofPaths(paths: List<String>, activeIndex: Int = -1): UiOpenTabs =
+            UiOpenTabs(paths.map { UiOpenTab(it) }, activeIndex)
+    }
+}
 
 // ---- project-management DTOs ----
 
@@ -574,6 +598,28 @@ data class BuildState(
     val elapsedMs: Long = 0,
     /** An informational notice shown above the step graph (e.g. the first-build dex-cache warning). */
     val banner: String? = null,
+)
+
+/**
+ * One logcat-style line forwarded from a running (debug) app for the "Logcat" console tab. [level] colors it
+ * and feeds the level filter (reusing [UiLogLevel]; a logcat Verbose folds to [UiLogLevel.Debug]); [tag] is
+ * the logcat tag (or `System.out`/`AndroidRuntime`); [timeLabel] is the host-formatted local time of day.
+ */
+data class AppLogLineUi(
+    val message: String,
+    val level: UiLogLevel = UiLogLevel.Info,
+    val tag: String = "",
+    val pid: Int = 0,
+    val tid: Int = 0,
+    val timeLabel: String = "",
+    val timestampMs: Long = 0,
+)
+
+/** Live app-log state for the Logcat tab: the recent [lines], whether an app is [connected], and which app. */
+data class AppLogUi(
+    val lines: List<AppLogLineUi> = emptyList(),
+    val connected: Boolean = false,
+    val packageName: String? = null,
 )
 
 /** A running program asking permission for a guarded operation. [category] is a guard-category id

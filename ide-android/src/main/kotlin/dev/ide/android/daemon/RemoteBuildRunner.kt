@@ -44,9 +44,17 @@ class RemoteBuildRunner(context: Context, private val services: IdeServices) : B
     private val _buildState = MutableStateFlow(BuildState())
     private val _runConsole = MutableStateFlow<RunConsoleUi?>(null)
     private val _permissionRequest = MutableStateFlow<UiPermissionRequest?>(null)
+    private val _appLog = MutableStateFlow(dev.ide.ui.backend.AppLogUi())
     override val buildState: StateFlow<BuildState> = _buildState.asStateFlow()
     override val runConsole: StateFlow<RunConsoleUi?> = _runConsole.asStateFlow()
     override val permissionRequest: StateFlow<UiPermissionRequest?> = _permissionRequest.asStateFlow()
+    // App-log (Logcat tab) streaming across the :build boundary is wired in Phase 4 (onAppLog deltas +
+    // reassembly here); until then this stays empty when the build daemon owns the engine.
+    override val appLog: StateFlow<dev.ide.ui.backend.AppLogUi> = _appLog.asStateFlow()
+    override fun clearAppLog() {
+        _appLog.update { it.copy(lines = emptyList()) } // optimistic; the daemon also emits a reset
+        runCatching { client.clearAppLog() }
+    }
 
     @Volatile
     private var connected = false
@@ -104,6 +112,23 @@ class RemoteBuildRunner(context: Context, private val services: IdeServices) : B
             // activity, so the activity launch isn't blocked) and surface the outcome in the build console.
             if (pkg.isNotEmpty()) {
                 dev.ide.android.ApkLauncher.launch(appContext, pkg) { msg -> _buildState.update { it.copy(log = it.log + line(msg)) } }
+            }
+        },
+        onAppLog = { level, tag, pid, tid, message, ts ->
+            val line = dev.ide.ui.backend.AppLogLineUi(
+                message = message,
+                level = dev.ide.ui.backend.UiLogLevel.entries.getOrElse(level) { dev.ide.ui.backend.UiLogLevel.Info },
+                tag = tag, pid = pid, tid = tid, timeLabel = appLogTimeLabel(ts), timestampMs = ts,
+            )
+            _appLog.update { ui ->
+                val next = ui.lines + line
+                ui.copy(lines = if (next.size > MAX_APP_LOG_LINES) next.subList(next.size - MAX_APP_LOG_LINES, next.size) else next)
+            }
+        },
+        onAppLogState = { connectedNow, pkg, reset ->
+            _appLog.update { ui ->
+                if (reset) dev.ide.ui.backend.AppLogUi(connected = connectedNow, packageName = pkg.ifEmpty { null })
+                else ui.copy(connected = connectedNow, packageName = pkg.ifEmpty { ui.packageName })
             }
         },
         onConnected = ::onDaemonConnected,
@@ -179,6 +204,12 @@ class RemoteBuildRunner(context: Context, private val services: IdeServices) : B
     }
 
     private fun line(msg: String) = BuildLogLine(msg)
+
+    /** Local time-of-day (HH:mm:ss.SSS) for an app-log line — formatted UI-side (the daemon sends only the epoch ms). */
+    private fun appLogTimeLabel(ms: Long): String = runCatching {
+        java.time.Instant.ofEpochMilli(ms).atZone(java.time.ZoneId.systemDefault()).toLocalTime()
+            .format(java.time.format.DateTimeFormatter.ofPattern("HH:mm:ss.SSS"))
+    }.getOrDefault("")
     private fun runStatusOf(name: String, fallback: RunStatus) = runCatching { RunStatus.valueOf(name) }.getOrDefault(fallback)
     private fun stepStatusOf(name: String) = runCatching { StepStatus.valueOf(name) }.getOrDefault(StepStatus.Pending)
     private fun runPhaseOf(ordinal: Int) = RunPhase.entries.getOrNull(ordinal) ?: RunPhase.Running
@@ -194,5 +225,6 @@ class RemoteBuildRunner(context: Context, private val services: IdeServices) : B
     private companion object {
         const val CONSOLE_CHUNK_MAX = 8192
         const val CONSOLE_TRANSCRIPT_MAX = 1_000_000
+        const val MAX_APP_LOG_LINES = 5000
     }
 }

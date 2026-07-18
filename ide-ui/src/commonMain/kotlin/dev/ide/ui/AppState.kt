@@ -15,6 +15,7 @@ import dev.ide.ui.backend.TreeViewMode
 import dev.ide.ui.backend.UiRenameResult
 import dev.ide.ui.backend.UiSourceRootRole
 import dev.ide.ui.backend.UiNewFileTemplate
+import dev.ide.ui.backend.UiOpenTab
 import dev.ide.ui.backend.UiOpenTabs
 import dev.ide.ui.backend.UiSettings
 import dev.ide.ui.editor.core.EditorSession
@@ -53,6 +54,23 @@ enum class RailDestination { Files, Search, Source, More }
  *  full-pane preview, or [Split] — code and its preview together (so you can edit and watch it update,
  *  the one layout that works on a phone where the panes can't otherwise share the screen). */
 enum class EditorViewMode { Text, Blocks, Preview, Split }
+
+/** Stable persisted id for a tab's [EditorViewMode] (see `UiOpenTab.viewMode`). */
+internal fun EditorViewMode.persistId(): String = when (this) {
+    EditorViewMode.Text -> "text"
+    EditorViewMode.Blocks -> "blocks"
+    EditorViewMode.Preview -> "preview"
+    EditorViewMode.Split -> "split"
+}
+
+/** Parse a persisted [EditorViewMode] id, or null when unknown (so the tab keeps its default surface). */
+internal fun editorViewModeOf(id: String?): EditorViewMode? = when (id) {
+    "text" -> EditorViewMode.Text
+    "blocks" -> EditorViewMode.Blocks
+    "preview" -> EditorViewMode.Preview
+    "split" -> EditorViewMode.Split
+    else -> null
+}
 
 /**
  * One open editor tab. Its buffer-of-record is the [EditorSession] (the rope-backed model both the text
@@ -425,25 +443,46 @@ class IdeUiState(
     fun saveActive() { active?.let(::save) }
 
     /**
-     * Reopen the tabs persisted from a previous session with this project (paths in tab order + the active
-     * tab). Files that no longer exist on disk are skipped. Returns true if at least one tab was restored, so
-     * the caller can fall back to [defaultFile] when there was no remembered session.
+     * Reopen the tabs persisted from a previous session with this project (in tab order + the active tab),
+     * each restored to where the user left it: its view mode, caret, and scroll position. Files that no longer
+     * exist on disk are skipped. Returns true if at least one tab was restored, so the caller can fall back to
+     * [defaultFile] when there was no remembered session.
      */
     suspend fun restoreTabs(): Boolean {
         val saved = backend.projects.openTabs()
-        if (saved.paths.isEmpty()) return false
-        for (path in saved.paths) {
-            val name = path.substringAfterLast('/').substringAfterLast('\\')
-            runCatching { openSuspend(path, name) } // a deleted file throws in readFile — skip it
+        if (saved.tabs.isEmpty()) return false
+        for (tab in saved.tabs) {
+            val name = tab.path.substringAfterLast('/').substringAfterLast('\\')
+            runCatching {
+                openSuspend(tab.path, name) // a deleted file throws in readFile — skip it
+                // Reapply the saved per-tab view state to the tab we just opened. setCaret + the scroll anchor
+                // coerce into the (possibly changed) buffer, so a shrunken file can't strand the caret/scroll.
+                openFiles.firstOrNull { it.path == tab.path }?.let { f ->
+                    editorViewModeOf(tab.viewMode)?.let { f.viewMode = it }
+                    f.session.setCaret(tab.caret)
+                    f.session.viewportTopLine = tab.scrollLine.coerceAtLeast(0)
+                }
+            }
         }
         if (openFiles.isEmpty()) return false
         activeIndex = saved.activeIndex.coerceIn(0, openFiles.lastIndex)
         return true
     }
 
-    /** The current open tabs as a persistable snapshot (paths in tab order + the active index). */
+    /** The current open tabs as a persistable snapshot: each tab's path, caret, scroll line, and view mode,
+     *  plus the active index. */
     fun tabsSnapshot(): UiOpenTabs =
-        UiOpenTabs(openFiles.map { it.path }, activeIndex)
+        UiOpenTabs(
+            openFiles.map { f ->
+                UiOpenTab(
+                    path = f.path,
+                    caret = f.session.selection.start,
+                    scrollLine = f.session.viewportTopLine.coerceAtLeast(0),
+                    viewMode = f.viewMode.persistId(),
+                )
+            },
+            activeIndex,
+        )
 
     /** Pick a sensible first file: a `Main.java`, else the first source file in the tree. */
     fun defaultFile(): TreeNode? {

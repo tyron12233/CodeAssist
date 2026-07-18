@@ -25,7 +25,7 @@ object StdlibResourceModel : ResourceModel {
     private val ID_BEARING = setOf(ResourceType.LAYOUT, ResourceType.MENU, ResourceType.NAVIGATION, ResourceType.DRAWABLE, ResourceType.XML, ResourceType.TRANSITION)
     private val ID_REF = Regex("""@\+id/([A-Za-z_][\w.]*)""")
 
-    override fun parse(resDirs: List<Path>): ResourceRepository {
+    override fun parse(resDirs: List<Path>, textOverride: (Path) -> String?): ResourceRepository {
         val out = ArrayList<ResourceItem>()
         val styleableAttrs = LinkedHashMap<String, List<String>>()
         val styles = LinkedHashMap<String, StyleData>()
@@ -40,7 +40,7 @@ object StdlibResourceModel : ResourceModel {
                         val base = raw.substringBefore('-')          // strip `-hdpi`, `-night`, `-v21`, …
                         val qualifier = raw.substringAfter('-', "")
                         if (base == "values") {
-                            forEachXml(folder) { parseValues(it, qualifier, out, styleableAttrs, styles, attrFormats) }
+                            forEachXml(folder) { parseValues(it, qualifier, out, styleableAttrs, styles, attrFormats, textOverride) }
                         } else {
                             val type = ResourceType.fromFolder(base) ?: continue
                             Files.newDirectoryStream(folder).use { files ->
@@ -48,7 +48,7 @@ object StdlibResourceModel : ResourceModel {
                                     out += ResourceItem(type, baseName(f.fileName.toString()), source = f, qualifier = qualifier)
                                 }
                             }
-                            if (type in ID_BEARING) forEachXml(folder) { scanIds(it, qualifier, out) }
+                            if (type in ID_BEARING) forEachXml(folder) { scanIds(it, qualifier, out, textOverride) }
                         }
                     }
                 }
@@ -68,17 +68,23 @@ object StdlibResourceModel : ResourceModel {
         styleableAttrs: MutableMap<String, List<String>>,
         styles: MutableMap<String, StyleData>,
         attrFormats: MutableMap<String, String>,
+        textOverride: (Path) -> String?,
     ) {
         val handler = ValuesHandler(file, qualifier, out, styleableAttrs, styles, attrFormats)
         val before = out.size
-        val ok = runCatching { Files.newInputStream(file).use { newSaxParser().parse(it, handler) } }.isSuccess
+        // An open editor buffer (unsaved edit) wins over disk, so a just-typed `<string>` resolves before save.
+        val buffer = textOverride(file)
+        val ok = runCatching {
+            if (buffer != null) newSaxParser().parse(org.xml.sax.InputSource(java.io.StringReader(buffer)), handler)
+            else Files.newInputStream(file).use { newSaxParser().parse(it, handler) }
+        }.isSuccess
         if (!ok) {
             // Malformed XML: SAX abandons the file at the first error. Drop its partial emission for this file
             // and recover ALL declarations leniently (see [LenientValuesScan]) so a single broken values file
             // (a stray tag while editing) doesn't wipe R.string/R.color/… completion. The structured extras
             // (styleable attr arrays, style items) aren't recovered — the resource NAMES the R class needs are.
             while (out.size > before) out.removeAt(out.size - 1)
-            val text = runCatching { String(Files.readAllBytes(file), Charsets.UTF_8) }.getOrNull()
+            val text = buffer ?: runCatching { String(Files.readAllBytes(file), Charsets.UTF_8) }.getOrNull()
             if (text != null) LenientValuesScan.scan(file.toString(), text).forEach {
                 out += ResourceItem(it.type, it.name, source = file, qualifier = qualifier)
             }
@@ -158,8 +164,8 @@ object StdlibResourceModel : ResourceModel {
         }
     }
 
-    private fun scanIds(file: Path, qualifier: String, out: MutableList<ResourceItem>) {
-        val text = runCatching { String(Files.readAllBytes(file), Charsets.UTF_8) }.getOrNull() ?: return
+    private fun scanIds(file: Path, qualifier: String, out: MutableList<ResourceItem>, textOverride: (Path) -> String?) {
+        val text = textOverride(file) ?: runCatching { String(Files.readAllBytes(file), Charsets.UTF_8) }.getOrNull() ?: return
         ID_REF.findAll(text).forEach { out += ResourceItem(ResourceType.ID, sanitize(it.groupValues[1]), source = file, qualifier = qualifier) }
     }
 

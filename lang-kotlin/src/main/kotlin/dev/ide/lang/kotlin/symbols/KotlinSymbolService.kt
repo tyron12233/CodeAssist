@@ -191,7 +191,7 @@ class KotlinSymbolService(
         val status = idx.status
         val building = status.building
         if (building && !extMemoBuilding) {
-            classpathExtMemo.clear(); checkMembersMemo.clear(); companionMembersMemo.clear(); classpathTypeExistsMemo.clear(); classpathOwnMembersMemo.clear(); topLevelLibMemo.clear(); topLevelBuiltinMemo.clear()
+            classpathExtMemo.clear(); checkMembersMemo.clear(); companionMembersMemo.clear(); classpathTypeExistsMemo.clear(); classpathOwnMembersMemo.clear(); classpathSupertypeMemo.clear(); topLevelLibMemo.clear(); topLevelBuiltinMemo.clear()
         }
         extMemoBuilding = building
         // Not ready ⇒ queries return PARTIAL results (whatever segments are open) for progressive completion;
@@ -678,12 +678,16 @@ class KotlinSymbolService(
 
     /** [kotlinSupertypes] memoized per FQN; the walk is the hot cost. A SOURCE type's chain (its FQN is in the
      *  project model) goes in the edit-dropped memo, everything else in the session-stable classpath memo.
-     *  Until the index is ready a classpath chain is INCOMPLETE (shapes gated / segments still opening), so it
-     *  is computed uncached — otherwise a dumb-mode walk would pin an empty chain for the whole session. */
+     *  While the index is (re)BUILDING a classpath chain is INCOMPLETE (shapes gated / segments still opening),
+     *  so it is computed uncached via [classpathCacheUsable] — otherwise a mid-build walk pins a partial chain
+     *  (e.g. `SolidColor` with `Brush` missing) for the whole session, and since `isKnownType` recomputes fresh
+     *  the two disagree → a false "SolidColor but Color expected" mismatch. Gated exactly like
+     *  [ownAndInheritedCached]/`classpathTypeExists`; the memo is also cleared on a build start (see
+     *  [classpathCacheUsable]), which the ready-only gate below previously left it out of. */
     private fun kotlinSupertypesMemo(fqn: String): List<String> {
         val memo = if (model().classByFqn.containsKey(fqn)) sourceSupertypeMemo else {
             val idx = index
-            if (idx != null && !idx.status.ready) return kotlinSupertypes(fqn, HashSet())
+            if (idx != null && !classpathCacheUsable(idx)) return kotlinSupertypes(fqn, HashSet())
             classpathSupertypeMemo
         }
         return memo.getOrPut(fqn) { kotlinSupertypes(fqn, HashSet()) }

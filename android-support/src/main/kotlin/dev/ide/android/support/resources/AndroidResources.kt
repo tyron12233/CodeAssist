@@ -80,6 +80,13 @@ object AndroidResources {
 
     private fun stem(p: Path): String = p.fileName.toString().substringBeforeLast('.')
 
-    fun repository(root: Module, workspace: Workspace, model: ResourceModel = ResourceModel.DEFAULT): ResourceRepository =
-        model.parse(resourceDirs(root, workspace))
+    fun repository(
+        root: Module,
+        workspace: Workspace,
+        model: ResourceModel = ResourceModel.DEFAULT,
+        /** Live editor-buffer text of an open `res/` file (by absolute path), so an unsaved edit is seen
+         *  before save; null = read disk. */
+        textOverride: (Path) -> String? = { null },
+    ): ResourceRepository =
+        model.parse(resourceDirs(root, workspace), textOverride)
 }

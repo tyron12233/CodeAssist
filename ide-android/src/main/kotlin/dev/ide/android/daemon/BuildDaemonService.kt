@@ -13,11 +13,13 @@ import android.os.IBinder
 import android.os.Looper
 import android.os.Process
 import dev.ide.android.AndroidIde
+import dev.ide.core.AppLogLevel
 import dev.ide.core.IdeServices
 import dev.ide.core.ProjectManager
 import dev.ide.platform.log.Log
 import dev.ide.ui.backend.RunPhase
 import dev.ide.ui.backend.RunStatus
+import dev.ide.ui.backend.UiLogLevel
 import dev.ide.ui.backend.StepStatus
 import dev.ide.ui.backend.UiPermissionDecision
 import kotlinx.coroutines.CoroutineScope
@@ -162,6 +164,10 @@ class BuildDaemonService : Service() {
             val dec = UiPermissionDecision.entries.getOrNull(decision) ?: return
             services?.buildRunner?.answerPermission(id, dec)
         }
+
+        override fun clearAppLog() {
+            services?.buildRunner?.clearAppLog()
+        }
     }
 
     /** Collect the engine's snapshot flows and stream the changes as deltas to the registered callback:
@@ -173,6 +179,43 @@ class BuildDaemonService : Service() {
             launch { streamBuildState(svc) }
             launch { streamRunConsole(svc) }
             launch { streamPermission(svc) }
+            launch { streamAppLog(svc) }
+        }
+    }
+
+    /** Stream the app-log (Logcat tab) deltas: new lines + connection/session changes. The daemon hosts the
+     *  LocalServerSocket the debug app connects to; [dev.ide.core.IdeServices.appLogState] carries the ring
+     *  buffer + a monotonic [dev.ide.core.AppLogSnapshot.totalAppended] so we forward only the lines the UI
+     *  hasn't seen even after the buffer trims, and detect a session reset (the counter going backwards). */
+    private suspend fun streamAppLog(svc: IdeServices) {
+        var lastTotal = 0L
+        var lastConnected = false
+        var lastPkg: String? = null
+        svc.appLogState.collect { snap ->
+            val cb = callback
+            val reset = snap.totalAppended < lastTotal // start()/clear() reset the counter → new session
+            if (reset) {
+                lastTotal = 0L
+                runCatching { cb?.onAppLogState(snap.connected, snap.packageName ?: "", true) }
+                lastConnected = snap.connected; lastPkg = snap.packageName
+            } else if (snap.connected != lastConnected || snap.packageName != lastPkg) {
+                runCatching { cb?.onAppLogState(snap.connected, snap.packageName ?: "", false) }
+                lastConnected = snap.connected; lastPkg = snap.packageName
+            }
+            // Held entries span global indices [firstHeld, totalAppended); forward those past lastTotal.
+            val firstHeld = snap.totalAppended - snap.entries.size
+            val startIdx = (lastTotal - firstHeld).coerceIn(0, snap.entries.size.toLong()).toInt()
+            for (i in startIdx until snap.entries.size) {
+                val e = snap.entries[i]
+                val level = when (e.level) {
+                    AppLogLevel.VERBOSE, AppLogLevel.DEBUG -> UiLogLevel.Debug
+                    AppLogLevel.INFO -> UiLogLevel.Info
+                    AppLogLevel.WARN -> UiLogLevel.Warn
+                    AppLogLevel.ERROR -> UiLogLevel.Error
+                }
+                runCatching { cb?.onAppLog(level.ordinal, e.tag, e.pid, e.tid, e.message, e.timestampMs) }
+            }
+            lastTotal = snap.totalAppended
         }
     }
 

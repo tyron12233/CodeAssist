@@ -3,6 +3,7 @@ package dev.ide.core.backend
 import dev.ide.core.BackendContext
 import dev.ide.core.BuildRunner
 import dev.ide.core.IdeServices
+import dev.ide.ui.backend.AppLogUi
 import dev.ide.ui.backend.BuildService
 import dev.ide.ui.backend.BuildState
 import dev.ide.ui.backend.RunConsoleUi
@@ -31,6 +32,9 @@ internal class BuildBackend(private val ctx: BackendContext) : BuildService {
     override val permissionRequest: StateFlow<UiPermissionRequest?> =
         ctx.engineFlow<UiPermissionRequest?>(null) { runner(it).permissionRequest }
     override fun answerPermission(id: Int, decision: UiPermissionDecision) = runner(ctx.services).answerPermission(id, decision)
+
+    override val appLog: StateFlow<AppLogUi> = ctx.engineFlow(AppLogUi()) { runner(it).appLog }
+    override fun clearAppLog() = runner(ctx.services).clearAppLog()
 
     override fun listVariants(moduleName: String): List<String> = ctx.services.listVariants(moduleName)
     override fun activeVariant(moduleName: String): String? = ctx.services.activeVariant(moduleName)

@@ -531,6 +531,43 @@ class JavaDiagnosticsTest {
     }
 
     @Test
+    fun wrongArgumentCountIsReported() {
+        val tooFew = diagnose("package com.foo;\nclass Use { void f(int a, int b) {} void m() { f(1); } }").diagnostics
+        assertTrue(
+            tooFew.any { it.code == JavaDiagnosticCodes.CANNOT_APPLY },
+            "f(1) against f(int,int) should be flagged; got ${tooFew.map { "${it.code}: ${it.message}" }}",
+        )
+
+        val tooMany = diagnose("package com.foo;\nclass Use { void f(int a) {} void m() { f(1, 2); } }").diagnostics
+        assertTrue(
+            tooMany.any { it.code == JavaDiagnosticCodes.CANNOT_APPLY },
+            "f(1,2) against f(int) should be flagged; got ${tooMany.map { "${it.code}: ${it.message}" }}",
+        )
+
+        val none = diagnose("package com.foo;\nclass Use { void f(int a) {} void m() { f(); } }").diagnostics
+        assertTrue(
+            none.any { it.code == JavaDiagnosticCodes.CANNOT_APPLY },
+            "f() against f(int) should be flagged; got ${none.map { "${it.code}: ${it.message}" }}",
+        )
+    }
+
+    @Test
+    fun inapplicableOverloadedCallIsReportedNotUnresolved() {
+        // Overloaded methods: `resolve()` is null when no overload applies, which used to (a) skip the
+        // applicability check and (b) mis-report "Cannot resolve symbol". Both must now be correct.
+        val overload = diagnose(
+            "package com.foo;\nclass Use { void g(int a) {} void g(String s) {} void m() { g(1, 2); } }",
+        ).diagnostics
+        assertTrue(overload.any { it.code == JavaDiagnosticCodes.CANNOT_APPLY }, "overloaded g(1,2) should be cannotApply; got ${overload.map { "${it.code}: ${it.message}" }}")
+        assertTrue(overload.none { it.code == JavaDiagnosticCodes.UNRESOLVED }, "must NOT mis-report unresolved for an existing overloaded name; got ${overload.map { "${it.code}: ${it.message}" }}")
+
+        // A real library overload set (Math.max has only 2-arg overloads).
+        val lib = diagnose("package com.foo;\nclass Use { void m() { Math.max(1); } }").diagnostics
+        assertTrue(lib.any { it.code == JavaDiagnosticCodes.CANNOT_APPLY }, "Math.max(1) should be cannotApply; got ${lib.map { "${it.code}: ${it.message}" }}")
+        assertTrue(lib.none { it.code == JavaDiagnosticCodes.UNRESOLVED }, "must NOT mis-report unresolved for Math.max; got ${lib.map { "${it.code}: ${it.message}" }}")
+    }
+
+    @Test
     fun validCallsAreNotApplicabilityFalsePositives() {
         val ok = codes(
             """

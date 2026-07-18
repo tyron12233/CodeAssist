@@ -26,6 +26,7 @@ trove4j = "1.0.20200330"  # gnu.trove.* — IntelliJ-core dependency the Kotlin 
 desugarJdkLibs = "2.1.5"  # com.android.tools:desugar_jdk_libs — core-library desugaring (temporarily enabled)
 bouncycastle = "1.78.1"   # org.bouncycastle — in-process keystore creation (keypair + self-signed X.509) on ART (no keytool)
 playServicesAds = "23.6.0"  # com.google.android.gms:play-services-ads — AdMob native ads (Android launcher only)
+androidStub = "4.1.1.4"     # com.google.android:android — the throwaway stub android.jar (compileOnly) :applog-runtime compiles against
 
 [libraries]
 kotlinx-coroutines-core = { module = "org.jetbrains.kotlinx:kotlinx-coroutines-core", version.ref = "coroutines" }
@@ -94,6 +95,12 @@ bouncycastle-prov = { module = "org.bouncycastle:bcprov-jdk18on", version.ref = 
 # AdMob native ads, Android launcher only (:ide-android). Ads are rendered through the AdHost seam; no other
 # module links this. Test ad unit IDs are used until real ones are provided.
 play-services-ads = { module = "com.google.android.gms:play-services-ads", version.ref = "playServicesAds" }
+# The stub android.jar (every method throws "Stub!"): compileOnly for :applog-runtime, whose tiny debug
+# log-bridge (ContentProvider + LocalSocket forwarder) is compiled against the framework APIs but never links
+# them (they resolve against the real android.jar when the runtime jar is dexed into a user's app). Ancient
+# API level, but ContentProvider/LocalSocket/Process/Log have existed since API 1, so it suffices and keeps
+# :applog-runtime buildable with no Android SDK (CI_CORE_ONLY).
+android-stub = { module = "com.google.android:android", version.ref = "androidStub" }
 
 [plugins]
 kotlin-jvm = { id = "org.jetbrains.kotlin.jvm", version.ref = "kotlin" }

@@ -47,6 +47,15 @@ class EditorSession(
     /** The IME composition region, drawn underlined; null when not composing. */
     var composing by mutableStateOf<TextRange?>(null)
         private set
+
+    /**
+     * The first visible document line (0-based) — a lightweight scroll anchor persisted per tab so a reopened
+     * tab scrolls back to roughly where the user left it (see `UiOpenTab.scrollLine`). The editor seeds its
+     * scroll from this on first layout and keeps it updated (debounced) as the user scrolls; the host reads it
+     * for the session snapshot. Snapshot state so a scroll-only change can still schedule the debounced session
+     * save — it is a persistence stash, not part of the edit engine.
+     */
+    var viewportTopLine by mutableIntStateOf(0)
     /** Bumped on every edit/caret move — the UI's bring-caret-into-view trigger. */
     var editCount by mutableIntStateOf(0)
         private set

@@ -151,6 +151,18 @@ class JavaSourceAnalyzer(private val env: JavaEnvironment) : SourceAnalyzer, Jvm
     private val version = AtomicLong(0)
     private val cache = ConcurrentHashMap<String, Pair<ContentHash, JavaParsedFile>>()
 
+    /**
+     * Drop cached synthetic/overlay class resolution (e.g. an Android `R` regenerated after a resource edit).
+     * Without this the facade keeps resolving the STALE `R`, so a just-added `R.string.foo` stays unresolved in
+     * code even though the resource exists. The host calls this on a synthetic/resource change (which does NOT
+     * dispose the analyzer, to keep the warm classpath env). Also drops the per-file parse cache, whose
+     * diagnostics were computed against the old `R`.
+     */
+    fun invalidateSyntheticClasses() {
+        cache.clear()
+        env.dropCaches()
+    }
+
     /** Parse (and cache) [file] from its current on-disk bytes; re-parses when the content hash changes. */
     private fun cachedParse(file: VirtualFile): JavaParsedFile {
         val hash = file.contentHash()

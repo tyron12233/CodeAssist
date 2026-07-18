@@ -27,6 +27,10 @@ object BuiltInSettingsPages {
     /** Toggle key on the [BUILD_RUNTIME] page: route builds/runs through the isolated `:build` process. */
     const val SEPARATE_PROCESS = "separateProcess"
 
+    /** Toggle key on the [BUILD_RUNTIME] page: weave the IDE log bridge into DEBUG builds so a running app
+     *  forwards its logs to the Logcat tab. Read per build (device only); default on. */
+    const val INJECT_APP_LOG = "injectAppLog"
+
     /** Action key on the [BUILD_RUNTIME] page (separate-process-capable hosts only): re-request the runtime
      *  notification permission the isolated build process needs. Handled UI-side (needs the platform permission
      *  launcher) — the SettingsScreen mirrors this key; there's no engine-side effect here. */
@@ -181,6 +185,11 @@ object BuiltInSettingsPages {
             SettingControl.Toggle(
                 SEPARATE_PROCESS, "Build in a separate process",
                 "Run builds and your program in an isolated process so an out-of-memory crash can't take down the IDE. Off = build in-process (uses less memory, no isolation). Takes effect the next time you open a project.",
+                default = true,
+            ),
+            SettingControl.Toggle(
+                INJECT_APP_LOG, "Forward app logs",
+                "On a debug build, inject a small log bridge into your app so its logs (logcat, println, crashes) stream to the Logcat tab. Debug builds only — release builds are never modified. Applies on the next build.",
                 default = true,
             ),
             // The Build Runtime page's R8 controls are rendered dynamically by SettingsBackend (the slider's

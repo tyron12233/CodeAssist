@@ -599,6 +599,27 @@ class Interpreter(
     /** A boxed result so a handled intrinsic can legitimately return `null`/`Unit` (distinct from "not one"). */
     private class Handled(val value: Any?)
 
+    /** Iterate any `forEach`-able receiver (collection / sequence / object or primitive array / map entries) —
+     *  the element supply for the `forEach`/`forEachIndexed` intrinsics. */
+    private fun forEachElement(recv: Any?, block: (Any?) -> Unit) {
+        when (recv) {
+            null -> {}
+            is Iterable<*> -> recv.forEach(block)
+            is Sequence<*> -> recv.forEach(block)
+            is Map<*, *> -> recv.entries.forEach(block)
+            is Array<*> -> recv.forEach(block)
+            is IntArray -> recv.forEach { block(it) }
+            is LongArray -> recv.forEach { block(it) }
+            is DoubleArray -> recv.forEach { block(it) }
+            is FloatArray -> recv.forEach { block(it) }
+            is ShortArray -> recv.forEach { block(it) }
+            is ByteArray -> recv.forEach { block(it) }
+            is CharArray -> recv.forEach { block(it) }
+            is BooleanArray -> recv.forEach { block(it) }
+            else -> throw InterpreterException("`forEach` receiver is not iterable (${recv::class.simpleName})")
+        }
+    }
+
     /**
      * Execute a known `@InlineOnly` stdlib intrinsic ([STDLIB_FACADE] callees), or return null if [call] isn't
      * one. Covers the scope functions — both the `it`-lambda forms (`let`/`also`/`takeIf`/`takeUnless`) and the
@@ -619,6 +640,25 @@ class Interpreter(
                 val action = lambda(args[1].value)
                 val budget = LoopBudget()
                 for (i in 0 until times) { action.invoke(listOf(i)); guardLoop(budget) }
+                Handled(Unit)
+            }
+            // `iterable.forEach { element -> … }` / `forEachIndexed { i, element -> … }` — inline HOFs, run HERE
+            // (like `repeat`) so a body that EMITS COMPOSABLES in a loop composes into the ambient composition
+            // with the enclosing composer intact. The reflective path (real `CollectionsKt.forEach`) runs the
+            // loop body inside a library frame, which drives the enclosing content lambda's composables through a
+            // group discipline the interpreter doesn't control — the `Column { list.forEach { Row { … } } }`
+            // preview failure. Iterating here keeps composable-group balance the same as an interpreted `for`.
+            name == "forEach" && call.dispatch == DispatchKind.EXTENSION && args.size == 1 -> {
+                val action = lambda(args[0].value)
+                val budget = LoopBudget()
+                forEachElement(receiver()) { element -> action.invoke(listOf(element)); guardLoop(budget) }
+                Handled(Unit)
+            }
+            name == "forEachIndexed" && call.dispatch == DispatchKind.EXTENSION && args.size == 1 -> {
+                val action = lambda(args[0].value)
+                val budget = LoopBudget()
+                var i = 0
+                forEachElement(receiver()) { element -> action.invoke(listOf(i++, element)); guardLoop(budget) }
                 Handled(Unit)
             }
             // `key(vararg keys, block)` — an inline @Composable that wraps `block` in a movable group keyed by

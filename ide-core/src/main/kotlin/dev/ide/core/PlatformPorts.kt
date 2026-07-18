@@ -26,6 +26,7 @@ import dev.ide.preview.impl.RealViewRuntime
  */
 internal val DEX_RUNNER = ServiceKey<DexRunner>("platform.dexRunner")
 internal val APK_INSTALLER = ServiceKey<ApkInstaller>("platform.apkInstaller")
+internal val APP_LOG_CHANNEL = ServiceKey<AppLogChannel>("platform.appLogChannel")
 internal val CUSTOM_VIEW_RUNTIME = ServiceKey<CustomViewRuntime>("platform.customViewRuntime")
 internal val KOTLIN_PLUGIN_LOADER = ServiceKey<KotlinPluginLoader>("platform.kotlinPluginLoader")
 internal val ANDROID_DEVICE_TOOLS = ServiceKey<AndroidDeviceTools>("platform.androidDeviceTools")

@@ -135,6 +135,10 @@ object AndroidIde {
             if (forkRunner.available()) forkRunner else DexClassLoaderRunner(File(context.cacheDir, "dexrun"))
         // Installs + launches a built APK (the android Run) via the system package installer.
         val apkInstaller = ApkInstallerImpl(context)
+        // The debug-only in-app log bridge: extract the bundled runtime jar (woven into debug builds) and host
+        // the LocalServerSocket it connects to, so a running debug app's logs stream to the IDE's Logcat tab.
+        val appLogRuntimeJar = copyAsset(context, "applog-runtime.jar", File(home, "applog-runtime.jar"))
+        val appLogChannel = AppLogChannelImpl()
         // Custom user views in the layout preview are DISABLED at this time: rendering them means D8-dexing the
         // user's compiled classes and loading them via DexClassLoader, which Google Play's Device-and-Network-
         // Abuse "DDL" scorer flags. Null → the owned preview shows placeholders for `<com.example.MyView/>`.
@@ -184,6 +188,9 @@ object AndroidIde {
             settingsPrefix + BuiltInSettingsPages.DEX_FORK_CONCURRENCY
         val dexForkConcurrencyProvider =
             { managerRef.get()?.preference(dexForkConcurrencyKey)?.trim()?.toIntOrNull() }
+        // "Forward app logs" (Build Runtime page), default on — read lazily like the R8/dex knobs.
+        val injectAppLogKey = settingsPrefix + BuiltInSettingsPages.INJECT_APP_LOG
+        val appLogEnabledProvider = { managerRef.get()?.preference(injectAppLogKey)?.trim() != "false" }
         // The dex MERGE (debug-path memory peak) forks too, under the same R8 execution / heap settings; the
         // archive step forks above the "Off-heap dexing threshold". The merge batches + parallelizes across
         // forked VMs bounded by the process-wide fork gate (see ForkedD8Dexer / R8ForkSupport).
@@ -228,6 +235,9 @@ object AndroidIde {
             dexRunner = dexRunner,
             deviceApiLevel = Build.VERSION.SDK_INT,
             apkInstaller = apkInstaller,
+            appLogRuntimeJar = appLogRuntimeJar.toPath(),
+            appLogChannel = appLogChannel,
+            appLogEnabledProvider = appLogEnabledProvider,
             customViewRuntime = previewRuntime,
             realViewRuntime = realViewRuntime,
             kotlinPluginLoader = kotlinPluginLoader,

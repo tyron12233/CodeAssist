@@ -61,6 +61,9 @@ class ProjectManager private constructor(
     private val dexRunner: DexRunner? = null,
     /** On-device APK installer (from :ide-android) so the android Run works in every opened project. */
     private val apkInstaller: ApkInstaller? = null,
+    /** On-device app-log channel (from :ide-android): receives a running debug app's forwarded logs for the
+     *  Logcat console tab, in every opened project. Null on desktop. */
+    private val appLogChannel: AppLogChannel? = null,
     /** On-device live custom-view runtime (from :ide-android) so the layout preview renders live custom
      *  views in every opened project, not just the first-run demo. */
     private val customViewRuntime: dev.ide.preview.impl.CustomViewRuntime? = null,
@@ -89,6 +92,7 @@ class ProjectManager private constructor(
         androidTools?.let { t -> env.container.registerServiceIfAbsent(ANDROID_DEVICE_TOOLS) { t } }
         dexRunner?.let { r -> env.container.registerServiceIfAbsent(DEX_RUNNER) { r } }
         apkInstaller?.let { i -> env.container.registerServiceIfAbsent(APK_INSTALLER) { i } }
+        appLogChannel?.let { c -> env.container.registerServiceIfAbsent(APP_LOG_CHANNEL) { c } }
         customViewRuntime?.let { c -> env.container.registerServiceIfAbsent(CUSTOM_VIEW_RUNTIME) { c } }
         kotlinPluginLoader?.let { l -> env.container.registerServiceIfAbsent(KOTLIN_PLUGIN_LOADER) { l } }
         realViewRuntime?.let { rv -> env.container.registerServiceIfAbsent(REAL_VIEW_RUNTIME) { rv } }
@@ -523,6 +527,13 @@ class ProjectManager private constructor(
             r8MergeDexer: dev.ide.android.support.tools.Dexer? = null,
             /** Max class-dex per merge batch on a large app (the "Dex merge batch size" setting); read per build. */
             mergeChunkProvider: () -> Int = { dev.ide.core.settings.BuiltInSettingsPages.DEX_MERGE_BATCH_DEFAULT },
+            /** The bundled `:applog-runtime` jar (extracted from assets), woven into debug builds so the running
+             *  app forwards its logs to the IDE. Null → app-log forwarding off. */
+            appLogRuntimeJar: Path? = null,
+            /** The host's app-log channel (hosts the LocalServerSocket the injected bridge connects to). */
+            appLogChannel: AppLogChannel? = null,
+            /** Whether app-log forwarding is enabled (the "Forward app logs" setting; read per build). Default on. */
+            appLogEnabledProvider: () -> Boolean = { true },
         ): ProjectManager {
 
 
@@ -530,7 +541,7 @@ class ProjectManager private constructor(
             // android.jar is the first boot entry; later entries (the desugar stubs) join the compile platform.
             val tools = AndroidDeviceTools(Paths.get(bootClasspath.first()), androidToolsDir, debugKeystore, deviceApiLevel,
                 desugarStubs = bootClasspath.drop(1).map { Paths.get(it) }, r8Shrinker = r8Shrinker, r8MergeDexer = r8MergeDexer,
-                mergeChunkProvider = mergeChunkProvider)
+                mergeChunkProvider = mergeChunkProvider, appLogRuntimeJar = appLogRuntimeJar, appLogEnabled = appLogEnabledProvider)
             return ProjectManager(
                 projectsRoot,
                 projectsRoot.parent ?: projectsRoot,
@@ -541,6 +552,7 @@ class ProjectManager private constructor(
                 legacyDataDirs = legacyDataDirs,
                 dexRunner = dexRunner,
                 apkInstaller = apkInstaller,
+                appLogChannel = appLogChannel,
                 customViewRuntime = customViewRuntime,
                 realViewRuntime = realViewRuntime,
                 kotlinPluginLoader = kotlinPluginLoader,

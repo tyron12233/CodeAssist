@@ -246,6 +246,7 @@ We never collect your code, file or project names, which features you use, or an
     <string name="buildc_tab_problems">Problems</string>
     <string name="buildc_tab_log">Log</string>
     <string name="buildc_tab_steps">Steps</string>
+    <string name="buildc_tab_logcat">Logcat</string>
     <string name="buildc_filter_all">All %1$d</string>
     <string name="buildc_filter_errors">Errors %1$d</string>
     <string name="buildc_filter_warnings">Warnings %1$d</string>
@@ -255,6 +256,10 @@ We never collect your code, file or project names, which features you use, or an
     <string name="buildc_group_by_task">Group by task</string>
     <string name="buildc_empty_log">Press Run to build &amp; run this module.</string>
     <string name="buildc_no_log_match">No log lines match.</string>
+    <string name="buildc_logcat_empty">Run a debug app to see its logs here.</string>
+    <string name="buildc_logcat_connected">Connected</string>
+    <string name="buildc_logcat_waiting">Waiting for app…</string>
+    <string name="buildc_logcat_idle">No app running</string>
     <string name="buildc_general">General</string>
     <string name="buildc_no_steps">No build steps yet.</string>
     <string name="buildc_indexing">Indexing…</string>
