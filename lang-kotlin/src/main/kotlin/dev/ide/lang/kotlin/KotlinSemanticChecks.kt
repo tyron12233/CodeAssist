@@ -2794,8 +2794,10 @@ internal class KotlinSemanticChecks(private val service: KotlinSymbolService) {
         // A qualified type (`java.util.Locale`, `Outer.Inner`) or a qualifier SEGMENT of one (the `gen` in
         // `gen.Txt`) — left alone; only a standalone simple name is checked.
         if (userType.qualifier != null || userType.parent is KtUserType) return null
-        // Annotation type references (`@Composable`) have their own resolution rules — not flagged here.
-        if (hasAncestor(userType) { it is org.jetbrains.kotlin.psi.KtAnnotationEntry }) return null
+        // Annotation type references (`@Foo`) ARE checked here — an unknown/unimported annotation is as much an
+        // error as any unresolved type. They resolve through the same paths below (import / same-package /
+        // builtin / star-import / `resolveTypeName`), so a real annotation (`@Composable`, `@Deprecated`, a
+        // same-package annotation class) never false-positives, while `@Undefined` is flagged.
         val ref = userType.referenceExpression ?: return null
         val name = ref.getReferencedName()
         if (name.isEmpty()) return null

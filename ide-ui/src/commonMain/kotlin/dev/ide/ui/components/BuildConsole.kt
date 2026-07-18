@@ -22,7 +22,6 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.lazy.LazyColumn
@@ -1071,64 +1070,42 @@ private fun LogcatStatus(appLog: AppLogUi) {
 @Composable
 private fun LogcatList(lines: List<AppLogLineUi>, connected: Boolean) {
     val listState = rememberLazyListState()
+    val hScroll = rememberScrollState()
     // Tail while an app is connected; once it disconnects, leave the scroll where the user put it.
     LaunchedEffect(lines.size, connected) {
         if (connected && lines.isNotEmpty()) runCatching { listState.animateScrollToItem(lines.lastIndex) }
     }
-    // Same gesture as the build Log tab: on mobile the timestamp is hidden and revealed by dragging rows
-    // sideways (reclaims width for the message); desktop keeps it inline. See [PeekTimestampReveal].
-    PeekTimestampReveal(TimeSlotWidth, Modifier.fillMaxSize()) { reveal, slotPx ->
-        SelectionContainer {
-            LazyColumn(state = listState, modifier = Modifier.fillMaxSize()) {
-                items(lines) { LogcatRow(it, reveal, slotPx) }
-            }
+    // Android-Studio Logcat behavior: soft-wrap OFF. Each entry stays on ONE line; a long line extends to the
+    // right and the whole list scrolls horizontally (swipe sideways) instead of wrapping onto extra rows.
+    SelectionContainer {
+        LazyColumn(state = listState, modifier = Modifier.fillMaxSize().horizontalScroll(hScroll)) {
+            items(lines) { LogcatRow(it) }
         }
     }
 }
 
 /**
- * One Android-Studio-style Logcat row: `time  PID-TID  <level chip>  tag  message`, the message tinted by
- * level. On mobile the timestamp is parked off the left edge and slides in on drag (see [PeekTimestampReveal]).
+ * One Android-Studio-style Logcat row on a SINGLE line (no wrap): `time  PID-TID  <level chip>  tag  message`,
+ * the message tinted by level. Long lines overflow to the right (the list scrolls horizontally).
  */
 @Composable
-private fun LogcatRow(line: AppLogLineUi, reveal: (() -> Float)?, slotPx: Float) {
-    if (reveal != null) {
-        Box(Modifier.fillMaxWidth().padding(start = 14.dp, top = 1.dp, bottom = 1.dp)) {
-            LogcatRowBody(line, Modifier.fillMaxWidth().graphicsLayer { translationX = reveal() })
-            if (line.timeLabel.isNotEmpty()) Text(
-                line.timeLabel,
-                color = Ca.colors.textTertiary,
-                style = Ca.type.caption2,
-                maxLines = 1,
-                modifier = Modifier.align(Alignment.TopStart)
-                    .graphicsLayer { translationX = reveal() - slotPx },
-            )
-        }
-        return
-    }
+private fun LogcatRow(line: AppLogLineUi) {
     Row(
-        Modifier.fillMaxWidth().padding(start = 14.dp, top = 1.dp, bottom = 1.dp),
-        verticalAlignment = Alignment.Top,
+        Modifier.padding(start = 14.dp, top = 1.dp, bottom = 1.dp),
+        verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(8.dp),
     ) {
-        if (line.timeLabel.isNotEmpty()) Text(line.timeLabel, color = Ca.colors.textTertiary, style = Ca.type.caption2)
-        LogcatRowBody(line, Modifier.weight(1f))
-    }
-}
-
-/** The columns after the timestamp: PID-TID, the colored level chip, the tag, and the level-tinted message. */
-@Composable
-private fun LogcatRowBody(line: AppLogLineUi, modifier: Modifier) {
-    Row(modifier, verticalAlignment = Alignment.Top, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        if (line.timeLabel.isNotEmpty()) Text(
+            line.timeLabel, color = Ca.colors.textTertiary, style = Ca.type.caption2, softWrap = false, maxLines = 1,
+        )
         if (line.pid > 0) Text(
-            "${line.pid}-${line.tid}", color = Ca.colors.textTertiary, style = Ca.type.caption2, maxLines = 1,
+            "${line.pid}-${line.tid}", color = Ca.colors.textTertiary, style = Ca.type.caption2, softWrap = false, maxLines = 1,
         )
         LevelChip(line.level)
         if (line.tag.isNotEmpty()) Text(
-            line.tag, color = Ca.colors.textSecondary, style = Ca.type.codeSmall, maxLines = 1,
-            overflow = TextOverflow.Ellipsis, modifier = Modifier.widthIn(max = 120.dp),
+            line.tag, color = Ca.colors.textSecondary, style = Ca.type.codeSmall, softWrap = false, maxLines = 1,
         )
-        Text(line.message, color = logcatColor(line.level), style = Ca.type.codeSmall, modifier = Modifier.weight(1f))
+        Text(line.message, color = logcatColor(line.level), style = Ca.type.codeSmall, softWrap = false, maxLines = 1)
     }
 }
 
