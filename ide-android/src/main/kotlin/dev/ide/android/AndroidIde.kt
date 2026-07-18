@@ -137,7 +137,11 @@ object AndroidIde {
         val apkInstaller = ApkInstallerImpl(context)
         // The debug-only in-app log bridge: extract the bundled runtime jar (woven into debug builds) and host
         // the LocalServerSocket it connects to, so a running debug app's logs stream to the IDE's Logcat tab.
-        val appLogRuntimeJar = copyAsset(context, "applog-runtime.jar", File(home, "applog-runtime.jar"))
+        // Best-effort — a missing/failed asset must NEVER stop the IDE from starting; null just disables
+        // app-log forwarding (the Logcat tab stays empty).
+        val appLogRuntimeJar = runCatching {
+            copyAsset(context, "applog-runtime.jar", File(home, "applog-runtime.jar"))
+        }.getOrNull()
         val appLogChannel = AppLogChannelImpl()
         // Custom user views in the layout preview are DISABLED at this time: rendering them means D8-dexing the
         // user's compiled classes and loading them via DexClassLoader, which Google Play's Device-and-Network-
@@ -235,7 +239,7 @@ object AndroidIde {
             dexRunner = dexRunner,
             deviceApiLevel = Build.VERSION.SDK_INT,
             apkInstaller = apkInstaller,
-            appLogRuntimeJar = appLogRuntimeJar.toPath(),
+            appLogRuntimeJar = appLogRuntimeJar?.toPath(),
             appLogChannel = appLogChannel,
             appLogEnabledProvider = appLogEnabledProvider,
             customViewRuntime = previewRuntime,

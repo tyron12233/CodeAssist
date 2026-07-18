@@ -117,6 +117,27 @@ val bundleComposeRuntimeAsset = tasks.register<Copy>("bundleComposeRuntimeAsset"
     rename { "compose-runtime.jar" }
 }
 
+// --- applog-runtime asset (debug-only app-log bridge injected into user apps) --------------------
+// The Android build system weaves this tiny jar (a ContentProvider + LocalSocket log forwarder) into DEBUG
+// builds so a running app forwards its logs to the IDE's Logcat tab. It ships as a plain jar of .class files
+// (compiled against a stub android.jar), dexed into the user's app by the normal external-dex path — so we
+// stage it as an asset the app extracts to a file and hands to AndroidBuildSystem. It is a PROJECT artifact,
+// so `from(configuration)` (NOT `.elements.map { it.asFile }`) is used: the configuration carries the
+// `:applog-runtime:jar` task dependency, so the jar is built before this Copy runs (otherwise the asset dir
+// is empty and the app throws FileNotFoundException on startup extracting it).
+val appLogRuntimeArtifact: Configuration by configurations.creating {
+    isCanBeConsumed = false
+    isCanBeResolved = true
+}
+dependencies { appLogRuntimeArtifact(project(":applog-runtime")) }
+
+val bundleAppLogRuntimeAsset = tasks.register<Copy>("bundleAppLogRuntimeAsset") {
+    description = "Stage the :applog-runtime jar as an asset (the debug-only in-app log bridge)."
+    from(appLogRuntimeArtifact)
+    into(layout.buildDirectory.dir("applog-runtime-asset"))
+    rename { "applog-runtime.jar" }
+}
+
 // --- kotlinc resources asset (extension-point descriptors for on-device K2) ----------------------
 // The K2 compiler's classes are dexed into the app, but IntelliJ-core boots its extension registry by
 // reading XML descriptors (META-INF/extensions/*.xml, plugin.xml, …) from a real filesystem path — a dex
@@ -316,6 +337,7 @@ android {
     sourceSets.getByName("main").assets.srcDir(layout.buildDirectory.dir("compose-drawables-asset").get().asFile)
     sourceSets.getByName("main").assets.srcDir(layout.buildDirectory.dir("r8-dex-asset").get().asFile)
     sourceSets.getByName("main").assets.srcDir(layout.buildDirectory.dir("reflective-launcher-asset").get().asFile)
+    sourceSets.getByName("main").assets.srcDir(layout.buildDirectory.dir("applog-runtime-asset").get().asFile)
 
     // Release signing, never committed. Resolution order per field: keystore.properties (gitignored,
     // alongside this build script) → Gradle property (-PRELEASE_*) → env var (RELEASE_*). With no keystore
@@ -602,7 +624,7 @@ val fetchAndroidBuildTools = tasks.register("fetchAndroidBuildTools") {
 // Run before anything AGP does, so the freshly-fetched lib*.so are on disk when the native-lib merge runs,
 // and the staged kotlin-stdlib.jar asset is present when the asset merge runs.
 tasks.named("preBuild").configure {
-    dependsOn(fetchAndroidBuildTools, bundleKotlinStdlibAsset, bundleKotlincResourcesAsset, bundleComposeRuntimeAsset, bundleComposeFontsAsset, bundleComposeStringAsset, bundleComposeDrawablesAsset, bundleR8DexAsset, bundleReflectiveLauncherDex)
+    dependsOn(fetchAndroidBuildTools, bundleKotlinStdlibAsset, bundleKotlincResourcesAsset, bundleComposeRuntimeAsset, bundleComposeFontsAsset, bundleComposeStringAsset, bundleComposeDrawablesAsset, bundleR8DexAsset, bundleReflectiveLauncherDex, bundleAppLogRuntimeAsset)
 }
 
 // Same Android packaging gap as the fonts above, for the i18n string resources. :ide-ui's
