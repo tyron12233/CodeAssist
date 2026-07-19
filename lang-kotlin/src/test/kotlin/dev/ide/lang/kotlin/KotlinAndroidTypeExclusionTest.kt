@@ -112,14 +112,34 @@ class KotlinAndroidTypeExclusionTest {
         }
     }
 
-    private fun fakeClassNamesIndex() = object : IndexService {
+    /**
+     * The Compose `Modifier` must rank ABOVE the `java.lang.reflect.Modifier` homonym in an Android/Compose
+     * module. The index here returns the java.* one FIRST, so without the package-relevance tiebreak it would
+     * keep its lead (the two tie on every other rank key); the tiebreak must float the androidx one up.
+     */
+    @Test
+    fun composeModifierRanksAboveJavaReflectHomonym() {
+        kotlinx.coroutines.runBlocking {
+            val dir = tempProject(mapOf("Use.kt" to "package demo\n"))
+            val a = KotlinSourceAnalyzer(fakeContext(dir))
+            a.indexService = fakeClassNamesIndex(javaFirst = true)
+            a.isAndroidModule = true
+            val modifiers = a.completeAtCaret(dir, "Use.kt", "package demo\nfun f() { val m = Modif| }")
+                .items.filter { it.insertText == "Modifier" }.map { it.container }
+            val androidxIdx = modifiers.indexOf("androidx.compose.ui")
+            val javaIdx = modifiers.indexOf("java.lang.reflect")
+            assertTrue(androidxIdx >= 0 && javaIdx >= 0, "both Modifiers present; got $modifiers")
+            assertTrue(androidxIdx < javaIdx, "Compose Modifier must rank above the java.lang.reflect homonym; got $modifiers")
+        }
+    }
+
+    private fun fakeClassNamesIndex(javaFirst: Boolean = false) = object : IndexService {
         @Suppress("UNCHECKED_CAST")
         override fun <V : Any> fuzzy(id: IndexId, pattern: String, limit: Int): Sequence<Hit<V>> {
             if (id != CLASS_NAMES) return emptySequence()
-            return sequenceOf(
-                Hit("Modifier", ClassNameValue("androidx.compose.ui.Modifier", IndexOrigin.LIBRARY, "INTERFACE"), 100),
-                Hit("Modifier", ClassNameValue("java.lang.reflect.Modifier", IndexOrigin.LIBRARY, "CLASS"), 100),
-            ) as Sequence<Hit<V>>
+            val androidx = Hit("Modifier", ClassNameValue("androidx.compose.ui.Modifier", IndexOrigin.LIBRARY, "INTERFACE"), 100)
+            val java = Hit("Modifier", ClassNameValue("java.lang.reflect.Modifier", IndexOrigin.LIBRARY, "CLASS"), 100)
+            return (if (javaFirst) sequenceOf(java, androidx) else sequenceOf(androidx, java)) as Sequence<Hit<V>>
         }
 
         override fun <V : Any> exact(id: IndexId, key: String): Sequence<V> = emptySequence()
