@@ -250,7 +250,15 @@ class KotlinCompletion(
                 val name = s.name
                 if (name == "_" || MARKER in name) continue
                 val grade = matcher.grade(name) ?: continue
-                if (!seen.add(name + "#" + s.kind + "#" + (s.signature ?: ""))) continue
+                // Dedup overloads by name+kind+signature, but TYPES by fully-qualified name: two DISTINCT
+                // classes sharing a simple name (`androidx.compose.ui.Modifier` vs `java.lang.reflect.Modifier`)
+                // must BOTH survive. The bytecode index records every type as kind "class", so a name+kind key
+                // collapsed them to whichever the index returned first — dropping the Compose `Modifier`
+                // on-device, where the java.* one happened to sort ahead.
+                val dedupKey =
+                    if (s.kind in TYPE_KINDS) "T#" + ((s.type as? KotlinType)?.qualifiedName ?: name)
+                    else name + "#" + s.kind + "#" + (s.signature ?: "")
+                if (!seen.add(dedupKey)) continue
                 out += Candidate(
                     symbol = s,
                     importEdit = if (packageCompletion || (pos.memberAccess && s.kind in TYPE_KINDS)) emptyList()
@@ -297,7 +305,10 @@ class KotlinCompletion(
         // otherwise an empty-prefix popup (hundreds of in-scope symbols) would truncate the keywords away.
         val keep = (MAX_ITEMS - tail.size).coerceAtLeast(0)
         val items =
-            ((pos.extra.distinctBy { it.kind to it.label } + symbolItems).take(keep) + tail).distinctBy { it.kind to it.label }
+            ((pos.extra.distinctBy { it.kind to it.label } + symbolItems).take(keep) + tail)
+                // Include `container` so two distinct types with the same simple name (different packages) both
+                // remain — otherwise this pass re-collapses the pair the symbol dedup above kept.
+                .distinctBy { Triple(it.kind, it.label, it.container) }
                 .take(MAX_ITEMS)
         return CompletionResult(
             items = items,

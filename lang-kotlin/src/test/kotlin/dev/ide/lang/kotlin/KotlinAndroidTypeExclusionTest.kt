@@ -46,6 +46,72 @@ class KotlinAndroidTypeExclusionTest {
         assertTrue("java.lang.reflect.Modifier" in fqns, "but keeps java.* ; got $fqns")
     }
 
+    // --- androidNamespacesVisible: the decision that picks the exclusion list, keyed on the module's OWN
+    // classpath so a Compose module never loses `androidx.compose.ui.Modifier` just because its host-side
+    // Android-ness flag came out false/null (a disabled android-support plugin, a `kotlin-*` Compose module,
+    // an on-device `android.jar` bundled under another name). See the bug this reproduces at the class KDoc. ---
+
+    private fun path(s: String) = java.nio.file.Paths.get(s)
+
+    @Test
+    fun androidxOnClasspathStaysVisibleEvenWhenHostSaysNonAndroid() {
+        // The reported failure mode: host injected `false` (no decoded AndroidFacet), yet the module depends on
+        // Compose. The androidx jar on the classpath must keep the namespaces visible.
+        val cp = listOf(path("/repo/.platform/caches/resolved-deps/androidx/compose/ui/ui-android/1.7.5/ui-android-1.7.5-exploded/classes.jar"))
+        assertTrue(androidNamespacesVisible(isAndroidModule = false, classpathJars = cp), "androidx on classpath must win over a false flag")
+        assertTrue(androidNamespacesVisible(isAndroidModule = null, classpathJars = cp), "…and over an unset flag")
+    }
+
+    @Test
+    fun androidJarByNameOrHostFlagKeepsNamespacesVisible() {
+        assertTrue(androidNamespacesVisible(isAndroidModule = true, classpathJars = emptyList()), "host flag true → visible")
+        assertTrue(
+            androidNamespacesVisible(isAndroidModule = null, classpathJars = listOf(path("/sdk/platforms/android-36/android.jar"))),
+            "android.jar boot classpath → visible",
+        )
+    }
+
+    @Test
+    fun pureJvmModuleWithNoAndroidJarsHidesNamespaces() {
+        val cp = listOf(
+            path("/repo/.platform/caches/resolved-deps/com/squareup/okhttp3/okhttp/4.12.0/okhttp-4.12.0.jar"),
+            path("/repo/.platform/caches/resolved-deps/com/google/guava/guava/33.0.0/guava-33.0.0.jar"),
+        )
+        assertTrue(!androidNamespacesVisible(isAndroidModule = false, classpathJars = cp), "no android/androidx on classpath → hidden")
+        assertTrue(!androidNamespacesVisible(isAndroidModule = null, classpathJars = cp), "…same for an unset flag")
+    }
+
+    @Test
+    fun androidStoragePathDoesNotFalselyTriggerVisibility() {
+        // On-device jars live under `…/Android/data/<pkg>/…`; that must NOT be read as an androidx dependency.
+        val cp = listOf(path("/storage/emulated/0/Android/data/com.example.app/files/Projects/app/.platform/caches/resolved-deps/org/jetbrains/kotlin/kotlin-stdlib/2.0.0/kotlin-stdlib-2.0.0.jar"))
+        assertTrue(!androidNamespacesVisible(isAndroidModule = false, classpathJars = cp), "the Android storage path is not an androidx coordinate; got visible")
+    }
+
+    /**
+     * Two DISTINCT types that share a simple name but live in different packages (`androidx.compose.ui.Modifier`
+     * vs `java.lang.reflect.Modifier`) must BOTH complete — the completion dedup used to collapse them by simple
+     * name (the bytecode index records every type as kind "class"), keeping only whichever the index returned
+     * first. On-device the `java.*` one sorted ahead, so the Compose `Modifier` vanished even though it was
+     * indexed. The dedup now keys types by fully-qualified name, so both survive (disambiguated by package).
+     */
+    @Test
+    fun sameSimpleNameTypesFromDifferentPackagesBothComplete() {
+        kotlinx.coroutines.runBlocking {
+            val dir = tempProject(mapOf("Use.kt" to "package demo\n"))
+            val a = KotlinSourceAnalyzer(fakeContext(dir))
+            a.indexService = fakeClassNamesIndex()
+            a.isAndroidModule = true // an Android module: androidx.* is not hidden
+            val items = a.completeAtCaret(dir, "Use.kt", "package demo\nfun f() { val m = Modif| }").items
+            val containers = items.filter { it.insertText == "Modifier" }.mapNotNull { it.container }.toSet()
+            assertTrue("androidx.compose.ui" in containers, "Compose Modifier must complete; got $containers")
+            assertTrue(
+                "java.lang.reflect" in containers,
+                "the java Modifier must also complete — distinct types are not collapsed; got $containers",
+            )
+        }
+    }
+
     private fun fakeClassNamesIndex() = object : IndexService {
         @Suppress("UNCHECKED_CAST")
         override fun <V : Any> fuzzy(id: IndexId, pattern: String, limit: Int): Sequence<Hit<V>> {

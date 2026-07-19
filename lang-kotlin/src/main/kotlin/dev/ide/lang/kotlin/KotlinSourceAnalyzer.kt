@@ -74,6 +74,28 @@ import java.nio.file.Paths
 /** Android framework FQN prefixes hidden from index-backed type-name completion in a non-Android module. */
 private val ANDROID_TYPE_PREFIXES = listOf("android.", "androidx.", "com.android.", "com.google.android.", "dalvik.")
 
+/**
+ * Whether `android.*`/`androidx.*` type names should stay VISIBLE in this module's type-name completion,
+ * i.e. NOT be hidden as "another module's classpath leaking through the shared index". True when either the
+ * host says this is an Android module ([isAndroidModule] `== true`), OR the Android world is actually on this
+ * module's own [classpathJars] — an `android.jar` boot classpath (by name, for a desktop SDK) OR any jar under
+ * an `androidx`/`android`/`com.android`/`com.google.android` coordinate group. The classpath check is read
+ * from the resolved jar PATHS, whose Maven layout encodes the group (`…/androidx/compose/ui/…`), so it holds
+ * where the filename sniff cannot: an on-device `android.jar` bundled under another name, a Compose module
+ * whose `AndroidFacet` didn't decode (android-support disabled), or a plain `kotlin-*`/JVM Compose-Multiplatform
+ * module. Crucially a `false`/`null` from the host does NOT force hiding — on-classpath evidence still wins, so
+ * `androidx.compose.ui.Modifier` is offered wherever Compose is a real dependency.
+ */
+internal fun androidNamespacesVisible(isAndroidModule: Boolean?, classpathJars: List<Path>): Boolean {
+    if (isAndroidModule == true) return true
+    return classpathJars.any { jar ->
+        jar.fileName?.toString() == "android.jar" || run {
+            val p = "/" + jar.toString().replace('\\', '/').trim('/') + "/"
+            p.contains("/androidx/") || p.contains("/com/android/") || p.contains("/com/google/android/")
+        }
+    }
+}
+
 class KotlinSourceAnalyzer(ctx: CompilationContext) : SourceAnalyzer, Disposable {
 
     /** Injected by the host (ide-core's `analyzerFor`). */
@@ -96,11 +118,12 @@ class KotlinSourceAnalyzer(ctx: CompilationContext) : SourceAnalyzer, Disposable
     @Volatile
     var sourceDocProvider: SourceDocProvider = SourceDocProvider.NONE
 
-    /** Injected by the host: whether this module targets Android (has an `AndroidFacet`). Authoritative when
-     *  set — an Android module keeps `android.*`/`androidx.*` type names in completion; a non-Android one hides
-     *  them (the shared index holds every module's classpath). Falls back to the [isAndroidPlatform] filename
-     *  sniff only when the host doesn't inject it (tests / non-ide-core hosts), because that sniff misses an
-     *  android.jar bundled under another name (on device) or a module typed `kotlin-*` that still uses Compose. */
+    /** Injected by the host: whether this module targets Android (has an `AndroidFacet`, or an `android-*`
+     *  module type). When `true` it forces `android.*`/`androidx.*` type names to stay VISIBLE in completion;
+     *  otherwise the decision falls to the module's own classpath (see [androidNamespacesVisible]). A `false`
+     *  is NOT taken as "hide them" — the analyzer still offers the namespaces whenever their jars are on this
+     *  module's classpath — so a Compose module whose `AndroidFacet` didn't decode (e.g. android-support
+     *  disabled) or a `kotlin-*`-typed Compose-Multiplatform module never loses `androidx.compose.ui.Modifier`. */
     @Volatile
     var isAndroidModule: Boolean? = null
 
@@ -137,10 +160,6 @@ class KotlinSourceAnalyzer(ctx: CompilationContext) : SourceAnalyzer, Disposable
             .mapNotNull { runCatching { Paths.get(it.root.path) }.getOrNull() }
             .filter { Files.exists(it) }
 
-    /** True when `android.jar` is this module's platform. A non-Android module hides `android.*` from
-     *  index-backed type-name completion (the shared index holds every module's classpath). */
-    private val isAndroidPlatform: Boolean = classpathJars.any { it.fileName?.toString() == "android.jar" }
-
     private val serviceLazy = lazy {
         KotlinSymbolService(
             sourceRoots,
@@ -149,7 +168,11 @@ class KotlinSourceAnalyzer(ctx: CompilationContext) : SourceAnalyzer, Disposable
             extensionCacheDir,
             { syntheticClassProvider() },
             sourceDocProvider,
-            excludedTypePrefixes = if (isAndroidModule ?: isAndroidPlatform) emptyList() else ANDROID_TYPE_PREFIXES,
+            // Hide the Android namespaces ONLY from a module that genuinely can't use them (see
+            // [androidNamespacesVisible]) — never purely because the host's Android-ness flag was false/unset.
+            // Hide the Android namespaces ONLY from a module that genuinely can't use them (see
+            // [androidNamespacesVisible]) — never purely because the host's Android-ness flag was false/unset.
+            excludedTypePrefixes = if (androidNamespacesVisible(isAndroidModule, classpathJars)) emptyList() else ANDROID_TYPE_PREFIXES,
         )
     }
     private val service: KotlinSymbolService get() = serviceLazy.value

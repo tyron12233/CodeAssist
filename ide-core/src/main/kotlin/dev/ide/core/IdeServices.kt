@@ -1697,10 +1697,14 @@ class IdeServices private constructor(
                     val scratchCompose = isScratch &&
                             module.facets.get(AndroidFacet.KEY) != null
                     it.indexService = if (scratchCompose) null else indexService
-                    // Authoritative Android-ness (the analyzer's own `android.jar`-by-name sniff misses the
-                    // bundled SDK jar on device and a `kotlin-*`-typed Compose module) — so `androidx.*`/
-                    // `android.*` TYPE names aren't wrongly hidden from completion (e.g. `Modifier`).
-                    it.isAndroidModule = module.facets.get(AndroidFacet.KEY) != null
+                    // Authoritative Android-ness so `androidx.*`/`android.*` TYPE names aren't wrongly hidden
+                    // from completion (e.g. `Modifier`). Keyed on the `android-*` module TYPE as well as the
+                    // facet: the type survives a project reload even when the `[android]` facet table wasn't
+                    // decoded (e.g. the android-support plugin is disabled, so no facet codec is registered),
+                    // so a Compose app never falls back to the "hide androidx" path. (Belt-and-suspenders: the
+                    // analyzer also self-detects androidx on its own classpath, so this need not be exhaustive.)
+                    it.isAndroidModule =
+                        module.facets.get(AndroidFacet.KEY) != null || module.type.platform == PlatformKind.ANDROID
                     it.extensionCacheDir = store.rootPath.resolve(".platform/caches/kotlin-ext")
                     // Synthetic "light" classes (Android R/BuildConfig, …), minus the Kotlin file facades.
                     it.syntheticClassProvider = { kotlinSyntheticClasses(module) }
