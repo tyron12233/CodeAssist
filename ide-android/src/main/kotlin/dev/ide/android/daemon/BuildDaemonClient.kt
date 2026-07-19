@@ -17,7 +17,7 @@ import dev.ide.platform.log.Log
  */
 class BuildDaemonClient(
     context: Context,
-    private val onOpened: (ok: Boolean, error: String?) -> Unit = { _, _ -> },
+    private val onOpened: (requestId: Int, ok: Boolean, error: String?) -> Unit = { _, _, _ -> },
     private val onStatus: (status: String, moduleName: String, elapsedMs: Long) -> Unit = { _, _, _ -> },
     private val onStep: (name: String, status: String) -> Unit = { _, _ -> },
     private val onLog: (message: String) -> Unit = {},
@@ -52,7 +52,7 @@ class BuildDaemonClient(
     }
 
     private val callback = object : IBuildCallback.Stub() {
-        override fun onOpened(ok: Boolean, error: String?) = onOpened.invoke(ok, error)
+        override fun onOpened(requestId: Int, ok: Boolean, error: String?) = onOpened.invoke(requestId, ok, error)
         override fun onStatus(status: String?, moduleName: String?, elapsedMs: Long) =
             onStatus.invoke(status ?: "", moduleName ?: "", elapsedMs)
         override fun onStep(name: String?, status: String?) = onStep.invoke(name ?: "", status ?: "")
@@ -103,7 +103,8 @@ class BuildDaemonClient(
         log.info("ui(pid=${Process.myPid()}): bindService = $ok")
     }
 
-    fun open(workspaceDir: String, modelGeneration: Int) = runCatching { daemon?.open(workspaceDir, modelGeneration) }
+    fun open(workspaceDir: String, modelGeneration: Int, requestId: Int) =
+        runCatching { daemon?.open(workspaceDir, modelGeneration, requestId) }
     fun runTasks(): List<String> = runCatching { daemon?.runTasks()?.toList() }.getOrNull().orEmpty()
     fun runTask(id: String) = runCatching { daemon?.runTask(id) }
     fun runBuild() = runCatching { daemon?.runBuild() }

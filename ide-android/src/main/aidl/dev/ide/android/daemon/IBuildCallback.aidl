@@ -5,7 +5,7 @@ interface IBuildCallback {
     // oneway: fire-and-forget, ordered per-binder, never blocks the daemon. These carry BuildState DELTAS
     // (the UI reassembles the full state on its side). Enums travel as their .name() string, decoded with
     // RunStatus.valueOf / StepStatus.valueOf — safe because both processes run the same dexed classes.
-    oneway void onOpened(boolean ok, String error);              // open(workspaceDir) completed
+    oneway void onOpened(int requestId, boolean ok, String error); // open(workspaceDir) completed; echoes the request's id
     oneway void onStatus(String status, String moduleName, long elapsedMs); // RunStatus changed
     oneway void onStep(String name, String status);              // a build step's StepStatus changed
     oneway void onLog(String message);                           // one new build-log line

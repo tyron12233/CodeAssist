@@ -16,7 +16,9 @@ interface IBuildDaemon {
     // so it runs off the Binder thread and replies via IBuildCallback.onOpened. [modelGeneration] is the UI
     // model's revision: when it differs from the one the daemon last opened at, the on-disk module.toml
     // changed (e.g. minifyEnabled toggled) and the daemon reloads instead of reusing its stale model.
-    void open(String workspaceDir, int modelGeneration);
+    // [requestId] is echoed back in onOpened so the UI can pair each reply with the request that caused it —
+    // a reply to a superseded open (a retry raced it) must not trigger the newer request's queued build.
+    void open(String workspaceDir, int modelGeneration, int requestId);
 
     // The runnable tasks for the open project, each encoded "id\tlabel\tgroup". Valid after onOpened(true).
     String[] runTasks();

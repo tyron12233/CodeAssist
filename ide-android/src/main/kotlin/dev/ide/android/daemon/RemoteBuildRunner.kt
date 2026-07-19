@@ -18,10 +18,18 @@ import dev.ide.ui.backend.RunTaskOption
 import dev.ide.ui.backend.StepStatus
 import dev.ide.ui.backend.UiPermissionDecision
 import dev.ide.ui.backend.UiPermissionRequest
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
+import kotlinx.coroutines.isActive
+import kotlinx.coroutines.launch
+import java.util.concurrent.atomic.AtomicInteger
 
 /**
  * Routes a project's build/run to the `:build` daemon process (build-process isolation,
@@ -59,27 +67,71 @@ class RemoteBuildRunner(context: Context, private val services: IdeServices) : B
     @Volatile
     private var connected = false
 
+    /** The build queued behind an in-flight daemon open, tagged with its open request's id so a reply to a
+     *  SUPERSEDED open (a retry raced the first cold open) can't fire the newer request's action against an
+     *  engine that request never opened. */
+    private class PendingRun(val id: Int, val action: () -> Unit)
+
     @Volatile
-    private var pending: (() -> Unit)? = null
+    private var pending: PendingRun? = null
+    private val pendingLock = Any()
+    private val requestSeq = AtomicInteger()
+
+    /** Atomically claim [pending] iff it belongs to [requestId] — the reply-to-request pairing. Touched from
+     *  the UI thread (execute/stop), binder threads (onOpened), and the watchdog, so check-then-clear must be
+     *  one step; the action itself runs outside the lock (it's a binder call). */
+    private fun takePending(requestId: Int): PendingRun? = synchronized(pendingLock) {
+        val p = pending
+        if (p != null && p.id == requestId) {
+            pending = null
+            p
+        } else null
+    }
+
+    /** Wall-clock of the last daemon sign of life (any delta/reply) — the watchdog's silence baseline. */
+    @Volatile
+    private var lastActivityMs = 0L
+    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
+
+    @Volatile
+    private var watchdog: Job? = null
+
+    private fun noteActivity() {
+        lastActivityMs = System.currentTimeMillis()
+    }
 
     private val client = BuildDaemonClient(
         context,
-        onOpened = { ok, err ->
-            if (ok) {
-                pending?.invoke()
-            } else {
-                _buildState.update { it.copy(status = RunStatus.Failed, log = it.log + line("Build process couldn't open the project: $err")) }
+        onOpened = { requestId, ok, err ->
+            noteActivity()
+            // Only the reply matching the CURRENT request may consume it; a stale reply is dropped (its
+            // requester was superseded, and the newer open gets its own reply — the daemon serializes them).
+            val p = takePending(requestId)
+            if (p != null) {
+                if (ok) {
+                    p.action()
+                } else {
+                    watchdog?.cancel()
+                    _buildState.update { it.copy(status = RunStatus.Failed, log = it.log + line("Build process couldn't open the project: $err")) }
+                }
             }
-            pending = null
         },
         onStatus = { status, module, elapsed ->
+            noteActivity()
             _buildState.update {
                 it.copy(status = runStatusOf(status, it.status), moduleName = module.ifEmpty { it.moduleName }, elapsedMs = elapsed)
             }
         },
-        onStep = { name, status -> _buildState.update { it.withStep(name, stepStatusOf(status)) } },
-        onLog = { msg -> _buildState.update { it.copy(log = it.log + line(msg)) } },
+        onStep = { name, status ->
+            noteActivity()
+            _buildState.update { it.withStep(name, stepStatusOf(status)) }
+        },
+        onLog = { msg ->
+            noteActivity()
+            _buildState.update { it.copy(log = it.log + line(msg)) }
+        },
         onDiagnostic = { severity, message, kind, source, file, lineNo, column, detail, task ->
+            noteActivity()
             _buildState.update {
                 it.copy(diagnostics = it.diagnostics + BuildDiagnosticUi(severityOf(severity), message, kind, source, file, lineNo, column, detail, task))
             }
@@ -154,7 +206,22 @@ class RemoteBuildRunner(context: Context, private val services: IdeServices) : B
 
     override fun runBuild() = execute { client.runBuild() }
     override fun runTask(id: String) = execute { client.runTask(id) }
-    override fun stopBuild() { runCatching { client.stopBuild() } }
+
+    override fun stopBuild() {
+        // Drop a build still queued behind the daemon-open handshake — Stop must never let it fire later.
+        synchronized(pendingLock) { pending = null }
+        watchdog?.cancel()
+        runCatching { client.stopBuild() }
+        // If the daemon never acknowledged this build (still in the handshake — no steps yet), no terminal
+        // status will ever stream back; resolve the optimistic Running locally so Stop visibly stops and the
+        // next Run isn't blocked by the run-conflict gate. A real in-flight build (steps present) terminates
+        // through the daemon's own Stopped/Failed delta instead.
+        _buildState.update {
+            if (it.status == RunStatus.Running && it.steps.isEmpty()) {
+                it.copy(status = RunStatus.Failed, log = it.log + line("Stopped."))
+            } else it
+        }
+    }
 
     override fun sendRunInput(text: String) { runCatching { client.sendRunInput(text) } }
     override fun closeRunInput() { runCatching { client.closeRunInput() } }
@@ -165,7 +232,7 @@ class RemoteBuildRunner(context: Context, private val services: IdeServices) : B
      *  reference [client] — which isn't yet assigned inside its own initializer.) */
     private fun onDaemonConnected() {
         connected = true
-        if (pending != null) runCatching { client.open(workspaceRoot, services.modelGeneration) }
+        pending?.let { p -> runCatching { client.open(workspaceRoot, services.modelGeneration, p.id) } }
     }
 
     /** Show Running immediately, then ensure the daemon has THIS project open (idempotent) and run [action].
@@ -177,12 +244,45 @@ class RemoteBuildRunner(context: Context, private val services: IdeServices) : B
         // whatever was last saved and runs stale code on an unsaved edit. The in-process runner flushes inside
         // BuildService.runTask; the remote runner must flush here, in the process that actually holds the edits.
         runCatching { services.flushOpenDocuments() }
-        _buildState.value = BuildState(status = RunStatus.Running)
-        pending = action
+        val id = requestSeq.incrementAndGet()
+        _buildState.value = BuildState(
+            status = RunStatus.Running,
+            log = listOf(line("Starting the build in the background build process…")),
+        )
+        synchronized(pendingLock) { pending = PendingRun(id, action) }
+        noteActivity()
         // Pass the current model revision: if the UI committed a config change (e.g. minifyEnabled) since the
         // daemon last opened, this differs and the daemon reloads module.toml before building — otherwise the
         // build would run against the daemon's stale, frozen-at-first-open model.
-        if (connected) runCatching { client.open(workspaceRoot, services.modelGeneration) } // → daemon onOpened → runs `pending`
+        if (connected) runCatching { client.open(workspaceRoot, services.modelGeneration, id) } // → daemon onOpened → runs `pending`
+        armWatchdog()
+    }
+
+    /** Guard the handshake window (execute → daemon open → first build deltas): if the daemon goes silent for
+     *  [WATCHDOG_SILENCE_MS] before ANY step arrives, fail the build visibly instead of spinning forever —
+     *  the historical stuck state ("Running…" + an empty Steps tab) that only a project re-open cleared.
+     *  Once steps stream (or the status resolves) the build is live and the watchdog stands down. */
+    private fun armWatchdog() {
+        watchdog?.cancel()
+        watchdog = scope.launch {
+            while (isActive) {
+                delay(WATCHDOG_POLL_MS)
+                val st = _buildState.value
+                if (st.status != RunStatus.Running || st.steps.isNotEmpty()) return@launch
+                if (System.currentTimeMillis() - lastActivityMs > WATCHDOG_SILENCE_MS) {
+                    synchronized(pendingLock) { pending = null }
+                    _buildState.update {
+                        if (it.status == RunStatus.Running && it.steps.isEmpty()) {
+                            it.copy(
+                                status = RunStatus.Failed,
+                                log = it.log + line("The build process didn't respond for ${WATCHDOG_SILENCE_MS / 1000}s — press Run to try again."),
+                            )
+                        } else it
+                    }
+                    return@launch
+                }
+            }
+        }
     }
 
     /** Append a streamed console fragment, coalescing into the trailing same-kind chunk (bounded per chunk)
@@ -226,5 +326,11 @@ class RemoteBuildRunner(context: Context, private val services: IdeServices) : B
         const val CONSOLE_CHUNK_MAX = 8192
         const val CONSOLE_TRANSCRIPT_MAX = 1_000_000
         const val MAX_APP_LOG_LINES = 5000
+
+        // Handshake watchdog: how often to check, and how long the daemon may stay silent before the first
+        // step arrives. Generous — a cold daemon open (model load + engine init, no index) is well under
+        // this even on a slow phone, and the daemon logs "loading project…" at open start, resetting the clock.
+        const val WATCHDOG_POLL_MS = 15_000L
+        const val WATCHDOG_SILENCE_MS = 120_000L
     }
 }

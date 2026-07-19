@@ -531,7 +531,15 @@ internal class BuildService(private val ctx: EngineContext) : Disposable {
 
     /** Run/assemble the task with [id] (from [runTasks]); streams progress into [buildState]. */
     fun runTask(id: String) {
-        if (_buildState.value.status == RunStatus.Running) return
+        if (_buildState.value.status == RunStatus.Running) {
+            // Dropped, but never silently: in the remote (:build daemon) flow the UI has already shown an
+            // optimistic Running for ITS request, and a silent drop here would leave it waiting forever on
+            // deltas that never come.
+            _buildState.update {
+                it.copy(log = it.log + logLine("Run request ignored — a build is already running.", UiLogLevel.Warn))
+            }
+            return
+        }
         ctx.flushOpenDocuments() // save unsaved editor buffers so the compiler sees the latest source
         runCatching { ctx.ensureKotlinStdlib() } // a newly-added .kt module needs the stdlib dep before it builds/runs
         // Graph construction + topological ordering run synchronously here; a misconfiguration (cyclic deps,
@@ -546,7 +554,7 @@ internal class BuildService(private val ctx: EngineContext) : Disposable {
                         ?: return fail("No runnable main() found for ${module.name}. Set one in Module Settings ▸ Run.")
                     val mainClass = target.mainClass
                     unresolvedBlocker(module)?.let { return fail(it) }
-                    val project = ctx.projectOf(module) ?: return
+                    val project = ctx.projectOf(module) ?: return fail("Internal error: no project for module '${module.name}'.")
                     // Start an interactive console session: program stdio + stdin flow through this ProgramIo
                     // into the full-screen Run terminal.
                     val sessionId = runConsoleSeq.incrementAndGet()
@@ -583,7 +591,7 @@ internal class BuildService(private val ctx: EngineContext) : Disposable {
                     unresolvedBlocker(module)?.let { return fail(it) }
                     val android = androidBuild
                         ?: return fail("Android SDK (platform + build-tools) not found — install one to assemble Android modules.")
-                    val project = ctx.projectOf(module) ?: return
+                    val project = ctx.projectOf(module) ?: return fail("Internal error: no project for module '${module.name}'.")
                     val graph = android.createBuildGraph(
                         project, BuildRequest(
                             listOf(module.id), VariantSelector(variant), BuildGoal.ASSEMBLE
@@ -605,7 +613,7 @@ internal class BuildService(private val ctx: EngineContext) : Disposable {
                     unresolvedBlocker(module)?.let { return fail(it) }
                     val android = androidBuild
                         ?: return fail("Android SDK (platform + build-tools) not found — install one to bundle Android modules.")
-                    val project = ctx.projectOf(module) ?: return
+                    val project = ctx.projectOf(module) ?: return fail("Internal error: no project for module '${module.name}'.")
                     val graph = android.createBuildGraph(
                         project, BuildRequest(
                             listOf(module.id), VariantSelector(variant), BuildGoal.BUNDLE
@@ -628,7 +636,7 @@ internal class BuildService(private val ctx: EngineContext) : Disposable {
                     unresolvedBlocker(module)?.let { return fail(it) }
                     val android = androidBuild
                         ?: return fail("Android SDK (platform + build-tools) not found — install one to assemble Android modules.")
-                    val project = ctx.projectOf(module) ?: return
+                    val project = ctx.projectOf(module) ?: return fail("Internal error: no project for module '${module.name}'.")
                     val graph = android.createBuildGraph(
                         project, BuildRequest(listOf(module.id), VariantSelector(variant), BuildGoal.ASSEMBLE)
                     )
@@ -650,7 +658,7 @@ internal class BuildService(private val ctx: EngineContext) : Disposable {
                     unresolvedBlocker(module)?.let { return fail(it) }
                     val android = androidBuild
                         ?: return fail("Android SDK (platform + build-tools) not found — install one to prepare the preview.")
-                    val project = ctx.projectOf(module) ?: return
+                    val project = ctx.projectOf(module) ?: return fail("Internal error: no project for module '${module.name}'.")
                     val graph = android.createBuildGraph(
                         project, BuildRequest(listOf(module.id), VariantSelector(variant), BuildGoal.DEX)
                     )
@@ -666,7 +674,7 @@ internal class BuildService(private val ctx: EngineContext) : Disposable {
                     val module = ctx.modules().firstOrNull { it.name == moduleName }
                         ?: return fail("No module '$moduleName'.")
                     unresolvedBlocker(module)?.let { return fail(it) }
-                    val project = ctx.projectOf(module) ?: return
+                    val project = ctx.projectOf(module) ?: return fail("Internal error: no project for module '${module.name}'.")
                     val bs = buildSystemFor(module.type)
                         ?: return fail("No build system supports module type '${module.type.id}'.")
                     val graph = bs.createBuildGraph(
@@ -686,7 +694,7 @@ internal class BuildService(private val ctx: EngineContext) : Disposable {
                     val android = androidBuild ?: return fail("Android SDK not found.")
                     val pkg = module.facets.get(AndroidFacet.KEY)?.namespace
                         ?: return fail("No Android package for '${parts[0]}'.")
-                    val project = ctx.projectOf(module) ?: return
+                    val project = ctx.projectOf(module) ?: return fail("Internal error: no project for module '${module.name}'.")
                     val graph = android.createBuildGraph(
                         project, BuildRequest(
                             listOf(module.id), VariantSelector(variant), BuildGoal.ASSEMBLE
