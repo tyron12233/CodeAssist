@@ -928,6 +928,7 @@ private fun CodeEditorContent(
         )
         LightbulbLayer(
             acts = acts,
+            interaction = interaction,
             showPopup = showPopup,
             engaged = engaged,
             caretOffset = caretOffset,
@@ -1136,6 +1137,7 @@ private fun SignatureHelpLayer(
 @Composable
 private fun LightbulbLayer(
     acts: EditorActionsController,
+    interaction: EditorInteraction,
     showPopup: Boolean,
     engaged: Boolean,
     caretOffset: Int,
@@ -1146,10 +1148,16 @@ private fun LightbulbLayer(
         val density = LocalDensity.current
         val (_, bulbX, bulbTop) = caretGeometry(caretOffset)
         val gapPx = with(density) { 6.dp.roundToPx() }
-        val positionProvider = remember(bulbX, bulbTop, gapPx) {
+        // The touch selection toolbar anchors above this same line; when it's up, stack the bulb above it
+        // (toolbar height + its 8dp gap) so a quick-fix like auto-import stays reachable.
+        val toolbarLift =
+            if (interaction.handlesVisible && interaction.lastInputWasTouch) {
+                interaction.selectionToolbarHeightPx + with(density) { 8.dp.roundToPx() }
+            } else 0
+        val positionProvider = remember(bulbX, bulbTop, gapPx, toolbarLift) {
             AboveAnchorPositionProvider(
                 bulbX.roundToInt().coerceAtLeast(gutterWidthPx.roundToInt()),
-                bulbTop.roundToInt(),
+                bulbTop.roundToInt() - toolbarLift,
                 gapPx,
             )
         }
