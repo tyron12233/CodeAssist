@@ -60,6 +60,28 @@ class ResourceLiveEditReproTest {
     }
 
     @Test
+    fun unsavedBufferEditIsVisibleInXmlResourceCompletion() {
+        // The XML side too: a `<string>` typed into strings.xml but NOT saved must appear in a layout's
+        // `@string/` completion. XML resource completion resolves through the save-driven resource index; it
+        // must ALSO consult the buffer-aware resource repository so an unsaved string shows live.
+        val s = IdeServices.bootstrapDemo(root).also { services = it }
+        val strings = root.resolve("app/src/main/res/values/strings.xml")
+        val original = Files.readString(strings)
+        val edited = original.replace("</resources>", "    <string name=\"xml_buffer_only\">v</string>\n</resources>")
+        s.updateDocument(strings, edited) // buffer only — NO save
+
+        val layout = root.resolve("app/src/main/res/layout/probe_live.xml")
+        val text = "<TextView xmlns:android=\"http://schemas.android.com/apk/res/android\" android:text=\"@string/\" />"
+        val off = text.indexOf("@string/") + "@string/".length
+        fun completedStringNames(): List<String> = runBlocking { s.complete(layout, text, off) }.items
+            .flatMap { listOfNotNull(it.label, it.insertText) }.map { it.substringAfterLast('/') }
+        assertTrue(
+            poll("xml_buffer_only", { completedStringNames() }, 10_000),
+            "XML @string/ completion must surface an unsaved buffer string; got ${completedStringNames()}",
+        )
+    }
+
+    @Test
     fun unsavedBufferEditIsVisibleInCode() {
         // Live-in-buffer: a `<string>` typed into strings.xml but NOT yet saved must still resolve in code,
         // for both Java and Kotlin (the synthetic R reads the open editor buffer of res files).

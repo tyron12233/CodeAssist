@@ -37,10 +37,16 @@ internal class AndroidResourceService(private val ctx: EngineContext) {
         val module = (if (isXml) ctx.moduleForResourceFile(file) else ctx.moduleForFile(file)) ?: return null
         if (module.facets.get(AndroidFacet.KEY) == null) return null
         val (type, name) = (if (isXml) xmlResourceRefAt(text, offset) else rClassRefAt(text, offset)) ?: return null
-        // Resolved purely through the resource index, which carries the declaring file + offset. No repository
-        // fallback: an as-yet-unindexed resource simply has no go-to target until the index catches up.
-        return indexDefinition(type, name)
+        // The index carries the precise declaring offset; a resource added/edited in an OPEN res buffer isn't
+        // indexed until save, so fall back to the buffer-aware repository (declaring file only, offset 0) so
+        // go-to-def still lands in the right file for an as-yet-unsaved declaration.
+        return indexDefinition(type, name) ?: repoDefinition(module, type, name)
     }
+
+    /** Buffer-aware go-to-target for an unindexed resource: the declaring file at offset 0 (the repository
+     *  tracks the source file per resource, not the precise offset — only the index does). */
+    private fun repoDefinition(module: Module, type: ResourceType, name: String): Pair<Path, Int>? =
+        ctx.resourceRepo(module)?.definitions(type, name)?.firstNotNullOfOrNull { it.source }?.let { it to 0 }
 
     /** The local resource reference under [offset] in res XML (`@type/name`), as (type, R-field name). */
     private fun xmlResourceRefAt(text: String, offset: Int): Pair<ResourceType, String>? {
