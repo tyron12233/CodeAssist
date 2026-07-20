@@ -736,6 +736,12 @@ dependencies {
     // only its own classes — the (unshaded) Kotlin compiler it builds on is already dexed via :lang-kotlin.
     implementation(libs.kotlin.compose.compiler.plugin.ide) { isTransitive = false }
 
+    // The kotlinx.serialization kotlinc plugin's classes — dexed into the app for the same reason as the
+    // Compose plugin above: kotlinc reads the service descriptor from the bundled `-Xplugin` jar but resolves
+    // `SerializationComponentRegistrar` through parent delegation to the app classloader on ART. Non-transitive
+    // (it needs only its own classes; the unshaded compiler it builds on is already dexed via :lang-kotlin).
+    implementation(libs.kotlin.serialization.compiler.plugin.ide) { isTransitive = false }
+
     // build-engine's ProgramInterpreter port + jvm-build's VmProgramInterpreter (kept `implementation` in
     // :ide-core, so not transitive): :ide-android constructs the interpreter with a dexing peer factory so a
     // Java/Kotlin console `run` executes on the bytecode VM on ART.

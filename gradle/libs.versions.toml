@@ -61,6 +61,14 @@ kotlin-metadata-jvm = { module = "org.jetbrains.kotlin:kotlin-metadata-jvm", ver
 # plugin-transformed bytecode. Bundled as a lang-kotlin resource jar (for the service descriptor + desktop
 # class-load) AND dexed into :ide-android (so its registrar resolves on ART).
 kotlin-compose-compiler-plugin-ide = { module = "org.jetbrains.kotlin:compose-compiler-plugin-for-ide", version.ref = "kotlinForIde" }
+# The kotlinx.serialization kotlinc compiler plugin (unshaded `-for-ide` build, matching the compiler world of
+# :kotlin-compiler-deps). Bundled as a lang-kotlin resource jar AND dexed into :ide-android like the Compose
+# plugin, so a module carrying the serialization runtime is compiled with it — no runtime DexClassLoader.
+kotlin-serialization-compiler-plugin-ide = { module = "org.jetbrains.kotlin:kotlinx-serialization-compiler-plugin-for-ide", version.ref = "kotlinForIde" }
+# The kotlinx.serialization RUNTIME (independent of the compiler-plugin version). Test-only in :lang-kotlin:
+# KotlinSerializationBuildTest compiles a @Serializable class against it (with the bundled plugin) and asserts
+# the generated serializer; self-gates when the jar isn't resolvable, so a stripped CI classpath skips it.
+kotlinx-serialization-json = { module = "org.jetbrains.kotlinx:kotlinx-serialization-json", version = "1.8.1" }
 # The Kotlin standard library JAR, bundled as an :ide-android asset so the on-device K2JVMCompiler spike has
 # stdlib on its compile classpath (the dexed app classes aren't usable as a -classpath input). Tracks `kotlin`.
 kotlin-stdlib = { module = "org.jetbrains.kotlin:kotlin-stdlib", version.ref = "kotlin" }

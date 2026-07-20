@@ -47,6 +47,10 @@ dependencies {
     // it (with the bundled Compose plugin) and asserts the synthetic-param transform. The test self-gates
     // (assumeTrue) when the jar isn't resolvable, so CI without the Compose repo just skips it.
     testImplementation(libs.compose.runtime.desktop)
+    // Real kotlinx.serialization runtime on the test classpath: KotlinSerializationBuildTest compiles a
+    // @Serializable class against it (with the bundled plugin) and asserts the generated serializer. Self-gates
+    // (assumeTrue) when the jar isn't resolvable, so CI without it just skips.
+    testImplementation(libs.kotlinx.serialization.json)
 }
 
 // Bundle the kotlin-stdlib JAR — the SAME version the editor/compiler target (`libs.versions.toml` `kotlin`)
@@ -67,9 +71,17 @@ dependencies { bundledStdlib(libs.kotlin.stdlib) }
 val bundledComposePlugin: Configuration by configurations.creating { isTransitive = false }
 dependencies { bundledComposePlugin(libs.kotlin.compose.compiler.plugin.ide) }
 
+// Bundle the kotlinx.serialization compiler-plugin JAR (`/kotlin-serialization-compiler-plugin.jar`) the same
+// way: when a module carries the serialization runtime, kotlinc is fed this jar via `-Xplugin` so `@Serializable`
+// classes get their generated serializers. `SerializationCompilerPlugin` extracts it; the host applies it
+// per-module. The `-for-ide` build, for the same unshaded-compiler reason as the Compose plugin above.
+val bundledSerializationPlugin: Configuration by configurations.creating { isTransitive = false }
+dependencies { bundledSerializationPlugin(libs.kotlin.serialization.compiler.plugin.ide) }
+
 tasks.processResources {
     from(bundledStdlib) { rename { "kotlin-stdlib.jar" } }
     from(bundledComposePlugin) { rename { "kotlin-compose-compiler-plugin.jar" } }
+    from(bundledSerializationPlugin) { rename { "kotlin-serialization-compiler-plugin.jar" } }
 }
 
 // `src/test/.../Test.kt` is a scratch file for manually comparing completion against IntelliJ in the IDE.
