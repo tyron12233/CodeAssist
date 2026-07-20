@@ -176,6 +176,12 @@ internal class ModuleService(private val ctx: EngineContext) {
                     bf.compose,
                     note = "Adds the Compose compiler plugin and the Compose runtime + tooling dependencies.",
                 ),
+                UiBuildFeature(
+                    "parcelize", "Parcelize",
+                    "Generate the Parcelable implementation for @Parcelize classes with the kotlin-parcelize compiler plugin.",
+                    bf.parcelize,
+                    note = "Adds the kotlin-parcelize runtime; the bundled plugin then applies to @Parcelize classes.",
+                ),
             ),
         )
     }
@@ -203,6 +209,7 @@ internal class ModuleService(private val ctx: EngineContext) {
         val updated = when (feature) {
             "viewBinding" -> bf.copy(viewBinding = enabled)
             "compose" -> bf.copy(compose = enabled)
+            "parcelize" -> bf.copy(parcelize = enabled)
             else -> return UiConfigResult(false, "Unknown build feature '$feature'.")
         }
         if (updated == bf) return UiConfigResult(true, "No change.")
@@ -223,6 +230,7 @@ internal class ModuleService(private val ctx: EngineContext) {
             val coords = when (feature) {
                 "viewBinding" -> AndroidFeatureDependencies.VIEW_BINDING
                 "compose" -> AndroidFeatureDependencies.COMPOSE
+                "parcelize" -> AndroidFeatureDependencies.PARCELIZE
                 else -> emptyList()
             }
             val failures = ensureFeatureDependencies(moduleName, coords)

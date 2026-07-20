@@ -57,6 +57,7 @@ import dev.ide.lang.kotlin.KotlinLanguageBackend
 import dev.ide.lang.kotlin.analysis.KotlinAnalysisSupport
 import dev.ide.lang.kotlin.compile.ComposeCompilerPlugin
 import dev.ide.lang.kotlin.compile.KOTLIN_COMPILER_PLUGIN_EP
+import dev.ide.lang.kotlin.compile.ParcelizeCompilerPlugin
 import dev.ide.lang.kotlin.compile.SerializationCompilerPlugin
 import dev.ide.lang.kotlin.completion.KotlinPostfixTemplates
 import dev.ide.lang.kotlin.index.BinaryAnnotationIndex
@@ -258,6 +259,7 @@ private class KotlinSupportPlugin : Plugin {
         reg.register(SYNTHETIC_CLASS_EP, KotlinSyntheticClassProvider())
         reg.register(KOTLIN_COMPILER_PLUGIN_EP, ComposeCompilerPlugin)
         reg.register(KOTLIN_COMPILER_PLUGIN_EP, SerializationCompilerPlugin)
+        reg.register(KOTLIN_COMPILER_PLUGIN_EP, ParcelizeCompilerPlugin)
         reg.contributeVia { ext, pid ->
             val templates = ProjectTemplateRegistry(ext)
             templates.register(KotlinConsoleAppTemplate, pid)

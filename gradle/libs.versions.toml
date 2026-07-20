@@ -65,6 +65,10 @@ kotlin-compose-compiler-plugin-ide = { module = "org.jetbrains.kotlin:compose-co
 # :kotlin-compiler-deps). Bundled as a lang-kotlin resource jar AND dexed into :ide-android like the Compose
 # plugin, so a module carrying the serialization runtime is compiled with it — no runtime DexClassLoader.
 kotlin-serialization-compiler-plugin-ide = { module = "org.jetbrains.kotlin:kotlinx-serialization-compiler-plugin-for-ide", version.ref = "kotlinForIde" }
+# The kotlin-parcelize kotlinc compiler plugin (unshaded `-for-ide` build). Bundled + dexed like the Compose
+# and serialization plugins so a module with `@Parcelize` compiles without a runtime DexClassLoader. Enabled
+# via the module's Build Features toggle (which adds the kotlin-parcelize runtime the plugin's probe detects).
+kotlin-parcelize-compiler-plugin-ide = { module = "org.jetbrains.kotlin:parcelize-compiler-plugin-for-ide", version.ref = "kotlinForIde" }
 # The kotlinx.serialization RUNTIME (independent of the compiler-plugin version). Test-only in :lang-kotlin:
 # KotlinSerializationBuildTest compiles a @Serializable class against it (with the bundled plugin) and asserts
 # the generated serializer; self-gates when the jar isn't resolvable, so a stripped CI classpath skips it.

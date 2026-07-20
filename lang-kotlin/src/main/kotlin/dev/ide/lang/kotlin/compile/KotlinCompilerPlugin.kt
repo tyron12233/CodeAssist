@@ -57,7 +57,8 @@ enum class KotlinPluginLoading {
 val KOTLIN_COMPILER_PLUGIN_EP = ExtensionPoint<KotlinCompilerPlugin>("platform.kotlinCompilerPlugin")
 
 /** The built-in plugins, applied unless a host overrides the list (the default for direct/test wiring). */
-val BUILTIN_KOTLIN_COMPILER_PLUGINS: List<KotlinCompilerPlugin> = listOf(ComposeCompilerPlugin, SerializationCompilerPlugin)
+val BUILTIN_KOTLIN_COMPILER_PLUGINS: List<KotlinCompilerPlugin> =
+    listOf(ComposeCompilerPlugin, SerializationCompilerPlugin, ParcelizeCompilerPlugin)
 
 /**
  * The applied plugins for a compile, split by loading mode:

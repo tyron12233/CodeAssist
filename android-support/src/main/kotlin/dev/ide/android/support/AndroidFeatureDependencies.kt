@@ -19,4 +19,8 @@ object AndroidFeatureDependencies {
         "androidx.compose.material3:material3:1.3.1",
         "androidx.compose.ui:ui-tooling-preview:1.7.5",
     )
+
+    /** The kotlin-parcelize runtime — carries the `@Parcelize`/`Parceler` annotations. Adding it puts the
+     *  `@Parcelize` marker on the classpath, which is what activates the bundled parcelize compiler plugin. */
+    val PARCELIZE: List<String> = listOf("org.jetbrains.kotlin:kotlin-parcelize-runtime:2.4.0")
 }

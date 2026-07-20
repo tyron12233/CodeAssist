@@ -78,10 +78,18 @@ dependencies { bundledComposePlugin(libs.kotlin.compose.compiler.plugin.ide) }
 val bundledSerializationPlugin: Configuration by configurations.creating { isTransitive = false }
 dependencies { bundledSerializationPlugin(libs.kotlin.serialization.compiler.plugin.ide) }
 
+// Bundle the kotlin-parcelize compiler-plugin JAR (`/kotlin-parcelize-compiler-plugin.jar`) the same way: a
+// module with the parcelize runtime (`@Parcelize`, added by the Build Features toggle) is compiled with it so
+// `@Parcelize` classes get their generated `Parcelable`. `ParcelizeCompilerPlugin` extracts it. `-for-ide` for
+// the same unshaded-compiler reason as the plugins above.
+val bundledParcelizePlugin: Configuration by configurations.creating { isTransitive = false }
+dependencies { bundledParcelizePlugin(libs.kotlin.parcelize.compiler.plugin.ide) }
+
 tasks.processResources {
     from(bundledStdlib) { rename { "kotlin-stdlib.jar" } }
     from(bundledComposePlugin) { rename { "kotlin-compose-compiler-plugin.jar" } }
     from(bundledSerializationPlugin) { rename { "kotlin-serialization-compiler-plugin.jar" } }
+    from(bundledParcelizePlugin) { rename { "kotlin-parcelize-compiler-plugin.jar" } }
 }
 
 // `src/test/.../Test.kt` is a scratch file for manually comparing completion against IntelliJ in the IDE.

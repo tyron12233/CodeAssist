@@ -91,9 +91,15 @@ data class BuildFeatures(
      * runtime/tooling dependencies. Compose previews then render from `@Preview` composables.
      */
     val compose: Boolean = false,
+    /**
+     * `parcelize`: enable the kotlin-parcelize compiler plugin — a `@Parcelize` class gets its `Parcelable`
+     * implementation generated. Like `compose`, the plugin is applied once its runtime (the `@Parcelize`
+     * annotation) is on the classpath, which enabling this adds.
+     */
+    val parcelize: Boolean = false,
 ) {
     /** True when at least one build feature is enabled (drives "emit only when set" persistence). */
-    val anyEnabled: Boolean get() = viewBinding || compose
+    val anyEnabled: Boolean get() = viewBinding || compose || parcelize
 }
 
 /** A build type (`debug`/`release`/…): how a variant is assembled regardless of flavor. */
