@@ -83,6 +83,31 @@ class KotlinCrossFilePreviewTest {
     }
 
     @Test
+    fun callsATopLevelExtensionDeclaredInAnotherFile() {
+        // The reported "Compose Preview fails to resolve top-level extension function ... no source extension
+        // `<function>/0`": a top-level extension (`fun String.shout()`) declared in a sibling file, called from
+        // the entry. The resolver correctly tags it a SOURCE extension, but the expander never merged its
+        // declaring file (no EXTENSION branch), so the interpreter threw "no source extension `shout/0`". It is
+        // keyed in the program by `name/valueParams` (the receiver is not a value parameter), like a top-level fn.
+        val entry = """
+            package com.example.compose
+            fun caller(): String = "hi".shout()
+        """.trimIndent()
+        val (service, dir) = serviceOver(
+            mapOf(
+                "Ext.kt" to "package com.example.compose\n\nfun String.shout(): String = this + \"!\"\n",
+                "Use.kt" to entry,
+            ),
+        )
+        val model = lowerCrossFile(service, dir, "Use.kt", entry)
+        assertTrue(model.program["caller/0"]?.isComplete == true, "caller should lower; diags=${model.program["caller/0"]?.diagnostics}")
+        assertNotNull(
+            model.program["shout/0"],
+            "the cross-file top-level extension must be merged into the program; got ${model.program.keys}",
+        )
+    }
+
+    @Test
     fun readsATopLevelPropertyDeclaredInAnotherFile() {
         // The reported "Preview failed to render: no source function `Purple80/0`": a top-level `val` (a theme
         // color) defined in a sibling file, read from the entry (`Text(color = Purple80)` in miniature). A

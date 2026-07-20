@@ -314,16 +314,25 @@ class KotlinSymbolService(
         return previewSourceFile(raw?.ctx?.path)
     }
 
-    /** The source files declaring a top-level CALLABLE named [name] — a function OR a (non-extension) top-level
-     *  property — for cross-file preview lowering. A property read lowers to a `name/0` TOP_LEVEL source call
-     *  (its synthetic zero-arg getter), so a preview referencing a `val` defined in another file (e.g. a theme
-     *  color `Purple80`) must follow it here too, not just functions. Distinct by path. */
-    fun sourceFilesDeclaringFunction(name: String): List<PreviewSourceFile> =
-        model().topLevel.asSequence()
-            .filter { it.receiverText == null && it.name == name }
+    /** The source files declaring a top-level CALLABLE named [name] — a function (INCLUDING a top-level
+     *  extension function, which a preview may call cross-file: `"x".shout()` where `fun String.shout()` lives in
+     *  a sibling file) OR a non-extension top-level property — for cross-file preview lowering. A property read
+     *  lowers to a `name/0` TOP_LEVEL source call (its synthetic zero-arg getter), so a preview referencing a
+     *  `val` defined in another file (e.g. a theme color `Purple80`) must follow it here too. An extension
+     *  PROPERTY stays excluded (its read routes through its receiver type, not this by-name lookup). Distinct by
+     *  path. */
+    fun sourceFilesDeclaringFunction(name: String): List<PreviewSourceFile> {
+        val m = model()
+        // `topLevel` holds NON-extension callables (functions + properties); extension callables live in a
+        // separate `extensions` list, so an extension FUNCTION must be looked up there too (an extension property
+        // stays excluded — its read routes through its receiver type, not this by-name lookup).
+        val candidates = m.topLevel.asSequence().filter { it.name == name } +
+            m.extensions.asSequence().filter { it.name == name && it.isFunction }
+        return candidates
             .mapNotNull { previewSourceFile(it.ctx.path) }
             .distinctBy { it.file.path }
             .toList()
+    }
 
     private fun sourceFileFor(vf: VirtualFile, ov: Map<String, String>): SourceFile? {
         val path = vf.path
@@ -373,6 +382,12 @@ class KotlinSymbolService(
         return SyntheticIndex(byFqn, current.map { it.fqName }.toHashSet())
             .also { syntheticCache = it; syntheticCacheKey = current }
     }
+
+    /** Whether [fqn] is a contributed synthetic class (Android `R`/`BuildConfig`, ViewBinding). Its members are
+     *  volatile (resource-driven) and cheap, so they must NOT enter the session-stable classpath member memos —
+     *  they are enumerated fresh so a resource edit is reflected at once. [synthetic] is identity-cached. */
+    private fun isSyntheticType(fqn: String): Boolean =
+        synthetic().byFqn.containsKey(Builtins.kotlinTypeFor(fqn) ?: fqn)
 
     /** Members of a synthetic class: fields + methods (with their declared modifiers) + nested types (the
      *  navigation `R.layout` → `R.layout.activity_main`). Null if [fqn] is not a synthetic class. */
@@ -668,7 +683,9 @@ class KotlinSymbolService(
     fun membersNamedForCheck(typeFqn: String, typeArgs: List<TypeRef>, name: String): List<KotlinSymbol> {
         if (name.isEmpty()) return emptyList()
         val idx = index
-        if (idx == null || sourceClass(typeFqn) != null || !classpathCacheUsable(idx))
+        // A synthetic class's members are volatile (resource-driven) — never pin them in the session-stable
+        // check memo, or a just-added `strings.xml` string would be flagged unresolved until a full rebuild.
+        if (idx == null || sourceClass(typeFqn) != null || isSyntheticType(typeFqn) || !classpathCacheUsable(idx))
             return membersNamed(typeFqn, typeArgs, name)
         return checkMembersMemo.getOrPut("$typeFqn $name") { membersNamed(typeFqn, emptyList(), name) }
     }
@@ -714,6 +731,12 @@ class KotlinSymbolService(
             model().classByFqn.containsKey(kfqn) ->
                 if (isInferringOwner(kfqn)) ownAndInherited(fqn, emptyList(), HashSet())
                 else sourceOwnMembersMemo.getOrPut(kfqn) { ownAndInherited(fqn, emptyList(), HashSet()) }
+            // A synthetic class (Android `R`/`BuildConfig`, ViewBinding) is VOLATILE — its members change when
+            // resources change — and cheap to enumerate (in-memory). Pinning it in the session-stable classpath
+            // memo (dropped only on a (re)build) would make an added/edited `strings.xml` string never appear in
+            // `R.string.` / `stringResource` completion until a full rebuild. Compute fresh: `synthetic()`
+            // self-invalidates by list identity when the host swaps the resource-driven list.
+            isSyntheticType(kfqn) -> ownAndInherited(fqn, emptyList(), HashSet())
             idx != null && !classpathCacheUsable(idx) -> ownAndInherited(fqn, emptyList(), HashSet()) // mid-build: don't pin a partial shape
             else -> classpathOwnMembersMemo.getOrPut(kfqn) { ownAndInherited(fqn, emptyList(), HashSet()) }
         }

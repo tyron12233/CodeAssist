@@ -508,6 +508,13 @@ fun expandPreviewModel(seed: PreviewFileModel, maxFiles: Int, provider: PreviewD
                             // short-circuit matches the registered `name/declaredArity` key.
                             node.dispatch == DispatchKind.TOP_LEVEL ->
                                 requestFn(callee.displayName, callee.declId.substringAfterLast('/').toIntOrNull() ?: node.args.size)
+                            // A top-level EXTENSION function declared in another file (`fun Foo.bar()`): its `declId`
+                            // owner is the package/facade (a dotted name), so without this branch it fell through to
+                            // `requestType` on the package and the declaring file was never merged — the interpreter
+                            // then threw `no source extension \`bar/0\``. It is keyed in the program by `name/valueParams`
+                            // (the receiver isn't a value parameter), the same shape as a top-level function.
+                            node.dispatch == DispatchKind.EXTENSION || node.dispatch == DispatchKind.MEMBER_EXTENSION ->
+                                requestFn(callee.displayName, callee.declId.substringAfterLast('/').toIntOrNull() ?: node.args.size)
                             '.' in owner -> requestType(owner.substringBeforeLast('.')) // a member's owner FQN
                         }
                     }

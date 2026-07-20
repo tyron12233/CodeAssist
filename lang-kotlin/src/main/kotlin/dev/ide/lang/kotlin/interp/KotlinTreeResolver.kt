@@ -1135,6 +1135,27 @@ class KotlinTreeResolver(
             )
             return RNode.Call(callee, DispatchKind.MEMBER, receiverNode, lowerArgs(call), csk(call.textRange.startOffset), span(call))
         }
+        // `iterable.forEach { }` / `forEachIndexed { }` — the Kotlin stdlib inline extension. On device its
+        // overload resolution contends against `java.lang.Iterable.forEach(Consumer)` (a Java 8 default MEMBER,
+        // present on API 24+): a trailing lambda's type is un-inferable so both look applicable, and the call
+        // lowers either to Unsupported (a false "unresolved/ambiguous call") or to the Java member (MEMBER on
+        // `java.lang.Iterable`). BOTH bypass the `forEach` inline intrinsic (the interpreter's `evalInlineIntrinsic`
+        // only fires for a CollectionsKt-owned EXTENSION), so a `Column { list.forEach { Row { } } }` runs the loop
+        // in a library frame and its child composables never render. Canonicalize a genuine kotlin.collections
+        // `forEach`/`forEachIndexed` (CollectionsKt for List/Set/Iterable, ArraysKt for arrays) to a
+        // CollectionsKt-owned EXTENSION Call so the interpreter runs it as an intrinsic (the loop body composes
+        // into the ambient composition). Gated on a real kotlin.collections candidate so a same-named user
+        // extension isn't hijacked; Map.forEach (MapsKt, a destructuring `(k, v)` lambda) is intentionally left
+        // to normal resolution.
+        if (receiverNode != null && bareCalleeName in COLLECTION_FOREACH_NAMES && call.valueArguments.size == 1 &&
+            isCollectionForEachCall(call, bareCalleeName!!)
+        ) {
+            val callee = ResolvedCallable.Library(
+                displayName = bareCalleeName, ownerFqn = "kotlin.collections.CollectionsKt", methodName = bareCalleeName,
+                paramTypes = listOf(null), isStatic = false, isConstructor = false, isInline = true,
+            )
+            return RNode.Call(callee, DispatchKind.EXTENSION, receiverNode, lowerArgs(call), csk(call.textRange.startOffset), span(call))
+        }
         // A generic call whose type arguments can't be inferred (`mutableStateOf()` with no value argument) is
         // invalid Kotlin — the editor flags `kt.cannotInferType`. The arity fallback in `chooseCallee` would
         // still pick the callee and lower a malformed (under-applied) call that crashes the run reflectively;
@@ -1703,6 +1724,17 @@ class KotlinTreeResolver(
             s.name == name && (s.packageName == "kotlinx.coroutines.flow" || s.declaringClassFqn?.startsWith("kotlinx.coroutines.flow") == true)
         }
 
+    /** Whether [call] resolves to the Kotlin stdlib `forEach`/`forEachIndexed` inline extension over a
+     *  collection/array (`CollectionsKt` for List/Set/Iterable, `ArraysKt` for arrays) — the gate for
+     *  canonicalizing it to the interpreter's inline intrinsic. `MapsKt` is deliberately excluded (its entry
+     *  lambda is usually destructured). Gated on a genuine kotlin.collections candidate so a same-named user
+     *  extension isn't hijacked. */
+    private fun isCollectionForEachCall(call: KtCallExpression, name: String): Boolean =
+        runCatching { resolver.callTargets(call) }.getOrDefault(emptyList()).any { s ->
+            s.name == name &&
+                (s.declaringClassFqn == "kotlin.collections.CollectionsKt" || s.declaringClassFqn == "kotlin.collections.ArraysKt")
+        }
+
     private fun chooseCallee(call: KtCallExpression): KotlinSymbol? {
         val raw = runCatching { resolver.callTargets(call) }.getOrDefault(emptyList())
         if (raw.isEmpty()) return null
@@ -1761,7 +1793,12 @@ class KotlinTreeResolver(
         val typed = byArity.filter { c -> argsBindable(c, valueArgs, exact = false) }
             .let { t -> t.filter { requiredParamsSatisfied(it, valueArgs) }.ifEmpty { t } }
         typed.singleOrNull()?.let { return it }
-        if (typed.isEmpty()) return null // nothing applicable → genuine no-match, never guess
+        // `typed` empties when no candidate's args bind — but for a BINARY (library) member overload set this is
+        // usually the Java/Kotlin type-name divide, not a real no-match: a Java parameter is a JVM FQN
+        // (`java.lang.String`) while the argument is a Kotlin type (`kotlin.String`), so `argsBindable` rejects
+        // every overload of `Intent.putExtra(String, …)`. Defer such a set to the RUNTIME dispatcher (which
+        // re-resolves the overload by the actual argument values) instead of tying out to "unresolved/ambiguous".
+        if (typed.isEmpty()) return deferToRuntimeMember(byArity)
         // More than one applicable overload. Prefer the MOST SPECIFIC: candidates whose parameter types
         // EXACTLY match the (known) argument types (so `f(String)` wins over `f(Any)` for a String argument).
         val exact = typed.filter { c -> argsBindable(c, valueArgs, exact = true) }
@@ -1812,6 +1849,29 @@ class KotlinTreeResolver(
         // concrete types (`Icon(ImageVector)` vs `Icon(Painter)`) — is NOT collapsed, so it stays rejected as
         // ambiguous until argument types narrow it.
         return mostConcrete.takeIf { pool2 -> pool2.all { sameCallableShape(it, pool2.first()) } }?.first()
+            ?: deferToRuntimeMember(byArity)
+    }
+
+    /**
+     * A tie among BINARY (library) overloads of the SAME method on the SAME owner that static resolution can't
+     * narrow — typically a Java overload set (`Intent.putExtra(String, String)` / `(String, CharSequence)` /
+     * `(String, Serializable)`) whose parameter types are JVM FQNs the argument's Kotlin type doesn't line up
+     * with, or an overload set with no most-specific member. Every candidate shares owner + name, so the runtime
+     * reflective dispatcher re-resolves the overload from the ACTUAL argument values (it looks a member up by
+     * name + arg types and ignores the callee's declared parameter types). Return one deterministically and defer,
+     * rather than failing the whole preview with an "unresolved/ambiguous call". Gated so a source / extension /
+     * mixed-owner set — which the interpreter CANNOT re-resolve reflectively — is still rejected as before.
+     */
+    private fun deferToRuntimeMember(candidates: List<KotlinSymbol>): KotlinSymbol? {
+        if (candidates.size < 2) return null
+        val first = candidates.first()
+        if (first.kind != SymbolKind.METHOD || first.isExtension) return null
+        val owner = first.declaringClassFqn ?: return null
+        val homogeneous = candidates.all {
+            !it.origin.fromSource && !it.isExtension && it.kind == SymbolKind.METHOD &&
+                it.name == first.name && it.declaringClassFqn == owner
+        }
+        return if (homogeneous) first else null
     }
 
     /** Whether [a] and [b] bind every SUPPLIED argument to a parameter of a compatible type — so the call site
@@ -1950,6 +2010,10 @@ class KotlinTreeResolver(
 
     /** `Flow.collect { }` terminal operators (inline extensions) the coroutine bridge drives. */
     private val FLOW_COLLECT_NAMES = setOf("collect", "collectLatest")
+
+    /** The collection/array iteration inline HOFs the interpreter models as intrinsics (`evalInlineIntrinsic`)
+     *  — canonicalized to a CollectionsKt-owned EXTENSION Call so a composable-emitting loop body renders. */
+    private val COLLECTION_FOREACH_NAMES = setOf("forEach", "forEachIndexed")
 
     private val ARITHMETIC = mapOf(
         KtTokens.PLUS to "plus", KtTokens.MINUS to "minus", KtTokens.MUL to "times",
