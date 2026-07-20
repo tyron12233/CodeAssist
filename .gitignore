@@ -9,6 +9,7 @@
 
 # IDE-derived / OS
 *.log
+*.trace
 .DS_Store
 .idea/
 .kotlin/
