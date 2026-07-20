@@ -65,6 +65,13 @@ object ArtPatchPasses {
         // interfaces load, then broke verification of Icon-returning methods on stricter ART verifiers.
         // Same instrumentation (scope = ALL) also reaches the dexed Eclipse jars, so an ecj fix rides here too.
         EcjInputStreamArtPass(),  // InputStream.readAllBytes/readNBytes (API 33) absent on ART → shim call sites
+        // Same instrumentation reaches the merged IntelliJ-platform jar (:kotlin-compiler-deps).
+        ClassValueArtPass(),      // MethodHandleCache extends java.lang.ClassValue (absent on ART) → shim superclass
+        VarHandleArtPass(),       // VarHandle polymorphic calls VerifyError on strict ART → sun.misc.Unsafe shim
+                                  // (AtomicFieldUpdater + the ConcurrentHashMap forks + ConcurrentBitSetImpl)
+        IntrospectorArtPass(),    // java.beans.Introspector absent on ART → decapitalize/flushCaches shim
+                                  // (unbreaks PsiMethod.findSuperMethods on device: StringUtil/PropertyUtilBase/
+                                  //  ExtensibleQueryFactory/GCUtil)
     )
 
     /** True if any registered pass rewrites [classFqn]. */

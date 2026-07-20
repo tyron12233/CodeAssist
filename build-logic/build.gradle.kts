@@ -15,7 +15,19 @@ dependencies {
     compileOnly("org.ow2.asm:asm:9.7")
     compileOnly("org.ow2.asm:asm-commons:9.7")
     compileOnly("org.ow2.asm:asm-tree:9.7") // ClassNode/MethodNode — body-replacement passes
+
+    // Unit-test the ASM passes in isolation (no device/APK): feed synthetic bytecode through a pass and read
+    // the result back. ASM is compileOnly for main (AGP provides it on the instrumentation worker), so the
+    // tests bring their own copy.
+    testImplementation("org.ow2.asm:asm:9.7")
+    testImplementation("org.ow2.asm:asm-commons:9.7") // ClassRemapper — used by ClassValueArtPass
+    testImplementation(platform("org.junit:junit-bom:5.11.4"))
+    testImplementation("org.junit.jupiter:junit-jupiter")
+    testImplementation(kotlin("test"))
+    testRuntimeOnly("org.junit.platform:junit-platform-launcher")
 }
+
+tasks.withType<Test>().configureEach { useJUnitPlatform() }
 
 // The `dev.ide.kotlinc-art` plugin id → :ide-android applies it with one line.
 gradlePlugin {
