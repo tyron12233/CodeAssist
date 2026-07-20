@@ -365,6 +365,32 @@ class ReflectiveDispatcherTest {
         assertEquals(6, dispatcher.dispatch(call, receiver = Sink(), args = listOf<Any?>(Outer(Inner(5)))), "a nested value-class arg must unbox all the way to the primitive")
     }
 
+    @Test
+    fun incomparableOverloadsAreBrokenByArgumentRuntimeType() {
+        // Two applicable overloads whose parameter types are pairwise INCOMPARABLE (neither a subtype of the
+        // other) — the `Intent.putExtra(String, CharSequence)` vs `(String, Serializable)` shape. With no
+        // parameter-type-only most-specific overload, the ARGUMENT's runtime type breaks the tie: `Both` reaches
+        // `A2` directly (distance 1) but `B2` only through a superclass (distance 2), so the `A2` overload wins
+        // deterministically instead of relying on JVM getMethods() order.
+        val callee = ResolvedCallable.Library(
+            displayName = "put", ownerFqn = Overloads::class.java.name, methodName = "put",
+            paramTypes = emptyList(), isStatic = false, isConstructor = false, isInline = false, descriptorPrecise = true,
+        )
+        val c = call(DispatchKind.MEMBER, callee)
+        assertEquals("a", dispatcher.dispatch(c, receiver = Overloads(), args = listOf<Any?>(Both())))
+    }
+
+    interface A2
+    interface B2
+    open class HasB2 : B2
+    /** Implements [A2] directly (distance 1) but [B2] only via [HasB2] (distance 2) — so the arg-runtime-type
+     *  tiebreak prefers the [A2] overload among two incomparable applicable overloads. */
+    class Both : HasB2(), A2
+    class Overloads {
+        fun put(a: A2): String = "a"
+        fun put(b: B2): String = "b"
+    }
+
     /** A Kotlin class with a mutable `value` property → `getValue()`/`setValue(x)` (a `MutableState` stand-in). */
     class Holder(var value: String)
 

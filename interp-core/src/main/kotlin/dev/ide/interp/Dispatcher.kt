@@ -256,6 +256,9 @@ class ReflectiveDispatcher(
     /** Host strategy for running an interpreted `suspend` block as a real cancellable coroutine (`delay` &c.
      *  actually suspend). Null → the built-in best-effort synchronous run (suspend calls degrade). */
     private val suspendBridge: SuspendBridge? = null,
+    /** Executes library classes the loaders cannot load (project-jar dependency code, run in the bytecode VM
+     *  on device instead of a DexClassLoader). Null → the honest "cannot load" boundary stands. */
+    private val libraryFallback: LibraryExecutor? = null,
 ) : Dispatcher {
 
     override fun dispatch(call: RNode.Call, receiver: Any?, args: List<Any?>): Any? =
@@ -359,6 +362,9 @@ class ReflectiveDispatcher(
     }
 
     private fun invokeInstance(target: Any, name: String, args: List<Any?>, composable: List<Boolean>): Any? {
+        // An instance the library executor produced (an interpreted-library object): its methods exist only in
+        // the executor's world, not on the peer class reflection sees.
+        if (libraryFallback?.ownsInstance(target) == true) return libraryFallback.invokeInstance(target, name, args)
         // An omitted (defaulted) parameter has no exact-arity match — go straight to the `$default` synthetic.
         if (args.none { it === OmittedArg }) {
             findMethod(target.javaClass, name, args, static = false)?.let { m ->
@@ -390,6 +396,7 @@ class ReflectiveDispatcher(
      *  receiver), so `receiverCount = 2`; the synthetic may live on the scope's interface (see
      *  [invokeViaDefaultSynthetic]'s interface search), not the runtime impl class. */
     private fun invokeMemberExtension(scope: Any, name: String, args: List<Any?>, composable: List<Boolean>): Any? {
+        if (libraryFallback?.ownsInstance(scope) == true) return libraryFallback.invokeInstance(scope, name, args, leadingReceivers = 1)
         if (args.none { it === OmittedArg }) {
             findMethod(scope.javaClass, name, args, static = false)?.let { m ->
                 runCatching { m.isAccessible = true }
@@ -403,6 +410,10 @@ class ReflectiveDispatcher(
     }
 
     private fun invokeStatic(ownerFqn: String, name: String, args: List<Any?>, composable: List<Boolean>, receiverCount: Int): Any? {
+        // A facade only the project's library jars carry (not loadable here) executes in the library executor.
+        if (libraryFallback != null && loadClassOrNull(ownerFqn) == null && libraryFallback.hasClass(ownerFqn)) {
+            return libraryFallback.invokeStatic(ownerFqn, name, args, receiverCount)
+        }
         val cls = loadClass(ownerFqn)
         if (args.none { it === OmittedArg }) {
             findMethod(cls, name, args, static = true)?.let { m ->
@@ -549,9 +560,13 @@ class ReflectiveDispatcher(
     }
 
     private fun construct(ownerFqn: String, args: List<Any?>, composable: List<Boolean>, declaredParamCount: Int): Any? {
+        // A type only the project's library jars carry constructs in the library executor.
+        if (libraryFallback != null && loadClassOrNull(ownerFqn) == null && libraryFallback.hasClass(ownerFqn)) {
+            return libraryFallback.construct(ownerFqn, args)
+        }
         // An unqualified type name (a stdlib exception the resolver couldn't fully qualify, e.g.
         // `IllegalArgumentException`) — try the `java.lang` package before giving up.
-        val cls = runCatching { Class.forName(ownerFqn, false, loader) }.getOrNull()
+        val cls = loadClassOrNull(ownerFqn)
             ?: (if ('.' !in ownerFqn) runCatching { Class.forName("java.lang.$ownerFqn", false, loader) }.getOrNull() else null)
             ?: throw InterpreterException("cannot load class `$ownerFqn`")
         // An interior [OmittedArg] hole means a defaulted param was skipped — there's no exact-arity match, so
@@ -870,6 +885,10 @@ class ReflectiveDispatcher(
         // wrong type). "Most specific" = every (boxed) parameter is a subtype of the others'; ties/incomparable
         // sets fall back to the accepting order.
         val ranked = accepting.filter { cand -> accepting.all { notLessSpecific(cand.parameterTypes, it.parameterTypes) } }
+            // No parameter-type-only most-specific overload (incomparable applicable overloads — e.g.
+            // `Intent.putExtra(String, CharSequence)` vs `(String, Serializable)` for a value that is both):
+            // break the tie by the ARGUMENTS' runtime types rather than JVM getMethods() order.
+            .ifEmpty { mostSpecificForArgs(accepting, args) }
             .ifEmpty { accepting }
         // Return null when NO same-arity overload actually accepts the args (ranked is empty iff accepting is):
         // invoking a non-accepting overload only throws an argument-type mismatch, and it hides the real target —
@@ -959,6 +978,37 @@ class ReflectiveDispatcher(
     private fun notLessSpecific(a: Array<Class<*>>, b: Array<Class<*>>): Boolean =
         a.size == b.size && a.indices.all { wrap(b[it]).isAssignableFrom(wrap(a[it])) }
 
+    /** Break a tie among applicable overloads that have NO parameter-type-only most-specific member (their
+     *  parameter types are pairwise incomparable) by the ARGUMENTS' runtime types: keep the candidates whose
+     *  parameters are the closest supertypes of the actual args (minimal total hierarchy distance). Deterministic
+     *  where `getMethods()` order is not — e.g. a `StringBuilder` (both `CharSequence` and `Serializable`) fed to
+     *  `putExtra(String, CharSequence)` vs `(String, Serializable)` picks the nearer `CharSequence`. Null and
+     *  interpreted-lambda args carry no comparable runtime type, so they don't influence the score. */
+    private fun mostSpecificForArgs(candidates: List<Method>, args: List<Any?>): List<Method> {
+        if (candidates.size < 2) return candidates
+        fun distance(from: Class<*>, to: Class<*>): Int {
+            val target = wrap(to)
+            if (!target.isAssignableFrom(wrap(from))) return Int.MAX_VALUE / 4
+            val seen = HashSet<Class<*>>()
+            val queue = ArrayDeque<Pair<Class<*>, Int>>().apply { add(wrap(from) to 0) }
+            while (queue.isNotEmpty()) {
+                val (c, d) = queue.removeFirst()
+                if (c == target) return d
+                if (!seen.add(c)) continue
+                c.superclass?.let { queue.add(it to d + 1) }
+                c.interfaces.forEach { queue.add(it to d + 1) }
+            }
+            return Int.MAX_VALUE / 4
+        }
+        fun score(m: Method): Long = args.indices.sumOf { i ->
+            val a = args[i]
+            if (a == null || a is InterpretedLambda) 0L else distance(a.javaClass, m.parameterTypes[i]).toLong()
+        }
+        val scored = candidates.map { it to score(it) }
+        val min = scored.minOf { it.second }
+        return scored.filter { it.second == min }.map { it.first }
+    }
+
     private fun wrap(c: Class<*>): Class<*> = when (c) {
         Int::class.javaPrimitiveType -> Integer::class.java
         Long::class.javaPrimitiveType -> java.lang.Long::class.java
@@ -985,6 +1035,9 @@ class ReflectiveDispatcher(
         }
         return false
     }
+
+    private fun loadClassOrNull(fqn: String): Class<*>? =
+        runCatching { Class.forName(fqn, false, loader) }.getOrNull()
 
     private fun loadClass(fqn: String): Class<*> =
         runCatching { Class.forName(fqn, false, loader) }.getOrElse {

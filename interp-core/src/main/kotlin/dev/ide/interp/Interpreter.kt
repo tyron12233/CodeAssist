@@ -52,6 +52,12 @@ class Interpreter(
     /** Resolves the previewed project's resources (`R.string.x` ids, `@string`/`@color`/… values). Null (the
      *  default, and on desktop/lessons) leaves resource access degrading as before. */
     private val resources: PreviewResourceResolver? = null,
+    /** Mediates every escape into real code — library dispatch, reflective property access, singleton class
+     *  init (see [InterpreterHooks]). Null (the default) checks nothing. */
+    private val hooks: InterpreterHooks? = null,
+    /** Executes library classes the loaders cannot load (project-jar dependency code, run in the bytecode VM
+     *  on device instead of a DexClassLoader). Null → the honest "cannot load" boundaries stand. */
+    private val libraryFallback: LibraryExecutor? = null,
 ) {
     /** Source classes indexed by fully-qualified name and by simple name (a constructor callee carries the
      *  simple name; an object/enum reference carries the resolved FQN). */
@@ -204,7 +210,7 @@ class Interpreter(
         val provider: Any = when {
             sourceClass != null -> instantiate(sourceClass, emptyList())
             providerFqn != null -> {
-                val cls = loadClassAcross(providerFqn, initialize = true, preferred = classLoader) ?: return emptyList()
+                val cls = loadInitialized(providerFqn) ?: return emptyList()
                 runCatching {
                     cls.getDeclaredConstructor().also { c -> runCatching { c.isAccessible = true } }.newInstance()
                 }.getOrNull() ?: return emptyList()
@@ -410,6 +416,37 @@ class Interpreter(
         else -> throw InterpreterException("not yet interpretable: ${node::class.simpleName}")
     }
 
+    /** Every dispatcher handoff funnels here so [hooks] sees ALL non-source calls regardless of which
+     *  dispatcher impl (reflective or Compose) serves them: consult the hook, then dispatch. */
+    private fun checkedDispatch(call: RNode.Call, receiver: Any?, args: List<Any?>): Any? {
+        hooks?.let { h ->
+            when (val d = h.beforeCall(call, receiver, args)) {
+                is HookDecision.Replace -> return d.value
+                is HookDecision.Deny -> throw InterpreterSecurityException(d.reason)
+                HookDecision.Proceed -> {}
+            }
+        }
+        return dispatcher.dispatch(call, receiver, args)
+    }
+
+    /** Consult [hooks] before a reflective property read; [Handled] carries a Replace value (a legitimate
+     *  null included), null means proceed with the real read. */
+    private fun hookPropertyRead(ownerFqn: String?, name: String, receiver: Any?): Handled? {
+        val h = hooks ?: return null
+        return when (val d = h.beforePropertyRead(ownerFqn, name, receiver)) {
+            is HookDecision.Replace -> Handled(d.value)
+            is HookDecision.Deny -> throw InterpreterSecurityException(d.reason)
+            HookDecision.Proceed -> null
+        }
+    }
+
+    /** [loadClassAcross] WITH static init, gated by [InterpreterHooks.beforeClassInit] — running `<clinit>`
+     *  is code execution, so a hooked host may veto it. A denied class simply behaves as not loadable (the
+     *  callers' existing honest "cannot load …" boundaries report it). */
+    private fun loadInitialized(fqn: String): Class<*>? =
+        if (hooks?.beforeClassInit(fqn) == false) null
+        else loadClassAcross(fqn, initialize = true, preferred = classLoader)
+
     private fun evalCall(call: RNode.Call, env: Env): Any? {
         InterpProfile.count("calls")
         val callee = call.callee
@@ -434,7 +471,7 @@ class Interpreter(
         if (call.dispatch == DispatchKind.INVOKE) {
             val target = call.receiver?.let { eval(it, env) }
             val argv = call.args.map { eval(it.value, env) }
-            return if (target is InterpretedLambda) target.invoke(argv) else dispatcher.dispatch(call, target, argv)
+            return if (target is InterpretedLambda) target.invoke(argv) else checkedDispatch(call, target, argv)
         }
         // A source constructor materializes a [SourceObject] (the type isn't compiled at preview/run time).
         if (callee is ResolvedCallable.Source && call.dispatch == DispatchKind.CONSTRUCTOR) {
@@ -497,7 +534,7 @@ class Interpreter(
         if (callee is ResolvedCallable.Library && staticHolderReceiver(call.receiver) != null) {
             val args = call.args.map { eval(it.value, env) }
             val staticCall = call.copy(dispatch = DispatchKind.TOP_LEVEL, receiver = null)
-            return dispatcher.dispatch(staticCall, null, args)
+            return checkedDispatch(staticCall, null, args)
         }
         // A MEMBER extension dispatched on an implicit-receiver scope (`RowScope.weight` called as
         // `Modifier.weight(1f)`): it's an INSTANCE method on the scope whose first parameter is the extension
@@ -510,7 +547,7 @@ class Interpreter(
             // dispatcher invokes it as an instance method on the scope (and threads BOTH receivers through the
             // `$default` synthetic when a value param is defaulted).
             val args = listOf(extReceiver) + call.args.map { eval(it.value, env) }
-            return dispatcher.dispatch(call, scope, args)
+            return checkedDispatch(call, scope, args)
         }
         // `super.foo(...)`: dispatch to the SUPERCLASS implementation, skipping the lexical class's own override.
         if (call.dispatch == DispatchKind.SUPER) {
@@ -550,9 +587,10 @@ class Interpreter(
         }
         val args = call.args.map { eval(it.value, env) }
         return try {
-            dispatcher.dispatch(call, receiver, args)
+            checkedDispatch(call, receiver, args)
         } catch (e: InterpreterException) {
-            throw refineInlineOnlyError(call, e)
+            // A hook refusal is already precise — don't re-attribute it to the inline-only boundary.
+            throw if (e is InterpreterSecurityException) e else refineInlineOnlyError(call, e)
         }
     }
 
@@ -882,8 +920,12 @@ class Interpreter(
      *  modifier; `Color` for `Color.Red`). Read from the runtime class — works for library objects on the
      *  classpath; a project-source object isn't compiled at preview time, so it fails the honest boundary. */
     private fun objectInstance(fqn: String): Any? {
-        val cls = loadClassAcross(fqn, initialize = true, preferred = classLoader)
-            ?: throw InterpreterException("cannot load `$fqn` (a project-source object isn't available to the interpreter)")
+        val cls = loadInitialized(fqn)
+            ?: run {
+                // An object only the project's library jars carry materializes in the library executor.
+                libraryFallback?.takeIf { it.hasClass(fqn) }?.objectInstance(fqn)?.let { return it }
+                throw InterpreterException("cannot load `$fqn` (a project-source object isn't available to the interpreter)")
+            }
         runCatching { cls.getField("INSTANCE") }.getOrNull()?.let { return it.get(null) } // a Kotlin `object`
         // A type's companion — `Companion` by default, but a NAMED companion (`kotlin.random.Random.Default`)
         // uses its own name, so find it by pattern rather than by the literal name `Companion`.
@@ -1118,7 +1160,7 @@ class Interpreter(
      *  which keeps the existing instance path for those. */
     private fun staticHolderReceiver(receiverNode: RNode?): Class<*>? {
         val ref = (receiverNode as? RNode.Name)?.binding as? Binding.ObjectRef ?: return null
-        val cls = loadClassAcross(ref.fqn, initialize = true, preferred = classLoader) ?: return null
+        val cls = loadInitialized(ref.fqn) ?: return null
         val hasSingleton = runCatching { cls.getField("INSTANCE") }.getOrNull() != null || companionField(cls) != null
         return if (hasSingleton) null else cls
     }
@@ -1145,6 +1187,7 @@ class Interpreter(
     /** Read a static member `name` off [cls]: a public static field (`System.out`, `Integer.MAX_VALUE`) first,
      *  then a static no-arg getter (`getName()`, mangling-aware for a value-class-typed property). */
     private fun readStaticMember(cls: Class<*>, name: String): Any? {
+        hookPropertyRead(cls.name, name, null)?.let { return it.value }
         runCatching { cls.getField(name) }.getOrNull()
             ?.takeIf { java.lang.reflect.Modifier.isStatic(it.modifiers) }
             ?.let { runCatching { it.isAccessible = true }; return it.get(null) }
@@ -1155,7 +1198,7 @@ class Interpreter(
         // Not a static field/getter — but `name` may be a NESTED CLASS reached through its enclosing type
         // (`Build.VERSION`, `Build.VERSION_CODES`); return that Class so a further static read off it resolves
         // (`Build.VERSION.SDK_INT`). The PropertyGet handler treats a Class-valued receiver as a static holder.
-        loadClassAcross("${cls.name}\$$name", initialize = true, preferred = classLoader)?.let { return it }
+        loadInitialized("${cls.name}\$$name")?.let { return it }
         throw InterpreterException("no static member `$name` on ${cls.name}")
     }
 
@@ -1163,7 +1206,7 @@ class Interpreter(
      *  compiles to the class `<enclosing>$<name>` with its own static `INSTANCE`. Null when there is no such
      *  nested class or it isn't an object (no `INSTANCE`). */
     private fun nestedObjectInstance(enclosing: Class<*>, name: String): Any? {
-        val nested = loadClassAcross("${enclosing.name}\$$name", initialize = true, preferred = classLoader)
+        val nested = loadInitialized("${enclosing.name}\$$name")
             ?: return null
         return runCatching { nested.getField("INSTANCE") }.getOrNull()?.get(null)
     }
@@ -1173,6 +1216,11 @@ class Interpreter(
      *  the dependency on the enclosing recompose scope — which is what drives recomposition. */
     private fun readProperty(receiver: Any, name: String): Any? {
         if (receiver is SourceObject) return readSourceProperty(receiver, name)
+        hookPropertyRead(null, name, receiver)?.let { return it.value }
+        // An instance the library executor produced: its getters exist only in the executor's world.
+        if (libraryFallback?.ownsInstance(receiver) == true) {
+            libraryFallback.propertyOrNull(receiver, name)?.let { return it.value }
+        }
         val getter = "get" + name.replaceFirstChar { if (it.isLowerCase()) it.titlecase() else it.toString() }
         (noArgMethod(receiver, getter) ?: noArgMethod(receiver, name))?.let {
             val v = it.invoke(receiver)
@@ -1205,6 +1253,14 @@ class Interpreter(
             }
             receiver.fields[name] = value; return
         }
+        hooks?.let { h ->
+            when (val d = h.beforePropertyWrite(name, receiver)) {
+                is HookDecision.Replace -> return // a stubbed write is simply skipped
+                is HookDecision.Deny -> throw InterpreterSecurityException(d.reason)
+                HookDecision.Proceed -> {}
+            }
+        }
+        if (libraryFallback?.ownsInstance(receiver) == true && libraryFallback.writeProperty(receiver, name, value)) return
         val setter = "set" + name.replaceFirstChar { if (it.isLowerCase()) it.titlecase() else it.toString() }
         val m = (oneArgMethod(receiver, setter) ?: oneArgMethod(receiver, name))
             ?: throw InterpreterException("no writable property `$name` on ${receiver.javaClass.name}")
@@ -1223,9 +1279,14 @@ class Interpreter(
      *  (its `<clinit>` populates the backing field). Name matched mangling-aware (a value-class-typed top-level
      *  property mangles its getter). */
     private fun readTopLevelProperty(ownerFqn: String, name: String): Any? {
-        val cls = loadClassAcross(ownerFqn, initialize = true, preferred = classLoader)
-            ?: throw InterpreterException("cannot load facade `$ownerFqn` for top-level property `$name`")
-        val getter = "get" + name.replaceFirstChar { if (it.isLowerCase()) it.titlecase() else it.toString() }
+        hookPropertyRead(ownerFqn, name, null)?.let { return it.value }
+        val getterName = "get" + name.replaceFirstChar { if (it.isLowerCase()) it.titlecase() else it.toString() }
+        val cls = loadInitialized(ownerFqn)
+            ?: run {
+                libraryFallback?.takeIf { it.hasClass(ownerFqn) }?.let { return it.invokeStatic(ownerFqn, getterName, emptyList()) }
+                throw InterpreterException("cannot load facade `$ownerFqn` for top-level property `$name`")
+            }
+        val getter = getterName
         val m = cls.methods.firstOrNull {
             java.lang.reflect.Modifier.isStatic(it.modifiers) && it.parameterCount == 0 && mangledNameMatches(it.name, getter)
         } ?: throw InterpreterException("no top-level property getter `$name` on `$ownerFqn`")
@@ -1238,9 +1299,14 @@ class Interpreter(
      *  Kotlin getter (`get` + capitalized name), MANGLED when the property's type is an inline value class
      *  (`Dp`/`TextUnit` → `getDp-<hash>`), which [mangledNameMatches] accepts. */
     private fun readExtensionProperty(receiver: Any, ownerFqn: String, name: String): Any? {
+        hookPropertyRead(ownerFqn, name, receiver)?.let { return it.value }
+        val getterName = "get" + name.replaceFirstChar { if (it.isLowerCase()) it.titlecase() else it.toString() }
         val cls = loadClassAcross(ownerFqn, initialize = false, preferred = classLoader)
-            ?: throw InterpreterException("cannot load facade `$ownerFqn` for extension property `$name`")
-        val getter = "get" + name.replaceFirstChar { if (it.isLowerCase()) it.titlecase() else it.toString() }
+            ?: run {
+                libraryFallback?.takeIf { it.hasClass(ownerFqn) }?.let { return it.invokeStatic(ownerFqn, getterName, listOf(receiver), leadingReceivers = 1) }
+                throw InterpreterException("cannot load facade `$ownerFqn` for extension property `$name`")
+            }
+        val getter = getterName
         val m = cls.methods.firstOrNull {
             java.lang.reflect.Modifier.isStatic(it.modifiers) && it.parameterCount == 1 && mangledNameMatches(it.name, getter)
         } ?: throw InterpreterException("no extension-property getter `$name` on `$ownerFqn`")
@@ -1546,8 +1612,9 @@ class Interpreter(
     }
 }
 
-/** Thrown when the interpreter meets a construct it cannot execute — the honest boundary, never a guess. */
-class InterpreterException(message: String) : RuntimeException(message)
+/** Thrown when the interpreter meets a construct it cannot execute — the honest boundary, never a guess.
+ *  Open for [InterpreterSecurityException] (a hook refusal), which boundary handling treats identically. */
+open class InterpreterException(message: String) : RuntimeException(message)
 
 /**
  * A project-source instance the interpreter materializes from a [ResolvedClass] — source types aren't compiled
