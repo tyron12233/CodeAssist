@@ -74,6 +74,7 @@ include(
     ":lang-kotlin", // editor-only Kotlin LanguageBackend (PSI parse + our own symbols/inference/completion)
     ":jvm-build", // JVM-language build system: JavaBuildSystem/JavaPlugin compose lang-jdt+lang-kotlin compile tasks over build-engine
     ":interp-core", // on-device Kotlin interpreter: tree-walks lang-kotlin's ResolvedTree (Compose interpreter, step 3)
+    ":jvm-interp", // PoC: standalone .class bytecode-interpreting VM + Android/native bridge seam (Play dynamic-code compliance spike)
     ":deps-api",
     ":deps-impl",
     ":analytics-api", // opt-in usage-analytics SPI (event model + AnalyticsService/AnalyticsSink ports)
