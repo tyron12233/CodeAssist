@@ -252,7 +252,7 @@ internal class EditorBackend(private val ctx: BackendContext) : EditorService {
                     label = s.label,
                     parameters = s.parameters.map { p ->
                         UiSignatureParam(
-                            p.label, p.labelStart, p.labelEnd
+                            p.label, p.labelStart, p.labelEnd, alreadyNamed = p.alreadyNamed
                         )
                     },
                     documentation = s.documentation,

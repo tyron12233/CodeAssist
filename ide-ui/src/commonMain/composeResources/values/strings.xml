@@ -287,6 +287,8 @@ We never collect your code, file or project names, which features you use, or an
     <string name="completion_back_to_suggestions">Back to suggestions</string>
     <string name="completion_show_documentation">Show documentation</string>
     <string name="sig_more">+%1$d more</string>
+    <string name="sig_peek_tip">Tap to peek full definition</string>
+    <string name="sig_peek_collapse">Tap to collapse</string>
     <string name="edsheet_source_control">Source Control</string>
     <string name="edsheet_source_control_desc">Git integration. Staging, diffs, commit &amp; push is on the roadmap.</string>
     <string name="symbolbar_move_line_up">Move line up</string>

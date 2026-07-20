@@ -70,4 +70,41 @@ class SignatureWindowTest {
         val s = sig(8, suffix = "): Unit")
         assertEquals("fn(…, p2, p3, p4, …): Unit", rendered(s, active = 3, windowed = true))
     }
+
+    // The peek (long-press) hint should surface exactly when a peek reveals more than the compact line.
+
+    @Test
+    fun peekWorthwhileWhenSignatureWindows() {
+        assertEquals(true, signatureWouldWindow(sig(8)))
+        assertEquals(true, peekWorthwhile(sig(8)))
+    }
+
+    @Test
+    fun shortCallWithoutDocsIsNotWorthPeeking() {
+        val s = sig(3)
+        assertEquals(false, signatureWouldWindow(s))
+        assertEquals(false, peekWorthwhile(s))
+    }
+
+    @Test
+    fun documentationAloneMakesAShortCallWorthPeeking() {
+        val s = sig(3).copy(documentation = "Returns the value.")
+        assertEquals(false, signatureWouldWindow(s))
+        assertEquals(true, peekWorthwhile(s))
+    }
+
+    @Test
+    fun alreadyNamedParameterRendersDimmed() {
+        // p1 has been supplied by a named argument → its span is the dim colour; the active p0 is accent, p2 plain.
+        val base = sig(3)
+        val withNamed = base.copy(
+            parameters = base.parameters.mapIndexed { i, p -> if (i == 1) p.copy(alreadyNamed = true) else p },
+        )
+        val ann = signatureAnnotated(withNamed, activeParameter = 0, active = true, accent = Color.Red, dim = Color.Gray, windowed = false)
+        val p1 = withNamed.parameters[1]
+        val dimSpans = ann.spanStyles.filter { it.item.color == Color.Gray }
+        assertEquals(1, dimSpans.size, "exactly one dim span, over the named parameter")
+        assertEquals(p1.start, dimSpans[0].start)
+        assertEquals(p1.end, dimSpans[0].end)
+    }
 }

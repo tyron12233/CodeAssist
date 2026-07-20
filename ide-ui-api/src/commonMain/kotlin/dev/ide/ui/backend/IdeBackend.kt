@@ -1313,8 +1313,9 @@ data class UiInlayHint(
 }
 
 /** One parameter within a [UiSignature]; [start]/[end] are its `[start, end)` offsets into [UiSignature.label]
- *  (for highlighting), both -1 when not located. */
-data class UiSignatureParam(val label: String, val start: Int = -1, val end: Int = -1)
+ *  (for highlighting), both -1 when not located. [alreadyNamed] is true when a named argument earlier in the
+ *  call has already supplied it, so the popup dims it. */
+data class UiSignatureParam(val label: String, val start: Int = -1, val end: Int = -1, val alreadyNamed: Boolean = false)
 
 /** One overload's rendered signature: the whole [label] (e.g. `format(String fmt, Object... args)`) plus each
  *  parameter's sub-range, and an optional per-overload [activeParameter] override (varargs). */

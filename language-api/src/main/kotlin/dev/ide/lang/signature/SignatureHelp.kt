@@ -75,4 +75,8 @@ data class ParameterInfo(
     val labelStart: Int = -1,
     val labelEnd: Int = -1,
     val documentation: String? = null,
+    /** True when this parameter has already been supplied by a named argument (`name = …`) earlier in the call
+     *  the caret is in, so the editor can dim it — it no longer needs to be typed. Languages without named
+     *  arguments leave this false. */
+    val alreadyNamed: Boolean = false,
 )

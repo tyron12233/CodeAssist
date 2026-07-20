@@ -45,7 +45,13 @@ class KotlinSignatureHelpService(
         val targets = resolver.callTargets(call).filter { it.paramNames.isNotEmpty() || it.paramTypes.isNotEmpty() }
         if (targets.isEmpty()) return null
 
-        val signatures = targets.map { signatureOf(it, site.activeParameter) }
+        // Names already supplied as `name = …` arguments in this call — those parameters are dimmed (they don't
+        // need to be typed again). Independent of overload; each signature matches them against its own names.
+        val namedArgs: Set<String> = call.valueArguments
+            .mapNotNull { it.getArgumentName()?.asName?.asString() }
+            .toSet()
+
+        val signatures = targets.map { signatureOf(it, site.activeParameter, namedArgs) }
         val active = pickActiveSignature(targets, site.activeParameter)
         return SignatureHelp(signatures = signatures, activeSignature = active, activeParameter = site.activeParameter)
     }
@@ -64,19 +70,20 @@ class KotlinSignatureHelpService(
         return targets.indices.maxByOrNull { arity(targets[it]) } ?: 0
     }
 
-    private fun signatureOf(s: KotlinSymbol, activeParameter: Int): SignatureInfo {
+    private fun signatureOf(s: KotlinSymbol, activeParameter: Int, namedArgs: Set<String>): SignatureInfo {
         val count = maxOf(s.paramNames.size, s.paramTypes.size)
         val sb = StringBuilder(s.name).append('(')
         val infos = ArrayList<ParameterInfo>(count)
         for (i in 0 until count) {
             if (i > 0) sb.append(", ")
-            val nm = s.paramNames.getOrNull(i)?.takeIf { it.isNotEmpty() && !isSyntheticParamName(it) }
+            val rawName = s.paramNames.getOrNull(i)
+            val nm = rawName?.takeIf { it.isNotEmpty() && !isSyntheticParamName(it) }
             val ty = renderType(s.paramTypes.getOrNull(i))
             val prefix = if (s.varargParamIndex == i) "vararg " else ""
             val partText = if (nm != null) "$prefix$nm: $ty" else "$prefix$ty"
             val start = sb.length
             sb.append(partText)
-            infos.add(ParameterInfo(partText, start, sb.length))
+            infos.add(ParameterInfo(partText, start, sb.length, alreadyNamed = rawName != null && rawName in namedArgs))
         }
         sb.append(')')
         if (s.kind != SymbolKind.CONSTRUCTOR) {

@@ -10,6 +10,7 @@ import com.intellij.psi.PsiMethodCallExpression
 import com.intellij.psi.PsiNewExpression
 import com.intellij.psi.util.PsiTreeUtil
 import dev.ide.lang.java.env.JavaEnvironment
+import dev.ide.lang.java.index.JavaDoc
 import dev.ide.psi.IntellijPsiHost
 import dev.ide.lang.signature.ParameterInfo
 import dev.ide.lang.signature.SignatureHelp
@@ -74,6 +75,8 @@ class JavaSignatureHelp(private val env: JavaEnvironment) : SignatureHelpService
         }
         sb.append(')')
         if (!m.isConstructor) m.returnType?.let { sb.append(": ").append(it.presentableText) }
-        return SignatureInfo(sb.toString(), params, documentation = m.docComment?.text)
+        // Clean the raw `/** … */` block to plain text (the peek/doc panel shows this verbatim).
+        val doc = m.docComment?.text?.let { JavaDoc.clean(it) }?.takeIf { it.isNotEmpty() }
+        return SignatureInfo(sb.toString(), params, documentation = doc)
     }
 }
