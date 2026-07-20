@@ -1,8 +1,10 @@
 package dev.ide.ui.editor
 
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -23,16 +25,26 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
+import androidx.compose.material3.PlainTooltip
 import androidx.compose.material3.Text
+import androidx.compose.material3.TooltipBox
+import androidx.compose.material3.TooltipDefaults
+import androidx.compose.material3.rememberTooltipState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.text.SpanStyle
+import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import dev.ide.ui.backend.UiAction
@@ -50,6 +62,7 @@ import dev.ide.ui.generated.resources.codeaction_severity_warning
 import dev.ide.ui.generated.resources.codeaction_show_context_actions
 import dev.ide.ui.icons.CaIcons
 import dev.ide.ui.theme.Ca
+import kotlinx.coroutines.launch
 import org.jetbrains.compose.resources.stringResource
 
 /**
@@ -110,41 +123,142 @@ fun CodeActionsMenu(
             .background(Ca.colors.glassThick, RoundedCornerShape(Ca.radius.md))
             .border(1.dp, Ca.colors.separator, RoundedCornerShape(Ca.radius.md)),
     ) {
+        val compactions = remember(actions) { importCompactions(actions) }
         LazyColumn(modifier = Modifier.heightIn(max = maxListHeight)) {
             itemsIndexed(actions) { index, action ->
-                ActionRow(action, index == selectedIndex, onPick = { onPick(index) })
+                ActionRow(action, compactions[index], index == selectedIndex, onPick = { onPick(index) })
             }
         }
     }
 }
 
+/**
+ * One action row. An "Import <fqn>" quick-fix is shown COMPACTED — `Import <first>…<Name>` with the imported
+ * name emphasized so a candidate list scans by name, not by a wall of identical package prefixes — and a
+ * long-press (touch) / long mouse-press pops a tooltip with the whole package. Other actions render verbatim.
+ */
+@OptIn(ExperimentalFoundationApi::class, ExperimentalMaterial3Api::class)
 @Composable
-private fun ActionRow(action: UiAction, selected: Boolean, onPick: () -> Unit, height: Dp = 38.dp) {
-    Row(
-        Modifier
-            .fillMaxWidth()
-            .height(height)
-            .background(if (selected) Ca.colors.accentSoft else Color.Transparent)
-            .clickable(onClick = onPick)
-            .padding(horizontal = 12.dp),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(10.dp),
-    ) {
-        val isFix = action.kind == UiActionKind.QUICK_FIX
-        Icon(
-            if (isFix) CaIcons.gear else CaIcons.lightbulb,
-            contentDescription = null,
-            tint = if (isFix) Ca.colors.accent else Ca.colors.warning,
-            modifier = Modifier.size(15.dp),
-        )
-        Text(
-            action.title,
-            style = Ca.type.code,
-            color = Ca.colors.textPrimary,
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis,
-        )
+private fun ActionRow(action: UiAction, compact: CompactImport?, selected: Boolean, onPick: () -> Unit, height: Dp = 38.dp) {
+    // Remembered unconditionally (a LazyColumn slot may flip between an import and a non-import action).
+    val tooltipState = rememberTooltipState(isPersistent = true)
+    val scope = rememberCoroutineScope()
+
+    val row: @Composable (Modifier) -> Unit = { clickMod ->
+        Row(
+            Modifier
+                .fillMaxWidth()
+                .height(height)
+                .background(if (selected) Ca.colors.accentSoft else Color.Transparent)
+                .then(clickMod)
+                .padding(horizontal = 12.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(10.dp),
+        ) {
+            val isFix = action.kind == UiActionKind.QUICK_FIX
+            Icon(
+                if (isFix) CaIcons.gear else CaIcons.lightbulb,
+                contentDescription = null,
+                tint = if (isFix) Ca.colors.accent else Ca.colors.warning,
+                modifier = Modifier.size(15.dp),
+            )
+            if (compact != null) {
+                Text(
+                    buildAnnotatedString {
+                        withStyle(SpanStyle(color = Ca.colors.textSecondary)) { append(compact.dimPrefix) }
+                        withStyle(SpanStyle(color = Ca.colors.textPrimary, fontWeight = FontWeight.Medium)) { append(compact.name) }
+                    },
+                    style = Ca.type.code,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+            } else {
+                Text(
+                    action.title,
+                    style = Ca.type.code,
+                    color = Ca.colors.textPrimary,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+            }
+        }
     }
+
+    if (compact != null) {
+        // combinedClickable cleanly splits tap (apply) from long-press (peek); the TooltipBox only renders the
+        // popup (enableUserInput = false) and we drive it via show(), so the two gestures never fight.
+        TooltipBox(
+            positionProvider = TooltipDefaults.rememberPlainTooltipPositionProvider(),
+            tooltip = { PlainTooltip { Text(compact.fqn, style = Ca.type.caption2) } },
+            state = tooltipState,
+            enableUserInput = false,
+        ) {
+            row(Modifier.combinedClickable(onClick = onPick, onLongClick = { scope.launch { tooltipState.show() } }))
+        }
+    } else {
+        row(Modifier.clickable(onClick = onPick))
+    }
+}
+
+/** The compacted display of an "Import <fqn>" action: a dim [dimPrefix] lead (`Import <first>…<differing pkg>.`),
+ *  the emphasized imported [name] (class / callable), and the whole [fqn] shown on long-press. */
+internal data class CompactImport(val dimPrefix: String, val name: String, val fqn: String)
+
+private val IMPORT_FQN = Regex("[\\w$]+(?:\\.[\\w$]+)+")
+private const val IMPORT_PREFIX = "Import "
+
+/**
+ * Group-aware compaction for the `Import <fqn>` actions in [actions], keyed by their index. Within each set of
+ * same-named candidates the package segments that are COMMON to all of them collapse to `…`, while the segments
+ * that DIFFER stay visible — so `androidx.compose.material.Icon` and `androidx.compose.material3.Icon` read as
+ * `Import androidx…material.Icon` / `Import androidx…material3.Icon` (like IntelliJ disambiguating same-named
+ * files), and a lone candidate collapses all the way to `Import androidx…IconKt`. The first segment is always
+ * kept for context and the imported name is always shown. Non-import / too-shallow (< 3 segments) titles are
+ * absent from the map and render verbatim.
+ */
+internal fun importCompactions(actions: List<UiAction>): Map<Int, CompactImport> {
+    val parsed = actions.mapIndexedNotNull { i, a ->
+        if (!a.title.startsWith(IMPORT_PREFIX)) return@mapIndexedNotNull null
+        val fqn = a.title.substring(IMPORT_PREFIX.length)
+        if (!IMPORT_FQN.matches(fqn)) return@mapIndexedNotNull null
+        val segs = fqn.split('.')
+        if (segs.size < 3) return@mapIndexedNotNull null
+        Triple(i, segs, fqn)
+    }
+    if (parsed.isEmpty()) return emptyMap()
+
+    val out = HashMap<Int, CompactImport>()
+    // Diff within same-name groups: what distinguishes same-named candidates is their (middle) package.
+    parsed.groupBy { it.second.last() }.forEach { (name, group) ->
+        val commonMid = commonPrefixLen(group.map { it.second.subList(1, it.second.size - 1) })
+        group.forEach { (idx, segs, fqn) ->
+            val first = segs.first()
+            val middle = segs.subList(1, segs.size - 1)
+            val collapse = commonMid.coerceAtMost(middle.size)
+            val remaining = middle.drop(collapse)
+            val pkg = buildString {
+                append(first)
+                if (collapse > 0) {
+                    append('…')
+                    if (remaining.isNotEmpty()) { append(remaining.joinToString(".")); append('.') }
+                } else {
+                    if (middle.isNotEmpty()) { append('.'); append(middle.joinToString(".")) }
+                    append('.')
+                }
+            }
+            out[idx] = CompactImport(dimPrefix = "$IMPORT_PREFIX$pkg", name = name, fqn = fqn)
+        }
+    }
+    return out
+}
+
+/** Length of the longest shared leading run across [lists] (0 when they diverge immediately or [lists] is empty). */
+private fun commonPrefixLen(lists: List<List<String>>): Int {
+    if (lists.isEmpty()) return 0
+    val minLen = lists.minOf { it.size }
+    var n = 0
+    while (n < minLen && lists.all { it[n] == lists[0][n] }) n++
+    return n
 }
 
 /**
@@ -218,7 +332,8 @@ fun DiagnosticSheet(
                 Box(Modifier.fillMaxWidth().height(1.dp).background(Ca.colors.separator))
                 Spacer(Modifier.height(6.dp))
                 Text(stringResource(Res.string.codeaction_quick_fixes), color = Ca.colors.textTertiary, style = Ca.type.caption2, fontWeight = FontWeight.SemiBold, modifier = Modifier.padding(horizontal = 12.dp, vertical = 4.dp))
-                actions.forEachIndexed { i, a -> ActionRow(a, selected = false, onPick = { onPick(i) }, height = 48.dp) }
+                val compactions = remember(actions) { importCompactions(actions) }
+                actions.forEachIndexed { i, a -> ActionRow(a, compactions[i], selected = false, onPick = { onPick(i) }, height = 48.dp) }
             }
             Spacer(Modifier.height(8.dp))
         }
