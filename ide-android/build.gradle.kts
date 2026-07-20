@@ -211,51 +211,6 @@ val bundleR8DexAsset = tasks.register<JavaExec>("bundleR8DexAsset") {
     }
 }
 
-// --- ReflectiveMainLauncher dexed as an asset (forked-dalvikvm entry-point launcher) --------------
-// The forked-dalvikvm console runner (dev.ide.android.ForkedDalvikRunner) launches a program through
-// dev.ide.build.engine.ReflectiveMainLauncher instead of the VM's built-in main(String[]) lookup, so it can
-// start EVERY Kotlin/JVM entry-point shape (fun main() / suspend main / a no-arg @JvmStatic fun main() that
-// has no (String[]) bridge / an instance main), not just a static main(String[]). That launcher must sit on
-// the forked VM's -cp, but the app's own dexed copy is in secondary dexes a bare `dalvikvm -cp <run dexes>`
-// won't load — so compile that ONE pure-Java class and D8 it into a standalone reflective-launcher.dex.zip
-// asset the runner extracts and appends to the run container. (Same mechanism as bundleR8DexAsset above.)
-// No android.jar bootclasspath: the class references only universal java.lang/reflect/util APIs present on ART.
-val compileReflectiveLauncher = tasks.register<JavaCompile>("compileReflectiveLauncher") {
-    description = "Compile :build-engine's ReflectiveMainLauncher.java for dexing into the run launcher asset."
-    source = files(
-        project(":build-engine").layout.projectDirectory
-            .file("src/main/java/dev/ide/build/engine/ReflectiveMainLauncher.java")
-    ).asFileTree
-    classpath = files()
-    // Java 8 bytecode: D8 rejects class files newer than it supports (r8.jar is itself plain Java 8 bytecode).
-    sourceCompatibility = "8"
-    targetCompatibility = "8"
-    destinationDirectory.set(layout.buildDirectory.dir("reflective-launcher/classes"))
-}
-val reflectiveLauncherJar = tasks.register<Jar>("reflectiveLauncherJar") {
-    from(compileReflectiveLauncher.flatMap { it.destinationDirectory })
-    archiveFileName.set("reflective-launcher.jar")
-    destinationDirectory.set(layout.buildDirectory.dir("reflective-launcher"))
-}
-val bundleReflectiveLauncherDex = tasks.register<JavaExec>("bundleReflectiveLauncherDex") {
-    description = "D8-dex ReflectiveMainLauncher into a forked-VM-loadable reflective-launcher.dex.zip asset."
-    val outZip = layout.buildDirectory.file("reflective-launcher-asset/reflective-launcher.dex.zip")
-    classpath = r8DexTool                       // r8.jar contains D8
-    mainClass.set("com.android.tools.r8.D8")
-    inputs.files(reflectiveLauncherJar)
-    outputs.file(outZip)
-    doFirst {
-        val out = outZip.get().asFile
-        out.parentFile.mkdirs(); out.delete()
-        args = listOf(
-            "--release",
-            "--min-api", "26",
-            "--output", out.absolutePath,
-            reflectiveLauncherJar.get().archiveFile.get().asFile.absolutePath,
-        )
-    }
-}
-
 // --- JetBrains Mono fonts as Compose-resource assets ----------------------------------------------
 // Compose Multiplatform's resource→Android-assets packaging isn't wired for :ide-ui's AGP-9
 // `com.android.kotlin.multiplatform.library` target: the generated `Res.font.*` accessors exist, but the
@@ -355,7 +310,6 @@ android {
     sourceSets.getByName("main").assets.srcDir(layout.buildDirectory.dir("compose-strings-asset").get().asFile)
     sourceSets.getByName("main").assets.srcDir(layout.buildDirectory.dir("compose-drawables-asset").get().asFile)
     sourceSets.getByName("main").assets.srcDir(layout.buildDirectory.dir("r8-dex-asset").get().asFile)
-    sourceSets.getByName("main").assets.srcDir(layout.buildDirectory.dir("reflective-launcher-asset").get().asFile)
     sourceSets.getByName("main").assets.srcDir(layout.buildDirectory.dir("applog-runtime-asset").get().asFile)
     sourceSets.getByName("androidTest").assets.srcDir(layout.buildDirectory.dir("vm-spike-asset").get().asFile)
 
@@ -644,7 +598,7 @@ val fetchAndroidBuildTools = tasks.register("fetchAndroidBuildTools") {
 // Run before anything AGP does, so the freshly-fetched lib*.so are on disk when the native-lib merge runs,
 // and the staged kotlin-stdlib.jar asset is present when the asset merge runs.
 tasks.named("preBuild").configure {
-    dependsOn(fetchAndroidBuildTools, bundleKotlinStdlibAsset, bundleKotlincResourcesAsset, bundleComposeRuntimeAsset, bundleComposeFontsAsset, bundleComposeStringAsset, bundleComposeDrawablesAsset, bundleR8DexAsset, bundleReflectiveLauncherDex, bundleAppLogRuntimeAsset, bundleVmSpikeComposeRuntimeAsset)
+    dependsOn(fetchAndroidBuildTools, bundleKotlinStdlibAsset, bundleKotlincResourcesAsset, bundleComposeRuntimeAsset, bundleComposeFontsAsset, bundleComposeStringAsset, bundleComposeDrawablesAsset, bundleR8DexAsset, bundleAppLogRuntimeAsset, bundleVmSpikeComposeRuntimeAsset)
 }
 
 // Same Android packaging gap as the fonts above, for the i18n string resources. :ide-ui's
@@ -782,9 +736,11 @@ dependencies {
     // only its own classes — the (unshaded) Kotlin compiler it builds on is already dexed via :lang-kotlin.
     implementation(libs.kotlin.compose.compiler.plugin.ide) { isTransitive = false }
 
-    // build-engine's DexRunner/DexBackend ports (kept `implementation` in :ide-core, so not transitive):
-    // :ide-android supplies the on-device DexClassLoader runner that backs the Java `run` on ART.
+    // build-engine's ProgramInterpreter port + jvm-build's VmProgramInterpreter (kept `implementation` in
+    // :ide-core, so not transitive): :ide-android constructs the interpreter with a dexing peer factory so a
+    // Java/Kotlin console `run` executes on the bytecode VM on ART.
     implementation(project(":build-engine"))
+    implementation(project(":jvm-build"))
 
     // On-device build tools, statically linked + run IN-PROCESS (ART has no `java -jar` to fork): D8/R8
     // (the dexer/shrinker) and apksig (APK v1/v2/v3 signing). android-support keeps these compileOnly+test;

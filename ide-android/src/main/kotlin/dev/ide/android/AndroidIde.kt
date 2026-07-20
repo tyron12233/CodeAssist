@@ -3,6 +3,7 @@ package dev.ide.android
 import android.content.Context
 import android.os.Build
 import dev.ide.analytics.DeviceInfo
+import dev.ide.build.jvm.run.VmProgramInterpreter
 import dev.ide.analytics.impl.AnalyticsLogSink
 import dev.ide.analytics.impl.DefaultAnalyticsService
 import dev.ide.analytics.impl.SupabaseSink
@@ -127,12 +128,10 @@ object AndroidIde {
         // android.jar MUST stay first: ProjectManager.onDevice treats bootClasspath.first() as the SDK
         // android.jar. The desugar stubs ride alongside it as the platform.
         val bootClasspath = listOf(androidJar.absolutePath, coreLambdaStubs.absolutePath)
-        // Runs a dexed console app on ART (there's no `java` to fork). Prefer a FORKED `dalvikvm` process
-        // (fully isolated + truly killable: a runaway loop dies with the process, and the run needs no
-        // in-process sandbox); fall back to the in-process DexClassLoader on the rare device with no dalvikvm.
-        val forkRunner = ForkedDalvikRunner(context.applicationContext, File(context.cacheDir, "dexrun-fork"))
-        val dexRunner: dev.ide.build.engine.DexRunner =
-            if (forkRunner.available()) forkRunner else DexClassLoaderRunner(File(context.cacheDir, "dexrun"))
+        // Runs a console app by INTERPRETING its compiled bytecode on the VM — no dexing, no dynamic class
+        // loading of the user's/libraries' code. The peer factory dexes the small generated peer classes the
+        // VM needs when an interpreted object is handed to real platform code (a Comparator, a Runnable).
+        val programInterpreter = VmProgramInterpreter(peerFactory = DexPeerFactory())
         // Installs + launches a built APK (the android Run) via the system package installer.
         val apkInstaller = ApkInstallerImpl(context)
         // The debug-only in-app log bridge: extract the bundled runtime jar (woven into debug builds) and host
@@ -143,12 +142,10 @@ object AndroidIde {
             copyAsset(context, "applog-runtime.jar", File(home, "applog-runtime.jar"))
         }.getOrNull()
         val appLogChannel = AppLogChannelImpl()
-        // Custom user views in the layout preview are DISABLED at this time: rendering them means D8-dexing the
-        // user's compiled classes and loading them via DexClassLoader, which Google Play's Device-and-Network-
-        // Abuse "DDL" scorer flags. Null → the owned preview shows placeholders for `<com.example.MyView/>`.
-        // To re-enable, restore:
-        //   DexCustomViewRuntime(context.applicationContext, androidJar.toPath(),
-        //       File(context.cacheDir, "preview"), Build.VERSION.SDK_INT)
+        // The legacy dex-based custom-view seam is gone (it D8-dexed the user's classes onto a DexClassLoader,
+        // which Google Play's Device-and-Network-Abuse "DDL" scorer flags). Custom library AND project views are
+        // now INTERPRETED by the real-view runtime's bytecode VM (see AndroidRealViewRuntime / VmViewFactory), so
+        // this owned-preview seam stays null.
         val previewRuntime: dev.ide.preview.impl.CustomViewRuntime? = null
         // Loads runtime (non-bundled) Kotlin compiler plugins on ART: D8-dex the plugin classpath + DexClassLoader.
         val kotlinPluginLoader = ArtKotlinPluginLoader(
@@ -236,7 +233,7 @@ object AndroidIde {
             projectsRoot, bootClasspath, nativeLibDir, debugKeystore.toPath(),
             storageRoot = externalHome(context).toPath(),
             legacyDataDirs = legacyDataDirs,
-            dexRunner = dexRunner,
+            programInterpreter = programInterpreter,
             deviceApiLevel = Build.VERSION.SDK_INT,
             apkInstaller = apkInstaller,
             appLogRuntimeJar = appLogRuntimeJar?.toPath(),

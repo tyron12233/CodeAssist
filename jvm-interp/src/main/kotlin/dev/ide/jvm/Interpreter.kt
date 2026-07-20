@@ -23,6 +23,10 @@ private const val MODE_NEXT = 0
 private const val MODE_GOTO = 1
 private const val MODE_RET = 2
 
+// Mask for the periodic cancellation check: `steps and INTERVAL == 0` fires once every 1024 instructions,
+// cheap enough to leave in the hot loop yet frequent enough to unwind a busy loop within microseconds.
+private const val CANCEL_CHECK_INTERVAL = 0x3FFL
+
 // Stack-entry and local-slot kinds. A primitive lives unboxed in the frame's long array (floats and doubles
 // as raw bits); a reference lives in the object array. Named K_* to avoid shadowing the Opcodes.T_* NEWARRAY
 // operand constants brought in by the star import.
@@ -108,6 +112,10 @@ internal class Interpreter(private val vm: Vm) {
     /** Total bytecode instructions executed, for diagnostics and throughput measurement. */
     var steps: Long = 0L
         internal set
+
+    /** Set by another thread to cancel the running program. Checked once every [CANCEL_CHECK_INTERVAL]
+     *  instructions in the loop, so even a tight compute loop with no bridge calls unwinds promptly. */
+    @Volatile @JvmField var cancelRequested: Boolean = false
 
     /** Serializes interpreter execution across threads (see [execute]). Re-entrant, so nested same-thread calls
      *  proceed freely; a second thread waits. */
@@ -320,6 +328,7 @@ internal class Interpreter(private val vm: Vm) {
             val op = insn.opcode
             if (op < 0) { pc++; continue } // LabelNode, FrameNode, or LineNumberNode
             steps++
+            if (steps and CANCEL_CHECK_INTERVAL == 0L && cancelRequested) throw VmInterruptedException()
             frame.mode = MODE_NEXT
             try {
                 step(insn, op, pc, block, frame, caller)

@@ -88,11 +88,6 @@ object BuiltInSettingsPages {
     const val SANDBOX_ANDROID = "sandboxAndroidSystem"
     const val SANDBOX_PROCESS = "sandboxProcessControl"
 
-    /** Toggle key on the [PREVIEW] page: render the XML real-view layout preview by INTERPRETING the library +
-     *  project view classes (the `:jvm-interp` VM) instead of dexing them onto a class loader. Default ON. Read
-     *  by `IdeServices.realViewPreview`. Keeps downloaded/user code off ART and re-enables project custom views. */
-    const val LAYOUT_INTERPRET = "layoutInterpret"
-
     // Keys the backend special-cases (routed to a non-generic-store effect).
     const val CONFLICT_POLICY = "conflictPolicy"
     const val ANALYTICS = "analytics"
@@ -181,11 +176,6 @@ object BuiltInSettingsPages {
     // (your own app vs. an untrusted sample), not of the device. Applies to previews opened after a change.
     private val preview = page(PREVIEW, "Preview", "image", 35, scope = SettingsScope.PROJECT) {
         listOf(
-            SettingControl.Toggle(
-                LAYOUT_INTERPRET, "Interpret layout classes",
-                "Render the XML layout preview by interpreting your libraries' and views' bytecode instead of compiling them to dex. Keeps downloaded and app code off the device's class loader and lets your own custom views render without a build step. Turn off to dex the classpath instead (needs a one-time prepare step). Applies to newly opened previews.",
-                default = true, group = "Layout preview",
-            ),
             SettingControl.Toggle(
                 SANDBOX_FILE_IO, "Block file access",
                 "Stop previewed code from reading or writing files (java.io / java.nio / kotlin.io). Blocked calls return null and are listed on the preview's problem chip. Applies to newly opened previews.",

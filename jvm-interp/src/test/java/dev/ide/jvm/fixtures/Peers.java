@@ -63,6 +63,10 @@ public final class Peers {
         return IntStream.range(0, n).map(new Doubler()).sum();
     }
 
+    /** Returns an interpreted interface implementation as its real interface type, for a caller to invoke the
+     *  overridden method and a non-overridden default (compose/andThen) directly. */
+    public static IntUnaryOperator doubler() { return new Doubler(); }
+
     /** Threads the interpreted constructor's arguments into a real superclass that has no no-arg constructor;
      *  the real label() then reads that state and calls the interpreted render(). */
     public static String makeButtonLabel(String name) {

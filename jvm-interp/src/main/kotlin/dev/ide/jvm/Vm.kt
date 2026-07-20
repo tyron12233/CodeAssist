@@ -53,6 +53,12 @@ class Vm(
 
     /** Total bytecode instructions the interpreter has executed (diagnostics / throughput measurement). */
     val steps: Long get() = interpreter.steps
+
+    /** Request cancellation of a running program from another thread: the interpreter loop observes it within a
+     *  few thousand instructions and unwinds with a [VmInterruptedException]. A program blocked in a bridged
+     *  call (reading stdin, sleeping) does not observe this — the host also interrupts the run thread to break
+     *  such a blocking call. One-shot: a cancelled [Vm] should not be reused. */
+    fun requestCancel() { interpreter.cancelRequested = true }
     private val loader: ClassLoader = Vm::class.java.classLoader
     private val peerDispatch = PeerDispatch { peer, vmObject, name, descriptor, args ->
         val obj = vmObject as VmObject

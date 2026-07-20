@@ -10,8 +10,9 @@ import dev.ide.lang.kotlin.interp.RNode
  * access, network, Android system calls). Each hook runs BEFORE the underlying operation and decides it.
  *
  * This sees the boundary between interpreted code and the FIRST library call only: what an allowed library
- * call does internally is invisible (unlike the console run's bytecode-instrumented `SandboxGuard` path).
- * A curated call-boundary policy, not a hardened sandbox — same caveat as the run sandbox's `Guards`.
+ * call does internally is invisible (like the console run sandbox, which mediates the program's calls at the
+ * bytecode VM's bridge). A curated call-boundary policy, not a hardened sandbox — same caveat as the run
+ * sandbox's `Guards`.
  *
  * All hooks default to [HookDecision.Proceed]; a null hooks reference on the [Interpreter] costs nothing on
  * the hot path. Implementations run on the composition (UI) thread AND the suspend-bridge thread, so they

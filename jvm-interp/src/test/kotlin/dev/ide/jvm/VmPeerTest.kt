@@ -4,6 +4,7 @@ import dev.ide.jvm.fixtures.Peers
 import dev.ide.jvm.host.Shape
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertTrue
 
 /**
  * The real-to-interpreted path: an interpreted class that extends a real supertype or implements a real
@@ -41,6 +42,18 @@ class VmPeerTest {
         for (n in listOf(0, 1, 5, 10)) {
             assertEquals(Peers.mapDoubled(n), vm.invokeStatic(PEERS, "mapDoubled", "(I)I", listOf(n)), "mapDoubled($n)")
         }
+    }
+
+    @Test fun interfaceOnlyPeerIsAProxyNotAGeneratedClass() {
+        val op = vm.invokeStatic(PEERS, "doubler", "()Ljava/util/function/IntUnaryOperator;")
+            as java.util.function.IntUnaryOperator
+        // An interface-only peer is a JDK Proxy — no class is generated or loaded (on Android, no dex),
+        // which is the point of this path for Play dynamic-code compliance.
+        assertTrue(java.lang.reflect.Proxy.isProxyClass(op.javaClass), "expected a Proxy, got ${op.javaClass}")
+        assertEquals(14, op.applyAsInt(7), "the interpreted override runs through the proxy handler")
+        // A non-overridden default method (andThen) runs its real body via invokeDefault, and its self-call
+        // back to applyAsInt routes through the handler to the interpreted body: (7*2) then +1 = 15.
+        assertEquals(15, op.andThen { it + 1 }.applyAsInt(7), "a non-overridden default composes with the interpreted body")
     }
 
     @Test fun realSuperConstructorCallsInterpretedOverrideDuringConstruction() {

@@ -150,3 +150,10 @@ internal class VmException(val value: Any?) : RuntimeException() {
 
 /** Signals a class-file construct the interpreter does not implement. */
 class VmUnsupportedException(message: String) : RuntimeException(message)
+
+/**
+ * Thrown from the interpreter's instruction loop when a run is cancelled (see [Vm.requestCancel]). It is not a
+ * [VmException], so it is never routed to an interpreted `try/catch` handler — a cancelled run unwinds all the
+ * way out, even through an interpreted `catch (Throwable)`.
+ */
+class VmInterruptedException : RuntimeException("run cancelled")

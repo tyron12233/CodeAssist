@@ -25,8 +25,9 @@ data class SandboxFinding(val category: SandboxCategory, val member: String)
  * The default [InterpreterHooks] policy behind the Compose preview sandbox: classifies each escape —
  * a library call, a reflective property read/write, a singleton class init — into a [SandboxCategory] by the
  * receiver's runtime class hierarchy and the callee's owner FQN, and blocks it when that category is
- * [restricted]. Like the console run sandbox's `SandboxGuard` this covers a CURATED set of common entry
- * points, not every conceivable path — a call-boundary guard, not a hardened sandbox.
+ * [restricted]. Like the console run sandbox (which mediates the program's calls at the bytecode VM's bridge)
+ * this covers a CURATED set of common entry points, not every conceivable path — a call-boundary guard, not a
+ * hardened sandbox.
  *
  * Two modes, matching the host's gap tolerance:
  *  - **stub** ([stubOnDeny] = true, the editor preview): a blocked call yields `null` (a write is skipped)

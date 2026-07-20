@@ -3,7 +3,7 @@ package dev.ide.core
 import dev.ide.android.support.AndroidFacetCodec
 import dev.ide.android.support.resources.LauncherIcon
 import dev.ide.android.support.tools.KeystoreRegistry
-import dev.ide.build.engine.DexRunner
+import dev.ide.build.engine.ProgramInterpreter
 import dev.ide.model.LanguageLevel
 import dev.ide.model.impl.ModelPersistence
 import dev.ide.model.impl.ProjectTemplateRegistry
@@ -57,8 +57,9 @@ class ProjectManager private constructor(
     /** Legacy on-device data homes (e.g. a previous internal-storage root) that a backup also sweeps up and
      *  that [importLegacyProjects] recovers projects from. Empty on desktop. */
     private val legacyDataDirs: List<Path>,
-    /** On-device `DexClassLoader` runner (from :ide-android) so a Java `run` works in every opened project. */
-    private val dexRunner: DexRunner? = null,
+    /** The console-run interpreter (from :ide-android on device — a bytecode VM whose peers are dexed) so a
+     *  Java `run` works in every opened project. Null → the engine's default in-process VM interpreter. */
+    private val programInterpreter: ProgramInterpreter? = null,
     /** On-device APK installer (from :ide-android) so the android Run works in every opened project. */
     private val apkInstaller: ApkInstaller? = null,
     /** On-device app-log channel (from :ide-android): receives a running debug app's forwarded logs for the
@@ -90,7 +91,7 @@ class ProjectManager private constructor(
         // opened engine resolves them there rather than by constructor injection. Absent (desktop) → not
         // registered → the engine falls back to its in-process default.
         androidTools?.let { t -> env.container.registerServiceIfAbsent(ANDROID_DEVICE_TOOLS) { t } }
-        dexRunner?.let { r -> env.container.registerServiceIfAbsent(DEX_RUNNER) { r } }
+        programInterpreter?.let { p -> env.container.registerServiceIfAbsent(PROGRAM_INTERPRETER) { p } }
         apkInstaller?.let { i -> env.container.registerServiceIfAbsent(APK_INSTALLER) { i } }
         appLogChannel?.let { c -> env.container.registerServiceIfAbsent(APP_LOG_CHANNEL) { c } }
         customViewRuntime?.let { c -> env.container.registerServiceIfAbsent(CUSTOM_VIEW_RUNTIME) { c } }
@@ -507,9 +508,10 @@ class ProjectManager private constructor(
             /** Extra directories a backup should also sweep up — a legacy internal-storage home and the
              *  previous app version's projects directory. */
             legacyDataDirs: List<Path> = emptyList(),
-            /** The host's `DexClassLoader` runner, so a Java console `run` works on ART. */
-            dexRunner: DexRunner? = null,
-            /** The device's `Build.VERSION.SDK_INT` — min-api the Java dex-run targets. */
+            /** The host's console-run interpreter (a bytecode VM whose peers are dexed on ART), so a Java
+             *  console `run` works on device. */
+            programInterpreter: ProgramInterpreter? = null,
+            /** The device's `Build.VERSION.SDK_INT` — the min-api the Android APK build/dex targets. */
             deviceApiLevel: Int = 21,
             /** The host's APK installer, so the android Run (build + install + launch) works on device. */
             apkInstaller: ApkInstaller? = null,
@@ -550,7 +552,7 @@ class ProjectManager private constructor(
                 LanguageLevel.JAVA_8,
                 tools,
                 legacyDataDirs = legacyDataDirs,
-                dexRunner = dexRunner,
+                programInterpreter = programInterpreter,
                 apkInstaller = apkInstaller,
                 appLogChannel = appLogChannel,
                 customViewRuntime = customViewRuntime,

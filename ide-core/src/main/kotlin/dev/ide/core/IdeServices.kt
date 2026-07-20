@@ -41,13 +41,13 @@ import dev.ide.android.support.resources.DrawableXmlCatalog
 import dev.ide.android.support.resources.ResourceReferences
 import dev.ide.android.support.resources.ResourceRepository
 import dev.ide.android.support.resources.ResourceType
-import dev.ide.android.support.tasks.SharedLibraryDexer
 import dev.ide.android.support.tools.Aapt2Subprocess
 import dev.ide.android.support.tools.AndroidSdk
 import dev.ide.android.support.tools.KeystoreRegistry
 import dev.ide.block.BLOCK_MAPPING_EP
 import dev.ide.block.impl.JavaBlockMapping
-import dev.ide.build.engine.DexRunner
+import dev.ide.build.engine.ProgramInterpreter
+import dev.ide.build.jvm.run.VmProgramInterpreter
 import dev.ide.core.IdeServices.Companion.PARSER_WARMUP_MIN_FREE_BYTES
 import dev.ide.core.IdeServices.Companion.openStore
 import dev.ide.core.actions.BuiltInActions
@@ -259,7 +259,7 @@ class AndroidDeviceTools(
     val androidJar: Path,
     val nativeLibDir: Path,
     val debugKeystore: Path,
-    /** The running device's API level (`Build.VERSION.SDK_INT`): the min-api the ephemeral Java dex-run
+    /** The running device's API level (`Build.VERSION.SDK_INT`): the min-api the Android APK build/dex
      *  targets, so D8 desugars only what this device needs. */
     val apiLevel: Int = 21,
     /** Java 9+ desugar stubs (`core-lambda-stubs.jar`: `StringConcatFactory`/`LambdaMetafactory`), part of the
@@ -436,7 +436,10 @@ class IdeServices private constructor(
     // in-process default. Declared early (before [indexService], which reads androidTools) so any init-time
     // reader sees the resolved value.
     private val androidTools: AndroidDeviceTools? = env.container.getServiceOrNull(ANDROID_DEVICE_TOOLS)
-    private val dexRunner: DexRunner? = env.container.getServiceOrNull(DEX_RUNNER)
+    // The console-run engine. A device host registers a VM interpreter whose peers are dexed (DexPeerFactory);
+    // absent that (desktop / tests), fall back to the default in-process bytecode interpreter.
+    private val programInterpreter: ProgramInterpreter =
+        env.container.getServiceOrNull(PROGRAM_INTERPRETER) ?: VmProgramInterpreter()
     private val apkInstaller: ApkInstaller? = env.container.getServiceOrNull(APK_INSTALLER)
     private val appLogChannel: AppLogChannel? = env.container.getServiceOrNull(APP_LOG_CHANNEL)
     private val customViewRuntime: CustomViewRuntime? = env.container.getServiceOrNull(CUSTOM_VIEW_RUNTIME)
@@ -553,7 +556,7 @@ class IdeServices private constructor(
         override val compileBootClasspath get() = this@IdeServices.compileBootClasspath
         override fun bootClasspathFor(module: Module) = this@IdeServices.bootClasspathFor(module)
         override val androidTools get() = this@IdeServices.androidTools
-        override val dexRunner get() = this@IdeServices.dexRunner
+        override val programInterpreter get() = this@IdeServices.programInterpreter
         override val apkInstaller get() = this@IdeServices.apkInstaller
         override val appLogChannel get() = this@IdeServices.appLogChannel
         override fun modules() = this@IdeServices.modules()
@@ -2939,7 +2942,7 @@ class IdeServices private constructor(
         // androidx.emoji2, pulled in by AppCompatTextView's EmojiCompat) are on the runtime path but absent from
         // compile, so a compile-only classpath inflates with NoClassDefFoundError. `AndroidLibraries.resolve`
         // gives exactly the runtime/packaged set the build's dexBuilder uses; module outputs cover multi-module
-        // + user custom views. Dexed via the shared cache (SharedLibraryDexer), so it's dexed once and reused.
+        // + user custom views. The VM interprets these jars directly (no dexing).
         val explodeRoot =
             AndroidBuildSystem.explodedAarPath(module, variant)
         val resolved = runCatching {
@@ -2991,26 +2994,19 @@ class IdeServices private constructor(
             ?: AndroidBuildSystem.rJarPath(module, variant)
                 .takeIf { Files.exists(it) }
         val runtimeLibs = resolved?.dexJars ?: emptyList()
-        // INTERPRET mode (default): the real-view runtime interprets the library + project view classes with the
-        // bytecode VM instead of dexing them onto a DexClassLoader. Nothing downloaded or user-built is loaded
-        // into ART, which sidesteps Google Play's Device-and-Network-Abuse "DDL" scorer (the reason the dex path
-        // stopped loading the project's own `project-dex`/`lib-dex`) — so a project-SOURCE custom view
-        // (`<com.example.app.MyView/>`) can resolve again, run interpreted from its compiled `.class` bytes.
-        val interpret = projectPref(
-            "settings.${BuiltInSettingsPages.PREVIEW}.${BuiltInSettingsPages.LAYOUT_INTERPRET}"
-        )?.toBooleanStrictOrNull() ?: true
-        // Interpret mode reads compiled `.class` DIRECTORIES directly (the build's classes / kotlin-classes for
-        // this module + dependency modules); a nonexistent dir is filtered by the runtime, so a not-yet-built
-        // module simply contributes no custom views. Dex mode loads no project code (DDL), so its list is empty.
-        val projectClassDirs: List<Path> = if (interpret) {
+        // The real-view runtime always INTERPRETS the library + project view classes with the bytecode VM
+        // instead of dexing them onto a DexClassLoader. Nothing downloaded or user-built is loaded into ART,
+        // which sidesteps Google Play's Device-and-Network-Abuse "DDL" scorer — and a project-SOURCE custom view
+        // (`<com.example.app.MyView/>`) resolves from its compiled `.class` bytes. It reads compiled `.class`
+        // DIRECTORIES directly (this module + dependency modules); a nonexistent dir is filtered by the runtime,
+        // so a not-yet-built module simply contributes no custom views.
+        val projectClassDirs: List<Path> =
             (listOf(module) + modules().filter { it !== module }).flatMap {
                 listOf(
                     AndroidBuildSystem.classesPath(it, variant),
                     AndroidBuildSystem.kotlinClassesPath(it, variant),
                 )
             }.filter { Files.isDirectory(it) }
-        } else emptyList()
-        val projectDexes = emptyList<Path>()
         // EXTERNAL libraries (the maven/AAR runtime set) are dexed via the shared cache; the project's own code
         // arrives PRE-DEXED (above) and needs no re-dex. The readiness gate + the render must key the shared cache
         // the SAME way the build does — an external lib desugars against the external set alone. A single combined
@@ -3022,72 +3018,11 @@ class IdeServices private constructor(
 
         val externalJars = androidDexJars(runtimeLibs)
 
-        // Dex-readiness gate (dex mode only): the DexClassLoader path does NOT dex libraries itself (the cold
-        // ~30s D8 pass). If any runtime library isn't already in the shared dex cache — a fresh project, or a
-        // newly-added dependency — don't render (which would trigger that dexing); return the owned fallback
-        // flagged `buildRequired` so the UI prompts a one-time "prepare libraries" build. Once every library is
-        // dexed (by that build or a prior one) the check passes and the real render proceeds. Interpret mode dexes
-        // nothing, so it skips the gate entirely — a fresh project renders immediately.
-        if (!interpret) {
-            val dexCacheRoot = (sharedCachesRoot ?: store.rootPath).resolve("caches").resolve("dex")
-            val status = runCatching {
-                val hashDir =
-                    (sharedCachesRoot ?: store.rootPath).resolve("caches").resolve("preview-dexcheck")
-                Files.createDirectories(hashDir)
-                SharedLibraryDexer.previewDexStatus(
-                    externalJars,
-                    // Project code is pre-dexed (project-dex/lib-dex) — nothing for the shared-cache readiness check.
-                    emptyList(),
-                    hashDir,
-                    facet.minSdk,
-                    desugaredLibConfig = null,
-                    dexCacheRoot,
-                )
-            }.getOrNull()
-            val undexed = status?.undexed ?: emptyList()
-            // Block ONLY on a truly COLD cache (nothing dexed yet) — prompt the one-time "prepare libraries" so the
-            // ~30s D8 pass is an explicit step, not a silent stall. If SOME libraries are already dexed (a prepare or
-            // build ran) but a few stragglers remain — e.g. a lib the prepare seeded under a slightly different key —
-            // do NOT loop the prompt: proceed and let the render dex the holdouts (it shows "Dexing" progress and seeds
-            // the shared cache, so the next check clears). This keeps a stale/mismatched gate from blocking forever.
-            if (undexed.isNotEmpty() && (status == null || status.dexed == 0)) {
-                _realViewProgress.value = null
-                val base = ownedPreview(
-                    module,
-                    repo,
-                    fingerprint,
-                    themeName,
-                    title,
-                    text,
-                    request,
-                    extraProblem = null
-                )
-                return (base ?: LayoutPreviewResult(
-                    RenderNode()
-                        .apply { renderer = PlaceholderRenderer; tag = "real-view" },
-                    ProjectPreviewResources(
-                        repo,
-                        request.density,
-                        request.density,
-                        night = request.night,
-                        themeName = themeName
-                    ),
-                    request.density, request.density,
-                )).apply { buildRequired = true; undexedCount = undexed.size }
-            }
-            if (undexed.isNotEmpty()) {
-                Log.logger("ide.preview").info(
-                    "real-view: ${undexed.size} library(ies) not in the shared dex cache after prepare " +
-                        "(${status?.dexed ?: 0} dexed); the render will dex them: ${undexed.map { it.fileName }}"
-                )
-            }
-        }
-
-        // Interpret mode adds the compiled project class DIRS (VM reads their bytes); dex mode adds pre-dexed
-        // project `.dex` (currently empty — DDL). Both share the external library jars + the preview R.jar.
-        val classpath = externalJars + (if (interpret) projectClassDirs else projectDexes) + listOfNotNull(rJar)
+        // The VM interprets the compiled project class DIRS (reads their bytes), the external library jars, and
+        // the preview R.jar — no dexing, no DexClassLoader.
+        val classpath = externalJars + projectClassDirs + listOfNotNull(rJar)
         Log.logger("ide.preview").info(
-            "real-view interpret=$interpret resolved=${resolved != null} runtimeLibs=${runtimeLibs.size} " +
+            "real-view (interpret) resolved=${resolved != null} runtimeLibs=${runtimeLibs.size} " +
                 "externalJars=${externalJars.size} projectDirs=${projectClassDirs.size} rJar=${rJar != null} " +
                 "classpath=${classpath.size}"
         )
@@ -3103,7 +3038,7 @@ class IdeServices private constructor(
             packageName = facet.namespace,
             themeName = themeName,
             minApi = facet.minSdk,
-            interpretClasses = interpret,
+            interpretClasses = true,
         ).apply {
             stageListener = { _realViewProgress.value = PreviewProgress(it) }
         }
@@ -4178,7 +4113,7 @@ class IdeServices private constructor(
             /** App-level shared download cache (projects-root parent); null → per-project. */
             sharedCachesRoot: Path? = null,
             /** The host's application environment, so app-scoped substrate + services are shared across projects.
-             *  The self-contained platform ports (dexRunner/apkInstaller/customViewRuntime/kotlinPluginLoader)
+             *  The self-contained platform ports (programInterpreter/apkInstaller/customViewRuntime/kotlinPluginLoader)
              *  are resolved from its container, registered there by the host. */
             env: ApplicationEnvironment = ApplicationEnvironment(),
         ): IdeServices {

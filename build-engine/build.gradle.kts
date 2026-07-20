@@ -10,12 +10,6 @@ plugins {
 dependencies {
     api(project(":build-api"))
     implementation(libs.kotlinx.coroutines.core)
-    // ASM — rewrites System.exit + sensitive network/file/reflection/exec calls in user/library bytecode for
-    // the in-process on-device dex-run (exit ends the run, not the IDE; sensitive calls are permission-gated).
-    // asm-tree gives the instruction-list API SandboxGuard needs for the new/dup/invokespecial ctor rewrite.
-    // Pure-Java; dexes fine on ART.
-    implementation(libs.ow2.asm)
-    implementation(libs.ow2.asm.tree)
 
     testImplementation(project(":project-model-impl"))
     testImplementation(libs.kotlinx.coroutines.core)

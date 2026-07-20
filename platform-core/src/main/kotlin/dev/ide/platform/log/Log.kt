@@ -97,9 +97,10 @@ class RingBufferSink(private val capacity: Int) : LogSink {
  * Binds to the console streams captured at CONSTRUCTION — not at each call. [Log] builds the default sink at
  * process startup, long before any program run, so this captures the true console (the desktop terminal /
  * the Android `System.out`→logcat redirect). That matters because a program run redirects the process-global
- * `System.out`/`System.err` to the run console for the duration of the run (`DexClassLoaderRunner` /
- * `JavaExecTask`); a call-time `println` would then dump every concurrent IDE log (build tasks, the `ide.mem`
- * heartbeat, daemon chatter) into the user program's output. Holding the originals keeps IDE logs out of it.
+ * `System.out`/`System.err`/`System.in` to the run console for the duration of the run (so the interpreted
+ * program's output and bridged standard-library I/O both reach it); a call-time `println` would then dump
+ * every concurrent IDE log (build tasks, the `ide.mem` heartbeat, daemon chatter) into the user program's
+ * output. Holding the originals keeps IDE logs out of it.
  */
 class ConsoleLogSink(
     private val out: java.io.PrintStream = System.out,

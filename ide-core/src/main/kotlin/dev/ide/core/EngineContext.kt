@@ -1,7 +1,7 @@
 package dev.ide.core
 
 import dev.ide.android.support.tools.KeystoreRegistry
-import dev.ide.build.engine.DexRunner
+import dev.ide.build.engine.ProgramInterpreter
 import dev.ide.core.services.DependencyService
 import dev.ide.index.IndexService
 import dev.ide.lang.kotlin.compile.KotlinJvmCompiler
@@ -67,8 +67,9 @@ internal interface EngineContext {
     /** On-device Android tool ports (android.jar + native tools), or null on the desktop / no SDK. */
     val androidTools: AndroidDeviceTools?
 
-    /** On-device dexed-console-app runner (a Java `run` on ART), or null on the desktop. */
-    val dexRunner: DexRunner?
+    /** The console-run engine: interprets a module's compiled program on the bytecode VM (both desktop and
+     *  device). Never null — a host that registers no port gets a default in-process interpreter. */
+    val programInterpreter: ProgramInterpreter
 
     /** On-device APK install+launch port (the Android Run), or null on the desktop. */
     val apkInstaller: ApkInstaller?

@@ -14,9 +14,7 @@ import dev.ide.android.support.AndroidFacet
 import dev.ide.android.support.AndroidVariants
 import dev.ide.android.support.tools.AndroidAppLogRuntime
 import dev.ide.android.support.tools.AndroidSdk
-import dev.ide.android.support.tools.D8InProcessDexer
 import dev.ide.android.support.tools.DebugKeystore
-import dev.ide.android.support.tools.RunDexer
 import dev.ide.android.support.tools.SigningConfig
 import dev.ide.build.BUILD_SYSTEM_EP
 import dev.ide.build.BuildDiagnostic
@@ -32,7 +30,6 @@ import dev.ide.build.SourceGenerator
 import dev.ide.build.TaskGraph
 import dev.ide.build.VariantSelector
 import dev.ide.build.engine.BuildCache
-import dev.ide.build.engine.RunDexBackend
 import dev.ide.build.engine.GuardCategory
 import dev.ide.build.engine.Guards
 import dev.ide.build.engine.PermissionBroker
@@ -234,18 +231,6 @@ internal class BuildService(private val ctx: EngineContext) : Disposable {
         )
     }
 
-    /**
-     * On-device only: the dex backend for the Java `run` path — D8 in-process, desugaring against the bundled
-     * `android.jar`. Paired with [ctx.dexRunner], it lets a console app run on ART. Null on the desktop (which
-     * forks `java` via [JavaBuildSystem.createRunGraph] instead). [RunDexer] content-hash caches the immutable
-     * library jars (stdlib + deps) into `caches/dex-run`, shared across projects, so a source edit re-dexes
-     * only the changed user classes instead of the whole runtime classpath.
-     */
-    private val javaRunDexBackend: RunDexBackend? = ctx.androidTools?.let { t ->
-        val runDexCache = (ctx.sharedCachesRoot ?: ctx.store.rootPath).resolve("caches").resolve("dex-run")
-        RunDexer(D8InProcessDexer(), t.androidJar, runDexCache)
-    }
-
     private val buildCache = BuildCache(ctx.store.rootPath.resolve(".platform/caches/build"))
     private val _buildState = MutableStateFlow(BuildState())
     val buildState: StateFlow<BuildState> get() = _buildState
@@ -424,7 +409,7 @@ internal class BuildService(private val ctx: EngineContext) : Disposable {
         }
     }
 
-    // ---- runtime permission guard (mediates instrumented code's network/file/reflection/exec; see SandboxGuard) ----
+    // ---- runtime permission guard (mediates the interpreted program's network/file/reflection/exec via the run bridge) ----
 
     private val _permissionRequest = MutableStateFlow<UiPermissionRequest?>(null)
     val permissionRequest: StateFlow<UiPermissionRequest?> get() = _permissionRequest
@@ -561,26 +546,16 @@ internal class BuildService(private val ctx: EngineContext) : Disposable {
                     val io = RunProgramIo(sessionId)
                     currentRunIo = io
                     _runConsole.value = RunConsoleUi(sessionId, module.name, mainClass)
-                    val runner = ctx.dexRunner
-                    val backend = javaRunDexBackend
-                    if (runner != null && backend != null) {
-                        // On-device (ART): there is no `java` to fork, so dex the runtime classpath and run the dex,
-                        // targeting this device's API level (default 21 if unknown). The dex runner reflects the
-                        // entry point itself, so it handles an instance main without a hint.
-                        val minApi = ctx.androidTools?.apiLevel ?: 21
-                        launch(
-                            module.name, buildSystem.createDexRunGraph(
-                                project, module, mainClass, minApi, backend, runner, programIo = io
-                            ), "> Run (dex) $mainClass", onComplete = ::finalizeRunConsole
-                        )
-                    } else {
-                        launch(
-                            module.name,
-                            buildSystem.createRunGraph(project, module, mainClass, programIo = io, instanceMain = target.instance),
-                            "> Run $mainClass",
-                            onComplete = ::finalizeRunConsole
-                        )
-                    }
+                    // The console program runs on the bytecode VM (both desktop and device): its compiled
+                    // classpath is interpreted directly, so there is no dexing and no dynamic class loading.
+                    launch(
+                        module.name,
+                        buildSystem.createInterpretRunGraph(
+                            project, module, mainClass, ctx.programInterpreter, programIo = io, instanceMain = target.instance
+                        ),
+                        "> Run $mainClass",
+                        onComplete = ::finalizeRunConsole
+                    )
                 }
 
                 id.startsWith("assemble:") -> {
@@ -816,7 +791,7 @@ internal class BuildService(private val ctx: EngineContext) : Disposable {
         )
         buildCtx = ctx
         // Arm the run-time guard for this run: fresh per-run decisions + this engine's broker. Only the
-        // in-process dex-run executes instrumented code that consults it; other graphs never touch it.
+        // interpreter run consults it (its bridge mediates sensitive calls); other graphs never touch it.
         permissionPolicy.resetRun(); _permissionRequest.value = null
         Guards.broker = permissionBroker
         // Tasks currently in-flight (maxParallel=2). The heap heartbeat names these so a process-killing OOM
@@ -1043,8 +1018,8 @@ internal class BuildService(private val ctx: EngineContext) : Disposable {
     /**
      * Compile [moduleName] and run its detected `main`, capturing stdout + exit code + compile-error
      * diagnostics — a self-contained, synchronous variant of [runTask] for programmatic callers (the Learn
-     * exercise checker). It reuses the same run graph ([JavaBuildSystem.createRunGraph] on desktop /
-     * [JavaBuildSystem.createDexRunGraph] on ART) but with a buffering [ProgramIo] and does NOT touch the
+     * exercise checker). It reuses the same interpreter run graph ([JavaBuildSystem.createInterpretRunGraph])
+     * but with a buffering [ProgramIo] and does NOT touch the
      * interactive [buildState]/[runConsole] flows. [stdin] is fed to the program then EOF'd; the run is
      * bounded by [timeoutMs]. The run sandbox is auto-allowed for the duration so a lesson snippet never
      * blocks on a permission prompt.
@@ -1064,14 +1039,9 @@ internal class BuildService(private val ctx: EngineContext) : Disposable {
             ?: return RunCapture(false, false, "", null, listOf("No project for ${module.name}."))
 
         val io = CaptureProgramIo(stdin)
-        val runner = ctx.dexRunner
-        val backend = javaRunDexBackend
-        val graph = if (runner != null && backend != null) {
-            val minApi = ctx.androidTools?.apiLevel ?: 21
-            buildSystem.createDexRunGraph(project, module, target.mainClass, minApi, backend, runner, programIo = io)
-        } else {
-            buildSystem.createRunGraph(project, module, target.mainClass, programIo = io, instanceMain = target.instance)
-        }
+        val graph = buildSystem.createInterpretRunGraph(
+            project, module, target.mainClass, ctx.programInterpreter, programIo = io, instanceMain = target.instance
+        )
 
         val diags = java.util.Collections.synchronizedList(mutableListOf<String>())
         val taskCtx = SimpleTaskContext(
