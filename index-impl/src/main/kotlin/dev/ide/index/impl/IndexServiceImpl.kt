@@ -33,9 +33,12 @@ import java.io.IOException
 import java.net.URI
 import java.nio.file.FileSystem
 import java.nio.file.FileSystems
+import java.nio.file.FileVisitResult
 import java.nio.file.Files
 import java.nio.file.Path
+import java.nio.file.SimpleFileVisitor
 import java.nio.file.StandardCopyOption
+import java.nio.file.attribute.BasicFileAttributes
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.ConcurrentLinkedQueue
 import java.util.concurrent.CopyOnWriteArrayList
@@ -700,20 +703,27 @@ class IndexServiceImpl(
         val dirty = ArrayList<Dirty>() // only files that are new or whose fingerprint changed
         for ((root, exts) in groups) {
             if (!Files.isDirectory(root)) continue
-            Files.walk(root).use { s ->
-                s.filter { f -> Files.isRegularFile(f) && exts.any { f.toString().endsWith(it) } }
-                    .forEach { f ->
-                        val sig = runCatching {
-                            SourceSig(
-                                Files.size(f), Files.getLastModifiedTime(f).toMillis()
-                            )
-                        }.getOrDefault(SourceSig(0L, 0L))
+            // walkFileTree hands each file the [BasicFileAttributes] the traversal already stat'd, so the
+            // (size, mtime) fingerprint costs ZERO extra syscalls — the old Files.walk path did three stats
+            // per file (isRegularFile + size + lastModifiedTime), which dominated the "nothing changed" restart
+            // on a large tree (thousands of res/source files) on ART's filesystem.
+            Files.walkFileTree(root, object : SimpleFileVisitor<Path>() {
+                override fun visitFile(f: Path, attrs: BasicFileAttributes): FileVisitResult {
+                    if (attrs.isRegularFile && exts.any { f.toString().endsWith(it) }) {
+                        val sig = SourceSig(attrs.size(), attrs.lastModifiedTime().toMillis())
                         val id = fileIds.idFor(f.toString())
                         currentIds.add(id)
                         val prev = fileIds.sigOf(id)
                         if (prev == null || !prev.matches(sig)) dirty.add(Dirty(f, root, id, sig))
                     }
-            }
+                    return FileVisitResult.CONTINUE
+                }
+
+                // Skip an unreadable entry rather than aborting the whole walk (was implicit in Files.walk's
+                // lazy per-element stat; make it explicit here).
+                override fun visitFileFailed(f: Path, exc: IOException): FileVisitResult =
+                    FileVisitResult.CONTINUE
+            })
         }
 
         // Drop files that no longer exist under any root (deleted/moved) from the source index + the id table.
@@ -724,21 +734,40 @@ class IndexServiceImpl(
 
         // Only the dirty files need a read + parse + index. Everything else is already in [IndexData] (loaded
         // from disk in [loadSourceCache] or indexed on a prior pass), updated incrementally per file below.
+        //
+        // Fan the read+parse out across cores (it dominates: file read + SAX/AST parse + entry build, all
+        // side-effect-free per file), then APPLY each file's entries to the in-memory [IndexData] on THIS
+        // coroutine in batch order — [IndexData] is not thread-safe, so the writes stay single-threaded while
+        // only the parse is parallelized. Same "parse concurrent, write ordered" split [buildArtifact] uses
+        // for the library/SDK side; the source phase used to be a single-threaded loop, leaving every core
+        // but one idle after a re-index/checkout touched hundreds of files.
         val total = dirty.size
         var processed = 0
-        for (d in dirty) {
-            runCatching { d.file.readText() }.getOrNull()
-                ?.let { indexSourceFile(d.file, it, d.root, d.id, timer) }
-            fileIds.setSig(d.id, d.sig)
-            processed++
-            // The source phase can be thousands of small files, so throttle status churn: report every 16th
-            // file (and the last) rather than every one.
-            if (processed % 16 == 0 || processed == total) {
-                val rel = runCatching { d.root.relativize(d.file).toString() }.getOrNull()
-                    ?: d.file.fileName?.toString() ?: ""
-                progress(rel, processed, total)
+        val srcDispatcher =
+            Dispatchers.IO.limitedParallelism(minOf(8, maxOf(4, Runtime.getRuntime().availableProcessors())))
+        coroutineScope {
+            for (batch in dirty.chunked(PARALLEL_BATCH)) {
+                val computed = batch.map { d ->
+                    async(srcDispatcher) {
+                        val text = runCatching { d.file.readText() }.getOrNull()
+                        text?.let { computeSourceEntries(d.file, it, d.root, d.id, timer) }
+                    }
+                }
+                for ((i, deferred) in computed.withIndex()) {
+                    val d = batch[i]
+                    deferred.await()?.let { applySourceEntries(d.id, it) }
+                    fileIds.setSig(d.id, d.sig)
+                    processed++
+                    // The source phase can be thousands of small files, so throttle status churn: report every
+                    // 16th file (and the last) rather than every one.
+                    if (processed % 16 == 0 || processed == total) {
+                        val rel = runCatching { d.root.relativize(d.file).toString() }.getOrNull()
+                            ?: d.file.fileName?.toString() ?: ""
+                        progress(rel, processed, total)
+                    }
+                }
+                yield()
             }
-            yield()
         }
 
         // No full rebuild: [indexSourceFile] already applied each dirty file to [IndexData] incrementally, and
@@ -755,13 +784,25 @@ class IndexServiceImpl(
      *  id, and the fresh fingerprint to record once it is indexed. */
     private class Dirty(val file: Path, val root: Path, val id: Int, val sig: SourceSig)
 
+    /** One extension's outcome for a source file: its entries, or null when the extension's filter rejected
+     *  the file (→ the file must be removed from that index). */
+    private class SourceOp(val state: State, val entries: List<IndexEntry>?)
+
+    /** The parse-heavy, side-effect-free half of indexing one source/resource file: build each extension's
+     *  entries. Touches NO shared [IndexData], so [indexSource] fans this out across cores; the caller applies
+     *  the result via [applySourceEntries] on its own coroutine. [BuildTimer.record] is thread-safe (LongAdder).
+     *  Each file gets its OWN [SourceInput] (its `shared("dom")` memo is per-input, single-threaded), so the
+     *  concurrent calls never share mutable state. */
     @Suppress("UNCHECKED_CAST")
-    private fun indexSourceFile(file: Path, text: String, root: Path?, id: Int, timer: BuildTimer? = null) {
+    private fun computeSourceEntries(
+        file: Path, text: String, root: Path?, id: Int, timer: BuildTimer? = null,
+    ): List<SourceOp> {
         val input = SourceInput(file, root, text, parse, id)
+        val ops = ArrayList<SourceOp>(states.size)
         for (st in states.values) {
             val e = st.ext as IndexExtension<Any, Any>
             if (!e.inputFilter.accepts(input)) {
-                st.source.removeFile(id); continue
+                ops.add(SourceOp(st, null)); continue
             }
             val entries = ArrayList<IndexEntry>()
             val extStart = System.nanoTime()
@@ -772,9 +813,21 @@ class IndexServiceImpl(
                 }
             }
             timer?.record(st.ext.id, System.nanoTime() - extStart, entries.size)
-            st.source.setFile(id, entries)
+            ops.add(SourceOp(st, entries))
+        }
+        return ops
+    }
+
+    /** Apply a file's precomputed [SourceOp]s to the in-memory source index. MUST run on the single owning
+     *  coroutine — [IndexData] is not thread-safe. */
+    private fun applySourceEntries(id: Int, ops: List<SourceOp>) {
+        for (op in ops) {
+            if (op.entries == null) op.state.source.removeFile(id) else op.state.source.setFile(id, op.entries)
         }
     }
+
+    private fun indexSourceFile(file: Path, text: String, root: Path?, id: Int, timer: BuildTimer? = null) =
+        applySourceEntries(id, computeSourceEntries(file, text, root, id, timer))
 
     override suspend fun reindexSource(path: Path, text: String) {
         check(!readOnly) { "read-only index: reindexSource() belongs to the owning (IDE) process" }
