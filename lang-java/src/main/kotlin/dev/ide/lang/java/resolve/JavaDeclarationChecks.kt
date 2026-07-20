@@ -2,14 +2,17 @@ package dev.ide.lang.java.resolve
 
 import com.intellij.psi.JavaRecursiveElementVisitor
 import com.intellij.psi.JavaTokenType
+import com.intellij.psi.PsiAnonymousClass
 import com.intellij.psi.PsiArrayType
 import com.intellij.psi.PsiAssignmentExpression
 import com.intellij.psi.PsiClass
 import com.intellij.psi.PsiClassType
 import com.intellij.psi.PsiElement
+import com.intellij.psi.PsiEnumConstant
 import com.intellij.psi.PsiErrorElement
 import com.intellij.psi.PsiExpression
 import com.intellij.psi.PsiField
+import com.intellij.psi.PsiJavaCodeReferenceElement
 import com.intellij.psi.PsiMethod
 import com.intellij.psi.PsiModifier
 import com.intellij.psi.PsiPrimitiveType
@@ -61,7 +64,7 @@ internal object JavaDeclarationChecks {
 
         // Override checks — static methods hide (not override), so skip them; ditto private.
         if (m.hasModifierProperty(PsiModifier.STATIC) || m.hasModifierProperty(PsiModifier.PRIVATE)) return
-        val supers = runCatching { m.findSuperMethods().toList() }.getOrDefault(emptyList())
+        val supers = superMethodsOf(m)
         if (supers.isNotEmpty()) {
             if (supers.any { it.hasModifierProperty(PsiModifier.FINAL) }) {
                 out += diag(nameEl, "'${m.name}' cannot override a final method", JavaDiagnosticCodes.INVALID_OVERRIDE)
@@ -73,7 +76,11 @@ internal object JavaDeclarationChecks {
             }
             checkReturnType(m, cls, supers, nameEl, out)
             checkThrows(m, cls, supers, nameEl, out)
-        } else if (m.hasAnnotation("java.lang.Override") && !hasUnresolvedSupers(cls)) {
+        } else if (
+            m.hasAnnotation("java.lang.Override") &&
+            !hasUnresolvedSupers(cls) &&
+            !anySuperDeclaresMethodNamed(cls, m.name)
+        ) {
             out += diag(nameEl, "Method '${m.name}' does not override or implement a method from a supertype",
                 JavaDiagnosticCodes.INVALID_OVERRIDE)
         }
@@ -128,7 +135,10 @@ internal object JavaDeclarationChecks {
     private fun checkBlankFinalFields(cls: PsiClass, out: MutableList<Diagnostic>) {
         if (cls.isInterface || cls.isAnnotationType || cls.isRecord) return
         val blanks = cls.fields.filter {
-            it.hasModifierProperty(PsiModifier.FINAL) && it.initializer == null && it.nameIdentifier != null
+            // Enum constants are implicitly-final PsiFields with no `= expr` initializer (they init via an
+            // argument list), and are never the target of an assignment — they must not be flagged as blank finals.
+            it !is PsiEnumConstant &&
+                it.hasModifierProperty(PsiModifier.FINAL) && it.initializer == null && it.nameIdentifier != null
         }
         if (blanks.isEmpty()) return
         if (PsiTreeUtil.findChildOfType(cls, PsiErrorElement::class.java) != null) return // half-typed → skip
@@ -219,9 +229,68 @@ internal object JavaDeclarationChecks {
         else -> false
     }
 
-    /** Whether any `extends`/`implements` reference doesn't resolve — then override analysis is unreliable, so
-     *  the `@Override`-on-a-non-override check backs off. */
-    private fun hasUnresolvedSupers(cls: PsiClass): Boolean = supersRefs(cls).any { it.resolve() == null }
+    /**
+     * The methods [m] directly overrides / implements — the ART-safe equivalent of [PsiMethod.findSuperMethods].
+     * `findSuperMethods()` throws `NoClassDefFoundError: java.beans.Introspector` on device (a class absent from
+     * ART; see `IntrospectorArtPass`), which — swallowed to an empty list — silently disabled the final-override
+     * / visibility / covariance / throws checks below. The hierarchical method signature gives the same
+     * immediately-overridden methods without touching `java.beans` (proven ART-safe by `FindSuperMethodsArtProbeTest`:
+     * `hierSuperSigs` was non-zero even when `findSuperMethods` threw), so these checks hold on device INDEPENDENT
+     * of the shim staying complete across compiler bumps. Still `runCatching`-guarded (belt-and-suspenders).
+     */
+    private fun superMethodsOf(m: PsiMethod): List<PsiMethod> =
+        runCatching { m.hierarchicalMethodSignature.superSignatures.map { it.method } }.getOrDefault(emptyList())
+
+    /**
+     * Whether [cls]'s supertype hierarchy can't be fully walked — then `findSuperMethods()` may miss a real
+     * override and the `@Override`-on-a-non-override check would false-positive, so it backs off. Walks the
+     * TRANSITIVE closure, not just the direct `extends`/`implements` refs: a resolvable direct super whose OWN
+     * ancestor is off the classpath (a missing transitive dependency, or the platform SDK jar) still breaks
+     * override resolution. That is the common Android case — `AppCompatActivity` resolves from its AAR while
+     * `android.app.Activity` (where `onCreate` is actually declared) is unresolved. [directSuperRefs] also reads
+     * an anonymous class's base reference, which is NOT in its (empty) extends/implements lists — covering
+     * `new View.OnClickListener() { @Override onClick }`.
+     */
+    private fun hasUnresolvedSupers(cls: PsiClass): Boolean {
+        val visited = HashSet<PsiClass>().apply { add(cls) }
+        val stack = ArrayDeque<PsiClass>().apply { add(cls) }
+        while (stack.isNotEmpty()) {
+            for (ref in directSuperRefs(stack.removeLast())) {
+                val resolved = ref.resolve() as? PsiClass ?: return true
+                if (resolved.qualifiedName == "java.lang.Object") continue
+                if (visited.add(resolved)) stack.add(resolved)
+            }
+        }
+        return false
+    }
+
+    /** The direct `extends`/`implements` references of [c] — including an anonymous class's base, which lives on
+     *  [PsiAnonymousClass.getBaseClassReference], not the (empty) extends/implements lists. */
+    private fun directSuperRefs(c: PsiClass): List<PsiJavaCodeReferenceElement> =
+        if (c is PsiAnonymousClass) listOf(c.baseClassReference) else supersRefs(c).toList()
+
+    /**
+     * Whether any supertype of [cls] declares a method named [name] — a NAME-only scan over the resolved
+     * supertype closure, reading each class's OWN declared methods ([PsiClass.findMethodsByName] with
+     * `checkBases = false`). This is deliberately NOT `findSuperMethods()`: that also requires an exact
+     * erased-signature match AND a fully-primed class-hierarchy cache, and it comes back empty for a genuine
+     * override in some environments — notably the on-device (`Cls`-decompiled library/SDK) path — which
+     * false-positives the `@Override`-on-a-non-override check on perfectly valid code (the reported
+     * `MainActivity extends AppCompatActivity` / anonymous `View.OnClickListener`, where every type resolved).
+     * A same-named method in a supertype means the annotation is almost certainly a real override (or at worst a
+     * signature mismatch the build's compiler will catch), so the check backs off. Reading a class's own method
+     * list stays reliable even when the platform's hierarchy walk isn't. [directSuperRefs] covers anonymous bases.
+     */
+    private fun anySuperDeclaresMethodNamed(cls: PsiClass, name: String): Boolean {
+        val visited = HashSet<PsiClass>().apply { add(cls) }
+        val stack = ArrayDeque<PsiClass>().apply { add(cls) }
+        while (stack.isNotEmpty()) {
+            val c = stack.removeLast()
+            if (c !== cls && c.findMethodsByName(name, false).isNotEmpty()) return true
+            for (ref in directSuperRefs(c)) (ref.resolve() as? PsiClass)?.let { if (visited.add(it)) stack.add(it) }
+        }
+        return false
+    }
 
     private fun supersRefs(c: PsiClass) =
         (c.extendsList?.referenceElements ?: emptyArray()) + (c.implementsList?.referenceElements ?: emptyArray())

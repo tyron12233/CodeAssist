@@ -212,6 +212,43 @@ class JavaDiagnosticsTest {
     }
 
     @Test
+    fun genericInterfaceParamImplementationIsNotFalsePositive() {
+        // Implementing a generic interface whose method has a TYPE-PARAMETER parameter: the inherited signature
+        // carries the raw `T`, the implementation the substituted `String` — signature matching must still see
+        // it as implemented (the extremely common Comparable/Consumer/Function pattern).
+        val ok = codes(
+            """
+            package com.foo;
+            class Money implements Comparable<Money> {
+                public int compareTo(Money o) { return 0; }
+            }
+            interface Sink<T> { void accept(T value); }
+            class StringSink implements Sink<String> {
+                public void accept(String value) {}
+            }
+            """.trimIndent(),
+            JavaDiagnosticCodes.ABSTRACT_NOT_IMPLEMENTED,
+        )
+        assertTrue(ok.isEmpty(), "a generic-interface method implemented with the substituted type must not be flagged; got ${ok.map { it.message }}")
+    }
+
+    @Test
+    fun recordsAreNotFlaggedAsAbstractNotImplemented() {
+        // java.lang.Record declares equals/hashCode/toString abstract; the compiler synthesizes them for every
+        // record. PSI doesn't surface the synthesized impls, so the abstract-member check must skip records.
+        val ok = codes(
+            """
+            package com.foo;
+            record Point(int x, int y) {}
+            interface Named { String name(); }
+            record Person(String name, int age) implements Named {}
+            """.trimIndent(),
+            JavaDiagnosticCodes.ABSTRACT_NOT_IMPLEMENTED,
+        )
+        assertTrue(ok.isEmpty(), "records must not be flagged for the compiler-synthesized equals/hashCode/toString; got ${ok.map { it.message }}")
+    }
+
+    @Test
     fun invalidOverridesAreReported() {
         val finalOverride = codes(
             "package com.foo;\nclass A { final void f() {} }\nclass B extends A { void f() {} }",
@@ -246,6 +283,47 @@ class JavaDiagnosticsTest {
             JavaDiagnosticCodes.INVALID_OVERRIDE,
         )
         assertTrue(ok.isEmpty(), "valid overrides must not be flagged; got ${ok.map { it.message }}")
+    }
+
+    /**
+     * The `@Override`-on-a-non-override check must back off whenever the containing class's supertype hierarchy
+     * can't be fully walked — otherwise it flags valid code whose classpath is incomplete (a missing transitive
+     * dependency / SDK jar). This is the real-world Android report: `MainActivity extends AppCompatActivity` with
+     * `@Override onCreate` (declared way up on `android.app.Activity`) and an anonymous `new View.OnClickListener()
+     * { @Override onClick }` both flagged as "does not override" while the libraries were on the classpath — the
+     * old guard only checked the DIRECT extends/implements refs (and ignored anonymous bases entirely).
+     */
+    @Test
+    fun overrideCheckBacksOffWhenHierarchyIsIncomplete() {
+        // Transitive: `Use` -> `Base` (resolves) -> `Missing` (unresolved). `whatever()` could be declared by
+        // `Missing`, so `@Override` must NOT be flagged (the AppCompatActivity -> ... -> Activity.onCreate case).
+        val transitive = codes(
+            "package com.foo;\nclass Base extends Missing {}\nclass Use extends Base { @Override void whatever() {} }",
+            JavaDiagnosticCodes.INVALID_OVERRIDE,
+        )
+        assertTrue(transitive.isEmpty(), "an @Override with an unresolved ANCESTOR must not be flagged; got ${transitive.map { it.message }}")
+
+        // Anonymous class over an unresolved base (the `new View.OnClickListener() { @Override onClick }` case):
+        // the base lives in the anonymous base reference, not extends/implements, so the guard must read it too.
+        val anon = codes(
+            "package com.foo;\nclass Use { Object o = new Missing() { @Override public void whatever() {} }; }",
+            JavaDiagnosticCodes.INVALID_OVERRIDE,
+        )
+        assertTrue(anon.isEmpty(), "an @Override in an anonymous class over an unresolved base must not be flagged; got ${anon.map { it.message }}")
+
+        // Directly-unresolved super — pre-existing behavior, keep it.
+        val direct = codes(
+            "package com.foo;\nclass Use extends Missing { @Override void whatever() {} }",
+            JavaDiagnosticCodes.INVALID_OVERRIDE,
+        )
+        assertTrue(direct.isEmpty(), "an @Override with an unresolved DIRECT super must not be flagged; got ${direct.map { it.message }}")
+
+        // Fully-resolvable hierarchy with a genuine non-override: STILL flagged (the guard doesn't over-suppress).
+        val genuine = codes(
+            "package com.foo;\nclass Base {}\nclass Use extends Base { @Override void whatever() {} }",
+            JavaDiagnosticCodes.INVALID_OVERRIDE,
+        )
+        assertTrue(genuine.isNotEmpty(), "a genuine @Override-non-override in a resolvable hierarchy must still be flagged; got ${genuine.map { it.message }}")
     }
 
     @Test
@@ -341,6 +419,44 @@ class JavaDiagnosticsTest {
             JavaDiagnosticCodes.NOT_INITIALIZED,
         )
         assertTrue(ok.isEmpty(), "final fields assigned somewhere must not be flagged; got ${ok.map { it.message }}")
+    }
+
+    @Test
+    fun enumConstantsAreNotFlaggedAsUninitialized() {
+        // Enum constants are implicitly-final PsiFields with no `= expr` initializer; they must NOT be reported
+        // as blank finals. A genuine blank-final field in the SAME enum still is.
+        val d = codes(
+            """
+            package com.foo;
+            enum Color {
+                RED, GREEN, BLUE;
+                final int code = 1;                           // initialized final — never flagged
+                final int unset;                              // genuine blank final — flagged
+            }
+            """.trimIndent(),
+            JavaDiagnosticCodes.NOT_INITIALIZED,
+        )
+        assertTrue(
+            d.none { it.message.contains("'RED'") || it.message.contains("'GREEN'") || it.message.contains("'BLUE'") },
+            "enum constants must not be flagged as uninitialized; got ${d.map { it.message }}",
+        )
+        assertTrue(d.any { it.message.contains("'unset'") }, "a real blank final in an enum should still be flagged; got ${d.map { it.message }}")
+    }
+
+    @Test
+    fun enumConstantWithConstructorArgsIsNotFalsePositive() {
+        val ok = codes(
+            """
+            package com.foo;
+            enum Planet {
+                EARTH(5.97), MARS(0.64);
+                final double mass;                            // assigned in constructor
+                Planet(double mass) { this.mass = mass; }
+            }
+            """.trimIndent(),
+            JavaDiagnosticCodes.NOT_INITIALIZED,
+        )
+        assertTrue(ok.isEmpty(), "enum with constructor-assigned final must be clean; got ${ok.map { it.message }}")
     }
 
     // --- abstract instantiation ---------------------------------------------------------------------------

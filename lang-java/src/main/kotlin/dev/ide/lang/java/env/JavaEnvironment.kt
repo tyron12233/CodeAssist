@@ -7,6 +7,8 @@ import com.intellij.openapi.util.Disposer
 import com.intellij.psi.JavaPsiFacade
 import com.intellij.psi.PsiFileFactory
 import com.intellij.psi.PsiJavaFile
+import com.intellij.psi.impl.PsiModificationTrackerImpl
+import com.intellij.psi.util.PsiModificationTracker
 import dev.ide.psi.IntellijPsiHost
 import org.jetbrains.kotlin.cli.common.messages.MessageCollector
 import org.jetbrains.kotlin.cli.create
@@ -84,7 +86,7 @@ class JavaEnvironment private constructor(
         // in this minimal core, so a re-resolved `R` kept returning the stale class. Bump it explicitly so the
         // facade's cached synthetic-class lookups recompute (re-consulting the injected finder → fresh `R`).
         runCatching {
-            (com.intellij.psi.util.PsiModificationTracker.getInstance(project) as? com.intellij.psi.impl.PsiModificationTrackerImpl)
+            (PsiModificationTracker.getInstance(project) as? PsiModificationTrackerImpl)
                 ?.incCounter()
         }
     }
