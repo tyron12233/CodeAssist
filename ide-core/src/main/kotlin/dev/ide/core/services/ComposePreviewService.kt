@@ -2,6 +2,7 @@ package dev.ide.core.services
 
 import dev.ide.core.EngineContext
 import dev.ide.core.LoweredComposePreview
+import dev.ide.core.settings.BuiltInSettingsPages
 import dev.ide.core.LoweredPreviewParameter
 import dev.ide.core.PreviewRunResult
 import dev.ide.lang.kotlin.KotlinLanguageBackend
@@ -93,6 +94,18 @@ internal class ComposePreviewService(private val ctx: EngineContext) {
      * building on first launch or while the hidden Learn Compose scratch's `androidx.compose.*` AARs are still
      * attaching. The preview host polls this so a first-run failure shows a transient "Preparing" state.
      */
+    /** The sandbox categories this project's Compose Preview settings restrict — `SandboxCategory.id` strings
+     *  (the hosts feed them to `PreviewSandboxPolicy.fromIds`; ide-core itself doesn't link interp-core). The
+     *  toggles default ON, so a project with nothing stored restricts everything. */
+    fun sandboxCategories(): Set<String> = buildSet {
+        fun blocked(key: String) =
+            ctx.projectPref("settings.${BuiltInSettingsPages.PREVIEW}.$key")?.toBooleanStrictOrNull() ?: true
+        if (blocked(BuiltInSettingsPages.SANDBOX_FILE_IO)) add("fileIo")
+        if (blocked(BuiltInSettingsPages.SANDBOX_NETWORK)) add("network")
+        if (blocked(BuiltInSettingsPages.SANDBOX_ANDROID)) add("androidSystem")
+        if (blocked(BuiltInSettingsPages.SANDBOX_PROCESS)) add("processControl")
+    }
+
     fun composePreviewReady(file: Path): Boolean {
         val module = ctx.moduleForEditableFile(file) ?: return true
         val analyzer = ctx.analyzerFor(module, KotlinLanguageBackend.LANGUAGE_ID) as? KotlinSourceAnalyzer

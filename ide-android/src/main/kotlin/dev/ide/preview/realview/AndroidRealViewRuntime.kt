@@ -13,7 +13,9 @@ import android.view.LayoutInflater
 import android.view.View
 import android.view.WindowInsets
 import dalvik.system.DexClassLoader
+import dev.ide.android.DexPeerFactory
 import dev.ide.android.support.tools.D8InProcessDexer
+import dev.ide.jvm.PeerFactory
 import dev.ide.platform.log.Log
 import dev.ide.preview.impl.RealViewRequest
 import dev.ide.preview.impl.RealViewResult
@@ -57,6 +59,12 @@ class AndroidRealViewRuntime(
     private val lock = Any()
     private var loaderCache: Pair<String, ClassLoader>? = null
     private var contextCache: Pair<String, ResourceContextFactory.PreviewContext>? = null
+    private var vmFactoryCache: Pair<String, VmViewFactory>? = null
+
+    // One peer factory for the runtime's lifetime, shared across VM rebuilds so a generated peer class (an
+    // interpreted view's real subclass) is dexed + defined ONCE and reused when the classpath changes but the
+    // peer shape doesn't. Interpret mode only; built lazily so the dex-mode path never touches it.
+    private val peerFactory: PeerFactory by lazy { DexPeerFactory() }
 
     /** Root of the real-view dex cache; the `.hashcache` sidecar under it is shared by [classpathSig] and the
      *  library dexer, so a jar is content-hashed once per (path, size, mtime) across both the signature and the dex. */
@@ -121,28 +129,45 @@ class AndroidRealViewRuntime(
     private fun renderInternal(request: RealViewRequest, resourcesAp: File): RealViewResult {
         val notify = request.stageListener
         val t0 = System.nanoTime()
-        // Split the classpath into three layers. The app's R.jar is VOLATILE (aapt2 reassigns resource ids on every
-        // resource edit, so its content changes constantly); the library jars are STABLE; and the project's own code
-        // arrives PRE-DEXED as `.dex` files (the build's `project-dex`/`lib-dex`). Each layer gets its own content
-        // signature so a change to one re-does only that layer — an R edit re-dexes just R, not the whole classpath.
-        val (rJars, nonR) = request.classpath.partition { isRJar(it) }
-        val (projectDexes, libJars) = nonR.partition { it.toString().endsWith(".dex") }
-        // Under lock: classpathSig reads/writes the shared `.hashcache` sidecar, and this serializes with the
-        // dexing so a concurrent render either reuses the in-flight loader or waits for it (no torn sidecar).
-        val librarySig: String
-        val rSig: String
-        val projectSig: String
-        synchronized(lock) {
-            librarySig = classpathSig(libJars) + "|api${request.minApi}"
-            rSig = classpathSig(rJars) + "|api${request.minApi}"
-            projectSig = projectDexSig(projectDexes) + "|api${request.minApi}"
+        val classLoader: ClassLoader
+        val sig: String
+        val vmFactory: VmViewFactory?
+        if (request.interpretClasses) {
+            // Interpret mode: no dexing, nothing loaded into ART. The context classloader is the framework boot
+            // loader (android.*/java.* only); every non-framework tag is created by the VM view factory below.
+            val jars = request.classpath.filter { it.toString().endsWith(".jar") }
+            val dirs = request.classpath.filter { Files.isDirectory(it) }
+            synchronized(lock) {
+                sig = "${classpathSig(jars)}|dirs:${classDirSig(dirs)}|api${request.minApi}"
+            }
+            vmFactory = cachedVmFactory(request.classpath, sig, notify)
+            classLoader = View::class.java.classLoader ?: javaClass.classLoader!!
+        } else {
+            // Split the classpath into three layers. The app's R.jar is VOLATILE (aapt2 reassigns resource ids on
+            // every resource edit, so its content changes constantly); the library jars are STABLE; and the
+            // project's own code arrives PRE-DEXED as `.dex` files (the build's `project-dex`/`lib-dex`). Each
+            // layer gets its own content signature so a change to one re-does only that layer — an R edit re-dexes
+            // just R, not the whole classpath.
+            val (rJars, nonR) = request.classpath.partition { isRJar(it) }
+            val (projectDexes, libJars) = nonR.partition { it.toString().endsWith(".dex") }
+            // Under lock: classpathSig reads/writes the shared `.hashcache` sidecar, and this serializes with the
+            // dexing so a concurrent render either reuses the in-flight loader or waits for it (no torn sidecar).
+            val librarySig: String
+            val rSig: String
+            val projectSig: String
+            synchronized(lock) {
+                librarySig = classpathSig(libJars) + "|api${request.minApi}"
+                rSig = classpathSig(rJars) + "|api${request.minApi}"
+                projectSig = projectDexSig(projectDexes) + "|api${request.minApi}"
+            }
+            sig = "$librarySig|R:$rSig|P:$projectSig"
+            classLoader = cachedClassLoader(
+                libJars, rJars, projectDexes, request.minApi, librarySig, rSig, projectSig, sig, notify
+            )  // reports "Dexing" only when the library layer re-merges
+            vmFactory = null
         }
-        val sig = "$librarySig|R:$rSig|P:$projectSig"
-        val classLoader = cachedClassLoader(
-            libJars, rJars, projectDexes, request.minApi, librarySig, rSig, projectSig, sig, notify
-        )  // reports "Dexing" only when the library layer re-merges
         val tLoader = System.nanoTime()
-        val pc = cachedContext(request, resourcesAp, classLoader, sig)
+        val pc = cachedContext(request, resourcesAp, classLoader, sig, vmFactory)
         val tCtx = System.nanoTime()
         val ctx = pc.context
         val layoutId =
@@ -160,12 +185,15 @@ class AndroidRealViewRuntime(
         // (hidden-API exemptions are unreliable on device). Falls back to inflating the content alone if the
         // windowed path isn't usable here.
         notify?.invoke("Inflating")
+        val stepsBefore = vmFactory?.steps ?: 0L
         var usedDecor = true
         var decorError: String? = null
         val root = runCatching { decorView(ctx, request, layoutId) }.getOrElse {
-            usedDecor = false; decorError =
-            "${it.javaClass.simpleName}: ${it.message ?: ""}"; LayoutInflater.from(context)
-            .cloneInContext(ctx).inflate(layoutId, null, false)
+            usedDecor = false; decorError = "${it.javaClass.simpleName}: ${it.message ?: ""}"
+            // Fallback: inflate through the PREVIEW context's inflater (which carries the VM view factory via
+            // getSystemService), NOT the app context's — the app inflater has no factory, so interpreted
+            // library/user views wouldn't be created and would fail to load from the boot class loader.
+            LayoutInflater.from(ctx).cloneInContext(ctx).inflate(layoutId, null, false)
         }
 
         // Synthesize system-bar insets (status + nav) so `fitsSystemWindows` / inset-driven padding apply, as
@@ -202,7 +230,7 @@ class AndroidRealViewRuntime(
             ms(
                 tCtx, tInflate
             )
-        }ms draw=${ms(tInflate, tDraw)}ms")
+        }ms draw=${ms(tInflate, tDraw)}ms${vmFactory?.let { " interpret-steps=${it.steps - stepsBefore}" } ?: ""}")
 
         return RealViewResult(
             pngBytes = null, width = w, height = h, nativeBitmap = bmp, viewTree = viewTree
@@ -216,8 +244,9 @@ class AndroidRealViewRuntime(
      * is attached), just draw the decor tree. The dialog uses the project's activity theme so the decor matches.
      */
     private fun decorView(ctx: Context, request: RealViewRequest, layoutId: Int): View {
-        val themeResId = request.themeName?.substringAfterLast('/')
-            ?.let { ctx.resources.getIdentifier(it, "style", request.packageName) } ?: 0
+        // Resolved with the Material/AppCompat fallback ladder — a bare Dialog theme makes any
+        // Material/AppCompat widget throw its theme-enforcement error and fail the whole render.
+        val themeResId = PreviewThemes.resolve(ctx.resources, request.packageName, request.themeName)
         val dialog = if (themeResId != 0) Dialog(ctx, themeResId) else Dialog(ctx)
         dialog.setContentView(layoutId)
         return dialog.window?.decorView ?: error("Dialog produced no decor view")
@@ -268,9 +297,12 @@ class AndroidRealViewRuntime(
     }
 
     /** The cached preview [Context]/[android.content.res.Resources]; rebuilt only when the linked resources, theme, density, night,
-     *  or classpath change. The previous one is closed on replacement (it holds a loader/file descriptor). */
+     *  or classpath change. The previous one is closed on replacement (it holds a loader/file descriptor). In
+     *  interpret mode [vmFactory] is installed as the context's inflater factory so non-framework tags are
+     *  created by the VM (the factory instance is keyed by the same [sig], so context + factory rebuild together). */
     private fun cachedContext(
         request: RealViewRequest, resourcesAp: File, classLoader: ClassLoader, sig: String,
+        vmFactory: VmViewFactory?,
     ): ResourceContextFactory.PreviewContext = synchronized(lock) {
         val key =
             "${resourcesAp.lastModified()}|${resourcesAp.length()}|${request.packageName}|${request.themeName}|${request.density}|${request.night}|$sig"
@@ -283,7 +315,42 @@ class AndroidRealViewRuntime(
             request.themeName,
             request.density,
             request.night,
+            inflaterFactory = vmFactory,
         ).also { contextCache = key to it }
+    }
+
+    /** The cached [VmViewFactory] over the interpret-mode classpath, keyed by [sig]; the previous one is closed
+     *  on replacement (it holds open library-jar handles). Reports "Interpreting" when a rebuild happens. */
+    private fun cachedVmFactory(classpath: List<Path>, sig: String, notify: ((String) -> Unit)?): VmViewFactory =
+        synchronized(lock) {
+            vmFactoryCache?.takeIf { it.first == sig }?.second ?: run {
+                notify?.invoke("Interpreting")
+                vmFactoryCache?.second?.let { old -> runCatching { old.close() } }
+                VmViewFactory(classpath, peerFactory).also { vmFactoryCache = sig to it }
+            }
+        }
+
+    /** A content signature for the interpret-mode project class DIRECTORIES (the build's compiled `.class`
+     *  output). Walks each dir's `.class` files hashing relative path + size + mtime, so a rebuild that changes
+     *  a class flips the signature (rebuilding the VM factory) while a no-op render reuses it. NOT thread-safe
+     *  in isolation — callers hold [lock] (paired with [classpathSig]'s shared sidecar). */
+    private fun classDirSig(dirs: List<Path>): String {
+        if (dirs.isEmpty()) return "0"
+        val sb = StringBuilder()
+        for (dir in dirs.filter { Files.isDirectory(it) }.sorted()) {
+            runCatching {
+                Files.walk(dir).use { stream ->
+                    stream.filter { Files.isRegularFile(it) && it.toString().endsWith(".class") }
+                        .sorted()
+                        .forEach { p ->
+                            sb.append(dir.relativize(p)).append(':')
+                                .append(Files.size(p)).append(':')
+                                .append(Files.getLastModifiedTime(p).toMillis()).append('|')
+                        }
+                }
+            }
+        }
+        return sb.toString().hashCode().toString()
     }
 
     /** A CONTENT signature for a set of library jars — computed separately for the library

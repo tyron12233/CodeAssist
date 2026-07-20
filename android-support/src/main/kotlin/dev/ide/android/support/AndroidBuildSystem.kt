@@ -950,6 +950,15 @@ class AndroidBuildSystem(
          *  view declared in a dependency module also resolves. */
         fun libDexPath(module: Module, variantName: String): Path = interDir(module, variantName).resolve("lib-dex")
 
+        /** The `javac`/`ecj` output dir (matches [Layout.classes]) — the module's compiled Java `.class` files.
+         *  The real-view preview's INTERPRET path reads these directly (VM `ClassBytesSource` over the dir) so a
+         *  project-source custom view runs interpreted, with no dexing and nothing loaded into ART. */
+        fun classesPath(module: Module, variantName: String): Path = interDir(module, variantName).resolve("classes")
+
+        /** The K2 output dir (matches [Layout.kotlinClasses]) — the module's compiled Kotlin `.class` files.
+         *  Consumed alongside [classesPath] by the real-view preview's interpret path. */
+        fun kotlinClassesPath(module: Module, variantName: String): Path = interDir(module, variantName).resolve("kotlin-classes")
+
         /** The aapt2-compiled resource archives dir for [module]+[variantName] (matches [Layout.compiledRes]) —
          *  the per-directory `res-*.zip` flats the link consumes. Reused as the base for the real-view preview's
          *  live relink (overlay the edited layout, skip recompiling the whole project). */

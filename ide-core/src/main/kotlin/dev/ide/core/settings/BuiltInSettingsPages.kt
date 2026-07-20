@@ -23,6 +23,8 @@ object BuiltInSettingsPages {
      *  separate-process toggle, which is app-global. See docs/build-process-isolation.md. */
     const val BUILD_RUNTIME = "buildRuntime"
     const val PRIVACY = "privacy"
+    /** Project-scoped Compose Preview page — the interpreter sandbox toggles (see `PreviewSandboxPolicy`). */
+    const val PREVIEW = "preview"
 
     /** Toggle key on the [BUILD_RUNTIME] page: route builds/runs through the isolated `:build` process. */
     const val SEPARATE_PROCESS = "separateProcess"
@@ -79,6 +81,18 @@ object BuiltInSettingsPages {
      *  Applied by the backend — it flips the shared `PerfTrace` flag. */
     const val PERF_LOGGING = "perfLogging"
 
+    /** Toggle keys on the [PREVIEW] page — `sandbox` + a capitalized `SandboxCategory.id`. Read by
+     *  `ComposePreviewService.sandboxCategories()` per preview open; all default ON (restricted). */
+    const val SANDBOX_FILE_IO = "sandboxFileIo"
+    const val SANDBOX_NETWORK = "sandboxNetwork"
+    const val SANDBOX_ANDROID = "sandboxAndroidSystem"
+    const val SANDBOX_PROCESS = "sandboxProcessControl"
+
+    /** Toggle key on the [PREVIEW] page: render the XML real-view layout preview by INTERPRETING the library +
+     *  project view classes (the `:jvm-interp` VM) instead of dexing them onto a class loader. Default ON. Read
+     *  by `IdeServices.realViewPreview`. Keeps downloaded/user code off ART and re-enables project custom views. */
+    const val LAYOUT_INTERPRET = "layoutInterpret"
+
     // Keys the backend special-cases (routed to a non-generic-store effect).
     const val CONFLICT_POLICY = "conflictPolicy"
     const val ANALYTICS = "analytics"
@@ -96,7 +110,7 @@ object BuiltInSettingsPages {
     /** All built-in pages in display order. [analyticsAvailable] gates the analytics toggle on the Privacy page.
      *  Code Style is not here: it has its own dedicated screen (the formatting profiles are per-language). */
     fun all(analyticsAvailable: Boolean): List<SettingsPage> = listOf(
-        appearance, editor, completion, analysis, build, buildRuntime, privacy(analyticsAvailable),
+        appearance, editor, completion, analysis, preview, build, buildRuntime, privacy(analyticsAvailable),
     )
 
     private val appearance = page(APPEARANCE, "Appearance", "eye", 0) {
@@ -160,6 +174,38 @@ object BuiltInSettingsPages {
             SettingControl.Toggle("onTheFly", "Analyze on the fly", "Show diagnostics as you type (off = on build only)", default = d.analyzeOnTheFly),
             SettingControl.IntSlider("reparseDelayMs", "Reparse delay", "Quiet period after a keystroke before re-analysis", default = d.reparseDelayMs, min = IdeSettings.MIN_REPARSE_DELAY_MS, max = IdeSettings.MAX_REPARSE_DELAY_MS, step = 50, unit = "ms", advanced = true),
             SettingControl.Toggle(PERF_LOGGING, "Log analysis timings", "Diagnostic: write per-pass (semantic / diagnostics / folds / inlay / previews) and per-stage timings to the log so you can find what makes a file slow. Read them in Privacy → View logs. Off by default.", default = d.analysisPerfLogging, advanced = true),
+        )
+    }
+
+    // Per-project: whether preview code may escape the sandbox is a property of the project you're editing
+    // (your own app vs. an untrusted sample), not of the device. Applies to previews opened after a change.
+    private val preview = page(PREVIEW, "Preview", "image", 35, scope = SettingsScope.PROJECT) {
+        listOf(
+            SettingControl.Toggle(
+                LAYOUT_INTERPRET, "Interpret layout classes",
+                "Render the XML layout preview by interpreting your libraries' and views' bytecode instead of compiling them to dex. Keeps downloaded and app code off the device's class loader and lets your own custom views render without a build step. Turn off to dex the classpath instead (needs a one-time prepare step). Applies to newly opened previews.",
+                default = true, group = "Layout preview",
+            ),
+            SettingControl.Toggle(
+                SANDBOX_FILE_IO, "Block file access",
+                "Stop previewed code from reading or writing files (java.io / java.nio / kotlin.io). Blocked calls return null and are listed on the preview's problem chip. Applies to newly opened previews.",
+                default = true, group = "Preview sandbox",
+            ),
+            SettingControl.Toggle(
+                SANDBOX_NETWORK, "Block network access",
+                "Stop previewed code from opening sockets or HTTP connections (java.net, OkHttp, Ktor).",
+                default = true, group = "Preview sandbox",
+            ),
+            SettingControl.Toggle(
+                SANDBOX_ANDROID, "Block Android system calls",
+                "Stop previewed code from launching activities/services, sending broadcasts, using system services, ContentResolver, or SharedPreferences. Resource and density reads stay available.",
+                default = true, group = "Preview sandbox",
+            ),
+            SettingControl.Toggle(
+                SANDBOX_PROCESS, "Block process & reflection",
+                "Stop previewed code from exec'ing processes, calling System.exit, loading native libraries, or invoking members reflectively.",
+                default = true, group = "Preview sandbox",
+            ),
         )
     }
 

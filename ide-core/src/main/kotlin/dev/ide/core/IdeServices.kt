@@ -2094,6 +2094,10 @@ class IdeServices private constructor(
      */
     fun composePreviewReady(file: Path): Boolean = composePreview.composePreviewReady(file)
 
+    /** The preview-sandbox categories this project restricts (settings-driven `SandboxCategory.id` strings;
+     *  the launchers build a `PreviewSandboxPolicy` from them). */
+    fun composePreviewSandbox(): Set<String> = composePreview.sandboxCategories()
+
     /** Why [functionName] in [file] (buffer [text]) isn't interpretable yet: each lowering diagnostic as
      *  `"reason: \"offending source\""`. Empty when it's fully interpretable (or not found). The preview panel
      *  shows these so an un-renderable preview explains the unsupported construct instead of a bare message. */
@@ -2599,16 +2603,22 @@ class IdeServices private constructor(
                 )
             }
 
-        // Both go purely through the incremental resource index (project + dependency/AAR res). No repository
-        // fallback: while the index is still building, `typeHasAny` is false so the unresolved-resource check
-        // stays quiet (never a false positive) until the index is ready: the same "dumb until indexed" rule
-        // the other editor features follow.
-        override fun typeHasAny(file: VirtualFile, rClass: String): Boolean =
-            ResourceType.byRClass(rClass)?.let { indexTypeHasAny(it) } == true
+        // The incremental resource index (project + dependency/AAR res) is primary; the BUFFER-AWARE resource
+        // repository is a fallback so a resource added/edited in an OPEN res buffer (not yet saved/indexed) is
+        // seen live — otherwise `@string/justAdded` in a layout would be flagged unresolved until the next save.
+        // The fallback only ADDS resolutions (never flags more), so it can't introduce a false positive.
+        override fun typeHasAny(file: VirtualFile, rClass: String): Boolean {
+            val type = ResourceType.byRClass(rClass) ?: return false
+            if (indexTypeHasAny(type)) return true
+            val module = moduleForResourceFile(Paths.get(file.path)) ?: return false
+            return resourceRepo(module)?.types()?.contains(type) == true
+        }
 
         override fun hasResource(file: VirtualFile, rClass: String, name: String): Boolean {
             val type = ResourceType.byRClass(rClass) ?: return true // unknown type → don't flag
-            return indexHasResource(type, name)
+            if (indexHasResource(type, name)) return true
+            val module = moduleForResourceFile(Paths.get(file.path)) ?: return false
+            return resourceRepo(module)?.has(type, name) == true
         }
 
         override fun isValueType(rClass: String): Boolean =
@@ -2909,8 +2919,12 @@ class IdeServices private constructor(
         val facet = module.facets.get(AndroidFacet.KEY)
             ?: return ownedPreview(module, repo, fingerprint, themeName, title, text, request, null)
 
-        val activeVariant = AndroidVariants.defaultVariant(module)
-        val variant = activeVariant?.name ?: "debug"
+        // Resolve against the user's ACTIVE variant (the persisted per-module choice the editor and build
+        // target), not the default — the merged manifest, exploded AARs, resource link caches and dex caches
+        // are all variant-scoped, so the default here made a variant switch invisible to the preview.
+        val selectedVariant = AndroidVariants.select(module, activeVariant(module))
+            ?: AndroidVariants.defaultVariant(module)
+        val variant = selectedVariant?.name ?: "debug"
         // Relink the live buffer over the project's resources so the preview reflects the edited (or newly
         // added) layout. The linker self-builds its base from the live res tree, so a prior successful build
         // is NOT required and edits to other resources show; it falls back internally to the build's flats.
@@ -2932,7 +2946,7 @@ class IdeServices private constructor(
             AndroidLibraries.resolve(
                 module,
                 explodeRoot,
-                activeVariant?.configurations
+                selectedVariant?.configurations
             )
         }.getOrNull()
         // Extra R packages: every AAR package (androidx.coordinatorlayout, com.google.android.material, …) plus
@@ -2977,14 +2991,25 @@ class IdeServices private constructor(
             ?: AndroidBuildSystem.rJarPath(module, variant)
                 .takeIf { Files.exists(it) }
         val runtimeLibs = resolved?.dexJars ?: emptyList()
-        // Custom user views in the preview are DISABLED at this time. Loading the project's OWN compiled+dexed
-        // code (`project-dex`/`lib-dex`) into the real-view DexClassLoader is what let a project-SOURCE custom
-        // view (`<com.example.app.MyView/>`) resolve at inflate time, but Google Play's Device-and-Network-Abuse
-        // "DDL" scorer flags loading the user's own compiled code (the `net/http/response/apk` call chain). With
-        // no project dex, such a tag fails to inflate and the render falls back to owned placeholders, while
-        // framework/library layouts still render normally. To re-enable, restore the project-dex/lib-dex scan:
-        //   listOf(AndroidBuildSystem.projectDexPath(module, variant), AndroidBuildSystem.libDexPath(module, variant))
-        //     .flatMap { dir -> if (Files.isDirectory(dir)) Files.list(dir).use { it.filter { p -> p.toString().endsWith(".dex") }.toList() } else emptyList() }
+        // INTERPRET mode (default): the real-view runtime interprets the library + project view classes with the
+        // bytecode VM instead of dexing them onto a DexClassLoader. Nothing downloaded or user-built is loaded
+        // into ART, which sidesteps Google Play's Device-and-Network-Abuse "DDL" scorer (the reason the dex path
+        // stopped loading the project's own `project-dex`/`lib-dex`) — so a project-SOURCE custom view
+        // (`<com.example.app.MyView/>`) can resolve again, run interpreted from its compiled `.class` bytes.
+        val interpret = projectPref(
+            "settings.${BuiltInSettingsPages.PREVIEW}.${BuiltInSettingsPages.LAYOUT_INTERPRET}"
+        )?.toBooleanStrictOrNull() ?: true
+        // Interpret mode reads compiled `.class` DIRECTORIES directly (the build's classes / kotlin-classes for
+        // this module + dependency modules); a nonexistent dir is filtered by the runtime, so a not-yet-built
+        // module simply contributes no custom views. Dex mode loads no project code (DDL), so its list is empty.
+        val projectClassDirs: List<Path> = if (interpret) {
+            (listOf(module) + modules().filter { it !== module }).flatMap {
+                listOf(
+                    AndroidBuildSystem.classesPath(it, variant),
+                    AndroidBuildSystem.kotlinClassesPath(it, variant),
+                )
+            }.filter { Files.isDirectory(it) }
+        } else emptyList()
         val projectDexes = emptyList<Path>()
         // EXTERNAL libraries (the maven/AAR runtime set) are dexed via the shared cache; the project's own code
         // arrives PRE-DEXED (above) and needs no re-dex. The readiness gate + the render must key the shared cache
@@ -2997,65 +3022,75 @@ class IdeServices private constructor(
 
         val externalJars = androidDexJars(runtimeLibs)
 
-        // Dex-readiness gate: the preview NO LONGER dexes libraries itself (the cold ~30s D8 pass). If any runtime
-        // library isn't already in the shared dex cache — a fresh project, or a newly-added dependency — don't
-        // render (which would trigger that dexing); return the owned fallback flagged `buildRequired` so the UI
-        // prompts a one-time "prepare libraries" build. Once every library is dexed (by that build or a prior
-        // one) the check passes and the real render proceeds with only cheap cache copies + the merge.
-        val dexCacheRoot = (sharedCachesRoot ?: store.rootPath).resolve("caches").resolve("dex")
-        val status = runCatching {
-            val hashDir =
-                (sharedCachesRoot ?: store.rootPath).resolve("caches").resolve("preview-dexcheck")
-            Files.createDirectories(hashDir)
-            SharedLibraryDexer.previewDexStatus(
-                externalJars,
-                // Project code is pre-dexed (project-dex/lib-dex) — nothing for the shared-cache readiness check.
-                emptyList(),
-                hashDir,
-                facet.minSdk,
-                desugaredLibConfig = null,
-                dexCacheRoot,
-            )
-        }.getOrNull()
-        val undexed = status?.undexed ?: emptyList()
-        // Block ONLY on a truly COLD cache (nothing dexed yet) — prompt the one-time "prepare libraries" so the
-        // ~30s D8 pass is an explicit step, not a silent stall. If SOME libraries are already dexed (a prepare or
-        // build ran) but a few stragglers remain — e.g. a lib the prepare seeded under a slightly different key —
-        // do NOT loop the prompt: proceed and let the render dex the holdouts (it shows "Dexing" progress and seeds
-        // the shared cache, so the next check clears). This keeps a stale/mismatched gate from blocking forever.
-        if (undexed.isNotEmpty() && (status == null || status.dexed == 0)) {
-            _realViewProgress.value = null
-            val base = ownedPreview(
-                module,
-                repo,
-                fingerprint,
-                themeName,
-                title,
-                text,
-                request,
-                extraProblem = null
-            )
-            return (base ?: LayoutPreviewResult(
-                RenderNode()
-                    .apply { renderer = PlaceholderRenderer; tag = "real-view" },
-                ProjectPreviewResources(
+        // Dex-readiness gate (dex mode only): the DexClassLoader path does NOT dex libraries itself (the cold
+        // ~30s D8 pass). If any runtime library isn't already in the shared dex cache — a fresh project, or a
+        // newly-added dependency — don't render (which would trigger that dexing); return the owned fallback
+        // flagged `buildRequired` so the UI prompts a one-time "prepare libraries" build. Once every library is
+        // dexed (by that build or a prior one) the check passes and the real render proceeds. Interpret mode dexes
+        // nothing, so it skips the gate entirely — a fresh project renders immediately.
+        if (!interpret) {
+            val dexCacheRoot = (sharedCachesRoot ?: store.rootPath).resolve("caches").resolve("dex")
+            val status = runCatching {
+                val hashDir =
+                    (sharedCachesRoot ?: store.rootPath).resolve("caches").resolve("preview-dexcheck")
+                Files.createDirectories(hashDir)
+                SharedLibraryDexer.previewDexStatus(
+                    externalJars,
+                    // Project code is pre-dexed (project-dex/lib-dex) — nothing for the shared-cache readiness check.
+                    emptyList(),
+                    hashDir,
+                    facet.minSdk,
+                    desugaredLibConfig = null,
+                    dexCacheRoot,
+                )
+            }.getOrNull()
+            val undexed = status?.undexed ?: emptyList()
+            // Block ONLY on a truly COLD cache (nothing dexed yet) — prompt the one-time "prepare libraries" so the
+            // ~30s D8 pass is an explicit step, not a silent stall. If SOME libraries are already dexed (a prepare or
+            // build ran) but a few stragglers remain — e.g. a lib the prepare seeded under a slightly different key —
+            // do NOT loop the prompt: proceed and let the render dex the holdouts (it shows "Dexing" progress and seeds
+            // the shared cache, so the next check clears). This keeps a stale/mismatched gate from blocking forever.
+            if (undexed.isNotEmpty() && (status == null || status.dexed == 0)) {
+                _realViewProgress.value = null
+                val base = ownedPreview(
+                    module,
                     repo,
-                    request.density,
-                    request.density,
-                    night = request.night,
-                    themeName = themeName
-                ),
-                request.density, request.density,
-            )).apply { buildRequired = true; undexedCount = undexed.size }
-        }
-        if (undexed.isNotEmpty()) {
-            Log.logger("ide.preview").info(
-                "real-view: ${undexed.size} library(ies) not in the shared dex cache after prepare " +
-                    "(${status?.dexed ?: 0} dexed); the render will dex them: ${undexed.map { it.fileName }}"
-            )
+                    fingerprint,
+                    themeName,
+                    title,
+                    text,
+                    request,
+                    extraProblem = null
+                )
+                return (base ?: LayoutPreviewResult(
+                    RenderNode()
+                        .apply { renderer = PlaceholderRenderer; tag = "real-view" },
+                    ProjectPreviewResources(
+                        repo,
+                        request.density,
+                        request.density,
+                        night = request.night,
+                        themeName = themeName
+                    ),
+                    request.density, request.density,
+                )).apply { buildRequired = true; undexedCount = undexed.size }
+            }
+            if (undexed.isNotEmpty()) {
+                Log.logger("ide.preview").info(
+                    "real-view: ${undexed.size} library(ies) not in the shared dex cache after prepare " +
+                        "(${status?.dexed ?: 0} dexed); the render will dex them: ${undexed.map { it.fileName }}"
+                )
+            }
         }
 
-        val classpath = externalJars + projectDexes + listOfNotNull(rJar)
+        // Interpret mode adds the compiled project class DIRS (VM reads their bytes); dex mode adds pre-dexed
+        // project `.dex` (currently empty — DDL). Both share the external library jars + the preview R.jar.
+        val classpath = externalJars + (if (interpret) projectClassDirs else projectDexes) + listOfNotNull(rJar)
+        Log.logger("ide.preview").info(
+            "real-view interpret=$interpret resolved=${resolved != null} runtimeLibs=${runtimeLibs.size} " +
+                "externalJars=${externalJars.size} projectDirs=${projectClassDirs.size} rJar=${rJar != null} " +
+                "classpath=${classpath.size}"
+        )
         val req = RealViewRequest(
             layoutName = file.fileName.toString().substringBeforeLast('.'),
             layoutText = text,
@@ -3068,6 +3103,7 @@ class IdeServices private constructor(
             packageName = facet.namespace,
             themeName = themeName,
             minApi = facet.minSdk,
+            interpretClasses = interpret,
         ).apply {
             stageListener = { _realViewProgress.value = PreviewProgress(it) }
         }
@@ -3673,8 +3709,10 @@ class IdeServices private constructor(
         module: Module, repo: ResourceRepository
     ): Pair<String?, String> {
         val manifest = manifestPath(module)?.let { runCatching { it.readText() }.getOrNull() } ?: ""
-        val themeName =
-            Regex("""android:theme\s*=\s*"@style/([^"]+)"""").find(manifest)?.groupValues?.get(1)
+        // `@style/Name` (project) or `@android:style/Name` (framework — kept `android:`-prefixed so theme
+        // resolution can target the framework package). The first match is in practice the <application> theme.
+        val themeName = Regex("""android:theme\s*=\s*"@(android:)?style/([^"]+)"""").find(manifest)
+            ?.let { if (it.groupValues[1].isEmpty()) it.groupValues[2] else "android:" + it.groupValues[2] }
         val labelRaw =
             Regex("""android:label\s*=\s*"([^"]+)"""").find(manifest)?.groupValues?.get(1)
         val title = when {
@@ -3689,11 +3727,12 @@ class IdeServices private constructor(
     }
 
     /**
-     * Resource candidates (name + value hint) of [type] for completion, **straight from the incremental
-     * resource index** - ONE `prefix("type/")` query yields both the name and the resolved value, so the
-     * completion popup never parses or fingerprints a `ResourceRepository`. No repository fallback: until the
-     * index has built, resource completion is simply empty (the "dumb until indexed" rule). Ids declared inline
-     * with `@+id/…` in open buffers (not yet saved/indexed) are surfaced live so `@id/…` completes immediately.
+     * Resource candidates (name + value hint) of [type] for completion. The incremental resource index is the
+     * primary source (ONE `prefix("type/")` query yields name + resolved value + AAR/library resources), MERGED
+     * with the BUFFER-AWARE [ResourceRepository]: a resource added/edited in an OPEN `res/` buffer isn't in the
+     * save-driven index yet, so the repository (whose fingerprint includes open res buffers) surfaces it live -
+     * the same live-edit behavior the synthetic `R` gives code. `putIfAbsent` keeps the index's value hint for an
+     * already-indexed name. Ids declared inline with `@+id/…` in open buffers are also surfaced live.
      */
     private fun resourceCandidatesFor(module: Module, type: ResourceType): List<ResourceCandidate> {
         val byName = LinkedHashMap<String, ResourceCandidate>()
@@ -3701,6 +3740,9 @@ class IdeServices private constructor(
             AndroidResourceIndex.id, "${type.rClass}/", limit = 2000
         )) {
             byName.putIfAbsent(hit.value.name, ResourceCandidate(hit.value.name, hit.value.value))
+        }
+        resourceRepo(module)?.all()?.forEach { item ->
+            if (item.type == type) byName.putIfAbsent(item.name, ResourceCandidate(item.name, item.value))
         }
         if (type == ResourceType.ID) for (id in liveDeclaredIds()) byName.putIfAbsent(
             id, ResourceCandidate(id)

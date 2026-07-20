@@ -382,6 +382,13 @@ class IdeServicesBackend(
     suspend fun composePreviewLibs(path: String): ComposePreviewLibs? =
         preview { services.composePreviewLibs(Paths.get(path)) }
 
+    /** The preview-sandbox categories the open project restricts (`SandboxCategory.id` strings from the
+     *  project-scoped Compose Preview settings); the preview host builds a `PreviewSandboxPolicy` from them.
+     *  A pref read, but routed through the preview lane like its sibling calls so it never races a swap of
+     *  the inner services on project switch. */
+    suspend fun composePreviewSandbox(): Set<String> =
+        preview { services.composePreviewSandbox() }
+
     /** The previewed module's resources + R package for interpreter-mediated resource resolution
      *  (`stringResource`/`R.string.x`/…); the launcher builds a `PreviewResourceResolver` from it. Off the UI
      *  thread (the first `ResourceRepository` build parses all dependency/AAR res). */

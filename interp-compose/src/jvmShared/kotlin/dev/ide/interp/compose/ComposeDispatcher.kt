@@ -5,6 +5,7 @@ import dev.ide.interp.Dispatcher
 import dev.ide.interp.InterpretedLambda
 import dev.ide.interp.InterpreterException
 import dev.ide.interp.LambdaProxyStrategy
+import dev.ide.interp.LibraryExecutor
 import dev.ide.interp.OmittedArg
 import dev.ide.interp.PreviewResourceResolver
 import dev.ide.interp.ReflectiveDispatcher
@@ -42,18 +43,34 @@ class ComposeDispatcher(
      *  `stringResource`/… composables are short-circuited to it (the real ones read the IDE app's Resources, not
      *  the project's). Null on desktop/lessons. */
     private val resources: PreviewResourceResolver? = null,
+    /** Executes library classes only the project's jars carry (the bytecode VM), replacing the DexClassLoader
+     *  route on device. Null → unloadable classes keep the honest "cannot load" boundary. */
+    private val libraryExecutor: LibraryExecutor? = null,
 ) : Dispatcher {
+
+    private val suspendBridge = ComposeSuspendBridge()
 
     private val fallback: Dispatcher = fallback ?: ReflectiveDispatcher(
         loader = loader ?: ReflectiveDispatcher::class.java.classLoader,
         lambdaProxies = LambdaProxyStrategy { lambda, fi, composable ->
-            // A composable function-type param: thread the Composer; otherwise let the default proxy run.
-            if (composable) composableLambdaProxy(lambda, fi) else null
+            // A composable function-type param threads the Composer. A PLAIN param gets the guarded proxy:
+            // real framework code invokes these outside the renderer's guarded composition pass (a
+            // `graphicsLayer` block during measure/semantics, an `onClick` from input dispatch), where a
+            // propagated InterpreterException would crash the whole app instead of failing the preview.
+            if (composable) composableLambdaProxy(lambda, fi) else guardedLambdaProxy(lambda, fi)
         },
         // Run interpreted `suspend` blocks (a `LaunchedEffect`/`launch` body) as real, cancellable coroutines
         // off the caller thread, so `delay`-driven timers actually tick instead of busy-looping the UI thread.
-        suspendBridge = ComposeSuspendBridge(),
+        suspendBridge = suspendBridge,
+        libraryFallback = libraryExecutor,
     )
+
+    /** The VM behind [libraryExecutor], when it is the bytecode executor: library COMPOSABLES whose bytes it
+     *  holds are interpreted with the composer threaded, instead of reflectively invoked. Its lambda proxies
+     *  report failures into [contentLambdaError] too — same crash-to-chip degradation as [guardedLambdaProxy]. */
+    private val vmComposables: VmLibraryExecutor? = (libraryExecutor as? VmLibraryExecutor)?.also { executor ->
+        executor.lambdaErrorSink = { t -> contentLambdaError = contentLambdaError ?: t }
+    }
 
     /** The live composer for the current composition pass; null outside a composition. */
     @Volatile
@@ -105,7 +122,9 @@ class ComposeDispatcher(
             // truth, independent of the resolver's decoded `@Composable` flag (which is resolved against the
             // project's classpath and can disagree with the runtime, or be stale). The decoded flag is only a
             // fast-path hint.
-            if (callee.isComposable || ComposableAbi.isComposableCall(callee.ownerFqn!!, callee.methodName, loader)) {
+            if (callee.isComposable || ComposableAbi.isComposableCall(callee.ownerFqn!!, callee.methodName, loader) ||
+                vmComposables?.isComposableCallable(callee.ownerFqn!!, callee.methodName) == true
+            ) {
                 return invokeComposable(call, callee, c, receiver, args)
             }
             // Treated as non-composable → plain dispatch. If that fails (e.g. `no static Text(1)`, which is
@@ -120,11 +139,59 @@ class ComposeDispatcher(
         return fallback.dispatch(call, receiver, args)
     }
 
+    /**
+     * A plain functional-interface proxy over an interpreted lambda whose failures are RECORDED instead of
+     * thrown. Real framework code invokes these long after dispatch, outside the renderer's error boundary —
+     * a `graphicsLayer` block runs during measure/semantics on the UI thread, an `onClick` from input
+     * dispatch — so a propagated interpreter failure there is an app crash (and an ANR), not a preview error.
+     * The first failure lands in [contentLambdaError] (the partial-render channel the host already surfaces)
+     * and the call degrades to the return type's zero value. Suspend invocations (a trailing Continuation)
+     * route through the coroutine bridge, exactly like the unguarded default proxy.
+     */
+    private fun guardedLambdaProxy(lambda: InterpretedLambda, functionalInterface: Class<*>): Any =
+        Proxy.newProxyInstance(functionalInterface.classLoader ?: javaClass.classLoader, arrayOf(functionalInterface)) { _, method, callArgs ->
+            when (method.name) {
+                "invoke" -> {
+                    val a = callArgs?.toList() ?: emptyList()
+                    if (a.lastOrNull() is kotlin.coroutines.Continuation<*>) suspendBridge.runSuspending(lambda, a)
+                    else try {
+                        lambda.invoke(a)
+                    } catch (t: Throwable) {
+                        contentLambdaError = contentLambdaError ?: t
+                        zeroReturn(method.returnType)
+                    }
+                }
+                "toString" -> "InterpretedLambda"
+                "hashCode" -> System.identityHashCode(lambda)
+                "equals" -> callArgs?.getOrNull(0) === lambda
+                else -> null
+            }
+        }
+
+    /** The degraded result of a guarded lambda that failed: the zero value of the SAM's return type, so a
+     *  primitive-returning caller doesn't die unboxing null on top of the recorded failure. */
+    private fun zeroReturn(type: Class<*>): Any? = when (type) {
+        java.lang.Boolean.TYPE -> false
+        java.lang.Character.TYPE -> ' '
+        java.lang.Byte.TYPE -> 0.toByte()
+        java.lang.Short.TYPE -> 0.toShort()
+        Integer.TYPE -> 0
+        java.lang.Long.TYPE -> 0L
+        java.lang.Float.TYPE -> 0f
+        java.lang.Double.TYPE -> 0.0
+        else -> null
+    }
+
     /** Thread the live composer through a `@Composable` property getter (`MaterialTheme.colorScheme`,
      *  `MaterialTheme.typography`, …). Returns null when there's no composer (outside a composition) or the
      *  property isn't a composable getter — the interpreter then reads it plainly. */
     override fun readComposableProperty(receiver: Any, propertyName: String): ComposablePropertyValue? {
         val c = composer ?: return null
+        // An instance the VM executor owns: its composable getter exists only in the interpreted world (the
+        // peer class reflection sees carries no library methods).
+        if (vmComposables?.ownsInstance(receiver) == true) {
+            return vmComposables.readComposableProperty(receiver, propertyName, c)?.let { ComposablePropertyValue(it.value) }
+        }
         val result = ComposableAbi.readComposableProperty(receiver, propertyName, c)
         return if (result === ComposableAbi.NotComposableProperty) null else ComposablePropertyValue(result)
     }
@@ -167,7 +234,19 @@ class ComposeDispatcher(
             val lastArgIsTrailingLambda = packed == null && call.args.lastOrNull()?.trailingLambda == true
             val effectiveArgs = if (isExtension) listOf(receiver) + bound else bound
             // The resolver knows the full value-parameter count; omitted args (defaults) are filled by the ABI.
-            val result = ComposableAbi.call(
+            // A composable whose bytes the VM executor holds (a project-jar library) runs INTERPRETED with the
+            // composer threaded; anything host-loadable keeps the reflective ABI against the bundled runtime.
+            val result = if (vmComposables != null && vmComposables.hasClass(callee.ownerFqn!!)) {
+                vmComposables.callComposable(
+                    callee.ownerFqn!!, callee.methodName, effectiveArgs, composer,
+                    declaredParamCount = callee.paramTypes.size + if (isExtension) 1 else 0,
+                    lambdaProxy = ::composableLambdaProxy,
+                    receiver = if (isExtension) null else receiver,
+                    receiverCount = if (isExtension) 1 else 0,
+                    argsInDeclarationOrder = argsInDeclarationOrder,
+                    lastArgIsTrailingLambda = lastArgIsTrailingLambda,
+                )
+            } else ComposableAbi.call(
                 callee.ownerFqn!!, callee.methodName, effectiveArgs, composer,
                 declaredParamCount = callee.paramTypes.size + if (isExtension) 1 else 0,
                 lambdaProxy = ::composableLambdaProxy,
@@ -295,6 +374,7 @@ class ComposeDispatcher(
         // that doesn't use the receiver still composes).
         val receiver = spec.contentReceiverFqn?.let { fqn ->
             runCatching { Class.forName(fqn, false, loader ?: javaClass.classLoader).getField("INSTANCE").get(null) }.getOrNull()
+                ?: libraryExecutor?.takeIf { it.hasClass(fqn) }?.objectInstance(fqn)
         }
         val marker = ComposableAbi.currentMarker(composer)
         ComposableAbi.startGroup(composer, call.callSiteKey.value)

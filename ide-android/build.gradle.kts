@@ -117,6 +117,25 @@ val bundleComposeRuntimeAsset = tasks.register<Copy>("bundleComposeRuntimeAsset"
     rename { "compose-runtime.jar" }
 }
 
+// --- Android compose-runtime classes.jar (androidTest VM interpret spike) ------------------------
+// VmComposeRuntimeArtSpike interprets the real ANDROID compose-runtime bytecode with the :jvm-interp VM.
+// The app's copy is dexed (no .class bytes on ART), so stage the artifact's classes.jar as an androidTest
+// asset. This is the androidx artifact (not the desktop JAR above) so the Android actuals run against the
+// real platform classes the bridge resolves on device.
+val vmSpikeComposeRuntimeAar: Configuration by configurations.creating {
+    isCanBeConsumed = false
+    isCanBeResolved = true
+    isTransitive = false
+}
+dependencies { vmSpikeComposeRuntimeAar("androidx.compose.runtime:runtime-android:1.10.5@aar") }
+
+val bundleVmSpikeComposeRuntimeAsset = tasks.register<Copy>("bundleVmSpikeComposeRuntimeAsset") {
+    description = "Stage the androidx compose-runtime classes.jar as an androidTest asset for the VM interpret spike."
+    from(vmSpikeComposeRuntimeAar.elements.map { zipTree(it.single().asFile) }) { include("classes.jar") }
+    rename { "compose-runtime-android.jar" }
+    into(layout.buildDirectory.dir("vm-spike-asset/vmbench"))
+}
+
 // --- applog-runtime asset (debug-only app-log bridge injected into user apps) --------------------
 // The Android build system weaves this tiny jar (a ContentProvider + LocalSocket log forwarder) into DEBUG
 // builds so a running app forwards its logs to the IDE's Logcat tab. It ships as a plain jar of .class files
@@ -338,6 +357,7 @@ android {
     sourceSets.getByName("main").assets.srcDir(layout.buildDirectory.dir("r8-dex-asset").get().asFile)
     sourceSets.getByName("main").assets.srcDir(layout.buildDirectory.dir("reflective-launcher-asset").get().asFile)
     sourceSets.getByName("main").assets.srcDir(layout.buildDirectory.dir("applog-runtime-asset").get().asFile)
+    sourceSets.getByName("androidTest").assets.srcDir(layout.buildDirectory.dir("vm-spike-asset").get().asFile)
 
     // Release signing, never committed. Resolution order per field: keystore.properties (gitignored,
     // alongside this build script) → Gradle property (-PRELEASE_*) → env var (RELEASE_*). With no keystore
@@ -624,7 +644,7 @@ val fetchAndroidBuildTools = tasks.register("fetchAndroidBuildTools") {
 // Run before anything AGP does, so the freshly-fetched lib*.so are on disk when the native-lib merge runs,
 // and the staged kotlin-stdlib.jar asset is present when the asset merge runs.
 tasks.named("preBuild").configure {
-    dependsOn(fetchAndroidBuildTools, bundleKotlinStdlibAsset, bundleKotlincResourcesAsset, bundleComposeRuntimeAsset, bundleComposeFontsAsset, bundleComposeStringAsset, bundleComposeDrawablesAsset, bundleR8DexAsset, bundleReflectiveLauncherDex, bundleAppLogRuntimeAsset)
+    dependsOn(fetchAndroidBuildTools, bundleKotlinStdlibAsset, bundleKotlincResourcesAsset, bundleComposeRuntimeAsset, bundleComposeFontsAsset, bundleComposeStringAsset, bundleComposeDrawablesAsset, bundleR8DexAsset, bundleReflectiveLauncherDex, bundleAppLogRuntimeAsset, bundleVmSpikeComposeRuntimeAsset)
 }
 
 // Same Android packaging gap as the fonts above, for the i18n string resources. :ide-ui's
@@ -825,10 +845,17 @@ dependencies {
     // Compose runtime so the editor's @Preview renders live (docs/compose-interpreter.md, step 4).
     implementation(project(":interp-core"))
     implementation(project(":interp-compose"))
+    // The bytecode VM: the real-view layout preview interprets library/user View classes (dev.ide.jvm.Vm via
+    // VmViewFactory) instead of dexing them, and DexPeerFactory realizes their peers. Reaches the app
+    // transitively through :interp-compose's jvmShared (api), but the real-view code uses it directly.
+    implementation(project(":jvm-interp"))
 
     // On-device instrumentation: the Kotlin-compiler-on-ART discovery spike.
     androidTestImplementation(libs.androidx.test.ext.junit)
     androidTestImplementation(libs.androidx.test.runner)
+    // On-device throughput benchmark for the :jvm-interp bytecode interpreter. Not in the app dex, so it is
+    // included in the test APK; its asm dependency resolves against the app's dexed copy at runtime.
+    androidTestImplementation(project(":jvm-interp"))
     // The compiler API (K2JVMCompiler/K2JVMCompilerArguments/MessageCollector/…) to COMPILE the spike
     // against. It arrives in the app only as a transitive `implementation` (via :ide-core → :lang-kotlin),
     // which doesn't leak to the androidTest *compile* classpath — and at runtime the app's dexed copy

@@ -46,6 +46,10 @@ kotlin {
             // public signature, so consumers (the hosts) need it on their compile classpath.
             dependencies {
                 api(project(":interp-core"))
+                // The bytecode VM behind VmLibraryExecutor (project-jar dependency code runs interpreted in
+                // the preview instead of through a DexClassLoader). `api`: PeerFactory is in its constructor
+                // signature (the Android host supplies a dex-generating factory).
+                api(project(":jvm-interp"))
                 // compileOnly: the renderer provides `LocalInspectionMode = true` around the preview (so
                 // Popup/Dialog/DropdownMenu render inline and tooling-aware components behave, exactly as a real
                 // @Preview does). LocalInspectionMode lives in compose.ui; keep it OFF the runtime artifact so it

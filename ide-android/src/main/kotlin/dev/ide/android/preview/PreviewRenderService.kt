@@ -65,6 +65,7 @@ class PreviewRenderService : Service() {
             packageName: String?,
             themeName: String?,
             minApi: Int,
+            interpretClasses: Boolean,
             outFile: String?,
         ): String {
             return runCatching {
@@ -77,6 +78,7 @@ class PreviewRenderService : Service() {
                     packageName = packageName.orEmpty(),
                     themeName = themeName,
                     minApi = minApi,
+                    interpretClasses = interpretClasses,
                 ).apply {
                     stageListener = { stage -> runCatching { stageCallback?.onStage(stage) } }
                 }

@@ -77,6 +77,7 @@ class RemoteRealViewRuntime(
                 request.packageName,
                 request.themeName,
                 request.minApi,
+                request.interpretClasses,
                 outFile.absolutePath,
             )
         } finally {

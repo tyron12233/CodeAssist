@@ -102,6 +102,7 @@ class PreviewRenderClient(context: Context) {
         packageName: String,
         themeName: String?,
         minApi: Int,
+        interpretClasses: Boolean,
         outFile: String,
     ): String? {
         val d = awaitDaemon(BIND_TIMEOUT_MS) ?: return null
@@ -117,6 +118,7 @@ class PreviewRenderClient(context: Context) {
                 packageName,
                 themeName,
                 minApi,
+                interpretClasses,
                 outFile
             )
         }.getOrNull()

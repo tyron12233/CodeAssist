@@ -39,6 +39,11 @@ class RealViewRequest(
     /** The module's `minSdk` — the dex min-api, so the preview's shared-cache buckets match the build's
      *  (which keys the cache by min-api); using the device api instead would key a separate, unshared cache. */
     val minApi: Int = 21,
+    /** When true, non-framework view classes on [classpath] are INTERPRETED (the `:jvm-interp` VM) instead of
+     *  dexed onto a `DexClassLoader` — the runtime builds no dex and loads no downloaded/library/user code into
+     *  ART. [classpath] may then include class DIRECTORIES (the build's compiled `.class` output) as well as
+     *  jars, and no `.dex` files. */
+    val interpretClasses: Boolean = false,
 ) {
     /** Transient in-process callback for fine render stages ("Dexing"/"Inflating"/"Drawing"), for the status
      *  chip. NOT serialized across the `:preview` IPC — each side sets its own (the daemon forwards over the

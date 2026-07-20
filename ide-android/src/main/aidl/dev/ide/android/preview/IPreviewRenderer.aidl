@@ -15,8 +15,11 @@ interface IPreviewRenderer {
 
     // Render the layout (already relinked into [resourcesAp] by the UI) with the real framework + the project's
     // libraries on [classpath], writing the raw ARGB_8888 pixels to [outFile]. Blocking. Returns "ok\t<w>\t<h>"
-    // (pixels at [outFile]) or "err\t<message>" (→ the caller falls back to owned rendering).
+    // (pixels at [outFile]) or "err\t<message>" (→ the caller falls back to owned rendering). When
+    // [interpretClasses] is true the non-framework classes on [classpath] (jars + class dirs) are interpreted by
+    // the bytecode VM rather than dexed, so nothing downloaded/user-built is loaded into ART.
     String render(
         String layoutName, int widthPx, int heightPx, float density, boolean night,
-        String resourcesAp, in String[] classpath, String packageName, String themeName, int minApi, String outFile);
+        String resourcesAp, in String[] classpath, String packageName, String themeName, int minApi,
+        boolean interpretClasses, String outFile);
 }
