@@ -1,8 +1,10 @@
 package dev.ide.plugin.impl
 
 import dev.ide.platform.ExtensionRegistry
+import dev.ide.platform.MessageBus
 import dev.ide.platform.PluginId
 import dev.ide.platform.impl.CompositeDisposable
+import dev.ide.platform.impl.MessageBusImpl
 import dev.ide.plugin.Plugin
 
 /**
@@ -16,7 +18,12 @@ import dev.ide.plugin.Plugin
  * and then bulk-unregisters anything it contributed through a facade (`unregisterAll`); both paths are
  * list-removals, so running both is idempotent.
  */
-class PluginManager(private val registry: ExtensionRegistry) {
+class PluginManager(
+    private val registry: ExtensionRegistry,
+    /** The bus handed to each plugin's [PluginRegistrationImpl] so it can publish/subscribe. Defaults to a
+     *  private bus (standalone tests); the host passes its application-wide `PlatformCore.messageBus`. */
+    private val bus: MessageBus = MessageBusImpl(),
+) {
 
     private class Loaded(val plugin: Plugin, val teardown: CompositeDisposable)
 
@@ -36,7 +43,7 @@ class PluginManager(private val registry: ExtensionRegistry) {
         val id = plugin.manifest.pluginId
         require(id !in loaded) { "plugin '${id.value}' already loaded" }
         val teardown = CompositeDisposable()
-        plugin.register(PluginRegistrationImpl(id, registry, teardown))
+        plugin.register(PluginRegistrationImpl(id, registry, teardown, bus))
         loaded[id] = Loaded(plugin, teardown)
     }
 

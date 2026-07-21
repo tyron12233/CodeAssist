@@ -455,6 +455,7 @@ We never collect your code, file or project names, which features you use, or an
     <string name="logs_filter_all">All</string>
     <string name="logs_filter_warnings">Warnings</string>
     <string name="logs_filter_errors">Errors</string>
+    <string name="logs_filter_all_plugins">All plugins</string>
     <string name="logs_filter_hint">Filter logs…</string>
     <string name="logs_resume">Resume live tail</string>
     <string name="logs_pause">Pause live tail</string>
@@ -809,6 +810,7 @@ We never collect your code, file or project names, which features you use, or an
     <!-- modcfg (ModuleConfigScreen) — ModulesTab.label is StringResource; uses ARG_TOKEN sentinel for toasts -->
     <string name="modcfg_tab_settings">Settings</string>
     <string name="modcfg_tab_build_features">Build Features</string>
+    <string name="modcfg_tab_compiler_plugins">Compiler plugins</string>
     <string name="modcfg_tab_packaging">Packaging</string>
     <string name="modcfg_tab_signing">Signing</string>
     <string name="modcfg_tab_dependencies">Dependencies</string>
@@ -819,6 +821,9 @@ We never collect your code, file or project names, which features you use, or an
     <string name="modcfg_removed">Removed %1$s</string>
     <string name="modcfg_build_features_android_only">Build features apply to Android modules only.</string>
     <string name="modcfg_build_features_intro">Turn build features on per module. Enabling one adds the dependencies it needs.</string>
+    <string name="modcfg_compiler_plugins_android_only">Compiler plugins apply to Android modules only.</string>
+    <string name="modcfg_compiler_plugins_intro">Kotlin compiler plugins transform your code at build time. Enabling one adds its runtime; the plugin then applies automatically wherever that runtime is on the classpath.</string>
+    <string name="modcfg_compiler_plugin_applied">Active on this module\'s classpath</string>
     <string name="modcfg_signing_android_only">Signing applies to Android modules only.</string>
     <string name="modcfg_signing_intro">Choose the keystore that signs each build type. An unassigned type signs with the debug keystore.</string>
     <string name="modcfg_packaging_android_only">Packaging options apply to Android modules only.</string>

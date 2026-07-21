@@ -366,9 +366,16 @@ contributes a toolbar action (Tier 1) and a Logcat tool window (Tier 2). *Exit t
 loaded, contributes both, can be disabled (contributions vanish) and uninstalled; the dex path is verified on
 device.
 
-**Phase D (later, behind these contracts):** keymap + user-rebindable shortcuts on actions; `MessageBus`
-plugin-facing events (file opened, build started/finished) so plugins react; palette categories; a plugin
-marketplace/install-from-URL flow.
+**Phase D (later, behind these contracts):** keymap + user-rebindable shortcuts on actions; palette categories;
+a plugin marketplace/install-from-URL flow.
+
+*Delivered:* the **`MessageBus` plugin-facing events + a plugin logger**. `PluginRegistration` now exposes
+`messageBus` (publish), `busConnection()` (subscribe, tracked for unload), and `logger(tag)` (attributed to the
+plugin id, filterable in the Logs viewer). The IDE publishes a lifecycle event set in `ide-core`'s
+`dev.ide.core.event.IdeEventTopics` — editor (open/close/active/selection), build, run, analysis diagnostics,
+project open/close, indexing — so plugins react to what the IDE is doing. See `docs/plugin-system.md` (Events and
+logging). Consumed by the built-ins today; promoting the topic payloads to their owning `*-api` modules is the
+follow-up for the external tier.
 
 ## IdeBackend decomposition
 

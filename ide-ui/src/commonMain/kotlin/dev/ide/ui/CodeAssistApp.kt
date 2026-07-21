@@ -63,6 +63,7 @@ import dev.ide.ui.theme.CodeAssistTheme
 import dev.ide.ui.theme.rememberJetBrainsMono
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.collectLatest
+import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.drop
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -202,6 +203,26 @@ fun CodeAssistApp(
             delay(600.milliseconds)
             val snapshot = state.tabsSnapshot() // read the Compose session state on the main thread…
             withContext(ioDispatcher) { state.backend.projects.saveOpenTabs(snapshot) } // …write off it
+        }
+    }
+
+    // Editor-lifecycle events for plugins: the engine republishes these on the message bus
+    // (IdeEventTopics.EDITOR) and they are no-ops when nothing subscribes. The focused file, whenever it
+    // changes (null once the last tab closes):
+    LaunchedEffect(state) {
+        snapshotFlow { state.active?.path }
+            .distinctUntilChanged()
+            .collect { state.backend.editor.onActiveEditorChanged(it) }
+    }
+    // The caret/selection, debounced so it fires on settle rather than on every keystroke (collectLatest
+    // cancels the pending delay when the selection moves again).
+    LaunchedEffect(state) {
+        snapshotFlow {
+            state.active?.let { Triple(it.path, it.session.selection.start, it.session.selection.end) }
+        }.distinctUntilChanged().collectLatest { sel ->
+            if (sel == null) return@collectLatest
+            delay(150.milliseconds)
+            state.backend.editor.onSelectionChanged(sel.first, sel.second, sel.third)
         }
     }
 

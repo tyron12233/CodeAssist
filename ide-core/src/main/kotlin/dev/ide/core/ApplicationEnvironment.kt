@@ -48,8 +48,9 @@ class ApplicationEnvironment(disabledPluginIds: Set<String> = emptySet()) : Auto
     @Volatile
     var activeEngine: IdeServices? = null
 
-    /** Drives the IDE's built-in plugins onto [platform]'s app-global registry. */
-    private val pluginManager = PluginManager(platform.extensions)
+    /** Drives the IDE's built-in plugins onto [platform]'s app-global registry. The app-wide message bus is
+     *  passed so a plugin's registrar can publish/subscribe on the same bus the engine's events flow through. */
+    private val pluginManager = PluginManager(platform.extensions, platform.messageBus)
 
     /**
      * The built-in plugin catalog: every built-in plus which are active, given the host's persisted disabled

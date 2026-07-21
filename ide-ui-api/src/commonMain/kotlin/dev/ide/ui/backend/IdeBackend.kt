@@ -85,6 +85,9 @@ data class UiLogEntry(
     val timeLabel: String,
     val thread: String,
     val stackTrace: String? = null,
+    /** The id of the plugin that emitted this record, or null for IDE/core logs. Lets the viewer filter by
+     *  plugin so a plugin's own output is separable from the IDE's. */
+    val source: String? = null,
 )
 
 // ---- editor-session DTOs ----
@@ -826,6 +829,27 @@ data class UiBuildFeature(
     val title: String,
     val description: String,
     val enabled: Boolean,
+    val note: String? = null,
+)
+
+/**
+ * The Kotlin compiler plugins available to one module — the toggles shown on the Compiler plugins tab (Compose,
+ * Kotlin Serialization, Parcelize). Null when the module is not an Android module (compiler plugins are wired
+ * through the Android build today). Enabling one persists the enable-state and adds its runtime dependency.
+ */
+data class UiCompilerPlugins(val moduleName: String, val plugins: List<UiCompilerPlugin>)
+
+/**
+ * One toggleable compiler plugin. [applied] reflects whether the plugin currently activates for the module's
+ * classpath (a plugin auto-applies once its runtime is present, so an enabled plugin whose dependency resolved
+ * shows applied). [note] is an optional aside (e.g. that it auto-applies from the classpath).
+ */
+data class UiCompilerPlugin(
+    val id: String,
+    val title: String,
+    val description: String,
+    val enabled: Boolean,
+    val applied: Boolean,
     val note: String? = null,
 )
 

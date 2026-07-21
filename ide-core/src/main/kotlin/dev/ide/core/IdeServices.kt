@@ -56,6 +56,9 @@ import dev.ide.core.completion.CompletionEngine
 import dev.ide.core.completion.CompletionOptions
 import dev.ide.core.completion.CompletionStats
 import dev.ide.core.completion.PostfixContributor
+import dev.ide.core.event.AnalysisEvent
+import dev.ide.core.event.IdeEventTopics
+import dev.ide.core.event.IndexEvent
 import dev.ide.core.services.AndroidResourceService
 import dev.ide.core.services.BlockService
 import dev.ide.core.services.BuildService
@@ -734,6 +737,23 @@ class IdeServices private constructor(
     ): RunCapture =
         build.runAndCapture(moduleName, stdin, timeoutMs)
 
+    // Tracks the index's building flag so the plugin-facing INDEXING topic fires one Started/Finished per
+    // build rather than on every progress tick. Declared before the init block that registers the observer
+    // (observeStatus replays the current status synchronously). See [IdeEventTopics].
+    private var lastIndexBuilding = false
+
+    /** Publish an [IndexEvent]/[AnalysisEvent] on the app bus for plugin subscribers; guarded so a throwing
+     *  subscriber can never break indexing/analysis. See [IdeEventTopics]. */
+    private fun publishIndex(event: IndexEvent) =
+        runCatching { platform.messageBus.syncPublisher(IdeEventTopics.INDEXING).onIndexEvent(event) }
+
+    private fun publishAnalysis(event: AnalysisEvent) =
+        runCatching { platform.messageBus.syncPublisher(IdeEventTopics.ANALYSIS).onAnalysisEvent(event) }
+
+    /** The application-wide message bus this engine publishes on (the per-project platform shares the app
+     *  bus). The backend reaches it through here to publish editor/project lifecycle events. */
+    internal val appBus: dev.ide.platform.MessageBus get() = platform.messageBus
+
     init {
         // Publish this engine's per-engine container services (the K2 compiler + this engine's EngineContext)
         // before anything resolves them. The reusable concern-service descriptors, the built-in actions, the
@@ -744,6 +764,12 @@ class IdeServices private constructor(
         // anything reads a Kotlin module's classpath.
         runCatching { ensureKotlinStdlib() }
         indexService.observeStatus { s ->
+            // Emit one INDEXING Started/Finished per build on the building→done edges (progress ticks in
+            // between keep `building` true). observeStatus replays the current status synchronously, which is
+            // building=false at open → no spurious event.
+            if (s.building && !lastIndexBuilding) publishIndex(IndexEvent.Started)
+            else if (!s.building && lastIndexBuilding) publishIndex(IndexEvent.Finished(s))
+            lastIndexBuilding = s.building
             _indexStatus.value = IndexUiStatus(
                 building = s.building,
                 message = s.message,
@@ -1721,6 +1747,12 @@ class IdeServices private constructor(
                     // Live editor buffers (path → text) so cross-file completion/resolution/diagnostics see
                     // unsaved edits in OTHER open .kt files before they're saved + reindexed.
                     it.liveOverlayProvider = ::kotlinOverlay
+                    // Editor support for a compiler plugin's generated members (kotlinx.serialization's
+                    // `serializer()`): the contributed providers, or the built-ins when nothing is registered.
+                    it.syntheticMemberProviders = {
+                        platform.extensions.extensions(dev.ide.lang.kotlin.symbols.KOTLIN_SYNTHETIC_MEMBER_EP)
+                            .ifEmpty { dev.ide.lang.kotlin.symbols.BUILTIN_KOTLIN_SYNTHETIC_MEMBER_PROVIDERS }
+                    }
                 }
 
                 is XmlSourceAnalyzer -> {
@@ -2025,6 +2057,10 @@ class IdeServices private constructor(
             if (inspectionProfileState != AnalysisProfile.DEFAULT) engine.configure(
                 inspectionProfileState
             )
+            // Republish each file's freshly-merged diagnostics on the app bus for plugin subscribers. This is
+            // the engine's single final-publish point (AnalysisEngine.notify → its listeners); the bus is a
+            // pass-through, so a plugin sees exactly what the editor does. See [IdeEventTopics.ANALYSIS].
+            engine.addListener { file, diagnostics -> publishAnalysis(AnalysisEvent(file.path, diagnostics)) }
         }
     }
 

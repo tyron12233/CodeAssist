@@ -3,10 +3,13 @@ package dev.ide.plugin
 import dev.ide.platform.Disposable
 import dev.ide.platform.ExtensionPoint
 import dev.ide.platform.ExtensionRegistry
+import dev.ide.platform.MessageBus
+import dev.ide.platform.MessageBusConnection
 import dev.ide.platform.PluginId
 import dev.ide.platform.ServiceFactory
 import dev.ide.platform.ServiceKey
 import dev.ide.platform.ServiceScopeLevel
+import dev.ide.platform.log.Logger
 
 /**
  * The registrar handed to [Plugin.register]. Every contribution is attributed to this plugin's [pluginId]
@@ -33,4 +36,19 @@ interface PluginRegistration {
 
     /** Tie an arbitrary [Disposable] to this plugin's unload (LIFO with the rest of its contributions). */
     fun onDispose(d: Disposable)
+
+    /** The application-wide [MessageBus]. Use it to PUBLISH — the IDE's lifecycle topics (editor/build/run/
+     *  analysis/project/indexing events) or a topic this plugin defines itself for plugin-to-plugin messaging
+     *  (`messageBus.syncPublisher(myTopic)`). To subscribe, prefer [busConnection]: a raw `messageBus.connect()`
+     *  is NOT tracked, so its subscriptions outlive an unload unless the plugin disposes it via [onDispose]. */
+    val messageBus: MessageBus
+
+    /** A [MessageBusConnection] already tracked for unload (disposed LIFO with the plugin's other
+     *  contributions), so its subscriptions are removed automatically when the plugin unloads. The normal
+     *  way for a plugin to listen: `busConnection().subscribe(SomeTopics.CHANGES, listener)`. */
+    fun busConnection(): MessageBusConnection
+
+    /** A [Logger] whose records are attributed to this plugin (via [pluginId]) so the in-app Logs viewer can
+     *  filter by plugin. The attribution is set by the platform and cannot be forged by the caller. */
+    fun logger(tag: String): Logger
 }

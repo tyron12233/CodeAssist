@@ -21,6 +21,8 @@ import dev.ide.ui.backend.ProjectInfo
 import dev.ide.ui.backend.UiError
 import dev.ide.analytics.AnalyticsService
 import dev.ide.core.backend.ActionBackend
+import dev.ide.core.event.IdeEventTopics
+import dev.ide.core.event.ProjectEvent
 import dev.ide.core.backend.BlockBackend
 import dev.ide.core.backend.BuildBackend
 import dev.ide.core.backend.DependencyBackend
@@ -144,6 +146,11 @@ class IdeServicesBackend(
     override val sdkManager: SdkManagerService? get() = manager?.sdkManager() ?: activeServices?.sdkManager
     override val keystoreRegistry: dev.ide.android.support.tools.KeystoreRegistry?
         get() = manager?.keystoreRegistry() ?: activeServices?.keystoreRegistry
+
+    // The app bus lives on the shared application platform (reached through the manager); the manager-less
+    // single-project path falls back to the active engine, whose per-project platform shares that same bus.
+    override val messageBus: dev.ide.platform.MessageBus?
+        get() = manager?.env?.platform?.messageBus ?: activeServices?.appBus
 
     /**
      * The thread the editor's language work (parse/complete/analyze/hints/actions/rename) runs on.
@@ -518,6 +525,15 @@ class IdeServicesBackend(
         // (command actions, synthetic-R, the XML resource host) that resolve the open project through it.
         manager?.env?.activeEngine = next
         _projectEpoch.value += 1
+        // Publish the project lifecycle for plugin subscribers, on the same app bus. Opened for the new engine;
+        // Closed for the one being replaced (before it is disposed). Guarded so a subscriber can't break the swap.
+        val bus = messageBus
+        if (bus != null) {
+            runCatching { bus.syncPublisher(IdeEventTopics.PROJECT).onProjectEvent(ProjectEvent.Opened(next.workspaceRoot.toString())) }
+            if (prev != null && prev !== next) {
+                runCatching { bus.syncPublisher(IdeEventTopics.PROJECT).onProjectEvent(ProjectEvent.Closed(prev.workspaceRoot.toString())) }
+            }
+        }
         if (prev !== next) runCatching { prev?.close() }
     }
 

@@ -4,6 +4,8 @@ import dev.ide.analysis.CodeActionKind
 import dev.ide.analysis.DiagnosticTag
 import dev.ide.analytics.Events
 import dev.ide.core.BackendContext
+import dev.ide.core.event.EditorEvent
+import dev.ide.core.event.IdeEventTopics
 import dev.ide.core.settings.CodeStyleSettings
 import dev.ide.core.settings.SettingsStore
 import dev.ide.lang.completion.CaretAction
@@ -130,6 +132,20 @@ internal class EditorBackend(private val ctx: BackendContext) : EditorService {
         ctx.services.updateDocument(Paths.get(path), text)
 
     override fun saveFile(path: String, text: String) = ctx.services.save(Paths.get(path), text)
+
+    // --- Editor-session lifecycle notifications (fire-and-forget from the UI) --------------------------------
+    // The UI reports these; we republish them on the app bus for plugin subscribers (see IdeEventTopics.EDITOR).
+    // Guarded so a throwing subscriber can never disturb the editor; a null bus (no project/manager) is a no-op.
+
+    private fun publishEditor(event: EditorEvent) =
+        runCatching { ctx.messageBus?.syncPublisher(IdeEventTopics.EDITOR)?.onEditorEvent(event) }
+
+    override fun onFileOpened(path: String) { publishEditor(EditorEvent.FileOpened(path)) }
+    override fun onFileClosed(path: String) { publishEditor(EditorEvent.FileClosed(path)) }
+    override fun onActiveEditorChanged(path: String?) { publishEditor(EditorEvent.ActiveEditorChanged(path)) }
+    override fun onSelectionChanged(path: String, start: Int, end: Int) {
+        publishEditor(EditorEvent.SelectionChanged(path, start, end))
+    }
 
     override suspend fun complete(path: String, text: String, offset: Int): UiCompletionResult {
         val t0 = System.nanoTime()

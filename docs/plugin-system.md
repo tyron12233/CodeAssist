@@ -46,6 +46,10 @@ interface PluginRegistration {
     fun <T : Any> service(key: ServiceKey<T>, level: ServiceScopeLevel, factory: ServiceFactory<T>): Disposable
     fun contributeVia(block: (ExtensionRegistry, PluginId) -> Unit)   // bridges existing facades
     fun onDispose(d: Disposable)
+
+    val messageBus: MessageBus            // publish (own topics via syncPublisher, or the IDE's lifecycle topics)
+    fun busConnection(): MessageBusConnection   // subscribe; tracked for unload (auto-unsubscribed)
+    fun logger(tag: String): Logger       // attributed to pluginId → filterable in the Logs viewer
 }
 ```
 
@@ -58,9 +62,31 @@ which is exact because they attribute to the same id.
 For built-ins the manifest is a Kotlin literal on the entry-point class (the "manifest + entry point" model);
 the same `PluginManifest` shape is TOML-parseable, reserved for the external tier's on-disk manifests.
 
+### Events and logging
+
+`PluginRegistration` also hands a plugin the eventing + logging substrate, so a plugin can *observe* and *report*,
+not just contribute:
+
+- **Message bus.** `messageBus` is the application-wide `MessageBus` (the one every project shares, threaded in
+  from `PlatformCore.messageBus`), for **publishing** — either the IDE's own lifecycle topics or a `Topic` the
+  plugin defines itself for plugin-to-plugin messaging. **Subscribing** goes through `busConnection()`, which
+  returns a `MessageBusConnection` already tracked for unload, so its subscriptions are removed automatically
+  (a raw `messageBus.connect()` is not tracked). Beyond the existing spines (`VfsTopics` / `ProjectModelTopics` /
+  `SettingsTopics`), the IDE publishes a set of plugin-facing lifecycle topics in `ide-core`'s
+  `dev.ide.core.event.IdeEventTopics`: editor (open/close/active/selection), build, run, analysis diagnostics,
+  project open/close, and indexing. These are published from the point that owns each transition — `BuildService`
+  (build/run), `EditorBackend` (editor, driven by the UI), `IdeServicesBackend.swapEngine` (project), and
+  `IdeServices` via the existing analysis/index listener seams — always guarded so a faulty subscriber can't break
+  the engine. Delivery is synchronous on the transition's thread (a build/analysis pass is a background
+  dispatcher, not the UI thread).
+- **Logging.** `logger(tag)` returns a `Logger` whose records are attributed to the plugin's id (`LogRecord.source`),
+  so a plugin's output flows into the same `Log` facade as the IDE's and is separable in the in-app Logs viewer
+  (which gained a per-plugin filter). The attribution is stamped by the platform, not the caller.
+
 ## The manager (`plugin-impl`)
 
-`PluginManager(registry)` loads a set of plugins in the topological order of `manifest.dependsOn` (throwing on
+`PluginManager(registry, bus)` (the `bus` is the app's `MessageBus`, handed to each plugin's registrar) loads a
+set of plugins in the topological order of `manifest.dependsOn` (throwing on
 a missing dependency or a cycle) and unloads a plugin by disposing its tracked `Disposable`s (LIFO) and then
 `unregisterAll(id)`. Both teardown paths are list-removals, so running both is idempotent. Making load order
 an explicit `dependsOn` edge replaces the old reliance on hand-tuned registration sequencing (for example, the

@@ -36,6 +36,7 @@ internal class DiagnosticsBackend(private val ctx: BackendContext) : Diagnostics
             timeLabel = logTimeLabel(r.timestampMs),
             thread = r.threadName,
             stackTrace = r.throwable?.let { stackTraceString(it) },
+            source = r.source,
         )
     }
 
@@ -61,7 +62,8 @@ internal class DiagnosticsBackend(private val ctx: BackendContext) : Diagnostics
         append("exported ${runCatching { java.time.LocalDateTime.now().withNano(0) }.getOrDefault("")}\n\n")
         for (r in records) {
             val time = runCatching { java.time.Instant.ofEpochMilli(r.timestampMs).toString() }.getOrDefault(r.timestampMs.toString())
-            append("$time [${r.level}] ${r.tag} (${r.threadName}): ${r.message}\n")
+            val origin = r.source?.let { "$it/" } ?: ""
+            append("$time [${r.level}] $origin${r.tag} (${r.threadName}): ${r.message}\n")
             r.throwable?.let { append(stackTraceString(it)).append('\n') }
         }
     }

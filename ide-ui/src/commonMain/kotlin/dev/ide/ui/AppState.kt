@@ -375,6 +375,7 @@ class IdeUiState(
         backend.editor.updateDocument(path, text)
         openFiles.add(OpenFile(path, name, text))
         activeIndex = openFiles.lastIndex
+        backend.editor.onFileOpened(path) // a genuinely new tab (focus path returned above), for plugin events
     }
 
     /** Focus the already-open tab for [path] if there is one; returns true when it existed. */
@@ -409,6 +410,7 @@ class IdeUiState(
         if (idx < 0) return
         openFiles.removeAt(idx)
         activeIndex = activeIndex.coerceAtMost(openFiles.lastIndex)
+        backend.editor.onFileClosed(file.path)
     }
 
     /** Close every tab except [keep] (tab context menu). Iterates a copy, so mutating [openFiles] is safe. */

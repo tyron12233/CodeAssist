@@ -60,6 +60,10 @@ internal interface BackendContext {
     /** The project manager (preferences, project list, swap), or null for a single-project host. */
     val manager: ProjectManager?
 
+    /** The application-wide message bus (for publishing plugin-facing lifecycle events), or null on a
+     *  host with neither a manager nor an open project. See [dev.ide.core.event.IdeEventTopics]. */
+    val messageBus: dev.ide.platform.MessageBus?
+
     /** Bumps when the active project changes (the project service re-exposes it). */
     val projectEpoch: StateFlow<Int>
 

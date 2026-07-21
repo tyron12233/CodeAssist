@@ -39,9 +39,13 @@ import dev.ide.build.engine.TaskExecutorImpl
 import dev.ide.build.engine.TaskStatus
 import dev.ide.build.engine.jarPath
 import dev.ide.build.jvm.JavaBuildSystem
+import dev.ide.core.BuildFailureKind
 import dev.ide.core.EngineContext
 import dev.ide.core.MemSample
 import dev.ide.core.PermissionPolicy
+import dev.ide.core.event.BuildEvent
+import dev.ide.core.event.IdeEventTopics
+import dev.ide.core.event.RunEvent
 import dev.ide.lang.kotlin.compile.BundledKotlinStdlib
 import dev.ide.lang.kotlin.compile.IncrementalKotlinCompiler
 import dev.ide.lang.kotlin.compile.KOTLIN_COMPILER_PLUGIN_EP
@@ -110,6 +114,14 @@ internal class BuildService(private val ctx: EngineContext) : Disposable {
 
     /** Background scope the build/run coroutine launches on; cancelled with the service (workspace close). */
     private val buildScope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
+
+    // Plugin-facing build/run lifecycle events on the app bus (docs: IdeEventTopics). Guarded so a throwing
+    // subscriber can never break a build/run; these fire on the build coroutine or the interpreter thread.
+    private fun publishBuild(event: BuildEvent) =
+        runCatching { ctx.platform.messageBus.syncPublisher(IdeEventTopics.BUILD).onBuildEvent(event) }
+
+    private fun publishRun(event: RunEvent) =
+        runCatching { ctx.platform.messageBus.syncPublisher(IdeEventTopics.RUN).onRunEvent(event) }
 
     // ---- build & run ----
 
@@ -308,6 +320,7 @@ internal class BuildService(private val ctx: EngineContext) : Disposable {
     /** Drive the run console to Finished if the program lifecycle didn't already (e.g. a compile failure
      *  where the program never started, or a cancelled run). Also EOFs stdin and drops the per-run IO. */
     private fun finalizeRunConsole(succeeded: Boolean) {
+        val prev = _runConsole.value
         _runConsole.update { rc ->
             if (rc == null || rc.phase == RunPhase.Finished) rc
             else rc.copy(
@@ -316,13 +329,23 @@ internal class BuildService(private val ctx: EngineContext) : Disposable {
                 exitCode = if (succeeded) 0 else null
             )
         }
+        // Close out the run event only when the program had actually started (RunPhase.Running) but never
+        // reported its own exit (a cancel/kill). A run that never started (compile failure, still Building)
+        // gets no RunEvent at all, and a clean exit already published Finished from RunProgramIo.exited().
+        if (prev != null && prev.phase == RunPhase.Running) {
+            publishRun(RunEvent.Finished(prev.moduleName, exitCode = null, succeeded = succeeded))
+        }
         currentRunIo?.input?.close()
         currentRunIo = null
     }
 
     /** The host's [ProgramIo] for a console run: routes the program's output into [runConsole], provides a
      *  blocking stdin the UI feeds, and flips the lifecycle phase on start/exit. */
-    private inner class RunProgramIo(private val sessionId: Int) : ProgramIo {
+    private inner class RunProgramIo(
+        private val sessionId: Int,
+        private val moduleName: String,
+        private val mainClass: String,
+    ) : ProgramIo {
         val input = RunInputStream()
         override val stdin: InputStream get() = input
         override fun stdout(text: String) {
@@ -337,6 +360,7 @@ internal class BuildService(private val ctx: EngineContext) : Disposable {
                     phase = RunPhase.Running, acceptsInput = true
                 ) else it
             }
+            publishRun(RunEvent.Started(moduleName, mainClass))
         }
 
         override fun exited(code: Int) {
@@ -348,6 +372,7 @@ internal class BuildService(private val ctx: EngineContext) : Disposable {
             if (_runConsole.value?.id == sessionId) appendConsoleChunk(
                 ConsoleChunkKind.SYSTEM, "\nProcess finished with exit code $code\n"
             )
+            publishRun(RunEvent.Finished(moduleName, exitCode = code, succeeded = code == 0))
         }
     }
 
@@ -543,7 +568,7 @@ internal class BuildService(private val ctx: EngineContext) : Disposable {
                     // Start an interactive console session: program stdio + stdin flow through this ProgramIo
                     // into the full-screen Run terminal.
                     val sessionId = runConsoleSeq.incrementAndGet()
-                    val io = RunProgramIo(sessionId)
+                    val io = RunProgramIo(sessionId, module.name, mainClass)
                     currentRunIo = io
                     _runConsole.value = RunConsoleUi(sessionId, module.name, mainClass)
                     // The console program runs on the bytecode VM (both desktop and device): its compiled
@@ -721,6 +746,8 @@ internal class BuildService(private val ctx: EngineContext) : Disposable {
             listOf(logLine(message, UiLogLevel.Error)),
             elapsedMs = 0
         )
+        // A pre-start failure (bad config, missing tool) never produced a diagnostic, so bucket it accordingly.
+        publishBuild(BuildEvent.Finished(module = "", succeeded = false, failureKind = BuildFailureKind.NO_DIAGNOSTIC, message = message))
         finalizeRunConsole(succeeded = false) // unstick a run console if a run failed before its program started
     }
 
@@ -779,6 +806,7 @@ internal class BuildService(private val ctx: EngineContext) : Disposable {
             elapsedMs = 0,
             banner = banner
         )
+        publishBuild(BuildEvent.Started(moduleName, order.map { it.name }))
         val start = System.currentTimeMillis()
         // Phase-0 build-process-isolation instrumentation (docs/build-process-isolation.md): track this
         // build/run's heap peak so we can see how close a build comes to the OOM ceiling and compare it
@@ -876,13 +904,23 @@ internal class BuildService(private val ctx: EngineContext) : Disposable {
                     )
                 }
             }
+            val succeeded = outcome?.succeeded == true
             _buildState.update {
                 it.copy(
-                    status = if (outcome?.succeeded == true) RunStatus.Succeeded else RunStatus.Failed,
+                    status = if (succeeded) RunStatus.Succeeded else RunStatus.Failed,
                     elapsedMs = System.currentTimeMillis() - start,
                 )
             }
-            onComplete?.invoke(outcome?.succeeded == true)
+            val finalState = _buildState.value
+            publishBuild(
+                BuildEvent.Finished(
+                    module = moduleName,
+                    succeeded = succeeded,
+                    failureKind = if (succeeded) null else BuildFailureKind.classify(finalState.diagnostics, finalState.log),
+                    message = if (succeeded) null else finalState.log.lastOrNull { it.level == UiLogLevel.Error }?.message,
+                )
+            )
+            onComplete?.invoke(succeeded)
         }
     }
 
@@ -895,10 +933,15 @@ internal class BuildService(private val ctx: EngineContext) : Disposable {
         Guards.broker = null
         _permissionRequest.value = null
         finalizeRunConsole(succeeded = false) // the cancelled coroutine skips launch's onComplete
+        // The cancelled build coroutine skips launch's completion block, so publish the terminal event here.
+        val wasRunning = _buildState.value.status == RunStatus.Running
         _buildState.update {
             if (it.status == RunStatus.Running) it.copy(
                 status = RunStatus.Failed, log = it.log + logLine("Stopped.", UiLogLevel.Warn)
             ) else it
+        }
+        if (wasRunning) {
+            publishBuild(BuildEvent.Finished(module = _buildState.value.moduleName, succeeded = false, failureKind = null, message = "Stopped."))
         }
     }
 

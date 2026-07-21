@@ -82,6 +82,23 @@ interface EditorService {
     /** Persist the buffer [text] for [path] to disk (and keep it as the live buffer). */
     fun saveFile(path: String, text: String)
 
+    // --- Editor-session lifecycle notifications (fire-and-forget; default no-op like completionAccepted) -----
+    // Pure notifications the UI pushes so the engine can publish editor-lifecycle events on the message bus for
+    // plugins; nothing is awaited. A backend that doesn't care (test fakes, previews) inherits the no-op default.
+
+    /** The user opened [path] in a new editor tab (not fired when re-focusing an already-open tab). */
+    fun onFileOpened(path: String) {}
+
+    /** The user closed [path]'s editor tab. */
+    fun onFileClosed(path: String) {}
+
+    /** The focused editor changed; [path] is null when the last tab closed (nothing focused). */
+    fun onActiveEditorChanged(path: String?) {}
+
+    /** The selection/caret in [path] settled at `[start, end)` (a bare caret has `start == end`). The UI
+     *  debounces this, so it fires on settle rather than on every keystroke. */
+    fun onSelectionChanged(path: String, start: Int, end: Int) {}
+
     /** Enclosing declarations at [offset] in [text] (type/method names, outer→inner) for the breadcrumb. */
     suspend fun breadcrumbAt(path: String, text: String, offset: Int): List<String> = emptyList()
 
@@ -414,6 +431,18 @@ interface ModuleService {
      */
     suspend fun setBuildFeature(moduleName: String, feature: String, enabled: Boolean): UiConfigResult =
         UiConfigResult(false, "Build features not supported by this backend")
+
+    /** The Kotlin compiler plugins available to [moduleName] (Compose, Serialization, Parcelize) with their
+     *  enable-state, or null when it is not an Android module. */
+    suspend fun getCompilerPlugins(moduleName: String): UiCompilerPlugins? = null
+
+    /**
+     * Turn a Kotlin compiler plugin ([pluginId] = the plugin's `pluginId`) on or off for [moduleName]. Enabling
+     * persists the enable-state and adds the plugin's runtime dependency, which is what activates it at build
+     * time (the plugin auto-applies once its runtime is on the classpath) and in the editor.
+     */
+    suspend fun setCompilerPlugin(moduleName: String, pluginId: String, enabled: Boolean): UiConfigResult =
+        UiConfigResult(false, "Compiler plugins not supported by this backend")
 
     /** The Android packaging options (Java-resource + native-lib merge rules) for [moduleName], or null when
      *  it is not an Android module. */
