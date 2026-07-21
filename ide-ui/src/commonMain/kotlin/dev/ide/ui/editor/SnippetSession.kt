@@ -45,6 +45,10 @@ class SnippetSession private constructor(
         else -> es + (d + (ee - es)) // edit straddles the point → land after the inserted text
     }
 
+    /** Document-offset ranges of every remaining template field (all stops, including linked mirrors), for the
+     *  editor to highlight while template mode is live. Ranges re-anchor on each edit (see [onEdit]). */
+    fun fieldRanges(): List<IntRange> = stops.flatMap { s -> s.ranges.map { it.start until it.end } }
+
     /** Move to the next stop; returns false (and lands the caret at `$0`) when there are none left. */
     fun next(): Boolean {
         mirrorCurrent()

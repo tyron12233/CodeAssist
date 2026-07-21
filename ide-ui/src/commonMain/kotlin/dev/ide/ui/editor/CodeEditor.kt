@@ -873,6 +873,7 @@ private fun CodeEditorContent(
                         findMatches = if (find.open) find.matches else emptyList(),
                         currentMatch = find.currentIndex,
                         occurrences = occurrences,
+                        templateFields = snippet?.fieldRanges().orEmpty(),
                         structure = geometry.editorStructure.value,
                         colors = EditorDrawColors(
                             background = colors.editorBg,
@@ -891,6 +892,7 @@ private fun CodeEditorContent(
                             findMatch = colors.warning.copy(alpha = 0.28f),
                             findCurrent = colors.accent.copy(alpha = 0.5f),
                             occurrence = colors.textSecondary.copy(alpha = 0.18f),
+                            templateField = colors.accent.copy(alpha = 0.16f),
                         ),
                         caretVisible = isFocused && (blinkOn || !editorSession.selection.collapsed),
                         caretContent = interaction.caretContent, // animated, content-space; read here → redraw per frame
