@@ -41,6 +41,13 @@ object KotlinPostfixTemplates {
     private fun isArray(ctx: PostfixContext): Boolean =
         ctx.type?.qualifiedName?.substringAfterLast('.')?.endsWith("Array") == true
 
+    /** A Throwable-shaped type, by name (the postfix context carries only the type's qualified name, not its
+     *  supertypes) — matches `Throwable` and the common `*Exception` / `*Error` conventions. */
+    private fun isThrowable(ctx: PostfixContext): Boolean {
+        val s = ctx.type?.qualifiedName?.substringAfterLast('.') ?: return false
+        return s == "Throwable" || s.endsWith("Exception") || s.endsWith("Error")
+    }
+
     private fun template(
         key: String,
         example: String,
@@ -126,6 +133,12 @@ object KotlinPostfixTemplates {
         },
         template("spread", "arr.spread → *arr", "Spread an array into a vararg", ::isArray) { c ->
             snippet { text("*${c.expressionText}"); finalHere() }
+        },
+        template("throw", "expr.throw → throw expr", "Throw the exception", ::isThrowable) { c ->
+            snippet { text("throw ${c.expressionText}"); finalHere() }
+        },
+        template("forEach", "coll.forEach → coll.forEach { }", "for-each with a lambda", ::isIterable) { c ->
+            snippet { text("${c.expressionText}.forEach { "); finalHere(); text(" }") }
         },
     )
 }

@@ -198,6 +198,9 @@ internal object JavaPostfixTemplates {
             (type.equalsToText("int") || type.equalsToText("short") || type.equalsToText("byte") || type.equalsToText("long"))
         val isReference: Boolean get() = type is PsiClassType || type is PsiArrayType
         val isIterable: Boolean get() = isArray || (type is PsiClassType && InheritanceUtil.isInheritor(type, "java.lang.Iterable"))
+        /** A `java.util.Collection` (has `.stream()` / `.forEach(...)` — unlike a bare array or `Iterable`). */
+        val isCollection: Boolean get() = type is PsiClassType && InheritanceUtil.isInheritor(type, "java.util.Collection")
+        val isThrowable: Boolean get() = type is PsiClassType && InheritanceUtil.isInheritor(type, "java.lang.Throwable")
         val typeName: String get() = type?.presentableText?.takeIf { it.isNotBlank() } ?: "var"
     }
 
@@ -286,6 +289,15 @@ internal object JavaPostfixTemplates {
         },
         Template("new", "Type.new → new Type()", "Instantiate the type", { it.staticQualifier }) { c ->
             Spec(snippet { text("new ${c.receiver}("); finalHere(); text(")") })
+        },
+        Template("throw", "expr.throw → throw expr;", "Throw the exception", { it.isThrowable }) { c ->
+            Spec(snippet { text("throw ${c.receiver};"); finalHere() })
+        },
+        Template("stream", "coll.stream → coll.stream()", "Open a stream over the collection", { it.isCollection }) { c ->
+            Spec(snippet { text("${c.receiver}.stream()"); finalHere() })
+        },
+        Template("forEach", "coll.forEach → coll.forEach(item -> )", "for-each with a lambda", { it.isIterable && !it.isArray }) { c ->
+            Spec(snippet { text("${c.receiver}.forEach("); stop(1, "item"); text(" -> "); finalHere(); text(")") })
         },
     )
 }

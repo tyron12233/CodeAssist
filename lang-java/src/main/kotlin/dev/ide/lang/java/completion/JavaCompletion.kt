@@ -4,7 +4,10 @@ import com.intellij.psi.PsiArrayType
 import com.intellij.psi.PsiAssignmentExpression
 import com.intellij.psi.PsiCatchSection
 import com.intellij.psi.PsiClass
+import com.intellij.psi.PsiAnnotation
 import com.intellij.psi.PsiClassType
+import com.intellij.psi.PsiSwitchBlock
+import com.intellij.psi.PsiSwitchLabelStatementBase
 import com.intellij.psi.PsiCodeBlock
 import com.intellij.psi.PsiElement
 import com.intellij.psi.PsiEllipsisType
@@ -111,16 +114,20 @@ class JavaCompletion(
 
         when {
             ref is PsiReferenceExpression && ref.qualifierExpression != null ->
-                fillMemberAccess(ref.qualifierExpression!!, ref, params, result)
+                fillMemberAccess(ref.qualifierExpression!!, ref, params, result, expected)
 
-            ref is PsiReferenceExpression ->
+            ref is PsiReferenceExpression -> {
+                // `case |` on an enum switch: float the selector enum's constants to the top (still allow the
+                // ordinary name reference, since a constant expression is also legal there).
+                addSwitchCaseCompletions(leaf, params, result)
                 fillNameReference(leaf, markerOffset, psi, params, result)
+            }
 
             ref != null && ref.qualifier is PsiJavaCodeReferenceElement ->
                 fillQualifiedTypeReference(ref.qualifier as PsiJavaCodeReferenceElement, ref, params, result, ctx)
 
             ref != null -> {
-                fillTypeReference(psi, params, result, ctx)
+                fillTypeReference(psi, params, result, ctx, leaf)
                 // A type-ref at a class-body MEMBER position is also where you'd start an override — offer the
                 // overridable superclass methods as full stubs (`toStr` → `@Override … toString() { … }`).
                 if (ctx == TypeCtx.ANY && isMemberPosition(leaf)) {
@@ -233,6 +240,7 @@ class JavaCompletion(
         place: PsiElement,
         params: CompletionParams,
         result: CompletionResultSet,
+        expected: PsiType? = null,
     ) {
         val resolved = (qualifier as? PsiReferenceExpression)?.resolve()
         when (resolved) {
@@ -244,13 +252,56 @@ class JavaCompletion(
             else -> when (val type = qualifier.type) {
                 // `arr.` — arrays have a `length` pseudo-field, a covariant `clone()`, and Object's methods.
                 is PsiArrayType -> emitArrayMembers(place, params, result)
-                is PsiClassType -> type.resolve()?.let { emitMembers(it, place, staticOnly = false, params, result) }
+                is PsiClassType -> type.resolve()?.let { cls ->
+                    emitMembers(cls, place, staticOnly = false, params, result)
+                    // One-hop chain completion: when the position expects a type this receiver can't produce
+                    // directly, offer `m1().m2()` where a member's result yields the expected type.
+                    if (expected != null) addChainCompletions(cls, expected, place, params, result)
+                }
                 else -> {} // a primitive receiver (shouldn't reach `.`) has no members
             }
         }
         // Postfix templates (`expr.sout` / `expr.nn` / `expr.for` / …) rewrite the whole `receiver.key`.
         addPostfixTemplates(qualifier, resolved, params, result)
         result.stopHere()
+    }
+
+    /** One-hop expected-type chains: for a no-arg member `m1()` returning a class type `T1`, if `T1` has a
+     *  no-arg member `m2()` whose result is assignable to [expected], offer the chain `m1().m2()` (boosted,
+     *  ranked just below a direct fit). Bounded to no-arg calls, one hop, and [CHAIN_LIMIT] results — a cheap
+     *  approximation of IntelliJ's chain completion. Only the first fitting `m2` per `m1` is offered. */
+    private fun addChainCompletions(cls: PsiClass, expected: PsiType, place: PsiElement, params: CompletionParams, result: CompletionResultSet) {
+        if (expected.equalsToText("void")) return
+        val helper = env.facade.resolveHelper
+        var emitted = 0
+        for (m1 in cls.allMethods) {
+            if (emitted >= CHAIN_LIMIT) break
+            if (m1.isConstructor || m1.parameterList.parametersCount != 0) continue
+            if (!params.prefixMatches(m1.name)) continue
+            if (!helper.isAccessible(m1, place, null)) continue
+            val t1 = (m1.returnType as? PsiClassType)?.resolve() ?: continue
+            val m2 = t1.allMethods.firstOrNull { m ->
+                !m.isConstructor && m.parameterList.parametersCount == 0 && m.returnType?.let {
+                    !it.equalsToText("void") && runCatching { TypeConversionUtil.isAssignable(expected, it) }.getOrDefault(false)
+                } == true && helper.isAccessible(m, place, null)
+            } ?: continue
+            result.addElement(chainItem(m1, m2))
+            emitted++
+        }
+    }
+
+    private fun chainItem(m1: PsiMethod, m2: PsiMethod): CompletionItem {
+        val insert = "${m1.name}().${m2.name}()"
+        return CompletionItem(
+            label = insert,
+            insertText = insert,
+            kind = CompletionItemKind.METHOD,
+            detail = m2.returnType?.presentableText ?: "?",
+            container = m1.containingClass?.name,
+            symbol = JavaSymbol(m1),
+            sortPriority = 10, // below a direct member (0), above keywords
+            relevance = CompletionRelevance(fitsExpectedType = true),
+        )
     }
 
     /** Contribute the postfix-template items for `receiver.key` at this member-access position. */
@@ -304,12 +355,12 @@ class JavaCompletion(
             if (m.isConstructor) return@forEach
             if (staticOnly && !m.hasModifierProperty(PsiModifier.STATIC)) return@forEach
             if (!params.prefixMatches(m.name)) return@forEach
-            if (accessible(m)) result.addElement(methodItem(m))
+            if (accessible(m)) result.addElement(methodItem(m, callableWeight = callableWeightOf(m, cls)))
         }
         cls.allFields.forEach { f ->
             if (staticOnly && !f.hasModifierProperty(PsiModifier.STATIC)) return@forEach
             if (!params.prefixMatches(f.name)) return@forEach
-            if (accessible(f)) result.addElement(fieldItem(f))
+            if (accessible(f)) result.addElement(fieldItem(f, callableWeight = callableWeightOf(f, cls)))
         }
         cls.allInnerClasses.forEach { c ->
             val n = c.name ?: return@forEach
@@ -333,7 +384,7 @@ class JavaCompletion(
             .filter { params.prefixMatches(it.name) }
             .forEach { result.addElement(symbolItem(it)) }
         // Types visible without a qualifier.
-        fillTypeReference(psi, params, result)
+        fillTypeReference(psi, params, result, leaf = leaf)
         // Statement-position live templates (`sout`, `fori`, `psvm`, `try`, …).
         JavaLiveTemplates.itemsFor(params.prefix).forEach { result.addElement(it) }
     }
@@ -343,6 +394,7 @@ class JavaCompletion(
         params: CompletionParams,
         result: CompletionResultSet,
         ctx: TypeCtx = TypeCtx.ANY,
+        leaf: PsiElement? = null,
     ) {
         // The index-backed (unimported) candidates are prefix-DEPENDENT and truncated (top-N per query), so the
         // set for `Li` isn't a superset of the set for `Lis` — the editor must re-query as the prefix grows,
@@ -355,7 +407,7 @@ class JavaCompletion(
             .filter { it.name != null && params.prefixMatches(it.name!!) && ctx.accepts(it) }
             .forEach { c -> c.qualifiedName?.let { offered += it }; emitClass(c, params, result) }
         emitIndexedTypes(psi, params, offered, result, ctx)
-        if (ctx == TypeCtx.ANY) emitKeywords(params, result) // primitives/keywords are illegal in a type-bound position
+        if (ctx == TypeCtx.ANY) emitKeywords(leaf, params, result) // primitives/keywords are illegal in a type-bound position
     }
 
     /** Unimported types from the workspace index (auto-import): offer each matching type by simple name, with
@@ -384,9 +436,20 @@ class JavaCompletion(
                     kind = classKindFromString(t.kind),
                     container = typePkg.ifEmpty { null },
                     additionalEdits = edits,
-                    relevance = CompletionRelevance(inScope = !needsImport),
+                    relevance = CompletionRelevance(inScope = !needsImport, proximity = PROX_INDEX),
                 )
             )
+        }
+    }
+
+    /** Callable grouping for a member accessed via `.`: a member declared on the receiver class is closest (0);
+     *  an inherited member sits in the middle (2); `java.lang.Object`'s methods sink to the bottom (4). */
+    private fun callableWeightOf(member: PsiMember, receiver: PsiClass): Int {
+        val owner = member.containingClass ?: return 0
+        return when {
+            owner === receiver || owner.qualifiedName == receiver.qualifiedName -> 0
+            owner.qualifiedName == "java.lang.Object" -> 4
+            else -> 2
         }
     }
 
@@ -404,14 +467,12 @@ class JavaCompletion(
         else -> CompletionItemKind.CLASS
     }
 
-    /** Java keywords + primitive type names, prefix-filtered. Offered in name/type positions (not after
-     *  `expr.` / `pkg.`), ranked below real symbols via [sortPriority]. */
-    private fun emitKeywords(params: CompletionParams, result: CompletionResultSet) {
-        JAVA_KEYWORDS.forEach { kw ->
-            if (params.prefixMatches(kw)) {
-                result.addElement(CompletionItem(label = kw, insertText = kw, kind = CompletionItemKind.KEYWORD, sortPriority = 50))
-            }
-        }
+    /** Scope-gated Java keywords, prefix-filtered. Offered in name/type positions (not after `expr.` / `pkg.`),
+     *  ranked below real symbols via `sortPriority`. Only the keywords legal at [leaf] are offered (see
+     *  [JavaKeywords]); a null leaf (a pure type-reference position with no marker leaf) offers none. */
+    private fun emitKeywords(leaf: PsiElement?, params: CompletionParams, result: CompletionResultSet) {
+        if (leaf == null) return
+        JavaKeywords.itemsFor(leaf) { params.prefixMatches(it) }.forEach { result.addElement(it) }
     }
 
     private fun fillQualifiedTypeReference(
@@ -463,7 +524,8 @@ class JavaCompletion(
         CLASS_EXTENDS,  // a class's `extends` — a non-final class
         INTERFACE,      // `implements`, or an interface's `extends` — an interface
         THROWABLE,      // a `throws` clause or `catch (…)` — a Throwable subtype
-        INSTANTIABLE;   // `new X(…)` — a concrete, instantiable type
+        INSTANTIABLE,   // `new X(…)` — a concrete, instantiable type
+        ANNOTATION;     // `@X` — an annotation type
 
         fun accepts(c: PsiClass): Boolean = when (this) {
             ANY -> true
@@ -471,6 +533,7 @@ class JavaCompletion(
             INTERFACE -> c.isInterface && !c.isAnnotationType
             THROWABLE -> InheritanceUtil.isInheritor(c, "java.lang.Throwable")
             INSTANTIABLE -> !c.isInterface && !c.isAnnotationType && !c.isEnum && !c.hasModifierProperty(PsiModifier.ABSTRACT)
+            ANNOTATION -> c.isAnnotationType
         }
 
         /** Coarse filter for index-backed (unresolved) candidates, which carry only a kind string. Precise for
@@ -481,10 +544,15 @@ class JavaCompletion(
             INTERFACE -> kind == "interface"
             THROWABLE -> kind == "class"                        // can't check Throwable-ness without resolving
             INSTANTIABLE -> kind == "class" || kind == "record" // can't check abstract without resolving
+            ANNOTATION -> kind == "annotation"
         }
     }
 
     private fun typeContext(ref: PsiJavaCodeReferenceElement): TypeCtx {
+        // `@X` — the ref is an annotation's name element; offer only annotation types.
+        PsiTreeUtil.getParentOfType(ref, PsiAnnotation::class.java, false)?.let { ann ->
+            if (ann.nameReferenceElement === ref) return TypeCtx.ANNOTATION
+        }
         PsiTreeUtil.getParentOfType(ref, PsiNewExpression::class.java, false)?.let { newExpr ->
             if (newExpr.classReference === ref) return TypeCtx.INSTANTIABLE
         }
@@ -529,6 +597,30 @@ class JavaCompletion(
                     relevance = CompletionRelevance(fitsExpectedType = true, inScope = !needsImport),
                 )
             )
+        }
+    }
+
+    // --- case-label completion (`case <caret>` on an enum → the selector's constants) --------------------
+
+    /** When [leaf] sits in a `case` label whose switch selector is an enum, offer that enum's constants by
+     *  simple name, boosted (they fit by construction). No-op otherwise. */
+    private fun addSwitchCaseCompletions(leaf: PsiElement, params: CompletionParams, result: CompletionResultSet) {
+        PsiTreeUtil.getParentOfType(leaf, PsiSwitchLabelStatementBase::class.java, false) ?: return
+        val switch = PsiTreeUtil.getParentOfType(leaf, PsiSwitchBlock::class.java, false) ?: return
+        val enumClass = (switch.expression?.type as? PsiClassType)?.resolve()?.takeIf { it.isEnum } ?: return
+        enumClass.fields.forEach { f ->
+            if (f is com.intellij.psi.PsiEnumConstant && params.prefixMatches(f.name)) {
+                result.addElement(
+                    CompletionItem(
+                        label = f.name,
+                        insertText = f.name,
+                        kind = CompletionItemKind.ENUM_CONSTANT,
+                        detail = enumClass.name,
+                        symbol = JavaSymbol(f),
+                        relevance = CompletionRelevance(fitsExpectedType = true, proximity = PROX_MEMBER),
+                    ),
+                )
+            }
         }
     }
 
@@ -614,7 +706,7 @@ class JavaCompletion(
 
     // --- item construction --------------------------------------------------------------------------------
 
-    private fun methodItem(m: PsiMethod): CompletionItem {
+    private fun methodItem(m: PsiMethod, proximity: Int = 0, callableWeight: Int = 0): CompletionItem {
         val hasParams = m.parameterList.parametersCount > 0
         val insert = "${m.name}()"
         val paramText = m.parameterList.parameters.joinToString(", ") { "${it.type.presentableText} ${it.name}" }
@@ -626,21 +718,21 @@ class JavaCompletion(
             container = m.containingClass?.name,
             symbol = JavaSymbol(m),
             caret = if (hasParams) CaretAction.At(m.name.length + 1) else CaretAction.AtEnd,
-            relevance = CompletionRelevance(deprecated = m.isDeprecated),
+            relevance = CompletionRelevance(deprecated = m.isDeprecated, proximity = proximity, callableWeight = callableWeight),
         )
     }
 
-    private fun fieldItem(f: PsiField): CompletionItem = CompletionItem(
+    private fun fieldItem(f: PsiField, proximity: Int = 0, callableWeight: Int = 0): CompletionItem = CompletionItem(
         label = f.name,
         insertText = f.name,
         kind = if (f is com.intellij.psi.PsiEnumConstant) CompletionItemKind.ENUM_CONSTANT else CompletionItemKind.FIELD,
         detail = f.type.presentableText,
         container = f.containingClass?.name,
         symbol = JavaSymbol(f),
-        relevance = CompletionRelevance(deprecated = f.isDeprecated),
+        relevance = CompletionRelevance(deprecated = f.isDeprecated, proximity = proximity, callableWeight = callableWeight),
     )
 
-    private fun emitClass(c: PsiClass, params: CompletionParams, result: CompletionResultSet) {
+    private fun emitClass(c: PsiClass, params: CompletionParams, result: CompletionResultSet, proximity: Int = PROX_TYPE) {
         val n = c.name ?: return
         result.addElement(
             CompletionItem(
@@ -650,7 +742,7 @@ class JavaCompletion(
                 container = (c.containingFile as? PsiJavaFile)?.packageName?.ifEmpty { null }
                     ?: c.qualifiedName?.substringBeforeLast('.', ""),
                 symbol = JavaSymbol(c),
-                relevance = CompletionRelevance(deprecated = c.isDeprecated),
+                relevance = CompletionRelevance(deprecated = c.isDeprecated, proximity = proximity),
             )
         )
     }
@@ -661,16 +753,24 @@ class JavaCompletion(
         result.addElement(CompletionItem(label = n, insertText = n, kind = CompletionItemKind.PACKAGE))
     }
 
+    /** A scope symbol at a bare-name position. Proximity ranks locals/params over enclosing-type members over
+     *  types, so a nearby variable outranks a same-prefix library class (the KindWeigher signal Java lacked). */
     private fun symbolItem(s: Symbol): CompletionItem {
+        val prox = when (s.kind) {
+            SymbolKind.LOCAL_VARIABLE, SymbolKind.PARAMETER -> PROX_LOCAL
+            SymbolKind.FIELD, SymbolKind.METHOD, SymbolKind.ENUM_CONSTANT -> PROX_MEMBER
+            else -> PROX_TYPE
+        }
         val psi = (s as? JavaSymbol)?.psi
-        if (psi is PsiMethod) return methodItem(psi)
-        if (psi is PsiField) return fieldItem(psi)
+        if (psi is PsiMethod) return methodItem(psi, proximity = prox)
+        if (psi is PsiField) return fieldItem(psi, proximity = prox)
         return CompletionItem(
             label = s.name,
             insertText = s.name,
             kind = symbolItemKind(s.kind),
             detail = s.type?.qualifiedName,
             symbol = s,
+            relevance = CompletionRelevance(proximity = prox),
         )
     }
 
@@ -703,16 +803,16 @@ class JavaCompletion(
     companion object {
         /** IntelliJ's canonical completion marker — a valid identifier the parser treats as a real name. */
         private const val DUMMY = "IntellijIdeaRulezzz"
+        // Keyword completion is scope-gated in JavaKeywords (the flat reserved-word list was position-blind).
 
-        /** Java keywords + primitive type names (JLS reserved words + `var`/`record`/`yield`). Offered
-         *  prefix-filtered in name/type positions; over-offering by context is harmless once prefix-gated. */
-        private val JAVA_KEYWORDS = listOf(
-            "abstract", "assert", "boolean", "break", "byte", "case", "catch", "char", "class", "const",
-            "continue", "default", "do", "double", "else", "enum", "extends", "final", "finally", "float",
-            "for", "goto", "if", "implements", "import", "instanceof", "int", "interface", "long", "native",
-            "new", "package", "private", "protected", "public", "record", "return", "short", "static",
-            "strictfp", "super", "switch", "synchronized", "this", "throw", "throws", "transient", "try",
-            "var", "void", "volatile", "while", "yield", "true", "false", "null",
-        )
+        // Declaration-proximity tiers (lower = nearer) read by the engine's KindWeigher. Java left this at 0
+        // (no signal) so a local never outranked a same-prefix library type; these give it Kotlin's ordering.
+        private const val PROX_LOCAL = 1   // a local variable / parameter
+        private const val PROX_MEMBER = 2  // an enclosing-type member reachable by bare name
+        private const val PROX_TYPE = 3    // a type visible without an import (own / imported / same-package)
+        private const val PROX_INDEX = 4   // an unimported type from the workspace index
+
+        /** Max one-hop chain (`m1().m2()`) suggestions offered at a member-access position. */
+        private const val CHAIN_LIMIT = 8
     }
 }
