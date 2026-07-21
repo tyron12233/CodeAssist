@@ -280,7 +280,14 @@ class Interpreter(
                 // evaluating keeps the composition balanced (the node never opens a group). A nested gap inside
                 // an otherwise-supported statement still surfaces — only a statement that IS a gap is skipped.
                 if (tolerateGaps && st is RNode.Unsupported) continue
-                last = eval(st, env)
+                last = if (tolerateGaps) {
+                    // A recoverable cannot-load boundary hit while evaluating a statement (e.g. a Compose icon
+                    // whose per-icon facade isn't loadable) skips just that statement — one missing icon leaves
+                    // the rest of the UI rendering, instead of the whole preview failing.
+                    try { eval(st, env) } catch (b: InterpreterBoundaryException) { Unit }
+                } else {
+                    eval(st, env)
+                }
             }
             last
         }
@@ -707,10 +714,20 @@ class Interpreter(
         if (receiver is SourceObject && call.dispatch == DispatchKind.MEMBER) {
             return dispatchSourceMember(receiver, callee.displayName, call, env)
         }
-        // Numeric conversions (`(progress * 100).toInt()`, `x.toFloat()`) have no JVM method on the boxed type,
-        // so the reflective dispatcher would fail — compute them intrinsically.
-        if (call.dispatch == DispatchKind.MEMBER && receiver is Number && call.args.isEmpty()) {
-            numericConversion(receiver, callee.displayName)?.let { return it.value }
+        // Numeric conversions (`(progress * 100).toInt()`, `x.toFloat()`) and bitwise operators (`x and y`,
+        // `1 shl 4`, `x.inv()`) are compiler intrinsics on `Int`/`Long` — the boxed JVM type has no such method,
+        // so the reflective dispatcher would fail. Compute them here. A bitwise name only reaches this branch
+        // with a `Number` receiver (a user's own `infix fun Foo.and` has a non-Number receiver), so it is safe
+        // to claim the call.
+        if (call.dispatch == DispatchKind.MEMBER && receiver is Number) {
+            if (call.args.isEmpty()) {
+                numericConversion(receiver, callee.displayName)?.let { return it.value }
+                if (callee.displayName == "inv") return bitwiseInv(receiver)
+            } else if (call.args.size == 1 && callee.displayName in BITWISE) {
+                val rhs = eval(call.args.first().value, env)
+                if (rhs is Number) return bitwiseBinary(callee.displayName, receiver, rhs)
+                throw InterpreterException("non-numeric operand for bitwise `${callee.displayName}`: $rhs")
+            }
         }
         val args = call.args.map { eval(it.value, env) }
         return try {
@@ -1678,7 +1695,7 @@ class Interpreter(
         val cls = loadInitialized(ownerFqn)
             ?: run {
                 libraryFallback?.takeIf { it.hasClass(ownerFqn) }?.let { return it.invokeStatic(ownerFqn, getterName, emptyList()) }
-                throw InterpreterException("cannot load facade `$ownerFqn` for top-level property `$name`")
+                throw InterpreterBoundaryException("cannot load facade `$ownerFqn` for top-level property `$name`")
             }
         val getter = getterName
         val m = cls.methods.firstOrNull {
@@ -1698,7 +1715,9 @@ class Interpreter(
         val cls = loadClassAcross(ownerFqn, initialize = false, preferred = classLoader)
             ?: run {
                 libraryFallback?.takeIf { it.hasClass(ownerFqn) }?.let { return it.invokeStatic(ownerFqn, getterName, listOf(receiver), leadingReceivers = 1) }
-                throw InterpreterException("cannot load facade `$ownerFqn` for extension property `$name`")
+                // A missing library facade (e.g. a Compose icon's per-icon `…Kt`) is a recoverable boundary:
+                // partial rendering skips the one statement rather than failing the whole preview.
+                throw InterpreterBoundaryException("cannot load facade `$ownerFqn` for extension property `$name`")
             }
         val getter = getterName
         val m = cls.methods.firstOrNull {
@@ -2084,6 +2103,12 @@ class Interpreter(
 /** Thrown when the interpreter meets a construct it cannot execute — the honest boundary, never a guess.
  *  Open for [InterpreterSecurityException] (a hook refusal), which boundary handling treats identically. */
 open class InterpreterException(message: String) : RuntimeException(message)
+
+/** A RECOVERABLE cannot-load boundary: a value depends on a library class/facade that isn't available to the
+ *  interpreter (a Compose icon's `…Kt` facade, an unresolved dependency). Under partial rendering the statement
+ *  that hit it is skipped rather than failing the whole preview — one unloadable icon leaves the rest of the UI
+ *  intact. A hard [InterpreterException] still aborts (a genuine interpretation gap, not a missing dependency). */
+class InterpreterBoundaryException(message: String) : InterpreterException(message)
 
 /**
  * A project-source instance the interpreter materializes from a [ResolvedClass] — source types aren't compiled

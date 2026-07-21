@@ -624,10 +624,16 @@ internal fun KotlinResolver.typeOfName(name: String, offset: Int): KotlinType? {
     if (narrowings.isEmpty()) smartCastTypeAt(name, offset)?.let { return it }
     localsAt(offset).firstOrNull { it.name == name }?.let { return it.type as? KotlinType }
     // Members of any implicit `this` (apply/with/run block, extension fn, enclosing class).
-    for (recv in implicitReceiversAt(offset)) memberNamed(
-        recv,
-        name
-    )?.let { return it.type as? KotlinType }
+    for (recv in implicitReceiversAt(offset)) {
+        // For a same-file class PROPERTY prefer the live PSI inference: the source model types an implicit-typed
+        // member from a crude parse of the initializer's callee name (`val x = MutableStateFlow(Key())` →
+        // raw `MutableStateFlow`), dropping the generic argument, whereas [sameFileProperty] runs full
+        // `inferType` on the initializer and keeps it (`MutableStateFlow<Key>`). Only for a FIELD — a function
+        // reference keeps the model's shape.
+        val live = sameFileTypeMember(recv.qualifiedName, name)?.takeIf { it.kind == SymbolKind.FIELD }
+        (live?.type as? KotlinType)?.let { return it }
+        (memberNamed(recv, name)?.type as? KotlinType)?.let { return it }
+    }
     // A bare read of an enclosing class's COMPANION member (`fun f() = CONST` inside the class) — companion
     // members are accessible without a qualifier, but live on a distinct classifier the receiver walk misses.
     enclosingCompanionMember(name, offset)?.let { return it.type as? KotlinType }

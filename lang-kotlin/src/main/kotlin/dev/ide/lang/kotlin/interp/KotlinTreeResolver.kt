@@ -853,9 +853,12 @@ class KotlinTreeResolver(
         }
         // A bare type name used as a VALUE is its singleton: an `object` (its `INSTANCE`) or a type with a
         // companion (`Modifier` → `Modifier.Companion`, the empty modifier; `Color` for `Color.Red`). The
-        // interpreter materializes it reflectively from the runtime class.
+        // interpreter materializes it reflectively from the runtime class. Gate on the resolved FQN actually
+        // being a TYPE: `resolveTypeName` also returns the FQN of a non-type explicit import (an extension
+        // property like `androidx.lifecycle.viewModelScope`), which must NOT be lowered as an object reference —
+        // that produces a hard "cannot load object" crash at render instead of a skippable gap.
         val typeFqn = runCatching { service.resolveTypeName(name, resolver.fileContext) }.getOrNull()
-        if (typeFqn != null) {
+        if (typeFqn != null && runCatching { service.isKnownType(typeFqn) }.getOrDefault(false)) {
             return RNode.Name(Binding.ObjectRef(typeFqn, name), span(e))
         }
         return unsupported("unresolved name `$name`", e)
