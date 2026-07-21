@@ -127,6 +127,19 @@
                 android:process=":preview"
                 android:exported="false" />
 
+        <!-- App-log sink: the debug-only log bridge woven into a built app (a SEPARATE untrusted app) binds to
+             this over Binder and pushes its logs to the IDE's Logcat console tab. A LocalSocket can't cross the
+             untrusted-app boundary (SELinux denies connectto), so this is exported and resolved by the SINK
+             action. Unauthenticated by design (the built app is signed with a different key); the channel gates
+             every frame on the currently-launched package, so a stray bind contributes nothing. -->
+        <service
+                android:name=".applog.AppLogSinkService"
+                android:exported="true">
+            <intent-filter>
+                <action android:name="dev.ide.applog.SINK" />
+            </intent-filter>
+        </service>
+
         <!-- Exposes a single project file to other apps as a content:// URI for Share / "Open with",
              without FileUriExposedException. Folder-level browsing is handled by the DocumentsProvider below. -->
         <provider

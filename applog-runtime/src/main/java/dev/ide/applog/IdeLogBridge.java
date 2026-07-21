@@ -1,24 +1,31 @@
 package dev.ide.applog;
 
+import android.content.ComponentName;
 import android.content.Context;
-import android.net.LocalSocket;
-import android.net.LocalSocketAddress;
+import android.content.Intent;
+import android.content.ServiceConnection;
+import android.content.pm.ResolveInfo;
+import android.os.IBinder;
+import android.os.Parcel;
 
 import java.io.BufferedReader;
 import java.io.ByteArrayOutputStream;
-import java.io.IOException;
 import java.io.InputStreamReader;
 import java.io.OutputStream;
 import java.io.PrintStream;
 import java.nio.charset.Charset;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.TimeUnit;
 
 /**
  * The injected, in-process log bridge. Runs entirely inside the built (debug) app and forwards its logs to
- * the IDE over an abstract-namespace {@link LocalSocket} — a device-local channel that needs no Android
- * permission (unlike reading another app's logcat, which requires the privileged {@code READ_LOGS}). The
- * IDE hosts the matching {@code LocalServerSocket} and renders what arrives in a live "Logcat" console tab.
+ * the IDE over <b>Binder</b>. A raw {@code LocalSocket} can't be used: on modern Android SELinux denies one
+ * untrusted app connecting to another's abstract/local socket ({@code avc: denied { connectto }}), and the
+ * IDE and the built app are separate untrusted apps. Binder is the sanctioned cross-app channel. The IDE hosts
+ * an exported service resolvable by the {@link #SINK_ACTION} intent; this bridge resolves + binds it and pushes
+ * batches of log frames through {@link #TXN_SUBMIT}. The IDE renders what arrives in a live "Logcat" console tab.
  *
  * <p>Sources of log lines, in order of richness:
  * <ol>
@@ -31,19 +38,24 @@ import java.util.concurrent.TimeUnit;
  *       previously-installed handler so the app still crashes normally.</li>
  * </ol>
  *
- * <p><b>Wire protocol</b> (must stay in sync with the IDE-side reader in {@code :ide-android}
- * {@code AppLogChannelImpl}): a stream of length-prefixed frames — a 4-byte big-endian length, then that
- * many UTF-8 bytes. The payload is tab-separated with a leading kind field:
+ * <p><b>Wire payload</b> (must stay in sync with the IDE-side {@code AppLogWire} in {@code :ide-core}): each
+ * submitted frame is a tab-separated string with a leading kind field:
  * <pre>
- *   H \t &lt;protocolVersion&gt; \t &lt;packageName&gt; \t &lt;pid&gt; \t &lt;token&gt;              (one HELLO on connect)
+ *   H \t &lt;protocolVersion&gt; \t &lt;packageName&gt; \t &lt;pid&gt; \t &lt;token&gt;              (one HELLO per connection)
  *   L \t &lt;timestampMs&gt; \t &lt;pid&gt; \t &lt;tid&gt; \t &lt;level&gt; \t &lt;tag&gt; \t &lt;message&gt;   (each LOG record)
  * </pre>
- * The {@code message} is the remainder after the sixth tab and may itself contain tabs and newlines.
+ * The {@code message} is the remainder after the sixth tab and may itself contain tabs and newlines. Frames are
+ * carried as a {@code String[]} in the Binder transaction (no length-prefix framing) rather than a byte stream.
  */
 public final class IdeLogBridge {
 
-    /** Abstract-namespace socket name the IDE listens on. Keep in sync with the IDE-side reader. */
-    public static final String SOCKET_NAME = "dev.ide.codeassist.applog";
+    // --- transport (Binder) — keep in sync with ide-core AppLogWire -------------------------------
+    /** Intent action the IDE's exported log-sink service is resolvable by. */
+    public static final String SINK_ACTION = "dev.ide.applog.SINK";
+    /** Interface token written into the submit transaction's Parcel. */
+    public static final String BINDER_DESCRIPTOR = "dev.ide.applog.IAppLogSink";
+    /** Submit transaction code ({@code IBinder.FIRST_CALL_TRANSACTION}): a batch of wire payloads. */
+    public static final int TXN_SUBMIT = 1;
     /** Wire protocol version, bumped on any framing change. */
     public static final int PROTOCOL_VERSION = 1;
 
@@ -56,7 +68,10 @@ public final class IdeLogBridge {
 
     /** Bounded so a flood while the IDE is not listening can never OOM the host app (drop-oldest). */
     private static final int QUEUE_CAPACITY = 4096;
-    private static final int CONNECT_RETRY_MS = 500;
+    /** Max frames coalesced into one submit transaction (keeps each Binder payload well under the 1 MiB limit). */
+    private static final int SUBMIT_BATCH_MAX = 256;
+    /** How long the sender waits for the IDE to bind before giving up (so it never spins when the IDE is absent). */
+    private static final long BIND_WAIT_MS = 8000L;
 
     private static volatile boolean started = false;
 
@@ -64,6 +79,11 @@ public final class IdeLogBridge {
     private final int pid;
     private final String token;
     private final LinkedBlockingQueue<String> queue = new LinkedBlockingQueue<String>(QUEUE_CAPACITY);
+
+    private Context appContext;
+    private final Object bindLock = new Object();
+    /** The IDE's sink binder once bound; null before bind / after the binding drops. */
+    private volatile IBinder sink;
 
     private IdeLogBridge(String packageName, int pid, String token) {
         this.packageName = packageName;
@@ -80,11 +100,14 @@ public final class IdeLogBridge {
         String tok = System.getProperty("dev.ide.applog.token", "");
         // Fully-qualified: java.lang.Process (the logcat subprocess) is used below, so we don't import android.os.Process.
         IdeLogBridge bridge = new IdeLogBridge(pkg != null ? pkg : "", android.os.Process.myPid(), tok != null ? tok : "");
+        bridge.appContext = context != null ? context.getApplicationContext() : null;
         bridge.launch();
     }
 
     private void launch() {
-        // The single writer: connects (with retry), then drains the queue to the socket, reconnecting on drop.
+        // Bind to the IDE's sink service (async; onServiceConnected wakes the sender). No socket, no retry spin.
+        bindToIde();
+        // The single writer: waits for the binding, then drains the queue to the IDE, reconnecting on drop.
         Thread sender = new Thread(new Runnable() {
             @Override public void run() { runSender(); }
         }, "ide-applog-sender");
@@ -98,6 +121,30 @@ public final class IdeLogBridge {
         installStdioTees();
         // android.util.Log.*: best-effort via reading our own PID's logcat.
         startLogcatReader();
+    }
+
+    /** Resolve the IDE's exported sink service by [SINK_ACTION] and bind to it. A missing/invisible IDE (the
+     *  service isn't installed, or package visibility wasn't granted) simply leaves the bridge unbound — no
+     *  retries, no log spam. BIND_AUTO_CREATE lets the system re-deliver onServiceConnected after a drop. */
+    private void bindToIde() {
+        if (appContext == null) return;
+        try {
+            Intent intent = new Intent(SINK_ACTION);
+            ResolveInfo ri = appContext.getPackageManager().resolveService(intent, 0);
+            if (ri == null || ri.serviceInfo == null) return; // IDE not installed / not visible to this app
+            intent.setComponent(new ComponentName(ri.serviceInfo.packageName, ri.serviceInfo.name));
+            ServiceConnection conn = new ServiceConnection() {
+                @Override public void onServiceConnected(ComponentName name, IBinder binder) {
+                    synchronized (bindLock) { sink = binder; bindLock.notifyAll(); }
+                }
+                @Override public void onServiceDisconnected(ComponentName name) {
+                    synchronized (bindLock) { sink = null; }
+                }
+            };
+            appContext.bindService(intent, conn, Context.BIND_AUTO_CREATE);
+        } catch (Throwable ignored) {
+            // Can't bind (service gone, security, older-API quirk) — the bridge stays dark, the app is unaffected.
+        }
     }
 
     // --- producers -------------------------------------------------------------------------------
@@ -184,58 +231,74 @@ public final class IdeLogBridge {
         }
     }
 
-    // --- the single socket writer ----------------------------------------------------------------
+    // --- the single Binder writer ----------------------------------------------------------------
 
     private void runSender() {
+        IBinder binder = awaitSink();
+        if (binder == null) return; // IDE never bound (not installed / not visible / blocked) — give up quietly
+        boolean helloSent = false;
+        List<String> batch = new ArrayList<String>();
         while (true) {
-            LocalSocket socket = connect();
-            if (socket == null) return; // gave up (bridge disabled for this run)
             try {
-                OutputStream out = socket.getOutputStream();
-                writeFrame(out, "H\t" + PROTOCOL_VERSION + "\t" + packageName + "\t" + pid + "\t" + token);
-                out.flush();
-                while (true) {
-                    String payload = queue.poll(30, TimeUnit.SECONDS);
-                    if (payload == null) continue; // keep the connection warm through idle periods
-                    writeFrame(out, payload);
-                    out.flush();
+                IBinder b = sink;
+                if (b == null) {
+                    // Binding dropped — wait (bounded) for BIND_AUTO_CREATE to re-deliver it, then resend HELLO.
+                    b = awaitSink();
+                    if (b == null) return;
+                    helloSent = false;
                 }
+                if (!helloSent) {
+                    submit(b, new String[]{ hello() });
+                    helloSent = true;
+                }
+                String first = queue.poll(30, TimeUnit.SECONDS);
+                if (first == null) continue; // idle — keep the loop alive
+                batch.clear();
+                batch.add(first);
+                queue.drainTo(batch, SUBMIT_BATCH_MAX - 1);
+                submit(b, batch.toArray(new String[batch.size()]));
             } catch (InterruptedException e) {
                 return;
-            } catch (IOException e) {
-                // Socket dropped (IDE closed the tab / went away). Loop and try to reconnect; queued records
-                // keep buffering (bounded) so a later reconnect resumes the stream.
-                try { socket.close(); } catch (Throwable ignored) {}
+            } catch (Throwable t) {
+                // The binding died mid-submit (DeadObjectException / RemoteException). Drop it and loop: the
+                // outer awaitSink waits for a reconnect (or gives up after BIND_WAIT_MS).
+                sink = null;
             }
         }
     }
 
-    private LocalSocket connect() {
-        // Retry indefinitely but cheaply: the IDE opens its server socket before launching the app, so this
-        // normally succeeds on the first try. A daemon thread parked here costs nothing if the IDE never listens.
-        while (true) {
-            try {
-                LocalSocket socket = new LocalSocket();
-                socket.connect(new LocalSocketAddress(SOCKET_NAME, LocalSocketAddress.Namespace.ABSTRACT));
-                return socket;
-            } catch (IOException e) {
+    /** Block (up to [BIND_WAIT_MS]) until the IDE's sink binder is available, or null if it never binds. */
+    private IBinder awaitSink() {
+        synchronized (bindLock) {
+            long deadline = System.currentTimeMillis() + BIND_WAIT_MS;
+            while (sink == null) {
+                long remaining = deadline - System.currentTimeMillis();
+                if (remaining <= 0) return null;
                 try {
-                    Thread.sleep(CONNECT_RETRY_MS);
-                } catch (InterruptedException ie) {
+                    bindLock.wait(remaining);
+                } catch (InterruptedException e) {
                     return null;
                 }
             }
+            return sink;
         }
     }
 
-    private static void writeFrame(OutputStream out, String payload) throws IOException {
-        byte[] bytes = payload.getBytes(UTF8);
-        int len = bytes.length;
-        out.write((len >>> 24) & 0xFF);
-        out.write((len >>> 16) & 0xFF);
-        out.write((len >>> 8) & 0xFF);
-        out.write(len & 0xFF);
-        out.write(bytes);
+    /** The one-time HELLO frame identifying this app to the IDE (which gates on the launched package). */
+    private String hello() {
+        return "H\t" + PROTOCOL_VERSION + "\t" + packageName + "\t" + pid + "\t" + token;
+    }
+
+    /** Submit a batch of wire-payload frames to the IDE over Binder (oneway — never blocks the app). */
+    private void submit(IBinder binder, String[] frames) throws Exception {
+        Parcel data = Parcel.obtain();
+        try {
+            data.writeInterfaceToken(BINDER_DESCRIPTOR);
+            data.writeStringArray(frames);
+            binder.transact(TXN_SUBMIT, data, null, IBinder.FLAG_ONEWAY);
+        } finally {
+            data.recycle();
+        }
     }
 
     /**
@@ -254,7 +317,7 @@ public final class IdeLogBridge {
             this.tag = tag;
         }
 
-        @Override public void write(int b) throws IOException {
+        @Override public void write(int b) throws java.io.IOException {
             delegate.write(b);
             if (b == '\n') {
                 flushLine();
@@ -263,7 +326,7 @@ public final class IdeLogBridge {
             }
         }
 
-        @Override public void flush() throws IOException {
+        @Override public void flush() throws java.io.IOException {
             delegate.flush();
         }
 

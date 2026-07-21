@@ -32,6 +32,7 @@ internal class InjectAppLogProviderTask(
     private val mergedManifest: Path,
     private val providerClass: String,
     private val authority: String,
+    private val sinkAction: String,
     private val outManifest: Path,
 ) : Task {
     override val inputs: TaskInputs
@@ -39,6 +40,7 @@ internal class InjectAppLogProviderTask(
             filePaths("manifest", listOf(mergedManifest).filter { Files.exists(it) })
             property("provider", providerClass)
             property("authority", authority)
+            property("sinkAction", sinkAction)
         }
     override val outputs: TaskOutputs get() = TaskOutputsImpl().apply { filePath("manifest", outManifest) }
 
@@ -79,6 +81,23 @@ internal class InjectAppLogProviderTask(
             // A high initOrder boots the bridge before lower-order providers, so early startup logs are captured.
             provider.setAttribute("android:initOrder", "2147483646")
             application.appendChild(provider)
+        }
+
+        // Package visibility (Android 11+): the built app must be able to SEE + bind the IDE's exported log-sink
+        // service, which the bridge resolves by [sinkAction]. Add a `<queries><intent>` for it (a sibling of
+        // `<application>`, directly under `<manifest>`), idempotently. Without it, `resolveService` returns null
+        // on API 30+ and the bridge silently stays dark.
+        val manifest = doc.documentElement
+        val queries = firstChildTag(manifest, "queries") ?: doc.createElement("queries").also { manifest.appendChild(it) }
+        val hasSinkIntent = childElements(queries).any { q ->
+            q.tagName == "intent" && childElements(q).any { it.tagName == "action" && it.androidAttr("name") == sinkAction }
+        }
+        if (!hasSinkIntent) {
+            val intent = doc.createElement("intent")
+            val action = doc.createElement("action")
+            action.setAttribute("android:name", sinkAction)
+            intent.appendChild(action)
+            queries.appendChild(intent)
         }
 
         outManifest.parent?.let { Files.createDirectories(it) }

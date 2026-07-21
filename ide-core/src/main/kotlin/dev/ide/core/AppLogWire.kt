@@ -19,12 +19,25 @@ sealed interface AppLogEvent {
  * ```
  * [message] is everything after the sixth tab and may itself contain tabs and newlines.
  *
- * Pure (no Android): the socket I/O lives in `:ide-android`'s `AppLogChannelImpl`, which reads frames through
- * [readFrame] and decodes them with [parse]; this half is unit-testable on the plain JVM.
+ * Pure (no Android): the Binder transport lives in `:ide-android`'s `AppLogSinkService`/`AppLogChannelImpl`,
+ * which decodes each received payload with [parse]; this half is unit-testable on the plain JVM. [readFrame]
+ * remains for the length-prefixed framing (kept for its round-trip test) though the Binder path passes payloads
+ * as a `String[]` directly.
  */
 object AppLogWire {
     const val PROTOCOL_VERSION = 1
-    const val SOCKET_NAME = "dev.ide.codeassist.applog"
+
+    /**
+     * Transport (Binder). A `LocalSocket` can't cross the untrusted-app boundary — SELinux denies one untrusted
+     * app connecting to another's abstract socket (`avc: denied { connectto }`) — so the built app pushes its
+     * log frames to the IDE over Binder instead. The IDE hosts an exported service resolvable by [SINK_ACTION];
+     * the injected bridge resolves + binds it and sends batches through [TXN_SUBMIT] (a Parcel opened with
+     * [BINDER_DESCRIPTOR] carrying a `String[]` of wire payloads). These MUST stay in sync with the client copy
+     * in `:applog-runtime`'s `IdeLogBridge`.
+     */
+    const val SINK_ACTION = "dev.ide.applog.SINK"
+    const val BINDER_DESCRIPTOR = "dev.ide.applog.IAppLogSink"
+    const val TXN_SUBMIT = 1 // android.os.IBinder.FIRST_CALL_TRANSACTION
 
     /** A defensive cap on a single frame (a well-behaved bridge never approaches it) so a bad/hostile peer
      *  cannot make us allocate an enormous buffer. */

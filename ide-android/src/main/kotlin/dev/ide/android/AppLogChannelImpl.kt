@@ -1,7 +1,5 @@
 package dev.ide.android
 
-import android.net.LocalServerSocket
-import android.net.LocalSocket
 import dev.ide.core.AppLogChannel
 import dev.ide.core.AppLogEntry
 import dev.ide.core.AppLogEvent
@@ -9,41 +7,41 @@ import dev.ide.core.AppLogSnapshot
 import dev.ide.core.AppLogWire
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
-import java.io.IOException
-import java.util.concurrent.atomic.AtomicInteger
 
 /**
- * On-device [AppLogChannel]: hosts a [LocalServerSocket] in the abstract namespace ([AppLogWire.SOCKET_NAME])
- * that the log bridge injected into a running debug app connects to, decodes the wire frames with the pure
- * [AppLogWire], and publishes a live [AppLogSnapshot].
+ * On-device [AppLogChannel]: receives the log frames the bridge injected into a running debug app pushes over
+ * Binder (through the exported [dev.ide.android.applog.AppLogSinkService]), decodes them with the pure
+ * [AppLogWire], and publishes a live [AppLogSnapshot]. A raw `LocalSocket` can't be used — SELinux denies one
+ * untrusted app connecting to another's abstract socket — so the transport is Binder; this channel is the sink
+ * the (system-instantiated) service routes to via [AppLogSinkRegistry] (both live in the IDE process).
  *
- * A single server serves every project (the socket name is device-global). Only the connection whose HELLO
- * package matches the currently-launched app ([activePackage], set by [start]) contributes — stray or stale
- * connections are dropped. Emissions are coalesced (~10/s) so a chatty app can't thrash the UI or the flow.
+ * Only frames whose HELLO package matches the currently-launched app ([activePackage], set by [start])
+ * contribute — stray or stale connections are dropped. Emissions are coalesced (~10/s) so a chatty app can't
+ * thrash the UI or the flow.
  */
 class AppLogChannelImpl : AppLogChannel {
     private val _logs = MutableStateFlow(AppLogSnapshot())
     override val logs: StateFlow<AppLogSnapshot> get() = _logs
 
     @Volatile private var activePackage: String? = null
-    private val liveConnections = AtomicInteger(0)
+    /** The package whose HELLO we accepted for the current connection; gates records against [activePackage]. */
+    @Volatile private var connectedPackage: String? = null
 
     private val lock = Any()
     private val entries = ArrayDeque<AppLogEntry>()
     private var totalAppended = 0L // guarded by lock; monotonic within a session, reset on start/clear
     @Volatile private var dirty = false
 
-    @Volatile private var server: LocalServerSocket? = null
-    @Volatile private var acceptThread: Thread? = null
     @Volatile private var flushThread: Thread? = null
 
     @Synchronized
     override fun start(packageName: String) {
         activePackage = packageName
+        connectedPackage = null
         synchronized(lock) { entries.clear(); totalAppended = 0 }
-        liveConnections.set(0)
         _logs.value = AppLogSnapshot(entries = emptyList(), connected = false, packageName = packageName, totalAppended = 0)
-        ensureServer()
+        AppLogSinkRegistry.active = this
+        ensureFlush()
     }
 
     override fun clear() {
@@ -53,56 +51,38 @@ class AppLogChannelImpl : AppLogChannel {
 
     @Synchronized
     override fun stop() {
+        if (AppLogSinkRegistry.active === this) AppLogSinkRegistry.active = null
         activePackage = null
+        connectedPackage = null
         synchronized(lock) { entries.clear() }
         _logs.value = AppLogSnapshot()
-        try { server?.close() } catch (_: Throwable) {}
-        server = null
-        acceptThread?.interrupt(); acceptThread = null
         flushThread?.interrupt(); flushThread = null
     }
 
-    private fun ensureServer() {
-        if (server != null) return
-        val s = try {
-            LocalServerSocket(AppLogWire.SOCKET_NAME)
-        } catch (e: IOException) {
-            // The abstract name is already bound (e.g. a lingering server from a prior run). Give up quietly;
-            // logs stay empty for this session rather than crashing the Run.
-            return
-        }
-        server = s
-        acceptThread = Thread({ acceptLoop(s) }, "ide-applog-accept").apply { isDaemon = true; start() }
-        flushThread = Thread({ flushLoop() }, "ide-applog-flush").apply { isDaemon = true; start() }
-    }
-
-    private fun acceptLoop(s: LocalServerSocket) {
-        while (!Thread.currentThread().isInterrupted) {
-            val socket = try { s.accept() } catch (e: IOException) { break }
-            Thread({ readConnection(socket) }, "ide-applog-conn").apply { isDaemon = true; start() }
-        }
-    }
-
-    private fun readConnection(socket: LocalSocket) {
-        var counted = false
-        try {
-            val input = socket.inputStream.buffered()
-            val hello = AppLogWire.parse(AppLogWire.readFrame(input) ?: return) as? AppLogEvent.Hello ?: return
-            if (hello.packageName != activePackage) return // not the app we launched
-            liveConnections.incrementAndGet(); counted = true
-            _logs.value = _logs.value.copy(connected = true, packageName = hello.packageName)
-            while (true) {
-                val ev = AppLogWire.parse(AppLogWire.readFrame(input) ?: break)
-                if (ev is AppLogEvent.Record && hello.packageName == activePackage) append(ev.entry)
-            }
-        } catch (_: Throwable) {
-            // dropped / malformed connection — fall through to cleanup
-        } finally {
-            try { socket.close() } catch (_: Throwable) {}
-            if (counted && liveConnections.decrementAndGet() <= 0) {
-                _logs.value = _logs.value.copy(connected = false)
+    /**
+     * A batch of wire payloads pushed by the bound bridge (via [dev.ide.android.applog.AppLogSinkService]). A
+     * HELLO for the active package marks the connection live; subsequent records append while the connection's
+     * package still matches the launched app (a stale app from a prior run is dropped).
+     */
+    fun acceptFrames(frames: List<String>) {
+        for (payload in frames) {
+            when (val ev = AppLogWire.parse(payload)) {
+                is AppLogEvent.Hello ->
+                    if (ev.packageName == activePackage) {
+                        connectedPackage = ev.packageName
+                        _logs.value = _logs.value.copy(connected = true, packageName = ev.packageName)
+                    }
+                is AppLogEvent.Record ->
+                    if (connectedPackage != null && connectedPackage == activePackage) append(ev.entry)
+                null -> {} // malformed / unrecognized frame — ignore
             }
         }
+    }
+
+    /** The bound bridge went away (its process died or it unbound). Mark the stream not-connected. */
+    fun onClientDisconnected() {
+        connectedPackage = null
+        _logs.value = _logs.value.copy(connected = false)
     }
 
     private fun append(entry: AppLogEntry) {
@@ -112,6 +92,11 @@ class AppLogChannelImpl : AppLogChannel {
             while (entries.size > MAX_ENTRIES) entries.removeFirst()
         }
         dirty = true
+    }
+
+    private fun ensureFlush() {
+        if (flushThread != null) return
+        flushThread = Thread({ flushLoop() }, "ide-applog-flush").apply { isDaemon = true; start() }
     }
 
     private fun flushLoop() {
@@ -130,4 +115,14 @@ class AppLogChannelImpl : AppLogChannel {
         private const val MAX_ENTRIES = 5000
         private const val FLUSH_MS = 100L
     }
+}
+
+/**
+ * Process-global handle to the active [AppLogChannelImpl] so the system-instantiated
+ * [dev.ide.android.applog.AppLogSinkService] can route Binder submits to it. The IDE and the service run in
+ * the same process, so a plain singleton suffices; it is set for the duration of a run ([AppLogChannelImpl.start])
+ * and cleared on [AppLogChannelImpl.stop].
+ */
+object AppLogSinkRegistry {
+    @Volatile var active: AppLogChannelImpl? = null
 }

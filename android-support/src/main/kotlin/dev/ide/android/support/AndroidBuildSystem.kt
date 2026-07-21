@@ -344,7 +344,7 @@ class AndroidBuildSystem(
             val injectAppLogTask = step("injectAppLogProvider")
             val authority = "$applicationId.${appLog.authoritySuffix}"
             tasks.task(injectAppLogTask, listOf(processManifest)) {
-                InjectAppLogProviderTask(injectAppLogTask, layout.mergedManifest, appLog.providerClassName, authority, layout.instrumentedManifest)
+                InjectAppLogProviderTask(injectAppLogTask, layout.mergedManifest, appLog.providerClassName, authority, appLog.sinkAction, layout.instrumentedManifest)
             }
             linkManifest = layout.instrumentedManifest
             manifestDep = injectAppLogTask

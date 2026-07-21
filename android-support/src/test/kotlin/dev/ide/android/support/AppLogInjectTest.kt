@@ -69,6 +69,8 @@ class AppLogInjectTest {
             assertTrue(PROVIDER in manifestXml, "instrumented manifest lacks the log-bridge provider:\n$manifestXml")
             assertTrue("$APPLICATION_ID.${AndroidAppLogRuntime.DEFAULT_AUTHORITY_SUFFIX}" in manifestXml,
                 "instrumented manifest lacks the per-app authority:\n$manifestXml")
+            assertTrue(AndroidAppLogRuntime.DEFAULT_SINK_ACTION in manifestXml,
+                "instrumented manifest lacks the sink-service <queries> intent (API 30+ visibility):\n$manifestXml")
             assertTrue(dexContainsType(debugApk, PROVIDER_DESC), "debug APK dex lacks $PROVIDER")
 
             // --- Release: never touched (debuggable = false), even with the runtime present. ---
