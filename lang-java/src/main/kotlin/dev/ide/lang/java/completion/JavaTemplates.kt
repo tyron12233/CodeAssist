@@ -119,7 +119,9 @@ internal object JavaPostfixTemplates {
         prefix: String,
         qualifierType: PsiType?,
         staticQualifier: Boolean,
-        importOffset: Int,
+        /** Plans a sorted-position `import <fqn>;` edit for a template that needs one, or null when already
+         *  imported / not applicable. */
+        plannedImport: (String) -> TextEdit?,
     ): List<CompletionItem> {
         val dot = dotBefore(text, keyStart) ?: return emptyList()
         val recvStart = receiverStart(text, dot)
@@ -136,8 +138,8 @@ internal object JavaPostfixTemplates {
             val spec = t.build(ctx) ?: continue
             val edits = buildList {
                 add(deleteReceiver)
-                // [importOffset] is the end of the last import / package statement (or 0); insert on its own line.
-                spec.importFqn?.let { add(TextEdit(TextRange(importOffset, importOffset), "\nimport $it;")) }
+                // The import (if any) is spliced in sorted position by the planner.
+                spec.importFqn?.let { fqn -> plannedImport(fqn)?.let(::add) }
             }
             out.add(
                 CompletionItem(

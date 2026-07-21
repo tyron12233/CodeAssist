@@ -41,6 +41,7 @@ import dev.ide.lang.completion.CompletionRelevance
 import dev.ide.lang.completion.CompletionResultSet
 import dev.ide.lang.completion.TextEdit
 import dev.ide.lang.dom.TextRange
+import dev.ide.lang.java.JavaImportEdits
 import dev.ide.lang.java.env.JavaEnvironment
 import dev.ide.lang.java.resolve.JavaScope
 import dev.ide.lang.java.resolve.JavaSymbol
@@ -259,22 +260,17 @@ class JavaCompletion(
         params: CompletionParams,
         result: CompletionResultSet,
     ) {
+        val psi = qualifier.containingFile as? PsiJavaFile
         JavaPostfixTemplates.itemsFor(
             text = params.document.text.toString(),
             keyStart = params.replacementRange.start,
             prefix = params.prefix,
             qualifierType = qualifier.type,
             staticQualifier = resolved is PsiClass, // `Type.new`
-            importOffset = importAnchorOffset(qualifier.containingFile as? PsiJavaFile),
+            plannedImport = { fqn ->
+                psi?.let { JavaImportEdits.planImport(it, fqn) }?.let { TextEdit(TextRange(it.offset, it.offset), it.text) }
+            },
         ).forEach { result.addElement(it) }
-    }
-
-    /** End of the last import / package statement (or 0) — where an added `import` line is anchored. */
-    private fun importAnchorOffset(psi: PsiJavaFile?): Int {
-        if (psi == null) return 0
-        return psi.importList?.importStatements?.lastOrNull()?.textRange?.endOffset
-            ?: psi.packageStatement?.textRange?.endOffset
-            ?: 0
     }
 
     /** Members of an array expression: the `length` field, `clone()`, and inherited `java.lang.Object` methods. */
@@ -394,17 +390,10 @@ class JavaCompletion(
         }
     }
 
-    /** A `import <fqn>;` edit inserted after the imports (or the package statement), or null if already imported. */
+    /** A `import <fqn>;` edit spliced in sorted position, or null if already imported (or on-demand covered). */
     private fun importEdit(psi: PsiJavaFile, fqn: String): TextEdit? {
-        val importList = psi.importList
-        importList?.importStatements?.forEach { imp ->
-            val q = imp.qualifiedName ?: return@forEach
-            if (q == fqn || (imp.isOnDemand && q == fqn.substringBeforeLast('.', ""))) return null
-        }
-        val anchorEnd = importList?.importStatements?.lastOrNull()?.textRange?.endOffset
-            ?: psi.packageStatement?.textRange?.endOffset
-            ?: 0
-        return TextEdit(TextRange(anchorEnd, anchorEnd), "\nimport $fqn;")
+        val plan = JavaImportEdits.planImport(psi, fqn) ?: return null
+        return TextEdit(TextRange(plan.offset, plan.offset), plan.text)
     }
 
     private fun classKindFromString(kind: String): CompletionItemKind = when (kind) {

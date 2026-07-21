@@ -1979,6 +1979,11 @@ class IdeServices private constructor(
         style: dev.ide.lang.formatting.FormatStyle
     ): List<DocumentEdit> = languageFeatures.formatRange(file, text, start, end, style)
 
+    /** Reorder + de-duplicate + wildcard-collapse + drop-unused the imports of [file]'s live buffer; minimal
+     *  edits, or empty when the language has no organizer / the imports are already optimal. */
+    fun organizeImports(file: Path, text: String): List<DocumentEdit> =
+        languageFeatures.organizeImports(file, text)
+
     /** Format the built-in code sample for [languageId] with [style] and return the result — for the Code
      *  Style screen's live preview. Module-independent: it builds a standalone formatter, so it works with no
      *  file open. Returns the sample unchanged if formatting fails. */

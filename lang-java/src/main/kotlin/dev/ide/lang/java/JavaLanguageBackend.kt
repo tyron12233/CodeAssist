@@ -35,6 +35,7 @@ class JavaLanguageBackend : LanguageBackend {
         BackendCapability.SEMANTIC_HIGHLIGHT,
         BackendCapability.CODE_FOLDING,
         BackendCapability.INLAY_HINTS,
+        BackendCapability.ORGANIZE_IMPORTS,
     )
 
     override fun createAnalyzer(ctx: CompilationContext): SourceAnalyzer {

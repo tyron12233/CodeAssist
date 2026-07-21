@@ -31,6 +31,7 @@ import com.intellij.psi.PsiElement
 import dev.ide.lang.completion.CompletionContribution
 import dev.ide.lang.folding.FoldingService
 import dev.ide.lang.formatting.FormattingService
+import dev.ide.lang.imports.ImportOrganizerService
 import dev.ide.lang.highlight.SemanticHighlightService
 import dev.ide.lang.kotlin.interp.KotlinPreviewLowering
 import dev.ide.lang.kotlin.interp.PreviewDeclProvider
@@ -296,6 +297,9 @@ class KotlinSourceAnalyzer(ctx: CompilationContext) : SourceAnalyzer, Disposable
     /** Re-indentation + whitespace cleanup over the parse-only PSI (no IntelliJ formatting model on ART). */
     override val formatting: FormattingService = KotlinFormatter()
 
+    /** "Optimize Imports": sort/dedupe/collapse + drop unused, over the parse-only PSI. */
+    override val importOrganizer: ImportOrganizerService = KotlinImportOrganizer()
+
     override suspend fun parsedFile(file: VirtualFile): ParsedFile =
         lastByFile[file.path] ?: incrementalParser.parseFull(EmptyDocument(file))
 
@@ -464,17 +468,15 @@ class KotlinSourceAnalyzer(ctx: CompilationContext) : SourceAnalyzer, Disposable
         val delegateOps =
             diags.filter { it.code == KotlinDiagnosticCodes.DELEGATE_OPERATOR && coversCaret(it) }
         if (unresolved.isEmpty() && delegateOps.isEmpty()) return emptyList()
-        val insertOffset = KotlinImportEdits.insertOffset(parsed.ktFile)
         val existing =
             parsed.ktFile.importDirectives.mapNotNull { it.importedFqName?.asString() }.toHashSet()
         val seen = HashSet<String>()
         val out = ArrayList<KotlinImportFix>()
         fun offer(fqn: String) {
             if (fqn in existing || !seen.add(fqn)) return
-            out += KotlinImportFix(
-                "Import $fqn",
-                listOf(DocumentEdit(insertOffset, 0, "import $fqn\n"))
-            )
+            // Splice the import in sorted position (a first import lands one blank line after the package).
+            val plan = KotlinImportEdits.planImport(parsed.ktFile, fqn) ?: return
+            out += KotlinImportFix("Import $fqn", listOf(DocumentEdit(plan.offset, 0, plan.text)))
         }
         for (d in unresolved) {
             val name = text.substring(

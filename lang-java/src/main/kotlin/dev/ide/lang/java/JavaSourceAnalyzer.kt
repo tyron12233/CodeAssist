@@ -143,6 +143,7 @@ class JavaSourceAnalyzer(private val env: JavaEnvironment) : SourceAnalyzer, Jvm
     ): List<dev.ide.lang.dom.TextRange> =
         dev.ide.lang.java.rename.JavaRename.referencesIn(env.parse(name, text), target)
 
+    override val importOrganizer: dev.ide.lang.imports.ImportOrganizerService = JavaImportOrganizer(env::parse)
     override val folding: FoldingService = JavaFolder(::psiFor)
     override val semanticHighlighter: SemanticHighlightService = JavaSemanticHighlighter(::psiFor)
     override val signatureHelp: SignatureHelpService = JavaSignatureHelp(env)

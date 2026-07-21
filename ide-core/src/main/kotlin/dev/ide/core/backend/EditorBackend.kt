@@ -355,6 +355,11 @@ internal class EditorBackend(private val ctx: BackendContext) : EditorService {
         }.map { UiTextEdit(it.offset, it.offset + it.oldLength, it.newText.toString()) }
     }
 
+    override suspend fun optimizeImports(path: String, text: String): List<UiTextEdit> =
+        withContext(ctx.engineDispatcher) {
+            ctx.services.organizeImports(Paths.get(path), text)
+        }.map { UiTextEdit(it.offset, it.offset + it.oldLength, it.newText.toString()) }
+
     // The active code style, resolved fresh per reformat from the file's language profile (so a settings
     // change applies without restart).
     private val settingsStore =

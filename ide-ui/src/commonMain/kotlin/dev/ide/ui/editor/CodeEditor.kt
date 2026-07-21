@@ -89,6 +89,8 @@ fun CodeEditor(
     findEpoch: Int = 0,
     /** Bump from the host (a toolbar/menu Reformat action) to reformat the whole file; 0 = no request. */
     formatEpoch: Int = 0,
+    /** Bump from the host (the Optimize Imports menu action) to reorganize imports; 0 = no request. */
+    optimizeImportsEpoch: Int = 0,
     /** Editor text zoom; 1.0 = the theme's code size. Driven by pinch + Ctrl-+/-/0; hoisted so it persists across tabs. */
     fontScale: Float = 1f,
     onFontScaleChange: (Float) -> Unit = {},
@@ -137,6 +139,7 @@ fun CodeEditor(
             onRenamed,
             findEpoch,
             formatEpoch,
+            optimizeImportsEpoch,
             fontScale,
             onFontScaleChange,
             onPreview,
@@ -164,6 +167,7 @@ private fun CodeEditorContent(
     onRenamed: (newPath: String?) -> Unit = {},
     findEpoch: Int = 0,
     formatEpoch: Int = 0,
+    optimizeImportsEpoch: Int = 0,
     fontScale: Float = 1f,
     onFontScaleChange: (Float) -> Unit = {},
     onPreview: (variantId: String) -> Unit = {},
@@ -388,18 +392,15 @@ private fun CodeEditorContent(
         editorSession.applyEdits(listOf(edit), TextRange(edit.caret))
     }
 
-    // Reformat Code: ask the backend for the minimal edits to reformat the whole buffer, or just the selection
-    // when `[rangeStart, rangeEnd)` is non-empty, then splice them in. The caret is kept on its logical spot and
-    // the viewport stays anchored on the caret's line. A no-op returns nothing and does nothing.
-    suspend fun runFormat(rangeStart: Int, rangeEnd: Int) {
+    // Apply the minimal edits a backend source-transform (Reformat, Optimize Imports) returns for the whole
+    // buffer, splicing them in while keeping the caret on its logical spot and the viewport anchored on the
+    // caret's line. A no-op ([compute] returns nothing) does nothing.
+    suspend fun applyBufferEdits(compute: suspend (text: String) -> List<dev.ide.ui.backend.UiTextEdit>) {
         completion.dismiss()
         val text = editorSession.doc.text
         val caretBefore = editorSession.selection.start.coerceIn(0, editorSession.doc.length)
         val anchorLine = editorSession.doc.lineForOffset(caretBefore)
-        val raw = runCatching {
-            if (rangeEnd > rangeStart) backend.editor.formatRange(path, text, rangeStart, rangeEnd)
-            else backend.editor.formatDocument(path, text)
-        }.getOrNull().orEmpty()
+        val raw = runCatching { compute(text) }.getOrNull().orEmpty()
         if (raw.isEmpty()) return
         val len = editorSession.doc.length
         val edits = raw.map { e ->
@@ -410,6 +411,16 @@ private fun CodeEditorContent(
         for (e in edits) if (e.start <= caret) caret += e.text.length - (e.end - e.start)
         applyEditsKeepingViewport(edits, TextRange(caret.coerceAtLeast(0)), anchorLine)
     }
+
+    // Reformat Code: the minimal edits to reformat the whole buffer, or just the selection when
+    // `[rangeStart, rangeEnd)` is non-empty.
+    suspend fun runFormat(rangeStart: Int, rangeEnd: Int) = applyBufferEdits { text ->
+        if (rangeEnd > rangeStart) backend.editor.formatRange(path, text, rangeStart, rangeEnd)
+        else backend.editor.formatDocument(path, text)
+    }
+
+    // Optimize Imports: reorder / de-duplicate / wildcard-collapse / drop-unused the file's imports.
+    suspend fun runOptimizeImports() = applyBufferEdits { text -> backend.editor.optimizeImports(path, text) }
 
     // keep the per-line render cache aligned with line splices (a render concern, owned by this surface)
     SideEffect {
@@ -480,6 +491,7 @@ private fun CodeEditorContent(
 
     LaunchedEffect(findEpoch) { if (findEpoch > 0) find.openBar(replace = false) }
     LaunchedEffect(formatEpoch) { if (formatEpoch > 0) runFormat(0, 0) }
+    LaunchedEffect(optimizeImportsEpoch) { if (optimizeImportsEpoch > 0) runOptimizeImports() }
 
     // recompute find matches when the query/options change or the buffer edits (debounced).
     LaunchedEffect(find.open, find.query, find.options, editorSession.textRevision) {
@@ -655,6 +667,11 @@ private fun CodeEditorContent(
         if ((ev.isCtrlPressed || ev.isMetaPressed) && ev.isAltPressed && ev.key == Key.L) {
             val sel = editorSession.selection
             scope.launch { if (!sel.collapsed) runFormat(sel.min, sel.max) else runFormat(0, 0) }
+            return true
+        }
+        // Optimize imports (⌘/Ctrl-Alt-O, IntelliJ).
+        if ((ev.isCtrlPressed || ev.isMetaPressed) && ev.isAltPressed && ev.key == Key.O) {
+            scope.launch { runOptimizeImports() }
             return true
         }
         if ((ev.isCtrlPressed || ev.isMetaPressed) && ev.key == Key.S) {

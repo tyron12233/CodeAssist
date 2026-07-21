@@ -140,6 +140,10 @@ interface EditorService {
     /** Reformat only the text overlapping the selection `[selStart, selEnd)`. */
     suspend fun formatRange(path: String, text: String, selStart: Int, selEnd: Int): List<UiTextEdit> = emptyList()
 
+    /** Reorder + de-duplicate + wildcard-collapse + drop-unused the file's imports ("Optimize Imports").
+     *  Empty if unsupported / already optimal. */
+    suspend fun optimizeImports(path: String, text: String): List<UiTextEdit> = emptyList()
+
     /** Go-to-definition for the symbol/reference at [offset], or null. */
     suspend fun definitionAt(path: String, text: String, offset: Int): UiDefinition? = null
 

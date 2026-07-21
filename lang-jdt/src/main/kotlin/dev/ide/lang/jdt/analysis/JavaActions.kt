@@ -72,10 +72,10 @@ class AddImportQuickFixProvider : QuickFixProvider {
                 override val title = "Import $fqn"
                 override val kind = CodeActionKind.QUICK_FIX
                 override suspend fun computeEdits(ctx: FixContext): WorkspaceEdit {
-                    val t = ctx.target.parsed.text().toString()
-                    if (Regex("(?m)^\\s*import\\s+${Regex.escape(fqn)}\\s*;").containsMatchIn(t)) return WorkspaceEdit.EMPTY
-                    val off = importInsertOffset(ctx.target.parsed)
-                    return WorkspaceEdit.of(ctx.target.file, DocumentEdit(off, 0, "import $fqn;\n"))
+                    // Splice the import in sorted position (regular block, static split, blank line after
+                    // package); null when it is already present.
+                    val plan = JdtImportLayout.planImport(ctx.target.parsed, fqn) ?: return WorkspaceEdit.EMPTY
+                    return WorkspaceEdit.of(ctx.target.file, DocumentEdit(plan.offset, 0, plan.text))
                 }
             }
         }

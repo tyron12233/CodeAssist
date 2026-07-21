@@ -309,6 +309,7 @@ We never collect your code, file or project names, which features you use, or an
     <string name="edchrome_toggle_navigator">Toggle navigator</string>
     <string name="edchrome_find_replace">Find / replace</string>
     <string name="edchrome_reformat_code">Reformat code</string>
+    <string name="edchrome_optimize_imports">Optimize imports</string>
     <string name="edchrome_command_palette">Command palette</string>
     <string name="edchrome_toggle_inlay_hints">Toggle inlay hints</string>
     <string name="edchrome_hide_inlay_hints">Hide inlay hints</string>

@@ -13,19 +13,19 @@ import org.jetbrains.kotlin.psi.KtFile
  * edit is a cheap lookup. The symbol-to-FQN decision stays in [KotlinCompletion] (it is completion-specific);
  * this only answers "is this FQN already visible, and if not, where does its `import` go?".
  */
-internal class KotlinAutoImport(kt: KtFile, fileContext: FileContext) {
+internal class KotlinAutoImport(private val kt: KtFile, fileContext: FileContext) {
 
     private val visiblePackages = (DefaultImports.STAR_PACKAGES + fileContext.packageName +
         fileContext.imports.filter { it.isStar }.map { it.packageName }).toHashSet()
     private val explicitImports = fileContext.imports.filter { !it.isStar }.map { it.fqn }.toHashSet()
-    private val anchor = KotlinImportEdits.anchorOf(kt)
 
-    /** The `import <fqn>` edit, or no edit when [fqn] is already visible (same package, a star import, or an
-     *  explicit import) or is unqualified. */
+    /** The `import <fqn>` edit, spliced in sorted position, or no edit when [fqn] is already visible (same
+     *  package, a star import, or an explicit import) or is unqualified. */
     fun editForType(fqn: String): List<TextEdit> {
         if ('.' !in fqn) return emptyList()
         val pkg = fqn.substringBeforeLast('.')
         if (pkg in visiblePackages || fqn in explicitImports) return emptyList()
-        return listOf(TextEdit(TextRange(anchor.offset, anchor.offset), anchor.prefix + "import " + fqn + anchor.suffix))
+        val plan = KotlinImportEdits.planImport(kt, fqn) ?: return emptyList()
+        return listOf(TextEdit(TextRange(plan.offset, plan.offset), plan.text))
     }
 }

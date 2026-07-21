@@ -11,6 +11,7 @@ import dev.ide.lang.resolve.Scope
 import dev.ide.lang.dom.DomNode
 import dev.ide.lang.folding.FoldingService
 import dev.ide.lang.formatting.FormattingService
+import dev.ide.lang.imports.ImportOrganizerService
 import dev.ide.lang.highlight.SemanticHighlightService
 import dev.ide.lang.resolve.QuickDocInfo
 import dev.ide.lang.resolve.StructureItem
@@ -65,6 +66,7 @@ enum class BackendCapability {
     SEMANTIC_HIGHLIGHT, // provides a SemanticHighlightService (type-aware editor coloring)
     CODE_FOLDING,       // provides a FoldingService (collapse imports / blocks / comments)
     FORMAT,
+    ORGANIZE_IMPORTS,   // provides an ImportOrganizerService (the "Optimize Imports" command)
 }
 
 /**
@@ -127,6 +129,10 @@ interface SourceAnalyzer {
 
     /** Code reformatting; null if !capabilities.contains(FORMAT). See the formatting SPI. */
     val formatting: FormattingService?
+        get() = null
+
+    /** "Optimize Imports"; null if !capabilities.contains(ORGANIZE_IMPORTS). See the imports SPI. */
+    val importOrganizer: ImportOrganizerService?
         get() = null
 
     /** Current tolerant tree for [file] (parsed/incrementally maintained). */

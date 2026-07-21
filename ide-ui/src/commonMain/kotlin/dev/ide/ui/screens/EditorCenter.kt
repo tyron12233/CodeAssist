@@ -74,6 +74,8 @@ internal fun EditorCenter(
     var findEpoch by remember(active?.path) { mutableStateOf(0) }
     // Bumped by the Reformat button (top bar) to reformat the active file (Ctrl/⌘-Alt-L is the keyboard path).
     var formatEpoch by remember(active?.path) { mutableStateOf(0) }
+    // Bumped by the Optimize Imports menu item to reorganize the active file's imports (Ctrl/⌘-Alt-O too).
+    var optimizeImportsEpoch by remember(active?.path) { mutableStateOf(0) }
     // Plugin-contributed toolbar actions (empty until a plugin registers; enablement re-evaluated per file).
     val toolbarActions = remember(active?.path) {
         state.backend.actions.actionsFor(
@@ -130,6 +132,7 @@ internal fun EditorCenter(
                 onRedo = { active?.session?.redo() },
                 onFind = { if (active != null) findEpoch++ },
                 onReformat = { if (active != null) formatEpoch++ },
+                onOptimizeImports = { if (active != null) optimizeImportsEpoch++ },
                 onToggleConsole = { state.consoleOpen = !state.consoleOpen },
                 consoleOpen = state.consoleOpen,
                 inlayHintsOn = state.inlayHintsEnabled,
@@ -198,6 +201,7 @@ internal fun EditorCenter(
                         onRenamed = { newPath -> state.reloadAfterRename(active.path, newPath) },
                         findEpoch = findEpoch,
                         formatEpoch = formatEpoch,
+                        optimizeImportsEpoch = optimizeImportsEpoch,
                         fontScale = state.editorFontScale,
                         onFontScaleChange = { state.editorFontScale = it },
                         completionAutoPopup = state.completionAutoPopup,

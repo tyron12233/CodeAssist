@@ -64,6 +64,15 @@ internal class LanguageFeatureService(private val ctx: EngineContext) {
         return runCatching { runSync { service.formatRange(vf, text, range, style) } }.getOrDefault(emptyList())
     }
 
+    /** Reorder + de-duplicate + wildcard-collapse + drop-unused the imports of [file]'s live buffer; minimal
+     *  edits, or empty when the language has no organizer / the imports are already optimal. */
+    fun organizeImports(file: Path, text: String): List<DocumentEdit> {
+        val module = ctx.moduleForEditableFile(file) ?: return emptyList()
+        val service = ctx.analyzerFor(module, ctx.languageFor(file)).importOrganizer ?: return emptyList()
+        val vf = ctx.store.vfs.fileFor(file)
+        return runCatching { runSync { service.organizeImports(vf, text) } }.getOrDefault(emptyList())
+    }
+
     private fun formattingServiceFor(file: Path): FormattingService? {
         val module = ctx.moduleForEditableFile(file) ?: return null
         ctx.analyzerFor(module, ctx.languageFor(file)).formatting?.let { return it }
