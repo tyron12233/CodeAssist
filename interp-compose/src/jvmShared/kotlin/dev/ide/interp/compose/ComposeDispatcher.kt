@@ -111,6 +111,15 @@ class ComposeDispatcher(
             val ser = resolveSerializerCall(call, callee, receiver)
             if (ser !== NOT_SERIALIZER) return ser
         }
+        // `rememberSaveable { init }` — the real one requires a SaveableStateRegistry from a SavedStateRegistryOwner,
+        // which the in-app preview composition has none of, so reflecting it crashes. Model it as a plain remember:
+        // run `init` and return its value (the Saver + persistence are irrelevant to a static preview). The value
+        // is recomputed per pass rather than restored across recompositions — an acceptable degradation over a crash.
+        if (callee is ResolvedCallable.Library && callee.methodName == "rememberSaveable" &&
+            callee.ownerFqn?.startsWith("androidx.compose.runtime.saveable") == true
+        ) {
+            (args.lastOrNull { it is InterpretedLambda } as? InterpretedLambda)?.let { return it.invoke(emptyList()) }
+        }
         // Windowed composables (`Popup`/`Dialog`, and the Material components built on them — `DropdownMenu`,
         // `AlertDialog`, `ModalBottomSheet`, …) open a REAL OS window (WindowManager/Dialog) anchored to the
         // composable. The in-app preview has no host window to give them, so on device `DropdownMenu(expanded =

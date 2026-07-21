@@ -10,6 +10,7 @@ import dev.ide.lang.kotlin.interp.RTypeArg
 import dev.ide.lang.kotlin.interp.ResolvedCallable
 import dev.ide.lang.kotlin.interp.ResolvedClass
 import dev.ide.lang.kotlin.interp.ResolvedFunction
+import dev.ide.lang.kotlin.interp.SecondaryCtor
 import dev.ide.lang.kotlin.interp.SlotId
 
 /**
@@ -177,6 +178,20 @@ class Interpreter(
      *  (a nullable extension receiver, `fun String?.f()` called on null). */
     private val NO_RECEIVER = Any()
 
+    /** Marker distinguishing a `getValue` call (no value argument) from a `setValue` in [callDelegateOp] —
+     *  a real `setValue(null)` writes a genuine null, so a plain nullable default would be ambiguous. */
+    private val NO_DELEGATE_VALUE = Any()
+
+    /** A stand-in for the `KProperty<*>` a `by`-delegate operator receives. A source delegate that reads
+     *  `property.name` sees the delegated property's name (via reflective `getName()`); a delegate that ignores
+     *  it is unaffected. Not a real `kotlin.reflect.KProperty` (that interface is far larger than a preview
+     *  needs), so a library operator with a strictly-typed `KProperty` parameter falls back to a null property
+     *  (see [reflectDelegateOp]). */
+    private class InterpretedKProperty(private val propName: String) {
+        fun getName(): String = propName
+        override fun toString(): String = "property $propName"
+    }
+
     /** Run [fn]'s body with [args] bound to its parameters and, when [receiver] is not [NO_RECEIVER], the
      *  receiver value bound to its [ResolvedFunction.receiverSlot] (an extension receiver / member `this`). */
     private fun invokeFunction(fn: ResolvedFunction, receiver: Any?, args: List<Any?>, reifiedTypes: Map<String, RTypeArg> = emptyMap()): Any? {
@@ -275,10 +290,15 @@ class Interpreter(
         }
         is RNode.Assign -> {
             val target = node.target
-            if (target !is RNode.Name || target.binding !is Binding.Local && target.binding !is Binding.Param) {
-                throw InterpreterException("unsupported assignment target: ${target::class.simpleName}")
+            val binding = (target as? RNode.Name)?.binding
+            when {
+                // A local `by`-delegate write: `delegate.setValue(null, property, value)`.
+                binding is Binding.DelegatedConvention ->
+                    delegateSetValue(env.read(binding.slot), binding.propertyName, thisRef = null, value = eval(node.value, env))
+                binding is Binding.Local || binding is Binding.Param ->
+                    env.assign(slotOf(binding), eval(node.value, env))
+                else -> throw InterpreterException("unsupported assignment target: ${target::class.simpleName}")
             }
-            env.assign(slotOf(target.binding), eval(node.value, env))
             Unit
         }
         is RNode.If -> {
@@ -296,11 +316,12 @@ class Interpreter(
             val budget = LoopBudget()
             try {
                 if (node.doWhile) {
-                    do { runLoopBody(node.body, Env(env)); guardLoop(budget) } while (eval(node.condition, env) == true)
+                    do { runLoopBody(node.body, Env(env), node.label); guardLoop(budget) } while (eval(node.condition, env) == true)
                 } else {
-                    while (eval(node.condition, env) == true) { runLoopBody(node.body, Env(env)); guardLoop(budget) }
+                    while (eval(node.condition, env) == true) { runLoopBody(node.body, Env(env), node.label); guardLoop(budget) }
                 }
-            } catch (b: BreakSignal) { /* break exits the loop */ }
+            } catch (b: BreakSignal) { /* break exits the loop */
+            } catch (b: LabeledBreakSignal) { if (!handledHere(b, node.label)) throw b }
             Unit
         }
         is RNode.ForEach -> {
@@ -313,14 +334,15 @@ class Interpreter(
                     // each pass, matching Kotlin's per-iteration capture rather than aliasing one shared slot.
                     val iterEnv = Env(env)
                     iterEnv.define(node.loopVar.slot, invoke0(iterator, "next"))
-                    runLoopBody(node.body, iterEnv)
+                    runLoopBody(node.body, iterEnv, node.label)
                     guardLoop(budget)
                 }
-            } catch (b: BreakSignal) { /* break exits the loop */ }
+            } catch (b: BreakSignal) { /* break exits the loop */
+            } catch (b: LabeledBreakSignal) { if (!handledHere(b, node.label)) throw b }
             Unit
         }
-        is RNode.Break -> throw BreakSignal
-        is RNode.Continue -> throw ContinueSignal
+        is RNode.Break -> throw (node.label?.let { LabeledBreakSignal(it) } ?: BreakSignal)
+        is RNode.Continue -> throw (node.label?.let { LabeledContinueSignal(it) } ?: ContinueSignal)
         is RNode.Call -> evalCall(node, env)
         is RNode.Lambda -> { InterpProfile.count("closures"); Closure(node, env) }
         is RNode.StringConcat -> buildString { node.parts.forEach { append(eval(it, env)?.toString() ?: "null") } }
@@ -435,7 +457,7 @@ class Interpreter(
                 } catch (t: Throwable) {
                     // Control-flow signals are not exceptions to catch — a `catch (e: Exception)` must NOT
                     // swallow a `return`/`break`/`continue` (they extend RuntimeException). The `finally` still runs.
-                    if (t is ReturnSignal || t is BreakSignal || t is ContinueSignal) throw t
+                    if (t is ReturnSignal || t is LoopSignal) throw t
                     val thrown = (t as? KotlinThrow)?.value ?: t
                     val handler = node.catches.firstOrNull { c -> c.typeFqn.let { it == null || isInstanceOf(thrown, it) } }
                         ?: throw t
@@ -482,7 +504,21 @@ class Interpreter(
                 HookDecision.Proceed -> {}
             }
         }
-        return dispatcher.dispatch(call, receiver, args)
+        return try {
+            dispatcher.dispatch(call, receiver, args)
+        } catch (e: java.lang.reflect.InvocationTargetException) {
+            // A reflectively-invoked library/user method threw. Surface the REAL cause (its type, message, and
+            // stack) instead of the opaque `InvocationTargetException` wrapper, so the preview's error view is
+            // actionable rather than showing "InvocationTargetException" with no detail.
+            throw unwrapInvocationTarget(e)
+        }
+    }
+
+    /** Peel nested [java.lang.reflect.InvocationTargetException] wrappers to the innermost real cause. */
+    private fun unwrapInvocationTarget(thrown: Throwable): Throwable {
+        var cur = thrown
+        while (cur is java.lang.reflect.InvocationTargetException) cur = cur.targetException ?: cur.cause ?: return cur
+        return cur
     }
 
     /** Consult [hooks] before a reflective property read; [Handled] carries a Replace value (a legitimate
@@ -511,6 +547,20 @@ class Interpreter(
         if (call.dispatch == DispatchKind.OPERATOR) {
             val op = callee.displayName
             val left = eval(call.receiver ?: throw InterpreterException("operator without receiver"), env)
+            // A project-source class with `operator fun plus`/`minus`/`compareTo`/… dispatches to that member
+            // (also drives `a += b`, which desugars through the arithmetic operator). Routed here so the RHS is
+            // evaluated once, by `dispatchSourceMember`. `eq`/`ne` fall through to structural equality below
+            // (`==` uses the class's `equals`, which a data class already provides — not a `compareTo`).
+            if (left is SourceObject) {
+                when {
+                    op in COMPARISON -> {
+                        val cmp = (dispatchSourceMember(left, "compareTo", call, env) as? Number)?.toInt()
+                            ?: throw InterpreterException("`compareTo` on ${left.cls.fqn} did not return an Int")
+                        return when (op) { "lt" -> cmp < 0; "gt" -> cmp > 0; "le" -> cmp <= 0; else -> cmp >= 0 }
+                    }
+                    op in ARITHMETIC -> return dispatchSourceMember(left, op, call, env)
+                }
+            }
             val right = eval(call.args.first().value, env)
             when {
                 op == "eq" -> return left == right
@@ -531,6 +581,8 @@ class Interpreter(
         // (its `invoke` method).
         if (call.dispatch == DispatchKind.INVOKE) {
             val target = call.receiver?.let { eval(it, env) }
+            // A source class with `operator fun invoke(...)` — dispatch to that member (RHS evaluated once there).
+            if (target is SourceObject) return dispatchSourceMember(target, "invoke", call, env)
             val argv = call.args.map { eval(it.value, env) }
             return if (target is InterpretedLambda) target.invoke(argv) else checkedDispatch(call, target, argv)
         }
@@ -538,6 +590,19 @@ class Interpreter(
         if (callee is ResolvedCallable.Source && call.dispatch == DispatchKind.CONSTRUCTOR) {
             sourceClass(callee)?.let { cls ->
                 val argv = call.args.map { eval(it.value, env) }
+                // Pick a secondary constructor when the call's arity can't fit the primary (fewer than the
+                // required primary params, or more than the primary declares). Match a secondary by arity — a
+                // best-effort selection, since same-arity constructor overloads collide on the declId key; the
+                // primary is preferred whenever the arguments fit it.
+                val n = call.args.size
+                val requiredPrimary = cls.primaryParams.count { it.default == null }
+                if (n !in requiredPrimary..cls.primaryParams.size) {
+                    cls.secondaryCtors.firstOrNull { it.params.size == n }?.let { secondary ->
+                        val obj = SourceObject(cls)
+                        constructViaSecondary(cls, obj, secondary, reorderNamedArgs(secondary.params.map { it.name }, call.args, argv))
+                        return obj
+                    }
+                }
                 return instantiate(cls, reorderNamedArgs(cls.primaryParams.map { it.name }, call.args, argv))
             }
         }
@@ -989,8 +1054,121 @@ class Interpreter(
             // so the CharSequence and Collection/Map overloads of `isNotEmpty`/`isNullOrEmpty` both resolve.
             call.dispatch == DispatchKind.EXTENSION && args.isEmpty() && name in EMPTY_BLANK_PREDICATES ->
                 evalEmptyBlankPredicate(name, receiver())
+            // `"fmt".format(args)` (extension on a String) / `String.format(fmt, args)` (companion) + their
+            // Locale overloads — @InlineOnly delegations to java.lang.String.format, so no JVM method exists to
+            // reflect. Route to the real formatter here.
+            name == "format" -> {
+                val recv = runCatching { call.receiver?.let { eval(it, env) } }.getOrNull()
+                val argv = args.flatMap { val v = eval(it.value, env); if (v is Array<*>) v.toList() else listOf(v) }
+                when {
+                    recv is CharSequence -> doStringFormat(recv.toString(), argv)               // "fmt".format([locale,] args)
+                    argv.isEmpty() -> null
+                    argv[0] is java.util.Locale && argv.size >= 2 ->                              // String.format(locale, fmt, args)
+                        Handled(String.format(argv[0] as java.util.Locale, argv[1]?.toString() ?: "null", *argv.drop(2).toTypedArray()))
+                    else -> doStringFormat(argv[0]?.toString() ?: "null", argv.drop(1))          // String.format(fmt, args)
+                }
+            }
+            // The precondition family — @InlineOnly (they carry contracts). A failed check throws the real
+            // exception, which surfaces as a preview error exactly as the compiled app would behave (rather than
+            // the opaque "inline-only function not modeled").
+            name == "error" && call.dispatch == DispatchKind.TOP_LEVEL && args.size == 1 ->
+                throw IllegalStateException((eval(args[0].value, env) ?: "null").toString())
+            name == "TODO" && call.dispatch == DispatchKind.TOP_LEVEL ->
+                throw NotImplementedError("An operation is not implemented" +
+                    (if (args.isNotEmpty()) ": ${eval(args[0].value, env)}" else "."))
+            name == "require" && call.dispatch == DispatchKind.TOP_LEVEL && args.isNotEmpty() -> {
+                if (eval(args[0].value, env) != true) throw IllegalArgumentException(lazyMessage(args, env, "Failed requirement."))
+                Handled(Unit)
+            }
+            name == "check" && call.dispatch == DispatchKind.TOP_LEVEL && args.isNotEmpty() -> {
+                if (eval(args[0].value, env) != true) throw IllegalStateException(lazyMessage(args, env, "Check failed."))
+                Handled(Unit)
+            }
+            name == "requireNotNull" && call.dispatch == DispatchKind.TOP_LEVEL && args.isNotEmpty() -> {
+                val v = eval(args[0].value, env) ?: throw IllegalArgumentException(lazyMessage(args, env, "Required value was null."))
+                Handled(v)
+            }
+            name == "checkNotNull" && call.dispatch == DispatchKind.TOP_LEVEL && args.isNotEmpty() -> {
+                val v = eval(args[0].value, env) ?: throw IllegalStateException(lazyMessage(args, env, "Required value was null."))
+                Handled(v)
+            }
+            // `kotlin.math.*` — @InlineOnly delegations to java.lang.Math (no JVM method to reflect).
+            name in MATH_UNARY && call.dispatch == DispatchKind.TOP_LEVEL && args.size == 1 -> {
+                val x = (eval(args[0].value, env) as? Number)?.toDouble() ?: return null
+                Handled(MATH_UNARY.getValue(name)(x))
+            }
+            // `abs(x)` — type-preserving (Int/Long/Float/Double keep their type; other numbers → Double).
+            name == "abs" && call.dispatch == DispatchKind.TOP_LEVEL && args.size == 1 ->
+                when (val x = eval(args[0].value, env)) {
+                    is Int -> Handled(if (x < 0) -x else x)
+                    is Long -> Handled(if (x < 0) -x else x)
+                    is Float -> Handled(Math.abs(x))
+                    is Double -> Handled(Math.abs(x))
+                    is Number -> Handled(Math.abs(x.toDouble()))
+                    else -> null
+                }
+            // `min(a, b)` / `max(a, b)` — two numbers; compare in Double, return the original (type-preserving).
+            (name == "min" || name == "max") && call.dispatch == DispatchKind.TOP_LEVEL && args.size == 2 -> {
+                val a = eval(args[0].value, env) as? Number ?: return null
+                val b = eval(args[1].value, env) as? Number ?: return null
+                val pickA = if (name == "max") a.toDouble() >= b.toDouble() else a.toDouble() <= b.toDouble()
+                Handled(if (pickA) a else b)
+            }
+            // `hypot(x, y)` / `atan2(y, x)` — two-argument functions.
+            (name == "hypot" || name == "atan2") && call.dispatch == DispatchKind.TOP_LEVEL && args.size == 2 -> {
+                val a = (eval(args[0].value, env) as? Number)?.toDouble() ?: return null
+                val b = (eval(args[1].value, env) as? Number)?.toDouble() ?: return null
+                Handled(if (name == "hypot") Math.hypot(a, b) else Math.atan2(a, b))
+            }
+            // `x.pow(n)` — Double.pow(Double) / Double.pow(Int); both fold to Math.pow in Double.
+            name == "pow" && call.dispatch == DispatchKind.EXTENSION && args.size == 1 -> {
+                val base = (receiver() as? Number)?.toDouble() ?: return null
+                val exp = (eval(args[0].value, env) as? Number)?.toDouble() ?: return null
+                Handled(Math.pow(base, exp))
+            }
+            // `x.roundToInt()` / `x.roundToLong()` — ties-up rounding on a Double/Float receiver.
+            (name == "roundToInt" || name == "roundToLong") && call.dispatch == DispatchKind.EXTENSION && args.isEmpty() -> {
+                val x = (receiver() as? Number)?.toDouble() ?: return null
+                Handled(if (name == "roundToInt") Math.round(x).toInt() else Math.round(x))
+            }
+            // `list.elementAtOrElse(index) { default }` — @InlineOnly; the in-range element, else the default lambda.
+            name == "elementAtOrElse" && call.dispatch == DispatchKind.EXTENSION && args.size == 2 -> {
+                val list = (receiver() as? List<*>) ?: return null
+                val idx = (eval(args[0].value, env) as? Number)?.toInt() ?: return null
+                Handled(if (idx in list.indices) list[idx] else lambda(args[1].value).invoke(listOf(idx)))
+            }
+            // `xs.firstNotNullOf { transform }` / `firstNotNullOfOrNull { }` — the first non-null transform result;
+            // @InlineOnly. `firstNotNullOf` throws when none is found, the `OrNull` variant yields null.
+            (name == "firstNotNullOf" || name == "firstNotNullOfOrNull") && call.dispatch == DispatchKind.EXTENSION && args.size == 1 -> {
+                val transform = lambda(args[0].value)
+                val budget = LoopBudget()
+                var found: Any? = null
+                var done = false
+                forEachElement(receiver()) { element ->
+                    if (!done) { val v = transform.invoke(listOf(element)); guardLoop(budget); if (v != null) { found = v; done = true } }
+                }
+                if (found == null && name == "firstNotNullOf")
+                    throw NoSuchElementException("No element of the collection was transformed to a non-null value.")
+                Handled(found)
+            }
             else -> null
         }
+    }
+
+    /** java.lang.String.format for the @InlineOnly `format` intrinsics: an optional leading Locale in [argv]
+     *  selects the locale-aware overload; otherwise the args are the format arguments. */
+    private fun doStringFormat(fmt: String, argv: List<Any?>): Handled {
+        val loc = argv.firstOrNull() as? java.util.Locale
+        val fa = (if (loc != null) argv.drop(1) else argv).toTypedArray()
+        return Handled(if (loc != null) String.format(loc, fmt, *fa) else String.format(fmt, *fa))
+    }
+
+    /** The message for a failed `require`/`check`/`*NotNull`: the second argument is a lazy-message lambda
+     *  (`require(x) { "..." }`); [fallback] is the stdlib's default when none is supplied. */
+    private fun lazyMessage(args: List<RArg>, env: Env, fallback: String): String {
+        val node = args.getOrNull(1)?.value ?: return fallback
+        val lambda = eval(node, env) as? InterpretedLambda ?: return fallback
+        return runCatching { lambda.invoke(emptyList())?.toString() }.getOrNull() ?: fallback
     }
 
     /** Compute an `@InlineOnly` empty/blank predicate (`isNotBlank`/`isNotEmpty`/`isNullOrBlank`/
@@ -1042,6 +1220,8 @@ class Interpreter(
 
     private fun readBinding(binding: Binding, env: Env): Any? = when (binding) {
         is Binding.Local, is Binding.Param -> env.read(slotOf(binding))
+        // A local `by`-delegate read: `delegate.getValue(null, property)` (a local delegate's `thisRef` is null).
+        is Binding.DelegatedConvention -> delegateGetValue(env.read(binding.slot), binding.propertyName, thisRef = null)
         is Binding.ObjectRef -> {
             // A source `object`/`companion` referenced by name is its (lazily-built) singleton; a class name
             // used as a value denotes its companion (`Maths.square()`); everything else (a library
@@ -1130,6 +1310,24 @@ class Interpreter(
             }
         }
         cls.initSteps.forEach { eval(it, env) }
+    }
+
+    /** Run a SECONDARY constructor on the shared [obj]: bind its own parameters, run its delegation, then its
+     *  body. A `this(…)` delegation runs the primary constructor (binding its params + super + init steps) with
+     *  the delegation arguments evaluated in this constructor's parameter scope; a `super(…)`/implicit delegation
+     *  (a class with no primary) runs the primary path with no primary args (superclass/init steps only).
+     *  Delegation to ANOTHER secondary isn't modeled — the primary is the shared target. */
+    private fun constructViaSecondary(cls: ResolvedClass, obj: SourceObject, ctor: SecondaryCtor, argv: List<Any?>) {
+        val env = Env()
+        env.define(cls.receiverSlot, obj)
+        bindParams(env, ctor.params, argv)
+        if (ctor.delegatesToThis) {
+            val delegArgv = ctor.delegationArgs.map { eval(it.value, env) }
+            construct(cls, obj, reorderNamedArgs(cls.primaryParams.map { it.name }, ctor.delegationArgs, delegArgv))
+        } else {
+            construct(cls, obj, emptyList())
+        }
+        eval(ctor.body, env)
     }
 
     /** A member function declared on [cls] or inherited from a source supertype (the runtime instance's own
@@ -1245,6 +1443,10 @@ class Interpreter(
                 ?: throw InterpreterException("delegate `$delegateField` for `$name` not initialized on ${receiver.cls.fqn}")
             return readProperty(delegate, "value")
         }
+        // A member `by`-delegate on the general convention: `delegate.getValue(this, property)`.
+        receiver.cls.conventionDelegatedProperties[name]?.let { delegateField ->
+            return delegateGetValue(receiver.fields[delegateField], name, thisRef = receiver)
+        }
         if (receiver.fields.containsKey(name)) return receiver.fields[name]
         if (name == "name" && receiver.enumName != null) return receiver.enumName
         if (name == "ordinal" && receiver.enumOrdinal >= 0) return receiver.enumOrdinal
@@ -1252,6 +1454,53 @@ class Interpreter(
         // method keyed `name/0`; invoke it on the receiver.
         findSourceMethod(receiver.cls, "$name/0")?.let { return callMethod(it, receiver, emptyList()) }
         throw InterpreterException("no property `$name` on source class ${receiver.cls.fqn}")
+    }
+
+    /** Read a `by`-delegate's value: `delegate.getValue(thisRef, property)`. [thisRef] is null for a local
+     *  delegate and the enclosing instance for a member delegate (Kotlin's own convention). */
+    private fun delegateGetValue(delegate: Any?, propertyName: String, thisRef: Any?): Any? =
+        callDelegateOp(requireDelegate(delegate, propertyName), "getValue", thisRef, InterpretedKProperty(propertyName), NO_DELEGATE_VALUE)
+
+    /** Write a `by`-delegate's value: `delegate.setValue(thisRef, property, value)`. */
+    private fun delegateSetValue(delegate: Any?, propertyName: String, thisRef: Any?, value: Any?) {
+        callDelegateOp(requireDelegate(delegate, propertyName), "setValue", thisRef, InterpretedKProperty(propertyName), value)
+    }
+
+    private fun requireDelegate(delegate: Any?, propertyName: String): Any =
+        delegate ?: throw InterpreterException("property delegate for `$propertyName` is not initialized")
+
+    /** Invoke a delegate's `getValue`/`setValue` operator. A source delegate interprets the member directly; a
+     *  library delegate reflects it (best-effort — see [reflectDelegateOp]). [value] === [NO_DELEGATE_VALUE]
+     *  selects `getValue` (no value argument); any other value selects `setValue`. */
+    private fun callDelegateOp(delegate: Any, op: String, thisRef: Any?, property: Any?, value: Any?): Any? {
+        val args = if (value === NO_DELEGATE_VALUE) listOf(thisRef, property) else listOf(thisRef, property, value)
+        if (delegate is SourceObject) {
+            val m = findSourceMethod(delegate.cls, "$op/${args.size}")
+                ?: throw InterpreterException("property delegate ${delegate.cls.fqn} has no `operator fun $op`")
+            return callMethod(m, delegate, args)
+        }
+        return reflectDelegateOp(delegate, op, args)
+    }
+
+    /** Reflect a library delegate's operator. The synthetic [InterpretedKProperty] is passed first; if the
+     *  operator declares a real `KProperty` parameter (so reflection rejects the fake), retry with a null
+     *  property — which works for the common operators that ignore the property metadata
+     *  (`Delegates.observable`/`notNull`). A still-failing call is an honest boundary, not a crash. */
+    private fun reflectDelegateOp(delegate: Any, op: String, args: List<Any?>): Any? {
+        val m = publicMethod(delegate.javaClass, op, args.size)
+            ?: delegate.javaClass.methods.firstOrNull { it.name == op && it.parameterCount == args.size }
+            ?: throw InterpreterException("no `$op` on delegate ${delegate.javaClass.name}")
+        runCatching { m.isAccessible = true }
+        fun invokeWith(a: List<Any?>): Any? =
+            try { m.invoke(delegate, *a.toTypedArray()) }
+            catch (e: java.lang.reflect.InvocationTargetException) { throw unwrapInvocationTarget(e) }
+        return try {
+            invokeWith(args)
+        } catch (e: IllegalArgumentException) {
+            val nulled = args.toMutableList().also { if (it.size >= 2) it[1] = null }
+            try { invokeWith(nulled) }
+            catch (e2: Throwable) { throw InterpreterException("library property delegate `${delegate.javaClass.name}.$op` is not supported in preview") }
+        }
     }
 
     /** Runtime `is`/`catch` type test. A [SourceObject] matches by walking its source class hierarchy; any
@@ -1392,6 +1641,10 @@ class Interpreter(
                     ?: throw InterpreterException("delegate `$delegateField` for `$name` not initialized on ${receiver.cls.fqn}")
                 writeProperty(delegate, "value", value); return
             }
+            // A member `by`-delegate on the general convention: `delegate.setValue(this, property, value)`.
+            receiver.cls.conventionDelegatedProperties[name]?.let { delegateField ->
+                delegateSetValue(receiver.fields[delegateField], name, thisRef = receiver, value = value); return
+            }
             receiver.fields[name] = value; return
         }
         hooks?.let { h ->
@@ -1495,6 +1748,12 @@ class Interpreter(
     }
 
     private fun invoke0(receiver: Any, name: String): Any? {
+        // A source class's no-arg operator/member (`operator fun iterator()`, and the returned iterator's own
+        // `hasNext()`/`next()` when it too is a source type) — interpret it instead of reflecting bytecode that
+        // doesn't exist. Drives `for (x in sourceObj)`.
+        if (receiver is SourceObject) {
+            findSourceMethod(receiver.cls, "$name/0")?.let { return callMethod(it, receiver, emptyList()) }
+        }
         val m = noArgMethod(receiver, name) ?: throw InterpreterException("no `$name()` on ${receiver.javaClass.name}")
         return m.invoke(receiver)
     }
@@ -1650,16 +1909,27 @@ class Interpreter(
     private class ReturnSignal(val value: Any?) : RuntimeException(null, null, false, false)
 
     /** Loop control transfers for `break`/`continue` — stackless singletons (no per-throw allocation in a hot
-     *  loop), caught by the enclosing [RNode.While]/[RNode.ForEach]. */
-    private object BreakSignal : RuntimeException(null, null, false, false)
-    private object ContinueSignal : RuntimeException(null, null, false, false)
+     *  loop), caught by the enclosing [RNode.While]/[RNode.ForEach]. The unlabeled jumps reuse the singletons;
+     *  a labeled jump (`break@outer`) carries its target [label] so an inner loop rethrows it to the loop it
+     *  names. Both cases are stackless (no fill-in of the trace). */
+    private sealed class LoopSignal : RuntimeException(null, null, false, false) { abstract val label: String? }
+    private object BreakSignal : LoopSignal() { override val label: String? get() = null }
+    private object ContinueSignal : LoopSignal() { override val label: String? get() = null }
+    private class LabeledBreakSignal(override val label: String) : LoopSignal()
+    private class LabeledContinueSignal(override val label: String) : LoopSignal()
 
-    /** Run a loop body in [bodyEnv], swallowing a `continue` (which just ends this iteration). A `break`
-     *  propagates out to the enclosing loop's own catch. */
-    private fun runLoopBody(body: RNode, bodyEnv: Env) {
+    /** True when a break/continue [signal] should be handled by a loop tagged [loopLabel]: an unlabeled jump
+     *  always stops at its innermost enclosing loop; a labeled jump only at the loop whose label it names. */
+    private fun handledHere(signal: LoopSignal, loopLabel: String?): Boolean =
+        signal.label == null || signal.label == loopLabel
+
+    /** Run a loop body in [bodyEnv], swallowing a `continue` that targets THIS loop (an unlabeled one, or one
+     *  labeled [loopLabel]); a `continue` naming an outer loop, and any `break`, propagate out. */
+    private fun runLoopBody(body: RNode, bodyEnv: Env, loopLabel: String?) {
         try {
             eval(body, bodyEnv)
-        } catch (c: ContinueSignal) { /* continue → fall through to the next iteration */ }
+        } catch (c: ContinueSignal) { /* continue → fall through to the next iteration */
+        } catch (c: LabeledContinueSignal) { if (!handledHere(c, loopLabel)) throw c }
     }
 
     /** Per-loop budget for the runaway guard. Reset whenever the loop cooperates (suspends via `delay`), so only
@@ -1765,9 +2035,29 @@ class Interpreter(
         val INLINE_INTRINSIC_FACADES = setOf(
             "kotlin.StandardKt", "kotlin.text.StringsKt", "kotlin.collections.CollectionsKt",
             "kotlinx.coroutines.DelayKt",
+            // The precondition family (`require`/`check`/`error`/`requireNotNull`/`checkNotNull`) — @InlineOnly
+            // (they carry contracts), so no JVM method exists to reflect. `TODO` lives on `StandardKt` above.
+            "kotlin.PreconditionsKt",
+            // `kotlin.math.*` (sqrt/abs/pow/roundToInt/…) — @InlineOnly delegations to java.lang.Math.
+            "kotlin.math.MathKt",
         )
         /** The `@InlineOnly` empty/blank predicates, dispatched by name in [evalEmptyBlankPredicate]. */
         val EMPTY_BLANK_PREDICATES = setOf("isNotBlank", "isNotEmpty", "isNullOrBlank", "isNullOrEmpty")
+
+        /** `kotlin.math` single-argument functions modeled over [java.lang.Math] (all compute in `Double`).
+         *  `round` is ties-to-even ([Math.rint], matching `kotlin.math.round`); `Double.roundToInt/Long` (ties
+         *  up) are handled separately. `abs`/`min`/`max` are type-preserving and also handled separately. */
+        val MATH_UNARY: Map<String, (Double) -> Double> = mapOf(
+            "sqrt" to Math::sqrt, "cbrt" to Math::cbrt,
+            "floor" to Math::floor, "ceil" to Math::ceil, "round" to Math::rint,
+            "sin" to Math::sin, "cos" to Math::cos, "tan" to Math::tan,
+            "asin" to Math::asin, "acos" to Math::acos, "atan" to Math::atan,
+            "sinh" to Math::sinh, "cosh" to Math::cosh, "tanh" to Math::tanh,
+            "exp" to Math::exp, "expm1" to Math::expm1,
+            "ln" to Math::log, "log10" to Math::log10, "ln1p" to Math::log1p,
+            "log2" to { x -> Math.log(x) / LN2 }, "sign" to Math::signum,
+        )
+        private val LN2 = Math.log(2.0)
 
         /** `arrayOf`/`intArrayOf`/… vararg factories + `emptyArray` — compiler intrinsics with no JVM method,
          *  built by [arrayConstructionIntrinsic]. `arrayOfNulls` is handled separately (it takes a size). */

@@ -154,15 +154,18 @@ class ComposePreviewRenderer(
                 }
                 null
             } catch (t: Throwable) {
-                log.warning("Compose preview render failed: ${t::class.simpleName}: ${t.message}")
-                t
+                // Surface the real cause, not a reflection `InvocationTargetException` wrapper (belt-and-suspenders
+                // for any ITE that reaches here from a non-dispatch reflective path — constructor/getter).
+                val real = unwrapInvocationTarget(t)
+                log.warning("Compose preview render failed: ${real::class.simpleName}: ${real.message}")
+                real
             }
         }
         // After each composition pass, drain the content-lambda error (LazyColumn/Scaffold bodies that threw
         // mid-subcompose, outside this try/catch). Reset the field so the NEXT pass starts clean; always call
         // onPartialError so the host knows when the error clears (null) after a fix.
         SideEffect {
-            val partial = dispatcher.contentLambdaError
+            val partial = dispatcher.contentLambdaError?.let { unwrapInvocationTarget(it) }
             if (partial != null) {
                 log.warning("Compose preview partial render error: ${partial::class.simpleName}: ${partial.message}")
                 dispatcher.contentLambdaError = null
@@ -172,4 +175,13 @@ class ComposePreviewRenderer(
         val f = failure
         if (f != null) onError(f)
     }
+}
+
+/** Peel [java.lang.reflect.InvocationTargetException] wrappers to the innermost real cause, so a preview error
+ *  shows the underlying exception (a user `NullPointerException`, `IllegalStateException`, …) with its message
+ *  and stack — not the opaque reflection wrapper. */
+private fun unwrapInvocationTarget(thrown: Throwable): Throwable {
+    var cur = thrown
+    while (cur is java.lang.reflect.InvocationTargetException) cur = cur.targetException ?: cur.cause ?: return cur
+    return cur
 }

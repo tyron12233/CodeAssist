@@ -56,6 +56,18 @@ sealed interface Binding {
         val mutable: Boolean,
         val valueProperty: Property,
     ) : Binding
+    /** A local `val/var x by <delegate>` read/written through the delegate's general MEMBER convention —
+     *  `delegate.getValue(thisRef, property)` / `delegate.setValue(thisRef, property, value)` — rather than a
+     *  `.value` shortcut. [slot] holds the delegate object; [propertyName] names the delegated property (handed
+     *  to the delegate as `property.name`). Unlike [DelegatedLocal] (expanded at lowering into a `.value`
+     *  get/set), the interpreter handles this binding directly, since the operators take arguments a plain
+     *  property read does not. A local delegate's `thisRef` is null (Kotlin's own convention). */
+    data class DelegatedConvention(
+        val slot: SlotId,
+        override val name: String,
+        val mutable: Boolean,
+        val propertyName: String,
+    ) : Binding
     /** A member or top-level property (read/written through [RNode.PropertyGet]/[RNode.PropertySet]).
      *  When [isExtension] is true this is an extension property: [ownerFqn] is the declaring `…Kt` facade and
      *  its getter is a STATIC method taking the receiver as its first argument (`16.dp` → `DpKt.getDp(int)`),
@@ -229,10 +241,11 @@ sealed interface RNode {
     data class Assign(val target: RNode, val value: RNode, override val source: SourceSpan) : RNode
     data class Return(val value: RNode?, override val source: SourceSpan) : RNode
     data class Throw(val value: RNode, override val source: SourceSpan) : RNode
-    /** Unlabeled `break` / `continue` — control flow handled by the enclosing [While]/[ForEach]. */
-    data class Break(override val source: SourceSpan) : RNode
-    data class Continue(override val source: SourceSpan) : RNode
-    data class While(val condition: RNode, val body: RNode, val doWhile: Boolean, override val source: SourceSpan) : RNode
+    /** `break` / `continue` — control flow handled by the enclosing [While]/[ForEach]. A non-null [label]
+     *  targets a specific labeled enclosing loop (`break@outer`); null is the ordinary innermost-loop jump. */
+    data class Break(override val source: SourceSpan, val label: String? = null) : RNode
+    data class Continue(override val source: SourceSpan, val label: String? = null) : RNode
+    data class While(val condition: RNode, val body: RNode, val doWhile: Boolean, override val source: SourceSpan, val label: String? = null) : RNode
     /** `for (x in xs)` with its convention methods pre-resolved (the interpreter just invokes them). */
     data class ForEach(
         val loopVar: RParam,
@@ -242,6 +255,7 @@ sealed interface RNode {
         val next: ResolvedCallable?,
         val body: RNode,
         override val source: SourceSpan,
+        val label: String? = null,
     ) : RNode
 
     /** The escape hatch that keeps the contract total. The interpreter refuses to run a tree containing one. */
@@ -294,6 +308,23 @@ data class REnumEntry(val name: String, val ordinal: Int, val args: List<RArg>)
 data class SuperCall(val fqn: String, val args: List<RArg>)
 
 /**
+ * A secondary constructor (`constructor(s: String) : this(s.length) { … }`). [params] are its value
+ * parameters; [delegatesToThis] is true for a `this(…)` delegation (to another constructor of the SAME class,
+ * which runs the primary params + init steps) and false for `super(…)` / no explicit delegation; [delegationArgs]
+ * are the lowered delegation arguments (evaluated in this constructor's parameter scope); [body] is the
+ * constructor body (run after delegation, with `this` and the params in scope).
+ */
+data class SecondaryCtor(
+    val params: List<RParam>,
+    val delegatesToThis: Boolean,
+    val delegationArgs: List<RArg>,
+    val body: RNode,
+    val diagnostics: List<LoweringDiagnostic>,
+) {
+    val isComplete: Boolean get() = diagnostics.isEmpty()
+}
+
+/**
  * A project-source class/object/enum lowered for interpretation — the type-level analogue of
  * [ResolvedFunction]. Source types aren't compiled at preview/run time, so the interpreter materializes them
  * as `SourceObject`s and runs their members from this model rather than reflecting bytecode.
@@ -329,10 +360,19 @@ data class ResolvedClass(
      *  (`State`/`MutableState`/`Lazy`) so a write hits the real `setValue()` and drives recomposition — the
      *  member analogue of [Binding.DelegatedLocal]. Empty for a class with no delegated members. */
     val delegatedProperties: Map<String, String> = emptyMap(),
+    /** `by`-delegated member properties whose delegate exposes a general MEMBER `getValue`/`setValue` operator
+     *  (a project delegate class, `Delegates.observable`, …) rather than a `.value` shortcut: property name →
+     *  the hidden field holding the delegate OBJECT. A read routes through `delegate.getValue(this, property)`
+     *  and a write through `delegate.setValue(this, property, value)` — the member analogue of
+     *  [Binding.DelegatedConvention]. Empty for a class with no such member. */
+    val conventionDelegatedProperties: Map<String, String> = emptyMap(),
+    /** Secondary constructors (`constructor(…) : this(…) { … }`), selected by arity at a `Type(…)` call when
+     *  the primary constructor doesn't match. Empty for the common single-constructor class. */
+    val secondaryCtors: List<SecondaryCtor> = emptyList(),
 ) {
     /** The data-class component property names, in constructor order. */
     val componentNames: List<String> get() = primaryParams.filter { it.isProperty }.map { it.name }
-    val isComplete: Boolean get() = diagnostics.isEmpty() && methods.values.all { it.isComplete }
+    val isComplete: Boolean get() = diagnostics.isEmpty() && methods.values.all { it.isComplete } && secondaryCtors.all { it.isComplete }
 }
 
 /** Where lowering had to give up, and why. */
@@ -393,6 +433,7 @@ fun reachableSourceClasses(
         cls.initSteps.forEach { addBody(it) }
         cls.methods.values.forEach { addBody(it.body) }
         cls.enumEntries.forEach { e -> e.args.forEach { addBody(it.value) } }
+        cls.secondaryCtors.forEach { ctor -> addBody(ctor.body); ctor.delegationArgs.forEach { addBody(it.value) } }
     }
 
     addBody(entry.body)
@@ -506,6 +547,7 @@ fun expandPreviewModel(seed: PreviewFileModel, maxFiles: Int, provider: PreviewD
         c.initSteps.forEach(work::add)
         c.methods.values.forEach { work.add(it.body) }
         c.enumEntries.forEach { e -> e.args.forEach { work.add(it.value) } }
+        c.secondaryCtors.forEach { ctor -> work.add(ctor.body); ctor.delegationArgs.forEach { work.add(it.value) } }
     }
     program.values.forEach { work.add(it.body) }
     classesByFqn.values.toList().forEach(::enqueueClass)

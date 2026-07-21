@@ -41,6 +41,24 @@ fun KotlinResolver.missingDelegateOperators(property: KtProperty): List<String> 
 }
 
 /**
+ * Whether a `by`-delegate exposes a general MEMBER `getValue` (and, for a `var`, a member `setValue`) operator
+ * — the delegation convention the interpreter can invoke directly as `delegate.getValue(thisRef, property)`.
+ * A project delegate class (`operator fun getValue`) and a member-operator library delegate (e.g.
+ * `Delegates.observable`'s `ReadWriteProperty`) both qualify. EXTENSION-only conventions (Compose's
+ * `MutableState` `.value`, map delegation) are deliberately excluded — the `.value` fast-path already covers
+ * State/Lazy, and an extension `getValue` can't be reached as a plain member call. False when the delegate's
+ * type is unknown/uninferable.
+ */
+fun KotlinResolver.delegateHasMemberConvention(property: KtProperty): Boolean {
+    val delegate = property.delegateExpression ?: return false
+    val dt = inferType(delegate)?.takeIf { !it.isTypeParameter } ?: return false
+    if (delegateContainsUninferableCall(delegate)) return false
+    fun hasMember(op: String) = service.membersNamed(dt.qualifiedName, dt.typeArguments, op)
+        .any { it.kind == SymbolKind.METHOD && !it.isExtension }
+    return hasMember("getValue") && (!property.isVar || hasMember("setValue"))
+}
+
+/**
  * Fully-qualified names to import to bring a `by`-delegate's missing `getValue`/`setValue` operator into
  * scope — the quick-fix for `val text by remember { mutableStateOf(0) }` →
  * `import androidx.compose.runtime.getValue`. Only out-of-scope EXTENSION operators that actually apply to

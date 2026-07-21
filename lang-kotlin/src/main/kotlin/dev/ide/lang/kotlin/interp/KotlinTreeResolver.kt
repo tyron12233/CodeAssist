@@ -31,6 +31,7 @@ import org.jetbrains.kotlin.psi.KtDotQualifiedExpression
 import org.jetbrains.kotlin.psi.KtExpression
 import org.jetbrains.kotlin.psi.KtFile
 import org.jetbrains.kotlin.psi.KtForExpression
+import org.jetbrains.kotlin.psi.KtLabeledExpression
 import org.jetbrains.kotlin.psi.KtIfExpression
 import org.jetbrains.kotlin.psi.KtIsExpression
 import org.jetbrains.kotlin.psi.KtLambdaArgument
@@ -44,6 +45,7 @@ import org.jetbrains.kotlin.psi.KtValueArgument
 import org.jetbrains.kotlin.psi.KtLiteralStringTemplateEntry
 import org.jetbrains.kotlin.psi.KtNameReferenceExpression
 import org.jetbrains.kotlin.psi.KtNamedFunction
+import org.jetbrains.kotlin.psi.KtSecondaryConstructor
 import org.jetbrains.kotlin.psi.KtParenthesizedExpression
 import org.jetbrains.kotlin.psi.KtParameter
 import org.jetbrains.kotlin.psi.KtPostfixExpression
@@ -456,7 +458,8 @@ class KotlinTreeResolver(
         val enumEntries = if (flavor == ClassFlavor.ENUM) lowerEnumEntries(decl) else emptyList()
         // Body-property initializers + init blocks, interleaved in source order.
         val steps = ArrayList<Pair<Int, RNode>>()
-        val delegatedProps = LinkedHashMap<String, String>() // property name → hidden delegate-object field
+        val delegatedProps = LinkedHashMap<String, String>() // .value-delegated property name → hidden delegate-object field
+        val conventionDelegatedProps = LinkedHashMap<String, String>() // getValue/setValue-delegated → hidden field
         for (prop in bodyProps) {
             val pname = prop.name ?: continue
             val offset = prop.textRange.startOffset
@@ -469,23 +472,25 @@ class KotlinTreeResolver(
                 // `var x by mutableStateOf(v)` — store the DELEGATE OBJECT in a hidden `x$delegate` field;
                 // reads/writes of `x` route through the delegate's `.value` (see Interpreter), so a write hits
                 // the real `MutableState.setValue()` and drives recomposition — the member form of a delegated
-                // local. Any non-`.value` delegate (no State/Lazy convention) is Unsupported (sound).
+                // local. A non-`.value` delegate exposing a member getValue/setValue operator uses the general
+                // convention instead (its read/write calls the operator with `this` and the property).
                 delegate != null -> {
                     val missing = runCatching { resolver.missingDelegateOperators(prop) }.getOrDefault(emptyList())
+                    val delegateField = "$pname\$delegate"
+                    fun storeDelegate(): RNode {
+                        val d = lower(delegate)
+                        return if (d is RNode.Unsupported) d
+                        else RNode.PropertySet(thisRef(ctx, prop), Binding.Property(delegateField, fqn, backingField = false), d, span(prop))
+                    }
                     val step: RNode = when {
                         missing.isNotEmpty() ->
                             unsupported("property delegate operator(s) ${missing.joinToString(", ")} not in scope (import them)", prop)
-                        delegateValueProperty(delegate) == null ->
-                            unsupported("property delegate is not a `.value` delegate (State/Lazy)", prop)
-                        else -> {
-                            val d = lower(delegate)
-                            if (d is RNode.Unsupported) d
-                            else {
-                                val delegateField = "$pname\$delegate"
-                                delegatedProps[pname] = delegateField
-                                RNode.PropertySet(thisRef(ctx, prop), Binding.Property(delegateField, fqn, backingField = false), d, span(prop))
-                            }
-                        }
+                        delegateValueProperty(delegate) != null ->
+                            storeDelegate().also { if (it !is RNode.Unsupported) delegatedProps[pname] = delegateField }
+                        runCatching { resolver.delegateHasMemberConvention(prop) }.getOrDefault(false) ->
+                            storeDelegate().also { if (it !is RNode.Unsupported) conventionDelegatedProps[pname] = delegateField }
+                        else ->
+                            unsupported("property delegate is not a `.value` delegate (State/Lazy) and has no member getValue/setValue operator", prop)
                     }
                     steps += offset to step
                 }
@@ -498,6 +503,10 @@ class KotlinTreeResolver(
             steps += anon.textRange.startOffset to lower(body)
         }
         val initSteps = steps.sortedBy { it.first }.map { it.second }
+        // Secondary constructors — lowered in their own scopes (`this` stays ctx.thisSlot; their value params
+        // get fresh slots). The call site selects primary vs. secondary by arity (see the interpreter).
+        val hasPrimary = decl.primaryConstructor != null || primaryKtParams.isNotEmpty()
+        val secondaryCtors = decl.secondaryConstructors.map { lowerSecondaryCtor(it, ctx, hasPrimary) }
         val supertypes = decl.superTypeListEntries.mapNotNull { ste ->
             val name = ste.typeReference?.text?.substringBefore('<')?.trim()?.takeIf { it.isNotEmpty() } ?: return@mapNotNull null
             runCatching { service.resolveTypeName(name, resolver.fileContext) }.getOrNull() ?: name
@@ -513,7 +522,29 @@ class KotlinTreeResolver(
             primaryParams = primaryParams, initSteps = initSteps, methods = methods,
             receiverSlot = thisSlot, supertypes = supertypes, superCall = superCall, enumEntries = enumEntries,
             diagnostics = classDiags, delegatedProperties = delegatedProps,
+            conventionDelegatedProperties = conventionDelegatedProps, secondaryCtors = secondaryCtors,
         )
+    }
+
+    /**
+     * Lower a secondary constructor (`constructor(…) : this(…)/super(…) { … }`). Its value params get fresh
+     * slots; `this` + members resolve through the pushed [ctx] (already on the classStack). The delegation call
+     * and body are lowered with the ctor params in scope. Delegation is [SecondaryCtor.delegatesToThis] for an
+     * explicit `this(…)` (or an implicit one when the class has a primary constructor); `super(…)` / no primary
+     * → false. Diagnostics are captured as the delta this lowering produced.
+     */
+    private fun lowerSecondaryCtor(sc: KtSecondaryConstructor, ctx: ClassContext, hasPrimary: Boolean): SecondaryCtor {
+        val before = diagnostics.size
+        scopes.addLast(HashMap())
+        val params = loweredValueParams(sc.valueParameters)
+        val deleg = sc.getDelegationCall()
+        val delegatesToThis = deleg.isCallToThis || (deleg.isImplicit && hasPrimary)
+        val delegationArgs = deleg.valueArguments.mapNotNull { va ->
+            (va as? KtValueArgument)?.getArgumentExpression()?.let { RArg(lower(it), va.getArgumentName()?.asName?.identifier) }
+        }
+        val body = sc.bodyBlockExpression?.let { lowerBlock(it) } ?: emptyBlock(sc)
+        scopes.removeLast()
+        return SecondaryCtor(params, delegatesToThis, delegationArgs, body, diagnostics.subList(before, diagnostics.size).toList())
     }
 
     /** Lower a class member function: a receiver slot (slot 0) is allocated first so `this`/implicit-member
@@ -583,9 +614,9 @@ class KotlinTreeResolver(
         is KtIsExpression -> isNode(e)
         is KtTryExpression -> tryNode(e)
         is KtThrowExpression -> RNode.Throw(e.thrownExpression?.let { lower(it) } ?: return unsupported("throw without value", e), span(e))
-        // Unlabeled `break` / `continue` (the common case); a labeled jump stays an honest boundary.
-        is KtBreakExpression -> if (e.getLabelName() == null) RNode.Break(span(e)) else unsupported("labeled break", e)
-        is KtContinueExpression -> if (e.getLabelName() == null) RNode.Continue(span(e)) else unsupported("labeled continue", e)
+        // `break` / `continue`, with an optional target label (`break@outer`) carried to the interpreter.
+        is KtBreakExpression -> RNode.Break(span(e), e.getLabelName())
+        is KtContinueExpression -> RNode.Continue(span(e), e.getLabelName())
         is KtDestructuringDeclaration -> destructuringNode(e)
         is KtReturnExpression -> RNode.Return(e.returnedExpression?.let { lower(it) }, span(e))
         is KtBinaryExpression -> binaryNode(e)
@@ -598,6 +629,7 @@ class KotlinTreeResolver(
         is KtWhileExpression -> whileNode(e, doWhile = false)
         is KtDoWhileExpression -> whileNode(e, doWhile = true)
         is KtForExpression -> forNode(e)
+        is KtLabeledExpression -> labeledNode(e)
         is KtWhenExpression -> whenNode(e)
         is KtLambdaExpression -> lambdaNode(e)
         is KtBlockExpression -> lowerBlock(e)
@@ -1653,13 +1685,27 @@ class KotlinTreeResolver(
         isStatic = false, isConstructor = false, isInline = false,
     )
 
-    private fun whileNode(e: org.jetbrains.kotlin.psi.KtWhileExpressionBase, doWhile: Boolean): RNode {
-        val cond = e.condition?.let { lower(it) } ?: return unsupported("while without condition", e)
-        val body = e.body?.let { lower(it) } ?: emptyBlock(e)
-        return RNode.While(cond, body, doWhile, span(e))
+    /** A labeled expression (`loop@ while(…)` / `outer@ for(…)`). A label on a loop is carried onto the loop
+     *  node so a matching `break@loop`/`continue@loop` targets it; a label on any other expression (a lambda or
+     *  block, used for labeled `return@`) is transparent — the base is lowered unchanged. */
+    private fun labeledNode(e: KtLabeledExpression): RNode {
+        val label = e.getLabelName()
+        return when (val base = e.baseExpression) {
+            is KtWhileExpression -> whileNode(base, doWhile = false, label = label)
+            is KtDoWhileExpression -> whileNode(base, doWhile = true, label = label)
+            is KtForExpression -> forNode(base, label = label)
+            null -> unsupported("empty labeled expression", e)
+            else -> lower(base)
+        }
     }
 
-    private fun forNode(e: KtForExpression): RNode {
+    private fun whileNode(e: org.jetbrains.kotlin.psi.KtWhileExpressionBase, doWhile: Boolean, label: String? = null): RNode {
+        val cond = e.condition?.let { lower(it) } ?: return unsupported("while without condition", e)
+        val body = e.body?.let { lower(it) } ?: emptyBlock(e)
+        return RNode.While(cond, body, doWhile, span(e), label)
+    }
+
+    private fun forNode(e: KtForExpression, label: String? = null): RNode {
         val lp = e.loopParameter ?: return unsupported("for without a loop variable (destructuring?)", e)
         val iterable = e.loopRange?.let { lower(it) } ?: return unsupported("for without an iterable", e)
         if (iterable is RNode.Unsupported) return iterable
@@ -1670,7 +1716,7 @@ class KotlinTreeResolver(
         val body = e.body?.let { lower(it) } ?: emptyBlock(e)
         scopes.removeLast()
         // The iterator/hasNext/next conventions are reflected on the runtime value by the interpreter.
-        return RNode.ForEach(RParam(slot, name, service.typeFromText(lp.typeReference?.text, resolver.fileContext)), iterable, null, null, null, body, span(e))
+        return RNode.ForEach(RParam(slot, name, service.typeFromText(lp.typeReference?.text, resolver.fileContext)), iterable, null, null, null, body, span(e), label)
     }
 
     private fun localVarNode(p: KtProperty): RNode {
@@ -1687,15 +1733,23 @@ class KotlinTreeResolver(
             if (missingOps.isNotEmpty()) {
                 return unsupported("property delegate operator(s) ${missingOps.joinToString(", ")} not in scope (import them)", p)
             }
-            // The slot holds the DELEGATE object; reads/writes of `x` go through its `.value` (the State/
-            // MutableState/Lazy convention). Any other delegate is Unsupported (sound: we don't model an
-            // arbitrary getValue/setValue convention).
+            // The slot holds the DELEGATE object. A State/MutableState/Lazy delegate reads/writes through its
+            // `.value` (the fast-path); any other delegate with a MEMBER getValue/setValue operator (a project
+            // delegate class, `Delegates.observable`, …) uses the general convention, handled by the interpreter.
             val valueProperty = delegateValueProperty(delegate)
-                ?: return unsupported("property delegate is not a `.value` delegate (State/Lazy)", p)
-            val delegateNode = lower(delegate)
-            if (delegateNode is RNode.Unsupported) return delegateNode
-            bind(name, Binding.DelegatedLocal(slot, name, p.isVar, valueProperty)) // AFTER the delegate is lowered
-            return RNode.LocalVar(slot, name, p.isVar, delegateNode, span(p))
+            if (valueProperty != null) {
+                val delegateNode = lower(delegate)
+                if (delegateNode is RNode.Unsupported) return delegateNode
+                bind(name, Binding.DelegatedLocal(slot, name, p.isVar, valueProperty)) // AFTER the delegate is lowered
+                return RNode.LocalVar(slot, name, p.isVar, delegateNode, span(p))
+            }
+            if (runCatching { resolver.delegateHasMemberConvention(p) }.getOrDefault(false)) {
+                val delegateNode = lower(delegate)
+                if (delegateNode is RNode.Unsupported) return delegateNode
+                bind(name, Binding.DelegatedConvention(slot, name, p.isVar, name)) // AFTER the delegate is lowered
+                return RNode.LocalVar(slot, name, p.isVar, delegateNode, span(p))
+            }
+            return unsupported("property delegate is not a `.value` delegate (State/Lazy) and has no member getValue/setValue operator", p)
         }
         val initializer = p.initializer?.let { lower(it) }
         bind(name, Binding.Local(slot, name, p.isVar)) // registered AFTER the initializer is lowered
