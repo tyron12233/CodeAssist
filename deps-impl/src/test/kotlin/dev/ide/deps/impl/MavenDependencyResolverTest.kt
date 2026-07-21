@@ -60,6 +60,41 @@ class MavenDependencyResolverTest {
     }
 
     @Test
+    fun kotlinStdlibCommonTransitiveIsPrunedNotUnresolved() {
+        // A library (kotlinx.serialization, coroutines, …) pulls `kotlin-stdlib-common` transitively. It's a KMP
+        // metadata-only module — no JVM bytecode, and since Kotlin 1.9.20 not published as a plain jar, so a
+        // JVM resolve 404s fetching it and used to flag it unresolved. The platform kotlin-stdlib provides the
+        // classes, so it must be PRUNED from the graph, not fetched or surfaced as unresolved.
+        val files = FakeRepo()
+        files.put("lib", "1.0", deps = listOf(Dep("org.jetbrains.kotlin", "kotlin-stdlib-common", "2.1.20")))
+        // Deliberately absent from the repo (mirrors the real 404): the prune must happen BEFORE any fetch.
+        val (resolver, _) = newResolver(files)
+
+        val result = runBlocking {
+            resolver.resolve(listOf(coord("lib", "1.0")), listOf(repo), ConflictPolicy.NEWEST, noProgress)
+        }
+        assertEquals(setOf("lib"), result.resolved.map { it.coordinate.name }.toSet(),
+            "kotlin-stdlib-common must be pruned (not resolved); got ${result.resolved.map { it.coordinate }}")
+        assertTrue(result.unresolved.isEmpty(),
+            "kotlin-stdlib-common must NOT be flagged unresolved — the platform stdlib provides it; got ${result.unresolved}")
+    }
+
+    @Test
+    fun directKotlinStdlibCommonIsPruned() {
+        val files = FakeRepo()
+        val (resolver, _) = newResolver(files)
+        val result = runBlocking {
+            resolver.resolve(
+                listOf(Coordinate("org.jetbrains.kotlin", "kotlin-stdlib-common", "2.1.20")),
+                listOf(repo), ConflictPolicy.NEWEST, noProgress,
+            )
+        }
+        assertTrue(result.resolved.isEmpty() && result.unresolved.isEmpty(),
+            "a directly-declared kotlin-stdlib-common must be pruned entirely; " +
+                "resolved=${result.resolved.map { it.coordinate }} unresolved=${result.unresolved}")
+    }
+
+    @Test
     fun normalizesHardPinAndRangeVersionsOnTransitives() {
         // AndroidX pins same-group deps as `[1.0]` (a Maven hard-pin range). The literal brackets must not
         // leak into the fetch URL, else the dep's POM 404s and its whole subtree is silently dropped — which

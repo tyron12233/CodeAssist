@@ -144,6 +144,9 @@ class MavenDependencyResolver(
 
         val queue = ArrayDeque<Req>()
         for (c0 in coordinates) {
+            // A JVM-irrelevant KMP metadata module (kotlin-stdlib-common) is provided by the platform stdlib —
+            // never fetch it (it 404s in modern Kotlin) or flag it unresolved. See [METADATA_ONLY_MODULES].
+            if (c0.ga in METADATA_ONLY_MODULES) continue
             // A blank version means "take it from a platform BOM" — fill it, or record it unresolved.
             val c = if (c0.version.isBlank()) {
                 val v = platformManaged[c0.ga] ?: run { unresolved += c0; continue }
@@ -229,6 +232,10 @@ class MavenDependencyResolver(
                     }
                     for (d in node.transitives) {
                         val childGa = GA(d.group, d.name)
+                        // A JVM-irrelevant KMP metadata module (kotlin-stdlib-common) pulled transitively (e.g.
+                        // by kotlinx-serialization) is provided by the platform stdlib — never walk/fetch it
+                        // (it 404s in modern Kotlin, surfacing as unresolved). See [METADATA_ONLY_MODULES].
+                        if (childGa in METADATA_ONLY_MODULES) continue
                         // A `strictly` pin forces the version; else a versionless transitive (one whose own
                         // metadata left the version to a BOM it didn't carry) is placeable iff a BOM manages it.
                         val version = d.strictly?.ifBlank { null } ?: d.version?.ifBlank { null } ?: platformManaged[childGa] ?: continue
@@ -1022,6 +1029,17 @@ class MavenDependencyResolver(
                 GA("org.jetbrains.kotlin", "kotlin-stdlib-common"),
             ),
         )
+
+        /**
+         * KMP metadata-only modules that must NOT be fetched as JVM artifacts. `kotlin-stdlib-common` carries
+         * only common-module metadata (no JVM bytecode); since Kotlin 1.9.20 it is published through Gradle
+         * Module Metadata / a `.klib`, not a plain `.jar`, so a POM-only JVM resolve (e.g. of
+         * kotlinx-serialization) pulls it transitively and then 404s fetching `kotlin-stdlib-common-<v>.jar` —
+         * surfacing as an unresolved dependency. On a JVM/Android classpath the platform `kotlin-stdlib` (here,
+         * the IDE's injected bundled stdlib) provides the real classes, so this module is redundant: prune it
+         * from the graph rather than fetch it or flag it unresolved.
+         */
+        val METADATA_ONLY_MODULES: Set<GA> = setOf(GA("org.jetbrains.kotlin", "kotlin-stdlib-common"))
     }
 }
 
