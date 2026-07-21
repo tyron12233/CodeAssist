@@ -21,6 +21,12 @@ interface KotlinCompilerPlugin {
     /** The plugin's kotlinc CLI id, the prefix of every `-P plugin:<pluginId>:<k>=<v>` option. */
     val pluginId: String
 
+    /** A short human name for the Compiler-plugins settings page (defaults to [pluginId]). */
+    val displayName: String get() = pluginId
+
+    /** A one-line explanation for the settings page (defaults to empty). */
+    val description: String get() = ""
+
     /** How the plugin's registrar is made available to the compiler (see [KotlinPluginLoading]). */
     val loading: KotlinPluginLoading get() = KotlinPluginLoading.COMPILE_CLASSPATH
 

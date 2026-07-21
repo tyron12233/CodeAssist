@@ -175,10 +175,19 @@ object ComposableAbi {
             if (a === OmittedArg) continue
             val slot = if (trailingLambda && i == k - 1) n - 1 else i
             if (slot !in 0 until n) continue
-            val value = if (a is InterpretedLambda) lambdaProxy(
-                a,
-                paramTypes[slot]
-            ) else boxValueClassIfNeeded(a, paramTypes[slot])
+            val raw = if (a is InterpretedLambda) lambdaProxy(a, paramTypes[slot]) else boxValueClassIfNeeded(a, paramTypes[slot])
+            // A NON-FUNCTION value bound to an EVENT-HANDLER parameter (`onClick: () -> Unit`, `onValueChange:
+            // (T) -> Unit`) — a null (unprovided/null callback) or a non-function (`onClick = onItemClick(x)`,
+            // a common mistake for `onClick = { onItemClick(x) }`, evaluates to the handler's `Unit` RESULT) —
+            // would otherwise be dropped to null (via the `$default` fill below) or bound raw. The real Compose
+            // runtime then stores that null and invokes it WITHOUT a null-check on the next tap
+            // (`ClickableNode.onPointerEvent` → `onClick.invoke()` NPE): a FATAL crash on the UI thread OUTSIDE
+            // any render try/catch, so a tap on the preview kills the app. Substitute a no-op so the handler
+            // slot is always a valid, inert function. Only the event-handler arities (`Function0`/`Function1`);
+            // a `@Composable` content slot is `Function2+` (it carries a Composer), so this never fabricates
+            // empty content.
+            val value = if (isEventHandlerFunctional(paramTypes[slot]) && (raw == null || !fitsParam(raw, paramTypes[slot])))
+                noOpFunctional(paramTypes[slot]) else raw
             // A supplied value that can't fit its parameter would make the reflective invoke throw an
             // argument-type mismatch that unwinds the WHOLE composition (a hard "preview failed" instead of a
             // partial render) — e.g. a value-class `long` landing on the typed `Modifier` slot (a placeholder/
@@ -192,7 +201,11 @@ object ComposableAbi {
                 provided[slot] = true
             }
         }
-        for (i in 0 until n) if (!provided[i]) slots[i] = zeroValue(paramTypes[i])
+        // An unprovided slot takes its zero value — EXCEPT an event-handler parameter, which takes a no-op (a
+        // required, omitted `onClick` would otherwise be null → the same fatal tap crash). A DEFAULTED handler's
+        // `$default` bit is still set below, so the composable's own default wins over this at runtime anyway.
+        for (i in 0 until n) if (!provided[i])
+            slots[i] = if (isEventHandlerFunctional(paramTypes[i])) noOpFunctional(paramTypes[i]) else zeroValue(paramTypes[i])
 
         val args = ArrayList<Any?>(m.parameterCount)
         args.addAll(slots)
@@ -442,6 +455,25 @@ object ComposableAbi {
      *  lambda takes) or any single-abstract-method (SAM) interface. A non-functional interface with several
      *  abstract methods (e.g. `androidx.compose.ui.Modifier`) is NOT one: a lambda proxy of it returns null for
      *  every method the caller invokes, which crashes deep in the library (see [firstParamsAccept]). Cached. */
+    /** An EVENT-HANDLER function type — `() -> R` (`Function0`, an `onClick`) or `(T) -> R` (`Function1`, an
+     *  `onValueChange`/`onCheckedChange`). These are invoked on interaction, OUTSIDE the render pass, so a null
+     *  one crashes the app on tap. A `@Composable` content slot is `Function2+` (the compiler adds the Composer
+     *  + `$changed` params), so it is never matched here — a no-op must not be injected as empty content. */
+    private fun isEventHandlerFunctional(c: Class<*>): Boolean =
+        c.name == "kotlin.jvm.functions.Function0" || c.name == "kotlin.jvm.functions.Function1"
+
+    /** A no-op stand-in for a null [fi] event handler (see [isEventHandlerFunctional]): every call returns the
+     *  method's zero value, so a preview tap/change is inert rather than a fatal NPE. */
+    private fun noOpFunctional(fi: Class<*>): Any =
+        java.lang.reflect.Proxy.newProxyInstance(fi.classLoader ?: javaClass.classLoader, arrayOf(fi)) { _, method, _ ->
+            when (method.name) {
+                "toString" -> "no-op"
+                "hashCode" -> System.identityHashCode(fi)
+                "equals" -> false
+                else -> zeroValue(method.returnType)
+            }
+        }
+
     private fun isFunctionalInterface(c: Class<*>): Boolean {
         if (!c.isInterface) return false
         return functionalInterfaceCache.getOrPut(c) {

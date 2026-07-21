@@ -65,6 +65,8 @@ import dev.ide.ui.backend.FileActions
 import dev.ide.ui.backend.IdeBackend
 import dev.ide.ui.backend.UiBuildFeature
 import dev.ide.ui.backend.UiBuildFeatures
+import dev.ide.ui.backend.UiCompilerPlugin
+import dev.ide.ui.backend.UiCompilerPlugins
 import dev.ide.ui.backend.UiConfigField
 import dev.ide.ui.backend.UiKeystore
 import dev.ide.ui.backend.UiSigningAssignment
@@ -100,6 +102,9 @@ import dev.ide.ui.generated.resources.modcfg_auto_detect
 import dev.ide.ui.generated.resources.modcfg_auto_detected
 import dev.ide.ui.generated.resources.modcfg_build_features_android_only
 import dev.ide.ui.generated.resources.modcfg_build_features_intro
+import dev.ide.ui.generated.resources.modcfg_compiler_plugin_applied
+import dev.ide.ui.generated.resources.modcfg_compiler_plugins_android_only
+import dev.ide.ui.generated.resources.modcfg_compiler_plugins_intro
 import dev.ide.ui.generated.resources.modcfg_couldnt_create
 import dev.ide.ui.generated.resources.modcfg_couldnt_load_config
 import dev.ide.ui.generated.resources.modcfg_created
@@ -150,6 +155,7 @@ import dev.ide.ui.generated.resources.modcfg_packaging_merge_desc
 import dev.ide.ui.generated.resources.modcfg_packaging_default_excludes
 import dev.ide.ui.generated.resources.modcfg_packaging_default_merges
 import dev.ide.ui.generated.resources.modcfg_tab_build_features
+import dev.ide.ui.generated.resources.modcfg_tab_compiler_plugins
 import dev.ide.ui.generated.resources.modcfg_tab_dependencies
 import dev.ide.ui.generated.resources.modcfg_tab_packaging
 import dev.ide.ui.generated.resources.modcfg_tab_settings
@@ -174,6 +180,7 @@ private const val ARG_TOKEN = "\u0000"
 enum class ModulesTab(val label: StringResource) {
     Settings(Res.string.modcfg_tab_settings),
     BuildFeatures(Res.string.modcfg_tab_build_features),
+    CompilerPlugins(Res.string.modcfg_tab_compiler_plugins),
     Packaging(Res.string.modcfg_tab_packaging),
     Signing(Res.string.modcfg_tab_signing),
     Dependencies(Res.string.modcfg_tab_dependencies),
@@ -314,6 +321,7 @@ private fun ModuleDetail(backend: IdeBackend, moduleName: String, initialTab: Mo
             when (tab) {
                 ModulesTab.Settings -> ModuleSettingsTab(backend, moduleName, codeFont, Modifier.weight(1f).fillMaxWidth())
                 ModulesTab.BuildFeatures -> BuildFeaturesPane(backend, moduleName, Modifier.weight(1f).fillMaxWidth())
+                ModulesTab.CompilerPlugins -> CompilerPluginsPane(backend, moduleName, Modifier.weight(1f).fillMaxWidth())
                 ModulesTab.Packaging -> PackagingPane(backend, moduleName, codeFont, Modifier.weight(1f).fillMaxWidth())
                 ModulesTab.Signing -> SigningPane(backend, moduleName, onOpenKeystoreManager, Modifier.weight(1f).fillMaxWidth())
                 ModulesTab.Dependencies -> DependenciesPane(backend, moduleName, codeFont, fileActions, Modifier.weight(1f).fillMaxWidth())
@@ -417,6 +425,97 @@ private fun BuildFeatureRow(feature: UiBuildFeature, working: Boolean, switchEna
             else CaSwitch(feature.enabled) { if (switchEnabled) onToggle(it) }
         }
         feature.note?.let {
+            Text(it, color = Ca.colors.textTertiary, style = Ca.type.caption2)
+        }
+    }
+}
+
+// ---- Compiler plugins (Kotlin compiler plugins: Compose, Serialization, Parcelize) ---------------
+
+@Composable
+private fun CompilerPluginsPane(backend: IdeBackend, moduleName: String, modifier: Modifier) {
+    var plugins by remember(moduleName) { mutableStateOf<UiCompilerPlugins?>(null) }
+    var loading by remember(moduleName) { mutableStateOf(true) }
+    var busy by remember(moduleName) { mutableStateOf<String?>(null) } // the plugin id currently toggling
+    var reloadKey by remember(moduleName) { mutableStateOf(0) }
+    var toast by remember { mutableStateOf<ConfigToast?>(null) }
+    val scope = rememberCoroutineScope()
+
+    LaunchedEffect(moduleName, reloadKey) {
+        loading = true
+        plugins = runCatching { backend.modules.getCompilerPlugins(moduleName) }.getOrNull()
+        loading = false
+    }
+    LaunchedEffect(toast) { if (toast != null) { delay(2600); toast = null } }
+
+    Box(modifier) {
+        val p = plugins
+        when {
+            loading -> Box(Modifier.fillMaxSize(), Alignment.Center) { CircularProgressIndicator(color = Ca.colors.accent) }
+            p == null -> Box(Modifier.fillMaxSize().padding(32.dp), Alignment.Center) {
+                Text(
+                    stringResource(Res.string.modcfg_compiler_plugins_android_only),
+                    color = Ca.colors.textTertiary, style = Ca.type.subhead,
+                )
+            }
+            else -> LazyColumn(
+                Modifier.fillMaxSize(),
+                contentPadding = PaddingValues(16.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp),
+            ) {
+                item("intro") {
+                    Text(
+                        stringResource(Res.string.modcfg_compiler_plugins_intro),
+                        color = Ca.colors.textSecondary, style = Ca.type.footnote,
+                    )
+                }
+                items(p.plugins, key = { it.id }) { plugin ->
+                    CompilerPluginRow(
+                        plugin = plugin,
+                        working = busy == plugin.id,
+                        switchEnabled = busy == null,
+                    ) { enabled ->
+                        if (busy == null) {
+                            busy = plugin.id
+                            scope.launch {
+                                val r = backend.modules.setCompilerPlugin(moduleName, plugin.id, enabled)
+                                toast = ConfigToast(r.message, error = !r.success)
+                                busy = null
+                                if (r.success) reloadKey++
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        ConfigToastHost(toast, Modifier.align(Alignment.BottomCenter))
+    }
+}
+
+@Composable
+private fun CompilerPluginRow(plugin: UiCompilerPlugin, working: Boolean, switchEnabled: Boolean, onToggle: (Boolean) -> Unit) {
+    Column(
+        Modifier.fillMaxWidth().background(Ca.colors.surface, RoundedCornerShape(Ca.radius.lg))
+            .border(1.dp, Ca.colors.separator, RoundedCornerShape(Ca.radius.lg)).padding(16.dp),
+        verticalArrangement = Arrangement.spacedBy(6.dp),
+    ) {
+        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+            Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
+                Text(plugin.title, color = Ca.colors.textPrimary, style = Ca.type.subhead, fontWeight = FontWeight.SemiBold)
+                Text(plugin.description, color = Ca.colors.textSecondary, style = Ca.type.footnote)
+            }
+            if (working) CircularProgressIndicator(Modifier.size(22.dp), color = Ca.colors.accent, strokeWidth = 2.dp)
+            else CaSwitch(plugin.enabled) { if (switchEnabled) onToggle(it) }
+        }
+        // "Active on the classpath" badge — the real build behavior, which can differ from the toggle when the
+        // runtime came in transitively (a dependency pulling it in applies the plugin even if not toggled here).
+        if (plugin.applied) {
+            Text(
+                "● " + stringResource(Res.string.modcfg_compiler_plugin_applied),
+                color = Ca.colors.accent, style = Ca.type.caption2,
+            )
+        }
+        plugin.note?.let {
             Text(it, color = Ca.colors.textTertiary, style = Ca.type.caption2)
         }
     }

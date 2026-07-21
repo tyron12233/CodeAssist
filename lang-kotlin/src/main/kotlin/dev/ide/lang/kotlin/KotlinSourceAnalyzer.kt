@@ -134,6 +134,14 @@ class KotlinSourceAnalyzer(ctx: CompilationContext) : SourceAnalyzer, Disposable
     @Volatile
     var liveOverlayProvider: () -> Map<String, String> = { emptyMap() }
 
+    /** Injected by the host: editor synthetic-member providers (kotlinx.serialization's `serializer()`, …) —
+     *  compiler-plugin-generated members the parse-only model can't see. Defaults to the built-ins so serialization
+     *  editor support works even in direct/test wiring; ide-core overrides with the `platform.kotlinSyntheticMember`
+     *  EP contributions (falling back to the same built-ins). See [KotlinSyntheticMemberProvider]. */
+    @Volatile
+    var syntheticMemberProviders: () -> List<dev.ide.lang.kotlin.symbols.KotlinSyntheticMemberProvider> =
+        { dev.ide.lang.kotlin.symbols.BUILTIN_KOTLIN_SYNTHETIC_MEMBER_PROVIDERS }
+
     /** Sync the symbol model to the current live buffers before a query (see [liveOverlayProvider]). */
     private fun refreshOverlay() {
         runCatching { service.setOverlay(liveOverlayProvider()) }
@@ -173,6 +181,7 @@ class KotlinSourceAnalyzer(ctx: CompilationContext) : SourceAnalyzer, Disposable
             // Hide the Android namespaces ONLY from a module that genuinely can't use them (see
             // [androidNamespacesVisible]) — never purely because the host's Android-ness flag was false/unset.
             excludedTypePrefixes = if (androidNamespacesVisible(isAndroidModule, classpathJars)) emptyList() else ANDROID_TYPE_PREFIXES,
+            syntheticMemberProviders = { syntheticMemberProviders() },
         )
     }
     private val service: KotlinSymbolService get() = serviceLazy.value

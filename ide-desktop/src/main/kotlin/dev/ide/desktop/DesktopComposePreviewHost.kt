@@ -27,6 +27,8 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import dev.ide.core.IdeServicesBackend
 import dev.ide.core.LoweredComposePreview
+import dev.ide.core.PreviewOutcome
+import dev.ide.core.resolvePreviewOutcome
 import dev.ide.interp.PreviewResourceResolver
 import dev.ide.interp.PreviewSandboxPolicy
 import dev.ide.interp.SandboxCategory
@@ -110,6 +112,11 @@ class DesktopComposePreviewHost(private val backend: IdeServicesBackend) : Compo
         val renderer = remember(libraryExecutor, resources, sandbox) {
             ComposePreviewRenderer(resources = resources, hooks = sandbox, libraryExecutor = libraryExecutor)
         }
+        // The last buffer that lowered cleanly, retained across edits (survives text changes; reset on a file /
+        // variant switch). A mid-edit / syntactically-broken buffer must never reach the Compose runtime — the
+        // debounced re-lower returns null for it, and we keep this last good render on screen instead of blanking
+        // (or churning a half-formed tree that corrupts the shared composer).
+        val lastGood = remember(path, preview.variantId) { arrayOfNulls<LoweredComposePreview>(1) }
         val state by produceState<PreviewState>(PreviewState.Loading, path, preview.functionName, preview.arity, text) {
             // First-run resilience: while the workspace index is still building, library composables (`Text`,
             // `Column`, `remember`) resolve to 0 candidates and the lower fails. Rather than latch that transient
@@ -119,15 +126,21 @@ class DesktopComposePreviewHost(private val backend: IdeServicesBackend) : Compo
             var attempts = 0
             while (true) {
                 val lowered = runCatching { backend.lowerComposePreview(path, preview.functionName, preview.arity, text) }.getOrNull()
-                if (lowered != null) { value = PreviewState.Ready(lowered); break }
+                if (lowered != null) { lastGood[0] = lowered; value = PreviewState.Ready(lowered); break }
                 val ready = runCatching { backend.composePreviewReady(path) }.getOrDefault(true)
                 if (ready || attempts++ >= PREVIEW_READY_MAX_ATTEMPTS) {
-                    // Surface WHY it isn't interpretable (the unsupported constructs + offending source), never a
-                    // bare message; even a thrown error becomes a visible reason.
-                    val why = runCatching { backend.composePreviewDiagnostics(path, preview.functionName, preview.arity, text) }
-                        .getOrElse { listOf("couldn't analyze: ${it::class.simpleName}: ${it.message}") }
-                        .ifEmpty { listOf("no reason reported (analysis returned nothing)") }
-                    value = PreviewState.NotInterpretable(why)
+                    // Broken / not-yet-lowerable buffer: keep the last good render (a broken tree must never reach
+                    // Compose); only when nothing ever rendered do we surface WHY (the unsupported constructs +
+                    // offending source). Even a thrown error becomes a visible reason.
+                    val outcome = resolvePreviewOutcome(null, lastGood[0]) {
+                        runCatching { backend.composePreviewDiagnostics(path, preview.functionName, preview.arity, text) }
+                            .getOrElse { listOf("couldn't analyze: ${it::class.simpleName}: ${it.message}") }
+                            .ifEmpty { listOf("no reason reported (analysis returned nothing)") }
+                    }
+                    value = when (outcome) {
+                        is PreviewOutcome.Render -> PreviewState.Ready(outcome.lowered)
+                        is PreviewOutcome.Unavailable -> PreviewState.NotInterpretable(outcome.reasons)
+                    }
                     break
                 }
                 value = PreviewState.Loading

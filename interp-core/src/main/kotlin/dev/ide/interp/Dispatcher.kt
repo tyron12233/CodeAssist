@@ -84,12 +84,15 @@ fun reorderNamedArgs(paramNames: List<String>, rawArgs: List<RArg>, args: List<A
     // the parens — `onCheckedChange = { }` (named) or a positional `f(x, { })` — is a normal value argument
     // that binds by name/position, NOT to the last parameter.
     val trailingLambda = rawArgs.lastOrNull()?.trailingLambda == true
-    var nextPositional = 0
     for (i in args.indices) {
         val target = when {
             rawArgs[i].name != null -> nameToIndex[rawArgs[i].name] ?: return args
             trailingLambda && i == args.lastIndex -> n - 1
-            else -> nextPositional++
+            // A positional argument binds to its ARGUMENT INDEX — Kotlin's rule, including a positional placed
+            // AFTER a named one (`Icon(imageVector = X, "")` binds `""` to parameter 1, contentDescription).
+            // A running "next positional" counter would instead reuse slot 0 (already filled by the named
+            // `imageVector`), dropping the image → the wrong overload is selected → a null painter at render.
+            else -> i
         }
         if (target !in 0 until n) return args
         slots[target] = args[i]
@@ -750,7 +753,22 @@ class ReflectiveDispatcher(
                 return out
             }
         }
+        // A List models a Kotlin array in the interpreter (`arrayOf`/`Array(n){}`/`vararg`). When the target is a
+        // real array parameter — a stdlib `ArraysKt` extension's `Object[]`/`int[]` receiver, or an `Array<T>`
+        // parameter — materialize it so the reflective call type-checks.
+        if (paramType.isArray && value is Collection<*>) return toRealArray(value, paramType.componentType)
         return boxValueClassIfNeeded(value, paramType)
+    }
+
+    /** Materialize [value] into a real Java array of [componentType] (boxing value-class elements; a primitive
+     *  component takes the element's unboxed form, a null primitive element its zero). */
+    private fun toRealArray(value: Collection<*>, componentType: Class<*>): Any {
+        val arr = java.lang.reflect.Array.newInstance(componentType, value.size)
+        value.forEachIndexed { i, e ->
+            val elem = if (componentType.isPrimitive && e == null) zeroValue(componentType) else boxValueClassIfNeeded(e, componentType)
+            java.lang.reflect.Array.set(arr, i, elem)
+        }
+        return arr
     }
 
     /** The generic parameter types of the REAL method behind a `<name>$default` synthetic [syn] (whose own
@@ -950,27 +968,30 @@ class ReflectiveDispatcher(
     }
 
     private fun leadingParamsAccept(params: Array<Class<*>>, args: List<Any?>, count: Int): Boolean =
-        (0 until count).all { i ->
-            val p = params[i]
-            when (val a = args[i]) {
-                null -> !p.isPrimitive
-                is InterpretedLambda -> p.isInterface
-                else -> wrap(p).isInstance(a) || acceptsValueClassUnderlying(p, a)
-            }
-        }
+        (0 until count).all { i -> paramAccepts(params[i], args[i]) }
 
     /** Whether each argument fits the (possibly primitive) parameter type — null fits any reference type, an
      *  interpreted lambda fits any functional interface, and an unboxed inline-value-class value fits a boxed
      *  value-class param (`bindArgs` boxes it via `box-impl` at invoke time). */
     private fun paramsAccept(params: Array<Class<*>>, args: List<Any?>): Boolean =
-        params.size == args.size && params.indices.all { i ->
-            val p = params[i]
-            when (val a = args[i]) {
-                null -> !p.isPrimitive
-                is InterpretedLambda -> p.isInterface
-                else -> wrap(p).isInstance(a) || acceptsValueClassUnderlying(p, a)
-            }
-        }
+        params.size == args.size && params.indices.all { i -> paramAccepts(params[i], args[i]) }
+
+    /** Whether argument [a] fits parameter type [p]. A `Collection` also fits an ARRAY parameter — the
+     *  interpreter models Kotlin arrays (`arrayOf`/`Array(n){}`/`vararg`) as Lists, so an array-typed stdlib
+     *  receiver/parameter (`ArraysKt.map(Object[], …)`) accepts one; [coerceArg] materializes the real array. */
+    private fun paramAccepts(p: Class<*>, a: Any?): Boolean = when (a) {
+        null -> !p.isPrimitive
+        is InterpretedLambda -> p.isInterface
+        else -> wrap(p).isInstance(a) || acceptsValueClassUnderlying(p, a) ||
+            (p.isArray && a is Collection<*> && collectionFitsArray(a, p.componentType))
+    }
+
+    /** Whether a Collection can materialize into an array of [componentType]: every element must fit the
+     *  (boxed) component type. This keeps the array-from-Collection acceptance from matching the WRONG stdlib
+     *  overload — a `List<Item>` fits `map(Object[], …)` but not `map(int[], …)`, while `intArrayOf(1,2,3)`'s
+     *  `List<Int>` fits both `int[]` and `Object[]` (either yields the same result). */
+    private fun collectionFitsArray(c: Collection<*>, componentType: Class<*>): Boolean =
+        c.all { it == null || wrap(componentType).isInstance(it) || acceptsValueClassUnderlying(componentType, it) }
 
     /** Whether method params [a] are not-less-specific than [b] (each boxed param of a is assignable to the
      *  corresponding boxed param of b) — the "more specific" relation from Java overload resolution, used to

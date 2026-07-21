@@ -1,9 +1,12 @@
 package dev.ide.core
 
+import dev.ide.android.support.resources.ResourceRepository
 import dev.ide.android.support.tools.KeystoreRegistry
 import dev.ide.build.engine.ProgramInterpreter
 import dev.ide.core.services.DependencyService
 import dev.ide.index.IndexService
+import dev.ide.lang.LanguageId
+import dev.ide.lang.SourceAnalyzer
 import dev.ide.lang.kotlin.compile.KotlinJvmCompiler
 import dev.ide.lang.dom.ParsedFile
 import dev.ide.model.Module
@@ -112,7 +115,7 @@ internal interface EngineContext {
 
     /** Construct the [SourceAnalyzer] for [module] in [language]. The app-global module-scoped analyzer service
      *  factory calls this through the scope-resolved engine; the module container caches and disposes it. */
-    fun buildAnalyzer(module: Module, language: dev.ide.lang.LanguageId): dev.ide.lang.SourceAnalyzer
+    fun buildAnalyzer(module: Module, language: LanguageId): SourceAnalyzer
 
     /** The module owning [file] by source root, or null (narrower than [moduleForEditableFile]). */
     fun moduleForFile(file: Path): Module?
@@ -129,7 +132,7 @@ internal interface EngineContext {
     fun analysisDisabled(file: Path): Boolean
 
     /** Mark [language]'s analysis unavailable after a backend LinkageError (see [analysisDisabled]). */
-    fun markAnalysisUnavailable(language: dev.ide.lang.LanguageId)
+    fun markAnalysisUnavailable(language: LanguageId)
 
     /** Remove and return [path]'s live editor overlay (for a rename that moves the backing file). */
     fun removeOverlay(path: Path): String?
@@ -144,22 +147,22 @@ internal interface EngineContext {
     val composePreviewRunner: ComposePreviewRunner?
 
     /** The per-(module, language) analyzer for editor features, resolved + cached as a MODULE-scoped service. */
-    fun analyzerFor(module: Module, language: dev.ide.lang.LanguageId): dev.ide.lang.SourceAnalyzer
+    fun analyzerFor(module: Module, language: LanguageId): SourceAnalyzer
 
     /** The editor language id for [file] (from `FILE_TYPE_EP`; the Java default for an unmapped file). */
-    fun languageFor(file: Path): dev.ide.lang.LanguageId
+    fun languageFor(file: Path): LanguageId
 
     /** Push [file]'s live editor buffer [text] into the overlay so analyzers see the unsaved edits. */
     fun updateDocument(file: Path, text: String)
 
     /** Reparse [file]'s live buffer [text] through [analyzer]'s incremental parser (bumping the shared
      *  document version), so a subsequent query on that same analyzer reflects the buffer. */
-    fun refreshParse(analyzer: dev.ide.lang.SourceAnalyzer, file: Path, text: String)
+    fun refreshParse(analyzer: SourceAnalyzer, file: Path, text: String)
 
     /** The module's merged Android resource repository (fingerprint-cached, shared with the editor's synthetic-R
      *  provider / layout preview / reference resolution), or null when the module has no Android resources. The
      *  app-global synthetic-R provider resolves this through the active engine. */
-    fun resourceRepo(module: Module): dev.ide.android.support.resources.ResourceRepository?
+    fun resourceRepo(module: Module): ResourceRepository?
 
     /** Read an app/project-scoped preference (`.platform/settings.properties`), or null if unset. */
     fun projectPref(key: String): String?

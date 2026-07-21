@@ -56,6 +56,11 @@ class KotlinSymbolService(
     /** FQN prefixes hidden from index-backed type-NAME completion — the Android namespaces for a non-Android
      *  (JVM/console) module, so the shared `java.classNames` index never offers `android.*` to auto-import. */
     private val excludedTypePrefixes: List<String> = emptyList(),
+    /** Editor synthetic-member providers (kotlinx.serialization's `serializer()`, …): compiler-plugin-generated
+     *  members the parse-only model can't see, folded into a SOURCE class's member enumeration. Contributed via
+     *  `platform.kotlinSyntheticMember`; queried lazily so a re-registration is picked up. See
+     *  [KotlinSyntheticMemberProvider]. */
+    private val syntheticMemberProviders: () -> List<KotlinSyntheticMemberProvider> = { emptyList() },
 ) : KotlinTypeContext, Closeable {
 
     // Kotlin's stdlib is an IMPLICIT dependency of every Kotlin file (like java.lang for Java). Always
@@ -398,6 +403,38 @@ class KotlinSymbolService(
         sc.methods.forEach { out += syntheticMethod(it) }
         sc.nestedClasses.forEach { out += syntheticNestedType(it) }
         return out
+    }
+
+    /** The gate a [KotlinSyntheticMemberProvider] uses to require its runtime before contributing (a plugin's
+     *  generated members are only real when the plugin actually ran, i.e. its runtime is on the classpath). */
+    private val syntheticMemberContext = object : KotlinSyntheticMemberProvider.Context {
+        override fun hasType(fqn: String): Boolean = isKnownType(fqn)
+    }
+
+    /** Compiler-plugin STATIC (type-/companion-accessible) synthetic members for [fqn] (kotlinx.serialization's
+     *  `serializer()`), surfaced at a `Foo.` reference alongside the real companion members. Empty unless [fqn]
+     *  is a PROJECT SOURCE class a registered provider targets — so it is a cheap map miss for every other type
+     *  (a binary `@Serializable` class already carries its real `serializer()` in bytecode). */
+    private fun syntheticStaticMembers(fqn: String, namePrefix: String): List<KotlinSymbol> {
+        val rc = sourceClass(fqn) ?: return emptyList()
+        val providers = runCatching { syntheticMemberProviders() }.getOrDefault(emptyList())
+        if (providers.isEmpty()) return emptyList()
+        val m = PrefixMatcher(namePrefix)
+        return providers
+            .flatMap { runCatching { it.staticMembers(rc, syntheticMemberContext) }.getOrDefault(emptyList()) }
+            .filter { namePrefix.isEmpty() || m.matches(it.name) }
+            .map { toSymbol(it, fqn, rc.typeParameterNames) }
+    }
+
+    /** Compiler-plugin INSTANCE synthetic members for source class [rc] (a future Parcelize provider's
+     *  `writeToParcel`/`describeContents`), folded into the class's own members. Empty unless a registered
+     *  provider targets [rc]. */
+    private fun syntheticInstanceMembers(rc: RawClass): List<KotlinSymbol> {
+        val providers = runCatching { syntheticMemberProviders() }.getOrDefault(emptyList())
+        if (providers.isEmpty()) return emptyList()
+        return providers
+            .flatMap { runCatching { it.instanceMembers(rc, syntheticMemberContext) }.getOrDefault(emptyList()) }
+            .map { toSymbol(it, rc.fqn, rc.typeParameterNames) }
     }
 
     private fun syntheticField(f: SyntheticField): KotlinSymbol = KotlinSymbol(
@@ -760,9 +797,12 @@ class KotlinSymbolService(
             // An enum's `values()`/`valueOf()`/`entries` are compiler-synthesized (not written in source), so
             // the source model would otherwise miss them and `Color.values()` would flag unresolved.
             val synthetic = if (rc.isEnum) enumSyntheticMembers(fqn) else emptyList()
+            // A compiler plugin's generated INSTANCE members (a future Parcelize provider's writeToParcel/…), for
+            // the same reason: the parse-only model never runs the plugin. Cheap — gated on the class's annotations.
+            val syntheticPlugin = syntheticInstanceMembers(rc)
             val inherited = rc.superTypeTexts.mapNotNull { resolveTypeName(it, rc.ctx) }
                 .flatMap { ownAndInherited(it, emptyList(), visited) }
-            return own + synthetic + inherited
+            return own + synthetic + syntheticPlugin + inherited
         }
         // `kotlin.Throwable` is a mapped built-in whose `.kotlin_builtins` shape is intentionally minimal
         // (`message`, `cause`); the rest of its API — `stackTrace`, `printStackTrace`, `localizedMessage`,
@@ -927,9 +967,13 @@ class KotlinSymbolService(
     }
 
     private fun computeCompanionMembers(typeFqnRaw: String, namePrefix: String): List<KotlinSymbol> {
-        val companionFqn = companionObjectFqn(typeFqnRaw) ?: return emptyList()
-        return membersForCompletion(companionFqn, emptyList(), namePrefix)
-            .filter { it.name !in OBJECT_METHODS }
+        val fqn = Builtins.kotlinTypeFor(typeFqnRaw) ?: typeFqnRaw
+        val companion = companionObjectFqn(typeFqnRaw)?.let { companionFqn ->
+            membersForCompletion(companionFqn, emptyList(), namePrefix).filter { it.name !in OBJECT_METHODS }
+        } ?: emptyList()
+        // A compiler-plugin's type-accessible synthetics (kotlinx.serialization's `Foo.serializer()`) surface here
+        // too — even for a `@Serializable` class with NO explicit companion, whose companion the plugin synthesizes.
+        return companion + syntheticStaticMembers(fqn, namePrefix)
     }
 
     /** The companion object of [typeFqnRaw] as a completion candidate — its declared simple name (`Companion`
@@ -945,6 +989,27 @@ class KotlinSymbolService(
             modifiers = setOf(Modifier.STATIC),
             origin = if (sourceClass(fqn) != null) SOURCE else BINARY,
         )
+    }
+
+    /**
+     * A member reachable by a fully-qualified import path — a companion-object member
+     * (`import …MainActivity.Companion.TAG`), a plain `object` member (`import …Config.DEBUG`), or a companion
+     * member imported through its enclosing class (`import …MainActivity.TAG`, which Kotlin also permits) —
+     * resolved to its symbol so a bare reference to the imported simple name gets a type. Null when the
+     * container declares no such member. The declared type/inference machinery treats the result exactly like a
+     * top-level property, so a chain off it (`TAG.length`) resolves.
+     */
+    fun importedMemberSymbol(memberFqn: String): KotlinSymbol? {
+        val container = memberFqn.substringBeforeLast('.', "")
+        val name = memberFqn.substringAfterLast('.')
+        if (container.isEmpty() || name.isEmpty()) return null
+        // The container is itself an `object` / companion-object FQN (`…MainActivity.Companion`, `…Config`):
+        // the member is declared directly on it.
+        membersNamed(container, emptyList(), name).firstOrNull { !it.isExtension && it.name == name }
+            ?.let { return it }
+        // The container is the ENCLOSING class of a companion member (`import Outer.member`): companion members
+        // are also accessible statically through the class name.
+        return companionMembersFor(container, name).firstOrNull { it.name == name }
     }
 
     /**
@@ -1356,25 +1421,30 @@ class KotlinSymbolService(
             run {
                 // Prefix-query the persistent index; an empty prefix (the explicit "show all" / resolution path,
                 // not per-keystroke) is uncapped so it stays complete, while a typed prefix is bounded by matches.
-                // A camel-hump prefix pushes only its first character into the packed key; the matcher narrows.
+                // A camel-hump prefix pushes its first character AND the full prefix into the packed keys (see
+                // [PrefixMatcher.indexPrefixes]): the first-char query's result cap could otherwise truncate a
+                // plain-prefix match — `listOf`, once the caret passes the capital `O` — before it's reached, so
+                // the narrow full-prefix query rescues the typed-in-full name; [distinctBy] folds the overlap.
                 // While the index is still building this returns the already-open segments' callables —
                 // progressive completion instead of a dumb-mode blackout.
                 val limit = if (prefix.isEmpty()) Int.MAX_VALUE else CALLABLE_QUERY_LIMIT
                 // The stdlib's top-level callables (`println`, `listOf`) are in the index too (the host adds the
                 // bundled stdlib jar to the index scope), so the prefix query covers them.
-                idx.prefix<CallableShape>(KotlinCallableIndex.id, KotlinCallableIndex.topKey(m.indexPrefix), limit)
-                    .filter { prefix.isEmpty() || m.matches(it.value.name) }
-                    .map { it.value.toSymbol(this) }.toList() +
+                fun scan(id: IndexId, origin: SymbolOrigin): List<KotlinSymbol> {
+                    val hits = m.indexPrefixes.flatMap { p ->
+                        idx.prefix<CallableShape>(id, KotlinCallableIndex.topKey(p), limit)
+                            .filter { prefix.isEmpty() || m.matches(it.value.name) }
+                            .map { it.value.toSymbol(this, origin) }
+                    }
+                    return if (m.indexPrefixes.size > 1) hits.distinctBy { it.name + "|" + it.signature } else hits
+                }
+                scan(KotlinCallableIndex.id, BINARY) +
                     // Cross-file source top-levels straight from the source index (available before the
                     // in-memory model warms; the completion dedup folds them with their model twins).
-                    idx.prefix<CallableShape>(KotlinSourceCallableIndex.id, KotlinCallableIndex.topKey(m.indexPrefix), limit)
-                        .filter { prefix.isEmpty() || m.matches(it.value.name) }
-                        .map { it.value.toSymbol(this, SOURCE) }.toList() +
+                    scan(KotlinSourceCallableIndex.id, SOURCE) +
                     // The builtin intrinsics (`arrayOf`/`intArrayOf`/…) — top-level functions in `.kotlin_builtins`
                     // with no `.class` facade, so absent from the `.class`-scanning KotlinCallableIndex above.
-                    idx.prefix<CallableShape>(KotlinBuiltinCallableIndex.id, KotlinCallableIndex.topKey(m.indexPrefix), limit)
-                        .filter { prefix.isEmpty() || m.matches(it.value.name) }
-                        .map { it.value.toSymbol(this) }.toList()
+                    scan(KotlinBuiltinCallableIndex.id, BINARY)
             }
         } else {
             val byName = reader.scan(this).topLevelByName
@@ -1415,6 +1485,12 @@ class KotlinSymbolService(
         typeNamesByPrefix(name).forEach { s ->
             val fqn = s.type?.qualifiedName
             if (fqn != null && '.' in fqn && fqn.substringAfterLast('.') == name) out += fqn
+        }
+        // Members of a project companion object, importable by their simple name through the enclosing type
+        // (`import …MainActivity.Companion.TAG`) — companion members are accessible statically, so a bare
+        // unresolved `TAG` can offer its companion import (mirrors an `object` member's static import).
+        model().classByFqn.values.forEach { rc ->
+            if (rc.isCompanion && rc.members.any { it.name == name }) out += "${rc.fqn}.$name"
         }
         return out.sorted()
     }

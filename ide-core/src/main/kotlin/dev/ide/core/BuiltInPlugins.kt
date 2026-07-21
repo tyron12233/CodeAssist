@@ -260,6 +260,12 @@ private class KotlinSupportPlugin : Plugin {
         reg.register(KOTLIN_COMPILER_PLUGIN_EP, ComposeCompilerPlugin)
         reg.register(KOTLIN_COMPILER_PLUGIN_EP, SerializationCompilerPlugin)
         reg.register(KOTLIN_COMPILER_PLUGIN_EP, ParcelizeCompilerPlugin)
+        // Editor support for a compiler plugin's generated members (kotlinx.serialization's `Foo.serializer()`):
+        // the parse-only symbol model can't see them, so a provider contributes them to completion/resolution.
+        reg.register(
+            dev.ide.lang.kotlin.symbols.KOTLIN_SYNTHETIC_MEMBER_EP,
+            dev.ide.lang.kotlin.symbols.SerializationSyntheticMembers,
+        )
         reg.contributeVia { ext, pid ->
             val templates = ProjectTemplateRegistry(ext)
             templates.register(KotlinConsoleAppTemplate, pid)

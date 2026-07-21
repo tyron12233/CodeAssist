@@ -97,9 +97,16 @@ data class BuildFeatures(
      * annotation) is on the classpath, which enabling this adds.
      */
     val parcelize: Boolean = false,
+    /**
+     * `serialization`: enable the kotlinx.serialization compiler plugin — a `@Serializable` class gets its
+     * generated `serializer()`/`$serializer`. Like `compose`/`parcelize`, the plugin is applied once its
+     * runtime (`kotlinx.serialization.Serializable`) is on the classpath, which enabling this adds; the editor
+     * then also resolves/completes the generated `serializer()` members.
+     */
+    val serialization: Boolean = false,
 ) {
     /** True when at least one build feature is enabled (drives "emit only when set" persistence). */
-    val anyEnabled: Boolean get() = viewBinding || compose || parcelize
+    val anyEnabled: Boolean get() = viewBinding || compose || parcelize || serialization
 }
 
 /** A build type (`debug`/`release`/…): how a variant is assembled regardless of flavor. */

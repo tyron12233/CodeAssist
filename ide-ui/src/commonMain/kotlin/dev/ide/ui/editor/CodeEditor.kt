@@ -443,18 +443,17 @@ private fun CodeEditorContent(
             }
         }
 
-        when {
-            // A new member-access context (`.`) always needs a fresh candidate set from the backend.
-            before == '.' ->
+        // A member access (`.`) or an annotation start (`@`, Kotlin/Java) opens a fresh candidate set; an
+        // identifier character extends the current token (narrowed client-side when the live set still covers
+        // it, so the keystroke path skips a backend re-query); anything else ends the session.
+        when (completionKeystroke(before, wordExtra)) {
+            CompletionKeystroke.Reopen ->
                 if (completion.autoPopupEnabled) completion.reopen() else completion.dismiss()
-            // Extending an identifier: if the live popup session already covers this token with a complete,
-            // locally-filterable set, the client-side filter narrows it instantly — so skip the backend re-query.
-            before != null && isIdentifierChar(before, wordExtra) ->
+            CompletionKeystroke.Extend ->
                 if (!canNarrowLocally(completion.current, completion.dismissed, d.chars, caret, wordExtra)) {
                     if (completion.autoPopupEnabled) completion.reopen() else completion.dismiss()
                 }
-
-            else -> completion.dismiss()
+            CompletionKeystroke.Dismiss -> completion.dismiss()
         }
     }
 

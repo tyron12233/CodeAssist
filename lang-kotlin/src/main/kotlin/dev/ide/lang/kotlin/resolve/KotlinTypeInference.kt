@@ -631,6 +631,14 @@ internal fun KotlinResolver.typeOfName(name: String, offset: Int): KotlinType? {
     // A bare read of an enclosing class's COMPANION member (`fun f() = CONST` inside the class) — companion
     // members are accessible without a qualifier, but live on a distinct classifier the receiver walk misses.
     enclosingCompanionMember(name, offset)?.let { return it.type as? KotlinType }
+    // A bare name brought into scope by an explicit member import (`import …MainActivity.Companion.TAG`,
+    // `import …Config.DEBUG`) — a companion-object / object member is accessible unqualified once imported, so
+    // a chain off it (`TAG.length`) can resolve. Gated on a matching non-star import simple name (the common
+    // case is zero matches), so the member lookup only fires for a name that was actually imported.
+    for (imp in fileContext.imports) {
+        if (imp.isStar || imp.simpleName != name) continue
+        service.importedMemberSymbol(imp.fqn)?.let { return it.type as? KotlinType }
+    }
     service.topLevelByName(name).firstOrNull { it.kind == SymbolKind.FIELD }
         ?.let { return it.type as? KotlinType }
     // A bare type name used as an expression (e.g. `Foo` in `Foo.CONST`): a LOCAL type in scope first (a local

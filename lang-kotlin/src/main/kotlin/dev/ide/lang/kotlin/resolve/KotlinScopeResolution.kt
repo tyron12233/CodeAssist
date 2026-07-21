@@ -728,7 +728,11 @@ internal fun KotlinResolver.sameFileFunction(fn: KtNamedFunction, ownerFqn: Stri
         paramHasDefault = fn.valueParameters.map { it.hasDefaultValue() },
         varargParamIndex = fn.valueParameters.indexOfFirst { it.isVarArg },
         isComposable = fn.annotationEntries.any { it.shortName?.asString() == "Composable" },
+        isInline = fn.hasModifier(org.jetbrains.kotlin.lexer.KtTokens.INLINE_KEYWORD),
         isDeprecated = fn.annotationEntries.any { it.shortName?.asString() == "Deprecated" },
+        // Type parameters (`fun <reified T> foo()` → ["T"]) — mirror toSymbol so a generic same-file call keeps
+        // its type parameters for explicit-type-argument resolution (reified-generics lowering reads them).
+        typeParameters = fn.typeParameters.mapNotNull { it.name },
         // Top-level callables carry their package for import-visibility; members don't (mirror toSymbol).
         packageName = if (ownerFqn == null) fileContext.packageName.ifEmpty { null } else null,
         declarationNode = runCatching { parsed.adapt(fn) }.getOrNull(),

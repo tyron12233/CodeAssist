@@ -177,10 +177,32 @@ a clear diagnostic:
 
 - **IN:** locals/params/properties; member & extension calls; **overload resolution by argument types**;
   constructor calls; operator / iterator / `invoke` / delegation conventions; `if`/`when`/loops; lambdas +
-  closures; basic generics (enough for dispatch); nullable + smart-cast on `!= null` / `is`.
-- **OUT (v1, rejected):** coroutines / `suspend`; reified inline; advanced inference (builder inference,
-  flexible types); sequences. UI/Compose code lives mostly inside the IN box — but **overload resolution and
-  smart-casts are mandatory** and are the parts most likely to bite.
+  closures; basic generics (enough for dispatch); nullable + smart-cast on `!= null` / `is`; **reified generics
+  for source functions** (see below).
+- **OUT (v1, rejected):** coroutines / `suspend`; advanced inference (builder inference, flexible types);
+  sequences. UI/Compose code lives mostly inside the IN box — but **overload resolution and smart-casts are
+  mandatory** and are the parts most likely to bite.
+
+### Reified generics + Navigation-Compose preview
+
+Call-site type arguments are captured onto `RNode.Call.typeArguments` (a `List<RTypeArg>`, positional with the
+callee's type parameters) by `KotlinTreeResolver.resolveCallTypeArgs`. For an interpreted (project-source)
+`inline fun <reified T>`, the interpreter binds `T` to the concrete type per call frame (`Env.reifiedTypes`), so
+`T::class` / `x is T` / `x as T` in the body resolve to the real type (a nested `bar<T>()` passthrough re-binds
+from the caller). Marked on the nodes by `RNode.ClassLiteral.reifiedParam` / `TypeCheck.reifiedParam` /
+`Cast.reifiedParam`. A LIBRARY reified-inline function has no reflectable target that carries the type argument,
+so it can't be dispatched generically — it needs a bespoke interceptor:
+
+- **`kotlinx.serialization.serializer<T>()`** (`ComposeDispatcher.resolveSerializerCall`): resolves `T` from the
+  type argument and returns the compiled type's `$serializer` singleton (or a static `SerializersKt.serializer(KClass)`);
+  a project-source `@Serializable` type has no compiled serializer at preview time, so it degrades to `null`
+  (no crash) rather than the old "inline-only function not modeled" failure.
+- **`NavHost { composable<T> { } }`** (`ComposeDispatcher.handleNavCall`): the real androidx.navigation runtime
+  needs a live `NavController`/back-stack/`Looper` the in-app preview can't provide, so it is intercepted, not
+  reflected. `rememberNavController` yields a placeholder; `NavHost` runs its builder to collect each
+  `composable<Route> { content }` (keyed by the route type argument) then composes the START destination's
+  content lambda inline — which is what a static `@Preview` of a NavHost should show. Route matching uses the
+  `startDestination` value's type FQN (a `@Serializable` route object/instance is a `SourceObject`).
 
 ## Risk register (ranked)
 

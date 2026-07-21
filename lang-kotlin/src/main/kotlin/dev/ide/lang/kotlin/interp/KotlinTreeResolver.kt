@@ -114,6 +114,13 @@ class KotlinTreeResolver(
     )
     private val classStack = ArrayDeque<ClassContext>()
 
+    /** The type-parameter names of the function currently being lowered (`fun <reified T> foo()` → `["T"]`).
+     *  A `T::class` / `x is T` / `x as T` in the body references one of these; a nested call `bar<T>()` passing
+     *  `T` as a type argument is a passthrough re-bound from the caller's frame. Reset per top-level lowering
+     *  ([reset]); set in [lowerFunction]. Reified type params are the only ones that can appear in `is`/`as`/
+     *  `::class`, so this set is effectively "the reified params in scope." */
+    private var currentTypeParams: List<String> = emptyList()
+
     private fun thisRef(ctx: ClassContext, e: PsiElement? = null): RNode =
         RNode.Name(Binding.Local(ctx.thisSlot, "this", mutable = false), e?.let { span(it) } ?: SourceSpan(0, 0))
 
@@ -262,6 +269,7 @@ class KotlinTreeResolver(
 
     fun lowerFunction(fn: KtNamedFunction): ResolvedFunction {
         reset(fn.textRange.startOffset)
+        currentTypeParams = fn.typeParameters.mapNotNull { it.name }
         scopes.addLast(HashMap())
         // An EXTENSION function binds its receiver to slot 0 (like a member's `this`) and registers it as an
         // implicit receiver scope, so `this` and bare-member access in the body resolve to it — and the
@@ -299,7 +307,7 @@ class KotlinTreeResolver(
         }
         return bound.map { (slot, name, p) ->
             RParam(slot, name, service.typeFromText(p.typeReference?.text, resolver.fileContext),
-                default = p.defaultValue?.let { lowerParamDefault(it) })
+                default = p.defaultValue?.let { lowerParamDefault(it) }, vararg = p.isVarArg)
         }
     }
 
@@ -849,6 +857,12 @@ class KotlinTreeResolver(
      */
     private fun classLiteralNode(e: KtClassLiteralExpression, asJava: Boolean): RNode {
         val recvExpr = e.receiverExpression ?: return unsupported("class literal without a receiver", e)
+        // `T::class` for a reified type parameter T: carry the param name so the interpreter resolves the bound
+        // concrete type from the call frame (the erased `T` has no loadable class of its own).
+        val recvText = recvExpr.text.substringBefore('<').trim()
+        if (recvText in currentTypeParams) {
+            return RNode.ClassLiteral(receiver = null, typeCandidates = emptyList(), asJava = asJava, source = span(e), reifiedParam = recvText)
+        }
         val typeFqn = runCatching { resolver.typeDenotationFqn(recvExpr) }.getOrNull()
         if (typeFqn != null) {
             return RNode.ClassLiteral(receiver = null, typeCandidates = classLoadCandidates(typeFqn), asJava = asJava, source = span(e))
@@ -946,8 +960,11 @@ class KotlinTreeResolver(
         if (value is RNode.Unsupported) return value
         val typeText = e.typeReference?.text?.substringBefore('<')?.trim()?.takeIf { it.isNotEmpty() }
             ?: return unsupported("`is` without a type", e)
+        // `x is T` for a reified type parameter T: carry the param name so the interpreter substitutes the
+        // bound concrete type at runtime (the erased `T` would otherwise never match).
+        val reified = typeText.takeIf { it in currentTypeParams }
         val fqn = runCatching { service.resolveTypeName(typeText, resolver.fileContext) }.getOrNull() ?: typeText
-        return RNode.TypeCheck(value, fqn, e.isNegated, span(e))
+        return RNode.TypeCheck(value, fqn, e.isNegated, span(e), reifiedParam = reified)
     }
 
     /** `value as T` / `value as? T` — a runtime cast. The target type's generic args are stripped (the JVM
@@ -958,9 +975,12 @@ class KotlinTreeResolver(
         val rawType = e.right?.text?.trim()?.takeIf { it.isNotEmpty() } ?: return unsupported("cast without a type", e)
         val nullable = rawType.endsWith("?")
         val typeText = rawType.removeSuffix("?").substringBefore('<').trim()
+        // `x as T` for a reified type parameter T: carry the param name so the interpreter substitutes the bound
+        // concrete type at runtime rather than trusting the un-resolvable `T`.
+        val reified = typeText.takeIf { it in currentTypeParams }
         val fqn = runCatching { service.resolveTypeName(typeText, resolver.fileContext) }.getOrNull() ?: typeText
         val safe = e.operationReference.getReferencedNameElementType() == KtTokens.AS_SAFE
-        return RNode.Cast(value, fqn, safe, nullable, span(e))
+        return RNode.Cast(value, fqn, safe, nullable, span(e), reifiedParam = reified)
     }
 
     /**
@@ -1246,6 +1266,7 @@ class KotlinTreeResolver(
         val args = lowerArgs(call)
         val key = csk(call.textRange.startOffset)
         val callee = toCallable(chosen)
+        val typeArgs = resolveCallTypeArgs(call, chosen)
         if (chosen.isExtension) {
             // A MEMBER extension of an in-scope receiver scope (`RowScope.weight`, declared inside `RowScope`)
             // dispatches ON that scope instance, with the explicit/implicit `Modifier` as its extension receiver
@@ -1254,17 +1275,17 @@ class KotlinTreeResolver(
             if (dispatchScope != null) {
                 val extReceiver = receiverNode ?: chosen.receiverTypeFqn?.let { findScopeReceiver(it) }
                 if (extReceiver != null) {
-                    return RNode.Call(callee, DispatchKind.MEMBER_EXTENSION, extReceiver, args, key, span(call), dispatchReceiver = dispatchScope)
+                    return RNode.Call(callee, DispatchKind.MEMBER_EXTENSION, extReceiver, args, key, span(call), dispatchReceiver = dispatchScope, typeArguments = typeArgs)
                 }
             }
             // A bare extension call resolves against an implicit receiver (`itemsIndexed(...)` on the
             // `LazyListScope` the `LazyColumn { }` lambda provides) — that scope is the extension receiver.
             if (receiverNode == null) {
                 chosen.receiverTypeFqn?.let { findScopeReceiver(it) }?.let { extReceiver ->
-                    return RNode.Call(callee, DispatchKind.EXTENSION, extReceiver, args, key, span(call))
+                    return RNode.Call(callee, DispatchKind.EXTENSION, extReceiver, args, key, span(call), typeArguments = typeArgs)
                 }
             }
-            return RNode.Call(callee, DispatchKind.EXTENSION, receiverNode, args, key, span(call))
+            return RNode.Call(callee, DispatchKind.EXTENSION, receiverNode, args, key, span(call), typeArguments = typeArgs)
         }
         // A bare call to a MEMBER of an in-scope implicit receiver — `item`/`items(count, …)` are MEMBERS of
         // the `LazyListScope` interface a `LazyColumn { }` lambda provides (NOT extensions), so they dispatch
@@ -1273,7 +1294,7 @@ class KotlinTreeResolver(
         // declaring class is a `…Kt` facade, never an in-scope receiver, so it stays TOP_LEVEL.)
         if (receiverNode == null && chosen.kind == SymbolKind.METHOD) {
             chosen.declaringClassFqn?.let { findScopeReceiver(it) }?.let { scope ->
-                return RNode.Call(callee, DispatchKind.MEMBER, scope, args, key, span(call))
+                return RNode.Call(callee, DispatchKind.MEMBER, scope, args, key, span(call), typeArguments = typeArgs)
             }
         }
         val dispatch = when {
@@ -1281,7 +1302,45 @@ class KotlinTreeResolver(
             receiverNode != null -> DispatchKind.MEMBER
             else -> DispatchKind.TOP_LEVEL
         }
-        return RNode.Call(callee, dispatch, receiverNode, args, key, span(call))
+        return RNode.Call(callee, dispatch, receiverNode, args, key, span(call), typeArguments = typeArgs)
+    }
+
+    /**
+     * Resolve a generic call's type arguments positionally with [chosen]'s type parameters, for
+     * [RNode.Call.typeArguments]. Explicit args (`serializer<Foo>()`, `composable<Route>()`) and inferred ones
+     * both flow through [inferTypeArguments]. An argument that is itself an enclosing reified type parameter
+     * (`bar<T>()` inside `fun <reified T> foo()`) becomes a [RTypeArg.typeParamRef] re-bound at interpret time;
+     * a concrete type gets its [classLoadCandidates] so `T::class` can materialize a reflectable stand-in.
+     */
+    private fun resolveCallTypeArgs(call: KtCallExpression, chosen: KotlinSymbol): List<RTypeArg> {
+        val names = chosen.typeParameters
+        if (names.isEmpty()) return emptyList()
+        // Resolve each type parameter to a concrete type: explicit `<...>` positionally (Kotlin does no
+        // argument inference when they're spelled out), else fall back to argument inference.
+        val byName = HashMap<String, KotlinType>()
+        val explicit = call.typeArgumentList?.arguments
+        if (!explicit.isNullOrEmpty()) {
+            names.forEachIndexed { i, n ->
+                explicit.getOrNull(i)?.typeReference?.text
+                    ?.let { service.typeFromText(it, resolver.fileContext) }?.let { byName[n] = it }
+            }
+        } else {
+            runCatching { resolver.inferTypeArguments(chosen, call) }.getOrNull()
+                ?.forEach { (n, tr) -> (tr as? KotlinType)?.let { byName[n] = it } }
+        }
+        if (byName.isEmpty()) return emptyList()
+        return names.map { n ->
+            val t = byName[n]
+            when {
+                t == null -> RTypeArg(fqn = null)
+                // An enclosing function's own type parameter passed through (`inner<T>()` inside `foo<T>()`):
+                // re-bound from the caller's frame at interpret time. Matched by name (a bare `T` may not carry
+                // `isTypeParameter` through `typeFromText`).
+                t.qualifiedName in currentTypeParams -> RTypeArg(fqn = null, typeParamRef = t.qualifiedName)
+                t.isTypeParameter -> RTypeArg(fqn = null) // some other unbound type variable — can't resolve
+                else -> RTypeArg(fqn = t.qualifiedName, loadCandidates = classLoadCandidates(t.qualifiedName))
+            }
+        }
     }
 
     /**
@@ -1666,6 +1725,9 @@ class KotlinTreeResolver(
         // the ITEM (arg 2), not the index (arg 1). Missing the receiver shifts every explicit param by one.
         val receiverType = runCatching { resolver.lambdaReceiverType(e) }.getOrNull()
         var pushedReceiver = false
+        // Reads emitted for a destructuring parameter (`{ (_, name, _) -> }`), prepended to the body so the
+        // entries are in scope when it runs.
+        val prelude = ArrayList<RNode>()
         val params = buildList {
             if (receiverType != null) {
                 val slot = newSlot()
@@ -1674,10 +1736,28 @@ class KotlinTreeResolver(
             }
             if (e.valueParameters.isNotEmpty()) {
                 e.valueParameters.forEach { p ->
-                    val slot = newSlot()
-                    val name = p.name ?: "_"
-                    bind(name, Binding.Local(slot, name, mutable = false))
-                    add(RParam(slot, name, service.typeFromText(p.typeReference?.text, resolver.fileContext)))
+                    val destructuring = p.destructuringDeclaration
+                    if (destructuring != null) {
+                        // A destructuring lambda parameter (`forEach { (_, name, _) -> }`): bind the whole
+                        // argument to a temp slot, then a local per entry reading `tmp.componentN()` (mirroring
+                        // [destructuringNode]). Without this the entries never bind, so a use of `name` falls
+                        // back to a bare `ObjectRef` and the interpreter fails at render with "cannot load name".
+                        val paramSlot = newSlot()
+                        add(RParam(paramSlot, "\$destr", service.typeFromText(p.typeReference?.text, resolver.fileContext)))
+                        destructuring.entries.forEachIndexed { i, entry ->
+                            val entryName = entry.name ?: "_"
+                            val entrySlot = newSlot()
+                            val tmpRef = RNode.Name(Binding.Local(paramSlot, "\$destr", mutable = false), span(entry))
+                            val comp = RNode.Call(synthMember("component${i + 1}"), DispatchKind.MEMBER, tmpRef, emptyList(), csk(span(entry).start), span(entry))
+                            bind(entryName, Binding.Local(entrySlot, entryName, mutable = false))
+                            prelude += RNode.LocalVar(entrySlot, entryName, mutable = false, comp, span(entry))
+                        }
+                    } else {
+                        val slot = newSlot()
+                        val name = p.name ?: "_"
+                        bind(name, Binding.Local(slot, name, mutable = false))
+                        add(RParam(slot, name, service.typeFromText(p.typeReference?.text, resolver.fileContext)))
+                    }
                 }
             } else if (receiverType == null) {
                 // The implicit `it` (harmless when unused).
@@ -1686,7 +1766,12 @@ class KotlinTreeResolver(
                 add(RParam(slot, "it", null))
             }
         }
-        val body = e.bodyExpression?.let { lowerBlock(it) } ?: emptyBlock(e)
+        val lowered = e.bodyExpression?.let { lowerBlock(it) } ?: emptyBlock(e)
+        val body = when {
+            prelude.isEmpty() -> lowered
+            lowered is RNode.Block -> RNode.Block(prelude + lowered.statements, lowered.isExpression, lowered.source)
+            else -> RNode.Block(prelude + lowered, isExpression = true, span(e))
+        }
         if (pushedReceiver) receiverScopes.removeLast()
         scopes.removeLast()
         return RNode.Lambda(params, body, captures = emptyList(), source = span(e))
@@ -1865,11 +1950,21 @@ class KotlinTreeResolver(
     private fun deferToRuntimeMember(candidates: List<KotlinSymbol>): KotlinSymbol? {
         if (candidates.size < 2) return null
         val first = candidates.first()
-        if (first.kind != SymbolKind.METHOD || first.isExtension) return null
+        if (first.kind != SymbolKind.METHOD) return null
         val owner = first.declaringClassFqn ?: return null
+        // Defer a homogeneous BINARY overload set on ONE owner to the runtime dispatcher, which re-resolves the
+        // overload from the ACTUAL argument values. This covers a plain member set (`Intent.putExtra(String, …)`)
+        // AND a LIBRARY extension set on a single facade (`kotlin.text.StringsKt.contains`/`isBlank`, whose 9
+        // `contains` / 2 `isBlank` overloads share the `StringsKt` facade): the interpreter invokes such an
+        // extension statically with the receiver as arg 0, so it re-resolves reflectively just the same. Without
+        // this, a statically-ambiguous stdlib String extension (`recv.contains(x)`) fails the WHOLE preview with
+        // "unresolved/ambiguous call". A SOURCE callable (interpreted — needs the exact declaration) or a
+        // mixed-owner set can't be re-resolved this way, so it stays rejected. All candidates must agree on
+        // extension-ness so an odd member/extension mix (which the interpreter would dispatch differently) isn't
+        // silently collapsed to one shape.
         val homogeneous = candidates.all {
-            !it.origin.fromSource && !it.isExtension && it.kind == SymbolKind.METHOD &&
-                it.name == first.name && it.declaringClassFqn == owner
+            !it.origin.fromSource && it.kind == SymbolKind.METHOD &&
+                it.name == first.name && it.declaringClassFqn == owner && it.isExtension == first.isExtension
         }
         return if (homogeneous) first else null
     }
@@ -1977,6 +2072,7 @@ class KotlinTreeResolver(
                 paramNames = sym.paramNames,
                 isConstructor = isCtor,
                 isComposable = sym.isComposable,
+                typeParameterNames = sym.typeParameters,
             )
         }
         val ownerFqn = sym.declaringClassFqn ?: sym.packageName ?: sym.owner?.name
@@ -1992,6 +2088,7 @@ class KotlinTreeResolver(
             descriptorPrecise = sym.declaringClassFqn != null,
             paramNames = sym.paramNames,
             varargParamIndex = sym.varargParamIndex,
+            typeParameterNames = sym.typeParameters,
         )
     }
 
@@ -2112,5 +2209,5 @@ class KotlinTreeResolver(
      */
     private fun csk(offset: Int): CallSiteKey = CallSiteKey(offset - currentUnitStart)
 
-    private fun reset(unitStart: Int = 0) { scopes.clear(); slotCounter = 0; diagnostics.clear(); currentUnitStart = unitStart }
+    private fun reset(unitStart: Int = 0) { scopes.clear(); slotCounter = 0; diagnostics.clear(); currentUnitStart = unitStart; currentTypeParams = emptyList() }
 }

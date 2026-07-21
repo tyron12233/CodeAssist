@@ -31,6 +31,16 @@ class PrefixMatcher(val prefix: String) {
     /** The longest plain (case-insensitive) prefix every matching name is guaranteed to start with. */
     val indexPrefix: String = if (isHumpQuery) prefix.take(1) else prefix
 
+    /**
+     * The plain (case-insensitive) prefixes an index query should push down to reach EVERY match. A plain query
+     * needs only [indexPrefix] (the whole prefix). A HUMP query (`listOf` once the caret passes the capital,
+     * `mDL`) needs BOTH: [indexPrefix] is only the first character (a hump match may diverge after char 0),
+     * whose result cap can truncate a plain-prefix match — the concrete `listOf`-typed-in-full bug — before it
+     * is reached; the FULL [prefix] is a narrow, uncapped query that rescues such a typed-in-full name. The full
+     * prefix is listed FIRST so it wins the result cap; callers de-duplicate the overlap.
+     */
+    val indexPrefixes: List<String> = if (isHumpQuery) listOf(prefix, indexPrefix) else listOf(indexPrefix)
+
     fun matches(name: String): Boolean = grade(name) != null
 
     /** The best [Grade] at which [name] matches, or null if it doesn't. An empty prefix matches everything.

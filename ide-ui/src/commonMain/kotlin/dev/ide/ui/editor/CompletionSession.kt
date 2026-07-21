@@ -89,6 +89,31 @@ internal fun isIdentifierChar(c: Char, extra: String = ""): Boolean =
 internal fun extraWordChars(path: String): String =
     if (path.endsWith(".xml", ignoreCase = true)) ":@?+/.-|" else ""
 
+/** What a just-typed character does to the completion popup. */
+internal enum class CompletionKeystroke {
+    /** A new context (`.` member access, `@` annotation start) — always re-query the backend for a fresh set. */
+    Reopen,
+
+    /** The same identifier token is being extended — narrow the live set locally if possible, else re-query. */
+    Extend,
+
+    /** A token-ending character — close the popup. */
+    Dismiss,
+}
+
+/**
+ * How the character [before] the caret should drive the completion popup (see [CompletionKeystroke]). `.` opens
+ * a member-access set; `@` opens the annotation-name set (Kotlin/Java — where it is NOT a [extraWordChars] word
+ * char, so `wordExtra` is empty; XML instead treats `@` as a resource-reference word char and extends). An
+ * identifier character extends the current token; anything else ends the session.
+ */
+internal fun completionKeystroke(before: Char?, wordExtra: String): CompletionKeystroke = when {
+    before == '.' -> CompletionKeystroke.Reopen
+    before == '@' && wordExtra.isEmpty() -> CompletionKeystroke.Reopen
+    before != null && isIdentifierChar(before, wordExtra) -> CompletionKeystroke.Extend
+    else -> CompletionKeystroke.Dismiss
+}
+
 /**
  * Is [session] still describing the token under [caret] in [text]? True iff the caret is at/after the
  * anchor and everything from the anchor to the caret is identifier characters (incl. [extra]) — i.e. the

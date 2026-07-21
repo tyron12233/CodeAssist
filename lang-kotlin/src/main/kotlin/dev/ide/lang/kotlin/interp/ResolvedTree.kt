@@ -83,6 +83,10 @@ sealed interface ResolvedCallable {
     val displayName: String
     val isComposable: Boolean
 
+    /** The callee's declared type-parameter names, in declaration order (`fun <reified T> foo()` → `["T"]`) —
+     *  positional with a call's [RNode.Call.typeArguments]. Empty for a non-generic callee. */
+    val typeParameterNames: List<String> get() = emptyList()
+
     /** A precompiled (binary) target — invoked reflectively. [ownerFqn] is the declaring class (a synthetic
      *  `…Kt` facade for a top-level callable); [descriptorPrecise] is false when the resolver could not pin
      *  the exact JVM owner/descriptor yet (the symbol model doesn't carry it for every binary member). */
@@ -105,6 +109,7 @@ sealed interface ResolvedCallable {
          *  the compiler packs at the call site — so the reflective invoke needs the loose args packed into that
          *  array, which only this index makes possible. */
         val varargParamIndex: Int = -1,
+        override val typeParameterNames: List<String> = emptyList(),
     ) : ResolvedCallable
 
     /** A project-source target — its body is available to interpret. [declId] locates the declaration. */
@@ -114,6 +119,7 @@ sealed interface ResolvedCallable {
         val paramNames: List<String>,
         val isConstructor: Boolean = false,
         override val isComposable: Boolean = false,
+        override val typeParameterNames: List<String> = emptyList(),
     ) : ResolvedCallable
 }
 
@@ -131,8 +137,27 @@ data class RArg(
 
 /** A lambda/function parameter slot. [default] is the lowered default-value expression for a function
  *  parameter that declares one (`modifier: Modifier = Modifier`), evaluated in the callee's frame when a call
- *  omits the argument; null for a required parameter, a lambda parameter, or a default that couldn't lower. */
-data class RParam(val slot: SlotId, val name: String, val type: KotlinType?, val default: RNode? = null)
+ *  omits the argument; null for a required parameter, a lambda parameter, or a default that couldn't lower.
+ *  [vararg] marks a `vararg xs: T` parameter: the interpreter packs the trailing arguments into it (Kotlin
+ *  binds it as `Array<T>`; see [dev.ide.interp bindParams]) rather than binding a single value. */
+data class RParam(val slot: SlotId, val name: String, val type: KotlinType?, val default: RNode? = null, val vararg: Boolean = false)
+
+/**
+ * A resolved call-site type argument (`composable<Route>()`, `serializer<Foo>()`) — carried on [RNode.Call]
+ * positionally with the callee's type parameters. Source functions are interpreted, so binding a type argument
+ * to the callee's type parameter lets a `reified T` inside the body resolve: `T::class`, `x is T`, `x as T`.
+ *
+ * [fqn] is the resolved concrete type (`com.example.Route`), or null when the argument couldn't resolve.
+ * [loadCandidates] is that FQN followed by loadable supertype FQNs — a project-source type isn't compiled at
+ * preview time, so its nearest reflectable supertype stands in (same shape as [RNode.ClassLiteral.typeCandidates]).
+ * [typeParamRef] is set when the argument IS an enclosing function's own type parameter (`bar<T>()` inside
+ * `fun <reified T> foo()`) — the interpreter re-binds it from the caller's frame rather than resolving it here.
+ */
+data class RTypeArg(
+    val fqn: String?,
+    val loadCandidates: List<String> = emptyList(),
+    val typeParamRef: String? = null,
+)
 
 /** A node of the resolved tree. Sealed + total: the only "I can't" is [Unsupported]. */
 sealed interface RNode {
@@ -152,6 +177,10 @@ sealed interface RNode {
         /** For [DispatchKind.MEMBER_EXTENSION]: the scope instance the member extension is invoked on (the
          *  enclosing receiver-lambda's `this`). Null for every other dispatch kind. */
         val dispatchReceiver: RNode? = null,
+        /** Explicit/inferred call-site type arguments (`serializer<Foo>()`, `composable<Route>()`), positional
+         *  with [callee]'s type parameters ([ResolvedCallable.typeParameterNames]). Empty for a non-generic call
+         *  or when they couldn't be resolved. See [RTypeArg]. */
+        val typeArguments: List<RTypeArg> = emptyList(),
     ) : RNode
     data class PropertyGet(val receiver: RNode?, val binding: Binding, override val source: SourceSpan) : RNode
     data class PropertySet(val receiver: RNode?, val binding: Binding, val value: RNode, override val source: SourceSpan) : RNode
@@ -167,12 +196,12 @@ sealed interface RNode {
     /** `value is T` (or `!is` when [negated]) — a runtime type test against the classifier [typeFqn]. The
      *  interpreter matches a [SourceObject] by walking its class hierarchy and a reflectable value by
      *  `Class.isInstance`. */
-    data class TypeCheck(val value: RNode, val typeFqn: String, val negated: Boolean, override val source: SourceSpan) : RNode
+    data class TypeCheck(val value: RNode, val typeFqn: String, val negated: Boolean, override val source: SourceSpan, val reifiedParam: String? = null) : RNode
     /** `value as T` (or `value as? T` when [safe]) — a runtime cast. The interpreter checks `value`'s runtime
      *  type against [typeFqn]: a confirmed mismatch throws `ClassCastException` (a [safe] cast yields null
      *  instead), while an unresolvable [typeFqn] (a type parameter / unmapped type) is trusted and passed
      *  through. [nullable] is the `?` on the target type (`as T?`) — it lets a null pass an unsafe cast. */
-    data class Cast(val value: RNode, val typeFqn: String, val safe: Boolean, val nullable: Boolean, override val source: SourceSpan) : RNode
+    data class Cast(val value: RNode, val typeFqn: String, val safe: Boolean, val nullable: Boolean, override val source: SourceSpan, val reifiedParam: String? = null) : RNode
     /** A class literal — `Foo::class` (a TYPE literal, [receiver] null) or `expr::class` (a runtime-class
      *  literal of the evaluated [receiver]). Yields a `kotlin.reflect.KClass` normally, or a `java.lang.Class`
      *  when [asJava] is set (the `::class.java` selector, folded in here so the interpreter needn't model
@@ -185,6 +214,10 @@ sealed interface RNode {
         val typeCandidates: List<String>,
         val asJava: Boolean,
         override val source: SourceSpan,
+        /** Set when this is `T::class` for a reified type parameter [reifiedParam]: the interpreter resolves it
+         *  from the call frame's reified-type bindings rather than [typeCandidates] (which hold only the erased
+         *  upper bound for a type parameter). */
+        val reifiedParam: String? = null,
     ) : RNode
 
     // --- statements ---

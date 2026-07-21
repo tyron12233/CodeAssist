@@ -3,8 +3,10 @@ package dev.ide.interp
 import dev.ide.lang.kotlin.interp.Binding
 import dev.ide.lang.kotlin.interp.ClassFlavor
 import dev.ide.lang.kotlin.interp.DispatchKind
+import dev.ide.lang.kotlin.interp.RArg
 import dev.ide.lang.kotlin.interp.RNode
 import dev.ide.lang.kotlin.interp.RParam
+import dev.ide.lang.kotlin.interp.RTypeArg
 import dev.ide.lang.kotlin.interp.ResolvedCallable
 import dev.ide.lang.kotlin.interp.ResolvedClass
 import dev.ide.lang.kotlin.interp.ResolvedFunction
@@ -89,9 +91,34 @@ class Interpreter(
      *  a call that omits a defaulted argument (`Greeting("x")` for `fun Greeting(name, modifier = Modifier)`)
      *  gets the declared default instead of a null hole. */
     private fun bindParams(env: Env, params: List<RParam>, args: List<Any?>) {
+        val varargIdx = params.indexOfFirst { it.vararg }
         params.forEachIndexed { i, p ->
-            val supplied = i < args.size && args[i] !== OmittedArg
-            env.define(p.slot, if (supplied) args[i] else defaultValue(p, env))
+            when {
+                // Kotlin binds a `vararg xs: T` parameter as `Array<T>`; the interpreter models it as a List
+                // (whose `.size`, `xs[i]`, `for (x in xs)`, `.forEach`/`.map` all work — a raw Java array does
+                // not respond to those). Pack the arguments from this slot up to the ones claimed by any fixed
+                // parameters that follow (a vararg is almost always last, so that is normally all trailing args).
+                // Without this the vararg slot took a single argument, so a use of `xs` as an array crashed
+                // ("Not an array: …" on ART / "no property size" on the JVM).
+                i == varargIdx -> {
+                    val trailingFixed = params.size - i - 1
+                    val endExclusive = (args.size - trailingFixed).coerceIn(i, args.size)
+                    val packed = ArrayList<Any?>(maxOf(0, endExclusive - i))
+                    for (j in i until endExclusive) if (args[j] !== OmittedArg) packed.add(args[j])
+                    env.define(p.slot, packed)
+                }
+                // A fixed parameter AFTER the vararg takes its argument from the tail (rare — a vararg is
+                // usually last), so it isn't mis-read as one of the vararg's elements.
+                varargIdx in 0 until i -> {
+                    val idx = args.size - (params.size - i)
+                    val a = if (idx in args.indices) args[idx] else OmittedArg
+                    env.define(p.slot, if (a !== OmittedArg) a else defaultValue(p, env))
+                }
+                else -> {
+                    val supplied = i < args.size && args[i] !== OmittedArg
+                    env.define(p.slot, if (supplied) args[i] else defaultValue(p, env))
+                }
+            }
         }
     }
 
@@ -152,7 +179,7 @@ class Interpreter(
 
     /** Run [fn]'s body with [args] bound to its parameters and, when [receiver] is not [NO_RECEIVER], the
      *  receiver value bound to its [ResolvedFunction.receiverSlot] (an extension receiver / member `this`). */
-    private fun invokeFunction(fn: ResolvedFunction, receiver: Any?, args: List<Any?>): Any? {
+    private fun invokeFunction(fn: ResolvedFunction, receiver: Any?, args: List<Any?>, reifiedTypes: Map<String, RTypeArg> = emptyMap()): Any? {
         // A function with unsupported nodes is refused outright — UNLESS gap tolerance is on (the preview path),
         // where it runs and skips the gaps (see [tolerateGaps]).
         if (!tolerateGaps && !fn.isComplete) {
@@ -175,6 +202,7 @@ class Interpreter(
         if (f.depth == 1) f.deadlineNanos = if (SuspendContext.isActive) 0L else System.nanoTime() + MAX_RENDER_NANOS
         else checkDeadline(f)
         val env = Env()
+        env.defineReified(reifiedTypes)
         if (receiver !== NO_RECEIVER) fn.receiverSlot?.let { env.define(it, receiver) }
         bindParams(env, fn.params, args)
         return try {
@@ -360,32 +388,39 @@ class Interpreter(
         is RNode.NotNull -> eval(node.value, env)
             ?: throw NullPointerException("null value passed to `!!`")
         is RNode.TypeCheck -> {
-            val matches = isInstanceOf(eval(node.value, env), node.typeFqn)
+            // `x is T` for a reified T: substitute the concrete type bound in this frame (the erased `T` never
+            // matches). An unbound reified param falls back to the literal `typeFqn`.
+            val typeFqn = node.reifiedParam?.let { env.reifiedType(it)?.fqn } ?: node.typeFqn
+            val matches = isInstanceOf(eval(node.value, env), typeFqn)
             if (node.negated) !matches else matches
         }
         is RNode.Cast -> {
             val v = eval(node.value, env)
+            val typeFqn = node.reifiedParam?.let { env.reifiedType(it)?.fqn } ?: node.typeFqn
             when {
                 v == null -> if (node.safe || node.nullable) null
-                else throw ClassCastException("null cannot be cast to non-null type ${node.typeFqn}")
+                else throw ClassCastException("null cannot be cast to non-null type $typeFqn")
                 // true → confirmed match; null → the type couldn't be resolved (a type parameter / unmapped
                 // type), so trust the compiler and pass through; false → a confirmed mismatch.
-                castMatches(v, node.typeFqn) == false ->
+                castMatches(v, typeFqn) == false ->
                     if (node.safe) null
-                    else throw ClassCastException("${v.javaClass.name} cannot be cast to ${node.typeFqn}")
+                    else throw ClassCastException("${v.javaClass.name} cannot be cast to $typeFqn")
                 else -> v
             }
         }
         is RNode.ClassLiteral -> {
             val recvNode = node.receiver
+            // `T::class` for a reified T: load the concrete type bound in this frame (its own candidates), the
+            // same class-token stand-in strategy [typeCandidates] uses for a project-source type.
+            val reifiedCandidates = node.reifiedParam?.let { env.reifiedType(it)?.loadCandidates }
             val cls: Class<*> = if (recvNode != null) {
                 (eval(recvNode, env) ?: throw InterpreterException("cannot take `::class` of a null value")).javaClass
             } else {
                 // Try the resolved type then its supertypes; a project-source type isn't on the preview
                 // classpath, so a reflectable supertype stands in (the value is only ever a class token).
-                node.typeCandidates.firstNotNullOfOrNull { loadClassAcross(it, initialize = false, preferred = classLoader) }
+                (reifiedCandidates ?: node.typeCandidates).firstNotNullOfOrNull { loadClassAcross(it, initialize = false, preferred = classLoader) }
                     ?: if (tolerateGaps) Any::class.java
-                    else throw InterpreterException("cannot resolve class literal `${node.typeCandidates.firstOrNull() ?: "?"}::class` (not on the preview classpath)")
+                    else throw InterpreterException("cannot resolve class literal `${(reifiedCandidates ?: node.typeCandidates).firstOrNull() ?: node.reifiedParam ?: "?"}::class` (not on the preview classpath)")
             }
             if (node.asJava) cls else cls.kotlin
         }
@@ -414,6 +449,27 @@ class Interpreter(
         }
         is RNode.Unsupported -> throw InterpreterException("unsupported construct: ${node.reason} (`${node.text}`)")
         else -> throw InterpreterException("not yet interpretable: ${node::class.simpleName}")
+    }
+
+    /** The concrete reified type bound to a call's type argument [arg] in [env]: a passthrough type parameter
+     *  (`bar<T>()` inside `fun <reified T> foo()`) re-binds from the caller frame; a concrete type resolves to
+     *  itself. Null when unbound / unresolved. */
+    private fun resolveTypeArg(arg: RTypeArg, env: Env): RTypeArg? {
+        val passthrough = arg.typeParamRef
+        return if (passthrough != null) env.reifiedType(passthrough) else arg.takeIf { it.fqn != null }
+    }
+
+    /** The reified type-parameter bindings a source-function [call] establishes for its callee's frame — the
+     *  callee's type-parameter names mapped to the concrete types resolved from the call's type arguments (in
+     *  the caller's [env], so a passthrough type parameter re-binds). Empty for a non-generic call. */
+    private fun reifiedBindingsFor(call: RNode.Call, env: Env): Map<String, RTypeArg> {
+        val names = call.callee.typeParameterNames
+        if (names.isEmpty() || call.typeArguments.isEmpty()) return emptyMap()
+        val out = HashMap<String, RTypeArg>(names.size)
+        names.forEachIndexed { i, name ->
+            call.typeArguments.getOrNull(i)?.let { resolveTypeArg(it, env) }?.let { out[name] = it }
+        }
+        return out
     }
 
     /** Every dispatcher handoff funnels here so [hooks] sees ALL non-source calls regardless of which
@@ -465,6 +521,11 @@ class Interpreter(
                 op in ARITHMETIC -> {} // a real operator method on a user/library type → fall through to dispatch
             }
         }
+        // Array construction (`arrayOf(…)`, `Array(n) { … }`, `intArrayOf(…)`, `xs.toTypedArray()`, …): these
+        // are compiler intrinsics with no invocable JVM method (the reflective path fails with a bogus owner
+        // `kotlin`/`kotlin.Array`), so build the result here. Modeled as a List (the interpreter's
+        // size/index/iteration paths support List — the vararg parameter model does the same).
+        arrayConstructionIntrinsic(call, env)?.let { return it.value }
         // Invoking a function value (`fn(x)`, `callback()`) where `fn` is a local/param/property holding a
         // lambda: an interpreted lambda is called directly; a JVM functional object goes through the dispatcher
         // (its `invoke` method).
@@ -495,7 +556,8 @@ class Interpreter(
             val target = sourceFunctionFor(callee, call.args.size)
                 ?: throw InterpreterException("no source function `${callee.displayName}/${call.args.size}`")
             val argv = reorderNamedArgs(target.params.map { it.name }, call.args, call.args.map { eval(it.value, env) })
-            val invoke = { call(target, argv) }
+            val reified = reifiedBindingsFor(call, env)
+            val invoke = { invokeFunction(target, NO_RECEIVER, argv, reified) }
             return if (callee.isComposable && composableInvoker != null) {
                 // The dirty set is keyed by declared `name/arity` (the program keys), so use the target's.
                 val key = "${callee.displayName}/${target.params.size}"
@@ -516,7 +578,7 @@ class Interpreter(
                 ?: throw InterpreterException("no source extension `${callee.displayName}/${call.args.size}`")
             val recv = call.receiver?.let { eval(it, env) }
             val argv = reorderNamedArgs(target.params.map { it.name }, call.args, call.args.map { eval(it.value, env) })
-            return invokeFunction(target, recv, argv)
+            return invokeFunction(target, recv, argv, reifiedBindingsFor(call, env))
         }
         // A handful of stdlib functions are `@kotlin.internal.InlineOnly` — they have NO callable JVM method
         // (they exist only to be inlined), so the reflective dispatcher can never find them. We execute them as
@@ -636,6 +698,85 @@ class Interpreter(
 
     /** A boxed result so a handled intrinsic can legitimately return `null`/`Unit` (distinct from "not one"). */
     private class Handled(val value: Any?)
+
+    /**
+     * Build an array-construction intrinsic ([ARRAY_OF_FUNCTIONS] / [ARRAY_CONSTRUCTORS] / [TO_ARRAY_FUNCTIONS]
+     * / `arrayOfNulls`), or null if [call] isn't one. Kotlin's `arrayOf`/`Array(size){}`/… are compiler
+     * intrinsics with no invocable JVM method, so the reflective dispatcher can't run them (they surface as a
+     * "cannot load class `kotlin`/`kotlin.Array`" boundary). Each result is a `List` — the interpreter's index
+     * (`a[i]`), size (`a.size`), iteration (`for`/`forEach`), and transform (`map`/…) paths all work on List,
+     * whereas a raw Java array responds to none of them; the `vararg` parameter model uses the same List form.
+     * Gated to a non-source callee so a user's own `class Array` / `fun arrayOf` isn't hijacked.
+     */
+    private fun arrayConstructionIntrinsic(call: RNode.Call, env: Env): Handled? {
+        if (call.callee is ResolvedCallable.Source) return null
+        val name = call.callee.displayName
+        return when {
+            // arrayOf(a, b, c) / intArrayOf(1, 2) / emptyArray() → the (evaluated) elements, spreads flattened.
+            name in ARRAY_OF_FUNCTIONS && call.dispatch == DispatchKind.TOP_LEVEL -> {
+                val out = ArrayList<Any?>(call.args.size)
+                for (a in call.args) {
+                    val v = eval(a.value, env)
+                    if (a.spread) toElementList(v).forEach { out.add(it) } else out.add(v)
+                }
+                Handled(out)
+            }
+            // arrayOfNulls(n) → n nulls.
+            name == "arrayOfNulls" && call.dispatch == DispatchKind.TOP_LEVEL && call.args.size == 1 -> {
+                val n = intArg(call.args[0], env)
+                Handled(ArrayList<Any?>(n).apply { repeat(n) { add(null) } })
+            }
+            // Array(size) { init } / IntArray(size) { init } / … → apply `init` to each index 0 until size.
+            name in ARRAY_CONSTRUCTORS && call.args.size == 2 -> {
+                val n = intArg(call.args[0], env)
+                val init = eval(call.args[1].value, env) as? InterpretedLambda
+                Handled(ArrayList<Any?>(n).apply { for (i in 0 until n) add(init?.invoke(listOf(i))) })
+            }
+            // IntArray(size) / DoubleArray(size) / … (no init) → zero-filled to the primitive's zero.
+            name in ARRAY_CONSTRUCTORS && name != "Array" && call.args.size == 1 -> {
+                val n = intArg(call.args[0], env)
+                val zero = primitiveArrayZero(name)
+                Handled(ArrayList<Any?>(n).apply { repeat(n) { add(zero) } })
+            }
+            // xs.toTypedArray() / xs.toIntArray() / … → the elements as a List (arrays are Lists here anyway).
+            name in TO_ARRAY_FUNCTIONS && call.dispatch == DispatchKind.EXTENSION ->
+                Handled(toElementList(call.receiver?.let { eval(it, env) }))
+            else -> null
+        }
+    }
+
+    /** The int value of an argument (an array size), 0 when it isn't a number or is negative. */
+    private fun intArg(arg: RArg, env: Env): Int = ((eval(arg.value, env) as? Number)?.toInt() ?: 0).coerceAtLeast(0)
+
+    /** The zero element a size-only primitive-array constructor fills with (`IntArray(3)` → three `0`s). */
+    private fun primitiveArrayZero(ctor: String): Any = when (ctor) {
+        "LongArray" -> 0L
+        "DoubleArray" -> 0.0
+        "FloatArray" -> 0f
+        "ShortArray" -> 0.toShort()
+        "ByteArray" -> 0.toByte()
+        "CharArray" -> ' '
+        "BooleanArray" -> false
+        else -> 0 // IntArray
+    }
+
+    /** Any array-like value (List/Collection, real Java array of objects or primitives) flattened to a List;
+     *  a single non-collection value becomes a one-element list, null an empty one. */
+    private fun toElementList(v: Any?): List<Any?> = when (v) {
+        null -> emptyList()
+        is List<*> -> v
+        is Collection<*> -> v.toList()
+        is Array<*> -> v.toList()
+        is IntArray -> v.toList()
+        is LongArray -> v.toList()
+        is DoubleArray -> v.toList()
+        is FloatArray -> v.toList()
+        is ShortArray -> v.toList()
+        is ByteArray -> v.toList()
+        is CharArray -> v.toList()
+        is BooleanArray -> v.toList()
+        else -> listOf(v)
+    }
 
     /** Iterate any `forEach`-able receiver (collection / sequence / object or primitive array / map entries) —
      *  the element supply for the `forEach`/`forEachIndexed` intrinsics. */
@@ -1440,6 +1581,24 @@ class Interpreter(
         private var values: Array<Any?>? = null
         private var size = 0
 
+        /** Reified type-parameter bindings of the function this Env frames (`T` → its concrete type token).
+         *  Set once at [invokeFunction] via [defineReified]; looked up the parent chain so a lambda / catch
+         *  body inside a reified function still resolves `T`. Null (the common case) when the function is
+         *  non-generic. */
+        private var reified: Map<String, RTypeArg>? = null
+
+        fun defineReified(m: Map<String, RTypeArg>) { if (m.isNotEmpty()) reified = m }
+
+        /** The concrete type bound to reified type parameter [name] in this frame or an enclosing one, or null. */
+        fun reifiedType(name: String): RTypeArg? {
+            var e: Env? = this
+            while (e != null) {
+                e.reified?.get(name)?.let { return it }
+                e = e.parent
+            }
+            return null
+        }
+
         fun read(slot: SlotId): Any? {
             val key = slot.value
             var e: Env? = this
@@ -1609,6 +1768,26 @@ class Interpreter(
         )
         /** The `@InlineOnly` empty/blank predicates, dispatched by name in [evalEmptyBlankPredicate]. */
         val EMPTY_BLANK_PREDICATES = setOf("isNotBlank", "isNotEmpty", "isNullOrBlank", "isNullOrEmpty")
+
+        /** `arrayOf`/`intArrayOf`/… vararg factories + `emptyArray` — compiler intrinsics with no JVM method,
+         *  built by [arrayConstructionIntrinsic]. `arrayOfNulls` is handled separately (it takes a size). */
+        val ARRAY_OF_FUNCTIONS = setOf(
+            "arrayOf", "emptyArray", "intArrayOf", "longArrayOf", "doubleArrayOf", "floatArrayOf",
+            "shortArrayOf", "byteArrayOf", "charArrayOf", "booleanArrayOf",
+        )
+
+        /** `Array(size){init}` and the primitive `IntArray(size)[{init}]` factories (capitalized → lowered as
+         *  constructor calls to `kotlin.Array`/`kotlin.IntArray`, which aren't real invocable constructors). */
+        val ARRAY_CONSTRUCTORS = setOf(
+            "Array", "IntArray", "LongArray", "DoubleArray", "FloatArray",
+            "ShortArray", "ByteArray", "CharArray", "BooleanArray",
+        )
+
+        /** `Collection.toTypedArray()` / `Iterable.toIntArray()` / … — return the elements as a List. */
+        val TO_ARRAY_FUNCTIONS = setOf(
+            "toTypedArray", "toIntArray", "toLongArray", "toDoubleArray", "toFloatArray",
+            "toShortArray", "toByteArray", "toCharArray", "toBooleanArray",
+        )
     }
 }
 

@@ -1678,8 +1678,12 @@ internal class KotlinSemanticChecks(private val service: KotlinSymbolService) {
      *
      * Conservative over the parse-only model — judged across the full overload set from the index-backed
      * [KotlinResolver.callTargets], and flagged only when EVERY candidate is provably inapplicable:
-     *  - only METHOD candidates (a constructor call resolves to CONSTRUCTOR candidates → none here → backs off,
-     *    leaving it to the constructor checks);
+     *  - only METHOD candidates are judged; but if the callee ALSO resolves to a CONSTRUCTOR (a class with a
+     *    same-named factory function — Compose's `BorderStroke(w, color)` beside the class's `(w, brush)`
+     *    constructor, or `Color(...)`), the whole check backs off: the constructor may accept an argument no
+     *    function overload does (`SolidColor` fits `brush: Brush` but not `color: Color`), and the method-only
+     *    verdict can't see it, so judging by the functions alone would false-flag a valid call. The
+     *    constructor side is owned by [constructorCallMismatch]/[sameFileConstructorMismatch];
      *  - backs off entirely on a spread argument (arity opaque) or if ANY candidate has unknown per-parameter
      *    defaults (its `paramHasDefault` size ≠ its arity — Java bytecode / a stale cache might accept the call);
      *  - the per-argument type check is the same [isMismatch] rule used everywhere else (both types fully-known
@@ -1690,8 +1694,11 @@ internal class KotlinSemanticChecks(private val service: KotlinSymbolService) {
      */
     private fun callNotApplicable(call: KtCallExpression, resolver: KotlinResolver): Diagnostic? {
         if (call.valueArguments.any { it.getSpreadElement() != null }) return null
-        val candidates = runCatching { resolver.callTargets(call) }.getOrDefault(emptyList())
-            .filter { it.kind == SymbolKind.METHOD }
+        val targets = runCatching { resolver.callTargets(call) }.getOrDefault(emptyList())
+        // A same-named constructor overload might accept the call even when no function does — the method-only
+        // judgment below is unsound then, so defer to the constructor checks (see kdoc).
+        if (targets.any { it.kind == SymbolKind.CONSTRUCTOR }) return null
+        val candidates = targets.filter { it.kind == SymbolKind.METHOD }
         if (candidates.isEmpty()) return null
         val verdicts = ArrayList<Applicability>(candidates.size)
         for (c in candidates) verdicts += applicability(c, call, resolver) ?: return null // unjudgeable → back off
@@ -1861,11 +1868,15 @@ internal class KotlinSemanticChecks(private val service: KotlinSymbolService) {
                 val expr = arg.getArgumentExpression()
                 val pt = c.paramTypes.getOrNull(idx) as? KotlinType
                 val at = expr?.let { resolver.inferType(it) }
-                // Skip functional positions entirely (a lambda / callable reference / function-typed parameter or
-                // SAM): a function value's inferred shape vs. the expected type is too imprecise here to flag
-                // soundly, and these dominate Compose call sites.
-                if (expr != null && pt != null && at != null && !isFunctional(pt) && !isFunctional(at)) {
-                    if (isMismatch(pt, at)) { if (typeBad == null) typeBad = Applicability.TypeBad(expr, pt, at, prefix) }
+                // A FUNCTIONAL argument (lambda / callable reference / function-typed value) is left unchecked:
+                // its shape vs. the expected type is too imprecise to flag soundly, and these dominate Compose
+                // call sites. For a NON-function argument we DO check: against a non-function parameter with the
+                // ordinary assignability rule, and against a FUNCTION parameter as a category error — a concrete
+                // non-function value can never be a `() -> R` (the `onClick = handler()` missing-lambda mistake,
+                // which otherwise silently binds a `Unit`/null the clickable NPE-crashes on at tap time).
+                if (expr != null && pt != null && at != null && !isFunctional(at)) {
+                    val bad = if (isFunctional(pt)) isConcreteNonFunction(at) else isMismatch(pt, at)
+                    if (bad) { if (typeBad == null) typeBad = Applicability.TypeBad(expr, pt, at, prefix) }
                     else if (typeBad == null) prefix++ // a matched leading argument (only before the first mismatch)
                 }
             }
@@ -1881,6 +1892,14 @@ internal class KotlinSemanticChecks(private val service: KotlinSymbolService) {
      *  functional argument/parameter slot, excluded from the positional type check (see [applicability]). */
     private fun isFunctional(t: KotlinType): Boolean =
         t.qualifiedName.startsWith("kotlin.Function") || t.isExtensionFunctionType || t.isComposable
+
+    /** Whether [t] is a KNOWN, concrete, non-function type — a value that can NEVER satisfy a function-typed
+     *  parameter (`Unit` from `onClick = handler()`, an `Int`, a data class). Gates the function-expected
+     *  mismatch so an un-inferred / type-parameter / `Nothing` argument (whose type can't be pinned) never
+     *  false-positives; the caller already excluded a functional [t]. */
+    private fun isConcreteNonFunction(t: KotlinType): Boolean =
+        !t.isTypeParameter && t.qualifiedName != "kotlin.Nothing" &&
+            service.isKnownType(canonicalForCheck(t).qualifiedName)
 
     /**
      * An assignment (`x = expr`) whose right-hand side type isn't assignable to the target's declared type
@@ -2334,6 +2353,19 @@ internal class KotlinSemanticChecks(private val service: KotlinSymbolService) {
         // A synthetic local/anonymous type key must not leak into the message — show `<anonymous …>` / the
         // local class's real name instead of the internal `$L<ordinal>` id.
         service.localTypeDisplayName(t.qualifiedName)?.let { return it + if (t.nullable) "?" else "" }
+        // A function type reads far better as `(P) -> R` than `Function1<P, R>` — `kotlin.FunctionN`'s type
+        // arguments are the N parameter types followed by the return type (a receiver function type's first
+        // argument is the receiver: `T.(…) -> R`).
+        if (t.qualifiedName.startsWith("kotlin.Function") && t.typeArguments.isNotEmpty()) {
+            val simple = t.typeArguments.map { it.qualifiedName.substringAfterLast('.') }
+            val ret = simple.last()
+            val params = simple.dropLast(1)
+            val head = if (t.isExtensionFunctionType && params.isNotEmpty())
+                "${params.first()}.(${params.drop(1).joinToString(", ")})"
+            else "(${params.joinToString(", ")})"
+            val fn = "$head -> $ret"
+            return if (t.nullable) "($fn)?" else fn
+        }
         val simple = t.qualifiedName.substringAfterLast('.')
         val args = if (t.typeArguments.isEmpty()) ""
         else t.typeArguments.joinToString(", ", "<", ">") { it.qualifiedName.substringAfterLast('.') }

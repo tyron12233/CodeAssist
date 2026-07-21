@@ -4,6 +4,7 @@ import dev.ide.core.BackendContext
 import dev.ide.model.ContentRole
 import dev.ide.ui.backend.ModuleService
 import dev.ide.ui.backend.UiBuildFeatures
+import dev.ide.ui.backend.UiCompilerPlugins
 import dev.ide.ui.backend.UiConfigResult
 import dev.ide.ui.backend.UiModuleConfig
 import dev.ide.ui.backend.UiModuleConfigEdit
@@ -101,6 +102,15 @@ internal class ModuleBackend(private val ctx: BackendContext) : ModuleService {
     override suspend fun setBuildFeature(moduleName: String, feature: String, enabled: Boolean): UiConfigResult =
         withContext(Dispatchers.IO) {
             ctx.services.moduleService.setBuildFeature(moduleName, feature, enabled)
+                .also { if (it.success) ctx.bumpFileSystemEpoch() }
+        }
+
+    override suspend fun getCompilerPlugins(moduleName: String): UiCompilerPlugins? =
+        withContext(Dispatchers.IO) { ctx.services.moduleService.getCompilerPlugins(moduleName) }
+
+    override suspend fun setCompilerPlugin(moduleName: String, pluginId: String, enabled: Boolean): UiConfigResult =
+        withContext(Dispatchers.IO) {
+            ctx.services.moduleService.setCompilerPlugin(moduleName, pluginId, enabled)
                 .also { if (it.success) ctx.bumpFileSystemEpoch() }
         }
 

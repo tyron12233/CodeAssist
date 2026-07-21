@@ -9,6 +9,7 @@ import dev.ide.interp.LibraryExecutor
 import dev.ide.interp.OmittedArg
 import dev.ide.interp.PreviewResourceResolver
 import dev.ide.interp.ReflectiveDispatcher
+import dev.ide.interp.SourceObject
 import dev.ide.interp.reorderNamedArgs
 import dev.ide.lang.kotlin.interp.DispatchKind
 import dev.ide.lang.kotlin.interp.RNode
@@ -96,6 +97,19 @@ class ComposeDispatcher(
         if (resources != null && callee is ResolvedCallable.Library) {
             val res = resolveResourceCall(callee, args)
             if (res !== NOT_A_RESOURCE) return res
+        }
+        // Navigation-Compose preview interception (see [handleNavCall]): `NavHost`/`composable<T>`/
+        // `rememberNavController` can't run against the real androidx.navigation runtime headlessly, so a static
+        // preview renders the START destination's content directly, keyed by the route type argument.
+        if (callee is ResolvedCallable.Library) {
+            val nav = handleNavCall(call, callee, c, receiver, args)
+            if (nav !== NOT_NAV) return nav
+        }
+        // kotlinx.serialization's reified `serializer<T>()` / `T.serializer()` (see [resolveSerializerCall]): a
+        // reified-inline library function reflection can't reach — resolve it from the type argument instead.
+        if (callee is ResolvedCallable.Library) {
+            val ser = resolveSerializerCall(call, callee, receiver)
+            if (ser !== NOT_SERIALIZER) return ser
         }
         // Windowed composables (`Popup`/`Dialog`, and the Material components built on them — `DropdownMenu`,
         // `AlertDialog`, `ModalBottomSheet`, …) open a REAL OS window (WindowManager/Dialog) anchored to the
@@ -424,8 +438,134 @@ class ComposeDispatcher(
         return if (fmtArgs.isEmpty()) s else runCatching { String.format(s, *fmtArgs.toTypedArray()) }.getOrDefault(s)
     }
 
+    // --- Navigation-Compose preview interception -----------------------------------------------------
+    // androidx.navigation's `NavHost` needs a live `NavController` + back-stack + Android `Looper`, none of which
+    // exist in the in-app preview — reflecting it hangs (device) or throws (headless). So DON'T reflect it: a
+    // static `@Preview` of a NavHost should show its START destination, so intercept the three nav entry points
+    // and compose that destination's content lambda directly, keyed by the route TYPE the call-site type
+    // argument carries (`composable<Home> { }` → key `Home`). No serializers, no real graph — the visible result.
+
+    /** A NavHost builder's collected `composable<T> { content }` registrations: route type FQN → content lambda. */
+    private class NavGraphCollector { val destinations = LinkedHashMap<String, InterpretedLambda>() }
+
+    /** The active collector while a NavHost builder lambda runs, so a `composable<T>` inside it registers here. */
+    @Volatile private var navCollector: NavGraphCollector? = null
+
+    /**
+     * Intercept a Navigation-Compose call, or return [NOT_NAV] to dispatch it normally. `rememberNavController`
+     * yields an opaque placeholder (only [renderNavHost] reads a NavHost's args, and it ignores the controller);
+     * `composable<T>` registers on the active collector; `NavHost` runs the builder then composes the start
+     * destination.
+     */
+    private fun handleNavCall(call: RNode.Call, callee: ResolvedCallable.Library, composer: Any?, receiver: Any?, args: List<Any?>): Any? {
+        val owner = callee.ownerFqn ?: return NOT_NAV
+        if (!owner.startsWith("androidx.navigation")) return NOT_NAV
+        return when (callee.methodName) {
+            "rememberNavController" -> NAV_CONTROLLER_STUB
+            "composable" -> registerNavDestination(call, args)
+            "NavHost" -> if (composer != null) renderNavHost(call, callee, composer, args) else NOT_NAV
+            else -> NOT_NAV
+        }
+    }
+
+    /** Register a `composable<T> { content }` on the active collector, keyed by T's FQN (from the call-site type
+     *  argument). [NOT_NAV] when it isn't inside a NavHost builder (no active collector) or carries no type arg. */
+    private fun registerNavDestination(call: RNode.Call, args: List<Any?>): Any? {
+        val collector = navCollector ?: return NOT_NAV
+        val routeFqn = call.typeArguments.firstOrNull()?.fqn ?: return NOT_NAV
+        val content = args.lastOrNull { it is InterpretedLambda } as? InterpretedLambda ?: return NOT_NAV
+        collector.destinations[routeFqn] = content
+        return Unit
+    }
+
+    /** Run a NavHost's builder to collect its destinations, then compose the start destination's content lambda
+     *  inline under the call-site group (so the preview shows the start screen). [NOT_NAV] if it isn't a NavHost. */
+    private fun renderNavHost(call: RNode.Call, callee: ResolvedCallable.Library, composer: Any, args: List<Any?>): Any? {
+        val builder = args.lastOrNull { it is InterpretedLambda } as? InterpretedLambda ?: return NOT_NAV
+        val ordered = reorderNamedArgs(callee.paramNames, call.args, args)
+        val startIdx = callee.paramNames.indexOf("startDestination")
+        val start = if (startIdx >= 0) ordered.getOrNull(startIdx) else args.getOrNull(1)
+        val collector = NavGraphCollector()
+        val prev = navCollector
+        navCollector = collector
+        try { builder.invoke(listOf(collector)) } finally { navCollector = prev }
+        if (collector.destinations.isEmpty()) return Unit
+        val content = matchDestination(start, collector) ?: collector.destinations.values.first()
+        val marker = ComposableAbi.currentMarker(composer)
+        ComposableAbi.startGroup(composer, call.callSiteKey.value)
+        var completed = false
+        try {
+            content.invoke(List(content.paramCount) { null })
+            completed = true
+            return Unit
+        } finally {
+            if (completed) ComposableAbi.endGroup(composer) else runCatching { ComposableAbi.endToMarker(composer, marker) }
+        }
+    }
+
+    /** The content lambda for [start]'s route, matched against [collector] by route FQN then simple name. */
+    private fun matchDestination(start: Any?, collector: NavGraphCollector): InterpretedLambda? {
+        val fqn = routeFqnOf(start) ?: return null
+        collector.destinations[fqn]?.let { return it }
+        val simple = fqn.substringAfterLast('.')
+        return collector.destinations.entries.firstOrNull { it.key.substringAfterLast('.') == simple }?.value
+    }
+
+    /** The route type FQN of a `startDestination` value — a `@Serializable` object/instance is a [SourceObject]
+     *  (its class FQN), a legacy string route is itself, a library route its JVM class. */
+    private fun routeFqnOf(value: Any?): String? = when (value) {
+        is SourceObject -> value.cls.fqn
+        is String -> value
+        null -> null
+        else -> value.javaClass.name
+    }
+
+    // --- kotlinx.serialization `serializer<T>()` -----------------------------------------------------
+
+    /**
+     * Resolve a reified `kotlinx.serialization.serializer<T>()` (a reified-inline function reflection can't
+     * reach) to a real `KSerializer` for a COMPILED `@Serializable` type, using the call-site type argument to
+     * name `T`. Returns [NOT_SERIALIZER] when it isn't a serialization `serializer` call, and `null` (a graceful
+     * degrade, no crash) when a serializer can't be obtained — e.g. a project-SOURCE `@Serializable` type, whose
+     * `$serializer` is generated at compile time and doesn't exist during preview.
+     */
+    private fun resolveSerializerCall(call: RNode.Call, callee: ResolvedCallable.Library, receiver: Any?): Any? {
+        if (callee.methodName != "serializer") return NOT_SERIALIZER
+        if (callee.ownerFqn?.startsWith("kotlinx.serialization") != true) return NOT_SERIALIZER
+        val cls = call.typeArguments.firstOrNull()?.loadCandidates?.firstNotNullOfOrNull { loadClass(it) }
+            ?: return null
+        return runCatching { reflectSerializer(cls) }.getOrNull()
+    }
+
+    /** A `KSerializer` for [cls], or null when one can't be obtained (an uncompiled/project-source `@Serializable`
+     *  type has no serializer during preview). Tries, in order: the compiled class's generated `$serializer`
+     *  singleton (the reliable path for a `@Serializable` type on the classpath), then a static `serializer(KClass)`
+     *  off `kotlinx.serialization.SerializersKt` if the runtime exposes one (built-in/contextual types). */
+    private fun reflectSerializer(cls: Class<*>): Any? {
+        loadClass(cls.name + "\$serializer")?.let { ser ->
+            runCatching { ser.getField("INSTANCE").get(null) }.getOrNull()?.let { return it }
+        }
+        val serializersKt = loadClass("kotlinx.serialization.SerializersKt") ?: return null
+        val m = serializersKt.methods.firstOrNull {
+            it.name == "serializer" && it.parameterCount == 1 && it.parameterTypes[0] == kotlin.reflect.KClass::class.java
+        } ?: return null
+        return runCatching { m.invoke(null, cls.kotlin) }.getOrNull()
+    }
+
+    private fun loadClass(fqn: String): Class<*>? =
+        runCatching { Class.forName(fqn, false, loader ?: javaClass.classLoader) }.getOrNull()
+
     private companion object {
         val COMPOSER: Class<*> = Class.forName("androidx.compose.runtime.Composer")
+
+        /** Placeholder for `rememberNavController()` — the preview NavHost interceptor ignores the controller. */
+        val NAV_CONTROLLER_STUB = Any()
+
+        /** Sentinel: [handleNavCall] returns this when the call isn't an intercepted nav call. */
+        val NOT_NAV = Any()
+
+        /** Sentinel: [resolveSerializerCall] returns this when the call isn't a serialization `serializer`. */
+        val NOT_SERIALIZER = Any()
 
         /** Sentinel: [resolveResourceCall] returns this when the call isn't a mediated resource function (a real
          *  resolved value is never null, so `!== NOT_A_RESOURCE` cleanly distinguishes the two). */

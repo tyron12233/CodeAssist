@@ -30,6 +30,8 @@ object SerializationCompilerPlugin : KotlinCompilerPlugin {
     const val PLUGIN_ID: String = "org.jetbrains.kotlinx.serialization"
 
     override val pluginId: String get() = PLUGIN_ID
+    override val displayName: String get() = "Kotlin Serialization"
+    override val description: String get() = "Generates serializers for @Serializable classes (kotlinx.serialization)."
 
     /** Applies when [classpath] carries the serialization runtime; the module then needs the plugin. */
     override fun appliesTo(module: Module, classpath: List<Path>): Boolean = usesSerialization(classpath)

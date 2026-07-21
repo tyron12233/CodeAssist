@@ -30,6 +30,8 @@ object ParcelizeCompilerPlugin : KotlinCompilerPlugin {
     const val PLUGIN_ID: String = "org.jetbrains.kotlin.parcelize"
 
     override val pluginId: String get() = PLUGIN_ID
+    override val displayName: String get() = "Parcelize"
+    override val description: String get() = "Generates Parcelable implementations for @Parcelize classes."
 
     /** Applies when [classpath] carries the parcelize runtime; the module then needs the plugin. */
     override fun appliesTo(module: Module, classpath: List<Path>): Boolean = usesParcelize(classpath)

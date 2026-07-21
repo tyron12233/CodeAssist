@@ -46,6 +46,15 @@ class KotlinAnnotationCompletionTest {
     }
 
     @Test
+    fun bareAtSignOffersAnnotationTypesWithNoPrefix() {
+        // Typing just `@` (empty prefix) must already surface annotation classes — the editor opens the popup
+        // on `@`, so the service must detect the annotation-name position without any typed letters yet.
+        val ns = names("package demo\nannotation class MyMarker\nclass MyWidget\n@| class Foo")
+        assertTrue("MyMarker" in ns, "a bare `@` must offer annotation classes; got $ns")
+        assertTrue("MyWidget" !in ns, "a bare `@` must NOT offer non-annotation classes; got $ns")
+    }
+
+    @Test
     fun normalTypePositionStillOffersNonAnnotationTypes() {
         // A normal type slot is unfiltered — a class and an annotation are both valid there.
         val ns = names("package demo\nannotation class MyMarker\nclass MyWidget\nfun f() { val x: My| }")
