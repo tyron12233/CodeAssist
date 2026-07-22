@@ -54,8 +54,8 @@ private val KOTLIN_KEYWORDS = setOf(
     "typeof", "val", "var", "when", "while",
     // common soft keywords (rarely used as plain identifiers)
     "by", "catch", "constructor", "finally", "import", "init", "where",
-    // modifier keywords
-    "abstract", "actual", "annotation", "companion", "const", "crossinline", "data", "enum", "expect",
+    // modifier keywords ("data" is handled contextually below, like "value")
+    "abstract", "actual", "annotation", "companion", "const", "crossinline", "enum", "expect",
     "external", "final", "infix", "inline", "inner", "internal", "lateinit", "noinline", "open",
     "operator", "out", "override", "private", "protected", "public", "reified", "sealed", "suspend",
     "tailrec", "vararg",
@@ -452,6 +452,9 @@ private fun scanKotlinWord(line: String, start: Int, spans: MutableList<LineSpan
         // `value` is a keyword only in `value class` (a soft keyword) — as a plain identifier (`val value`,
         // `it.value`) it is far too common to color everywhere, so gate it on the following `class`.
         word == "value" && nextWordIs(line, i, "class") -> TokenType.KEYWORD
+        // `data` is a keyword only in `data class` / `data object` — as a plain identifier or a package
+        // segment (`import com.example.data.Foo`, `val data`) it must NOT be colored, so gate it likewise.
+        word == "data" && (nextWordIs(line, i, "class") || nextWordIs(line, i, "object")) -> TokenType.KEYWORD
         else -> {
             var j = i
             while (j < n && (line[j] == ' ' || line[j] == '\t')) j++
