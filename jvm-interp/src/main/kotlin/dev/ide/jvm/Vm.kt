@@ -59,6 +59,16 @@ class Vm(
      *  call (reading stdin, sleeping) does not observe this — the host also interrupts the run thread to break
      *  such a blocking call. One-shot: a cancelled [Vm] should not be reused. */
     fun requestCancel() { interpreter.cancelRequested = true }
+
+    /** Run [body] with the interpreter applying [types] (reified type-parameter name → JVM internal name) to
+     *  any `reifiedOperationMarker` it executes — the mechanism that runs a reified inline function without the
+     *  compiler having inlined it. Single-threaded; nested reified executions are not supported (the inner
+     *  clobbers the outer's map, restored on exit). */
+    internal fun <T> withReifiedTypes(types: Map<String, String>, body: () -> T): T {
+        val prev = interpreter.reifiedTypes
+        interpreter.reifiedTypes = types
+        return try { body() } finally { interpreter.reifiedTypes = prev }
+    }
     private val loader: ClassLoader = Vm::class.java.classLoader
     private val peerDispatch = PeerDispatch { peer, vmObject, name, descriptor, args ->
         val obj = vmObject as VmObject

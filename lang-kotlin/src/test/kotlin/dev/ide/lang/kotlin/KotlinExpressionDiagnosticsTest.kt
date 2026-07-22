@@ -47,6 +47,44 @@ class KotlinExpressionDiagnosticsTest {
     }
 
     @Test
+    fun mapNotNullYieldsNonNullElements() {
+        // `mapNotNull { … : Note? }` returns `List<Note>` (its `transform: (T) -> R?` has `R : Any`), so an
+        // element member access needs no `?.`. Regression for the inference binding `R = Note?` from the `R?`
+        // parameter and spuriously making the elements nullable.
+        val diags = diagnose(
+            "MapNotNull.kt",
+            "package demo\n" +
+                "class Note(val lastModified: Long)\n" +
+                "fun load(s: String): Note? = null\n" +
+                "fun all(xs: List<String>): List<Note> =\n" +
+                "    xs.mapNotNull { load(it) }.sortedByDescending { it.lastModified }\n",
+        )
+        assertTrue(
+            diags.none { it.code == "kt.unsafeNullable" },
+            "mapNotNull yields List<Note>, so `it.lastModified` needs no `?.`; got $diags",
+        )
+    }
+
+    @Test
+    fun mapKeepsNullableElements() {
+        // The counterpart: plain `map { … : Note? }` yields `List<Note?>` (a bare `R` keeps the argument's
+        // nullability), so an unguarded member access IS unsafe — proves the mapNotNull fix didn't over-strip.
+        val diags = diagnose(
+            "MapNullable.kt",
+            "package demo\n" +
+                "class Note(val lastModified: Long)\n" +
+                "fun load(s: String): Note? = null\n" +
+                "fun all(xs: List<String>) {\n" +
+                "    xs.map { load(it) }.sortedByDescending { it.lastModified }\n" +
+                "}\n",
+        )
+        assertTrue(
+            diags.any { it.code == "kt.unsafeNullable" },
+            "map yields List<Note?>, so `it.lastModified` must still require `?.`; got $diags",
+        )
+    }
+
+    @Test
     fun elvisOnNotNullAssertedOperandIsFlagged() {
         val diags = diagnose("UselessElvis.kt", "package demo\nfun f(s: String?) { val x = s!! ?: \"\" }")
         assertTrue(

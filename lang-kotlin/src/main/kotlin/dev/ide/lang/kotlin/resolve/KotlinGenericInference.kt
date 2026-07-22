@@ -236,7 +236,13 @@ internal fun KotlinResolver.unify(
     bindings: MutableMap<String, TypeRef>
 ) {
     if (param.isTypeParameter) {
-        bindings.putIfAbsent(param.qualifiedName, arg); return
+        // A NULLABLE type-parameter reference (`R?`) absorbs one level of the argument's nullability:
+        // `R? = Note?` ⇒ R = Note. This is the `mapNotNull`/`filterNotNull` shape — `transform: (T) -> R?`
+        // with `R : Any` — so `xs.mapNotNull { … : Note? }` yields `List<Note>`, not `List<Note?>` (which would
+        // make the elements spuriously nullable). A bare `R` binds the argument unchanged (`R = Note?` stays
+        // nullable), so `let { it }` / `map { … }` are unaffected.
+        val bound = if (param.nullable) arg.withNullable(false) else arg
+        bindings.putIfAbsent(param.qualifiedName, bound); return
     }
     // A vararg parameter (`of(E...)`) is an `Array<E>`; a single scalar argument unifies with the element.
     if (param.qualifiedName == "kotlin.Array" && param.typeArguments.size == 1 &&

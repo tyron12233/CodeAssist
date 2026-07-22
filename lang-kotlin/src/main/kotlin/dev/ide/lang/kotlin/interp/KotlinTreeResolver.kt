@@ -37,7 +37,10 @@ import org.jetbrains.kotlin.psi.KtIsExpression
 import org.jetbrains.kotlin.psi.KtLambdaArgument
 import org.jetbrains.kotlin.psi.KtLambdaExpression
 import org.jetbrains.kotlin.psi.KtObjectDeclaration
+import org.jetbrains.kotlin.psi.KtObjectLiteralExpression
+import com.intellij.psi.util.PsiTreeUtil
 import org.jetbrains.kotlin.psi.KtSafeQualifiedExpression
+import org.jetbrains.kotlin.psi.KtDelegatedSuperTypeEntry
 import org.jetbrains.kotlin.psi.KtSuperTypeCallEntry
 import org.jetbrains.kotlin.psi.KtThrowExpression
 import org.jetbrains.kotlin.psi.KtTryExpression
@@ -95,6 +98,12 @@ class KotlinTreeResolver(
     private var slotCounter = 0
     private val diagnostics = ArrayList<LoweringDiagnostic>()
 
+    /** Anonymous-object literals (`object : Foo { … }`) discovered while lowering function/member bodies. Each
+     *  is materialized as its own synthesized [ResolvedClass] (name `<anonymous>$N`) and appended to the file's
+     *  class list by [lowerClasses], so the interpreter can construct it. Populated by [objectLiteralNode]. */
+    private val anonymousClasses = ArrayList<ResolvedClass>()
+    private var anonCounter = 0
+
     /** The implicit `this` receivers of the enclosing receiver-lambdas (`RowScope.() -> Unit` content slots),
      *  each bound to the slot the scope instance arrives in at runtime — so a member extension of the scope
      *  (`RowScope.weight`) can dispatch onto it, and a bare extension call can use it as its extension receiver. */
@@ -144,6 +153,9 @@ class KotlinTreeResolver(
         val enumEntryNames: Set<String>,
         /** Direct supertype simple names (keys into the file-class index for inherited-member walks). */
         val supertypeSimpleNames: List<String>,
+        /** The primary constructor's value-parameter count (0 for a no-arg / primaryless class) — the arity of a
+         *  `::Type` constructor reference. */
+        val primaryArity: Int = 0,
     ) {
         /** Whether `name(arity args)` is a member declared directly on this type (or a companion member via the
          *  class name, an enum static, or a data-class generated member) — NOT counting inherited ones, which
@@ -189,6 +201,7 @@ class KotlinTreeResolver(
                 out[simple] = FileClassInfo(
                     qualifiedNameOf(simple, decl), simple, flavor, decl.isData(),
                     props, arities(decl), companion?.let { arities(it) } ?: emptySet(), entries, supers,
+                    primaryArity = decl.primaryConstructorParameters.size,
                 )
             }
             decl.declarations.filterIsInstance<KtClassOrObject>().forEach { visit(it) }
@@ -333,6 +346,16 @@ class KotlinTreeResolver(
     fun lowerTopLevelProperty(prop: KtProperty): ResolvedFunction {
         reset(prop.textRange.startOffset)
         scopes.addLast(HashMap())
+        // An EXTENSION property (`val Boxed.doubled get() = v * 2`) binds its receiver like an extension function
+        // (slot 0 + an implicit receiver scope), so `this`/bare-member access in the getter resolves to it; the
+        // interpreter binds the actual receiver on an EXTENSION-dispatch read (see [propertyGet]). A source
+        // extension property has no compiled `…Kt` facade, so this synthetic getter IS its implementation.
+        val recvType = prop.receiverTypeReference?.text?.let { service.typeFromText(it, resolver.fileContext) }
+        val receiverSlot = if (prop.receiverTypeReference != null) newSlot() else null // slot 0 when present
+        var pushedReceiver = false
+        if (receiverSlot != null && recvType != null) {
+            receiverScopes.addLast(ReceiverScope(receiverSlot, recvType)); pushedReceiver = true
+        }
         val getter = prop.getter
         val body = when {
             prop.initializer != null -> lower(prop.initializer!!)
@@ -340,8 +363,9 @@ class KotlinTreeResolver(
             getter?.bodyExpression != null -> lower(getter.bodyExpression!!)
             else -> unsupported("top-level property without a value", prop)
         }
+        if (pushedReceiver) receiverScopes.removeLast()
         scopes.removeLast()
-        return ResolvedFunction(prop.name ?: "<anonymous>", emptyList(), body, diagnostics.toList())
+        return ResolvedFunction(prop.name ?: "<anonymous>", emptyList(), body, diagnostics.toList(), receiverSlot = receiverSlot)
     }
 
     /** Whether [fn] returns `Unit` — a block body with no explicit return type, or one declared `: Unit`. An
@@ -367,20 +391,36 @@ class KotlinTreeResolver(
             }
         }
         rec(ktFile.declarations)
-        return out
+        // Anonymous object literals (`object : Foo { }`) found while lowering function/member bodies are
+        // materialized as their own classes. The function pass runs before this in the pipeline, and lowering
+        // the classes above lowers their member bodies, so [anonymousClasses] holds every one by now.
+        return out + anonymousClasses.distinctBy { it.fqn }
     }
 
-    private fun lowerClass(decl: KtClassOrObject): ResolvedClass? {
-        val simpleName = decl.name ?: return null
+    /**
+     * Lower a class/object declaration to a [ResolvedClass]. For an ANONYMOUS object literal ([anonFqn] set),
+     * [captures] are the enclosing locals/params the literal references — each becomes a synthesized `val`
+     * property (a leading primary-constructor parameter), so a member body reads the captured value through the
+     * object's field map (no interpreter capture-plumbing needed); the construct call passes their values.
+     */
+    private fun lowerClass(
+        decl: KtClassOrObject,
+        anonFqn: String? = null,
+        anonSimpleName: String? = null,
+        captures: List<Pair<String, Binding>> = emptyList(),
+    ): ResolvedClass? {
+        val simpleName = decl.name ?: anonSimpleName ?: return null
         val ktClass = decl as? KtClass
         val flavor = when {
+            // An object LITERAL is a fresh instance per evaluation (a class), not a singleton `object`.
+            anonFqn != null -> ClassFlavor.CLASS
             decl is KtObjectDeclaration && decl.isCompanion() -> ClassFlavor.COMPANION
             decl is KtObjectDeclaration -> ClassFlavor.OBJECT
             ktClass?.isEnum() == true -> ClassFlavor.ENUM
             ktClass?.isInterface() == true -> ClassFlavor.INTERFACE
             else -> ClassFlavor.CLASS
         }
-        val fqn = qualifiedNameOf(simpleName, decl)
+        val fqn = anonFqn ?: qualifiedNameOf(simpleName, decl)
         val primaryKtParams = decl.primaryConstructorParameters
         val bodyProps = decl.declarations.filterIsInstance<KtProperty>()
         // Computed body properties (`val isDraw get() = …`): no backing field, lowered as zero-arg getter
@@ -407,7 +447,8 @@ class KotlinTreeResolver(
                 m.forEach { (n, sigs) -> inhMethods.getOrPut(n) { ArrayList() }.addAll(sigs) }
             }
         }
-        val propertyNames = ownPropertyNames + inhProps
+        // Captured enclosing locals become synthesized `val` properties, so a member body reads them by bare name.
+        val propertyNames = ownPropertyNames + inhProps + captures.map { it.first }
         val methodSigs = (ownMethodSigs.keys + inhMethods.keys).associateWith { name ->
             ownMethodSigs[name].orEmpty() + inhMethods[name].orEmpty()
         }
@@ -434,7 +475,14 @@ class KotlinTreeResolver(
         scopes.addLast(HashMap())
         classStack.addLast(ctx)
         val thisSlot = newSlot() // slot 0 — equals ctx.thisSlot
-        val primaryParams = primaryKtParams.map { p ->
+        // Leading synthesized `val` properties for the captured enclosing locals (anonymous object only). The
+        // construct call passes their values positionally; `construct` stores each into the object's field map.
+        val captureParams = captures.map { (name, _) ->
+            val slot = newSlot()
+            bind(name, Binding.Param(slot, name)) // visible to initializers/init blocks
+            RClassParam(slot, name, type = null, isProperty = true, mutable = false, default = null)
+        }
+        val primaryParams = captureParams + primaryKtParams.map { p ->
             val slot = newSlot()
             val name = p.name ?: "_"
             bind(name, Binding.Param(slot, name)) // visible to initializers and init blocks
@@ -502,7 +550,25 @@ class KotlinTreeResolver(
             val body = anon.body ?: continue
             steps += anon.textRange.startOffset to lower(body)
         }
-        val initSteps = steps.sortedBy { it.first }.map { it.second }
+        // `class C : I by expr` — store each delegate object in a hidden field (initialized BEFORE property
+        // initializers/init blocks, as Kotlin does) and record the interface so an un-overridden member forwards
+        // to the delegate at dispatch time (see Interpreter). The delegate expression is lowered in the ctor
+        // scope, so it can reference a primary-constructor parameter (`C(d: I) : I by d`).
+        val interfaceDelegates = ArrayList<InterfaceDelegate>()
+        val delegateSteps = ArrayList<RNode>()
+        decl.superTypeListEntries.filterIsInstance<KtDelegatedSuperTypeEntry>().forEachIndexed { i, entry ->
+            val ifaceName = entry.typeReference?.text?.substringBefore('<')?.trim()?.takeIf { it.isNotEmpty() }
+            val delegateExpr = entry.delegateExpression
+            if (ifaceName != null && delegateExpr != null) {
+                val ifaceFqn = runCatching { service.resolveTypeName(ifaceName, resolver.fileContext) }.getOrNull() ?: ifaceName
+                val fieldName = "\$delegate\$$i"
+                val d = lower(delegateExpr)
+                delegateSteps += if (d is RNode.Unsupported) d
+                else RNode.PropertySet(thisRef(ctx), Binding.Property(fieldName, fqn, backingField = false), d, span(entry))
+                if (d !is RNode.Unsupported) interfaceDelegates += InterfaceDelegate(ifaceFqn, fieldName)
+            }
+        }
+        val initSteps = delegateSteps + steps.sortedBy { it.first }.map { it.second }
         // Secondary constructors — lowered in their own scopes (`this` stays ctx.thisSlot; their value params
         // get fresh slots). The call site selects primary vs. secondary by arity (see the interpreter).
         val hasPrimary = decl.primaryConstructor != null || primaryKtParams.isNotEmpty()
@@ -523,7 +589,62 @@ class KotlinTreeResolver(
             receiverSlot = thisSlot, supertypes = supertypes, superCall = superCall, enumEntries = enumEntries,
             diagnostics = classDiags, delegatedProperties = delegatedProps,
             conventionDelegatedProperties = conventionDelegatedProps, secondaryCtors = secondaryCtors,
+            interfaceDelegates = interfaceDelegates,
         )
+    }
+
+    /**
+     * An anonymous object literal (`object : Foo { … }`) — a fresh instance of a synthesized class per
+     * evaluation. Its body's references to enclosing locals/params are CAPTURED as synthesized `val` properties
+     * (see [lowerClass]); the returned node is a constructor call that passes those captured values, so a member
+     * of the object reads them through the instance's field map at run time.
+     *
+     * Because [lowerClass] resets the shared lowering state (it's written for the top-level class pass), the
+     * enclosing function's scopes/slots/diagnostics are saved and restored around it. Anonymous objects whose
+     * supertype is a LIBRARY interface invoked by library code (e.g. `object : NestedScrollConnection` handed to
+     * `Modifier.nestedScroll`) still construct here, but the library can't call back into the interpreted object
+     * without a proxy — that path degrades rather than rendering (a tracked boundary).
+     */
+    private fun objectLiteralNode(e: KtObjectLiteralExpression): RNode {
+        val decl = e.objectDeclaration
+        // Free enclosing locals/params the literal body references. Over-capturing a name also bound inside the
+        // object is harmless — a member's own local shadows the captured field (nameNode resolves locals first).
+        val captures = LinkedHashMap<String, Binding>()
+        for (ref in PsiTreeUtil.collectElementsOfType(decl, KtNameReferenceExpression::class.java)) {
+            val name = ref.getReferencedName()
+            if (name in captures) continue
+            when (val b = resolveLocal(name)) {
+                is Binding.Local, is Binding.Param -> captures[name] = b
+                else -> {} // a delegated local, member, or unresolved name isn't captured by value
+            }
+        }
+        val captureList = captures.entries.map { it.key to it.value }
+        val simpleName = "<no name provided>"
+        val fqn = "${classStack.lastOrNull()?.fqn ?: "<file>"}\$anon\$${anonCounter++}"
+
+        // lowerClass RESETS scopes/slots/diagnostics (it targets the top-level pass); save + restore the
+        // enclosing function's lowering state around it so the rest of the enclosing body still lowers.
+        val savedScopes = ArrayList(scopes)
+        val savedSlot = slotCounter
+        val savedClassStack = ArrayList(classStack)
+        val savedReceivers = ArrayList(receiverScopes)
+        val savedDiags = ArrayList(diagnostics)
+        val savedUnitStart = currentUnitStart
+        val savedTypeParams = currentTypeParams
+        val cls = lowerClass(decl, anonFqn = fqn, anonSimpleName = simpleName, captures = captureList)
+        scopes.clear(); scopes.addAll(savedScopes)
+        slotCounter = savedSlot
+        classStack.clear(); classStack.addAll(savedClassStack)
+        receiverScopes.clear(); receiverScopes.addAll(savedReceivers)
+        diagnostics.clear(); diagnostics.addAll(savedDiags)
+        currentUnitStart = savedUnitStart
+        currentTypeParams = savedTypeParams
+
+        cls ?: return unsupported("anonymous object", e)
+        anonymousClasses += cls
+        val callee = ResolvedCallable.Source(simpleName, "$fqn/${captureList.size}", captureList.map { it.first }, isConstructor = true)
+        val args = captureList.map { RArg(RNode.Name(it.second, span(e))) }
+        return RNode.Call(callee, DispatchKind.CONSTRUCTOR, receiver = null, args = args, callSiteKey = csk(e.textRange.startOffset), source = span(e))
     }
 
     /**
@@ -607,6 +728,7 @@ class KotlinTreeResolver(
         is KtConstantExpression -> constNode(e)
         is KtStringTemplateExpression -> stringNode(e)
         is KtNameReferenceExpression -> nameNode(e)
+        is KtObjectLiteralExpression -> objectLiteralNode(e)
         is KtDotQualifiedExpression -> qualifiedNode(e)
         is KtSafeQualifiedExpression -> safeCallNode(e)
         is KtCallExpression -> callNode(e, receiverNode = null)
@@ -634,15 +756,18 @@ class KotlinTreeResolver(
         is KtLambdaExpression -> lambdaNode(e)
         is KtBlockExpression -> lowerBlock(e)
         is KtProperty -> localVarNode(e)
+        is KtNamedFunction -> localFunctionNode(e)
         is KtThisExpression -> {
             // `this` binds to the innermost lambda-receiver scope if one is active, else the enclosing class's
-            // implicit receiver (both arrive as a slot-bound value the interpreter reads from its env).
+            // implicit receiver (both arrive as a slot-bound value the interpreter reads from its env). With
+            // neither in scope there is no receiver value to read (the interpreter never bound one) — a clean
+            // lowering gap (skipped under gap-tolerant preview) beats emitting a node that aborts at runtime.
             val rs = receiverScopes.lastOrNull()
             val ctx = classStack.lastOrNull()
             when {
                 rs != null -> RNode.Name(Binding.Local(rs.slot, "this", mutable = false), span(e))
                 ctx != null -> thisRef(ctx, e)
-                else -> RNode.This(Binding.Receiver(resolver.implicitReceiversAt(e.textRange.startOffset).firstOrNull()), span(e))
+                else -> unsupported("`this` with no receiver in scope (not inside a class member, extension, or receiver lambda)", e)
             }
         }
         else -> unsupported(e::class.simpleName ?: "expression", e)
@@ -967,8 +1092,24 @@ class KotlinTreeResolver(
         // Inference is best-effort and can throw on a deep chain; degrade to null (→ Unsupported with a reason)
         // instead of letting the throw crash the whole function's lowering.
         val recvType = runCatching { resolver.inferType(receiverExpr) }.getOrNull()
+        // A SOURCE extension property (`val Boxed.doubled get() = …`) has no compiled facade getter to reflect —
+        // interpret its synthetic getter via a source EXTENSION call (its receiver is [receiverNode]), mirroring
+        // how a source extension FUNCTION dispatches.
+        sourceExtensionProperty(name, recvType)?.let { sym ->
+            return RNode.Call(toCallable(sym), DispatchKind.EXTENSION, receiverNode, emptyList(), csk(e.textRange.startOffset), span(e))
+        }
         return propertyBinding(name, recvType)?.let { RNode.PropertyGet(receiverNode, it, span(e)) }
             ?: unsupported("unresolved property `$name` (extension not imported)", e)
+    }
+
+    /** A SOURCE extension property `val Recv.name` in scope on [recvType] — its getter is interpreted (there's no
+     *  compiled facade). Null for a member property, a library extension property (reflected), or one not imported. */
+    private fun sourceExtensionProperty(name: String, recvType: KotlinType?): KotlinSymbol? {
+        val rt = recvType ?: return null
+        return runCatching {
+            service.membersForCompletion(rt.qualifiedName, rt.typeArguments, name)
+                .firstOrNull { it.name == name && it.kind == SymbolKind.FIELD && it.isExtension && it.origin.fromSource && extensionInScope(it) }
+        }.getOrNull()
     }
 
     /** `receiver?.selector` → `receiver.let { tmp -> if (tmp != null) tmp.selector else null }`, lowered with a
@@ -1029,25 +1170,75 @@ class KotlinTreeResolver(
         val name = e.callableReference.getReferencedName()
         val receiverExpr = e.receiverExpression
         if (receiverExpr == null) {
-            val sym = service.topLevelByName(name).firstOrNull { it.kind == SymbolKind.METHOD }
-                ?: return unsupported("callable reference `::$name` (unresolved)", e)
-            return synthRefLambda(toCallable(sym), DispatchKind.TOP_LEVEL, receiverNode = null, arity = sym.paramTypes.size, span = span)
+            // `::foo` — a top-level function, else `::Type` — a constructor reference.
+            service.topLevelByName(name).firstOrNull { it.kind == SymbolKind.METHOD }?.let {
+                return synthRefLambda(toCallable(it), DispatchKind.TOP_LEVEL, receiverNode = null, arity = it.paramTypes.size, span = span)
+            }
+            constructorRefLambda(name, span)?.let { return it }
+            return unsupported("callable reference `::$name` (unresolved)", e)
         }
-        // `expr::method` — a BOUND reference requires the receiver to be a VALUE expression (typeable); a bare
-        // type name (`Foo::method`, an unbound/static reference) doesn't infer a type and stays unsupported.
+        // A bare receiver name that denotes a TYPE (not a local/value in scope) is an UNBOUND member/property
+        // reference (`String::length`, `Widget::render`): the receiver becomes the synthesized lambda's first
+        // parameter. Checked before the bound path because a type name can still `inferType` (to its companion).
+        val bareName = (receiverExpr as? KtNameReferenceExpression)?.getReferencedName()
+        if (bareName != null && resolveLocal(bareName) == null) {
+            unboundRefLambda(bareName, name, span)?.let { return it }
+        }
         val recvType = runCatching { resolver.inferType(receiverExpr) }.getOrNull()
             ?: return unsupported("callable reference `${receiverExpr.text}::$name` (unbound or untyped receiver)", e)
+        // `expr::method` — a BOUND reference on a value receiver, evaluated once into a captured temp.
         val sym = service.membersForCompletion(recvType.qualifiedName, recvType.typeArguments, name)
             .firstOrNull { it.name == name && it.kind == SymbolKind.METHOD && !it.isExtension }
             ?: return unsupported("callable reference `${receiverExpr.text}::$name` (no such member)", e)
         val recvNode = lower(receiverExpr)
         if (recvNode is RNode.Unsupported) return recvNode
-        // Bind the receiver once into a temp the synthesized lambda captures (so `obj` is evaluated at the point
-        // the reference is taken, not on each call) — the same pattern as a safe-call temp.
         val tmpSlot = newSlot()
         val ref = RNode.Name(Binding.Local(tmpSlot, "\$ref", mutable = false), span)
         val lambda = synthRefLambda(toCallable(sym), DispatchKind.MEMBER, ref, arity = sym.paramTypes.size, span = span)
         return RNode.Block(listOf(RNode.LocalVar(tmpSlot, "\$ref", mutable = false, recvNode, span), lambda), isExpression = true, span)
+    }
+
+    /** `::Type` — a constructor reference lowered to `{ p0, … -> Type(p0, …) }`. Resolves the type + its
+     *  constructor (source or library) so the synthesized `CONSTRUCTOR` call materializes an instance. Null when
+     *  the name isn't a constructible type. */
+    private fun constructorRefLambda(name: String, span: SourceSpan): RNode? {
+        // A source class in this file — mirror the constructor callee the normal `Type(...)` call builds.
+        fileClasses[name]?.takeIf { it.flavor == ClassFlavor.CLASS }?.let { sc ->
+            val callee = ResolvedCallable.Source(name, "${sc.fqn}/${sc.primaryArity}", emptyList(), isConstructor = true)
+            return synthRefLambda(callee, DispatchKind.CONSTRUCTOR, receiverNode = null, arity = sc.primaryArity, span = span)
+        }
+        // A library class.
+        val fqn = runCatching { service.resolveTypeName(name, resolver.fileContext) }.getOrNull() ?: return null
+        val ctor = runCatching { service.constructorsOf(fqn) }.getOrDefault(emptyList()).firstOrNull() ?: return null
+        return synthRefLambda(toCallable(ctor), DispatchKind.CONSTRUCTOR, receiverNode = null, arity = ctor.paramTypes.size, span = span)
+    }
+
+    /** `Type::member` — an UNBOUND reference: the receiver is the synthesized lambda's FIRST parameter. A method
+     *  `Type::m` → `{ recv, p1… -> recv.m(p1…) }`; a property `Type::p` → `{ recv -> recv.p }`. Null when the
+     *  name isn't a type or has no such member. */
+    private fun unboundRefLambda(typeName: String, member: String, span: SourceSpan): RNode? {
+        val fqn = runCatching { service.resolveTypeName(typeName, resolver.fileContext) }.getOrNull() ?: return null
+        val members = runCatching { service.membersForCompletion(fqn, emptyList(), member) }.getOrDefault(emptyList())
+            .filter { it.name == member }
+        val recvSlot = newSlot()
+        val recvRef = RNode.Name(Binding.Local(recvSlot, "\$recv", mutable = false), span)
+        // A real member method, else an in-scope extension function (`String::uppercase` → `StringsKt.uppercase`);
+        // prefer the zero-value-parameter overload (the shape a `Type::name` reference denotes).
+        val memberMethod = members.filter { it.kind == SymbolKind.METHOD && !it.isExtension }.minByOrNull { it.paramTypes.size }
+        val extMethod = memberMethod ?: runCatching { service.extensionsFor(fqn, emptyList(), member) }.getOrDefault(emptyList())
+            .filter { it.name == member && it.kind == SymbolKind.METHOD && extensionInScope(it) }.minByOrNull { it.paramTypes.size }
+        (memberMethod?.let { it to DispatchKind.MEMBER } ?: extMethod?.let { it to DispatchKind.EXTENSION })?.let { (m, dispatch) ->
+            val argSlots = (0 until m.paramTypes.size).map { newSlot() }
+            val params = listOf(RParam(recvSlot, "\$recv", null)) + argSlots.mapIndexed { i, s -> RParam(s, "p$i", null) }
+            val argRefs = argSlots.map { RArg(RNode.Name(Binding.Local(it, "p", mutable = false), span)) }
+            val call = RNode.Call(toCallable(m), dispatch, recvRef, argRefs, csk(span.start), span)
+            return RNode.Lambda(params, call, captures = emptyList(), source = span)
+        }
+        members.firstOrNull { it.kind == SymbolKind.FIELD }?.let {
+            val get = RNode.PropertyGet(recvRef, Binding.Property(member, fqn, backingField = false), span)
+            return RNode.Lambda(listOf(RParam(recvSlot, "\$recv", null)), get, captures = emptyList(), source = span)
+        }
+        return null
     }
 
     /** Build `{ p0, … -> callee(p0, …) }` for a callable reference of the given [arity] — a normal lambda the
@@ -1759,6 +1950,35 @@ class KotlinTreeResolver(
         return RNode.LocalVar(slot, name, p.isVar, initializer, span(p))
     }
 
+    /**
+     * A local function declaration inside a block (`fun helper(x: Int): Int = x * 2`). Lowered as a local slot
+     * bound to a closure — an [RNode.Lambda] flagged `isLocalFunction` so the interpreter treats a `return` in
+     * its body as LOCAL (not a non-local return from the enclosing function). The name is bound in the enclosing
+     * block scope BEFORE the body is lowered, so the function can call itself (recursion resolves through the
+     * invoke-on-local path in [callNode]); the body + params are lowered in a fresh pushed scope, exactly like a
+     * lambda. Not modeled: default parameter values, and a forward reference to a sibling local function declared
+     * later in the same block (a backward reference / self-recursion works).
+     */
+    private fun localFunctionNode(fn: KtNamedFunction): RNode {
+        val name = fn.name ?: return unsupported("local function without a name", fn)
+        val slot = newSlot()
+        // Bind the name in the ENCLOSING scope first so the body (recursion) and later statements resolve it.
+        bind(name, Binding.Local(slot, name, mutable = false))
+        scopes.addLast(HashMap())
+        val params = fn.valueParameters.map { p ->
+            val pSlot = newSlot()
+            val pName = p.name ?: "_"
+            bind(pName, Binding.Local(pSlot, pName, mutable = false))
+            RParam(pSlot, pName, service.typeFromText(p.typeReference?.text, resolver.fileContext))
+        }
+        val body = fn.bodyBlockExpression?.let { lowerBlock(it) }
+            ?: fn.bodyExpression?.let { lower(it) }
+            ?: emptyBlock(fn)
+        scopes.removeLast()
+        val lambda = RNode.Lambda(params, body, captures = emptyList(), source = span(fn), isLocalFunction = true)
+        return RNode.LocalVar(slot, name, mutable = false, lambda, span(fn))
+    }
+
     /** The `.value` property a `by`-delegate is read/written through, or null if the delegate's type exposes
      *  no `value` member — i.e. it is not a State/MutableState/Lazy-style delegate (the only delegates whose
      *  `getValue`/`setValue` convention forwards to `.value`). Requiring an actual `value` member keeps this
@@ -2130,6 +2350,7 @@ class KotlinTreeResolver(
                 isConstructor = isCtor,
                 isComposable = sym.isComposable,
                 typeParameterNames = sym.typeParameters,
+                isSuspend = sym.isSuspend,
             )
         }
         val ownerFqn = sym.declaringClassFqn ?: sym.packageName ?: sym.owner?.name
@@ -2146,6 +2367,7 @@ class KotlinTreeResolver(
             paramNames = sym.paramNames,
             varargParamIndex = sym.varargParamIndex,
             typeParameterNames = sym.typeParameters,
+            isSuspend = sym.isSuspend,
         )
     }
 
@@ -2181,7 +2403,10 @@ class KotlinTreeResolver(
     private val COMPARISON = mapOf(
         KtTokens.LT to "lt", KtTokens.GT to "gt", KtTokens.LTEQ to "le", KtTokens.GTEQ to "ge",
     )
-    private val EQUALITY = mapOf(KtTokens.EQEQ to "eq", KtTokens.EXCLEQ to "ne")
+    private val EQUALITY = mapOf(
+        KtTokens.EQEQ to "eq", KtTokens.EXCLEQ to "ne",
+        KtTokens.EQEQEQ to "refeq", KtTokens.EXCLEQEQEQ to "refne", // `===` / `!==` referential identity
+    )
 
     private fun parseChar(t: String): Char? {
         val inner = t.removePrefix("'").removeSuffix("'")

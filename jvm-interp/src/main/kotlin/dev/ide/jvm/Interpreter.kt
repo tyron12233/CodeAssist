@@ -36,6 +36,13 @@ private const val K_LONG: Byte = 2
 private const val K_FLOAT: Byte = 3
 private const val K_DOUBLE: Byte = 4
 
+/** Owner of Kotlin's reification marker intrinsic. */
+private const val REIFIED_MARKER_OWNER = "kotlin/jvm/internal/Intrinsics"
+/** `ReifiedTypeInliner.OperationKind` ids the interpreter can reproduce: NEW_ARRAY(0), AS(1), SAFE_AS(2),
+ *  IS(3), JAVA_CLASS(4, `T::class.java`). ENUM(5, `enumValues`)/TYPE_OF(6, `typeOf`) are handled ahead of the
+ *  VM (enum) or need kotlin-reflect (typeOf); a marker of those kinds throws so the caller falls back. */
+private val REIFIED_KINDS_SUPPORTED = setOf(0, 1, 2, 3, 4)
+
 /**
  * The execution engine. It runs one [MethodNode]'s bytecode over a typed frame (see [Frame]), dispatching
  * calls back through the [vm]: an interpreted target recurses into a fresh frame, and any other target goes
@@ -116,6 +123,15 @@ internal class Interpreter(private val vm: Vm) {
     /** Set by another thread to cancel the running program. Checked once every [CANCEL_CHECK_INTERVAL]
      *  instructions in the loop, so even a tight compute loop with no bridge calls unwinds promptly. */
     @Volatile @JvmField var cancelRequested: Boolean = false
+
+    /** Reified-type substitution for a running reified inline function: type-parameter name (`R`) → the JVM
+     *  internal name of the concrete type argument (`java/lang/String`). Set by [Vm.withReifiedTypes] around a
+     *  reified invocation, empty otherwise. Single-threaded, so one map for the whole reified execution. */
+    @JvmField var reifiedTypes: Map<String, String> = emptyMap()
+
+    /** The concrete type a just-executed [reifiedOperationMarker] armed, consumed by the very next type op
+     *  (`INSTANCEOF`/`CHECKCAST`/`ANEWARRAY`). The compiler always emits that op immediately after the marker. */
+    private var pendingReified: String? = null
 
     /** Serializes interpreter execution across threads (see [execute]). Re-entrant, so nested same-thread calls
      *  proceed freely; a second thread waits. */
@@ -499,7 +515,7 @@ internal class Interpreter(private val vm: Vm) {
             // object and array creation
             NEW -> frame.pushRef(instantiate((insn as TypeInsnNode).desc))
             NEWARRAY -> frame.pushRef(VmArray.of(primitiveArrayDesc((insn as IntInsnNode).operand), frame.popI()))
-            ANEWARRAY -> { val t = insn as TypeInsnNode; frame.pushRef(VmArray.of(elementDescOf(t.desc), frame.popI())) }
+            ANEWARRAY -> { val t = insn as TypeInsnNode; val et = takePendingReified() ?: t.desc; frame.pushRef(VmArray.of(elementDescOf(et), frame.popI())) }
             MULTIANEWARRAY -> frame.pushRef(multiArray(insn as MultiANewArrayInsnNode, frame))
             ARRAYLENGTH -> frame.pushI(arrayLength(deref(frame.popRef())))
 
@@ -514,8 +530,8 @@ internal class Interpreter(private val vm: Vm) {
             DASTORE -> { val v = frame.popD(); val i = frame.popI(); arraySet(deref(frame.popRef()), i, v) }
             AASTORE -> { val v = deref(frame.popRef()); val i = frame.popI(); arraySet(deref(frame.popRef()), i, v) }
 
-            CHECKCAST -> { val t = (insn as TypeInsnNode).desc; if (!castOk(deref(frame.peekRef()), t)) throwReal(ClassCastException("cannot cast to $t")) }
-            INSTANCEOF -> { val t = (insn as TypeInsnNode).desc; frame.pushI(if (instanceOf(deref(frame.popRef()), t)) 1 else 0) }
+            CHECKCAST -> { val t = takePendingReified() ?: (insn as TypeInsnNode).desc; if (!castOk(deref(frame.peekRef()), t)) throwReal(ClassCastException("cannot cast to $t")) }
+            INSTANCEOF -> { val t = takePendingReified() ?: (insn as TypeInsnNode).desc; frame.pushI(if (instanceOf(deref(frame.popRef()), t)) 1 else 0) }
 
             ATHROW -> { val t = deref(frame.popRef()); if (t == null) throwReal(NullPointerException()); throw VmException(t) }
             MONITORENTER, MONITOREXIT -> frame.popAny() // locking is a no-op in the single-threaded interpreter
@@ -540,7 +556,11 @@ internal class Interpreter(private val vm: Vm) {
             is Long -> frame.pushJ(cst)
             is Float -> frame.pushF(cst)
             is Double -> frame.pushD(cst)
-            is Type -> frame.pushRef(vm.classLiteral(cst)) // a class literal (Foo.class, int[].class)
+            // A class literal (`Foo.class`, `int[].class`). Under a pending reified marker (`T::class.java`,
+            // OperationKind JAVA_CLASS) the erased placeholder is replaced by the concrete type's class literal.
+            is Type -> takePendingReified().let { t ->
+                frame.pushRef(vm.classLiteral(if (t != null) Type.getObjectType(t) else cst))
+            }
             else -> frame.pushRef(cst) // String (or a constant the bridge understands as a reference)
         }
     }
@@ -606,7 +626,29 @@ internal class Interpreter(private val vm: Vm) {
         if (sh.ret != "V") frame.pushByDesc(sh.ret, result)
     }
 
+    /** The concrete type a preceding [reifiedOperationMarker] armed, consumed once (cleared). Null when no
+     *  marker is pending — the type op then uses its own (erased placeholder) operand. */
+    private fun takePendingReified(): String? {
+        val p = pendingReified
+        pendingReified = null
+        return p
+    }
+
     private fun invokeStatic(insn: MethodInsnNode, frame: Frame) {
+        // Kotlin's reification marker: `reifiedOperationMarker(int operationKind, String typeParameterName)`.
+        // Calling it directly throws (it exists only for the compiler's inliner to strip); here we reproduce the
+        // inliner's transform live — consume the operands and ARM the concrete type for the following type op,
+        // so `INSTANCEOF`/`CHECKCAST`/`ANEWARRAY` run against the real type argument. Kinds: 0=NEW_ARRAY, 1=AS,
+        // 2=SAFE_AS, 3=IS. Kinds we don't model (4=JAVA_CLASS, 5=ENUM, 6=TYPE_OF) fail cleanly so the caller can
+        // fall back rather than silently mis-run.
+        if (insn.owner == REIFIED_MARKER_OWNER && insn.name == "reifiedOperationMarker") {
+            val typeName = deref(frame.popRef()) as? String
+            val kind = frame.popI()
+            if (kind !in REIFIED_KINDS_SUPPORTED) throw VmUnsupportedException("reified operation kind $kind is not supported")
+            pendingReified = typeName?.let { reifiedTypes[it] }
+                ?: throw VmUnsupportedException("no reified type bound for `$typeName`")
+            return
+        }
         val cls = vm.resolve(insn.owner)
         if (cls != null) {
             vm.ensureInitialized(cls)

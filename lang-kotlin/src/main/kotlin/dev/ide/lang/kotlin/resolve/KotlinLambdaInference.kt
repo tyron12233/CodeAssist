@@ -34,11 +34,13 @@ internal fun KotlinResolver.bindLambdaReturn(
     bindings: MutableMap<String, TypeRef>
 ) {
     val r = service.functionalShape(pt)?.returnType as? KotlinType ?: return
-    if (r.isTypeParameter) inferLambdaResult(lambda)?.let {
-        bindings.putIfAbsent(
-            r.qualifiedName,
-            it
-        )
+    if (r.isTypeParameter) inferLambdaResult(lambda)?.let { result ->
+        // A NULLABLE functional return `R?` (the `mapNotNull` `transform: (T) -> R?` shape, `R : Any`) absorbs
+        // one level of the lambda result's nullability: `{ … : Note? }` binds R = Note, so the call's `List<R>`
+        // is `List<Note>`, not `List<Note?>` (which would make the elements spuriously nullable). A bare `R`
+        // (`map { … }`, `let { … }`) keeps the result's nullability unchanged.
+        val bound = if (r.nullable && result is KotlinType) result.withNullable(false) else result
+        bindings.putIfAbsent(r.qualifiedName, bound)
     }
 }
 

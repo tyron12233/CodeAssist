@@ -42,4 +42,19 @@ interface LibraryExecutor {
 
     /** Write property [name] of [receiver]; false when no setter exists. */
     fun writeProperty(receiver: Any, name: String, value: Any?): Boolean
+
+    /**
+     * Run a library **reified inline** function ([name] on [ownerFqn]) that cannot be dispatched reflectively —
+     * its compiled JVM body is a reification-marker stub that throws when called directly, because the concrete
+     * type only materializes when the compiler inlines it at the call site. The executor reproduces that inlining
+     * by interpreting the body with [reifiedTypes] (each reified type-parameter name → the JVM internal name,
+     * `java/lang/String`, of its concrete type argument) applied to the body's `is`/`as`/array operations.
+     *
+     * [args] is the full JVM argument list the static function expects — for an extension function the receiver
+     * is already `args[0]`. Returns a [LibraryValue] (a null result is boxed) or null when the executor can't run
+     * it (the class bytes aren't available, no such method, an unmodeled reified operation, or an unresolvable
+     * type), so the caller keeps its honest boundary. The default declines, so an executor without a bytecode VM
+     * behind it is unaffected.
+     */
+    fun invokeReifiedInline(ownerFqn: String, name: String, reifiedTypes: Map<String, String>, args: List<Any?>): LibraryValue? = null
 }

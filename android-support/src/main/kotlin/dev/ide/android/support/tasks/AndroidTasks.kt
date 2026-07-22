@@ -92,9 +92,10 @@ internal class MergeResourcesTask(
 /**
  * Merge [resDirs] (ascending priority) into [outDir] — the reusable core of [MergeResourcesTask], also driven
  * by the layout preview's live resource relink ([dev.ide.android.support.PreviewResourceLinker]). Non-`values`
- * files overlay by path (higher priority wins); `values*` files merge by entry (last wins), deduplicating a
- * resource that arrives from more than one source so it reaches `aapt2 link` once. A values file that fails to
- * parse is copied verbatim under a unique name (so a single broken file doesn't drop the rest of the merge).
+ * files overlay by RESOURCE IDENTITY (higher priority wins, extension-independent); `values*` files merge by
+ * entry (last wins), deduplicating a resource that arrives from more than one source so it reaches `aapt2 link`
+ * once. A values file that fails to parse is copied verbatim under a unique name (so a single broken file
+ * doesn't drop the rest of the merge).
  */
 internal fun mergeResourceDirs(resDirs: List<Path>, outDir: Path) {
     if (Files.exists(outDir)) Files.walk(outDir).use { s ->
@@ -106,21 +107,40 @@ internal fun mergeResourceDirs(resDirs: List<Path>, outDir: Path) {
         Files.copy(from, to, java.nio.file.StandardCopyOption.REPLACE_EXISTING)
     }
     val values = ValuesMerger()
+    // File resources overlay by RESOURCE IDENTITY (qualifier dir + name, extension-INDEPENDENT), not by file
+    // name — so a higher-priority source's `ic_launcher.png` overrides a lower one's `ic_launcher.xml` instead
+    // of BOTH landing in merged-res and failing aapt2 link with "resource 'drawable/ic_launcher' has a
+    // conflicting value". Matches AGP's ResourceMerger (file resources keyed by folder-type + name + qualifier;
+    // higher priority wins). Ascending priority means the later source in [resDirs] wins.
+    val fileResOutput = HashMap<String, Path>()  // resource identity -> the merged path currently holding it
     resDirs.filter { Files.isDirectory(it) }.forEach { dir ->
         Files.walk(dir).use { s ->
-            s.filter { Files.isRegularFile(it) }.forEach { f ->
+            s.filter { Files.isRegularFile(it) }.sorted().forEach { f ->
                 val rel = dir.relativize(f)
                 val qualifier = rel.getName(0).toString()
                 if (qualifier.startsWith("values")) {
                     // Accumulate entries; ascending priority means a later source's entry wins.
                     if (!values.add(qualifier, f)) copyRaw(f, outDir.resolve(qualifier).resolve("unparsed_${values.bump()}_${f.fileName}"))
                 } else {
-                    copyRaw(f, outDir.resolve(rel)) // overlay: a higher-priority source overwrites
+                    val dest = outDir.resolve(rel)
+                    val id = "$qualifier/${fileResourceName(rel.fileName.toString())}"
+                    // A prior same-identity file under a DIFFERENT name (extension) must go, or aapt2 sees two.
+                    fileResOutput.put(id, dest)?.let { prior -> if (prior != dest) runCatching { Files.deleteIfExists(prior) } }
+                    copyRaw(f, dest) // overlay: a higher-priority source overrides the same resource
                 }
             }
         }
     }
     values.writeTo(outDir)
+}
+
+/** The aapt2 resource name of a res FILE, i.e. its name without the type extension (`ic_launcher.png` ->
+ *  `ic_launcher`); a nine-patch keeps its base name (`bg.9.png` -> `bg`). Used so two files that declare the
+ *  same resource in different formats collapse to one identity in [mergeResourceDirs]. */
+private fun fileResourceName(fileName: String): String {
+    val ninePatch = ".9.png"
+    return if (fileName.endsWith(ninePatch, ignoreCase = true)) fileName.dropLast(ninePatch.length)
+    else fileName.substringBeforeLast('.', fileName)
 }
 
 /**

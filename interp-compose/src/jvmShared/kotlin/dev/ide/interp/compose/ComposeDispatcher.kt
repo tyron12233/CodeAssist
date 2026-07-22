@@ -2,6 +2,7 @@ package dev.ide.interp.compose
 
 import dev.ide.interp.ComposablePropertyValue
 import dev.ide.interp.Dispatcher
+import dev.ide.jvm.AsmPeerFactory
 import dev.ide.interp.InterpretedLambda
 import dev.ide.interp.InterpreterException
 import dev.ide.interp.LambdaProxyStrategy
@@ -64,6 +65,9 @@ class ComposeDispatcher(
         // off the caller thread, so `delay`-driven timers actually tick instead of busy-looping the UI thread.
         suspendBridge = suspendBridge,
         libraryFallback = libraryExecutor,
+        // Realize an interpreted `object : SomeClass()` as a real subclass when it crosses into library code —
+        // reusing the library executor's peer factory (so the dexing path holds on device), else ASM on desktop.
+        classProxies = PeerClassProxyFactory((libraryExecutor as? VmLibraryExecutor)?.peerFactory ?: AsmPeerFactory()),
     )
 
     /** The VM behind [libraryExecutor], when it is the bytecode executor: library COMPOSABLES whose bytes it
@@ -131,6 +135,8 @@ class ComposeDispatcher(
         if (c != null && callee is ResolvedCallable.Library) {
             val inlined = renderWindowedInline(call, callee, c, args)
             if (inlined !== NOT_WINDOWED) return inlined
+            val dialog = renderMultiSlotDialogInline(call, callee, c, args)
+            if (dialog !== NOT_WINDOWED) return dialog
         }
         // A composable can be called top-level (`Text(…)`), as a member of an object/companion
         // (`CardDefaults.cardColors(…)`), or as an EXTENSION on a scope (`RowScope.NavigationBarItem(…)` inside a
@@ -371,9 +377,47 @@ class ComposeDispatcher(
     private data class Windowed(val ownerPrefix: String, val method: String, val contentReceiverFqn: String?)
 
     /**
+     * Multi-slot dialogs the preview renders inline. Unlike [windowed] these have SEVERAL `@Composable` content
+     * slots (`AlertDialog`: `icon`/`title`/`text`/`confirmButton`/`dismissButton`) rather than one, so they're
+     * rendered by composing every `@Composable`-typed lambda argument (identified by its parameter type) in
+     * declaration order — the visible body of a static preview, without the real scrim/window.
+     */
+    private val multiSlotDialogPrefixes = listOf("androidx.compose.material3", "androidx.compose.material")
+    private val multiSlotDialogMethods = setOf("AlertDialog", "BasicAlertDialog")
+
+    /**
+     * If [call] is a multi-slot dialog ([multiSlotDialogMethods]), compose each of its `@Composable` content-slot
+     * lambdas INLINE under the call-site group and return `Unit`; otherwise [NOT_WINDOWED]. A slot is a lambda
+     * argument whose parameter type is a `@Composable` function type (so `onDismissRequest`, a plain `() -> Unit`,
+     * is correctly skipped). Balances the group on throw so a failing slot degrades to the preview error view.
+     */
+    private fun renderMultiSlotDialogInline(call: RNode.Call, callee: ResolvedCallable.Library, composer: Any, args: List<Any?>): Any? {
+        val owner = callee.ownerFqn ?: return NOT_WINDOWED
+        if (callee.methodName !in multiSlotDialogMethods || multiSlotDialogPrefixes.none { owner.startsWith(it) }) return NOT_WINDOWED
+        val ordered = reorderNamedArgs(callee.paramNames, call.args, args)
+        val slots = ordered.mapIndexedNotNull { i, a ->
+            if (a is InterpretedLambda && callee.paramTypes.getOrNull(i)?.isComposable == true) a else null
+        }
+        if (slots.isEmpty()) return NOT_WINDOWED
+        val marker = ComposableAbi.currentMarker(composer)
+        ComposableAbi.startGroup(composer, call.callSiteKey.value)
+        var completed = false
+        try {
+            // The slots (title/text/buttons) are a FIXED set, so composing them sequentially under the call-site
+            // group is positionally stable across recomposition (no per-slot movable key needed). AlertDialog's
+            // slots take no receiver; a receiver-typed slot would need its scope, which these don't have.
+            slots.forEach { it.invoke(emptyList()) }
+            completed = true
+            return Unit
+        } finally {
+            if (completed) ComposableAbi.endGroup(composer) else runCatching { ComposableAbi.endToMarker(composer, marker) }
+        }
+    }
+
+    /**
      * Windowed composables the preview renders inline instead of opening a real OS window. `Popup`/`Dialog` are
      * the primitives; `DropdownMenu` is the common Material component (its content is a `ColumnScope` lambda).
-     * Multi-slot dialogs (`AlertDialog`) aren't here — they have no single content lambda to inline.
+     * Multi-slot dialogs (`AlertDialog`) are handled by [renderMultiSlotDialogInline], not here.
      */
     private val windowed = listOf(
         Windowed("androidx.compose.material3", "DropdownMenu", "androidx.compose.foundation.layout.ColumnScopeInstance"),

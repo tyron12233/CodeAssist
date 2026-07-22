@@ -151,6 +151,25 @@ fun interface LambdaProxyStrategy {
 }
 
 /**
+ * The host's strategy for realizing an interpreted `object : SomeClass() { }` (a [SourceObject]) as a real
+ * generated SUBCLASS of the library [superClass] it extends, when the object is passed to library code that
+ * expects that class. A [java.lang.reflect.Proxy] can only implement interfaces, so a class-extending anonymous
+ * object needs bytecode generation (ASM on the JVM, dex on Android) — which lives outside interp-core. The
+ * generated subclass's overridden methods (those whose name is in [overriddenMethods]) route to [invoker]
+ * (method name + args → result); the rest keep the real superclass behaviour. Returns null when it can't
+ * generate one (a final class, no accessible constructor, unsupported shape) — the honest boundary then stands.
+ */
+fun interface ClassProxyFactory {
+    fun proxyOrNull(
+        interpretedObject: Any,
+        superClass: Class<*>,
+        interfaces: List<Class<*>>,
+        overriddenMethods: Set<String>,
+        invoker: (String, List<Any?>) -> Any?,
+    ): Any?
+}
+
+/**
  * Which of [args] (in the order the dispatcher will pass them) target a `@Composable` function-type parameter
  * of [callee] — so a lambda there must be invoked with a threaded `Composer`. Aligned positionally to the
  * callee's value parameters, with the Kotlin trailing-lambda rule applied: a lambda in the LAST argument slot
@@ -262,6 +281,10 @@ class ReflectiveDispatcher(
     /** Executes library classes the loaders cannot load (project-jar dependency code, run in the bytecode VM
      *  on device instead of a DexClassLoader). Null → the honest "cannot load" boundary stands. */
     private val libraryFallback: LibraryExecutor? = null,
+    /** Realizes an interpreted `object : SomeClass()` as a real generated SUBCLASS when it's passed to library
+     *  code expecting that class (a `java.lang.reflect.Proxy`, used for interfaces, can't extend a class). Null →
+     *  a class-extending anonymous object stays the honest boundary (interfaces still proxy). */
+    private val classProxies: ClassProxyFactory? = null,
 ) : Dispatcher {
 
     override fun dispatch(call: RNode.Call, receiver: Any?, args: List<Any?>): Any? =
@@ -732,6 +755,18 @@ class ReflectiveDispatcher(
      * element boxed (a `List` stays a `List`, a `Set` stays a `Set`).
      */
     private fun coerceArg(value: Any?, paramType: Class<*>, genericType: java.lang.reflect.Type?): Any? {
+        // An interpreted `object : Foo { }` (a SourceObject) passed to library code that expects the type it
+        // implements/extends. An INTERFACE param wraps it in a JVM Proxy routing each call into the interpreter
+        // (`object : Comparator` → `sortedWith`). A library CLASS param needs a real generated subclass, which
+        // only a [classProxies] factory can make (`object : SomeAbstractClass()`); without one, the honest
+        // boundary stands (the reflective call fails and, under tolerateGaps, the statement degrades).
+        if (value is SourceObject && !paramType.isInstance(value)) {
+            val invoker = value.proxyInvoker
+            if (invoker != null) {
+                if (paramType.isInterface) return sourceObjectProxy(value, invoker, paramType)
+                classProxies?.proxyOrNull(value, paramType, emptyList(), overriddenMethodNames(value), invoker)?.let { return it }
+            }
+        }
         val typeArgs = (genericType as? java.lang.reflect.ParameterizedType)?.actualTypeArguments
         // Collection<VC>: box each element (`List<Color>` built from `listOf(Color.Red, …)`).
         if (value is Collection<*> && Collection::class.java.isAssignableFrom(paramType)) {
@@ -864,6 +899,33 @@ class ReflectiveDispatcher(
             }
         }
     }
+
+    /** Wrap an interpreted [obj] (an `object : Foo { }` literal or a source-class instance) in a JVM Proxy of the
+     *  library [iface] it implements, routing each interface method to the interpreter's member dispatch via
+     *  [invoker]. `Object` methods delegate to the SourceObject; a `void` method returns null; a failure is
+     *  swallowed to null so a preview degrades instead of crashing the host (a genuine error still surfaces the
+     *  first time via the interpreter's own diagnostics). The JVM unboxes a boxed primitive return for us. */
+    private fun sourceObjectProxy(obj: Any, invoker: (String, List<Any?>) -> Any?, iface: Class<*>): Any =
+        java.lang.reflect.Proxy.newProxyInstance(iface.classLoader ?: loader, arrayOf(iface)) { _, method, callArgs ->
+            val a = callArgs?.toList() ?: emptyList()
+            when {
+                method.declaringClass == Any::class.java -> when (method.name) {
+                    "toString" -> obj.toString()
+                    "hashCode" -> System.identityHashCode(obj)
+                    "equals" -> a.getOrNull(0) === obj
+                    else -> null
+                }
+                else -> {
+                    val r = runCatching { invoker(method.name, a) }.getOrNull()
+                    if (method.returnType == Void.TYPE) null else r
+                }
+            }
+        }
+
+    /** The method NAMES an interpreted [obj] provides (its own class's members) — the set a [ClassProxyFactory]
+     *  overrides in the generated subclass; a name absent here keeps the real superclass method. */
+    private fun overriddenMethodNames(obj: SourceObject): Set<String> =
+        obj.cls.methods.keys.mapTo(HashSet()) { it.substringBeforeLast('/') }
 
     /** Prefer a method declared on a public type (invokable under the module system) that accepts the args.
      *  Matches a mangled JVM name (`name-<hash>`) too, for functions with inline value-class params. Cached. */

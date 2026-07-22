@@ -95,6 +95,12 @@ sealed interface ResolvedCallable {
     val displayName: String
     val isComposable: Boolean
 
+    /** Whether the callee is a `suspend` function. The interpreter routes any suspend call through the general
+     *  continuation bridge (a real blocking [kotlin.coroutines.Continuation] on the coroutine fiber) rather than
+     *  hardcoding individual suspend functions — so `delay`, a project `suspend fun`, or any library suspend
+     *  function all work the same way. */
+    val isSuspend: Boolean get() = false
+
     /** The callee's declared type-parameter names, in declaration order (`fun <reified T> foo()` → `["T"]`) —
      *  positional with a call's [RNode.Call.typeArguments]. Empty for a non-generic callee. */
     val typeParameterNames: List<String> get() = emptyList()
@@ -122,6 +128,7 @@ sealed interface ResolvedCallable {
          *  array, which only this index makes possible. */
         val varargParamIndex: Int = -1,
         override val typeParameterNames: List<String> = emptyList(),
+        override val isSuspend: Boolean = false,
     ) : ResolvedCallable
 
     /** A project-source target — its body is available to interpret. [declId] locates the declaration. */
@@ -132,6 +139,7 @@ sealed interface ResolvedCallable {
         val isConstructor: Boolean = false,
         override val isComposable: Boolean = false,
         override val typeParameterNames: List<String> = emptyList(),
+        override val isSuspend: Boolean = false,
     ) : ResolvedCallable
 }
 
@@ -198,7 +206,12 @@ sealed interface RNode {
     data class PropertySet(val receiver: RNode?, val binding: Binding, val value: RNode, override val source: SourceSpan) : RNode
     data class If(val condition: RNode, val then: RNode, val otherwise: RNode?, override val source: SourceSpan) : RNode
     data class Block(val statements: List<RNode>, val isExpression: Boolean, override val source: SourceSpan) : RNode
-    data class Lambda(val params: List<RParam>, val body: RNode, val captures: List<Binding>, override val source: SourceSpan) : RNode
+    /** [isLocalFunction] marks a lambda that is really a lowered local function declaration (`fun helper() { … }`
+     *  inside a block). It differs from an ordinary lambda in one way the interpreter must honor: a `return` in a
+     *  local function's body returns from THAT function (a local return), whereas a bare `return` in a lambda is a
+     *  non-local return from the enclosing function. The interpreter's closure catches the return signal for a
+     *  local function and lets it propagate for a plain lambda. */
+    data class Lambda(val params: List<RParam>, val body: RNode, val captures: List<Binding>, override val source: SourceSpan, val isLocalFunction: Boolean = false) : RNode
     /** A string template: `"a${x}b"` → the concatenation of its parts (literals + interpolated expressions,
      *  each stringified at runtime). A plain string literal stays an [Const]. */
     data class StringConcat(val parts: List<RNode>, override val source: SourceSpan) : RNode
@@ -369,11 +382,20 @@ data class ResolvedClass(
     /** Secondary constructors (`constructor(…) : this(…) { … }`), selected by arity at a `Type(…)` call when
      *  the primary constructor doesn't match. Empty for the common single-constructor class. */
     val secondaryCtors: List<SecondaryCtor> = emptyList(),
+    /** `class C : I by expr` interface delegations. Each names a hidden field (populated by an init step from
+     *  the delegate expression) that a member NOT overridden by the class forwards to. Empty for a class with
+     *  no `by` supertype. */
+    val interfaceDelegates: List<InterfaceDelegate> = emptyList(),
 ) {
     /** The data-class component property names, in constructor order. */
     val componentNames: List<String> get() = primaryParams.filter { it.isProperty }.map { it.name }
     val isComplete: Boolean get() = diagnostics.isEmpty() && methods.values.all { it.isComplete } && secondaryCtors.all { it.isComplete }
 }
+
+/** A `class C : I by expr` interface delegation: [fieldName] is the hidden field holding the delegate object
+ *  (set by an init step evaluating the delegate expression). A member of [interfaceFqn] the class does not
+ *  itself override is dispatched on that delegate object. */
+data class InterfaceDelegate(val interfaceFqn: String, val fieldName: String)
 
 /** Where lowering had to give up, and why. */
 data class LoweringDiagnostic(val reason: String, val source: SourceSpan)

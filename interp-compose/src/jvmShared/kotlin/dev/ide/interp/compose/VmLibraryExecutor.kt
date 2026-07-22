@@ -9,6 +9,7 @@ import dev.ide.jvm.AsmPeerFactory
 import dev.ide.jvm.ClassBytesSource
 import dev.ide.jvm.InterpretPolicy
 import dev.ide.jvm.PeerFactory
+import dev.ide.jvm.ReifiedInlineExecutor
 import dev.ide.jvm.Vm
 import dev.ide.jvm.VmMethodView
 import dev.ide.jvm.hasInterpretedClass
@@ -40,7 +41,9 @@ import java.util.jar.JarFile
  */
 class VmLibraryExecutor(
     jars: List<Path> = emptyList(),
-    peerFactory: PeerFactory = AsmPeerFactory(),
+    /** The peer generator (ASM on the JVM, dex on Android) — exposed so the Compose bridge can reuse the SAME
+     *  factory to realize a class-extending anonymous object as a real subclass (see [PeerClassProxyFactory]). */
+    val peerFactory: PeerFactory = AsmPeerFactory(),
     private val hostLoader: ClassLoader = VmLibraryExecutor::class.java.classLoader,
     /** Test seam: overrides "the host can load this binary name" (a host-loadable class is bridged real). */
     private val hostLoadable: ((String) -> Boolean)? = null,
@@ -72,15 +75,25 @@ class VmLibraryExecutor(
             ?: (runCatching { Class.forName(binaryName, false, hostLoader) }.getOrNull() != null)
     }
 
+    /** Class bytes for the project's library jars (a downloaded Maven jar / AAR), keyed by internal name. Shared
+     *  by the main VM and the reified-inline executor (a library reified inline lives in one of these jars). */
+    private val jarSource: ClassBytesSource = source ?: ClassBytesSource { internalName ->
+        jarFiles.firstNotNullOfOrNull { jar ->
+            jar.getJarEntry("$internalName.class")?.let { e -> jar.getInputStream(e).use { it.readBytes() } }
+        }
+    }
+
     private val vm = Vm(
-        source = source ?: ClassBytesSource { internalName ->
-            jarFiles.firstNotNullOfOrNull { jar ->
-                jar.getJarEntry("$internalName.class")?.let { e -> jar.getInputStream(e).use { it.readBytes() } }
-            }
-        },
+        source = jarSource,
         policy = InterpretPolicy { internalName -> !isHostLoadable(internalName.replace('/', '.')) },
         peerFactory = peerFactory,
     )
+
+    /** Runs library reified inline functions (which cannot be dispatched reflectively) INTERPRETED, applying the
+     *  call-site type argument — the general reification mechanism. Reads bytes from the project jars first, then
+     *  the host classpath (a standard-library reified inline like `filterIsInstance` on desktop). Lazy: only
+     *  built when a reified inline is actually hit. */
+    private val reifiedExecutor by lazy { ReifiedInlineExecutor(extraSource = jarSource, loader = hostLoader, peerFactory = peerFactory) }
 
     override fun hasClass(fqn: String): Boolean = vm.hasInterpretedClass(fqn)
 
@@ -156,6 +169,9 @@ class VmLibraryExecutor(
             ?: call(methods, name, wantStatic = false, receiver, listOf(value), 0)
         return r != null
     }
+
+    override fun invokeReifiedInline(ownerFqn: String, name: String, reifiedTypes: Map<String, String>, args: List<Any?>): LibraryValue? =
+        reifiedExecutor.invoke(ownerFqn, name, reifiedTypes, args)?.let { LibraryValue(it.value) }
 
     // ---- composables -------------------------------------------------------------------------------
 

@@ -194,10 +194,11 @@ class InterpreterTest {
 
     @Test
     fun unsupportedConstructFailsLoudly() {
-        // A construct outside the interpreter's subset (an anonymous object literal) makes the function
-        // incomplete → the interpreter refuses it rather than producing a wrong result. (Non-Int ranges,
-        // indexed assignment `xs[i] = v`, and labeled break/continue are now supported.)
-        val code = "package demo\nfun f(): Any = object : Runnable { override fun run() {} }"
+        // A construct outside the interpreter's subset (an anonymous FUNCTION expression) makes the function
+        // incomplete → the interpreter refuses it rather than producing a wrong result. (Anonymous OBJECTS
+        // `object : Foo { }`, non-Int ranges, indexed assignment `xs[i] = v`, and labeled break/continue are now
+        // supported — see AnonymousObjectTest / RangeLoweringTest / LabeledLoopTest.)
+        val code = "package demo\nfun f(): Any = fun(): Int = 5"
         val ex = assertFailsWith<InterpreterException> { runProgram(code, "f/0", emptyList()) }
         assertTrue(ex.message?.contains("unsupported") == true, "message=${ex.message}")
     }

@@ -69,6 +69,18 @@ class KotlinControlFlowTest {
         assertTrue(d.none { it.code == "kt.unreachable" }, "code after a conditional return is reachable; got $d")
     }
 
+    @Test
+    fun qualifiedErrorCallDoesNotFalselyFlagUnreachable() {
+        // `Log.error(...)` is a MEMBER call, not `kotlin.error(): Nothing` — the following statement is reachable.
+        // The name-based Nothing shortcut must only fire on an UNQUALIFIED `error`/`TODO`/`fail`.
+        val d = diagnose(
+            "UR3.kt",
+            b("object Log { fun error(m: String) {} }\n" +
+                "fun f(): Boolean {\n  try { return true } catch (e: Exception) {\n    Log.error(\"x\")\n    return false\n  }\n}"),
+        )
+        assertTrue(d.none { it.code == "kt.unreachable" }, "a qualified `error(...)` member call must not deaden the next statement; got $d")
+    }
+
     // --- definite assignment / uninitialized variable ---
 
     @Test

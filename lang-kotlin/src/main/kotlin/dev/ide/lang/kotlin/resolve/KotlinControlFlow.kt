@@ -147,9 +147,14 @@ internal class KotlinControlFlow(private val resolver: KotlinResolver) {
             is KtDotQualifiedExpression -> e.selectorExpression as? KtCallExpression
             else -> null
         }
-        // The common Nothing-returning calls are recognized by NAME — no type inference needed.
+        // The common Nothing-returning calls are recognized by NAME — no type inference needed. Only for an
+        // UNQUALIFIED call, though: `kotlin.error`/`TODO`/`kotlin.test.fail` are top-level functions, so a
+        // QUALIFIED `receiver.error(...)` (`ConsoleUI.error("…")`) is a DIFFERENT member that does NOT return
+        // Nothing — matching it by name flags the following statement as falsely unreachable. A genuine
+        // Nothing-returning member is still caught by the precise inference below.
+        val qualified = e is KtDotQualifiedExpression
         val callee = (call?.calleeExpression as? KtNameReferenceExpression)?.getReferencedName()
-        if (callee == "TODO" || callee == "error" || callee == "fail") return true
+        if (!qualified && (callee == "TODO" || callee == "error" || callee == "fail")) return true
         // A call taking a lambda is a builder/scope call (Compose's `Column { … }`, `Surface { … }`, `remember
         // { … }`): treat it as non-Nothing WITHOUT inferring its type. This is the hot fix — `inferType` on a
         // deeply-nested Compose builder statement drives exponential overload+lambda RE-inference (the inference

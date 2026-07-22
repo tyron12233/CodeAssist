@@ -477,6 +477,10 @@ class Interpreter(
             }
         }
         is RNode.Unsupported -> throw InterpreterException("unsupported construct: ${node.reason} (`${node.text}`)")
+        // A bare `this` the resolver couldn't bind to a slot (no class member / extension / receiver lambda in
+        // scope). The resolver now lowers that case to Unsupported, so this is a defensive fallback for the
+        // contract node — a clear boundary rather than a cryptic "not yet interpretable".
+        is RNode.This -> throw InterpreterException("`this` has no receiver bound in this frame")
         else -> throw InterpreterException("not yet interpretable: ${node::class.simpleName}")
     }
 
@@ -517,7 +521,78 @@ class Interpreter(
             // A reflectively-invoked library/user method threw. Surface the REAL cause (its type, message, and
             // stack) instead of the opaque `InvocationTargetException` wrapper, so the preview's error view is
             // actionable rather than showing "InvocationTargetException" with no detail.
-            throw unwrapInvocationTarget(e)
+            val cause = unwrapInvocationTarget(e)
+            // A library function with a reified type parameter (`filterIsInstance`, `enumValues`, …) compiles to a
+            // JVM method whose body just `throw UnsupportedOperationException(…)` — it can only be inlined, never
+            // called. The general recovery: run it INTERPRETED through the library executor's bytecode VM, which
+            // reproduces the compiler's reification transform with the call-site type argument (see
+            // [LibraryExecutor.invokeReifiedInline]). If no executor is wired (or it declines — no class bytes, an
+            // unmodeled reified op, an unresolvable/source type), convert Kotlin's runtime guard into a clean
+            // interpreter boundary (a skippable gap in preview) instead of leaking a raw crash.
+            if (cause is UnsupportedOperationException && cause.message?.contains("reified type parameter") == true) {
+                reifiedInlineFallback(call, receiver, args)?.let { return it.value }
+                throw InterpreterException(
+                    "`${call.callee.displayName}` is a library function with a reified type parameter — it can " +
+                        "only be inlined at compile time, so the interpreter can't call it directly",
+                )
+            }
+            throw cause
+        }
+    }
+
+    /** Recover a library reified inline call (one that threw the reification-marker guard) by running it through
+     *  the library executor's bytecode VM. Builds the reified type map (each callee type-parameter name → the JVM
+     *  internal name of its resolved concrete argument; unresolved ones are skipped — the marker only reads the
+     *  reified names) and the full JVM argument list (an extension receiver is prepended). Null when there is no
+     *  executor, the callee shape is unsupported, or no type argument resolved. */
+    private fun reifiedInlineFallback(call: RNode.Call, receiver: Any?, args: List<Any?>): LibraryValue? {
+        val callee = call.callee as? ResolvedCallable.Library ?: return null
+        val typeFqn = call.typeArguments.firstOrNull()?.fqn
+        // `enumValues<T>()` / `enumValueOf<T>(name)` — computed directly from the concrete enum type (a source
+        // enum from its lowered entries, a library enum reflectively), rather than through the VM: the enum's
+        // identity is the type argument, which we already have.
+        if (typeFqn != null && (callee.displayName == "enumValues" || callee.displayName == "enumValueOf")) {
+            enumReifiedIntrinsic(callee.displayName, typeFqn, args)?.let { return it }
+        }
+        // Everything else: run the reified inline INTERPRETED through the library executor's VM.
+        val exec = libraryFallback ?: return null
+        val owner = callee.ownerFqn ?: return null
+        val types = HashMap<String, String>()
+        callee.typeParameterNames.forEachIndexed { i, name ->
+            call.typeArguments.getOrNull(i)?.fqn?.let { types[name] = (KOTLIN_TYPE_TO_JVM[it] ?: it).replace('.', '/') }
+        }
+        if (types.isEmpty()) return null
+        val jvmArgs = when (call.dispatch) {
+            DispatchKind.TOP_LEVEL -> args
+            DispatchKind.EXTENSION -> listOf(receiver) + args
+            else -> return null
+        }
+        return exec.invokeReifiedInline(owner, callee.displayName, types, jvmArgs)
+    }
+
+    /** `enumValues<T>()` → all entries of enum [typeFqn] (as a List, the interpreter's array model);
+     *  `enumValueOf<T>(name)` → the matching entry. Handles a source enum (its lowered entries) and a library
+     *  enum (reflective). Null when [typeFqn] isn't a known enum. */
+    private fun enumReifiedIntrinsic(name: String, typeFqn: String, args: List<Any?>): LibraryValue? {
+        sourceClass(typeFqn)?.takeIf { it.flavor == ClassFlavor.ENUM }?.let { sc ->
+            return when (name) {
+                "enumValues" -> LibraryValue(sc.enumEntries.map { enumEntryInstance(sc, it) })
+                else -> {
+                    val n = args.firstOrNull() as? String
+                    LibraryValue(sc.enumEntries.firstOrNull { it.name == n }?.let { enumEntryInstance(sc, it) }
+                        ?: throw InterpreterException("no enum constant $typeFqn.$n"))
+                }
+            }
+        }
+        val cls = loadClassAcross(typeFqn, initialize = true, preferred = classLoader)?.takeIf { it.isEnum } ?: return null
+        val constants = cls.enumConstants?.toList() ?: return null
+        return when (name) {
+            "enumValues" -> LibraryValue(constants)
+            else -> {
+                val n = args.firstOrNull() as? String
+                LibraryValue(constants.firstOrNull { (it as? Enum<*>)?.name == n }
+                    ?: throw InterpreterException("no enum constant $typeFqn.$n"))
+            }
         }
     }
 
@@ -549,6 +624,15 @@ class Interpreter(
     private fun evalCall(call: RNode.Call, env: Env): Any? {
         InterpProfile.count("calls")
         val callee = call.callee
+        // Inside a `sequence { … }` block (running on a generator's producer thread), `yield(v)` / `yieldAll(vs)`
+        // stream elements to the consumer through the active generator. Intercepted by name — a generator is
+        // active only inside such a block, so this can't hijack an unrelated `yield`.
+        activeGenerator.get()?.let { gen ->
+            if (call.args.size == 1) when (callee.displayName) {
+                "yield" -> { gen.emit(eval(call.args[0].value, env)); return Unit }
+                "yieldAll" -> { forEachElement(eval(call.args[0].value, env)) { gen.emit(it) }; return Unit }
+            }
+        }
         // Operators are computed intrinsically: arithmetic/comparison on numbers and structural equality have
         // no JVM method to invoke (a synthetic callee). Arithmetic on a non-number falls through to dispatch.
         if (call.dispatch == DispatchKind.OPERATOR) {
@@ -572,6 +656,8 @@ class Interpreter(
             when {
                 op == "eq" -> return left == right
                 op == "ne" -> return left != right
+                op == "refeq" -> return left === right // `===` referential identity
+                op == "refne" -> return left !== right // `!==`
                 op in COMPARISON -> return compare(op, left, right)
                 op == "plus" && left is String -> return left + right?.toString() // String.plus(Any?)
                 op in ARITHMETIC && left is Number && right is Number -> return arithmetic(op, left, right)
@@ -582,6 +668,41 @@ class Interpreter(
         // are compiler intrinsics with no invocable JVM method (the reflective path fails with a bogus owner
         // `kotlin`/`kotlin.Array`), so build the result here. Modeled as a List (the interpreter's
         // size/index/iteration paths support List — the vararg parameter model does the same).
+        // `sequence { … }` — a lazy generator. It takes a `suspend SequenceScope.() -> Unit` with no reflectable
+        // synchronous form, so run the block on a producer thread (see [interpretedSequence]); `yield` streams
+        // elements on demand, which is what makes an infinite generator terminate under `take(n)`.
+        if (callee is ResolvedCallable.Library && callee.ownerFqn?.endsWith("SequencesKt") == true &&
+            callee.displayName == "sequence" && call.args.size == 1
+        ) {
+            (eval(call.args[0].value, env) as? InterpretedLambda)?.let { return interpretedSequence(it) }
+        }
+        // `enumValues<T>()` / `enumValueOf<T>(name)` — reified inlines whose owner is the bare `kotlin` package
+        // (not a reflectable facade), so intercept before dispatch and compute from the concrete enum type.
+        if (callee is ResolvedCallable.Library && call.dispatch == DispatchKind.TOP_LEVEL &&
+            (callee.displayName == "enumValues" || callee.displayName == "enumValueOf")
+        ) {
+            call.typeArguments.firstOrNull()?.let { resolveTypeArg(it, env) }?.fqn?.let { fqn ->
+                enumReifiedIntrinsic(callee.displayName, fqn, call.args.map { eval(it.value, env) })?.let { return it.value }
+            }
+        }
+        // Coroutine builders. `runBlocking { }` runs its block to a result on the calling thread (a suspend
+        // context, so `delay` sleeps — runBlocking's real semantics). Inside a coroutine scope, `launch { }` /
+        // `async { }` run their child block cooperatively: `launch` is fire-and-forget (a Job), `async` captures
+        // the result for `await`. Gated to the coroutines package so a same-named user function isn't hijacked,
+        // and `launch`/`async` only inside a scope so a preview's SuspendBridge-driven `launch` is untouched.
+        if (callee is ResolvedCallable.Library && callee.ownerFqn?.contains("coroutines") == true && call.args.isNotEmpty()) {
+            when (callee.displayName) {
+                "runBlocking" -> (eval(call.args.last().value, env) as? InterpretedLambda)?.let { block ->
+                    return SuspendContext.runManaged { withCoroutineScope { runCoroutineBlock(block) } }
+                }
+                "launch" -> if (coroutineDepth.get() > 0) (eval(call.args.last().value, env) as? InterpretedLambda)?.let { block ->
+                    runCoroutineBlock(block); return CoroutineJob()
+                }
+                "async" -> if (coroutineDepth.get() > 0) (eval(call.args.last().value, env) as? InterpretedLambda)?.let { block ->
+                    return CoroutineDeferred(runCoroutineBlock(block))
+                }
+            }
+        }
         arrayConstructionIntrinsic(call, env)?.let { return it.value }
         // Invoking a function value (`fn(x)`, `callback()`) where `fn` is a local/param/property holding a
         // lambda: an interpreted lambda is called directly; a JVM functional object goes through the dispatcher
@@ -605,7 +726,7 @@ class Interpreter(
                 val requiredPrimary = cls.primaryParams.count { it.default == null }
                 if (n !in requiredPrimary..cls.primaryParams.size) {
                     cls.secondaryCtors.firstOrNull { it.params.size == n }?.let { secondary ->
-                        val obj = SourceObject(cls)
+                        val obj = newSourceObject(cls)
                         constructViaSecondary(cls, obj, secondary, reorderNamedArgs(secondary.params.map { it.name }, call.args, argv))
                         return obj
                     }
@@ -697,10 +818,19 @@ class Interpreter(
                     val argv = reorderNamedArgs(m.params.map { it.name }, call.args, call.args.map { eval(it.value, env) })
                     return callMethod(m, receiver, argv)
                 }
-                // A binary/library superclass method (`Activity.onCreate`, `Object.toString`): there is no source
-                // body and a SourceObject isn't a real subclass instance to reflect a `super` call into. No-op it
-                // — an override that calls `super.foo()` still lowers and runs; the preview never needs the
-                // framework's own behavior. (Arguments are still evaluated for their side effects.)
+                // The universal `Any`/`Object` supers have a meaningful default even without a real super
+                // instance — an `override fun toString()` calling `super.toString()` expects a String, not Unit.
+                when (callee.displayName) {
+                    "toString" -> if (call.args.isEmpty()) return "${receiver.cls.simpleName}@${Integer.toHexString(System.identityHashCode(receiver))}"
+                    "hashCode" -> if (call.args.isEmpty()) return System.identityHashCode(receiver)
+                    "equals" -> if (call.args.size == 1) return receiver === eval(call.args[0].value, env)
+                }
+                // Any other binary/library superclass method (`Activity.onCreate`): there is no source body and a
+                // SourceObject isn't a real subclass instance to reflect a `super` call into, so it is a no-op —
+                // the override still lowers and runs, and a preview never needs the framework's own behavior. (On
+                // the console-run path this is handled for real: the bytecode VM builds a peer of the actual
+                // superclass, so `super.foo()` invokes the compiled superclass method.) Arguments are still
+                // evaluated for their side effects.
                 call.args.forEach { eval(it.value, env) }
                 return Unit
             }
@@ -711,6 +841,8 @@ class Interpreter(
         // whose receiver turns out to be a source instance, which can't be reflected and is interpreted instead
         // (covers both a `Source` member callee and a synthetic `contains`/`componentN` on a source object).
         val receiver = call.receiver?.let { eval(it, env) }
+        // `deferred.await()` — the `async` builder produced a completed [CoroutineDeferred]; return its value.
+        if (receiver is CoroutineDeferred && callee.displayName == "await") return receiver.value
         if (receiver is SourceObject && call.dispatch == DispatchKind.MEMBER) {
             return dispatchSourceMember(receiver, callee.displayName, call, env)
         }
@@ -730,12 +862,47 @@ class Interpreter(
             }
         }
         val args = call.args.map { eval(it.value, env) }
+        // A library `suspend` function (`delay`, a Ktor/Room/… suspend API, any project suspend fun already
+        // handled above). Invoked GENERICALLY through the continuation bridge — the real method takes a trailing
+        // `Continuation`; we append a blocking one and park the fiber until it resumes. No per-function code: any
+        // suspend function works the same way. Only on a coroutine fiber (a `runBlocking`/`launch`/`LaunchedEffect`
+        // body); a stray suspend call off one keeps the honest boundary rather than blocking the UI thread.
+        if (callee is ResolvedCallable.Library && callee.isSuspend && SuspendContext.isActive) {
+            return dispatchSuspend(call, receiver, args)
+        }
         return try {
             checkedDispatch(call, receiver, args)
         } catch (e: InterpreterException) {
             // A hook refusal is already precise — don't re-attribute it to the inline-only boundary.
             throw if (e is InterpreterSecurityException) e else refineInlineOnlyError(call, e)
         }
+    }
+
+    /** Invoke a real library `suspend` function through the continuation bridge: append a blocking
+     *  [kotlin.coroutines.Continuation] to the argument list, dispatch reflectively, and — if it suspends
+     *  ([COROUTINE_SUSPENDED]) — park the fiber until the continuation resumes, returning its value (or
+     *  rethrowing its failure). This is the ONE path every suspend function takes; nothing is hardcoded per
+     *  function. Runs on a coroutine fiber, so blocking the thread is the fiber's own suspension. */
+    private fun dispatchSuspend(call: RNode.Call, receiver: Any?, args: List<Any?>): Any? {
+        SuspendContext.markSuspended() // a real suspension point → the enclosing loop counts as cooperative
+        return callSuspendBlocking { cont ->
+            checkedDispatch(call, receiver, args + cont)
+        }.let { if (it === Unit || it == kotlin.coroutines.intrinsics.COROUTINE_SUSPENDED) Unit else it }
+    }
+
+    /** Run [invoke] (a real suspend-function call given the continuation), parking the current fiber thread if it
+     *  suspends. Pure `kotlin.coroutines`: a fresh [kotlin.coroutines.Continuation] resumes a latch, and its
+     *  result (or exception) is returned once available. */
+    private fun callSuspendBlocking(invoke: (kotlin.coroutines.Continuation<Any?>) -> Any?): Any? {
+        val latch = java.util.concurrent.CountDownLatch(1)
+        val outcome = java.util.concurrent.atomic.AtomicReference<Result<Any?>>()
+        val cont = kotlin.coroutines.Continuation<Any?>(kotlin.coroutines.EmptyCoroutineContext) { r ->
+            outcome.set(r); latch.countDown()
+        }
+        val immediate = invoke(cont)
+        if (immediate !== kotlin.coroutines.intrinsics.COROUTINE_SUSPENDED) return immediate
+        latch.await() // the fiber's suspension: block this thread until the real coroutine resumes it
+        return outcome.get().getOrThrow()
     }
 
     /** A source enum's static members reached through the type qualifier: `Enum.values()` → all entries (in
@@ -922,6 +1089,18 @@ class Interpreter(
                 forEachElement(receiver()) { element -> action.invoke(listOf(i++, element)); guardLoop(budget) }
                 Handled(Unit)
             }
+            // `iterable.filterIsInstance<R>()` — a reified inline extension. Its JVM method exists but its body is
+            // just `throw UnsupportedOperationException` (a reified type parameter can only be inlined), so it can
+            // never be dispatched reflectively. The call site's reified type argument IS captured on the node, so
+            // filter here (`isInstanceOf` handles source + library element types). The type-taking overload
+            // `filterIsInstance(klass)` (one value arg) is left to normal dispatch.
+            name == "filterIsInstance" && call.dispatch == DispatchKind.EXTENSION && args.isEmpty() -> {
+                val typeFqn = call.typeArguments.firstOrNull()?.let { resolveTypeArg(it, env) }?.fqn
+                    ?: throw InterpreterException("`filterIsInstance` needs a resolvable reified type argument")
+                val out = ArrayList<Any?>()
+                forEachElement(receiver()) { if (isInstanceOf(it, typeFqn)) out.add(it) }
+                Handled(out)
+            }
             // `key(vararg keys, block)` — an inline @Composable that wraps `block` in a movable group keyed by
             // `keys` so changing a key resets the subtree's state. There is no reflectively-invocable form here:
             // it is @InlineOnly, and its vararg `keys` compiles to a NON-last `Object[]` the compiler packs at the
@@ -932,12 +1111,11 @@ class Interpreter(
             // the block's value (`key(a) { … }` can be used for its result).
             name == "key" && call.dispatch == DispatchKind.TOP_LEVEL && args.isNotEmpty() ->
                 Handled(lambda(args.last().value).invoke(emptyList()))
-            // `delay(millis)` — the coroutines suspend function has no reflectable synchronous form (its JVM
-            // shape takes a `Continuation`). Under a [SuspendBridge]-managed block it runs on a background
-            // coroutine thread, so an interruptible sleep gives the REAL timing (a `while { delay(); tick() }`
-            // timer ticks instead of busy-looping); cancelling the coroutine interrupts the sleep. OUTSIDE a
-            // managed context (no bridge → the block runs synchronously on the UI thread) it must NOT block the
-            // UI, so it throws — degrading to the old best-effort behavior (the effect aborts, nothing hangs).
+            // `delay(millis)` — kept as a special case (arbitrary OTHER suspend functions go through the general
+            // continuation bridge; see `dispatchSuspend`). Two reasons delay stays here: the resolver canonicalizes
+            // it to a package-owner callee that isn't reflectively dispatchable, and an interruptible `Thread.sleep`
+            // gives clean cooperative-timer cancellation (a cancelled coroutine interrupts the sleep) that the
+            // SuspendBridge tests depend on. Under a managed coroutine only; off one it throws (never blocks the UI).
             name == "delay" && call.dispatch == DispatchKind.TOP_LEVEL && args.size == 1 -> {
                 val millis = (eval(args[0].value, env) as? Number)?.toLong()
                     ?: throw InterpreterException("`delay` requires a numeric millisecond argument")
@@ -963,9 +1141,12 @@ class Interpreter(
             // modeled and degrades). The block may be a `CoroutineScope`-receiver lambda; [runSuspendBlock] binds
             // a null receiver when it has a `<this>` slot (a block using `this.launch` isn't supported anyway).
             name == "withContext" && call.dispatch == DispatchKind.TOP_LEVEL && args.size == 2 ->
-                Handled(runSuspendBlock(lambda(args[1].value)))
+                Handled(withCoroutineScope { runSuspendBlock(lambda(args[1].value)) })
+            // `coroutineScope`/`supervisorScope { block }` — run the block under a coroutine scope so a child
+            // `launch`/`async` inside runs cooperatively (structured concurrency: all children complete before
+            // the scope returns, which the eager run guarantees).
             (name == "coroutineScope" || name == "supervisorScope") && call.dispatch == DispatchKind.TOP_LEVEL && args.size == 1 ->
-                Handled(runSuspendBlock(lambda(args[0].value)))
+                Handled(withCoroutineScope { runSuspendBlock(lambda(args[0].value)) })
             // `withFrameNanos { t -> … }` / `withFrameMillis { t -> … }` — a frame-driven animation loop
             // (`while (running) { withFrameNanos { … } }`). Real vsync isn't available in the interpreter, so
             // simulate a ~60fps cadence with a short interruptible sleep and hand the block a monotonic frame
@@ -1250,6 +1431,7 @@ class Interpreter(
                 else -> companionOf(sc)?.let { objectSingleton(it) } ?: objectInstance(binding.fqn)
             }
         }
+        is Binding.Receiver -> throw InterpreterException("`this` (${binding.type?.qualifiedName ?: "receiver"}) has no value bound in this frame")
         else -> throw InterpreterException("cannot read binding: ${binding::class.simpleName}")
     }
 
@@ -1302,8 +1484,22 @@ class Interpreter(
 
     /** Build an instance of [cls] (its `cls` is the most-derived type, for virtual dispatch + `is` checks). */
     private fun instantiate(cls: ResolvedClass, orderedValues: List<Any?>): SourceObject {
-        val obj = SourceObject(cls)
+        val obj = newSourceObject(cls)
         construct(cls, obj, orderedValues)
+        return obj
+    }
+
+    /** A [SourceObject] with its [SourceObject.proxyInvoker] wired to this interpreter's member dispatch, so the
+     *  reflective dispatcher can proxy it as the library interface it implements when it crosses into library
+     *  code (an `object : Comparator` handed to `sortedWith`). Virtual dispatch by `name/arity` is used, so an
+     *  override on the instance's own class wins. */
+    private fun newSourceObject(cls: ResolvedClass): SourceObject {
+        val obj = SourceObject(cls)
+        obj.proxyInvoker = { name, args ->
+            val m = findSourceMethod(cls, "$name/${args.size}")
+                ?: throw InterpreterException("no member `$name/${args.size}` on ${cls.fqn}")
+            callMethod(m, obj, args)
+        }
         return obj
     }
 
@@ -1330,17 +1526,29 @@ class Interpreter(
     }
 
     /** Run a SECONDARY constructor on the shared [obj]: bind its own parameters, run its delegation, then its
-     *  body. A `this(…)` delegation runs the primary constructor (binding its params + super + init steps) with
-     *  the delegation arguments evaluated in this constructor's parameter scope; a `super(…)`/implicit delegation
-     *  (a class with no primary) runs the primary path with no primary args (superclass/init steps only).
-     *  Delegation to ANOTHER secondary isn't modeled — the primary is the shared target. */
+     *  body. A `this(…)` delegation runs the constructor whose arity matches the delegation arguments — ANOTHER
+     *  secondary (recursing here) or, when the argument count fits the primary, the primary (binding its params +
+     *  super + init steps); a `super(…)`/implicit delegation (a class with no primary, or one delegating straight
+     *  to its superclass) runs the primary path once (superclass + property initializers + init blocks). Each
+     *  constructor's own body runs after its delegation, so a `this → this → primary` chain runs the initializers
+     *  once (at the primary) and every body in order, matching Kotlin. */
     private fun constructViaSecondary(cls: ResolvedClass, obj: SourceObject, ctor: SecondaryCtor, argv: List<Any?>) {
         val env = Env()
         env.define(cls.receiverSlot, obj)
         bindParams(env, ctor.params, argv)
         if (ctor.delegatesToThis) {
             val delegArgv = ctor.delegationArgs.map { eval(it.value, env) }
-            construct(cls, obj, reorderNamedArgs(cls.primaryParams.map { it.name }, ctor.delegationArgs, delegArgv))
+            val n = delegArgv.size
+            val requiredPrimary = cls.primaryParams.count { it.default == null }
+            // Delegate to a same-class secondary of the delegation's arity when it can't be the primary — so a
+            // `this(a) : this(a, 0)` chain reaches the right constructor, not the primary with a short arg list.
+            val targetSecondary = if (n !in requiredPrimary..cls.primaryParams.size)
+                cls.secondaryCtors.firstOrNull { it !== ctor && it.params.size == n } else null
+            if (targetSecondary != null) {
+                constructViaSecondary(cls, obj, targetSecondary, reorderNamedArgs(targetSecondary.params.map { it.name }, ctor.delegationArgs, delegArgv))
+            } else {
+                construct(cls, obj, reorderNamedArgs(cls.primaryParams.map { it.name }, ctor.delegationArgs, delegArgv))
+            }
         } else {
             construct(cls, obj, emptyList())
         }
@@ -1418,7 +1626,28 @@ class Interpreter(
             return callMethod(m, receiver, argv)
         }
         synthesizedMember(receiver, name, call, env)?.let { return it.value }
+        // A member the class inherits via `: I by delegate` (not overridden): forward it to the delegate object.
+        delegatedMemberDispatch(receiver, name, call, env)?.let { return it.value }
         throw InterpreterException("no member `$name/$arity` on source class ${receiver.cls.fqn}")
+    }
+
+    /** Dispatch [name] on an interface-delegate (`class C : I by field`) when the class itself doesn't declare
+     *  it: a source delegate interprets the member, a library delegate reflects it. Null when no delegate has
+     *  the member (the caller then reports the honest "no member"). Arguments are evaluated once here. */
+    private fun delegatedMemberDispatch(receiver: SourceObject, name: String, call: RNode.Call, env: Env): Handled? {
+        if (receiver.cls.interfaceDelegates.isEmpty()) return null
+        val arity = call.args.size
+        val argv = call.args.map { eval(it.value, env) }
+        for (d in receiver.cls.interfaceDelegates) {
+            val delegate = receiver.fields[d.fieldName] ?: continue
+            if (delegate is SourceObject) {
+                findSourceMethod(delegate.cls, "$name/$arity")?.let { return Handled(callMethod(it, delegate, argv)) }
+            } else {
+                runCatching { checkedDispatch(call.copy(dispatch = DispatchKind.MEMBER), delegate, argv) }
+                    .onSuccess { return Handled(it) }
+            }
+        }
+        return null
     }
 
     /** The compiler-synthesized members of a data class (`copy`/`componentN`/`equals`/`hashCode`/`toString`),
@@ -1470,6 +1699,15 @@ class Interpreter(
         // A computed property (`val isOver get() = …`) has no backing field — it is lowered as a zero-arg getter
         // method keyed `name/0`; invoke it on the receiver.
         findSourceMethod(receiver.cls, "$name/0")?.let { return callMethod(it, receiver, emptyList()) }
+        // A property the class inherits via `: I by delegate` (not overridden): read it from the delegate object.
+        for (d in receiver.cls.interfaceDelegates) {
+            val delegate = receiver.fields[d.fieldName] ?: continue
+            if (delegate is SourceObject) {
+                runCatching { readSourceProperty(delegate, name) }.onSuccess { return it }
+            } else {
+                readProperty(delegate, name)?.let { return it }
+            }
+        }
         throw InterpreterException("no property `$name` on source class ${receiver.cls.fqn}")
     }
 
@@ -1809,6 +2047,22 @@ class Interpreter(
         else -> throw InterpreterException("unknown operator `$op`")
     }
 
+    /** Kotlin's bitwise infix operators (`and`/`or`/`xor`/`shl`/`shr`/`ushr`) — intrinsics on `Int`/`Long` with
+     *  no invocable JVM method. Shifts keep the receiver's width and take an `Int` count; and/or/xor widen to
+     *  `Long` if either operand is `Long`, else operate as `Int` (Byte/Short promote to Int, as in Kotlin). */
+    private fun bitwiseBinary(op: String, a: Number, b: Number): Any = when (op) {
+        "shl" -> if (a is Long) a shl b.toInt() else a.toInt() shl b.toInt()
+        "shr" -> if (a is Long) a shr b.toInt() else a.toInt() shr b.toInt()
+        "ushr" -> if (a is Long) a ushr b.toInt() else a.toInt() ushr b.toInt()
+        "and" -> if (a is Long || b is Long) a.toLong() and b.toLong() else a.toInt() and b.toInt()
+        "or" -> if (a is Long || b is Long) a.toLong() or b.toLong() else a.toInt() or b.toInt()
+        "xor" -> if (a is Long || b is Long) a.toLong() xor b.toLong() else a.toInt() xor b.toInt()
+        else -> throw InterpreterException("unknown bitwise operator `$op`")
+    }
+
+    /** `x.inv()` — bitwise complement, keeping the receiver's width (`Long` stays `Long`, else `Int`). */
+    private fun bitwiseInv(a: Number): Any = if (a is Long) a.inv() else a.toInt().inv()
+
     /** Kotlin's numeric-conversion members (`toInt`/`toFloat`/…). The boxed JVM type (`java.lang.Float`) has no
      *  such method — they're intrinsics on the primitive — so the reflective dispatcher can't find them; compute
      *  them here. Null when [name] isn't a conversion. */
@@ -1836,9 +2090,104 @@ class Interpreter(
         override fun invoke(args: List<Any?>): Any? {
             val callEnv = Env(env)
             node.params.forEachIndexed { i, p -> callEnv.define(p.slot, args.getOrNull(i)) }
-            return eval(node.body, callEnv)
+            // A local function's `return` is LOCAL — it returns from this closure, not the enclosing function. A
+            // plain lambda's bare `return` is non-local (it must propagate to the enclosing function's frame).
+            return if (node.isLocalFunction) {
+                try { eval(node.body, callEnv) } catch (r: ReturnSignal) { r.value }
+            } else {
+                eval(node.body, callEnv)
+            }
         }
     }
+
+    // --- sequence builder (`sequence { yield(…) }`) -------------------------------------------------------
+
+    /** The generator whose `sequence { … }` block is running on THIS thread, so `yield`/`yieldAll` reach it. */
+    private val activeGenerator = ThreadLocal<SeqGenerator?>()
+
+    /** Build the lazy `Sequence` a `sequence { … }` block denotes. Each `iterator()` runs the block on a fresh
+     *  producer thread that hands ONE element across per consumer pull — so an infinite generator terminates
+     *  under `take(n)`/`first()` (the producer parks after the last element pulled; it is a daemon thread). */
+    private fun interpretedSequence(block: InterpretedLambda): Sequence<Any?> = Sequence { SeqGenerator(block) }
+
+    private inner class SeqGenerator(private val block: InterpretedLambda) : Iterator<Any?> {
+        private val demand = java.util.concurrent.SynchronousQueue<Any>()
+        private val supply = java.util.concurrent.SynchronousQueue<Any>()
+        private var started = false
+        private var finished = false
+        private var ready: Boolean? = null // null = not fetched; true = a value is buffered; false = exhausted
+        private var value: Any? = null
+
+        private fun startIfNeeded() {
+            if (started) return
+            started = true
+            Thread {
+                try {
+                    demand.take() // wait for the first pull before running any of the block
+                    val prev = activeGenerator.get()
+                    activeGenerator.set(this)
+                    try { block.invoke(listOf(SEQ_SCOPE)) } finally { activeGenerator.set(prev) }
+                    supply.put(SEQ_DONE)
+                } catch (t: Throwable) {
+                    runCatching { supply.put(SeqFail(t)) }
+                }
+            }.apply { isDaemon = true; name = "interp-sequence"; start() }
+        }
+
+        /** Hand [v] to the consumer (called by `yield` on the producer thread), then park until the next pull. */
+        fun emit(v: Any?) {
+            supply.put(SeqVal(v))
+            demand.take()
+        }
+
+        private fun fetch() {
+            if (ready != null || finished) return
+            startIfNeeded()
+            demand.put(SEQ_UNIT)
+            when (val s = supply.take()) {
+                is SeqVal -> { value = s.v; ready = true }
+                is SeqFail -> { finished = true; ready = false; throw s.t }
+                else -> { finished = true; ready = false } // SEQ_DONE
+            }
+        }
+
+        override fun hasNext(): Boolean { fetch(); return ready == true }
+        override fun next(): Any? {
+            fetch()
+            if (ready != true) throw NoSuchElementException()
+            ready = null
+            return value
+        }
+    }
+
+    /** The receiver a `sequence { … }` block runs against (its `SequenceScope`); `yield`/`yieldAll` are
+     *  intercepted by name so nothing is dispatched on it. */
+    private val SEQ_SCOPE = Any()
+    private val SEQ_UNIT = Any()
+    private object SEQ_DONE
+    private class SeqVal(val v: Any?)
+    private class SeqFail(val t: Throwable)
+
+    // --- coroutine builders (`runBlocking`/`coroutineScope`/`launch`/`async`/`await`) --------------------
+
+    /** Nesting depth of a coroutine scope on THIS thread (a `runBlocking`/`coroutineScope`/`supervisorScope`
+     *  block). `launch`/`async` are intercepted ONLY inside one, so a preview's own `scope.launch` (driven by
+     *  the SuspendBridge on its coroutine thread) is left to that path. */
+    private val coroutineDepth = ThreadLocal.withInitial { 0 }
+    private val COROUTINE_SCOPE = Any()
+    private class CoroutineJob
+    private class CoroutineDeferred(val value: Any?)
+
+    private fun <T> withCoroutineScope(body: () -> T): T {
+        coroutineDepth.set(coroutineDepth.get() + 1)
+        try { return body() } finally { coroutineDepth.set(coroutineDepth.get() - 1) }
+    }
+
+    /** Run a coroutine builder's block (a `CoroutineScope.() -> T` receiver lambda), binding the scope marker so
+     *  a `this.launch { }` inside it resolves; child `launch`/`async` run cooperatively (eagerly, in order),
+     *  which is a correct single-threaded execution — the same serialization a single dispatcher gives. */
+    private fun runCoroutineBlock(block: InterpretedLambda): Any? =
+        block.invoke(if (block.paramCount >= 1) listOf<Any?>(COROUTINE_SCOPE) else emptyList())
 
     /**
      * A lexical scope. Slots are unique within a function, but a declaration inside a loop or lambda executes
@@ -2021,6 +2370,7 @@ class Interpreter(
 
         val ARITHMETIC = setOf("plus", "minus", "times", "div", "rem")
         val COMPARISON = setOf("lt", "le", "gt", "ge")
+        val BITWISE = setOf("and", "or", "xor", "shl", "shr", "ushr")
         val COMPONENT = Regex("component(\\d+)")
         /** Common Kotlin type names → their JVM classes, for `is`/`catch` checks against reflectable values. */
         val KOTLIN_TYPE_TO_JVM = mapOf(
@@ -2122,6 +2472,12 @@ class InterpreterBoundaryException(message: String) : InterpreterException(messa
 class SourceObject(val cls: ResolvedClass, val fields: MutableMap<String, Any?> = LinkedHashMap()) {
     var enumName: String? = null
     var enumOrdinal: Int = -1
+
+    /** Invokes a member by `name` with `args` and returns the result — set by the interpreter at construction so
+     *  the reflective dispatcher can wrap this object in a JVM interface [java.lang.reflect.Proxy] when it's
+     *  passed to library code that expects the interface it implements (`object : Comparator` handed to
+     *  `sortedWith`, `object : NestedScrollConnection` to `Modifier.nestedScroll`). Null until construction sets it. */
+    @JvmField var proxyInvoker: ((String, List<Any?>) -> Any?)? = null
 
     override fun equals(other: Any?): Boolean {
         if (this === other) return true

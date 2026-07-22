@@ -50,3 +50,10 @@ fun higherOrder(n: Int): Int {
     val twice: (Int) -> Int = { it * 2 }
     return twice(n) + 1
 }
+
+/** A reified inline whose body is `T::class.java` (OperationKind JAVA_CLASS) — uncallable reflectively;
+ *  exercises the VM reification transform's class-literal rewrite. */
+inline fun <reified T> classOf(): Class<T> = T::class.java
+
+/** A reified inline whose body casts with `as` (OperationKind AS) — exercises the CHECKCAST rewrite. */
+inline fun <reified T> castTo(x: Any?): T = x as T

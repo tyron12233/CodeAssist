@@ -69,7 +69,6 @@ fun lowerProgramFull(code: String): Pair<Map<String, ResolvedFunction>, List<Res
         // read of one interprets its initializer (there is no compiled facade to reflect).
         kt.declarations.filterIsInstance<KtProperty>().forEach { p ->
             val name = p.name ?: return@forEach
-            if (p.receiverTypeReference != null) return@forEach
             val hasValue = p.initializer != null || p.getter?.bodyExpression != null || p.getter?.bodyBlockExpression != null
             if (!hasValue || containsKey("$name/0")) return@forEach
             put("$name/0", resolver.lowerTopLevelProperty(p))
