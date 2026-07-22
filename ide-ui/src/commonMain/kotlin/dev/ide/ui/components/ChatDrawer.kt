@@ -33,7 +33,6 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
@@ -208,7 +207,7 @@ private fun ModelPicker(cfg: UiAgentConfig, models: List<UiAgentModel>, onPick: 
             val chevron by animateFloatAsState(if (open) 180f else 0f, label = "chevron")
             Icon(CaIcons.chevronDown, null, Modifier.size(12.dp).rotate(chevron), tint = Ca.colors.textTertiary)
         }
-        DropdownMenu(expanded = open, onDismissRequest = { open = false }) {
+        CaDropdownMenu(expanded = open, onDismissRequest = { open = false }) {
             models.forEach { model ->
                 DropdownMenuItem(
                     text = { Text(model.displayName, style = Ca.type.footnote, color = Ca.colors.textPrimary) },
