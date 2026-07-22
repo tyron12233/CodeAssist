@@ -976,4 +976,37 @@ We never collect your code, file or project names, which features you use, or an
 
     <string name="modcfg_platform_sdk">Platform SDK</string>
     <string name="modcfg_platform_sdk_auto">Auto (%1$s)</string>
+
+    <!-- AI coding agent -->
+    <string name="chat_open">AI agent</string>
+    <string name="chat_title">AI</string>
+    <string name="chat_new">New chat</string>
+    <string name="chat_close">Close</string>
+    <string name="chat_stop">Stop</string>
+    <string name="chat_send">Send</string>
+    <string name="chat_retry">Retry</string>
+    <string name="chat_manage_keys">Manage providers</string>
+    <string name="chat_providers_title">AI providers</string>
+    <string name="chat_providers_subtitle">Choose a provider and add your key. Keys are stored on this device.</string>
+    <string name="chat_api_key">API key</string>
+    <string name="chat_base_url">Base URL</string>
+    <string name="chat_model">Model</string>
+    <string name="chat_connected">Connected</string>
+    <string name="chat_add_key">Add API key</string>
+    <string name="chat_show">Show</string>
+    <string name="chat_hide">Hide</string>
+    <string name="chat_gateway_hint">OpenAI-compatible: OpenRouter, LiteLLM, or a self-hosted endpoint.</string>
+    <string name="chat_done">Done</string>
+    <string name="chat_placeholder">Ask about your code, or describe a change</string>
+    <string name="chat_empty_title">AI coding agent</string>
+    <string name="chat_empty_body">Ask about your code, or tell the agent what to change. It can read, search, and edit your files under the permission mode you choose.</string>
+    <string name="chat_need_key">Add an API key in Settings to start.</string>
+    <string name="chat_thinking">Thinking</string>
+    <string name="chat_mode_ask">Ask each</string>
+    <string name="chat_mode_auto">Auto-accept</string>
+    <string name="chat_mode_plan">Plan only</string>
+    <string name="chat_perm_title">Allow this change?</string>
+    <string name="chat_allow">Allow</string>
+    <string name="chat_allow_session">Allow for this session</string>
+    <string name="chat_deny">Deny</string>
 </resources>

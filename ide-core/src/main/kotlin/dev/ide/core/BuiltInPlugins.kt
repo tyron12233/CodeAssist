@@ -126,6 +126,7 @@ object BuiltInPlugins {
         AndroidXmlPlugin(env),
         IdeCoreServicesPlugin(),
         IdeCoreActionsPlugin(env),
+        AgentPlugin(),
     )
 }
 

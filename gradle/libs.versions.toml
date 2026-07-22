@@ -27,6 +27,7 @@ desugarJdkLibs = "2.1.5"  # com.android.tools:desugar_jdk_libs — core-library 
 bouncycastle = "1.78.1"   # org.bouncycastle — in-process keystore creation (keypair + self-signed X.509) on ART (no keytool)
 playServicesAds = "23.6.0"  # com.google.android.gms:play-services-ads — AdMob native ads (Android launcher only)
 androidStub = "4.1.1.4"     # com.google.android:android — the throwaway stub android.jar (compileOnly) :applog-runtime compiles against
+okhttp = "4.12.0"           # com.squareup.okhttp3 — HTTP + SSE transport for the agent's LLM client (:agent-impl); runs on JVM and ART
 
 [libraries]
 kotlinx-coroutines-core = { module = "org.jetbrains.kotlinx:kotlinx-coroutines-core", version.ref = "coroutines" }
@@ -113,12 +114,20 @@ play-services-ads = { module = "com.google.android.gms:play-services-ads", versi
 # API level, but ContentProvider/LocalSocket/Process/Log have existed since API 1, so it suffices and keeps
 # :applog-runtime buildable with no Android SDK (CI_CORE_ONLY).
 android-stub = { module = "com.google.android:android", version.ref = "androidStub" }
+# OkHttp + its SSE companion: the agent's LLM client (:agent-impl) POSTs chat requests and reads the
+# provider's Server-Sent-Events stream through EventSource. One transport for all providers, identical on
+# desktop and ART (bundled into :ide-android like the other in-process tools). okhttp-sse tracks okhttp.
+okhttp = { module = "com.squareup.okhttp3:okhttp", version.ref = "okhttp" }
+okhttp-sse = { module = "com.squareup.okhttp3:okhttp-sse", version.ref = "okhttp" }
 
 [plugins]
 kotlin-jvm = { id = "org.jetbrains.kotlin.jvm", version.ref = "kotlin" }
 kotlin-multiplatform = { id = "org.jetbrains.kotlin.multiplatform", version.ref = "kotlin" }
 kotlin-android = { id = "org.jetbrains.kotlin.android", version.ref = "kotlin" }
 kotlin-compose = { id = "org.jetbrains.kotlin.plugin.compose", version.ref = "kotlin" }
+# kotlinx.serialization compiler plugin — generates serializers for the agent's @Serializable provider
+# DTOs (:agent-impl). Ships in the Kotlin gradle-plugin artifact, so its version tracks `kotlin`.
+kotlin-serialization = { id = "org.jetbrains.kotlin.plugin.serialization", version.ref = "kotlin" }
 compose = { id = "org.jetbrains.compose", version.ref = "compose" }
 android-application = { id = "com.android.application", version.ref = "agp" }
 # AGP 9's KMP library plugin: configures a Kotlin Multiplatform module's Android target inside `kotlin {}`.

@@ -1199,6 +1199,33 @@ class IdeServices private constructor(
         if (changed && isResourcePath(norm)) invalidateSyntheticClasses()
     }
 
+    /** Overlay-preferred current text: the live editor buffer if [file] is open, else its disk content. */
+    fun readCurrentText(file: Path): String {
+        val norm = file.toAbsolutePath().normalize()
+        return openDocuments[norm] ?: norm.readText()
+    }
+
+    /**
+     * Apply offset [edits] to [file], persisting to disk and the editor overlay together and firing one
+     * batched mutation event (so the index, analyzers, and synthetic classes stay consistent). The general
+     * form of [dev.ide.core.services.RefactorService]'s multi-file apply loop, used by the AI agent's edit
+     * tools; the caller is responsible for permission gating.
+     */
+    fun applyDocumentEdits(file: Path, edits: List<DocumentEdit>) {
+        val path = file.toAbsolutePath().normalize()
+        val current = openDocuments[path] ?: runCatching { path.readText() }.getOrNull() ?: return
+        val sb = StringBuilder(current)
+        for (e in edits.sortedByDescending { it.offset }) {
+            val s = e.offset.coerceIn(0, sb.length)
+            val en = (e.offset + e.oldLength).coerceIn(s, sb.length)
+            sb.replace(s, en, e.newText.toString())
+        }
+        val updated = sb.toString()
+        updateDocument(path, updated)
+        runCatching { path.parent?.let { Files.createDirectories(it) }; path.writeText(updated) }
+        events.filesMutated(listOf(path), null)
+    }
+
     /** Persist a single editor buffer to disk and keep it as the live overlay (it now equals disk). The
      *  invalidation chain (JDT binding-cache drop, res→R refresh, xml re-index, kt→facade refresh) runs as
      *  the [events] hub's [FileChanged][dev.ide.vfs.FileChanged] reaction, not inline here. */

@@ -33,11 +33,18 @@ import dev.ide.ui.backend.PackageSegment
 import dev.ide.ui.backend.TreeNode
 import dev.ide.ui.backend.UiActionContext
 import dev.ide.ui.backend.UiActionPlaces
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.expandHorizontally
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.shrinkHorizontally
 import androidx.compose.ui.Alignment
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.height
 import kotlinx.coroutines.launch
 import dev.ide.ui.components.BuildConsole
+import dev.ide.ui.components.ChatOverlay
 import dev.ide.ui.components.BuildDock
 import dev.ide.ui.components.DockBarHeight
 import dev.ide.ui.components.FileNavigator
@@ -45,6 +52,11 @@ import dev.ide.ui.components.FileOpKind
 import dev.ide.ui.components.fileOpPath
 import dev.ide.ui.components.GlassMaterial
 import dev.ide.ui.components.GlassSurface
+import dev.ide.ui.theme.Motion
+import dev.ide.ui.ext.ToolWindowAnchor
+import dev.ide.ui.ext.ToolWindowContext
+import dev.ide.ui.ext.ToolWindowRegistry
+import dev.ide.ui.ext.UiPluginHost
 import dev.ide.ui.components.NewSourceLang
 import dev.ide.ui.components.PushDrawer
 import dev.ide.ui.components.SideRail
@@ -171,6 +183,33 @@ internal fun ExpandedLayout(
                         activeFilePath = state.active?.path,
                         appLog = appLog,
                     )
+                }
+            }
+            // The AI agent chat drawer, right edge. Plugin-based: rendered from the RIGHT tool-window anchor,
+            // so any UI plugin can contribute a right-edge panel (the chat is AgentUiPlugin's contribution).
+            // Slides in/out from the end so opening/closing the drawer is animated, matching the mobile overlay.
+            if (state.chatOpen) UiPluginHost.ensureLoaded()
+            val rightTool = ToolWindowRegistry.forAnchor(ToolWindowAnchor.RIGHT).firstOrNull()
+            AnimatedVisibility(
+                visible = state.chatOpen && rightTool != null,
+                enter = expandHorizontally(tween(Motion.BASE, easing = Motion.quiet), expandFrom = Alignment.End) +
+                    fadeIn(tween(Motion.BASE)),
+                exit = shrinkHorizontally(tween(Motion.BASE, easing = Motion.quiet), shrinkTowards = Alignment.End) +
+                    fadeOut(tween(Motion.BASE / 2)),
+            ) {
+                Row(Modifier.fillMaxHeight()) {
+                    VerticalDivider()
+                    GlassSurface(Modifier.width(420.dp).fillMaxHeight(), GlassMaterial.Regular) {
+                        val twBackend = state.backend
+                        val twActive = state.active?.path
+                        val twCtx = remember(twBackend, twActive) {
+                            object : ToolWindowContext {
+                                override val backend = twBackend
+                                override val activeFilePath = twActive
+                            }
+                        }
+                        rightTool?.content(twCtx)
+                    }
                 }
             }
         }
@@ -336,6 +375,9 @@ internal fun CompactLayout(
 
         DestinationSheets(state, compact = true, onOpenModuleConfig, onToggleTheme, onOpenHub, onCloseProject, fileActions)
         PaletteOverlay(state, onToggleTheme, onOpenHub, onOpenDependencies)
+        // The AI agent chat: a right-edge drawer overlay (the phone counterpart of the desktop pane). It owns
+        // its own continuous right-edge-swipe-to-open gesture, so the finger drags the panel in directly.
+        ChatOverlay(state)
     }
 }
 

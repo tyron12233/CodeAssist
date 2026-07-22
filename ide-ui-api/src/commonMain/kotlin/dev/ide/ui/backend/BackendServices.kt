@@ -857,3 +857,77 @@ interface DiagnosticsService {
     /** Record an analytics [event] (performance metrics only; never user content). */
     fun track(event: String, props: Map<String, String> = emptyMap()) {}
 }
+
+/**
+ * The AI coding agent: a streamed chat transcript over a tool-using agent (see docs/agentic-coding.md). The
+ * UI observes [chatState] and [permissionRequest], sends user turns, and answers write-permission prompts.
+ * A backend that wires no agent inherits [Unsupported].
+ */
+interface AgentService {
+    /** The live chat transcript (messages, streaming reasoning, per-tool-call status). */
+    val chatState: StateFlow<UiAgentChatState>
+
+    /** A pending write-permission prompt in ASK_EACH mode, or null. */
+    val permissionRequest: StateFlow<UiAgentPermissionRequest?>
+
+    /** Providers, the current selection/model, whether a key is configured, and the permission mode. */
+    fun config(): UiAgentConfig
+
+    /** Models available from the current provider (fetched via [refreshModels]); falls back to the provider's
+     *  known models until a live list arrives. */
+    val models: StateFlow<List<UiAgentModel>>
+
+    /** Fetch the current provider's model list with the configured key. */
+    fun refreshModels()
+
+    /** Set the active model (persisted). */
+    fun setModel(model: String)
+
+    /** Choose the active provider (a built-in id, or "gateway" for the custom OpenAI-compatible entry). */
+    fun selectProvider(id: String)
+
+    /** Store the API key for [providerId] (a built-in id or "gateway"). Blank clears it. */
+    fun setProviderKey(providerId: String, key: String)
+
+    /** Configure the custom OpenAI-compatible gateway (base URL + model name). */
+    fun setGateway(baseUrl: String, model: String)
+
+    /** Send a user message; streams the agent's response into [chatState]. */
+    fun send(text: String)
+
+    /** Re-run the last turn after a failure (rate limit, network). No-op if there's nothing to retry. */
+    fun retry()
+
+    /** Cancel the in-flight response. */
+    fun stop()
+
+    /** Clear the transcript and start a fresh conversation. */
+    fun newSession()
+
+    /** Set the write-permission mode (persisted). */
+    fun setPermissionMode(mode: UiAgentPermissionMode)
+
+    /** Answer a pending [permissionRequest]. */
+    fun answerPermission(id: Int, decision: UiAgentPermissionDecision)
+
+    /** A no-op agent for backends that wire none. */
+    object Unsupported : AgentService {
+        override val chatState: StateFlow<UiAgentChatState> =
+            kotlinx.coroutines.flow.MutableStateFlow(UiAgentChatState())
+        override val permissionRequest: StateFlow<UiAgentPermissionRequest?> =
+            kotlinx.coroutines.flow.MutableStateFlow(null)
+        override fun config(): UiAgentConfig = UiAgentConfig()
+        override val models: StateFlow<List<UiAgentModel>> = kotlinx.coroutines.flow.MutableStateFlow(emptyList())
+        override fun refreshModels() {}
+        override fun setModel(model: String) {}
+        override fun selectProvider(id: String) {}
+        override fun setProviderKey(providerId: String, key: String) {}
+        override fun setGateway(baseUrl: String, model: String) {}
+        override fun send(text: String) {}
+        override fun retry() {}
+        override fun stop() {}
+        override fun newSession() {}
+        override fun setPermissionMode(mode: UiAgentPermissionMode) {}
+        override fun answerPermission(id: Int, decision: UiAgentPermissionDecision) {}
+    }
+}

@@ -135,6 +135,8 @@ internal fun EditorCenter(
                 onOptimizeImports = { if (active != null) optimizeImportsEpoch++ },
                 onToggleConsole = { state.consoleOpen = !state.consoleOpen },
                 consoleOpen = state.consoleOpen,
+                onToggleChat = { state.chatOpen = !state.chatOpen },
+                chatOpen = state.chatOpen,
                 inlayHintsOn = state.inlayHintsEnabled,
                 onToggleInlayHints = { state.inlayHintsEnabled = !state.inlayHintsEnabled },
                 showPreview = hasPreview,

@@ -67,6 +67,9 @@ interface IdeBackend {
 
     /** The critical-error dialog, the logs viewer, and opt-in analytics. */
     val diagnostics: DiagnosticsService
+
+    /** The AI coding agent (chat + tool use). Optional — a backend that wires none inherits [AgentService.Unsupported]. */
+    val agent: AgentService get() = AgentService.Unsupported
 }
 
 // ---- logging DTOs ----
@@ -631,6 +634,67 @@ data class UiPermissionRequest(val id: Int, val category: String, val detail: St
 
 /** The user's answer to a [UiPermissionRequest]: deny, or allow for this one call / this run / always (persisted). */
 enum class UiPermissionDecision { DENY, ALLOW_ONCE, ALLOW_RUN, ALLOW_ALWAYS }
+
+// ---- AI agent DTOs ----
+
+enum class UiAgentRole { USER, ASSISTANT }
+enum class UiAgentPermissionMode { ASK_EACH, AUTO_ACCEPT, PLAN_ONLY }
+enum class UiAgentToolStatus { RUNNING, OK, ERROR, DENIED }
+
+/** One tool call in a streamed assistant turn, with its live status. */
+data class UiAgentToolCall(
+    val id: String,
+    val title: String,
+    val status: UiAgentToolStatus,
+    val detail: String = "",
+)
+
+/** One chat message. Assistant messages stream: [text], [thinking], and [toolCalls] fill in as events arrive. */
+data class UiAgentMessage(
+    val id: Long,
+    val role: UiAgentRole,
+    val text: String = "",
+    val thinking: String = "",
+    val toolCalls: List<UiAgentToolCall> = emptyList(),
+    val streaming: Boolean = false,
+    /** An error surfaced as a message bubble rather than a banner. */
+    val isError: Boolean = false,
+    /** When [isError], whether re-running the last turn is worth offering (a transient failure). */
+    val canRetry: Boolean = false,
+)
+
+/** The observable chat transcript. */
+data class UiAgentChatState(
+    val messages: List<UiAgentMessage> = emptyList(),
+    val busy: Boolean = false,
+)
+
+data class UiAgentModel(val id: String, val displayName: String)
+data class UiAgentProvider(
+    val id: String,
+    val displayName: String,
+    val models: List<UiAgentModel>,
+    val defaultModel: String,
+    /** The user's stored API key for this provider (shown masked + editable in the key manager). */
+    val apiKey: String = "",
+)
+
+/** Provider/model selection and permission mode, for the chat drawer header, key manager, and settings. */
+data class UiAgentConfig(
+    val providers: List<UiAgentProvider> = emptyList(),
+    val selectedProvider: String = "",
+    val model: String = "",
+    val configured: Boolean = false,
+    val mode: UiAgentPermissionMode = UiAgentPermissionMode.ASK_EACH,
+    /** For the "Custom gateway" (OpenAI-compatible) entry: its base URL and model name. */
+    val gatewayBaseUrl: String = "",
+    val gatewayModel: String = "",
+)
+
+/** A pending write-permission prompt (ASK_EACH mode). */
+data class UiAgentPermissionRequest(val id: Int, val tool: String, val summary: String, val path: String?)
+
+enum class UiAgentPermissionDecision { DENY, ALLOW_ONCE, ALLOW_SESSION }
 
 /**
  * An unexpected error surfaced as a non-fatal dialog (IntelliJ "Internal Error" style). [title] is a short

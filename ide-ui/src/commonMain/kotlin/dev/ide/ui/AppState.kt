@@ -174,6 +174,8 @@ class IdeUiState(
     var navOpen by mutableStateOf(!isMobilePlatform)
     var searchOpen by mutableStateOf(false)
     var consoleOpen by mutableStateOf(!isMobilePlatform)
+    /** The AI agent chat drawer (right edge; desktop layout). */
+    var chatOpen by mutableStateOf(false)
     var paletteOpen by mutableStateOf(false)
     /** The in-file structure / outline bottom sheet (opened from the breadcrumb tap or Ctrl-F12). */
     var structureOpen by mutableStateOf(false)
@@ -549,6 +551,25 @@ class IdeUiState(
                 backend.editor.updateDocument(diskPath, text)
             }
             loadTree()
+        }
+    }
+
+    /**
+     * Re-read any clean open tab whose backing file changed on disk since it was loaded (e.g. the agent, or
+     * any external tool, wrote it). Runs on every file-system-epoch bump. Modified tabs are left untouched so
+     * an external write never clobbers in-progress user edits; unchanged tabs keep their session/undo/caret.
+     */
+    fun syncOpenTabsFromDisk() {
+        scope.launch {
+            for (i in openFiles.indices) {
+                val f = openFiles[i]
+                if (f.modified) continue
+                val text = readTabText(f.path) ?: continue
+                if (text == f.savedText) continue // untouched → preserve session/undo/caret
+                val name = f.path.substringAfterLast('/').substringAfterLast('\\')
+                openFiles[i] = OpenFile(f.path, name, text)
+                backend.editor.updateDocument(f.path, text)
+            }
         }
     }
 

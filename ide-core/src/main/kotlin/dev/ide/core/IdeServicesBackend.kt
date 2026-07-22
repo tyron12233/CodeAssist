@@ -270,6 +270,7 @@ class IdeServicesBackend(
     override val sdk: SdkService = SdkBackend(this)
     override val settings: SettingsService = SettingsBackend(this)
     override val actions: ActionService = ActionBackend(this)
+    override val agent: dev.ide.ui.backend.AgentService = AgentBackend(this)
     override val diagnostics: DiagnosticsService = DiagnosticsBackend(this)
 
     init {

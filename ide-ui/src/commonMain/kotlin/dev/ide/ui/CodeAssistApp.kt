@@ -106,6 +106,9 @@ fun CodeAssistApp(
      *  non-null value, the import preview opens for it. Null on desktop / normal launch. */
     importPackagePath: String? = null,
 ) {
+    // The AI agent's chat panel is a UI-plugin-contributed RIGHT tool window; register it once, before any
+    // surface triggers UiPluginHost.ensureLoaded() (the command palette / editor sheets do so lazily).
+    remember { dev.ide.ui.ext.UiPluginHost.register(dev.ide.ui.components.AgentUiPlugin); Unit }
     // Persisted IDE settings drive the theme (and seed the editor's live prefs). Re-read after the Settings
     // screen writes; appearance changes then take effect immediately.
     var settings by remember { mutableStateOf(backend.settings.settings()) }
@@ -285,9 +288,15 @@ fun CodeAssistApp(
         if (runConsole != null && screen == Screen.Editor) screen = Screen.Run
     }
 
-    // External file writes (e.g. an "Open with" import the UI didn't drive) re-read the tree.
+    // External file writes (e.g. an agent edit, or an "Open with" import the UI didn't drive) re-read the tree
+    // AND re-sync any clean open editor tab whose file changed on disk.
     val fsEpoch by backend.files.fileSystemEpoch.collectAsState()
-    LaunchedEffect(state, fsEpoch) { if (fsEpoch > 0) state.refreshTree() }
+    LaunchedEffect(state, fsEpoch) {
+        if (fsEpoch > 0) {
+            state.refreshTree()
+            state.syncOpenTabsFromDisk()
+        }
+    }
 
     // Theme + accent + code font come from settings; the Settings screen (and the quick toggle) update them
     // live. "system" follows the OS dark-mode signal.

@@ -80,6 +80,7 @@ import dev.ide.ui.backend.IndexUiStatus
 import dev.ide.ui.backend.RunTaskOption
 import dev.ide.ui.backend.UiActionItem
 import dev.ide.ui.generated.resources.Res
+import dev.ide.ui.generated.resources.chat_open
 import dev.ide.ui.generated.resources.close
 import dev.ide.ui.generated.resources.edchrome_build_console
 import dev.ide.ui.generated.resources.edchrome_build_variant
@@ -167,6 +168,8 @@ fun EditorTopBar(
     onOptimizeImports: () -> Unit = {},
     onToggleConsole: () -> Unit = {},
     consoleOpen: Boolean = false,
+    onToggleChat: () -> Unit = {},
+    chatOpen: Boolean = false,
     inlayHintsOn: Boolean = true,
     onToggleInlayHints: () -> Unit = {},
     showPreview: Boolean = false,
@@ -211,6 +214,7 @@ fun EditorTopBar(
             if (compact) {
                 // On a phone the bar can't hold every control, so Run stays inline and the rest (incl. the
                 // edit actions) collapse into a single ⋯ overflow menu — everything one tap away.
+                IconButtonCa(CaIcons.sparkle, stringResource(Res.string.chat_open), onToggleChat, active = chatOpen)
                 PluginToolbarActions(pluginActions, dim, onPluginAction)
                 if (activeVariant != null) VariantChip(
                     activeVariant,
@@ -256,6 +260,12 @@ fun EditorTopBar(
                     stringResource(Res.string.edchrome_build_console),
                     onToggleConsole,
                     active = consoleOpen
+                )
+                IconButtonCa(
+                    CaIcons.sparkle,
+                    stringResource(Res.string.chat_open),
+                    onToggleChat,
+                    active = chatOpen
                 )
                 // Shown when the open file has @Preview composables — renders/checks them via the interpreter.
                 if (showPreview) IconButtonCa(

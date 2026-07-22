@@ -90,4 +90,37 @@
     </plurals>
     <string name="recovered_projects_content">这些项目使用 Gradle，将以受限的兼容模式打开——部分功能可能无法使用，并且在重新添加依赖项之前可能无法构建。您的原始文件已安全保存在存储文件夹中。</string>
 
+
+    <!-- AI 编码助手 -->
+    <string name="chat_open">AI 助手</string>
+    <string name="chat_title">AI</string>
+    <string name="chat_new">新对话</string>
+    <string name="chat_close">关闭</string>
+    <string name="chat_stop">停止</string>
+    <string name="chat_send">发送</string>
+    <string name="chat_retry">重试</string>
+    <string name="chat_manage_keys">管理提供方</string>
+    <string name="chat_providers_title">AI 提供方</string>
+    <string name="chat_providers_subtitle">选择提供方并添加密钥。密钥保存在本设备上。</string>
+    <string name="chat_api_key">API 密钥</string>
+    <string name="chat_base_url">基础 URL</string>
+    <string name="chat_model">模型</string>
+    <string name="chat_connected">已连接</string>
+    <string name="chat_add_key">添加 API 密钥</string>
+    <string name="chat_show">显示</string>
+    <string name="chat_hide">隐藏</string>
+    <string name="chat_gateway_hint">兼容 OpenAI：OpenRouter、LiteLLM 或自托管端点。</string>
+    <string name="chat_done">完成</string>
+    <string name="chat_placeholder">询问代码，或描述要做的更改</string>
+    <string name="chat_empty_title">AI 编码助手</string>
+    <string name="chat_empty_body">询问你的代码，或告诉助手要更改什么。它可以在你选择的权限模式下读取、搜索和编辑文件。</string>
+    <string name="chat_need_key">请先在“设置”中添加 API 密钥。</string>
+    <string name="chat_thinking">思考中</string>
+    <string name="chat_mode_ask">每次询问</string>
+    <string name="chat_mode_auto">自动接受</string>
+    <string name="chat_mode_plan">仅计划</string>
+    <string name="chat_perm_title">允许此更改？</string>
+    <string name="chat_allow">允许</string>
+    <string name="chat_allow_session">本次会话允许</string>
+    <string name="chat_deny">拒绝</string>
 </resources>

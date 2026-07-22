@@ -9,6 +9,7 @@ import dev.ide.ui.components.BuildNotificationGate
 import dev.ide.ui.components.ErrorDialog
 import dev.ide.ui.components.MigrationNotice
 import dev.ide.ui.components.OnboardingSheet
+import dev.ide.ui.components.AgentPermissionDialog
 import dev.ide.ui.components.PermissionDialog
 import dev.ide.ui.components.RunConflictDialog
 import dev.ide.ui.screens.ImportErrorDialog
@@ -58,6 +59,8 @@ internal fun AppOverlays(
     )
     // The run sandbox's permission prompt — overlays everything while a guarded program is blocked.
     PermissionDialog(backend)
+    // The AI agent's write-permission prompt (ASK_EACH) — overlays while a mutating tool call awaits approval.
+    AgentPermissionDialog(backend)
     // First-build notification-permission gate — asks for the permission the isolated build process needs, and
     // falls back to in-process builds (with an explanation) if declined. No-op after the one-time prompt.
     BuildNotificationGate(state)
