@@ -999,6 +999,13 @@ class KotlinTreeResolver(
         if (recvExpr is KtClassLiteralExpression && sel0 is KtNameReferenceExpression &&
             (sel0.getReferencedName() == "java" || sel0.getReferencedName() == "javaObjectType")
         ) return classLiteralNode(recvExpr, asJava = true)
+        // A qualified reference that itself denotes a TYPE or `object` singleton (not a value): lower it
+        // straight to the singleton so a trailing selector reads a static/companion member or a further
+        // nested type. Without this, a fully-qualified reference recurses into its package segments
+        // (`androidx.compose.material.icons.Icons.Default.Remove` -> the leading `androidx` resolves to
+        // nothing), and a nested type is misread as a property on the OUTER type's companion
+        // (`LineHeightStyle.Alignment` -> "no readable property Alignment on LineHeightStyle$Companion").
+        typeOrObjectRef(e)?.let { return it }
         val receiver = lower(e.receiverExpression)
         if (receiver is RNode.Unsupported) return receiver
         return when (val sel = e.selectorExpression) {
@@ -1006,6 +1013,29 @@ class KotlinTreeResolver(
             is KtNameReferenceExpression -> propertyGet(sel.getReferencedName(), receiver, e.receiverExpression, e)
             else -> unsupported("qualified selector ${sel?.let { it::class.simpleName }}", e)
         }
+    }
+
+    /**
+     * If [e] denotes a TYPE or `object` singleton rather than a value, a reference to that singleton (so a
+     * trailing selector on it reads a static/companion member or a nested type). Covers a nested type reached
+     * through a resolved outer (`LineHeightStyle.Alignment`, `Outer.Inner`) and a fully-qualified non-object
+     * type (`java.util.Locale`) via [KotlinResolver.typeDenotationFqn], PLUS a fully-qualified type or `object`
+     * by its own source text (`androidx.compose.material.icons.Icons`) which `typeDenotationFqn` intentionally
+     * rejects for objects. Null for a value chain (`Icons.Default`, `Color.Red`, `foo().bar`), which then
+     * lowers as an ordinary receiver + property/call.
+     */
+    private fun typeOrObjectRef(e: KtDotQualifiedExpression): RNode? {
+        val sel = (e.selectorExpression as? KtNameReferenceExpression)?.getReferencedName() ?: return null
+        runCatching { resolver.typeDenotationFqn(e) }.getOrNull()?.let {
+            return RNode.Name(Binding.ObjectRef(it, sel), span(e))
+        }
+        if (sel.firstOrNull()?.isUpperCase() == true) {
+            val text = e.text
+            if (runCatching { service.isKnownType(text) }.getOrDefault(false)) {
+                return RNode.Name(Binding.ObjectRef(text, sel), span(e))
+            }
+        }
+        return null
     }
 
     /**

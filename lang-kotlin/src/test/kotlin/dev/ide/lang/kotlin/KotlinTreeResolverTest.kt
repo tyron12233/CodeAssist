@@ -798,6 +798,31 @@ class KotlinTreeResolverTest {
         assertTrue(fn.isComplete, "diags=${fn.diagnostics}")
     }
 
+    @Test
+    fun fullyQualifiedObjectReferenceResolvesToObjectRefNotPackageRecursion() {
+        // Regression: a fully-qualified reference to an object (`androidx.compose.material.icons.Icons...`)
+        // failed because the resolver recursed into the leading package segments (`androidx` resolves to
+        // nothing). It must lower to an ObjectRef of the object, exactly like the imported/same-package form.
+        val fn = lower("package demo\nfun f() { demo.Icons.Home }")
+        val get = assertIs<RNode.PropertyGet>(fn.stmts()[0], "FQN object property should lower to a PropertyGet")
+        val recv = assertIs<RNode.Name>(get.receiver, "receiver should be the object singleton")
+        assertEquals("demo.Icons", assertIs<Binding.ObjectRef>(recv.binding).fqn)
+        assertTrue(fn.isComplete, "FQN object reference should lower completely; diags=${fn.diagnostics}")
+    }
+
+    @Test
+    fun nestedTypeAccessResolvesToNestedObjectRefNotOuterCompanionProperty() {
+        // Regression: `LineHeightStyle.Alignment.Center` threw "no readable property Alignment on ...$Companion"
+        // because the nested type `Alignment` was read as a property on the OUTER type's companion. The nested
+        // type must lower to its own ObjectRef, so the trailing selector reads THAT type's member.
+        val fn = lower("package demo\nfun f() { Line.Align.Center }")
+        val get = assertIs<RNode.PropertyGet>(fn.stmts()[0], "nested-type member should lower to a PropertyGet")
+        assertEquals("Center", get.binding.name)
+        val recv = assertIs<RNode.Name>(get.receiver, "receiver should be the nested-type singleton, not the outer companion")
+        assertEquals("demo.Line.Align", assertIs<Binding.ObjectRef>(recv.binding).fqn)
+        assertTrue(fn.isComplete, "nested-type access should lower completely; diags=${fn.diagnostics}")
+    }
+
     companion object {
         val srcDir: Path = tempProject(
             mapOf(
@@ -843,6 +868,7 @@ class KotlinTreeResolverTest {
                         val Home: Vec get() = Vec()
                         val Settings: Vec get() = Vec()
                     }
+                    class Line { class Align { companion object { val Center: Int = 1 } } }
                     class Pads
                     class Widget {
                         fun pad(p: Pads): Widget = this
