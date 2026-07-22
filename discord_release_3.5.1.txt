@@ -1,0 +1,23 @@
+# 🚀 CodeAssist 3.5.1
+
+**ON-DEVICE BUILD SPEED**
+- **Much faster library dexing, especially on low-RAM phones.** The build used to dex an entire Jetpack Compose / AndroidX library set in one giant pass that could thrash or get killed on a small device (and then start over from scratch every time). It now dexes libraries in bounded, memory-safe batches that finish reliably and are cached as they go, so a build that could stall for minutes now completes.
+- **Repeat builds are near-instant.** Once your libraries are dexed, a rebuild with unchanged dependencies reuses the cached dex instead of redoing the work, so you're only waiting on your own code.
+- **New projects default to `minSdk 26`.** Below API 26 the phone has to rewrite (desugar) every library while dexing, which is much slower; at 26+ that's skipped and each library is dexed once and reused across all your projects. Existing projects are untouched, and the build now hints when raising `minSdk` would speed things up.
+- **No more `"error parsing kotlin metadata"` warnings** flooding the build log. Library Kotlin metadata is now stripped before dexing (the same thing release builds do), so the log stays clean.
+
+**COMPOSE PREVIEW**
+- The preview now **loads real resources** — drawables, strings, and other `@`-resources referenced from your `@Composable` render instead of coming up blank.
+- Handles **more Compose code**: composables with `vararg` parameters, value-class arguments (like `Dp`/`Color`), and `key { }` now render correctly.
+- **Sturdier**: added guards so a runaway recursion or a misbehaving custom view can no longer hang or crash the preview.
+- Custom-view previews written in Kotlin render more reliably.
+
+**KOTLIN EDITOR**
+- Completion for **nested types** (e.g. `Outer.Inner`) now works.
+- More accurate resolver, type inference, and completion across a range of cases, plus a fix for delegated-property reentrancy.
+- Faster and steadier code folding.
+
+**UI & STABILITY**
+- Editor, completion, and preview polish across phone and desktop, plus assorted indexing and parser fixes under the hood.
+
+Full changelog: https://github.com/tyron12233/CodeAssist/releases/tag/v3.5.1

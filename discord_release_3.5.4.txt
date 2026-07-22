@@ -1,0 +1,9 @@
+# 🚀 CodeAssist 3.5.4
+
+A fast follow-up to 3.5.3 fixing two Compose preview crashes in the interpreter's reflective dispatch.
+
+**COMPOSE PREVIEW**
+- **`Color(r, g, b)` with float components no longer crashes the preview.** Something like `Color(Random.nextFloat(), Random.nextFloat(), Random.nextFloat())` inside a `clickable { }` threw an argument-type error ("argument 1 has type int, got java.lang.Float"); it now builds the color correctly.
+- **`0f..50f` ranges render reliably on every device.** 3.5.3 added float-range previews (for example a `Slider`'s `valueRange`), but they could still resolve to the wrong range type depending on the device's runtime; overload resolution is now deterministic, so they render consistently everywhere.
+
+Full changelog: https://github.com/tyron12233/CodeAssist/releases/tag/v3.5.4

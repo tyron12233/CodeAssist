@@ -1,0 +1,38 @@
+# 🚀 CodeAssist 3.6.1
+
+This release is built around a new on-device **bytecode interpreter** (a small JVM) that powers the Compose and XML layout previews, plus the start of the Java editor's move onto IntelliJ's own engine, better signature help, and a round of Kotlin, resource and indexing fixes.
+
+**BYTECODE INTERPRETER (A SMALL JVM FOR PREVIEWS)**
+- **What it is.** CodeAssist now ships a small, stack-based virtual machine that reads compiled `.class` bytecode and runs it instruction by instruction, right inside the app. Your project's views and your library dependencies are **interpreted**, and only the real drawing (Android's `View`/`Canvas`, the Compose runtime) is handed off to the actual framework.
+- **Why it's needed.** Google Play's Device and Network Abuse policy restricts apps that download code from outside the app and then run it. This is called dynamic code loading (DCL). The old preview did exactly that: it compiled your project and your downloaded Maven/Gradle dependencies, then loaded that compiled code into Android's class loader (`DexClassLoader`) to render it, which is the pattern Play restricts. **This is why updates have been held back from Google Play.** New Play releases are effectively on hold until this interpreted build is reviewed and accepted. GitHub gets the updates in the meantime.
+- **How it steps around the restriction.** The interpreter never hands downloaded or user-built code to Android's class loader and never runs it as native code. It reads the bytecode and executes it itself, bridging out to the real framework only for rendering. Play's policy explicitly allows interpreters and virtual machines (the same carve-out that lets a WebView run JavaScript), so a preview that interprets bytecode does its job **without dynamic code loading**. The `DexClassLoader` path is gone from the preview.
+- **Performance.** It's fast enough for previews today. Once warmed up, a Compose composition renders in the tens of milliseconds, and real Material/AndroidX XML layouts (CoordinatorLayout, CollapsingToolbar, BottomNavigationView, FABs) render on device. The first render is slower while classes are decoded. Interpreting is a few times slower than running code natively, but only the small slice of code you're previewing is interpreted, so it stays interactive.
+- **What's coming.** Later builds on GitHub will add a **JIT** so previews get noticeably more responsive. Interpretation works well for now; the JIT is a speed upgrade on top of it.
+- **Scope, to be clear.** While this is effectively a JVM, it is only *just enough* of one to interpret views for Compose and XML layout previews. It does **not** run Gradle, and there are no plans to support running Gradle inside it.
+
+**JAVA EDITOR (MOVING ONTO INTELLIJ'S ENGINE)**
+- The Java editor is transitioning to **IntelliJ's own Java engine**, the same parser, resolution and inference IntelliJ IDEA uses, which is the exact path the Kotlin editor already took. This brings more accurate resolution, completion and navigation over time.
+- **Diagnostics (the red/yellow underlines) may not be fully reliable yet** while this transition settles. Accuracy will keep improving, following the same trajectory Kotlin's did. This is expected, not a regression in the engine.
+- One concrete fix already in: an `@Override` on a method inherited from a library (for example `Activity.onCreate`) is **no longer wrongly flagged** "does not override or implement a supertype method".
+
+**COMPOSE & LAYOUT PREVIEW**
+- **Your own custom views render again.** A project-source custom view (`<com.example.MyView/>`) resolves and renders in the XML layout preview, now that it runs interpreted from its compiled classes.
+- **Library composables from jars render** in the Compose preview instead of failing.
+- **`forEach` content renders.** `Column { list.forEach { … } }` now composes its children correctly.
+- **Preview sandbox.** A project-scoped Compose Preview settings page lets you block a preview's file, network, Android-system and process/reflection access (all blocked by default). Anything blocked is reported on the preview's problem chip instead of doing real I/O.
+
+**KOTLIN EDITOR**
+- Cross-file **extension functions** now resolve in previews (`"x".shout()` where `fun String.shout()` lives in another file).
+- Fewer false "unresolved / ambiguous" errors on library calls like `intent.putExtra(...)`: ambiguous binary overloads now defer to the real dispatcher.
+- A resource added or edited in an open file refreshes in Kotlin code without a stale cache getting in the way.
+
+**EDITOR**
+- **Signature help** now dims a parameter that an earlier named argument already supplied, and lets you **tap to peek** the full definition (tap again to collapse).
+- The **quick-fix / import popup** compacts long import suggestions (shared package segments collapse to `…`) and supports tap-to-peek.
+- **Keyboard fix:** the IME state is reset when a new input connection takes over, so switching between keyboards like SwiftKey and Gboard no longer leaves the editor in a stuck sync state.
+
+**PERFORMANCE**
+- Faster indexing: source files parse **in parallel across cores**, and the "nothing changed" up-to-date check does far fewer filesystem stats on large trees.
+- The Android resource index now parses files **concurrently** with a lock-free per-thread parser.
+
+Full changelog: https://github.com/tyron12233/CodeAssist/releases/tag/v3.6.1

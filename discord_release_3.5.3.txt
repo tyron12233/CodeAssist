@@ -1,0 +1,17 @@
+# 🚀 CodeAssist 3.5.3
+
+**COMPOSE PREVIEW**
+- **A preview that hits an error no longer takes down the editor.** If a composable fails while rendering (a library call that dies mid-draw), the preview now degrades to a partial/error view instead of crashing the IDE around it.
+- **`Box { }` renders without an explicit `modifier`.** Writing `Box { Text("") }` (no `modifier = Modifier`) used to fail to render; it now works, like `Column`/`Row` already did.
+- **Previews of composables with default parameters render.** A `@Preview fun Foo(sdk: Int = 4)` (or a default like `Build.VERSION.SDK_INT` that can't be evaluated off-device) no longer blanks the whole preview.
+- **Nested-class constructors render.** `LazyVerticalGrid(columns = GridCells.Fixed(2))` and similar `Type.Nested(...)` calls now resolve in the preview instead of reporting "not interpretable".
+- **Numeric ranges render.** `0f..50f` (for example a `Slider`'s `valueRange`) and other non-Int ranges now render; previously only `Int` ranges worked.
+- **Material Icons Extended now load in on-device previews.** Icons like `Icons.Filled.Remove` failed with "cannot load facade …RemoveKt"; the preview's library dexing now handles them.
+
+**EDITOR**
+- **Auto-import refreshes the errors immediately.** After completing something that adds an import (especially operators, `by` delegates, and destructuring, like `var x by mutableStateOf(0)` after importing `getValue`), the red error clears right away instead of only after you type another character.
+- **A class used as a value is now flagged.** Writing `GridCells.Fixed` (a class) where a value is expected, without constructing it (`GridCells.Fixed(2)`), now shows the "must be initialized" error.
+- **An unimported library type used for static access is now flagged.** `FontWeight.Bold` with no `import androidx.compose.ui.text.font.FontWeight` is now reported as unresolved, as it should be.
+- **`0f..50f` is no longer wrongly flagged.** Assigning a float range to a `ClosedFloatingPointRange<Float>` is no longer reported as a type mismatch.
+
+Full changelog: https://github.com/tyron12233/CodeAssist/releases/tag/v3.5.3

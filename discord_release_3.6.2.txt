@@ -1,0 +1,20 @@
+# 🚀 CodeAssist 3.6.2
+
+**COMPILER PLUGINS**
+- New per-module **Compiler plugins** tab in Module settings: toggle **Jetpack Compose**, **Kotlin Serialization**, and **Parcelize** on or off. Enabling one adds its runtime and applies the plugin at build time. Compose and Parcelize moved here from Build Features (which now keeps View Binding).
+- **kotlinx.serialization** is bundled and applied automatically: a `@Serializable` class gets its generated serializer when you build, on device.
+- **Parcelize** is bundled the same way: a `@Parcelize` class gets its `Parcelable` implementation generated.
+
+**EDITOR**
+- Kotlin Serialization is understood by the editor: `Foo.serializer()` on a `@Serializable` class now resolves, completes, and no longer shows a false "unresolved" error.
+
+**COMPOSE PREVIEW**
+- **Reified generics** now work in previews: `T::class`, `x is T`, and `x as T` inside an inline `reified` function resolve to the real type.
+- **NavHost previews render**: a `@Preview` with `NavHost { composable<Route> { ... } }` now shows its start destination instead of failing.
+- `serializer<T>()` no longer crashes a preview when a serializer can't be produced; it degrades gracefully.
+
+**FIXES**
+- Enabling a compiler plugin no longer leaves `org.jetbrains.kotlin:kotlin-stdlib-common` showing as an unresolved dependency (it is provided by the bundled Kotlin standard library).
+- Console programs run through the on-device bytecode interpreter on one code path for both desktop and device.
+
+Full changelog: https://github.com/tyron12233/CodeAssist/releases/tag/v3.6.2

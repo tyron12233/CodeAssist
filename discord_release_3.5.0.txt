@@ -1,0 +1,49 @@
+# 🚀 CodeAssist 3.5.0
+
+**LAYOUT PREVIEW**
+- **Tap to edit** - tap any view in the live layout preview to open a visual attribute editor (a bottom sheet on phones, a docked panel on wide screens). It edits the real XML, so the Code view and the preview update together as you change things.
+- Each attribute gets the right control: a switch for `true`/`false`, chips for enums and flag combinations, a `dp` field (with `wrap_content`/`match_parent` chips) for sizes, a color swatch for colors, and a text field for the rest.
+- **Add attribute** opens a searchable picker that only lists attributes the selected view actually supports (framework + your own custom views), and auto-declares a missing `xmlns` when you add an `app:` attribute.
+- Typing a value gives the exact same auto-complete you get editing the XML by hand.
+- New one-time **"Prepare libraries"** panel: the preview now tells you when a project's libraries still need preparing (and how many) with a one-tap prepare step, instead of silently stalling on the first render. It no longer redoes that work on every render.
+
+**ANDROID XML**
+- **Code folding** - collapse any element's body and multi-line comments in layouts, manifests, and resource files.
+- **Parameter hints inside attribute values** - put the caret inside an attribute's quotes and see what it expects (`true`/`false`, the enum/flag members, or the resource type like `@string/...`).
+- Your own **custom `View` subclasses** now show up as layout tags (even before they are compiled) and inherit the `android:` attributes of the framework widget they extend.
+- Theme references (`?attr/colorPrimary`, including Material/AppCompat) now complete - type `?` to bring them up.
+- New inspection: a **duplicate attribute** on the same tag is now flagged.
+- XML is now parsed with IntelliJ's XML PSI, the same engine Android Studio uses, so tags, attributes, and value ranges are recognized more precisely (and it stays error-tolerant on half-typed files).
+
+**KOTLIN**
+- **Much smarter type inference** - a new constraint-based engine (K2-style) infers types through generic call chains and scope functions. `sumOf`/`maxOf`/`minOf { }` now resolve to the correct `Int`/`Long`/`Double` overload based on what your lambda returns.
+- **Builder inference** - `buildList`/`buildSet`/`buildMap`/`sequence`/`flow { }` infer their element type from what you `add`/`put`/`yield` inside, even through `if`/`for`/`repeat`.
+- **Generics variance** (`out`/`in`/`*`) is now respected in completion and subtyping.
+- Highlighting: `this`/`super` are colored as keywords everywhere (including inside string templates and when labeled like `this@Outer`), and a lambda's implicit `it` is colored as a parameter.
+- A batch of completion fixes: `map.forEach` entry types as `Map.Entry` (so `.key`/`.value` complete), `x!!` yields the not-null type, `StringBuilder`/`StringBuffer` members, `Array(n){}`/`reduce`/`IntRange` element types, and mixed numeric arithmetic (`Int * Double`) widens correctly.
+- Fixed a `with`/`run`/`apply` regression where members of the receiver inside the block could resolve incorrectly.
+
+**ANDROID BUILD**
+- **Build your own `.aar` library modules** - Android library modules now assemble a real `.aar` (per variant) containing the classes, manifest, resources, `R.txt`, assets, native libs, and consumer ProGuard rules a consumer needs. Assemble it straight from the Run picker.
+- **Console / plain-Java projects no longer see `android.*`** - each module now resolves its own platform SDK, so a Java/Kotlin console or library module compiles, completes, and error-checks against the core Java platform instead of `android.jar` (no more spurious `android.*` suggestions). You can also pick a module's Platform SDK in Module config.
+- Fixed corrupted `.aar` extraction: a dependency `.aar` interrupted mid-extract is no longer treated as complete and reused (which caused missing resources/assets) - it now re-extracts cleanly.
+
+**EDITOR & STABILITY**
+- Fixed the top on-device editor crash - shortening a file could throw `ArrayIndexOutOfBounds` when the renderer read a line number captured a frame earlier; line lookups now clamp safely and self-correct.
+- Fixed a crash when copying a long build log to the clipboard (`TransactionTooLargeException`); the copy is now capped while keeping the end of the log, where the errors and final status are.
+- **Smart backspace** - Backspace at an indent stop now removes a full indent level instead of one space at a time.
+- Sample-project images and other binary assets are now created byte-for-byte instead of being corrupted, and large/binary files are no longer overwritten by the editor.
+- Faster folding - fold regions are cached and reused while the buffer is unchanged, instead of reparsing on every folding pass.
+
+**BUILDS & NOTIFICATIONS**
+- Notification permission is now asked the **first time you build** (with an explanation of why the isolated build shows a progress notification) instead of at launch. Decline and builds simply run in-process; you can re-enable it later in **Settings → Build Runtime**. It only prompts once.
+
+**SUPPORTING CodeAssist (ADS), FREE TO TURN OFF**
+- CodeAssist now shows lightweight **native ads on Android only** (never on desktop), in a few calm, between-tasks spots: below the project list, one card in the Projects store, the Learn tab, and the build console footer while nothing is building. No pop-ups, no interstitials, nothing over your work or a running build.
+- **You can turn ads off for free, no payment, ever.** On the project picker's **"Support CodeAssist"** card there is a single **"Show ads"** toggle; switch it off and ads never render again (your choice is saved).
+- There is deliberately **no paid "remove ads"** purchase. Removing ads is free; supporting the project through the optional Sponsor / donation button is completely separate and always optional.
+
+**ANALYTICS**
+- Still opt-in and performance-only - it never collects your messages, file names, or content, and there is no new personal data. Behind the scenes, failed builds are now tagged by category and crash reports always pin a line of app code, so problems are easier for us to diagnose.
+
+Full changelog: https://github.com/tyron12233/CodeAssist/releases/tag/v3.5.0
