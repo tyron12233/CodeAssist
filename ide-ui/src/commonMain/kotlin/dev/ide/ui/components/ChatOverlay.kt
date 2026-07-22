@@ -25,7 +25,6 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
-import androidx.compose.ui.input.pointer.PointerEventPass
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.input.pointer.positionChange
 import androidx.compose.ui.input.pointer.util.VelocityTracker
@@ -44,7 +43,7 @@ import kotlinx.coroutines.launch
 import kotlin.math.abs
 import kotlin.math.roundToInt
 
-/** The right-edge zone where a leftward swipe always grabs the chat drawer open. */
+/** The right-edge zone where a leftward swipe grabs the chat drawer open. */
 private val EdgeGrabWidth = 24.dp
 
 /** Fling speed (px/s, expressed in dp) past which a release commits to open/close regardless of position. */
@@ -53,9 +52,14 @@ private val FlingCommit = 320.dp
 /**
  * The phone chat drawer: a right-edge overlay that tracks the finger continuously, mirroring [PushDrawer]
  * (which is left-only). An [Animatable] `shown` (0 = closed, panel off-screen right → openPx = fully open)
- * is driven live by a right-edge leftward-swipe to open and a rightward drag / scrim tap to close; a release
- * settles to the nearer edge (or a fling commits). External toggles ([IdeUiState.chatOpen], the top-bar
- * button, back) animate the same value, so the panel and its dimming scrim never pop.
+ * is driven live: a leftward swipe from the right edge opens, a drag or tap on the scrim closes, and a
+ * release settles to the nearer edge (a fling commits). External toggles ([IdeUiState.chatOpen], the top-bar
+ * button, back) animate the same value.
+ *
+ * IMPORTANT: while closed, the ONLY overlay laid over the editor is a thin right-edge catcher strip, so the
+ * editor stays fully touchable — the dimming scrim (which is modal and does block touches) is composed only
+ * once the drawer is open or animating. The catcher strip is persistent, so a swipe it captures keeps
+ * driving the drag (pointer capture) even after the panel appears and the finger travels off the strip.
  */
 @Composable
 internal fun ChatOverlay(state: IdeUiState) {
@@ -64,19 +68,18 @@ internal fun ChatOverlay(state: IdeUiState) {
         val panelWidth = if (maxWidth < 480.dp) maxWidth - 48.dp else 420.dp
         val openPx = with(density) { panelWidth.toPx() }
         val flingPx = with(density) { FlingCommit.toPx() }
-        val edgePx = with(density) { EdgeGrabWidth.toPx() }
         val touchSlop = LocalViewConfiguration.current.touchSlop
         val scope = rememberCoroutineScope()
 
         // 0 = fully closed (panel off-screen right), openPx = fully open (panel flush at the right edge).
         val shown = remember { Animatable(0f) }
         shown.updateBounds(0f, openPx)
-        val visible by remember { derivedStateOf { shown.value > 0.5f } }
+        // Composited while open OR mid-animation; a fully closed drawer composes nothing over the editor.
+        val visible by remember { derivedStateOf { shown.value > 0.5f || state.chatOpen } }
 
         // A leftward drag (negative delta) opens; a rightward drag closes.
         fun dragBy(delta: Float) {
-            val target = (shown.value - delta).coerceIn(0f, openPx)
-            scope.launch { shown.snapTo(target) }
+            scope.launch { shown.snapTo((shown.value - delta).coerceIn(0f, openPx)) }
         }
 
         suspend fun settle(velocityX: Float) {
@@ -97,81 +100,82 @@ internal fun ChatOverlay(state: IdeUiState) {
             if (shown.value != target) shown.animateTo(target, tween(Motion.BASE, easing = Motion.quiet))
         }
 
-        Box(
-            Modifier.fillMaxSize()
-                // Drag anywhere (scrim or panel) to close, once open.
-                .draggable(
-                    rememberDraggableState { dragBy(it) },
-                    Orientation.Horizontal,
-                    enabled = isMobilePlatform && visible,
-                    onDragStopped = { velocity -> scope.launch { settle(velocity) } },
-                )
-                // Right-edge grab: a leftward drag starting within the edge zone opens the drawer, tracked
-                // on the Initial pass so it wins over the editor before it treats the drag as a pan.
-                .pointerInput(isMobilePlatform, openPx) {
-                    if (!isMobilePlatform) return@pointerInput
-                    awaitEachGesture {
-                        val down = awaitFirstDown(requireUnconsumed = false, pass = PointerEventPass.Initial)
-                        if (shown.value > 0.5f || down.position.x < size.width - edgePx) return@awaitEachGesture
-                        var totalX = 0f
-                        var totalY = 0f
-                        var claimed = false
-                        val tracker = VelocityTracker()
-                        while (true) {
-                            val event = awaitPointerEvent(PointerEventPass.Initial)
-                            val change = event.changes.firstOrNull { it.id == down.id } ?: break
-                            if (!change.pressed) {
+        // Persistent thin right-edge catcher: the only thing laid over the editor while closed. A leftward,
+        // horizontal-dominant drag past slop grabs the drawer and drives it continuously; taps and vertical
+        // scrolls in the strip are not consumed, so they fall through to the editor.
+        if (isMobilePlatform) {
+            Box(
+                Modifier.align(Alignment.CenterEnd).fillMaxHeight().width(EdgeGrabWidth)
+                    .pointerInput(openPx) {
+                        awaitEachGesture {
+                            val down = awaitFirstDown(requireUnconsumed = false)
+                            if (shown.value > 0.5f) return@awaitEachGesture
+                            var totalX = 0f
+                            var totalY = 0f
+                            var claimed = false
+                            val tracker = VelocityTracker()
+                            while (true) {
+                                val event = awaitPointerEvent()
+                                val change = event.changes.firstOrNull { it.id == down.id } ?: break
+                                if (!change.pressed) {
+                                    if (claimed) {
+                                        change.consume()
+                                        scope.launch { settle(tracker.calculateVelocity().x) }
+                                    }
+                                    break
+                                }
+                                val delta = change.positionChange()
+                                totalX += delta.x
+                                totalY += delta.y
+                                if (!claimed) {
+                                    if (abs(totalY) > touchSlop && abs(totalY) > abs(totalX)) break
+                                    if (-totalX > touchSlop && -totalX > abs(totalY)) claimed = true
+                                }
                                 if (claimed) {
+                                    tracker.addPosition(change.uptimeMillis, change.position)
+                                    dragBy(delta.x)
                                     change.consume()
-                                    scope.launch { settle(tracker.calculateVelocity().x) }
-                                }
-                                break
-                            }
-                            val delta = change.positionChange()
-                            totalX += delta.x
-                            totalY += delta.y
-                            if (!claimed) {
-                                if (abs(totalY) > touchSlop && abs(totalY) > abs(totalX)) break
-                                if (-totalX > touchSlop && -totalX > abs(totalY)) claimed = true
-                            }
-                            if (claimed) {
-                                tracker.addPosition(change.uptimeMillis, change.position)
-                                dragBy(delta.x)
-                                change.consume()
-                            }
-                        }
-                    }
-                },
-        ) {
-            if (visible) {
-                // Dimming scrim, tracking openness; a tap on it closes.
-                Box(
-                    Modifier.fillMaxSize()
-                        .graphicsLayer { alpha = (shown.value / openPx).coerceIn(0f, 1f) }
-                        .background(Color.Black.copy(alpha = 0.32f))
-                        .pointerInput(Unit) { detectTapGestures { state.chatOpen = false } },
-                )
-                UiPluginHost.ensureLoaded()
-                val tool = ToolWindowRegistry.forAnchor(ToolWindowAnchor.RIGHT).firstOrNull()
-                Box(
-                    Modifier.align(Alignment.CenterEnd)
-                        .width(panelWidth)
-                        .fillMaxHeight()
-                        // Slide from the right edge: translationX 0 fully open, off-screen when closed.
-                        .offset { IntOffset((openPx - shown.value).roundToInt(), 0) },
-                ) {
-                    GlassSurface(Modifier.fillMaxSize(), GlassMaterial.Thick) {
-                        if (tool != null) {
-                            val backend = state.backend
-                            val active = state.active?.path
-                            val ctx = remember(backend, active) {
-                                object : ToolWindowContext {
-                                    override val backend = backend
-                                    override val activeFilePath = active
                                 }
                             }
-                            tool.content(ctx)
                         }
+                    },
+            )
+        }
+
+        if (visible) {
+            // Dimming scrim (modal): tap or, on mobile, drag it to close; alpha tracks openness.
+            Box(
+                Modifier.fillMaxSize()
+                    .graphicsLayer { alpha = (shown.value / openPx).coerceIn(0f, 1f) }
+                    .background(Color.Black.copy(alpha = 0.32f))
+                    .pointerInput(Unit) { detectTapGestures { state.chatOpen = false } }
+                    .draggable(
+                        rememberDraggableState { dragBy(it) },
+                        Orientation.Horizontal,
+                        enabled = isMobilePlatform,
+                        onDragStopped = { velocity -> scope.launch { settle(velocity) } },
+                    ),
+            )
+            UiPluginHost.ensureLoaded()
+            val tool = ToolWindowRegistry.forAnchor(ToolWindowAnchor.RIGHT).firstOrNull()
+            Box(
+                Modifier.align(Alignment.CenterEnd)
+                    .width(panelWidth)
+                    .fillMaxHeight()
+                    // Slide from the right edge: translationX 0 fully open, off-screen when closed.
+                    .offset { IntOffset((openPx - shown.value).roundToInt(), 0) },
+            ) {
+                GlassSurface(Modifier.fillMaxSize(), GlassMaterial.Thick) {
+                    if (tool != null) {
+                        val backend = state.backend
+                        val active = state.active?.path
+                        val ctx = remember(backend, active) {
+                            object : ToolWindowContext {
+                                override val backend = backend
+                                override val activeFilePath = active
+                            }
+                        }
+                        tool.content(ctx)
                     }
                 }
             }
