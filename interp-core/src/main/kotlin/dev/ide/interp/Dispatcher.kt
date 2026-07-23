@@ -1147,13 +1147,15 @@ class ReflectiveDispatcher(
         return false
     }
 
+    // Via [loadClassAcross] so a nested class named by its DOTTED fqn (`a.b.Outer.Nested` — e.g. a bare-imported
+    // `GridCells.Fixed`) resolves to its `$` binary name, and so the same loader chain the interpreter uses is
+    // searched (the project-library loader first), not a single loader with the raw name.
     private fun loadClassOrNull(fqn: String): Class<*>? =
-        runCatching { Class.forName(fqn, false, loader) }.getOrNull()
+        loadClassAcross(fqn, initialize = false, preferred = loader)
 
     private fun loadClass(fqn: String): Class<*> =
-        runCatching { Class.forName(fqn, false, loader) }.getOrElse {
-            throw InterpreterException("cannot load class `$fqn`: ${it.message}")
-        }
+        loadClassAcross(fqn, initialize = false, preferred = loader)
+            ?: throw InterpreterException("cannot load class `$fqn`")
 
     /** Map a Kotlin classifier FQN to its JVM class for reflection; `…Kt` facades are already JVM names. */
     private fun jvmName(fqn: String): String = KOTLIN_TO_JVM[fqn] ?: fqn
