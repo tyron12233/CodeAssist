@@ -108,6 +108,14 @@ import dev.ide.ui.generated.resources.block_keyword_to
 import dev.ide.ui.generated.resources.block_live_projection
 import dev.ide.ui.generated.resources.block_no_index_matches
 import dev.ide.ui.generated.resources.block_no_matches
+import dev.ide.ui.generated.resources.block_palette_call
+import dev.ide.ui.generated.resources.block_palette_comment
+import dev.ide.ui.generated.resources.block_palette_for_each
+import dev.ide.ui.generated.resources.block_palette_if
+import dev.ide.ui.generated.resources.block_palette_if_else
+import dev.ide.ui.generated.resources.block_palette_return
+import dev.ide.ui.generated.resources.block_palette_variable
+import dev.ide.ui.generated.resources.block_palette_while
 import dev.ide.ui.generated.resources.block_projecting
 import dev.ide.ui.generated.resources.block_search_placeholder
 import dev.ide.ui.generated.resources.block_searching_index
@@ -121,6 +129,7 @@ import dev.ide.ui.generated.resources.expand
 import dev.ide.ui.icons.CaIcons
 import dev.ide.ui.theme.Ca
 import dev.ide.ui.theme.CodeAssistTheme
+import org.jetbrains.compose.resources.StringResource
 import org.jetbrains.compose.resources.pluralStringResource
 import org.jetbrains.compose.resources.stringResource
 import kotlin.math.roundToInt
@@ -896,17 +905,19 @@ private fun BlockBar(drag: DragState, onAddBlock: () -> Unit) {
     }
 }
 
-private data class PaletteItem(val label: String, val cat: BlockCat, val ghost: String, val text: String)
+// [label] is the stable English key used to filter the palette by typed query; [labelRes] is the localized
+// text shown on the block (and in the drag preview).
+private data class PaletteItem(val label: String, val labelRes: StringResource, val cat: BlockCat, val ghost: String, val text: String)
 
 private val PALETTE = listOf(
-    PaletteItem("If", BlockCat.Control, "if ( ) { }", "if (true) {\n}"),
-    PaletteItem("If / Else", BlockCat.Control, "if ( ) { } else { }", "if (true) {\n} else {\n}"),
-    PaletteItem("For each", BlockCat.Control, "for ( : ) { }", "for (var item : items) {\n}"),
-    PaletteItem("While", BlockCat.Control, "while ( ) { }", "while (true) {\n}"),
-    PaletteItem("Return", BlockCat.Return, "return ;", "return value;"),
-    PaletteItem("Variable", BlockCat.Data, "var = ;", "var name = value;"),
-    PaletteItem("Call", BlockCat.Call, "method();", "method();"),
-    PaletteItem("Comment", BlockCat.Comment, "// …", "// comment"),
+    PaletteItem("If", Res.string.block_palette_if, BlockCat.Control, "if ( ) { }", "if (true) {\n}"),
+    PaletteItem("If / Else", Res.string.block_palette_if_else, BlockCat.Control, "if ( ) { } else { }", "if (true) {\n} else {\n}"),
+    PaletteItem("For each", Res.string.block_palette_for_each, BlockCat.Control, "for ( : ) { }", "for (var item : items) {\n}"),
+    PaletteItem("While", Res.string.block_palette_while, BlockCat.Control, "while ( ) { }", "while (true) {\n}"),
+    PaletteItem("Return", Res.string.block_palette_return, BlockCat.Return, "return ;", "return value;"),
+    PaletteItem("Variable", Res.string.block_palette_variable, BlockCat.Data, "var = ;", "var name = value;"),
+    PaletteItem("Call", Res.string.block_palette_call, BlockCat.Call, "method();", "method();"),
+    PaletteItem("Comment", Res.string.block_palette_comment, BlockCat.Comment, "// …", "// comment"),
 )
 
 @OptIn(ExperimentalLayoutApi::class)
@@ -940,7 +951,7 @@ private fun Palette(ctx: Ctx, onClose: () -> Unit) {
             PaletteSearch(query) { query = it }
             val statics = if (query.isBlank()) PALETTE else PALETTE.filter { it.label.contains(query.trim(), ignoreCase = true) }
             FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                statics.forEach { item -> PaletteBlock(item.label, item.ghost, item.cat, item.text, ctx) }
+                statics.forEach { item -> PaletteBlock(stringResource(item.labelRes), item.ghost, item.cat, item.text, ctx) }
                 hits.forEach { (hit, fromMembers) -> PaletteBlock(hit.name, hit.detail, BlockCat.Call, templateFor(hit, fromMembers), ctx) }
             }
             when {

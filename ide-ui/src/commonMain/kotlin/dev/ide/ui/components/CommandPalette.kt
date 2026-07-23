@@ -62,6 +62,7 @@ import dev.ide.ui.generated.resources.palette_filter_members
 import dev.ide.ui.generated.resources.palette_filter_symbols
 import dev.ide.ui.generated.resources.palette_hint
 import dev.ide.ui.generated.resources.palette_no_matches
+import dev.ide.ui.generated.resources.palette_section_goto
 import dev.ide.ui.generated.resources.palette_type_to_search
 import dev.ide.ui.icons.CaIcons
 import dev.ide.ui.theme.Ca
@@ -256,6 +257,17 @@ private fun FilterTabs(active: PaletteFilter, onSelect: (PaletteFilter) -> Unit)
     }
 }
 
+/** Localized display for a [PaletteEntry.section] key (the key itself stays English for filtering/grouping). */
+@Composable
+private fun sectionLabel(section: String): String = when (section) {
+    "Commands" -> stringResource(Res.string.palette_filter_commands)
+    "Symbols" -> stringResource(Res.string.palette_filter_symbols)
+    "Files" -> stringResource(Res.string.palette_filter_files)
+    "Members" -> stringResource(Res.string.palette_filter_members)
+    "Go to" -> stringResource(Res.string.palette_section_goto)
+    else -> section
+}
+
 @Composable
 private fun PaletteRow(entry: PaletteEntry, onClose: () -> Unit) {
     Row(
@@ -268,7 +280,7 @@ private fun PaletteRow(entry: PaletteEntry, onClose: () -> Unit) {
         horizontalArrangement = Arrangement.spacedBy(12.dp),
     ) {
         Box(Modifier.width(64.dp), contentAlignment = Alignment.CenterStart) {
-            Text(entry.section.uppercase(), color = Ca.colors.textTertiary, fontSize = 10.sp, fontWeight = FontWeight.SemiBold)
+            Text(sectionLabel(entry.section).uppercase(), color = Ca.colors.textTertiary, fontSize = 10.sp, fontWeight = FontWeight.SemiBold)
         }
         Text(
             entry.label, color = Ca.colors.textPrimary, style = Ca.type.subhead,

@@ -65,6 +65,7 @@ import dev.ide.ui.components.pressScale
 import dev.ide.ui.editor.preview.decodeImageBytes
 import dev.ide.ui.editor.preview.drawUiDrawable
 import dev.ide.ui.generated.resources.Res
+import dev.ide.ui.generated.resources.back
 import dev.ide.ui.generated.resources.caproj_files
 import dev.ide.ui.generated.resources.cancel
 import dev.ide.ui.generated.resources.export_action
@@ -522,7 +523,7 @@ private fun SharingHeader(title: String, onBack: () -> Unit) {
                 .clickable(interaction, indication = null, onClick = onBack),
             contentAlignment = Alignment.Center,
         ) {
-            Icon(CaIcons.chevronLeft, "Back", Modifier.size(20.dp), tint = Ca.colors.textSecondary)
+            Icon(CaIcons.chevronLeft, stringResource(Res.string.back), Modifier.size(20.dp), tint = Ca.colors.textSecondary)
         }
         Text(title, color = Ca.colors.textPrimary, style = Ca.type.title2, maxLines = 1, overflow = TextOverflow.Ellipsis)
     }

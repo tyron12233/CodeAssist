@@ -75,6 +75,7 @@ import dev.ide.ui.generated.resources.learn_hint_n
 import dev.ide.ui.generated.resources.learn_indexing
 import dev.ide.ui.generated.resources.learn_need_hint
 import dev.ide.ui.generated.resources.learn_next
+import dev.ide.ui.generated.resources.learn_check_failed
 import dev.ide.ui.generated.resources.learn_output
 import dev.ide.ui.generated.resources.learn_preparing
 import dev.ide.ui.generated.resources.learn_preparing_sub
@@ -305,6 +306,7 @@ private fun InteractiveStep(
         }
 
         // Action row.
+        val checkFailedMsg = stringResource(Res.string.learn_check_failed)
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             if (step.hints.isNotEmpty() && hintsShown < step.hints.size) {
                 TextAction(stringResource(Res.string.learn_need_hint), CaIcons.lightbulb) { hintsShown++ }
@@ -324,7 +326,7 @@ private fun InteractiveStep(
                     val code = session.doc.text
                     scope.launch {
                         val r = runCatching { backend.learn.check(lessonId.orEmpty(), step.id, code) }
-                            .getOrElse { UiExerciseResult(passed = false, compiled = false, message = it.message ?: "Check failed") }
+                            .getOrElse { UiExerciseResult(passed = false, compiled = false, message = it.message ?: checkFailedMsg) }
                         result = r
                         running = false
                         if (r.passed) onSolved()

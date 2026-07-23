@@ -25,6 +25,7 @@ import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import dev.ide.ui.generated.resources.Res
+import dev.ide.ui.generated.resources.symbolbar_tab
 import dev.ide.ui.generated.resources.symbolbar_duplicate_line
 import dev.ide.ui.generated.resources.symbolbar_move_line_down
 import dev.ide.ui.generated.resources.symbolbar_move_line_up
@@ -65,7 +66,7 @@ internal fun EditorSymbolBar(
             },
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        SymbolKey("Tab", onClick = onTab, modifier = Modifier.width(48.dp), accent = true)
+        SymbolKey(stringResource(Res.string.symbolbar_tab), onClick = onTab, modifier = Modifier.width(48.dp), accent = true)
         Box(Modifier.width(1.dp).fillMaxHeight().background(Ca.colors.separator))
         // Fixed line-action group: comment toggle, move line up/down, duplicate — the editor ops that are
         // otherwise keyboard-only, surfaced for touch.

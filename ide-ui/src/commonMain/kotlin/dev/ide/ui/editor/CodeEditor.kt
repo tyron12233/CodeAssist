@@ -51,8 +51,11 @@ import dev.ide.ui.editor.core.RangeEdit
 import dev.ide.ui.editor.core.smartEnter
 import dev.ide.ui.editor.core.textInputCodePoint
 import dev.ide.ui.editor.core.wordRangeAt
+import dev.ide.ui.generated.resources.Res
+import dev.ide.ui.generated.resources.rename_failed
 import dev.ide.ui.platform.isMobilePlatform
 import dev.ide.ui.theme.Ca
+import org.jetbrains.compose.resources.stringResource
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlin.math.roundToInt
@@ -258,6 +261,7 @@ private fun CodeEditorContent(
         }
     }
 
+    val renameFailedMsg = stringResource(Res.string.rename_failed)
     fun commitRename() {
         val r = rename ?: return
         if (renameBusy || r.newName.isBlank() || r.newName == r.oldName) {
@@ -267,7 +271,7 @@ private fun CodeEditorContent(
         val text = editorSession.doc.text
         scope.launch {
             val result = runCatching { backend.editor.rename(path, text, r.offset, r.newName) }
-                .getOrElse { UiRenameResult(false, it.message ?: "Rename failed") }
+                .getOrElse { UiRenameResult(false, it.message ?: renameFailedMsg) }
             renameBusy = false
             if (result.success) {
                 rename = null; onRenamed(result.newPath)

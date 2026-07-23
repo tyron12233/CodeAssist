@@ -45,6 +45,9 @@ import dev.ide.ui.components.PrimaryButton
 import dev.ide.ui.components.entranceSlideUp
 import dev.ide.ui.components.pressScale
 import dev.ide.ui.generated.resources.Res
+import dev.ide.ui.generated.resources.back
+import dev.ide.ui.generated.resources.toggle_off
+import dev.ide.ui.generated.resources.toggle_on
 import dev.ide.ui.generated.resources.choose_start_point
 import dev.ide.ui.generated.resources.create_project
 import dev.ide.ui.generated.resources.creating
@@ -246,7 +249,7 @@ private fun ParamControl(param: UiTemplateParam, value: String, onChange: (Strin
                     .clickable { onChange((!on).toString()) }
                     .padding(horizontal = 14.dp, vertical = 6.dp),
             ) {
-                Text(if (on) "On" else "Off", color = if (on) Ca.colors.accent else Ca.colors.textSecondary, style = Ca.type.footnote, fontWeight = FontWeight.SemiBold)
+                Text(if (on) stringResource(Res.string.toggle_on) else stringResource(Res.string.toggle_off), color = if (on) Ca.colors.accent else Ca.colors.textSecondary, style = Ca.type.footnote, fontWeight = FontWeight.SemiBold)
             }
         }
     }
@@ -266,7 +269,7 @@ private fun Header(title: String, subtitle: String, onBack: () -> Unit) {
                 .clickable(interaction, indication = null, onClick = onBack),
             contentAlignment = Alignment.Center,
         ) {
-            Icon(CaIcons.chevronLeft, "Back", Modifier.size(20.dp), tint = Ca.colors.textSecondary)
+            Icon(CaIcons.chevronLeft, stringResource(Res.string.back), Modifier.size(20.dp), tint = Ca.colors.textSecondary)
         }
         Column {
             Text(title, color = Ca.colors.textPrimary, style = Ca.type.title2, maxLines = 1, overflow = TextOverflow.Ellipsis)

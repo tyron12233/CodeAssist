@@ -59,6 +59,9 @@ import dev.ide.ui.components.pressScale
 import dev.ide.ui.backend.AdPlacement
 import dev.ide.ui.components.AdSlot
 import dev.ide.ui.generated.resources.Res
+import dev.ide.ui.generated.resources.dismiss
+import dev.ide.ui.generated.resources.picker_delete_project
+import dev.ide.ui.generated.resources.settings_hub_title
 import dev.ide.ui.generated.resources.backup
 import dev.ide.ui.generated.resources.cancel
 import dev.ide.ui.generated.resources.compatibility
@@ -164,7 +167,7 @@ fun ProjectPickerScreen(
                 }
                 if (onBackup != null) BackupButton(onBackup, compact = narrow)
                 if (onOpenHub != null) {
-                    IconButtonCa(CaIcons.gear, "Settings & tools", onOpenHub)
+                    IconButtonCa(CaIcons.gear, stringResource(Res.string.settings_hub_title), onOpenHub)
                 }
             }
             Spacer(Modifier.size(12.dp))
@@ -559,7 +562,7 @@ private fun ProjectCard(
                     .clickable(deleteInteraction, indication = null, onClick = onDelete),
                 contentAlignment = Alignment.Center,
             ) {
-                Icon(CaIcons.close, "Delete project", Modifier.size(18.dp), tint = Ca.colors.textTertiary)
+                Icon(CaIcons.close, stringResource(Res.string.picker_delete_project), Modifier.size(18.dp), tint = Ca.colors.textTertiary)
             }
         }
         Icon(CaIcons.chevronRight, null, Modifier.size(20.dp), tint = Ca.colors.textTertiary)
@@ -718,7 +721,7 @@ private fun LegacyRecoveryBanner(count: Int, onDismiss: () -> Unit) {
             Modifier.size(28.dp).pressScale(interaction).clickable(interaction, indication = null, onClick = onDismiss),
             contentAlignment = Alignment.Center,
         ) {
-            Icon(CaIcons.close, "Dismiss", Modifier.size(16.dp), tint = Ca.colors.textTertiary)
+            Icon(CaIcons.close, stringResource(Res.string.dismiss), Modifier.size(16.dp), tint = Ca.colors.textTertiary)
         }
     }
 }

@@ -100,6 +100,7 @@ import dev.ide.ui.generated.resources.modcfg_add_row
 import dev.ide.ui.generated.resources.modcfg_add_source_root
 import dev.ide.ui.generated.resources.modcfg_auto_detect
 import dev.ide.ui.generated.resources.modcfg_auto_detected
+import dev.ide.ui.generated.resources.modcfg_consumer_suffix
 import dev.ide.ui.generated.resources.modcfg_build_features_android_only
 import dev.ide.ui.generated.resources.modcfg_build_features_intro
 import dev.ide.ui.generated.resources.modcfg_compiler_plugin_applied
@@ -1091,7 +1092,7 @@ private fun MissingProguardCard(
                 Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
                     Text(mf.entry, color = Ca.colors.textPrimary,
                         style = Ca.type.footnote.copy(fontFamily = codeFont), maxLines = 1, overflow = TextOverflow.Ellipsis)
-                    Text("${mf.buildType}${if (mf.consumer) " · consumer" else ""}",
+                    Text(if (mf.consumer) stringResource(Res.string.modcfg_consumer_suffix, mf.buildType) else mf.buildType,
                         color = Ca.colors.textTertiary, style = Ca.type.caption2)
                 }
                 CreateRuleButton { onCreate(mf.entry) }
