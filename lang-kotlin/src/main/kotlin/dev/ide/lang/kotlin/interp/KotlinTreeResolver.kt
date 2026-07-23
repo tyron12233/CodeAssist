@@ -2014,13 +2014,40 @@ class KotlinTreeResolver(
      *  `getValue`/`setValue` convention forwards to `.value`). Requiring an actual `value` member keeps this
      *  sound: a `Delegates.observable`/`notNull` delegate (no `.value`) correctly falls through to Unsupported. */
     private fun delegateValueProperty(delegate: KtExpression): Binding.Property? {
-        val dt = runCatching { resolver.inferType(delegate) }.getOrNull() ?: return null
-        val hasValue = runCatching {
-            service.membersForCompletion(dt.qualifiedName, dt.typeArguments, "value")
-                .any { it.name == "value" && it.kind == SymbolKind.FIELD }
-        }.getOrDefault(false)
-        if (!hasValue) return null
+        val dt = delegateType(delegate) ?: return null
+        if (!hasValueMember(dt)) return null
         return Binding.Property("value", dt.qualifiedName, backingField = false)
+    }
+
+    /**
+     * The delegate expression's type. `remember { … }` / `rememberSaveable { … }` return their trailing
+     * lambda's value UNCHANGED, so when the direct inference doesn't yield a `.value` (State/MutableState/Lazy)
+     * type — inferring the library generic's return THROUGH the lambda can miss on a bytecode `remember` — fall
+     * back to the type of the lambda's last expression (`mutableStateOf(0)` -> `MutableState<Int>`, a direct
+     * call that infers reliably). This is what makes `var count by remember { mutableStateOf(0) }` resolve.
+     */
+    private fun delegateType(delegate: KtExpression): KotlinType? {
+        val direct = runCatching { resolver.inferType(delegate) }.getOrNull()
+        if (direct != null && hasValueMember(direct)) return direct
+        rememberLambdaBody(delegate)?.let { body ->
+            runCatching { resolver.inferType(body) }.getOrNull()?.let { return it }
+        }
+        return direct
+    }
+
+    private fun hasValueMember(dt: KotlinType): Boolean = runCatching {
+        service.membersForCompletion(dt.qualifiedName, dt.typeArguments, "value")
+            .any { it.name == "value" && it.kind == SymbolKind.FIELD }
+    }.getOrDefault(false)
+
+    /** The last expression of a `remember { … }` / `rememberSaveable { … }` trailing-lambda body (the value
+     *  the call returns unchanged), or null when the delegate is not such a call. */
+    private fun rememberLambdaBody(delegate: KtExpression): KtExpression? {
+        val call = delegate as? KtCallExpression ?: return null
+        val callee = (call.calleeExpression as? KtNameReferenceExpression)?.getReferencedName() ?: return null
+        if (callee != "remember" && callee != "rememberSaveable") return null
+        val lambda = call.lambdaArguments.lastOrNull()?.getLambdaExpression() ?: return null
+        return lambda.bodyExpression?.statements?.lastOrNull()
     }
 
     private fun lambdaNode(e: KtLambdaExpression): RNode {
