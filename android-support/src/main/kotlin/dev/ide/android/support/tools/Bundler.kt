@@ -41,7 +41,28 @@ class BundletoolInProcess : Bundler {
                 .execute()
             ToolResult.ok(listOf("bundletool (in-process) built ${request.outputAab.fileName}"))
         } catch (t: Throwable) {
-            ToolResult.fail("bundletool build-bundle failed: ${t.message}")
+            // Report the FULL cause chain + a compact stack, not just `t.message` (often null/opaque). bundletool
+            // runs in-process on the same VM, so on ART a failure is frequently a platform gap — e.g. it reaches
+            // for a JAXP/SAX class the JDK has but ART does not; the class name only shows up down the chain.
+            ToolResult.fail("bundletool build-bundle failed (${t.javaClass.simpleName})", diagnose(t))
+        }
+    }
+
+    private companion object {
+        /** Flatten [t]'s message + cause chain + the top stack frames into console lines. */
+        fun diagnose(t: Throwable): List<String> {
+            val lines = ArrayList<String>()
+            lines += "bundletool build-bundle failed in-process on ${System.getProperty("java.vm.name")} " +
+                "${System.getProperty("java.vm.version")}"
+            var cur: Throwable? = t
+            var depth = 0
+            while (cur != null && depth < 10) {
+                lines += (if (depth == 0) "  " else "  caused by: ") + "${cur.javaClass.name}: ${cur.message}"
+                cur.stackTrace.take(8).forEach { lines += "      at $it" }
+                cur = cur.cause
+                depth++
+            }
+            return lines
         }
     }
 }

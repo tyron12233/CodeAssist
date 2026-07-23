@@ -12,10 +12,6 @@ import org.w3c.dom.Element
 import java.nio.file.Files
 import java.nio.file.Path
 import javax.xml.parsers.DocumentBuilderFactory
-import javax.xml.transform.OutputKeys
-import javax.xml.transform.TransformerFactory
-import javax.xml.transform.dom.DOMSource
-import javax.xml.transform.stream.StreamResult
 
 /**
  * `injectAppLogProvider`: on a DEBUG build, weave a `<provider>` for the IDE's log bridge
@@ -101,11 +97,9 @@ internal class InjectAppLogProviderTask(
         }
 
         outManifest.parent?.let { Files.createDirectories(it) }
-        val transformer = TransformerFactory.newInstance().newTransformer().apply {
-            setOutputProperty(OutputKeys.ENCODING, "UTF-8")
-            setOutputProperty(OutputKeys.OMIT_XML_DECLARATION, "no")
-        }
-        Files.newOutputStream(outManifest).use { transformer.transform(DOMSource(doc), StreamResult(it)) }
+        // Serialize by hand (NOT javax.xml.transform): the identity Transformer is an ART hazard — on device
+        // it reaches for a SAX driver that isn't on the platform and fails/corrupts the manifest.
+        Files.write(outManifest, XmlDomWriter.toXml(doc).toByteArray(Charsets.UTF_8))
         ctx.logger()("injectAppLogProvider -> ${outManifest.fileName} (provider $providerClass, authority $authority)")
         return TaskResult.Success
     }
