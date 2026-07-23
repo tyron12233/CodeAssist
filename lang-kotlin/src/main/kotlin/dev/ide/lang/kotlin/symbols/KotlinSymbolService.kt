@@ -1752,6 +1752,32 @@ class KotlinSymbolService(
     }
 
     /**
+     * The DIRECT nested types of the SOURCE type [fqn] (`Outer.Nested` — a nested `class`/`object`/`interface`,
+     * a sealed type's nested subclasses), prefix-filtered, as STATIC type candidates. `SourceIndex` keeps a
+     * nested type OUT of its outer's member list (registering it as its own top-level [RawClass] by FQN), so
+     * — unlike a classpath binary, whose nested types arrive as STATIC members of its shape ([KotlinMetadata])
+     * and thus flow through [membersForCompletion] — a source type's nested types would otherwise never appear
+     * at `Outer.`. This surfaces them there, matching the binary behavior. Companion objects (offered via
+     * [companionObjectSymbol]) and local/anonymous types are excluded; empty for a non-source / unknown [fqn].
+     */
+    fun nestedTypesOf(fqn: String, namePrefix: String = ""): List<KotlinSymbol> {
+        val m = model()
+        m.classByFqn[fqn] ?: return emptyList()
+        val matcher = PrefixMatcher(namePrefix)
+        val outerPrefix = "$fqn."
+        return m.classByFqn.values.mapNotNull { rc ->
+            if (rc.isCompanion || rc.isLocal) return@mapNotNull null
+            if (!rc.fqn.startsWith(outerPrefix)) return@mapNotNull null
+            if ('.' in rc.fqn.substring(outerPrefix.length)) return@mapNotNull null // direct child only
+            if (namePrefix.isNotEmpty() && !matcher.matches(rc.simpleName)) return@mapNotNull null
+            KotlinSymbol(
+                rc.simpleName, rawClassKind(rc), typeByFqn(rc.fqn),
+                modifiers = setOf(Modifier.STATIC), origin = SOURCE, declarationNode = rc.node,
+            )
+        }
+    }
+
+    /**
      * The DIRECT subclasses (FQNs) of the SOURCE `sealed` class/interface [fqn] — gathered across the whole
      * project model, so it is COMPLETE (a sealed type's subclasses must be in the same module, hence all in the
      * source model). Returns null when [fqn] isn't a known source sealed type (a library sealed class would need
