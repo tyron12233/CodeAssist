@@ -62,6 +62,34 @@ class LibraryNestedClassConstructorTest {
         )
     }
 
+    @Test
+    fun bareImportedLibraryNestedConstructorConstructsViaDollarName() {
+        // `import …GridCells.Fixed; Fixed(2)` — a BARE-imported library nested class. It lowers to a reflective
+        // Library callee whose owner is the DOTTED fqn `…GridCells.Fixed`; the dispatcher must map that to the
+        // `$` binary name to construct it. Before the fix `Class.forName(dotted)` threw "cannot load class".
+        val code = """
+            package demo
+            import androidx.compose.foundation.lazy.grid.GridCells.Fixed
+            fun cells() = Fixed(2)
+        """.trimIndent()
+        val service = KotlinSymbolService(sourceRoots = emptyList(), classpathJars = classpathJars())
+        val parsed = KotlinIncrementalParser().parseFull(Doc(code)) as KotlinParsedFile
+        val program = KotlinPreviewLowering(service).program(parsed)
+        val entry = assertNotNull(program["cells/0"], "the function must lower; keys=${program.keys}")
+
+        var fixed: RNode.Call? = null
+        entry.body.walk { if (it is RNode.Call && it.callee.displayName == "Fixed") fixed = it }
+        val call = assertNotNull(fixed, "`Fixed(2)` must lower to a Call; diags=${entry.diagnostics.map { it.reason }}")
+        assertTrue(call.dispatch == DispatchKind.CONSTRUCTOR, "`Fixed(2)` must be a CONSTRUCTOR call, was ${call.dispatch}")
+        // End-to-end: the dotted Library owner must resolve to the `$` binary name and construct the real class.
+        val built = ComposeDispatcher().dispatch(call, receiver = null, args = listOf(2))
+        assertNotNull(built, "the dispatcher must construct the bare-imported nested class")
+        assertTrue(
+            built.javaClass.name.endsWith("GridCells\$Fixed"),
+            "constructs androidx…GridCells\$Fixed, was ${built.javaClass.name}",
+        )
+    }
+
     private class Doc(override val text: CharSequence) : DocumentSnapshot {
         override val file: VirtualFile = F()
         override val version: Long = 1
