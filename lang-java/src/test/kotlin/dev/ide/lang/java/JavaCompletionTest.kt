@@ -277,4 +277,34 @@ class JavaCompletionTest {
             "an unimported type should carry an auto-import edit; got ${item.additionalEdits}",
         )
     }
+
+    @Test
+    fun annotationPositionOffersOnlyIndexedAnnotationTypes() {
+        // `@Mark|` — an annotation NAME position. The index-backed coarse filter (TypeCtx.ANNOTATION) keeps
+        // only candidates whose kind is "annotation", so a library annotation surfaces while an equally-
+        // prefixed library class does not. This relies on `java.classNames` labeling a binary annotation
+        // "annotation" (not the old blanket "class"); with the wrong kind the popup was empty.
+        val src = "package com.foo;\n@Mark| class Use {}"
+        val offset = src.indexOf('|')
+        val text = src.removeRange(offset, offset + 1)
+        val vf = fs.fileFor(File(srcRoot, "com/foo/Use.java").toPath())
+        val comp = dev.ide.lang.java.completion.JavaCompletion(
+            env,
+            typeSearch = {
+                listOf(
+                    dev.ide.lang.java.completion.JavaCompletion.IndexedType("com.lib.Marker", "annotation"),
+                    dev.ide.lang.java.completion.JavaCompletion.IndexedType("com.lib.MarkerBase", "class"),
+                )
+            },
+        )
+        val res = runBlocking {
+            comp.complete(
+                CompletionRequest(Snap(vf, text), offset, CompletionTrigger.Explicit),
+                JavaLanguageBackend.LANGUAGE_ID,
+            )
+        }
+        val labels = res.items.map { it.label }
+        assertTrue("Marker" in labels, "a library annotation must be offered at `@…`; got $labels")
+        assertFalse("MarkerBase" in labels, "a non-annotation library class must NOT be offered at `@…`; got $labels")
+    }
 }

@@ -7,6 +7,7 @@ import dev.ide.index.IndexOrigin
 import dev.ide.index.SubtypeIndex
 import dev.ide.lang.java.index.JavaClassNamesIndex
 import dev.ide.lang.java.index.JavaMainIndex
+import dev.ide.lang.java.index.JavaPackageTypesIndex
 import dev.ide.lang.java.index.JavaMembersByOwnerIndex
 import dev.ide.lang.java.index.JavaMembersIndex
 import dev.ide.lang.java.index.JavaSourceAnnotationIndex
@@ -71,6 +72,46 @@ class JavaIndexTest {
     fun binaryClassNameIsPublicKeyedBySimpleName() {
         val input = Input(IndexOrigin.LIBRARY, "com/foo/Greeter.class", b = greeterClassBytes())
         assertEquals("com.foo.Greeter", JavaClassNamesIndex.index(input)["Greeter"]?.first()?.fqn)
+    }
+
+    /** A class with just the given access flags (no members), for kind classification. */
+    private fun typeBytes(access: Int, internalName: String, superName: String, interfaces: Array<String>?): ByteArray {
+        val cw = ClassWriter(0)
+        cw.visit(Opcodes.V1_8, access, internalName, null, superName, interfaces)
+        cw.visitEnd()
+        return cw.toByteArray()
+    }
+
+    @Test
+    fun binaryTypeKindReflectsAccessFlags() {
+        // A library annotation/interface/enum class must be labeled by its real kind, not a blanket "class".
+        // The Kotlin `@`-annotation completion filter keeps only ANNOTATION_TYPE candidates, so a library
+        // annotation (`@Composable`, `@Deprecated`, …) mislabeled "class" would be dropped -> empty popup.
+        val anno = Input(
+            IndexOrigin.LIBRARY, "com/foo/MyAnno.class",
+            b = typeBytes(
+                Opcodes.ACC_PUBLIC or Opcodes.ACC_ANNOTATION or Opcodes.ACC_INTERFACE or Opcodes.ACC_ABSTRACT,
+                "com/foo/MyAnno", "java/lang/Object", arrayOf("java/lang/annotation/Annotation"),
+            ),
+        )
+        assertEquals("annotation", JavaClassNamesIndex.index(anno)["MyAnno"]?.first()?.kind, "classNames kind")
+        assertEquals("annotation", JavaPackageTypesIndex.index(anno)["com.foo"]?.first()?.kind, "packageTypes kind")
+
+        val iface = Input(
+            IndexOrigin.LIBRARY, "com/foo/MyIface.class",
+            b = typeBytes(Opcodes.ACC_PUBLIC or Opcodes.ACC_INTERFACE or Opcodes.ACC_ABSTRACT, "com/foo/MyIface", "java/lang/Object", null),
+        )
+        assertEquals("interface", JavaClassNamesIndex.index(iface)["MyIface"]?.first()?.kind)
+
+        val enum = Input(
+            IndexOrigin.LIBRARY, "com/foo/MyEnum.class",
+            b = typeBytes(Opcodes.ACC_PUBLIC or Opcodes.ACC_FINAL or Opcodes.ACC_ENUM, "com/foo/MyEnum", "java/lang/Enum", null),
+        )
+        assertEquals("enum", JavaClassNamesIndex.index(enum)["MyEnum"]?.first()?.kind)
+
+        // A plain class still reads as "class".
+        val cls = Input(IndexOrigin.LIBRARY, "com/foo/Greeter.class", b = greeterClassBytes())
+        assertEquals("class", JavaClassNamesIndex.index(cls)["Greeter"]?.first()?.kind)
     }
 
     @Test

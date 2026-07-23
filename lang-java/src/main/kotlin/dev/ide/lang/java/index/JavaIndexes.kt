@@ -37,15 +37,18 @@ private fun isSource(i: IndexInput) =
 private val TYPE_KINDS =
     setOf(DeclKind.CLASS, DeclKind.INTERFACE, DeclKind.ENUM, DeclKind.RECORD, DeclKind.ANNOTATION)
 
-/** Whether a library/SDK class file declares a `public` top-level type (JPMS gates packages, not the
- *  package-private types inside them), read from the ASM access flags. */
-private fun isPublicBytecodeType(input: IndexInput): Boolean =
-    JavaBytecode.read(input.bytes())?.let { JavaBytecode.isPublic(it.access) } ?: false
+/** The declaration kind of a library/SDK class file if it declares a `public` top-level type (JPMS gates
+ *  packages, not the package-private types inside them), read from the ASM access flags; null when the type
+ *  is non-public or the bytecode can't be read. Returning the kind (not just a boolean) lets the class-name
+ *  indexes label a binary annotation/interface/enum correctly instead of the blanket `"class"` — so e.g. an
+ *  `@`-annotation completion filter can tell `@Composable` from an ordinary class. */
+private fun publicBytecodeKind(input: IndexInput): String? =
+    JavaBytecode.read(input.bytes())?.takeIf { JavaBytecode.isPublic(it.access) }?.let { JavaBytecode.kindOf(it.access) }
 
 /** classNames: simple type name -> FQN/origin/kind. Library/SDK from the entry path; source from the PSI parse. */
 object JavaClassNamesIndex : IndexExtension<String, ClassNameValue> {
     override val id = IndexId("java.classNames")
-    override val version = 3
+    override val version = 4
     override val keyDescriptor: KeyDescriptor<String> = StringKeyDescriptor
     override val valueExternalizer = ClassNameExternalizer
     override val matching = MatchingMode.PREFIX_AND_FUZZY
@@ -53,9 +56,9 @@ object JavaClassNamesIndex : IndexExtension<String, ClassNameValue> {
 
     override fun index(input: IndexInput): Map<String, Collection<ClassNameValue>> {
         if (isClassFile(input)) {
-            if (!isPublicBytecodeType(input)) return emptyMap()
+            val kind = publicBytecodeKind(input) ?: return emptyMap()
             val (fqn, simple) = classEntryToFqn(input.unitName!!) ?: return emptyMap()
-            return mapOf(simple to listOf(ClassNameValue(fqn, input.origin, "class")))
+            return mapOf(simple to listOf(ClassNameValue(fqn, input.origin, kind)))
         }
         val parsed = JavaSourceIndexer.sharedParsed(input)
         val out = HashMap<String, MutableList<ClassNameValue>>()
@@ -88,7 +91,7 @@ object JavaClassLocatorIndex : IndexExtension<String, String> {
 /** packageTypes: package FQN -> the types directly in it (exact-package keyed, for `java.util.` completion). */
 object JavaPackageTypesIndex : IndexExtension<String, ClassNameValue> {
     override val id = IndexId("java.packageTypes")
-    override val version = 3
+    override val version = 4
     override val keyDescriptor: KeyDescriptor<String> = StringKeyDescriptor
     override val valueExternalizer = ClassNameExternalizer
     override val matching = MatchingMode.PREFIX_ONLY
@@ -96,10 +99,10 @@ object JavaPackageTypesIndex : IndexExtension<String, ClassNameValue> {
 
     override fun index(input: IndexInput): Map<String, Collection<ClassNameValue>> {
         if (isClassFile(input)) {
-            if (!isPublicBytecodeType(input)) return emptyMap()
+            val kind = publicBytecodeKind(input) ?: return emptyMap()
             val (fqn, _) = classEntryToFqn(input.unitName!!) ?: return emptyMap()
             val pkg = fqn.substringBeforeLast('.', "").ifEmpty { return emptyMap() }
-            return mapOf(pkg to listOf(ClassNameValue(fqn, input.origin, "class")))
+            return mapOf(pkg to listOf(ClassNameValue(fqn, input.origin, kind)))
         }
         val parsed = JavaSourceIndexer.sharedParsed(input)
         val pkg = parsed.packageName?.takeIf { it.isNotEmpty() } ?: return emptyMap()
