@@ -188,6 +188,32 @@ class KotlinCrossFilePreviewTest {
     }
 
     @Test
+    fun mergesACrossFileSuperclassOfAConstructedSubclass() {
+        // Constructing `HomeCard()` (in Card.kt) whose superclass `BaseCard` lives in Base.kt: the expander must
+        // pull in the SUPERCLASS's file too, or super-init never runs (inherited `title` reads null) and an
+        // inherited call throws "no member". Before the fix the expander requested only the constructed type's
+        // file — `reachableSourceClasses` followed supertypes but the runtime-model expander did not.
+        val entry = """
+            package com.example.compose
+            fun make(): BaseCard = HomeCard()
+        """.trimIndent()
+        val (service, dir) = serviceOver(
+            mapOf(
+                "Base.kt" to "package com.example.compose\n\nabstract class BaseCard(val title: String = \"base\")\n",
+                "Card.kt" to "package com.example.compose\n\nclass HomeCard : BaseCard(\"home\")\n",
+                "Use.kt" to entry,
+            ),
+        )
+        val model = lowerCrossFile(service, dir, "Use.kt", entry)
+        assertTrue(model.program["make/0"]?.isComplete == true, "make() should lower; diags=${model.program["make/0"]?.diagnostics}")
+        assertNotNull(model.classes.firstOrNull { it.simpleName == "HomeCard" }, "the constructed subclass must be merged")
+        assertNotNull(
+            model.classes.firstOrNull { it.simpleName == "BaseCard" },
+            "the cross-file SUPERCLASS must be merged so super-init runs; got ${model.classes.map { it.fqn }}",
+        )
+    }
+
+    @Test
     fun selfContainedPreviewDoesNotPullExtraFiles() {
         // A preview that references nothing cross-file lowers exactly as before (only its own declarations).
         val entry = """
