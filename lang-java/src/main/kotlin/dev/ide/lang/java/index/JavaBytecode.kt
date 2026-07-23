@@ -53,4 +53,13 @@ object JavaBytecode {
     }.getOrNull()
 
     fun isPublic(access: Int): Boolean = (access and Opcodes.ACC_PUBLIC) != 0
+
+    /** The declaration kind from the class access flags (annotations also carry `ACC_INTERFACE`, so test it
+     *  first). Same string vocabulary as [JavaSourceIndexer.DeclKind]`.name.lowercase()` for source types. */
+    fun kindOf(access: Int): String = when {
+        access and Opcodes.ACC_ANNOTATION != 0 -> "annotation"
+        access and Opcodes.ACC_INTERFACE != 0 -> "interface"
+        access and Opcodes.ACC_ENUM != 0 -> "enum"
+        else -> "class"
+    }
 }
