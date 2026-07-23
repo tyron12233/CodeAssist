@@ -367,6 +367,30 @@ android {
             manifestPlaceholders["admobAppId"] = testAdmobAppId
             buildConfigField("String", "AD_NATIVE_UNIT_ID", "\"$testAdmobNativeUnitId\"")
         }
+        // EXPERIMENTAL, non-shipping: an R8-minified build used only to measure how far the app's own
+        // dex (~61% of the APK, mostly the bundled Kotlin compiler + IntelliJ platform) can shrink. The
+        // shipping `release` build keeps R8 OFF (see above) because the toolchain is loaded reflectively;
+        // this variant explores that "revisit with keep rules" note behind conservative keep rules
+        // (proguard-rules-minified.pro keeps the reflective toolchain wholesale and tree-shakes only the
+        // safe libraries). Build with `:ide-android:assembleMinified` — R8 whole-program on this input is
+        // memory-hungry, so bump org.gradle.jvmargs (~8g) for the run. NOT runtime-validated: a minified
+        // build can boot and still break when it compiles/dexes a user project, so never ship it without
+        // exercising the full toolchain (compile -> dex -> sign -> run -> completion) on-device.
+        create("minified") {
+            initWith(getByName("release"))
+            isMinifyEnabled = true
+            isShrinkResources = false // isolate code shrinking; resources aren't the bulk
+            proguardFiles(
+                getDefaultProguardFile("proguard-android-optimize.txt"),
+                "proguard-rules-minified.pro",
+            )
+            // Sign with the release/upload key when configured, else the debug key so it installs locally.
+            signingConfig = signingConfigs.findByName("release") ?: signingConfigs.getByName("debug")
+            matchingFallbacks += listOf("release")
+            // Non-shipping: keep Google TEST ad ids (initWith(release) copied the real ones).
+            manifestPlaceholders["admobAppId"] = testAdmobAppId
+            buildConfigField("String", "AD_NATIVE_UNIT_ID", "\"$testAdmobNativeUnitId\"")
+        }
     }
 
     // AGP's built-in Kotlin aligns its jvmTarget to these Java options.
@@ -397,6 +421,12 @@ android {
                 "META-INF/AL2.0", "META-INF/LGPL2.1", "META-INF/LICENSE", "META-INF/LICENSE.txt",
                 "META-INF/LICENSE.md", "META-INF/NOTICE", "META-INF/NOTICE.txt", "META-INF/NOTICE.md",
                 "META-INF/DEPENDENCIES", "META-INF/*.txt",
+                // bundletool ships pre-dexed "archived app" stubs (archive/dex/*/classes.dex) used only by
+                // Play's app-archiving, which the on-device build never invokes. Dead weight in every build,
+                // and their `.dex`-alongside-`.class` mixing in the jar is exactly what makes whole-program
+                // R8 refuse the archive ("Cannot create android app from an archive containing both DEX and
+                // Java-bytecode content"). Dropping them keeps bundletool's transitives intact.
+                "com/android/tools/build/bundletool/archive/dex/**",
             )
             pickFirsts += setOf(
                 "META-INF/MANIFEST.MF",
@@ -849,3 +879,34 @@ dependencies {
     androidTestCompileOnly(project(":lang-java"))
     androidTestCompileOnly(project(":intellij-psi-host"))
 }
+
+// ============================================================================
+// R8 input fix for the experimental `minified` variant. The global
+// packaging.resources.excludes above drops bundletool's dead archive-dex stubs
+// from every build's PACKAGED OUTPUT, but whole-program R8 reads the dependency
+// jar directly (not the packaged resources), so it still sees the `.class`+`.dex`
+// mix and refuses it. Feed R8 a dex-stripped copy of the jar for `minified`
+// only. Scoped here (not global) because (a) the shipping R8-off builds don't
+// need it, and (b) doing it globally without dropping bundletool's protobuf/
+// dagger transitives (which resolve only through the bundletool module) needs a
+// transitive-preserving jar swap AGP doesn't cleanly allow — worth solving only
+// if/when R8 is enabled on a shipping variant. CONSEQUENCE for `minified`: the
+// module-exclude drops that protobuf/dagger closure, so the minified APK is a
+// slight under-estimate of a correct minified build (a few MB would return).
+val bundletoolNoDexSource: Configuration by configurations.creating {
+    isCanBeConsumed = false
+    isCanBeResolved = true
+}
+dependencies { bundletoolNoDexSource(libs.android.bundletool) { isTransitive = false } }
+
+val stripBundletoolDex = tasks.register<Jar>("stripBundletoolDex") {
+    description = "Repackage bundletool without its embedded .dex stubs so whole-program R8 can ingest it."
+    archiveFileName.set("bundletool-nodex.jar")
+    destinationDirectory.set(layout.buildDirectory.dir("stripped-libs"))
+    from(provider { zipTree(bundletoolNoDexSource.singleFile) }) { exclude("**/*.dex") }
+}
+
+configurations.matching { it.name.startsWith("minified") }.configureEach {
+    exclude(group = "com.android.tools.build", module = "bundletool")
+}
+dependencies { "minifiedImplementation"(files(stripBundletoolDex)) }
