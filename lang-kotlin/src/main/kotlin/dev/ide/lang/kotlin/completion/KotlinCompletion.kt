@@ -434,7 +434,11 @@ class KotlinCompletion(
                 // alongside its members (`Test.rainbowColors`). Named companions appear under their given name.
                 val companion = service.companionObjectSymbol(recvType.qualifiedName)
                     ?.takeIf { matcher.matches(it.name) }
-                members + enumConstants + listOfNotNull(companion) + service.companionMembersFor(
+                // A SOURCE type's nested types (`Outer.Nested`, a sealed interface's nested subclasses) are kept
+                // out of its member list by SourceIndex, so — unlike a classpath binary's — they don't arrive
+                // through `membersForCompletion`; add them explicitly so `Outer.` surfaces them.
+                val nestedTypes = service.nestedTypesOf(recvType.qualifiedName, prefix)
+                members + nestedTypes + enumConstants + listOfNotNull(companion) + service.companionMembersFor(
                     recvType.qualifiedName, prefix
                 ).filter { memberVisibleOn(it, typeReceiver = false) }
             } else {
