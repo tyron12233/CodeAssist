@@ -1009,4 +1009,149 @@
     <string name="chat_allow">允许</string>
     <string name="chat_allow_session">本次会话中允许</string>
     <string name="chat_deny">拒绝</string>
+
+    <!-- 设置页面内容（对应 ide-core/BuiltInSettingsPages.kt + SettingsBackend；由 UI 层的 SettingsLocalization.kt 覆盖显示） -->
+    <!-- 页面标题 -->
+    <string name="set_page_appearance">外观</string>
+    <string name="set_page_editor">编辑器</string>
+    <string name="set_page_completion">代码补全</string>
+    <string name="set_page_analysis">分析与检查</string>
+    <string name="set_page_preview">预览</string>
+    <string name="set_page_build">构建与依赖</string>
+    <string name="set_page_build_runtime">构建运行时</string>
+    <string name="set_page_privacy">隐私与数据</string>
+    <!-- 分组小标题 -->
+    <string name="set_grp_gestures">手势</string>
+    <string name="set_grp_keyboard">键盘</string>
+    <string name="set_grp_preview_sandbox">预览沙盒</string>
+    <string name="set_grp_privacy">隐私</string>
+    <string name="set_grp_storage">存储</string>
+    <string name="set_grp_debug_dexing">调试构建（Dex 转换）</string>
+    <!-- 滑块单位词 -->
+    <string name="set_unit_classes">个类</string>
+    <!-- 严重级别标签 -->
+    <string name="set_sev_error">错误</string>
+    <string name="set_sev_warning">警告</string>
+    <string name="set_sev_info">信息</string>
+    <string name="set_sev_hint">提示</string>
+    <!-- 外观 -->
+    <string name="set_appearance_theme">主题</string>
+    <string name="set_appearance_theme_desc">使用固定主题或跟随操作系统</string>
+    <string name="set_appearance_theme_light">浅色</string>
+    <string name="set_appearance_theme_dark">深色</string>
+    <string name="set_appearance_theme_system">跟随系统</string>
+    <string name="set_appearance_accent">强调色</string>
+    <string name="set_appearance_accent_desc">界面的高亮颜色</string>
+    <string name="set_appearance_accent_violet">紫色</string>
+    <string name="set_appearance_accent_teal">青色</string>
+    <string name="set_appearance_accent_orange">橙色（旧版）</string>
+    <!-- 编辑器 -->
+    <string name="set_editor_font_size">字号</string>
+    <string name="set_editor_code_font">代码字体</string>
+    <string name="set_editor_code_font_monospace">系统等宽字体</string>
+    <string name="set_editor_ligatures">字体连字</string>
+    <string name="set_editor_ligatures_desc">当代码字体支持时，渲染编程连字（-> != >= …）</string>
+    <string name="set_editor_inlay">内嵌提示</string>
+    <string name="set_editor_inlay_desc">以内嵌方式显示推断类型和参数名提示</string>
+    <string name="set_editor_semantic">语义高亮</string>
+    <string name="set_editor_semantic_desc">在词法着色之上叠加类型感知的着色</string>
+    <string name="set_editor_folding">代码折叠</string>
+    <string name="set_editor_folding_desc">折叠导入、方法体和块注释</string>
+    <string name="set_editor_wrap">自动换行</string>
+    <string name="set_editor_wrap_desc">在视口边缘软换行长行，而不是横向滚动</string>
+    <string name="set_editor_wrap_indent">缩进换行后的行</string>
+    <string name="set_editor_wrap_indent_desc">将换行行的后续行对齐到其缩进（当自动换行开启时）</string>
+    <string name="set_editor_two_axis">双向滚动</string>
+    <string name="set_editor_two_axis_desc">朝任意方向拖动即可同时在两个轴上滚动（触摸）</string>
+    <string name="set_editor_pinch">双指缩放</string>
+    <string name="set_editor_pinch_desc">用两指捏合以更改代码字号</string>
+    <string name="set_editor_kbd_suggest">键盘建议</string>
+    <string name="set_editor_kbd_suggest_desc">允许软键盘自动纠错、联想和自动加空格（普通键盘）。关闭以进行原始代码输入，这样键入的“.”不会被自动插入空格，但会失去联想候选栏。</string>
+    <!-- 代码补全 -->
+    <string name="set_completion_auto">自动显示建议</string>
+    <string name="set_completion_auto_desc">键入时自动弹出列表（关闭 = 仅 Ctrl-Space）</string>
+    <string name="set_completion_postfix">后缀模板</string>
+    <string name="set_completion_postfix_desc">提供 .val / .if / .notnull / … 等补全</string>
+    <string name="set_completion_word">单词补全</string>
+    <string name="set_completion_word_desc">将文件中已有的单词作为后备建议</string>
+    <string name="set_completion_delay">自动弹出延迟</string>
+    <string name="set_completion_delay_desc">按键后多久显示列表</string>
+    <string name="set_completion_max">最大建议数</string>
+    <!-- 分析与检查 -->
+    <string name="set_analysis_otf">实时分析</string>
+    <string name="set_analysis_otf_desc">键入时显示诊断（关闭 = 仅在构建时）</string>
+    <string name="set_analysis_reparse">重新解析延迟</string>
+    <string name="set_analysis_reparse_desc">按键后重新分析前的静默时间</string>
+    <string name="set_analysis_perf">记录分析耗时</string>
+    <string name="set_analysis_perf_desc">诊断用途：将各阶段（语义 / 诊断 / 折叠 / 内嵌提示 / 预览）以及每步的耗时写入日志，以便找出使文件变慢的原因。可在“隐私 → 查看日志”中查看。默认关闭。</string>
+    <!-- 预览沙盒 -->
+    <string name="set_preview_file">阻止文件访问</string>
+    <string name="set_preview_file_desc">阻止预览代码读写文件（java.io / java.nio / kotlin.io）。被阻止的调用返回 null，并列在预览的问题标签中。对新打开的预览生效。</string>
+    <string name="set_preview_net">阻止网络访问</string>
+    <string name="set_preview_net_desc">阻止预览代码打开套接字或 HTTP 连接（java.net、OkHttp、Ktor）。</string>
+    <string name="set_preview_android">阻止 Android 系统调用</string>
+    <string name="set_preview_android_desc">阻止预览代码启动 Activity/Service、发送广播、使用系统服务、ContentResolver 或 SharedPreferences。资源和密度读取仍然可用。</string>
+    <string name="set_preview_process">阻止进程与反射</string>
+    <string name="set_preview_process_desc">阻止预览代码执行进程、调用 System.exit、加载本地库或通过反射调用成员。</string>
+    <!-- 构建与依赖 -->
+    <string name="set_build_conflict">依赖冲突</string>
+    <string name="set_build_conflict_desc">当依赖图中请求了两个版本时，选用哪个版本</string>
+    <string name="set_build_conflict_newest">最新</string>
+    <string name="set_build_conflict_pinned">直接依赖优先</string>
+    <string name="set_build_conflict_fail">冲突时报错</string>
+    <!-- 构建运行时（标题/选项/按钮 + 静态描述；与设备相关的描述保留后端英文） -->
+    <string name="set_br_separate">在独立进程中构建</string>
+    <string name="set_br_separate_desc">在独立进程中运行构建和你的程序，这样内存溢出崩溃就不会拖垮 IDE。关闭 = 在进程内构建（占用内存更少，但没有隔离）。需要通知权限（独立进程会显示进度通知）；若没有该权限，构建将在进程内运行。下次打开项目时生效。</string>
+    <string name="set_br_notif">构建通知</string>
+    <string name="set_br_notif_desc">在独立进程中运行构建或你的程序时显示进度通知。隔离构建所需；若关闭，构建将在应用内运行。</string>
+    <string name="set_br_notif_btn">启用</string>
+    <string name="set_br_r8mode">R8 执行方式</string>
+    <string name="set_br_r8mode_forked">独立 VM</string>
+    <string name="set_br_r8mode_inprocess">进程内</string>
+    <string name="set_br_r8heap">R8 独立 VM 堆内存</string>
+    <string name="set_br_dexoff">堆外 Dex 转换阈值</string>
+    <string name="set_br_dexbatch">Dex 合并批大小</string>
+    <string name="set_br_dexbatch_desc">在非常大的应用中，最后的 Dex 转换步骤会分批合并类，以免一次性把所有类都放入内存。较小的批次可降低内存占用（适合低内存设备），但会略微增大 APK 体积（跨类共享压缩更少）；较大的批次打包更紧凑，但每次合并需要更多内存。大多数应用永远不会触及此设置，它只在类数超过数千时才会生效。</string>
+    <string name="set_br_dexfork">最大并发 Dex 进程数</string>
+    <!-- 隐私与数据 -->
+    <string name="set_privacy_analytics">分享性能分析数据</string>
+    <string name="set_privacy_analytics_desc">仅匿名性能指标，绝不包含你的代码或文件名</string>
+    <string name="set_privacy_clear">清除缓存</string>
+    <string name="set_privacy_clear_desc">释放可再生的依赖 / 语言 / 预览缓存（绝不包含源代码）</string>
+    <string name="set_privacy_clear_btn">清除</string>
+    <string name="set_privacy_logs">查看日志</string>
+    <string name="set_privacy_logs_desc">最近的编辑器、分析和构建活动</string>
+    <string name="set_privacy_logs_btn">打开</string>
+    <string name="set_privacy_backup">备份工程项目</string>
+    <string name="set_privacy_backup_desc">将每个项目导出为单个 zip</string>
+    <string name="set_privacy_backup_btn">备份</string>
+
+    <!-- 本地化补充：此前在 composable 中硬编码的零散界面文本 -->
+    <string name="toggle_on">开</string>
+    <string name="toggle_off">关</string>
+    <string name="picker_delete_project">删除项目</string>
+    <string name="storage_copy_path">复制路径</string>
+    <string name="symbolbar_tab">Tab</string>
+    <string name="rename_failed">重命名失败</string>
+    <string name="learn_check_failed">检查失败</string>
+    <string name="palette_section_goto">转到</string>
+    <string name="quickdoc_parameters">参数</string>
+    <string name="quickdoc_returns">返回值</string>
+    <string name="quickdoc_throws">异常</string>
+    <string name="quickdoc_see_also">另请参阅</string>
+    <string name="respreview_no_preview">此文件暂无预览</string>
+    <string name="respreview_render_drawable_failed">无法渲染此 Drawable</string>
+    <string name="respreview_unsupported">不支持：&lt;%1$s>，%2$s</string>
+    <string name="respreview_no_colors">此文件未声明任何颜色</string>
+    <string name="respreview_unresolved">（未解析）</string>
+    <string name="respreview_decode_image_failed">无法解码此图片</string>
+    <string name="modcfg_consumer_suffix">%1$s · 消费者</string>
+    <string name="block_palette_if">如果</string>
+    <string name="block_palette_if_else">如果 / 否则</string>
+    <string name="block_palette_for_each">遍历</string>
+    <string name="block_palette_while">循环</string>
+    <string name="block_palette_return">返回</string>
+    <string name="block_palette_variable">变量</string>
+    <string name="block_palette_call">调用</string>
+    <string name="block_palette_comment">注释</string>
 </resources>
