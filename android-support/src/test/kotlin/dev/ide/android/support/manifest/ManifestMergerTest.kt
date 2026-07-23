@@ -90,6 +90,33 @@ class ManifestMergerTest {
     }
 
     @Test
+    fun unresolvedPlaceholderInAnIdentifierAttributeIsAnError() {
+        // A library authority/name left with an unresolved ${…} is a hard `aapt2 link` failure ("attribute
+        // 'android:name'/'package' … must be a valid Java package name"). The merge escalates it to a precise
+        // error naming the element, instead of emitting a manifest aapt2 rejects on a line number.
+        val r = ManifestMerger.mergeXml(APP, listOf(FIREBASE_LIB), emptyMap())
+        assertTrue(r.hasErrors, "an unresolved placeholder in an identifier attribute should fail the merge")
+        assertTrue(
+            r.messages.any { it.severity == ManifestMerger.Severity.ERROR && "provider" in it.text && "authorities" in it.text },
+            "the error should name the offending <provider> android:authorities: ${r.messages}",
+        )
+    }
+
+    @Test
+    fun queriesPackageWithUnresolvedNameIsReportedNotAcceptedSilently() {
+        // Android 11 package visibility: <queries><package android:name> is validated by aapt2 as a Java
+        // package name; an unresolved placeholder there is the exact "valid Java package name" failure.
+        val lib = """
+            <manifest xmlns:android="http://schemas.android.com/apk/res/android" package="com.lib">
+                <queries><package android:name="${'$'}{targetApp}" /></queries>
+            </manifest>
+        """.trimIndent()
+        val r = ManifestMerger.mergeXml(APP, listOf(lib), mapOf("applicationId" to "com.example.app"))
+        assertTrue(r.hasErrors, "an unresolved <queries><package android:name> should fail the merge: ${r.messages}")
+        assertTrue(r.messages.any { it.severity == ManifestMerger.Severity.ERROR && "package" in it.text })
+    }
+
+    @Test
     fun dedupesAComponentDeclaredInBothAppAndLibrary() {
         val lib = """
             <manifest xmlns:android="http://schemas.android.com/apk/res/android" package="com.lib">

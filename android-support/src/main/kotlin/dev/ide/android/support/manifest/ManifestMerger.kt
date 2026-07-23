@@ -31,7 +31,10 @@ import javax.xml.parsers.DocumentBuilderFactory
  *    `tools:*` attributes are stripped from the output (aapt2 does not understand them).
  *  - **Placeholders**: `${name}` in any attribute value is replaced from the supplied map (`${applicationId}`
  *    being the one Firebase/Play Services rely on, e.g. a `FirebaseInitProvider` authority). An unresolved
- *    placeholder is left verbatim and reported (ManifestMerger2 fails the build; the IDE keeps going).
+ *    placeholder is left verbatim and reported; in an IDENTIFIER attribute (a component/permission
+ *    `android:name`, `<manifest package>`, a `<queries><package>` name, or `android:authorities`) it is
+ *    escalated to a build error by [validateIdentifierAttributes], since `aapt2 link` hard-fails those with a
+ *    cryptic "must be a valid Java package name" — elsewhere (e.g. `android:label`) the IDE stays lenient.
  *  - **`uses-sdk`**: the app owns its SDK levels (the build config feeds `aapt2 --min/--target-sdk-version`),
  *    so a library's `<uses-sdk>` never reaches the output: its min/target/maxSdkVersion are dropped if the app
  *    declares its own, and the whole element is skipped if the app declares none (importing it would make the
@@ -125,6 +128,12 @@ object ManifestMerger {
         // tools namespace so the output is a clean, aapt2-consumable manifest.
         applyRemovals(mergedDoc.documentElement)
         stripToolsArtifacts(mergedDoc.documentElement)
+        // Final gate: an identifier attribute (a component/permission `android:name`, `<manifest package>`,
+        // `<queries><package android:name>`, `android:authorities`) that is empty or still carries an
+        // unresolved `${…}` after substitution is a HARD `aapt2 link` failure ("attribute 'android:name' …
+        // must be a valid Java package name") — surface it here as a precise, actionable error instead of
+        // letting aapt2 fail on a line number. Matches AGP, which treats an unresolved placeholder as an error.
+        validateIdentifierAttributes(mergedDoc.documentElement, messages)
         return Result(serialize(mergedDoc), messages)
     }
 
@@ -236,6 +245,41 @@ object ManifestMerger {
         "manifest" -> ns == null && local == "package"
         "uses-sdk" -> ns == ANDROID_NS && (local == "minSdkVersion" || local == "targetSdkVersion" || local == "maxSdkVersion")
         else -> false
+    }
+
+    // ---- output validation ---------------------------------------------------------------------
+
+    /**
+     * Flag identifier attributes aapt2 will reject in the merged output — a component/permission `android:name`,
+     * the root `<manifest package>`, a `<queries><package android:name>` (Android 11 visibility), or a
+     * `<provider android:authorities>` — that is EMPTY or still carries an unresolved `${…}` placeholder after
+     * substitution. aapt2 fails these late with "attribute 'android:name' in <X> tag must be a valid Java
+     * package name"; reporting them here names the offending element + value so the cause is actionable. A
+     * dependency whose manifest needs a placeholder the app never defines is the common trigger.
+     */
+    private fun validateIdentifierAttributes(root: Element, msgs: MutableList<Message>) {
+        fun report(e: Element, attrLabel: String, value: String) {
+            val reason = if ("\${" in value) "has an unresolved \${} placeholder" else "is empty"
+            msgs += Message(
+                Severity.ERROR,
+                "<${e.tagName}> $attrLabel $reason (\"$value\") — aapt2 requires a valid identifier here. " +
+                    "Define the placeholder value (the app's applicationId/namespace, or a manifestPlaceholder " +
+                    "the dependency expects), or fix the dependency's manifest.",
+            )
+        }
+        fun checkAndroidName(e: Element) {
+            val v = getAttr(e, ANDROID_NS, "name") ?: return // absent is legal (aapt2 checks required-ness itself)
+            if (v.isEmpty() || "\${" in v) report(e, "android:name", v)
+        }
+        when (root.tagName) {
+            "manifest" -> getAttr(root, null, "package")?.let { if ("\${" in it) report(root, "package", it) }
+            "activity", "activity-alias", "service", "receiver", "provider", "application", "instrumentation",
+            "permission", "permission-group", "permission-tree", "uses-permission", "package" -> checkAndroidName(root)
+        }
+        if (root.tagName == "provider") {
+            getAttr(root, ANDROID_NS, "authorities")?.let { if (it.isEmpty() || "\${" in it) report(root, "android:authorities", it) }
+        }
+        childElements(root).forEach { validateIdentifierAttributes(it, msgs) }
     }
 
     // ---- removals + tools cleanup --------------------------------------------------------------
