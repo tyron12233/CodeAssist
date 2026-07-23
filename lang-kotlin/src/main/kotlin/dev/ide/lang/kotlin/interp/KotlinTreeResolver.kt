@@ -1285,8 +1285,16 @@ class KotlinTreeResolver(
             val callee = ResolvedCallable.Source(name, "${sc.fqn}/${sc.primaryArity}", emptyList(), isConstructor = true)
             return synthRefLambda(callee, DispatchKind.CONSTRUCTOR, receiverNode = null, arity = sc.primaryArity, span = span)
         }
-        // A library class.
         val fqn = runCatching { service.resolveTypeName(name, resolver.fileContext) }.getOrNull() ?: return null
+        // A whole-project SOURCE class declared in another file (the fast path above is current-file only) —
+        // mirror its `Type(...)` constructor callee, INCLUDING a class with an implicit constructor (where
+        // `constructorsOf` returns nothing), which would otherwise fall through and be dropped as unresolved.
+        if (service.isSourceClass(fqn) && !service.isObject(fqn)) {
+            val arity = runCatching { service.sourceClass(fqn) }.getOrNull()?.constructors?.firstOrNull()?.paramTexts?.size ?: 0
+            val callee = ResolvedCallable.Source(name, "$fqn/$arity", emptyList(), isConstructor = true)
+            return synthRefLambda(callee, DispatchKind.CONSTRUCTOR, receiverNode = null, arity = arity, span = span)
+        }
+        // A library class.
         val ctor = runCatching { service.constructorsOf(fqn) }.getOrDefault(emptyList()).firstOrNull() ?: return null
         return synthRefLambda(toCallable(ctor), DispatchKind.CONSTRUCTOR, receiverNode = null, arity = ctor.paramTypes.size, span = span)
     }
