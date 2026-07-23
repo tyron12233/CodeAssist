@@ -50,10 +50,18 @@ internal fun KotlinResolver.composableContextWalk(offset: Int): ComposableContex
                 if (expected?.isComposable == true) return ComposableContext.COMPOSABLE
                 val callee =
                     enclosingCallAndParamIndex(node)?.let { resolveCalleeFunction(it.first) }
-                // Couldn't determine what kind of lambda this is → unknown context (back off downstream).
-                if (expected == null && callee == null) return ComposableContext.UNKNOWN
-                // A non-inline lambda resets the context; an inline lambda is transparent (keep walking out).
-                if (callee?.isInline != true) return ComposableContext.NON_COMPOSABLE
+                when {
+                    // An inline lambda is transparent: keep walking out to the real enclosing boundary.
+                    callee?.isInline == true -> {}
+                    // Only a SOURCE callee's functional parameter is faithful: a confirmed non-`@Composable`
+                    // type genuinely resets the context, so this lambda is a NON_COMPOSABLE boundary.
+                    callee != null && callee.origin.fromSource && expected != null -> return ComposableContext.NON_COMPOSABLE
+                    // A binary callee (a `@Composable` on a function-type parameter can be dropped by a stale
+                    // metadata decode) or an unresolved callee / unknown expected type → can't tell; back off,
+                    // so a valid `@Composable` call (`Button(onClick = {}) { Text(...) }`) isn't false-flagged.
+                    // Mirrors the suspend sibling's guard exactly.
+                    else -> return ComposableContext.UNKNOWN
+                }
             }
 
             else -> {}
