@@ -93,6 +93,15 @@ fun KotlinResolver.inheritanceProblems(cls: KtClassOrObject, concrete: Boolean):
     val closure = resolvedSupertypeMembers(cls) ?: return InheritanceReport.EMPTY
     val byName: Map<String, List<KotlinSymbol>> = closure.groupBy { it.name }
     val missing = if (concrete) unimplementedFrom(cls, closure) else emptyList()
+    // `overridesNothing` fires on ABSENCE from the closure, so it is sound only when the closure is fully
+    // enumerable. A binary/framework DIRECT supertype (`android.view.View`, `ComponentActivity`) reaches
+    // inherited members through boot-classpath ancestors the symbol reader may not have read — its chain
+    // enumeration is best-effort, so a valid `override fun onDraw` could look like it overrides nothing. Back
+    // off in that case (mirroring the `super.member` guard); `missing`/`needsOverride` fire on POSITIVE finds
+    // and so stay sound under an incomplete closure.
+    val closureFullyEnumerable = cls.superTypeListEntries.all { e ->
+        e.typeReference?.text?.let { service.resolveTypeName(it, fileContext) }?.let { service.sourceClass(it) != null } == true
+    }
     val overridesNothing = ArrayList<KtCallableDeclaration>()
     val needsOverride = ArrayList<Pair<KtCallableDeclaration, KotlinSymbol>>()
     for (d in cls.declarations) {
@@ -101,7 +110,7 @@ fun KotlinResolver.inheritanceProblems(cls: KtClassOrObject, concrete: Boolean):
         val name = member.name ?: continue
         val sameName = byName[name].orEmpty()
         if (member.hasModifier(KtTokens.OVERRIDE_KEYWORD)) {
-            if (sameName.isEmpty()) overridesNothing += member // `override` but nothing carries this name
+            if (closureFullyEnumerable && sameName.isEmpty()) overridesNothing += member // `override` but nothing carries this name
         } else if (!member.hasModifier(KtTokens.PRIVATE_KEYWORD)) {
             hiddenSupertypeMember(member, sameName)?.let { needsOverride += member to it }
         }
