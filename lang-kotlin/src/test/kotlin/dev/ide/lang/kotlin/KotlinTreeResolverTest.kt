@@ -823,6 +823,15 @@ class KotlinTreeResolverTest {
         assertTrue(fn.isComplete, "nested-type access should lower completely; diags=${fn.diagnostics}")
     }
 
+    @Test
+    fun byDelegateThroughLambdaReturningStateLowersToValueDelegate() {
+        // Regression (the Compose Counter): `var count by remember { mutableStateOf(0) }`. The delegate type
+        // is inferred THROUGH the lambda's return (remember's `fun <T> remember(() -> T): T`); the resolver
+        // must recognize the `.value` (State) delegate rather than rejecting it as "not a `.value` delegate".
+        val fn = lower("package demo\nfun f() { var count by remember { mkState(0) }\n  count = count + 1 }")
+        assertTrue(fn.isComplete, "state-by-delegate through a lambda-return should lower; diags=${fn.diagnostics}")
+    }
+
     companion object {
         val srcDir: Path = tempProject(
             mapOf(
@@ -869,6 +878,11 @@ class KotlinTreeResolverTest {
                         val Settings: Vec get() = Vec()
                     }
                     class Line { class Align { companion object { val Center: Int = 1 } } }
+                    interface St<T> { var value: T }
+                    fun <T> mkState(v: T): St<T> = TODO()
+                    inline fun <T> remember(calc: () -> T): T = calc()
+                    operator fun <T> St<T>.getValue(thisRef: Any?, prop: kotlin.reflect.KProperty<*>): T = value
+                    operator fun <T> St<T>.setValue(thisRef: Any?, prop: kotlin.reflect.KProperty<*>, v: T) { value = v }
                     class Pads
                     class Widget {
                         fun pad(p: Pads): Widget = this
