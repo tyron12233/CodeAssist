@@ -138,4 +138,1080 @@
     <string name="chat_new">جلسة جديدة</string>
     <string name="chat_retry">إعادة المحاولة</string>
     <string name="chat_thinking">جاري التفكير…</string>
+
+    <!-- ==================== Added to reach parity with English ==================== -->
+    <!-- Plurals: projects, files, modules -->
+    <plurals name="caproj_files">
+        <item quantity="one">ملف واحد</item>
+        <item quantity="two">ملفان</item>
+        <item quantity="few">%1$d ملفات</item>
+        <item quantity="many">%1$d ملفًا</item>
+        <item quantity="other">%1$d ملف</item>
+    </plurals>
+    <plurals name="project_opened_minutes">
+        <item quantity="one">فُتح قبل دقيقة واحدة</item>
+        <item quantity="two">فُتح قبل دقيقتين</item>
+        <item quantity="few">فُتح قبل %1$d دقائق</item>
+        <item quantity="many">فُتح قبل %1$d دقيقة</item>
+        <item quantity="other">فُتح قبل %1$d دقيقة</item>
+    </plurals>
+    <plurals name="project_opened_hours">
+        <item quantity="one">فُتح قبل ساعة واحدة</item>
+        <item quantity="two">فُتح قبل ساعتين</item>
+        <item quantity="few">فُتح قبل %1$d ساعات</item>
+        <item quantity="many">فُتح قبل %1$d ساعة</item>
+        <item quantity="other">فُتح قبل %1$d ساعة</item>
+    </plurals>
+    <plurals name="project_opened_days">
+        <item quantity="one">فُتح قبل يوم واحد</item>
+        <item quantity="two">فُتح قبل يومين</item>
+        <item quantity="few">فُتح قبل %1$d أيام</item>
+        <item quantity="many">فُتح قبل %1$d يومًا</item>
+        <item quantity="other">فُتح قبل %1$d يوم</item>
+    </plurals>
+    <plurals name="project_opened_weeks">
+        <item quantity="one">فُتح قبل أسبوع واحد</item>
+        <item quantity="two">فُتح قبل أسبوعين</item>
+        <item quantity="few">فُتح قبل %1$d أسابيع</item>
+        <item quantity="many">فُتح قبل %1$d أسبوعًا</item>
+        <item quantity="other">فُتح قبل %1$d أسبوع</item>
+    </plurals>
+    <plurals name="modules">
+        <item quantity="one">وحدة واحدة</item>
+        <item quantity="two">وحدتان</item>
+        <item quantity="few">%1$d وحدات</item>
+        <item quantity="many">%1$d وحدة</item>
+        <item quantity="other">%1$d وحدة</item>
+    </plurals>
+    <plurals name="recovered_projects">
+        <item quantity="one">تم استرداد مشروع واحد من إصدار أقدم</item>
+        <item quantity="two">تم استرداد مشروعين من إصدار أقدم</item>
+        <item quantity="few">تم استرداد %1$d مشاريع من إصدار أقدم</item>
+        <item quantity="many">تم استرداد %1$d مشروعًا من إصدار أقدم</item>
+        <item quantity="other">تم استرداد %1$d مشروع من إصدار أقدم</item>
+    </plurals>
+    <string name="recovered_projects_content">تستخدم هذه المشاريع Gradle وتُفتح في وضع توافق محدود، وقد لا تعمل بعض الميزات، وقد لا تُبنى حتى يُعاد إضافة التبعيات. تظل ملفاتك الأصلية آمنة في مجلد التخزين الخاص بك.</string>
+
+    <!-- Block editor -->
+    <string name="block_cannot_project">لا يمكن عرض هذا الملف ككتل بعد.</string>
+    <string name="block_projecting">جاري عرض الكتل…</string>
+    <string name="block_fold">طي</string>
+    <string name="block_keyword_to">إلى</string>
+    <string name="block_edit_expression">تحرير التعبير</string>
+    <string name="block_focus_hint">انقر على مقبس لتحريره؛ انقر على شريحة متداخلة للتعمق أكثر.</string>
+    <string name="block_add_block">إضافة كتلة</string>
+    <string name="block_trash">حذف</string>
+    <string name="block_drop_to_delete">أفلِت للحذف</string>
+    <string name="block_button">كتلة</string>
+    <string name="block_live_projection">عرض مباشر · متزامن مع الكود</string>
+    <string name="block_add_a_block">إضافة كتلة</string>
+    <string name="block_statement_slot">مقبس عبارة</string>
+    <string name="block_searching_index">جاري البحث في الفهرس…</string>
+    <string name="block_no_matches">لا توجد نتائج مطابقة</string>
+    <string name="block_no_index_matches">لا توجد نتائج مطابقة في الفهرس</string>
+    <string name="block_search_placeholder">ابحث في الكتل والأصناف والدوال…</string>
+    <string name="block_wrap_if">تغليف بـ if</string>
+    <string name="block_duplicate">تكرار</string>
+    <plurals name="block_import_count">
+        <item quantity="one">· عملية استيراد واحدة</item>
+        <item quantity="two">· عمليتا استيراد</item>
+        <item quantity="few">· %1$d عمليات استيراد</item>
+        <item quantity="many">· %1$d عملية استيراد</item>
+        <item quantity="other">· %1$d عملية استيراد</item>
+    </plurals>
+    <plurals name="block_block_count">
+        <item quantity="one">· كتلة واحدة</item>
+        <item quantity="two">· كتلتان</item>
+        <item quantity="few">· %1$d كتل</item>
+        <item quantity="many">· %1$d كتلة</item>
+        <item quantity="other">· %1$d كتلة</item>
+    </plurals>
+
+    <!-- Editor view -->
+    <string name="edview_open_a_file_from_navigator">افتح ملفًا من المتصفح</string>
+    <string name="edview_no_file_open_title">لا يوجد ملف مفتوح</string>
+    <string name="edview_no_file_open_hint">اختر ملفًا من المتصفح لبدء التحرير</string>
+    <string name="tab_close_others">إغلاق البقية</string>
+    <string name="tab_close_to_the_right">إغلاق ما على اليمين</string>
+    <string name="tab_close_to_the_left">إغلاق ما على اليسار</string>
+    <string name="tab_close_all">إغلاق الكل</string>
+
+    <!-- File tree -->
+    <string name="filetree_open_in_file_manager">الفتح في مدير الملفات</string>
+    <string name="filetree_import_files">استيراد ملفات</string>
+    <string name="filetree_change_view">تغيير العرض</string>
+    <string name="filetree_scope_project">المشروع</string>
+    <string name="filetree_scope_all_files">جميع الملفات</string>
+    <string name="filetree_more_actions">المزيد من الإجراءات</string>
+    <string name="filetree_new_file">ملف جديد</string>
+    <string name="filetree_new_folder">مجلد جديد</string>
+    <string name="filetree_expand_all">توسيع الكل</string>
+    <string name="filetree_collapse_all">طي الكل</string>
+    <string name="filetree_refresh">تحديث</string>
+    <string name="filetree_sort_by">ترتيب حسب</string>
+    <string name="filetree_sort_name">الاسم</string>
+    <string name="filetree_sort_type">النوع</string>
+    <string name="filetree_settings_of">إعدادات %1$s</string>
+    <string name="filetree_dependencies_of">تبعيات %1$s</string>
+    <string name="filetree_share_node">مشاركة %1$s</string>
+    <string name="filetree_actions_for">إجراءات %1$s</string>
+    <string name="filetree_module_settings">إعدادات الوحدة</string>
+    <string name="filetree_dependencies">التبعيات</string>
+    <string name="filetree_add_source_root">إضافة جذر مصدر</string>
+    <string name="filetree_new">جديد</string>
+    <string name="filetree_import_from_file_manager">استيراد من مدير الملفات</string>
+    <string name="filetree_export">تصدير…</string>
+    <string name="filetree_reveal_in_file_manager">إظهار في مدير الملفات</string>
+    <string name="filetree_rename">إعادة تسمية</string>
+    <string name="filetree_move">نقل</string>
+    <string name="filetree_copy">نسخ</string>
+    <string name="filetree_delete">حذف</string>
+    <string name="filetree_java_class">صنف Java</string>
+    <string name="filetree_kotlin_file">ملف Kotlin</string>
+    <string name="filetree_resource_file">ملف موارد</string>
+    <string name="filetree_file">ملف</string>
+    <string name="filetree_directory">مجلد</string>
+    <string name="filetree_new_in">جديد في %1$s</string>
+
+    <!-- Build console -->
+    <string name="buildc_build">بناء</string>
+    <string name="buildc_collapse">طي</string>
+    <string name="buildc_status_idle">خامل</string>
+    <string name="buildc_status_running">قيد التشغيل…</string>
+    <string name="buildc_status_succeeded">نجح</string>
+    <string name="buildc_status_failed">فشل</string>
+    <string name="buildc_copied">تم النسخ</string>
+    <string name="buildc_copy">نسخ %1$s</string>
+    <string name="buildc_working">جاري العمل…</string>
+    <string name="buildc_tab_problems">المشكلات</string>
+    <string name="buildc_tab_log">السجل</string>
+    <string name="buildc_tab_steps">الخطوات</string>
+    <string name="buildc_tab_logcat">Logcat</string>
+    <string name="buildc_filter_all">الكل %1$d</string>
+    <string name="buildc_filter_errors">الأخطاء %1$d</string>
+    <string name="buildc_filter_warnings">التحذيرات %1$d</string>
+    <string name="buildc_no_problems">لا توجد مشكلات.</string>
+    <string name="buildc_no_problems_match">لا توجد مشكلات مطابقة لهذا المرشِّح.</string>
+    <string name="buildc_ungroup">إلغاء التجميع</string>
+    <string name="buildc_group_by_task">التجميع حسب المهمة</string>
+    <string name="buildc_empty_log">اضغط تشغيل لبناء هذه الوحدة وتشغيلها.</string>
+    <string name="buildc_no_log_match">لا توجد أسطر سجل مطابقة.</string>
+    <string name="buildc_logcat_empty">شغّل تطبيق تصحيح لرؤية سجلاته هنا.</string>
+    <string name="buildc_logcat_connected">متصل</string>
+    <string name="buildc_logcat_waiting">في انتظار التطبيق…</string>
+    <string name="buildc_logcat_idle">لا يوجد تطبيق قيد التشغيل</string>
+    <string name="buildc_general">عام</string>
+    <string name="buildc_no_steps">لا توجد خطوات بناء بعد.</string>
+    <string name="buildc_indexing">جاري الفهرسة…</string>
+    <string name="buildc_filter_log">تصفية السجل…</string>
+    <string name="buildc_loglevel_all">الكل</string>
+    <string name="buildc_loglevel_warnings">التحذيرات</string>
+    <string name="buildc_loglevel_errors">الأخطاء</string>
+    <string name="buildc_step_up_to_date">محدَّث</string>
+    <string name="buildc_step_no_source">لا مصدر</string>
+    <string name="buildc_step_skipped">تم التخطي</string>
+    <string name="buildc_build_succeeded">نجح البناء</string>
+    <string name="buildc_build_failed">فشل البناء</string>
+
+    <!-- Code actions -->
+    <string name="codeaction_show_context_actions">إظهار إجراءات السياق</string>
+    <string name="codeaction_preview_composable">معاينة هذا الـ composable</string>
+    <string name="codeaction_dismiss">تجاهل</string>
+    <string name="codeaction_severity_error">خطأ</string>
+    <string name="codeaction_severity_warning">تحذير</string>
+    <string name="codeaction_severity_unused">غير مستخدم</string>
+    <string name="codeaction_severity_info">معلومة</string>
+    <string name="codeaction_severity_hint">تلميح</string>
+    <string name="codeaction_quick_fixes">إصلاحات سريعة</string>
+
+    <!-- Completion -->
+    <string name="completion_no_suggestions">لا توجد اقتراحات</string>
+    <string name="completion_back_to_suggestions">العودة إلى الاقتراحات</string>
+    <string name="completion_show_documentation">إظهار التوثيق</string>
+    <string name="sig_more">+%1$d المزيد</string>
+    <string name="sig_peek_tip">انقر لمعاينة التعريف الكامل</string>
+    <string name="sig_peek_collapse">انقر للطي</string>
+
+    <!-- Editor sheet / symbol bar -->
+    <string name="edsheet_source_control">التحكم في المصدر</string>
+    <string name="edsheet_source_control_desc">تكامل Git. التجهيز والفروق والالتزام والدفع مدرجة في خارطة الطريق.</string>
+    <string name="symbolbar_move_line_up">تحريك السطر لأعلى</string>
+    <string name="symbolbar_move_line_down">تحريك السطر لأسفل</string>
+    <string name="symbolbar_duplicate_line">تكرار السطر</string>
+    <string name="symbolbar_next_problem">المشكلة التالية</string>
+    <string name="edbottomnav_source">المصدر</string>
+    <string name="breadcrumb_code">الكود</string>
+    <string name="breadcrumb_blocks">الكتل</string>
+    <string name="breadcrumb_preview">المعاينة</string>
+    <string name="breadcrumb_split">مقسّم</string>
+
+    <!-- Editor chrome -->
+    <string name="edchrome_files">الملفات</string>
+    <string name="edchrome_source">المصدر</string>
+    <string name="edchrome_more">المزيد</string>
+    <string name="edchrome_settings_and_tools">الإعدادات والأدوات</string>
+    <string name="edchrome_toggle_navigator">تبديل المتصفح</string>
+    <string name="edchrome_find_replace">بحث / استبدال</string>
+    <string name="edchrome_reformat_code">إعادة تنسيق الكود</string>
+    <string name="edchrome_optimize_imports">تحسين الاستيرادات</string>
+    <string name="edchrome_command_palette">لوحة الأوامر</string>
+    <string name="edchrome_toggle_inlay_hints">تبديل التلميحات المضمّنة</string>
+    <string name="edchrome_hide_inlay_hints">إخفاء التلميحات المضمّنة</string>
+    <string name="edchrome_show_inlay_hints">إظهار التلميحات المضمّنة</string>
+    <string name="edchrome_build_console">وحدة تحكم البناء</string>
+    <string name="edchrome_compose_preview">معاينة Compose</string>
+    <string name="edchrome_more_actions">المزيد من الإجراءات</string>
+    <string name="edchrome_resolving_dependencies">جاري حل التبعيات…</string>
+    <string name="edchrome_hide_resolution_details">إخفاء تفاصيل الحل</string>
+    <string name="edchrome_show_resolution_details">إظهار تفاصيل الحل</string>
+    <string name="edchrome_hide_unresolved_dependencies">إخفاء التبعيات غير المحلولة</string>
+    <string name="edchrome_show_unresolved_dependencies">إظهار التبعيات غير المحلولة</string>
+    <plurals name="edchrome_unresolved_dependencies">
+        <item quantity="one">تعذّر حل تبعية واحدة</item>
+        <item quantity="two">تعذّر حل تبعيتين</item>
+        <item quantity="few">تعذّر حل %1$d تبعيات</item>
+        <item quantity="many">تعذّر حل %1$d تبعية</item>
+        <item quantity="other">تعذّر حل %1$d تبعية</item>
+    </plurals>
+    <string name="edchrome_search_tasks">البحث في المهام…</string>
+    <string name="edchrome_nothing_to_run">لا شيء لتشغيله</string>
+    <string name="edchrome_no_matching_tasks">لا توجد مهام مطابقة</string>
+    <string name="edchrome_build_variant">متغيّر البناء</string>
+    <string name="edchrome_no_variants">لا توجد متغيرات</string>
+    <string name="edchrome_gradle_compatibility_mode">وضع توافق Gradle</string>
+    <string name="edchrome_gradle_compat">توافق Gradle</string>
+    <string name="edchrome_indexing">جاري الفهرسة…</string>
+    <string name="edchrome_indexing_percent">جاري الفهرسة… %1$d%</string>
+    <string name="edchrome_indexed">تمت الفهرسة</string>
+
+    <!-- Find / replace -->
+    <string name="find_toggle_replace">تبديل الاستبدال</string>
+    <string name="find_placeholder">بحث</string>
+    <string name="find_case_sensitive">Aa</string>
+    <string name="find_whole_word">W</string>
+    <string name="find_regex">.*</string>
+    <string name="find_previous_match">النتيجة السابقة</string>
+    <string name="find_next_match">النتيجة التالية</string>
+    <string name="find_replace_placeholder">استبدال</string>
+    <string name="find_replace">استبدال</string>
+    <string name="find_all">الكل</string>
+
+    <!-- Gradle compatibility -->
+    <string name="gradle_mode_title">وضع توافق Gradle</string>
+    <string name="gradle_resync">إعادة المزامنة</string>
+    <string name="gradle_syncing">جاري المزامنة من Gradle…</string>
+
+    <!-- Sources download -->
+    <string name="sources_not_installed">لم يتم تثبيت مصادر منصة Android (%1$s). وهي مطلوبة لأسماء معاملات android.* وتوثيقها.</string>
+    <string name="sources_download">تنزيل</string>
+    <string name="sources_downloading">جاري التنزيل…</string>
+    <string name="sources_download_failed">فشل التنزيل: %1$s</string>
+
+    <!-- Structure -->
+    <string name="structure_title">البنية</string>
+    <string name="structure_filter">تصفية…</string>
+    <string name="structure_no_symbols">لا توجد رموز في هذا الملف</string>
+    <string name="structure_no_matches">لا توجد نتائج مطابقة</string>
+    <string name="comingsoon_footnote">قريبًا</string>
+    <string name="edscreen_project_root">جذر المشروع</string>
+
+    <!-- Home / Explore / Store -->
+    <string name="home_store">استكشاف</string>
+    <string name="home_learn">تعلّم</string>
+    <string name="store_title">استكشاف</string>
+    <string name="store_subtitle">قوالب ومشاريع نموذجية للبدء منها</string>
+    <string name="store_settings_and_tools">الإعدادات والأدوات</string>
+    <string name="store_search_hint">ابحث في القوالب والنماذج</string>
+    <string name="store_all">الكل</string>
+    <string name="store_unavailable">الاستكشاف غير متاح</string>
+    <string name="store_unavailable_content">الاستكشاف غير متاح في هذا الإصدار.</string>
+    <string name="store_coming_soon">قريبًا</string>
+    <string name="store_community_content">ستظهر مشاريع المجتمع هنا بمجرد فتح باب الإرسال.</string>
+    <string name="store_no_matches">لا توجد نتائج مطابقة</string>
+    <string name="store_soon">قريبًا</string>
+    <string name="store_by_author">بواسطة %1$s</string>
+    <string name="store_use_template">استخدام هذا القالب</string>
+    <string name="store_create">إنشاء مشروع</string>
+    <string name="store_item_about">حول</string>
+    <string name="store_item_whats_included">ما ستحصل عليه</string>
+    <string name="store_item_details">التفاصيل</string>
+    <string name="store_item_type">النوع</string>
+    <string name="store_item_language">اللغة</string>
+    <string name="store_item_publisher">الناشر</string>
+    <string name="store_item_downloads">التنزيلات</string>
+    <string name="store_installing">جاري التثبيت…</string>
+    <string name="store_get">الحصول عليه</string>
+    <string name="store_kind_template">قالب</string>
+    <string name="store_kind_sample">نموذج</string>
+    <string name="store_kind_community">المجتمع</string>
+
+    <!-- Learn -->
+    <string name="learn_title">تعلّم</string>
+    <string name="learn_subtitle">أدلة ونماذج والمجتمع</string>
+    <string name="learn_documentation">التوثيق</string>
+    <string name="learn_documentation_content">أدلة البنية والبناء واللغات.</string>
+    <string name="learn_browse_samples">تصفح النماذج</string>
+    <string name="learn_browse_samples_content">افتح المشاريع النموذجية في الاستكشاف لقراءتها وتشغيلها.</string>
+    <string name="learn_community_content">اطرح الأسئلة وشارك ما تبنيه.</string>
+    <string name="learn_tutorials">دروس تفاعلية</string>
+    <string name="learn_tutorials_content">دروس خطوة بخطوة داخل المحرر.</string>
+    <string name="learn_soon">قريبًا</string>
+    <string name="learn_continue_learning">متابعة التعلّم</string>
+    <string name="learn_tracks">مسارات التعلّم</string>
+    <string name="learn_all">الكل</string>
+    <string name="learn_more_resources">المزيد</string>
+    <string name="learn_resume">استئناف</string>
+    <string name="learn_start">بدء</string>
+    <string name="learn_review">مراجعة</string>
+    <string name="learn_continue">متابعة</string>
+    <string name="learn_completed">مكتمل</string>
+    <string name="learn_minutes">%1$d دقيقة</string>
+    <string name="learn_lessons_progress">%1$d / %2$d دروس</string>
+    <string name="learn_step_progress">الخطوة %1$d من %2$d</string>
+    <string name="learn_run_check">تشغيل وفحص</string>
+    <string name="learn_running">قيد التشغيل…</string>
+    <string name="learn_need_hint">هل تحتاج إلى تلميح؟</string>
+    <string name="learn_hint_n">تلميح %1$d</string>
+    <string name="learn_show_solution">إظهار الحل</string>
+    <string name="learn_solution">الحل</string>
+    <string name="learn_copy_to_editor">نسخ إلى المحرر</string>
+    <string name="learn_next">التالي</string>
+    <string name="learn_finish">إنهاء</string>
+    <string name="learn_output">المخرجات</string>
+    <string name="learn_preparing">جاري تجهيز مساحة عمل البرمجة…</string>
+    <string name="learn_preparing_sub">جاري بناء فهرس الكود حتى يعمل الإكمال وفحص الأخطاء فورًا.</string>
+    <string name="learn_compose_preparing">جاري تجهيز مساحة عمل Compose…</string>
+    <string name="learn_compose_downloading">جاري تنزيل مكتبات Compose، ويحدث هذا مرة واحدة.</string>
+    <string name="learn_compose_indexing">جاري الفهرسة… تبدأ المعاينة بعد لحظات.</string>
+    <string name="learn_compose_edit_hint">حرّر الكود أعلاه وشاهده يُعاد عرضه</string>
+    <string name="learn_indexing">جاري الفهرسة… تتحسن الاقتراحات والفحوصات بعد لحظات</string>
+    <string name="learn_submit">إرسال</string>
+    <string name="learn_quiz_correct">صحيح!</string>
+    <string name="learn_quiz_incorrect">ليس تمامًا. حاول مرة أخرى.</string>
+    <string name="learn_lesson_complete">اكتمل الدرس!</string>
+    <string name="learn_lesson_complete_content">عمل رائع! حافظ على هذا الزخم.</string>
+    <plurals name="learn_lesson_count">
+        <item quantity="one">درس واحد</item>
+        <item quantity="two">درسان</item>
+        <item quantity="few">%1$d دروس</item>
+        <item quantity="many">%1$d درسًا</item>
+        <item quantity="other">%1$d درس</item>
+    </plurals>
+
+    <!-- Search -->
+    <string name="search_tab_symbols">الرموز</string>
+    <string name="search_tab_members">الأعضاء</string>
+    <string name="search_tab_text">النص</string>
+    <string name="search_find_in_files_hint">بحث في الملفات…</string>
+    <string name="search_hint">ابحث في %1$s…</string>
+    <string name="search_min_chars">اكتب حرفين على الأقل للبحث.</string>
+    <string name="search_indexing">جاري الفهرسة… تظهر الرموز أثناء بناء الفهرس.</string>
+    <string name="search_no_symbols">لم يُعثر على رموز.</string>
+    <string name="search_no_members">لم يُعثر على أعضاء.</string>
+    <string name="search_no_text_matches">لا توجد نتائج مطابقة في ملفات المشروع.</string>
+
+    <!-- Logs -->
+    <string name="logs_title">السجلات</string>
+    <string name="logs_filter_all">الكل</string>
+    <string name="logs_filter_warnings">التحذيرات</string>
+    <string name="logs_filter_errors">الأخطاء</string>
+    <string name="logs_filter_all_plugins">جميع الإضافات</string>
+    <string name="logs_filter_hint">تصفية السجلات…</string>
+    <string name="logs_resume">استئناف التتبع المباشر</string>
+    <string name="logs_pause">إيقاف التتبع المباشر مؤقتًا</string>
+    <string name="logs_copy_all">نسخ الكل</string>
+    <string name="logs_empty">لا توجد سجلات بعد.</string>
+    <string name="logs_no_match">لا توجد سجلات مطابقة لهذا المرشِّح.</string>
+
+    <!-- Command palette -->
+    <string name="palette_filter_all">الكل</string>
+    <string name="palette_filter_commands">الأوامر</string>
+    <string name="palette_filter_files">الملفات</string>
+    <string name="palette_filter_symbols">الرموز</string>
+    <string name="palette_filter_members">الأعضاء</string>
+    <string name="palette_hint">شغّل أمرًا، أو انتقل إلى ملف أو رمز…</string>
+    <string name="palette_type_to_search">اكتب للبحث في %1$s…</string>
+    <string name="palette_no_matches">لا توجد نتائج مطابقة</string>
+
+    <!-- Run -->
+    <string name="run_no_active_run">لا يوجد تشغيل نشط.</string>
+    <string name="run_back">رجوع</string>
+    <string name="run_run_again">تشغيل مرة أخرى</string>
+    <string name="run_building">جاري البناء…</string>
+    <string name="run_running">قيد التشغيل</string>
+    <string name="run_exit_code">خروج %1$d</string>
+    <string name="run_failed">فشل</string>
+    <string name="run_stopped">متوقف</string>
+    <string name="run_building_module">جاري بناء %1$s…</string>
+    <string name="run_running_module">جاري تشغيل %1$s</string>
+    <string name="run_no_output">(لا توجد مخرجات)</string>
+    <string name="run_type_input">اكتب المدخلات، ثم اضغط Enter…</string>
+    <string name="run_send">إرسال</string>
+    <string name="run_end_input_eof">إنهاء الإدخال (EOF)</string>
+    <string name="run_conflict_title">قيد التشغيل بالفعل</string>
+    <string name="run_conflict_message">لا يزال هناك بناء أو برنامج قيد التشغيل. هل تريد إيقافه وبدء هذا التشغيل بدلاً منه؟</string>
+    <string name="run_conflict_stop_and_run">إيقاف وتشغيل</string>
+    <string name="run_conflict_dont_ask">عدم السؤال مرة أخرى</string>
+
+    <!-- Build notifications -->
+    <string name="build_notif_title">عرض إشعارات البناء؟</string>
+    <string name="build_notif_message">يمكن لـ CodeAssist تشغيل عمليات البناء وبرنامجك في عملية منفصلة ومعزولة وعرض إشعار تقدّم أثناء تشغيلها. يمنع هذا Android من إيقاف البناء عند التبديل إلى تطبيق آخر، ويتيح لك متابعة التقدّم. اسمح بالإشعارات لتفعيل هذا.</string>
+    <string name="build_notif_not_now">ليس الآن</string>
+    <string name="build_notif_inprocess_title">ستُشغَّل عمليات البناء داخل التطبيق</string>
+    <string name="build_notif_inprocess_message">بدون إذن الإشعارات، تُشغَّل عمليات البناء داخل CodeAssist بدلاً من عملية منفصلة، ولن ترى إشعارات تقدّم البناء. يمكنك تفعيل الإشعارات في أي وقت من الإعدادات، ضمن وقت تشغيل البناء.</string>
+    <string name="build_notif_enabled">تم تفعيل إشعارات البناء</string>
+
+    <!-- Preview -->
+    <string name="preview_live">مباشر</string>
+    <string name="preview_paused">متوقف مؤقتًا</string>
+    <string name="preview_stop_live">إيقاف المعاينة المباشرة</string>
+    <string name="preview_resume_live">استئناف المعاينة المباشرة</string>
+    <string name="preview_rebuild">إعادة بناء المعاينة</string>
+    <string name="preview_choose_preview">اختيار المعاينة</string>
+    <string name="preview_no_preview_found">لم يُعثر على @Preview</string>
+    <string name="preview_renders_on_device">تُعرض معاينة Compose على الجهاز</string>
+    <string name="preview_device_phone">هاتف</string>
+    <string name="preview_device_compact">مدمج</string>
+    <string name="preview_device_tablet">جهاز لوحي</string>
+    <string name="preview_rotate">تدوير</string>
+    <string name="preview_night_mode">الوضع الليلي</string>
+    <string name="preview_night">ليلي</string>
+    <string name="preview_zoom_in">تكبير</string>
+    <string name="preview_fit">ملاءمة</string>
+    <string name="preview_problems">مشكلات المعاينة</string>
+    <string name="preview_copy_problems">نسخ المشكلات</string>
+    <string name="preview_render_error">خطأ في العرض</string>
+    <string name="preview_render_failed">فشل عرض المعاينة</string>
+    <plurals name="preview_problems_count">
+        <item quantity="one">مشكلة واحدة</item>
+        <item quantity="two">مشكلتان</item>
+        <item quantity="few">%1$d مشكلات</item>
+        <item quantity="many">%1$d مشكلة</item>
+        <item quantity="other">%1$d مشكلة</item>
+    </plurals>
+
+    <!-- Editor overlay -->
+    <string name="edoverlay_rename_kind">إعادة تسمية %1$s</string>
+    <string name="edoverlay_renaming">جاري إعادة التسمية…</string>
+    <string name="edoverlay_rename_hint">اضغط Enter لإعادة تسمية "%1$s"، وEsc للإلغاء</string>
+    <string name="edoverlay_go_to_line">الانتقال إلى سطر</string>
+    <string name="edoverlay_go_to_line_hint">السطر 1–%1$d  (سطر أو سطر:عمود)</string>
+    <string name="edoverlay_no_documentation">لا يوجد توثيق</string>
+    <string name="edoverlay_cut">قص</string>
+    <string name="edoverlay_paste">لصق</string>
+    <string name="edoverlay_select_all">تحديد الكل</string>
+    <string name="edoverlay_quick_documentation">توثيق سريع</string>
+    <string name="edoverlay_quick_actions">إجراءات سريعة</string>
+
+    <!-- New file -->
+    <string name="newfile_title">ملف جديد</string>
+    <string name="newfile_new_folder">مجلد جديد</string>
+    <string name="newfile_in">في %1$s</string>
+    <string name="newfile_file_name">اسم الملف</string>
+    <string name="newfile_folder_name">اسم المجلد</string>
+    <string name="newfile_file_name_hint">Helper.kt  ·  أو  res/raw/data.json</string>
+    <string name="newfile_folder_name_hint">utils  ·  أو  com/example/utils</string>
+    <string name="newfile_help_folder">استخدم / لتداخل المجلدات.</string>
+    <string name="newfile_help_file">استخدم / للمجلدات المتداخلة. تُنشئ .java/.kt هيكل صنف؛ و.xml عنصرًا جذريًا؛ وأي شيء آخر يكون فارغًا.</string>
+    <string name="newfile_package">الحزمة</string>
+    <string name="newfile_kind">النوع</string>
+    <string name="newfile_name">الاسم</string>
+    <string name="newfile_kind_class">صنف</string>
+    <string name="newfile_kind_interface">واجهة</string>
+    <string name="newfile_kind_enum">تعداد</string>
+    <string name="newfile_kind_abstract_class">صنف مجرّد</string>
+    <string name="newfile_kind_annotation">تعليق توضيحي</string>
+    <string name="newfile_kind_file">ملف</string>
+    <string name="newfile_kind_data_class">صنف بيانات</string>
+    <string name="newfile_kind_object">كائن</string>
+    <string name="newfile_new_java_class">صنف Java جديد</string>
+    <string name="newfile_new_kotlin_file">ملف Kotlin جديد</string>
+    <string name="newfile_source_java_hint">MyClass</string>
+    <string name="newfile_source_kotlin_hint">MyFile</string>
+    <string name="newfile_reskind_layout">تخطيط</string>
+    <string name="newfile_reskind_values">قيم</string>
+    <string name="newfile_reskind_drawable">قابل للرسم</string>
+    <string name="newfile_reskind_menu">قائمة</string>
+    <string name="newfile_reskind_xml">XML</string>
+    <string name="newfile_mode_resource_file">ملف موارد</string>
+    <string name="newfile_mode_directory">مجلد</string>
+    <string name="newfile_new_resource_directory">مجلد موارد جديد</string>
+    <string name="newfile_new_resource_title">مورد %1$s جديد</string>
+    <string name="newfile_res_layout_hint">activity_main</string>
+    <string name="newfile_res_name_hint">my_resource</string>
+    <string name="newfile_root_element">العنصر الجذري</string>
+    <string name="newfile_resdir_name">اسم المجلد</string>
+    <string name="newfile_resdir_name_hint">drawable-night</string>
+    <string name="newfile_preset_java">Java</string>
+    <string name="newfile_preset_kotlin">Kotlin</string>
+    <string name="newfile_preset_resources">الموارد</string>
+    <string name="newfile_kind_android_res">موارد Android</string>
+    <string name="newfile_kind_assets">الأصول</string>
+    <string name="newfile_preset_aidl">AIDL</string>
+    <string name="newfile_preset_custom">مخصص</string>
+    <string name="newfile_role_sources">المصادر</string>
+    <string name="newfile_add_source_root">إضافة جذر مصدر</string>
+    <string name="newfile_to">إلى %1$s</string>
+    <string name="newfile_source_set">مجموعة مصادر</string>
+    <string name="newfile_new_set">مجموعة جديدة…</string>
+    <string name="newfile_set_name_hint">مثلاً test  ·  debug</string>
+    <string name="newfile_custom_folder_hint">مثلاً proto  ·  templates</string>
+    <string name="newfile_treat_as">معاملته كـ</string>
+    <string name="newfile_created_at">أُنشئ في %1$s</string>
+
+    <!-- File operations -->
+    <string name="fileop_rename_title">إعادة تسمية "%1$s"</string>
+    <string name="fileop_new_name">الاسم الجديد</string>
+    <string name="fileop_delete_dir_title">حذف "%1$s" ومحتوياته؟</string>
+    <string name="fileop_delete_file_title">حذف "%1$s"؟</string>
+    <string name="fileop_delete_dir_body">يؤدي هذا إلى إزالة المجلد وكل ما بداخله نهائيًا. لا يمكن التراجع عن هذا.</string>
+    <string name="fileop_delete_file_body">يؤدي هذا إلى إزالة الملف نهائيًا. لا يمكن التراجع عن هذا.</string>
+    <string name="fileop_move_title">نقل "%1$s" إلى…</string>
+    <string name="fileop_copy_title">نسخ "%1$s" إلى…</string>
+    <string name="fileop_empty_folder">هذا المجلد فارغ.</string>
+    <string name="fileop_move_here">النقل هنا</string>
+    <string name="fileop_copy_here">النسخ هنا</string>
+
+    <!-- Error dialog -->
+    <string name="errdlg_unexpected">حدث خطأ غير متوقع. ظل التطبيق يعمل.</string>
+    <string name="errdlg_hide_details">إخفاء التفاصيل</string>
+    <string name="errdlg_show_details">إظهار التفاصيل</string>
+    <string name="errdlg_dismiss">تجاهل</string>
+
+    <!-- Index -->
+    <string name="index_title_building">جاري الفهرسة</string>
+    <string name="index_title_idle">الفهرس</string>
+    <string name="index_working">جاري العمل…</string>
+    <string name="index_up_to_date">محدَّث</string>
+    <string name="index_count_files">%1$d / %2$d ملف</string>
+    <string name="index_count_artifacts">%1$d / %2$d عنصر</string>
+    <string name="index_current_file">الملف الحالي</string>
+    <string name="index_artifacts">العناصر</string>
+    <string name="index_idle_body">جميع فهارس الرموز والإكمال محدَّثة.</string>
+    <string name="index_reindex">إعادة فهرسة المشروع</string>
+    <string name="index_indexers">المُفهرِسات</string>
+    <string name="index_ms">%1$d مللي ثانية</string>
+    <string name="index_build_cache">%1$d عنصر · %2$d من الذاكرة المؤقتة</string>
+    <string name="index_build_phases">المكتبات %1$d مللي ثانية · المصدر %2$d مللي ثانية</string>
+    <string name="index_more">+%1$d المزيد</string>
+
+    <!-- Run permissions -->
+    <string name="perm_wants_to">يريد البرنامج قيد التشغيل %1$s:</string>
+    <string name="perm_title_network">السماح بالوصول إلى الشبكة؟</string>
+    <string name="perm_verb_network">الاتصال بالشبكة</string>
+    <string name="perm_title_file_read">السماح بقراءة ملف؟</string>
+    <string name="perm_verb_file_read">قراءة الملف</string>
+    <string name="perm_title_file_write">السماح بكتابة ملف؟</string>
+    <string name="perm_verb_file_write">كتابة الملف</string>
+    <string name="perm_title_reflection">السماح بالانعكاس؟</string>
+    <string name="perm_verb_reflection">استخدام الانعكاس على</string>
+    <string name="perm_title_exec">السماح بتشغيل عملية؟</string>
+    <string name="perm_verb_exec">تشغيل العملية</string>
+    <string name="perm_title_default">السماح بهذا الإجراء؟</string>
+    <string name="perm_verb_default">تنفيذ</string>
+    <string name="perm_allow_once">السماح مرة واحدة</string>
+    <string name="perm_allow_run">السماح لهذا التشغيل</string>
+    <string name="perm_allow_always">السماح دائمًا في هذا المشروع</string>
+    <string name="perm_deny">رفض</string>
+
+    <!-- Settings hub -->
+    <string name="settings_title">الإعدادات</string>
+    <string name="settings_no_settings_available">لا توجد إعدادات متاحة.</string>
+    <string name="settings_all_settings">جميع الإعدادات</string>
+    <string name="settings_backup_ready">النسخة الاحتياطية جاهزة</string>
+    <string name="settings_inspections_for_language">فحوصات %1$s</string>
+    <string name="settings_advanced">متقدم</string>
+    <string name="settings_hub_title">الإعدادات والأدوات</string>
+    <string name="settings_settings">الإعدادات</string>
+    <string name="settings_settings_subtitle">المظهر والمحرر والإكمال والتحليل</string>
+    <string name="settings_code_style">نمط الكود</string>
+    <string name="settings_code_style_subtitle">ملفات تنسيق لكل لغة ومعاينة مباشرة</string>
+    <string name="settings_sdk_manager">مدير SDK</string>
+    <string name="settings_sdk_manager_subtitle">تنزيل مصادر Android SDK وJDK</string>
+    <string name="settings_keystore_manager">مدير مخازن المفاتيح</string>
+    <string name="settings_keystore_manager_subtitle">إنشاء واستيراد وإدارة مخازن مفاتيح التوقيع</string>
+    <string name="settings_plugins">الإضافات</string>
+    <string name="settings_plugins_subtitle">تفعيل أو تعطيل الإضافات المدمجة</string>
+
+    <!-- Plugins -->
+    <string name="plugins_restart_hint">أعد التشغيل لتطبيق تغييرات الإضافات.</string>
+    <string name="plugins_required">مطلوب</string>
+    <string name="plugins_requires">يتطلب %1$s</string>
+
+    <!-- Keystore manager -->
+    <string name="keystore_manager_title">مدير مخازن المفاتيح</string>
+    <string name="keystore_section_title">مخازن مفاتيح التوقيع</string>
+    <string name="keystore_section_description"><![CDATA[أنشئ أو استورد مخازن المفاتيح التي توقّع بها إصدارات النشر. تُخزَّن مرة واحدة وتُشارَك عبر المشاريع؛ عيّن واحدًا لنوع بناء في علامة تبويب التوقيع الخاصة بالوحدة.]]></string>
+    <string name="keystore_assign_to_build">تعيين لبناء (توقيع المشروع)</string>
+    <string name="keystore_empty">لا توجد مخازن مفاتيح بعد. أنشئ أو استورد واحدًا لتوقيع إصدارات النشر.</string>
+    <string name="keystore_deleted">تم حذف %1$s</string>
+    <string name="keystore_row_subtitle">%1$s · المفتاح: %2$s</string>
+    <string name="keystore_sha256">SHA-256 %1$s</string>
+    <string name="keystore_expires">تنتهي الصلاحية ~%1$s</string>
+    <string name="keystore_cert_unreadable"><![CDATA[تعذّر قراءة الشهادة (ربما تغيّرت كلمة المرور).]]></string>
+    <string name="keystore_create_title">مخزن مفاتيح جديد</string>
+    <string name="keystore_name">الاسم</string>
+    <string name="keystore_key_alias">اسم مستعار للمفتاح</string>
+    <string name="keystore_password">كلمة المرور (‏≥ 6 أحرف؛ تحمي المخزن والمفتاح)</string>
+    <string name="keystore_full_name">الاسم الكامل (CN)</string>
+    <string name="keystore_organization">المؤسسة (اختياري)</string>
+    <string name="keystore_country">رمز الدولة (اختياري)</string>
+    <string name="keystore_validity">مدة الصلاحية (بالسنوات)</string>
+    <string name="keystore_create_button">إنشاء مخزن مفاتيح</string>
+    <string name="keystore_import_title">استيراد مخزن مفاتيح</string>
+    <string name="keystore_import_password">كلمة مرور مخزن المفاتيح</string>
+    <string name="keystore_import_alias">اسم مستعار للمفتاح (فارغ = الأول)</string>
+    <string name="keystore_import_key_password">كلمة مرور المفتاح (فارغ = كلمة مرور المخزن)</string>
+
+    <!-- SDK manager -->
+    <string name="sdk_manager_title">مدير SDK</string>
+    <string name="sdk_could_not_load">تعذّر تحميل الحزم.</string>
+    <string name="sdk_sources_documentation">المصادر والتوثيق</string>
+    <string name="sdk_sources_documentation_desc">نزّل مصادر منصة SDK ومصادر JDK حتى يتمكن المحرر من عرض توثيق javadoc وأسماء المعاملات والانتقال إلى المصدر داخل SDK. تستمر التنزيلات في الخلفية، بحيث يمكنك مغادرة هذه الشاشة ومواصلة العمل.</string>
+    <string name="sdk_downloads">التنزيلات</string>
+    <string name="sdk_clear_finished">مسح المكتملة</string>
+    <string name="sdk_jdk">JDK</string>
+    <string name="sdk_jdk_version">JDK %1$s</string>
+    <string name="sdk_jdk_sources_available">المصادر متاحة، وتوثيق android.* وjava.* مُفعّل.</string>
+    <string name="sdk_jdk_no_sources">لم يُعثر على مصادر JDK. نزّل نسخة JDK تتضمنها:</string>
+    <string name="sdk_jdk_downloading">JDK %1$d…</string>
+    <string name="sdk_jdk_sources">مصادر JDK %1$d</string>
+    <string name="sdk_android_sources">مصادر Android SDK</string>
+    <string name="sdk_loading_packages">جاري تحميل قائمة الحزم…</string>
+    <string name="sdk_no_packages">لا توجد حزم. تحقق من اتصالك، ثم حدّث.</string>
+    <string name="sdk_downloading">جاري التنزيل</string>
+    <string name="sdk_downloading_detail">جاري التنزيل · %1$s</string>
+    <string name="sdk_download_failed">فشل</string>
+    <string name="sdk_download_extracting">جاري الاستخراج…</string>
+    <string name="sdk_download_installing">جاري التثبيت…</string>
+    <string name="sdk_installed">مثبّت</string>
+    <string name="sdk_resume">استئناف</string>
+
+    <!-- Dependencies -->
+    <string name="dep_declared">مُعلَن</string>
+    <string name="dep_resolved">محلول</string>
+    <string name="dep_tree">شجرة</string>
+    <string name="dep_graph">رسم بياني</string>
+    <string name="dep_mode_library">مكتبة</string>
+    <string name="dep_mode_platform">منصة (BOM)</string>
+    <string name="dep_mode_module">وحدة</string>
+    <string name="dep_mode_local">ملف محلي</string>
+    <string name="dep_resolving">جاري الحل…</string>
+    <string name="dep_re_resolve">إعادة حل التبعيات</string>
+    <string name="dep_repositories">المستودعات</string>
+    <string name="dep_repositories_subtitle">من أين تُحل المكتبات. لا يمكن إزالة المستودعات المدمجة.</string>
+    <string name="dep_repo_name_hint">الاسم (اختياري)</string>
+    <string name="dep_repo_url_hint">https://repo.example.com/maven</string>
+    <string name="dep_remove_repo">إزالة %1$s</string>
+    <string name="dep_built_in">مدمج</string>
+    <string name="dep_load_failed">تعذّر تحميل التبعيات.</string>
+    <string name="dep_resolving_dependencies">جاري حل التبعيات</string>
+    <string name="dep_downloading_artifacts">جاري تنزيل ملفات POM والعناصر…</string>
+    <string name="dep_unresolved_count">%1$d غير محلولة</string>
+    <string name="dep_none_declared">لا توجد تبعيات مُعلَنة. انقر إضافة لتنزيل واحدة.</string>
+    <string name="dep_nothing_resolved">لم يُحل شيء بعد.</string>
+    <string name="dep_not_resolved">غير محلولة. تحقق من الإصدار/المستودع أو أعد الحل</string>
+    <string name="dep_cycle_shown_above">دورة، معروضة أعلاه بالفعل</string>
+    <string name="dep_couldnt_resolve_tooltip">تعذّر الحل. تحقق من الإصدار/المستودع</string>
+    <string name="dep_unresolved">غير محلولة</string>
+    <string name="dep_incompatible">غير متوافقة</string>
+    <string name="dep_edit_named">تحرير %1$s</string>
+    <string name="dep_more_actions">المزيد من الإجراءات لـ %1$s</string>
+    <string name="dep_exclude_named">استبعاد %1$s</string>
+    <string name="dep_remove_named">إزالة %1$s</string>
+    <string name="dep_transitive">متعدية</string>
+    <string name="dep_options_excluded">خيارات %1$s المستبعدة</string>
+    <string name="dep_remove_exclusion">إزالة الاستبعاد</string>
+    <string name="dep_excluded">مستبعدة</string>
+    <string name="dep_add_dependency">إضافة تبعية</string>
+    <string name="dep_search_bom_hint">ابحث عن BOM، أو اكتب group:name:version، مثل androidx.compose:compose-bom:…</string>
+    <string name="dep_search_library_hint">ابحث في Maven Central، أو اكتب group:name[:version]…</string>
+    <string name="dep_scope">النطاق</string>
+    <string name="dep_variant">المتغيّر</string>
+    <string name="dep_all_variants">جميع المتغيرات</string>
+    <string name="dep_suggested">مقترحة</string>
+    <string name="dep_adding">جاري إضافة %1$s</string>
+    <string name="dep_resolving_transitive">جاري حل التبعيات المتعدية…</string>
+    <string name="dep_no_other_modules">لا توجد وحدات أخرى يمكن الاعتماد عليها.</string>
+    <string name="dep_no_results">لا توجد نتائج.</string>
+    <string name="dep_type_to_search">اكتب حرفين على الأقل للبحث، أو قيمة group:name[:version] كاملة.</string>
+    <string name="dep_add_named">إضافة %1$s</string>
+    <string name="dep_import_as_platform">استيراد كمنصة (BOM)</string>
+    <string name="dep_add_versionless">إضافة بدون إصدار، الإصدار من منصة</string>
+    <string name="dep_add_exact">إضافة هذا الإحداثي بالضبط</string>
+    <string name="dep_add_infer_group">إضافة هذا الإصدار (تم العثور على المجموعة بالبحث)</string>
+    <string name="dep_choose_local_file">اختر ملف .jar أو .aar</string>
+    <string name="dep_copied_into_libs">تم النسخ إلى مجلد libs/ الخاص بالوحدة</string>
+    <string name="dep_already_in_project">موجودة بالفعل في المشروع</string>
+    <string name="dep_no_local_libs">لم يُعثر على ملفات jars/aars محلية. استورد واحدًا إلى المشروع، أو افتح هذا على جهاز لاختيار ملف.</string>
+    <string name="dep_attach_named">إرفاق %1$s</string>
+    <string name="dep_remove_dependency">إزالة التبعية</string>
+    <string name="dep_remove_confirm">إزالة %1$s من %2$s؟ سيُفصل مسار الأصناف المحلول لها عن الوحدة.</string>
+    <string name="dep_edit_dependency">تحرير التبعية</string>
+    <string name="dep_section_version">الإصدار</string>
+    <string name="dep_section_scope">النطاق</string>
+    <string name="dep_section_exclusions">الاستبعادات</string>
+    <string name="dep_exclusions_help">إدخالات group:name المتعدية المراد إسقاطها (يمكن أن يكون أي طرف *)، مفصولة بفواصل أو مسافات.</string>
+    <string name="dep_exclusions_hint">مثلاً com.google.guava:guava، org.json:*</string>
+    <string name="dep_version_hint">الإصدار</string>
+    <string name="dep_loading_versions">جاري تحميل الإصدارات…</string>
+    <string name="dep_versions_load_failed">تعذّر تحميل الإصدارات، اكتب واحدًا أعلاه.</string>
+    <string name="dep_selected">محدد</string>
+    <string name="dep_variant_only_tooltip">في المتغيّر "%1$s" فقط</string>
+    <string name="dep_version_conflict_tooltip">تعارض في الإصدار: %1$s → يُستخدم %2$s</string>
+    <string name="dep_version_conflict">تعارض في الإصدار</string>
+    <string name="dep_extra_auto_resolved">+%1$d تم حلها تلقائيًا</string>
+    <string name="dep_repo_invalid">أدخل عنوان http(s) صالحًا لم تتم إضافته بالفعل.</string>
+    <string name="dep_subtitle_module">وحدة</string>
+    <string name="dep_subtitle_platform">منصة (BOM)</string>
+    <string name="dep_subtitle_local_aar">aar محلي</string>
+    <string name="dep_subtitle_local_jar">jar محلي</string>
+    <plurals name="dep_cycles">
+        <item quantity="one">دورة تبعية واحدة</item>
+        <item quantity="two">دورتا تبعية</item>
+        <item quantity="few">%1$d دورات تبعية</item>
+        <item quantity="many">%1$d دورة تبعية</item>
+        <item quantity="other">%1$d دورة تبعية</item>
+    </plurals>
+    <plurals name="dep_conflicts_to_review">
+        <item quantity="one">تعارض إصدار واحد للمراجعة</item>
+        <item quantity="two">تعارضا إصدار للمراجعة</item>
+        <item quantity="few">%1$d تعارضات إصدار للمراجعة</item>
+        <item quantity="many">%1$d تعارض إصدار للمراجعة</item>
+        <item quantity="other">%1$d تعارض إصدار للمراجعة</item>
+    </plurals>
+    <plurals name="dep_versions_auto_resolved">
+        <item quantity="one">تم حل إصدار واحد تلقائيًا (الأحدث يفوز)</item>
+        <item quantity="two">تم حل إصدارين تلقائيًا (الأحدث يفوز)</item>
+        <item quantity="few">تم حل %1$d إصدارات تلقائيًا (الأحدث يفوز)</item>
+        <item quantity="many">تم حل %1$d إصدارًا تلقائيًا (الأحدث يفوز)</item>
+        <item quantity="other">تم حل %1$d إصدار تلقائيًا (الأحدث يفوز)</item>
+    </plurals>
+
+    <!-- Module config -->
+    <string name="modcfg_tab_settings">الإعدادات</string>
+    <string name="modcfg_tab_build_features">ميزات البناء</string>
+    <string name="modcfg_tab_compiler_plugins">إضافات المُصرِّف</string>
+    <string name="modcfg_tab_packaging">التغليف</string>
+    <string name="modcfg_tab_signing">التوقيع</string>
+    <string name="modcfg_tab_dependencies">التبعيات</string>
+    <string name="modcfg_title_modules">الوحدات</string>
+    <string name="modcfg_new_module_action">وحدة جديدة</string>
+    <string name="modcfg_no_modules">لا توجد وحدات. انقر + لإضافة واحدة.</string>
+    <string name="modcfg_remove_named">إزالة %1$s</string>
+    <string name="modcfg_removed">تمت إزالة %1$s</string>
+    <string name="modcfg_build_features_android_only">تنطبق ميزات البناء على وحدات Android فقط.</string>
+    <string name="modcfg_build_features_intro">فعّل ميزات البناء لكل وحدة. يؤدي تفعيل ميزة إلى إضافة التبعيات التي تحتاجها.</string>
+    <string name="modcfg_compiler_plugins_android_only">تنطبق إضافات المُصرِّف على وحدات Android فقط.</string>
+    <string name="modcfg_compiler_plugins_intro">تحوّل إضافات مُصرِّف Kotlin كودك أثناء البناء. يؤدي تفعيل إضافة إلى إضافة وقت تشغيلها؛ ثم تُطبَّق الإضافة تلقائيًا أينما كان وقت التشغيل ذاك في مسار الأصناف.</string>
+    <string name="modcfg_compiler_plugin_applied">نشطة في مسار أصناف هذه الوحدة</string>
+    <string name="modcfg_signing_android_only">ينطبق التوقيع على وحدات Android فقط.</string>
+    <string name="modcfg_signing_intro">اختر مخزن المفاتيح الذي يوقّع كل نوع بناء. يُوقَّع النوع غير المعيَّن بمخزن مفاتيح التصحيح.</string>
+    <string name="modcfg_packaging_android_only">تنطبق خيارات التغليف على وحدات Android فقط.</string>
+    <string name="modcfg_packaging_intro">كيفية دمج موارد Java والمكتبات الأصلية التي يساهم بها أكثر من مُدخل (وحدتك، والوحدات الفرعية، وملفات AAR، والمكتبات) في APK.</string>
+    <string name="modcfg_packaging_glob_hint">الأنماط هي أنماط glob نسبية إلى APK: ** تعبر المجلدات، و* تبقى داخل مجلد واحد، والشرطة المائلة / في البداية اختيارية.</string>
+    <string name="modcfg_packaging_resources">موارد Java</string>
+    <string name="modcfg_packaging_jni">المكتبات الأصلية</string>
+    <string name="modcfg_packaging_jni_note">تُغلَّف المكتبات الأصلية كما هي (بدون تجريد NDK على الجهاز).</string>
+    <string name="modcfg_packaging_excludes">استبعاد</string>
+    <string name="modcfg_packaging_excludes_desc">إسقاط كل ملف يطابق مساره النمط.</string>
+    <string name="modcfg_packaging_pick_first">اختيار الأول</string>
+    <string name="modcfg_packaging_pick_first_desc">الاحتفاظ بأول تطابق؛ وإسقاط التكرارات اللاحقة بصمت.</string>
+    <string name="modcfg_packaging_merge">دمج</string>
+    <string name="modcfg_packaging_merge_desc">ضم التكرارات بدلاً من إسقاطها.</string>
+    <string name="modcfg_packaging_default_excludes">مستبعدة دائمًا افتراضيًا</string>
+    <string name="modcfg_packaging_default_merges">مدموجة دائمًا افتراضيًا</string>
+    <string name="modcfg_manage_keystores">إدارة مخازن المفاتيح</string>
+    <string name="modcfg_keystores_empty">لا توجد مخازن مفاتيح بعد. أنشئ واحدًا في مدير مخازن المفاتيح لتوقيع إصدارات النشر.</string>
+    <string name="modcfg_debug_default">debug (افتراضي)</string>
+    <string name="modcfg_created">تم إنشاء %1$s</string>
+    <string name="modcfg_couldnt_create">تعذّر إنشاء %1$s</string>
+    <string name="modcfg_remove_module">إزالة الوحدة</string>
+    <string name="modcfg_remove_module_content">إزالة "%1$s" من المشروع؟ تبقى ملفاتها على القرص؛ وتُسقَط تبعيات الوحدات الأخرى عليها.</string>
+    <string name="modcfg_remove">إزالة</string>
+    <string name="modcfg_no_module_types">لا توجد أنواع وحدات متاحة.</string>
+    <string name="modcfg_new_module">وحدة جديدة</string>
+    <string name="modcfg_name">الاسم</string>
+    <string name="modcfg_module_name_placeholder">مثلاً feature، core</string>
+    <string name="modcfg_type">النوع</string>
+    <string name="modcfg_java_version">إصدار Java</string>
+    <string name="modcfg_couldnt_load_config">تعذّر تحميل تكوين الوحدة.</string>
+    <string name="modcfg_section_general">عام</string>
+    <string name="modcfg_output">المخرجات</string>
+    <string name="modcfg_run">تشغيل</string>
+    <string name="modcfg_run_config_hint">الصنف الرئيسي الذي يشغّله زر التشغيل لهذه الوحدة. اتركه فارغًا للكشف التلقائي.</string>
+    <string name="modcfg_auto_detected">%1$s  (تم اكتشافه تلقائيًا)</string>
+    <string name="modcfg_run_main_class_placeholder">مثلاً com.example.Main</string>
+    <string name="modcfg_auto_detect">كشف تلقائي</string>
+    <string name="modcfg_section_source_sets">مجموعات المصادر</string>
+    <string name="modcfg_add_source_root">إضافة جذر مصدر</string>
+    <string name="modcfg_no_source_sets">لا توجد مجموعات مصادر بعد.</string>
+    <string name="modcfg_save">حفظ</string>
+    <string name="modcfg_save_changes">حفظ التغييرات</string>
+    <string name="modcfg_missing_keep_rule_files">ملفات قواعد الإبقاء مفقودة</string>
+    <string name="modcfg_missing_keep_rule_files_content">هذه الملفات مشار إليها من نوع بناء لكنها غير موجودة، لذا يتخطاها R8 عند تفعيل التصغير.</string>
+    <string name="modcfg_no_roots">لا توجد جذور</string>
+    <string name="modcfg_add_placeholder">إضافة…</string>
+    <string name="modcfg_no_rows_yet">لا توجد %1$s بعد، أضف واحدة أدناه.</string>
+    <string name="modcfg_new_badge">جديد</string>
+    <string name="modcfg_add_row">إضافة %1$s</string>
+
+    <!-- Code style -->
+    <string name="codestyle_title">نمط الكود</string>
+    <string name="codestyle_language">اللغة</string>
+    <string name="codestyle_language_desc">تحتفظ كل لغة بملفها الخاص</string>
+    <string name="codestyle_lang_java">Java</string>
+    <string name="codestyle_lang_kotlin">Kotlin</string>
+    <string name="codestyle_style">النمط</string>
+    <string name="codestyle_style_desc">نقطة انطلاق جاهزة؛ تغيير أي خيار أدناه ينتقل إلى مخصص</string>
+    <string name="codestyle_reformat_on_save">إعادة التنسيق عند الحفظ</string>
+    <string name="codestyle_reformat_on_save_desc">إعادة تنسيق الملف في كل مرة تحفظه فيها</string>
+    <string name="codestyle_kotlin_note">يُطبّع تنسيق Kotlin المسافات البادئة وعلامات الجدولة والأسطر الفارغة والتباعد المضمّن. يتبع وضع الأقواس ولف الأسطر الكود كما هو مكتوب.</string>
+    <string name="codestyle_indentation">المسافة البادئة</string>
+    <string name="codestyle_indent_size">حجم المسافة البادئة</string>
+    <string name="codestyle_indent_size_desc">مسافات لكل مستوى</string>
+    <string name="codestyle_continuation_indent">مسافة الاستمرار</string>
+    <string name="codestyle_continuation_indent_desc">مسافة بادئة إضافية للسطر الملفوف</string>
+    <string name="codestyle_line_width">عرض السطر</string>
+    <string name="codestyle_line_width_desc">العمود الذي يلف عنده المُنسِّق</string>
+    <string name="codestyle_indent_with_tabs">مسافة بادئة بعلامات الجدولة</string>
+    <string name="codestyle_indent_with_tabs_desc">استخدام علامات الجدولة بدلاً من المسافات</string>
+    <string name="codestyle_wrapping_and_braces">اللف والأقواس</string>
+    <string name="codestyle_brace_placement">وضع الأقواس</string>
+    <string name="codestyle_brace_end_of_line">نهاية السطر</string>
+    <string name="codestyle_brace_next_line">السطر التالي</string>
+    <string name="codestyle_method_parameters">معاملات الدالة</string>
+    <string name="codestyle_method_arguments">وسائط الدالة</string>
+    <string name="codestyle_chained_calls">الاستدعاءات المتسلسلة</string>
+    <string name="codestyle_binary_expressions">التعبيرات الثنائية</string>
+    <string name="codestyle_spaces">المسافات</string>
+    <string name="codestyle_within_parens">داخل الأقواس</string>
+    <string name="codestyle_within_parens_desc">`( x )` بدلاً من `(x)`</string>
+    <string name="codestyle_after_comma">بعد الفاصلة</string>
+    <string name="codestyle_after_comma_desc">`a, b` بدلاً من `a,b`</string>
+    <string name="codestyle_around_operators">حول العوامل</string>
+    <string name="codestyle_around_operators_desc">`a + b`، `x = 1`</string>
+    <string name="codestyle_before_brace">قبل القوس</string>
+    <string name="codestyle_before_brace_desc">`) {` بدلاً من `){`</string>
+    <string name="codestyle_around_lambda_arrow">حول سهم lambda</string>
+    <string name="codestyle_around_lambda_arrow_desc">`a -&gt; b`</string>
+    <string name="codestyle_before_parens">قبل الأقواس</string>
+    <string name="codestyle_before_parens_desc">`if (` `for (` `while (`</string>
+    <string name="codestyle_before_semicolon">قبل الفاصلة المنقوطة</string>
+    <string name="codestyle_before_semicolon_desc">`x ;` بدلاً من `x;`</string>
+    <string name="codestyle_around_ternary">حول العامل الثلاثي</string>
+    <string name="codestyle_around_ternary_desc">`c ? a : b`</string>
+    <string name="codestyle_after_type_cast">بعد تحويل النوع</string>
+    <string name="codestyle_after_type_cast_desc">`(Foo) x` بدلاً من `(Foo)x`</string>
+    <string name="codestyle_blank_lines">الأسطر الفارغة</string>
+    <string name="codestyle_keep_at_most">الاحتفاظ بحد أقصى</string>
+    <string name="codestyle_keep_at_most_desc">الحد الأقصى للأسطر الفارغة المتتالية</string>
+    <string name="codestyle_after_imports">بعد الاستيرادات</string>
+    <string name="codestyle_before_method">قبل الدالة</string>
+    <string name="codestyle_before_field">قبل الحقل</string>
+    <string name="codestyle_before_first_member">قبل أول عضو</string>
+    <string name="codestyle_between_types">بين الأنواع</string>
+    <string name="codestyle_comments">التعليقات</string>
+    <string name="codestyle_format_comments">تنسيق التعليقات</string>
+    <string name="codestyle_format_comments_desc">إعادة ضبط مسافات تعليقات Javadoc / الكتل / الأسطر</string>
+    <string name="codestyle_wrap_comments">لف التعليقات</string>
+    <string name="codestyle_wrap_comments_desc">لف نص التعليق عند عرض السطر</string>
+    <string name="codestyle_preview">معاينة</string>
+    <string name="codestyle_preview_no_project">افتح مشروعًا لمعاينة التنسيق.</string>
+    <string name="codestyle_preset_kotlin_official">Kotlin الرسمي</string>
+    <string name="codestyle_preset_android">Android</string>
+    <string name="codestyle_preset_custom">مخصص</string>
+    <string name="codestyle_preset_google">Google</string>
+    <string name="codestyle_wrap_never">أبدًا</string>
+    <string name="codestyle_wrap_if_long">إذا كان طويلاً</string>
+    <string name="codestyle_wrap_one_per_line">واحد لكل سطر</string>
+
+    <!-- Common actions -->
+    <string name="save">حفظ</string>
+    <string name="close">إغلاق</string>
+    <string name="clear">مسح</string>
+    <string name="back">رجوع</string>
+    <string name="expand">توسيع</string>
+    <string name="run">تشغيل</string>
+    <string name="stop">إيقاف</string>
+    <string name="search">بحث</string>
+    <string name="more">المزيد</string>
+    <string name="undo">تراجع</string>
+    <string name="redo">إعادة</string>
+    <string name="retry">إعادة المحاولة</string>
+    <string name="refresh">تحديث</string>
+    <string name="share">مشاركة</string>
+    <string name="copy">نسخ</string>
+    <string name="error">خطأ</string>
+    <string name="loading">جاري التحميل</string>
+    <string name="dismiss">تجاهل</string>
+    <string name="hide_details">إخفاء التفاصيل</string>
+    <string name="show_details">إظهار التفاصيل</string>
+    <string name="create">إنشاء</string>
+    <string name="add">إضافة</string>
+    <string name="remove">إزالة</string>
+    <string name="rename">إعادة تسمية</string>
+    <string name="import">استيراد</string>
+    <string name="install">تثبيت</string>
+
+    <!-- Module config (platform SDK) -->
+    <string name="modcfg_platform_sdk">منصة SDK</string>
+    <string name="modcfg_platform_sdk_auto">تلقائي (%1$s)</string>
+
+    <!-- AI chat providers -->
+    <string name="chat_providers_title">مزودو الذكاء الاصطناعي</string>
+    <string name="chat_providers_subtitle">اختر مزودًا وأضف مفتاحك. تُخزَّن المفاتيح على هذا الجهاز.</string>
+    <string name="chat_api_key">مفتاح API</string>
+    <string name="chat_base_url">عنوان URL الأساسي</string>
+    <string name="chat_model">النموذج</string>
+    <string name="chat_connected">متصل</string>
+    <string name="chat_show">إظهار</string>
+    <string name="chat_hide">إخفاء</string>
+    <string name="chat_gateway_hint">متوافق مع OpenAI: OpenRouter أو LiteLLM أو نقطة نهاية مستضافة ذاتيًا.</string>
+    <string name="chat_done">تم</string>
+    <string name="chat_perm_title">السماح بهذا التغيير؟</string>
+    <string name="chat_allow">سماح</string>
+    <string name="chat_allow_session">السماح لهذه الجلسة</string>
+    <string name="chat_deny">رفض</string>
+
+    <!-- Settings pages -->
+    <string name="set_page_appearance">المظهر</string>
+    <string name="set_page_editor">المحرر</string>
+    <string name="set_page_completion">إكمال الكود</string>
+    <string name="set_page_analysis">التحليل والفحوصات</string>
+    <string name="set_page_preview">المعاينة</string>
+    <string name="set_page_build">البناء والتبعيات</string>
+    <string name="set_page_build_runtime">وقت تشغيل البناء</string>
+    <string name="set_page_privacy">الخصوصية والبيانات</string>
+    <string name="set_grp_gestures">الإيماءات</string>
+    <string name="set_grp_keyboard">لوحة المفاتيح</string>
+    <string name="set_grp_preview_sandbox">صندوق حماية المعاينة</string>
+    <string name="set_grp_privacy">الخصوصية</string>
+    <string name="set_grp_storage">التخزين</string>
+    <string name="set_grp_debug_dexing">بناء التصحيح (تحويل dex)</string>
+    <string name="set_unit_classes">أصناف</string>
+    <string name="set_sev_error">خطأ</string>
+    <string name="set_sev_warning">تحذير</string>
+    <string name="set_sev_info">معلومة</string>
+    <string name="set_sev_hint">تلميح</string>
+    <string name="set_appearance_theme">السمة</string>
+    <string name="set_appearance_theme_desc">استخدام سمة ثابتة أو متابعة نظام التشغيل</string>
+    <string name="set_appearance_theme_light">فاتح</string>
+    <string name="set_appearance_theme_dark">داكن</string>
+    <string name="set_appearance_theme_system">النظام</string>
+    <string name="set_appearance_accent">اللون المميّز</string>
+    <string name="set_appearance_accent_desc">لون إبراز الواجهة</string>
+    <string name="set_appearance_accent_violet">بنفسجي</string>
+    <string name="set_appearance_accent_teal">أزرق مخضر</string>
+    <string name="set_appearance_accent_orange">برتقالي (قديم)</string>
+    <string name="set_editor_font_size">حجم الخط</string>
+    <string name="set_editor_code_font">خط الكود</string>
+    <string name="set_editor_code_font_monospace">خط النظام أحادي المسافة</string>
+    <string name="set_editor_ligatures">روابط الخط</string>
+    <string name="set_editor_ligatures_desc">عرض الروابط البرمجية (-> != >= …) عندما يتضمنها خط الكود</string>
+    <string name="set_editor_inlay">التلميحات المضمّنة</string>
+    <string name="set_editor_inlay_desc">أنواع مستنتَجة وتلميحات أسماء المعاملات، معروضة مضمّنة</string>
+    <string name="set_editor_semantic">التلوين الدلالي</string>
+    <string name="set_editor_semantic_desc">تلوين يراعي الأنواع مُضاف فوق المُحلِّل اللغوي</string>
+    <string name="set_editor_folding">طي الكود</string>
+    <string name="set_editor_folding_desc">طي الاستيرادات والأجسام وتعليقات الكتل</string>
+    <string name="set_editor_wrap">التفاف النص</string>
+    <string name="set_editor_wrap_desc">لف الأسطر الطويلة بمرونة عند حافة العرض بدلاً من التمرير أفقيًا</string>
+    <string name="set_editor_wrap_indent">مسافة بادئة للأسطر الملفوفة</string>
+    <string name="set_editor_wrap_indent_desc">محاذاة أسطر استمرار السطر الملفوف إلى مسافته البادئة (عند تفعيل التفاف النص)</string>
+    <string name="set_editor_two_axis">التمرير على محورين</string>
+    <string name="set_editor_two_axis_desc">اسحب في أي اتجاه للتمرير على المحورين معًا (باللمس)</string>
+    <string name="set_editor_pinch">القرص للتكبير</string>
+    <string name="set_editor_pinch_desc">اقرص بإصبعين لتغيير حجم خط الكود</string>
+    <string name="set_editor_kbd_suggest">اقتراحات لوحة المفاتيح</string>
+    <string name="set_editor_kbd_suggest_desc">اسمح للوحة المفاتيح الافتراضية بالتصحيح التلقائي والاقتراح وإضافة المسافات تلقائيًا (لوحة مفاتيح عادية). أوقفه لإدخال الكود الخام، بحيث لا تحصل النقطة "." المكتوبة على مسافة مُدرَجة تلقائيًا، مقابل فقدان شريط الاقتراحات.</string>
+    <string name="set_completion_auto">إظهار الاقتراحات تلقائيًا</string>
+    <string name="set_completion_auto_desc">إظهار القائمة أثناء الكتابة (إيقاف = Ctrl-Space فقط)</string>
+    <string name="set_completion_postfix">قوالب لاحقة</string>
+    <string name="set_completion_postfix_desc">توفير إكمالات .val / .if / .notnull / …</string>
+    <string name="set_completion_word">إكمال الكلمات</string>
+    <string name="set_completion_word_desc">توفير كلمات موجودة بالفعل في الملف كخيار احتياطي</string>
+    <string name="set_completion_delay">تأخير الظهور التلقائي</string>
+    <string name="set_completion_delay_desc">المدة قبل ظهور القائمة بعد ضغطة المفتاح</string>
+    <string name="set_completion_max">الحد الأقصى للاقتراحات</string>
+    <string name="set_analysis_otf">التحليل الفوري</string>
+    <string name="set_analysis_otf_desc">عرض التشخيصات أثناء الكتابة (إيقاف = عند البناء فقط)</string>
+    <string name="set_analysis_reparse">تأخير إعادة التحليل</string>
+    <string name="set_analysis_reparse_desc">فترة الهدوء بعد ضغطة المفتاح قبل إعادة التحليل</string>
+    <string name="set_analysis_perf">تسجيل أوقات التحليل</string>
+    <string name="set_analysis_perf_desc">تشخيصي: يكتب أوقات كل مرور (دلالي / تشخيصات / طيّات / تلميحات مضمّنة / معاينات) وكل مرحلة إلى السجل حتى تجد ما يبطئ الملف. اقرأها في الخصوصية ← عرض السجلات. متوقف افتراضيًا.</string>
+    <string name="set_preview_file">حظر الوصول إلى الملفات</string>
+    <string name="set_preview_file_desc">منع الكود المُعاين من قراءة الملفات أو كتابتها (java.io / java.nio / kotlin.io). تُرجع الاستدعاءات المحظورة null وتُدرَج في شريحة مشكلات المعاينة. ينطبق على المعاينات المفتوحة حديثًا.</string>
+    <string name="set_preview_net">حظر الوصول إلى الشبكة</string>
+    <string name="set_preview_net_desc">منع الكود المُعاين من فتح مقابس أو اتصالات HTTP (java.net، OkHttp، Ktor).</string>
+    <string name="set_preview_android">حظر استدعاءات نظام Android</string>
+    <string name="set_preview_android_desc">منع الكود المُعاين من إطلاق الأنشطة/الخدمات، أو إرسال البثوث، أو استخدام خدمات النظام أو ContentResolver أو SharedPreferences. تبقى قراءات الموارد والكثافة متاحة.</string>
+    <string name="set_preview_process">حظر العمليات والانعكاس</string>
+    <string name="set_preview_process_desc">منع الكود المُعاين من تشغيل العمليات، أو استدعاء System.exit، أو تحميل المكتبات الأصلية، أو استدعاء الأعضاء بالانعكاس.</string>
+    <string name="set_build_conflict">تعارضات التبعيات</string>
+    <string name="set_build_conflict_desc">أي إصدار يفوز عند طلب إصدارين في الرسم البياني</string>
+    <string name="set_build_conflict_newest">الأحدث</string>
+    <string name="set_build_conflict_pinned">المباشر يفوز</string>
+    <string name="set_build_conflict_fail">الفشل عند التعارض</string>
+    <string name="set_br_separate">البناء في عملية منفصلة</string>
+    <string name="set_br_separate_desc">شغّل عمليات البناء وبرنامجك في عملية معزولة حتى لا يُسقط عطل نفاد الذاكرة بيئة التطوير. إيقاف = البناء داخل العملية (يستخدم ذاكرة أقل، بدون عزل). يتطلب إذن الإشعارات (تعرض العملية المعزولة إشعار تقدّم)؛ وبدونه تُشغَّل عمليات البناء داخل العملية. يسري في المرة التالية التي تفتح فيها مشروعًا.</string>
+    <string name="set_br_notif">إشعارات البناء</string>
+    <string name="set_br_notif_desc">عرض إشعار تقدّم أثناء تشغيل بناء أو برنامجك في العملية المنفصلة. مطلوب للبناء المعزول؛ وإذا كان متوقفًا، تُشغَّل عمليات البناء داخل التطبيق.</string>
+    <string name="set_br_notif_btn">تفعيل</string>
+    <string name="set_br_r8mode">تنفيذ R8</string>
+    <string name="set_br_r8mode_forked">VM منفصل</string>
+    <string name="set_br_r8mode_inprocess">داخل العملية</string>
+    <string name="set_br_r8heap">ذاكرة كومة VM المنفصل لـ R8</string>
+    <string name="set_br_dexoff">عتبة تحويل dex خارج الكومة</string>
+    <string name="set_br_dexbatch">حجم دفعة دمج dex</string>
+    <string name="set_br_dexbatch_desc">في التطبيقات الكبيرة جدًا تدمج خطوة تحويل dex النهائية الأصناف على دفعات حتى لا تحتاجها كلها في الذاكرة دفعة واحدة. تُبقي الدفعات الأصغر تلك الذاكرة منخفضة (جيد للأجهزة قليلة الذاكرة) لكنها تجعل APK أكبر قليلاً (ضغط مشترك أقل بين الأصناف)؛ وتحزم الدفعات الأكبر بإحكام أكثر لكنها تحتاج ذاكرة أكبر لكل دمج. لا تصل معظم التطبيقات إلى هذا الحد، إذ لا يبدأ إلا بعد بضعة آلاف من الأصناف.</string>
+    <string name="set_br_dexfork">الحد الأقصى لعمليات dex المتزامنة المنفصلة</string>
+    <string name="set_privacy_analytics">مشاركة تحليلات الأداء</string>
+    <string name="set_privacy_analytics_desc">مقاييس أداء مجهولة الهوية فقط، ولا يشمل ذلك كودك أو أسماء ملفاتك أبدًا</string>
+    <string name="set_privacy_clear">مسح الذاكرة المؤقتة</string>
+    <string name="set_privacy_clear_desc">تحرير ذواكر التبعيات / اللغة / المعاينة القابلة لإعادة التوليد (لا يشمل المصدر أبدًا)</string>
+    <string name="set_privacy_clear_btn">مسح</string>
+    <string name="set_privacy_logs">عرض السجلات</string>
+    <string name="set_privacy_logs_desc">أحدث نشاط للمحرر والتحليل والبناء</string>
+    <string name="set_privacy_logs_btn">فتح</string>
+    <string name="set_privacy_backup">نسخ المشاريع احتياطيًا</string>
+    <string name="set_privacy_backup_desc">تصدير كل مشروع إلى ملف zip واحد</string>
+    <string name="set_privacy_backup_btn">نسخ احتياطي</string>
+
+    <!-- Toggles / misc -->
+    <string name="toggle_on">تشغيل</string>
+    <string name="toggle_off">إيقاف</string>
+    <string name="picker_delete_project">حذف المشروع</string>
+    <string name="storage_copy_path">نسخ المسار</string>
+    <string name="symbolbar_tab">Tab</string>
+    <string name="rename_failed">فشلت إعادة التسمية</string>
+    <string name="learn_check_failed">فشل الفحص</string>
+    <string name="palette_section_goto">الانتقال إلى</string>
+
+    <!-- Quick documentation -->
+    <string name="quickdoc_parameters">المعاملات</string>
+    <string name="quickdoc_returns">القيمة المُرجَعة</string>
+    <string name="quickdoc_throws">الاستثناءات</string>
+    <string name="quickdoc_see_also">انظر أيضًا</string>
+
+    <!-- Resource preview -->
+    <string name="respreview_no_preview">لا تتوفر معاينة لهذا الملف</string>
+    <string name="respreview_render_drawable_failed">تعذّر عرض هذا القابل للرسم</string>
+    <string name="respreview_unsupported">غير مدعوم: &lt;%1$s>، %2$s</string>
+    <string name="respreview_no_colors">لا توجد ألوان مُعلَنة في هذا الملف</string>
+    <string name="respreview_unresolved">(غير محلول)</string>
+    <string name="respreview_decode_image_failed">تعذّر فك ترميز هذه الصورة</string>
+
+    <!-- Module config (consumer) -->
+    <string name="modcfg_consumer_suffix">%1$s · مستهلِك</string>
+
+    <!-- Block palette -->
+    <string name="block_palette_if">If</string>
+    <string name="block_palette_if_else">If / Else</string>
+    <string name="block_palette_for_each">لكل عنصر</string>
+    <string name="block_palette_while">While</string>
+    <string name="block_palette_return">Return</string>
+    <string name="block_palette_variable">متغيّر</string>
+    <string name="block_palette_call">استدعاء</string>
+    <string name="block_palette_comment">تعليق</string>
 </resources>

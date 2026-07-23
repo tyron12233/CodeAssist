@@ -166,4 +166,1013 @@ Nunca recopilamos su código, nombres de archivos o proyectos, qué funciones us
     <string name="chat_new">Nueva sesión</string>
     <string name="chat_retry">Reintentar</string>
     <string name="chat_thinking">Pensando…</string>
+
+    <!-- Block editor -->
+    <string name="block_cannot_project">Este archivo aún no se puede proyectar en bloques.</string>
+    <string name="block_projecting">Proyectando bloques…</string>
+    <string name="block_fold">plegar</string>
+    <string name="block_keyword_to">a</string>
+    <string name="block_edit_expression">Editar expresión</string>
+    <string name="block_focus_hint">Toca un conector para editarlo; toca un chip anidado para profundizar.</string>
+    <string name="block_add_block">agregar bloque</string>
+    <string name="block_trash">papelera</string>
+    <string name="block_drop_to_delete">Suelta para eliminar</string>
+    <string name="block_button">Bloques</string>
+    <string name="block_live_projection">proyección en vivo · sincronizado con Código</string>
+    <string name="block_add_a_block">Agregar un bloque</string>
+    <string name="block_statement_slot">espacio de sentencia</string>
+    <string name="block_searching_index">Buscando en el índice…</string>
+    <string name="block_no_matches">Sin coincidencias</string>
+    <string name="block_no_index_matches">Sin coincidencias en el índice</string>
+    <string name="block_search_placeholder">Buscar bloques, clases, métodos…</string>
+    <string name="block_wrap_if">Envolver en if</string>
+    <string name="block_duplicate">Duplicar</string>
+    <plurals name="block_import_count">
+        <item quantity="one">· %1$d importación</item>
+        <item quantity="other">· %1$d importaciones</item>
+    </plurals>
+    <plurals name="block_block_count">
+        <item quantity="one">· %1$d bloque</item>
+        <item quantity="other">· %1$d bloques</item>
+    </plurals>
+
+    <!-- Editor view -->
+    <string name="edview_open_a_file_from_navigator">Abre un archivo desde el navegador</string>
+    <string name="edview_no_file_open_title">Ningún archivo abierto</string>
+    <string name="edview_no_file_open_hint">Selecciona un archivo en el navegador para empezar a editar</string>
+
+    <!-- Tabs -->
+    <string name="tab_close_others">Cerrar las demás</string>
+    <string name="tab_close_to_the_right">Cerrar a la derecha</string>
+    <string name="tab_close_to_the_left">Cerrar a la izquierda</string>
+    <string name="tab_close_all">Cerrar todas</string>
+
+    <!-- File tree -->
+    <string name="filetree_open_in_file_manager">Abrir en el administrador de archivos</string>
+    <string name="filetree_import_files">Importar archivos</string>
+    <string name="filetree_change_view">Cambiar vista</string>
+    <string name="filetree_scope_project">Proyecto</string>
+    <string name="filetree_scope_all_files">Todos los archivos</string>
+    <string name="filetree_more_actions">Más acciones</string>
+    <string name="filetree_new_file">Nuevo archivo</string>
+    <string name="filetree_new_folder">Nueva carpeta</string>
+    <string name="filetree_expand_all">Expandir todo</string>
+    <string name="filetree_collapse_all">Contraer todo</string>
+    <string name="filetree_refresh">Actualizar</string>
+    <string name="filetree_sort_by">Ordenar por</string>
+    <string name="filetree_sort_name">Nombre</string>
+    <string name="filetree_sort_type">Tipo</string>
+    <string name="filetree_settings_of">Configuración de %1$s</string>
+    <string name="filetree_dependencies_of">Dependencias de %1$s</string>
+    <string name="filetree_share_node">Compartir %1$s</string>
+    <string name="filetree_actions_for">Acciones para %1$s</string>
+    <string name="filetree_module_settings">Configuración del módulo</string>
+    <string name="filetree_dependencies">Dependencias</string>
+    <string name="filetree_add_source_root">Agregar raíz de fuentes</string>
+    <string name="filetree_new">Nuevo</string>
+    <string name="filetree_import_from_file_manager">Importar desde el administrador de archivos</string>
+    <string name="filetree_export">Exportar…</string>
+    <string name="filetree_reveal_in_file_manager">Mostrar en el administrador de archivos</string>
+    <string name="filetree_rename">Renombrar</string>
+    <string name="filetree_move">Mover</string>
+    <string name="filetree_copy">Copiar</string>
+    <string name="filetree_delete">Eliminar</string>
+    <string name="filetree_java_class">Clase Java</string>
+    <string name="filetree_kotlin_file">Archivo Kotlin</string>
+    <string name="filetree_resource_file">Archivo de recursos</string>
+    <string name="filetree_file">Archivo</string>
+    <string name="filetree_directory">Directorio</string>
+    <string name="filetree_new_in">Nuevo en %1$s</string>
+
+    <!-- Build console -->
+    <string name="buildc_build">Compilar</string>
+    <string name="buildc_collapse">Contraer</string>
+    <string name="buildc_status_idle">Inactivo</string>
+    <string name="buildc_status_running">Ejecutando…</string>
+    <string name="buildc_status_succeeded">Correcto</string>
+    <string name="buildc_status_failed">Fallido</string>
+    <string name="buildc_copied">Copiado</string>
+    <string name="buildc_copy">Copiar %1$s</string>
+    <string name="buildc_working">Trabajando…</string>
+    <string name="buildc_tab_problems">Problemas</string>
+    <string name="buildc_tab_log">Registro</string>
+    <string name="buildc_tab_steps">Pasos</string>
+    <string name="buildc_tab_logcat">Logcat</string>
+    <string name="buildc_filter_all">Todos %1$d</string>
+    <string name="buildc_filter_errors">Errores %1$d</string>
+    <string name="buildc_filter_warnings">Advertencias %1$d</string>
+    <string name="buildc_no_problems">Sin problemas.</string>
+    <string name="buildc_no_problems_match">Ningún problema coincide con este filtro.</string>
+    <string name="buildc_ungroup">Desagrupar</string>
+    <string name="buildc_group_by_task">Agrupar por tarea</string>
+    <string name="buildc_empty_log">Pulsa Ejecutar para compilar y ejecutar este módulo.</string>
+    <string name="buildc_no_log_match">Ninguna línea de registro coincide.</string>
+    <string name="buildc_logcat_empty">Ejecuta una app de depuración para ver sus registros aquí.</string>
+    <string name="buildc_logcat_connected">Conectado</string>
+    <string name="buildc_logcat_waiting">Esperando la app…</string>
+    <string name="buildc_logcat_idle">Ninguna app en ejecución</string>
+    <string name="buildc_general">General</string>
+    <string name="buildc_no_steps">Aún no hay pasos de compilación.</string>
+    <string name="buildc_indexing">Indexando…</string>
+    <string name="buildc_filter_log">Filtrar registro…</string>
+    <string name="buildc_loglevel_all">Todos</string>
+    <string name="buildc_loglevel_warnings">Advertencias</string>
+    <string name="buildc_loglevel_errors">Errores</string>
+    <string name="buildc_step_up_to_date">ACTUALIZADO</string>
+    <string name="buildc_step_no_source">SIN-FUENTES</string>
+    <string name="buildc_step_skipped">OMITIDO</string>
+    <string name="buildc_build_succeeded">Compilación correcta</string>
+    <string name="buildc_build_failed">Error en la compilación</string>
+
+    <!-- Code actions -->
+    <string name="codeaction_show_context_actions">Mostrar acciones de contexto</string>
+    <string name="codeaction_preview_composable">Previsualizar este composable</string>
+    <string name="codeaction_dismiss">Descartar</string>
+    <string name="codeaction_severity_error">Error</string>
+    <string name="codeaction_severity_warning">Advertencia</string>
+    <string name="codeaction_severity_unused">Sin usar</string>
+    <string name="codeaction_severity_info">Información</string>
+    <string name="codeaction_severity_hint">Sugerencia</string>
+    <string name="codeaction_quick_fixes">Correcciones rápidas</string>
+
+    <!-- Completion -->
+    <string name="completion_no_suggestions">Sin sugerencias</string>
+    <string name="completion_back_to_suggestions">Volver a las sugerencias</string>
+    <string name="completion_show_documentation">Mostrar documentación</string>
+
+    <!-- Signature help -->
+    <string name="sig_more">+%1$d más</string>
+    <string name="sig_peek_tip">Toca para ver la definición completa</string>
+    <string name="sig_peek_collapse">Toca para contraer</string>
+
+    <!-- Editor sheet -->
+    <string name="edsheet_source_control">Control de versiones</string>
+    <string name="edsheet_source_control_desc">Integración con Git. La preparación, los diffs, commit y push están en la hoja de ruta.</string>
+
+    <!-- Symbol bar -->
+    <string name="symbolbar_move_line_up">Subir línea</string>
+    <string name="symbolbar_move_line_down">Bajar línea</string>
+    <string name="symbolbar_duplicate_line">Duplicar línea</string>
+    <string name="symbolbar_next_problem">Siguiente problema</string>
+
+    <!-- Editor bottom nav / breadcrumb -->
+    <string name="edbottomnav_source">Fuente</string>
+    <string name="breadcrumb_code">Código</string>
+    <string name="breadcrumb_blocks">Bloques</string>
+    <string name="breadcrumb_preview">Vista previa</string>
+    <string name="breadcrumb_split">Dividido</string>
+
+    <!-- Editor chrome -->
+    <string name="edchrome_files">Archivos</string>
+    <string name="edchrome_source">Fuente</string>
+    <string name="edchrome_more">Más</string>
+    <string name="edchrome_settings_and_tools">Configuración y herramientas</string>
+    <string name="edchrome_toggle_navigator">Alternar navegador</string>
+    <string name="edchrome_find_replace">Buscar / reemplazar</string>
+    <string name="edchrome_reformat_code">Reformatear código</string>
+    <string name="edchrome_optimize_imports">Optimizar importaciones</string>
+    <string name="edchrome_command_palette">Paleta de comandos</string>
+    <string name="edchrome_toggle_inlay_hints">Alternar sugerencias en línea</string>
+    <string name="edchrome_hide_inlay_hints">Ocultar sugerencias en línea</string>
+    <string name="edchrome_show_inlay_hints">Mostrar sugerencias en línea</string>
+    <string name="edchrome_build_console">Consola de compilación</string>
+    <string name="edchrome_compose_preview">Vista previa de Compose</string>
+    <string name="edchrome_more_actions">Más acciones</string>
+    <string name="edchrome_resolving_dependencies">Resolviendo dependencias…</string>
+    <string name="edchrome_hide_resolution_details">Ocultar detalles de resolución</string>
+    <string name="edchrome_show_resolution_details">Mostrar detalles de resolución</string>
+    <string name="edchrome_hide_unresolved_dependencies">Ocultar dependencias sin resolver</string>
+    <string name="edchrome_show_unresolved_dependencies">Mostrar dependencias sin resolver</string>
+    <string name="edchrome_search_tasks">Buscar tareas…</string>
+    <string name="edchrome_nothing_to_run">Nada que ejecutar</string>
+    <string name="edchrome_no_matching_tasks">No hay tareas coincidentes</string>
+    <string name="edchrome_build_variant">Variante de compilación</string>
+    <string name="edchrome_no_variants">Sin variantes</string>
+    <string name="edchrome_gradle_compatibility_mode">Modo de compatibilidad con Gradle</string>
+    <string name="edchrome_gradle_compat">Compat. Gradle</string>
+    <string name="edchrome_indexing">Indexando…</string>
+    <string name="edchrome_indexing_percent">Indexando… %1$d%</string>
+    <string name="edchrome_indexed">Indexado</string>
+    <plurals name="edchrome_unresolved_dependencies">
+        <item quantity="one">No se pudo resolver %1$d dependencia</item>
+        <item quantity="other">No se pudieron resolver %1$d dependencias</item>
+    </plurals>
+
+    <!-- Find / replace -->
+    <string name="find_toggle_replace">Alternar reemplazo</string>
+    <string name="find_placeholder">Buscar</string>
+    <string name="find_case_sensitive">Aa</string>
+    <string name="find_whole_word">W</string>
+    <string name="find_regex">.*</string>
+    <string name="find_previous_match">Coincidencia anterior</string>
+    <string name="find_next_match">Coincidencia siguiente</string>
+    <string name="find_replace_placeholder">Reemplazar</string>
+    <string name="find_replace">Reemplazar</string>
+    <string name="find_all">Todas</string>
+
+    <!-- Gradle compatibility -->
+    <string name="gradle_mode_title">Modo de compatibilidad con Gradle</string>
+    <string name="gradle_resync">Volver a sincronizar</string>
+    <string name="gradle_syncing">Sincronizando desde Gradle…</string>
+
+    <!-- SDK sources -->
+    <string name="sources_not_installed">Las fuentes de la plataforma Android (%1$s) no están instaladas. Se necesitan para los nombres de parámetros y la documentación de android.*.</string>
+    <string name="sources_download">Descargar</string>
+    <string name="sources_downloading">Descargando…</string>
+    <string name="sources_download_failed">Error de descarga: %1$s</string>
+
+    <!-- Structure -->
+    <string name="structure_title">Estructura</string>
+    <string name="structure_filter">Filtrar…</string>
+    <string name="structure_no_symbols">No hay símbolos en este archivo</string>
+    <string name="structure_no_matches">Sin coincidencias</string>
+
+    <!-- Misc editor -->
+    <string name="comingsoon_footnote">Próximamente</string>
+    <string name="edscreen_project_root">raíz del proyecto</string>
+
+    <!-- Home / Explore / Learn hubs -->
+    <string name="home_store">Explorar</string>
+    <string name="home_learn">Aprender</string>
+    <string name="store_title">Explorar</string>
+    <string name="store_subtitle">Plantillas y proyectos de ejemplo para empezar</string>
+    <string name="store_settings_and_tools">Configuración y herramientas</string>
+    <string name="store_search_hint">Buscar plantillas y ejemplos</string>
+    <string name="store_all">Todos</string>
+    <string name="store_unavailable">Explorar no disponible</string>
+    <string name="store_unavailable_content">Explorar no está disponible en esta compilación.</string>
+    <string name="store_coming_soon">Próximamente</string>
+    <string name="store_community_content">Los proyectos de la comunidad aparecerán aquí cuando se abran los envíos.</string>
+    <string name="store_no_matches">Sin coincidencias</string>
+    <string name="store_soon">Pronto</string>
+    <string name="store_by_author">por %1$s</string>
+    <string name="store_use_template">Usar esta plantilla</string>
+    <string name="store_create">Crear proyecto</string>
+    <string name="store_item_about">Acerca de</string>
+    <string name="store_item_whats_included">Qué incluye</string>
+    <string name="store_item_details">Detalles</string>
+    <string name="store_item_type">Tipo</string>
+    <string name="store_item_language">Lenguaje</string>
+    <string name="store_item_publisher">Editor</string>
+    <string name="store_item_downloads">Descargas</string>
+    <string name="store_installing">Instalando…</string>
+    <string name="store_get">Obtener</string>
+    <string name="store_kind_template">Plantilla</string>
+    <string name="store_kind_sample">Ejemplo</string>
+    <string name="store_kind_community">Comunidad</string>
+
+    <!-- Learn -->
+    <string name="learn_title">Aprender</string>
+    <string name="learn_subtitle">Guías, ejemplos y la comunidad</string>
+    <string name="learn_documentation">Documentación</string>
+    <string name="learn_documentation_content">Guías de arquitectura, compilación y lenguajes.</string>
+    <string name="learn_browse_samples">Explorar ejemplos</string>
+    <string name="learn_browse_samples_content">Abre los proyectos de ejemplo de Explorar para leerlos y ejecutarlos.</string>
+    <string name="learn_community_content">Haz preguntas y comparte lo que construyes.</string>
+    <string name="learn_tutorials">Tutoriales interactivos</string>
+    <string name="learn_tutorials_content">Lecciones paso a paso dentro del editor.</string>
+    <string name="learn_soon">Pronto</string>
+    <string name="learn_continue_learning">Continuar aprendiendo</string>
+    <string name="learn_tracks">Rutas de aprendizaje</string>
+    <string name="learn_all">Todos</string>
+    <string name="learn_more_resources">Más</string>
+    <string name="learn_resume">Reanudar</string>
+    <string name="learn_start">Empezar</string>
+    <string name="learn_review">Repasar</string>
+    <string name="learn_continue">Continuar</string>
+    <string name="learn_completed">Completado</string>
+    <string name="learn_minutes">%1$d min</string>
+    <string name="learn_lessons_progress">%1$d / %2$d lecciones</string>
+    <string name="learn_step_progress">Paso %1$d de %2$d</string>
+    <string name="learn_run_check">Ejecutar y comprobar</string>
+    <string name="learn_running">Ejecutando…</string>
+    <string name="learn_need_hint">¿Necesitas una pista?</string>
+    <string name="learn_hint_n">Pista %1$d</string>
+    <string name="learn_show_solution">Mostrar solución</string>
+    <string name="learn_solution">Solución</string>
+    <string name="learn_copy_to_editor">Copiar al editor</string>
+    <string name="learn_next">Siguiente</string>
+    <string name="learn_finish">Finalizar</string>
+    <string name="learn_output">Salida</string>
+    <string name="learn_preparing">Preparando tu espacio de trabajo de programación…</string>
+    <string name="learn_preparing_sub">Creando el índice de código para que el autocompletado y la comprobación de errores funcionen al instante.</string>
+    <string name="learn_compose_preparing">Preparando tu espacio de trabajo de Compose…</string>
+    <string name="learn_compose_downloading">Descargando las bibliotecas de Compose, esto ocurre solo una vez.</string>
+    <string name="learn_compose_indexing">Indexando… la vista previa empezará en un momento.</string>
+    <string name="learn_compose_edit_hint">Edita el código de arriba y observa cómo se vuelve a renderizar</string>
+    <string name="learn_indexing">Indexando… las sugerencias y comprobaciones mejorarán en un momento</string>
+    <string name="learn_submit">Enviar</string>
+    <string name="learn_quiz_correct">¡Correcto!</string>
+    <string name="learn_quiz_incorrect">No exactamente. Inténtalo de nuevo.</string>
+    <string name="learn_lesson_complete">¡Lección completada!</string>
+    <string name="learn_lesson_complete_content">¡Buen trabajo! Mantén el ritmo.</string>
+    <plurals name="learn_lesson_count">
+        <item quantity="one">%1$d lección</item>
+        <item quantity="other">%1$d lecciones</item>
+    </plurals>
+
+    <!-- Search -->
+    <string name="search_tab_symbols">Símbolos</string>
+    <string name="search_tab_members">Miembros</string>
+    <string name="search_tab_text">Texto</string>
+    <string name="search_find_in_files_hint">Buscar en archivos…</string>
+    <string name="search_hint">Buscar %1$s…</string>
+    <string name="search_min_chars">Escribe al menos 2 caracteres para buscar.</string>
+    <string name="search_indexing">Indexando… los símbolos aparecen a medida que se crea el índice.</string>
+    <string name="search_no_symbols">No se encontraron símbolos.</string>
+    <string name="search_no_members">No se encontraron miembros.</string>
+    <string name="search_no_text_matches">Sin coincidencias en los archivos del proyecto.</string>
+
+    <!-- Logs -->
+    <string name="logs_title">Registros</string>
+    <string name="logs_filter_all">Todos</string>
+    <string name="logs_filter_warnings">Advertencias</string>
+    <string name="logs_filter_errors">Errores</string>
+    <string name="logs_filter_all_plugins">Todos los complementos</string>
+    <string name="logs_filter_hint">Filtrar registros…</string>
+    <string name="logs_resume">Reanudar seguimiento en vivo</string>
+    <string name="logs_pause">Pausar seguimiento en vivo</string>
+    <string name="logs_copy_all">Copiar todo</string>
+    <string name="logs_empty">Aún no hay registros.</string>
+    <string name="logs_no_match">Ningún registro coincide con este filtro.</string>
+
+    <!-- Command palette -->
+    <string name="palette_filter_all">Todos</string>
+    <string name="palette_filter_commands">Comandos</string>
+    <string name="palette_filter_files">Archivos</string>
+    <string name="palette_filter_symbols">Símbolos</string>
+    <string name="palette_filter_members">Miembros</string>
+    <string name="palette_hint">Ejecuta un comando, salta a un archivo o símbolo…</string>
+    <string name="palette_type_to_search">Escribe para buscar %1$s…</string>
+    <string name="palette_no_matches">Sin coincidencias</string>
+
+    <!-- Run -->
+    <string name="run_no_active_run">No hay ninguna ejecución activa.</string>
+    <string name="run_back">Atrás</string>
+    <string name="run_run_again">Ejecutar de nuevo</string>
+    <string name="run_building">Compilando…</string>
+    <string name="run_running">Ejecutando</string>
+    <string name="run_exit_code">Salida %1$d</string>
+    <string name="run_failed">Fallida</string>
+    <string name="run_stopped">Detenida</string>
+    <string name="run_building_module">Compilando %1$s…</string>
+    <string name="run_running_module">Ejecutando %1$s</string>
+    <string name="run_no_output">(sin salida)</string>
+    <string name="run_type_input">Escribe una entrada, pulsa Intro…</string>
+    <string name="run_send">Enviar</string>
+    <string name="run_end_input_eof">Finalizar entrada (EOF)</string>
+    <string name="run_conflict_title">Ya en ejecución</string>
+    <string name="run_conflict_message">Todavía se está ejecutando una compilación o un programa. ¿Detenerlo e iniciar esta ejecución en su lugar?</string>
+    <string name="run_conflict_stop_and_run">Detener y ejecutar</string>
+    <string name="run_conflict_dont_ask">No volver a preguntar</string>
+
+    <!-- Build notifications -->
+    <string name="build_notif_title">¿Mostrar notificaciones de compilación?</string>
+    <string name="build_notif_message">CodeAssist puede ejecutar las compilaciones y tu programa en un proceso separado y aislado, y mostrar una notificación de progreso mientras se ejecutan. Esto evita que Android detenga la compilación cuando cambias de app, y te permite seguir el progreso. Permite las notificaciones para activarlo.</string>
+    <string name="build_notif_not_now">Ahora no</string>
+    <string name="build_notif_inprocess_title">Las compilaciones se ejecutarán en la app</string>
+    <string name="build_notif_inprocess_message">Sin permiso de notificaciones, las compilaciones se ejecutan dentro de CodeAssist en lugar de en un proceso separado, y no verás notificaciones de progreso de compilación. Puedes activar las notificaciones en cualquier momento en Configuración, en Entorno de compilación.</string>
+    <string name="build_notif_enabled">Notificaciones de compilación activadas</string>
+
+    <!-- Compose preview -->
+    <string name="preview_live">En vivo</string>
+    <string name="preview_paused">En pausa</string>
+    <string name="preview_stop_live">Detener vista previa en vivo</string>
+    <string name="preview_resume_live">Reanudar vista previa en vivo</string>
+    <string name="preview_rebuild">Reconstruir vista previa</string>
+    <string name="preview_choose_preview">Elegir vista previa</string>
+    <string name="preview_no_preview_found">No se encontró ningún @Preview</string>
+    <string name="preview_renders_on_device">La vista previa de Compose se renderiza en el dispositivo</string>
+    <string name="preview_device_phone">Teléfono</string>
+    <string name="preview_device_compact">Compacto</string>
+    <string name="preview_device_tablet">Tableta</string>
+    <string name="preview_rotate">Rotar</string>
+    <string name="preview_night_mode">Modo nocturno</string>
+    <string name="preview_night">Noche</string>
+    <string name="preview_zoom_in">Acercar</string>
+    <string name="preview_fit">Ajustar</string>
+    <string name="preview_problems">Problemas de la vista previa</string>
+    <string name="preview_copy_problems">Copiar problemas</string>
+    <string name="preview_render_error">error de renderizado</string>
+    <string name="preview_render_failed">No se pudo renderizar la vista previa</string>
+    <plurals name="preview_problems_count">
+        <item quantity="one">%1$d problema</item>
+        <item quantity="other">%1$d problemas</item>
+    </plurals>
+
+    <!-- Editor overlays -->
+    <string name="edoverlay_rename_kind">Renombrar %1$s</string>
+    <string name="edoverlay_renaming">Renombrando…</string>
+    <string name="edoverlay_rename_hint">Intro para renombrar '%1$s', Esc para cancelar</string>
+    <string name="edoverlay_go_to_line">Ir a la línea</string>
+    <string name="edoverlay_go_to_line_hint">Línea 1–%1$d  (línea o línea:columna)</string>
+    <string name="edoverlay_no_documentation">Sin documentación</string>
+    <string name="edoverlay_cut">Cortar</string>
+    <string name="edoverlay_paste">Pegar</string>
+    <string name="edoverlay_select_all">Seleccionar todo</string>
+    <string name="edoverlay_quick_documentation">Documentación rápida</string>
+    <string name="edoverlay_quick_actions">Acciones rápidas</string>
+
+    <!-- New file / folder -->
+    <string name="newfile_title">Nuevo archivo</string>
+    <string name="newfile_new_folder">Nueva carpeta</string>
+    <string name="newfile_in">en %1$s</string>
+    <string name="newfile_file_name">Nombre del archivo</string>
+    <string name="newfile_folder_name">Nombre de la carpeta</string>
+    <string name="newfile_file_name_hint">Helper.kt  ·  o  res/raw/data.json</string>
+    <string name="newfile_folder_name_hint">utils  ·  o  com/example/utils</string>
+    <string name="newfile_help_folder">Usa / para anidar carpetas.</string>
+    <string name="newfile_help_file">Usa / para anidar carpetas. .java/.kt generan una clase; .xml un elemento raíz; cualquier otra cosa queda vacía.</string>
+    <string name="newfile_package">Paquete</string>
+    <string name="newfile_kind">Tipo</string>
+    <string name="newfile_name">Nombre</string>
+    <string name="newfile_kind_class">Clase</string>
+    <string name="newfile_kind_interface">Interfaz</string>
+    <string name="newfile_kind_enum">Enum</string>
+    <string name="newfile_kind_abstract_class">Clase abstracta</string>
+    <string name="newfile_kind_annotation">Anotación</string>
+    <string name="newfile_kind_file">Archivo</string>
+    <string name="newfile_kind_data_class">Data class</string>
+    <string name="newfile_kind_object">Object</string>
+    <string name="newfile_new_java_class">Nueva clase Java</string>
+    <string name="newfile_new_kotlin_file">Nuevo archivo Kotlin</string>
+    <string name="newfile_source_java_hint">MyClass</string>
+    <string name="newfile_source_kotlin_hint">MyFile</string>
+    <string name="newfile_reskind_layout">Diseño</string>
+    <string name="newfile_reskind_values">Valores</string>
+    <string name="newfile_reskind_drawable">Drawable</string>
+    <string name="newfile_reskind_menu">Menú</string>
+    <string name="newfile_reskind_xml">XML</string>
+    <string name="newfile_mode_resource_file">Archivo de recursos</string>
+    <string name="newfile_mode_directory">Directorio</string>
+    <string name="newfile_new_resource_directory">Nuevo directorio de recursos</string>
+    <string name="newfile_new_resource_title">Nuevo recurso de %1$s</string>
+    <string name="newfile_res_layout_hint">activity_main</string>
+    <string name="newfile_res_name_hint">my_resource</string>
+    <string name="newfile_root_element">Elemento raíz</string>
+    <string name="newfile_resdir_name">Nombre del directorio</string>
+    <string name="newfile_resdir_name_hint">drawable-night</string>
+    <string name="newfile_preset_java">Java</string>
+    <string name="newfile_preset_kotlin">Kotlin</string>
+    <string name="newfile_preset_resources">Recursos</string>
+    <string name="newfile_kind_android_res">Recursos Android</string>
+    <string name="newfile_kind_assets">Assets</string>
+    <string name="newfile_preset_aidl">AIDL</string>
+    <string name="newfile_preset_custom">Personalizado</string>
+    <string name="newfile_role_sources">Fuentes</string>
+    <string name="newfile_add_source_root">Agregar raíz de fuentes</string>
+    <string name="newfile_to">a %1$s</string>
+    <string name="newfile_source_set">Conjunto de fuentes</string>
+    <string name="newfile_new_set">Nuevo conjunto…</string>
+    <string name="newfile_set_name_hint">p. ej. test  ·  debug</string>
+    <string name="newfile_custom_folder_hint">p. ej. proto  ·  templates</string>
+    <string name="newfile_treat_as">Tratar como</string>
+    <string name="newfile_created_at">Creado en %1$s</string>
+
+    <!-- File operations -->
+    <string name="fileop_rename_title">Renombrar '%1$s'</string>
+    <string name="fileop_new_name">Nuevo nombre</string>
+    <string name="fileop_delete_dir_title">¿Eliminar '%1$s' y su contenido?</string>
+    <string name="fileop_delete_file_title">¿Eliminar '%1$s'?</string>
+    <string name="fileop_delete_dir_body">Esto elimina permanentemente la carpeta y todo su contenido. No se puede deshacer.</string>
+    <string name="fileop_delete_file_body">Esto elimina permanentemente el archivo. No se puede deshacer.</string>
+    <string name="fileop_move_title">Mover '%1$s' a…</string>
+    <string name="fileop_copy_title">Copiar '%1$s' a…</string>
+    <string name="fileop_empty_folder">Esta carpeta está vacía.</string>
+    <string name="fileop_move_here">Mover aquí</string>
+    <string name="fileop_copy_here">Copiar aquí</string>
+
+    <!-- Error dialog -->
+    <string name="errdlg_unexpected">Se produjo un error inesperado. La app siguió funcionando.</string>
+    <string name="errdlg_hide_details">Ocultar detalles</string>
+    <string name="errdlg_show_details">Mostrar detalles</string>
+    <string name="errdlg_dismiss">Descartar</string>
+
+    <!-- Index status -->
+    <string name="index_title_building">Indexando</string>
+    <string name="index_title_idle">Índice</string>
+    <string name="index_working">Trabajando…</string>
+    <string name="index_up_to_date">Actualizado</string>
+    <string name="index_count_files">%1$d / %2$d archivos</string>
+    <string name="index_count_artifacts">%1$d / %2$d artefactos</string>
+    <string name="index_current_file">ARCHIVO ACTUAL</string>
+    <string name="index_artifacts">ARTEFACTOS</string>
+    <string name="index_idle_body">Todos los índices de símbolos y autocompletado están actualizados.</string>
+    <string name="index_reindex">Reindexar proyecto</string>
+    <string name="index_indexers">INDEXADORES</string>
+    <string name="index_ms">%1$d ms</string>
+    <string name="index_build_cache">%1$d artefactos · %2$d desde la caché</string>
+    <string name="index_build_phases">bibliotecas %1$d ms · fuentes %2$d ms</string>
+    <string name="index_more">+%1$d más</string>
+
+    <!-- Run-time permissions -->
+    <string name="perm_wants_to">El programa en ejecución quiere %1$s:</string>
+    <string name="perm_title_network">¿Permitir el acceso a la red?</string>
+    <string name="perm_verb_network">conectarse a la red</string>
+    <string name="perm_title_file_read">¿Permitir leer un archivo?</string>
+    <string name="perm_verb_file_read">leer el archivo</string>
+    <string name="perm_title_file_write">¿Permitir escribir un archivo?</string>
+    <string name="perm_verb_file_write">escribir el archivo</string>
+    <string name="perm_title_reflection">¿Permitir la reflexión?</string>
+    <string name="perm_verb_reflection">usar reflexión sobre</string>
+    <string name="perm_title_exec">¿Permitir ejecutar un proceso?</string>
+    <string name="perm_verb_exec">ejecutar el proceso</string>
+    <string name="perm_title_default">¿Permitir esta acción?</string>
+    <string name="perm_verb_default">realizar</string>
+    <string name="perm_allow_once">Permitir una vez</string>
+    <string name="perm_allow_run">Permitir en esta ejecución</string>
+    <string name="perm_allow_always">Permitir siempre en este proyecto</string>
+    <string name="perm_deny">Denegar</string>
+
+    <!-- Settings hub -->
+    <string name="settings_title">Configuración</string>
+    <string name="settings_no_settings_available">No hay opciones disponibles.</string>
+    <string name="settings_all_settings">Todas las opciones</string>
+    <string name="settings_backup_ready">Copia de seguridad lista</string>
+    <string name="settings_inspections_for_language">Inspecciones de %1$s</string>
+    <string name="settings_advanced">Avanzado</string>
+    <string name="settings_hub_title">Configuración y herramientas</string>
+    <string name="settings_settings">Configuración</string>
+    <string name="settings_settings_subtitle">Apariencia, editor, autocompletado y análisis</string>
+    <string name="settings_code_style">Estilo de código</string>
+    <string name="settings_code_style_subtitle">Perfiles de formato por lenguaje y vista previa en vivo</string>
+    <string name="settings_sdk_manager">Administrador de SDK</string>
+    <string name="settings_sdk_manager_subtitle">Descargar el SDK de Android y las fuentes del JDK</string>
+    <string name="settings_keystore_manager">Administrador de keystores</string>
+    <string name="settings_keystore_manager_subtitle">Crear, importar y gestionar keystores de firma</string>
+    <string name="settings_plugins">Complementos</string>
+    <string name="settings_plugins_subtitle">Activar o desactivar los complementos integrados</string>
+    <string name="plugins_restart_hint">Reinicia para aplicar los cambios de complementos.</string>
+    <string name="plugins_required">Obligatorio</string>
+    <string name="plugins_requires">Requiere %1$s</string>
+
+    <!-- Keystore manager -->
+    <string name="keystore_manager_title">Administrador de keystores</string>
+    <string name="keystore_section_title">Keystores de firma</string>
+    <string name="keystore_section_description"><![CDATA[Crea o importa los keystores con los que firmas las compilaciones de lanzamiento. Se almacenan una sola vez y se comparten entre proyectos; asigna uno a un tipo de compilación en la pestaña Firma de un módulo.]]></string>
+    <string name="keystore_assign_to_build">Asignar a una compilación (firma del proyecto)</string>
+    <string name="keystore_empty">Aún no hay keystores. Crea o importa uno para firmar compilaciones de lanzamiento.</string>
+    <string name="keystore_deleted">Se eliminó %1$s</string>
+    <string name="keystore_row_subtitle">%1$s · clave: %2$s</string>
+    <string name="keystore_sha256">SHA-256 %1$s</string>
+    <string name="keystore_expires">caduca ~%1$s</string>
+    <string name="keystore_cert_unreadable"><![CDATA[No se pudo leer el certificado (la contraseña puede haber cambiado).]]></string>
+    <string name="keystore_create_title">Nuevo keystore</string>
+    <string name="keystore_name">Nombre</string>
+    <string name="keystore_key_alias">Alias de la clave</string>
+    <string name="keystore_password">Contraseña (≥ 6 caracteres; protege el keystore y la clave)</string>
+    <string name="keystore_full_name">Nombre completo (CN)</string>
+    <string name="keystore_organization">Organización (opcional)</string>
+    <string name="keystore_country">Código de país (opcional)</string>
+    <string name="keystore_validity">Validez (años)</string>
+    <string name="keystore_create_button">Crear keystore</string>
+    <string name="keystore_import_title">Importar keystore</string>
+    <string name="keystore_import_password">Contraseña del keystore</string>
+    <string name="keystore_import_alias">Alias de la clave (vacío = la primera)</string>
+    <string name="keystore_import_key_password">Contraseña de la clave (vacío = contraseña del keystore)</string>
+
+    <!-- SDK manager -->
+    <string name="sdk_manager_title">Administrador de SDK</string>
+    <string name="sdk_could_not_load">No se pudieron cargar los paquetes.</string>
+    <string name="sdk_sources_documentation">Fuentes y documentación</string>
+    <string name="sdk_sources_documentation_desc">Descarga las fuentes de la plataforma SDK y las fuentes del JDK para que el editor pueda mostrar javadoc, nombres de parámetros e ir al código fuente del SDK. Las descargas continúan en segundo plano, así que puedes salir de esta pantalla y seguir trabajando.</string>
+    <string name="sdk_downloads">Descargas</string>
+    <string name="sdk_clear_finished">Borrar finalizadas</string>
+    <string name="sdk_jdk">JDK</string>
+    <string name="sdk_jdk_version">JDK %1$s</string>
+    <string name="sdk_jdk_sources_available">Fuentes disponibles, la documentación de android.* y java.* está activada.</string>
+    <string name="sdk_jdk_no_sources">No se encontraron fuentes del JDK. Descarga un JDK que las incluya:</string>
+    <string name="sdk_jdk_downloading">JDK %1$d…</string>
+    <string name="sdk_jdk_sources">Fuentes del JDK %1$d</string>
+    <string name="sdk_android_sources">Fuentes del SDK de Android</string>
+    <string name="sdk_loading_packages">Cargando la lista de paquetes…</string>
+    <string name="sdk_no_packages">No hay paquetes. Comprueba tu conexión y luego Actualiza.</string>
+    <string name="sdk_downloading">Descargando</string>
+    <string name="sdk_downloading_detail">Descargando · %1$s</string>
+    <string name="sdk_download_failed">Fallida</string>
+    <string name="sdk_download_extracting">Extrayendo…</string>
+    <string name="sdk_download_installing">Instalando…</string>
+    <string name="sdk_installed">Instalado</string>
+    <string name="sdk_resume">Reanudar</string>
+
+    <!-- Dependencies -->
+    <string name="dep_declared">Declaradas</string>
+    <string name="dep_resolved">Resueltas</string>
+    <string name="dep_tree">Árbol</string>
+    <string name="dep_graph">Grafo</string>
+    <string name="dep_mode_library">Biblioteca</string>
+    <string name="dep_mode_platform">Plataforma (BOM)</string>
+    <string name="dep_mode_module">Módulo</string>
+    <string name="dep_mode_local">Archivo local</string>
+    <string name="dep_resolving">Resolviendo…</string>
+    <string name="dep_re_resolve">Volver a resolver dependencias</string>
+    <string name="dep_repositories">Repositorios</string>
+    <string name="dep_repositories_subtitle">Desde dónde se resuelven las bibliotecas. Los repositorios integrados no se pueden quitar.</string>
+    <string name="dep_repo_name_hint">Nombre (opcional)</string>
+    <string name="dep_repo_url_hint">https://repo.example.com/maven</string>
+    <string name="dep_remove_repo">Quitar %1$s</string>
+    <string name="dep_built_in">integrado</string>
+    <string name="dep_load_failed">No se pudieron cargar las dependencias.</string>
+    <string name="dep_resolving_dependencies">Resolviendo dependencias</string>
+    <string name="dep_downloading_artifacts">Descargando POMs y artefactos…</string>
+    <string name="dep_unresolved_count">%1$d sin resolver</string>
+    <string name="dep_none_declared">No hay dependencias declaradas. Toca Agregar para descargar una.</string>
+    <string name="dep_nothing_resolved">Aún no se ha resuelto nada.</string>
+    <string name="dep_not_resolved">no resuelta. Comprueba la versión/repositorio o vuelve a resolver</string>
+    <string name="dep_cycle_shown_above">ciclo, ya mostrado arriba</string>
+    <string name="dep_couldnt_resolve_tooltip">No se pudo resolver. Comprueba la versión/repositorio</string>
+    <string name="dep_unresolved">Sin resolver</string>
+    <string name="dep_incompatible">Incompatible</string>
+    <string name="dep_edit_named">Editar %1$s</string>
+    <string name="dep_more_actions">Más acciones para %1$s</string>
+    <string name="dep_exclude_named">Excluir %1$s</string>
+    <string name="dep_remove_named">Quitar %1$s</string>
+    <string name="dep_transitive">transitiva</string>
+    <string name="dep_options_excluded">Opciones de %1$s (excluida)</string>
+    <string name="dep_remove_exclusion">Quitar exclusión</string>
+    <string name="dep_excluded">excluida</string>
+    <string name="dep_add_dependency">Agregar dependencia</string>
+    <string name="dep_search_bom_hint">Busca un BOM, o escribe group:name:version, p. ej. androidx.compose:compose-bom:…</string>
+    <string name="dep_search_library_hint">Busca en Maven Central, o escribe group:name[:version]…</string>
+    <string name="dep_scope">ámbito</string>
+    <string name="dep_variant">variante</string>
+    <string name="dep_all_variants">Todas las variantes</string>
+    <string name="dep_suggested">sugerida</string>
+    <string name="dep_adding">Agregando %1$s</string>
+    <string name="dep_resolving_transitive">Resolviendo dependencias transitivas…</string>
+    <string name="dep_no_other_modules">No hay otros módulos disponibles de los que depender.</string>
+    <string name="dep_no_results">Sin resultados.</string>
+    <string name="dep_type_to_search">Escribe al menos 2 caracteres para buscar, o un group:name[:version] completo.</string>
+    <string name="dep_add_named">Agregar %1$s</string>
+    <string name="dep_import_as_platform">Importar como plataforma (BOM)</string>
+    <string name="dep_add_versionless">Agregar sin versión, la versión viene de una plataforma</string>
+    <string name="dep_add_exact">Agregar esta coordenada exacta</string>
+    <string name="dep_add_infer_group">Agregar esta versión (grupo encontrado por búsqueda)</string>
+    <string name="dep_choose_local_file">Elige un archivo .jar o .aar</string>
+    <string name="dep_copied_into_libs">Copiado a la carpeta libs/ del módulo</string>
+    <string name="dep_already_in_project">Ya está en el proyecto</string>
+    <string name="dep_no_local_libs">No se encontraron jars/aars locales. Importa uno al proyecto, o abre esto en un dispositivo para elegir un archivo.</string>
+    <string name="dep_attach_named">Adjuntar %1$s</string>
+    <string name="dep_remove_dependency">Quitar dependencia</string>
+    <string name="dep_remove_confirm">¿Quitar %1$s de %2$s? Su classpath resuelto se separará del módulo.</string>
+    <string name="dep_edit_dependency">Editar dependencia</string>
+    <string name="dep_section_version">Versión</string>
+    <string name="dep_section_scope">Ámbito</string>
+    <string name="dep_section_exclusions">Exclusiones</string>
+    <string name="dep_exclusions_help">Entradas transitivas group:name que se deben descartar (cualquiera de los lados puede ser *), separadas por comas o espacios.</string>
+    <string name="dep_exclusions_hint">p. ej. com.google.guava:guava, org.json:*</string>
+    <string name="dep_version_hint">versión</string>
+    <string name="dep_loading_versions">Cargando versiones…</string>
+    <string name="dep_versions_load_failed">No se pudieron cargar las versiones, escribe una arriba.</string>
+    <string name="dep_selected">Seleccionada</string>
+    <string name="dep_variant_only_tooltip">Solo en la variante '%1$s'</string>
+    <string name="dep_version_conflict_tooltip">Conflicto de versión: %1$s → usando %2$s</string>
+    <string name="dep_version_conflict">Conflicto de versión</string>
+    <string name="dep_extra_auto_resolved">+%1$d resueltas automáticamente</string>
+    <string name="dep_repo_invalid">Introduce una URL http(s) válida que no se haya añadido ya.</string>
+    <string name="dep_subtitle_module">módulo</string>
+    <string name="dep_subtitle_platform">plataforma (BOM)</string>
+    <string name="dep_subtitle_local_aar">aar local</string>
+    <string name="dep_subtitle_local_jar">jar local</string>
+    <plurals name="dep_cycles">
+        <item quantity="one">%1$d ciclo de dependencias</item>
+        <item quantity="other">%1$d ciclos de dependencias</item>
+    </plurals>
+    <plurals name="dep_conflicts_to_review">
+        <item quantity="one">%1$d conflicto de versión por revisar</item>
+        <item quantity="other">%1$d conflictos de versión por revisar</item>
+    </plurals>
+    <plurals name="dep_versions_auto_resolved">
+        <item quantity="one">%1$d versión resuelta automáticamente (gana la más reciente)</item>
+        <item quantity="other">%1$d versiones resueltas automáticamente (gana la más reciente)</item>
+    </plurals>
+
+    <!-- Module config -->
+    <string name="modcfg_tab_settings">Configuración</string>
+    <string name="modcfg_tab_build_features">Funciones de compilación</string>
+    <string name="modcfg_tab_compiler_plugins">Complementos del compilador</string>
+    <string name="modcfg_tab_packaging">Empaquetado</string>
+    <string name="modcfg_tab_signing">Firma</string>
+    <string name="modcfg_tab_dependencies">Dependencias</string>
+    <string name="modcfg_title_modules">Módulos</string>
+    <string name="modcfg_new_module_action">Nuevo módulo</string>
+    <string name="modcfg_no_modules">No hay módulos. Toca + para agregar uno.</string>
+    <string name="modcfg_remove_named">Quitar %1$s</string>
+    <string name="modcfg_removed">Se quitó %1$s</string>
+    <string name="modcfg_build_features_android_only">Las funciones de compilación se aplican solo a módulos Android.</string>
+    <string name="modcfg_build_features_intro">Activa las funciones de compilación por módulo. Al activar una se agregan las dependencias que necesita.</string>
+    <string name="modcfg_compiler_plugins_android_only">Los complementos del compilador se aplican solo a módulos Android.</string>
+    <string name="modcfg_compiler_plugins_intro">Los complementos del compilador de Kotlin transforman tu código en tiempo de compilación. Al activar uno se agrega su runtime; el complemento se aplica entonces automáticamente donde ese runtime esté en el classpath.</string>
+    <string name="modcfg_compiler_plugin_applied">Activo en el classpath de este módulo</string>
+    <string name="modcfg_signing_android_only">La firma se aplica solo a módulos Android.</string>
+    <string name="modcfg_signing_intro">Elige el keystore que firma cada tipo de compilación. Un tipo sin asignar se firma con el keystore de depuración.</string>
+    <string name="modcfg_packaging_android_only">Las opciones de empaquetado se aplican solo a módulos Android.</string>
+    <string name="modcfg_packaging_intro">Cómo se combinan en el APK los recursos Java y las bibliotecas nativas aportados por más de una entrada (tu módulo, submódulos, AARs, bibliotecas).</string>
+    <string name="modcfg_packaging_glob_hint">Los patrones son globs relativos al APK: ** cruza carpetas, * se queda dentro de una, la / inicial es opcional.</string>
+    <string name="modcfg_packaging_resources">Recursos Java</string>
+    <string name="modcfg_packaging_jni">Bibliotecas nativas</string>
+    <string name="modcfg_packaging_jni_note">Las bibliotecas nativas se empaquetan tal cual (sin recorte NDK en el dispositivo).</string>
+    <string name="modcfg_packaging_excludes">Excluir</string>
+    <string name="modcfg_packaging_excludes_desc">Descarta todos los archivos cuya ruta coincida.</string>
+    <string name="modcfg_packaging_pick_first">Elegir el primero</string>
+    <string name="modcfg_packaging_pick_first_desc">Conserva la primera coincidencia; descarta silenciosamente los duplicados posteriores.</string>
+    <string name="modcfg_packaging_merge">Combinar</string>
+    <string name="modcfg_packaging_merge_desc">Concatena los duplicados en lugar de descartarlos.</string>
+    <string name="modcfg_packaging_default_excludes">Siempre excluidos por defecto</string>
+    <string name="modcfg_packaging_default_merges">Siempre combinados por defecto</string>
+    <string name="modcfg_manage_keystores">Gestionar keystores</string>
+    <string name="modcfg_keystores_empty">Aún no hay keystores. Crea uno en el Administrador de keystores para firmar compilaciones de lanzamiento.</string>
+    <string name="modcfg_debug_default">depuración (predeterminado)</string>
+    <string name="modcfg_created">Se creó %1$s</string>
+    <string name="modcfg_couldnt_create">No se pudo crear %1$s</string>
+    <string name="modcfg_remove_module">Quitar módulo</string>
+    <string name="modcfg_remove_module_content">¿Quitar '%1$s' del proyecto? Sus archivos permanecen en el disco; se eliminan las dependencias de otros módulos hacia él.</string>
+    <string name="modcfg_remove">Quitar</string>
+    <string name="modcfg_no_module_types">No hay tipos de módulo disponibles.</string>
+    <string name="modcfg_new_module">Nuevo módulo</string>
+    <string name="modcfg_name">Nombre</string>
+    <string name="modcfg_module_name_placeholder">p. ej. feature, core</string>
+    <string name="modcfg_type">Tipo</string>
+    <string name="modcfg_java_version">Versión de Java</string>
+    <string name="modcfg_couldnt_load_config">No se pudo cargar la configuración del módulo.</string>
+    <string name="modcfg_section_general">General</string>
+    <string name="modcfg_output">Salida</string>
+    <string name="modcfg_run">Ejecutar</string>
+    <string name="modcfg_run_config_hint">La clase principal que el botón Ejecutar lanza para este módulo. Déjalo en blanco para detectarla automáticamente.</string>
+    <string name="modcfg_auto_detected">%1$s  (detectada automáticamente)</string>
+    <string name="modcfg_run_main_class_placeholder">p. ej. com.example.Main</string>
+    <string name="modcfg_auto_detect">Detectar automáticamente</string>
+    <string name="modcfg_section_source_sets">Conjuntos de fuentes</string>
+    <string name="modcfg_add_source_root">Agregar raíz de fuentes</string>
+    <string name="modcfg_no_source_sets">Aún no hay conjuntos de fuentes.</string>
+    <string name="modcfg_save">Guardar</string>
+    <string name="modcfg_save_changes">Guardar cambios</string>
+    <string name="modcfg_missing_keep_rule_files">Faltan archivos de reglas keep</string>
+    <string name="modcfg_missing_keep_rule_files_content">Estos archivos están referenciados por un tipo de compilación pero no existen, así que R8 los omite cuando la minificación está activada.</string>
+    <string name="modcfg_no_roots">sin raíces</string>
+    <string name="modcfg_add_placeholder">Agregar…</string>
+    <string name="modcfg_no_rows_yet">Aún no hay %1$s, agrega uno abajo.</string>
+    <string name="modcfg_new_badge">nuevo</string>
+    <string name="modcfg_add_row">Agregar %1$s</string>
+
+    <!-- Code style -->
+    <string name="codestyle_title">Estilo de código</string>
+    <string name="codestyle_language">Lenguaje</string>
+    <string name="codestyle_language_desc">Cada lenguaje mantiene su propio perfil</string>
+    <string name="codestyle_lang_java">Java</string>
+    <string name="codestyle_lang_kotlin">Kotlin</string>
+    <string name="codestyle_style">Estilo</string>
+    <string name="codestyle_style_desc">Un punto de partida predefinido; cambiar cualquier opción de abajo cambia a Personalizado</string>
+    <string name="codestyle_reformat_on_save">Reformatear al guardar</string>
+    <string name="codestyle_reformat_on_save_desc">Reformatea el archivo cada vez que lo guardas</string>
+    <string name="codestyle_kotlin_note">El formato de Kotlin normaliza la sangría, las tabulaciones, las líneas en blanco y el espaciado en línea. La colocación de llaves y el ajuste de líneas siguen el código tal como está escrito.</string>
+    <string name="codestyle_indentation">Sangría</string>
+    <string name="codestyle_indent_size">Tamaño de sangría</string>
+    <string name="codestyle_indent_size_desc">Espacios por nivel</string>
+    <string name="codestyle_continuation_indent">Sangría de continuación</string>
+    <string name="codestyle_continuation_indent_desc">Sangría adicional para una línea ajustada</string>
+    <string name="codestyle_line_width">Ancho de línea</string>
+    <string name="codestyle_line_width_desc">Columna en la que el formateador ajusta</string>
+    <string name="codestyle_indent_with_tabs">Sangrar con tabulaciones</string>
+    <string name="codestyle_indent_with_tabs_desc">Usar tabulaciones en lugar de espacios</string>
+    <string name="codestyle_wrapping_and_braces">Ajuste y llaves</string>
+    <string name="codestyle_brace_placement">Colocación de llaves</string>
+    <string name="codestyle_brace_end_of_line">Fin de línea</string>
+    <string name="codestyle_brace_next_line">Línea siguiente</string>
+    <string name="codestyle_method_parameters">Parámetros del método</string>
+    <string name="codestyle_method_arguments">Argumentos del método</string>
+    <string name="codestyle_chained_calls">Llamadas encadenadas</string>
+    <string name="codestyle_binary_expressions">Expresiones binarias</string>
+    <string name="codestyle_spaces">Espacios</string>
+    <string name="codestyle_within_parens">Dentro de los paréntesis</string>
+    <string name="codestyle_within_parens_desc">`( x )` en lugar de `(x)`</string>
+    <string name="codestyle_after_comma">Después de la coma</string>
+    <string name="codestyle_after_comma_desc">`a, b` en lugar de `a,b`</string>
+    <string name="codestyle_around_operators">Alrededor de los operadores</string>
+    <string name="codestyle_around_operators_desc">`a + b`, `x = 1`</string>
+    <string name="codestyle_before_brace">Antes de la llave</string>
+    <string name="codestyle_before_brace_desc">`) {` en lugar de `){`</string>
+    <string name="codestyle_around_lambda_arrow">Alrededor de la flecha lambda</string>
+    <string name="codestyle_around_lambda_arrow_desc">`a -&gt; b`</string>
+    <string name="codestyle_before_parens">Antes de los paréntesis</string>
+    <string name="codestyle_before_parens_desc">`if (` `for (` `while (`</string>
+    <string name="codestyle_before_semicolon">Antes del punto y coma</string>
+    <string name="codestyle_before_semicolon_desc">`x ;` en lugar de `x;`</string>
+    <string name="codestyle_around_ternary">Alrededor del ternario</string>
+    <string name="codestyle_around_ternary_desc">`c ? a : b`</string>
+    <string name="codestyle_after_type_cast">Después del casting de tipo</string>
+    <string name="codestyle_after_type_cast_desc">`(Foo) x` en lugar de `(Foo)x`</string>
+    <string name="codestyle_blank_lines">Líneas en blanco</string>
+    <string name="codestyle_keep_at_most">Conservar como máximo</string>
+    <string name="codestyle_keep_at_most_desc">Máximo de líneas en blanco consecutivas</string>
+    <string name="codestyle_after_imports">Después de las importaciones</string>
+    <string name="codestyle_before_method">Antes de un método</string>
+    <string name="codestyle_before_field">Antes de un campo</string>
+    <string name="codestyle_before_first_member">Antes del primer miembro</string>
+    <string name="codestyle_between_types">Entre tipos</string>
+    <string name="codestyle_comments">Comentarios</string>
+    <string name="codestyle_format_comments">Formatear comentarios</string>
+    <string name="codestyle_format_comments_desc">Volver a sangrar comentarios Javadoc / de bloque / de línea</string>
+    <string name="codestyle_wrap_comments">Ajustar comentarios</string>
+    <string name="codestyle_wrap_comments_desc">Ajustar el texto del comentario al ancho de línea</string>
+    <string name="codestyle_preview">Vista previa</string>
+    <string name="codestyle_preview_no_project">Abre un proyecto para previsualizar el formato.</string>
+    <string name="codestyle_preset_kotlin_official">Kotlin oficial</string>
+    <string name="codestyle_preset_android">Android</string>
+    <string name="codestyle_preset_custom">Personalizado</string>
+    <string name="codestyle_preset_google">Google</string>
+    <string name="codestyle_wrap_never">Nunca</string>
+    <string name="codestyle_wrap_if_long">Si es larga</string>
+    <string name="codestyle_wrap_one_per_line">Uno por línea</string>
+
+    <!-- Common verbs / actions -->
+    <string name="save">Guardar</string>
+    <string name="close">Cerrar</string>
+    <string name="clear">Borrar</string>
+    <string name="back">Atrás</string>
+    <string name="expand">Expandir</string>
+    <string name="run">Ejecutar</string>
+    <string name="stop">Detener</string>
+    <string name="search">Buscar</string>
+    <string name="more">Más</string>
+    <string name="undo">Deshacer</string>
+    <string name="redo">Rehacer</string>
+    <string name="retry">Reintentar</string>
+    <string name="refresh">Actualizar</string>
+    <string name="share">Compartir</string>
+    <string name="copy">Copiar</string>
+    <string name="error">Error</string>
+    <string name="loading">Cargando</string>
+    <string name="dismiss">Descartar</string>
+    <string name="hide_details">Ocultar detalles</string>
+    <string name="show_details">Mostrar detalles</string>
+    <string name="create">Crear</string>
+    <string name="add">Agregar</string>
+    <string name="remove">Quitar</string>
+    <string name="rename">Renombrar</string>
+    <string name="import">Importar</string>
+    <string name="install">Instalar</string>
+
+    <!-- Platform SDK -->
+    <string name="modcfg_platform_sdk">SDK de la plataforma</string>
+    <string name="modcfg_platform_sdk_auto">Automático (%1$s)</string>
+
+    <!-- AI chat providers -->
+    <string name="chat_providers_title">Proveedores de IA</string>
+    <string name="chat_providers_subtitle">Elige un proveedor y agrega tu clave. Las claves se almacenan en este dispositivo.</string>
+    <string name="chat_api_key">Clave de API</string>
+    <string name="chat_base_url">URL base</string>
+    <string name="chat_model">Modelo</string>
+    <string name="chat_connected">Conectado</string>
+    <string name="chat_show">Mostrar</string>
+    <string name="chat_hide">Ocultar</string>
+    <string name="chat_gateway_hint">Compatible con OpenAI: OpenRouter, LiteLLM o un endpoint autoalojado.</string>
+    <string name="chat_done">Hecho</string>
+    <string name="chat_perm_title">¿Permitir este cambio?</string>
+    <string name="chat_allow">Permitir</string>
+    <string name="chat_allow_session">Permitir en esta sesión</string>
+    <string name="chat_deny">Denegar</string>
+
+    <!-- Settings pages -->
+    <string name="set_page_appearance">Apariencia</string>
+    <string name="set_page_editor">Editor</string>
+    <string name="set_page_completion">Autocompletado de código</string>
+    <string name="set_page_analysis">Análisis e inspecciones</string>
+    <string name="set_page_preview">Vista previa</string>
+    <string name="set_page_build">Compilación y dependencias</string>
+    <string name="set_page_build_runtime">Entorno de compilación</string>
+    <string name="set_page_privacy">Privacidad y datos</string>
+    <string name="set_grp_gestures">Gestos</string>
+    <string name="set_grp_keyboard">Teclado</string>
+    <string name="set_grp_preview_sandbox">Espacio aislado de la vista previa</string>
+    <string name="set_grp_privacy">Privacidad</string>
+    <string name="set_grp_storage">Almacenamiento</string>
+    <string name="set_grp_debug_dexing">Compilación de depuración (dexing)</string>
+    <string name="set_unit_classes">clases</string>
+    <string name="set_sev_error">Error</string>
+    <string name="set_sev_warning">Advertencia</string>
+    <string name="set_sev_info">Información</string>
+    <string name="set_sev_hint">Sugerencia</string>
+    <string name="set_appearance_theme">Tema</string>
+    <string name="set_appearance_theme_desc">Usa un tema fijo o sigue el del sistema operativo</string>
+    <string name="set_appearance_theme_light">Claro</string>
+    <string name="set_appearance_theme_dark">Oscuro</string>
+    <string name="set_appearance_theme_system">Sistema</string>
+    <string name="set_appearance_accent">Acento</string>
+    <string name="set_appearance_accent_desc">El color de resalte de la interfaz</string>
+    <string name="set_appearance_accent_violet">Violeta</string>
+    <string name="set_appearance_accent_teal">Verde azulado</string>
+    <string name="set_appearance_accent_orange">Naranja (heredado)</string>
+    <string name="set_editor_font_size">Tamaño de fuente</string>
+    <string name="set_editor_code_font">Fuente del código</string>
+    <string name="set_editor_code_font_monospace">Monoespaciada del sistema</string>
+    <string name="set_editor_ligatures">Ligaduras de fuente</string>
+    <string name="set_editor_ligatures_desc">Renderiza ligaduras de programación (-> != >= …) cuando la fuente del código las tiene</string>
+    <string name="set_editor_inlay">Sugerencias en línea</string>
+    <string name="set_editor_inlay_desc">Tipos inferidos y sugerencias de nombres de parámetros, mostrados en línea</string>
+    <string name="set_editor_semantic">Resaltado semántico</string>
+    <string name="set_editor_semantic_desc">Coloreado según el tipo, superpuesto al lexer</string>
+    <string name="set_editor_folding">Plegado de código</string>
+    <string name="set_editor_folding_desc">Plegar importaciones, cuerpos y comentarios de bloque</string>
+    <string name="set_editor_wrap">Ajuste de línea</string>
+    <string name="set_editor_wrap_desc">Ajusta suavemente las líneas largas en el borde de la vista en lugar de desplazarse horizontalmente</string>
+    <string name="set_editor_wrap_indent">Sangrar líneas ajustadas</string>
+    <string name="set_editor_wrap_indent_desc">Alinea las filas de continuación de una línea ajustada con su sangría (cuando el ajuste de línea está activado)</string>
+    <string name="set_editor_two_axis">Desplazamiento en dos ejes</string>
+    <string name="set_editor_two_axis_desc">Arrastra en cualquier dirección para desplazarte en ambos ejes a la vez (táctil)</string>
+    <string name="set_editor_pinch">Pellizcar para hacer zoom</string>
+    <string name="set_editor_pinch_desc">Pellizca con dos dedos para cambiar el tamaño de la fuente del código</string>
+    <string name="set_editor_kbd_suggest">Sugerencias del teclado</string>
+    <string name="set_editor_kbd_suggest_desc">Permite que el teclado en pantalla autocorrija, sugiera y agregue espacios automáticamente (un teclado normal). Desactívalo para introducir código sin procesar, de modo que un \'.\' escrito no reciba un espacio automático, a costa de la barra de sugerencias.</string>
+    <string name="set_completion_auto">Mostrar sugerencias automáticamente</string>
+    <string name="set_completion_auto_desc">Muestra la lista mientras escribes (desactivado = solo con Ctrl-Space)</string>
+    <string name="set_completion_postfix">Plantillas postfix</string>
+    <string name="set_completion_postfix_desc">Ofrece autocompletados .val / .if / .notnull / …</string>
+    <string name="set_completion_word">Autocompletado de palabras</string>
+    <string name="set_completion_word_desc">Ofrece palabras que ya están en el archivo como alternativa</string>
+    <string name="set_completion_delay">Retardo de aparición automática</string>
+    <string name="set_completion_delay_desc">Cuánto tarda en aparecer la lista tras una pulsación de tecla</string>
+    <string name="set_completion_max">Máximo de sugerencias</string>
+    <string name="set_analysis_otf">Analizar sobre la marcha</string>
+    <string name="set_analysis_otf_desc">Muestra diagnósticos mientras escribes (desactivado = solo al compilar)</string>
+    <string name="set_analysis_reparse">Retardo de reanálisis</string>
+    <string name="set_analysis_reparse_desc">Periodo de inactividad tras una pulsación de tecla antes de reanalizar</string>
+    <string name="set_analysis_perf">Registrar tiempos de análisis</string>
+    <string name="set_analysis_perf_desc">Diagnóstico: escribe los tiempos por pasada (semántico / diagnósticos / plegados / sugerencias en línea / vistas previas) y por etapa en el registro para que puedas averiguar qué hace lento a un archivo. Léelos en Privacidad → Ver registros. Desactivado por defecto.</string>
+    <string name="set_preview_file">Bloquear el acceso a archivos</string>
+    <string name="set_preview_file_desc">Impide que el código previsualizado lea o escriba archivos (java.io / java.nio / kotlin.io). Las llamadas bloqueadas devuelven null y se muestran en el chip de problemas de la vista previa. Se aplica a las vistas previas abiertas a partir de ahora.</string>
+    <string name="set_preview_net">Bloquear el acceso a la red</string>
+    <string name="set_preview_net_desc">Impide que el código previsualizado abra sockets o conexiones HTTP (java.net, OkHttp, Ktor).</string>
+    <string name="set_preview_android">Bloquear las llamadas al sistema Android</string>
+    <string name="set_preview_android_desc">Impide que el código previsualizado inicie actividades/servicios, envíe broadcasts, use servicios del sistema, ContentResolver o SharedPreferences. Las lecturas de recursos y densidad siguen disponibles.</string>
+    <string name="set_preview_process">Bloquear procesos y reflexión</string>
+    <string name="set_preview_process_desc">Impide que el código previsualizado ejecute procesos, llame a System.exit, cargue bibliotecas nativas o invoque miembros por reflexión.</string>
+    <string name="set_build_conflict">Conflictos de dependencias</string>
+    <string name="set_build_conflict_desc">Qué versión gana cuando se solicitan dos en el grafo</string>
+    <string name="set_build_conflict_newest">La más reciente</string>
+    <string name="set_build_conflict_pinned">Gana la directa</string>
+    <string name="set_build_conflict_fail">Fallar ante un conflicto</string>
+    <string name="set_br_separate">Compilar en un proceso separado</string>
+    <string name="set_br_separate_desc">Ejecuta las compilaciones y tu programa en un proceso aislado para que un fallo por falta de memoria no derribe el IDE. Desactivado = compilar en el mismo proceso (usa menos memoria, sin aislamiento). Necesita permiso de notificaciones (el proceso aislado muestra una notificación de progreso); sin él, las compilaciones se ejecutan en el mismo proceso. Surte efecto la próxima vez que abras un proyecto.</string>
+    <string name="set_br_notif">Notificaciones de compilación</string>
+    <string name="set_br_notif_desc">Muestra una notificación de progreso mientras una compilación o tu programa se ejecuta en el proceso separado. Necesaria para las compilaciones aisladas; si está desactivada, las compilaciones se ejecutan dentro de la app.</string>
+    <string name="set_br_notif_btn">Activar</string>
+    <string name="set_br_r8mode">Ejecución de R8</string>
+    <string name="set_br_r8mode_forked">VM bifurcada</string>
+    <string name="set_br_r8mode_inprocess">En el mismo proceso</string>
+    <string name="set_br_r8heap">Heap de la VM bifurcada de R8</string>
+    <string name="set_br_dexoff">Umbral de dexing fuera del heap</string>
+    <string name="set_br_dexbatch">Tamaño de lote de fusión de dex</string>
+    <string name="set_br_dexbatch_desc">En una app muy grande, el paso final de dexing fusiona las clases por lotes para no necesitarlas todas en memoria a la vez. Los lotes más pequeños mantienen baja esa memoria (bueno para dispositivos con poca memoria) pero hacen el APK ligeramente más grande (menos compresión compartida entre clases); los lotes más grandes comprimen mejor pero necesitan más memoria por fusión. La mayoría de las apps nunca llegan a esto, solo entra en juego a partir de unos pocos miles de clases.</string>
+    <string name="set_br_dexfork">Máximo de forks de dex concurrentes</string>
+    <string name="set_privacy_analytics">Compartir análisis de rendimiento</string>
+    <string name="set_privacy_analytics_desc">Solo métricas de rendimiento anónimas, nunca tu código ni nombres de archivos</string>
+    <string name="set_privacy_clear">Borrar cachés</string>
+    <string name="set_privacy_clear_desc">Libera cachés regenerables de dependencias / lenguaje / vista previa (nunca las fuentes)</string>
+    <string name="set_privacy_clear_btn">Borrar</string>
+    <string name="set_privacy_logs">Ver registros</string>
+    <string name="set_privacy_logs_desc">Actividad reciente del editor, análisis y compilación</string>
+    <string name="set_privacy_logs_btn">Abrir</string>
+    <string name="set_privacy_backup">Respaldar proyectos</string>
+    <string name="set_privacy_backup_desc">Exporta todos los proyectos a un único zip</string>
+    <string name="set_privacy_backup_btn">Respaldar</string>
+
+    <!-- Toggle -->
+    <string name="toggle_on">Activado</string>
+    <string name="toggle_off">Desactivado</string>
+
+    <!-- Misc -->
+    <string name="picker_delete_project">Eliminar proyecto</string>
+    <string name="storage_copy_path">Copiar ruta</string>
+    <string name="symbolbar_tab">Tab</string>
+    <string name="rename_failed">Error al renombrar</string>
+    <string name="learn_check_failed">La comprobación falló</string>
+    <string name="palette_section_goto">Ir a</string>
+
+    <!-- Quick documentation -->
+    <string name="quickdoc_parameters">Parámetros</string>
+    <string name="quickdoc_returns">Devuelve</string>
+    <string name="quickdoc_throws">Lanza</string>
+    <string name="quickdoc_see_also">Véase también</string>
+
+    <!-- Resource preview -->
+    <string name="respreview_no_preview">No hay vista previa disponible para este archivo</string>
+    <string name="respreview_render_drawable_failed">No se pudo renderizar este drawable</string>
+    <string name="respreview_unsupported">No compatible: &lt;%1$s> (%2$s)</string>
+    <string name="respreview_no_colors">No hay colores declarados en este archivo</string>
+    <string name="respreview_unresolved">(sin resolver)</string>
+    <string name="respreview_decode_image_failed">No se pudo decodificar esta imagen</string>
+
+    <!-- Module config consumer -->
+    <string name="modcfg_consumer_suffix">%1$s · consumidor</string>
+
+    <!-- Block palette -->
+    <string name="block_palette_if">Si</string>
+    <string name="block_palette_if_else">Si / Si no</string>
+    <string name="block_palette_for_each">Para cada</string>
+    <string name="block_palette_while">Mientras</string>
+    <string name="block_palette_return">Devolver</string>
+    <string name="block_palette_variable">Variable</string>
+    <string name="block_palette_call">Llamada</string>
+    <string name="block_palette_comment">Comentario</string>
 </resources>
