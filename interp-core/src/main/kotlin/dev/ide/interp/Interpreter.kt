@@ -1597,6 +1597,10 @@ class Interpreter(
             if (name == "entries") return Handled(cls.enumEntries.map { enumEntryInstance(cls, it) })
             return cls.enumEntries.firstOrNull { it.name == name }?.let { Handled(enumEntryInstance(cls, it)) }
         }
+        // A NESTED source `object` reached through its enclosing type — `State.Loading` where `State` is a sealed
+        // interface (no companion). The warm path lowers `State.Loading` straight to one ObjectRef; while the
+        // index is still cold it arrives here as a member read, so resolve the nested object's singleton.
+        sourceClass("${cls.fqn}.$name")?.takeIf { it.flavor == ClassFlavor.OBJECT }?.let { return Handled(objectSingleton(it)) }
         val holder = if (cls.flavor == ClassFlavor.OBJECT || cls.flavor == ClassFlavor.COMPANION) cls
             else companionOf(cls) ?: return null
         return Handled(readSourceProperty(objectSingleton(holder), name))
