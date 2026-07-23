@@ -76,6 +76,24 @@ class CrossFileInheritanceLoweringTest {
     }
 
     @Test
+    fun constructorReferenceToACrossFileImplicitCtorClassLowersToSource() {
+        // `::Marker` where `class Marker` (no declared constructor) lives in another file. The library fallback
+        // `constructorsOf` returns nothing for the implicit ctor, so without the whole-project source branch the
+        // callable reference is dropped as "unresolved" and blanks the preview.
+        val use = "package demo\nfun p(): () -> Marker = ::Marker\n"
+        val (service, dir) = serviceOver(mapOf("Model.kt" to "package demo\nclass Marker\n", "Use.kt" to use))
+        val fn = lowerFirstFn(service, dir, "Use.kt", use)
+        assertTrue(fn.isComplete, "`::Marker` for a cross-file implicit-ctor class must lower; diags=${fn.diagnostics.map { it.reason }}")
+        var call: RNode.Call? = null
+        fn.body.walk { if (it is RNode.Call && it.callee.displayName == "Marker") call = it }
+        val c = assertNotNull(call, "the `::Marker` reference must synthesize a Marker constructor Call")
+        assertTrue(
+            c.callee is ResolvedCallable.Source && c.dispatch == DispatchKind.CONSTRUCTOR,
+            "must be a SOURCE CONSTRUCTOR, was ${c.callee::class.simpleName}/${c.dispatch}",
+        )
+    }
+
+    @Test
     fun inheritedMembersFromACrossFileSuperclassResolveInASubclassBody() {
         // Inside `HomeCard`'s method bodies, a bare `title` read and `render()` call inherited from a base class
         // in ANOTHER file must resolve — the class-context inherited-member walk must follow the cross-file super.
