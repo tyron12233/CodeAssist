@@ -289,13 +289,19 @@ private fun isNotNullAssertStatement(
     return postfix.operationToken == KtTokens.EXCLEXCL && matches(postfix.baseExpression)
 }
 
-/** `requireNotNull(v)` / `checkNotNull(v)` — a stdlib precondition call that throws on null. */
-private fun isNotNullPrecondition(st: KtExpression, matches: (KtExpression?) -> Boolean): Boolean {
+/** A stdlib precondition that makes the accessed value non-null past the call: `requireNotNull(v)` /
+ *  `checkNotNull(v)` (throws on a null VALUE), or `require(cond)` / `check(cond)` whose boolean condition
+ *  guarantees it (`require(v != null)`, `check(a != null && b != null)`) — the `returns() implies (…)`
+ *  contract smart-casts after the call. */
+private fun KotlinResolver.isNotNullPrecondition(st: KtExpression, matches: (KtExpression?) -> Boolean): Boolean {
     val call = stripParens(st) as? KtCallExpression ?: return false
-    val callee =
-        (call.calleeExpression as? KtNameReferenceExpression)?.getReferencedName() ?: return false
-    if (callee != "requireNotNull" && callee != "checkNotNull") return false
-    return matches(call.valueArguments.singleOrNull()?.getArgumentExpression())
+    val callee = (call.calleeExpression as? KtNameReferenceExpression)?.getReferencedName() ?: return false
+    val arg = call.valueArguments.singleOrNull()?.getArgumentExpression()
+    return when (callee) {
+        "requireNotNull", "checkNotNull" -> matches(arg)
+        "require", "check" -> arg != null && condGuarantees(arg, true, matches)
+        else -> false
+    }
 }
 
 /** The classifier target of an `is` check is non-null when its written text carries no trailing `?`. */

@@ -156,6 +156,23 @@ internal class KotlinVarNullFlow(private val resolver: KotlinResolver) {
                 return afterRange
             }
 
+            is KtCallExpression -> {
+                // Record reads in the receiver + arguments first, then apply a precondition STATEMENT's effect:
+                // `requireNotNull(v)`/`checkNotNull(v)` proves v non-null; `require(cond)`/`check(cond)` narrows
+                // as if cond held (it throws otherwise) — so `requireNotNull(v); v.use` / `require(v != null); …`
+                // don't wrongly flag the following read.
+                var s = state
+                var c = e.firstChild
+                while (c != null) { s = flowNull(c, s); c = c.nextSibling }
+                val callee = (e.calleeExpression as? KtNameReferenceExpression)?.getReferencedName()
+                val arg = e.valueArguments.singleOrNull()?.getArgumentExpression()
+                when (callee) {
+                    "requireNotNull", "checkNotNull" -> boundVar(arg)?.let { s = s + (it to VarNul.NOT_NULL) }
+                    "require", "check" -> if (arg != null) s = refine(s, arg, true)
+                }
+                return s
+            }
+
             is KtNameReferenceExpression -> {
                 val v = boundVar(e)
                 if (v != null && state[v] == VarNul.NOT_NULL) notNull.add(e)

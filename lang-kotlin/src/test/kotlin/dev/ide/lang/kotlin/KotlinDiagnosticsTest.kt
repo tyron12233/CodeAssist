@@ -203,6 +203,34 @@ class KotlinDiagnosticsTest {
         )
     }
 
+    @Test
+    fun requireCheckPreconditionSmartCastsToNonNull() {
+        // Baseline: an unguarded nullable member access IS flagged.
+        val bare = diagnose("Bare.kt", "package demo\nfun f(s: String?) { s.length }")
+        assertTrue(bare.any { it.code == "kt.unsafeNullable" }, "unguarded s.length should be flagged; got $bare")
+        // `require(s != null)` / `check(s != null)` smart-cast s to non-null afterwards (the stdlib contract),
+        // so the following access is NOT a false positive.
+        for (guard in listOf("require(s != null)", "check(s != null)")) {
+            val d = diagnose("G_${guard.take(3)}.kt", "package demo\nfun f(s: String?) { $guard\ns.length }")
+            assertTrue(d.none { it.code == "kt.unsafeNullable" }, "`$guard` must guard the following access; got $d")
+        }
+    }
+
+    @Test
+    fun requireNotNullOnAVarSmartCasts() {
+        // The `var` flow must apply a `requireNotNull(v)` STATEMENT too, not only `val`s/params.
+        val d = diagnose("GVar.kt", "package demo\nfun f(s: String?) { var t = s\nrequireNotNull(t)\nt.length }")
+        assertTrue(d.none { it.code == "kt.unsafeNullable" }, "requireNotNull(var) must guard the following read; got $d")
+    }
+
+    @Test
+    fun sameNamedFunctionImportsAreNotAConflict() {
+        // Same-named CALLABLES (lowercase → functions/properties) form a legal OVERLOAD SET, not a
+        // classifier-only CONFLICTING_IMPORT.
+        val d = diagnose("Ovl.kt", "package demo\nimport a.process\nimport b.process\nfun f() {}")
+        assertTrue(d.none { it.code == "kt.conflictingImport" }, "same-named function imports must not conflict; got $d")
+    }
+
     companion object {
         val srcDir: Path = tempProject(
             mapOf(

@@ -1478,6 +1478,12 @@ internal class KotlinSemanticChecks(private val service: KotlinSymbolService) {
         }
         val out = ArrayList<Diagnostic>()
         for ((name, imports) in byName) {
+            // Kotlin's CONFLICTING_IMPORT is CLASSIFIER-only: same-named CALLABLES (functions/properties) form a
+            // legal OVERLOAD SET, not a conflict. Classifiers are Capitalized by convention, so a lowercase name
+            // (`import a.process; import b.process`) is never flagged — the false positive — while a genuine type
+            // clash (`java.util.Date` vs `java.sql.Date`) still is. (A same-named capitalized factory function is
+            // a rare residual; resolving classifier-ness precisely needs the classpath, which may be absent here.)
+            if (!name.first().isUpperCase()) continue
             // Only a genuine ambiguity — two DIFFERENT targets sharing one name — conflicts.
             if (imports.mapNotNullTo(HashSet()) { it.importedFqName?.asString() }.size < 2) continue
             for (imp in imports) {
