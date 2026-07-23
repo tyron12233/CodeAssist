@@ -36,9 +36,11 @@ class SystemOutCallAnalyzer : FileAnalyzer {
         for (call in target.parsed.nodesIn(target.parsed.range)) {
             if (call.kind != NodeKind.METHOD_CALL) continue
             val text = call.text().toString()
+            // Require the member boundary (`System.out.`), so a user type's own member — `System.outLog.append(x)`
+            // where `System` is the project's class — isn't mistaken for `java.lang.System.out`.
             val prefix = when {
-                text.startsWith("System.out") -> "System.out"
-                text.startsWith("System.err") -> "System.err"
+                text.startsWith("System.out.") -> "System.out"
+                text.startsWith("System.err.") -> "System.err"
                 else -> continue
             }
             val start = call.range.start
