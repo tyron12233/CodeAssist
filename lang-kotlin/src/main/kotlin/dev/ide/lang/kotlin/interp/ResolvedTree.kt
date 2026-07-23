@@ -562,6 +562,12 @@ fun expandPreviewModel(seed: PreviewFileModel, maxFiles: Int, provider: PreviewD
     val requestedTypes = HashSet<String>()
     val requestedFns = HashSet<String>()
     val work = ArrayDeque<RNode>()
+    // Supertype FQNs whose declaring file must be merged: a subclass drags in its cross-file SUPERCLASS so its
+    // super-constructor/init run and inherited members resolve. `reachableSourceClasses` already follows
+    // supertypes; the expander that builds the RUNTIME model must too, or inherited `val`s read null and
+    // inherited calls throw "no member". A plain deque drained through `requestType` in the work loop (below,
+    // where `requestType` is in scope) — so no forward reference from `enqueueClass`.
+    val superWork = ArrayDeque<String>()
 
     fun enqueueClass(c: ResolvedClass) {
         c.superCall?.args?.forEach { work.add(it.value) }
@@ -570,6 +576,8 @@ fun expandPreviewModel(seed: PreviewFileModel, maxFiles: Int, provider: PreviewD
         c.methods.values.forEach { work.add(it.body) }
         c.enumEntries.forEach { e -> e.args.forEach { work.add(it.value) } }
         c.secondaryCtors.forEach { ctor -> work.add(ctor.body); ctor.delegationArgs.forEach { work.add(it.value) } }
+        c.superCall?.fqn?.let(superWork::add)
+        c.supertypes.forEach(superWork::add)
     }
     program.values.forEach { work.add(it.body) }
     classesByFqn.values.toList().forEach(::enqueueClass)
@@ -592,7 +600,9 @@ fun expandPreviewModel(seed: PreviewFileModel, maxFiles: Int, provider: PreviewD
         provider.filesDeclaringFunction(name).forEach(::merge)
     }
 
-    while (work.isNotEmpty()) {
+    while (work.isNotEmpty() || superWork.isNotEmpty()) {
+        while (superWork.isNotEmpty()) requestType(superWork.removeFirst())
+        if (work.isEmpty()) continue
         work.removeFirst().walk { node ->
             when (node) {
                 is RNode.Call -> {
