@@ -19,7 +19,35 @@ internal fun loadClassAcross(fqn: String, initialize: Boolean, preferred: ClassL
         ReflectiveDispatcher::class.java.classLoader,
         ClassLoader.getSystemClassLoader(),
     ).distinct()
-    return loaders.firstNotNullOfOrNull { l -> runCatching { Class.forName(fqn, initialize, l) }.getOrNull() }
+    // A dotted FQN can name a NESTED class: the resolver collapses `Build.VERSION` into the single reference
+    // `android.os.Build.VERSION`, but the JVM binary name is `android.os.Build$VERSION` (`$`, not `.`, at a
+    // class-nesting boundary). Try the plain name first, then variants with trailing class-boundary dots
+    // rewritten to `$`, so a nested static holder (`Build.VERSION.SDK_INT`) resolves the same on device as off.
+    for (candidate in nestedNameCandidates(fqn)) {
+        loaders.firstNotNullOfOrNull { l -> runCatching { Class.forName(candidate, initialize, l) }.getOrNull() }
+            ?.let { return it }
+    }
+    return null
+}
+
+/** [fqn] itself, then variants with each trailing `.` whose preceding segment is a class name (starts
+ *  UPPER-case; package segments are lower-case) rewritten to `$`, cumulatively right-to-left — so
+ *  `a.b.Outer.Inner` yields `a.b.Outer.Inner`, `a.b.Outer$Inner`. Stops at the first package segment, so a
+ *  plain top-level FQN (`java.util.ArrayList`) adds no extra candidates. */
+private fun nestedNameCandidates(fqn: String): List<String> {
+    val dots = fqn.indices.filter { fqn[it] == '.' }
+    if (dots.isEmpty()) return listOf(fqn)
+    val out = ArrayList<String>(4).apply { add(fqn) }
+    val chars = fqn.toCharArray()
+    for (i in dots.indices.reversed()) {
+        val pos = dots[i]
+        val segStart = if (i == 0) 0 else dots[i - 1] + 1
+        if (segStart < pos && chars[segStart].isUpperCase()) {
+            chars[pos] = '$'
+            out.add(String(chars))
+        } else break
+    }
+    return out
 }
 
 /** Whether a JVM method/field name corresponds to the Kotlin name [kotlinName]. Kotlin MANGLES the JVM name
