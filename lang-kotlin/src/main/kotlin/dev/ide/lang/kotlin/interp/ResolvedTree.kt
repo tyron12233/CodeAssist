@@ -475,10 +475,12 @@ fun reachableSourceClasses(
                             // arguments still follows the function's body (else its reachable classes are missed).
                             val declaredArity = callee.declId.substringAfterLast('/').toIntOrNull() ?: node.args.size
                             program["${callee.displayName}/$declaredArity"]?.let { addBody(it.body) }
-                            if ('.' in owner) reachClass(owner.substringBeforeLast('.'))
+                            if ('.' in owner) reachClass(owner.substringBeforeLast('.').removeSuffix(".Companion"))
                         }
                     }
+                    node.typeArguments.forEach { ta -> ta.fqn?.let { reachClass(it) }; ta.loadCandidates.forEach { reachClass(it) } }
                 }
+                is RNode.ClassLiteral -> node.typeCandidates.forEach { reachClass(it) }
                 is RNode.Name -> node.binding.referencedClass()?.let { reachClass(it) }
                 is RNode.PropertyGet -> node.binding.referencedClass()?.let { reachClass(it) }
                 is RNode.PropertySet -> node.binding.referencedClass()?.let { reachClass(it) }
@@ -622,10 +624,16 @@ fun expandPreviewModel(seed: PreviewFileModel, maxFiles: Int, provider: PreviewD
                             // (the receiver isn't a value parameter), the same shape as a top-level function.
                             node.dispatch == DispatchKind.EXTENSION || node.dispatch == DispatchKind.MEMBER_EXTENSION ->
                                 requestFn(callee.displayName, callee.declId.substringAfterLast('/').toIntOrNull() ?: node.args.size)
-                            '.' in owner -> requestType(owner.substringBeforeLast('.')) // a member's owner FQN
+                            // Strip a trailing `.Companion` so a companion member's owner requests the ENCLOSING
+                            // type's file (whose simple name maps) rather than the unmappable `Companion`.
+                            '.' in owner -> requestType(owner.substringBeforeLast('.').removeSuffix(".Companion"))
                         }
                     }
+                    // A source type reached ONLY as a type argument (`enumValues<Suit>()` over a cross-file enum)
+                    // must merge too, else the reified intrinsic can't find its lowered form.
+                    node.typeArguments.forEach { ta -> ta.fqn?.let(::requestType); ta.loadCandidates.forEach(::requestType) }
                 }
+                is RNode.ClassLiteral -> node.typeCandidates.forEach(::requestType)
                 is RNode.Name -> node.binding.referencedClass()?.let(::requestType)
                 is RNode.PropertyGet -> node.binding.referencedClass()?.let(::requestType)
                 is RNode.PropertySet -> node.binding.referencedClass()?.let(::requestType)

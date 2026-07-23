@@ -214,6 +214,29 @@ class KotlinCrossFilePreviewTest {
     }
 
     @Test
+    fun mergesASourceEnumReachedOnlyAsAReifiedTypeArgument() {
+        // `enumValues<Suit>()` where `enum Suit` lives in another file and appears ONLY as a type argument. The
+        // expander must follow `Call.typeArguments`, or Suit's file never merges and the `enumValues` reified
+        // intrinsic can't find its lowered enum (the preview hard-fails).
+        val entry = """
+            package com.example.compose
+            fun names(): List<String> = enumValues<Suit>().map { it.name }
+        """.trimIndent()
+        val (service, dir) = serviceOver(
+            mapOf(
+                "Suit.kt" to "package com.example.compose\n\nenum class Suit { HEARTS, SPADES }\n",
+                "Use.kt" to entry,
+            ),
+        )
+        val model = lowerCrossFile(service, dir, "Use.kt", entry)
+        assertTrue(model.program["names/0"]?.isComplete == true, "names() should lower; diags=${model.program["names/0"]?.diagnostics}")
+        assertNotNull(
+            model.classes.firstOrNull { it.simpleName == "Suit" },
+            "the source enum reached only as a type argument must be merged; got ${model.classes.map { it.fqn }}",
+        )
+    }
+
+    @Test
     fun selfContainedPreviewDoesNotPullExtraFiles() {
         // A preview that references nothing cross-file lowers exactly as before (only its own declarations).
         val entry = """
