@@ -252,10 +252,6 @@ private class ValuesMerger {
     /** Emit `<qualifier>/values.xml` for every accumulated qualifier. */
     fun writeTo(outDir: Path) {
         if (byQualifier.isEmpty()) return
-        val tf = javax.xml.transform.TransformerFactory.newInstance().newTransformer().apply {
-            setOutputProperty(javax.xml.transform.OutputKeys.INDENT, "yes")
-            setOutputProperty(javax.xml.transform.OutputKeys.ENCODING, "utf-8")
-        }
         for ((qualifier, entries) in byQualifier) {
             val out = doc.createElement("resources")
             rootAttrs.forEach { (k, v) -> out.setAttribute(k, v) }
@@ -263,12 +259,10 @@ private class ValuesMerger {
             val dir = outDir.resolve(qualifier)
             Files.createDirectories(dir)
             val target = dir.resolve("values.xml")
-            Files.newOutputStream(target).use { os ->
-                tf.transform(
-                    javax.xml.transform.dom.DOMSource(out),
-                    javax.xml.transform.stream.StreamResult(os)
-                )
-            }
+            // Serialize by hand (NOT javax.xml.transform): the identity Transformer is an ART hazard — on
+            // device it reaches for a SAX driver that isn't on the platform. XmlDomWriter preserves each
+            // entry's text / CDATA / nested markup faithfully, which is all aapt2 needs.
+            Files.write(target, XmlDomWriter.toXml(out).toByteArray(Charsets.UTF_8))
             // appendChild moves nodes out of `out`; rebuild not needed since each entry is written once.
         }
     }
