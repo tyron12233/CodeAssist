@@ -34,7 +34,15 @@ import androidx.compose.ui.unit.dp
 import dev.ide.ui.backend.IdeBackend
 import dev.ide.ui.backend.UiColorEntry
 import dev.ide.ui.backend.UiDrawable
+import dev.ide.ui.generated.resources.Res
+import dev.ide.ui.generated.resources.respreview_decode_image_failed
+import dev.ide.ui.generated.resources.respreview_no_colors
+import dev.ide.ui.generated.resources.respreview_no_preview
+import dev.ide.ui.generated.resources.respreview_render_drawable_failed
+import dev.ide.ui.generated.resources.respreview_unresolved
+import dev.ide.ui.generated.resources.respreview_unsupported
 import dev.ide.ui.theme.Ca
+import org.jetbrains.compose.resources.stringResource
 
 /** Which resource preview a file gets — or null when it has none (so the Preview toggle stays hidden). */
 enum class PreviewKind { DRAWABLE, COLOR, BITMAP }
@@ -77,7 +85,7 @@ fun ResourcePreviewPane(
             PreviewKind.DRAWABLE -> DrawablePreview(path, text, backend)
             PreviewKind.COLOR -> ColorPreview(path, text, backend)
             PreviewKind.BITMAP -> BitmapPreview(path, backend)
-            null -> EmptyPreview("No preview available for this file")
+            null -> EmptyPreview(stringResource(Res.string.respreview_no_preview))
         }
     }
 }
@@ -93,7 +101,7 @@ private fun DrawablePreview(path: String, text: String, backend: IdeBackend) {
     val d = drawable
     when {
         !loaded -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {}
-        d == null -> EmptyPreview("Couldn't render this drawable")
+        d == null -> EmptyPreview(stringResource(Res.string.respreview_render_drawable_failed))
         d is UiDrawable.Bitmap && d.filePath != null -> BitmapPreview(d.filePath!!, backend)
         else -> Column(
             Modifier.fillMaxSize().padding(Ca.spacing.s5),
@@ -116,7 +124,7 @@ private fun DrawablePreview(path: String, text: String, backend: IdeBackend) {
             }
             if (d is UiDrawable.Unsupported) {
                 Box(Modifier.padding(top = Ca.spacing.s3)) {
-                    Caption("Unsupported: <${d.rootTag}> — ${d.message}")
+                    Caption(stringResource(Res.string.respreview_unsupported, d.rootTag, d.message))
                 }
             }
         }
@@ -131,7 +139,7 @@ private fun ColorPreview(path: String, text: String, backend: IdeBackend) {
             runCatching { backend.preview.colorResources(path, text) }.getOrDefault(emptyList())
     }
     if (colors.isEmpty()) {
-        EmptyPreview("No colors declared in this file")
+        EmptyPreview(stringResource(Res.string.respreview_no_colors))
         return
     }
     Column(
@@ -160,7 +168,7 @@ private fun ColorPreview(path: String, text: String, backend: IdeBackend) {
                         fontWeight = FontWeight.Medium
                     )
                     androidx.compose.material3.Text(
-                        c.rawValue.ifEmpty { "—" } + if (c.argb == null) "  (unresolved)" else "",
+                        c.rawValue.ifEmpty { "—" } + if (c.argb == null) "  " + stringResource(Res.string.respreview_unresolved) else "",
                         color = Ca.colors.textSecondary, style = Ca.type.caption,
                     )
                 }
@@ -182,7 +190,7 @@ private fun BitmapPreview(path: String, backend: IdeBackend) {
     val img = image
     when {
         !loaded -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {}
-        img == null -> EmptyPreview("Couldn't decode this image")
+        img == null -> EmptyPreview(stringResource(Res.string.respreview_decode_image_failed))
         else -> Column(
             Modifier.fillMaxSize().padding(Ca.spacing.s5),
             horizontalAlignment = Alignment.CenterHorizontally,

@@ -1009,4 +1009,160 @@ We never collect your code, file or project names, which features you use, or an
     <string name="chat_allow">Allow</string>
     <string name="chat_allow_session">Allow for this session</string>
     <string name="chat_deny">Deny</string>
+
+    <!-- Settings page content (localizes the built-in pages declared in ide-core/BuiltInSettingsPages.kt +
+         SettingsBackend). Rendered generically; the UI overlay (SettingsLocalization.kt) uses these where a
+         key exists and falls back to the backend-supplied English for plugin pages and the device-specific
+         Build Runtime descriptions. -->
+    <!-- Page titles (keyed by page id) -->
+    <string name="set_page_appearance">Appearance</string>
+    <string name="set_page_editor">Editor</string>
+    <string name="set_page_completion">Code Completion</string>
+    <string name="set_page_analysis">Analysis &amp; Inspections</string>
+    <string name="set_page_preview">Preview</string>
+    <string name="set_page_build">Build &amp; Dependencies</string>
+    <string name="set_page_build_runtime">Build Runtime</string>
+    <string name="set_page_privacy">Privacy &amp; Data</string>
+    <!-- Group sub-headings -->
+    <string name="set_grp_gestures">Gestures</string>
+    <string name="set_grp_keyboard">Keyboard</string>
+    <string name="set_grp_preview_sandbox">Preview sandbox</string>
+    <string name="set_grp_privacy">Privacy</string>
+    <string name="set_grp_storage">Storage</string>
+    <string name="set_grp_debug_dexing">Debug build (dexing)</string>
+    <!-- Slider unit words -->
+    <string name="set_unit_classes">classes</string>
+    <!-- Severity chip labels -->
+    <string name="set_sev_error">Error</string>
+    <string name="set_sev_warning">Warning</string>
+    <string name="set_sev_info">Info</string>
+    <string name="set_sev_hint">Hint</string>
+    <!-- Appearance -->
+    <string name="set_appearance_theme">Theme</string>
+    <string name="set_appearance_theme_desc">Use a fixed theme or follow the operating system</string>
+    <string name="set_appearance_theme_light">Light</string>
+    <string name="set_appearance_theme_dark">Dark</string>
+    <string name="set_appearance_theme_system">System</string>
+    <string name="set_appearance_accent">Accent</string>
+    <string name="set_appearance_accent_desc">The interface highlight color</string>
+    <string name="set_appearance_accent_violet">Violet</string>
+    <string name="set_appearance_accent_teal">Teal</string>
+    <string name="set_appearance_accent_orange">Orange (Legacy)</string>
+    <!-- Editor -->
+    <string name="set_editor_font_size">Font size</string>
+    <string name="set_editor_code_font">Code font</string>
+    <string name="set_editor_code_font_monospace">System monospace</string>
+    <string name="set_editor_ligatures">Font ligatures</string>
+    <string name="set_editor_ligatures_desc">Render programming ligatures (-> != >= …) when the code font has them</string>
+    <string name="set_editor_inlay">Inlay hints</string>
+    <string name="set_editor_inlay_desc">Inferred types and parameter-name hints, shown inline</string>
+    <string name="set_editor_semantic">Semantic highlighting</string>
+    <string name="set_editor_semantic_desc">Type-aware coloring layered over the lexer</string>
+    <string name="set_editor_folding">Code folding</string>
+    <string name="set_editor_folding_desc">Fold imports, bodies, and block comments</string>
+    <string name="set_editor_wrap">Word wrap</string>
+    <string name="set_editor_wrap_desc">Soft-wrap long lines at the viewport edge instead of scrolling horizontally</string>
+    <string name="set_editor_wrap_indent">Indent wrapped lines</string>
+    <string name="set_editor_wrap_indent_desc">Align a wrapped line\'s continuation rows to its indentation (when word wrap is on)</string>
+    <string name="set_editor_two_axis">Two-axis scrolling</string>
+    <string name="set_editor_two_axis_desc">Drag in any direction to scroll both axes at once (touch)</string>
+    <string name="set_editor_pinch">Pinch to zoom</string>
+    <string name="set_editor_pinch_desc">Pinch with two fingers to change the code font size</string>
+    <string name="set_editor_kbd_suggest">Keyboard suggestions</string>
+    <string name="set_editor_kbd_suggest_desc">Let the soft keyboard autocorrect, suggest, and auto-space (a normal keyboard). Turn off for raw code input, so a typed \'.\' doesn\'t get an auto-inserted space, at the cost of the suggestion strip.</string>
+    <!-- Code Completion -->
+    <string name="set_completion_auto">Auto-show suggestions</string>
+    <string name="set_completion_auto_desc">Pop the list up while typing (off = Ctrl-Space only)</string>
+    <string name="set_completion_postfix">Postfix templates</string>
+    <string name="set_completion_postfix_desc">Offer .val / .if / .notnull / … completions</string>
+    <string name="set_completion_word">Word completion</string>
+    <string name="set_completion_word_desc">Offer words already in the file as a fallback</string>
+    <string name="set_completion_delay">Auto-popup delay</string>
+    <string name="set_completion_delay_desc">How long after a keystroke the list appears</string>
+    <string name="set_completion_max">Maximum suggestions</string>
+    <!-- Analysis &amp; Inspections -->
+    <string name="set_analysis_otf">Analyze on the fly</string>
+    <string name="set_analysis_otf_desc">Show diagnostics as you type (off = on build only)</string>
+    <string name="set_analysis_reparse">Reparse delay</string>
+    <string name="set_analysis_reparse_desc">Quiet period after a keystroke before re-analysis</string>
+    <string name="set_analysis_perf">Log analysis timings</string>
+    <string name="set_analysis_perf_desc">Diagnostic: write per-pass (semantic / diagnostics / folds / inlay / previews) and per-stage timings to the log so you can find what makes a file slow. Read them in Privacy → View logs. Off by default.</string>
+    <!-- Preview sandbox -->
+    <string name="set_preview_file">Block file access</string>
+    <string name="set_preview_file_desc">Stop previewed code from reading or writing files (java.io / java.nio / kotlin.io). Blocked calls return null and are listed on the preview\'s problem chip. Applies to newly opened previews.</string>
+    <string name="set_preview_net">Block network access</string>
+    <string name="set_preview_net_desc">Stop previewed code from opening sockets or HTTP connections (java.net, OkHttp, Ktor).</string>
+    <string name="set_preview_android">Block Android system calls</string>
+    <string name="set_preview_android_desc">Stop previewed code from launching activities/services, sending broadcasts, using system services, ContentResolver, or SharedPreferences. Resource and density reads stay available.</string>
+    <string name="set_preview_process">Block process &amp; reflection</string>
+    <string name="set_preview_process_desc">Stop previewed code from exec\'ing processes, calling System.exit, loading native libraries, or invoking members reflectively.</string>
+    <!-- Build &amp; Dependencies -->
+    <string name="set_build_conflict">Dependency conflicts</string>
+    <string name="set_build_conflict_desc">Which version wins when two are requested in the graph</string>
+    <string name="set_build_conflict_newest">Newest</string>
+    <string name="set_build_conflict_pinned">Direct wins</string>
+    <string name="set_build_conflict_fail">Fail on conflict</string>
+    <!-- Build Runtime (titles/options/buttons + static descriptions; device-specific descriptions stay backend-English) -->
+    <string name="set_br_separate">Build in a separate process</string>
+    <string name="set_br_separate_desc">Run builds and your program in an isolated process so an out-of-memory crash can\'t take down the IDE. Off = build in-process (uses less memory, no isolation). Needs notification permission (the isolated process shows a progress notification); without it, builds run in-process. Takes effect the next time you open a project.</string>
+    <string name="set_br_notif">Build notifications</string>
+    <string name="set_br_notif_desc">Show a progress notification while a build or your program runs in the separate process. Required for isolated builds; if it\'s off, builds run inside the app.</string>
+    <string name="set_br_notif_btn">Enable</string>
+    <string name="set_br_r8mode">R8 execution</string>
+    <string name="set_br_r8mode_forked">Forked VM</string>
+    <string name="set_br_r8mode_inprocess">In-process</string>
+    <string name="set_br_r8heap">R8 forked-VM heap</string>
+    <string name="set_br_dexoff">Off-heap dexing threshold</string>
+    <string name="set_br_dexbatch">Dex merge batch size</string>
+    <string name="set_br_dexbatch_desc">On a very large app the final dexing step merges classes in batches so it doesn\'t need all of them in memory at once. Smaller batches keep that memory low (good for low-memory devices) but make the APK slightly larger (less shared compression across classes); larger batches pack tighter but need more memory per merge. Most apps never reach this — it only kicks in past a few thousand classes.</string>
+    <string name="set_br_dexfork">Max concurrent dex forks</string>
+    <!-- Privacy &amp; Data -->
+    <string name="set_privacy_analytics">Share performance analytics</string>
+    <string name="set_privacy_analytics_desc">Anonymous performance metrics only — never your code or file names</string>
+    <string name="set_privacy_clear">Clear caches</string>
+    <string name="set_privacy_clear_desc">Free regenerable dependency / language / preview caches (never source)</string>
+    <string name="set_privacy_clear_btn">Clear</string>
+    <string name="set_privacy_logs">View logs</string>
+    <string name="set_privacy_logs_desc">Recent editor, analysis, and build activity</string>
+    <string name="set_privacy_logs_btn">Open</string>
+    <string name="set_privacy_backup">Back up projects</string>
+    <string name="set_privacy_backup_desc">Export every project to a single zip</string>
+    <string name="set_privacy_backup_btn">Back up</string>
+
+    <!-- Localization pass: assorted on-screen strings previously hardcoded in composables -->
+    <!-- Generic toggle chips -->
+    <string name="toggle_on">On</string>
+    <string name="toggle_off">Off</string>
+    <!-- Accessibility / content descriptions -->
+    <string name="picker_delete_project">Delete project</string>
+    <string name="storage_copy_path">Copy path</string>
+    <string name="symbolbar_tab">Tab</string>
+    <!-- Editor fallbacks -->
+    <string name="rename_failed">Rename failed</string>
+    <string name="learn_check_failed">Check failed</string>
+    <!-- Command palette result-section headers ("Go to"; the rest reuse the filter-tab labels) -->
+    <string name="palette_section_goto">Go to</string>
+    <!-- Quick-doc section headers -->
+    <string name="quickdoc_parameters">Parameters</string>
+    <string name="quickdoc_returns">Returns</string>
+    <string name="quickdoc_throws">Throws</string>
+    <string name="quickdoc_see_also">See also</string>
+    <!-- Resource preview pane -->
+    <string name="respreview_no_preview">No preview available for this file</string>
+    <string name="respreview_render_drawable_failed">Couldn\'t render this drawable</string>
+    <string name="respreview_unsupported">Unsupported: &lt;%1$s> — %2$s</string>
+    <string name="respreview_no_colors">No colors declared in this file</string>
+    <string name="respreview_unresolved">(unresolved)</string>
+    <string name="respreview_decode_image_failed">Couldn\'t decode this image</string>
+    <!-- Module config: keep-rule file build-type descriptor -->
+    <string name="modcfg_consumer_suffix">%1$s · consumer</string>
+    <!-- Block editor palette items -->
+    <string name="block_palette_if">If</string>
+    <string name="block_palette_if_else">If / Else</string>
+    <string name="block_palette_for_each">For each</string>
+    <string name="block_palette_while">While</string>
+    <string name="block_palette_return">Return</string>
+    <string name="block_palette_variable">Variable</string>
+    <string name="block_palette_call">Call</string>
+    <string name="block_palette_comment">Comment</string>
 </resources>

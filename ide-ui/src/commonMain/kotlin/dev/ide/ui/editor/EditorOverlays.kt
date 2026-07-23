@@ -53,6 +53,10 @@ import dev.ide.ui.backend.UiCompletionItem
 import dev.ide.ui.backend.UiQuickDoc
 import dev.ide.ui.backend.UiSeverity
 import dev.ide.ui.generated.resources.Res
+import dev.ide.ui.generated.resources.quickdoc_parameters
+import dev.ide.ui.generated.resources.quickdoc_returns
+import dev.ide.ui.generated.resources.quickdoc_see_also
+import dev.ide.ui.generated.resources.quickdoc_throws
 import dev.ide.ui.generated.resources.copy
 import dev.ide.ui.generated.resources.edoverlay_cut
 import dev.ide.ui.generated.resources.edoverlay_go_to_line
@@ -226,7 +230,7 @@ internal fun QuickDocPopup(doc: UiQuickDoc, modifier: Modifier = Modifier) {
                 for (sec in content.sections) {
                     Spacer(Modifier.size(10.dp))
                     if (sec.title.isNotEmpty()) {
-                        Text(sec.title, style = Ca.type.caption, color = Ca.colors.textSecondary, fontWeight = FontWeight.SemiBold)
+                        Text(docSectionLabel(sec.title), style = Ca.type.caption, color = Ca.colors.textSecondary, fontWeight = FontWeight.SemiBold)
                         Spacer(Modifier.size(3.dp))
                     }
                     for (item in sec.items) {
@@ -236,6 +240,17 @@ internal fun QuickDocPopup(doc: UiQuickDoc, modifier: Modifier = Modifier) {
             }
         }
     }
+}
+
+/** Localized display for a quick-doc section header. The parser ([parseQuickDoc]) keeps the English key
+ *  ("Parameters"/"Returns"/"Throws"/"See also"); an unknown/plugin title falls through unchanged. */
+@Composable
+private fun docSectionLabel(title: String): String = when (title) {
+    "Parameters" -> stringResource(Res.string.quickdoc_parameters)
+    "Returns" -> stringResource(Res.string.quickdoc_returns)
+    "Throws" -> stringResource(Res.string.quickdoc_throws)
+    "See also" -> stringResource(Res.string.quickdoc_see_also)
+    else -> title
 }
 
 /** The inline diagnostic chip: a pill at the right of a diagnostic line — severity-tinted fill, icon,

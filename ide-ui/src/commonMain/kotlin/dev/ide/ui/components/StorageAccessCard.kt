@@ -28,6 +28,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import dev.ide.ui.generated.resources.Res
+import dev.ide.ui.generated.resources.storage_copy_path
 import dev.ide.ui.generated.resources.open_in_the_file_manager
 import dev.ide.ui.generated.resources.your_codeassist_files
 import dev.ide.ui.generated.resources.your_codeassist_files_content
@@ -98,7 +99,7 @@ fun StorageAccessCard(path: String?, onOpenInFiles: (() -> Unit)?, modifier: Mod
                 overflow = TextOverflow.Ellipsis,
                 modifier = Modifier.weight(1f),
             )
-            Icon(if (copied) CaIcons.check else CaIcons.copy, "Copy path", Modifier.size(15.dp), tint = Ca.colors.textTertiary)
+            Icon(if (copied) CaIcons.check else CaIcons.copy, stringResource(Res.string.storage_copy_path), Modifier.size(15.dp), tint = Ca.colors.textTertiary)
         }
         if (onOpenInFiles != null) {
             val openInteraction = remember { MutableInteractionSource() }

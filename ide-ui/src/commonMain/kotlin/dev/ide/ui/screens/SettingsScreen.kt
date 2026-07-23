@@ -68,6 +68,10 @@ import dev.ide.ui.generated.resources.settings_backup_ready
 import dev.ide.ui.generated.resources.settings_inspections_for_language
 import dev.ide.ui.generated.resources.settings_no_settings_available
 import dev.ide.ui.generated.resources.settings_title
+import dev.ide.ui.generated.resources.set_sev_error
+import dev.ide.ui.generated.resources.set_sev_hint
+import dev.ide.ui.generated.resources.set_sev_info
+import dev.ide.ui.generated.resources.set_sev_warning
 import dev.ide.ui.generated.resources.support_show_ads
 import dev.ide.ui.generated.resources.support_show_ads_desc
 import dev.ide.ui.icons.CaIcons
@@ -222,7 +226,7 @@ private fun WideLayout(
             verticalArrangement = Arrangement.spacedBy(4.dp),
         ) {
             pages.forEach { page ->
-                SettingsCategoryItem(page.title, iconFor(page.iconId), page.id == selectedId, showChevron = false) { selectedId = page.id }
+                SettingsCategoryItem(localizedPageTitle(page), iconFor(page.iconId), page.id == selectedId, showChevron = false) { selectedId = page.id }
             }
         }
         Box(Modifier.width(1.dp).fillMaxHeight().background(Ca.colors.separator))
@@ -249,14 +253,14 @@ private fun NarrowLayout(
     if (open == null) {
         LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(12.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
             items(pages, key = { it.id }) { page ->
-                SettingsCategoryItem(page.title, iconFor(page.iconId), selected = false, showChevron = true) { openId = page.id }
+                SettingsCategoryItem(localizedPageTitle(page), iconFor(page.iconId), selected = false, showChevron = true) { openId = page.id }
             }
         }
     } else {
         Column(Modifier.fillMaxSize()) {
             Row(Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 8.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 IconButtonCa(CaIcons.chevronLeft, stringResource(Res.string.settings_all_settings), { openId = null })
-                Text(open.title, color = Ca.colors.textPrimary, style = Ca.type.headline, fontWeight = FontWeight.SemiBold)
+                Text(localizedPageTitle(open), color = Ca.colors.textPrimary, style = Ca.type.headline, fontWeight = FontWeight.SemiBold)
             }
             PageContent(backend, open, values, codeFont, onSet, onAction, onStructuralChange, Modifier.weight(1f))
         }
@@ -284,7 +288,7 @@ private fun PageContent(
     LazyColumn(modifier.fillMaxSize(), contentPadding = PaddingValues(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
         groups.forEach { (groupTitle, controls) ->
             item(groupTitle ?: "_") {
-                SettingsCard(groupTitle) {
+                SettingsCard(localizedGroup(groupTitle)) {
                     controls.forEach { c -> ControlRow(page.id, c, values, codeFont, onSet, onAction, onStructuralChange) }
                     if (advanced.isNotEmpty() && groupTitle == groups.first().first) {
                         AdvancedGroup { advanced.forEach { c -> ControlRow(page.id, c, values, codeFont, onSet, onAction, onStructuralChange) } }
@@ -313,22 +317,25 @@ private fun ControlRow(
     onStructuralChange: () -> Unit,
 ) {
     val stored = values["$pageId.${c.key}"]
+    // Localize the built-in labels/descriptions (override where a resource exists; backend string otherwise).
+    val title = localizedControlTitle(pageId, c)
+    val description = localizedControlDescription(pageId, c)
     when (c) {
         // Toggle/Choice can change which controls a page shows (e.g. R8 mode hides the heap slider), so they
         // also trigger a page re-fetch; Slider/Text don't (avoids a re-fetch on every slider step).
-        is UiSettingControl.Toggle -> SettingsToggleRow(c.title, c.description, stored?.toBooleanStrictOrNull() ?: c.value) {
+        is UiSettingControl.Toggle -> SettingsToggleRow(title, description, stored?.toBooleanStrictOrNull() ?: c.value) {
             onSet(pageId, c.key, it.toString()); onStructuralChange()
         }
-        is UiSettingControl.Slider -> SettingsSliderRow(c.title, c.description, stored?.toIntOrNull() ?: c.value, c.min, c.max, c.step, c.unit) {
+        is UiSettingControl.Slider -> SettingsSliderRow(title, description, stored?.toIntOrNull() ?: c.value, c.min, c.max, c.step, localizedUnit(c.unit)) {
             onSet(pageId, c.key, it.toString())
         }
-        is UiSettingControl.Choice -> SettingsChoiceRow(c.title, c.description, stored ?: c.value, c.options.map { it.value to it.label }) {
+        is UiSettingControl.Choice -> SettingsChoiceRow(title, description, stored ?: c.value, c.options.map { it.value to localizedOptionLabel(pageId, c.key, it) }) {
             onSet(pageId, c.key, it); onStructuralChange()
         }
-        is UiSettingControl.Text -> SettingsTextRow(c.title, c.description, stored ?: c.value, c.placeholder, codeFont) {
+        is UiSettingControl.Text -> SettingsTextRow(title, description, stored ?: c.value, c.placeholder, codeFont) {
             onSet(pageId, c.key, it)
         }
-        is UiSettingControl.Action -> SettingsActionRow(c.title, c.description, c.buttonLabel, c.destructive) { onAction(pageId, c) }
+        is UiSettingControl.Action -> SettingsActionRow(title, description, localizedActionButton(pageId, c), c.destructive) { onAction(pageId, c) }
     }
 }
 
@@ -381,12 +388,18 @@ private fun SeverityChip(severity: UiSeverity, selected: Boolean, onClick: () ->
         UiSeverity.Info -> Ca.colors.info
         UiSeverity.Hint -> Ca.colors.textTertiary
     }
+    val label = when (severity) {
+        UiSeverity.Error -> stringResource(Res.string.set_sev_error)
+        UiSeverity.Warning -> stringResource(Res.string.set_sev_warning)
+        UiSeverity.Info -> stringResource(Res.string.set_sev_info)
+        UiSeverity.Hint -> stringResource(Res.string.set_sev_hint)
+    }
     Box(
         Modifier.background(if (selected) color.copy(alpha = 0.20f) else Ca.colors.surface2, RoundedCornerShape(Ca.radius.pill))
             .clickable(remember { MutableInteractionSource() }, null, onClick = onClick)
             .padding(horizontal = 11.dp, vertical = 5.dp),
     ) {
-        Text(severity.name, color = if (selected) color else Ca.colors.textTertiary, style = Ca.type.caption2, fontWeight = FontWeight.Medium)
+        Text(label, color = if (selected) color else Ca.colors.textTertiary, style = Ca.type.caption2, fontWeight = FontWeight.Medium)
     }
 }
 
