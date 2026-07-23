@@ -11,6 +11,7 @@ import dev.ide.lang.resolve.SymbolKind
 import dev.ide.platform.EngineCancellation
 import dev.ide.vfs.VirtualFile
 import com.intellij.psi.PsiElement
+import dev.ide.lang.kotlin.symbols.KotlinSymbol
 import org.jetbrains.kotlin.lexer.KtTokens
 import org.jetbrains.kotlin.psi.KtAnnotated
 import org.jetbrains.kotlin.psi.KtCallExpression
@@ -22,12 +23,14 @@ import org.jetbrains.kotlin.psi.KtFunction
 import org.jetbrains.kotlin.psi.KtAnnotationEntry
 import org.jetbrains.kotlin.psi.KtBinaryExpression
 import org.jetbrains.kotlin.psi.KtBlockExpression
+import org.jetbrains.kotlin.psi.KtCallableReferenceExpression
 import org.jetbrains.kotlin.psi.KtConstructorCalleeExpression
 import org.jetbrains.kotlin.psi.KtDeclaration
 import org.jetbrains.kotlin.psi.KtDestructuringDeclaration
 import org.jetbrains.kotlin.psi.KtDestructuringDeclarationEntry
 import org.jetbrains.kotlin.psi.KtEscapeStringTemplateEntry
 import org.jetbrains.kotlin.psi.KtExpressionWithLabel
+import org.jetbrains.kotlin.psi.KtInstanceExpressionWithLabel
 import org.jetbrains.kotlin.psi.KtNameReferenceExpression
 import org.jetbrains.kotlin.psi.KtNamedFunction
 import org.jetbrains.kotlin.psi.KtObjectDeclaration
@@ -82,46 +85,61 @@ class KotlinSemanticHighlighter(
 
     private val cache = java.util.concurrent.ConcurrentHashMap<String, Snapshot>()
 
-    override suspend fun highlight(file: VirtualFile): List<SemanticToken> = KotlinPerf.trace("kt.highlight") {
-        val parsed = parsedFor(file) ?: return@trace emptyList()
-        KotlinPerf.span("refresh") { refresh() } // cross-file freshness: a decl just typed in another open file resolves here
-        val resolver = KotlinPerf.span("resolver") { resolverFor(parsed) }
-        val ktFile = parsed.ktFile
-        val out = ArrayList<SemanticToken>(256)
-        // Non-declaration top-level children (package / imports / file annotations) — cheap, recomputed each
-        // time. They precede every declaration in a Kotlin file, so emitting them first keeps document order.
-        for (child in ktFile.children) if (child !is KtDeclaration) collectInto(
-            child,
-            resolver,
-            out
-        )
+    override suspend fun highlight(file: VirtualFile): List<SemanticToken> =
+        KotlinPerf.trace("kt.highlight") {
+            val parsed = parsedFor(file) ?: return@trace emptyList()
+            KotlinPerf.span("refresh") { refresh() } // cross-file freshness: a decl just typed in another open file resolves here
+            val resolver = KotlinPerf.span("resolver") { resolverFor(parsed) }
+            val ktFile = parsed.ktFile
+            val out = ArrayList<SemanticToken>(256)
+            // Non-declaration top-level children (package / imports / file annotations) — cheap, recomputed each
+            // time. They precede every declaration in a Kotlin file, so emitting them first keeps document order.
+            for (child in ktFile.children) if (child !is KtDeclaration) collectInto(
+                child,
+                resolver,
+                out
+            )
 
-        val topDecls = ktFile.declarations
-        val curImports = IncrementalDecls.importsOf(ktFile)
-        val curFileText = ktFile.text
-        val externalStamp = externalStampFor(file.path)
-        val prev = cache[file.path]?.takeIf { it.externalStamp == externalStamp }
-        // Recompute only the declarations this edit can affect (changed ones + dependents of a signature/import
-        // change); reuse the rest re-anchored. Same dependency plan the diagnostics pass uses (see IncrementalDecls).
-        val plan = KotlinPerf.span("scopeCheck") { IncrementalDecls.plan(prev?.decls?.map { it.facts }, prev?.imports, prev?.fileText, topDecls, curImports, curFileText) }
-        val recompute: Set<Int>? = (plan as? IncrementalDecls.Plan.Partial)?.recompute
-        val newEntries = ArrayList<DeclTokens>(topDecls.size)
-        KotlinPerf.span("walk") { for ((i, d) in topDecls.withIndex()) {
-            val base = d.textRange.startOffset
-            if (recompute != null && i !in recompute) {
-                val cached = prev!!.decls[i] // unaffected → reuse this declaration's tokens, re-anchored
-                cached.rel.forEach { out += shift(it, base) }
-                newEntries += cached
-            } else {
-                val abs = ArrayList<SemanticToken>()
-                collectInto(d, resolver, abs)
-                out += abs
-                newEntries += DeclTokens(IncrementalDecls.factsOf(d), abs.map { shift(it, -base) })
+            val topDecls = ktFile.declarations
+            val curImports = IncrementalDecls.importsOf(ktFile)
+            val curFileText = ktFile.text
+            val externalStamp = externalStampFor(file.path)
+            val prev = cache[file.path]?.takeIf { it.externalStamp == externalStamp }
+            // Recompute only the declarations this edit can affect (changed ones + dependents of a signature/import
+            // change); reuse the rest re-anchored. Same dependency plan the diagnostics pass uses (see IncrementalDecls).
+            val plan = KotlinPerf.span("scopeCheck") {
+                IncrementalDecls.plan(
+                    prev?.decls?.map { it.facts },
+                    prev?.imports,
+                    prev?.fileText,
+                    topDecls,
+                    curImports,
+                    curFileText
+                )
             }
-        } }
-        cache[file.path] = Snapshot(curImports, curFileText, externalStamp, newEntries)
-        return@trace out
-    }
+            val recompute: Set<Int>? = (plan as? IncrementalDecls.Plan.Partial)?.recompute
+            val newEntries = ArrayList<DeclTokens>(topDecls.size)
+            KotlinPerf.span("walk") {
+                for ((i, d) in topDecls.withIndex()) {
+                    val base = d.textRange.startOffset
+                    if (recompute != null && i !in recompute) {
+                        val cached =
+                            prev!!.decls[i] // unaffected → reuse this declaration's tokens, re-anchored
+                        cached.rel.forEach { out += shift(it, base) }
+                        newEntries += cached
+                    } else {
+                        val abs = ArrayList<SemanticToken>()
+                        collectInto(d, resolver, abs)
+                        out += abs
+                        newEntries += DeclTokens(
+                            IncrementalDecls.factsOf(d),
+                            abs.map { shift(it, -base) })
+                    }
+                }
+            }
+            cache[file.path] = Snapshot(curImports, curFileText, externalStamp, newEntries)
+            return@trace out
+        }
 
     /** Shift a token's range by [delta] (relative⇄absolute re-anchoring; [SemanticToken] has no copy()). */
     private fun shift(t: SemanticToken, delta: Int): SemanticToken =
@@ -177,7 +195,8 @@ class KotlinSemanticHighlighter(
                     emit(
                         psi.nameIdentifier?.textRange,
                         when {
-                            const -> HighlightKind.CONSTANT       // `const val` — a compile-time constant
+                            // `const val` — a compile-time constant
+                            const -> HighlightKind.CONSTANT
                             local -> HighlightKind.LOCAL_VARIABLE
                             else -> HighlightKind.PROPERTY
                         },
@@ -229,16 +248,38 @@ class KotlinSemanticHighlighter(
                     emit(com.intellij.openapi.util.TextRange(at, at + 1), HighlightKind.ANNOTATION)
                 }
 
+                // `this` / `super` (optionally labeled, `this@Outer`): color the keyword itself so it reads as a
+                // keyword even inside a string template (`"$this"` / `"${this}"`), where the lexer colored the
+                // whole literal as a string and left the `this` uncolored. The label (if any) is colored too.
+                // More specific than the generic KtExpressionWithLabel branch below, so it must precede it.
+                is KtInstanceExpressionWithLabel -> {
+                    emit(psi.instanceReference.textRange, HighlightKind.KEYWORD)
+                    psi.getTargetLabel()?.let { emit(it.textRange, HighlightKind.LABEL) }
+                }
+
                 // A Kotlin label: a definition (`loop@ for …`), a jump target (`break@loop`, `continue@loop`,
-                // `return@loop`), or a labeled `this`/`super` (`this@Outer`). All share KtExpressionWithLabel; we
-                // color its target-label token. Unlabeled `this`/`return`/… have a null target → no token.
+                // `return@loop`). All share KtExpressionWithLabel; we color its target-label token. Unlabeled
+                // `return`/… have a null target → no token. (`this`/`super` handled by the branch above.)
                 is KtExpressionWithLabel ->
                     emit(psi.getTargetLabel()?.textRange, HighlightKind.LABEL)
 
                 // The three resolution-heavy categories get their own [KotlinPerf] bucket so a slow-highlight
                 // trace pins the cost on call-callee resolution vs infix resolution vs member/name inference.
-                is KtCallExpression -> KotlinPerf.span("hl.call") { classifyCall(psi, resolver, ::emit) }
-                is KtBinaryExpression -> KotlinPerf.span("hl.infix") { classifyInfix(psi, resolver, ::emit) }
+                is KtCallExpression -> KotlinPerf.span("hl.call") {
+                    classifyCall(
+                        psi,
+                        resolver,
+                        ::emit
+                    )
+                }
+
+                is KtBinaryExpression -> KotlinPerf.span("hl.infix") {
+                    classifyInfix(
+                        psi,
+                        resolver,
+                        ::emit
+                    )
+                }
                 // A named-argument label (`foo(name = x)`) is a parameter reference — color it like a parameter.
                 is KtValueArgumentName -> emit(
                     psi.referenceExpression.textRange,
@@ -247,7 +288,14 @@ class KotlinSemanticHighlighter(
                 )
 
                 is KtUserType -> classifyTypeRef(psi, ::emit)
-                is KtNameReferenceExpression -> KotlinPerf.span("hl.ref") { classifyReference(psi, resolver, ::emit) }
+                is KtNameReferenceExpression -> KotlinPerf.span("hl.ref") {
+                    classifyReference(
+                        psi,
+                        resolver,
+                        ::emit
+                    )
+                }
+
                 is KtStringTemplateExpression -> classifyStringTemplate(psi, ::emit)
                 else -> {}
             }
@@ -282,9 +330,11 @@ class KotlinSemanticHighlighter(
                     KtTokens.LONG_TEMPLATE_ENTRY_START,
                     KtTokens.LONG_TEMPLATE_ENTRY_END ->
                         emit(child.textRange, HighlightKind.STRING_TEMPLATE_ENTRY, emptySet())
+
                     in KtTokens.KEYWORDS -> {
                         emit(child.textRange, HighlightKind.KEYWORD, emptySet())
                     }
+
                     else -> {}
                 }
                 child = child.nextSibling
@@ -373,7 +423,8 @@ class KotlinSemanticHighlighter(
         userType: KtUserType,
         emit: (com.intellij.openapi.util.TextRange?, HighlightKind, Set<HighlightModifier>) -> Unit
     ) {
-        if (userType.parent is KtUserType) return // a qualifier segment of an enclosing type
+        // a qualifier segment of an enclosing type
+        if (userType.parent is KtUserType) return
         val ref = userType.referenceExpression ?: return
         val name = ref.getReferencedName()
         val kind = when {
@@ -400,15 +451,17 @@ class KotlinSemanticHighlighter(
         val parent = ref.parent
         if (parent is KtCallExpression && parent.calleeExpression === ref) return // a call callee (classifyCall)
         if (parent is KtUserType || parent is KtValueArgumentName) return
-        if (parent is org.jetbrains.kotlin.psi.KtInstanceExpressionWithLabel) return // this/super
+        if (parent is KtInstanceExpressionWithLabel) return // this/super
         if (parent is KtQualifiedExpression && parent.selectorExpression === ref) {
             classifyMemberSelector(ref, parent, resolver, emit); return
         }
         // A callable reference `Person::age` / `String::length` / `::topFun`: color the referenced callable
         // (`age`) like a property/method; a type-denoting receiver (`Person`) reads as a class. An instance
         // receiver (`instance::foo`) falls through to the local/parameter coloring below.
-        if (parent is org.jetbrains.kotlin.psi.KtCallableReferenceExpression) {
-            if (parent.callableReference === ref) { classifyCallableRef(ref, parent, resolver, emit); return }
+        if (parent is KtCallableReferenceExpression) {
+            if (parent.callableReference === ref) {
+                classifyCallableRef(ref, parent, resolver, emit); return
+            }
             if (parent.receiverExpression === ref && resolver.typeDenotationFqn(ref) != null) {
                 emit(ref.textRange, HighlightKind.CLASS, emptySet()); return
             }
@@ -448,8 +501,18 @@ class KotlinSemanticHighlighter(
         val member = resolver.implicitReceiverMember(name, offset)
         if (member != null) {
             when (member.kind) {
-                SymbolKind.FIELD -> emit(ref.textRange, HighlightKind.PROPERTY, deprecationMods(member))
-                SymbolKind.ENUM_CONSTANT -> emit(ref.textRange, HighlightKind.ENUM_CONSTANT, deprecationMods(member))
+                SymbolKind.FIELD -> emit(
+                    ref.textRange,
+                    HighlightKind.PROPERTY,
+                    deprecationMods(member)
+                )
+
+                SymbolKind.ENUM_CONSTANT -> emit(
+                    ref.textRange,
+                    HighlightKind.ENUM_CONSTANT,
+                    deprecationMods(member)
+                )
+
                 else -> {} // a member / top-level / unresolved name → leave to the lexical layer
             }
             return
@@ -464,9 +527,10 @@ class KotlinSemanticHighlighter(
         }
     }
 
-    /** Whether [name] is a property of an enclosing class — a member `val`/`var` or a `val`/`var` primary-
-     *  constructor param — returning its mutability (`var` → true), or null if none. Pure PSI: colors an
-     *  enclosing-class member read even where the resolver's implicit-receiver lookup can't. */
+    /** Whether [name] is a property of an enclosing class — a member `val`/`var`, a `val`/`var` primary-
+     *  constructor param, or a property of an enclosing class's COMPANION object (companion members are bare-
+     *  accessible inside the class) — returning its mutability (`var` → true), or null if none. Pure PSI: colors
+     *  an enclosing-class / companion member read even where the resolver's implicit-receiver lookup can't. */
     private fun enclosingClassMemberProperty(name: String, from: PsiElement): Boolean? {
         var cls = from.getStrictParentOfType<KtClassOrObject>()
         while (cls != null) {
@@ -474,6 +538,12 @@ class KotlinSemanticHighlighter(
                 ?.firstOrNull { it.name == name }?.let { return it.isVar }
             (cls as? KtClass)?.primaryConstructorParameters
                 ?.firstOrNull { it.hasValOrVar() && it.name == name }?.let { return it.isMutable }
+            // A companion object's members are accessible bare from the enclosing class (`rainbowColors` inside
+            // a member fun refers to the companion's `val rainbowColors`).
+            for (comp in cls.companionObjects) {
+                comp.body?.declarations?.filterIsInstance<KtProperty>()
+                    ?.firstOrNull { it.name == name }?.let { return it.isVar }
+            }
             cls = cls.getStrictParentOfType<KtClassOrObject>()
         }
         return null
@@ -484,7 +554,7 @@ class KotlinSemanticHighlighter(
      *  Left to the lexer when the parse-only model can't resolve it. */
     private fun classifyCallableRef(
         ref: KtNameReferenceExpression,
-        cr: org.jetbrains.kotlin.psi.KtCallableReferenceExpression,
+        cr: KtCallableReferenceExpression,
         resolver: KotlinResolver,
         emit: (com.intellij.openapi.util.TextRange?, HighlightKind, Set<HighlightModifier>) -> Unit
     ) {
@@ -498,8 +568,14 @@ class KotlinSemanticHighlighter(
                 if (sym.isDeprecated) mods += HighlightModifier.DEPRECATED
                 emit(ref.textRange, HighlightKind.METHOD, mods)
             }
+
             SymbolKind.FIELD -> emit(ref.textRange, HighlightKind.PROPERTY, deprecationMods(sym))
-            SymbolKind.ENUM_CONSTANT -> emit(ref.textRange, HighlightKind.ENUM_CONSTANT, deprecationMods(sym))
+            SymbolKind.ENUM_CONSTANT -> emit(
+                ref.textRange,
+                HighlightKind.ENUM_CONSTANT,
+                deprecationMods(sym)
+            )
+
             else -> {}
         }
     }
@@ -528,20 +604,21 @@ class KotlinSemanticHighlighter(
             // against the parameter's upper bound — whether or not the inferred `T` is MARKED (a class field's
             // `T` is, a function parameter's isn't). Resolve the bound first, then skip a LEAKED (not-in-scope)
             // type parameter, whose concrete members can't be known.
-            val recvType = resolver.receiverForMembers(inferred, receiver.textRange.startOffset) ?: return
+            val recvType =
+                resolver.receiverForMembers(inferred, receiver.textRange.startOffset) ?: return
             if (recvType.isTypeParameter) return
             resolver.instanceMemberNamed(recvType, name)
         } ?: return
         // A property/field read (a method ref without a call is rare; leave it to the lexical layer).
-        if (member.kind == dev.ide.lang.resolve.SymbolKind.FIELD || member.kind == dev.ide.lang.resolve.SymbolKind.ENUM_CONSTANT) {
+        if (member.kind == SymbolKind.FIELD || member.kind == SymbolKind.ENUM_CONSTANT) {
             val kind =
-                if (member.kind == dev.ide.lang.resolve.SymbolKind.ENUM_CONSTANT) HighlightKind.ENUM_CONSTANT else HighlightKind.PROPERTY
+                if (member.kind == SymbolKind.ENUM_CONSTANT) HighlightKind.ENUM_CONSTANT else HighlightKind.PROPERTY
             emit(ref.textRange, kind, deprecationMods(member))
         }
     }
 
     /** The DEPRECATED modifier when [sym] is `@Deprecated` (UI renders strikethrough), else nothing. */
-    private fun deprecationMods(sym: dev.ide.lang.kotlin.symbols.KotlinSymbol): Set<HighlightModifier> =
+    private fun deprecationMods(sym: KotlinSymbol): Set<HighlightModifier> =
         if (sym.isDeprecated) setOf(HighlightModifier.DEPRECATED) else emptySet()
 
     /** The nearest local property / parameter named [name] declared before [offset], or null if it resolves
@@ -562,7 +639,8 @@ class KotlinSemanticHighlighter(
                     node.valueParameters.firstOrNull { it.name == name }?.let { return it }
                     // A lambda destructuring param `{ (a, b) -> }` — the entries live on the parameter.
                     node.valueParameters.forEach { p ->
-                        p.destructuringDeclaration?.entries?.firstOrNull { it.name == name }?.let { return it }
+                        p.destructuringDeclaration?.entries?.firstOrNull { it.name == name }
+                            ?.let { return it }
                     }
                 }
 
@@ -574,7 +652,8 @@ class KotlinSemanticHighlighter(
                 is KtForExpression -> {
                     node.loopParameter?.takeIf { it.name == name }?.let { return it }
                     // `for ((k, v) in …)` — the loop parameter is itself a destructuring.
-                    node.destructuringDeclaration?.entries?.firstOrNull { it.name == name }?.let { return it }
+                    node.destructuringDeclaration?.entries?.firstOrNull { it.name == name }
+                        ?.let { return it }
                 }
 
                 is KtCatchClause -> node.catchParameter?.takeIf { it.name == name }
@@ -593,7 +672,7 @@ class KotlinSemanticHighlighter(
                     val shadows = node.body?.declarations?.any {
                         (it is KtProperty && it.name == name) || (it is KtNamedFunction && it.name == name)
                     } == true ||
-                        (node as? KtClass)?.primaryConstructorParameters?.any { it.hasValOrVar() && it.name == name } == true
+                            (node as? KtClass)?.primaryConstructorParameters?.any { it.hasValOrVar() && it.name == name } == true
                     if (shadows) return null
                 }
             }

@@ -8,8 +8,8 @@ import dev.ide.index.IndexScope
 import dev.ide.index.IndexService
 import dev.ide.index.IndexStatus
 import dev.ide.lang.dom.ParsedFile
-import dev.ide.lang.jdt.index.JavaClassLocatorIndex
-import dev.ide.lang.jdt.index.normalizedJarKey
+import dev.ide.lang.java.index.JavaClassLocatorIndex
+import dev.ide.index.normalizedJarKey
 import dev.ide.platform.ContentHash
 import dev.ide.platform.Disposable
 import java.nio.file.Files

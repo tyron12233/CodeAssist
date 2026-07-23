@@ -1,0 +1,12 @@
+# 🚀 CodeAssist 3.5.5
+
+More Compose preview fixes, plus a new Plugins screen.
+
+**COMPOSE PREVIEW**
+- **Tapping a `Card` (or any Material container) no longer crashes the preview.** A plain `Card { }` with no `onClick` was being built as a clickable card with a null click handler, so tapping it anywhere threw a NullPointerException. Plain `Card`, `Surface`, `ListItem`, and friends now render as non-clickable, exactly as written.
+- **Previews can read theme values defined in other files.** A top-level `val` such as `val Purple80 = Color(...)` in your `Theme.kt`, referenced from a `@Preview` in another file, now resolves instead of failing with "no source function `Purple80/0`".
+
+**PLUGINS**
+- **New Settings > Plugins screen.** Enable or disable CodeAssist's built-in plugins, with essential ones protected and dependency-aware toggling. Changes apply on restart.
+
+Full changelog: https://github.com/tyron12233/CodeAssist/releases/tag/v3.5.5

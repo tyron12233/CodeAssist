@@ -82,6 +82,35 @@ class KotlinPostfixTemplateTest {
     }
 
     @Test
+    fun newTypeAgnosticTemplates() {
+        assertEquals("(x)", rewrite(byKey("par"), ctx("x")))
+        assertEquals("x as Type", rewrite(byKey("cast"), ctx("x")))
+        assertTrue(rewrite(byKey("when"), ctx("x")).startsWith("when (x) {"))
+        assertTrue(rewrite(byKey("try"), ctx("x")).startsWith("try {\n    x\n} catch ("))
+        for (key in listOf("par", "cast", "when", "try")) {
+            assertTrue(byKey(key).isApplicable(ctx("x")), "$key should apply to any receiver")
+        }
+    }
+
+    @Test
+    fun takeIfUnlessAreReferenceGated() {
+        val str = type("kotlin.String")
+        val int = type("kotlin.Int")
+        for (key in listOf("takeIf", "takeUnless")) {
+            assertTrue(byKey(key).isApplicable(ctx("s", str)), "$key applies to a reference type")
+            assertFalse(byKey(key).isApplicable(ctx("n", int)), "$key must not apply to a primitive")
+        }
+        assertEquals("s.takeIf {  }", rewrite(byKey("takeIf"), ctx("s", str)))
+    }
+
+    @Test
+    fun spreadIsArrayGated() {
+        assertTrue(byKey("spread").isApplicable(ctx("a", type("kotlin.IntArray"))), "spread applies to an array")
+        assertFalse(byKey("spread").isApplicable(ctx("xs", type("kotlin.collections.List"))), "spread must not apply to a List")
+        assertEquals("*a", rewrite(byKey("spread"), ctx("a", type("kotlin.IntArray"))))
+    }
+
+    @Test
     fun expandIsAlwaysASnippetWithNoExtraEdits() {
         val exp = byKey("val").expand(ctx("x"))
         assertTrue(exp.edits.isEmpty(), "the rewrite rides on the snippet; the driver adds the receiver delete")

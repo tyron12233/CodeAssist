@@ -55,8 +55,8 @@ private fun DrawScope.drawShape(s: UiDrawable.Shape, topLeft: Offset, size: Size
     val inset = sw / 2f
     val rect = Rect(topLeft.x + inset, topLeft.y + inset, topLeft.x + size.width - inset, topLeft.y + size.height - inset)
     val fillBrush: Brush? = when {
-        s.gradient != null -> gradientBrush(s.gradient, rect)
-        s.solidColor != null -> Brush.linearGradient(0f to argbColor(s.solidColor), 1f to argbColor(s.solidColor))
+        s.gradient != null -> gradientBrush(s.gradient!!, rect)
+        s.solidColor != null -> Brush.linearGradient(0f to argbColor(s.solidColor!!), 1f to argbColor(s.solidColor!!))
         else -> null
     }
 
@@ -64,7 +64,7 @@ private fun DrawScope.drawShape(s: UiDrawable.Shape, topLeft: Offset, size: Size
         "oval" -> {
             fillBrush?.let { drawOval(it, Offset(rect.left, rect.top), Size(rect.width, rect.height)) }
             if (s.strokeColor != null && sw > 0) drawOval(
-                argbColor(s.strokeColor), Offset(rect.left, rect.top), Size(rect.width, rect.height),
+                argbColor(s.strokeColor!!), Offset(rect.left, rect.top), Size(rect.width, rect.height),
                 style = strokeStyle(s, sw),
             )
         }
@@ -83,7 +83,7 @@ private fun DrawScope.drawShape(s: UiDrawable.Shape, topLeft: Offset, size: Size
         else -> { // rectangle (default), honouring per-corner radii
             val path = roundRectPath(rect, s)
             fillBrush?.let { drawPath(path, it, style = Fill) }
-            if (s.strokeColor != null && sw > 0) drawPath(path, argbColor(s.strokeColor), style = strokeStyle(s, sw))
+            if (s.strokeColor != null && sw > 0) drawPath(path, argbColor(s.strokeColor!!), style = strokeStyle(s, sw))
         }
     }
 }
@@ -108,7 +108,7 @@ private fun DrawScope.strokeStyle(s: UiDrawable.Shape, sw: Float): Stroke {
 private fun DrawScope.gradientBrush(g: UiGradient, rect: Rect): Brush {
     val stops = buildList {
         add(0f to argbColor(g.startColor))
-        if (g.centerColor != null) add(0.5f to argbColor(g.centerColor))
+        if (g.centerColor != null) add(0.5f to argbColor(g.centerColor!!))
         add(1f to argbColor(g.endColor))
     }.toTypedArray()
     val center = Offset(rect.left + rect.width * g.centerX, rect.top + rect.height * g.centerY)
@@ -139,7 +139,7 @@ private fun DrawScope.drawVector(v: UiDrawable.Vector, topLeft: Offset, size: Si
                 p.fillColor?.let { drawPath(path, argbColor(it), alpha = (p.fillAlpha * v.rootAlpha).coerceIn(0f, 1f), style = Fill) }
                 if (p.strokeColor != null && p.strokeWidthVp > 0f) {
                     drawPath(
-                        path, argbColor(p.strokeColor),
+                        path, argbColor(p.strokeColor!!),
                         alpha = (p.strokeAlpha * v.rootAlpha).coerceIn(0f, 1f),
                         style = Stroke(width = p.strokeWidthVp),
                     )

@@ -35,6 +35,8 @@ import dev.ide.ui.generated.resources.settings_code_style_subtitle
 import dev.ide.ui.generated.resources.settings_hub_title
 import dev.ide.ui.generated.resources.settings_keystore_manager
 import dev.ide.ui.generated.resources.settings_keystore_manager_subtitle
+import dev.ide.ui.generated.resources.settings_plugins
+import dev.ide.ui.generated.resources.settings_plugins_subtitle
 import dev.ide.ui.generated.resources.settings_sdk_manager
 import dev.ide.ui.generated.resources.settings_sdk_manager_subtitle
 import dev.ide.ui.generated.resources.settings_settings
@@ -56,6 +58,7 @@ fun SettingsHubScreen(
     onOpenCodeStyle: () -> Unit,
     onOpenSdkManager: () -> Unit,
     onOpenKeystoreManager: () -> Unit,
+    onOpenPlugins: () -> Unit,
 ) {
     Box(Modifier.fillMaxSize().background(Ca.colors.bg)) {
         Column(Modifier.fillMaxSize()) {
@@ -80,6 +83,7 @@ fun SettingsHubScreen(
                 HubRow(CaIcons.braces, stringResource(Res.string.settings_code_style), stringResource(Res.string.settings_code_style_subtitle), onOpenCodeStyle)
                 HubRow(CaIcons.pkg, stringResource(Res.string.settings_sdk_manager), stringResource(Res.string.settings_sdk_manager_subtitle), onOpenSdkManager)
                 HubRow(CaIcons.key, stringResource(Res.string.settings_keystore_manager), stringResource(Res.string.settings_keystore_manager_subtitle), onOpenKeystoreManager)
+                HubRow(CaIcons.box, stringResource(Res.string.settings_plugins), stringResource(Res.string.settings_plugins_subtitle), onOpenPlugins)
             }
         }
     }

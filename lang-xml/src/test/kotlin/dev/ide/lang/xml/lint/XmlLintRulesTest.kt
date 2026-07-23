@@ -38,6 +38,19 @@ class XmlLintRulesTest {
     }
 
     @Test
+    fun flagsDuplicateAttributes() {
+        // The same attribute name twice on one tag → the second occurrence is flagged (the first is fine).
+        val dups = XmlLintRules.duplicateAttributes(parse(
+            "<TextView android:text=\"a\" android:id=\"@+id/x\" android:text=\"b\"/>"
+        ))
+        assertEquals(listOf("android:text"), dups.map { it.attribute })
+        // No false positive when every attribute name is distinct.
+        assertTrue(XmlLintRules.duplicateAttributes(parse(
+            "<TextView android:text=\"a\" android:id=\"@+id/x\"/>"
+        )).isEmpty())
+    }
+
+    @Test
     fun flagsHardcodedTextButNotResourceRefs() {
         val hits = XmlLintRules.hardcodedText(parse("""<TextView android:text="Hello world" android:hint="@string/h"/>"""))
         assertEquals(1, hits.size)

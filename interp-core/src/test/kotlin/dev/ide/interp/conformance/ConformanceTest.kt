@@ -3,6 +3,7 @@ package dev.ide.interp.conformance
 import java.nio.file.Files
 import java.nio.file.Paths
 import kotlin.test.Test
+import kotlin.test.assertEquals
 import kotlin.test.assertTrue
 
 /**
@@ -33,9 +34,10 @@ class ConformanceTest {
         }
 
         assertTrue(report.total > 0, "no conformance corpus files were discovered")
-        // Frontier gaps are expected; correctness bugs and crashes are the actionable signal. Left informational
-        // for now (see KDoc) — flip these to fail the build once the corpus is green:
-        // assertEquals(0, report.fail, "interpreter produced wrong answers — see scorecard")
-        // assertEquals(0, report.error, "interpreter crashed unexpectedly — see scorecard")
+        // Frontier GAPs (a feature the interpreter honestly refuses) stay informational — they're the roadmap,
+        // not a regression. But a FAIL (ran, wrong answer) or an ERROR (unexpected crash) is a real defect, and
+        // the corpus is clean of both — so gate on them: a change that introduces one fails the build here.
+        assertEquals(0, report.fail, "interpreter produced wrong answers — see scorecard:\n${ConformanceHarness.format(report)}")
+        assertEquals(0, report.error, "interpreter crashed unexpectedly — see scorecard:\n${ConformanceHarness.format(report)}")
     }
 }

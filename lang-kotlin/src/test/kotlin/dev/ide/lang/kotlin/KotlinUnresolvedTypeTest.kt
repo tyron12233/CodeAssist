@@ -183,4 +183,47 @@ class KotlinUnresolvedTypeTest {
             "default simple types (Int/String/Boolean) must not be flagged; got $diags",
         )
     }
+
+    @Test
+    fun unimportedLibraryTypeAsStaticReceiverIsFlagged() {
+        // `FontWeight.Bold` shape: a LIBRARY type used for companion/static access, never imported. The receiver
+        // itself must be flagged (Kotlin reports "Unresolved reference: FontWeight") — the selector can't be
+        // typed, so the member check backs off and the receiver used to fall through every check silently.
+        val diags = diagnose("Use.kt", "package com.example\nfun f() { val x = ComponentActivity.INSTANCE }")
+        assertTrue(
+            diags.any { it.code == "kt.unresolved" && it.message.contains("ComponentActivity") },
+            "an unimported library type used as a static/companion receiver must be flagged; got $diags",
+        )
+    }
+
+    @Test
+    fun sameModuleSourceTypeAsStaticReceiverIsNotFlagged() {
+        // A same-package SOURCE type as receiver resolves without an import — must NOT be flagged.
+        val diags = diagnose("Use.kt", "package com.example\nfun f() { val x = LocalJavaType.FIELD }")
+        assertTrue(
+            diags.none { it.code == "kt.unresolved" && it.message.contains("LocalJavaType") },
+            "a same-module source type receiver must not be flagged; got $diags",
+        )
+    }
+
+    @Test
+    fun generatedOrUnknownReceiverIsNotFlagged() {
+        // A capitalized receiver that is NOT a known library type — an Android `R`/`BuildConfig` not yet built,
+        // or a typo — must NOT be flagged: we can't tell a missing import from a generated same-package class.
+        val diags = diagnose("Use.kt", "package com.example\nfun f() { val x = R.drawable.icon }")
+        assertTrue(
+            diags.none { it.code == "kt.unresolved" && it.message.contains("R") },
+            "an unknown/generated receiver (Android R) must not be flagged; got $diags",
+        )
+    }
+
+    @Test
+    fun packageSegmentReceiverIsNotFlagged() {
+        // The package head of a fully-qualified reference (`unknownpkg.Foo.bar`) must not be flagged unresolved.
+        val diags = diagnose("Use.kt", "package com.example\nfun f() { val x = unknownpkg.Foo.bar }")
+        assertTrue(
+            diags.none { it.code == "kt.unresolved" && it.message.contains("unknownpkg") },
+            "a package-segment receiver must not be flagged; got $diags",
+        )
+    }
 }

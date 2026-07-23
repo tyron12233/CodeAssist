@@ -41,8 +41,12 @@ Events (the `event` column), by category:
 
 | Category      | Events (props in parens) |
 |---------------|--------|
-| `performance` | `cold_start` (`duration_ms` — full on-device bootstrap, once per launch; also the per-launch anchor), `index_perf` (`duration_ms` — per index build/reindex), `build_result` (`ok`, `duration_ms`, `steps` — per build/run), `completion_perf` / `analysis_perf` (`count`, `mean_ms`, `p50_ms`, `p95_ms`, `max_ms`) |
-| `crash`       | `app_crash` (scrubbed — see below) |
+| `performance` | `cold_start` (`duration_ms` — full on-device bootstrap, once per launch; also the per-launch anchor), `index_perf` (`duration_ms` + `heap_*_mb` — per index build/reindex; **plus** the phase split `lib_ms`/`src_ms`, the cache-effectiveness counts `artifacts`/`artifacts_built`/`artifacts_reused`, the source-diff counts `src_files`/`src_parsed`, and a per-indexer breakdown `idx.<index-id>.ms` for each index that cost ≥1ms — e.g. `idx.java.classNames.ms`, `idx.android.resources.ms` — where the id is a fixed index-kind name, never a file/project/package name), `build_result` (`ok`, `duration_ms`, `steps`, `peak_heap_mb`/`min_headroom_mb`/`heap_max_mb`, and on failure `failure_kind` = `compile`/`resource`/`tool`/`oom`/`no_diagnostic` — per build/run), `completion_perf` / `analysis_perf` (`count`, `mean_ms`, `p50_ms`, `p95_ms`, `max_ms`) |
+| `crash`       | `app_crash` (scrubbed — see below; also carries the crash-time `heap_*_mb` and always pins at least one `dev.ide.*` frame, walking the cause chain if the top of the stack is all framework code), `error_logged` (a caught ERROR-level failure, scrubbed + throttled) |
+
+`failure_kind` categorizes a failed build so the ~50% "failure" rate is actionable: a compiler/resource
+error is the user's own code (the expected inner loop), whereas `tool`/`no_diagnostic` point at our pipeline
+and `oom` at memory pressure. It is a fixed bucket name — never a message, file name, or user content.
 
 `completion_perf` and `analysis_perf` are **aggregated**, not one event per keystroke: latencies are
 accumulated client-side and emitted as a single summary every 50 samples (and on shutdown), so a

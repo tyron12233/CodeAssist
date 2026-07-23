@@ -4,12 +4,12 @@
     <string name="a_new_build_system">A new build system</string>
     <string name="a_new_build_system_content"><![CDATA[CodeAssist has been rebuilt with a new on-device build system. It uses its own project configuration, so projects from a previous version aren't compatible and won't open automatically.
 
-Back up your projects to a .zip now — your source files stay safe, and you can re-add them to a new project.]]></string>
+Back up your projects to a .zip now, your source files stay safe, and you can re-add them to a new project.]]></string>
     <string name="preparing_backup">Preparing backup…</string>
     <string name="backup_projects">Back up projects</string>
     <string name="got_it">Got it</string>
     <string name="help_improve_codeassist">Help improve CodeAssist</string>
-    <string name="help_improve_codeassist_content"><![CDATA[Share anonymous performance data so we can see what's slow and what's failing — and fix the right things.
+    <string name="help_improve_codeassist_content"><![CDATA[Share anonymous performance data so we can see what's slow and what's failing, and fix the right things.
 
 We collect: your app version and device model, how long builds, indexing, and code completion take, build success/failure, and scrubbed crash reports.
 
@@ -19,34 +19,34 @@ We never collect your code, file or project names, which features you use, or an
     <string name="no_thanks">No thanks</string>
     <string name="on_device">On-device</string>
     <string name="on_device_title">A real IDE. On your phone.</string>
-    <string name="on_device_content">Write, navigate, and build Android &amp; Java projects end to end — no laptop required.</string>
+    <string name="on_device_content">Write, navigate, and build Android &amp; Java projects end to end, no laptop required.</string>
     <string name="continue">Continue</string>
     <string name="maybe_later">Maybe later</string>
     <string name="skip_for_now">Skip for now</string>
     <string name="code_completion">Code completion</string>
     <string name="code_completion_title">Completion that knows your code.</string>
-    <string name="code_completion_content">Eclipse JDT powers precise, ranked suggestions — with signatures and docs — as you type.</string>
+    <string name="code_completion_content">Eclipse JDT powers precise, ranked suggestions, with signatures and docs as you type.</string>
     <string name="block_editing">Block editing</string>
     <string name="block_editing_title">Edit as code, or as blocks.</string>
-    <string name="block_editing_content">Project any Java file into interlocking blocks — a live view of the same source, byte for byte.</string>
+    <string name="block_editing_content">Project any Java file into interlocking blocks, a live view of the same source, byte for byte.</string>
     <string name="build_and_run">Build &amp; run</string>
     <string name="build_and_run_title">Build real APKs, on device.</string>
-    <string name="build_and_run_content">Resolve, compile, dex, package, sign — then install straight to your phone.</string>
+    <string name="build_and_run_content">Resolve, compile, dex, package, sign, then install straight to your phone.</string>
     <string name="command_palette">Command palette</string>
     <string name="command_palette_title">Jump anywhere, instantly.</string>
-    <string name="command_palette_content">One input for commands, files, and symbols — the accelerator behind everything.</string>
+    <string name="command_palette_content">One input for commands, files, and symbols, the accelerator behind everything.</string>
     <string name="kotlin_beta">Kotlin · Beta</string>
     <string name="kotlin_beta_title">Kotlin completion, now in beta.</string>
     <string name="kotlin_beta_content">Full Kotlin code completion, tuned to the same calm, ranked experience as Java.</string>
     <string name="xml">XML</string>
     <string name="xml_title">Layouts, fully assisted.</string>
-    <string name="xml_content">Tag, attribute, and resource completion for Android XML — with live validation.</string>
+    <string name="xml_content">Tag, attribute, and resource completion for Android XML with live validation.</string>
     <string name="your_files">Your files</string>
     <string name="your_files_title">Your projects, in a real folder.</string>
-    <string name="your_files_content">Projects live in app storage you can open from any file manager — drop in icons, layouts, or assets, or edit from a PC. No special permissions, nothing hidden.</string>
+    <string name="your_files_content">Projects live in app storage you can open from any file manager, drop in icons, layouts, or assets, or edit from a PC. No special permissions, nothing hidden.</string>
     <string name="jetpack_compose">Jetpack Compose</string>
     <string name="jetpack_compose_title">Rebuilt on Jetpack Compose.</string>
-    <string name="jetpack_compose_content">A faster, smoother CodeAssist — native Compose throughout, with live @Preview.</string>
+    <string name="jetpack_compose_content">A faster, smoother CodeAssist, native Compose throughout, with live @Preview.</string>
     <string name="create_your_first_project">Create your first project</string>
     <string name="open_a_project">Open a project or start a new one.</string>
     <string name="new_project">New Project</string>
@@ -90,11 +90,15 @@ We never collect your code, file or project names, which features you use, or an
     <string name="support_title">Support CodeAssist</string>
     <string name="support_content">Built in my free time and kept free for everyone. If it helps you, a sponsor or a star means a lot.</string>
     <string name="support_chip_free">100% free</string>
-    <string name="support_chip_no_ads">No ads</string>
     <string name="support_chip_open_source">Open source</string>
     <string name="support_sponsor">Sponsor</string>
     <string name="support_star">Star on GitHub</string>
-    <string name="no_project_yet">No projects yet — create one to get started.</string>
+    <string name="support_show_ads">Show ads</string>
+    <string name="support_show_ads_desc">Show ads in the app. You can turn them off at any time.</string>
+    <string name="ad_label">Ad</string>
+    <string name="house_ad_support_title">Enjoying CodeAssist?</string>
+    <string name="house_ad_support_content">Support the project on GitHub Sponsors.</string>
+    <string name="no_project_yet">No projects yet. Create one to get started.</string>
     <string name="your_projects">Your projects</string>
     <string name="project_kind_android">Android</string>
     <string name="project_opened_just_now">Opened just now</string>
@@ -119,7 +123,7 @@ We never collect your code, file or project names, which features you use, or an
         <item quantity="other">%1$d modules</item>
     </plurals>
     <string name="beta_notice">You're on the %1$s</string>
-    <string name="beta_notice_content">Some features may be incomplete or change. We'd love your feedback — tell us what's missing or broken.</string>
+    <string name="beta_notice_content">Some features may be incomplete or change. We'd love your feedback, tell us what's missing or broken.</string>
     <string name="submit_suggestion">Submit suggestions</string>
     <string name="your_codeassist_files">Your CodeAssist files</string>
     <string name="your_codeassist_files_content">Open this folder in any file manager to browse your projects (including any from older versions, under "Projects"), add icons or assets, or edit from a PC.</string>
@@ -143,7 +147,7 @@ We never collect your code, file or project names, which features you use, or an
         <item quantity="one">Recovered %1$d project from an older version</item>
         <item quantity="other">Recovered %1$d projects from an older version</item>
     </plurals>
-    <string name="recovered_projects_content">These use Gradle and open in a limited compatibility mode — some features may not work and they may not build until dependencies are re-added. Your original files are kept safe in your storage folder.</string>
+    <string name="recovered_projects_content">These use Gradle and open in a limited compatibility mode, some features may not work, and they may not build until dependencies are re-added. Your original files are kept safe in your storage folder.</string>
 
 
     <!-- ============================================================ -->
@@ -242,6 +246,7 @@ We never collect your code, file or project names, which features you use, or an
     <string name="buildc_tab_problems">Problems</string>
     <string name="buildc_tab_log">Log</string>
     <string name="buildc_tab_steps">Steps</string>
+    <string name="buildc_tab_logcat">Logcat</string>
     <string name="buildc_filter_all">All %1$d</string>
     <string name="buildc_filter_errors">Errors %1$d</string>
     <string name="buildc_filter_warnings">Warnings %1$d</string>
@@ -251,6 +256,10 @@ We never collect your code, file or project names, which features you use, or an
     <string name="buildc_group_by_task">Group by task</string>
     <string name="buildc_empty_log">Press Run to build &amp; run this module.</string>
     <string name="buildc_no_log_match">No log lines match.</string>
+    <string name="buildc_logcat_empty">Run a debug app to see its logs here.</string>
+    <string name="buildc_logcat_connected">Connected</string>
+    <string name="buildc_logcat_waiting">Waiting for app…</string>
+    <string name="buildc_logcat_idle">No app running</string>
     <string name="buildc_general">General</string>
     <string name="buildc_no_steps">No build steps yet.</string>
     <string name="buildc_indexing">Indexing…</string>
@@ -278,8 +287,10 @@ We never collect your code, file or project names, which features you use, or an
     <string name="completion_back_to_suggestions">Back to suggestions</string>
     <string name="completion_show_documentation">Show documentation</string>
     <string name="sig_more">+%1$d more</string>
+    <string name="sig_peek_tip">Tap to peek full definition</string>
+    <string name="sig_peek_collapse">Tap to collapse</string>
     <string name="edsheet_source_control">Source Control</string>
-    <string name="edsheet_source_control_desc">Git integration — staging, diffs, commit &amp; push — is on the roadmap.</string>
+    <string name="edsheet_source_control_desc">Git integration. Staging, diffs, commit &amp; push is on the roadmap.</string>
     <string name="symbolbar_move_line_up">Move line up</string>
     <string name="symbolbar_move_line_down">Move line down</string>
     <string name="symbolbar_duplicate_line">Duplicate line</string>
@@ -298,6 +309,7 @@ We never collect your code, file or project names, which features you use, or an
     <string name="edchrome_toggle_navigator">Toggle navigator</string>
     <string name="edchrome_find_replace">Find / replace</string>
     <string name="edchrome_reformat_code">Reformat code</string>
+    <string name="edchrome_optimize_imports">Optimize imports</string>
     <string name="edchrome_command_palette">Command palette</string>
     <string name="edchrome_toggle_inlay_hints">Toggle inlay hints</string>
     <string name="edchrome_hide_inlay_hints">Hide inlay hints</string>
@@ -341,7 +353,7 @@ We never collect your code, file or project names, which features you use, or an
     <string name="gradle_mode_title">Gradle compatibility mode</string>
     <string name="gradle_resync">Re-sync</string>
     <string name="gradle_syncing">Syncing from Gradle…</string>
-    <string name="sources_not_installed">Android platform sources (%1$s) aren't installed — needed for android.* parameter names &amp; docs.</string>
+    <string name="sources_not_installed">Android platform sources (%1$s) aren't installed. It is needed for android.* parameter names &amp; docs.</string>
     <string name="sources_download">Download</string>
     <string name="sources_downloading">Downloading…</string>
     <string name="sources_download_failed">Download failed: %1$s</string>
@@ -417,15 +429,15 @@ We never collect your code, file or project names, which features you use, or an
     <string name="learn_preparing">Preparing your coding workspace…</string>
     <string name="learn_preparing_sub">Building the code index so completions and error checks work instantly.</string>
     <string name="learn_compose_preparing">Preparing your Compose workspace…</string>
-    <string name="learn_compose_downloading">Downloading the Compose libraries — this happens once.</string>
+    <string name="learn_compose_downloading">Downloading the Compose libraries, this happens once.</string>
     <string name="learn_compose_indexing">Indexing… the preview starts in a moment.</string>
     <string name="learn_compose_edit_hint">Edit the code above and watch it re-render</string>
     <string name="learn_indexing">Indexing… suggestions and checks improve in a moment</string>
     <string name="learn_submit">Submit</string>
     <string name="learn_quiz_correct">Correct!</string>
-    <string name="learn_quiz_incorrect">Not quite — try again.</string>
+    <string name="learn_quiz_incorrect">Not quite. Try again.</string>
     <string name="learn_lesson_complete">Lesson complete!</string>
-    <string name="learn_lesson_complete_content">Nice work — keep the momentum going.</string>
+    <string name="learn_lesson_complete_content">Nice work! Keep the momentum going.</string>
     <plurals name="learn_lesson_count">
         <item quantity="one">%1$d lesson</item>
         <item quantity="other">%1$d lessons</item>
@@ -444,6 +456,7 @@ We never collect your code, file or project names, which features you use, or an
     <string name="logs_filter_all">All</string>
     <string name="logs_filter_warnings">Warnings</string>
     <string name="logs_filter_errors">Errors</string>
+    <string name="logs_filter_all_plugins">All plugins</string>
     <string name="logs_filter_hint">Filter logs…</string>
     <string name="logs_resume">Resume live tail</string>
     <string name="logs_pause">Pause live tail</string>
@@ -478,6 +491,13 @@ We never collect your code, file or project names, which features you use, or an
     <string name="run_conflict_message">A build or program is still running. Stop it and start this run instead?</string>
     <string name="run_conflict_stop_and_run">Stop and Run</string>
     <string name="run_conflict_dont_ask">Don\'t ask again</string>
+    <!-- Build notifications: the first-build permission prompt + its in-process fallback, and the Settings re-request -->
+    <string name="build_notif_title">Show build notifications?</string>
+    <string name="build_notif_message">CodeAssist can run builds and your program in a separate, isolated process and show a progress notification while they run. It keeps Android from stopping the build when you switch away, and lets you follow progress. Allow notifications to turn this on.</string>
+    <string name="build_notif_not_now">Not now</string>
+    <string name="build_notif_inprocess_title">Builds will run in the app</string>
+    <string name="build_notif_inprocess_message">Without notification permission, builds run inside CodeAssist instead of a separate process, and you won\'t see build progress notifications. You can turn notifications on anytime in Settings, under Build Runtime.</string>
+    <string name="build_notif_enabled">Build notifications enabled</string>
     <string name="preview_live">Live</string>
     <string name="preview_paused">Paused</string>
     <string name="preview_stop_live">Stop live preview</string>
@@ -600,6 +620,11 @@ We never collect your code, file or project names, which features you use, or an
     <string name="index_artifacts">ARTIFACTS</string>
     <string name="index_idle_body">All symbol &amp; completion indexes are up to date.</string>
     <string name="index_reindex">Re-index project</string>
+    <string name="index_indexers">INDEXERS</string>
+    <string name="index_ms">%1$d ms</string>
+    <string name="index_build_cache">%1$d artifacts · %2$d from cache</string>
+    <string name="index_build_phases">libraries %1$d ms · source %2$d ms</string>
+    <string name="index_more">+%1$d more</string>
 
     <!-- dialogs: PermissionDialog (roleLabel/labelFor return StringResource) -->
     <string name="perm_wants_to">The running program wants to %1$s:</string>
@@ -636,6 +661,11 @@ We never collect your code, file or project names, which features you use, or an
     <string name="settings_sdk_manager_subtitle">Download Android SDK &amp; JDK sources</string>
     <string name="settings_keystore_manager">Keystore Manager</string>
     <string name="settings_keystore_manager_subtitle">Create, import &amp; manage signing keystores</string>
+    <string name="settings_plugins">Plugins</string>
+    <string name="settings_plugins_subtitle">Enable or disable built-in plugins</string>
+    <string name="plugins_restart_hint">Restart to apply your plugin changes.</string>
+    <string name="plugins_required">Required</string>
+    <string name="plugins_requires">Requires %1$s</string>
 
     <!-- keystore (KeystoreManagerScreen) -->
     <string name="keystore_manager_title">Keystore Manager</string>
@@ -671,7 +701,7 @@ We never collect your code, file or project names, which features you use, or an
     <string name="sdk_clear_finished">Clear finished</string>
     <string name="sdk_jdk">JDK</string>
     <string name="sdk_jdk_version">JDK %1$s</string>
-    <string name="sdk_jdk_sources_available">Sources available — android.* and java.* docs are on.</string>
+    <string name="sdk_jdk_sources_available">Sources available, android.* and java.* docs are on.</string>
     <string name="sdk_jdk_no_sources">No JDK sources found. Download a JDK that bundles them:</string>
     <string name="sdk_jdk_downloading">JDK %1$d…</string>
     <string name="sdk_jdk_sources">JDK %1$d sources</string>
@@ -709,9 +739,9 @@ We never collect your code, file or project names, which features you use, or an
     <string name="dep_unresolved_count">%1$d unresolved</string>
     <string name="dep_none_declared">No dependencies declared. Tap Add to download one.</string>
     <string name="dep_nothing_resolved">Nothing resolved yet.</string>
-    <string name="dep_not_resolved">not resolved — check the version/repository or re-resolve</string>
-    <string name="dep_cycle_shown_above">cycle — already shown above</string>
-    <string name="dep_couldnt_resolve_tooltip">Couldn't resolve — check the version/repository</string>
+    <string name="dep_not_resolved">not resolved. Check the version/repository or re-resolve</string>
+    <string name="dep_cycle_shown_above">cycle, already shown above</string>
+    <string name="dep_couldnt_resolve_tooltip">Couldn't resolve. Check the version/repository</string>
     <string name="dep_unresolved">Unresolved</string>
     <string name="dep_incompatible">Incompatible</string>
     <string name="dep_edit_named">Edit %1$s</string>
@@ -723,7 +753,7 @@ We never collect your code, file or project names, which features you use, or an
     <string name="dep_remove_exclusion">Remove exclusion</string>
     <string name="dep_excluded">excluded</string>
     <string name="dep_add_dependency">Add dependency</string>
-    <string name="dep_search_bom_hint">Search a BOM, or type group:name:version — e.g. androidx.compose:compose-bom:…</string>
+    <string name="dep_search_bom_hint">Search a BOM, or type group:name:version, e.g. androidx.compose:compose-bom:…</string>
     <string name="dep_search_library_hint">Search Maven Central, or type group:name[:version]…</string>
     <string name="dep_scope">scope</string>
     <string name="dep_variant">variant</string>
@@ -736,7 +766,7 @@ We never collect your code, file or project names, which features you use, or an
     <string name="dep_type_to_search">Type at least 2 characters to search, or a full group:name[:version].</string>
     <string name="dep_add_named">Add %1$s</string>
     <string name="dep_import_as_platform">Import as a platform (BOM)</string>
-    <string name="dep_add_versionless">Add versionless — version from a platform</string>
+    <string name="dep_add_versionless">Add versionless, version from a platform</string>
     <string name="dep_add_exact">Add this exact coordinate</string>
     <string name="dep_add_infer_group">Add this version (group found by search)</string>
     <string name="dep_choose_local_file">Choose a .jar or .aar file</string>
@@ -754,7 +784,7 @@ We never collect your code, file or project names, which features you use, or an
     <string name="dep_exclusions_hint">e.g. com.google.guava:guava, org.json:*</string>
     <string name="dep_version_hint">version</string>
     <string name="dep_loading_versions">Loading versions…</string>
-    <string name="dep_versions_load_failed">Couldn't load versions — type one above.</string>
+    <string name="dep_versions_load_failed">Couldn't load versions, type one above.</string>
     <string name="dep_selected">Selected</string>
     <string name="dep_variant_only_tooltip">Only in the '%1$s' variant</string>
     <string name="dep_version_conflict_tooltip">Version conflict: %1$s → using %2$s</string>
@@ -781,6 +811,7 @@ We never collect your code, file or project names, which features you use, or an
     <!-- modcfg (ModuleConfigScreen) — ModulesTab.label is StringResource; uses ARG_TOKEN sentinel for toasts -->
     <string name="modcfg_tab_settings">Settings</string>
     <string name="modcfg_tab_build_features">Build Features</string>
+    <string name="modcfg_tab_compiler_plugins">Compiler plugins</string>
     <string name="modcfg_tab_packaging">Packaging</string>
     <string name="modcfg_tab_signing">Signing</string>
     <string name="modcfg_tab_dependencies">Dependencies</string>
@@ -791,6 +822,9 @@ We never collect your code, file or project names, which features you use, or an
     <string name="modcfg_removed">Removed %1$s</string>
     <string name="modcfg_build_features_android_only">Build features apply to Android modules only.</string>
     <string name="modcfg_build_features_intro">Turn build features on per module. Enabling one adds the dependencies it needs.</string>
+    <string name="modcfg_compiler_plugins_android_only">Compiler plugins apply to Android modules only.</string>
+    <string name="modcfg_compiler_plugins_intro">Kotlin compiler plugins transform your code at build time. Enabling one adds its runtime; the plugin then applies automatically wherever that runtime is on the classpath.</string>
+    <string name="modcfg_compiler_plugin_applied">Active on this module\'s classpath</string>
     <string name="modcfg_signing_android_only">Signing applies to Android modules only.</string>
     <string name="modcfg_signing_intro">Choose the keystore that signs each build type. An unassigned type signs with the debug keystore.</string>
     <string name="modcfg_packaging_android_only">Packaging options apply to Android modules only.</string>
@@ -808,7 +842,7 @@ We never collect your code, file or project names, which features you use, or an
     <string name="modcfg_packaging_default_excludes">Always excluded by default</string>
     <string name="modcfg_packaging_default_merges">Always merged by default</string>
     <string name="modcfg_manage_keystores">Manage keystores</string>
-    <string name="modcfg_keystores_empty">No keystores yet — create one in the Keystore Manager to sign release builds.</string>
+    <string name="modcfg_keystores_empty">No keystores yet. Create one in the Keystore Manager to sign release builds.</string>
     <string name="modcfg_debug_default">debug (default)</string>
     <string name="modcfg_created">Created %1$s</string>
     <string name="modcfg_couldnt_create">Couldn't create %1$s</string>
@@ -838,7 +872,7 @@ We never collect your code, file or project names, which features you use, or an
     <string name="modcfg_missing_keep_rule_files_content">These files are referenced by a build type but don't exist, so R8 skips them when minify is on.</string>
     <string name="modcfg_no_roots">no roots</string>
     <string name="modcfg_add_placeholder">Add…</string>
-    <string name="modcfg_no_rows_yet">No %1$s yet — add one below.</string>
+    <string name="modcfg_no_rows_yet">No %1$s yet, add one below.</string>
     <string name="modcfg_new_badge">new</string>
     <string name="modcfg_add_row">Add %1$s</string>
 
@@ -940,4 +974,39 @@ We never collect your code, file or project names, which features you use, or an
     <string name="import">Import</string>
     <string name="install">Install</string>
 
+    <string name="modcfg_platform_sdk">Platform SDK</string>
+    <string name="modcfg_platform_sdk_auto">Auto (%1$s)</string>
+
+    <!-- AI coding agent -->
+    <string name="chat_open">AI agent</string>
+    <string name="chat_title">AI</string>
+    <string name="chat_new">New chat</string>
+    <string name="chat_close">Close</string>
+    <string name="chat_stop">Stop</string>
+    <string name="chat_send">Send</string>
+    <string name="chat_retry">Retry</string>
+    <string name="chat_manage_keys">Manage providers</string>
+    <string name="chat_providers_title">AI providers</string>
+    <string name="chat_providers_subtitle">Choose a provider and add your key. Keys are stored on this device.</string>
+    <string name="chat_api_key">API key</string>
+    <string name="chat_base_url">Base URL</string>
+    <string name="chat_model">Model</string>
+    <string name="chat_connected">Connected</string>
+    <string name="chat_add_key">Add API key</string>
+    <string name="chat_show">Show</string>
+    <string name="chat_hide">Hide</string>
+    <string name="chat_gateway_hint">OpenAI-compatible: OpenRouter, LiteLLM, or a self-hosted endpoint.</string>
+    <string name="chat_done">Done</string>
+    <string name="chat_placeholder">Ask about your code, or describe a change</string>
+    <string name="chat_empty_title">AI coding agent</string>
+    <string name="chat_empty_body">Ask about your code, or tell the agent what to change. It can read, search, and edit your files under the permission mode you choose.</string>
+    <string name="chat_need_key">Add an API key in Settings to start.</string>
+    <string name="chat_thinking">Thinking</string>
+    <string name="chat_mode_ask">Ask each</string>
+    <string name="chat_mode_auto">Auto-accept</string>
+    <string name="chat_mode_plan">Plan only</string>
+    <string name="chat_perm_title">Allow this change?</string>
+    <string name="chat_allow">Allow</string>
+    <string name="chat_allow_session">Allow for this session</string>
+    <string name="chat_deny">Deny</string>
 </resources>

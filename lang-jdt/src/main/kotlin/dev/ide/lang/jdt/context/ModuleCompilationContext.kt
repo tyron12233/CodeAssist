@@ -15,6 +15,7 @@ import dev.ide.model.ModuleId
 import dev.ide.model.Sdk
 import dev.ide.model.PlatformDependency
 import dev.ide.model.SdkDependency
+import dev.ide.model.SdkResolution
 import dev.ide.model.Workspace
 import dev.ide.platform.ContentHash
 import dev.ide.vfs.VirtualFile
@@ -40,13 +41,14 @@ object ModuleCompilationContext {
         val sources = LinkedHashSet<VirtualFile>()
         val libraries = LinkedHashSet<ClasspathEntry>()
         val sourceAttachments = LinkedHashSet<VirtualFile>()
-        val sdkNames = LinkedHashSet<String>()
         val libIndex = libraryIndex(workspace)
 
-        collect(workspace, module, isRoot = true, variant, sources, libraries, sourceAttachments, sdkNames, libIndex, HashSet())
+        collect(workspace, module, isRoot = true, variant, sources, libraries, sourceAttachments, libIndex, HashSet())
 
-        val sdk: Sdk? = sdkNames.firstNotNullOfOrNull { workspace.sdkTable.byName(it) }
-            ?: workspace.sdkTable.sdks.firstOrNull()
+        // The boot classpath is THIS module's platform SDK, resolved by kind (a `java-*`/`kotlin-*` module
+        // gets the core-Java SDK, an `android-*` module the Android SDK) — the same resolver the build uses,
+        // so the editor never resolves `android.*` that the build would reject. See [SdkResolution].
+        val sdk: Sdk? = SdkResolution.sdkFor(workspace, module)
         val boot = ClasspathSnapshotView(
             (sdk?.bootClasspath ?: emptyList()).map { ClasspathEntry(it, ClasspathEntryKind.SDK_BOOTCLASSPATH) },
         )
@@ -73,7 +75,6 @@ object ModuleCompilationContext {
         sources: MutableSet<VirtualFile>,
         libraries: MutableSet<ClasspathEntry>,
         sourceAttachments: MutableSet<VirtualFile>,
-        sdkNames: MutableSet<String>,
         libIndex: Map<String, Library>,
         visited: MutableSet<String>,
     ) {
@@ -89,7 +90,9 @@ object ModuleCompilationContext {
             if (!includedInVariant(entry.variant, variant)) continue
             val propagate = isRoot || entry.exported
             when (entry) {
-                is SdkDependency -> sdkNames.add(entry.sdk.name)
+                // The platform SDK is resolved once for the root module by [SdkResolution]; a transitive
+                // module dependency doesn't change this module's platform, so SdkDependency is ignored here.
+                is SdkDependency -> { /* handled by SdkResolution.sdkFor above */ }
                 is LibraryDependency -> if (propagate) {
                     libIndex[entry.library.name]?.let { lib ->
                         lib.classesRoots.forEach { libraries.add(ClasspathEntry(it, ClasspathEntryKind.LIBRARY)) }
@@ -98,7 +101,7 @@ object ModuleCompilationContext {
                 }
                 is ModuleDependency -> if (propagate) {
                     findModule(workspace, entry.target)?.let {
-                        collect(workspace, it, isRoot = false, variant, sources, libraries, sourceAttachments, sdkNames, libIndex, visited)
+                        collect(workspace, it, isRoot = false, variant, sources, libraries, sourceAttachments, libIndex, visited)
                     }
                 }
                 is PlatformDependency -> { /* a BOM contributes no classes to the compile classpath */ }

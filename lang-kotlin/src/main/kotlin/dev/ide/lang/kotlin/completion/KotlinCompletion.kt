@@ -23,16 +23,26 @@ import dev.ide.lang.kotlin.symbols.KotlinType
 import dev.ide.lang.resolve.Modifier
 import dev.ide.lang.resolve.SymbolKind
 import com.intellij.psi.PsiElement
+import org.jetbrains.kotlin.kdoc.psi.api.KDoc
 import org.jetbrains.kotlin.lexer.KtTokens
 import org.jetbrains.kotlin.psi.KtBinaryExpression
 import org.jetbrains.kotlin.psi.KtBlockExpression
 import org.jetbrains.kotlin.psi.KtBlockStringTemplateEntry
+import org.jetbrains.kotlin.psi.KtBreakExpression
 import org.jetbrains.kotlin.psi.KtCallExpression
 import org.jetbrains.kotlin.psi.KtCallableReferenceExpression
 import org.jetbrains.kotlin.psi.KtClassBody
+import org.jetbrains.kotlin.psi.KtClassOrObject
+import org.jetbrains.kotlin.psi.KtConstructorDelegationCall
+import org.jetbrains.kotlin.psi.KtContinueExpression
 import org.jetbrains.kotlin.psi.KtExpression
 import org.jetbrains.kotlin.psi.KtFile
 import org.jetbrains.kotlin.psi.KtImportDirective
+import org.jetbrains.kotlin.psi.KtLabelReferenceExpression
+import org.jetbrains.kotlin.psi.KtLabeledExpression
+import org.jetbrains.kotlin.psi.KtLambdaArgument
+import org.jetbrains.kotlin.psi.KtLambdaExpression
+import org.jetbrains.kotlin.psi.KtLoopExpression
 import org.jetbrains.kotlin.psi.KtNameReferenceExpression
 import org.jetbrains.kotlin.psi.KtNamedDeclaration
 import org.jetbrains.kotlin.psi.KtNamedFunction
@@ -47,6 +57,9 @@ import org.jetbrains.kotlin.psi.KtQualifiedExpression
 import org.jetbrains.kotlin.psi.KtSimpleNameStringTemplateEntry
 import org.jetbrains.kotlin.psi.KtStringTemplateEntry
 import org.jetbrains.kotlin.psi.KtStringTemplateExpression
+import org.jetbrains.kotlin.psi.KtSuperExpression
+import org.jetbrains.kotlin.psi.KtSuperTypeCallEntry
+import org.jetbrains.kotlin.psi.KtThisExpression
 import org.jetbrains.kotlin.psi.KtSuperTypeList
 import org.jetbrains.kotlin.psi.KtTypeParameter
 import org.jetbrains.kotlin.psi.KtTypeReference
@@ -54,6 +67,9 @@ import org.jetbrains.kotlin.psi.KtAnnotationEntry
 import org.jetbrains.kotlin.psi.KtValueArgument
 import org.jetbrains.kotlin.psi.KtValueArgumentList
 import org.jetbrains.kotlin.psi.KtValueArgumentName
+import org.jetbrains.kotlin.psi.KtWhenConditionIsPattern
+import org.jetbrains.kotlin.psi.KtWhenConditionWithExpression
+import org.jetbrains.kotlin.psi.KtWhenExpression
 
 /**
  * Kotlin code completion, using the completion-token technique: splice a dummy identifier at the caret on a
@@ -96,8 +112,7 @@ class KotlinCompletion(
     private fun parseSpliced(name: String, path: String, spliced: String): KtFile {
         val prev = if (splicedPath == path) splicedTree else null
         val kt = prev?.let { KotlinParserHost.tryReparse(it, spliced) } ?: KotlinParserHost.parse(
-            name,
-            spliced
+            name, spliced
         )
         splicedPath = path
         splicedTree = kt
@@ -105,8 +120,7 @@ class KotlinCompletion(
     }
 
     override suspend fun fillCompletionVariants(
-        params: CompletionParams,
-        result: CompletionResultSet
+        params: CompletionParams, result: CompletionResultSet
     ) {
         val res = KotlinPerf.trace("kt.complete") { completeInner(params.document, params.offset) }
         result.addAllElements(res.items)
@@ -115,8 +129,7 @@ class KotlinCompletion(
     }
 
     private fun completeInner(
-        document: dev.ide.lang.incremental.DocumentSnapshot,
-        requestedOffset: Int
+        document: dev.ide.lang.incremental.DocumentSnapshot, requestedOffset: Int
     ): CompletionResult {
         KotlinPerf.span("onBefore") { onBeforeComplete() }
         val original = document.text.toString()
@@ -140,9 +153,7 @@ class KotlinCompletion(
         val spliced = original.substring(0, offset) + MARKER + original.substring(offset)
         val kt = KotlinPerf.span("parse") {
             parseSpliced(
-                document.file.name,
-                document.file.path,
-                spliced
+                document.file.name, document.file.path, spliced
             )
         }
         val parsed = KotlinParsedFile(kt, document.file, document.version)
@@ -152,9 +163,7 @@ class KotlinCompletion(
         runCatching {
             service.syncFocal(document.file.path, original.hashCode()) {
                 dev.ide.lang.kotlin.symbols.SourceIndexBuilder.extractFrom(
-                    kt,
-                    parsed,
-                    document.file.path
+                    kt, parsed, document.file.path
                 )
             }
         }
@@ -164,10 +173,20 @@ class KotlinCompletion(
         // Don't complete inside a string literal's text (but DO inside ${ ... } template entries — that's code).
         if (insideStringLiteral(markerLeaf)) {
             return CompletionResult(
-                emptyList(),
-                isIncomplete = false,
-                replacementRange = replaceRange
+                emptyList(), isIncomplete = false, replacementRange = replaceRange
             )
+        }
+        // Inside a KDoc `/** */`: offer doc tags (`@param`, `@return`, …) / the documented declaration's
+        // parameter names after `@param`, and otherwise NOTHING — never the scope symbols/keywords a plain
+        // name-ref classification would wrongly leak into a doc comment.
+        kdocCompletion(markerLeaf, original, offset, prefix, matcher)?.let { kdocItems ->
+            return CompletionResult(kdocItems, isIncomplete = false, replacementRange = replaceRange)
+        }
+        // A label reference (`return@<caret>`, `break@`/`continue@<caret>`, `this@`/`super@<caret>`): offer the
+        // enclosing labels, NOT scope locals + type names — which is what a plain name-ref classification would
+        // wrongly surface here (a jump target is never a local or a type).
+        labelCompletion(markerLeaf, matcher)?.let { labelItems ->
+            return CompletionResult(labelItems, isIncomplete = false, replacementRange = replaceRange)
         }
         val nameRef = climbTo<KtNameReferenceExpression>(markerLeaf)
         // A callable REFERENCE — `::foo`, `receiver::foo`, `this::foo` — completes the name after `::`. A function
@@ -183,31 +202,32 @@ class KotlinCompletion(
         val pos = KotlinPerf.span("candidates") {
             when (val where = classifyPosition(markerLeaf, nameRef)) {
                 is CompletionPosition.MemberAccess -> memberAccessCandidates(
-                    where.receiver,
-                    offset,
-                    resolver,
-                    matcher,
-                    where.callableRef
+                    where.receiver, offset, resolver, matcher, where.callableRef
                 )
                 // A type slot also carries a few keyword positions (a `where` clause after a generic
                 // signature); KotlinKeywords returns nothing for a plain type reference, so this is safe.
                 CompletionPosition.TypeReference -> service.typeNameCandidates(prefix).let {
-                    PositionResult(it.symbols, keywordContext = true, capped = it.capped)
+                    // At an annotation NAME (`@Comp…`) only annotation classes belong — restrict to them so the
+                    // popup isn't every classifier (IntelliJ's `@` filter). Non-annotation position → all types.
+                    val syms = if (inAnnotationNamePosition(markerLeaf))
+                        it.symbols.filter { s -> s.kind == SymbolKind.ANNOTATION_TYPE } else it.symbols
+                    // `when (subject) { is <caret> }` on a SEALED subject → surface its subclasses. They're
+                    // assignable to the subject type, so passing it as `expected` floats them above every other
+                    // classifier (the rank's fits-expected key); adding them explicitly guarantees they appear
+                    // even past the type-name cap. A non-sealed / subjectless `when` keeps the plain type list.
+                    val sealedSubject = sealedWhenSubject(markerLeaf, resolver)
+                    if (sealedSubject != null) {
+                        val subs = service.sealedSubtypeCandidates(sealedSubject.qualifiedName, prefix).orEmpty()
+                        PositionResult(subs + syms, expected = sealedSubject, keywordContext = true, capped = it.capped)
+                    } else PositionResult(syms, keywordContext = true, capped = it.capped)
                 }
 
                 is CompletionPosition.InfixName -> infixCandidates(
-                    where.left,
-                    offset,
-                    resolver,
-                    matcher
+                    where.left, offset, resolver, matcher
                 )
 
                 CompletionPosition.NameReference -> nameReferenceCandidates(
-                    markerLeaf,
-                    offset,
-                    matcher,
-                    resolver,
-                    autoImport
+                    markerLeaf, offset, matcher, resolver, autoImport
                 )
             }
         }
@@ -221,26 +241,38 @@ class KotlinCompletion(
         }
 
         val candidates = KotlinPerf.span("rank") {
-            raw.asSequence()
-                .filter { it.name != "_" && matcher.matches(it.name) && MARKER !in it.name }
-                .distinctBy { it.name + "#" + it.kind + "#" + (it.signature ?: "") }
-                .map { s ->
-                    Candidate(
-                        symbol = s,
-                        importEdit = if (pos.packageCompletion) emptyList() else importEditFor(
-                            s,
-                            autoImport
-                        ),
-                        fitsExpected = pos.expected != null && matchesExpected(s, pos.expected),
-                        grade = matcher.grade(s.name)?.ordinal ?: PrefixMatcher.Grade.entries.size,
-                        boosted = composableContext && s.isComposable,
-                        group = memberGroup(s),
-                        proximity = proximityOf(s, pos.nameReference),
-                    )
-                }
-                .sortedWith(rank())
-                .take(MAX_ITEMS)
-                .toList()
+            val packageCompletion = pos.packageCompletion
+            val expected = pos.expected
+            val nameReference = pos.nameReference
+            val out = ArrayList<Candidate>(raw.size)
+            val seen = HashSet<String>()
+            for (s in raw) {
+                val name = s.name
+                if (name == "_" || MARKER in name) continue
+                val grade = matcher.grade(name) ?: continue
+                // Dedup overloads by name+kind+signature, but TYPES by fully-qualified name: two DISTINCT
+                // classes sharing a simple name (`androidx.compose.ui.Modifier` vs `java.lang.reflect.Modifier`)
+                // must BOTH survive. The bytecode index records every type as kind "class", so a name+kind key
+                // collapsed them to whichever the index returned first — dropping the Compose `Modifier`
+                // on-device, where the java.* one happened to sort ahead.
+                val dedupKey =
+                    if (s.kind in TYPE_KINDS) "T#" + ((s.type as? KotlinType)?.qualifiedName ?: name)
+                    else name + "#" + s.kind + "#" + (s.signature ?: "")
+                if (!seen.add(dedupKey)) continue
+                out += Candidate(
+                    symbol = s,
+                    importEdit = if (packageCompletion || (pos.memberAccess && s.kind in TYPE_KINDS)) emptyList()
+                    else importEditFor(s, autoImport),
+                    fitsExpected = expected != null && matchesExpected(s, expected),
+                    grade = grade.ordinal,
+                    boosted = composableContext && s.isComposable,
+                    group = memberGroup(s),
+                    proximity = proximityOf(s, nameReference),
+                )
+            }
+            out.sortWith(RANK)
+            if (out.size > MAX_ITEMS) out.subList(MAX_ITEMS, out.size).clear()
+            out
         }
 
         val symbolItems = candidates.map {
@@ -272,16 +304,23 @@ class KotlinCompletion(
         // Reserve room so the (small) keyword/template/postfix tail is never starved by a large symbol set —
         // otherwise an empty-prefix popup (hundreds of in-scope symbols) would truncate the keywords away.
         val keep = (MAX_ITEMS - tail.size).coerceAtLeast(0)
-        val items = ((pos.extra.distinctBy { it.kind to it.label } + symbolItems).take(keep) + tail)
-            .distinctBy { it.kind to it.label }
-            .take(MAX_ITEMS)
+        val items =
+            ((pos.extra.distinctBy { it.kind to it.label } + symbolItems).take(keep) + tail)
+                // Include `container` so two distinct types with the same simple name (different packages) both
+                // remain — otherwise this pass re-collapses the pair the symbol dedup above kept.
+                .distinctBy { Triple(it.kind, it.label, it.container) }
+                .take(MAX_ITEMS)
         return CompletionResult(
             items = items,
             // Incomplete when the final set was truncated OR a producer capped its query — either way matches
             // exist that this page doesn't hold, so the engine must re-query as the prefix narrows instead of
             // narrowing this page client-side (which would permanently hide, e.g., `StringBuilder` typed from `S`).
-            isIncomplete = raw.size > MAX_ITEMS || pos.capped,
-            replacementRange = replaceRange
+            // Also incomplete while the classpath index is still BUILDING: this page was served from whatever
+            // segments are open so far, so a classpath type (`Modifier`, …) that indexes moments later is absent
+            // — force a re-query on each keystroke until the index is ready, otherwise the editor caches this
+            // pre-index page as complete and a fast typist never sees the type appear (cf. LearnBackend).
+            isIncomplete = raw.size > MAX_ITEMS || pos.capped || !service.classpathReady(),
+            replacementRange = replaceRange,
         )
     }
 
@@ -324,24 +363,28 @@ class KotlinCompletion(
          *  matches exist than [raw] holds. Forces the result incomplete so the engine re-queries as the prefix
          *  narrows rather than client-side-narrowing a capped page (see [KotlinSymbolService.typeNameCandidates]). */
         val capped: Boolean = false,
+        /** A `receiver.` member-access position: a nested TYPE candidate (`GridCells.Fixed`) is already reached
+         *  through its qualifier, so it needs NO auto-import (unlike a bare type-reference or a top-level
+         *  extension, which do). Gates the import-edit computation below. */
+        val memberAccess: Boolean = false,
     )
 
     private fun classifyPosition(
-        markerLeaf: PsiElement?,
-        nameRef: KtNameReferenceExpression?
+        markerLeaf: PsiElement?, nameRef: KtNameReferenceExpression?
     ): CompletionPosition {
         // A callable reference `Receiver::name` (`String::length`, `foo::bar`) — the name after `::` completes
         // from the receiver's members, exactly like a `.` access (bound/unbound is the same candidate set).
         val callableRefReceiver =
             nameRef?.let { (it.parent as? KtCallableReferenceExpression)?.takeIf { p -> p.callableReference === it }?.receiverExpression }
+        // The receiver of a `recv.name` / `recv.name(args)` / `recv.name { }` member access at the marker — see
+        // [qualifiedMemberReceiver] for the call-selector (trailing-lambda / argument-list) case.
+        val memberReceiver = nameRef?.let { qualifiedMemberReceiver(it) }
         return when {
             callableRefReceiver != null -> CompletionPosition.MemberAccess(
-                callableRefReceiver,
-                callableRef = true
+                callableRefReceiver, callableRef = true
             )
 
-            nameRef != null && isSelectorOfQualified(nameRef) ->
-                CompletionPosition.MemberAccess((nameRef.parent as KtQualifiedExpression).receiverExpression)
+            memberReceiver != null -> CompletionPosition.MemberAccess(memberReceiver)
 
             inTypePosition(markerLeaf) -> CompletionPosition.TypeReference
             else -> infixOperatorLeft(markerLeaf)?.let { CompletionPosition.InfixName(it) }
@@ -371,46 +414,41 @@ class KotlinCompletion(
         // A bare type-parameter receiver (`t.` where `t: T`, `<T : Bound>`) completes against the parameter's
         // upper bound; a normal type is unchanged, an unbounded parameter drops to the package/empty path.
         val recvType = KotlinPerf.span("infer") {
-            resolver.inferType(receiver)?.let { resolver.receiverForMembers(it, receiver.textRange.startOffset) }
+            resolver.inferType(receiver)
+                ?.let { resolver.receiverForMembers(it, receiver.textRange.startOffset) }
         }
         if (recvType != null) {
-            // Instance receiver (`listOf("").`) → instance members + extensions; type receiver (`Int.`) →
-            // companion ("static") members + nested. Built-ins provide the real Kotlin members + companion (from
-            // .kotlin_builtins), so `List.` is naturally empty and `Int.` shows MAX_VALUE. Constructors are never
-            // reached via `.`. Prefix-aware: with large classpaths (Compose) a receiver's member+extension set is
-            // huge, so push the typed prefix into the symbol service rather than enumerating then filtering.
-            // A callable reference (`String::length`) admits BOTH instance (unbound) and static members on a type
-            // receiver, so the static-only visibility filter is skipped there.
             val typeReceiver = resolver.isTypeReceiver(receiver)
             val members = KotlinPerf.span("members") {
                 service.membersForCompletion(recvType.qualifiedName, recvType.typeArguments, prefix)
             }.filter { callableRef || memberVisibleOn(it, typeReceiver) }
             // A bare `Type.` where the type has a companion object resolves to the companion instance, so the
             // companion's own members (Compose's `Color.Black`/`White`) and the extensions applicable to it
-            // (`Modifier.Companion : Modifier` → `Modifier.padding`/`background`) are in scope too — instance-filtered.
+            // (`Modifier.Companion : Modifier` → `Modifier.padding`/`background`) are in scope too
             val raw = if (typeReceiver) {
                 // An enum's CONSTANTS are reached statically (`Test.A`) but aren't instance members, so
                 // `membersForCompletion` (which surfaces `values()`/`valueOf()`/`entries`) never lists them.
                 val enumConstants = service.enumConstantsOf(recvType.qualifiedName)
                     .filter { matcher.matches(it.name) }
-                members + enumConstants + service.companionMembersFor(
-                    recvType.qualifiedName,
-                    prefix
-                )
-                    .filter { memberVisibleOn(it, typeReceiver = false) }
+                // The companion object itself (`Test.Companion`), reached statically through the type — offered
+                // alongside its members (`Test.rainbowColors`). Named companions appear under their given name.
+                val companion = service.companionObjectSymbol(recvType.qualifiedName)
+                    ?.takeIf { matcher.matches(it.name) }
+                members + enumConstants + listOfNotNull(companion) + service.companionMembersFor(
+                    recvType.qualifiedName, prefix
+                ).filter { memberVisibleOn(it, typeReceiver = false) }
             } else {
                 // Member-extensions in scope on an instance receiver (`map.printMap()` where `printMap` is a
                 // `Map<…>` extension declared in the enclosing class, `Modifier.weight` inside a `Row { }`).
                 members + resolver.scopeMemberExtensions(offset, recvType, prefix)
             }
-            return PositionResult(raw)
+            return PositionResult(raw, memberAccess = true)
         }
         // Receiver is a package/FQN prefix (`java.util.`, `android.`) — complete its sub-packages + the types in
         // it (inserted fully-qualified, so it needs no auto-import).
         val pkg = packagePathOf(receiver)
         return if (pkg != null) PositionResult(
-            service.packageMembers(pkg, prefix),
-            packageCompletion = true
+            service.packageMembers(pkg, prefix), packageCompletion = true
         )
         else PositionResult(emptyList())
     }
@@ -421,14 +459,12 @@ class KotlinCompletion(
      *  unresolved left operand still offers those. Scope symbols are NOT offered — an operation reference only
      *  accepts an infix function name, never an arbitrary local. */
     private fun infixCandidates(
-        left: KtExpression,
-        offset: Int,
-        resolver: KotlinResolver,
-        matcher: PrefixMatcher
+        left: KtExpression, offset: Int, resolver: KotlinResolver, matcher: PrefixMatcher
     ): PositionResult {
         val prefix = matcher.prefix
         val recvType = KotlinPerf.span("infer") {
-            resolver.inferType(left)?.let { resolver.receiverForMembers(it, left.textRange.startOffset) }
+            resolver.inferType(left)
+                ?.let { resolver.receiverForMembers(it, left.textRange.startOffset) }
         } ?: return PositionResult(emptyList(), keywordContext = true)
         val members = KotlinPerf.span("members") {
             service.membersForCompletion(recvType.qualifiedName, recvType.typeArguments, prefix)
@@ -448,12 +484,21 @@ class KotlinCompletion(
         autoImport: KotlinAutoImport,
     ): PositionResult {
         val prefix = matcher.prefix
+        // A bare `import <caret>` (no dot yet): offer the top-level package roots (`androidx`, `kotlin`, …), NOT
+        // scope symbols / types. `packageCompletion = true` inserts the bare segment with NO auto-import edit —
+        // otherwise accepting a type here injected a second `import` statement while editing an import. (A dotted
+        // `import a.b.<caret>` is a member-access position, already served by packageMembers.)
+        if (climbTo<KtImportDirective>(markerLeaf) != null || climbTo<KtPackageDirective>(markerLeaf) != null) {
+            return PositionResult(service.rootPackages(prefix), packageCompletion = true)
+        }
         val extra = ArrayList<CompletionItem>()
-        // Member-declaration position in a class body → offer overridable inherited members as stubs.
+        // Member-declaration position in a class body → offer overridable inherited members as stubs. The stub
+        // carries the member line's indent (so its body lines up) and the range of any `override`/`fun`/`val`
+        // already typed before the name (so accepting REPLACES it rather than duplicating `override fun`).
         if (isOverridePosition(markerLeaf)) {
-            resolver.overridableMembersAt(offset)
-                .filter { matcher.matches(it.name) }
-                .forEach { extra += KotlinCompletionItems.overrideItem(it) }
+            val (indent, leadingDelete) = overrideInsertContext(markerLeaf, offset)
+            resolver.overridableMembersAt(offset).filter { matcher.matches(it.name) }
+                .forEach { extra += KotlinCompletionItems.overrideItem(it, indent, leadingDelete) }
         }
         // Primary-constructor parameter position → offer the inherited open PROPERTIES as `override val name: T`
         // stubs (a ctor parameter can override a supertype property, never a function). When `override` is
@@ -477,9 +522,22 @@ class KotlinCompletion(
                 .filter { it.name !in supplied && matcher.matches(it.name) }
                 .forEach { extra += KotlinCompletionItems.namedArgItem(it, bareName = editingName) }
         }
+        // Inside a constructor-DELEGATION call the KtCallExpression path above can't see: a supertype call in a
+        // class header (`class X : Base(<caret>)`) or a secondary ctor's `: this(<caret>)` / `: super(<caret>)`.
+        // The target constructor's parameters resolve to named-arg offers exactly as a normal call's do.
+        delegationArgListOf(markerLeaf)?.let { list ->
+            val editingName = climbTo<KtValueArgumentName>(markerLeaf) != null
+            val supplied = list.arguments.mapNotNull { it.getArgumentName()?.asName?.identifier }.toHashSet()
+            resolver.delegationCallParameters(markerLeaf)
+                .filter { it.name !in supplied && matcher.matches(it.name) }
+                .forEach { extra += KotlinCompletionItems.namedArgItem(it, bareName = editingName) }
+        }
         // Inside an annotation's argument list → its parameter names (ranked first), plus the enum-ish constants
         // for @Preview's uiMode/device which aren't recoverable from the parameter type alone.
         extra += annotationArgExtras(markerLeaf, matcher, resolver)
+        // At a `when (subject) { <caret> }` branch slot on a SEALED/ENUM subject → a single "add remaining
+        // branches" item that fills every not-yet-covered case (IntelliJ's exhaustive-when fill).
+        whenAddBranchesItem(markerLeaf, offset, resolver)?.let { extra += it }
         // The marker IS the NAME being given to a declaration (`val foo`, `fun bar`, a parameter) — an
         // identifier the user is inventing, so scope symbols / type names / auto-imports don't belong here.
         // (Any override / ctor-property / named-argument stubs above still apply: they're the *right* offers at
@@ -488,13 +546,16 @@ class KotlinCompletion(
         // (`val`/`var`/`vararg`/`reified`), so keyword context stays on there.
         val declName = declarationNameKind(markerLeaf)
         if (declName != DeclNameKind.NONE) {
-            return PositionResult(emptyList(), extra = extra, keywordContext = declName == DeclNameKind.PARAM)
+            return PositionResult(
+                emptyList(), extra = extra, keywordContext = declName == DeclNameKind.PARAM
+            )
         }
         // The type the context wants → offer literals/enum constants and rank assignable candidates first.
         val expected = resolver.expectedTypeAt(offset)
         expected?.let { extra += expectedExtras(it, matcher, autoImport) }
         val types = KotlinPerf.span("typeNames") { service.typeNameCandidates(prefix) }
-        val raw = KotlinPerf.span("scope") { resolver.scopeSymbolsAt(offset, prefix) } + types.symbols
+        val raw =
+            KotlinPerf.span("scope") { resolver.scopeSymbolsAt(offset, prefix) } + types.symbols
         return PositionResult(
             raw, extra = extra, expected = expected, keywordContext = true,
             nameReference = true, capped = types.capped,
@@ -517,6 +578,46 @@ class KotlinCompletion(
 
     // --- override / named-argument / expected-type extras ---
 
+    /**
+     * The insert context for an override stub at [leaf]: the member line's leading indentation (prepended to
+     * the stub's continuation lines so a nested member's body/`}` align to its column), and — when [leaf] is
+     * the NAME of a declaration the user has already begun (`override fun onCr|`) — the range of the
+     * `override`/`fun`/`val` + modifiers before the name, so accepting the stub REPLACES that text instead of
+     * inserting a duplicate `override fun` next to it. Indentation is read from the (marker-spliced) buffer;
+     * the marker sits at the caret, so the line's leading whitespace is intact.
+     */
+    private fun overrideInsertContext(leaf: PsiElement?, offset: Int): Pair<String, TextRange?> {
+        val text = leaf?.containingFile?.text ?: return "" to null
+        var lineStart = offset.coerceIn(0, text.length)
+        while (lineStart > 0 && text[lineStart - 1] != '\n') lineStart--
+        var i = lineStart
+        while (i < text.length && (text[i] == ' ' || text[i] == '\t')) i++
+        val indent = text.substring(lineStart, i)
+        val decl = leaf.parent as? KtNamedDeclaration
+        val leadingDelete = if (decl != null && decl.nameIdentifier === leaf) {
+            val nameStart = leaf.textRange.startOffset
+            // Delete from the `override`/`fun`/`val`/`var` keyword (NOT the declaration's textRange start, which
+            // would also swallow a leading annotation like `@Composable`) up to the partial name.
+            val kwStart = declKeywordStart(decl)
+            if (kwStart != null && kwStart < nameStart) TextRange(kwStart, nameStart) else null
+        } else null
+        return indent to leadingDelete
+    }
+
+    /** The earliest offset of the `override` modifier or the `fun`/`val`/`var` keyword of [decl] — where the
+     *  stub-replacing deletion should begin, leaving any preceding annotations untouched. Null when none is
+     *  present (a bare name with no keywords typed yet → nothing to replace). */
+    private fun declKeywordStart(decl: KtNamedDeclaration): Int? {
+        val offsets = ArrayList<Int>(2)
+        decl.modifierList?.getModifier(KtTokens.OVERRIDE_KEYWORD)?.textRange?.startOffset?.let { offsets += it }
+        when (decl) {
+            is KtNamedFunction -> decl.funKeyword?.textRange?.startOffset?.let { offsets += it }
+            is KtProperty -> decl.valOrVarKeyword?.textRange?.startOffset?.let { offsets += it }
+            else -> {}
+        }
+        return offsets.minOrNull()
+    }
+
     /** True at a member-declaration spot inside a class body (not within a function body, initializer,
      *  parameter list, supertype list, or type) — where `override` members should be offered. */
     private fun isOverridePosition(leaf: PsiElement?): Boolean {
@@ -525,9 +626,7 @@ class KotlinCompletion(
         while (n != null) {
             when (n) {
                 is KtClassBody -> return true
-                is KtBlockExpression, is KtCallExpression, is KtValueArgumentList, is KtPropertyAccessor,
-                is KtParameterList, is KtSuperTypeList, is KtTypeReference, is KtImportDirective, is KtPackageDirective ->
-                    return false
+                is KtBlockExpression, is KtCallExpression, is KtValueArgumentList, is KtPropertyAccessor, is KtParameterList, is KtSuperTypeList, is KtTypeReference, is KtImportDirective, is KtPackageDirective -> return false
 
                 is KtProperty -> if (prev != null && prev === n.initializer) return false
                 is KtNamedFunction -> if (prev != null && prev === n.bodyExpression) return false
@@ -555,11 +654,147 @@ class KotlinCompletion(
         return false
     }
 
+    /** A single "add remaining branches" item at a `when (subject) { <caret> }` branch slot when the subject is
+     *  a SEALED type or an enum and some cases aren't covered yet — inserts one branch per missing case
+     *  (`is Circle -> TODO()` / `Color.RED -> TODO()`), indented to the branch column. Null otherwise (not a
+     *  branch-condition slot, an unresolved/non-exhaustible subject, or every case already covered). */
+    private fun whenAddBranchesItem(leaf: PsiElement?, offset: Int, resolver: KotlinResolver): CompletionItem? {
+        climbTo<KtWhenConditionWithExpression>(leaf) ?: return null // a branch-condition slot (not a branch body)
+        val whenExpr = climbTo<KtWhenExpression>(leaf) ?: return null
+        val subject = whenExpr.subjectExpression ?: return null
+        val fqn = (resolver.inferType(subject) ?: return null).qualifiedName
+        val covered = HashSet<String>()
+        for (entry in whenExpr.entries) for (cond in entry.conditions) when (cond) {
+            is KtWhenConditionIsPattern ->
+                cond.typeReference?.text?.substringBefore('<')?.substringAfterLast('.')?.trim()?.let { covered += it }
+            is KtWhenConditionWithExpression ->
+                cond.expression?.text?.substringAfterLast('.')?.trim()?.let { if (MARKER !in it) covered += it }
+        }
+        val branches = service.sealedSubclassesOf(fqn)?.let { subs ->
+            subs.map { it.substringAfterLast('.') }.filter { it !in covered }.map { "is $it -> TODO()" }
+        } ?: service.enumConstantsOf(fqn).map { it.name }.filter { it !in covered }.let { missing ->
+            val simple = fqn.substringAfterLast('.')
+            missing.map { "$simple.$it -> TODO()" }
+        }
+        if (branches.isEmpty()) return null
+        val indent = lineIndentAt(leaf?.containingFile?.text ?: "", offset)
+        return CompletionItem(
+            label = "Add remaining branches",
+            insertText = branches.joinToString("\n$indent"),
+            kind = CompletionItemKind.KEYWORD,
+            detail = "when",
+            sortPriority = -3,
+        )
+    }
+
+    /** The leading whitespace of the line containing [offset] in [text]. */
+    private fun lineIndentAt(text: CharSequence, offset: Int): String {
+        var start = offset.coerceIn(0, text.length)
+        while (start > 0 && text[start - 1] != '\n') start--
+        var i = start
+        while (i < text.length && (text[i] == ' ' || text[i] == '\t')) i++
+        return text.substring(start, i)
+    }
+
+    /** Completion inside a KDoc comment, or null when [leaf] isn't in one. `@param <caret>` → the documented
+     *  declaration's parameter names; `@<caret>` → the standard doc tags; anywhere else in the doc → an EMPTY
+     *  list (suppresses the scope/keyword completion that would otherwise leak into prose). */
+    private fun kdocCompletion(
+        leaf: PsiElement?, original: String, offset: Int, prefix: String, matcher: PrefixMatcher
+    ): List<CompletionItem>? {
+        climbTo<KDoc>(leaf) ?: return null
+        val lineStart = original.lastIndexOf('\n', (offset - 1).coerceAtLeast(0)).let { if (it < 0) 0 else it + 1 }
+        val linePrefix = original.substring(lineStart, offset)
+        if (KDOC_PARAM_RE.containsMatchIn(linePrefix)) {
+            val params = climbTo<KtNamedFunction>(leaf)?.valueParameters?.mapNotNull { it.name }
+                ?: climbTo<KtClassOrObject>(leaf)?.primaryConstructorParameters?.mapNotNull { it.name }
+                ?: emptyList()
+            return params.filter { matcher.matches(it) }
+                .map { CompletionItem(it, it, CompletionItemKind.FIELD, sortPriority = -1) }
+        }
+        // A tag only right after `@` (the `@` is already typed, so insert the name without it, space-terminated).
+        if (original.getOrNull(offset - prefix.length - 1) == '@') {
+            return KDOC_TAGS.filter { matcher.matches(it) }
+                .map { CompletionItem("@$it", "$it ", CompletionItemKind.KEYWORD, sortPriority = -1) }
+        }
+        return emptyList()
+    }
+
+    /** Label candidates at a label reference [leaf] (`@<caret>` in return/break/continue/this/super), or null
+     *  when the caret isn't at a label. A jump's valid targets differ by kind: `break`/`continue` take only
+     *  labeled LOOPS; `return` takes enclosing lambda implicit labels (the call's name — `forEach`, `let`,
+     *  `Composable`), explicit `label@` names, and enclosing function names; `this`/`super` take enclosing class
+     *  names + receiver-lambda labels. */
+    private fun labelCompletion(leaf: PsiElement?, matcher: PrefixMatcher): List<CompletionItem>? {
+        if (climbTo<KtLabelReferenceExpression>(leaf) == null) return null
+        val labels = LinkedHashSet<String>()
+        when {
+            climbTo<KtBreakExpression>(leaf) != null || climbTo<KtContinueExpression>(leaf) != null ->
+                forEachAncestor(leaf) { n -> if (n is KtLoopExpression) (n.parent as? KtLabeledExpression)?.getLabelName()?.let { labels += it } }
+
+            climbTo<KtThisExpression>(leaf) != null || climbTo<KtSuperExpression>(leaf) != null ->
+                forEachAncestor(leaf) { n ->
+                    when (n) {
+                        is KtClassOrObject -> n.name?.let { labels += it }
+                        is KtLambdaExpression -> lambdaImplicitLabel(n)?.let { labels += it }
+                        is KtLabeledExpression -> n.getLabelName()?.let { labels += it }
+                    }
+                }
+
+            else -> forEachAncestor(leaf) { n -> // return@ (or a bare label)
+                when (n) {
+                    is KtLambdaExpression -> lambdaImplicitLabel(n)?.let { labels += it }
+                    is KtLabeledExpression -> n.getLabelName()?.let { labels += it }
+                    is KtNamedFunction -> n.name?.let { labels += it } // `return@funName` returns from it
+                }
+            }
+        }
+        return labels.filter { matcher.matches(it) }
+            .map { CompletionItem(it, it, CompletionItemKind.KEYWORD, sortPriority = -1) }
+    }
+
+    /** The implicit label of a lambda that is a call argument — the callee's name (`list.forEach { }` →
+     *  `forEach`, `run { }` → `run`), which `return@forEach` / `this@run` target. Null for a non-argument lambda. */
+    private fun lambdaImplicitLabel(lambda: KtLambdaExpression): String? {
+        val call = when (val p = lambda.parent) {
+            is KtLambdaArgument -> p.parent as? KtCallExpression
+            is KtValueArgument -> (p.parent as? KtValueArgumentList)?.parent as? KtCallExpression
+            else -> null
+        } ?: return null
+        return (call.calleeExpression as? KtNameReferenceExpression)?.getReferencedName()
+    }
+
+    private inline fun forEachAncestor(leaf: PsiElement?, action: (PsiElement) -> Unit) {
+        var n: PsiElement? = leaf
+        while (n != null) { action(n); n = n.parent }
+    }
+
     /** The call whose argument list contains [leaf] (for named-argument completion), or null. */
     private fun namedArgCallOf(leaf: PsiElement?): KtCallExpression? {
         val arg = climbTo<KtValueArgument>(leaf) ?: return null
         val list = arg.parent as? KtValueArgumentList ?: return null
         return list.parent as? KtCallExpression
+    }
+
+    /** The argument list of a constructor-DELEGATION call whose IMMEDIATE arguments contain [leaf] — a
+     *  supertype call (`: Base(…)`, [KtSuperTypeCallEntry]) or a secondary-ctor delegation (`: this(…)` /
+     *  `: super(…)`, [KtConstructorDelegationCall]) — or null. Keys on the nearest argument's list owner, so a
+     *  nested call inside a delegation argument (`: Base(foo(<caret>))`) is correctly excluded. */
+    private fun delegationArgListOf(leaf: PsiElement?): KtValueArgumentList? {
+        val arg = climbTo<KtValueArgument>(leaf) ?: return null
+        val list = arg.parent as? KtValueArgumentList ?: return null
+        return if (list.parent is KtSuperTypeCallEntry || list.parent is KtConstructorDelegationCall) list else null
+    }
+
+    /** The SEALED subject type of the enclosing `when` when [leaf] sits at an `is <caret>` type pattern (the
+     *  position where only the subject's subclasses are relevant), else null — not an `is` pattern, a
+     *  subjectless `when`, an unresolved subject, or a subject that is not a known sealed type. */
+    private fun sealedWhenSubject(leaf: PsiElement?, resolver: KotlinResolver): KotlinType? {
+        climbTo<KtWhenConditionIsPattern>(leaf) ?: return null
+        val whenExpr = climbTo<KtWhenExpression>(leaf) ?: return null
+        val subject = whenExpr.subjectExpression ?: return null
+        val t = resolver.inferType(subject) ?: return null
+        return if (service.sealedSubclassesOf(t.qualifiedName) != null) t else null
     }
 
     private fun suppliedArgNames(call: KtCallExpression): Set<String> =
@@ -577,9 +812,7 @@ class KotlinCompletion(
      * outside an annotation.
      */
     private fun annotationArgExtras(
-        leaf: PsiElement?,
-        matcher: PrefixMatcher,
-        resolver: KotlinResolver
+        leaf: PsiElement?, matcher: PrefixMatcher, resolver: KotlinResolver
     ): List<CompletionItem> {
         val arg = climbTo<KtValueArgument>(leaf) ?: return emptyList()
         val list = arg.parent as? KtValueArgumentList ?: return emptyList()
@@ -593,20 +826,15 @@ class KotlinCompletion(
             fun constItem(qualifier: String, name: String, detail: String) {
                 val insert = "$qualifier.$name"
                 out += CompletionItem(
-                    insert,
-                    insert,
-                    CompletionItemKind.FIELD,
-                    detail = detail,
-                    sortPriority = -1
+                    insert, insert, CompletionItemKind.FIELD, detail = detail, sortPriority = -1
                 )
             }
             when (argName) {
-                "uiMode" -> PreviewConstants.uiModeConstants.keys
-                    .filter { matcher.matches(it) }
+                "uiMode" -> PreviewConstants.uiModeConstants.keys.filter { matcher.matches(it) }
                     .forEach { constItem("Configuration", it, "uiMode") }
 
-                "device" -> PreviewConstants.deviceConstants.keys
-                    .filter { matcher.matches(it) }.forEach { constItem("Devices", it, "device") }
+                "device" -> PreviewConstants.deviceConstants.keys.filter { matcher.matches(it) }
+                    .forEach { constItem("Devices", it, "device") }
             }
         }
         // Name position (a bare argument, or editing an argument's name) → the annotation's parameter names.
@@ -618,16 +846,14 @@ class KotlinCompletion(
             if (params.isNotEmpty()) {
                 params.forEach {
                     out += KotlinCompletionItems.namedArgItem(
-                        it,
-                        bareName = editingName
+                        it, bareName = editingName
                     )
                 }
             } else if (short in previewAnnotationNames) {
                 // The androidx @Preview type isn't on the resolved classpath (or the index is still building) —
                 // fall back to the bundled argument list so @Preview completion works regardless. Same item shape
                 // as a resolved named argument (label `name =`, inserts `name = `).
-                PreviewConstants.previewArgNames
-                    .filter { it !in supplied && matcher.matches(it) }
+                PreviewConstants.previewArgNames.filter { it !in supplied && matcher.matches(it) }
                     .forEach {
                         out += CompletionItem(
                             "$it =",
@@ -646,9 +872,7 @@ class KotlinCompletion(
      *  and the type's own companion constants (`Color.Transparent`, `Alignment.Center`) — each with an
      *  auto-import of the type when it isn't already visible. Powers value completion after `param = `. */
     private fun expectedExtras(
-        expected: KotlinType,
-        matcher: PrefixMatcher,
-        autoImport: KotlinAutoImport
+        expected: KotlinType, matcher: PrefixMatcher, autoImport: KotlinAutoImport
     ): List<CompletionItem> {
         val out = ArrayList<CompletionItem>()
         val simple = expected.qualifiedName.substringAfterLast('.')
@@ -667,15 +891,47 @@ class KotlinCompletion(
                 relevance = fits,
             )
         }
+        // The SHORT form of an enum constant (`RED` rather than `Color.RED`), importing the entry — what
+        // IntelliJ floats first at an enum slot. Ranked above the qualified form (which stays as a no-import
+        // fallback). Offered only for a true enum entry (a companion constant isn't cleanly entry-importable).
+        fun shortEnumItem(c: KotlinSymbol) {
+            out += CompletionItem(
+                label = c.name,
+                insertText = c.name,
+                kind = CompletionItemKind.ENUM_CONSTANT,
+                detail = simple,
+                sortPriority = -2,
+                symbol = c,
+                additionalEdits = autoImport.editForType("${expected.qualifiedName}.${c.name}"),
+                relevance = fits,
+            )
+        }
+        // The expected type used AS a value by its own name — the companion-object idiom: `Modifier`'s bare
+        // reference IS its companion object (an empty `Modifier`), so `modifier = Modifier` is valid. Android
+        // Studio floats this at an expected-`Modifier` slot; offer it here (resolved from the type SHAPE, so it
+        // appears even when the class-names index page capped the type out). Guarded to types whose companion
+        // IS-A the expected type (so `String`, whose companion is NOT a String, isn't offered as a value).
+        service.companionObjectSymbol(expected.qualifiedName)?.let { comp ->
+            val compType = comp.type as? KotlinType
+            if (matcher.matches(simple) && compType != null &&
+                runCatching { expected.isAssignableFrom(compType) }.getOrDefault(false)
+            ) {
+                out += CompletionItem(
+                    label = simple,
+                    insertText = simple,
+                    kind = CompletionItemKind.CLASS,
+                    detail = simple,
+                    sortPriority = -2,
+                    additionalEdits = autoImport.editForType(expected.qualifiedName),
+                    relevance = fits,
+                )
+            }
+        }
         if (expected.qualifiedName == "kotlin.Boolean") {
             for (b in listOf("true", "false")) {
                 if (matcher.matches(b)) {
                     out += CompletionItem(
-                        b,
-                        b,
-                        CompletionItemKind.KEYWORD,
-                        sortPriority = -1,
-                        relevance = fits
+                        b, b, CompletionItemKind.KEYWORD, sortPriority = -1, relevance = fits
                     )
                 }
             }
@@ -683,15 +939,14 @@ class KotlinCompletion(
         val consts = service.enumConstantsOf(expected.qualifiedName)
         if (consts.isNotEmpty()) {
             consts.filter { matcher.matches(it.name) }
-                .forEach { constItem(it, CompletionItemKind.ENUM_CONSTANT) }
+                .forEach { shortEnumItem(it); constItem(it, CompletionItemKind.ENUM_CONSTANT) }
         } else {
             // Not an enum — offer the type's companion constants OF that type (`val Transparent: Color` on
             // `Color`'s companion), the value-class / object-constant idiom. Capped so a large palette (Color
             // has dozens) doesn't flood the popup; prefix-filtering narrows it as the user types.
             service.companionMembersFor(expected.qualifiedName, matcher.prefix)
                 .filter { it.kind == SymbolKind.FIELD && (it.type as? KotlinType)?.qualifiedName == expected.qualifiedName }
-                .take(MAX_EXPECTED_CONSTANTS)
-                .forEach { constItem(it, CompletionItemKind.FIELD) }
+                .take(MAX_EXPECTED_CONSTANTS).forEach { constItem(it, CompletionItemKind.FIELD) }
         }
         return out
     }
@@ -710,26 +965,18 @@ class KotlinCompletion(
         val group: Int,
         val proximity: Int,
     ) {
+        /** No auto-import needed (already visible) — the in-scope-before-needs-import rank key, computed once. */
+        val inScope: Boolean = importEdit.isEmpty()
+
         fun relevance() = CompletionRelevance(
             fitsExpectedType = fitsExpected,
             contextBoost = boosted,
             callableWeight = group,
-            inScope = importEdit.isEmpty(),
+            inScope = inScope,
             deprecated = symbol.isDeprecated,
             proximity = proximity,
         )
     }
-
-    private fun rank(): Comparator<Candidate> = compareBy(
-        { if (it.fitsExpected) 0 else 1 },                         // expected-type matches first
-        { it.grade },                                              // exact > cs-prefix > ci-prefix > hump > substring
-        { if (it.boosted) 0 else 1 },                              // @Composable callables first in a @Composable context
-        { it.group },                                              // own members > source ext > library ext > universal scope fns > Object methods
-        { if (it.importEdit.isEmpty()) 0 else 1 },                 // in-scope (no import) before needs-import
-        { it.proximity },                                          // locals/members > types > top-level library callables (name ref)
-        { it.symbol.name.length },
-        { it.symbol.name },
-    )
 
     /**
      * Ranking proximity for [s]: how "near" the caret it is (locals/params closest, then members, then
@@ -785,9 +1032,9 @@ class KotlinCompletion(
             // on accept. A *member* extension (declared inside a class/scope, like Compose's `RowScope.weight`) is
             // NOT importable that way — its dispatch receiver must already be in scope — so it gets no import;
             // [isTopLevelCallable] keeps it out.
-            s.packageName != null && (s.kind == SymbolKind.METHOD || s.kind == SymbolKind.FIELD) &&
-                    (!s.isExtension || isTopLevelCallable(s)) ->
-                "${s.packageName}.${s.name}"
+            s.packageName != null && (s.kind == SymbolKind.METHOD || s.kind == SymbolKind.FIELD) && (!s.isExtension || isTopLevelCallable(
+                s
+            )) -> "${s.packageName}.${s.name}"
 
             else -> null
         } ?: return emptyList()
@@ -842,11 +1089,99 @@ class KotlinCompletion(
         return q.selectorExpression === nameRef
     }
 
+    /**
+     * The receiver of the qualified member access whose selector is [nameRef] (the marker), or null when
+     * [nameRef] isn't a member-access selector. Covers `recv.name` (the name IS the selector) AND
+     * `recv.name(args)` / `recv.name { }` — where the argument list / trailing lambda makes the selector a
+     * [KtCallExpression] whose callee is [nameRef], so the plain selector check misses it and completion would
+     * otherwise fall through to name-reference (scope symbols + type names) instead of the receiver's members.
+     */
+    private fun qualifiedMemberReceiver(nameRef: KtNameReferenceExpression): KtExpression? {
+        if (isSelectorOfQualified(nameRef)) return (nameRef.parent as KtQualifiedExpression).receiverExpression
+        val call = nameRef.parent as? KtCallExpression ?: return null
+        if (call.calleeExpression !== nameRef) return null
+        val q = call.parent as? KtQualifiedExpression ?: return null
+        return if (q.selectorExpression === call) q.receiverExpression else null
+    }
+
     private fun inTypePosition(leaf: PsiElement?): Boolean = climbTo<KtTypeReference>(leaf) != null
+
+    /** The marker sits on an annotation's NAME (`@Comp…`, `@field:Inj…`, a type-use `@…`) — a type reference
+     *  under a [KtAnnotationEntry], where only annotation classes belong. Checked only in the type-reference
+     *  branch (so it can't misfire on an annotation's VALUE arguments, which are a name-reference position). */
+    private fun inAnnotationNamePosition(leaf: PsiElement?): Boolean = climbTo<KtAnnotationEntry>(leaf) != null
 
     private companion object {
         // The classic completion dummy identifier; unlikely to collide with real code.
         const val MARKER = "IntellijIdeaRulezzz"
+
+        /** Standard KDoc block tags offered after `@` inside a `/** */` comment (names without the `@`). */
+        val KDOC_TAGS = listOf(
+            "param", "return", "throws", "exception", "property", "constructor", "receiver",
+            "see", "sample", "since", "suppress", "author",
+        )
+
+        /** Matches a `@param ` (optionally with a partial name) at the end of the current KDoc line — the spot
+         *  where the documented declaration's parameter names are offered. */
+        val KDOC_PARAM_RE = Regex("@param\\s+\\w*$")
+
+        /**
+         * The candidate ordering, hand-written as one stateless comparator instead of `compareBy(8 selectors)`:
+         * every key is compared as a primitive `Int` (booleans as 0/1, "true"/in-scope first) so a comparison
+         * neither boxes nor walks a lambda array — the sort runs N·log N times over the candidate set, so that
+         * per-compare overhead dominated the span. Key order is identical to the old `compareBy`:
+         *   expected-type match → match grade → @Composable boost → member group → in-scope → proximity →
+         *   name length → name. Each Candidate precomputes its keys, so this only reads fields.
+         */
+        val RANK = Comparator<Candidate> { a, b ->
+            var c = (if (a.fitsExpected) 0 else 1) - (if (b.fitsExpected) 0 else 1)
+            if (c != 0) return@Comparator c
+            c = a.grade - b.grade
+            if (c != 0) return@Comparator c
+            c = (if (a.boosted) 0 else 1) - (if (b.boosted) 0 else 1)
+            if (c != 0) return@Comparator c
+            c = a.group - b.group
+            if (c != 0) return@Comparator c
+            c = (if (a.inScope) 0 else 1) - (if (b.inScope) 0 else 1)
+            if (c != 0) return@Comparator c
+            c = a.proximity - b.proximity
+            if (c != 0) return@Comparator c
+            // Tiebreak two otherwise-equal TYPE homonyms toward the one this project actually wants: in an
+            // Android/Compose module `androidx.compose.ui.Modifier` must outrank `java.lang.reflect.Modifier`.
+            c = packageRankOf(a.symbol) - packageRankOf(b.symbol)
+            if (c != 0) return@Comparator c
+            val an = a.symbol.name
+            val bn = b.symbol.name
+            c = an.length - bn.length
+            if (c != 0) return@Comparator c
+            an.compareTo(bn)
+        }
+
+        /** Neutral package-relevance rank: non-types and ordinary library types share it, so [packageRankOf]
+         *  only ever re-orders classifiers whose package is notably more (androidx/Compose, kotlin) or less
+         *  (JDK reflection/internal) relevant than the norm. */
+        private const val PKG_NEUTRAL = 3
+
+        /**
+         * A LOW-priority ranking key (see [RANK]) that breaks ties between classifiers sharing a simple name by
+         * package relevance in the app's ecosystem — so completing `Modif` floats `androidx.compose.ui.Modifier`
+         * above `java.lang.reflect.Modifier`. Lower sorts earlier. Only classifiers ([TYPE_KINDS]) are ranked;
+         * everything else is [PKG_NEUTRAL] (types already separate from callables on `proximity`, so this never
+         * reshuffles them). `androidx.*` reaches completion only in an Android module (the non-Android exclusion
+         * drops it elsewhere), so preferring it here needs no extra platform check.
+         */
+        private fun packageRankOf(s: KotlinSymbol): Int {
+            if (s.kind !in TYPE_KINDS) return PKG_NEUTRAL
+            val pkg = (s.type as? KotlinType)?.qualifiedName?.substringBeforeLast('.', "") ?: return PKG_NEUTRAL
+            return when {
+                pkg.startsWith("androidx.compose") -> 0
+                pkg.startsWith("androidx.") || pkg.startsWith("android.") || pkg.startsWith("com.google.android.") -> 1
+                pkg == "kotlin" || pkg.startsWith("kotlin.") -> 2
+                pkg.startsWith("java.lang.reflect") || pkg.startsWith("java.beans") ||
+                    pkg.startsWith("sun.") || pkg.startsWith("com.sun.") || pkg.startsWith("jdk.internal") -> 6
+                else -> PKG_NEUTRAL
+            }
+        }
 
         // Matches the engine's ranked cap (CompletionEngine.MAX_ITEMS) so this rank-aware inner cut never
         // drops a candidate the engine's global ranking would have kept — the engine cap is authoritative.

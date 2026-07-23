@@ -43,7 +43,7 @@ class XmlTreeParserTest {
         val parsed = parse("<LinearLayout>\n    <TextView ")
         val names = tags(parsed).map { it.name }
         assertTrue("LinearLayout" in names && "TextView" in names, "got $names")
-        assertTrue(parsed.diagnostics.any { it.code == "xml.unclosedTag" || it.code == "xml.malformedTag" })
+        assertTrue(parsed.diagnostics.isNotEmpty(), "expected a well-formedness diagnostic; got ${parsed.diagnostics}")
     }
 
     @Test
@@ -52,7 +52,7 @@ class XmlTreeParserTest {
         val names = tags(parsed).map { it.name }
         assertEquals(listOf("a", "b"), names)
         // <b> is implicitly closed when </a> appears; a diagnostic is reported, parsing continues.
-        assertTrue(parsed.diagnostics.any { it.code == "xml.unclosedTag" })
+        assertTrue(parsed.diagnostics.isNotEmpty(), "expected a well-formedness diagnostic; got ${parsed.diagnostics}")
         // The whole document is still covered (no exception, root spans the text).
         assertEquals(0, parsed.range.start)
     }

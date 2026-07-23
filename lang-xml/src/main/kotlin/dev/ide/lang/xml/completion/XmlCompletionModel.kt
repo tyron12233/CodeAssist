@@ -12,10 +12,13 @@ import dev.ide.lang.dom.TextRange
 enum class XmlCompletionKind {
     /** Typing an element name: `<Tex|` or `<|`. Candidates are the tags valid inside [parentTag]. */
     TAG_NAME,
+
     /** Typing an attribute name inside a start tag: `<TextView a|`. Candidates depend on [tag]. */
     ATTRIBUTE_NAME,
+
     /** Typing an attribute value: `android:text="@string/ho|"`. Candidates depend on [tag]+[attributeName]. */
     ATTRIBUTE_VALUE,
+
     /** Element text content (between tags) — rarely completed; offered for completeness. */
     TEXT,
     UNKNOWN,

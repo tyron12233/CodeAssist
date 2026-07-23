@@ -56,8 +56,8 @@ class KotlinNestedAbstractTypeTest {
         private fun abstractMethod(name: String) = KotlinSymbol(name, SymbolKind.METHOD, origin = BIN, modifiers = setOf(Modifier.ABSTRACT), signature = "(): Unit")
 
         private val served: Map<String, TypeShape> = mapOf(
-            "lib.Base" to TypeShape(emptyList(), emptyList(), emptyList(), listOf(nestedType()), isKotlin = false),
-            "lib.Base2" to TypeShape(emptyList(), emptyList(), emptyList(), listOf(nestedType(), abstractMethod("doWork")), isKotlin = false),
+            "lib.Base" to TypeShape(emptyList(), emptyList(), emptyList(), emptyList(), listOf(nestedType()), isKotlin = false),
+            "lib.Base2" to TypeShape(emptyList(), emptyList(), emptyList(), emptyList(), listOf(nestedType(), abstractMethod("doWork")), isKotlin = false),
         )
 
         @Suppress("UNCHECKED_CAST")

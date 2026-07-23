@@ -3,6 +3,7 @@ package dev.ide.android
 import android.content.Context
 import android.os.Build
 import dev.ide.analytics.DeviceInfo
+import dev.ide.build.jvm.run.VmProgramInterpreter
 import dev.ide.analytics.impl.AnalyticsLogSink
 import dev.ide.analytics.impl.DefaultAnalyticsService
 import dev.ide.analytics.impl.SupabaseSink
@@ -10,7 +11,6 @@ import dev.ide.core.IdeServicesBackend
 import dev.ide.core.ProjectManager
 import dev.ide.core.settings.BuiltInSettingsPages
 import dev.ide.platform.log.Log.addSink
-import dev.ide.preview.bridge.DexCustomViewRuntime
 import java.io.File
 import java.nio.file.Path
 import java.util.zip.ZipInputStream
@@ -59,12 +59,21 @@ object AndroidIde {
         // is the app-global "Build in a separate process" setting (default ON), checked in
         // IdeServicesBackend.buildRunnerFor. A build OOM then kills only that process, not the IDE.
         val appContext = context.applicationContext
+        // Analytics is an application-scoped host service now; register it before the backend resolves it.
+        manager.applicationContainer.registerServiceIfAbsent(dev.ide.core.ANALYTICS_SERVICE) { analytics }
         val backend = IdeServicesBackend(
-            initial = null, manager = manager, analytics = analytics,
+            initial = null, manager = manager,
             buildRunnerFactory = { svc ->
                 dev.ide.android.daemon.RemoteBuildRunner(
                     appContext, svc
                 )
+            },
+            // The `:build` daemon posts a foreground-service progress notification; if notifications are off
+            // (POST_NOTIFICATIONS denied on API 33+, or disabled in system settings) the isolated build is
+            // pointless, so fall back to in-process builds. The first-build prompt (BuildNotificationGate) asks
+            // for the grant; this is the live check the runner selection reads. See docs/build-process-isolation.md.
+            notificationsAllowed = {
+                androidx.core.app.NotificationManagerCompat.from(appContext).areNotificationsEnabled()
             },
         )
         // Process-wide uncaught-exception handler: report app_crash + surface the non-fatal dialog + keep the
@@ -119,19 +128,25 @@ object AndroidIde {
         // android.jar MUST stay first: ProjectManager.onDevice treats bootClasspath.first() as the SDK
         // android.jar. The desugar stubs ride alongside it as the platform.
         val bootClasspath = listOf(androidJar.absolutePath, coreLambdaStubs.absolutePath)
-        // Runs a dexed console app on ART (there's no `java` to fork). Prefer a FORKED `dalvikvm` process
-        // (fully isolated + truly killable: a runaway loop dies with the process, and the run needs no
-        // in-process sandbox); fall back to the in-process DexClassLoader on the rare device with no dalvikvm.
-        val forkRunner = ForkedDalvikRunner(context.applicationContext, File(context.cacheDir, "dexrun-fork"))
-        val dexRunner: dev.ide.build.engine.DexRunner =
-            if (forkRunner.available()) forkRunner else DexClassLoaderRunner(File(context.cacheDir, "dexrun"))
+        // Runs a console app by INTERPRETING its compiled bytecode on the VM — no dexing, no dynamic class
+        // loading of the user's/libraries' code. The peer factory dexes the small generated peer classes the
+        // VM needs when an interpreted object is handed to real platform code (a Comparator, a Runnable).
+        val programInterpreter = VmProgramInterpreter(peerFactory = DexPeerFactory())
         // Installs + launches a built APK (the android Run) via the system package installer.
         val apkInstaller = ApkInstallerImpl(context)
-        // Renders live custom views in the layout preview: D8-dex the instrumented classes + DexClassLoader.
-        val previewRuntime = DexCustomViewRuntime(
-            context.applicationContext, androidJar.toPath(),
-            File(context.cacheDir, "preview"), Build.VERSION.SDK_INT,
-        )
+        // The debug-only in-app log bridge: extract the bundled runtime jar (woven into debug builds) and host
+        // the LocalServerSocket it connects to, so a running debug app's logs stream to the IDE's Logcat tab.
+        // Best-effort — a missing/failed asset must NEVER stop the IDE from starting; null just disables
+        // app-log forwarding (the Logcat tab stays empty).
+        val appLogRuntimeJar = runCatching {
+            copyAsset(context, "applog-runtime.jar", File(home, "applog-runtime.jar"))
+        }.getOrNull()
+        val appLogChannel = AppLogChannelImpl()
+        // The legacy dex-based custom-view seam is gone (it D8-dexed the user's classes onto a DexClassLoader,
+        // which Google Play's Device-and-Network-Abuse "DDL" scorer flags). Custom library AND project views are
+        // now INTERPRETED by the real-view runtime's bytecode VM (see AndroidRealViewRuntime / VmViewFactory), so
+        // this owned-preview seam stays null.
+        val previewRuntime: dev.ide.preview.impl.CustomViewRuntime? = null
         // Loads runtime (non-bundled) Kotlin compiler plugins on ART: D8-dex the plugin classpath + DexClassLoader.
         val kotlinPluginLoader = ArtKotlinPluginLoader(
             androidJar.toPath(),
@@ -174,6 +189,9 @@ object AndroidIde {
             settingsPrefix + BuiltInSettingsPages.DEX_FORK_CONCURRENCY
         val dexForkConcurrencyProvider =
             { managerRef.get()?.preference(dexForkConcurrencyKey)?.trim()?.toIntOrNull() }
+        // "Forward app logs" (Build Runtime page), default on — read lazily like the R8/dex knobs.
+        val injectAppLogKey = settingsPrefix + BuiltInSettingsPages.INJECT_APP_LOG
+        val appLogEnabledProvider = { managerRef.get()?.preference(injectAppLogKey)?.trim() != "false" }
         // The dex MERGE (debug-path memory peak) forks too, under the same R8 execution / heap settings; the
         // archive step forks above the "Off-heap dexing threshold". The merge batches + parallelizes across
         // forked VMs bounded by the process-wide fork gate (see ForkedD8Dexer / R8ForkSupport).
@@ -215,9 +233,12 @@ object AndroidIde {
             projectsRoot, bootClasspath, nativeLibDir, debugKeystore.toPath(),
             storageRoot = externalHome(context).toPath(),
             legacyDataDirs = legacyDataDirs,
-            dexRunner = dexRunner,
+            programInterpreter = programInterpreter,
             deviceApiLevel = Build.VERSION.SDK_INT,
             apkInstaller = apkInstaller,
+            appLogRuntimeJar = appLogRuntimeJar?.toPath(),
+            appLogChannel = appLogChannel,
+            appLogEnabledProvider = appLogEnabledProvider,
             customViewRuntime = previewRuntime,
             realViewRuntime = realViewRuntime,
             kotlinPluginLoader = kotlinPluginLoader,

@@ -2,7 +2,7 @@ package dev.ide.core
 
 import dev.ide.index.IndexService
 import dev.ide.index.SourceDocValue
-import dev.ide.lang.jdt.index.JavaSourceDocIndex
+import dev.ide.lang.java.index.JavaSourceDocIndex
 import dev.ide.lang.kotlin.index.KotlinSourceDocIndex
 import dev.ide.lang.resolve.SourceDocProvider
 

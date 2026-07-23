@@ -53,7 +53,7 @@ class OnDiskFormatTest {
             assertContains(workspaceJson, "\"id\": \"core\"")
 
             val moduleToml = Files.readString(dir.resolve("core/module.toml"))
-            assertContains(moduleToml, "version = 1")
+            assertContains(moduleToml, "version = 2")
             assertContains(moduleToml, "[module]")
             assertContains(moduleToml, "type = \"java-lib\"")
             assertContains(moduleToml, "[sourceSets.main]")

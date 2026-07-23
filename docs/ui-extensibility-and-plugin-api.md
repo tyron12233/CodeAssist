@@ -1,5 +1,14 @@
 # UI extensibility and the plugin API
 
+> **Status — the unified internal plugin system is delivered.** The IDE now has one plugin system: a `Plugin`
+> SPI + `PluginManager`, with the built-ins as its first consumers. See [`plugin-system.md`](plugin-system.md)
+> for what ships. The UI-extensibility model this document specifies is delivered as `UiPlugin` /
+> `UiContributionScope` in `:ide-ui-api` (tool windows, screens, view modes, tree icons, and data-driven
+> actions all plug in through the one model). What remains **future** is the *external tier* this document also
+> designs: dex-loaded, separately-built, trust-gated third-party plugins (on-disk manifest discovery,
+> `DexClassLoader` isolation, a permission model). Read the sections below as the design for that external tier;
+> read `plugin-system.md` for the internal model in use today.
+
 This document specifies how the IDE's **UI** becomes extensible the same way its **engine** already is: through
 the IntelliJ-style extension-point registry in `platform-core`. Today the engine is a plugin platform (language
 backends, analyzers, indexes, templates, settings pages all plug in), but the UI is almost entirely hardcoded:
@@ -357,9 +366,16 @@ contributes a toolbar action (Tier 1) and a Logcat tool window (Tier 2). *Exit t
 loaded, contributes both, can be disabled (contributions vanish) and uninstalled; the dex path is verified on
 device.
 
-**Phase D (later, behind these contracts):** keymap + user-rebindable shortcuts on actions; `MessageBus`
-plugin-facing events (file opened, build started/finished) so plugins react; palette categories; a plugin
-marketplace/install-from-URL flow.
+**Phase D (later, behind these contracts):** keymap + user-rebindable shortcuts on actions; palette categories;
+a plugin marketplace/install-from-URL flow.
+
+*Delivered:* the **`MessageBus` plugin-facing events + a plugin logger**. `PluginRegistration` now exposes
+`messageBus` (publish), `busConnection()` (subscribe, tracked for unload), and `logger(tag)` (attributed to the
+plugin id, filterable in the Logs viewer). The IDE publishes a lifecycle event set in `ide-core`'s
+`dev.ide.core.event.IdeEventTopics` — editor (open/close/active/selection), build, run, analysis diagnostics,
+project open/close, indexing — so plugins react to what the IDE is doing. See `docs/plugin-system.md` (Events and
+logging). Consumed by the built-ins today; promoting the topic payloads to their owning `*-api` modules is the
+follow-up for the external tier.
 
 ## IdeBackend decomposition
 

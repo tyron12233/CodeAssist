@@ -81,6 +81,34 @@ class ModuleConfigTest {
         dir.toFile().deleteRecursively()
     }
 
+    /** The platform-SDK picker: a `java-lib` resolves a JVM (core-Java) SDK, never `android`; pinning an
+     *  explicit override persists through module.toml. This is the "console apps don't see android.*" fix,
+     *  surfaced in Module Config. */
+    @Test
+    fun platformSdkResolvesByTypeAndOverridePersists() {
+        val dir = Files.createTempDirectory("ide-cfg-sdk")
+        IdeServices.bootstrapDemo(dir).use { ide ->
+            val core = assertNotNull(ide.moduleService.getModuleConfig("core")) // a java-lib
+            assertTrue(core.availableSdks.isNotEmpty(), "SDK table is populated")
+            // A console/library module resolves a JVM platform — NOT the Android SDK.
+            assertTrue(core.resolvedSdk.isNotEmpty(), "core resolves some platform SDK")
+            assertTrue(core.resolvedSdk != "android", "java-lib must not resolve android.jar (got ${core.resolvedSdk})")
+            assertEquals("", core.platformSdk, "no explicit override by default")
+
+            // Pin an explicit override and confirm it's visible immediately.
+            val target = core.availableSdks.first().name
+            val res = ide.moduleService.updateModuleConfig("core", UiModuleConfigEdit(platformSdk = target))
+            assertTrue(res.success, res.message)
+            assertEquals(target, assertNotNull(ide.moduleService.getModuleConfig("core")).platformSdk)
+        }
+        // The override survived the module.toml round-trip.
+        IdeServices.open(dir).use { reopened ->
+            val core = assertNotNull(reopened.moduleService.getModuleConfig("core"))
+            assertTrue(core.platformSdk.isNotEmpty(), "explicit [module] sdk override persisted to module.toml")
+        }
+        dir.toFile().deleteRecursively()
+    }
+
     // Mirror what the UI does on Save: collapse the rendered fields back into the codec's value map,
     // applying any edits. Proves the generic round-trip (incl. the buildTypes TableList) is lossless.
     private fun UiFacetConfig.toValues(overrides: Map<String, Any?> = emptyMap()): Map<String, Any?> =

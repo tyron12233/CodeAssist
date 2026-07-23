@@ -487,6 +487,9 @@ internal class FileBackend(private val ctx: BackendContext) : FileService {
         else -> "$bytes B"
     }
 
+    // The editable-file resolver (source OR res/ OR manifest), not the source-only [moduleForFile]: an open
+    // XML resource under `res/` (e.g. a layout the preview's "prepare libraries" action must build for) has no
+    // source root, so the narrow lookup returned null and the caller silently no-op'd.
     override fun moduleNameForFile(path: String): String? =
-        ctx.services.moduleForFile(Paths.get(path))?.name
+        ctx.services.moduleForEditableFile(Paths.get(path))?.name
 }

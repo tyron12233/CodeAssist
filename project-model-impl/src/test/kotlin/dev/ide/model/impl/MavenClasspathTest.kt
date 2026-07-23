@@ -91,6 +91,28 @@ class MavenClasspathTest {
         assertEquals(listOf(android.toString(), jvm.toString()), result, "distinct-module -android and -jvm both kept")
     }
 
+    @Test
+    fun dexDedupDropsAMissingBundledStdlibForThePresentMavenOne() {
+        // The reported Firebase crash: the bundled `.platform/kotlin-stdlib-2.4.0.jar` was ABSENT on disk (its
+        // extraction failed), so newest-wins would supersede the project's real Maven stdlib and drop it from the
+        // dex input — leaving kotlin-stdlib un-dexed (`NoClassDefFoundError: kotlin/collections/CollectionsKt` at
+        // launch). A missing jar must not evict a present one: the real Maven stdlib survives.
+        val dir = java.nio.file.Files.createTempDirectory("dex-dedup-missing")
+        try {
+            val bundledMissing = dir.resolve(".platform/kotlin-stdlib-2.4.0.jar")   // never created (extraction failed)
+            val maven = dir.resolve("org/jetbrains/kotlin/kotlin-stdlib/1.9.24/kotlin-stdlib-1.9.24.jar")
+            java.nio.file.Files.createDirectories(maven.parent)
+            java.nio.file.Files.write(maven, ByteArray(0))
+            val result = MavenClasspath.dedupeForAndroidDex(listOf(bundledMissing, maven)).map { it.toString() }
+            assertEquals(
+                listOf(maven.toString()), result,
+                "the present Maven stdlib must survive; the missing (newer) bundled 2.4.0 must not evict it: $result",
+            )
+        } finally {
+            dir.toFile().deleteRecursively()
+        }
+    }
+
     /** A [VirtualFile] that only carries a [path] — all the dedup logic reads. */
     private class PathOnlyFile(override val path: String) : VirtualFile {
         override val name get() = path.substringAfterLast('/')

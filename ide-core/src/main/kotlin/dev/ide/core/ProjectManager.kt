@@ -3,10 +3,11 @@ package dev.ide.core
 import dev.ide.android.support.AndroidFacetCodec
 import dev.ide.android.support.resources.LauncherIcon
 import dev.ide.android.support.tools.KeystoreRegistry
-import dev.ide.build.engine.DexRunner
+import dev.ide.build.engine.ProgramInterpreter
 import dev.ide.model.LanguageLevel
 import dev.ide.model.impl.ModelPersistence
 import dev.ide.model.impl.ProjectTemplateRegistry
+import dev.ide.model.PlatformKind
 import dev.ide.model.impl.SdkData
 import dev.ide.model.template.ProjectTemplate
 import dev.ide.model.template.TemplateArgs
@@ -56,10 +57,14 @@ class ProjectManager private constructor(
     /** Legacy on-device data homes (e.g. a previous internal-storage root) that a backup also sweeps up and
      *  that [importLegacyProjects] recovers projects from. Empty on desktop. */
     private val legacyDataDirs: List<Path>,
-    /** On-device `DexClassLoader` runner (from :ide-android) so a Java `run` works in every opened project. */
-    private val dexRunner: DexRunner? = null,
+    /** The console-run interpreter (from :ide-android on device — a bytecode VM whose peers are dexed) so a
+     *  Java `run` works in every opened project. Null → the engine's default in-process VM interpreter. */
+    private val programInterpreter: ProgramInterpreter? = null,
     /** On-device APK installer (from :ide-android) so the android Run works in every opened project. */
     private val apkInstaller: ApkInstaller? = null,
+    /** On-device app-log channel (from :ide-android): receives a running debug app's forwarded logs for the
+     *  Logcat console tab, in every opened project. Null on desktop. */
+    private val appLogChannel: AppLogChannel? = null,
     /** On-device live custom-view runtime (from :ide-android) so the layout preview renders live custom
      *  views in every opened project, not just the first-run demo. */
     private val customViewRuntime: dev.ide.preview.impl.CustomViewRuntime? = null,
@@ -79,7 +84,20 @@ class ProjectManager private constructor(
      * project's workspace container), and the host plugin registrations. All application *bootstrap* lives in
      * [ApplicationEnvironment], so this manager is purely about *managing* projects. Disposed by [dispose].
      */
-    val env: ApplicationEnvironment = ApplicationEnvironment()
+    val env: ApplicationEnvironment = ApplicationEnvironment(disabledPluginIds = readDisabledPlugins())
+
+    init {
+        // The launcher-supplied platform ports become APPLICATION services on the shared container, so every
+        // opened engine resolves them there rather than by constructor injection. Absent (desktop) → not
+        // registered → the engine falls back to its in-process default.
+        androidTools?.let { t -> env.container.registerServiceIfAbsent(ANDROID_DEVICE_TOOLS) { t } }
+        programInterpreter?.let { p -> env.container.registerServiceIfAbsent(PROGRAM_INTERPRETER) { p } }
+        apkInstaller?.let { i -> env.container.registerServiceIfAbsent(APK_INSTALLER) { i } }
+        appLogChannel?.let { c -> env.container.registerServiceIfAbsent(APP_LOG_CHANNEL) { c } }
+        customViewRuntime?.let { c -> env.container.registerServiceIfAbsent(CUSTOM_VIEW_RUNTIME) { c } }
+        kotlinPluginLoader?.let { l -> env.container.registerServiceIfAbsent(KOTLIN_PLUGIN_LOADER) { l } }
+        realViewRuntime?.let { rv -> env.container.registerServiceIfAbsent(REAL_VIEW_RUNTIME) { rv } }
+    }
 
     /** The process-global application service container (see [env]); parents every project container. */
     val applicationContainer: ServiceContainer get() = env.container
@@ -167,14 +185,14 @@ class ProjectManager private constructor(
     fun create(templateId: String, args: Map<String, String>): IdeServices {
         val name = args[TemplateArgs.NAME]?.takeIf { it.isNotBlank() } ?: "Untitled"
         val dir = uniqueProjectDir(name)
-        return IdeServices.createProjectAt(dir, templateId, args, sdk(), languageLevel, androidTools, dexRunner, apkInstaller, customViewRuntime, realViewRuntime = realViewRuntime, kotlinPluginLoader = kotlinPluginLoader, sharedCachesRoot = homeDir, env = env)
+        return IdeServices.createProjectAt(dir, templateId, args, sdk(), languageLevel, sharedCachesRoot = homeDir, env = env)
             .also { recordOpened(dir) }
     }
 
     /** Open the existing project at [rootPath]; returns the opened engine. [buildOnly] opens a headless
      *  build engine (the `:build` daemon) that skips the editor cold-start — see [IdeServices]. */
     fun open(rootPath: String, buildOnly: Boolean = false): IdeServices =
-        IdeServices.openAt(Paths.get(rootPath), sdk(), androidTools, dexRunner, apkInstaller, customViewRuntime, realViewRuntime = realViewRuntime, kotlinPluginLoader = kotlinPluginLoader, sharedCachesRoot = homeDir, env = env, buildOnly = buildOnly)
+        IdeServices.openAt(Paths.get(rootPath), sdk(), sharedCachesRoot = homeDir, env = env, buildOnly = buildOnly)
             // A build-only daemon open isn't a user "access" — don't let a background build reorder the picker.
             .also { if (!buildOnly) recordOpened(Paths.get(rootPath)) }
 
@@ -197,9 +215,8 @@ class ProjectManager private constructor(
         val services =
             if (ModelPersistence.exists(dir)) open(dir.toString())
             else IdeServices.createProjectAt(
-                dir, templateId, mapOf(TemplateArgs.NAME to key) + args, sdk(), languageLevel, androidTools,
-                dexRunner, apkInstaller, customViewRuntime, realViewRuntime = realViewRuntime,
-                kotlinPluginLoader = kotlinPluginLoader, sharedCachesRoot = homeDir, env = env,
+                dir, templateId, mapOf(TemplateArgs.NAME to key) + args, sdk(), languageLevel,
+                sharedCachesRoot = homeDir, env = env,
             )
         scratchEngines[key] = services
         return services
@@ -243,6 +260,20 @@ class ProjectManager private constructor(
         val props = loadPrefs().apply { setProperty(key, value) }
         Files.createDirectories(prefsFile.parent)
         Files.newOutputStream(prefsFile).use { props.store(it, "CodeAssist preferences") }
+    }
+
+    // --- built-in plugin enable/disable (app-global; applied on the next launch) ---
+
+    /** The persisted ids of disabled built-in plugins. Read once at startup to gate [env]'s plugin load; the
+     *  Plugins settings screen edits it via [setDisabledPlugins] and prompts for a restart. */
+    fun disabledPlugins(): Set<String> = readDisabledPlugins()
+
+    private fun readDisabledPlugins(): Set<String> =
+        preference(DISABLED_PLUGINS_KEY)?.split(",")?.mapNotNull { it.trim().ifEmpty { null } }?.toSet() ?: emptySet()
+
+    /** Persist [ids] as the disabled built-in plugins; takes effect on the next launch. */
+    fun setDisabledPlugins(ids: Set<String>) {
+        setPreference(DISABLED_PLUGINS_KEY, ids.sorted().joinToString(","))
     }
 
     private fun loadPrefs(): Properties = Properties().apply {
@@ -445,6 +476,7 @@ class ProjectManager private constructor(
 
     companion object {
         private const val LEGACY_IMPORTED_PREF = "legacy.projects.imported"
+        private const val DISABLED_PLUGINS_KEY = "plugins.disabled"
 
         /** Desktop host: an installed Android SDK if present (so `android.*` resolves), else a detected JDK; Java 17. */
         fun desktop(projectsRoot: Path, legacyDataDirs: List<Path> = emptyList()): ProjectManager =
@@ -476,9 +508,10 @@ class ProjectManager private constructor(
             /** Extra directories a backup should also sweep up — a legacy internal-storage home and the
              *  previous app version's projects directory. */
             legacyDataDirs: List<Path> = emptyList(),
-            /** The host's `DexClassLoader` runner, so a Java console `run` works on ART. */
-            dexRunner: DexRunner? = null,
-            /** The device's `Build.VERSION.SDK_INT` — min-api the Java dex-run targets. */
+            /** The host's console-run interpreter (a bytecode VM whose peers are dexed on ART), so a Java
+             *  console `run` works on device. */
+            programInterpreter: ProgramInterpreter? = null,
+            /** The device's `Build.VERSION.SDK_INT` — the min-api the Android APK build/dex targets. */
             deviceApiLevel: Int = 21,
             /** The host's APK installer, so the android Run (build + install + launch) works on device. */
             apkInstaller: ApkInstaller? = null,
@@ -496,14 +529,21 @@ class ProjectManager private constructor(
             r8MergeDexer: dev.ide.android.support.tools.Dexer? = null,
             /** Max class-dex per merge batch on a large app (the "Dex merge batch size" setting); read per build. */
             mergeChunkProvider: () -> Int = { dev.ide.core.settings.BuiltInSettingsPages.DEX_MERGE_BATCH_DEFAULT },
+            /** The bundled `:applog-runtime` jar (extracted from assets), woven into debug builds so the running
+             *  app forwards its logs to the IDE. Null → app-log forwarding off. */
+            appLogRuntimeJar: Path? = null,
+            /** The host's app-log channel (hosts the LocalServerSocket the injected bridge connects to). */
+            appLogChannel: AppLogChannel? = null,
+            /** Whether app-log forwarding is enabled (the "Forward app logs" setting; read per build). Default on. */
+            appLogEnabledProvider: () -> Boolean = { true },
         ): ProjectManager {
 
 
-            val sdk = SdkData("android", bootClasspath, buildToolsPath = null)
+            val sdk = SdkData("android", bootClasspath, buildToolsPath = null, kind = PlatformKind.ANDROID)
             // android.jar is the first boot entry; later entries (the desugar stubs) join the compile platform.
             val tools = AndroidDeviceTools(Paths.get(bootClasspath.first()), androidToolsDir, debugKeystore, deviceApiLevel,
                 desugarStubs = bootClasspath.drop(1).map { Paths.get(it) }, r8Shrinker = r8Shrinker, r8MergeDexer = r8MergeDexer,
-                mergeChunkProvider = mergeChunkProvider)
+                mergeChunkProvider = mergeChunkProvider, appLogRuntimeJar = appLogRuntimeJar, appLogEnabled = appLogEnabledProvider)
             return ProjectManager(
                 projectsRoot,
                 projectsRoot.parent ?: projectsRoot,
@@ -512,8 +552,9 @@ class ProjectManager private constructor(
                 LanguageLevel.JAVA_8,
                 tools,
                 legacyDataDirs = legacyDataDirs,
-                dexRunner = dexRunner,
+                programInterpreter = programInterpreter,
                 apkInstaller = apkInstaller,
+                appLogChannel = appLogChannel,
                 customViewRuntime = customViewRuntime,
                 realViewRuntime = realViewRuntime,
                 kotlinPluginLoader = kotlinPluginLoader,

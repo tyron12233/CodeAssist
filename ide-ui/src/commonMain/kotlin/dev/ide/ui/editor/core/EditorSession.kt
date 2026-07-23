@@ -47,6 +47,15 @@ class EditorSession(
     /** The IME composition region, drawn underlined; null when not composing. */
     var composing by mutableStateOf<TextRange?>(null)
         private set
+
+    /**
+     * The first visible document line (0-based) — a lightweight scroll anchor persisted per tab so a reopened
+     * tab scrolls back to roughly where the user left it (see `UiOpenTab.scrollLine`). The editor seeds its
+     * scroll from this on first layout and keeps it updated (debounced) as the user scrolls; the host reads it
+     * for the session snapshot. Snapshot state so a scroll-only change can still schedule the debounced session
+     * save — it is a persistence stash, not part of the edit engine.
+     */
+    var viewportTopLine by mutableIntStateOf(0)
     /** Bumped on every edit/caret move — the UI's bring-caret-into-view trigger. */
     var editCount by mutableIntStateOf(0)
         private set
@@ -171,6 +180,15 @@ class EditorSession(
     private var pendingIme = false // an IME state push was deferred while a batch was open
     private var pendingImeText = false // ...and at least one of those deferred pushes was a text edit
     private var pendingRestart = false // an IME restart was deferred while a batch was open
+    // An IME commit ending in a symbol happened in the CURRENT batch — arms the split auto-space swallow
+    // in [imeCommitText] (a bare " " commit in the same batch is the keyboard's, not the user's).
+    private var batchImeSymbolCommit = false
+    // Offset (and char) of a space/tab the IME's 1,0-delete fast path removed in the CURRENT batch, -1 when
+    // none. A symbol commit landing at exactly that offset later in the same batch reveals the delete as the
+    // keyboard's punctuation swap, and [imeCommitText] restores the char — the user's space is not the
+    // keyboard's to take. Cleared by any other edit or caret move, so only back-to-back swap ops match.
+    private var batchImeSpaceDeleteOffset = -1
+    private var batchImeSpaceDeleteChar = ' '
     private var goalColumn = -1 // sticky column for consecutive vertical caret moves
 
     // ---- undo / redo ----
@@ -207,6 +225,7 @@ class EditorSession(
             updateSelectionAndComposing(newSelection, newComposing)
             return
         }
+        batchImeSpaceDeleteOffset = -1 // any real edit breaks the swap-op adjacency (the delete re-arms after)
         val removedText = if (applyingUndo) "" else doc.substring(s, e)
         val selBefore = selection
         val firstLine = doc.lineForOffset(s)
@@ -268,12 +287,17 @@ class EditorSession(
      */
     fun applyCodeFolds(fresh: List<FoldRegion>) {
         val previouslyCollapsed = foldRegions.filter { it.collapsed }
-        foldRegions = fresh.map { r ->
+        val next = fresh.map { r ->
             val keepCollapsed = previouslyCollapsed.any { it.start == r.start && it.end == r.end } ||
                 (r.collapsed && !defaultFoldsApplied) // collapsedByDefault, first time only
             r.copy(collapsed = keepCollapsed)
         }
         defaultFoldsApplied = true
+        // Skip the state write (and the [foldModel] rebuild it forces) when the fresh set is identical to the
+        // current one — the common case while typing inside a block, where the structure is unchanged and the
+        // in-place edit shift already moved the offsets to match. Keeps the same list reference. FoldRegion is a
+        // data class, so this is a value comparison.
+        if (next != foldRegions) foldRegions = next
     }
 
     /** Toggle the fold whose START is on document [line] (the gutter chevron / placeholder click). No-op when
@@ -301,6 +325,7 @@ class EditorSession(
         val ns = sel.coercedIn(doc.length)
         val nc = comp?.coercedIn(doc.length)?.takeIf { it.min < it.max }
         if (ns == selection && nc == composing) return
+        batchImeSpaceDeleteOffset = -1 // a caret/composition move breaks the swap-op adjacency
         selection = ns
         composing = nc
         goalColumn = -1
@@ -340,11 +365,17 @@ class EditorSession(
             currentGroup = UndoStep(ArrayList(), selection, selection)
             coalesceTyping = false
         }
+        if (batchDepth == 0) {
+            batchImeSymbolCommit = false
+            batchImeSpaceDeleteOffset = -1
+        }
         batchDepth++
     }
 
     fun endBatch() {
         if (batchDepth > 0 && --batchDepth == 0) {
+            batchImeSymbolCommit = false
+            batchImeSpaceDeleteOffset = -1
             val g = currentGroup
             currentGroup = null
             if (g != null && g.edits.isNotEmpty()) {
@@ -507,13 +538,19 @@ class EditorSession(
      * [ImeListener.onTextChanged] push (a partial `updateExtractedText`), so it never drifts and the restart
      * would be pure churn. The restart remains the fallback for IMEs that don't mirror our text.
      *
+     * [force] overrides that skip. A smart edit that changed NO text (skip-over closer, aligned-closer
+     * backspace keep) never produces an [ImeListener.onTextChanged] push, so nothing corrects a monitoring
+     * IME (SwiftKey) that already applied its own insert/delete to its mirror — its absolute offsets drift
+     * by one per occurrence and every later `setComposingRegion`/suggestion replacement lands off-target.
+     * Only a restart resets that model; the callers force it exactly in the no-text-change divergence cases.
+     *
      * Deferred while a batch is open: a smart edit can fire from *inside* an IME batch (the Gboard
      * `deleteSurroundingText` fast path routes through [backspace]), and restarting input between the IME's
      * own batched ops would drop the rest of them. [endBatch] flushes the restart once the batch closes.
      */
-    private fun resyncIme() {
+    private fun resyncIme(force: Boolean = false) {
         val l = imeListener ?: return
-        if (l.isSyncingExtractedText()) return
+        if (!force && l.isSyncingExtractedText()) return
         if (batchDepth > 0) {
             pendingRestart = true
             return
@@ -531,9 +568,11 @@ class EditorSession(
             val edit = smartInsert(doc.chars, selMin, selMax, text[0], language)
             replaceRange(edit.start, edit.end, edit.text, TextRange(edit.caret))
             // A smart rule that didn't simply replace the selection with the typed char shifted the buffer by a
-            // different amount than the IME delivered, so its model is now stale.
+            // different amount than the IME delivered, so its model is now stale. Forced when the edit changed
+            // no text (skip-over closer): no extracted-text push follows, so even a monitoring IME needs the
+            // restart — its mirror already holds the char it committed and nothing else will evict it.
             if (edit.start != selMin || edit.end != selMax || edit.text != text || edit.caret != selMin + 1) {
-                resyncIme()
+                resyncIme(force = edit.start == edit.end && edit.text.isEmpty())
             }
         } else {
             // The IME's own commit of a composed word lands here too — it matches the buffer, so no resync.
@@ -1020,18 +1059,74 @@ class EditorSession(
         // the same path the hardware Enter key takes — rather than pasting "\n" over the composing region (which
         // would drop the just-composed word). [commitText] clears any composition as it splices.
         if (text == "\n") {
+            val wasComposing = composing != null
             commitText("\n")
+            // Keeping the composed word deviates from the contract (a commit REPLACES the composing text), so
+            // an IME that was composing now models the word as gone. Forced restart: commitText's own
+            // divergence check can't see this (it compares against a plain insert at the selection, and an
+            // un-indented smart Enter matches one exactly), and a monitoring IME's mirror can't absorb the
+            // partial push at offsets shifted by the word it believes vanished.
+            if (wasComposing) resyncIme(force = true)
+            return
+        }
+        // SwiftKey-style "auto insert space after punctuation", in BOTH wire shapes. Markdown/plain files
+        // keep the keyboard's spacing (auto-space after `.` is what prose wants).
+        val codeFile = language != CodeLanguage.Markdown && language != CodeLanguage.Plain
+        // Split shape: the symbol and its auto-space arrive as TWO commits inside ONE batch edit. A human
+        // tap produces one commit; a second bare-space commit in the same batch can only be the keyboard's
+        // auto-space — swallow it. The IME's model holds the space, so force the restart (deferred to the
+        // batch end).
+        if (codeFile && text == " " && batchDepth > 0 && batchImeSymbolCommit) {
+            resyncIme(force = true)
+            return
+        }
+        // Bundled shape: the commit itself ends "<symbol><space>" — ") " from a bare punctuation tap, or
+        // "word) " committed over the composing region. In code that trailing auto-space is wrong (`foo() ;`,
+        // a closing quote followed by a space mid-string), and on the single-char shape the two-char commit
+        // also bypassed the smart path, so skip-over/auto-close silently stopped working on those keyboards.
+        // Strip the space; word commits ("hello ", a suggestion pick) keep theirs. The IME applied the full
+        // text to its own model, so a phantom space survives there that no extracted-text push can evict —
+        // force the restart.
+        var t = text
+        var strippedAutoSpace = false
+        if (codeFile && newCursorPosition == 1 && t.length >= 2 && t[t.length - 1] == ' ' &&
+            isAutoSpacedSymbol(t[t.length - 2])
+        ) {
+            t = t.substring(0, t.length - 1)
+            strippedAutoSpace = true
+        }
+        if (batchDepth > 0 && t.isNotEmpty() && isAutoSpacedSymbol(t[t.length - 1])) {
+            batchImeSymbolCommit = true
+        }
+        // Punctuation swap, second half: a symbol commit landing exactly where this batch's IME delete
+        // removed a space reveals that delete as the keyboard's "no space before punctuation" swap (prose
+        // manners; SwiftKey sends batch { delete(1,0); commit ")"; commit " " }). The user typed that
+        // space — restore it and let the symbol land after it. The keyboard's model (space gone) is stale
+        // either way, so force the restart.
+        if (codeFile && batchImeSpaceDeleteOffset >= 0 && composing == null && selection.collapsed &&
+            selection.min == batchImeSpaceDeleteOffset && t.isNotEmpty() && isAutoSpacedSymbol(t[0])
+        ) {
+            val off = batchImeSpaceDeleteOffset
+            replaceRange(off, off, batchImeSpaceDeleteChar.toString(), TextRange(off + 1))
+            resyncIme(force = true)
+        }
+        // single-char direct commits (no composition) get the same smart edits as hardware typing
+        if (composing == null && selection.collapsed && t.length == 1 && newCursorPosition == 1) {
+            if (strippedAutoSpace) {
+                beginBatch() // folds the smart path's own resync and the forced one into a single restart
+                commitText(t)
+                resyncIme(force = true)
+                endBatch()
+            } else {
+                commitText(t)
+            }
             return
         }
         val region = composing ?: selection
-        // single-char direct commits (no composition) get the same smart edits as hardware typing
-        if (composing == null && selection.collapsed && text.length == 1 && newCursorPosition == 1) {
-            commitText(text)
-            return
-        }
         val rs = region.min
-        val caret = imeCaret(rs, text.length, newCursorPosition)
-        replaceRange(rs, region.max, text, TextRange(caret), null)
+        val caret = imeCaret(rs, t.length, newCursorPosition)
+        replaceRange(rs, region.max, t, TextRange(caret), null)
+        if (strippedAutoSpace) resyncIme(force = true)
     }
 
     fun imeSetComposingText(text: String, newCursorPosition: Int) {
@@ -1055,11 +1150,34 @@ class EditorSession(
     fun imeDeleteSurrounding(before: Int, after: Int) {
         // the Gboard backspace fast path — and the one place pair-aware delete applies
         if (before == 1 && after == 0 && composing == null && selection.collapsed) {
+            val p = selection.start
+            // A WHITESPACE delete stays LITERAL. SwiftKey's punctuation swap removes the space before a
+            // symbol via deleteSurroundingText(1,0) in the same batch as the commit that follows, and at
+            // this point it is byte-identical to the user's backspace tap (both batched) — but the smart
+            // rules that fire on a space delete (unindent level, blank-line collapse, aligned-closer keep)
+            // would eat real code on every swap (the "typing ) deletes my indent" bug). Deleting exactly
+            // what the IME asked for also keeps its model coherent — no resync needed. The smart rules
+            // still run for the editor's own [backspace] (hardware key / symbol bar), and the pair-aware
+            // delete below still fires on IME deletes of non-whitespace (no keyboard deletes those on
+            // its own).
+            if (p > 0 && (doc.charAt(p - 1) == ' ' || doc.charAt(p - 1) == '\t')) {
+                val ch = doc.charAt(p - 1)
+                replaceRange(p - 1, p, "", TextRange(p - 1))
+                // Arm the punctuation-swap detector: if a symbol commit lands at this offset later in the
+                // SAME batch, this delete was the keyboard's swap and [imeCommitText] restores the char.
+                if (batchDepth > 0) {
+                    batchImeSpaceDeleteOffset = p - 1
+                    batchImeSpaceDeleteChar = ch
+                }
+                return
+            }
             val rev = textRevision
             backspace()
-            // A smart rule that kept the text unchanged (backspace on an already-aligned closer) still looked
-            // like a successful one-char delete to the IME, so its model is now off by one — resync it.
-            if (textRevision == rev) resyncIme()
+            // A smart rule that kept the text unchanged still looked like a successful one-char delete to
+            // the IME, so its model is now off by one — resync it. Forced past the monitoring-IME skip:
+            // with no text change there is no extracted-text push to correct the mirror, and the selection
+            // didn't move either, so the IME gets no signal at all without a restart.
+            if (textRevision == rev) resyncIme(force = true)
             return
         }
         // Deletion happens OUTSIDE the composing region as well as the selection (the framework contract:
@@ -1103,6 +1221,10 @@ class EditorSession(
         val start = selection.max
         return doc.substring(start, (start + n.coerceIn(0, MAX_IPC_TEXT)).coerceAtMost(doc.length))
     }
+
+    /** A char SwiftKey-style keyboards auto-space after: any symbol (identifier chars and whitespace never
+     *  get the bundled-space treatment, and a plain `"x "` word commit must keep its trailing space). */
+    private fun isAutoSpacedSymbol(c: Char): Boolean = !c.isLetterOrDigit() && !c.isWhitespace()
 
     // Clamped at 0: a large negative newCursorPosition near the document start must not produce a negative
     // offset (TextRange throws on those). The upper bound is coerced where the TextRange is applied.

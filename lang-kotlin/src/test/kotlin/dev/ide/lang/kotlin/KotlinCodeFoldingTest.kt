@@ -62,6 +62,35 @@ class KotlinCodeFoldingTest {
         assertTrue(folds("One.kt", code).none { it.kind == FoldKind.FUNCTION_BODY.id }, "a one-line body is not foldable")
     }
 
+    /** Incremental folding (reuse of unchanged declarations, re-anchored) must equal a fresh full fold. Edit one
+     *  body — which shifts every later declaration — then re-fold on the SAME analyzer (incremental path) and
+     *  compare against a fresh analyzer folding the edited text cold. */
+    @Test
+    fun incrementalEqualsFull() {
+        val v1 = "package demo\n\nimport a.B\nimport c.D\n\n" +
+            "class Foo {\n  fun a() {\n    val x = 1\n    println(x)\n  }\n}\n\n" +
+            "fun top() {\n  val y = 2\n  println(y)\n}\n\n" +
+            "/*\n a block\n comment\n */\nval z = 3\n"
+        // Edit Foo.a's body (adds a line) → every declaration after it shifts.
+        val v2 = v1.replace("    val x = 1\n", "    val x = 1\n    val w = 9\n")
+
+        fun asKeys(list: List<Fold>) = list.map { "${it.text}|${it.placeholder}|${it.kind}|${it.byDefault}" }.toSet()
+
+        val inc = KotlinSourceAnalyzer(fakeContext(srcDir))
+        val vf = DiskFile(srcDir.resolve("Inc.kt"))
+        fun foldWith(a: KotlinSourceAnalyzer, code: String): List<Fold> {
+            val doc = SnippetDoc(code, vf)
+            a.incrementalParser.parseFull(doc)
+            return runBlocking { a.folding!!.folds(doc.file) }
+                .map { Fold(code.substring(it.range.start, it.range.end), it.placeholder, it.kind.id, it.collapsedByDefault) }
+        }
+
+        foldWith(inc, v1)                              // prime the per-declaration cache
+        val incremental = foldWith(inc, v2)            // reuses unchanged decls, re-anchored
+        val full = foldWith(KotlinSourceAnalyzer(fakeContext(srcDir)), v2) // cold, whole-file
+        assertEquals(asKeys(full), asKeys(incremental), "incremental folding must equal a fresh full fold")
+    }
+
     companion object {
         val srcDir: Path = tempProject(mapOf("Seed.kt" to "package demo\n"))
         val analyzer = KotlinSourceAnalyzer(fakeContext(srcDir))

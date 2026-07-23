@@ -54,7 +54,7 @@ import dev.ide.ui.icons.CaIcons
 import dev.ide.ui.icons.actionIcon
 import dev.ide.ui.icons.TreeIcon
 import dev.ide.ui.icons.TreeIcons
-import dev.ide.ui.icons.resolveTint
+import dev.ide.ui.theme.resolveTint
 import dev.ide.ui.platform.isMobilePlatform
 import dev.ide.ui.platform.secondaryClickable
 import dev.ide.ui.theme.Ca
@@ -681,7 +681,7 @@ private fun TreeRowContent(
                 node.gitStatus != null ->
                     Box(
                         Modifier.size(6.dp).background(
-                            gitColor(node.gitStatus),
+                            gitColor(node.gitStatus!!),
                             RoundedCornerShape(Ca.radius.pill)
                         )
                     )

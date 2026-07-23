@@ -6,6 +6,7 @@ import dev.ide.lang.completion.CompletionParams
 import dev.ide.lang.completion.CompletionRequest
 import dev.ide.lang.completion.CompletionResultSet
 import dev.ide.lang.dom.ParsedFile
+import dev.ide.lang.xml.XmlIncrementalParser
 
 /**
  * The XML language backend's completion [CompletionContributor]: computes the [XmlCompletionPosition] at the
@@ -19,13 +20,15 @@ import dev.ide.lang.dom.ParsedFile
 class XmlCompletion(
     private val contributors: () -> List<XmlCompletionContributor>,
     private val parseFor: (CompletionRequest) -> ParsedFile = {
-        dev.ide.lang.xml.XmlIncrementalParser().parseFull(it.document)
+        XmlIncrementalParser().parseFull(it.document)
     },
 ) : CompletionContributor {
 
     override val id = "xml.completion"
 
-    override suspend fun fillCompletionVariants(params: CompletionParams, result: CompletionResultSet) {
+    override suspend fun fillCompletionVariants(
+        params: CompletionParams, result: CompletionResultSet
+    ) {
         val request = CompletionRequest(params.document, params.offset, params.trigger)
         val text = request.document.text
         val parsed = parseFor(request)
@@ -33,9 +36,9 @@ class XmlCompletion(
         result.setReplacementRange(pos.replacementRange)
         if (pos.kind == XmlCompletionKind.UNKNOWN) return
 
-        val candidates = contributors().flatMap { runCatching { it.contribute(pos) }.getOrDefault(emptyList()) }
-        val items = candidates
-            .filter { matchesPrefix(it, pos.prefix) }
+        val candidates =
+            contributors().flatMap { runCatching { it.contribute(pos) }.getOrDefault(emptyList()) }
+        val items = candidates.filter { matchesPrefix(it, pos.prefix) }
             .sortedWith(compareBy({ it.sortPriority }, { it.label.lowercase() }))
         result.addAllElements(items)
     }

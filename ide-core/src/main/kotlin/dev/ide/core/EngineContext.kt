@@ -1,9 +1,12 @@
 package dev.ide.core
 
+import dev.ide.android.support.resources.ResourceRepository
 import dev.ide.android.support.tools.KeystoreRegistry
-import dev.ide.build.engine.DexRunner
+import dev.ide.build.engine.ProgramInterpreter
 import dev.ide.core.services.DependencyService
 import dev.ide.index.IndexService
+import dev.ide.lang.LanguageId
+import dev.ide.lang.SourceAnalyzer
 import dev.ide.lang.kotlin.compile.KotlinJvmCompiler
 import dev.ide.lang.dom.ParsedFile
 import dev.ide.model.Module
@@ -56,14 +59,26 @@ internal interface EngineContext {
      *  build, the analyzer, and the Kotlin compiler warm-up. */
     val compileBootClasspath: List<Path>
 
+    /**
+     * The compile boot (platform) classpath for [module] specifically — its resolved platform SDK
+     * ([dev.ide.model.SdkResolution]): the core-Java platform for a `java-*`/`kotlin-*` module, the Android
+     * SDK for an `android-*` module, so a console app never compiles against `android.jar`. Only existing jar
+     * files are returned; a modular JDK home (desktop) drops to empty → the host JRE, matching the old build.
+     */
+    fun bootClasspathFor(module: Module): List<Path>
+
     /** On-device Android tool ports (android.jar + native tools), or null on the desktop / no SDK. */
     val androidTools: AndroidDeviceTools?
 
-    /** On-device dexed-console-app runner (a Java `run` on ART), or null on the desktop. */
-    val dexRunner: DexRunner?
+    /** The console-run engine: interprets a module's compiled program on the bytecode VM (both desktop and
+     *  device). Never null — a host that registers no port gets a default in-process interpreter. */
+    val programInterpreter: ProgramInterpreter
 
     /** On-device APK install+launch port (the Android Run), or null on the desktop. */
     val apkInstaller: ApkInstaller?
+
+    /** On-device app-log channel (receives a running debug app's forwarded logs), or null on the desktop. */
+    val appLogChannel: AppLogChannel?
 
     /** [module] plus its transitive in-project module-dependency closure (the modules a build compiles/links). */
     fun moduleBuildClosure(module: Module): List<Module>
@@ -100,12 +115,54 @@ internal interface EngineContext {
 
     /** Construct the [SourceAnalyzer] for [module] in [language]. The app-global module-scoped analyzer service
      *  factory calls this through the scope-resolved engine; the module container caches and disposes it. */
-    fun buildAnalyzer(module: Module, language: dev.ide.lang.LanguageId): dev.ide.lang.SourceAnalyzer
+    fun buildAnalyzer(module: Module, language: LanguageId): SourceAnalyzer
+
+    /** The module owning [file] by source root, or null (narrower than [moduleForEditableFile]). */
+    fun moduleForFile(file: Path): Module?
+
+    /** The module owning [file] for editing — a source/generated root, an Android `res/` tree, or the
+     *  module's manifest. Broader than [moduleForFile]. */
+    fun moduleForEditableFile(file: Path): Module?
+
+    /** The Android module owning [file] under one of its `res/` roots, or null. */
+    fun moduleForResourceFile(file: Path): Module?
+
+    /** True when the language backend for [file] was marked unavailable (a JDT LinkageError); editor features
+     *  skip it rather than repeatedly crash. */
+    fun analysisDisabled(file: Path): Boolean
+
+    /** Mark [language]'s analysis unavailable after a backend LinkageError (see [analysisDisabled]). */
+    fun markAnalysisUnavailable(language: LanguageId)
+
+    /** Remove and return [path]'s live editor overlay (for a rename that moves the backing file). */
+    fun removeOverlay(path: Path): String?
+
+    /** Every project `.java` file across all modules' source roots — the rename reference-sweep candidates. */
+    fun projectJavaFiles(): List<Path>
+
+    /** True if [s] is a valid Java identifier (and not a reserved word) — the rename validator. */
+    fun isValidJavaIdentifier(s: String): Boolean
+
+    /** The injected on-device Compose preview renderer, or null when none is wired (the interpret-only path). */
+    val composePreviewRunner: ComposePreviewRunner?
+
+    /** The per-(module, language) analyzer for editor features, resolved + cached as a MODULE-scoped service. */
+    fun analyzerFor(module: Module, language: LanguageId): SourceAnalyzer
+
+    /** The editor language id for [file] (from `FILE_TYPE_EP`; the Java default for an unmapped file). */
+    fun languageFor(file: Path): LanguageId
+
+    /** Push [file]'s live editor buffer [text] into the overlay so analyzers see the unsaved edits. */
+    fun updateDocument(file: Path, text: String)
+
+    /** Reparse [file]'s live buffer [text] through [analyzer]'s incremental parser (bumping the shared
+     *  document version), so a subsequent query on that same analyzer reflects the buffer. */
+    fun refreshParse(analyzer: SourceAnalyzer, file: Path, text: String)
 
     /** The module's merged Android resource repository (fingerprint-cached, shared with the editor's synthetic-R
      *  provider / layout preview / reference resolution), or null when the module has no Android resources. The
      *  app-global synthetic-R provider resolves this through the active engine. */
-    fun resourceRepo(module: Module): dev.ide.android.support.resources.ResourceRepository?
+    fun resourceRepo(module: Module): ResourceRepository?
 
     /** Read an app/project-scoped preference (`.platform/settings.properties`), or null if unset. */
     fun projectPref(key: String): String?

@@ -13,6 +13,7 @@ import android.widget.ImageView
 import android.widget.LinearLayout
 import android.widget.ProgressBar
 import android.widget.TextView
+import dev.ide.jvm.interpretedClassNameOf
 import dev.ide.preview.PreviewViewNode
 import dev.ide.preview.PreviewViewProperty
 import kotlin.math.roundToInt
@@ -60,7 +61,9 @@ object ViewHierarchyCapture {
             }
         }
         return PreviewViewNode(
-            className = v.javaClass.name,
+            // An interpreted view is a generated peer whose Class name is synthetic (dev.ide.jvm.peers.*); report
+            // the interpreted class it stands for so the hierarchy shows the real tag (com.example.MyView).
+            className = interpretedClassNameOf(v) ?: v.javaClass.name,
             id = resourceId(v),
             left = absL, top = absT, right = absR, bottom = absB,
             properties = properties(v, density, scaledDensity),

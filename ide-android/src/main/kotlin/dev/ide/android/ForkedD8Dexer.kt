@@ -56,8 +56,18 @@ class ForkedD8Dexer(
         inputs: List<Path>, androidJar: Path, minApi: Int, release: Boolean, outDir: Path,
         threads: Int, desugaredLibConfig: Path?,
     ): ToolResult {
-        // A merge that forks holds a global fork permit so the parallel merge tasks don't over-commit RAM
-        // (in-process merges don't fork → no gating).
+        // Fork the merge ONLY when the device can back the fork heap ([forkAffordable]). On a RAM-starved device
+        // (this is the merge equivalent of [runsOffHeap] for the one-pass) forking a big-heap VM to merge dex
+        // thrashes GC / risks an LMK kill and, for a tiny scope like the project layer, pays a whole fork spawn +
+        // R8-load for a few classes. In-process instead: [DexMergeTask]'s native-multidex path is bucketed
+        // (fixed ≤8 buckets, each merged separately), so the working set stays bounded without a fork — and
+        // [mergePlan] returns null in that case so the merge task sizes concurrency for the app heap.
+        val fork = forkAffordable()
+        if (!fork) {
+            if (delegate !== fallback) log.info("forked-D8 merge: in-process (available RAM below fork headroom)")
+            return fallback.dex(inputs, androidJar, minApi, release, outDir, threads, desugaredLibConfig)
+        }
+        // A merge that forks holds a global fork permit so the parallel merge tasks don't over-commit RAM.
         val r = onForkGate { delegate.dex(inputs, androidJar, minApi, release, outDir, threads, desugaredLibConfig) }
         return note?.let { r.copy(log = listOf(it) + r.log) } ?: r
     }
@@ -80,6 +90,33 @@ class ForkedD8Dexer(
         // Gate only the forked archive (dexer === delegate); an in-process archive is bounded by the app heap.
         val call = { dexer.dexArchive(inputs, classpath, androidJar, minApi, release, outDir, threads, desugaredLibConfig) }
         return if (dexer === delegate) onForkGate(call) else call()
+    }
+
+    /**
+     * Whether a forked VM both RESOLVED and the device can back its heap RIGHT NOW: available RAM ≥
+     * [FORK_HEADROOM_FACTOR] × the fork's `-Xmx`. `canFork` only proves a VM *starts* at that `-Xmx` (address
+     * space is reserved lazily); it does NOT prove the device can keep the heap resident. Forking anyway on a
+     * small phone/emulator thrashes GC or is LMK-killed mid-run. Both fork decisions consult this — the
+     * whole-classpath one-pass ([runsOffHeap]) and the dex merge ([dex]/[mergePlan]) — so a RAM-starved device
+     * uniformly falls back to the bounded in-process paths. Not memoised: available RAM fluctuates, and the
+     * in-process fallback is safe (just slower on a big device), so a transient dip only affects one build.
+     */
+    private fun forkAffordable(): Boolean {
+        if (delegate === fallback) return false        // resolves the one-time fork probe; fallback ⇒ never forks
+        val xmx = forkXmxMb ?: return false
+        val avail = R8ForkSupport.availableMemMb(appContext)
+        return avail <= 0L || avail >= (xmx * FORK_HEADROOM_FACTOR).toLong()   // avail unknown → allow (can't tell)
+    }
+
+    // The Android build asks this (at graph-build time, for a minSdk-21..25 debug external scope) to choose the
+    // fast whole-classpath one-pass vs. bounded per-library archiving: the one-pass needs the fork's heap live,
+    // so below the headroom bar per-library archiving wins (capped working set, and it banks each library to the
+    // shared cache as it completes, so a killed build keeps its progress).
+    override fun runsOffHeap(): Boolean {
+        val ok = forkAffordable()
+        if (!ok && delegate !== fallback)
+            log.info("forked-D8: one-pass external dexing disabled — availMem ${R8ForkSupport.availableMemMb(appContext)}MB below headroom for a ${forkXmxMb}MB fork; using bounded per-library archiving")
+        return ok
     }
 
     /** Run [body] holding a global fork permit when this dexer is actually forking; otherwise run it directly. */
@@ -130,10 +167,12 @@ class ForkedD8Dexer(
      *    low-memory killer doesn't take the app or the forks. availMem (not totalMem) keeps it honest under
      *    pressure → 1 fork merging everything, still far better than N sequential ones.
      *
-     * Returns null (defer to the in-process default) when the merge isn't actually forking here.
+     * Returns null (defer to the in-process app-heap-bounded default) when the merge isn't actually forking
+     * here — no forked VM resolved, OR the device can't back the fork heap right now ([forkAffordable]), so
+     * [dex] will run in-process and the plan must size concurrency for the app heap, not for big-heap forks.
      */
     override fun mergePlan(inputCount: Int): MergePlan? {
-        if (delegate === fallback) return null
+        if (!forkAffordable()) return null
         val xmx = forkXmxMb ?: return null
         val cores = Runtime.getRuntime().availableProcessors().coerceAtLeast(1)
         val concurrency = forkBudget()
@@ -179,5 +218,11 @@ class ForkedD8Dexer(
         // Default archive-fork threshold (MB) when the setting is unset: archive inputs at/above this size fork
         // (clean-build project jar / big library); smaller ones (the incremental case) stay in-process.
         const val ARCHIVE_FORK_DEFAULT_MB = 8
+
+        // A forked VM (one-pass dexing OR the dex merge) is worth it only when the device has this multiple of
+        // the fork's heap actually available, so D8's working set stays resident instead of thrashing / being
+        // LMK-killed. Below it, both fall back to the bounded in-process paths. ~1.5x a 1536MB fork ≈ 2.3GB
+        // available — comfortably true on an 8GB emulator, false on a 1.5-2GB one (where forks thrashed).
+        const val FORK_HEADROOM_FACTOR = 1.5
     }
 }

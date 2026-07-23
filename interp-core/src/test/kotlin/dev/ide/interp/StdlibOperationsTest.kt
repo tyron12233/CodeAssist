@@ -67,6 +67,12 @@ class StdlibOperationsTest {
         "\"abc\".length" to 3,
         "\"a,b,c\".split(\",\").size" to 3,
         "\"hello\".uppercase().length" to 5,
+        // `String.contains` / `isBlank` — the `StringsKt` extensions that broke a ViewModel preview when their
+        // overload set stayed statically ambiguous; they must dispatch reflectively on the facade at runtime.
+        "if (\"hello\".contains(\"ell\")) 1 else 0" to 1,
+        "if (\"hello\".contains(\"xyz\")) 0 else 1" to 1,
+        "if (\"  \".isBlank()) 1 else 0" to 1,
+        "if (\"x\".isBlank()) 0 else 1" to 1,
     )
 
     @Test

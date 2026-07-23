@@ -56,6 +56,18 @@ sealed interface Binding {
         val mutable: Boolean,
         val valueProperty: Property,
     ) : Binding
+    /** A local `val/var x by <delegate>` read/written through the delegate's general MEMBER convention —
+     *  `delegate.getValue(thisRef, property)` / `delegate.setValue(thisRef, property, value)` — rather than a
+     *  `.value` shortcut. [slot] holds the delegate object; [propertyName] names the delegated property (handed
+     *  to the delegate as `property.name`). Unlike [DelegatedLocal] (expanded at lowering into a `.value`
+     *  get/set), the interpreter handles this binding directly, since the operators take arguments a plain
+     *  property read does not. A local delegate's `thisRef` is null (Kotlin's own convention). */
+    data class DelegatedConvention(
+        val slot: SlotId,
+        override val name: String,
+        val mutable: Boolean,
+        val propertyName: String,
+    ) : Binding
     /** A member or top-level property (read/written through [RNode.PropertyGet]/[RNode.PropertySet]).
      *  When [isExtension] is true this is an extension property: [ownerFqn] is the declaring `…Kt` facade and
      *  its getter is a STATIC method taking the receiver as its first argument (`16.dp` → `DpKt.getDp(int)`),
@@ -83,6 +95,16 @@ sealed interface ResolvedCallable {
     val displayName: String
     val isComposable: Boolean
 
+    /** Whether the callee is a `suspend` function. The interpreter routes any suspend call through the general
+     *  continuation bridge (a real blocking [kotlin.coroutines.Continuation] on the coroutine fiber) rather than
+     *  hardcoding individual suspend functions — so `delay`, a project `suspend fun`, or any library suspend
+     *  function all work the same way. */
+    val isSuspend: Boolean get() = false
+
+    /** The callee's declared type-parameter names, in declaration order (`fun <reified T> foo()` → `["T"]`) —
+     *  positional with a call's [RNode.Call.typeArguments]. Empty for a non-generic callee. */
+    val typeParameterNames: List<String> get() = emptyList()
+
     /** A precompiled (binary) target — invoked reflectively. [ownerFqn] is the declaring class (a synthetic
      *  `…Kt` facade for a top-level callable); [descriptorPrecise] is false when the resolver could not pin
      *  the exact JVM owner/descriptor yet (the symbol model doesn't carry it for every binary member). */
@@ -100,6 +122,13 @@ sealed interface ResolvedCallable {
          *  (`Text(text = …, modifier = …)`) back to their parameter positions before dispatch. Empty when the
          *  symbol model didn't carry them (then only positional binding is possible). */
         val paramNames: List<String> = emptyList(),
+        /** The index of the `vararg` value parameter, or -1 if none. A NON-last vararg (`key(vararg keys, block)`,
+         *  `CompositionLocalProvider(vararg values, content)`) compiles to a plain `Object[]`/`ProvidedValue[]`
+         *  the compiler packs at the call site — so the reflective invoke needs the loose args packed into that
+         *  array, which only this index makes possible. */
+        val varargParamIndex: Int = -1,
+        override val typeParameterNames: List<String> = emptyList(),
+        override val isSuspend: Boolean = false,
     ) : ResolvedCallable
 
     /** A project-source target — its body is available to interpret. [declId] locates the declaration. */
@@ -109,6 +138,8 @@ sealed interface ResolvedCallable {
         val paramNames: List<String>,
         val isConstructor: Boolean = false,
         override val isComposable: Boolean = false,
+        override val typeParameterNames: List<String> = emptyList(),
+        override val isSuspend: Boolean = false,
     ) : ResolvedCallable
 }
 
@@ -124,8 +155,29 @@ data class RArg(
     val trailingLambda: Boolean = false,
 )
 
-/** A lambda/function parameter slot. */
-data class RParam(val slot: SlotId, val name: String, val type: KotlinType?)
+/** A lambda/function parameter slot. [default] is the lowered default-value expression for a function
+ *  parameter that declares one (`modifier: Modifier = Modifier`), evaluated in the callee's frame when a call
+ *  omits the argument; null for a required parameter, a lambda parameter, or a default that couldn't lower.
+ *  [vararg] marks a `vararg xs: T` parameter: the interpreter packs the trailing arguments into it (Kotlin
+ *  binds it as `Array<T>`; see [dev.ide.interp bindParams]) rather than binding a single value. */
+data class RParam(val slot: SlotId, val name: String, val type: KotlinType?, val default: RNode? = null, val vararg: Boolean = false)
+
+/**
+ * A resolved call-site type argument (`composable<Route>()`, `serializer<Foo>()`) — carried on [RNode.Call]
+ * positionally with the callee's type parameters. Source functions are interpreted, so binding a type argument
+ * to the callee's type parameter lets a `reified T` inside the body resolve: `T::class`, `x is T`, `x as T`.
+ *
+ * [fqn] is the resolved concrete type (`com.example.Route`), or null when the argument couldn't resolve.
+ * [loadCandidates] is that FQN followed by loadable supertype FQNs — a project-source type isn't compiled at
+ * preview time, so its nearest reflectable supertype stands in (same shape as [RNode.ClassLiteral.typeCandidates]).
+ * [typeParamRef] is set when the argument IS an enclosing function's own type parameter (`bar<T>()` inside
+ * `fun <reified T> foo()`) — the interpreter re-binds it from the caller's frame rather than resolving it here.
+ */
+data class RTypeArg(
+    val fqn: String?,
+    val loadCandidates: List<String> = emptyList(),
+    val typeParamRef: String? = null,
+)
 
 /** A node of the resolved tree. Sealed + total: the only "I can't" is [Unsupported]. */
 sealed interface RNode {
@@ -145,12 +197,21 @@ sealed interface RNode {
         /** For [DispatchKind.MEMBER_EXTENSION]: the scope instance the member extension is invoked on (the
          *  enclosing receiver-lambda's `this`). Null for every other dispatch kind. */
         val dispatchReceiver: RNode? = null,
+        /** Explicit/inferred call-site type arguments (`serializer<Foo>()`, `composable<Route>()`), positional
+         *  with [callee]'s type parameters ([ResolvedCallable.typeParameterNames]). Empty for a non-generic call
+         *  or when they couldn't be resolved. See [RTypeArg]. */
+        val typeArguments: List<RTypeArg> = emptyList(),
     ) : RNode
     data class PropertyGet(val receiver: RNode?, val binding: Binding, override val source: SourceSpan) : RNode
     data class PropertySet(val receiver: RNode?, val binding: Binding, val value: RNode, override val source: SourceSpan) : RNode
     data class If(val condition: RNode, val then: RNode, val otherwise: RNode?, override val source: SourceSpan) : RNode
     data class Block(val statements: List<RNode>, val isExpression: Boolean, override val source: SourceSpan) : RNode
-    data class Lambda(val params: List<RParam>, val body: RNode, val captures: List<Binding>, override val source: SourceSpan) : RNode
+    /** [isLocalFunction] marks a lambda that is really a lowered local function declaration (`fun helper() { … }`
+     *  inside a block). It differs from an ordinary lambda in one way the interpreter must honor: a `return` in a
+     *  local function's body returns from THAT function (a local return), whereas a bare `return` in a lambda is a
+     *  non-local return from the enclosing function. The interpreter's closure catches the return signal for a
+     *  local function and lets it propagate for a plain lambda. */
+    data class Lambda(val params: List<RParam>, val body: RNode, val captures: List<Binding>, override val source: SourceSpan, val isLocalFunction: Boolean = false) : RNode
     /** A string template: `"a${x}b"` → the concatenation of its parts (literals + interpolated expressions,
      *  each stringified at runtime). A plain string literal stays an [Const]. */
     data class StringConcat(val parts: List<RNode>, override val source: SourceSpan) : RNode
@@ -160,12 +221,29 @@ sealed interface RNode {
     /** `value is T` (or `!is` when [negated]) — a runtime type test against the classifier [typeFqn]. The
      *  interpreter matches a [SourceObject] by walking its class hierarchy and a reflectable value by
      *  `Class.isInstance`. */
-    data class TypeCheck(val value: RNode, val typeFqn: String, val negated: Boolean, override val source: SourceSpan) : RNode
+    data class TypeCheck(val value: RNode, val typeFqn: String, val negated: Boolean, override val source: SourceSpan, val reifiedParam: String? = null) : RNode
     /** `value as T` (or `value as? T` when [safe]) — a runtime cast. The interpreter checks `value`'s runtime
      *  type against [typeFqn]: a confirmed mismatch throws `ClassCastException` (a [safe] cast yields null
      *  instead), while an unresolvable [typeFqn] (a type parameter / unmapped type) is trusted and passed
      *  through. [nullable] is the `?` on the target type (`as T?`) — it lets a null pass an unsafe cast. */
-    data class Cast(val value: RNode, val typeFqn: String, val safe: Boolean, val nullable: Boolean, override val source: SourceSpan) : RNode
+    data class Cast(val value: RNode, val typeFqn: String, val safe: Boolean, val nullable: Boolean, override val source: SourceSpan, val reifiedParam: String? = null) : RNode
+    /** A class literal — `Foo::class` (a TYPE literal, [receiver] null) or `expr::class` (a runtime-class
+     *  literal of the evaluated [receiver]). Yields a `kotlin.reflect.KClass` normally, or a `java.lang.Class`
+     *  when [asJava] is set (the `::class.java` selector, folded in here so the interpreter needn't model
+     *  `KClass.java`). For the type form, [typeCandidates] is the resolved receiver type FQN followed by its
+     *  loadable supertype FQNs: a project-source type isn't compiled at preview time, so its nearest
+     *  reflectable supertype stands in (the resulting `Class`/`KClass` is only ever a token — e.g. the second
+     *  argument to `Intent(context, X::class.java)` — so the supertype is a sound stand-in). */
+    data class ClassLiteral(
+        val receiver: RNode?,
+        val typeCandidates: List<String>,
+        val asJava: Boolean,
+        override val source: SourceSpan,
+        /** Set when this is `T::class` for a reified type parameter [reifiedParam]: the interpreter resolves it
+         *  from the call frame's reified-type bindings rather than [typeCandidates] (which hold only the erased
+         *  upper bound for a type parameter). */
+        val reifiedParam: String? = null,
+    ) : RNode
 
     // --- statements ---
     /** `try { … } catch (e: T) { … } … finally { … }`. The interpreter runs [body]; if it throws, the first
@@ -176,10 +254,11 @@ sealed interface RNode {
     data class Assign(val target: RNode, val value: RNode, override val source: SourceSpan) : RNode
     data class Return(val value: RNode?, override val source: SourceSpan) : RNode
     data class Throw(val value: RNode, override val source: SourceSpan) : RNode
-    /** Unlabeled `break` / `continue` — control flow handled by the enclosing [While]/[ForEach]. */
-    data class Break(override val source: SourceSpan) : RNode
-    data class Continue(override val source: SourceSpan) : RNode
-    data class While(val condition: RNode, val body: RNode, val doWhile: Boolean, override val source: SourceSpan) : RNode
+    /** `break` / `continue` — control flow handled by the enclosing [While]/[ForEach]. A non-null [label]
+     *  targets a specific labeled enclosing loop (`break@outer`); null is the ordinary innermost-loop jump. */
+    data class Break(override val source: SourceSpan, val label: String? = null) : RNode
+    data class Continue(override val source: SourceSpan, val label: String? = null) : RNode
+    data class While(val condition: RNode, val body: RNode, val doWhile: Boolean, override val source: SourceSpan, val label: String? = null) : RNode
     /** `for (x in xs)` with its convention methods pre-resolved (the interpreter just invokes them). */
     data class ForEach(
         val loopVar: RParam,
@@ -189,6 +268,7 @@ sealed interface RNode {
         val next: ResolvedCallable?,
         val body: RNode,
         override val source: SourceSpan,
+        val label: String? = null,
     ) : RNode
 
     /** The escape hatch that keeps the contract total. The interpreter refuses to run a tree containing one. */
@@ -241,6 +321,23 @@ data class REnumEntry(val name: String, val ordinal: Int, val args: List<RArg>)
 data class SuperCall(val fqn: String, val args: List<RArg>)
 
 /**
+ * A secondary constructor (`constructor(s: String) : this(s.length) { … }`). [params] are its value
+ * parameters; [delegatesToThis] is true for a `this(…)` delegation (to another constructor of the SAME class,
+ * which runs the primary params + init steps) and false for `super(…)` / no explicit delegation; [delegationArgs]
+ * are the lowered delegation arguments (evaluated in this constructor's parameter scope); [body] is the
+ * constructor body (run after delegation, with `this` and the params in scope).
+ */
+data class SecondaryCtor(
+    val params: List<RParam>,
+    val delegatesToThis: Boolean,
+    val delegationArgs: List<RArg>,
+    val body: RNode,
+    val diagnostics: List<LoweringDiagnostic>,
+) {
+    val isComplete: Boolean get() = diagnostics.isEmpty()
+}
+
+/**
  * A project-source class/object/enum lowered for interpretation — the type-level analogue of
  * [ResolvedFunction]. Source types aren't compiled at preview/run time, so the interpreter materializes them
  * as `SourceObject`s and runs their members from this model rather than reflecting bytecode.
@@ -276,11 +373,29 @@ data class ResolvedClass(
      *  (`State`/`MutableState`/`Lazy`) so a write hits the real `setValue()` and drives recomposition — the
      *  member analogue of [Binding.DelegatedLocal]. Empty for a class with no delegated members. */
     val delegatedProperties: Map<String, String> = emptyMap(),
+    /** `by`-delegated member properties whose delegate exposes a general MEMBER `getValue`/`setValue` operator
+     *  (a project delegate class, `Delegates.observable`, …) rather than a `.value` shortcut: property name →
+     *  the hidden field holding the delegate OBJECT. A read routes through `delegate.getValue(this, property)`
+     *  and a write through `delegate.setValue(this, property, value)` — the member analogue of
+     *  [Binding.DelegatedConvention]. Empty for a class with no such member. */
+    val conventionDelegatedProperties: Map<String, String> = emptyMap(),
+    /** Secondary constructors (`constructor(…) : this(…) { … }`), selected by arity at a `Type(…)` call when
+     *  the primary constructor doesn't match. Empty for the common single-constructor class. */
+    val secondaryCtors: List<SecondaryCtor> = emptyList(),
+    /** `class C : I by expr` interface delegations. Each names a hidden field (populated by an init step from
+     *  the delegate expression) that a member NOT overridden by the class forwards to. Empty for a class with
+     *  no `by` supertype. */
+    val interfaceDelegates: List<InterfaceDelegate> = emptyList(),
 ) {
     /** The data-class component property names, in constructor order. */
     val componentNames: List<String> get() = primaryParams.filter { it.isProperty }.map { it.name }
-    val isComplete: Boolean get() = diagnostics.isEmpty() && methods.values.all { it.isComplete }
+    val isComplete: Boolean get() = diagnostics.isEmpty() && methods.values.all { it.isComplete } && secondaryCtors.all { it.isComplete }
 }
+
+/** A `class C : I by expr` interface delegation: [fieldName] is the hidden field holding the delegate object
+ *  (set by an init step evaluating the delegate expression). A member of [interfaceFqn] the class does not
+ *  itself override is dispatched on that delegate object. */
+data class InterfaceDelegate(val interfaceFqn: String, val fieldName: String)
 
 /** Where lowering had to give up, and why. */
 data class LoweringDiagnostic(val reason: String, val source: SourceSpan)
@@ -340,6 +455,7 @@ fun reachableSourceClasses(
         cls.initSteps.forEach { addBody(it) }
         cls.methods.values.forEach { addBody(it.body) }
         cls.enumEntries.forEach { e -> e.args.forEach { addBody(it.value) } }
+        cls.secondaryCtors.forEach { ctor -> addBody(ctor.body); ctor.delegationArgs.forEach { addBody(it.value) } }
     }
 
     addBody(entry.body)
@@ -354,8 +470,11 @@ fun reachableSourceClasses(
                             reachClass(owner)
                         } else {
                             // A top-level source function (`Greeting(...)`) is keyed `name/arity` in the program;
-                            // a member/super call carries its declaring class as `owner` (`pkg.Type.name`).
-                            program["${callee.displayName}/${node.args.size}"]?.let { addBody(it.body) }
+                            // a member/super call carries its declaring class as `owner` (`pkg.Type.name`). Key by
+                            // the callee's DECLARED arity (from `declId`) so a call that omits trailing defaulted
+                            // arguments still follows the function's body (else its reachable classes are missed).
+                            val declaredArity = callee.declId.substringAfterLast('/').toIntOrNull() ?: node.args.size
+                            program["${callee.displayName}/$declaredArity"]?.let { addBody(it.body) }
                             if ('.' in owner) reachClass(owner.substringBeforeLast('.'))
                         }
                     }
@@ -384,6 +503,7 @@ fun RNode.children(): List<RNode> = when (this) {
     is RNode.NotNull -> listOf(value)
     is RNode.TypeCheck -> listOf(value)
     is RNode.Cast -> listOf(value)
+    is RNode.ClassLiteral -> listOfNotNull(receiver)
     is RNode.Try -> listOf(body) + catches.map { it.body } + listOfNotNull(finallyBlock)
     is RNode.LocalVar -> listOfNotNull(initializer)
     is RNode.Assign -> listOf(target, value)
@@ -449,6 +569,7 @@ fun expandPreviewModel(seed: PreviewFileModel, maxFiles: Int, provider: PreviewD
         c.initSteps.forEach(work::add)
         c.methods.values.forEach { work.add(it.body) }
         c.enumEntries.forEach { e -> e.args.forEach { work.add(it.value) } }
+        c.secondaryCtors.forEach { ctor -> work.add(ctor.body); ctor.delegationArgs.forEach { work.add(it.value) } }
     }
     program.values.forEach { work.add(it.body) }
     classesByFqn.values.toList().forEach(::enqueueClass)
@@ -480,7 +601,17 @@ fun expandPreviewModel(seed: PreviewFileModel, maxFiles: Int, provider: PreviewD
                         val owner = callee.declId.substringBeforeLast('/')
                         when {
                             callee.isConstructor -> requestType(callee.displayName) // carries the simple name
-                            node.dispatch == DispatchKind.TOP_LEVEL -> requestFn(callee.displayName, node.args.size)
+                            // Key by the callee's DECLARED arity so an omitted-defaults call's `already in program`
+                            // short-circuit matches the registered `name/declaredArity` key.
+                            node.dispatch == DispatchKind.TOP_LEVEL ->
+                                requestFn(callee.displayName, callee.declId.substringAfterLast('/').toIntOrNull() ?: node.args.size)
+                            // A top-level EXTENSION function declared in another file (`fun Foo.bar()`): its `declId`
+                            // owner is the package/facade (a dotted name), so without this branch it fell through to
+                            // `requestType` on the package and the declaring file was never merged — the interpreter
+                            // then threw `no source extension \`bar/0\``. It is keyed in the program by `name/valueParams`
+                            // (the receiver isn't a value parameter), the same shape as a top-level function.
+                            node.dispatch == DispatchKind.EXTENSION || node.dispatch == DispatchKind.MEMBER_EXTENSION ->
+                                requestFn(callee.displayName, callee.declId.substringAfterLast('/').toIntOrNull() ?: node.args.size)
                             '.' in owner -> requestType(owner.substringBeforeLast('.')) // a member's owner FQN
                         }
                     }

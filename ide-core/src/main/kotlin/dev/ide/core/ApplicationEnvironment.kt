@@ -5,6 +5,8 @@ import dev.ide.model.impl.ProjectTemplateRegistry
 import dev.ide.platform.ServiceKey
 import dev.ide.platform.impl.ApplicationContainer
 import dev.ide.platform.impl.PlatformCore
+import dev.ide.plugin.impl.PluginCatalog
+import dev.ide.plugin.impl.PluginManager
 
 /** APPLICATION-scoped Create-Project template registry key (resolved from [ApplicationEnvironment.container]
  *  so the picker can enumerate templates with no project open). */
@@ -16,8 +18,10 @@ internal val PROJECT_TEMPLATES = ServiceKey<ProjectTemplateRegistry>("ide.projec
  *  - the app-global extension registry + **message bus** + **model lock** ([platform]);
  *  - the process-global [ApplicationContainer] (parent of every project's workspace container), so
  *    APPLICATION-scoped services (the warm K2 compiler, the template registry) survive project switches; and
- *  - the project-INDEPENDENT host plugin contributions (module types, facet codecs, file icons, Create-Project
- *    templates), registered **once** here for the app's lifetime.
+ *  - the IDE's **built-in plugins** ([BuiltInPlugins]), loaded **once** here for the app's lifetime through the
+ *    [PluginManager]. The IDE is the first consumer of its own plugin API: every module type, language backend,
+ *    index, analyzer, template, scoped service, and action is contributed by a built-in [dev.ide.plugin.Plugin],
+ *    in dependency order — there is no separate imperative host-wiring path.
  *
  * Each opened project gets a CHILD [PlatformCore] whose registry **parents** [platform]'s and whose bus + lock
  * ARE the app's — so app extensions, model events, and locking are application-wide while per-project
@@ -26,7 +30,7 @@ internal val PROJECT_TEMPLATES = ServiceKey<ProjectTemplateRegistry>("ide.projec
  *
  * This is the home for application bootstrap, so [ProjectManager] can be purely about *managing* projects.
  */
-class ApplicationEnvironment : AutoCloseable {
+class ApplicationEnvironment(disabledPluginIds: Set<String> = emptySet()) : AutoCloseable {
 
     /** The app substrate: app-global extension registry + message bus + model lock. */
     val platform: PlatformCore = PlatformCore()
@@ -34,24 +38,42 @@ class ApplicationEnvironment : AutoCloseable {
     /** Process-global application service container over [platform]'s registry; parents every project's. */
     val container: ApplicationContainer = ApplicationContainer(platform.extensions)
 
-    /** Facet codecs from the host registration; reused by every opened project to decode `module.toml`. */
-    val codecs: FacetCodecRegistry
+    /** Facet codecs, now [FACET_CODEC_EP]-backed over the app registry (like the module-type / file-icon /
+     *  template registries). The android built-in plugin registers the AndroidFacet codec through it; every
+     *  opened project reuses it to decode `module.toml`. */
+    val codecs: FacetCodecRegistry = FacetCodecRegistry(platform.extensions)
 
     /** The currently-open project's engine, or null. Set by the backend on project swap; read by app-level
      *  extension callbacks (e.g. command actions) that fire outside any project's service scope. */
     @Volatile
     var activeEngine: IdeServices? = null
 
+    /** Drives the IDE's built-in plugins onto [platform]'s app-global registry. The app-wide message bus is
+     *  passed so a plugin's registrar can publish/subscribe on the same bus the engine's events flow through. */
+    private val pluginManager = PluginManager(platform.extensions, platform.messageBus)
+
+    /**
+     * The built-in plugin catalog: every built-in plus which are active, given the host's persisted disabled
+     * set (passed into this constructor). Only the enabled subset is loaded; enabling/disabling a plugin is
+     * applied on the next launch (the manager loads once here, it does not hot-swap). The Plugins settings UI
+     * reads this to render toggles.
+     */
+    val pluginCatalog: PluginCatalog
+
     init {
-        // Register every project-independent + reusable host contribution ONCE on the app registry. The
-        // capturing ones (command actions, synthetic-R, the XML resource host) resolve the open project lazily
-        // through [activeEngine] at callback time — safe to pass `this` mid-construction (it is dereferenced
-        // only later, never during registration).
-        codecs = IdeServices.registerStaticPlugins(platform.extensions, this).second
+        // Load every ENABLED built-in contribution ONCE on the app registry, in dependency order. The catalog
+        // keeps essentials (and their transitive dependencies) on regardless of the disabled set, and drops a
+        // disabled plugin's dependents so the load graph stays valid. The capturing plugins (command actions,
+        // synthetic-R, the XML resource host) resolve the open project lazily through [activeEngine] at callback
+        // time — safe to pass `this` mid-construction (it is dereferenced only later, never during register()).
+        val allPlugins = BuiltInPlugins.assemble(this, codecs)
+        pluginCatalog = PluginCatalog(allPlugins.map { it.manifest }, disabledPluginIds)
+        pluginManager.loadAll(allPlugins.filter { pluginCatalog.isEnabled(it.manifest.id) })
         container.registerServiceIfAbsent(PROJECT_TEMPLATES) { ProjectTemplateRegistry(platform.extensions) }
     }
 
     override fun close() {
+        runCatching { pluginManager.unloadAll() }
         runCatching { container.dispose() }
         runCatching { platform.dispose() }
     }

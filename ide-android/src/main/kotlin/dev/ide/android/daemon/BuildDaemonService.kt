@@ -13,11 +13,13 @@ import android.os.IBinder
 import android.os.Looper
 import android.os.Process
 import dev.ide.android.AndroidIde
+import dev.ide.core.AppLogLevel
 import dev.ide.core.IdeServices
 import dev.ide.core.ProjectManager
 import dev.ide.platform.log.Log
 import dev.ide.ui.backend.RunPhase
 import dev.ide.ui.backend.RunStatus
+import dev.ide.ui.backend.UiLogLevel
 import dev.ide.ui.backend.StepStatus
 import dev.ide.ui.backend.UiPermissionDecision
 import kotlinx.coroutines.CoroutineScope
@@ -26,6 +28,8 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 
 /**
  * The headless build/run daemon for build-process isolation (docs/build-process-isolation.md). Runs in the
@@ -85,6 +89,9 @@ class BuildDaemonService : Service() {
     private var currentGeneration: Int = -1
     private var streamJob: Job? = null
 
+    // Serializes open() requests — see the comment inside it. One engine open at a time, ever.
+    private val openMutex = Mutex()
+
     private val binder = object : IBuildDaemon.Stub() {
         override fun pid(): Int = Process.myPid()
 
@@ -92,35 +99,48 @@ class BuildDaemonService : Service() {
             callback = cb
         }
 
-        override fun open(workspaceDir: String?, modelGeneration: Int) {
+        override fun open(workspaceDir: String?, modelGeneration: Int, requestId: Int) {
             val dir = workspaceDir ?: return
-            // Idempotent: re-opening the already-open project is a fast no-op — never pay the engine
-            // re-create (model load + index). Lets the UI safely open-then-build on every Run. BUT only when
-            // the model is also unchanged: a higher [modelGeneration] means the UI committed a config edit
-            // (and saved module.toml), so the cached model is stale and must be reloaded from disk.
-            if (dir == currentDir && modelGeneration == currentGeneration && services != null) {
-                runCatching { callback?.onOpened(true, null) }
-                return
-            }
             scope.launch {
-                runCatching {
-                    val mgr = manager ?: AndroidIde.createProjectManager(this@BuildDaemonService).also { manager = it }
-                    services?.let { old -> runCatching { old.close() } }
-                    // buildOnly: this is a headless build engine — skip the editor index + Kotlin warm-ups so
-                    // that baseline heap is free for the dexer/R8 (the build's real ceiling).
-                    mgr.open(dir, buildOnly = true).also {
-                        services = it
-                        currentDir = dir
-                        currentGeneration = modelGeneration
-                        startStreaming(it)
+                // Serialized: a second open() arriving while the first cold open is still in flight (a Run
+                // retry, or a reconnect re-drive) used to race a SECOND full engine creation on the same
+                // directory — two concurrent IdeServices inits fighting over process-global state, and the
+                // later one closing the earlier (possibly mid-build) engine. Under the mutex the duplicate
+                // just waits, hits the idempotent fast path below, and still gets its own onOpened reply.
+                openMutex.withLock {
+                    // Idempotent: re-opening the already-open project is a fast no-op — never pay the engine
+                    // re-create (model load + index). Lets the UI safely open-then-build on every Run. BUT only
+                    // when the model is also unchanged: a higher [modelGeneration] means the UI committed a
+                    // config edit (and saved module.toml), so the cached model is stale and must be reloaded.
+                    if (dir == currentDir && modelGeneration == currentGeneration && services != null) {
+                        runCatching { callback?.onOpened(requestId, true, null) }
+                        return@withLock
                     }
-                }.onSuccess {
-                    log.info("daemon(pid=${Process.myPid()}): opened $dir")
-                    runCatching { callback?.onOpened(true, null) }
-                }.onFailure { e ->
-                    currentDir = null
-                    log.warn("daemon(pid=${Process.myPid()}): open failed: ${e.message}", e)
-                    runCatching { callback?.onOpened(false, e.message ?: e.toString()) }
+                    // Show life in the build console right away: the cold open (model load + engine init) can
+                    // take a while on a phone, and a silent console reads as a hung build.
+                    runCatching { callback?.onLog("Build process: loading project…") }
+                    runCatching {
+                        val mgr = manager ?: AndroidIde.createProjectManager(this@BuildDaemonService).also { manager = it }
+                        services?.let { old ->
+                            runCatching { old.buildRunner.stopBuild() } // never close an engine mid-build
+                            runCatching { old.close() }
+                        }
+                        // buildOnly: this is a headless build engine — skip the editor index + Kotlin warm-ups
+                        // so that baseline heap is free for the dexer/R8 (the build's real ceiling).
+                        mgr.open(dir, buildOnly = true).also {
+                            services = it
+                            currentDir = dir
+                            currentGeneration = modelGeneration
+                            startStreaming(it)
+                        }
+                    }.onSuccess {
+                        log.info("daemon(pid=${Process.myPid()}): opened $dir")
+                        runCatching { callback?.onOpened(requestId, true, null) }
+                    }.onFailure { e ->
+                        currentDir = null
+                        log.warn("daemon(pid=${Process.myPid()}): open failed: ${e.message}", e)
+                        runCatching { callback?.onOpened(requestId, false, e.message ?: e.toString()) }
+                    }
                 }
             }
         }
@@ -136,11 +156,13 @@ class BuildDaemonService : Service() {
             id ?: return
             buildActive = true; refreshForeground() // promote before work starts, so :build is protected at once
             services?.buildRunner?.runTask(id)
+                ?: runCatching { callback?.onLog("Build process: no project open — press Run to try again.") }
         }
 
         override fun runBuild() {
             buildActive = true; refreshForeground()
             services?.buildRunner?.runBuild()
+                ?: runCatching { callback?.onLog("Build process: no project open — press Run to try again.") }
         }
 
         override fun stopBuild() {
@@ -162,6 +184,10 @@ class BuildDaemonService : Service() {
             val dec = UiPermissionDecision.entries.getOrNull(decision) ?: return
             services?.buildRunner?.answerPermission(id, dec)
         }
+
+        override fun clearAppLog() {
+            services?.buildRunner?.clearAppLog()
+        }
     }
 
     /** Collect the engine's snapshot flows and stream the changes as deltas to the registered callback:
@@ -173,11 +199,50 @@ class BuildDaemonService : Service() {
             launch { streamBuildState(svc) }
             launch { streamRunConsole(svc) }
             launch { streamPermission(svc) }
+            launch { streamAppLog(svc) }
+        }
+    }
+
+    /** Stream the app-log (Logcat tab) deltas: new lines + connection/session changes. The daemon hosts the
+     *  LocalServerSocket the debug app connects to; [dev.ide.core.IdeServices.appLogState] carries the ring
+     *  buffer + a monotonic [dev.ide.core.AppLogSnapshot.totalAppended] so we forward only the lines the UI
+     *  hasn't seen even after the buffer trims, and detect a session reset (the counter going backwards). */
+    private suspend fun streamAppLog(svc: IdeServices) {
+        var lastTotal = 0L
+        var lastConnected = false
+        var lastPkg: String? = null
+        svc.appLogState.collect { snap ->
+            val cb = callback
+            val reset = snap.totalAppended < lastTotal // start()/clear() reset the counter → new session
+            if (reset) {
+                lastTotal = 0L
+                runCatching { cb?.onAppLogState(snap.connected, snap.packageName ?: "", true) }
+                lastConnected = snap.connected; lastPkg = snap.packageName
+            } else if (snap.connected != lastConnected || snap.packageName != lastPkg) {
+                runCatching { cb?.onAppLogState(snap.connected, snap.packageName ?: "", false) }
+                lastConnected = snap.connected; lastPkg = snap.packageName
+            }
+            // Held entries span global indices [firstHeld, totalAppended); forward those past lastTotal.
+            val firstHeld = snap.totalAppended - snap.entries.size
+            val startIdx = (lastTotal - firstHeld).coerceIn(0, snap.entries.size.toLong()).toInt()
+            for (i in startIdx until snap.entries.size) {
+                val e = snap.entries[i]
+                val level = when (e.level) {
+                    AppLogLevel.VERBOSE, AppLogLevel.DEBUG -> UiLogLevel.Debug
+                    AppLogLevel.INFO -> UiLogLevel.Info
+                    AppLogLevel.WARN -> UiLogLevel.Warn
+                    AppLogLevel.ERROR -> UiLogLevel.Error
+                }
+                runCatching { cb?.onAppLog(level.ordinal, e.tag, e.pid, e.tid, e.message, e.timestampMs) }
+            }
+            lastTotal = snap.totalAppended
         }
     }
 
     private suspend fun streamBuildState(svc: IdeServices) {
-        var lastStatus: RunStatus? = null
+        // Seeded Idle (not null): a fresh engine's initial state is Idle, and emitting it at stream start
+        // would overwrite the UI's optimistic Running while the queued first build is about to launch.
+        var lastStatus: RunStatus? = RunStatus.Idle
         var lastLogCount = 0
         var lastDiagCount = 0
         val lastStep = HashMap<String, StepStatus>()

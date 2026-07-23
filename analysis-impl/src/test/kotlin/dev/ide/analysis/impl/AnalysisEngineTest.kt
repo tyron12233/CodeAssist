@@ -143,6 +143,23 @@ class AnalysisEngineTest {
     }
 
     @Test
+    fun fileSuppressCoversTheWholeFileIncludingImports() = runBlocking {
+        val file = FakeFile("/src/Main.java")
+        // `@file:Suppress("style.x")` at the very top; the finding sits BEFORE any declaration (like an
+        // unused-import / package-line warning) — a spot a declaration-scoped @Suppress can never reach.
+        val src = "@file:Suppress(\"style.x\")\npackage demo;\nimport a.b.C;\nclass Main {}"
+        val at = TextRange(src.indexOf("import"), src.indexOf("import") + 6)
+        val target = target(file, src) // no declaration nodes — whole-file scope must still cover it
+        val suppressed = RecordingAnalyzer(AnalyzerId("sx"), AnalyzerTier.SYNTAX, null, "style.x", atRange = at)
+        val other = RecordingAnalyzer(AnalyzerId("sy"), AnalyzerTier.SYNTAX, null, "style.y", atRange = at)
+        val engine = engine(analyzers = listOf(suppressed, other), env = env(target))
+
+        val merged = engine.analyzeNow(file)
+        assertTrue(merged.none { it.code == "style.x" }, "@file:Suppress(\"style.x\") covers the whole file, imports included")
+        assertTrue(merged.any { it.code == "style.y" }, "a code not listed in @file:Suppress is untouched")
+    }
+
+    @Test
     fun noinspectionSuppressesFollowingLine() = runBlocking {
         val file = FakeFile("/src/Main.java")
         val src = "class Main {\n  // noinspection style.x\n  int bad;\n}"

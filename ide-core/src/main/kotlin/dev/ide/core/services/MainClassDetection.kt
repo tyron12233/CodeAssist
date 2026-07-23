@@ -3,7 +3,7 @@ package dev.ide.core.services
 import dev.ide.core.EngineContext
 import dev.ide.index.EntryPointIndex
 import dev.ide.index.EntryPointValue
-import dev.ide.lang.jdt.index.JavaMainScan
+import dev.ide.lang.java.index.JavaMainScan
 import dev.ide.lang.kotlin.index.KotlinMainScan
 import dev.ide.model.Module
 import java.nio.file.Files

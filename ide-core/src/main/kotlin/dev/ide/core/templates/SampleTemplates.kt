@@ -18,14 +18,26 @@ import dev.ide.model.template.TemplateParameter
  * templates"); they otherwise flow through the exact same create path as any other template.
  */
 internal object SampleSupport {
-    /** Read a bundled sample resource, or fail loudly (a missing sample is a build/packaging bug). */
-    private fun readResource(path: String): String =
-        SampleSupport::class.java.classLoader.getResourceAsStream(path)?.use { String(it.readBytes(), Charsets.UTF_8) }
+    /** Read a bundled sample resource's raw bytes, or fail loudly (a missing sample is a build/packaging bug). */
+    private fun readResourceBytes(path: String): ByteArray =
+        SampleSupport::class.java.classLoader.getResourceAsStream(path)?.use { it.readBytes() }
             ?: error("Missing bundled sample resource: $path")
 
-    /** Copy each of [files] (paths relative to both the sample resource root and the project root). */
+    /** True if [bytes] has a NUL in its first block — the same "not text" sniff the editor uses. */
+    private fun looksBinary(bytes: ByteArray): Boolean =
+        (0 until minOf(bytes.size, 8000)).any { bytes[it].toInt() == 0 }
+
+    /**
+     * Copy each of [files] (paths relative to both the sample resource root and the project root). A binary
+     * asset (PNG/font/…) is written byte-exact via [ProjectScaffold.writeBytes]; text goes through
+     * [ProjectScaffold.writeText] as before, so existing sample output is unchanged.
+     */
     fun copyFiles(scaffold: ProjectScaffold, sampleId: String, files: List<String>) {
-        for (rel in files) scaffold.writeText(rel, readResource("samples/$sampleId/$rel"))
+        for (rel in files) {
+            val bytes = readResourceBytes("samples/$sampleId/$rel")
+            if (looksBinary(bytes)) scaffold.writeBytes(rel, bytes)
+            else scaffold.writeText(rel, String(bytes, Charsets.UTF_8))
+        }
     }
 }
 

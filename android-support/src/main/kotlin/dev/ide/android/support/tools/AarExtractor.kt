@@ -1,5 +1,7 @@
 package dev.ide.android.support.tools
 
+import java.nio.file.AtomicMoveNotSupportedException
+import java.nio.file.FileAlreadyExistsException
 import java.nio.file.Files
 import java.nio.file.Path
 import java.nio.file.StandardCopyOption
@@ -45,25 +47,50 @@ object AarExtractor {
         )
     }
 
-    private fun isAlreadyExploded(into: Path): Boolean =
-        Files.isRegularFile(into.resolve("classes.jar")) || Files.isRegularFile(into.resolve(".exploded"))
+    // The `.exploded` marker (written last, inside a fully-extracted dir) is the ONLY completion signal.
+    // Keying on `classes.jar` — which is written mid-stream, being just another zip entry — would treat a
+    // crash/cancel that stopped after `classes.jar` but before `res/`+`assets/` as "already done", reusing a
+    // dir with missing/truncated resources and native assets.
+    private fun isAlreadyExploded(into: Path): Boolean = Files.isRegularFile(into.resolve(".exploded"))
 
+    /**
+     * Extract into a temp sibling dir and atomically swap it into place, so an interrupted extraction never
+     * leaves a partial dir that reads as complete. The marker is written into the temp dir *before* the swap,
+     * and [into] receives it only as part of the fully-populated directory.
+     */
     private fun unzip(aar: Path, into: Path) {
-        Files.createDirectories(into)
-        ZipFile(aar.toFile()).use { zf ->
-            val entries = zf.entries()
-            while (entries.hasMoreElements()) {
-                val e = entries.nextElement()
-                val target = into.resolve(e.name).normalize()
-                require(target.startsWith(into)) { "unsafe zip entry (zip slip): ${e.name}" }
-                if (e.isDirectory) {
-                    Files.createDirectories(target)
-                } else {
-                    target.parent?.let { Files.createDirectories(it) }
-                    zf.getInputStream(e).use { Files.copy(it, target, StandardCopyOption.REPLACE_EXISTING) }
+        val parent = checkNotNull(into.parent) { "AAR explode target must have a parent dir: $into" }
+        Files.createDirectories(parent)
+        val tmp = Files.createTempDirectory(parent, "aar-explode-")
+        try {
+            ZipFile(aar.toFile()).use { zf ->
+                val entries = zf.entries()
+                while (entries.hasMoreElements()) {
+                    val e = entries.nextElement()
+                    val target = tmp.resolve(e.name).normalize()
+                    require(target.startsWith(tmp)) { "unsafe zip entry (zip slip): ${e.name}" }
+                    if (e.isDirectory) {
+                        Files.createDirectories(target)
+                    } else {
+                        target.parent?.let { Files.createDirectories(it) }
+                        zf.getInputStream(e).use { Files.copy(it, target, StandardCopyOption.REPLACE_EXISTING) }
+                    }
                 }
             }
+            (tmp.resolve(".exploded")).writeText(aar.fileName.toString())
+            // Swap into place: drop any partial/previous dir (no marker → not trusted), then move the
+            // fully-extracted temp dir over it. A crash in the gap leaves NO `into`, so the next run re-extracts.
+            if (Files.exists(into)) into.toFile().deleteRecursively()
+            try {
+                Files.move(tmp, into, StandardCopyOption.ATOMIC_MOVE)
+            } catch (_: AtomicMoveNotSupportedException) {
+                Files.move(tmp, into)
+            } catch (e: FileAlreadyExistsException) {
+                // A concurrent explode of the same AAR won the swap; its result is complete — reuse it.
+                if (!isAlreadyExploded(into)) throw e
+            }
+        } finally {
+            if (Files.exists(tmp)) tmp.toFile().deleteRecursively()
         }
-        (into.resolve(".exploded")).writeText(aar.fileName.toString())
     }
 }

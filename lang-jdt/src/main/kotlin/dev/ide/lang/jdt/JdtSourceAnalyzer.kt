@@ -2,6 +2,7 @@ package dev.ide.lang.jdt
 
 import dev.ide.lang.AnalysisResult
 import dev.ide.lang.CompilationContext
+import dev.ide.lang.JvmIndexScopeProvider
 import dev.ide.lang.SourceAnalyzer
 import dev.ide.lang.completion.CompletionContribution
 import dev.ide.lang.dom.DomNode
@@ -69,16 +70,16 @@ import java.nio.file.Paths
  * from the boot classpath. Re-reading the sourcepath each parse means edits saved to dependency files
  * are picked up immediately.
  */
-class JdtSourceAnalyzer(ctx: CompilationContext) : SourceAnalyzer, Disposable {
+class JdtSourceAnalyzer(ctx: CompilationContext) : SourceAnalyzer, Disposable, JvmIndexScopeProvider {
 
     /** Project source roots only (this module + dependencies) — for unit-name/FQCN derivation. */
-    val sourceRootPaths: List<Path> =
+    override val sourceRootPaths: List<Path> =
         ctx.sourceRoots.mapNotNull { runCatching { Paths.get(it.path) }.getOrNull() }.filter { Files.isDirectory(it) }
 
     /** Source roots for the name environment: project roots + any synthetic-stub platform dir. */
     val completionSourceRoots: List<Path>
-    val classpathJarPaths: List<Path>
-    val jdkHome: Path?
+    override val classpathJarPaths: List<Path>
+    override val jdkHome: Path?
     val complianceLevel: Long
 
     /**
@@ -89,12 +90,15 @@ class JdtSourceAnalyzer(ctx: CompilationContext) : SourceAnalyzer, Disposable {
      */
     var sourceMethodResolver: SourceMethodResolver
         private set
-    private val baseSourceDirs: List<Path>
-    private val baseSourceJars: List<Path>
+    // var (not val): the host composes extra sources after construction — the JDK `src.zip` via [addSourceJars]
+    // and the SDK-Manager-installed Android platform sources via [addSourceDirs]. Each setter persists its
+    // addition here so the two compose (a later setter rebuilds the resolver over the accumulated set).
+    private var baseSourceDirs: List<Path> = emptyList()
+    private var baseSourceJars: List<Path> = emptyList()
 
     /** Immutable library/SDK SOURCE archives + dirs (`-sources.jar`, JDK `src.zip`, Android `sources/`) — no
      *  project source. The host feeds these to the source-doc index ([IndexScope.sourceArchives]). */
-    var librarySourceArchives: List<Path> = emptyList()
+    override var librarySourceArchives: List<Path> = emptyList()
         private set
 
     /** Live editor buffers (FQCN -> source) for in-memory completion; set by the host (e.g. IdeServices). */
@@ -107,6 +111,10 @@ class JdtSourceAnalyzer(ctx: CompilationContext) : SourceAnalyzer, Disposable {
     private val classpath: Array<String>
     private val includeVmBootclasspath: Boolean
     private val compilerOptions: Map<String, String>
+
+    /** True when `android.jar` is this module's platform (Android module, or on-device). Console/JVM modules
+     *  are false — completion uses this to keep `android.*` auto-import suggestions out of a non-Android file. */
+    val isAndroidPlatform: Boolean
 
     init {
         val bootDirs = ctx.bootClasspath.entries.mapNotNull { runCatching { Paths.get(it.root.path) }.getOrNull() }.filter { Files.isDirectory(it) }
@@ -126,7 +134,7 @@ class JdtSourceAnalyzer(ctx: CompilationContext) : SourceAnalyzer, Disposable {
         classpath = jars.map { it.toString() }.toTypedArray()
         // Whether `android.jar` is the platform (no real modular JDK underneath) — true on-device (ART) and
         // for an Android project on desktop.
-        val isAndroidPlatform = jars.any { it.fileName?.toString() == "android.jar" }
+        isAndroidPlatform = jars.any { it.fileName?.toString() == "android.jar" }
         // On a real JDK, the public DOM ASTParser needs a recognized system library or it throws "Missing
         // system library"; a plain classpath jar isn't one, so it must be handed the running VM's modular JRE.
         // On an android.jar platform, DON'T include the VM bootclasspath:
@@ -188,7 +196,25 @@ class JdtSourceAnalyzer(ctx: CompilationContext) : SourceAnalyzer, Disposable {
         val present = extra.filter { Files.isRegularFile(it) }
         val jars = (baseSourceJars + present).distinct()
         if (jars.size != baseSourceJars.size) {
+            baseSourceJars = jars
             sourceMethodResolver = SourceMethodResolver(baseSourceDirs, jars)
+            librarySourceArchives = (librarySourceArchives + present).distinct()
+        }
+    }
+
+    /**
+     * Add extra source DIRS for names/javadoc, rebuilding the resolver. The host uses this for the Android
+     * platform `sources/android-NN` dir when the analyzer can't derive it from `android.jar`'s on-disk layout
+     * — notably on device, where `android.jar` is a bundled flat asset (not `platforms/android-NN/android.jar`),
+     * so the SDK-Manager-installed sources have to be attached explicitly. Deduped, so a desktop dir the
+     * `configure` derivation already found is not added twice.
+     */
+    fun addSourceDirs(extra: List<Path>) {
+        val present = extra.filter { Files.isDirectory(it) }
+        val dirs = (baseSourceDirs + present).distinct()
+        if (dirs.size != baseSourceDirs.size) {
+            baseSourceDirs = dirs
+            sourceMethodResolver = SourceMethodResolver(dirs, baseSourceJars)
             librarySourceArchives = (librarySourceArchives + present).distinct()
         }
     }

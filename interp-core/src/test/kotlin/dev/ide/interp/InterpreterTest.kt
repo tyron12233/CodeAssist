@@ -115,6 +115,28 @@ class InterpreterTest {
     }
 
     @Test
+    fun typeClassLiteralEvaluatesToTheJvmClass() {
+        // `X::class.java` yields the `java.lang.Class` token — the `Intent(context, X::class.java)` argument the
+        // Compose preview used to crash on (`KtClassLiteralExpression` was Unsupported). A mapped Kotlin type
+        // (`String`) resolves to its JVM class.
+        assertEquals(java.lang.String::class.java, runProgram("package demo\nfun f(): Any = String::class.java", "f/0", emptyList()))
+    }
+
+    @Test
+    fun instanceClassLiteralEvaluatesToTheRuntimeClass() {
+        // `value::class.java` — the runtime class of the evaluated receiver.
+        assertEquals(java.lang.String::class.java, runProgram("package demo\nfun f(): Any = \"hi\"::class.java", "f/0", emptyList()))
+    }
+
+    @Test
+    fun bareClassLiteralEvaluatesToAKClass() {
+        // `X::class` (no `.java`) yields a KClass whose `.java` is the JVM class.
+        val v = runProgram("package demo\nfun f(): Any = String::class", "f/0", emptyList())
+        assertTrue(v is kotlin.reflect.KClass<*>, "a bare `::class` must yield a KClass; got ${v?.javaClass}")
+        assertEquals(java.lang.String::class.java, (v as kotlin.reflect.KClass<*>).java)
+    }
+
+    @Test
     fun whenExpressionWithSubject() {
         // `when (x) { 1 -> ; 2 -> ; else -> }` → if/else chain comparing the subject (evaluated once).
         val code = "package demo\nfun label(x: Int): String = when (x) { 1 -> \"one\"\n  2 -> \"two\"\n  else -> \"many\" }"
@@ -132,11 +154,51 @@ class InterpreterTest {
     }
 
     @Test
+    fun omittedTrailingDefaultArgumentIsFilled() {
+        // The Compose-template shape: `Greeting("Compose")` calls `fun Greeting(name, modifier = Modifier)` with
+        // the trailing defaulted parameter omitted. The call has FEWER args than the declared arity, so it must
+        // (a) still find the function — the reported `no source function Greeting/1` — and (b) fill the default.
+        val code = "package demo\n" +
+            "fun greet(name: String, greeting: String = \"Hi \"): String = greeting + name\n" +
+            "fun caller(): String = greet(\"Bob\")"
+        // Direct call with the trailing default omitted → the default is substituted at bind time.
+        assertEquals("Hi Bob", runProgram(code, "greet/2", listOf("Bob")))
+        // Through a caller whose body calls `greet` with one argument → the TOP_LEVEL lookup resolves the
+        // 2-parameter declaration by its declared arity rather than missing on `greet/1`.
+        assertEquals("Hi Bob", runProgram(code, "caller/0", emptyList()))
+    }
+
+    @Test
+    fun namedArgumentsBindByNameAndFillOmittedDefaults() {
+        // A source top-level call with NAMED arguments must reorder them into the declared parameter order
+        // (previously they bound positionally — `greeting` landed in `name`), and an omitted defaulted parameter
+        // still takes its default.
+        val code = "package demo\n" +
+            "fun greet(name: String, greeting: String = \"Hi \"): String = greeting + name\n" +
+            "fun reordered(): String = greet(greeting = \"Yo \", name = \"Al\")\n" +
+            "fun defaulted(): String = greet(name = \"Al\")"
+        assertEquals("Yo Al", runProgram(code, "reordered/0", emptyList()))
+        assertEquals("Hi Al", runProgram(code, "defaulted/0", emptyList()))
+    }
+
+    @Test
+    fun defaultReferencingAnEarlierParameterIsEvaluatedInTheCalleeFrame() {
+        // A default expression may read an earlier parameter (`fun f(a, b = a + 1)`); it must evaluate in the
+        // callee's frame where `a` is already bound, not blow up or read null.
+        val code = "package demo\n" +
+            "fun f(a: Int, b: Int = a + 1): Int = a + b\n" +
+            "fun g(): Int = f(10)"
+        assertEquals(21, runProgram(code, "f/2", listOf(10)))
+        assertEquals(21, runProgram(code, "g/0", emptyList()))
+    }
+
+    @Test
     fun unsupportedConstructFailsLoudly() {
-        // A construct outside the interpreter's subset (a non-Int range) makes the function incomplete → the
-        // interpreter refuses it rather than producing a wrong result. (Indexed assignment `xs[i] = v` is now
-        // supported — see SourceClassTest.indexedAssignmentThroughSetOperator.)
-        val code = "package demo\nfun f() { val r = 1L..5L }"
+        // A construct outside the interpreter's subset (an anonymous FUNCTION expression) makes the function
+        // incomplete → the interpreter refuses it rather than producing a wrong result. (Anonymous OBJECTS
+        // `object : Foo { }`, non-Int ranges, indexed assignment `xs[i] = v`, and labeled break/continue are now
+        // supported — see AnonymousObjectTest / RangeLoweringTest / LabeledLoopTest.)
+        val code = "package demo\nfun f(): Any = fun(): Int = 5"
         val ex = assertFailsWith<InterpreterException> { runProgram(code, "f/0", emptyList()) }
         assertTrue(ex.message?.contains("unsupported") == true, "message=${ex.message}")
     }

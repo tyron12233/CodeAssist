@@ -4,6 +4,7 @@
 // kotlin-android plugin); Compose comes from the Compose Multiplatform + Compose-compiler plugins.
 import com.android.build.gradle.internal.tasks.factory.dependsOn
 import dev.ide.build.RelocateTypesInJar
+import org.gradle.api.attributes.java.TargetJvmEnvironment
 // Imported (not fully-qualified) because the Java plugin's `java` project extension shadows the `java.*`
 // package inside a build script — `java.io.File` would parse as `(java extension).io`.
 import java.io.File
@@ -116,6 +117,46 @@ val bundleComposeRuntimeAsset = tasks.register<Copy>("bundleComposeRuntimeAsset"
     rename { "compose-runtime.jar" }
 }
 
+// --- Android compose-runtime classes.jar (androidTest VM interpret spike) ------------------------
+// VmComposeRuntimeArtSpike interprets the real ANDROID compose-runtime bytecode with the :jvm-interp VM.
+// The app's copy is dexed (no .class bytes on ART), so stage the artifact's classes.jar as an androidTest
+// asset. This is the androidx artifact (not the desktop JAR above) so the Android actuals run against the
+// real platform classes the bridge resolves on device.
+val vmSpikeComposeRuntimeAar: Configuration by configurations.creating {
+    isCanBeConsumed = false
+    isCanBeResolved = true
+    isTransitive = false
+}
+dependencies { vmSpikeComposeRuntimeAar("androidx.compose.runtime:runtime-android:1.10.5@aar") }
+
+val bundleVmSpikeComposeRuntimeAsset = tasks.register<Copy>("bundleVmSpikeComposeRuntimeAsset") {
+    description = "Stage the androidx compose-runtime classes.jar as an androidTest asset for the VM interpret spike."
+    from(vmSpikeComposeRuntimeAar.elements.map { zipTree(it.single().asFile) }) { include("classes.jar") }
+    rename { "compose-runtime-android.jar" }
+    into(layout.buildDirectory.dir("vm-spike-asset/vmbench"))
+}
+
+// --- applog-runtime asset (debug-only app-log bridge injected into user apps) --------------------
+// The Android build system weaves this tiny jar (a ContentProvider + LocalSocket log forwarder) into DEBUG
+// builds so a running app forwards its logs to the IDE's Logcat tab. It ships as a plain jar of .class files
+// (compiled against a stub android.jar), dexed into the user's app by the normal external-dex path — so we
+// stage it as an asset the app extracts to a file and hands to AndroidBuildSystem. It is a PROJECT artifact,
+// so `from(configuration)` (NOT `.elements.map { it.asFile }`) is used: the configuration carries the
+// `:applog-runtime:jar` task dependency, so the jar is built before this Copy runs (otherwise the asset dir
+// is empty and the app throws FileNotFoundException on startup extracting it).
+val appLogRuntimeArtifact: Configuration by configurations.creating {
+    isCanBeConsumed = false
+    isCanBeResolved = true
+}
+dependencies { appLogRuntimeArtifact(project(":applog-runtime")) }
+
+val bundleAppLogRuntimeAsset = tasks.register<Copy>("bundleAppLogRuntimeAsset") {
+    description = "Stage the :applog-runtime jar as an asset (the debug-only in-app log bridge)."
+    from(appLogRuntimeArtifact)
+    into(layout.buildDirectory.dir("applog-runtime-asset"))
+    rename { "applog-runtime.jar" }
+}
+
 // --- kotlinc resources asset (extension-point descriptors for on-device K2) ----------------------
 // The K2 compiler's classes are dexed into the app, but IntelliJ-core boots its extension registry by
 // reading XML descriptors (META-INF/extensions/*.xml, plugin.xml, …) from a real filesystem path — a dex
@@ -170,51 +211,6 @@ val bundleR8DexAsset = tasks.register<JavaExec>("bundleR8DexAsset") {
     }
 }
 
-// --- ReflectiveMainLauncher dexed as an asset (forked-dalvikvm entry-point launcher) --------------
-// The forked-dalvikvm console runner (dev.ide.android.ForkedDalvikRunner) launches a program through
-// dev.ide.build.engine.ReflectiveMainLauncher instead of the VM's built-in main(String[]) lookup, so it can
-// start EVERY Kotlin/JVM entry-point shape (fun main() / suspend main / a no-arg @JvmStatic fun main() that
-// has no (String[]) bridge / an instance main), not just a static main(String[]). That launcher must sit on
-// the forked VM's -cp, but the app's own dexed copy is in secondary dexes a bare `dalvikvm -cp <run dexes>`
-// won't load — so compile that ONE pure-Java class and D8 it into a standalone reflective-launcher.dex.zip
-// asset the runner extracts and appends to the run container. (Same mechanism as bundleR8DexAsset above.)
-// No android.jar bootclasspath: the class references only universal java.lang/reflect/util APIs present on ART.
-val compileReflectiveLauncher = tasks.register<JavaCompile>("compileReflectiveLauncher") {
-    description = "Compile :build-engine's ReflectiveMainLauncher.java for dexing into the run launcher asset."
-    source = files(
-        project(":build-engine").layout.projectDirectory
-            .file("src/main/java/dev/ide/build/engine/ReflectiveMainLauncher.java")
-    ).asFileTree
-    classpath = files()
-    // Java 8 bytecode: D8 rejects class files newer than it supports (r8.jar is itself plain Java 8 bytecode).
-    sourceCompatibility = "8"
-    targetCompatibility = "8"
-    destinationDirectory.set(layout.buildDirectory.dir("reflective-launcher/classes"))
-}
-val reflectiveLauncherJar = tasks.register<Jar>("reflectiveLauncherJar") {
-    from(compileReflectiveLauncher.flatMap { it.destinationDirectory })
-    archiveFileName.set("reflective-launcher.jar")
-    destinationDirectory.set(layout.buildDirectory.dir("reflective-launcher"))
-}
-val bundleReflectiveLauncherDex = tasks.register<JavaExec>("bundleReflectiveLauncherDex") {
-    description = "D8-dex ReflectiveMainLauncher into a forked-VM-loadable reflective-launcher.dex.zip asset."
-    val outZip = layout.buildDirectory.file("reflective-launcher-asset/reflective-launcher.dex.zip")
-    classpath = r8DexTool                       // r8.jar contains D8
-    mainClass.set("com.android.tools.r8.D8")
-    inputs.files(reflectiveLauncherJar)
-    outputs.file(outZip)
-    doFirst {
-        val out = outZip.get().asFile
-        out.parentFile.mkdirs(); out.delete()
-        args = listOf(
-            "--release",
-            "--min-api", "26",
-            "--output", out.absolutePath,
-            reflectiveLauncherJar.get().archiveFile.get().asFile.absolutePath,
-        )
-    }
-}
-
 // --- JetBrains Mono fonts as Compose-resource assets ----------------------------------------------
 // Compose Multiplatform's resource→Android-assets packaging isn't wired for :ide-ui's AGP-9
 // `com.android.kotlin.multiplatform.library` target: the generated `Res.font.*` accessors exist, but the
@@ -244,6 +240,22 @@ val bundleComposeDrawablesAsset = tasks.register<Copy>("bundleComposeDrawablesAs
     into(layout.buildDirectory.dir("compose-drawables-asset/composeResources/dev.ide.ui.generated.resources/drawable"))
 }
 
+// --- AdMob ids (debug/profile = Google TEST ids; release = your real ids) ------------------------
+// Debug + profile builds ALWAYS use Google's TEST ids: test ads are non-billable and safe to click during
+// development, so there's no risk of an invalid-traffic ban. The release build uses the real ids when supplied
+// via -PADMOB_APP_ID / -PADMOB_NATIVE_UNIT_ID (or the ADMOB_APP_ID / ADMOB_NATIVE_UNIT_ID env vars), falling
+// back to the test ids so a fork builds fine with AdMob unconfigured. The App id reaches the manifest through
+// the `admobAppId` placeholder; the native ad-unit id is a BuildConfig field AndroidAdHost reads. One native
+// ad unit is reused across all four placements. OFFICIAL RELEASES MUST SET BOTH real ids.
+val testAdmobAppId = "ca-app-pub-3940256099942544~3347511713"
+val testAdmobNativeUnitId = "ca-app-pub-3940256099942544/2247696110"
+// The real ids are baked in as the release defaults (AdMob ids are not secret — they ship inside every APK),
+// and stay overridable so a fork can point ads at its own AdMob account instead of the upstream one.
+val realAdmobAppId = (findProperty("ADMOB_APP_ID") as String?) ?: System.getenv("ADMOB_APP_ID")
+    ?: "ca-app-pub-7523005242346905~2985774451"
+val realAdmobNativeUnitId = (findProperty("ADMOB_NATIVE_UNIT_ID") as String?) ?: System.getenv("ADMOB_NATIVE_UNIT_ID")
+    ?: "ca-app-pub-7523005242346905/7440024785"
+
 android {
     namespace = "dev.ide.android"
     compileSdk = 36
@@ -258,8 +270,8 @@ android {
         minSdk = 26
         targetSdk = 36
         // versionCode must exceed the last published release (the previous-codebase app reached ~29).
-        versionCode = 49
-        versionName = "3.4.1"
+        versionCode = 60
+        versionName = "3.7.0"
         // connectedAndroidTest harness (the on-device Kotlin-compiler discovery spike).
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 
@@ -275,6 +287,12 @@ android {
             ?: "sb_publishable_5T14bUAG6fOGz47kwYzG7A_25dj3ap4"
         buildConfigField("String", "ANALYTICS_URL", "\"$analyticsUrl\"")
         buildConfigField("String", "ANALYTICS_KEY", "\"$analyticsKey\"")
+
+        // AdMob defaults = Google TEST ids. Debug inherits these as-is; `release` overrides to the real ids
+        // below, and `profile` (a local perf build) is forced back to test. The App id reaches the manifest
+        // via ${admobAppId}; the native ad-unit id is read from BuildConfig by AndroidAdHost.
+        manifestPlaceholders["admobAppId"] = testAdmobAppId
+        buildConfigField("String", "AD_NATIVE_UNIT_ID", "\"$testAdmobNativeUnitId\"")
     }
 
     buildFeatures {
@@ -292,7 +310,8 @@ android {
     sourceSets.getByName("main").assets.srcDir(layout.buildDirectory.dir("compose-strings-asset").get().asFile)
     sourceSets.getByName("main").assets.srcDir(layout.buildDirectory.dir("compose-drawables-asset").get().asFile)
     sourceSets.getByName("main").assets.srcDir(layout.buildDirectory.dir("r8-dex-asset").get().asFile)
-    sourceSets.getByName("main").assets.srcDir(layout.buildDirectory.dir("reflective-launcher-asset").get().asFile)
+    sourceSets.getByName("main").assets.srcDir(layout.buildDirectory.dir("applog-runtime-asset").get().asFile)
+    sourceSets.getByName("androidTest").assets.srcDir(layout.buildDirectory.dir("vm-spike-asset").get().asFile)
 
     // Release signing, never committed. Resolution order per field: keystore.properties (gitignored,
     // alongside this build script) → Gradle property (-PRELEASE_*) → env var (RELEASE_*). With no keystore
@@ -327,6 +346,9 @@ android {
             // download size becomes a concern.
             isMinifyEnabled = false
             signingConfig = signingConfigs.findByName("release")
+            // The shipped build serves real AdMob ads (falls back to test ids if none were configured).
+            manifestPlaceholders["admobAppId"] = realAdmobAppId
+            buildConfigField("String", "AD_NATIVE_UNIT_ID", "\"$realAdmobNativeUnitId\"")
         }
         // A release-like, non-debuggable build that's still installable locally (signed with the debug key).
         // Use this — never `debug` — to judge runtime/typing/recomposition performance: a `debuggable` app
@@ -340,6 +362,10 @@ android {
             // locally when no release keystore is present.
             signingConfig = signingConfigs.findByName("release") ?: signingConfigs.getByName("debug")
             matchingFallbacks += listOf("release")
+            // This build is for on-device perf testing, so keep TEST ads (initWith(release) copied the real
+            // ids — undo that) — a tester must never click a live ad.
+            manifestPlaceholders["admobAppId"] = testAdmobAppId
+            buildConfigField("String", "AD_NATIVE_UNIT_ID", "\"$testAdmobNativeUnitId\"")
         }
     }
 
@@ -572,7 +598,7 @@ val fetchAndroidBuildTools = tasks.register("fetchAndroidBuildTools") {
 // Run before anything AGP does, so the freshly-fetched lib*.so are on disk when the native-lib merge runs,
 // and the staged kotlin-stdlib.jar asset is present when the asset merge runs.
 tasks.named("preBuild").configure {
-    dependsOn(fetchAndroidBuildTools, bundleKotlinStdlibAsset, bundleKotlincResourcesAsset, bundleComposeRuntimeAsset, bundleComposeFontsAsset, bundleComposeStringAsset, bundleComposeDrawablesAsset, bundleR8DexAsset, bundleReflectiveLauncherDex)
+    dependsOn(fetchAndroidBuildTools, bundleKotlinStdlibAsset, bundleKotlincResourcesAsset, bundleComposeRuntimeAsset, bundleComposeFontsAsset, bundleComposeStringAsset, bundleComposeDrawablesAsset, bundleR8DexAsset, bundleAppLogRuntimeAsset, bundleVmSpikeComposeRuntimeAsset)
 }
 
 // Same Android packaging gap as the fonts above, for the i18n string resources. :ide-ui's
@@ -610,6 +636,19 @@ configurations.configureEach {
         // fork's classes are API-compatible for the platform's (rarely hit) JNA touchpoints.
         exclude(group = "org.jetbrains.intellij.deps.jna", module = "jna")
         exclude(group = "org.jetbrains.intellij.deps.jna", module = "jna-platform")
+    }
+    // Force guava's JRE flavor over its Android flavor. The `implementation(libs.guava)` edge below requests
+    // `org.gradle.jvm.environment = standard-jvm`, which makes guava's `jreRuntimeElements` a candidate
+    // alongside the `androidRuntimeElements` the transitive (bundletool) edges pull in this Android app; both
+    // provide the `com.google.guava:guava` capability, so they conflict. Resolve that conflict to the JRE
+    // variant: its `com.google.common.base.Predicate` extends `java.util.function.Predicate` (the Android
+    // flavor's does not), which the dexed bundletool relies on when it filters streams with guava predicates
+    // — otherwise ART throws `IncompatibleClassChangeError` building an .aab. See the guava dependency below.
+    resolutionStrategy.capabilitiesResolution.withCapability("com.google.guava:guava") {
+        candidates.firstOrNull { "jre" in it.variantName }?.let { jre ->
+            select(jre)
+            because("guava JRE flavor: Predicate extends java.util.function.Predicate (dexed bundletool needs it on ART)")
+        }
     }
 }
 
@@ -697,9 +736,22 @@ dependencies {
     // only its own classes — the (unshaded) Kotlin compiler it builds on is already dexed via :lang-kotlin.
     implementation(libs.kotlin.compose.compiler.plugin.ide) { isTransitive = false }
 
-    // build-engine's DexRunner/DexBackend ports (kept `implementation` in :ide-core, so not transitive):
-    // :ide-android supplies the on-device DexClassLoader runner that backs the Java `run` on ART.
+    // The kotlinx.serialization kotlinc plugin's classes — dexed into the app for the same reason as the
+    // Compose plugin above: kotlinc reads the service descriptor from the bundled `-Xplugin` jar but resolves
+    // `SerializationComponentRegistrar` through parent delegation to the app classloader on ART. Non-transitive
+    // (it needs only its own classes; the unshaded compiler it builds on is already dexed via :lang-kotlin).
+    implementation(libs.kotlin.serialization.compiler.plugin.ide) { isTransitive = false }
+
+    // The kotlin-parcelize kotlinc plugin's classes — dexed into the app for the same reason as the Compose
+    // and serialization plugins above: kotlinc resolves `ParcelizeComponentRegistrar` through parent delegation
+    // to the app classloader on ART. Non-transitive (only its own classes; the compiler is dexed via :lang-kotlin).
+    implementation(libs.kotlin.parcelize.compiler.plugin.ide) { isTransitive = false }
+
+    // build-engine's ProgramInterpreter port + jvm-build's VmProgramInterpreter (kept `implementation` in
+    // :ide-core, so not transitive): :ide-android constructs the interpreter with a dexing peer factory so a
+    // Java/Kotlin console `run` executes on the bytecode VM on ART.
     implementation(project(":build-engine"))
+    implementation(project(":jvm-build"))
 
     // On-device build tools, statically linked + run IN-PROCESS (ART has no `java -jar` to fork): D8/R8
     // (the dexer/shrinker) and apksig (APK v1/v2/v3 signing). android-support keeps these compileOnly+test;
@@ -715,6 +767,26 @@ dependencies {
     // a duplicate-class / mergeJavaResource clash, add the offending entry to the packaging{} block above.
     implementation(libs.android.bundletool)
 
+    // Force the JRE flavor of guava (not the Android flavor). In an Android application the runtime
+    // classpath requests `org.gradle.jvm.environment = android`, so guava's Gradle module metadata
+    // resolves its coordinate (e.g. `33.2.0-jre`) to the `androidRuntimeElements` variant, which is
+    // `available-at` the `guava-*-android.jar`. That Android flavor's `com.google.common.base.Predicate`
+    // does NOT extend `java.util.function.Predicate` (it targets pre-24 Android), whereas the JRE flavor's
+    // does. bundletool is compiled against the JRE flavor and passes guava `Predicate`s into
+    // `java.util.stream.Stream.filter(java.util.function.Predicate)`; with the Android flavor dexed in, ART
+    // throws `IncompatibleClassChangeError` ("Predicates$NotPredicate does not implement
+    // java.util.function.Predicate") when a user builds an .aab. minSdk is 26, so `java.util.function.*`
+    // is native and the JRE flavor runs fine — pin the environment attribute to standard-jvm so the JRE
+    // jar is the one dexed.
+    implementation(libs.guava) {
+        attributes {
+            attribute(
+                TargetJvmEnvironment.TARGET_JVM_ENVIRONMENT_ATTRIBUTE,
+                objects.named(TargetJvmEnvironment::class.java, TargetJvmEnvironment.STANDARD_JVM),
+            )
+        }
+    }
+
     // Core-library desugaring runtime (temporarily enabled — see isCoreLibraryDesugaringEnabled above).
     coreLibraryDesugaring(libs.desugar.jdk.libs)
 
@@ -723,6 +795,13 @@ dependencies {
     implementation(compose.material3)
     implementation(compose.ui)
     implementation(libs.androidx.activity.compose)
+    // AdMob native ads (Android launcher only), rendered through the AdHost seam. Excludes protobuf-lite: this
+    // app already dexes full protobuf (via :android-support's bundletool), and the two share the com.google.
+    // protobuf.* package, so keeping both is a D8 duplicate-class failure. The ads SDK's protobuf touchpoints
+    // are API-compatible with the full runtime already present.
+    implementation(libs.play.services.ads) {
+        exclude(group = "com.google.protobuf", module = "protobuf-javalite")
+    }
     // FileProvider (androidx.core.content.FileProvider) — hands other apps content:// URIs to our
     // app-private project files for Share / "Open with", and grants read access on inbound intents.
     implementation(libs.androidx.core)
@@ -733,10 +812,17 @@ dependencies {
     // Compose runtime so the editor's @Preview renders live (docs/compose-interpreter.md, step 4).
     implementation(project(":interp-core"))
     implementation(project(":interp-compose"))
+    // The bytecode VM: the real-view layout preview interprets library/user View classes (dev.ide.jvm.Vm via
+    // VmViewFactory) instead of dexing them, and DexPeerFactory realizes their peers. Reaches the app
+    // transitively through :interp-compose's jvmShared (api), but the real-view code uses it directly.
+    implementation(project(":jvm-interp"))
 
     // On-device instrumentation: the Kotlin-compiler-on-ART discovery spike.
     androidTestImplementation(libs.androidx.test.ext.junit)
     androidTestImplementation(libs.androidx.test.runner)
+    // On-device throughput benchmark for the :jvm-interp bytecode interpreter. Not in the app dex, so it is
+    // included in the test APK; its asm dependency resolves against the app's dexed copy at runtime.
+    androidTestImplementation(project(":jvm-interp"))
     // The compiler API (K2JVMCompiler/K2JVMCompilerArguments/MessageCollector/…) to COMPILE the spike
     // against. It arrives in the app only as a transitive `implementation` (via :ide-core → :lang-kotlin),
     // which doesn't leak to the androidTest *compile* classpath — and at runtime the app's dexed copy
@@ -757,4 +843,9 @@ dependencies {
     androidTestCompileOnly(project(":project-model-impl"))
     androidTestCompileOnly(project(":deps-impl"))
     androidTestCompileOnly(project(":deps-api"))
+    // JavaPsiConcurrentArtSpikeTest drives the IntelliJ-PSI Java indexer (JavaSourceIndexer) + the shared PSI
+    // host's concurrent read path (IntellijPsiHost.parseConcurrent) on ART. Both reach the app only
+    // transitively via :ide-core, so compile against them here; the app's dexed copies provide them at runtime.
+    androidTestCompileOnly(project(":lang-java"))
+    androidTestCompileOnly(project(":intellij-psi-host"))
 }

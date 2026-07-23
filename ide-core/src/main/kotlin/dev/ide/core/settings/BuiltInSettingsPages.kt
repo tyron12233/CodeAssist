@@ -23,9 +23,20 @@ object BuiltInSettingsPages {
      *  separate-process toggle, which is app-global. See docs/build-process-isolation.md. */
     const val BUILD_RUNTIME = "buildRuntime"
     const val PRIVACY = "privacy"
+    /** Project-scoped Compose Preview page — the interpreter sandbox toggles (see `PreviewSandboxPolicy`). */
+    const val PREVIEW = "preview"
 
     /** Toggle key on the [BUILD_RUNTIME] page: route builds/runs through the isolated `:build` process. */
     const val SEPARATE_PROCESS = "separateProcess"
+
+    /** Toggle key on the [BUILD_RUNTIME] page: weave the IDE log bridge into DEBUG builds so a running app
+     *  forwards its logs to the Logcat tab. Read per build (device only); default on. */
+    const val INJECT_APP_LOG = "injectAppLog"
+
+    /** Action key on the [BUILD_RUNTIME] page (separate-process-capable hosts only): re-request the runtime
+     *  notification permission the isolated build process needs. Handled UI-side (needs the platform permission
+     *  launcher) — the SettingsScreen mirrors this key; there's no engine-side effect here. */
+    const val BUILD_NOTIFICATIONS = "buildNotifications"
 
     /** IntSlider key on the [BUILD_RUNTIME] page: the heap (MB) the on-device R8 (release/minify) pass runs
      *  with in a forked VM — larger than the app's own heap cap. Read by `ForkedR8Shrinker` (:ide-android),
@@ -70,6 +81,13 @@ object BuiltInSettingsPages {
      *  Applied by the backend — it flips the shared `PerfTrace` flag. */
     const val PERF_LOGGING = "perfLogging"
 
+    /** Toggle keys on the [PREVIEW] page — `sandbox` + a capitalized `SandboxCategory.id`. Read by
+     *  `ComposePreviewService.sandboxCategories()` per preview open; all default ON (restricted). */
+    const val SANDBOX_FILE_IO = "sandboxFileIo"
+    const val SANDBOX_NETWORK = "sandboxNetwork"
+    const val SANDBOX_ANDROID = "sandboxAndroidSystem"
+    const val SANDBOX_PROCESS = "sandboxProcessControl"
+
     // Keys the backend special-cases (routed to a non-generic-store effect).
     const val CONFLICT_POLICY = "conflictPolicy"
     const val ANALYTICS = "analytics"
@@ -87,7 +105,7 @@ object BuiltInSettingsPages {
     /** All built-in pages in display order. [analyticsAvailable] gates the analytics toggle on the Privacy page.
      *  Code Style is not here: it has its own dedicated screen (the formatting profiles are per-language). */
     fun all(analyticsAvailable: Boolean): List<SettingsPage> = listOf(
-        appearance, editor, completion, analysis, build, buildRuntime, privacy(analyticsAvailable),
+        appearance, editor, completion, analysis, preview, build, buildRuntime, privacy(analyticsAvailable),
     )
 
     private val appearance = page(APPEARANCE, "Appearance", "eye", 0) {
@@ -154,6 +172,33 @@ object BuiltInSettingsPages {
         )
     }
 
+    // Per-project: whether preview code may escape the sandbox is a property of the project you're editing
+    // (your own app vs. an untrusted sample), not of the device. Applies to previews opened after a change.
+    private val preview = page(PREVIEW, "Preview", "image", 35, scope = SettingsScope.PROJECT) {
+        listOf(
+            SettingControl.Toggle(
+                SANDBOX_FILE_IO, "Block file access",
+                "Stop previewed code from reading or writing files (java.io / java.nio / kotlin.io). Blocked calls return null and are listed on the preview's problem chip. Applies to newly opened previews.",
+                default = true, group = "Preview sandbox",
+            ),
+            SettingControl.Toggle(
+                SANDBOX_NETWORK, "Block network access",
+                "Stop previewed code from opening sockets or HTTP connections (java.net, OkHttp, Ktor).",
+                default = true, group = "Preview sandbox",
+            ),
+            SettingControl.Toggle(
+                SANDBOX_ANDROID, "Block Android system calls",
+                "Stop previewed code from launching activities/services, sending broadcasts, using system services, ContentResolver, or SharedPreferences. Resource and density reads stay available.",
+                default = true, group = "Preview sandbox",
+            ),
+            SettingControl.Toggle(
+                SANDBOX_PROCESS, "Block process & reflection",
+                "Stop previewed code from exec'ing processes, calling System.exit, loading native libraries, or invoking members reflectively.",
+                default = true, group = "Preview sandbox",
+            ),
+        )
+    }
+
     private val build = page(BUILD, "Build & Dependencies", "hammer", 40, scope = SettingsScope.PROJECT) {
         listOf(
             SettingControl.Choice(
@@ -176,6 +221,11 @@ object BuiltInSettingsPages {
             SettingControl.Toggle(
                 SEPARATE_PROCESS, "Build in a separate process",
                 "Run builds and your program in an isolated process so an out-of-memory crash can't take down the IDE. Off = build in-process (uses less memory, no isolation). Takes effect the next time you open a project.",
+                default = true,
+            ),
+            SettingControl.Toggle(
+                INJECT_APP_LOG, "Forward app logs",
+                "On a debug build, inject a small log bridge into your app so its logs (logcat, println, crashes) stream to the Logcat tab. Debug builds only — release builds are never modified. Applies on the next build.",
                 default = true,
             ),
             // The Build Runtime page's R8 controls are rendered dynamically by SettingsBackend (the slider's

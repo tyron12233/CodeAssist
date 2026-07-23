@@ -15,6 +15,7 @@ dependencies {
     implementation(project(":project-model-impl"))
     implementation(project(":language-api"))
     implementation(project(":lang-jdt"))
+    implementation(project(":lang-java")) // IntelliJ-PSI Java backend (native resolution/inference); JDT is still the .java default
     implementation(project(":lang-xml")) // XML language backend (Android layouts/values/manifest)
     implementation(project(":lang-kotlin")) // editor-only Kotlin language backend (PSI parse + own completion)
     implementation(project(":index-api"))
@@ -33,6 +34,7 @@ dependencies {
     implementation(project(":layout-preview-impl")) // the preview engine (inflater + resolver + chrome)
     implementation(project(":deps-api"))
     implementation(project(":deps-impl")) // Maven dependency resolver (download/transitive/conflict)
+    implementation(project(":agent-impl")) // the AI coding agent engine (providers, loop, tools)
     // Opt-in usage analytics. `api` because AnalyticsService appears in IdeServicesBackend's (public)
     // constructor signature, so a host wiring it (ide-android) needs the type on its compile classpath.
     api(project(":analytics-api"))

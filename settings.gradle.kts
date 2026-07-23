@@ -58,18 +58,23 @@ include(
     ":build-engine",
     ":android-support",
     ":android-sdk-metadata", // build-time generator: SDK attrs.xml + android.jar → bundled metadata asset
+    ":applog-runtime", // tiny Java runtime injected into DEBUG apps: a ContentProvider that forwards the app's logs to the IDE
+
     ":language-api",
     ":index-api",
     ":index-impl",
     ":analysis-api",
     ":analysis-impl",
     ":lang-jdt",
+    ":lang-java", // IntelliJ-PSI Java LanguageBackend: IntelliJ Java parser + native resolution/inference (replaces lang-jdt in the editor)
     ":lang-xml",
     ":lang-kotlin-index", // pure, compiler-free Kotlin symbol/index layer shared by the Kotlin editor backend
     ":kotlin-compiler-deps", // the ONE unshaded Kotlin compiler + IntelliJ platform dependency set (no embeddable)
+    ":intellij-psi-host", // the ONE shared IntelliJ platform env both lang-kotlin + lang-xml parse against
     ":lang-kotlin", // editor-only Kotlin LanguageBackend (PSI parse + our own symbols/inference/completion)
     ":jvm-build", // JVM-language build system: JavaBuildSystem/JavaPlugin compose lang-jdt+lang-kotlin compile tasks over build-engine
     ":interp-core", // on-device Kotlin interpreter: tree-walks lang-kotlin's ResolvedTree (Compose interpreter, step 3)
+    ":jvm-interp", // PoC: standalone .class bytecode-interpreting VM + Android/native bridge seam (Play dynamic-code compliance spike)
     ":deps-api",
     ":deps-impl",
     ":analytics-api", // opt-in usage-analytics SPI (event model + AnalyticsService/AnalyticsSink ports)
@@ -78,6 +83,8 @@ include(
     ":block-impl",
     ":plugin-api",  // UI extensibility SPI: the lean action model (IdeAction/ActionGroup + places) + EPs
     ":plugin-impl", // ActionManager: resolves UI_ACTION_EP/ACTION_GROUP_EP into places/menus, dispatches
+    ":agent-api",   // agentic-coding SPI: provider-neutral LLM client + AgentTool + AgentWorkspace engine port
+    ":agent-impl",  // the agent engine: OkHttp/SSE transport, Anthropic/OpenAI/Gemini providers, loop, built-in tools
     ":layout-preview-api",  // owned XML-layout preview: render contracts (RCanvas/RenderNode/Renderer), android-free
     ":layout-preview-impl", // the preview engine: resource value resolver, inflater, built-in renderers, ASM bridge remapper
     ":bench-support", // test-only: shared regression/benchmark harness (consumed via testImplementation)
@@ -91,6 +98,7 @@ include(
 if (System.getenv("CI_CORE_ONLY") != "true") {
     include(
         ":interp-compose", // Compose bridge + render surface (KMP: desktop+android) — needs the Compose plugin
+        ":ide-ui-api", // neutral IdeBackend port + DTOs + UI-contribution model, shared by :ide-ui and :ide-core
         ":ide-ui",
         ":ide-core",
         ":ide-desktop",

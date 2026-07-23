@@ -33,6 +33,8 @@ object AndroidFacetCodec : FacetCodec<AndroidFacet> {
         // buildFeatures: flatten the on flags into the `[android]` table (off ⇒ absent), like the knobs above.
         if (facet.buildFeatures.viewBinding) put("viewBinding", true)
         if (facet.buildFeatures.compose) put("compose", true)
+        if (facet.buildFeatures.parcelize) put("parcelize", true)
+        if (facet.buildFeatures.serialization) put("serialization", true)
         // packaging: only when the user configured something (defaults are applied at build time, not stored).
         if (!facet.packaging.isDefault) put("packaging", encodePackaging(facet.packaging))
     }
@@ -57,6 +59,8 @@ object AndroidFacetCodec : FacetCodec<AndroidFacet> {
             buildFeatures = BuildFeatures(
                 viewBinding = values["viewBinding"] as? Boolean ?: false,
                 compose = values["compose"] as? Boolean ?: false,
+                parcelize = values["parcelize"] as? Boolean ?: false,
+                serialization = values["serialization"] as? Boolean ?: false,
             ),
             packaging = decodePackaging(values.table("packaging")),
         )

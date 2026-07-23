@@ -20,7 +20,6 @@ import dev.ide.vfs.VfsListener
 import dev.ide.vfs.VfsTopics
 import java.nio.file.Path
 import java.nio.file.Paths
-import java.security.MessageDigest
 import java.util.concurrent.atomic.AtomicLong
 
 /**
@@ -166,12 +165,7 @@ internal class WorkspaceEventHub(
     }
 
     private fun changedEvent(path: Path, newText: String?): FileChanged =
-        FileChanged(store.vfs.fileFor(path), ContentHash(""), newText?.let(::hashOf) ?: ContentHash(""))
-
-    private fun hashOf(text: String): ContentHash {
-        val digest = MessageDigest.getInstance("SHA-256").digest(text.toByteArray(Charsets.UTF_8))
-        return ContentHash(digest.joinToString("") { "%02x".format(it.toInt() and 0xFF) })
-    }
+        FileChanged(store.vfs.fileFor(path), ContentHash(""), newText?.let { ContentHash.of(it) } ?: ContentHash(""))
 
     // ---- react (coalesced per batch; see the reaction table above) ----
 
@@ -192,7 +186,15 @@ internal class WorkspaceEventHub(
                     if (reactions.isResourcePath(p)) {
                         synthetic = true
                         if (p.toString().endsWith(".xml")) reactions.reindexSourceAsync(p)
-                    } else if (isKotlin(p)) synthetic = true
+                    } else if (isSource(p)) {
+                        // Keep the source index current on SAVE so a query against it sees the edit — e.g. a newly
+                        // declared `View` subclass must appear as a custom-view tag in XML-layout completion. This is
+                        // a single-file incremental reindex (O(this file)); it deliberately does NOT invalidate
+                        // analyzers (disposing every module container on each save would evict the warm Kotlin/JDT
+                        // caches — too heavy). Consumers that snapshot the index refresh off its generation stamp.
+                        reactions.reindexSourceAsync(p)
+                        if (isKotlin(p)) synthetic = true
+                    }
                 }
 
                 is FileCreated -> if (!e.file.isDirectory) {

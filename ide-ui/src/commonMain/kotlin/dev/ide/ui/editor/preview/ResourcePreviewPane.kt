@@ -94,7 +94,7 @@ private fun DrawablePreview(path: String, text: String, backend: IdeBackend) {
     when {
         !loaded -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {}
         d == null -> EmptyPreview("Couldn't render this drawable")
-        d is UiDrawable.Bitmap && d.filePath != null -> BitmapPreview(d.filePath, backend)
+        d is UiDrawable.Bitmap && d.filePath != null -> BitmapPreview(d.filePath!!, backend)
         else -> Column(
             Modifier.fillMaxSize().padding(Ca.spacing.s5),
             horizontalAlignment = Alignment.CenterHorizontally,

@@ -11,6 +11,9 @@ import org.eclipse.jdt.core.compiler.IProblem
 /** The marker spliced at the caret. A valid identifier, unlikely to collide with real code. */
 internal const val COMPLETION_MARKER = "__codeassist_completion__"
 
+/** Android framework FQN prefixes hidden from index-backed auto-import in a non-Android (JVM) module. */
+private val ANDROID_TYPE_PREFIXES = listOf("android.", "androidx.", "com.android.", "com.google.android.", "dalvik.")
+
 /**
  * Completion driven by the custom name environment (model + in-memory overlay + jars + jrt) via ecj's
  * internal compiler — no disk flush, true working copies. Splices a marker at the caret (verbatim and
@@ -63,7 +66,14 @@ class JdtCompletion(private val analyzer: JdtSourceAnalyzer) : CompletionContrib
             val ctx = ContextAnalyzer.analyze(cud, replaceStart, prefix)
             if (ctx.kind == CompletionKind.NONE) continue
             val importOffset = importOffset(ctx.unit.importAnchorEnd, text)
-            var items = CompletionRanker.rank(CandidateCollector.collect(ctx, index, importOffset, appendCallParens, analyzer.sourceMethodResolver), ctx)
+            // A non-Android (console/JVM) module must not be offered `android.*` types to auto-import — the
+            // shared index holds them (an Android module in the same workspace contributed android.jar), but
+            // this module's classpath can't compile them. See [CandidateCollector.collect].
+            val excludedTypePrefixes = if (analyzer.isAndroidPlatform) emptyList() else ANDROID_TYPE_PREFIXES
+            var items = CompletionRanker.rank(
+                CandidateCollector.collect(ctx, index, importOffset, appendCallParens, analyzer.sourceMethodResolver, excludedTypePrefixes),
+                ctx,
+            )
             // Postfix templates (expr.sout / expr.for / expr.var …) at a member-access position, mixed into
             // the same popup. They rewrite the whole `receiver.key` and step through tab stops on accept.
             if (ctx.kind == CompletionKind.MEMBER_ACCESS) {

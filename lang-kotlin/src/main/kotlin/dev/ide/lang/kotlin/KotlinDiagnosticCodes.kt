@@ -26,6 +26,10 @@ object KotlinDiagnosticCodes {
     /** A destructuring declaration whose value's type lacks the required `componentN()` operator (too many
      *  entries for the type's components, or a non-destructurable type). */
     const val DESTRUCTURING = "kt.destructuring"
+    /** A classifier (a class/interface with no companion object) used as a VALUE without being initialized —
+     *  `columns = GridCells.Fixed` / `val x = Foo` (must be `GridCells.Fixed(2)` / `Foo(...)`). The compiler's
+     *  "Classifier 'X' does not have a companion object, and thus must be initialized here". */
+    const val CLASSIFIER_AS_VALUE = "kt.classifierAsValue"
 
     // --- declaration / modifier validity ---
     const val CONFLICTING_DECLARATION = "kt.conflictingDeclaration"

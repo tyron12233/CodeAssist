@@ -4,13 +4,11 @@ import dev.ide.build.BuildGoal
 import dev.ide.build.BuildRequest
 import dev.ide.build.VariantSelector
 import dev.ide.build.engine.BuildCache
-import dev.ide.build.engine.DexResult
-import dev.ide.build.engine.DexRunner
-import dev.ide.build.engine.RunDexBackend
 import dev.ide.build.engine.ProgramIo
 import dev.ide.build.engine.SimpleTaskContext
 import dev.ide.build.engine.TaskExecutorImpl
 import dev.ide.build.engine.jarPath
+import dev.ide.build.jvm.run.VmProgramInterpreter
 import dev.ide.model.BuildSystemId
 import dev.ide.model.ContentRole
 import dev.ide.model.DependencyScope
@@ -35,14 +33,16 @@ import java.io.File
 import java.nio.file.Files
 import java.nio.file.Path
 import kotlin.test.Test
+import kotlin.test.assertEquals
 import kotlin.test.assertTrue
 
 /**
  * Native build + the console-app run task: builds `app → util → core` (api-exported) via the native
  * [JavaBuildSystem] on the JDT compile backend (lang-jdt's JdtCompileTask), then (1) packages to jars and
- * runs them, (2) runs the app through the `run` task (the Gradle `application`-plugin equivalent) which
- * always re-executes, and (3) exercises the on-device `createDexRunGraph` (`compileJava → dexRun → runDex`)
- * with fake dex ports.
+ * runs them, and (2) runs the app through the `run` task (the Gradle `application`-plugin equivalent) which
+ * always re-executes. The `run` task INTERPRETS the compiled program on the bytecode VM
+ * ([VmProgramInterpreter]) — no forking, no dexing — so these are real end-to-end interpreter runs, including
+ * interactive stdin and cancelling a never-ending program.
  */
 class JavaBuildTest {
 
@@ -110,13 +110,51 @@ class JavaBuildTest {
     }
 
     @Test
+    fun packagedJarHasARunnableManifestAndRunsStandalone() {
+        // The reported bug: a built .jar had no META-INF/MANIFEST.MF, so it couldn't run outside the app.
+        // A single self-contained module now packages a manifest with Main-Class and runs via `java -jar`.
+        val dir = Files.createTempDirectory("jarmanifest")
+        val platform = PlatformCore()
+        try {
+            ModuleTypeRegistry(platform.extensions).register(JavaLib(), PluginId("java-support"))
+            val store = ProjectModel.open(dir, platform, FacetCodecRegistry())
+            val javaLib = ModuleTypeRegistry(platform.extensions).resolve("java-lib")
+            store.workspace.beginModification().apply { addProject("demo", BuildSystemId.NATIVE, store.vfs.root()); commit() }
+            store.workspace.projects.single().beginModification().apply {
+                addModule("solo", javaLib).addSourceSet(mainSources()); commit()
+            }
+            write(dir, "solo/src/main/java/com/example/solo/App.java", SOLO)
+            val project = store.workspace.projects.single()
+
+            // Wire the host's main-class resolver (here a fixed value) — as BuildService does from its Run config.
+            val bs = JavaBuildSystem(mainClassFor = { "com.example.solo.App" })
+            val graph = bs.createBuildGraph(
+                project, BuildRequest(listOf(ModuleId("solo")), VariantSelector("main"), BuildGoal.PACKAGE),
+            )
+            val exec = TaskExecutorImpl(BuildCache(dir.resolve(".caches/build")))
+            val log = StringBuilder()
+            assertTrue(runBlocking { exec.execute(graph, SimpleTaskContext(log = { log.appendLine(it) }), 2) }.succeeded, "build failed:\n$log")
+
+            val jar = jarPath(project.modules.single { it.name == "solo" })
+            java.util.jar.JarFile(jar.toFile()).use { jf ->
+                val mf = jf.manifest ?: error("jar has no META-INF/MANIFEST.MF")
+                assertEquals("1.0", mf.mainAttributes.getValue("Manifest-Version"))
+                assertEquals("com.example.solo.App", mf.mainAttributes.getValue("Main-Class"), "Main-Class must name the module's entry point")
+            }
+            assertTrue("STANDALONE OK" in runJar(jar), "the jar must run standalone via `java -jar`")
+        } finally {
+            platform.dispose(); dir.toFile().deleteRecursively()
+        }
+    }
+
+    @Test
     fun runsConsoleAppViaTheRunTask() {
         val dir = Files.createTempDirectory("javarun")
         val platform = PlatformCore()
         try {
             val (_, project) = buildWorkspace(dir, platform)
             val app = project.modules.first { it.name == "app" }
-            val graph = javaBuildSystem().createRunGraph(project, app, "com.example.app.Main")
+            val graph = javaBuildSystem().createInterpretRunGraph(project, app, "com.example.app.Main", VmProgramInterpreter())
             val exec = TaskExecutorImpl(BuildCache(dir.resolve(".caches/build")))
             val log = StringBuilder()
 
@@ -133,54 +171,6 @@ class JavaBuildTest {
     }
 
     @Test
-    fun runsConsoleAppViaTheDexRunPath() {
-        val dir = Files.createTempDirectory("javadexrun")
-        val platform = PlatformCore()
-        try {
-            val (_, project) = buildWorkspace(dir, platform)
-            val app = project.modules.first { it.name == "app" }
-
-            // Fake D8: record the runtime classpath scopes it was handed, drop a placeholder classes.dex so the graph proceeds.
-            var dexedClasspath: List<Path> = emptyList()
-            val dexBackend = RunDexBackend { request ->
-                dexedClasspath = request.userClassDirs + request.libJars
-                Files.createDirectories(request.outDex); Files.write(request.outDex.resolve("classes.dex"), byteArrayOf(0))
-                DexResult(true, listOf("fake-dex ${dexedClasspath.size} input(s)"))
-            }
-            // Fake DexClassLoader runner: record what it was asked to run.
-            var ranMain: String? = null
-            var ranDexDir: Path? = null
-            val dexRunner = object : DexRunner {
-                override suspend fun run(dexDir: Path, mainClass: String, args: List<String>, io: ProgramIo): Int {
-                    ranMain = mainClass; ranDexDir = dexDir
-                    io.stdout("ran $mainClass from ${dexDir.fileName}\n")
-                    return 0
-                }
-            }
-
-            val graph = javaBuildSystem().createDexRunGraph(project, app, "com.example.app.Main", minApi = 21, dexBackend, dexRunner)
-            val exec = TaskExecutorImpl(BuildCache(dir.resolve(".caches/build")))
-            val log = StringBuilder()
-            val outcome = runBlocking { exec.execute(graph, SimpleTaskContext(log = { log.appendLine(it) }), 2) }
-            assertTrue(outcome.succeeded, "dex-run failed:\n$log")
-
-            val ran = outcome.ranTasks.map { it.value }
-            assertTrue(":app:dexRun" in ran, "dexRun must run: $ran")
-            assertTrue(":app:runDex" in ran, "runDex must run: $ran")
-            assertTrue(dexedClasspath.isNotEmpty(), "the dex backend must receive the runtime classpath (app + deps)")
-            assertTrue(ranMain == "com.example.app.Main", "runner got the wrong main: $ranMain")
-            assertTrue(ranDexDir?.let { Files.exists(it.resolve("classes.dex")) } == true, "runner must get the produced dex dir")
-
-            // runDex is AlwaysRun → re-executes; the unchanged dexRun is up-to-date the second time.
-            val again = runBlocking { exec.execute(graph, SimpleTaskContext(), 2) }.ranTasks.map { it.value }
-            assertTrue(":app:runDex" in again, "runDex must always re-run: $again")
-            assertTrue(":app:dexRun" !in again, "unchanged dexRun should be up-to-date: $again")
-        } finally {
-            platform.dispose(); dir.toFile().deleteRecursively()
-        }
-    }
-
-    @Test
     fun runsAnInteractiveConsoleAppFeedingStdin() {
         val dir = Files.createTempDirectory("javarunio")
         val platform = PlatformCore()
@@ -189,7 +179,7 @@ class JavaBuildTest {
             write(dir, "app/src/main/java/com/example/app/Echo.java", ECHO)
             val app = project.modules.first { it.name == "app" }
             val io = CapturingIo("World\n")
-            val graph = javaBuildSystem().createRunGraph(project, app, "com.example.app.Echo", programIo = io)
+            val graph = javaBuildSystem().createInterpretRunGraph(project, app, "com.example.app.Echo", VmProgramInterpreter(), programIo = io)
             val exec = TaskExecutorImpl(BuildCache(dir.resolve(".caches/build")))
             val log = StringBuilder()
 
@@ -214,14 +204,14 @@ class JavaBuildTest {
             write(dir, "app/src/main/java/com/example/app/Loop.java", LOOP)
             val app = project.modules.first { it.name == "app" }
             val io = CapturingIo("") // never reads input; loops forever printing nothing
-            val graph = javaBuildSystem().createRunGraph(project, app, "com.example.app.Loop", programIo = io)
+            val graph = javaBuildSystem().createInterpretRunGraph(project, app, "com.example.app.Loop", VmProgramInterpreter(), programIo = io)
             val exec = TaskExecutorImpl(BuildCache(dir.resolve(".caches/build")))
             runBlocking {
                 val job = launch { exec.execute(graph, SimpleTaskContext(), 2) }
                 // Wait until the program is actually running (it printed before looping).
                 withTimeout(30_000) { while ("looping" !in io.out.toString()) delay(20) }
-                // Stop == cancel: the forked process must die promptly even though its stdout read is a native
-                // blocking call the interrupt can't unblock — the cancellation handler force-destroys it.
+                // Stop == cancel: the interpreter must unwind promptly — the VM's cancellation flag breaks the
+                // interpreted loop and interrupting the program thread breaks the bridged Thread.sleep.
                 withTimeout(10_000) { job.cancelAndJoin() }
             }
         } finally {
@@ -253,6 +243,15 @@ class JavaBuildTest {
         return text.trim()
     }
 
+    /** Run a jar STANDALONE (`java -jar <jar>`) — relies on the jar's manifest `Main-Class`, no `-cp`. */
+    private fun runJar(jar: Path): String {
+        val javaBin = Path.of(System.getProperty("java.home"), "bin", "java").toString()
+        val proc = ProcessBuilder(javaBin, "-jar", jar.toString()).redirectErrorStream(true).start()
+        val text = proc.inputStream.bufferedReader().readText()
+        proc.waitFor()
+        return text.trim()
+    }
+
     private companion object {
         val GREETER = """
             package com.example.core;
@@ -275,6 +274,12 @@ class JavaBuildTest {
                 public static void main(String[] args) {
                     System.out.println(new Formatter().format("World"));
                 }
+            }
+        """
+        val SOLO = """
+            package com.example.solo;
+            public class App {
+                public static void main(String[] args) { System.out.println("STANDALONE OK"); }
             }
         """
         val ECHO = """

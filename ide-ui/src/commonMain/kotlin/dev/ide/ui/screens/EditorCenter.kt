@@ -74,6 +74,8 @@ internal fun EditorCenter(
     var findEpoch by remember(active?.path) { mutableStateOf(0) }
     // Bumped by the Reformat button (top bar) to reformat the active file (Ctrl/⌘-Alt-L is the keyboard path).
     var formatEpoch by remember(active?.path) { mutableStateOf(0) }
+    // Bumped by the Optimize Imports menu item to reorganize the active file's imports (Ctrl/⌘-Alt-O too).
+    var optimizeImportsEpoch by remember(active?.path) { mutableStateOf(0) }
     // Plugin-contributed toolbar actions (empty until a plugin registers; enablement re-evaluated per file).
     val toolbarActions = remember(active?.path) {
         state.backend.actions.actionsFor(
@@ -130,8 +132,11 @@ internal fun EditorCenter(
                 onRedo = { active?.session?.redo() },
                 onFind = { if (active != null) findEpoch++ },
                 onReformat = { if (active != null) formatEpoch++ },
+                onOptimizeImports = { if (active != null) optimizeImportsEpoch++ },
                 onToggleConsole = { state.consoleOpen = !state.consoleOpen },
                 consoleOpen = state.consoleOpen,
+                onToggleChat = { state.chatOpen = !state.chatOpen },
+                chatOpen = state.chatOpen,
                 inlayHintsOn = state.inlayHintsEnabled,
                 onToggleInlayHints = { state.inlayHintsEnabled = !state.inlayHintsEnabled },
                 showPreview = hasPreview,
@@ -198,6 +203,7 @@ internal fun EditorCenter(
                         onRenamed = { newPath -> state.reloadAfterRename(active.path, newPath) },
                         findEpoch = findEpoch,
                         formatEpoch = formatEpoch,
+                        optimizeImportsEpoch = optimizeImportsEpoch,
                         fontScale = state.editorFontScale,
                         onFontScaleChange = { state.editorFontScale = it },
                         completionAutoPopup = state.completionAutoPopup,
@@ -217,7 +223,9 @@ internal fun EditorCenter(
                         },
                     )
                 }
-                val previewSurface: @Composable (Modifier) -> Unit = { mod ->
+                // `split` is true only in the Split view (editor + preview together): the Compose preview then
+                // hides its chrome bars and fits to width so dragging the divider doesn't rescale it.
+                val previewSurface: @Composable (Modifier, Boolean) -> Unit = { mod, split ->
                     when {
                         isMarkdownPreviewable(active.path) -> MarkdownPreviewPane(
                             path = active.path,
@@ -229,6 +237,7 @@ internal fun EditorCenter(
                             path = active.path,
                             text = active.text,
                             backend = state.backend,
+                            session = active.session,
                             modifier = mod,
                         )
 
@@ -246,6 +255,7 @@ internal fun EditorCenter(
                             host = state.composePreviewHost,
                             modifier = mod,
                             selected = active.previewTarget,
+                            split = split,
                         )
                     }
                 }
@@ -257,12 +267,12 @@ internal fun EditorCenter(
                         modifier = Modifier.weight(1f).fillMaxWidth(),
                     )
 
-                    EditorViewMode.Preview -> previewSurface(Modifier.weight(1f).fillMaxWidth())
+                    EditorViewMode.Preview -> previewSurface(Modifier.weight(1f).fillMaxWidth(), false)
                     // Edit + watch at once: stacked on a phone (the only way both fit), side-by-side when wide.
                     EditorViewMode.Split -> SplitEditorPreview(
                         stacked = compact,
                         editor = codeSurface,
-                        preview = previewSurface,
+                        preview = { previewSurface(it, true) },
                         modifier = Modifier.weight(1f).fillMaxWidth(),
                     )
 

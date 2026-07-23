@@ -11,8 +11,10 @@ import dev.ide.ui.backend.UiLayer
 import dev.ide.ui.backend.UiStateLayer
 import dev.ide.ui.backend.UiVectorPath
 
-/** Maps the engine's [DrawablePreview] model onto the neutral [UiDrawable] DTO the Compose canvas renders. */
-internal object DrawableMapping {
+/** Maps the engine's [DrawablePreview] model onto the neutral [UiDrawable] DTO the Compose canvas renders.
+ *  Public so the launcher's Compose-preview resource resolver can turn a `res/drawable` XML into a `Painter`
+ *  (see :ide-android `AndroidPreviewResources` + `UiDrawablePainter`), not just the resource-preview pane. */
+object DrawableMapping {
 
     fun toUi(d: DrawablePreview): UiDrawable = when (d) {
         is DrawablePreview.SolidColor -> UiDrawable.SolidColor(d.color)

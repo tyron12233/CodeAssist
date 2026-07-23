@@ -44,7 +44,7 @@ class ExtensionRegistryImpl(private val parent: ExtensionRegistry? = null) : Ext
     }
 
     /** Remove every contribution made by [plugin] (bulk unregister on plugin unload). */
-    fun unregisterAll(plugin: PluginId) {
+    override fun unregisterAll(plugin: PluginId) {
         for (list in byPoint.values) list.removeAll { it.plugin == plugin }
     }
 }

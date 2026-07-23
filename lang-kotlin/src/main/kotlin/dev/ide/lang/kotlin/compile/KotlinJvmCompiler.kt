@@ -3,6 +3,8 @@ package dev.ide.lang.kotlin.compile
 import com.intellij.openapi.util.Disposer
 import org.jetbrains.kotlin.cli.common.ExitCode
 import org.jetbrains.kotlin.cli.common.arguments.K2JVMCompilerArguments
+import org.jetbrains.kotlin.cli.common.diagnosticsCollector
+import org.jetbrains.kotlin.cli.common.fir.FirDiagnosticsCompilerResultsReporter
 import org.jetbrains.kotlin.cli.common.messages.CompilerMessageSeverity
 import org.jetbrains.kotlin.cli.common.messages.CompilerMessageSourceLocation
 import org.jetbrains.kotlin.cli.common.messages.GroupingMessageCollector
@@ -17,6 +19,7 @@ import org.jetbrains.kotlin.cli.pipeline.jvm.JvmFrontendPipelinePhase
 import org.jetbrains.kotlin.cli.pipeline.jvm.JvmWriteOutputsPhase
 import org.jetbrains.kotlin.compiler.plugin.CompilerPluginRegistrar
 import org.jetbrains.kotlin.compiler.plugin.ExperimentalCompilerApi
+import org.jetbrains.kotlin.config.CompilerConfiguration
 import org.jetbrains.kotlin.config.Services
 import org.jetbrains.kotlin.platform.jvm.JvmPlatforms
 import org.jetbrains.kotlin.util.PerformanceManagerImpl
@@ -178,31 +181,50 @@ class KotlinJvmCompiler(
         val args = buildArguments(
             (kotlinSources + javaSources).map { it.toString() }, fullClasspath, outputDir, jvmTarget, onArt, friendPaths,
         )
-        // GroupingMessageCollector is what the real pipeline wraps the collector in (it defers errors so
-        // related diagnostics group up); flush() in finally hands everything to the recorder.
+        // GroupingMessageCollector is what the real pipeline wraps the collector in (it defers messages so
+        // related diagnostics group up). CRITICAL: unlike `K2JVMCompiler.exec`, driving the phases by hand
+        // does NOT surface the FIR analysis diagnostics — those accumulate in the configuration's
+        // BaseDiagnosticsCollector, and the CLI's `CheckCompilationErrors` step is what renders them to the
+        // message collector and fails the build on an error. We must do the same, or a genuine compile ERROR
+        // (an unresolved reference, a type mismatch) is silently swallowed and the compile "succeeds" with no
+        // output — which strands a wiped output dir just like the incremental stale-manifest bug. Covered by
+        // RegistrarPathErrorReportingTest.
         val grouping = GroupingMessageCollector(collector, false, false)
         val disposable = Disposer.newDisposable("kotlin-registrar-compile")
+
+        // Reached by EVERY exit path: render the configuration's accumulated FIR diagnostics into `collector`
+        // (mirrors CheckCompilationErrors → FirDiagnosticsCompilerResultsReporter), flush any grouped messages,
+        // then decide success from whether an error was actually recorded. Renders once per compile.
+        fun finish(config: CompilerConfiguration?, extra: List<String> = emptyList()): Result {
+            config?.let {
+                FirDiagnosticsCompilerResultsReporter.reportToMessageCollector(it.diagnosticsCollector, collector, false)
+            }
+            runCatching { grouping.flush() }
+            return Result(!collector.hasErrors(), collector.messages + extra, collector.outputs())
+        }
+
         try {
             val performanceManager = PerformanceManagerImpl(JvmPlatforms.defaultJvmPlatform, "kotlin-registrar-compile")
             val argsArtifact = ArgumentsPipelineArtifact(args, Services.EMPTY, disposable, grouping, performanceManager)
             val configArtifact = JvmConfigurationPipelinePhase.executePhase(argsArtifact)
-                ?: return Result(false, collector.messages + "error: kotlinc rejected the compiler arguments", collector.outputs())
+                ?: return finish(null, listOf("error: kotlinc rejected the compiler arguments"))
             registrars.forEach { configArtifact.configuration.add(CompilerPluginRegistrar.COMPILER_PLUGIN_REGISTRARS, it) }
             val frontend = JvmFrontendPipelinePhase.executePhase(configArtifact)
-                ?: return Result(false, collector.messages, collector.outputs())
-            if (grouping.hasErrors()) return Result(false, collector.messages, collector.outputs())
+                ?: return finish(configArtifact.configuration)
+            // A frontend error (unresolved reference, type mismatch, …) stops before codegen — exactly like the
+            // real pipeline's post-frontend CheckCompilationErrors. The rendering itself happens once, in finish().
+            if (frontend.configuration.diagnosticsCollector.hasErrors) return finish(frontend.configuration)
             val fir2ir = JvmFir2IrPipelinePhase.executePhase(frontend)
-                ?: return Result(false, collector.messages, collector.outputs())
+                ?: return finish(frontend.configuration)
             val backend = JvmBackendPipelinePhase.executePhase(fir2ir)
-                ?: return Result(false, collector.messages, collector.outputs())
+                ?: return finish(fir2ir.configuration)
             JvmWriteOutputsPhase.executePhase(backend)
+            return finish(backend.configuration)
         } catch (t: Throwable) {
-            return Result(false, collector.messages + "error: kotlinc threw: ${t.javaClass.name}: ${t.message}", collector.outputs())
+            return finish(null, listOf("error: kotlinc threw: ${t.javaClass.name}: ${t.message}"))
         } finally {
-            runCatching { grouping.flush() } // hand any grouped (deferred) diagnostics to the recorder
             Disposer.dispose(disposable)
         }
-        return Result(!collector.hasErrors(), collector.messages, collector.outputs())
     }
 
     /** The CLI argument set shared by both compile paths (classpath, target, `-no-jdk`, friend paths). */

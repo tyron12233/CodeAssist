@@ -28,11 +28,22 @@ internal object ComposeSampleSupport {
     val composeDependencies: List<TemplateDependency> =
         AndroidFeatureDependencies.COMPOSE.map { TemplateDependency("app", it) }
 
-    /** Read a bundled sample resource, or fail loudly (a missing sample is a build/packaging bug). */
-    private fun readResource(path: String): String =
+    /** Read a bundled sample resource's raw bytes, or fail loudly (a missing sample is a build/packaging bug). */
+    private fun readResourceBytes(path: String): ByteArray =
         ComposeSampleSupport::class.java.classLoader.getResourceAsStream(path)
-            ?.use { String(it.readBytes(), Charsets.UTF_8) }
+            ?.use { it.readBytes() }
             ?: error("Missing bundled sample resource: $path")
+
+    /** True if [bytes] has a NUL in its first block — the same "not text" sniff the editor uses. */
+    private fun looksBinary(bytes: ByteArray): Boolean =
+        (0 until minOf(bytes.size, 8000)).any { bytes[it].toInt() == 0 }
+
+    /** Copy a bundled sample file: byte-exact for binary assets, UTF-8 text otherwise (output unchanged). */
+    private fun copyResource(scaffold: ProjectScaffold, resourcePath: String, dest: String) {
+        val bytes = readResourceBytes(resourcePath)
+        if (looksBinary(bytes)) scaffold.writeBytes(dest, bytes)
+        else scaffold.writeText(dest, String(bytes, Charsets.UTF_8))
+    }
 
     /**
      * Scaffold a single-module Jetpack Compose app: the project + the `app` module (Compose facet), the
@@ -128,7 +139,7 @@ internal object ComposeSampleSupport {
             val body = if (rel == "drawable/ic_launcher_foreground.xml") icon.foreground else content
             scaffold.writeText("app/src/main/res/$rel", body)
         }
-        for (rel in sources) scaffold.writeText(rel, readResource("samples/$sampleId/$rel"))
+        for (rel in sources) copyResource(scaffold, "samples/$sampleId/$rel", rel)
     }
 }
 

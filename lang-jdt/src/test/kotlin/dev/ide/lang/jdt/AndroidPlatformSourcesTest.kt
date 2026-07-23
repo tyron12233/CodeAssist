@@ -14,6 +14,7 @@ import java.util.zip.ZipOutputStream
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNotNull
+import kotlin.test.assertNull
 
 /**
  * The Android platform sources dir is matched by MAJOR API level, not exact name: the SDK ships framework
@@ -50,6 +51,46 @@ class AndroidPlatformSourcesTest {
         val onCreate = resolver.method("android.app.Activity", "onCreate", 1)
         assertNotNull(onCreate, "Activity.onCreate should resolve from the same-major sources dir")
         assertEquals(listOf("savedInstanceState"), onCreate.names, "real framework param name")
+    }
+
+    /**
+     * On device `android.jar` is a bundled FLAT asset (`<home>/android.jar`, no `platforms/android-NN/` parent),
+     * so the analyzer can't DERIVE the framework sources dir from its path — the SDK-Manager-installed sources
+     * live at an unrelated root. This is the disconnect that left `setContentView` showing `p0`/no javadoc on
+     * device even after installing sources. The host bridges it by attaching the sources dir explicitly via
+     * [JdtSourceAnalyzer.addSourceDirs]; without that attach the method must NOT resolve.
+     */
+    @Test
+    fun bundledFlatJarResolvesFrameworkDocsOnlyAfterExplicitSourceDirAttach() {
+        val home = Files.createTempDirectory("device-home")
+        val androidJar = home.resolve("android.jar")
+        ZipOutputStream(Files.newOutputStream(androidJar)).close()
+
+        val sdkManagerRoot = Files.createTempDirectory("sdk-manager-root")
+        val activity = sdkManagerRoot.resolve("sources/android-36/android/app/Activity.java")
+        Files.createDirectories(activity.parent)
+        Files.writeString(
+            activity,
+            """
+            package android.app;
+            public class Activity {
+                /** Set the activity content from a layout resource. */
+                public void setContentView(int layoutResID) {}
+            }
+            """.trimIndent(),
+        )
+
+        val analyzer = analyzerWithBoot(androidJar)
+        assertNull(
+            analyzer.sourceMethodResolver.method("android.app.Activity", "setContentView", 1),
+            "a flat bundled android.jar has no derivable sources dir — resolution should miss",
+        )
+
+        analyzer.addSourceDirs(listOf(sdkManagerRoot.resolve("sources/android-36")))
+        val doc = analyzer.sourceMethodResolver.method("android.app.Activity", "setContentView", 1)
+        assertNotNull(doc, "setContentView should resolve after the SDK-Manager sources dir is attached")
+        assertEquals(listOf("layoutResID"), doc.names, "real framework param name")
+        assertNotNull(doc.doc, "framework javadoc should be attached")
     }
 
     private fun analyzerWithBoot(androidJar: Path): JdtSourceAnalyzer {

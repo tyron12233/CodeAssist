@@ -13,6 +13,7 @@ import androidx.compose.runtime.key
 import android.content.res.Configuration
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -23,12 +24,20 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalConfiguration
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.dp
+import dev.ide.interp.PreviewResourceResolver
+import dev.ide.interp.PreviewSandboxPolicy
+import dev.ide.interp.SandboxCategory
+import dev.ide.interp.SandboxFinding
 import androidx.compose.ui.unit.sp
 import dev.ide.core.IdeServicesBackend
 import dev.ide.core.LoweredComposePreview
+import dev.ide.core.PreviewOutcome
+import dev.ide.core.resolvePreviewOutcome
 import dev.ide.interp.compose.ComposePreviewRenderer
 import dev.ide.interp.compose.PreviewParameterBinding
+import dev.ide.interp.compose.VmLibraryExecutor
 import dev.ide.ui.ComposePreviewHost
 import dev.ide.ui.backend.UiComposePreview
 import dev.ide.ui.editor.preview.PreviewIssue
@@ -59,6 +68,11 @@ class AndroidComposePreviewHost(private val backend: IdeServicesBackend) : Compo
     override fun Preview(path: String, preview: UiComposePreview, text: String, dark: Boolean, onProblems: (List<PreviewIssue>) -> Unit, onBusy: (Boolean) -> Unit, modifier: Modifier) {
         val report by rememberUpdatedState(onProblems)
         val reportBusy by rememberUpdatedState(onBusy)
+        // The last buffer that lowered cleanly, retained across edits (survives text changes; reset on a file /
+        // variant switch). A mid-edit / syntactically-broken buffer must never reach the Compose runtime — the
+        // debounced re-lower returns null for it, and we keep this last good render on screen instead of blanking
+        // (or, worse, churning a half-formed tree that corrupts the shared composer with "Missed endGroup").
+        val lastGood = remember(path, preview.variantId) { arrayOfNulls<LoweredComposePreview>(1) }
         val state by produceState<PreviewState>(PreviewState.Loading, path, preview.functionName, preview.arity, text) {
             // First-run resilience: while the workspace index is still building, library composables (`Text`,
             // `Column`, `remember`) resolve to 0 candidates and the lower fails. Rather than latch that transient
@@ -68,32 +82,92 @@ class AndroidComposePreviewHost(private val backend: IdeServicesBackend) : Compo
             var attempts = 0
             while (true) {
                 val lowered = runCatching { backend.lowerComposePreview(path, preview.functionName, preview.arity, text) }.getOrNull()
-                if (lowered != null) { value = PreviewState.Ready(lowered); break }
+                if (lowered != null) { lastGood[0] = lowered; value = PreviewState.Ready(lowered); break }
                 val ready = runCatching { backend.composePreviewReady(path) }.getOrDefault(true)
                 if (ready || attempts++ >= PREVIEW_READY_MAX_ATTEMPTS) {
-                    // Surface WHY it isn't interpretable (the unsupported constructs + offending source) instead
-                    // of a bare message, so a gap is investigable. Even a thrown error becomes a visible reason.
-                    val why = runCatching { backend.composePreviewDiagnostics(path, preview.functionName, preview.arity, text) }
-                        .getOrElse { listOf("couldn't analyze: ${it::class.simpleName}: ${it.message}") }
-                        .ifEmpty { listOf("no reason reported (analysis returned nothing)") }
-                    value = PreviewState.NotInterpretable(why)
+                    // Broken / not-yet-lowerable buffer: keep the last good render (a broken tree must never reach
+                    // Compose); only when nothing ever rendered do we surface WHY (the unsupported constructs +
+                    // offending source, so a gap is investigable). Even a thrown error becomes a visible reason.
+                    val outcome = resolvePreviewOutcome(null, lastGood[0]) {
+                        runCatching { backend.composePreviewDiagnostics(path, preview.functionName, preview.arity, text) }
+                            .getOrElse { listOf("couldn't analyze: ${it::class.simpleName}: ${it.message}") }
+                            .ifEmpty { listOf("no reason reported (analysis returned nothing)") }
+                    }
+                    value = when (outcome) {
+                        is PreviewOutcome.Render -> PreviewState.Ready(outcome.lowered)
+                        is PreviewOutcome.Unavailable -> PreviewState.NotInterpretable(outcome.reasons)
+                    }
                     break
                 }
                 value = PreviewState.Loading
                 delay(PREVIEW_READY_POLL_MS)
             }
         }
-        // Dex the project's library closure once (off-thread, cached by dependency fingerprint) and dispatch
-        // library composables through it. Null while it builds / on failure → the renderer falls back to the
+        // The project's library closure executes in the bytecode VM: dependency classes are read straight from
+        // the resolved jars and interpreted (bridged to the IDE's bundled runtime), so downloaded code never
+        // reaches a ClassLoader. Null while the jar list resolves / on failure → the renderer falls back to the
         // IDE's bundled Compose, which still serves standard composables.
-        val loader by produceState<ClassLoader?>(null, path) {
+        val libraryExecutor by produceState<VmLibraryExecutor?>(null, path) {
             value = runCatching {
-                backend.composePreviewLibs(path)?.let { withContext(Dispatchers.IO) { ComposeLibraryLoader.loaderFor(it) } }
+                backend.composePreviewLibs(path)?.let { libs ->
+                    withContext(Dispatchers.IO) { VmLibraryExecutor(libs.jars, peerFactory = DexPeerFactory()) }
+                }
             }.getOrNull()
         }
-        val renderer = remember(loader) { ComposePreviewRenderer(loader) }
+        // Close the executor's open library-jar handles when it is replaced (a new file/path produces a fresh
+        // one) or the preview leaves composition — produceState never disposes the value it superseded. The
+        // local capture matters: onDispose must close THIS executor, not whatever the state holds later.
+        DisposableEffect(libraryExecutor) {
+            val exec = libraryExecutor
+            onDispose { exec?.close() }
+        }
+        // Close the executor's open library-jar handles when it is replaced (a new file/path produces a fresh
+        // one) or the preview leaves composition — produceState never disposes the value it superseded, so
+        // without this each discarded executor leaks its jar FDs until GC, and ART logs a "ZipFile.close" warning
+        // per handle. onDispose fires with the exec that was just superseded, so the current one stays open.
+        DisposableEffect(libraryExecutor) {
+            val exec = libraryExecutor
+            onDispose { exec?.close() }
+        }
+        // Interpreter-mediated project resources: fetch the module's res off-thread, then build a resolver with
+        // the previewed density + night baked in (see [AndroidPreviewResources]) so `stringResource(R.string.x)`
+        // / `colorResource`/`painterResource`/… resolve against the project (not the IDE app's own Resources).
+        // Null while it builds / for a non-Android module → the renderer falls back to no resource resolution.
+        val night = dark || (preview.config.nightMode == true)
+        val density = LocalDensity.current.density
+        // The resolver loads async (off-thread res parse). Track "settled" so the render WAITS for it — else the
+        // first render fires with a null resolver (before this completes), `stringResource(R.string.x)` throws
+        // "no resource resolver", and that error latches (`renderError` never clears on a later good render).
+        // `.first` = the resolver (or genuine null for a non-Android module); `.second` = load finished.
+        val resLoad by produceState(null as PreviewResourceResolver? to false, path, night, density) {
+            val resolver = runCatching {
+                val res = backend.composePreviewResources(path)
+                if (res == null) log.warn("no preview resources for $path — R.string/colorResource/… won't resolve (module has no Android namespace or an empty resource repo)")
+                res?.let { withContext(Dispatchers.IO) { AndroidPreviewResources(it.repo, it.namespace, density, night) } }
+            }.onFailure { log.warn("building preview resources for $path failed: ${it.javaClass.name}: ${it.message}", it) }.getOrNull()
+            value = resolver to true
+        }
+        val resources = resLoad.first
+        val resourcesReady = resLoad.second
+        // The preview sandbox: block file/network/Android-system/process escapes per the project's Compose
+        // Preview settings. The default-restricted policy serves the FIRST pass too (no unrestricted window
+        // while the settings read is in flight); the configured one replaces it only when the project
+        // actually relaxes a category (else the instance — and its findings — stays stable).
+        val defaultSandbox = remember(path) { PreviewSandboxPolicy(SandboxCategory.entries.toSet()) }
+        val sandbox by produceState(defaultSandbox, path) {
+            val cats = runCatching { backend.composePreviewSandbox() }.getOrNull()
+                ?.mapNotNullTo(HashSet()) { SandboxCategory.fromId(it) } ?: return@produceState
+            if (cats != SandboxCategory.entries.toSet()) value = PreviewSandboxPolicy(cats)
+        }
+        val renderer = remember(libraryExecutor, resources, sandbox) {
+            ComposePreviewRenderer(resources = resources, hooks = sandbox, libraryExecutor = libraryExecutor)
+        }
         var renderError by remember(path, preview.variantId, text) { mutableStateOf<Throwable?>(null) }
         var partialError by remember(path, preview.variantId, text) { mutableStateOf<Throwable?>(null) }
+        var sandboxFindings by remember(path, preview.variantId, text) { mutableStateOf(listOf<SandboxFinding>()) }
+        // A buffer edit resets the recorded findings so the chip reflects the current text — a still-present
+        // blocked call re-records on the next render pass.
+        LaunchedEffect(text, sandbox) { sandbox.clearFindings() }
         // The interpreter re-runs on every recomposition pass, so a content lambda that fails deterministically
         // hands the renderer a FRESH Throwable each pass. Writing that to `partialError` (read during
         // composition) every pass would invalidate → re-run → invalidate … an unbounded recomposition loop.
@@ -109,24 +183,25 @@ class AndroidComposePreviewHost(private val backend: IdeServicesBackend) : Compo
         // so the details live in the tappable chip rather than covering the device frame.
         // renderError = top-level failure (preview replaced by error view); partialError = content-lambda error
         // (preview still shows, but lazy content like LazyColumn items may be incomplete).
-        LaunchedEffect(state, renderError, partialError) {
+        LaunchedEffect(state, renderError, partialError, sandboxFindings) {
             val err = renderError
             val partial = partialError
-            report(
-                when {
-                    err != null -> listOf(PreviewIssue(PreviewIssueLevel.ERROR, "Preview failed to render", err.message ?: err::class.simpleName ?: "Unknown error"))
-                    partial != null -> listOf(PreviewIssue(PreviewIssueLevel.WARNING, "Preview partially rendered", partial.message ?: partial::class.simpleName ?: "Unknown error"))
-                    state is PreviewState.NotInterpretable -> (state as PreviewState.NotInterpretable).reasons.map { PreviewIssue(PreviewIssueLevel.WARNING, "Preview not interpretable", it) }
-                    else -> emptyList()
-                },
-            )
+            val issues = when {
+                err != null -> listOf(PreviewIssue(PreviewIssueLevel.ERROR, "Preview failed to render", err.message ?: err::class.simpleName ?: "Unknown error"))
+                partial != null -> listOf(PreviewIssue(PreviewIssueLevel.WARNING, "Preview partially rendered", partial.message ?: partial::class.simpleName ?: "Unknown error"))
+                state is PreviewState.NotInterpretable -> (state as PreviewState.NotInterpretable).reasons.map { PreviewIssue(PreviewIssueLevel.WARNING, "Preview not interpretable", it) }
+                else -> emptyList()
+            }
+            // Sandbox blocks ride along whatever else is reported: the stubbed call returned null, so the
+            // preview may LOOK fine — the chip is the only place the block is visible.
+            report(issues + sandboxFindings.map { PreviewIssue(PreviewIssueLevel.WARNING, "Preview blocked ${it.category.label}", it.member) })
         }
 
         // Force the requested night mode so a theme reading isSystemInDarkTheme() (i.e. LocalConfiguration's
         // uiMode) renders the same preview Light or Dark. The effective night is the surface's Night toggle OR
         // the variant's own @Preview(uiMode = UI_MODE_NIGHT_YES). A @Preview(locale=...) overrides the locale
-        // so a localized string/resource resolves the way that variant declares.
-        val night = dark || (preview.config.nightMode == true)
+        // so a localized string/resource resolves the way that variant declares. (`night` is computed above,
+        // where the resource resolver is built.)
         val locale = preview.config.locale?.takeIf { it.isNotBlank() }
         val base = LocalConfiguration.current
         val cfg = remember(base, night, locale) {
@@ -141,7 +216,9 @@ class AndroidComposePreviewHost(private val backend: IdeServicesBackend) : Compo
             Box(modifier, contentAlignment = Alignment.Center) {
                 when (val s = state) {
                     is PreviewState.Loading -> CircularProgressIndicator(Modifier.size(28.dp))
-                    is PreviewState.Ready -> {
+                    // Wait for the resource load to settle before the first render, so `stringResource`/`R.*`
+                    // have their resolver (else the first pass fails "no resolver" and that error latches).
+                    is PreviewState.Ready -> if (!resourcesReady) CircularProgressIndicator(Modifier.size(28.dp)) else {
                         // Key the capture on the error's identity, not the instance: the interpreter throws a
                         // fresh Throwable each pass, so keying on it would relaunch + rewrite state every
                         // recomposition → a render loop. Same message/type ⇒ same key ⇒ captured once.
@@ -156,6 +233,10 @@ class AndroidComposePreviewHost(private val backend: IdeServicesBackend) : Compo
                                 if (e != null) log.warn("Compose preview partial render", e)
                                 partialError = e
                             }
+                            // Drain the sandbox's blocked-call findings after each pass (same cadence as the
+                            // partial-error drain); the state write no-ops when the list is unchanged.
+                            val fs = sandbox.findings()
+                            if (fs != sandboxFindings) sandboxFindings = fs
                         }
                         PreviewVariants(renderer, s.lowered, onErr, onPartial)
                     }
@@ -177,7 +258,14 @@ class AndroidComposePreviewHost(private val backend: IdeServicesBackend) : Compo
         val report by rememberUpdatedState(onProblems)
         val reportBusy by rememberUpdatedState(onBusy)
         // tolerateGaps=false so a snippet that fails to dispatch surfaces the reason instead of a blank preview.
-        val renderer = remember { ComposePreviewRenderer(null, tolerateGaps = false) }
+        // The sandbox matches: strict mode (throw, not stub), everything restricted — an authored lesson
+        // snippet has no business touching files/network/system, and a violation should fail loudly.
+        val renderer = remember {
+            ComposePreviewRenderer(
+                null, tolerateGaps = false,
+                hooks = PreviewSandboxPolicy(SandboxCategory.entries.toSet(), stubOnDeny = false),
+            )
+        }
         val state by produceState<PreviewState>(PreviewState.Loading, code) {
             // Same first-run resilience as [Preview]: the hidden Compose scratch's androidx.compose.* download +
             // attach may still be in flight, so `Text`/`Column`/`remember` don't resolve yet. Stay in Loading

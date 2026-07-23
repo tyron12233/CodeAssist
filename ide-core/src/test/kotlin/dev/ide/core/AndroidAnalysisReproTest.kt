@@ -34,6 +34,23 @@ class AndroidAnalysisReproTest {
             val validDiags = runBlocking { ide.analyzeDiagnostics(main, valid) }.map { it.message }
             assertFalse(validDiags.any { "Activity" in it && "resolved" in it }, "android.jar types must resolve: $validDiags")
             assertFalse(validDiags.any { "Missing system library" in it }, "must not fail with missing system library: $validDiags")
+            // `@Override onCreate(Bundle)` overrides android.app.Activity.onCreate — a LIBRARY-inherited override.
+            // It must not be flagged "does not override or implement" (the on-device false-positive report).
+            assertFalse(validDiags.any { "does not override or implement" in it },
+                "a valid library-inherited @Override must not be flagged: $validDiags")
+
+            // The user's exact shape: an anonymous listener whose @Override method comes from an android.jar
+            // interface. Must not be flagged either.
+            val withListener = valid.replace(
+                "setContentView(tv);",
+                """setContentView(tv);
+                tv.setOnClickListener(new android.view.View.OnClickListener() {
+                    @Override public void onClick(android.view.View v) { }
+                });""",
+            )
+            val listenerDiags = runBlocking { ide.analyzeDiagnostics(main, withListener) }.map { it.message }
+            assertFalse(listenerDiags.any { "does not override or implement" in it },
+                "an anonymous android.jar-interface @Override must not be flagged: $listenerDiags")
 
             val broken = valid.replace("super.onCreate(savedInstanceState);", "super.onCreate(savedInstanceState); int z = ;")
             assertTrue(

@@ -25,11 +25,14 @@ fun KotlinResolver.composableContextAt(offset: Int): ComposableContext {
     // nearest such boundary is a sound cache key — every position within it resolves to the same context.
     val boundary = run {
         var n: PsiElement? = elementAt(offset)
-        while (n != null && n !is KtNamedFunction && n !is org.jetbrains.kotlin.psi.KtPropertyAccessor && n !is KtLambdaExpression) n = n.parent
+        while (n != null && n !is KtNamedFunction && n !is org.jetbrains.kotlin.psi.KtPropertyAccessor && n !is KtLambdaExpression) n =
+            n.parent
         n
     }
     boundary?.let { composeCtxCache[it]?.let { hit -> return hit } }
-    return composableContextWalk(offset).also { if (boundary != null) composeCtxCache[boundary] = it }
+    return composableContextWalk(offset).also {
+        if (boundary != null) composeCtxCache[boundary] = it
+    }
 }
 
 internal fun KotlinResolver.composableContextWalk(offset: Int): ComposableContext {
@@ -38,17 +41,21 @@ internal fun KotlinResolver.composableContextWalk(offset: Int): ComposableContex
         when (node) {
             is KtNamedFunction ->
                 return if (node.hasComposableAnnotation()) ComposableContext.COMPOSABLE else ComposableContext.NON_COMPOSABLE
+
             is org.jetbrains.kotlin.psi.KtPropertyAccessor ->
                 if (node.hasComposableAnnotation()) return ComposableContext.COMPOSABLE
+
             is KtLambdaExpression -> {
                 val expected = expectedFunctionTypeFor(node)
                 if (expected?.isComposable == true) return ComposableContext.COMPOSABLE
-                val callee = enclosingCallAndParamIndex(node)?.let { resolveCalleeFunction(it.first) }
+                val callee =
+                    enclosingCallAndParamIndex(node)?.let { resolveCalleeFunction(it.first) }
                 // Couldn't determine what kind of lambda this is → unknown context (back off downstream).
                 if (expected == null && callee == null) return ComposableContext.UNKNOWN
                 // A non-inline lambda resets the context; an inline lambda is transparent (keep walking out).
                 if (callee?.isInline != true) return ComposableContext.NON_COMPOSABLE
             }
+
             else -> {}
         }
         node = node.parent
@@ -83,7 +90,8 @@ fun KotlinResolver.suspendContextAt(offset: Int): SuspendContext {
     // resolves the same), so it is a sound cache key (mirrors [composableContextAt]).
     val boundary = run {
         var n: PsiElement? = elementAt(offset)
-        while (n != null && n !is KtNamedFunction && n !is org.jetbrains.kotlin.psi.KtPropertyAccessor && n !is KtLambdaExpression) n = n.parent
+        while (n != null && n !is KtNamedFunction && n !is org.jetbrains.kotlin.psi.KtPropertyAccessor && n !is KtLambdaExpression) n =
+            n.parent
         n
     }
     boundary?.let { suspendCtxCache[it]?.let { hit -> return hit } }
@@ -101,7 +109,8 @@ internal fun KotlinResolver.suspendContextWalk(offset: Int): SuspendContext {
             is KtLambdaExpression -> {
                 val expected = expectedFunctionTypeFor(node)
                 if (expected != null && TypeRendering.isSuspendFunctionType(expected.qualifiedName)) return SuspendContext.SUSPEND
-                val callee = enclosingCallAndParamIndex(node)?.let { resolveCalleeFunction(it.first) }
+                val callee =
+                    enclosingCallAndParamIndex(node)?.let { resolveCalleeFunction(it.first) }
                 when {
                     // An inline lambda is transparent: keep walking out to the real enclosing boundary.
                     callee?.isInline == true -> {}
@@ -112,6 +121,7 @@ internal fun KotlinResolver.suspendContextWalk(offset: Int): SuspendContext {
                     else -> return SuspendContext.UNKNOWN
                 }
             }
+
             else -> {}
         }
         node = node.parent

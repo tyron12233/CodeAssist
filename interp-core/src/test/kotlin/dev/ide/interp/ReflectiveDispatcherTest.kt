@@ -335,8 +335,76 @@ class ReflectiveDispatcherTest {
         assertEquals(110, dispatcher.dispatch(call, receiver = Palette(), args = listOf<Any?>(listOf(2, 3, 5), 100)), "the exact-arity bind path must box List<Tag> elements")
     }
 
+    @Test
+    fun instanceCallUnboxesABoxedValueClassArgForAPrimitiveUnderlyingParam() {
+        // The reported live-edit crash `method OffsetKt.offset-VpY3zN4 argument 2 has type float, got Dp`: a
+        // BOXED value-class value (a `Dp` read from state / an animated value) reaches a parameter typed as its
+        // UNBOXED underlying (the mangled `offset-<hash>(…, float, float)` wants the Dp's `float`). The bind must
+        // unbox it via `unbox-impl` before the invoke — the inverse of the box case above. `Sink.consume(v: Int)`
+        // fed a BOXED `Tag` mirrors it (a value-class instance, as a value-class-typed state read produces).
+        val callee = ResolvedCallable.Library(
+            displayName = "consume", ownerFqn = Sink::class.java.name, methodName = "consume",
+            paramTypes = emptyList(), isStatic = false, isConstructor = false, isInline = false, descriptorPrecise = true,
+        )
+        val call = call(DispatchKind.MEMBER, callee)
+        assertEquals(6, dispatcher.dispatch(call, receiver = Sink(), args = listOf<Any?>(Tag(5))), "a boxed value-class arg must unbox to fit a primitive underlying param")
+    }
+
+    @Test
+    fun instanceCallRecursivelyUnboxesANestedValueClass() {
+        // Found on ART: `colorResource(...)` fed a `RecordColor(color: Color)` (JVM `RecordColor-…(long, …)`)
+        // failed because `Color` is `value class Color(val value: ULong)` — its underlying is ITSELF a value class
+        // over `long`, so a boxed Color reaching a mangled `long` param needs recursive unboxing (Color→ULong→
+        // long), not one level. `Outer(Inner(v))` (a value class wrapping a value class wrapping an Int) fed to a
+        // plain `Int` param mirrors it exactly.
+        val callee = ResolvedCallable.Library(
+            displayName = "consume", ownerFqn = Sink::class.java.name, methodName = "consume",
+            paramTypes = emptyList(), isStatic = false, isConstructor = false, isInline = false, descriptorPrecise = true,
+        )
+        val call = call(DispatchKind.MEMBER, callee)
+        assertEquals(6, dispatcher.dispatch(call, receiver = Sink(), args = listOf<Any?>(Outer(Inner(5)))), "a nested value-class arg must unbox all the way to the primitive")
+    }
+
+    @Test
+    fun incomparableOverloadsAreBrokenByArgumentRuntimeType() {
+        // Two applicable overloads whose parameter types are pairwise INCOMPARABLE (neither a subtype of the
+        // other) — the `Intent.putExtra(String, CharSequence)` vs `(String, Serializable)` shape. With no
+        // parameter-type-only most-specific overload, the ARGUMENT's runtime type breaks the tie: `Both` reaches
+        // `A2` directly (distance 1) but `B2` only through a superclass (distance 2), so the `A2` overload wins
+        // deterministically instead of relying on JVM getMethods() order.
+        val callee = ResolvedCallable.Library(
+            displayName = "put", ownerFqn = Overloads::class.java.name, methodName = "put",
+            paramTypes = emptyList(), isStatic = false, isConstructor = false, isInline = false, descriptorPrecise = true,
+        )
+        val c = call(DispatchKind.MEMBER, callee)
+        assertEquals("a", dispatcher.dispatch(c, receiver = Overloads(), args = listOf<Any?>(Both())))
+    }
+
+    interface A2
+    interface B2
+    open class HasB2 : B2
+    /** Implements [A2] directly (distance 1) but [B2] only via [HasB2] (distance 2) — so the arg-runtime-type
+     *  tiebreak prefers the [A2] overload among two incomparable applicable overloads. */
+    class Both : HasB2(), A2
+    class Overloads {
+        fun put(a: A2): String = "a"
+        fun put(b: B2): String = "b"
+    }
+
     /** A Kotlin class with a mutable `value` property → `getValue()`/`setValue(x)` (a `MutableState` stand-in). */
     class Holder(var value: String)
+
+    /** A method taking a value class's UNBOXED underlying primitive (`Int`), like `offset(…, float, float)` takes
+     *  the `Dp`'s float — a boxed value-class arg must be unboxed to bind. */
+    class Sink { fun consume(v: Int): Int = v + 1 }
+
+    /** A value class wrapping a value class wrapping a primitive (`Color`→`ULong`→`long` in miniature) — a boxed
+     *  [Outer] must unbox through [Inner] to the `Int` for [Sink.consume]. */
+    @JvmInline
+    value class Inner(val v: Int)
+
+    @JvmInline
+    value class Outer(val i: Inner)
 
     /** An inline value class — its underlying `int` is what the interpreter produces for a `Tag(n)` expression. */
     @JvmInline

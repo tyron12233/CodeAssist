@@ -5,7 +5,7 @@ interface IBuildCallback {
     // oneway: fire-and-forget, ordered per-binder, never blocks the daemon. These carry BuildState DELTAS
     // (the UI reassembles the full state on its side). Enums travel as their .name() string, decoded with
     // RunStatus.valueOf / StepStatus.valueOf — safe because both processes run the same dexed classes.
-    oneway void onOpened(boolean ok, String error);              // open(workspaceDir) completed
+    oneway void onOpened(int requestId, boolean ok, String error); // open(workspaceDir) completed; echoes the request's id
     oneway void onStatus(String status, String moduleName, long elapsedMs); // RunStatus changed
     oneway void onStep(String name, String status);              // a build step's StepStatus changed
     oneway void onLog(String message);                           // one new build-log line
@@ -24,4 +24,10 @@ interface IBuildCallback {
     // :build, but firing the installed app's activity from that background process is blocked by Android's
     // background-activity-launch rules — the UI has a foreground activity, so it can.
     oneway void onLaunchPackage(String packageName);
+
+    // --- App-log forwarding (the Logcat tab). The debug app's log bridge connects to a LocalServerSocket in
+    // :build; these stream the received lines + connection state to the UI. [level] is a UiLogLevel ordinal.
+    oneway void onAppLog(int level, String tag, int pid, int tid, String message, long timestampMs);
+    // Session/connection change. reset = true means clear the buffer (a new run started); packageName may be empty.
+    oneway void onAppLogState(boolean connected, String packageName, boolean reset);
 }

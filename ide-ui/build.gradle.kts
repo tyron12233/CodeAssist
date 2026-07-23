@@ -34,6 +34,9 @@ kotlin {
 
     sourceSets {
         commonMain.dependencies {
+            // The IdeBackend port + DTOs + UI-contribution model live in :ide-ui-api; `api` re-exposes them so
+            // :ide-core (which depends on :ide-ui) keeps seeing them transitively without a build change.
+            api(project(":ide-ui-api"))
             implementation(compose.runtime)
             implementation(compose.foundation)
             implementation(compose.material3)

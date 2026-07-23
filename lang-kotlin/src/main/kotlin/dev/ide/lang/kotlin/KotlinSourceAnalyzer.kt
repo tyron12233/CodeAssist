@@ -31,9 +31,11 @@ import com.intellij.psi.PsiElement
 import dev.ide.lang.completion.CompletionContribution
 import dev.ide.lang.folding.FoldingService
 import dev.ide.lang.formatting.FormattingService
+import dev.ide.lang.imports.ImportOrganizerService
 import dev.ide.lang.highlight.SemanticHighlightService
 import dev.ide.lang.kotlin.interp.KotlinPreviewLowering
 import dev.ide.lang.kotlin.interp.PreviewDeclProvider
+import dev.ide.lang.kotlin.interp.PreviewFileModel
 import dev.ide.lang.kotlin.interp.PreviewInfo
 import dev.ide.lang.kotlin.interp.PreviewModel
 import dev.ide.lang.kotlin.interp.ResolvedClass
@@ -70,6 +72,31 @@ import java.nio.file.Paths
  * with [indexService] injected by the host after construction (it powers type-NAME completion via
  * `java.classNames`; members come from bytecode).
  */
+/** Android framework FQN prefixes hidden from index-backed type-name completion in a non-Android module. */
+private val ANDROID_TYPE_PREFIXES = listOf("android.", "androidx.", "com.android.", "com.google.android.", "dalvik.")
+
+/**
+ * Whether `android.*`/`androidx.*` type names should stay VISIBLE in this module's type-name completion,
+ * i.e. NOT be hidden as "another module's classpath leaking through the shared index". True when either the
+ * host says this is an Android module ([isAndroidModule] `== true`), OR the Android world is actually on this
+ * module's own [classpathJars] — an `android.jar` boot classpath (by name, for a desktop SDK) OR any jar under
+ * an `androidx`/`android`/`com.android`/`com.google.android` coordinate group. The classpath check is read
+ * from the resolved jar PATHS, whose Maven layout encodes the group (`…/androidx/compose/ui/…`), so it holds
+ * where the filename sniff cannot: an on-device `android.jar` bundled under another name, a Compose module
+ * whose `AndroidFacet` didn't decode (android-support disabled), or a plain `kotlin-*`/JVM Compose-Multiplatform
+ * module. Crucially a `false`/`null` from the host does NOT force hiding — on-classpath evidence still wins, so
+ * `androidx.compose.ui.Modifier` is offered wherever Compose is a real dependency.
+ */
+internal fun androidNamespacesVisible(isAndroidModule: Boolean?, classpathJars: List<Path>): Boolean {
+    if (isAndroidModule == true) return true
+    return classpathJars.any { jar ->
+        jar.fileName?.toString() == "android.jar" || run {
+            val p = "/" + jar.toString().replace('\\', '/').trim('/') + "/"
+            p.contains("/androidx/") || p.contains("/com/android/") || p.contains("/com/google/android/")
+        }
+    }
+}
+
 class KotlinSourceAnalyzer(ctx: CompilationContext) : SourceAnalyzer, Disposable {
 
     /** Injected by the host (ide-core's `analyzerFor`). */
@@ -92,12 +119,29 @@ class KotlinSourceAnalyzer(ctx: CompilationContext) : SourceAnalyzer, Disposable
     @Volatile
     var sourceDocProvider: SourceDocProvider = SourceDocProvider.NONE
 
+    /** Injected by the host: whether this module targets Android (has an `AndroidFacet`, or an `android-*`
+     *  module type). When `true` it forces `android.*`/`androidx.*` type names to stay VISIBLE in completion;
+     *  otherwise the decision falls to the module's own classpath (see [androidNamespacesVisible]). A `false`
+     *  is NOT taken as "hide them" — the analyzer still offers the namespaces whenever their jars are on this
+     *  module's classpath — so a Compose module whose `AndroidFacet` didn't decode (e.g. android-support
+     *  disabled) or a `kotlin-*`-typed Compose-Multiplatform module never loses `androidx.compose.ui.Modifier`. */
+    @Volatile
+    var isAndroidModule: Boolean? = null
+
     /** Injected by the host: the current live editor buffers (VirtualFile path → text) for CROSS-file
      *  freshness — a declaration just typed in ANOTHER open file resolves/completes here before it is saved
      *  and reindexed. Pushed into the symbol model at each analyze/complete/resolve; the model diffs the
      *  buffers and reparses only what changed (a no-op when nothing did), so the refresh is cheap. */
     @Volatile
     var liveOverlayProvider: () -> Map<String, String> = { emptyMap() }
+
+    /** Injected by the host: editor synthetic-member providers (kotlinx.serialization's `serializer()`, …) —
+     *  compiler-plugin-generated members the parse-only model can't see. Defaults to the built-ins so serialization
+     *  editor support works even in direct/test wiring; ide-core overrides with the `platform.kotlinSyntheticMember`
+     *  EP contributions (falling back to the same built-ins). See [KotlinSyntheticMemberProvider]. */
+    @Volatile
+    var syntheticMemberProviders: () -> List<dev.ide.lang.kotlin.symbols.KotlinSyntheticMemberProvider> =
+        { dev.ide.lang.kotlin.symbols.BUILTIN_KOTLIN_SYNTHETIC_MEMBER_PROVIDERS }
 
     /** Sync the symbol model to the current live buffers before a query (see [liveOverlayProvider]). */
     private fun refreshOverlay() {
@@ -132,7 +176,13 @@ class KotlinSourceAnalyzer(ctx: CompilationContext) : SourceAnalyzer, Disposable
             indexService,
             extensionCacheDir,
             { syntheticClassProvider() },
-            sourceDocProvider
+            sourceDocProvider,
+            // Hide the Android namespaces ONLY from a module that genuinely can't use them (see
+            // [androidNamespacesVisible]) — never purely because the host's Android-ness flag was false/unset.
+            // Hide the Android namespaces ONLY from a module that genuinely can't use them (see
+            // [androidNamespacesVisible]) — never purely because the host's Android-ness flag was false/unset.
+            excludedTypePrefixes = if (androidNamespacesVisible(isAndroidModule, classpathJars)) emptyList() else ANDROID_TYPE_PREFIXES,
+            syntheticMemberProviders = { syntheticMemberProviders() },
         )
     }
     private val service: KotlinSymbolService get() = serviceLazy.value
@@ -156,33 +206,33 @@ class KotlinSourceAnalyzer(ctx: CompilationContext) : SourceAnalyzer, Disposable
     private val backing = KotlinIncrementalParser()
     private val lastByFile = ConcurrentHashMap<String, KotlinParsedFile>()
 
-    // A keystroke resolves the same snapshot twice — the diagnostics pass (incrementalAnalysis) AND, when the
-    // preview is open, the Compose preview lowerer — each through its own KotlinResolver, recomputing inference
-    // + overload resolution from cold (measured: ~1100 inferType + 654 callTargets duplicated per keystroke).
-    // The lowerer reuses the diagnostics pass's per-snapshot memo caches instead. Keyed by file path; the prior
-    // entry is unreachable once replaced. Safe: every engine lane runs on EngineScheduler's single serialized
-    // worker, so the shared caches are never touched concurrently, and each pass keeps its own transient
-    // resolver state (narrowings/reentrancy) — only the pure memo caches are shared.
-    private class CachesEntry(val parsed: KotlinParsedFile, val caches: KotlinResolverCaches)
+    // A single keystroke resolves the SAME snapshot from several passes — diagnostics (incrementalAnalysis),
+    // semantic highlight (callee classification), inlay hints, and the Compose preview lowerer — each through its
+    // own KotlinResolver. Each pass recomputes inference + overload resolution + member enumeration from cold
+    // (measured on-device: highlight's `hl.call` alone ~800ms on a member-heavy file, most of it re-resolving
+    // callees the diagnostics pass already resolved). Sharing the per-snapshot memo caches across those passes
+    // means only the FIRST pays; the rest hit the memos. Keyed by file path; the prior entry is unreachable once
+    // replaced. Safe: every engine lane runs on EngineScheduler's single serialized worker, so the shared caches
+    // are never touched concurrently, and each pass keeps its own transient resolver state (narrowings/
+    // reentrancy) — only the pure memo caches are shared.
+    private class CachesEntry(val parsed: KotlinParsedFile, val externalStamp: Long, val caches: KotlinResolverCaches)
 
     private val cachesBySnapshot = ConcurrentHashMap<String, CachesEntry>()
 
-    /** Diagnostics ALWAYS resolves with a fresh cache: a dependency edit leaves the dependent file's OWN
-     *  snapshot unchanged, so reusing a prior cache would stale-serve cross-file results (caught by
-     *  `crossFileDependencyEditInvalidatesDependentCache`). The fresh cache is published so the preview lowerer
-     *  of the SAME keystroke can reuse it ([reuseCachesFor]). */
-    private fun freshCachesFor(parsed: KotlinParsedFile): KotlinResolverCaches {
+    /**
+     * The per-snapshot resolver memo caches shared across a keystroke's passes. Reuse is gated on snapshot
+     * IDENTITY *and* the external content stamp: a cross-file dependency edit leaves this file's own snapshot
+     * unchanged (same [parsed] object) but bumps the stamp, so it forces a fresh cache — the resolution memos
+     * would otherwise stale-serve the old cross-file shape (caught by
+     * `crossFileDependencyEditInvalidatesDependentCache`). Within one keystroke (same snapshot, same stamp) every
+     * pass reuses the one cache; the first to run builds it.
+     */
+    private fun sharedCachesFor(parsed: KotlinParsedFile): KotlinResolverCaches {
+        val stamp = service.externalContentStamp(parsed.file.path)
+        cachesBySnapshot[parsed.file.path]?.let { if (it.parsed === parsed && it.externalStamp == stamp) return it.caches }
         val c = KotlinResolverCaches()
-        cachesBySnapshot[parsed.file.path] = CachesEntry(parsed, c)
+        cachesBySnapshot[parsed.file.path] = CachesEntry(parsed, stamp, c)
         return c
-    }
-
-    /** The preview lowerer reuses the cache the diagnostics pass just published for this EXACT snapshot (the
-     *  per-keystroke win — no redundant second resolution); absent one (a preview with no diagnostics pass), it
-     *  builds and publishes its own. Preview is best-effort and re-renders on change, so reuse is safe here. */
-    private fun reuseCachesFor(parsed: KotlinParsedFile): KotlinResolverCaches {
-        cachesBySnapshot[parsed.file.path]?.let { if (it.parsed === parsed) return it.caches }
-        return freshCachesFor(parsed)
     }
 
     override val incrementalParser: IncrementalParser = object : IncrementalParser {
@@ -223,7 +273,7 @@ class KotlinSourceAnalyzer(ctx: CompilationContext) : SourceAnalyzer, Disposable
     override val inlayHints: dev.ide.lang.hints.InlayHintService by lazy {
         KotlinInlayHintService(
             parsedFor = { lastByFile[it.path] },
-            resolverFor = { syncFocal(it); KotlinResolver(it.ktFile, it, service) },
+            resolverFor = { syncFocal(it); KotlinResolver(it.ktFile, it, service, sharedCachesFor(it)) },
         )
     }
 
@@ -234,7 +284,7 @@ class KotlinSourceAnalyzer(ctx: CompilationContext) : SourceAnalyzer, Disposable
     override val semanticHighlighter: SemanticHighlightService by lazy {
         KotlinSemanticHighlighter(
             parsedFor = { lastByFile[it.path] },
-            resolverFor = { syncFocal(it); KotlinResolver(it.ktFile, it, service) },
+            resolverFor = { syncFocal(it); KotlinResolver(it.ktFile, it, service, sharedCachesFor(it)) },
             refresh = { refreshOverlay() },
             externalStampFor = { service.externalContentStamp(it) },
         )
@@ -247,13 +297,16 @@ class KotlinSourceAnalyzer(ctx: CompilationContext) : SourceAnalyzer, Disposable
     /** Re-indentation + whitespace cleanup over the parse-only PSI (no IntelliJ formatting model on ART). */
     override val formatting: FormattingService = KotlinFormatter()
 
+    /** "Optimize Imports": sort/dedupe/collapse + drop unused, over the parse-only PSI. */
+    override val importOrganizer: ImportOrganizerService = KotlinImportOrganizer()
+
     override suspend fun parsedFile(file: VirtualFile): ParsedFile =
         lastByFile[file.path] ?: incrementalParser.parseFull(EmptyDocument(file))
 
     // --- Compose preview (interpreter integration; see docs/compose-interpreter.md) ---
 
     /** PSI→ResolvedTree lowering for the Compose-preview interpreter, with its own per-function memoization. */
-    private val previewLowering by lazy { KotlinPreviewLowering(service, ::reuseCachesFor) }
+    private val previewLowering by lazy { KotlinPreviewLowering(service, ::sharedCachesFor) }
 
     /** The `@Preview @Composable` functions in [file]'s last parse — the editor's preview targets. */
     fun composePreviews(file: VirtualFile): List<PreviewInfo> =
@@ -278,7 +331,7 @@ class KotlinSourceAnalyzer(ctx: CompilationContext) : SourceAnalyzer, Disposable
             if (subs.isEmpty()) continue
             out += InheritorMarker(
                 anchor,
-                isInterface = decl is org.jetbrains.kotlin.psi.KtClass && decl.isInterface(),
+                isInterface = decl is KtClass && decl.isInterface(),
                 targets = subs.map { InheritorTarget(it.fqn, it.kind) }.sortedBy { it.fqn },
             )
         }
@@ -288,7 +341,7 @@ class KotlinSourceAnalyzer(ctx: CompilationContext) : SourceAnalyzer, Disposable
     /** Whether a declaration can have subtypes (so an inheritors marker is meaningful): an interface or an
      *  `open`/`abstract`/`sealed` class. A `final` class (Kotlin's default), object, enum, or annotation cannot. */
     private fun canBeInherited(d: KtClassOrObject): Boolean {
-        val c = d as? org.jetbrains.kotlin.psi.KtClass ?: return false
+        val c = d as? KtClass ?: return false
         if (c.isInterface()) return true
         if (c.isEnum() || c.isAnnotation()) return false
         return c.hasModifier(org.jetbrains.kotlin.lexer.KtTokens.OPEN_KEYWORD) ||
@@ -362,7 +415,7 @@ class KotlinSourceAnalyzer(ctx: CompilationContext) : SourceAnalyzer, Disposable
 
     /** Lower a single source file (located via [findDeclaringTypeFile]/[findDeclaringFunctionFiles]) with THIS
      *  module's analyzer — so a dependency module's file resolves against ITS OWN classpath. */
-    fun loweredFile(pf: KotlinSymbolService.PreviewSourceFile): dev.ide.lang.kotlin.interp.PreviewFileModel? =
+    fun loweredFile(pf: KotlinSymbolService.PreviewSourceFile): PreviewFileModel? =
         previewLowering.loweredFile(pf)
 
     /** The incremental-analyze engine (runs the semantic checks with per-declaration caching). Holds the
@@ -370,7 +423,7 @@ class KotlinSourceAnalyzer(ctx: CompilationContext) : SourceAnalyzer, Disposable
     private val incrementalAnalysis by lazy {
         IncrementalSemanticAnalysis(
             service,
-            ::freshCachesFor
+            ::sharedCachesFor
         )
     }
 
@@ -415,17 +468,15 @@ class KotlinSourceAnalyzer(ctx: CompilationContext) : SourceAnalyzer, Disposable
         val delegateOps =
             diags.filter { it.code == KotlinDiagnosticCodes.DELEGATE_OPERATOR && coversCaret(it) }
         if (unresolved.isEmpty() && delegateOps.isEmpty()) return emptyList()
-        val insertOffset = KotlinImportEdits.insertOffset(parsed.ktFile)
         val existing =
             parsed.ktFile.importDirectives.mapNotNull { it.importedFqName?.asString() }.toHashSet()
         val seen = HashSet<String>()
         val out = ArrayList<KotlinImportFix>()
         fun offer(fqn: String) {
             if (fqn in existing || !seen.add(fqn)) return
-            out += KotlinImportFix(
-                "Import $fqn",
-                listOf(DocumentEdit(insertOffset, 0, "import $fqn\n"))
-            )
+            // Splice the import in sorted position (a first import lands one blank line after the package).
+            val plan = KotlinImportEdits.planImport(parsed.ktFile, fqn) ?: return
+            out += KotlinImportFix("Import $fqn", listOf(DocumentEdit(plan.offset, 0, plan.text)))
         }
         for (d in unresolved) {
             val name = text.substring(

@@ -25,6 +25,9 @@ asm = "9.7"           # org.ow2.asm — bytecode rewrite of System.exit for the 
 trove4j = "1.0.20200330"  # gnu.trove.* — IntelliJ-core dependency the Kotlin compiler needs but doesn't bundle
 desugarJdkLibs = "2.1.5"  # com.android.tools:desugar_jdk_libs — core-library desugaring (temporarily enabled)
 bouncycastle = "1.78.1"   # org.bouncycastle — in-process keystore creation (keypair + self-signed X.509) on ART (no keytool)
+playServicesAds = "23.6.0"  # com.google.android.gms:play-services-ads — AdMob native ads (Android launcher only)
+androidStub = "4.1.1.4"     # com.google.android:android — the throwaway stub android.jar (compileOnly) :applog-runtime compiles against
+okhttp = "4.12.0"           # com.squareup.okhttp3 — HTTP + SSE transport for the agent's LLM client (:agent-impl); runs on JVM and ART
 
 [libraries]
 kotlinx-coroutines-core = { module = "org.jetbrains.kotlinx:kotlinx-coroutines-core", version.ref = "coroutines" }
@@ -59,6 +62,18 @@ kotlin-metadata-jvm = { module = "org.jetbrains.kotlin:kotlin-metadata-jvm", ver
 # plugin-transformed bytecode. Bundled as a lang-kotlin resource jar (for the service descriptor + desktop
 # class-load) AND dexed into :ide-android (so its registrar resolves on ART).
 kotlin-compose-compiler-plugin-ide = { module = "org.jetbrains.kotlin:compose-compiler-plugin-for-ide", version.ref = "kotlinForIde" }
+# The kotlinx.serialization kotlinc compiler plugin (unshaded `-for-ide` build, matching the compiler world of
+# :kotlin-compiler-deps). Bundled as a lang-kotlin resource jar AND dexed into :ide-android like the Compose
+# plugin, so a module carrying the serialization runtime is compiled with it — no runtime DexClassLoader.
+kotlin-serialization-compiler-plugin-ide = { module = "org.jetbrains.kotlin:kotlinx-serialization-compiler-plugin-for-ide", version.ref = "kotlinForIde" }
+# The kotlin-parcelize kotlinc compiler plugin (unshaded `-for-ide` build). Bundled + dexed like the Compose
+# and serialization plugins so a module with `@Parcelize` compiles without a runtime DexClassLoader. Enabled
+# via the module's Build Features toggle (which adds the kotlin-parcelize runtime the plugin's probe detects).
+kotlin-parcelize-compiler-plugin-ide = { module = "org.jetbrains.kotlin:parcelize-compiler-plugin-for-ide", version.ref = "kotlinForIde" }
+# The kotlinx.serialization RUNTIME (independent of the compiler-plugin version). Test-only in :lang-kotlin:
+# KotlinSerializationBuildTest compiles a @Serializable class against it (with the bundled plugin) and asserts
+# the generated serializer; self-gates when the jar isn't resolvable, so a stripped CI classpath skips it.
+kotlinx-serialization-json = { module = "org.jetbrains.kotlinx:kotlinx-serialization-json", version = "1.8.1" }
 # The Kotlin standard library JAR, bundled as an :ide-android asset so the on-device K2JVMCompiler spike has
 # stdlib on its compile classpath (the dexed app classes aren't usable as a -classpath input). Tracks `kotlin`.
 kotlin-stdlib = { module = "org.jetbrains.kotlin:kotlin-stdlib", version.ref = "kotlin" }
@@ -90,12 +105,29 @@ ow2-asm-commons = { module = "org.ow2.asm:asm-commons", version.ref = "asm" } # 
 # bundled into the launchers (:ide-android, :ide-desktop). bcpkix pulls bcprov transitively.
 bouncycastle-pkix = { module = "org.bouncycastle:bcpkix-jdk18on", version.ref = "bouncycastle" }
 bouncycastle-prov = { module = "org.bouncycastle:bcprov-jdk18on", version.ref = "bouncycastle" }
+# AdMob native ads, Android launcher only (:ide-android). Ads are rendered through the AdHost seam; no other
+# module links this. Test ad unit IDs are used until real ones are provided.
+play-services-ads = { module = "com.google.android.gms:play-services-ads", version.ref = "playServicesAds" }
+# The stub android.jar (every method throws "Stub!"): compileOnly for :applog-runtime, whose tiny debug
+# log-bridge (ContentProvider + LocalSocket forwarder) is compiled against the framework APIs but never links
+# them (they resolve against the real android.jar when the runtime jar is dexed into a user's app). Ancient
+# API level, but ContentProvider/LocalSocket/Process/Log have existed since API 1, so it suffices and keeps
+# :applog-runtime buildable with no Android SDK (CI_CORE_ONLY).
+android-stub = { module = "com.google.android:android", version.ref = "androidStub" }
+# OkHttp + its SSE companion: the agent's LLM client (:agent-impl) POSTs chat requests and reads the
+# provider's Server-Sent-Events stream through EventSource. One transport for all providers, identical on
+# desktop and ART (bundled into :ide-android like the other in-process tools). okhttp-sse tracks okhttp.
+okhttp = { module = "com.squareup.okhttp3:okhttp", version.ref = "okhttp" }
+okhttp-sse = { module = "com.squareup.okhttp3:okhttp-sse", version.ref = "okhttp" }
 
 [plugins]
 kotlin-jvm = { id = "org.jetbrains.kotlin.jvm", version.ref = "kotlin" }
 kotlin-multiplatform = { id = "org.jetbrains.kotlin.multiplatform", version.ref = "kotlin" }
 kotlin-android = { id = "org.jetbrains.kotlin.android", version.ref = "kotlin" }
 kotlin-compose = { id = "org.jetbrains.kotlin.plugin.compose", version.ref = "kotlin" }
+# kotlinx.serialization compiler plugin — generates serializers for the agent's @Serializable provider
+# DTOs (:agent-impl). Ships in the Kotlin gradle-plugin artifact, so its version tracks `kotlin`.
+kotlin-serialization = { id = "org.jetbrains.kotlin.plugin.serialization", version.ref = "kotlin" }
 compose = { id = "org.jetbrains.compose", version.ref = "compose" }
 android-application = { id = "com.android.application", version.ref = "agp" }
 # AGP 9's KMP library plugin: configures a Kotlin Multiplatform module's Android target inside `kotlin {}`.

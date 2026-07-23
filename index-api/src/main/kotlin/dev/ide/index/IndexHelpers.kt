@@ -1,5 +1,13 @@
 package dev.ide.index
 
+/**
+ * Normalize a jar path to the stable string the class-locator index (producer) and a name environment
+ * (consumer) both match on. A shared producer↔consumer contract, so it lives here (neutral) rather than in
+ * any one language backend.
+ */
+fun normalizedJarKey(p: java.nio.file.Path): String =
+    runCatching { p.toAbsolutePath().normalize().toString() }.getOrDefault(p.toString())
+
 /** FQN + simple name from a class-file entry path ("java/util/List.class" -> "java.util.List","List"), or null for nested/synthetic/info. */
 fun classEntryToFqn(entry: String): Pair<String, String>? {
     if (!entry.endsWith(".class")) return null

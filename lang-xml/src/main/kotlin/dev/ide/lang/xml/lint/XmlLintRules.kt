@@ -13,7 +13,7 @@ import dev.ide.lang.xml.XmlNodeKinds
  */
 object XmlLintRules {
 
-    private val ANDROID_NS = "http://schemas.android.com/apk/res/android"
+    private const val ANDROID_NS = "http://schemas.android.com/apk/res/android"
     private val TEXT_ATTRS = setOf("android:text", "android:hint", "android:contentDescription")
     private val SIZELESS_TAGS = setOf("merge", "include", "ViewStub", "requestFocus", "tag")
 
@@ -38,6 +38,9 @@ object XmlLintRules {
 
     /** A view [tag] missing `android:[dim]`; the attribute would be spliced at [insertAt]. [range] underlines the tag. */
     data class MissingSize(val range: TextRange, val tag: String, val dim: String, val insertAt: Int)
+
+    /** A second (or later) occurrence of [attribute] on [tag]; [range] underlines the duplicate's name. */
+    data class DuplicateAttr(val range: TextRange, val tag: String, val attribute: String)
 
     /** A problem with an attribute occurrence found by [attributeProblems]. [range] is what to underline. */
     sealed interface AttributeProblem {
@@ -66,6 +69,25 @@ object XmlLintRules {
             n.children.forEach(::walk)
         }
         walk(parsed)
+        return out
+    }
+
+    /**
+     * A start tag carrying the same attribute name twice — invalid XML (well-formedness). IntelliJ flags this
+     * as an error via an annotator; the tolerant PSI parser doesn't, so we detect it structurally over the DOM.
+     * The first occurrence is fine; every later same-named attribute is flagged (its name underlined).
+     */
+    fun duplicateAttributes(parsed: ParsedFile): List<DuplicateAttr> {
+        val out = ArrayList<DuplicateAttr>()
+        for (tag in allTags(parsed)) {
+            val seen = HashSet<String>()
+            for (attr in tag.attributes) {
+                val name = attr.name ?: continue
+                if (!seen.add(name)) {
+                    out += DuplicateAttr(TextRange(attr.startOffset, attr.startOffset + name.length), tag.name ?: "", name)
+                }
+            }
+        }
         return out
     }
 

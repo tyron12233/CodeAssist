@@ -2,7 +2,9 @@ package dev.ide.android.support
 
 import dev.ide.android.support.tasks.ApkPackaging
 import dev.ide.android.support.tools.AndroidSdk
+import dev.ide.android.support.tools.D8InProcessDexer
 import dev.ide.android.support.tools.DebugKeystore
+import dev.ide.android.support.tools.Dexer
 import dev.ide.build.BuildGoal
 import dev.ide.build.BuildRequest
 import dev.ide.build.VariantSelector
@@ -64,7 +66,11 @@ class AndroidIncrementalDexTest {
             write(dir, "app/src/main/java/com/example/app/MainActivity.java", activity("one"))
 
             val signing = DebugKeystore.getOrCreate(dir.resolve(".keystore/debug.ks"), sdk.keytool)
-            val buildSystem = AndroidBuildSystem.inProcess(sdk, signing)
+            // Force the off-heap one-pass external-dex path (dexExtLibs) this test exercises. On device that path
+            // is a forked big-heap VM, gated by AndroidBuildSystem on Dexer.runsOffHeap(); an in-process D8 reports
+            // false (it would thrash a whole-classpath pass on a small heap → bounded per-lib archiving instead),
+            // so wrap it to report off-heap here. The dex work still runs in-process; only the task graph is selected.
+            val buildSystem = AndroidBuildSystem.inProcess(sdk, signing, mergeDexer = OffHeapDexer())
             val request = BuildRequest(listOf(ModuleId("app")), VariantSelector("debug"), BuildGoal.PACKAGE)
             val cache = BuildCache(dir.resolve(".caches/build"))
             fun build() = runBlocking {
@@ -141,5 +147,11 @@ class AndroidIncrementalDexTest {
             <?xml version="1.0" encoding="utf-8"?>
             <resources><string name="app_name">Inc</string></resources>
         """
+    }
+
+    /** In-process D8 that reports itself as off-heap, so the build selects the one-pass external-dex path
+     *  (dexExtLibs). Dexing still runs in-process; only [Dexer.runsOffHeap] (the path gate) is overridden. */
+    private class OffHeapDexer(private val delegate: Dexer = D8InProcessDexer()) : Dexer by delegate {
+        override fun runsOffHeap(): Boolean = true
     }
 }

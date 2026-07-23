@@ -17,6 +17,9 @@ data class AndroidManifestInfo(
     val appIcon: String? = null,
     /** `<application android:roundIcon>` resource reference, or null (a fallback when [appIcon] won't resolve). */
     val appRoundIcon: String? = null,
+    /** The runtime [android.app.Application] subclass (`<application android:name>`), resolved against the
+     *  package (`.MyApp` / bare → fully qualified); null when the app uses the framework `Application`. */
+    val applicationName: String? = null,
 )
 
 /** A declared component — its [kind] (`activity`/`service`/`receiver`/`provider`) and fully-qualified [name]. */
@@ -37,6 +40,7 @@ object AndroidManifestParser {
         var targetSdk: Int? = null
         var appIcon: String? = null
         var appRoundIcon: String? = null
+        var applicationName: String? = null
         val permissions = ArrayList<String>()
         val components = ArrayList<ManifestComponent>()
 
@@ -49,12 +53,13 @@ object AndroidManifestParser {
                 "application" -> {
                     appIcon = el.androidAttr("icon") ?: appIcon
                     appRoundIcon = el.androidAttr("roundIcon") ?: appRoundIcon
+                    applicationName = el.androidAttr("name")?.let { resolveName(it, pkg) } ?: applicationName
                 }
                 "uses-permission" -> el.androidAttr("name")?.let { permissions += it }
                 in COMPONENT_TAGS -> el.androidAttr("name")?.let { components += ManifestComponent(el.tagName, resolveName(it, pkg)) }
             }
         }
-        return AndroidManifestInfo(pkg, minSdk, targetSdk, permissions.distinct(), components, appIcon, appRoundIcon)
+        return AndroidManifestInfo(pkg, minSdk, targetSdk, permissions.distinct(), components, appIcon, appRoundIcon, applicationName)
     }
 
     /** A component `android:name` may be relative (`.MainActivity`) or bare — resolve it against [pkg]. */

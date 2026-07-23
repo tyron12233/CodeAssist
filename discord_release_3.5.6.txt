@@ -1,0 +1,28 @@
+# 🚀 CodeAssist 3.5.6
+
+Compose preview and Kotlin completion fixes, plus important Android build and runtime fixes.
+
+**COMPOSE PREVIEW**
+- **Class literals no longer crash the preview.** A composable that uses `X::class.java` (for example `Intent(context, WelcomeActivity::class.java)`) now renders instead of failing with "unsupported construct".
+- **Top-level extension functions resolve in previews.** A `@Preview` that calls your own top-level extension no longer fails with "extension has no owner".
+
+**KOTLIN EDITOR**
+- **Auto-import now works for `setContent` and similar extensions.** Extension functions that apply to the implicit receiver (like `androidx.activity.compose.setContent`) are now offered and imported, instead of leaving an unresolved reference.
+- **Picking an override no longer duplicates it.** Selecting an overriding function from completion now replaces the `override fun` you had already typed and indents it correctly, instead of inserting a second copy.
+- **Completion after `?.` on inferred types.** Values whose type is inferred from a lambda parameter (for example `result.data?.` in an Activity Result callback) now show member completions.
+- **`_` placeholders are no longer flagged.** Underscore declarations are no longer reported as conflicting declarations.
+- **Smarter completion in more places.** Named arguments are offered inside `super(...)`, `this(...)`, and supertype constructor calls; `when (x) { is ... }` on a sealed type offers its subclasses first; `@` offers only annotations; and `import ` offers package roots.
+
+**ANDROID BUILD**
+- **AndroidX Navigation (and other libraries) link correctly.** Fixed `aapt2` failures like "attribute navGraph / startDestination / defaultNavHost not found" caused by a library's resources being skipped after an older extraction.
+- **Fixed a startup crash with Firebase and other Kotlin libraries.** Resolved `NoClassDefFoundError: kotlin/collections/CollectionsKt` at launch, caused by the bundled Kotlin standard library being dropped from the app.
+- **Resource completion survives a broken XML file.** A malformed `strings.xml` or other resource file no longer wipes out `R.string`, `R.id`, and other `R.*` completions.
+
+**JAVA & DEPENDENCIES**
+- **Java `.jar` builds now run standalone.** The build writes `META-INF/MANIFEST.MF` with the `Main-Class`, so the jar runs outside the app.
+- **Relocated dependencies resolve.** Artifacts that were moved to a new coordinate (for example `itext7-core`) now follow the relocation and pull the correct jars.
+
+**UI**
+- **Run console is readable in light theme.** Fixed washed-out run-console text on the light theme.
+
+Full changelog: https://github.com/tyron12233/CodeAssist/releases/tag/v3.5.6

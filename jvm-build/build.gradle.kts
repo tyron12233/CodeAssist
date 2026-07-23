@@ -13,6 +13,8 @@ dependencies {
     api(project(":build-engine"))   // the generic engine + neutral tasks/helpers (brings build-api/project-model-api)
     api(project(":lang-kotlin"))    // KotlinCompileTask (K2) + IncrementalKotlinCompiler (exposed in the public ctor)
     implementation(project(":lang-jdt")) // JdtCompileTask (ecj) — constructed internally
+    api(project(":jvm-interp"))     // the bytecode VM: VmProgramInterpreter runs a module's compiled program
+    implementation(libs.kotlinx.coroutines.core) // VmProgramInterpreter runs the program on a cancellable coroutine
 
     // Builds a real workspace and compiles/runs it through the real ecj/K2, exactly as the host wires it.
     testImplementation(project(":project-model-impl"))

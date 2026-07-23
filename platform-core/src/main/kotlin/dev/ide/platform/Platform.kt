@@ -1,5 +1,7 @@
 package dev.ide.platform
 
+import java.security.MessageDigest
+
 /**
  * platform-core — the substrate every other module sits on.
  *
@@ -15,7 +17,21 @@ value class PluginId(val value: String)
 
 /** A stable digest of some content (file bytes, a classpath, a set of task inputs). String-backed (hex/base64). */
 @JvmInline
-value class ContentHash(val value: String)
+value class ContentHash(val value: String) {
+    companion object {
+        /** The one canonical content digest: SHA-256 of [bytes] as lowercase hex. Both the VFS
+         *  ([dev.ide.vfs.VirtualFile.contentHash]) and the event spine hash through this, so a file's hash
+         *  is identical however it is computed. */
+        fun of(bytes: ByteArray): ContentHash {
+            val digest = MessageDigest.getInstance("SHA-256").digest(bytes)
+            return ContentHash(digest.joinToString("") { "%02x".format(it.toInt() and 0xFF) })
+        }
+
+        /** Digest of [text]'s UTF-8 bytes — the bytes a UTF-8 `writeText` persists — so it equals [of] over
+         *  the resulting file's bytes. */
+        fun of(text: String): ContentHash = of(text.toByteArray(Charsets.UTF_8))
+    }
+}
 
 /** Anything with a deterministic teardown. Registrations return one so callers can unregister. */
 fun interface Disposable {
@@ -39,6 +55,10 @@ interface ExtensionRegistry {
 
     /** All current contributions to [ep], in registration order. */
     fun <T : Any> extensions(ep: ExtensionPoint<T>): List<T>
+
+    /** Remove every contribution made by [plugin]. The bulk-unregister path a plugin unload takes: a plugin
+     *  contributing through a facade that discards its per-registration [Disposable] is still fully removed. */
+    fun unregisterAll(plugin: PluginId)
 }
 
 /** A scoped service locator (workspace- or project-scoped, depending on the key's origin). */

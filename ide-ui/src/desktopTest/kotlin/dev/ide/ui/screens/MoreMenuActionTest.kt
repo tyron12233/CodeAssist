@@ -21,7 +21,7 @@ import dev.ide.ui.backend.UiActionPlaces
 import dev.ide.ui.backend.UiCompletionResult
 import dev.ide.ui.backend.UiDiagnostic
 import dev.ide.ui.StubBackend
-import dev.ide.ui.ext.BuiltInUiActions
+import dev.ide.ui.ext.UiPluginHost
 import dev.ide.ui.ext.UiActionHost
 import dev.ide.ui.ext.UiActionRegistry
 import dev.ide.ui.ext.UiDestinations
@@ -57,7 +57,7 @@ class MoreMenuActionTest {
 
     @Test
     fun builtInsResolveInOrder() {
-        BuiltInUiActions.ensureRegistered()
+        UiPluginHost.ensureLoaded()
         val host = RecordingHost(FakeBackend())
         val ids = UiActionRegistry.forPlace(UiActionPlaces.MORE_MENU, host).map { it.id }
         assertEquals(
@@ -69,7 +69,7 @@ class MoreMenuActionTest {
 
     @Test
     fun invokingAnActionRoutesToTheHost() {
-        BuiltInUiActions.ensureRegistered()
+        UiPluginHost.ensureLoaded()
         val backend = FakeBackend()
         val host = RecordingHost(backend)
         val actions = UiActionRegistry.forPlace(UiActionPlaces.MORE_MENU, host).associateBy { it.id }
@@ -86,7 +86,7 @@ class MoreMenuActionTest {
     @OptIn(ExperimentalComposeUiApi::class)
     @Test
     fun renderMoreMenu() {
-        BuiltInUiActions.ensureRegistered()
+        UiPluginHost.ensureLoaded()
         val backend = FakeBackend()
         val host = RecordingHost(backend)
         snapshot("more-menu.png", 520, 560) {

@@ -1,0 +1,19 @@
+# 🚀 CodeAssist 3.4.1
+
+**COMPOSE PREVIEW**
+- **Live edit** - change one composable and only that function re-renders; the rest keep their state, so counters, text fields, and `remember`ed values survive the edit.
+- State changes now show immediately - a counter or toggle in a preview reflects its new value right away.
+- Faster rendering, by caching the Compose reflection the preview repeated on every pass.
+- **First-run reliability** - a preview opened before the project finishes loading now shows "Preparing" and retries, instead of getting stuck on an `unresolved call` error.
+
+**EDITOR**
+- Pressing Enter before a closing brace on its own line now keeps it aligned with its opener instead of jumping toward the left margin.
+- Line comments continue onto the next line when you press Enter at the end of a bulleted item.
+
+**KOTLIN**
+- Completion now offers the JDK collection methods on lists and maps (`sort`, `replaceAll`, `getOrDefault`, `putIfAbsent`, and more).
+
+**UI**
+- Fixed the navigation drawer sometimes sticking mid-swipe instead of snapping open or closed.
+
+Full changelog: https://github.com/tyron12233/CodeAssist/releases/tag/v3.4.1

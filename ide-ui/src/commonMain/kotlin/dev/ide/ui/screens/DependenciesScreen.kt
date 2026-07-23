@@ -682,7 +682,7 @@ private fun DependencyRow(
             when {
                 unresolved -> Text(stringResource(Res.string.dep_not_resolved), color = Ca.colors.error, style = Ca.type.caption2, maxLines = 1, overflow = TextOverflow.Ellipsis)
                 !node.compatible && node.incompatibleReason != null ->
-                    Text(node.incompatibleReason, color = Ca.colors.error, style = Ca.type.caption2, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                    Text(node.incompatibleReason!!, color = Ca.colors.error, style = Ca.type.caption2, maxLines = 1, overflow = TextOverflow.Ellipsis)
                 cycle -> Text(stringResource(Res.string.dep_cycle_shown_above), color = Ca.colors.warning, style = Ca.type.caption2)
                 else -> DepSubtitle(node)
             }
@@ -1083,7 +1083,7 @@ private fun AddResultRow(hit: UiArtifactHit, codeFont: FontFamily, modifier: Mod
             Text(hit.coordinate, color = if (hit.compatible) Ca.colors.textPrimary else Ca.colors.textTertiary,
                 style = Ca.type.footnote.copy(fontFamily = codeFont), maxLines = 1, overflow = TextOverflow.Ellipsis)
             if (!hit.compatible && hit.incompatibleReason != null)
-                Text(hit.incompatibleReason, color = Ca.colors.error, style = Ca.type.caption2, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                Text(hit.incompatibleReason!!, color = Ca.colors.error, style = Ca.type.caption2, maxLines = 1, overflow = TextOverflow.Ellipsis)
             else Text(hit.packaging, color = Ca.colors.textTertiary, style = Ca.type.caption2)
         }
         if (hit.compatible) IconButtonCa(CaIcons.plus, stringResource(Res.string.dep_add_named, hit.coordinate), onClick = onAdd, active = true, boxSize = 32, iconSize = 18)

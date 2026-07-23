@@ -1,0 +1,34 @@
+  EDITOR
+  • New high-performance editor
+  architecture: refactored into separate
+  RenderState, Geometry, and
+  Interaction layers to allow ART
+  compilation and smoother rendering.
+  • Improved touch and mouse selection
+  handling for a more native feel.
+
+  LEARN
+  • New interactive "Learn" tab with
+  integrated lessons.
+  • Lesson player features layout and
+  Compose previews, plus full Markdown
+  support for educational content.
+
+  SAMPLES
+  • Expanded sample gallery with 7 new
+  high-quality projects including 2048,
+  Snake, TicTacToe, and Weather.
+  • Visual previews for all samples in
+  the Project Picker.
+
+  KOTLIN
+  • Support for SAM constructors,
+  enabling more concise syntax for
+  functional interfaces.
+  • Enhanced type inference for value
+  classes and collection typealiases.
+
+  UI
+  • New project sharing and store item
+  screens for better collaboration.
+  • Markdown preview pane for .md files.

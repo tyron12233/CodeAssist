@@ -20,6 +20,8 @@ class XmlLanguageBackend : LanguageBackend {
         BackendCapability.COMPLETION,
         BackendCapability.SEMANTIC_HIGHLIGHT, // structural coloring: namespace prefixes + resource references
         BackendCapability.INLAY_HINTS,        // resolved resource-value previews (host wires the resolver)
+        BackendCapability.CODE_FOLDING,       // collapse element bodies + comments (real PSI ranges)
+        BackendCapability.SIGNATURE_HELP,     // parameter hints: expected value of the attribute under the caret
     )
 
     override fun createAnalyzer(ctx: CompilationContext): SourceAnalyzer = XmlSourceAnalyzer()

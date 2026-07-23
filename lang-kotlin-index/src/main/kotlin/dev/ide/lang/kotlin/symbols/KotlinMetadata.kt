@@ -46,6 +46,9 @@ object KotlinMetadata {
         val supertypes: List<TypeRef>,
         /** The class's own type-parameter names (`List<T>` → `["T"]`), for member substitution. */
         val typeParameters: List<String>,
+        /** Each type parameter's declaration-site variance (positional with [typeParameters]): `"out"`,
+         *  `"in"`, or `""` (invariant) — drives variance-aware subtyping (`List<out E>`, `Comparator<in T>`). */
+        val typeParameterVariances: List<String> = emptyList(),
         val ownMembers: List<KotlinSymbol>,
         val topLevel: List<KotlinSymbol>,
         val extensions: List<KotlinSymbol>,
@@ -208,10 +211,24 @@ object KotlinMetadata {
                 origin = BINARY,
             )
         }
+
+        // nested classes support
+        km.nestedClasses.forEach { nested ->
+            if (nested == km.companionObject) return@forEach
+            own += KotlinSymbol(
+                name = nested,
+                kind = SymbolKind.CLASS,
+                type = KotlinType("$classFqn.$nested", context = ctx),
+                owner = owner,
+                modifiers = setOf(Modifier.STATIC), // a nested type is reached statically via the outer
+                origin = BINARY,
+            )
+        }
         return Decoded(
             classFqn,
             km.supertypes.mapNotNull { typeRef(it, ctx, classTp) },
             km.typeParameters.map { it.name },
+            km.typeParameters.map { varianceStr(it.variance) },
             own,
             emptyList(),
             ext,
@@ -248,6 +265,7 @@ object KotlinMetadata {
         }
         return Decoded(
             null,
+            emptyList(),
             emptyList(),
             emptyList(),
             emptyList(),
@@ -345,6 +363,13 @@ object KotlinMetadata {
         )
     }
 
+    /** A type parameter's declaration-site variance as the string the model uses: `"out"`/`"in"`/`""`. */
+    private fun varianceStr(v: kotlin.metadata.KmVariance): String = when (v) {
+        kotlin.metadata.KmVariance.OUT -> "out"
+        kotlin.metadata.KmVariance.IN -> "in"
+        kotlin.metadata.KmVariance.INVARIANT -> ""
+    }
+
     /** When [param]'s upper bound is a SIBLING type parameter (`fun <R, T : R>` → T's bound is R), that
      *  parameter's name (looked up in the id→name map [tp]); null when the bound is a class/absent. Drives
      *  `T : R` constraint propagation (see [KotlinSymbol.typeParamBoundNames]). */
@@ -382,7 +407,15 @@ object KotlinMetadata {
         }
         val fqn = classifierFqn(t) ?: return null
         val args = t.arguments.map { arg ->
-            arg.type?.let { typeRef(it, ctx, tp) } ?: KotlinType("kotlin.Any", context = ctx)
+            // Capture the USE-SITE projection (`Array<out T>`, `Comparator<in T>`, `List<*>`) onto the argument.
+            val proj = when {
+                arg.type == null -> "*"
+                arg.variance == kotlin.metadata.KmVariance.OUT -> "out"
+                arg.variance == kotlin.metadata.KmVariance.IN -> "in"
+                else -> ""
+            }
+            val base = (arg.type?.let { typeRef(it, ctx, tp) } as? KotlinType) ?: KotlinType("kotlin.Any", context = ctx)
+            if (proj.isEmpty()) base else base.withProjection(proj)
         }
         // `T.() -> R` (apply/with/run blocks, DSL builders) carries @kotlin.ExtensionFunctionType on the type;
         // a Compose content slot (`@Composable () -> Unit`) carries @androidx.compose.runtime.Composable on it.

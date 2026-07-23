@@ -61,6 +61,12 @@ object Builtins {
         // its members — the SAM `compare(T, T)` above all — live on the java.util type. Without this,
         // `Comparator<String> { a, b -> … }` resolved to a shapeless FQN, leaving the SAM lambda's params untyped.
         "kotlin.Comparator" to "java.util.Comparator",
+        // `kotlin.text.StringBuilder`/`StringBuffer` are typealiases to the java.lang types (`kotlin/text/
+        // TypeAliases.kt`) — no `.kotlin_builtins`, no `.class` — so their members (`append`/`insert`/`toString`,
+        // which chain fluently, each returning `java.lang.StringBuilder`) live only on the aliased java.lang type.
+        // Without this, `StringBuilder().append("x")` resolved to a shapeless FQN and completed / chained nothing.
+        "kotlin.text.StringBuilder" to "java.lang.StringBuilder",
+        "kotlin.text.StringBuffer" to "java.lang.StringBuffer",
     )
 
     /**
@@ -134,6 +140,10 @@ object Builtins {
             "kotlin.collections.MutableMap", "kotlin.collections.Map", "kotlin.Any",
         ),
         "kotlin.Comparator" to listOf("kotlin.Any"),
+        // The StringBuilder/StringBuffer typealiases (see KOTLIN_TO_JAVA): a CharSequence, so CharSequence
+        // extensions (and Any's scope functions) walk up from it in dumb mode / standalone.
+        "kotlin.text.StringBuilder" to listOf("kotlin.CharSequence", "kotlin.Any"),
+        "kotlin.text.StringBuffer" to listOf("kotlin.CharSequence", "kotlin.Any"),
         "kotlin.Enum" to listOf("kotlin.Comparable", "kotlin.Any"),
         "kotlin.Boolean" to listOf("kotlin.Comparable", "kotlin.Any"),
         "kotlin.Char" to listOf("kotlin.Comparable", "kotlin.Any"),
@@ -177,6 +187,9 @@ object Builtins {
             "LinkedHashMap",
             "LinkedHashSet",
         ).forEach { put(it, "kotlin.collections.$it") }
+        // `kotlin.text` is a default star import; its `StringBuilder`/`StringBuffer` typealiases resolve bare.
+        put("StringBuilder", "kotlin.text.StringBuilder")
+        put("StringBuffer", "kotlin.text.StringBuffer")
     }
 
     /**
@@ -235,6 +248,18 @@ object Builtins {
             "putIfAbsent", "remove", "replace", "replaceAll", "merge",
             "compute", "computeIfAbsent", "computeIfPresent",
         ),
+    )
+
+    /**
+     * Declaration-site variance for well-known types whose JVM form ERASES it: `kotlin.Comparator` is a
+     * `typealias` to `java.util.Comparator` (bytecode carries no variance), but Kotlin's `Comparator<in T>` is
+     * contravariant. Keyed by Kotlin FQN, positional with the type parameters (`"out"`/`"in"`/`""`). Consulted
+     * by `classTypeParameterVariance` ahead of the (variance-less) java shape, so `Comparator<Number>` is
+     * correctly a subtype of `Comparator<Int>`. Function types (`kotlin.FunctionN` = `<in P…, out R>`) are
+     * handled separately (their arity is variable).
+     */
+    val DECLARATION_VARIANCE: Map<String, List<String>> = mapOf(
+        "kotlin.Comparator" to listOf("in"),
     )
 
     fun javaTypeFor(kotlinFqn: String): String? = KOTLIN_TO_JAVA[kotlinFqn]

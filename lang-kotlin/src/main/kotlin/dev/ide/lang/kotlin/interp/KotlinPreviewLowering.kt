@@ -8,6 +8,7 @@ import com.intellij.psi.util.PsiTreeUtil
 import org.jetbrains.kotlin.psi.KtAnnotationEntry
 import org.jetbrains.kotlin.psi.KtFile
 import org.jetbrains.kotlin.psi.KtNamedFunction
+import org.jetbrains.kotlin.psi.KtObjectLiteralExpression
 import org.jetbrains.kotlin.psi.KtProperty
 import java.util.concurrent.ConcurrentHashMap
 
@@ -168,13 +169,18 @@ class KotlinPreviewLowering(
     private val loweredCache = ConcurrentHashMap<String, Lowered>()
 
     /** The file text with every TOP-LEVEL function body elided — a hash of everything a sibling's lowering can
-     *  depend on (signatures, imports, properties, class bodies). Stable across function-body edits. */
+     *  depend on (signatures, imports, properties, class bodies). Stable across function-body edits.
+     *
+     *  A body that contains an anonymous object literal (`object : Foo { }`) is NOT elided: such a literal is
+     *  lowered into the file's CLASS list (see [KotlinTreeResolver.lowerClasses]), which is reused whole on a
+     *  signature match — so an edit inside it must move the hash to force the classes to re-lower. */
     private fun fileSignatureHash(ktFile: KtFile): Int {
         val text = ktFile.text
         val sb = StringBuilder(text.length)
         var pos = 0
         for (fn in ktFile.declarations.filterIsInstance<KtNamedFunction>()) {
             val body = fn.bodyExpression ?: continue
+            if (PsiTreeUtil.collectElementsOfType(body, KtObjectLiteralExpression::class.java).isNotEmpty()) continue
             val r = body.textRange
             if (r.startOffset >= pos) { sb.append(text, pos, r.startOffset); pos = r.endOffset }
         }
@@ -199,12 +205,13 @@ class KotlinPreviewLowering(
                 val reused = if (sigMatch) prev!!.functions[key]?.takeIf { it.textHash == ownHash && it.startOffset == start } else null
                 put(key, reused ?: FnEntry(ownHash, start, KotlinPerf.span("lowerFn") { lowerOneFunction(resolver, fn) }))
             }
-            // Top-level source `val`/`var` (non-extension, with a value) → a synthetic zero-arg getter `name/0`,
-            // so a read of it (KotlinTreeResolver.nameNode) interprets its initializer instead of reflecting a
-            // non-existent compiled `…Kt` facade. A same-named top-level function keeps priority (can't collide).
+            // Top-level source `val`/`var` (with a value) → a synthetic zero-arg getter `name/0`, so a read of it
+            // interprets its initializer/getter instead of reflecting a non-existent compiled `…Kt` facade. This
+            // includes an EXTENSION property (`val Boxed.doubled get() = …`): its getter binds the receiver (see
+            // KotlinTreeResolver.lowerTopLevelProperty) and a `b.doubled` read lowers to a source EXTENSION call
+            // of it. A same-named top-level function keeps priority (can't collide).
             parsed.ktFile.declarations.filterIsInstance<KtProperty>().forEach { prop ->
                 val name = prop.name ?: return@forEach
-                if (prop.receiverTypeReference != null) return@forEach
                 val hasValue = prop.initializer != null || prop.getter?.bodyExpression != null || prop.getter?.bodyBlockExpression != null
                 if (!hasValue) return@forEach
                 val key = "$name/0"

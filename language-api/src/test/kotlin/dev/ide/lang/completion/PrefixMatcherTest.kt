@@ -79,6 +79,17 @@ class PrefixMatcherTest {
     }
 
     @Test
+    fun indexPrefixesPushesDownTheFullPrefixForHumpQueries() {
+        // A plain query pushes down only itself.
+        assertEquals(listOf("listof"), PrefixMatcher("listof").indexPrefixes)
+        // A hump query pushes down BOTH the full prefix (rescues a plain-prefix match like `listOf` from the
+        // first-char query's result cap) AND the first character (covers hump matches that diverge after it).
+        // The reported bug: typing `listOf` collapsed the query to `l`, whose 2000-hit cap dropped `listOf`.
+        assertEquals(listOf("listOf", "l"), PrefixMatcher("listOf").indexPrefixes)
+        assertEquals(listOf("mDL", "m"), PrefixMatcher("mDL").indexPrefixes)
+    }
+
+    @Test
     fun digitBoundariesAreHumpStarts() {
         assertEquals(PrefixMatcher.Grade.HUMP, PrefixMatcher("v2").grade("view2Model"))
     }

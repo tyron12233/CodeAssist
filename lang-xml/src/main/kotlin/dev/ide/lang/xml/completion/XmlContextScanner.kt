@@ -15,7 +15,12 @@ import dev.ide.lang.xml.XmlNodeKinds
  */
 object XmlContextScanner {
 
-    fun scan(text: CharSequence, offset: Int, parsed: ParsedFile, filePath: String): XmlCompletionPosition {
+    fun scan(
+        text: CharSequence,
+        offset: Int,
+        parsed: ParsedFile,
+        filePath: String
+    ): XmlCompletionPosition {
         val caret = offset.coerceIn(0, text.length)
 
         // The governing '<' is the last one before the caret; there is no other '<' between it and the caret.
@@ -25,7 +30,10 @@ object XmlContextScanner {
         }
         val afterLt = if (lt + 1 < text.length) text[lt + 1] else ' '
         if (afterLt == '/' || afterLt == '!' || afterLt == '?') {
-            return unknown(filePath, caret) // close tag / comment / prolog / doctype — not completed
+            return unknown(
+                filePath,
+                caret
+            ) // close tag / comment / prolog / doctype — not completed
         }
 
         // Walk the start tag from just after '<' to the caret, tracking quote state and the current attribute.
@@ -41,14 +49,26 @@ object XmlContextScanner {
         while (i < caret) {
             val c = text[i]
             if (inQuote != null) {
-                if (c == inQuote) { inQuote = null; curAttr = null; sawEquals = false }
+                if (c == inQuote) {
+                    inQuote = null; curAttr = null; sawEquals = false
+                }
                 i++
                 continue
             }
             when {
-                c == '>' -> return content(parsed, caret, filePath) // tag already closed before the caret
-                c == '"' || c == '\'' -> { inQuote = c; valueStart = i + 1; i++ }
-                c == '=' -> { sawEquals = true; i++ }
+                c == '>' -> return content(
+                    parsed,
+                    caret,
+                    filePath
+                ) // tag already closed before the caret
+                c == '"' || c == '\'' -> {
+                    inQuote = c; valueStart = i + 1; i++
+                }
+
+                c == '=' -> {
+                    sawEquals = true; i++
+                }
+
                 c.isWhitespace() || c == '/' -> i++
                 isNameStart(c) -> {
                     val s = i
@@ -58,6 +78,7 @@ object XmlContextScanner {
                     sawEquals = false
                     i = e
                 }
+
                 else -> i++
             }
         }
@@ -107,7 +128,9 @@ object XmlContextScanner {
         // 4) Otherwise we're typing an attribute name. The partial token runs back to the last boundary.
         var tokenStart = caret
         while (tokenStart > lt + 1 && isNameChar(text[tokenStart - 1])) tokenStart--
-        existing.remove(text.subSequence(tokenStart, caret).toString()) // don't count the token being typed
+        existing.remove(
+            text.subSequence(tokenStart, caret).toString()
+        ) // don't count the token being typed
         val root = rootTag(parsed)
         return XmlCompletionPosition(
             kind = XmlCompletionKind.ATTRIBUTE_NAME,
@@ -134,7 +157,9 @@ object XmlContextScanner {
         var found: XmlNode? = null
         fun walk(n: DomNode) {
             if (found != null) return
-            if (n is XmlNode && n.kind == XmlNodeKinds.TAG) { found = n; return }
+            if (n is XmlNode && n.kind == XmlNodeKinds.TAG) {
+                found = n; return
+            }
             n.children.forEach(::walk)
         }
         walk(parsed)
@@ -153,7 +178,14 @@ object XmlContextScanner {
     )
 
     private fun unknown(filePath: String, caret: Int) = XmlCompletionPosition(
-        XmlCompletionKind.UNKNOWN, null, null, null, emptySet(), "", TextRange(caret, caret), filePath,
+        XmlCompletionKind.UNKNOWN,
+        null,
+        null,
+        null,
+        emptySet(),
+        "",
+        TextRange(caret, caret),
+        filePath,
     )
 
     /** Name of the nearest enclosing element at [offset], or null at the document level. */
@@ -165,7 +197,9 @@ object XmlContextScanner {
 
     private fun lastIndexOfBefore(text: CharSequence, ch: Char, before: Int): Int {
         var i = before - 1
-        while (i >= 0) { if (text[i] == ch) return i; i-- }
+        while (i >= 0) {
+            if (text[i] == ch) return i; i--
+        }
         return -1
     }
 
@@ -179,5 +213,6 @@ object XmlContextScanner {
     }
 
     private fun isNameStart(c: Char): Boolean = c.isLetter() || c == '_' || c == ':'
-    private fun isNameChar(c: Char): Boolean = c.isLetterOrDigit() || c == '_' || c == ':' || c == '.' || c == '-'
+    private fun isNameChar(c: Char): Boolean =
+        c.isLetterOrDigit() || c == '_' || c == ':' || c == '.' || c == '-'
 }

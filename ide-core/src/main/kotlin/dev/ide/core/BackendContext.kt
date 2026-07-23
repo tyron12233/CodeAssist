@@ -34,6 +34,11 @@ internal interface BackendContext {
      *  every build/run call through. See docs/build-process-isolation.md. */
     fun buildRunnerFor(services: IdeServices): BuildRunner
 
+    /** Whether this host can run builds in a separate OS process (the `:build` daemon) — true only when a
+     *  build-runner factory was injected (Android). Gates host-specific Build Runtime settings such as the
+     *  build-notification permission action, which is meaningless where builds are always in-process. */
+    val separateProcessBuildsSupported: Boolean
+
     /** The single serialized worker the editor's language calls run on. */
     val engineDispatcher: CoroutineDispatcher
 
@@ -54,6 +59,10 @@ internal interface BackendContext {
 
     /** The project manager (preferences, project list, swap), or null for a single-project host. */
     val manager: ProjectManager?
+
+    /** The application-wide message bus (for publishing plugin-facing lifecycle events), or null on a
+     *  host with neither a manager nor an open project. See [dev.ide.core.event.IdeEventTopics]. */
+    val messageBus: dev.ide.platform.MessageBus?
 
     /** Bumps when the active project changes (the project service re-exposes it). */
     val projectEpoch: StateFlow<Int>

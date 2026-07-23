@@ -60,6 +60,41 @@ class MavenDependencyResolverTest {
     }
 
     @Test
+    fun kotlinStdlibCommonTransitiveIsPrunedNotUnresolved() {
+        // A library (kotlinx.serialization, coroutines, …) pulls `kotlin-stdlib-common` transitively. It's a KMP
+        // metadata-only module — no JVM bytecode, and since Kotlin 1.9.20 not published as a plain jar, so a
+        // JVM resolve 404s fetching it and used to flag it unresolved. The platform kotlin-stdlib provides the
+        // classes, so it must be PRUNED from the graph, not fetched or surfaced as unresolved.
+        val files = FakeRepo()
+        files.put("lib", "1.0", deps = listOf(Dep("org.jetbrains.kotlin", "kotlin-stdlib-common", "2.1.20")))
+        // Deliberately absent from the repo (mirrors the real 404): the prune must happen BEFORE any fetch.
+        val (resolver, _) = newResolver(files)
+
+        val result = runBlocking {
+            resolver.resolve(listOf(coord("lib", "1.0")), listOf(repo), ConflictPolicy.NEWEST, noProgress)
+        }
+        assertEquals(setOf("lib"), result.resolved.map { it.coordinate.name }.toSet(),
+            "kotlin-stdlib-common must be pruned (not resolved); got ${result.resolved.map { it.coordinate }}")
+        assertTrue(result.unresolved.isEmpty(),
+            "kotlin-stdlib-common must NOT be flagged unresolved — the platform stdlib provides it; got ${result.unresolved}")
+    }
+
+    @Test
+    fun directKotlinStdlibCommonIsPruned() {
+        val files = FakeRepo()
+        val (resolver, _) = newResolver(files)
+        val result = runBlocking {
+            resolver.resolve(
+                listOf(Coordinate("org.jetbrains.kotlin", "kotlin-stdlib-common", "2.1.20")),
+                listOf(repo), ConflictPolicy.NEWEST, noProgress,
+            )
+        }
+        assertTrue(result.resolved.isEmpty() && result.unresolved.isEmpty(),
+            "a directly-declared kotlin-stdlib-common must be pruned entirely; " +
+                "resolved=${result.resolved.map { it.coordinate }} unresolved=${result.unresolved}")
+    }
+
+    @Test
     fun normalizesHardPinAndRangeVersionsOnTransitives() {
         // AndroidX pins same-group deps as `[1.0]` (a Maven hard-pin range). The literal brackets must not
         // leak into the fetch URL, else the dep's POM 404s and its whole subtree is silently dropped — which
@@ -77,6 +112,45 @@ class MavenDependencyResolverTest {
         assertEquals(setOf("a", "mid", "leaf"), byName.keys, "range-pinned transitives must resolve: ${result.unresolved}")
         assertEquals("1.0", byName.getValue("mid").coordinate.version)
         assertEquals("1.0", byName.getValue("leaf").coordinate.version)
+        assertTrue(result.unresolved.isEmpty(), "unexpected unresolved: ${result.unresolved}")
+    }
+
+    @Test
+    fun followsPomRelocationToTheMovedCoordinate() {
+        // com.itextpdf:itext7-core:9.2.0 is a `pom`-packaged relocation stub (NO jar, NO <dependencies>) that
+        // moved to :itext-core, itself a `pom` aggregator pulling the real module jars. Without following the
+        // <relocation> the direct dep resolves to nothing → "cannot import". Here itext7-core relocates (by
+        // artifactId only, inheriting group + version) to itext-core, whose aggregator pom pulls kernel + io.
+        val files = FakeRepo()
+        files.putRelocation("itext7-core", "9.2.0", toName = "itext-core")
+        files.put("itext-core", "9.2.0", packaging = "pom", deps = listOf(Dep("g", "kernel", "9.2.0"), Dep("g", "io", "9.2.0")))
+        files.put("kernel", "9.2.0")
+        files.put("io", "9.2.0")
+        val (resolver, _) = newResolver(files)
+
+        val result = runBlocking {
+            resolver.resolve(listOf(coord("itext7-core", "9.2.0")), listOf(repo), ConflictPolicy.NEWEST, noProgress)
+        }
+        // Both aggregator poms carry no artifact; the real jars behind the relocation must all resolve.
+        val byName = result.resolved.associateBy { it.coordinate.name }
+        assertEquals(setOf("kernel", "io"), byName.keys, "relocated aggregator must pull the real jars: ${result.unresolved}")
+        assertTrue(result.unresolved.isEmpty(), "unexpected unresolved: ${result.unresolved}")
+    }
+
+    @Test
+    fun followsPomRelocationWithAFullTargetCoordinate() {
+        // A relocation that changes group + artifact + version, moving to a normal jar: the moved-to artifact
+        // (not the stub) is what ends up on the classpath.
+        val files = FakeRepo()
+        files.putRelocation("old-lib", "1.0", toGroup = "g2", toName = "new-lib", toVersion = "2.0")
+        files.put("new-lib", "2.0", group = "g2")
+        val (resolver, _) = newResolver(files)
+
+        val result = runBlocking {
+            resolver.resolve(listOf(coord("old-lib", "1.0")), listOf(repo), ConflictPolicy.NEWEST, noProgress)
+        }
+        val art = result.resolved.single()
+        assertEquals(Coordinate("g2", "new-lib", "2.0"), art.coordinate)
         assertTrue(result.unresolved.isEmpty(), "unexpected unresolved: ${result.unresolved}")
     }
 
@@ -109,6 +183,36 @@ class MavenDependencyResolverTest {
         // the AAR's res/ is exploded next to classes.jar, for the IDE's resource model
         val res = Path.of(art.classesRoot.path).parent.resolve("res/values/strings.xml")
         assertTrue(Files.isRegularFile(res), "AAR res/ should be extracted next to classes.jar: $res")
+    }
+
+    @Test
+    fun reExtractsAStaleExplodedAarMissingRes() {
+        // The AndroidX-Navigation "attribute … not found" bug: an AAR exploded by an OLDER build left
+        // classes.jar + AndroidManifest.xml + an empty `.extracted` marker but NO `res/` (res unpacking was
+        // added later). Such a dir was reused as-is, so a (transitive) library's attrs never reached aapt2.
+        // Versioning the marker makes a stale explosion re-extract, restoring `res/`.
+        val files = FakeRepo()
+        files.put("widget", "1.0", packaging = "aar", jarBytes = aarWithRes())
+        val tmp = createTempDirectory("deps-stale-aar")
+        val lfs = LocalFileSystem(tmp)
+        val cache = ResolverCache(tmp)
+        val resolver = MavenDependencyResolver(cache, lfs::fileFor, files)
+
+        // Warm: the first resolve explodes the AAR fully (classes.jar + res/ + manifest + marker).
+        runBlocking { resolver.resolve(listOf(coord("widget", "1.0")), listOf(repo), ConflictPolicy.NEWEST, noProgress) }
+        val dir = cache.explodedDir(coord("widget", "1.0"))
+        val res = dir.resolve("res/values/strings.xml")
+        assertTrue(Files.isRegularFile(res), "warm resolve should extract res/")
+
+        // Simulate an OLD-format exploded dir: drop res/, rewrite the marker in the pre-version (empty) format,
+        // keeping classes.jar + AndroidManifest.xml (which the old reuse-shortcut deemed sufficient).
+        Files.walk(dir.resolve("res")).use { s -> s.sorted(Comparator.reverseOrder()).forEach { Files.deleteIfExists(it) } }
+        Files.writeString(dir.resolve(".extracted"), "")
+        assertFalse(Files.exists(res), "res/ removed to simulate a stale explosion")
+
+        // Re-resolve: the stale (empty) marker must trigger re-extraction, restoring res/.
+        runBlocking { resolver.resolve(listOf(coord("widget", "1.0")), listOf(repo), ConflictPolicy.NEWEST, noProgress) }
+        assertTrue(Files.isRegularFile(res), "a stale exploded AAR (empty marker, no res/) must be re-extracted: $res")
     }
 
     @Test
@@ -908,6 +1012,20 @@ class MavenDependencyResolverTest {
         /** A `pom`-packaged BOM: only a POM with a `<dependencyManagement>` block, no artifact. */
         fun putBom(name: String, version: String, manages: List<Dep>) {
             byUrl[url("g", name, version, "pom")] = pom("g", name, version, "pom", emptyList(), manages).toByteArray()
+        }
+
+        /** A `pom`-packaged relocation stub: only a POM with `<distributionManagement><relocation>` (no artifact),
+         *  mirroring com.itextpdf:itext7-core → :itext-core. Omitted target fields inherit this coordinate's. */
+        fun putRelocation(name: String, version: String, toGroup: String? = null, toName: String? = null, toVersion: String? = null, group: String = "g") {
+            byUrl[url(group, name, version, "pom")] = buildString {
+                append("""<?xml version="1.0" encoding="UTF-8"?><project>""")
+                append("<groupId>$group</groupId><artifactId>$name</artifactId><version>$version</version><packaging>pom</packaging>")
+                append("<distributionManagement><relocation>")
+                toGroup?.let { append("<groupId>$it</groupId>") }
+                toName?.let { append("<artifactId>$it</artifactId>") }
+                toVersion?.let { append("<version>$it</version>") }
+                append("</relocation></distributionManagement></project>")
+            }.toByteArray()
         }
 
         /** Publish Google Maven's `master-index.xml` listing [groups] (self-closing `<group.id/>` entries). */

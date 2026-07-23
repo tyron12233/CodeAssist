@@ -72,10 +72,10 @@ class AddImportQuickFixProvider : QuickFixProvider {
                 override val title = "Import $fqn"
                 override val kind = CodeActionKind.QUICK_FIX
                 override suspend fun computeEdits(ctx: FixContext): WorkspaceEdit {
-                    val t = ctx.target.parsed.text().toString()
-                    if (Regex("(?m)^\\s*import\\s+${Regex.escape(fqn)}\\s*;").containsMatchIn(t)) return WorkspaceEdit.EMPTY
-                    val off = importInsertOffset(ctx.target.parsed)
-                    return WorkspaceEdit.of(ctx.target.file, DocumentEdit(off, 0, "import $fqn;\n"))
+                    // Splice the import in sorted position (regular block, static split, blank line after
+                    // package); null when it is already present.
+                    val plan = JdtImportLayout.planImport(ctx.target.parsed, fqn) ?: return WorkspaceEdit.EMPTY
+                    return WorkspaceEdit.of(ctx.target.file, DocumentEdit(plan.offset, 0, plan.text))
                 }
             }
         }
@@ -217,11 +217,21 @@ private fun expressionToExtract(parsed: ParsedFile, range: TextRange): DomNode? 
     }
     var n: DomNode? = parsed.nodeAt(range.start)
     while (n != null) {
-        if (isExtractableAtCaret(n)) return n
+        // Don't extract the callee head of an enclosing call (e.g. `foo.bar` inside `foo.bar(x)`): a backend
+        // whose DOM exposes the method-expression as its own node (the IntelliJ-PSI backend does; JDT does not)
+        // would otherwise extract `foo.bar` instead of the whole `foo.bar(x)` call — climb to the call.
+        if (isExtractableAtCaret(n) && !isCalleeHeadOfEnclosingCall(n)) return n
         if (n.parent?.kind == NodeKind.BLOCK) return null
         n = n.parent
     }
     return null
+}
+
+/** True when [n] is the callee/receiver head of an enclosing method call — its parent is a call that starts at
+ *  the same offset and extends past it (so [n] is the `foo.bar` in `foo.bar(...)`, not the whole call). */
+private fun isCalleeHeadOfEnclosingCall(n: DomNode): Boolean {
+    val p = n.parent ?: return false
+    return p.kind == NodeKind.METHOD_CALL && p.range.start == n.range.start && p.range.end > n.range.end
 }
 
 /** The statement enclosing [node] — the ancestor that is a direct child of a [NodeKind.BLOCK]. */

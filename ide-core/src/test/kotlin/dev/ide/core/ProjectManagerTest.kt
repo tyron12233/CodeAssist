@@ -3,11 +3,13 @@ package dev.ide.core
 import kotlinx.coroutines.runBlocking
 
 import dev.ide.android.support.templates.JetpackComposeAppTemplate
+import dev.ide.lang.kotlin.compile.SerializationCompilerPlugin
 import dev.ide.model.LibraryDependency
 import dev.ide.model.template.TemplateArgs
 import org.junit.jupiter.api.Test
 import java.nio.file.Files
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 
 class ProjectManagerTest {
@@ -199,22 +201,52 @@ class ProjectManagerTest {
         }
     }
 
-    /** A Compose template ships with the `compose` build feature already on (the toggle reflects reality, and
-     *  the build/preview don't depend solely on the classpath probe). */
+    /** A Compose template ships with the Compose compiler plugin already on (the toggle reflects reality, and
+     *  the build/preview don't depend solely on the classpath probe). Compose is a compiler plugin, so its
+     *  toggle lives on the Compiler-plugins tab ([ModuleService.getCompilerPlugins]), not Build Features. */
     @Test
     fun composeTemplateEnablesComposeBuildFeature() {
         val root = Files.createTempDirectory("cm-compose-feature")
         try {
             val manager = ProjectManager.desktop(root.resolve("projects"))
             fun composeOn(ide: IdeServices): Boolean =
-                ide.moduleService.getBuildFeatures("app")?.features?.firstOrNull { it.id == "compose" }?.enabled == true
+                ide.moduleService.getCompilerPlugins("app")
+                    ?.plugins?.firstOrNull { it.id == dev.ide.lang.kotlin.compile.ComposeCompilerPlugin.pluginId }
+                    ?.enabled == true
 
             manager.create("compose-app", mapOf("name" to "ComposeDemo", "packageName" to "com.acme.compose")).use { ide ->
-                assertTrue(composeOn(ide), "the Jetpack Compose template enables the compose build feature")
+                assertTrue(composeOn(ide), "the Jetpack Compose template enables the Compose compiler plugin")
             }
             // And it survives a reopen (persisted to module.toml, not just in memory).
             manager.open(manager.list().first().rootPath).use { reopened ->
-                assertTrue(composeOn(reopened), "the compose build feature round-trips through module.toml")
+                assertTrue(composeOn(reopened), "the Compose compiler plugin round-trips through module.toml")
+            }
+        } finally {
+            root.toFile().deleteRecursively()
+        }
+    }
+
+    /** Toggling a compiler plugin on through the backend persists to `module.toml` and round-trips a reopen.
+     *  (Serialization starts OFF, so it's a clean on-toggle.) Dependency resolution may fail offline — the
+     *  toggle still succeeds and the enable-state persists, which is what this asserts. */
+    @Test
+    fun compilerPluginToggleRoundTrips() {
+        val root = Files.createTempDirectory("cm-serialization-toggle")
+        try {
+            val manager = ProjectManager.desktop(root.resolve("projects"))
+            fun serializationOn(ide: IdeServices): Boolean =
+                ide.moduleService.getCompilerPlugins("app")
+                    ?.plugins?.firstOrNull { it.id == SerializationCompilerPlugin.pluginId }
+                    ?.enabled == true
+
+            manager.create("compose-app", mapOf("name" to "SerDemo", "packageName" to "com.acme.ser")).use { ide ->
+                assertFalse(serializationOn(ide), "serialization starts off")
+                val r = runBlocking { ide.moduleService.setCompilerPlugin("app", SerializationCompilerPlugin.pluginId, true) }
+                assertTrue(r.success, "toggling serialization on should succeed: ${r.message}")
+                assertTrue(serializationOn(ide), "serialization is on after the toggle")
+            }
+            manager.open(manager.list().first().rootPath).use { reopened ->
+                assertTrue(serializationOn(reopened), "the serialization toggle round-trips through module.toml")
             }
         } finally {
             root.toFile().deleteRecursively()

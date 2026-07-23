@@ -34,7 +34,7 @@ import dev.ide.ui.components.BottomSheet
 import dev.ide.ui.components.ComingSoon
 import dev.ide.ui.components.CommandPalette
 import dev.ide.ui.components.DropdownOverlay
-import dev.ide.ui.ext.BuiltInUiActions
+import dev.ide.ui.ext.UiPluginHost
 import dev.ide.ui.ext.UiActionHost
 import dev.ide.ui.ext.UiActionRegistry
 import dev.ide.ui.ext.UiDestinations
@@ -156,7 +156,7 @@ internal fun MoreSheetContent(
     host: UiActionHost,
     modifier: Modifier = Modifier,
 ) {
-    BuiltInUiActions.ensureRegistered()
+    UiPluginHost.ensureLoaded()
     val actions = UiActionRegistry.forPlace(UiActionPlaces.MORE_MENU, host)
     // Scrollable so every row (incl. "Close project") is reachable when the sheet is short — e.g. the soft
     // keyboard is up and the sheet has been lifted above it (issue #994).

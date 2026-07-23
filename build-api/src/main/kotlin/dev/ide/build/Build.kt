@@ -1,9 +1,11 @@
 package dev.ide.build
 
 import dev.ide.model.ClasspathSnapshot
+import dev.ide.model.Module
 import dev.ide.model.ModuleId
 import dev.ide.model.Project
 import dev.ide.platform.ContentHash
+import dev.ide.platform.ExtensionPoint
 import dev.ide.platform.ProgressReporter
 import dev.ide.vfs.VirtualFile
 
@@ -44,7 +46,12 @@ data class BuildRequest(
     val goal: BuildGoal,
 )
 
-enum class BuildGoal { COMPILE_ONLY, ASSEMBLE, TEST, LINT, PACKAGE, INSTALL, BUNDLE, CLEAN }
+enum class BuildGoal {
+    COMPILE_ONLY, ASSEMBLE, TEST, LINT, PACKAGE, INSTALL, BUNDLE, CLEAN,
+    /** Compile + dex (populate the shared library-dex cache) but stop before packaging the APK — used to
+     *  prepare a project's libraries for the real-view layout preview without a full assemble. */
+    DEX,
+}
 
 @JvmInline value class VariantSelector(val name: String)
 
@@ -53,6 +60,35 @@ data class TaskDescriptor(val name: String, val group: String, val description: 
 data class SyncResult(val success: Boolean, val messages: List<SyncMessage>)
 data class SyncMessage(val severity: SyncSeverity, val text: String, val file: VirtualFile? = null)
 enum class SyncSeverity { INFO, WARNING, ERROR }
+
+// ---------------------------------------------------------------------------
+// BuildSystem / run-task extension points
+// ---------------------------------------------------------------------------
+
+/**
+ * Plugin-contributed build systems. The IDE's own Java/Android build systems are per-project, context-heavy
+ * objects the engine constructs and holds directly — they capture per-project state and the Android one defers
+ * SDK detection, so they are not modelled as application extensions. This point is the seam through which a
+ * *plugin* adds a [BuildSystem] for a new module type: the engine selects a module's build system by
+ * [BuildSystem.supports] — its own built-ins first, then this point.
+ */
+val BUILD_SYSTEM_EP = ExtensionPoint<BuildSystem>("platform.buildSystem")
+
+/**
+ * A Run-picker option a [RunTaskProvider] offers for a module — the neutral form of the host's Run-picker row.
+ * [id] is dispatched by the host; reuse a built-in prefix (`build:`/`run:`/`assemble:`/…) to run through the
+ * existing pipeline. [group] is a coarse icon/category key (e.g. `build`, `run`, `android`).
+ */
+data class RunTaskSpec(val id: String, val label: String, val group: String)
+
+/** Contributes extra Run-picker options for a module. The enumeration seam — the host keeps id dispatch, so a
+ *  provider reuses a built-in id prefix to execute through the existing task pipeline. */
+interface RunTaskProvider {
+    fun tasksFor(module: Module): List<RunTaskSpec>
+}
+
+/** Plugin-contributed Run-picker options, merged into the host's built-in enumeration ([RunTaskProvider]). */
+val RUN_TASK_PROVIDER_EP = ExtensionPoint<RunTaskProvider>("platform.runTaskProvider")
 
 // ---------------------------------------------------------------------------
 // The generic incremental task engine (mimics Gradle's task model)

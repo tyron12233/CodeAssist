@@ -61,7 +61,8 @@ internal fun KotlinResolver.smartCastNonNull(ref: KtNameReferenceExpression): Bo
         // An immutable stable sink (val local / parameter / final val member) — position-based narrowing is sound
         // (no reassignment can invalidate it) and carries into nested lambdas.
         if (nullGuardedNonNullAt(name, offset)) return true
-        val narrowed = smartCastTypeAt(name, offset) // an `is T` narrowing yields a non-null classifier
+        val narrowed =
+            smartCastTypeAt(name, offset) // an `is T` narrowing yields a non-null classifier
         return narrowed != null && !narrowed.nullable
     }
     // Otherwise: an effectively-immutable local `var` may still be smart-cast — that needs reassignment-aware
@@ -74,7 +75,9 @@ internal fun KotlinResolver.smartCastNonNull(ref: KtNameReferenceExpression): Bo
  *  the enclosing instance. Resolves to the NEAREST binding (an inner shadow wins) and reports that binding's
  *  stability; a `var`/delegated local, an `open`/custom-getter/qualified-receiver member, or an unresolved name
  *  is not stable. */
-internal fun KotlinResolver.stableForSmartCast(name: String, offset: Int, from: PsiElement): Boolean {
+internal fun KotlinResolver.stableForSmartCast(
+    name: String, offset: Int, from: PsiElement
+): Boolean {
     val bareOrThis = isBareOrThisReceiver(from)
     var node: PsiElement? = from.parent
     while (node != null) {
@@ -85,12 +88,16 @@ internal fun KotlinResolver.stableForSmartCast(name: String, offset: Int, from: 
                 } as? KtProperty
                 if (local != null) return !local.isVar && !local.hasDelegate()
             }
+
             is KtFunction -> node.valueParameters.firstOrNull { it.name == name }?.let {
                 // A plain value parameter is immutable → stable; a primary-constructor `val`/`var` parameter is a
                 // member property, handled in the KtClassOrObject case below with the member-stability rules.
                 if (!it.hasValOrVar()) return true
             }
-            is KtForExpression -> node.loopParameter?.takeIf { it.name == name }?.let { return true }
+
+            is KtForExpression -> node.loopParameter?.takeIf { it.name == name }
+                ?.let { return true }
+
             is KtCatchClause -> node.catchParameter?.takeIf { it.name == name }?.let { return true }
             // A member read (bare or `this.name`): a `val` member of THIS file's enclosing class with a backing
             // field, not overridable, is stable (Kotlin spec: private/internal/same-module + not open + no custom
@@ -116,15 +123,19 @@ private enum class MemberStability { STABLE, UNSTABLE, ABSENT }
 private fun stableValMemberKind(cls: KtClassOrObject, name: String): MemberStability {
     val prop = cls.declarations.firstOrNull { it is KtProperty && it.name == name } as? KtProperty
     if (prop != null) {
-        val stable = !prop.isVar && prop.getter == null && !prop.hasDelegate() &&
-            !prop.hasModifier(KtTokens.OPEN_KEYWORD) && !prop.hasModifier(KtTokens.ABSTRACT_KEYWORD) &&
-            !prop.hasModifier(KtTokens.OVERRIDE_KEYWORD)
+        val stable =
+            !prop.isVar && prop.getter == null && !prop.hasDelegate() && !prop.hasModifier(KtTokens.OPEN_KEYWORD) && !prop.hasModifier(
+                KtTokens.ABSTRACT_KEYWORD
+            ) && !prop.hasModifier(KtTokens.OVERRIDE_KEYWORD)
         return if (stable) MemberStability.STABLE else MemberStability.UNSTABLE
     }
-    val ctorParam = cls.primaryConstructor?.valueParameters?.firstOrNull { it.name == name && it.hasValOrVar() }
+    val ctorParam =
+        cls.primaryConstructor?.valueParameters?.firstOrNull { it.name == name && it.hasValOrVar() }
     if (ctorParam != null) {
-        val stable = !ctorParam.isMutable && !ctorParam.hasModifier(KtTokens.OPEN_KEYWORD) &&
-            !ctorParam.hasModifier(KtTokens.OVERRIDE_KEYWORD)
+        val stable =
+            !ctorParam.isMutable && !ctorParam.hasModifier(KtTokens.OPEN_KEYWORD) && !ctorParam.hasModifier(
+                KtTokens.OVERRIDE_KEYWORD
+            )
         return if (stable) MemberStability.STABLE else MemberStability.UNSTABLE
     }
     return MemberStability.ABSENT
@@ -156,22 +167,35 @@ internal fun KotlinResolver.pathGuardedNonNullAt(path: String, offset: Int): Boo
 
 /** The shared ancestor walk for [nullGuardedNonNullAt] / [pathGuardedNonNullAt], parameterized by a [matches]
  *  predicate deciding whether an operand expression refers to the guarded value (a name, or an access path). */
-private fun KotlinResolver.guardedNonNullAt(offset: Int, matches: (KtExpression?) -> Boolean): Boolean {
+private fun KotlinResolver.guardedNonNullAt(
+    offset: Int, matches: (KtExpression?) -> Boolean
+): Boolean {
     var child: PsiElement? = null
     var node: PsiElement? = elementAt(offset)
     while (node != null) {
         when (node) {
             is KtIfExpression -> {
-                if (node.then?.textRange?.contains(offset) == true && condGuarantees(node.condition, true, matches)) return true
-                if (node.`else`?.textRange?.contains(offset) == true && condGuarantees(node.condition, false, matches)) return true
+                if (node.then?.textRange?.contains(offset) == true && condGuarantees(
+                        node.condition, true, matches
+                    )
+                ) return true
+                if (node.`else`?.textRange?.contains(offset) == true && condGuarantees(
+                        node.condition, false, matches
+                    )
+                ) return true
             }
-            is KtWhileExpression ->
-                if (node.body?.textRange?.contains(offset) == true && condGuarantees(node.condition, true, matches)) return true
+
+            is KtWhileExpression -> if (node.body?.textRange?.contains(offset) == true && condGuarantees(
+                    node.condition, true, matches
+                )
+            ) return true
+
             is KtBinaryExpression -> if (node.right?.textRange?.contains(offset) == true) when (node.operationToken) {
                 KtTokens.ANDAND -> if (condGuarantees(node.left, true, matches)) return true
                 KtTokens.OROR -> if (condGuarantees(node.left, false, matches)) return true
                 else -> {}
             }
+
             is KtBlockExpression -> if (earlyExitGuarded(node, child, matches)) return true
         }
         child = node
@@ -182,39 +206,61 @@ private fun KotlinResolver.guardedNonNullAt(offset: Int, matches: (KtExpression?
 
 /** Whether [cond], evaluating to [whenTrue], guarantees the matched value is non-null: `v != null` (true side) /
  *  `v == null` (false side), an `is`/negation, and `&&` (true side) / `||` (false side) conjunctions. */
-private fun KotlinResolver.condGuarantees(cond: KtExpression?, whenTrue: Boolean, matches: (KtExpression?) -> Boolean): Boolean =
-    when (val c = unwrapParens(cond)) {
-        is KtBinaryExpression -> when (c.operationToken) {
-            KtTokens.EXCLEQ -> whenTrue && isNullCmp(c, matches)   // v != null, true side
-            KtTokens.EQEQ -> !whenTrue && isNullCmp(c, matches)    // v == null, false side
-            KtTokens.ANDAND -> whenTrue && (condGuarantees(c.left, true, matches) || condGuarantees(c.right, true, matches))
-            KtTokens.OROR -> !whenTrue && (condGuarantees(c.left, false, matches) || condGuarantees(c.right, false, matches))
-            else -> false
-        }
-        // `v is T` (a non-nullable target) implies non-null on the true side (`!is` flips it).
-        is org.jetbrains.kotlin.psi.KtIsExpression ->
-            matches(c.leftHandSide) && whenTrue != c.isNegated && isNonNullIsTarget(c.typeReference?.text)
-        is KtPrefixExpression -> if (c.operationToken == KtTokens.EXCL) condGuarantees(c.baseExpression, !whenTrue, matches) else false
+private fun KotlinResolver.condGuarantees(
+    cond: KtExpression?, whenTrue: Boolean, matches: (KtExpression?) -> Boolean
+): Boolean = when (val c = unwrapParens(cond)) {
+    is KtBinaryExpression -> when (c.operationToken) {
+        KtTokens.EXCLEQ -> whenTrue && isNullCmp(c, matches)   // v != null, true side
+        KtTokens.EQEQ -> !whenTrue && isNullCmp(c, matches)    // v == null, false side
+        KtTokens.ANDAND -> whenTrue && (condGuarantees(c.left, true, matches) || condGuarantees(
+            c.right, true, matches
+        ))
+
+        KtTokens.OROR -> !whenTrue && (condGuarantees(c.left, false, matches) || condGuarantees(
+            c.right, false, matches
+        ))
+
         else -> false
     }
+    // `v is T` (a non-nullable target) implies non-null on the true side (`!is` flips it).
+    is org.jetbrains.kotlin.psi.KtIsExpression -> matches(c.leftHandSide) && whenTrue != c.isNegated && isNonNullIsTarget(
+        c.typeReference?.text
+    )
+
+    is KtPrefixExpression -> if (c.operationToken == KtTokens.EXCL) condGuarantees(
+        c.baseExpression, !whenTrue, matches
+    ) else false
+
+    else -> false
+}
 
 /** Whether [binary] is `v == null` / `v != null` (either operand order) for the matched value. */
 private fun isNullCmp(binary: KtBinaryExpression, matches: (KtExpression?) -> Boolean): Boolean =
-    (matches(binary.left) && isNullLit(stripParens(binary.right))) ||
-        (matches(binary.right) && isNullLit(stripParens(binary.left)))
+    (matches(binary.left) && isNullLit(stripParens(binary.right))) || (matches(binary.right) && isNullLit(
+        stripParens(binary.left)
+    ))
 
 /** An early-exit guard preceding [fromChild] in [block] that leaves the matched value non-null for the rest of
  *  the block: `if (v == null) <jump>` / `if (v != null) {} else <jump>`, `v ?: <jump>`, `v!!`, `requireNotNull(v)`. */
-private fun KotlinResolver.earlyExitGuarded(block: KtBlockExpression, fromChild: PsiElement?, matches: (KtExpression?) -> Boolean): Boolean {
+private fun KotlinResolver.earlyExitGuarded(
+    block: KtBlockExpression, fromChild: PsiElement?, matches: (KtExpression?) -> Boolean
+): Boolean {
     for (st in block.statements) {
         if (st === fromChild) break
         when {
             st is KtIfExpression -> {
                 val thenJumps = branchAlwaysJumps(st.then)
                 val elseJumps = st.`else` != null && branchAlwaysJumps(st.`else`)
-                if (thenJumps && !elseJumps && condGuarantees(st.condition, false, matches)) return true
-                if (elseJumps && !thenJumps && condGuarantees(st.condition, true, matches)) return true
+                if (thenJumps && !elseJumps && condGuarantees(
+                        st.condition, false, matches
+                    )
+                ) return true
+                if (elseJumps && !thenJumps && condGuarantees(
+                        st.condition, true, matches
+                    )
+                ) return true
             }
+
             isElvisJump(st, matches) -> return true
             isNotNullAssertStatement(st, matches) -> return true
             isNotNullPrecondition(st, matches) -> return true
@@ -224,13 +270,17 @@ private fun KotlinResolver.earlyExitGuarded(block: KtBlockExpression, fromChild:
 }
 
 /** `v ?: <jump>` — an elvis whose left is the matched value and whose right unconditionally transfers out. */
-private fun KotlinResolver.isElvisJump(st: KtExpression, matches: (KtExpression?) -> Boolean): Boolean {
+private fun KotlinResolver.isElvisJump(
+    st: KtExpression, matches: (KtExpression?) -> Boolean
+): Boolean {
     val e = stripParens(st) as? KtBinaryExpression ?: return false
     return e.operationToken == KtTokens.ELVIS && matches(e.left) && branchAlwaysJumps(e.right)
 }
 
 /** `v!!` used at the top of statement [st] (`v!!`, `v!!.foo`, `v!!()`), which throws when null. */
-private fun isNotNullAssertStatement(st: KtExpression, matches: (KtExpression?) -> Boolean): Boolean {
+private fun isNotNullAssertStatement(
+    st: KtExpression, matches: (KtExpression?) -> Boolean
+): Boolean {
     val postfix = when (val e = stripParens(st)) {
         is KtPostfixExpression -> e
         is KtDotQualifiedExpression -> stripParens(e.receiverExpression) as? KtPostfixExpression
@@ -242,7 +292,8 @@ private fun isNotNullAssertStatement(st: KtExpression, matches: (KtExpression?) 
 /** `requireNotNull(v)` / `checkNotNull(v)` — a stdlib precondition call that throws on null. */
 private fun isNotNullPrecondition(st: KtExpression, matches: (KtExpression?) -> Boolean): Boolean {
     val call = stripParens(st) as? KtCallExpression ?: return false
-    val callee = (call.calleeExpression as? KtNameReferenceExpression)?.getReferencedName() ?: return false
+    val callee =
+        (call.calleeExpression as? KtNameReferenceExpression)?.getReferencedName() ?: return false
     if (callee != "requireNotNull" && callee != "checkNotNull") return false
     return matches(call.valueArguments.singleOrNull()?.getArgumentExpression())
 }

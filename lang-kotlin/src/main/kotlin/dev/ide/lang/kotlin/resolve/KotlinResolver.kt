@@ -12,6 +12,7 @@ import com.intellij.psi.PsiElement
 import org.jetbrains.kotlin.psi.KtCallExpression
 import org.jetbrains.kotlin.psi.KtExpression
 import org.jetbrains.kotlin.psi.KtFile
+import org.jetbrains.kotlin.psi.KtLambdaExpression
 import org.jetbrains.kotlin.psi.KtParenthesizedExpression
 
 /** The Compose calling-convention status of a code position (see [KotlinResolver.composableContextAt]). */
@@ -28,12 +29,19 @@ enum class SuspendContext { SUSPEND, NON_SUSPEND, UNKNOWN }
  * approximate under concurrency (plain longs); the benchmarks drive them single-threaded.
  */
 object KotlinResolverStats {
-    @Volatile var enabled: Boolean = false
-    @Volatile var inferCalls: Long = 0
-    @Volatile var inferComputes: Long = 0
-    @Volatile var callTargetsCalls: Long = 0
-    @Volatile var callTargetsComputes: Long = 0
-    fun reset() { inferCalls = 0; inferComputes = 0; callTargetsCalls = 0; callTargetsComputes = 0 }
+    @Volatile
+    var enabled: Boolean = false
+    @Volatile
+    var inferCalls: Long = 0
+    @Volatile
+    var inferComputes: Long = 0
+    @Volatile
+    var callTargetsCalls: Long = 0
+    @Volatile
+    var callTargetsComputes: Long = 0
+    fun reset() {
+        inferCalls = 0; inferComputes = 0; callTargetsCalls = 0; callTargetsComputes = 0
+    }
 }
 
 /**
@@ -54,10 +62,35 @@ class KotlinResolverCaches {
     val implicitReceivers = HashMap<Int, List<KotlinType>>()
     val composeCtx = HashMap<PsiElement, ComposableContext>()
     val suspendCtx = HashMap<PsiElement, SuspendContext>()
+
     /** Per-flow-root result of the CFG var-nullability pass: the var references it proves non-null (see
      *  [KotlinVarNullFlow]). Keyed by the analysed body block. */
     val varNonNull = HashMap<PsiElement, Set<PsiElement>>()
 }
+
+/**
+ * A dependency-tracking frame for the scoring-time caches ([KotlinResolver.scoringCalleeCache] /
+ * [KotlinResolver.scoringInferCache]). While overload SCORING is active every nested callee (and every argument /
+ * lambda-body inference) is otherwise recomputed once per outer candidate per level — the ∏(candidate) blowup
+ * that froze the editor on a deeply nested Compose builder (`Column{Row{Surface{…}}}`). A frame records, for one
+ * in-flight [KotlinResolver.resolveCalleeFunction] or [inferType], which OUTER lambda-shape overrides its
+ * computation actually consulted ([deps]) — the ONLY per-candidate-varying input, so an entry with no such deps
+ * is provably identical across sibling candidates and can be reused. [shadowed] holds the overrides this
+ * computation pushed ITSELF (its own lambda's shape, via [KotlinResolver.withLambdaShape]), whose consults are
+ * internal and must NOT count as external dependencies.
+ */
+internal class ScoringDepFrame {
+    val deps = HashMap<KtLambdaExpression, KotlinSymbolService.FunctionalShape?>()
+    val shadowed = HashSet<KtLambdaExpression>()
+}
+
+/** A scoring-time resolution result ([V]) plus the outer lambda-shape overrides its computation depended on (see
+ *  [ScoringDepFrame]); reusable while those overrides are unchanged ([KotlinResolver.overridesMatch]). Backs both
+ *  the callee cache ([KotlinSymbol?]) and the type-inference cache ([KotlinType?]). */
+internal class ScoringEntry<V>(
+    val result: V,
+    val deps: Map<KtLambdaExpression, KotlinSymbolService.FunctionalShape?>,
+)
 
 /**
  * Resolution and the inference subset, computed over the LIVE [KtFile] (the buffer being edited).
@@ -128,6 +161,73 @@ class KotlinResolver(
     /** Pop the innermost narrowing scope pushed by [pushNarrowing]. */
     fun popNarrowing() = narrowings.removeLast()
 
+    // Bidirectional inference: a lambda's expected functional shape, pushed TOP-DOWN from the candidate/callee
+    // being evaluated, so the lambda's parameters (`it`/named) type from that shape WITHOUT re-resolving the
+    // enclosing call — which is what breaks the re-entrancy that blocks typing a lambda body during overload
+    // resolution (`sumOf { it }`, where the overloads differ only by the lambda's RETURN type). [expectedLambdaShape]
+    // consults this first; [inferType]'s cache is bypassed while any override is active (a lambda body's type is
+    // then context-dependent, exactly like a smart-cast narrowing, so it must not leak into the shared cache).
+    internal val lambdaShapeOverrides =
+        HashMap<KtLambdaExpression, KotlinSymbolService.FunctionalShape>()
+
+    /** True while overload resolution is SCORING a candidate by typing its lambda body under a pushed shape
+     *  ([lambdaShapeOverrides]). The enclosing call is then mid-resolution, so a nested resolution can be
+     *  provisional (re-entrancy fallback) or context-dependent; the per-snapshot memo caches suspend their
+     *  reads/writes while this holds, so a provisional result never poisons the real (post-scoring) inference. */
+    internal val scoringActive: Boolean get() = lambdaShapeOverrides.isNotEmpty()
+
+    // Dependency-tracked scoring-time caches: the regular [calleeCache]/[inferCache] stay bypassed during
+    // scoring (a provisional, context-dependent result must not leak post-scoring), but the SAME nested callee
+    // (and the SAME argument/lambda-body inference) is otherwise recomputed once per outer candidate per level —
+    // the ∏(candidate) blowup that froze the editor, and the allocation storm behind the semantic pass. These
+    // collapse it to O(calls) by memoizing each scoring-time [resolveCalleeFunction]/[inferType] keyed by exactly
+    // the outer overrides it consults (see [ScoringDepFrame]/[ScoringEntry]). Per-resolver + snapshot-scoped
+    // (transient, like [resolvingCallees]); validity re-checked per read via [overridesMatch].
+    internal val scoringDepFrames = ArrayDeque<ScoringDepFrame>()
+    internal val scoringCalleeCache = HashMap<KtCallExpression, ScoringEntry<KotlinSymbol?>>()
+    internal val scoringInferCache = HashMap<KtExpression, ScoringEntry<KotlinType?>>()
+
+    /** Record that a scoring-time computation consulted [lambda]'s (possibly absent) shape override — into every
+     *  active frame that did NOT push it itself, so a cached result is keyed by exactly the OUTER overrides it
+     *  depends on. Called from the one place [lambdaShapeOverrides] is read ([expectedLambdaShape]). */
+    internal fun recordOverrideConsult(lambda: KtLambdaExpression, value: KotlinSymbolService.FunctionalShape?) {
+        if (scoringDepFrames.isEmpty()) return
+        for (f in scoringDepFrames) if (lambda !in f.shadowed) f.deps.putIfAbsent(lambda, value)
+    }
+
+    /** Whether a cached scoring entry's recorded [deps] still hold under the current overrides. Identity match:
+     *  a candidate's shape is a fresh instance each scoring, so a changed override never spuriously matches (at
+     *  worst forcing a safe recompute), and an absent-vs-present change (null vs a shape) is likewise a miss. */
+    internal fun overridesMatch(deps: Map<KtLambdaExpression, KotlinSymbolService.FunctionalShape?>): Boolean {
+        for ((lambda, shape) in deps) if (lambdaShapeOverrides[lambda] !== shape) return false
+        return true
+    }
+
+    /** Propagate a reused entry's [deps] to the active frames — the reusing computation now transitively depends
+     *  on whatever that entry did (skipping any override a frame pushed itself). */
+    internal fun propagateDeps(deps: Map<KtLambdaExpression, KotlinSymbolService.FunctionalShape?>) {
+        for (f in scoringDepFrames) for ((l, s) in deps) if (l !in f.shadowed) f.deps.putIfAbsent(l, s)
+    }
+
+    /** Run [body] with [shape] pushed as [lambda]'s expected functional shape (see [lambdaShapeOverrides]),
+     *  restoring the prior binding afterwards. */
+    internal fun <T> withLambdaShape(
+        lambda: KtLambdaExpression,
+        shape: KotlinSymbolService.FunctionalShape,
+        body: () -> T
+    ): T {
+        val had = lambdaShapeOverrides.containsKey(lambda)
+        val prev = lambdaShapeOverrides.put(lambda, shape)
+        // This override belongs to the CURRENT scoring computations — shadow it in every active dep frame so its
+        // own consults (typing THIS lambda's params/body) aren't recorded as EXTERNAL deps of those computations.
+        for (f in scoringDepFrames) f.shadowed.add(lambda)
+        try {
+            return body()
+        } finally {
+            if (had) lambdaShapeOverrides[lambda] = prev!! else lambdaShapeOverrides.remove(lambda)
+        }
+    }
+
     internal fun unwrapParens(e: KtExpression?): KtExpression? =
         if (e is KtParenthesizedExpression) unwrapParens(e.expression) else e
 
@@ -142,6 +242,13 @@ class KotlinResolver(
      *  `fun a() = b(); fun b() = a()` (neither declares a return type) would recurse forever; re-entry
      *  returns null, breaking the cycle. */
     internal val inferringReturnBodies = HashSet<PsiElement>()
+
+    /** Expressions currently having their type inferred — a re-entrancy guard for [inferType]. Its cache is
+     *  written only AFTER computing, so a cycle that re-enters the SAME expression mid-inference never hits the
+     *  cache: a `by`-delegated property (`var x by mutableStateOf(…)`) types its delegate, whose generic-call
+     *  argument resolution enumerates same-file properties — itself included — back through [delegatedValueType]
+     *  into the same delegate. Re-entry returns null (never cached); the outer inference computes the real type. */
+    internal val inferringTypes = HashSet<KtExpression>()
 
     /** Simple name of a parameter's declared type TEXT (`kotlin.Int` / `List<String>` → `Int` / `List`); null
      *  text → null. Type arguments are dropped (JVM erasure forbids overloading on them, so it's safe). */

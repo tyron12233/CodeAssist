@@ -41,7 +41,7 @@ data class CompletionSession(
         //   1. Buffer words (hippie completion) always sort BELOW real, semantic completions — a guessed word
         //      must never outrank a resolved symbol, even when it is the closer textual match (the reported bug:
         //      a case-insensitive-exact word `text` jumping above the prefix-matching symbol `TextField`).
-        //   2. Within each group, float exact matches over prefix over fuzzy (case-sensitive winning each pair).
+        //   2. Within each group, float exact matches over prefix fuzzy (case-sensitive winning each pair).
         // The sort is stable, so the backend's semantic ranking (expected type, proximity) survives within a tier.
         return base.asSequence()
             .filter { matchPositions(it.label, prefix) != null }
@@ -87,7 +87,32 @@ internal fun isIdentifierChar(c: Char, extra: String = ""): Boolean =
  * shut — the reason typing `android:` used to dismiss completion). Java/other files get none.
  */
 internal fun extraWordChars(path: String): String =
-    if (path.endsWith(".xml", ignoreCase = true)) ":@?+/.-" else ""
+    if (path.endsWith(".xml", ignoreCase = true)) ":@?+/.-|" else ""
+
+/** What a just-typed character does to the completion popup. */
+internal enum class CompletionKeystroke {
+    /** A new context (`.` member access, `@` annotation start) — always re-query the backend for a fresh set. */
+    Reopen,
+
+    /** The same identifier token is being extended — narrow the live set locally if possible, else re-query. */
+    Extend,
+
+    /** A token-ending character — close the popup. */
+    Dismiss,
+}
+
+/**
+ * How the character [before] the caret should drive the completion popup (see [CompletionKeystroke]). `.` opens
+ * a member-access set; `@` opens the annotation-name set (Kotlin/Java — where it is NOT a [extraWordChars] word
+ * char, so `wordExtra` is empty; XML instead treats `@` as a resource-reference word char and extends). An
+ * identifier character extends the current token; anything else ends the session.
+ */
+internal fun completionKeystroke(before: Char?, wordExtra: String): CompletionKeystroke = when {
+    before == '.' -> CompletionKeystroke.Reopen
+    before == '@' && wordExtra.isEmpty() -> CompletionKeystroke.Reopen
+    before != null && isIdentifierChar(before, wordExtra) -> CompletionKeystroke.Extend
+    else -> CompletionKeystroke.Dismiss
+}
 
 /**
  * Is [session] still describing the token under [caret] in [text]? True iff the caret is at/after the
@@ -95,7 +120,7 @@ internal fun extraWordChars(path: String): String =
  * user has only extended (or not yet changed) the same identifier, so the cached set can be narrowed.
  */
 internal fun CompletionSession.coversCaret(text: CharSequence, caret: Int, extra: String = ""): Boolean {
-    if (tokenStart < 0 || caret < tokenStart || tokenStart > text.length) return false
+    if (tokenStart !in 0..caret || tokenStart > text.length) return false
     val end = caret.coerceAtMost(text.length)
     for (i in tokenStart until end) if (!isIdentifierChar(text[i], extra)) return false
     return true

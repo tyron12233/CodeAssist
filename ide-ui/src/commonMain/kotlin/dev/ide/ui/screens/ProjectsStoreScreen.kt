@@ -46,11 +46,14 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import dev.ide.ui.ads.LocalAds
+import dev.ide.ui.backend.AdPlacement
 import dev.ide.ui.backend.IdeBackend
 import dev.ide.ui.backend.UiStoreCatalog
 import dev.ide.ui.backend.UiStoreItem
 import dev.ide.ui.backend.UiStoreItemKind
 import dev.ide.ui.backend.UiStoreSection
+import dev.ide.ui.components.AdSlot
 import dev.ide.ui.components.Chip
 import dev.ide.ui.components.ComingSoon
 import dev.ide.ui.components.IconButtonCa
@@ -77,7 +80,7 @@ import dev.ide.ui.generated.resources.store_by_author
 import dev.ide.ui.icons.CaIcons
 import dev.ide.ui.icons.TreeIcon
 import dev.ide.ui.icons.TreeIcons
-import dev.ide.ui.icons.resolveTint
+import dev.ide.ui.theme.resolveTint
 import dev.ide.ui.theme.Ca
 import kotlinx.coroutines.delay
 import org.jetbrains.compose.resources.stringResource
@@ -114,6 +117,7 @@ fun ProjectsStoreScreen(
     var category by remember { mutableStateOf<String?>(null) }
     var results by remember { mutableStateOf<List<UiStoreItem>>(emptyList()) }
     val filtering = query.isNotBlank() || category != null
+    val adsActive = LocalAds.current?.adsActive == true
 
     LaunchedEffect(query, category, filtering) {
         if (!filtering) { results = emptyList(); return@LaunchedEffect }
@@ -142,6 +146,12 @@ fun ProjectsStoreScreen(
                     item(key = "featured") {
                         Spacer(Modifier.height(6.dp))
                         FeaturedCarousel(catalog.featured, onClick = onOpenItem)
+                    }
+                }
+                // A native ad reads as just another shelf item in the gallery — the most natural placement.
+                if (adsActive) {
+                    item(key = "ad") {
+                        AdSlot(AdPlacement.STORE, Modifier.padding(horizontal = HPAD, vertical = 8.dp))
                     }
                 }
                 catalog.sections.forEach { section -> storeSection(section, onClick = onOpenItem) }

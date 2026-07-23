@@ -34,6 +34,31 @@ enum class IndexItemState { PENDING, ACTIVE, DONE }
  *  Surfaced in [IndexStatus.items] so the UI can show *what* is being indexed, not just an aggregate percent. */
 data class IndexItem(val label: String, val state: IndexItemState = IndexItemState.PENDING)
 
+/** One indexer's ([IndexExtension]) contribution to a build: cumulative wall time spent inside its
+ *  [IndexExtension.index] across every unit it consumed, and the number of entries it produced. Keyed by the
+ *  extension's stable [IndexId] value (e.g. `java.classNames`, `android.resources`) — a fixed index-kind
+ *  identifier, never a file/artifact/project name. Answers "which index is taking the time". */
+data class IndexerStat(val id: String, val indexMs: Long, val entries: Long)
+
+/** Aggregate stats for a completed build, for the detail view + analytics. All privacy-safe (times + counts,
+ *  no names/paths). Set on the terminal (idle) [IndexStatus] and carried until the next build. */
+data class IndexBuildStats(
+    /** Wall time of the libraries/SDK (artifact) phase. */
+    val libMs: Long = 0,
+    /** Wall time of the project-source phase. */
+    val sourceMs: Long = 0,
+    /** Library/SDK artifacts on the classpath this build. */
+    val artifacts: Int = 0,
+    /** Of [artifacts], how many were freshly indexed (a cache miss). */
+    val artifactsBuilt: Int = 0,
+    /** Of [artifacts], how many were reused from the on-disk segment cache (a cache hit). */
+    val artifactsReused: Int = 0,
+    /** Source/resource files walked this build. */
+    val sourceFiles: Int = 0,
+    /** Of [sourceFiles], how many were (re)parsed (new/changed since the last pass). */
+    val sourceParsed: Int = 0,
+)
+
 /** Observable build state for the UI — the "availability / graceful degrade while building" signal. */
 data class IndexStatus(
     val building: Boolean = false,
@@ -53,6 +78,13 @@ data class IndexStatus(
     /** Units finished / total in the current phase (0 total ⇒ unknown / indeterminate). */
     val processed: Int = 0,
     val total: Int = 0,
+    /** Per-indexer time/entry breakdown, sorted slowest first. Accumulates live during a build and stays
+     *  populated on the terminal status (the last build's breakdown), so the detail view can always answer
+     *  "which index cost the most". Empty before the first build. */
+    val breakdown: List<IndexerStat> = emptyList(),
+    /** Aggregate stats for the last completed build (phase times, cache hit/miss, file counts). Non-null only
+     *  once a build has finished. */
+    val stats: IndexBuildStats? = null,
 )
 
 interface IndexService {

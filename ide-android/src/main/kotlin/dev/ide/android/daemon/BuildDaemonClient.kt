@@ -10,15 +10,14 @@ import dev.ide.platform.log.Log
 
 /**
  * UI-process client for [BuildDaemonService]. Binds the `:build` daemon, registers a stream-back callback,
- * and — the load-bearing part for build-process isolation — links an [IBinder.DeathRecipient] so that when
+ * and the load-bearing part for build-process isolation, links an [IBinder.DeathRecipient] so that when
  * the daemon dies (e.g. a build OOM) the UI is NOTIFIED and keeps running instead of crashing with it. The
  * callback deltas are surfaced through the [onOpened]/[onStatus]/[onStep]/[onLog] hooks, invoked on Binder
- * threads. In Phase 3b this becomes the core of `RemoteBuildRunner` (reassembling a `StateFlow<BuildState>`);
- * for now it also drives the Phase-3a proof ([BuildDaemonProof]).
+ * threads.
  */
 class BuildDaemonClient(
     context: Context,
-    private val onOpened: (ok: Boolean, error: String?) -> Unit = { _, _ -> },
+    private val onOpened: (requestId: Int, ok: Boolean, error: String?) -> Unit = { _, _, _ -> },
     private val onStatus: (status: String, moduleName: String, elapsedMs: Long) -> Unit = { _, _, _ -> },
     private val onStep: (name: String, status: String) -> Unit = { _, _ -> },
     private val onLog: (message: String) -> Unit = {},
@@ -28,6 +27,10 @@ class BuildDaemonClient(
     private val onPermission: (reqId: Int, category: String, detail: String) -> Unit = { _, _, _ -> },
     /** The daemon installed an android-app APK; launch it here in the UI process (foreground-activity rules). */
     private val onLaunchPackage: (packageName: String) -> Unit = {},
+    /** One forwarded app-log (Logcat) line; [level] is a UiLogLevel ordinal. */
+    private val onAppLog: (level: Int, tag: String, pid: Int, tid: Int, message: String, timestampMs: Long) -> Unit = { _, _, _, _, _, _ -> },
+    /** App-log session/connection change; [reset] means clear the buffer for a new run. */
+    private val onAppLogState: (connected: Boolean, packageName: String, reset: Boolean) -> Unit = { _, _, _ -> },
     /** Fires on EVERY (re)connect — including the auto-restart after the daemon dies — so a client can
      *  re-drive in-flight work. (Distinct from [bind]'s one-shot `onReady`, which fires only the first time.) */
     private val onConnected: () -> Unit = {},
@@ -49,7 +52,7 @@ class BuildDaemonClient(
     }
 
     private val callback = object : IBuildCallback.Stub() {
-        override fun onOpened(ok: Boolean, error: String?) = onOpened.invoke(ok, error)
+        override fun onOpened(requestId: Int, ok: Boolean, error: String?) = onOpened.invoke(requestId, ok, error)
         override fun onStatus(status: String?, moduleName: String?, elapsedMs: Long) =
             onStatus.invoke(status ?: "", moduleName ?: "", elapsedMs)
         override fun onStep(name: String?, status: String?) = onStep.invoke(name ?: "", status ?: "")
@@ -61,6 +64,10 @@ class BuildDaemonClient(
         override fun onConsoleChunk(runId: Int, text: String?, kind: Int) = onConsoleChunk.invoke(runId, text ?: "", kind)
         override fun onPermission(reqId: Int, category: String?, detail: String?) = onPermission.invoke(reqId, category ?: "", detail ?: "")
         override fun onLaunchPackage(packageName: String?) = onLaunchPackage.invoke(packageName ?: "")
+        override fun onAppLog(level: Int, tag: String?, pid: Int, tid: Int, message: String?, timestampMs: Long) =
+            onAppLog.invoke(level, tag ?: "", pid, tid, message ?: "", timestampMs)
+        override fun onAppLogState(connected: Boolean, packageName: String?, reset: Boolean) =
+            onAppLogState.invoke(connected, packageName ?: "", reset)
     }
 
     private val connection = object : ServiceConnection {
@@ -96,7 +103,8 @@ class BuildDaemonClient(
         log.info("ui(pid=${Process.myPid()}): bindService = $ok")
     }
 
-    fun open(workspaceDir: String, modelGeneration: Int) = runCatching { daemon?.open(workspaceDir, modelGeneration) }
+    fun open(workspaceDir: String, modelGeneration: Int, requestId: Int) =
+        runCatching { daemon?.open(workspaceDir, modelGeneration, requestId) }
     fun runTasks(): List<String> = runCatching { daemon?.runTasks()?.toList() }.getOrNull().orEmpty()
     fun runTask(id: String) = runCatching { daemon?.runTask(id) }
     fun runBuild() = runCatching { daemon?.runBuild() }
@@ -104,5 +112,6 @@ class BuildDaemonClient(
     fun sendRunInput(text: String) = runCatching { daemon?.sendRunInput(text) }
     fun closeRunInput() = runCatching { daemon?.closeRunInput() }
     fun answerPermission(id: Int, decision: Int) = runCatching { daemon?.answerPermission(id, decision) }
+    fun clearAppLog() = runCatching { daemon?.clearAppLog() }
     fun unbind() = runCatching { appContext.unbindService(connection) }
 }

@@ -42,7 +42,7 @@ class AndroidRClassProviderTest {
         styleableAttrs = mapOf("MyChart" to listOf("barColor", "maxValue")),
     )
     private val model = object : ResourceModel {
-        override fun parse(resDirs: List<Path>): ResourceRepository = repo
+        override fun parse(resDirs: List<Path>, textOverride: (Path) -> String?): ResourceRepository = repo
     }
 
     private fun withAppModule(block: (Module, Workspace) -> Unit) {
@@ -117,7 +117,7 @@ class AndroidRClassProviderTest {
             styleableAttrs = mapOf("View" to listOf("android:textColor", "barColor")),
         )
         val colonModel = object : ResourceModel {
-            override fun parse(resDirs: List<Path>): ResourceRepository = colonRepo
+            override fun parse(resDirs: List<Path>, textOverride: (Path) -> String?): ResourceRepository = colonRepo
         }
         withAppModule { module, workspace ->
             val ctx = object : SyntheticClassContext {

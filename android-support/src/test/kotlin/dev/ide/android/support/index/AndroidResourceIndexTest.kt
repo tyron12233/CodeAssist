@@ -31,6 +31,23 @@ class AndroidResourceIndexTest {
     }
 
     @Test
+    fun recoversDeclarationsFromAMalformedValuesFile() {
+        // A malformed values file (unescaped `&`) makes SAX abandon it at the error, losing every later
+        // declaration — which would break `@string/…` resolution/completion. The error-tolerant PSI fallback
+        // recovers ALL declarations regardless of well-formedness.
+        val text = """<resources>
+            <string name="first">A & B</string>
+            <string name="second">C</string>
+            <color name="accent">#FF0000</color>
+        </resources>""".trimIndent()
+        val decls = ResourceFileScanner.scan("values", "/p/res/values/strings.xml", text)
+        val byName = decls.associateBy { it.name }
+        assertEquals("string", byName["first"]?.type, "a broken file must still yield decls after the error: $decls")
+        assertEquals("string", byName["second"]?.type)
+        assertEquals("color", byName["accent"]?.type)
+    }
+
+    @Test
     fun fileResourcesAndIdsCarryNoValue() {
         val text = """<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
             android:id="@+id/root"/>""".trimIndent()

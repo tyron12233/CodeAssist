@@ -53,6 +53,14 @@ class KotlinSymbolService(
     /** Optional: real parameter names + javadoc/KDoc from attached SOURCES, used to enrich binary symbols
      *  (Java bytecode strips parameter names; neither bytecode nor `@Metadata` carries doc comments). */
     private val sourceDoc: dev.ide.lang.resolve.SourceDocProvider = dev.ide.lang.resolve.SourceDocProvider.NONE,
+    /** FQN prefixes hidden from index-backed type-NAME completion — the Android namespaces for a non-Android
+     *  (JVM/console) module, so the shared `java.classNames` index never offers `android.*` to auto-import. */
+    private val excludedTypePrefixes: List<String> = emptyList(),
+    /** Editor synthetic-member providers (kotlinx.serialization's `serializer()`, …): compiler-plugin-generated
+     *  members the parse-only model can't see, folded into a SOURCE class's member enumeration. Contributed via
+     *  `platform.kotlinSyntheticMember`; queried lazily so a re-registration is picked up. See
+     *  [KotlinSyntheticMemberProvider]. */
+    private val syntheticMemberProviders: () -> List<KotlinSyntheticMemberProvider> = { emptyList() },
 ) : KotlinTypeContext, Closeable {
 
     // Kotlin's stdlib is an IMPLICIT dependency of every Kotlin file (like java.lang for Java). Always
@@ -108,6 +116,25 @@ class KotlinSymbolService(
     private val inferredBodyTypeMemo = java.util.Collections.synchronizedMap(java.util.IdentityHashMap<RawCallable, Holder<KotlinType>>())
     private val inferringBody = ThreadLocal.withInitial { java.util.Collections.newSetFromMap(java.util.IdentityHashMap<RawCallable, Boolean>()) }
 
+    // FQNs of source classes with a member whose type is currently being inferred ([inferReturnFromBody]), as a
+    // per-thread reference count (a member inference nests into its class's other members). While a class is in
+    // here, enumerating ITS OWN members ([ownAndInheritedCached]) sees the in-flight member come back
+    // re-entrant-null, so that (partial) list must not be pinned in the session cache — but OTHER classes
+    // enumerated during the same inference are complete and stay cached. Scoping the bypass to the owner class
+    // (not every source class) keeps member enumeration O(members), not O(members × delegates).
+    private val inferringMemberOwners = ThreadLocal.withInitial { HashMap<String, Int>() }
+
+    private fun pushInferringOwner(fqn: String) {
+        val m = inferringMemberOwners.get(); m[fqn] = (m[fqn] ?: 0) + 1
+    }
+
+    private fun popInferringOwner(fqn: String) {
+        val m = inferringMemberOwners.get(); val n = (m[fqn] ?: 0) - 1
+        if (n <= 0) m.remove(fqn) else m[fqn] = n
+    }
+
+    private fun isInferringOwner(fqn: String): Boolean = inferringMemberOwners.get().containsKey(fqn)
+
     // Per-receiver-FQN memo of the (recursively-walked) Kotlin supertype chain — the expensive part of
     // `extensionsFor`/`supertypesOf`, recomputed on every member-access keystroke otherwise. Split by origin:
     // a classpath/builtin type's chain CANNOT depend on project source (the classpath can't extend your code),
@@ -115,6 +142,12 @@ class KotlinSymbolService(
     // memo across edits is the win for Compose (its deep `Modifier`/`MaterialTheme`/… chains stay warm).
     private val classpathSupertypeMemo = ConcurrentHashMap<String, List<String>>()
     @Volatile private var sourceSupertypeMemo = ConcurrentHashMap<String, List<String>>()
+
+    // Per-(sub → super) memo of a type's parameterized instantiation of a supertype, expressed as a TEMPLATE
+    // in the sub type's own type-parameter refs (arg-independent, so a receiver's actual args substitute in per
+    // call). Keyed "sub super"; a genuine non-supertype is not cached (rare — the receiver's extension set
+    // only carries extensions whose declared receiver IS a supertype). Powers [receiverSupertypeArgs].
+    private val supertypeArgTemplateMemo = ConcurrentHashMap<String, List<TypeRef>>()
 
     // Per-(receiver-target, name-prefix) memo of the classpath extension-index query. Like the classpath
     // supertype memo, this is session-stable: the persistent `kotlin.callables` index can't gain a project
@@ -145,6 +178,14 @@ class KotlinSymbolService(
     // stable, dropped on build-start via [classpathCacheUsable]); a SOURCE type's change on edit.
     private val classpathOwnMembersMemo = ConcurrentHashMap<String, List<KotlinSymbol>>()
     @Volatile private var sourceOwnMembersMemo = ConcurrentHashMap<String, List<KotlinSymbol>>()
+    // Per-name memo of [topLevelByName]'s two DISK-SEGMENT-backed callable-index scans (library + Kotlin
+    // builtins). These are the `Segment.exact` queries a CPU trace showed being re-run once per node of the
+    // deep call/overload-inference recursion on a Compose file (every `Text`/`Column`/`remember` re-queried
+    // per inference step) — a segment-read storm that pegged CPU and churned the heap. Session-stable exactly
+    // like the sibling classpath memos (dropped on a (re)build via [classpathCacheUsable]); the PROJECT-SOURCE
+    // callable query stays live (in-memory + edit-sensitive), so a source top-level edit is still seen at once.
+    private val topLevelLibMemo = ConcurrentHashMap<String, List<KotlinSymbol>>()
+    private val topLevelBuiltinMemo = ConcurrentHashMap<String, List<KotlinSymbol>>()
     // Tracks the index's last-seen build state so the classpath memos above are dropped the moment a (re)build
     // STARTS — a rebuilt index can carry different members/extensions (a dependency was added), and a query
     // mid-build sees only a partial index, so partial results must never be cached.
@@ -155,7 +196,7 @@ class KotlinSymbolService(
         val status = idx.status
         val building = status.building
         if (building && !extMemoBuilding) {
-            classpathExtMemo.clear(); checkMembersMemo.clear(); companionMembersMemo.clear(); classpathTypeExistsMemo.clear(); classpathOwnMembersMemo.clear()
+            classpathExtMemo.clear(); checkMembersMemo.clear(); companionMembersMemo.clear(); classpathTypeExistsMemo.clear(); classpathOwnMembersMemo.clear(); classpathSupertypeMemo.clear(); topLevelLibMemo.clear(); topLevelBuiltinMemo.clear()
         }
         extMemoBuilding = building
         // Not ready ⇒ queries return PARTIAL results (whatever segments are open) for progressive completion;
@@ -278,14 +319,25 @@ class KotlinSymbolService(
         return previewSourceFile(raw?.ctx?.path)
     }
 
-    /** The source files declaring a top-level function named [name] — for cross-file preview lowering of a call
-     *  to a function defined in another file. Distinct by path. */
-    fun sourceFilesDeclaringFunction(name: String): List<PreviewSourceFile> =
-        model().topLevel.asSequence()
-            .filter { it.isFunction && it.receiverText == null && it.name == name }
+    /** The source files declaring a top-level CALLABLE named [name] — a function (INCLUDING a top-level
+     *  extension function, which a preview may call cross-file: `"x".shout()` where `fun String.shout()` lives in
+     *  a sibling file) OR a non-extension top-level property — for cross-file preview lowering. A property read
+     *  lowers to a `name/0` TOP_LEVEL source call (its synthetic zero-arg getter), so a preview referencing a
+     *  `val` defined in another file (e.g. a theme color `Purple80`) must follow it here too. An extension
+     *  PROPERTY stays excluded (its read routes through its receiver type, not this by-name lookup). Distinct by
+     *  path. */
+    fun sourceFilesDeclaringFunction(name: String): List<PreviewSourceFile> {
+        val m = model()
+        // `topLevel` holds NON-extension callables (functions + properties); extension callables live in a
+        // separate `extensions` list, so an extension FUNCTION must be looked up there too (an extension property
+        // stays excluded — its read routes through its receiver type, not this by-name lookup).
+        val candidates = m.topLevel.asSequence().filter { it.name == name } +
+            m.extensions.asSequence().filter { it.name == name && it.isFunction }
+        return candidates
             .mapNotNull { previewSourceFile(it.ctx.path) }
             .distinctBy { it.file.path }
             .toList()
+    }
 
     private fun sourceFileFor(vf: VirtualFile, ov: Map<String, String>): SourceFile? {
         val path = vf.path
@@ -336,6 +388,12 @@ class KotlinSymbolService(
             .also { syntheticCache = it; syntheticCacheKey = current }
     }
 
+    /** Whether [fqn] is a contributed synthetic class (Android `R`/`BuildConfig`, ViewBinding). Its members are
+     *  volatile (resource-driven) and cheap, so they must NOT enter the session-stable classpath member memos —
+     *  they are enumerated fresh so a resource edit is reflected at once. [synthetic] is identity-cached. */
+    private fun isSyntheticType(fqn: String): Boolean =
+        synthetic().byFqn.containsKey(Builtins.kotlinTypeFor(fqn) ?: fqn)
+
     /** Members of a synthetic class: fields + methods (with their declared modifiers) + nested types (the
      *  navigation `R.layout` → `R.layout.activity_main`). Null if [fqn] is not a synthetic class. */
     private fun syntheticMembers(fqn: String): List<KotlinSymbol>? {
@@ -345,6 +403,38 @@ class KotlinSymbolService(
         sc.methods.forEach { out += syntheticMethod(it) }
         sc.nestedClasses.forEach { out += syntheticNestedType(it) }
         return out
+    }
+
+    /** The gate a [KotlinSyntheticMemberProvider] uses to require its runtime before contributing (a plugin's
+     *  generated members are only real when the plugin actually ran, i.e. its runtime is on the classpath). */
+    private val syntheticMemberContext = object : KotlinSyntheticMemberProvider.Context {
+        override fun hasType(fqn: String): Boolean = isKnownType(fqn)
+    }
+
+    /** Compiler-plugin STATIC (type-/companion-accessible) synthetic members for [fqn] (kotlinx.serialization's
+     *  `serializer()`), surfaced at a `Foo.` reference alongside the real companion members. Empty unless [fqn]
+     *  is a PROJECT SOURCE class a registered provider targets — so it is a cheap map miss for every other type
+     *  (a binary `@Serializable` class already carries its real `serializer()` in bytecode). */
+    private fun syntheticStaticMembers(fqn: String, namePrefix: String): List<KotlinSymbol> {
+        val rc = sourceClass(fqn) ?: return emptyList()
+        val providers = runCatching { syntheticMemberProviders() }.getOrDefault(emptyList())
+        if (providers.isEmpty()) return emptyList()
+        val m = PrefixMatcher(namePrefix)
+        return providers
+            .flatMap { runCatching { it.staticMembers(rc, syntheticMemberContext) }.getOrDefault(emptyList()) }
+            .filter { namePrefix.isEmpty() || m.matches(it.name) }
+            .map { toSymbol(it, fqn, rc.typeParameterNames) }
+    }
+
+    /** Compiler-plugin INSTANCE synthetic members for source class [rc] (a future Parcelize provider's
+     *  `writeToParcel`/`describeContents`), folded into the class's own members. Empty unless a registered
+     *  provider targets [rc]. */
+    private fun syntheticInstanceMembers(rc: RawClass): List<KotlinSymbol> {
+        val providers = runCatching { syntheticMemberProviders() }.getOrDefault(emptyList())
+        if (providers.isEmpty()) return emptyList()
+        return providers
+            .flatMap { runCatching { it.instanceMembers(rc, syntheticMemberContext) }.getOrDefault(emptyList()) }
+            .map { toSymbol(it, rc.fqn, rc.typeParameterNames) }
     }
 
     private fun syntheticField(f: SyntheticField): KotlinSymbol = KotlinSymbol(
@@ -630,7 +720,9 @@ class KotlinSymbolService(
     fun membersNamedForCheck(typeFqn: String, typeArgs: List<TypeRef>, name: String): List<KotlinSymbol> {
         if (name.isEmpty()) return emptyList()
         val idx = index
-        if (idx == null || sourceClass(typeFqn) != null || !classpathCacheUsable(idx))
+        // A synthetic class's members are volatile (resource-driven) — never pin them in the session-stable
+        // check memo, or a just-added `strings.xml` string would be flagged unresolved until a full rebuild.
+        if (idx == null || sourceClass(typeFqn) != null || isSyntheticType(typeFqn) || !classpathCacheUsable(idx))
             return membersNamed(typeFqn, typeArgs, name)
         return checkMembersMemo.getOrPut("$typeFqn $name") { membersNamed(typeFqn, emptyList(), name) }
     }
@@ -640,12 +732,16 @@ class KotlinSymbolService(
 
     /** [kotlinSupertypes] memoized per FQN; the walk is the hot cost. A SOURCE type's chain (its FQN is in the
      *  project model) goes in the edit-dropped memo, everything else in the session-stable classpath memo.
-     *  Until the index is ready a classpath chain is INCOMPLETE (shapes gated / segments still opening), so it
-     *  is computed uncached — otherwise a dumb-mode walk would pin an empty chain for the whole session. */
+     *  While the index is (re)BUILDING a classpath chain is INCOMPLETE (shapes gated / segments still opening),
+     *  so it is computed uncached via [classpathCacheUsable] — otherwise a mid-build walk pins a partial chain
+     *  (e.g. `SolidColor` with `Brush` missing) for the whole session, and since `isKnownType` recomputes fresh
+     *  the two disagree → a false "SolidColor but Color expected" mismatch. Gated exactly like
+     *  [ownAndInheritedCached]/`classpathTypeExists`; the memo is also cleared on a build start (see
+     *  [classpathCacheUsable]), which the ready-only gate below previously left it out of. */
     private fun kotlinSupertypesMemo(fqn: String): List<String> {
         val memo = if (model().classByFqn.containsKey(fqn)) sourceSupertypeMemo else {
             val idx = index
-            if (idx != null && !idx.status.ready) return kotlinSupertypes(fqn, HashSet())
+            if (idx != null && !classpathCacheUsable(idx)) return kotlinSupertypes(fqn, HashSet())
             classpathSupertypeMemo
         }
         return memo.getOrPut(fqn) { kotlinSupertypes(fqn, HashSet()) }
@@ -665,7 +761,19 @@ class KotlinSymbolService(
         val kfqn = Builtins.kotlinTypeFor(fqn) ?: fqn
         val idx = index
         return when {
-            model().classByFqn.containsKey(kfqn) -> sourceOwnMembersMemo.getOrPut(kfqn) { ownAndInherited(fqn, emptyList(), HashSet()) }
+            // While THIS class has a member whose type is mid-inference ([isInferringOwner]), enumerating its own
+            // members returns that member re-entrant-null; pinning the partial list would leave it stuck untyped
+            // for the session (`var x by mutableStateOf(emptyList<T>())`). Compute uncached in that window (only
+            // for the owner class — other classes stay cached), like the mid-build partial-shape guard below.
+            model().classByFqn.containsKey(kfqn) ->
+                if (isInferringOwner(kfqn)) ownAndInherited(fqn, emptyList(), HashSet())
+                else sourceOwnMembersMemo.getOrPut(kfqn) { ownAndInherited(fqn, emptyList(), HashSet()) }
+            // A synthetic class (Android `R`/`BuildConfig`, ViewBinding) is VOLATILE — its members change when
+            // resources change — and cheap to enumerate (in-memory). Pinning it in the session-stable classpath
+            // memo (dropped only on a (re)build) would make an added/edited `strings.xml` string never appear in
+            // `R.string.` / `stringResource` completion until a full rebuild. Compute fresh: `synthetic()`
+            // self-invalidates by list identity when the host swaps the resource-driven list.
+            isSyntheticType(kfqn) -> ownAndInherited(fqn, emptyList(), HashSet())
             idx != null && !classpathCacheUsable(idx) -> ownAndInherited(fqn, emptyList(), HashSet()) // mid-build: don't pin a partial shape
             else -> classpathOwnMembersMemo.getOrPut(kfqn) { ownAndInherited(fqn, emptyList(), HashSet()) }
         }
@@ -689,9 +797,12 @@ class KotlinSymbolService(
             // An enum's `values()`/`valueOf()`/`entries` are compiler-synthesized (not written in source), so
             // the source model would otherwise miss them and `Color.values()` would flag unresolved.
             val synthetic = if (rc.isEnum) enumSyntheticMembers(fqn) else emptyList()
+            // A compiler plugin's generated INSTANCE members (a future Parcelize provider's writeToParcel/…), for
+            // the same reason: the parse-only model never runs the plugin. Cheap — gated on the class's annotations.
+            val syntheticPlugin = syntheticInstanceMembers(rc)
             val inherited = rc.superTypeTexts.mapNotNull { resolveTypeName(it, rc.ctx) }
                 .flatMap { ownAndInherited(it, emptyList(), visited) }
-            return own + synthetic + inherited
+            return own + synthetic + syntheticPlugin + inherited
         }
         // `kotlin.Throwable` is a mapped built-in whose `.kotlin_builtins` shape is intentionally minimal
         // (`message`, `cause`); the rest of its API — `stackTrace`, `printStackTrace`, `localizedMessage`,
@@ -829,6 +940,10 @@ class KotlinSymbolService(
      *  bytecode (so not flagged `internal`) but are never user-facing API, so they must not appear in
      *  completion / member resolution. */
     private fun isImplementationCallable(s: KotlinSymbol): Boolean {
+        // Perf counter: this is the CPU trace's #1 app frame — cheap per call but called per scored
+        // extension/overload candidate, so its count is a direct readout of an overload-scoring blowup
+        // (surfaced as `resolveOps=N` in the kotlin-perf trace lines). No-op unless timing is enabled.
+        dev.ide.lang.kotlin.KotlinPerf.bump()
         val pkg = s.packageName ?: s.declaringClassFqn?.substringBeforeLast('.', "")?.takeIf { it.isNotEmpty() } ?: return false
         return IMPLEMENTATION_PACKAGES.any { pkg == it || pkg.startsWith("$it.") }
     }
@@ -852,9 +967,49 @@ class KotlinSymbolService(
     }
 
     private fun computeCompanionMembers(typeFqnRaw: String, namePrefix: String): List<KotlinSymbol> {
-        val companionFqn = companionObjectFqn(typeFqnRaw) ?: return emptyList()
-        return membersForCompletion(companionFqn, emptyList(), namePrefix)
-            .filter { it.name !in OBJECT_METHODS }
+        val fqn = Builtins.kotlinTypeFor(typeFqnRaw) ?: typeFqnRaw
+        val companion = companionObjectFqn(typeFqnRaw)?.let { companionFqn ->
+            membersForCompletion(companionFqn, emptyList(), namePrefix).filter { it.name !in OBJECT_METHODS }
+        } ?: emptyList()
+        // A compiler-plugin's type-accessible synthetics (kotlinx.serialization's `Foo.serializer()`) surface here
+        // too — even for a `@Serializable` class with NO explicit companion, whose companion the plugin synthesizes.
+        return companion + syntheticStaticMembers(fqn, namePrefix)
+    }
+
+    /** The companion object of [typeFqnRaw] as a completion candidate — its declared simple name (`Companion`
+     *  by default, or a named companion's name), reached statically through the type (`Test.Companion`). Null
+     *  when the type has no companion object. Offered at a `Type.` reference alongside the companion's members. */
+    fun companionObjectSymbol(typeFqnRaw: String): KotlinSymbol? {
+        val companionFqn = companionObjectFqn(typeFqnRaw) ?: return null
+        val fqn = Builtins.kotlinTypeFor(typeFqnRaw) ?: typeFqnRaw
+        return KotlinSymbol(
+            name = companionFqn.substringAfterLast('.'),
+            kind = SymbolKind.CLASS,
+            type = typeByFqn(companionFqn),
+            modifiers = setOf(Modifier.STATIC),
+            origin = if (sourceClass(fqn) != null) SOURCE else BINARY,
+        )
+    }
+
+    /**
+     * A member reachable by a fully-qualified import path — a companion-object member
+     * (`import …MainActivity.Companion.TAG`), a plain `object` member (`import …Config.DEBUG`), or a companion
+     * member imported through its enclosing class (`import …MainActivity.TAG`, which Kotlin also permits) —
+     * resolved to its symbol so a bare reference to the imported simple name gets a type. Null when the
+     * container declares no such member. The declared type/inference machinery treats the result exactly like a
+     * top-level property, so a chain off it (`TAG.length`) resolves.
+     */
+    fun importedMemberSymbol(memberFqn: String): KotlinSymbol? {
+        val container = memberFqn.substringBeforeLast('.', "")
+        val name = memberFqn.substringAfterLast('.')
+        if (container.isEmpty() || name.isEmpty()) return null
+        // The container is itself an `object` / companion-object FQN (`…MainActivity.Companion`, `…Config`):
+        // the member is declared directly on it.
+        membersNamed(container, emptyList(), name).firstOrNull { !it.isExtension && it.name == name }
+            ?.let { return it }
+        // The container is the ENCLOSING class of a companion member (`import Outer.member`): companion members
+        // are also accessible statically through the class name.
+        return companionMembersFor(container, name).firstOrNull { it.name == name }
     }
 
     /**
@@ -1092,13 +1247,26 @@ class KotlinSymbolService(
     }
 
     /** Bind an extension's receiver type params from the actual receiver: `T.also` → T = the receiver type;
-     *  `Iterable<T>.first()` on `List<String>` → T = String (positional from the receiver's args). */
+     *  `Iterable<T>.first()` on `List<String>` → T = String (positional from the receiver's args); a NESTED
+     *  receiver arg (`Iterable<Iterable<T>>.flatten()` on `List<List<Int>>` → T = Int) binds by unifying the
+     *  declared arg against the actual one structurally. */
     private fun bindExtensionReceiver(ext: KotlinSymbol, receiverFqn: String, receiverArgs: List<TypeRef>): KotlinSymbol {
         val bindings = HashMap<String, TypeRef>()
         ext.receiverTypeParam?.let { bindings[it] = typeByFqn(receiverFqn, receiverArgs) } // T.also(): T -> receiver
+        // When the extension is declared on a SUPERTYPE of the actual receiver (`Iterable<T>.forEach` on an
+        // `IntRange` or a `List<String>`), bind its receiver args from the receiver's INSTANTIATION of that
+        // supertype — so a type parameter the receiver's OWN args don't supply positionally (a range carries
+        // none; `IntRange : Iterable<Int>`) still resolves. Falls back to the receiver's own args when the
+        // instantiation is unavailable (dumb mode) or the extension is on the receiver's exact type.
+        val extRecvFqn = ext.receiverTypeFqn?.let { Builtins.kotlinTypeFor(it) ?: it }
+        val recvArgs = if (extRecvFqn != null && extRecvFqn != receiverFqn && ext.receiverTypeArgs.isNotEmpty())
+            receiverSupertypeArgs(receiverFqn, receiverArgs, extRecvFqn) ?: receiverArgs
+        else receiverArgs
         ext.receiverTypeArgs.forEachIndexed { i, ra ->
             val k = ra as? KotlinType ?: return@forEachIndexed
-            if (k.isTypeParameter && i < receiverArgs.size) bindings[k.qualifiedName] = receiverArgs[i]
+            val actual = recvArgs.getOrNull(i) ?: return@forEachIndexed
+            if (k.isTypeParameter) bindings[k.qualifiedName] = actual       // Iterable<T> on List<String> -> T = String
+            else unifyReceiverArg(k, actual, bindings)                      // Iterable<Iterable<T>> on List<List<Int>> -> T = Int
         }
         if (bindings.isEmpty()) return ext
         // `T : R` propagation: a receiver-bound param `T` whose declared upper bound is a sibling param `R`
@@ -1111,6 +1279,53 @@ class KotlinSymbolService(
         }
         val sub = substituteSymbol(ext, bindings)
         return if (lowerBounds.isEmpty()) sub else sub.withTypeParamLowerBounds(lowerBounds)
+    }
+
+    /** Structurally unify a declared extension-receiver argument [declared] (which may nest type parameters,
+     *  e.g. `Iterable<T>`) against the [actual] type argument at that position, recording any type-param
+     *  bindings. Positional over type arguments, so `Iterable<T>` vs `List<String>` binds `T = String` and
+     *  `Iterable<Iterable<T>>` vs `List<List<Int>>` binds `T = Int`. First binding wins (putIfAbsent). */
+    private fun unifyReceiverArg(declared: KotlinType, actual: TypeRef, out: MutableMap<String, TypeRef>) {
+        if (declared.isTypeParameter) { out.putIfAbsent(declared.qualifiedName, actual); return }
+        val a = actual as? KotlinType ?: return
+        declared.typeArguments.forEachIndexed { i, d ->
+            (d as? KotlinType)?.let { dk -> a.typeArguments.getOrNull(i)?.let { av -> unifyReceiverArg(dk, av, out) } }
+        }
+    }
+
+    /**
+     * The type arguments `[subFqn]<[subArgs]>` supplies to its supertype [superFqn] — `IntRange`→`Iterable`
+     * is `[Int]` (via `IntProgression : Iterable<Int>`), `ArrayList<String>`→`Iterable` is `[String]`. Null
+     * when [superFqn] isn't a (transitive) supertype or its shape is unavailable (dumb mode). The walk is
+     * memoized per (sub, super) as a template in [subFqn]'s type parameters; only the final substitution of
+     * [subArgs] varies per receiver, keeping the completion hot path cheap.
+     */
+    internal fun receiverSupertypeArgs(subFqn: String, subArgs: List<TypeRef>, superFqn: String): List<TypeRef>? {
+        val params = (builtinShape(subFqn) ?: typeShape(subFqn))?.typeParameters ?: return null
+        val template = supertypeArgTemplateMemo.getOrPut("$subFqn $superFqn") {
+            val paramRefs = params.map { KotlinType(it, isTypeParameter = true, context = this) }
+            walkSupertypeArgs(subFqn, paramRefs, superFqn, HashSet()) ?: return null // don't cache a non-supertype
+        }
+        if (subArgs.isEmpty() || params.isEmpty()) return template
+        val subst = params.zip(subArgs).toMap()
+        return template.map { substitute(it, subst) }
+    }
+
+    /** DFS over the supertype graph, substituting each level's declared type arguments through the running
+     *  binding, until [superFqn] is reached (then its arguments in terms of the start type's parameters). */
+    private fun walkSupertypeArgs(subFqn: String, subArgs: List<TypeRef>, superFqn: String, visited: MutableSet<String>): List<TypeRef>? {
+        if (subFqn == superFqn) return subArgs
+        if (!visited.add(subFqn)) return null
+        val shape = builtinShape(subFqn) ?: typeShape(subFqn) ?: return null
+        val subst = if (subArgs.isEmpty() || shape.typeParameters.isEmpty()) emptyMap()
+            else shape.typeParameters.zip(subArgs).toMap()
+        for (sup in shape.supertypes) {
+            val supK = sup as? KotlinType ?: continue
+            val supFqn = Builtins.kotlinTypeFor(supK.qualifiedName) ?: supK.qualifiedName
+            val supArgs = if (subst.isEmpty()) supK.typeArguments else supK.typeArguments.map { substitute(it, subst) }
+            walkSupertypeArgs(supFqn, supArgs, superFqn, visited)?.let { return it }
+        }
+        return null
     }
 
     /** Apply type-parameter [bindings] to a symbol's return/param/receiver-arg types. */
@@ -1158,9 +1373,14 @@ class KotlinSymbolService(
     fun substitute(type: TypeRef, bindings: Map<String, TypeRef>): TypeRef {
         if (bindings.isEmpty()) return type
         val kt = type as? KotlinType ?: return type
-        if (kt.isTypeParameter) return bindings[kt.qualifiedName] ?: kt
+        // Substituting a type parameter keeps the USE-SITE projection of its position: `List<out T>` with
+        // `T = Int` is `List<out Int>` — the argument stays `out`, not bare.
+        if (kt.isTypeParameter) {
+            val bound = bindings[kt.qualifiedName] ?: return kt
+            return if (kt.projection.isEmpty()) bound else (bound as? KotlinType)?.withProjection(kt.projection) ?: bound
+        }
         if (kt.typeArguments.isEmpty()) return kt
-        return KotlinType(kt.qualifiedName, kt.typeArguments.map { substitute(it, bindings) }, kt.nullable, this, kt.isTypeParameter, kt.isExtensionFunctionType, kt.isComposable)
+        return KotlinType(kt.qualifiedName, kt.typeArguments.map { substitute(it, bindings) }, kt.nullable, this, kt.isTypeParameter, kt.isExtensionFunctionType, kt.isComposable, kt.projection)
     }
 
     private fun kotlinSupertypes(fqnRaw: String, visited: MutableSet<String>): List<String> {
@@ -1201,25 +1421,30 @@ class KotlinSymbolService(
             run {
                 // Prefix-query the persistent index; an empty prefix (the explicit "show all" / resolution path,
                 // not per-keystroke) is uncapped so it stays complete, while a typed prefix is bounded by matches.
-                // A camel-hump prefix pushes only its first character into the packed key; the matcher narrows.
+                // A camel-hump prefix pushes its first character AND the full prefix into the packed keys (see
+                // [PrefixMatcher.indexPrefixes]): the first-char query's result cap could otherwise truncate a
+                // plain-prefix match — `listOf`, once the caret passes the capital `O` — before it's reached, so
+                // the narrow full-prefix query rescues the typed-in-full name; [distinctBy] folds the overlap.
                 // While the index is still building this returns the already-open segments' callables —
                 // progressive completion instead of a dumb-mode blackout.
                 val limit = if (prefix.isEmpty()) Int.MAX_VALUE else CALLABLE_QUERY_LIMIT
                 // The stdlib's top-level callables (`println`, `listOf`) are in the index too (the host adds the
                 // bundled stdlib jar to the index scope), so the prefix query covers them.
-                idx.prefix<CallableShape>(KotlinCallableIndex.id, KotlinCallableIndex.topKey(m.indexPrefix), limit)
-                    .filter { prefix.isEmpty() || m.matches(it.value.name) }
-                    .map { it.value.toSymbol(this) }.toList() +
+                fun scan(id: IndexId, origin: SymbolOrigin): List<KotlinSymbol> {
+                    val hits = m.indexPrefixes.flatMap { p ->
+                        idx.prefix<CallableShape>(id, KotlinCallableIndex.topKey(p), limit)
+                            .filter { prefix.isEmpty() || m.matches(it.value.name) }
+                            .map { it.value.toSymbol(this, origin) }
+                    }
+                    return if (m.indexPrefixes.size > 1) hits.distinctBy { it.name + "|" + it.signature } else hits
+                }
+                scan(KotlinCallableIndex.id, BINARY) +
                     // Cross-file source top-levels straight from the source index (available before the
                     // in-memory model warms; the completion dedup folds them with their model twins).
-                    idx.prefix<CallableShape>(KotlinSourceCallableIndex.id, KotlinCallableIndex.topKey(m.indexPrefix), limit)
-                        .filter { prefix.isEmpty() || m.matches(it.value.name) }
-                        .map { it.value.toSymbol(this, SOURCE) }.toList() +
+                    scan(KotlinSourceCallableIndex.id, SOURCE) +
                     // The builtin intrinsics (`arrayOf`/`intArrayOf`/…) — top-level functions in `.kotlin_builtins`
                     // with no `.class` facade, so absent from the `.class`-scanning KotlinCallableIndex above.
-                    idx.prefix<CallableShape>(KotlinBuiltinCallableIndex.id, KotlinCallableIndex.topKey(m.indexPrefix), limit)
-                        .filter { prefix.isEmpty() || m.matches(it.value.name) }
-                        .map { it.value.toSymbol(this) }.toList()
+                    scan(KotlinBuiltinCallableIndex.id, BINARY)
             }
         } else {
             val byName = reader.scan(this).topLevelByName
@@ -1261,8 +1486,25 @@ class KotlinSymbolService(
             val fqn = s.type?.qualifiedName
             if (fqn != null && '.' in fqn && fqn.substringAfterLast('.') == name) out += fqn
         }
+        // Members of a project companion object, importable by their simple name through the enclosing type
+        // (`import …MainActivity.Companion.TAG`) — companion members are accessible statically, so a bare
+        // unresolved `TAG` can offer its companion import (mirrors an `object` member's static import).
+        model().classByFqn.values.forEach { rc ->
+            if (rc.isCompanion && rc.members.any { it.name == name }) out += "${rc.fqn}.$name"
+        }
         return out.sorted()
     }
+
+    /**
+     * Whether the classpath carries a LIBRARY (binary) type with simple [name] — one a file could `import` but
+     * may not have. Distinguishes a genuine missing-import reference (`FontWeight.Bold` with no
+     * `import androidx.compose.ui.text.font.FontWeight`) from a package segment (`androidx.…` — no such type) or
+     * a same-module SOURCE / synthetic class (Android `R`/`BuildConfig`), which resolve without an import and so
+     * must never be flagged unresolved. Exact (not fuzzy), so it needs no built trigram dictionary.
+     */
+    fun hasLibraryType(name: String): Boolean =
+        name.isNotEmpty() &&
+            index?.exact<ClassNameValue>(CLASS_NAMES, name)?.any { it.origin == IndexOrigin.LIBRARY } == true
 
     fun topLevelByName(name: String): List<KotlinSymbol> {
         val src = model().topLevel.filter { it.name == name }.map { toSymbol(it, null) }
@@ -1270,14 +1512,26 @@ class KotlinSymbolService(
         val cp = if (idx != null) {
             // Index only — the stdlib (`println`, `listOf`) is indexed alongside every other library jar.
             // While building this sees the already-open segments (partial, progressive); resolution-driven
-            // NEGATIVE conclusions gate on [classpathReady] separately.
-            idx.exact<CallableShape>(KotlinCallableIndex.id, KotlinCallableIndex.topKey(name)).map { it.toSymbol(this) }.toList() +
-                idx.exact<CallableShape>(KotlinSourceCallableIndex.id, KotlinCallableIndex.topKey(name)).map { it.toSymbol(this, SOURCE) }.toList() +
-                idx.exact<CallableShape>(KotlinBuiltinCallableIndex.id, KotlinCallableIndex.topKey(name)).map { it.toSymbol(this) }.toList()
+            // NEGATIVE conclusions gate on [classpathReady] separately. The library + builtin scans hit disk
+            // segments and are session-stable, so memoize them (the hot re-query under inference recursion);
+            // the project-source scan is in-memory + edit-sensitive, so it stays live. Order is preserved.
+            val usable = classpathCacheUsable(idx)
+            val lib = if (usable) topLevelLibMemo.getOrPut(name) { topLevelLibScan(idx, name) } else topLevelLibScan(idx, name)
+            val srcIdx = idx.exact<CallableShape>(KotlinSourceCallableIndex.id, KotlinCallableIndex.topKey(name)).map { it.toSymbol(this, SOURCE) }.toList()
+            val bi = if (usable) topLevelBuiltinMemo.getOrPut(name) { topLevelBuiltinScan(idx, name) } else topLevelBuiltinScan(idx, name)
+            lib + srcIdx + bi
         } else reader.scan(this).topLevelByName[name].orEmpty() +
             builtins.topLevelCallables().filter { it.receiverTypeFqn == null && it.name == name }
         return src + cp
     }
+
+    /** The library callable-index (`kotlin.callables`) half of [topLevelByName] — a disk-segment `exact` scan. */
+    private fun topLevelLibScan(idx: IndexService, name: String): List<KotlinSymbol> =
+        idx.exact<CallableShape>(KotlinCallableIndex.id, KotlinCallableIndex.topKey(name)).map { it.toSymbol(this) }.toList()
+
+    /** The Kotlin-builtins callable-index half of [topLevelByName] — a disk-segment `exact` scan. */
+    private fun topLevelBuiltinScan(idx: IndexService, name: String): List<KotlinSymbol> =
+        idx.exact<CallableShape>(KotlinBuiltinCallableIndex.id, KotlinCallableIndex.topKey(name)).map { it.toSymbol(this) }.toList()
 
     /**
      * Completion candidates under a dotted package prefix [packageFqn]: its immediate sub-packages + the
@@ -1313,6 +1567,26 @@ class KotlinSymbolService(
         return out.values.take(limit)
     }
 
+    /** Top-level package segments (`androidx`, `kotlin`, `com`, `java`, …) matching [prefix] — the candidates
+     *  for a bare `import <caret>` (before any dot). Drilling into one (`androidx.<caret>`) then routes through
+     *  [packageMembers]. */
+    fun rootPackages(prefix: String, limit: Int = 200): List<KotlinSymbol> {
+        val m = PrefixMatcher(prefix)
+        val out = LinkedHashMap<String, KotlinSymbol>()
+        index?.prefix<String>(PACKAGES, m.indexPrefix, 1000)?.forEach { hit ->
+            val seg = hit.value.substringBefore('.')
+            if (seg.isNotEmpty() && (prefix.isEmpty() || m.matches(seg)))
+                out.getOrPut(seg) { KotlinSymbol(seg, SymbolKind.PACKAGE, origin = BINARY) }
+        }
+        // Same-project source packages (the index lags the live buffer).
+        model().classByFqn.keys.forEach { fqn ->
+            val seg = fqn.substringBefore('.')
+            if (seg.isNotEmpty() && seg != fqn && (prefix.isEmpty() || m.matches(seg)))
+                out.getOrPut(seg) { KotlinSymbol(seg, SymbolKind.PACKAGE, origin = SOURCE) }
+        }
+        return out.values.take(limit)
+    }
+
     /**
      * Whether a BINARY classpath class [fqn] is a Kotlin file/multi-file **facade** (`FooKt`, `StringsKt`,
      * `StringsKt__StringsJVMKt`) — the synthetic class top-level functions/properties compile into. It is not a
@@ -1345,7 +1619,7 @@ class KotlinSymbolService(
         val m = PrefixMatcher(prefix)
         val out = LinkedHashMap<String, KotlinSymbol>()
         model().classByFqn.values.filter { !it.isCompanion && !it.isLocal && (prefix.isEmpty() || m.matches(it.simpleName)) }
-            .forEach { out[it.fqn] = KotlinSymbol(it.simpleName, SymbolKind.CLASS, typeByFqn(it.fqn), origin = SOURCE, declarationNode = it.node) }
+            .forEach { out[it.fqn] = KotlinSymbol(it.simpleName, rawClassKind(it), typeByFqn(it.fqn), origin = SOURCE, declarationNode = it.node) }
         // Top-level synthetic classes (Android `R`/`BuildConfig`, …) complete by simple name like any type.
         synthetic().let { idx ->
             idx.topLevelFqns.filter { prefix.isEmpty() || m.matches(it.substringAfterLast('.')) }
@@ -1366,6 +1640,8 @@ class KotlinSymbolService(
             val v = hit.value
             val simple = v.fqn.substringAfterLast('.')
             if (prefix.isNotEmpty() && !m.matches(simple)) return@forEach
+            // Don't offer `android.*` to auto-import in a non-Android module (the shared index holds it).
+            if (excludedTypePrefixes.any { v.fqn.startsWith(it) }) return@forEach
             if (v.origin != IndexOrigin.SOURCE && isKotlinFacade(v.fqn, simple)) return@forEach
             out.getOrPut(v.fqn) {
                 KotlinSymbol(simple, classNameKind(v.kind), typeByFqn(v.fqn), origin = BINARY)
@@ -1375,6 +1651,15 @@ class KotlinSymbolService(
         // may have been dropped, so the caller must not treat the page as the complete match set.
         val capped = (classHits?.size ?: 0) >= limit || out.size > limit
         return TypeNameCandidates(out.values.take(limit), capped)
+    }
+
+    /** The [SymbolKind] a project-source [rc] completes as — so type-name completion (and its annotation-only
+     *  filter for `@…`) and the item icon reflect enum/interface/annotation instead of a blanket CLASS. */
+    private fun rawClassKind(rc: RawClass): SymbolKind = when {
+        rc.isAnnotation -> SymbolKind.ANNOTATION_TYPE
+        rc.isEnum -> SymbolKind.ENUM
+        rc.isInterface -> SymbolKind.INTERFACE
+        else -> SymbolKind.CLASS
     }
 
     /** The constructors declared by a classpath type [fqn] (own shape only — constructors aren't inherited),
@@ -1400,12 +1685,29 @@ class KotlinSymbolService(
     }
 
     /** Each type parameter's declaration-site variance (positional with [classTypeParameters]): `"out"`, `"in"`,
-     *  or `""` for invariant. Available only for SOURCE classes (read straight from PSI); a classpath/binary
-     *  class returns an empty list (the Kotlin-metadata decode and type-shape index don't carry variance), so
-     *  the variance/projection checks back off for it. An empty list for a class WITH type arguments means
-     *  "unknown", distinct from a source invariant class (which returns `["", ...]`). */
-    fun classTypeParameterVariance(fqn: String): List<String> =
-        model().classByFqn[fqn]?.typeParameterVariance ?: emptyList()
+     *  or `""` for invariant. From the project source model (PSI), else the Kotlin built-in shape (`List<out E>`,
+     *  `Comparator<in T>` — decoded from `.kotlin_builtins`), else a classpath binary's `@Metadata`/type-shape
+     *  variance. An empty list for a class WITH type arguments means "unknown" (a plain-Java type — Java has no
+     *  declaration-site variance), distinct from an invariant Kotlin class (which returns `["", ...]`); the
+     *  variance-aware subtyping treats "unknown" conservatively (see [KotlinConstraintSystem]). */
+    fun classTypeParameterVariance(fqn: String): List<String> {
+        model().classByFqn[fqn]?.let { return it.typeParameterVariance }
+        // A function type is `FunctionN<in P1..Pn, out R>` (params contravariant, result covariant); its arity
+        // is variable, so it's computed rather than tabled.
+        functionTypeVariance(fqn)?.let { return it }
+        Builtins.DECLARATION_VARIANCE[fqn]?.let { return it }             // JVM-erased variance (Comparator)
+        builtinShape(fqn)?.typeParameterVariances?.takeIf { it.isNotEmpty() }?.let { return it }
+        return typeShape(fqn)?.typeParameterVariances ?: emptyList()
+    }
+
+    /** `kotlin.FunctionN`'s declaration-site variance: `n` contravariant parameter positions then one covariant
+     *  result (`Function1<in P1, out R>`). Null when [fqn] isn't a function type. */
+    private fun functionTypeVariance(fqn: String): List<String>? {
+        val tail = fqn.substringAfterLast('.')
+        if (!tail.startsWith("Function")) return null
+        val n = tail.removePrefix("Function").toIntOrNull() ?: return null
+        return List(n) { "in" } + "out"
+    }
 
     /**
      * The parameter types of the constructor of [fqn] whose arity accepts [argCount] (the unique one when a
@@ -1471,6 +1773,23 @@ class KotlinSymbolService(
         // A LIBRARY (classpath) sealed type: its direct subclasses come from the `@Metadata` `sealedSubclasses`
         // (decoded into the type shape). Non-empty ⟹ it is sealed (only sealed types carry the list).
         return typeShape(fqn)?.sealedSubclasses?.takeIf { it.isNotEmpty() }
+    }
+
+    /** The sealed subtypes of [fqn] as type-name completion candidates — name/kind/type/import shape identical
+     *  to [typeNameCandidates] (source classes carry their declaration node + real kind, library ones a plain
+     *  CLASS), prefix-filtered. Null when [fqn] is not a known sealed type (mirrors [sealedSubclassesOf]). Drives
+     *  `when (subject) { is <caret> }` on a sealed subject. */
+    fun sealedSubtypeCandidates(fqn: String, prefix: String): List<KotlinSymbol>? {
+        val subs = sealedSubclassesOf(fqn) ?: return null
+        val m = model()
+        val matcher = PrefixMatcher(prefix)
+        return subs.mapNotNull { sub ->
+            val simple = sub.substringAfterLast('.')
+            if (prefix.isNotEmpty() && !matcher.matches(simple)) return@mapNotNull null
+            val rc = m.classByFqn[sub]
+            if (rc != null) KotlinSymbol(rc.simpleName, rawClassKind(rc), typeByFqn(rc.fqn), origin = SOURCE, declarationNode = rc.node)
+            else KotlinSymbol(simple, SymbolKind.CLASS, typeByFqn(sub), origin = BINARY)
+        }
     }
 
     /**
@@ -1628,7 +1947,7 @@ class KotlinSymbolService(
         val type = markTypeParameters(
             typeFromText(rc.returnText, rc.ctx)
                 ?: inferInitializerType(rc.initializerText, rc.ctx)
-                ?: inferReturnFromBody(rc),
+                ?: inferReturnFromBody(rc, ownerFqn),
             tps,
         )
         val receiverFqn = rc.receiverText?.let { resolveTypeName(it, rc.ctx) }
@@ -1683,7 +2002,7 @@ class KotlinSymbolService(
      * result is memoized; a re-entrant request (a body whose own type is needed to type it — self/mutual
      * recursion, which Kotlin rejects) returns null to break the cycle without caching a misleading value.
      */
-    private fun inferReturnFromBody(rc: RawCallable): KotlinType? {
+    private fun inferReturnFromBody(rc: RawCallable, ownerFqn: String? = null): KotlinType? {
         val dom = rc.node as? dev.ide.lang.kotlin.parse.KotlinDomNode ?: return null
         // What to type: an expression body / property initializer (inferred directly), or a `by` delegate
         // (resolved through its `value` member — the State/Lazy convention, matching [KotlinResolver.localVar]
@@ -1705,6 +2024,9 @@ class KotlinSymbolService(
         inferredBodyTypeMemo[rc]?.let { return it.value }
         val guard = inferringBody.get()
         if (!guard.add(rc)) return null // re-entrant (self/mutual recursion) → break the cycle, don't cache
+        // Mark this member's owner in-flight so enumerating that class's OWN members ([ownAndInheritedCached])
+        // doesn't pin a partial list in which this member is re-entrant-null (the generic-delegate case).
+        if (ownerFqn != null) pushInferringOwner(ownerFqn)
         val result = try {
             val resolver = dev.ide.lang.kotlin.resolve.KotlinResolver(dom.owner.ktFile, dom.owner, this)
             val inferred = if (delegate != null) resolver.delegatedValueType(delegate) else resolver.inferType(body)
@@ -1717,6 +2039,7 @@ class KotlinSymbolService(
             null
         } finally {
             guard.remove(rc)
+            if (ownerFqn != null) popInferringOwner(ownerFqn)
         }
         inferredBodyTypeMemo[rc] = Holder(result)
         return result

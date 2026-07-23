@@ -2,7 +2,9 @@ package dev.ide.core
 
 import kotlinx.coroutines.runBlocking
 import java.nio.file.Files
+import java.util.Base64
 import kotlin.test.Test
+import kotlin.test.assertContentEquals
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertNotNull
@@ -144,6 +146,39 @@ class IdeFileOperationsTest {
             assertNotNull(ide.copyPath(src, to), "copy succeeds")
             assertTrue("package com.example.core.sub;" in Files.readString(to.resolve("Gadget.java")), "the copy's package is rewritten")
             assertTrue("package com.example.core;" in Files.readString(src), "the original keeps its package")
+        }
+        dir.toFile().deleteRecursively()
+    }
+
+    // A real 1x1 PNG (its length/CRC fields carry NUL bytes, so the binary sniff catches it like any PNG).
+    private val PNG_1X1 = Base64.getDecoder().decode(
+        "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAAC0lEQVR4nGNgYGAAAAAEAAH2FzhVAAAAAElFTkSuQmCC"
+    )
+
+    @Test
+    fun buildFlushNeverOverwritesAnOpenedBinaryAsset() {
+        // Regression: opening a PNG seeds the editor overlay with FileBackend.readFile's placeholder text;
+        // the build-time flushOpenDocuments() then used to write that placeholder over the real bytes.
+        val dir = Files.createTempDirectory("fileops-binflush")
+        IdeServices.bootstrapJavaDemo(dir).use { ide ->
+            val png = ide.workspaceRoot.resolve("logo.png")
+            Files.write(png, PNG_1X1)
+
+            // Simulate the editor open path: the overlay holds placeholder text, not the file's bytes.
+            ide.updateDocument(png, "logo.png — binary file (${PNG_1X1.size} B).\n\nNot shown in the text editor.")
+            ide.flushOpenDocuments() // runs before every build/run
+            assertContentEquals(PNG_1X1, Files.readAllBytes(png), "the PNG bytes must survive a build flush")
+
+            // A direct editor save of placeholder text must likewise refuse to clobber the asset.
+            ide.save(png, "still a placeholder")
+            assertContentEquals(PNG_1X1, Files.readAllBytes(png), "save must not overwrite a binary file")
+
+            // A genuine text file still flushes normally (the guard must not over-reach).
+            val src = ide.workspaceRoot.resolve("Notes.txt")
+            Files.writeString(src, "old")
+            ide.updateDocument(src, "new content")
+            ide.flushOpenDocuments()
+            assertEquals("new content", Files.readString(src), "a text overlay still flushes to disk")
         }
         dir.toFile().deleteRecursively()
     }

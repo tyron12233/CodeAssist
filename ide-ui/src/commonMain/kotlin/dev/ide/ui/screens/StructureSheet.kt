@@ -119,7 +119,7 @@ private fun StructureRow(sym: UiFileSymbol, onClick: () -> Unit) {
         KindBadge(sym.kind)
         Text(sym.name, color = Ca.colors.textPrimary, style = Ca.type.body, fontWeight = FontWeight.Medium)
         if (!sym.detail.isNullOrEmpty()) {
-            Text(sym.detail, color = Ca.colors.textTertiary, style = Ca.type.caption, maxLines = 1)
+            Text(sym.detail!!, color = Ca.colors.textTertiary, style = Ca.type.caption, maxLines = 1)
         }
     }
 }

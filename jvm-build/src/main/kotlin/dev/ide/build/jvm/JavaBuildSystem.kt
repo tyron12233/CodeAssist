@@ -7,18 +7,14 @@ import dev.ide.build.TaskDescriptor
 import dev.ide.build.TaskGraph
 import dev.ide.build.TaskName
 import dev.ide.build.engine.DefaultTaskContainer
-import dev.ide.build.engine.DexExecTask
-import dev.ide.build.engine.DexRunner
-import dev.ide.build.engine.JavaDexTask
-import dev.ide.build.engine.JavaExecTask
+import dev.ide.build.engine.InterpretExecTask
+import dev.ide.build.engine.ProgramInterpreter
 import dev.ide.build.engine.ProgramIo
-import dev.ide.build.engine.RunDexBackend
 import dev.ide.build.SourceGenerator
 import dev.ide.build.engine.SimpleBuildConfiguration
 import dev.ide.build.engine.classOutputs
 import dev.ide.build.engine.kotlinSiblings
 import dev.ide.build.engine.moduleClosure
-import dev.ide.build.engine.outputDir
 import dev.ide.lang.kotlin.compile.BUILTIN_KOTLIN_COMPILER_PLUGINS
 import dev.ide.lang.kotlin.compile.IncrementalKotlinCompiler
 import dev.ide.lang.kotlin.compile.KotlinCompilerPlugin
@@ -40,11 +36,12 @@ import java.nio.file.Paths
  *
  * The compile steps are owned by the language modules: [JavaPlugin] wires in lang-jdt's `JdtCompileTask`
  * and (for modules with `.kt`) lang-kotlin's `KotlinCompileTask`, which drive ecj / K2 directly. The only
- * host-specific input is [bootClasspath] (empty on the desktop → the host JRE; `android.jar` + desugar
- * stubs on ART); [kotlin] is the workspace's incremental Kotlin compiler, absent for Java-only setups.
+ * host-specific input is [bootClasspathFor] — the module's platform SDK, resolved **per module** so a
+ * Java/Kotlin console module compiles against the core-Java platform (never `android.jar`); empty → the host
+ * JRE (desktop), a jar → the on-device platform. [kotlin] is the workspace's incremental Kotlin compiler.
  */
 class JavaBuildSystem(
-    private val bootClasspath: List<Path> = emptyList(),
+    private val bootClasspathFor: (Module) -> List<Path> = { emptyList() },
     private val kotlin: IncrementalKotlinCompiler? = null,
     /** Kotlin compiler plugins applied per module (the `platform.kotlinCompilerPlugin` EP contents;
      *  defaults to the built-ins). */
@@ -52,6 +49,9 @@ class JavaBuildSystem(
     /** Build-time source generators (the `platform.sourceGenerator` EP contents), run into a module's
      *  `ContentRole.GENERATED` root ahead of compilation. Empty by default. */
     private val generators: List<SourceGenerator> = emptyList(),
+    /** The module's runnable entry point → the packaged jar's manifest `Main-Class` (so the built jar runs
+     *  standalone). Null / blank for a library module. The host wires this to its main-class detection. */
+    private val mainClassFor: (Module) -> String? = { null },
 ) : BuildSystem {
 
     override val id: BuildSystemId = BuildSystemId.NATIVE
@@ -67,67 +67,35 @@ class JavaBuildSystem(
 
     override fun createBuildGraph(project: Project, request: BuildRequest): TaskGraph {
         val tasks = DefaultTaskContainer()
-        JavaPlugin(bootClasspath, kotlin, plugins, generators).apply(SimpleBuildConfiguration(project, request, tasks))
+        JavaPlugin(bootClasspathFor, kotlin, plugins, generators, mainClassFor).apply(SimpleBuildConfiguration(project, request, tasks))
         return tasks.build()
     }
 
     /**
-     * Build the closure of [module] then run [mainClass] as a console app — the equivalent of Gradle's
-     * `application` plugin `run` task. The `run` task depends on the module's `classes` (which transitively
-     * compiles the module + its dependencies), and launches on the runtime classpath.
+     * Build the closure of [module] then run [mainClass] as a console app by INTERPRETING its bytecode on the
+     * bytecode VM — the single console-run path (the desktop `java`-fork and the on-device dex-run graphs are
+     * gone). The `run` task depends on the module's `classes` (which transitively compiles the module + its
+     * dependencies) and hands the runtime classpath (class dirs + library jars, no dexing) to the injected
+     * [interpreter], which reads and interprets the user's/libraries' classes and bridges only the platform.
      */
-    fun createRunGraph(
+    fun createInterpretRunGraph(
         project: Project,
         module: Module,
         mainClass: String,
+        interpreter: ProgramInterpreter,
         programArgs: List<String> = emptyList(),
-        javaLauncher: () -> Path = { Paths.get(System.getProperty("java.home"), "bin", "java") },
         programIo: ProgramIo? = null,
-        /** True when [mainClass]'s `main` is an instance method (run via the reflective launcher). */
+        /** True when [mainClass]'s `main` is an instance method (the interpreter constructs the class first). */
         instanceMain: Boolean = false,
     ): TaskGraph {
         val byId = project.modules.associateBy { it.id }
         val tasks = DefaultTaskContainer()
-        val java = JavaPlugin(bootClasspath, kotlin, plugins, generators)
+        val java = JavaPlugin(bootClasspathFor, kotlin, plugins, generators)
         for (m in moduleClosure(listOf(module.id), byId)) java.registerModule(tasks, m, byId, withJar = false)
         val runName = TaskName(":${module.name}:run")
-        tasks.register(runName) { JavaExecTask(runName, mainClass, { runtimeClasspath(module) }, programArgs, javaLauncher, programIo, instanceMain) }
-            .configure { dependsOn(TaskName(":${module.name}:classes")) }
-        return tasks.build()
-    }
-
-    /**
-     * Build the closure of [module], **dex** its runtime classpath, then run [mainClass] on ART — the
-     * on-device counterpart to [createRunGraph] (there is no `java` to fork on a device). The graph is
-     * `compileJava* → :module:dexRun → :module:runDex`; [dexBackend] (D8 in-process) and [dexRunner]
-     * (a `DexClassLoader` launcher) are injected by the host. [minApi] is the device's API level.
-     */
-    fun createDexRunGraph(
-        project: Project,
-        module: Module,
-        mainClass: String,
-        minApi: Int,
-        dexBackend: RunDexBackend,
-        dexRunner: DexRunner,
-        programArgs: List<String> = emptyList(),
-        programIo: ProgramIo? = null,
-    ): TaskGraph {
-        val byId = project.modules.associateBy { it.id }
-        val tasks = DefaultTaskContainer()
-        val java = JavaPlugin(bootClasspath, kotlin, plugins, generators)
-        for (m in moduleClosure(listOf(module.id), byId)) java.registerModule(tasks, m, byId, withJar = false)
-        val base = outputDir(module).resolveSibling("dex-run")
-        val dexName = TaskName(":${module.name}:dexRun")
-        // A runner that runs the program out-of-process (forked dalvikvm) is isolated by the process boundary,
-        // so its dex is left un-instrumented (no ExitGuard/SandboxGuard); the in-process DexClassLoader runner
-        // needs the guards to protect the host, so its dex is instrumented.
-        val guarded = !dexRunner.isolatedProcess
-        tasks.register(dexName) {
-            JavaDexTask(dexName, { runtimeClasspath(module) }, minApi, base.resolve("staging"), base.resolve("dex"), dexBackend, guarded)
+        tasks.register(runName) {
+            InterpretExecTask(runName, mainClass, { runtimeClasspath(module) }, interpreter, programArgs, instanceMain, programIo)
         }.configure { dependsOn(TaskName(":${module.name}:classes")) }
-        val runName = TaskName(":${module.name}:runDex")
-        tasks.register(runName) { DexExecTask(runName, mainClass, base.resolve("dex"), programArgs, dexRunner, programIo) }
-            .configure { dependsOn(dexName) }
         return tasks.build()
     }
 

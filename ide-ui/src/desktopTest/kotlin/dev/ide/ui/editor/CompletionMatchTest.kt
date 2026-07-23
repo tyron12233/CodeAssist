@@ -54,6 +54,33 @@ class CompletionMatchTest {
         assertFalse(canNarrowLocally(sessionAt(4), dismissed = false, text = "foo.bar", caret = 3)) // caret before tokenStart
     }
 
+    // --- completionKeystroke: which typed char opens / extends / closes the popup ---
+
+    @Test fun memberAccessDotReopens() {
+        assertEquals(CompletionKeystroke.Reopen, completionKeystroke('.', wordExtra = ""))
+    }
+
+    @Test fun annotationAtSignReopensInKotlinJava() {
+        // The reported bug: typing `@` must open the annotation-name popup (Kotlin/Java have no word extras).
+        assertEquals(CompletionKeystroke.Reopen, completionKeystroke('@', wordExtra = ""))
+    }
+
+    @Test fun atSignExtendsInXmlWhereItIsAResourceRefWordChar() {
+        // In XML `@` is a word char (`@string/…`), so it extends an in-flight session rather than reopening.
+        assertEquals(CompletionKeystroke.Extend, completionKeystroke('@', wordExtra = ":@?+/.-|"))
+    }
+
+    @Test fun identifierCharExtends() {
+        assertEquals(CompletionKeystroke.Extend, completionKeystroke('a', wordExtra = ""))
+        assertEquals(CompletionKeystroke.Extend, completionKeystroke('_', wordExtra = ""))
+    }
+
+    @Test fun tokenEndingCharDismisses() {
+        assertEquals(CompletionKeystroke.Dismiss, completionKeystroke(' ', wordExtra = ""))
+        assertEquals(CompletionKeystroke.Dismiss, completionKeystroke('(', wordExtra = ""))
+        assertEquals(CompletionKeystroke.Dismiss, completionKeystroke(null, wordExtra = ""))
+    }
+
     @Test
     fun emptyQueryMatchesEverythingWithNoHighlight() {
         assertContentEquals(intArrayOf(), matchPositions("newFile", ""))

@@ -20,6 +20,7 @@ import org.jetbrains.kotlin.psi.KtNameReferenceExpression
 import org.jetbrains.kotlin.psi.KtNamedFunction
 import org.jetbrains.kotlin.psi.KtObjectLiteralExpression
 import org.jetbrains.kotlin.psi.KtParenthesizedExpression
+import org.jetbrains.kotlin.psi.KtPostfixExpression
 import org.jetbrains.kotlin.psi.KtPrefixExpression
 import org.jetbrains.kotlin.psi.KtQualifiedExpression
 import org.jetbrains.kotlin.psi.KtStringTemplateExpression
@@ -44,43 +45,67 @@ internal val NUMERIC_RANK = mapOf(
 fun KotlinResolver.inferType(expr: KtExpression?): KotlinType? {
     if (expr == null) return null
     if (KotlinResolverStats.enabled) KotlinResolverStats.inferCalls++
-    // A narrowed type is flow-dependent, not a property of the expression alone — bypass the cache so it
-    // can't leak across narrowing scopes.
-    val cacheable = narrowings.isEmpty()
+    // A narrowed type — or a type inferred under a pushed lambda-shape override (bidirectional overload
+    // resolution) — is flow/context-dependent, not a property of the expression alone; bypass the cache so it
+    // can't leak across narrowing scopes or poison a lambda body's real type with a candidate-scoped one.
+    val cacheable = narrowings.isEmpty() && lambdaShapeOverrides.isEmpty()
     if (cacheable && inferCache.containsKey(expr)) return inferCache[expr]
+    // During overload SCORING the ordinary [inferCache] is bypassed (a type inferred under a pushed lambda-shape
+    // override is context-dependent). But `isApplicable` and `lambdaReturnSpecificity` re-type the SAME lambda
+    // body, and every candidate re-types the SAME non-lambda arguments, so a large Compose file re-infers the
+    // same expressions O(candidates) times per level — the allocation-heavy work behind the semantic pass's GC
+    // storm. Memoize here too, dependency-tracked by exactly the OUTER overrides consulted (see
+    // [KotlinResolver.scoringInferCache] / [resolveCalleeFunction]); skipped while narrowings are active.
+    val scoringMemoable = scoringActive && narrowings.isEmpty()
+    if (scoringMemoable) {
+        scoringInferCache[expr]?.let { e ->
+            if (overridesMatch(e.deps)) { propagateDeps(e.deps); return e.result }
+        }
+    }
+    // Re-entrancy guard (see [KotlinResolver.inferringTypes]): a cycle that re-enters the SAME expression while
+    // it is mid-inference can't be served from the cache (written only below), so break it with null.
+    if (!inferringTypes.add(expr)) return null
     if (KotlinResolverStats.enabled) KotlinResolverStats.inferComputes++
-    val r = when (expr) {
-        is KtParenthesizedExpression -> inferType(expr.expression)
-        is KtConstantExpression -> constType(expr)
-        is KtStringTemplateExpression -> service.typeByFqn("kotlin.String")
-        is KtNameReferenceExpression -> typeOfName(
-            expr.getReferencedName(),
-            expr.textRange.startOffset
-        )
+    val frame = if (scoringMemoable) ScoringDepFrame().also { scoringDepFrames.addLast(it) } else null
+    val r = try {
+        when (expr) {
+            is KtParenthesizedExpression -> inferType(expr.expression)
+            is KtConstantExpression -> constType(expr)
+            is KtStringTemplateExpression -> service.typeByFqn("kotlin.String")
+            is KtNameReferenceExpression -> typeOfName(
+                expr.getReferencedName(),
+                expr.textRange.startOffset
+            )
 
-        is KtCallExpression -> typeOfCall(expr, null)
-        is KtQualifiedExpression -> typeOfQualified(expr)
-        is KtClassLiteralExpression -> classLiteralType(expr)
-        // An anonymous object (`object : Foo { }` / `object { }`): typed to the synthetic classifier the source
-        // model registered its declaration under, so its own + supertype members enumerate + are checked.
-        is KtObjectLiteralExpression -> objectLiteralType(expr)
-        // An anonymous function (`fun(x: Int): Int = …`) used as a value → its `(P…) -> R` function type.
-        is KtNamedFunction -> if (expr.name == null) anonymousFunctionType(expr) else null
-        is KtThisExpression -> thisType(expr)
-        is KtSuperExpression -> superType(expr)
-        is KtBinaryExpression -> inferBinaryType(expr)
-        is KtBinaryExpressionWithTypeRHS -> castType(expr)
-        is KtPrefixExpression -> inferPrefixType(expr)
-        is KtArrayAccessExpression -> inferArrayGet(expr)
-        // `if`/`when` used as an expression: the value is one of the branches, so its type is the common
-        // type of the branches — made nullable if any branch is `null` (`fun f(): E? = when(x){ a->E.A;
-        // else->null }`). (A common Compose pattern: `Icon(if (selected) IconA else IconB, …)` — typing the
-        // arg disambiguate the overload.)
-        is KtIfExpression -> inferBranchUnion(listOf(expr.then, expr.`else`))
-        is KtWhenExpression -> inferBranchUnion(expr.entries.map { it.expression })
-        else -> null
+            is KtCallExpression -> typeOfCall(expr, null)
+            is KtQualifiedExpression -> typeOfQualified(expr)
+            is KtClassLiteralExpression -> classLiteralType(expr)
+            // An anonymous object (`object : Foo { }` / `object { }`): typed to the synthetic classifier the source
+            // model registered its declaration under, so its own + supertype members enumerate + are checked.
+            is KtObjectLiteralExpression -> objectLiteralType(expr)
+            // An anonymous function (`fun(x: Int): Int = …`) used as a value → its `(P…) -> R` function type.
+            is KtNamedFunction -> if (expr.name == null) anonymousFunctionType(expr) else null
+            is KtThisExpression -> thisType(expr)
+            is KtSuperExpression -> superType(expr)
+            is KtBinaryExpression -> inferBinaryType(expr)
+            is KtBinaryExpressionWithTypeRHS -> castType(expr)
+            is KtPrefixExpression -> inferPrefixType(expr)
+            is KtPostfixExpression -> inferPostfixType(expr)
+            is KtArrayAccessExpression -> inferArrayGet(expr)
+            // `if`/`when` used as an expression: the value is one of the branches, so its type is the common
+            // type of the branches — made nullable if any branch is `null` (`fun f(): E? = when(x){ a->E.A;
+            // else->null }`). (A common Compose pattern: `Icon(if (selected) IconA else IconB, …)` — typing the
+            // arg disambiguate the overload.)
+            is KtIfExpression -> inferBranchUnion(listOf(expr.then, expr.`else`))
+            is KtWhenExpression -> inferBranchUnion(expr.entries.map { it.expression })
+            else -> null
+        }
+    } finally {
+        if (frame != null) scoringDepFrames.removeLast()
+        inferringTypes.remove(expr)
     }
     if (cacheable) inferCache[expr] = r
+    else if (frame != null) scoringInferCache[expr] = ScoringEntry(r, frame.deps)
     return r
 }
 
@@ -106,17 +131,22 @@ internal fun KotlinResolver.inferBinaryType(e: KtBinaryExpression): KotlinType? 
             val convention = ARITHMETIC_CONVENTIONS[token] ?: return null
             val leftType = inferType(e.left) ?: return null
             val rightType = inferType(e.right)
-            if (token == KtTokens.PLUS && leftType.qualifiedName == "kotlin.String") leftType
-            // A custom `operator` whose parameter accepts the RIGHT operand wins over numeric promotion:
-            // `2.dp * 2f` is `Dp.times(Float): Dp`, and `2f * 4.dp` is `Float.times(Dp): Dp` — NOT Float×Float.
-            // Kotlin resolves the operator by the argument type; primitive promotion is only the built-ins' own
-            // signatures (whose return type the model omits, so [arithmeticOperatorReturn] yields null there and
-            // the primitive×primitive case falls through to the synthesized promotion below).
-            else arithmeticOperatorReturn(leftType, convention, rightType)
-                // Primitive numeric arithmetic (`progress * 100`): the result is the WIDER of the two operands
-                // (Double > Float > Long > Int; Byte/Short/Char promote to Int) — Kotlin's promotion. Computed
-                // directly because the builtin `Float.times`/etc. members carry no return type in the model.
-                ?: numericResultType(leftType, rightType)
+            when {
+                token == KtTokens.PLUS && leftType.qualifiedName == "kotlin.String" -> leftType
+                // Two primitive numbers → Kotlin's WIDENING promotion directly (`1 * 1.0` = Double, `1 + 1L` =
+                // Long; Byte/Short/Char promote to Int). NOT [arithmeticOperatorReturn]: its by-argument overload
+                // pick, over the built-in `times`/`plus` set whose numeric parameters accept each other loosely,
+                // wrongly lands on `Int.times(Int): Int` for a `Double` argument — typing `1 * 1.0` as Int.
+                leftType.qualifiedName in NUMERIC_RANK && rightType != null && rightType.qualifiedName in NUMERIC_RANK ->
+                    numericResultType(leftType, rightType)
+                // A custom `operator` whose parameter accepts the RIGHT operand wins over numeric promotion:
+                // `2.dp * 2f` is `Dp.times(Float): Dp`, and `2f * 4.dp` is `Float.times(Dp): Dp` — NOT Float×Float.
+                // Kotlin resolves the operator by the argument type; the primitive×primitive case is handled
+                // above, so this covers a value-class / non-numeric operand, falling back to promotion when the
+                // custom operator's return type is unknown.
+                else -> arithmeticOperatorReturn(leftType, convention, rightType)
+                    ?: numericResultType(leftType, rightType)
+            }
         }
     }
 
@@ -134,11 +164,19 @@ internal fun KotlinResolver.arithmeticOperatorReturn(
     convention: String,
     rightType: KotlinType?,
 ): KotlinType? {
-    val candidates = service.membersNamed(leftType.qualifiedName, leftType.typeArguments, convention)
-        .filter { it.kind == SymbolKind.METHOD && it.paramTypes.size == 1 }
+    val candidates =
+        service.membersNamed(leftType.qualifiedName, leftType.typeArguments, convention)
+            .filter { it.kind == SymbolKind.METHOD && it.paramTypes.size == 1 }
     if (candidates.isEmpty()) return null
     val chosen = if (rightType == null) candidates.firstOrNull()
-    else candidates.firstOrNull { c -> (c.paramTypes.first() as? KotlinType)?.let { paramAcceptsArg(it, rightType) } == true }
+    else candidates.firstOrNull { c ->
+        (c.paramTypes.first() as? KotlinType)?.let {
+            paramAcceptsArg(
+                it,
+                rightType
+            )
+        } == true
+    }
     return chosen?.type as? KotlinType
 }
 
@@ -161,13 +199,18 @@ internal fun KotlinResolver.binaryConventionReturn(
     val leftType = inferType(e.left) ?: return null
     val member = service.membersNamed(leftType.qualifiedName, leftType.typeArguments, name)
         .firstOrNull { it.kind == SymbolKind.METHOD && !it.isExtension && it.paramTypes.size == 1 }
-    val callable = member ?: service.extensionsFor(
-        leftType.qualifiedName,
-        leftType.typeArguments,
-        name,
-        exactName = true
-    )
-        .firstOrNull { it.name == name && it.kind == SymbolKind.METHOD && it.paramTypes.size == 1 }
+    val exts = service.extensionsFor(leftType.qualifiedName, leftType.typeArguments, name, exactName = true)
+        .filter { it.name == name && it.kind == SymbolKind.METHOD && it.paramTypes.size == 1 }
+    // Prefer the extension declared on the EXACT left type over one on a supertype / type-parameter bound —
+    // Kotlin's most-specific-receiver overload resolution. `10f..3f` sees BOTH the generic
+    // `Comparable<T>.rangeTo(T): ClosedRange<T>` and the specific `Float.rangeTo(Float):
+    // ClosedFloatingPointRange<Float>` (float ranges are floating-point ranges, defined as an extension in
+    // stdlib `Ranges.kt`, not a class member like `Int.rangeTo`). The specific one must win, else the range
+    // is mis-typed as its `ClosedRange` supertype and `val r: ClosedFloatingPointRange<Float> = 10f..3f` is
+    // false-flagged a type mismatch. Without the tiebreak the first match (the generic one) wins arbitrarily.
+    val callable = member
+        ?: exts.firstOrNull { it.receiverTypeFqn == leftType.qualifiedName }
+        ?: exts.firstOrNull()
     val raw = callable?.type as? KotlinType
     if (raw == null || callable.typeParameters.isEmpty()) return raw
     val bindings = HashMap<String, TypeRef>()
@@ -204,6 +247,14 @@ internal fun KotlinResolver.inferPrefixType(e: KtPrefixExpression): KotlinType? 
     return unaryOperator(operand, name)
 }
 
+/** A postfix expression's type: `x!!` (the not-null assertion) → the operand's type made non-null, so a
+ *  member chain off it (`nullable!!.member`, `map[k]!!.foo()`) resolves; `x++`/`x--` yield the operand's own
+ *  type. Null when the operand can't be typed. */
+internal fun KotlinResolver.inferPostfixType(e: KtPostfixExpression): KotlinType? {
+    val operand = inferType(e.baseExpression) ?: return null
+    return if (e.operationToken == KtTokens.EXCLEXCL) operand.withNullable(false) else operand
+}
+
 /** The return type of a zero-argument unary operator [name] on [type] (member or extension). */
 internal fun KotlinResolver.unaryOperator(type: KotlinType, name: String): KotlinType? =
     service.membersNamed(type.qualifiedName, type.typeArguments, name)
@@ -227,7 +278,8 @@ internal fun KotlinResolver.numericResultType(left: KotlinType, right: KotlinTyp
     // A KNOWN non-numeric right operand isn't primitive arithmetic — its operator (if any) was already tried by
     // [arithmeticOperatorReturn]; don't force a numeric result here (that made `2f * 4.dp` read as Float, not Dp).
     if (right != null && !right.isTypeParameter && right.qualifiedName !in NUMERIC_RANK &&
-        service.isKnownType(right.qualifiedName)) return null
+        service.isKnownType(right.qualifiedName)
+    ) return null
     val rr = right?.qualifiedName?.let { NUMERIC_RANK[it] } ?: -1
     val rank = maxOf(lr, rr).coerceAtLeast(NUMERIC_RANK.getValue("kotlin.Int"))
     return service.typeByFqn(NUMERIC_RANK.entries.first { it.value == rank }.key)
@@ -236,7 +288,7 @@ internal fun KotlinResolver.numericResultType(left: KotlinType, right: KotlinTyp
 /** The value of an `if`/`when` branch: a bare expression as-is, or the last statement of a `{ … }` block
  *  branch (so `if (c) { x } else { y }` still types). Null when the branch is absent or not an expression. */
 internal fun KotlinResolver.branchExpr(branch: KtExpression?): KtExpression? = when (branch) {
-    is KtBlockExpression -> branch.statements.lastOrNull() as? KtExpression
+    is KtBlockExpression -> branch.statements.lastOrNull()
     else -> branch
 }
 
@@ -411,8 +463,24 @@ internal fun KotlinResolver.typeOfCall(
     // Bind the function's OWN type parameters from the arguments (listOf("") -> List<String>; a lambda's
     // result binds R in `(…) -> R`), falling back to each parameter's erased bound when an argument can't
     // pin it (a raw `findViewById(): T` → `View`), then substitute into the return type.
-    val bindings = (methodTypeParamErasure(sym) + inferTypeArguments(sym, call)).toMutableMap()
+    val erasure = methodTypeParamErasure(sym)
+    val inferred = inferTypeArguments(sym, call)
+    val bindings = (erasure + inferred).toMutableMap()
     applyLowerBounds(sym, call, bindings)
+    // Bidirectional constraint inference ([inferCallBindings]) fills any variable the ad-hoc pass above left at
+    // just its erased upper bound (or a bare type variable) — e.g. a lambda result flowing through a nested
+    // generic, or the expected type driving an argument-less generic. Additive: applied ONLY where the ad-hoc
+    // pass didn't confidently pin the variable, so a resolved binding is never overridden.
+    if (sym.typeParameters.isNotEmpty()) {
+        val solved = inferCallBindings(sym, call, expectedTypeAt(call.textRange.startOffset))
+        for ((k, v) in solved) {
+            if ((v as? KotlinType)?.isTypeParameter != false) continue
+            val cur = bindings[k] as? KotlinType
+            val onlyErased = cur == null || cur.isTypeParameter ||
+                    (k !in inferred && cur.qualifiedName == (erasure[k] as? KotlinType)?.qualifiedName)
+            if (onlyErased) bindings[k] = v
+        }
+    }
     // The callee's declared return type; when it has none (an expression-body function `fun f() = expr`, whose
     // type neither the same-file symbol nor the disk index carries), infer it from the body.
     val raw = (sym.type as? KotlinType) ?: inferredReturnTypeForCall(call, sym)
@@ -428,13 +496,17 @@ internal fun KotlinResolver.typeOfCall(
  * types as `Any` (public) rather than the non-denotable anonymous type. Null when the callee isn't a
  * resolvable same-file expression-body function.
  */
-internal fun KotlinResolver.inferredReturnTypeForCall(call: KtCallExpression, sym: KotlinSymbol): KotlinType? {
+internal fun KotlinResolver.inferredReturnTypeForCall(
+    call: KtCallExpression,
+    sym: KotlinSymbol
+): KotlinType? {
     (sym.declaration() as? dev.ide.lang.kotlin.parse.KotlinDomNode)?.psi?.let { psi ->
         (psi as? KtNamedFunction)?.let { return inferredExpressionBodyType(it) }
     }
     // A member call is resolved elsewhere; only a bare top-level call needs the live-file by-name fallback.
     if ((call.parent as? KtQualifiedExpression)?.selectorExpression === call) return null
-    val name = (call.calleeExpression as? KtNameReferenceExpression)?.getReferencedName() ?: return null
+    val name =
+        (call.calleeExpression as? KtNameReferenceExpression)?.getReferencedName() ?: return null
     val matches = ktFile.declarations.filterIsInstance<KtNamedFunction>()
         .filter { it.name == name && it.receiverTypeReference == null && it.typeReference == null && !it.hasBlockBody() }
     return matches.singleOrNull()?.let { inferredExpressionBodyType(it) }
@@ -475,7 +547,8 @@ internal fun KotlinResolver.approximateEscapingLocalType(
 
 /** Whether [fqn] is the synthetic key a local/anonymous type is registered under ([SourceIndexBuilder.
  *  localTypeFqn] appends a `$L<ordinal>` last segment). */
-internal fun isSyntheticLocalTypeFqn(fqn: String): Boolean = fqn.substringAfterLast('.').startsWith("\$L")
+internal fun isSyntheticLocalTypeFqn(fqn: String): Boolean =
+    fqn.substringAfterLast('.').startsWith("\$L")
 
 /** Whether [decl] is declared inside a body (not a top-level or class-member declaration) — an anonymous
  *  type it returns stays denotable in its enclosing scope, so no escape approximation applies. */
@@ -492,6 +565,18 @@ internal fun isLocalDeclaration(decl: org.jetbrains.kotlin.psi.KtDeclaration): B
  * (a partial inference) erases to `Any`.
  */
 internal fun KotlinResolver.constructorResultType(fqn: String, call: KtCallExpression): KotlinType {
+    // `Array(size) { init }` / `Array<T>(size)` — the element type comes from the explicit type argument, else
+    // the init lambda's RESULT (the intrinsic constructor `Array<T>(size: Int, init: (Int) -> T)`). Handled
+    // before the type-parameter check below, which the service leaves empty for the built-in `Array`.
+    if (fqn == "kotlin.Array") {
+        call.typeArgumentList?.arguments?.firstOrNull()?.typeReference?.text
+            ?.let { service.typeFromText(it, fileContext) }
+            ?.let { return service.typeByFqn(fqn, listOf(it)) }
+        val initLambda = call.lambdaArguments.firstOrNull()?.getLambdaExpression()
+            ?: call.valueArguments.mapNotNull { it.getArgumentExpression() as? KtLambdaExpression }
+                .lastOrNull()
+        initLambda?.let { inferLambdaResult(it) }?.let { return service.typeByFqn(fqn, listOf(it)) }
+    }
     val tps = service.classTypeParameters(fqn)
     if (tps.isEmpty()) return service.typeByFqn(fqn)
     // Explicit type arguments on the call (`ArrayList<String>()`, `HashMap<String, Int>()`, `Box<Int>()`) are
@@ -539,13 +624,27 @@ internal fun KotlinResolver.typeOfName(name: String, offset: Int): KotlinType? {
     if (narrowings.isEmpty()) smartCastTypeAt(name, offset)?.let { return it }
     localsAt(offset).firstOrNull { it.name == name }?.let { return it.type as? KotlinType }
     // Members of any implicit `this` (apply/with/run block, extension fn, enclosing class).
-    for (recv in implicitReceiversAt(offset)) memberNamed(
-        recv,
-        name
-    )?.let { return it.type as? KotlinType }
+    for (recv in implicitReceiversAt(offset)) {
+        // For a same-file class PROPERTY prefer the live PSI inference: the source model types an implicit-typed
+        // member from a crude parse of the initializer's callee name (`val x = MutableStateFlow(Key())` →
+        // raw `MutableStateFlow`), dropping the generic argument, whereas [sameFileProperty] runs full
+        // `inferType` on the initializer and keeps it (`MutableStateFlow<Key>`). Only for a FIELD — a function
+        // reference keeps the model's shape.
+        val live = sameFileTypeMember(recv.qualifiedName, name)?.takeIf { it.kind == SymbolKind.FIELD }
+        (live?.type as? KotlinType)?.let { return it }
+        (memberNamed(recv, name)?.type as? KotlinType)?.let { return it }
+    }
     // A bare read of an enclosing class's COMPANION member (`fun f() = CONST` inside the class) — companion
     // members are accessible without a qualifier, but live on a distinct classifier the receiver walk misses.
     enclosingCompanionMember(name, offset)?.let { return it.type as? KotlinType }
+    // A bare name brought into scope by an explicit member import (`import …MainActivity.Companion.TAG`,
+    // `import …Config.DEBUG`) — a companion-object / object member is accessible unqualified once imported, so
+    // a chain off it (`TAG.length`) can resolve. Gated on a matching non-star import simple name (the common
+    // case is zero matches), so the member lookup only fires for a name that was actually imported.
+    for (imp in fileContext.imports) {
+        if (imp.isStar || imp.simpleName != name) continue
+        service.importedMemberSymbol(imp.fqn)?.let { return it.type as? KotlinType }
+    }
     service.topLevelByName(name).firstOrNull { it.kind == SymbolKind.FIELD }
         ?.let { return it.type as? KotlinType }
     // A bare type name used as an expression (e.g. `Foo` in `Foo.CONST`): a LOCAL type in scope first (a local

@@ -26,7 +26,11 @@ class RealViewRequest(
     /** The `resources.ap_` to render against (binary manifest + `resources.arsc` + compiled res XML): the
      *  build's compiled resources relinked with [layoutText], or the build's own if the relink was unavailable. */
     val resourcesAp: Path,
-    /** Library jars + the build's `R.jar` to dex onto the `DexClassLoader` (framework/library/R classes). */
+    /** What to load onto the `DexClassLoader`, as a mixed list the runtime splits by kind:
+     *  - library `.jar`s (framework/library classes) → dexed via the shared cache + merged (stable layer),
+     *  - the `R.jar` (`R.jar`/`preview-r.jar`, matched by name) → the volatile R layer,
+     *  - the project's own PRE-DEXED `.dex` files (the build's `project-dex`/`lib-dex`, app + module code) →
+     *    added directly (no re-dex) so a project-source custom view resolves at inflate time. */
     val classpath: List<Path>,
     /** The app package (the `R` package the linked resources live under). */
     val packageName: String,
@@ -35,6 +39,11 @@ class RealViewRequest(
     /** The module's `minSdk` — the dex min-api, so the preview's shared-cache buckets match the build's
      *  (which keys the cache by min-api); using the device api instead would key a separate, unshared cache. */
     val minApi: Int = 21,
+    /** When true, non-framework view classes on [classpath] are INTERPRETED (the `:jvm-interp` VM) instead of
+     *  dexed onto a `DexClassLoader` — the runtime builds no dex and loads no downloaded/library/user code into
+     *  ART. [classpath] may then include class DIRECTORIES (the build's compiled `.class` output) as well as
+     *  jars, and no `.dex` files. */
+    val interpretClasses: Boolean = false,
 ) {
     /** Transient in-process callback for fine render stages ("Dexing"/"Inflating"/"Drawing"), for the status
      *  chip. NOT serialized across the `:preview` IPC — each side sets its own (the daemon forwards over the

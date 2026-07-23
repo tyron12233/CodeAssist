@@ -43,6 +43,7 @@ import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalFontFamilyResolver
 import androidx.compose.ui.text.TextMeasurer
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
@@ -58,8 +59,15 @@ import dev.ide.preview.RPath
 import dev.ide.preview.RenderNode
 import dev.ide.preview.SimpleRenderContext
 import dev.ide.ui.backend.IdeBackend
+import dev.ide.ui.backend.RunStatus
+import dev.ide.ui.backend.UiLayoutElement
+import dev.ide.ui.backend.UiTextEdit
+import dev.ide.ui.editor.core.EditorSession
+import dev.ide.ui.editor.core.RangeEdit
 import dev.ide.ui.icons.CaIcons
 import dev.ide.ui.theme.Ca
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.ui.text.TextRange
 import kotlin.math.roundToInt
 import kotlinx.coroutines.delay
 
@@ -91,8 +99,9 @@ private fun PreviewStatusChip(stage: String, modifier: Modifier = Modifier) {
 }
 
 @Composable
-actual fun LayoutPreviewPane(path: String, text: String, backend: IdeBackend, modifier: Modifier) {
+actual fun LayoutPreviewPane(path: String, text: String, backend: IdeBackend, session: EditorSession, modifier: Modifier) {
     val state = rememberPreviewSurfaceState(path)
+    val scope = rememberCoroutineScope()
     var showChrome by remember { mutableStateOf(true) }
     var blueprint by remember { mutableStateOf(false) }
     // Real-view ("layoutlib-on-device") is the default renderer; owned rendering is the fallback (and the
@@ -103,6 +112,21 @@ actual fun LayoutPreviewPane(path: String, text: String, backend: IdeBackend, mo
     // in play per result (the real-view path carries `viewTree`, the owned path carries `root`).
     var selected by remember(path) { mutableStateOf<RenderNode?>(null) }
     var selectedView by remember(path) { mutableStateOf<PreviewViewNode?>(null) }
+    // The selection's stable identity, so it survives a re-render (the tree is rebuilt from new text after an
+    // edit): re-resolved by id when the view has one, else by its pre-order child-index path.
+    var selKey by remember(path) { mutableStateOf<SelKey?>(null) }
+    // The editable attribute model for the selected view + the text it was fetched from (so edits are computed
+    // against a consistent buffer; the sheet is gated stale until they realign after an edit).
+    var element by remember(path) { mutableStateOf<UiLayoutElement?>(null) }
+    var elementText by remember(path) { mutableStateOf("") }
+
+    // Apply the attribute editor's edits to the shared session — the same surgical write-back the block editor
+    // uses, so the Code view + preview both update. Descending order is handled by applyEdits.
+    fun applyEdits(edits: List<UiTextEdit>) {
+        if (edits.isEmpty()) return
+        val ranges = edits.map { RangeEdit(it.start, it.end, it.newText, it.start + it.newText.length) }
+        session.applyEdits(ranges, TextRange(edits.minOf { it.start }.coerceAtLeast(0)))
+    }
 
     val request = PreviewRequest(state.widthPx, state.heightPx, state.device.density, showChrome, state.night, realViews = realViews)
     val lpBackend = backend as? LayoutPreviewBackend
@@ -112,7 +136,11 @@ actual fun LayoutPreviewPane(path: String, text: String, backend: IdeBackend, mo
     val depsResolving = backend.deps.depsState.collectAsState().value.resolving
     // Live render-pipeline stage (relink → render) for the floating status chip; null when idle.
     val renderProgress = backend.preview.previewProgress.collectAsState().value
-    LaunchedEffect(path, text, request, lpBackend, depsResolving) {
+    // Build status — so a "prepare libraries" (dex) build that finishes flips the readiness gate: re-fetch when
+    // the status changes (notably Running → Succeeded), at which point the libraries are dexed and the real
+    // render proceeds instead of the build-required prompt.
+    val buildStatus = backend.build.buildState.collectAsState().value.status
+    LaunchedEffect(path, text, request, lpBackend, depsResolving, buildStatus) {
         // The effect re-launches (cancelling the prior) on every keystroke; this delay coalesces a typing
         // burst into a single render. The fetch runs on the backend's preview lane, off the UI thread.
         delay(PREVIEW_DEBOUNCE_MS)
@@ -148,13 +176,35 @@ actual fun LayoutPreviewPane(path: String, text: String, backend: IdeBackend, mo
     val surfaceColor = Ca.colors.surface
     val separatorColor = Ca.colors.separator
 
+    // Re-resolve the real-view selection against the freshly-rendered tree (a new object every render, e.g.
+    // after an attribute edit) by its stable [SelKey], so the attribute editor stays open on the same view.
+    LaunchedEffect(r.viewTree) {
+        val vt = r.viewTree
+        if (vt != null) selectedView = selKey?.let { nodeByKey(vt, it) }
+    }
+    // Fetch the editable model for the selected view. Keyed on text so it realigns after every edit; the sheet's
+    // controls stay disabled (its per-element `busy`) between a commit and the fresh model arriving.
+    val selOffset = selectedView?.sourceOffset
+    val selId = selectedView?.id
+    LaunchedEffect(selOffset, selId, text) {
+        element = if (selOffset != null) backend.preview.layoutElementAt(path, text, selOffset, selId) else null
+        elementText = text
+    }
+
+    Box(modifier.fillMaxSize()) {
     PreviewSurface(
-        modifier = modifier,
+        modifier = Modifier.fillMaxSize(),
         state = state,
         cardColor = if (blueprint) BlueprintGround else Color.White,
         cardBorderColor = if (blueprint) BlueprintLine.copy(alpha = 0.4f) else Ca.colors.separator,
         blueprint = blueprint,
-        onSurfaceTap = { selected = null; selectedView = null },
+        // Deselect on a background tap — but NOT while the editable sheet is open, so a tap that reaches the
+        // surface (e.g. leaking past the sheet) can't dismiss it. Close it with its own button, or tap another
+        // view (the card's own tap-select). Tapping to deselect stays live for the read-only/owned paths.
+        onSurfaceTap = {
+            val sheetOpen = selectedView?.sourceOffset != null && element != null
+            if (!sheetOpen) { selected = null; selectedView = null; selKey = null }
+        },
         topBarExtras = {
             Divider()
             PillButton({ treeOpen = !treeOpen }) {
@@ -204,19 +254,22 @@ actual fun LayoutPreviewPane(path: String, text: String, backend: IdeBackend, mo
                 }
             }
 
-            // Inspector (top-end), when a node is selected.
-            if (vt != null) {
-                selectedView?.let { node ->
+            // Read-only inspector, for a selected node that ISN'T an editable element (window decor /
+            // synthesized internals), and the owned path. The EDITABLE sheet is rendered OUTSIDE PreviewSurface
+            // (as a top-level sibling below) so its taps aren't intercepted by the surface's subcompose/overlay
+            // stack — see the `LayoutAttributeSheet` call after this PreviewSurface.
+            val node = selectedView
+            when {
+                vt != null && node != null && node.sourceOffset == null ->
                     RealViewInspectorPanel(
                         node = node,
                         modifier = Modifier.align(Alignment.TopEnd).padding(Ca.spacing.s3),
-                        onClose = { selectedView = null },
+                        onClose = { selectedView = null; selKey = null },
                     )
-                }
-            } else {
-                selected?.let { node ->
+
+                vt == null -> selected?.let { n ->
                     InspectorPanel(
-                        node = node, density = state.device.density,
+                        node = n, density = state.device.density,
                         modifier = Modifier.align(Alignment.TopEnd).padding(Ca.spacing.s3),
                         onClose = { selected = null },
                     )
@@ -231,8 +284,14 @@ actual fun LayoutPreviewPane(path: String, text: String, backend: IdeBackend, mo
                     // rendered bitmap); owned path hit-tests the render tree.
                     onTap = { p ->
                         val vt = r.viewTree
-                        if (vt != null) selectedView = vt.hitTest(p.x, p.y)
-                        else selected = engine.hitTest(r.root, p.x, p.y)
+                        if (vt != null) {
+                            val hit = vt.hitTest(p.x, p.y)
+                            // Selecting a different view clears the stale model so the sheet never shows another
+                            // view's attributes while the new one is fetched.
+                            if (hit !== selectedView) element = null
+                            selectedView = hit
+                            selKey = hit?.let { SelKey(it.id, pathTo(vt, it) ?: emptyList()) }
+                        } else selected = engine.hitTest(r.root, p.x, p.y)
                     },
                     onDoubleTap = { if (state.userScale <= 0f) state.userScale = 1f else { state.userScale = 0f; state.offset = Offset.Zero } },
                 )
@@ -257,6 +316,42 @@ actual fun LayoutPreviewPane(path: String, text: String, backend: IdeBackend, mo
                 if (img == null) selected?.let { n -> drawSelectionBox(n.left.toFloat(), n.top.toFloat(), n.right.toFloat(), n.bottom.toFloat(), accent, surfaceColor, density) }
                 else selectedView?.let { n -> drawSelectionBox(n.left.toFloat(), n.top.toFloat(), n.right.toFloat(), n.bottom.toFloat(), accent, surfaceColor, density) }
             }
+        }
+    }
+
+        // Build-required prompt: the real-view preview no longer dexes libraries itself. When they aren't
+        // prepared yet (fresh project, or a newly-added dependency), the backend returns `buildRequired` (with an
+        // owned fallback render behind) — show an Android-Studio-style one-time "prepare libraries" panel + a dex
+        // build button. When the build finishes, `buildStatus` changes → the effect re-fetches → the gate passes.
+        if (r.buildRequired) {
+            BuildRequiredPanel(
+                undexedCount = r.undexedCount,
+                running = buildStatus == RunStatus.Running,
+                onPrepare = {
+                    val module = backend.files.moduleNameForFile(path)
+                    if (module != null) {
+                        val variant = backend.build.activeVariant(module) ?: "debug"
+                        backend.build.runTask("prepareDex:$module:$variant")
+                    }
+                },
+                modifier = Modifier.align(Alignment.Center).padding(Ca.spacing.s4),
+            )
+        }
+
+        // The EDITABLE attribute sheet — a TOP-LEVEL sibling of PreviewSurface (not one of its overlays), so its
+        // controls' taps are hit-tested cleanly on top of the whole surface with nothing intercepting them. NOT
+        // gated on `r.viewTree` (the render result): the sheet model comes from parsing the buffer, so an edit
+        // that breaks the render (empty/invalid value) must NOT drop the sheet — it stays open so the user can
+        // fix the value. `selectedView` is only ever set on the real-view path and retains its value when a later
+        // render fails (its re-resolve only runs on a non-null tree).
+        val sheetNode = selectedView
+        val sheetEl = element
+        if (sheetNode != null && sheetNode.sourceOffset != null && sheetEl != null) {
+            LayoutAttributeSheet(
+                element = sheetEl, node = sheetNode, path = path, text = text, backend = backend,
+                onEdit = { applyEdits(it) },
+                onClose = { selectedView = null; selKey = null; element = null },
+            )
         }
     }
 }
@@ -511,5 +606,85 @@ private fun InspectorAttrRow(name: String, value: String) {
     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(Ca.spacing.s2)) {
         Text(name, color = Ca.colors.textTertiary, style = Ca.type.caption, modifier = Modifier.width(96.dp), maxLines = 1)
         Text(value, color = Ca.colors.textPrimary, style = Ca.type.caption, modifier = Modifier.weight(1f))
+    }
+}
+
+/** The stable identity of a selected view, so the selection survives a re-render (a new tree object): the
+ *  `@id` entry name when it has one (re-resolved by id), else the pre-order child-index path from the root. */
+internal data class SelKey(val id: String?, val path: List<Int>)
+
+/** The pre-order child-index path from [root] to [target] (empty = root itself), or null if not found. */
+private fun pathTo(root: PreviewViewNode, target: PreviewViewNode): List<Int>? {
+    if (root === target) return emptyList()
+    root.children.forEachIndexed { i, c -> pathTo(c, target)?.let { return listOf(i) + it } }
+    return null
+}
+
+/** Re-find the node for [key] in [root] — by id (pre-order) when set, else by walking its child-index path. */
+private fun nodeByKey(root: PreviewViewNode, key: SelKey): PreviewViewNode? {
+    if (key.id != null) findViewById(root, key.id)?.let { return it }
+    var node: PreviewViewNode? = root
+    for (i in key.path) node = node?.children?.getOrNull(i)
+    return node
+}
+
+private fun findViewById(root: PreviewViewNode, id: String): PreviewViewNode? {
+    if (root.id == id) return root
+    for (c in root.children) findViewById(c, id)?.let { return it }
+    return null
+}
+
+/**
+ * The one-time "prepare libraries" prompt shown when the real-view preview's libraries aren't dexed yet
+ * (Android-Studio-style). Explains WHY (real libraries must be dexed once; fast afterward) and HOW MANY
+ * libraries need it, and offers a dex-only build (`prepareDex:` — no APK packaging). While the build runs it
+ * shows a spinner; when it finishes the preview re-checks readiness and renders.
+ */
+@Composable
+private fun BuildRequiredPanel(undexedCount: Int, running: Boolean, onPrepare: () -> Unit, modifier: Modifier) {
+    Column(
+        modifier.widthIn(max = 380.dp)
+            .shadow(16.dp, RoundedCornerShape(Ca.radius.lg))
+            .clip(RoundedCornerShape(Ca.radius.lg))
+            .background(Ca.colors.surface)
+            .border(1.dp, Ca.colors.separator, RoundedCornerShape(Ca.radius.lg))
+            .padding(Ca.spacing.s4),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.spacedBy(Ca.spacing.s3),
+    ) {
+        Box(
+            Modifier.size(48.dp).clip(RoundedCornerShape(Ca.radius.md)).background(Ca.colors.accent.copy(alpha = 0.14f)),
+            contentAlignment = Alignment.Center,
+        ) { Icon(CaIcons.hammer, null, Modifier.size(24.dp), tint = Ca.colors.accent) }
+
+        Text("Prepare the preview", style = Ca.type.headline, color = Ca.colors.textPrimary)
+        Text(
+            buildString {
+                append("The real-view preview renders with your project's real libraries, which have to be prepared (dexed) once. ")
+                append("It's a one-time step per library set. After it, editing and previewing are fast. ")
+                if (undexedCount > 0) append("$undexedCount ${if (undexedCount == 1) "library needs" else "libraries need"} preparing.")
+            },
+            style = Ca.type.footnote, color = Ca.colors.textSecondary, textAlign = TextAlign.Center,
+        )
+
+        Row(
+            Modifier.clip(RoundedCornerShape(Ca.radius.md))
+                .background(if (running) Ca.colors.surface2 else Ca.colors.accent)
+                .clickable(enabled = !running) { onPrepare() }
+                .padding(horizontal = Ca.spacing.s4, vertical = Ca.spacing.s3),
+            verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(Ca.spacing.s2),
+        ) {
+            if (running) {
+                CircularProgressIndicator(Modifier.size(15.dp), color = Ca.colors.accent, strokeWidth = 2.dp)
+                Text("Preparing libraries…", color = Ca.colors.textSecondary, style = Ca.type.footnote, fontWeight = FontWeight.SemiBold)
+            } else {
+                Icon(CaIcons.hammer, null, Modifier.size(16.dp), tint = Color.White)
+                Text("Prepare libraries", color = Color.White, style = Ca.type.footnote, fontWeight = FontWeight.SemiBold)
+            }
+        }
+        Text(
+            "Runs a build up to dexing. It doesn't package an APK.",
+            style = Ca.type.caption2, color = Ca.colors.textTertiary, textAlign = TextAlign.Center,
+        )
     }
 }

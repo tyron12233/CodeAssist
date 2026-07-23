@@ -50,6 +50,8 @@ internal class EditorDrawColors(
     val findMatch: Color,
     val findCurrent: Color,
     val occurrence: Color,
+    /** Background box for a live template (snippet) field while stepping through tab stops. */
+    val templateField: Color,
 )
 
 internal class DiagSeg(val startCol: Int, val endCol: Int, val severity: UiSeverity, val unused: Boolean)
@@ -110,6 +112,8 @@ internal fun DrawScope.drawEditor(
     findMatches: List<Match>,
     currentMatch: Int,
     occurrences: List<Match>,
+    /** Live template (snippet) field ranges to box while stepping through tab stops; empty when not in a template. */
+    templateFields: List<IntRange>,
     structure: List<UiFileSymbol>,
     colors: EditorDrawColors,
     caretVisible: Boolean,
@@ -202,6 +206,20 @@ internal fun DrawScope.drawEditor(
     }
 
     clipRect(left = gutterWidth, top = 0f, right = size.width, bottom = size.height) {
+        // live template fields (lowest layer): each snippet tab stop tinted so the user sees the fields to
+        // fill; the active field also carries the selection, painted on top. Single-line ranges only (a
+        // template placeholder never spans a line break).
+        if (templateFields.isNotEmpty()) {
+            for (r in templateFields) {
+                if (r.isEmpty()) continue
+                val line = doc.lineForOffset(r.first)
+                if (line < firstVisible || line > lastVisible || foldModel.isHidden(line)) continue
+                val vStart = rawToVisual(line, r.first - doc.lineStart(line))
+                val vEnd = rawToVisual(line, (r.last + 1) - doc.lineStart(line))
+                fillRange(line, vStart, vEnd, colors.templateField, trailingMarker = false)
+            }
+        }
+
         // occurrence highlights (lowest layer): every textual use of the identifier under the caret, tinted
         // subtly. The selection / find layers paint over the current one.
         if (occurrences.isNotEmpty()) {

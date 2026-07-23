@@ -5,6 +5,7 @@ import android.content.ClipboardManager
 import android.content.Context
 import android.graphics.Matrix
 import android.text.InputType
+import android.util.Log
 import android.view.View
 import android.view.inputmethod.BaseInputConnection
 import android.view.inputmethod.CursorAnchorInfo
@@ -213,6 +214,7 @@ private class EditorImeRequest(
             EditorInfo.IME_ACTION_NONE
         outAttributes.initialSelStart = session.selection.min
         outAttributes.initialSelEnd = session.selection.max
+        bridge.onNewConnection()
         return EditorInputConnection(session, view, bridge, rawMode)
     }
 }
@@ -222,6 +224,14 @@ private class EditorImeRequest(
  *  one-shot/initial snapshot. */
 private const val MAX_EXTRACT_CHARS = 100_000
 private const val NO_MONITOR = -1
+
+/** Wire-level IME trace for diagnosing keyboard-specific behavior (SwiftKey auto-space, composing flows).
+ *  Off by default; enable without a rebuild via `adb shell setprop log.tag.EditorIme D`, read with
+ *  `adb logcat -s EditorIme`. The only cost when off is the isLoggable check. */
+private const val IME_LOG_TAG = "EditorIme"
+private inline fun imeLog(message: () -> String) {
+    Log.d(IME_LOG_TAG, message())
+}
 
 /**
  * Owns the editor's IME-push side. Set as the [EditorSession.ImeListener], it forwards every edit/selection
@@ -251,6 +261,20 @@ private class EditorImeBridge(
      *  the IME's mirror with absolute offsets, valid only while the mirror is the whole document; a windowed
      *  mirror is re-based, so we keep pushing full snapshots until it spans the whole buffer from 0 again. */
     private var mirrorWindowed = false
+
+    /**
+     * A new [InputConnection] is becoming authoritative (initial start, `restartInput`, or an IME switch):
+     * drop the monitor/cursor state the previous one armed. Every (re)start makes the IME re-request what it
+     * uses (`getExtractedText`/`requestCursorUpdates`); without this reset a monitor armed by a mirroring IME
+     * (SwiftKey) leaks into a non-mirroring one's session (Gboard), keeping [isSyncingExtractedText] true and
+     * suppressing the smart-edit resync restarts it depends on. [EditorInputConnection.closeConnection]'s
+     * generation guard covers the other direction — a stale close must not disarm the live connection.
+     */
+    fun onNewConnection() {
+        monitorToken = NO_MONITOR
+        cursorUpdateMode = 0
+        mirrorWindowed = false
+    }
 
     override fun onStateChanged() {
         pushSelection()
@@ -364,12 +388,14 @@ private class EditorInputConnection(
     private var batchDepth = 0
 
     override fun beginBatchEdit(): Boolean {
+        imeLog { "beginBatchEdit depth=$batchDepth" }
         batchDepth++
         session.beginBatch()
         return true
     }
 
     override fun endBatchEdit(): Boolean {
+        imeLog { "endBatchEdit depth=$batchDepth" }
         if (batchDepth > 0) {
             batchDepth--
             session.endBatch()
@@ -378,11 +404,13 @@ private class EditorInputConnection(
     }
 
     override fun commitText(text: CharSequence?, newCursorPosition: Int): Boolean {
+        imeLog { "commitText \"$text\" ncp=$newCursorPosition sel=${session.selection} comp=${session.composing}" }
         session.imeCommitText(text?.toString() ?: "", newCursorPosition)
         return true
     }
 
     override fun setComposingText(text: CharSequence?, newCursorPosition: Int): Boolean {
+        imeLog { "setComposingText \"$text\" ncp=$newCursorPosition sel=${session.selection} comp=${session.composing}" }
         val s = text?.toString() ?: ""
         // Composing text never spans a line break; refuse one and let the IME fall back to committing the text,
         // so the underlined composing region can't straddle two lines.
@@ -399,17 +427,20 @@ private class EditorInputConnection(
     }
 
     override fun setComposingRegion(start: Int, end: Int): Boolean {
+        imeLog { "setComposingRegion [$start,$end) sel=${session.selection}" }
         if (rawMode) return false // never let a starved IME re-compose over existing text
         session.imeSetComposingRegion(start, end)
         return true
     }
 
     override fun finishComposingText(): Boolean {
+        imeLog { "finishComposingText comp=${session.composing}" }
         session.imeFinishComposing()
         return true
     }
 
     override fun deleteSurroundingText(beforeLength: Int, afterLength: Int): Boolean {
+        imeLog { "deleteSurroundingText before=$beforeLength after=$afterLength sel=${session.selection} comp=${session.composing}" }
         if (beforeLength < 0 || afterLength < 0) return false
         session.imeDeleteSurrounding(beforeLength, afterLength)
         return true
@@ -470,6 +501,7 @@ private class EditorInputConnection(
     }
 
     override fun setSelection(start: Int, end: Int): Boolean {
+        imeLog { "setSelection [$start,$end) sel=${session.selection}" }
         if (rawMode) return false // a starved IME thinks the field is empty — don't let it yank the caret
         session.imeSetSelection(start, end)
         return true
@@ -477,7 +509,13 @@ private class EditorInputConnection(
 
     override fun getCursorCapsMode(reqModes: Int): Int = 0
 
+    override fun sendKeyEvent(event: AndroidKeyEvent?): Boolean {
+        imeLog { "sendKeyEvent $event" }
+        return super.sendKeyEvent(event)
+    }
+
     override fun performEditorAction(actionCode: Int): Boolean {
+        imeLog { "performEditorAction $actionCode" }
         session.commitText("\n") // multiline editor: any action key behaves as Enter
         return true
     }

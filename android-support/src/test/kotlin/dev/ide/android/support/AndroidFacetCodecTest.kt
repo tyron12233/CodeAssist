@@ -38,7 +38,7 @@ class AndroidFacetCodecTest {
         ),
         r8FullMode = false,
         coreLibraryDesugaringEnabled = true,
-        buildFeatures = BuildFeatures(viewBinding = true, compose = true),
+        buildFeatures = BuildFeatures(viewBinding = true, compose = true, parcelize = true, serialization = true),
         packaging = AndroidPackaging(
             resources = ResourcePackaging(
                 excludes = linkedSetOf("/META-INF/extra.txt"),
@@ -80,6 +80,8 @@ class AndroidFacetCodecTest {
         // buildFeatures flatten into on-only flags on the [android] table.
         assertEquals(true, values["viewBinding"])
         assertEquals(true, values["compose"])
+        assertEquals(true, values["parcelize"])
+        assertEquals(true, values["serialization"])
         // shrinkResources is always emitted (like minifyEnabled) so the Module Settings UI can render a
         // toggle to turn it ON — a key omitted when false would leave no control for it.
         assertEquals(false, bts[0]["shrinkResources"])
@@ -93,6 +95,8 @@ class AndroidFacetCodecTest {
         // An off feature is an absent key, not `false`, so a default facet equals its reloaded form.
         assertEquals(null, values["viewBinding"])
         assertEquals(null, values["compose"])
+        assertEquals(null, values["parcelize"])
+        assertEquals(null, values["serialization"])
         assertEquals(BuildFeatures(), AndroidFacetCodec.decode(values).buildFeatures)
     }
 

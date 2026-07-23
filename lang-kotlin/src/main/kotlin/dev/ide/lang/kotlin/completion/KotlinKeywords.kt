@@ -13,6 +13,7 @@ import org.jetbrains.kotlin.psi.KtClassBody
 import org.jetbrains.kotlin.psi.KtDoWhileExpression
 import org.jetbrains.kotlin.psi.KtFile
 import org.jetbrains.kotlin.psi.KtForExpression
+import org.jetbrains.kotlin.psi.KtIfExpression
 import org.jetbrains.kotlin.psi.KtFunctionLiteral
 import org.jetbrains.kotlin.psi.KtImportDirective
 import org.jetbrains.kotlin.psi.KtNamedFunction
@@ -136,6 +137,9 @@ internal object KotlinKeywords {
         if (whereSpot(declRun)) kw("where", trailingSpace = true)
         // `catch`/`finally` after a `try { }` block (or after an existing catch) at statement level.
         if (tryContinuationSpot(leaf)) { kw("catch"); kw("finally") }
+        // `else` after an `if (…) { }` that has no else yet; `while` after a `do { }` missing its while.
+        if (elseContinuationSpot(leaf)) kw("else", trailingSpace = true)
+        if (doWhileContinuationSpot(leaf)) kw("while")
         // `get`/`set` property accessors after a property declaration (`val x: Int █`). Only the accessors the
         // property still lacks — a `val` has no setter.
         accessorTarget(leaf)?.let { p ->
@@ -509,6 +513,34 @@ internal object KotlinKeywords {
         }
         return prevMeaningfulSibling(leaf) is KtTryExpression ||
             prevMeaningfulSiblingUp(leaf) is KtTryExpression
+    }
+
+    /** True right after an `if (…) { }` that has no `else` yet — where `else` continues the statement. Either
+     *  the leaf is inside the KtIfExpression past its then-branch (a malformed `else` being typed), or the
+     *  previous meaningful sibling is an else-less KtIfExpression. */
+    private fun elseContinuationSpot(leaf: PsiElement?): Boolean {
+        ((prevMeaningfulSibling(leaf) ?: prevMeaningfulSiblingUp(leaf)) as? KtIfExpression)?.let {
+            if (it.`else` == null) return true
+        }
+        val caret = leaf?.textRange?.startOffset ?: return false
+        leaf.getParentOfType<KtIfExpression>(strict = false)?.let { ife ->
+            val thenEnd = ife.then?.textRange?.endOffset ?: return false
+            if (ife.`else` == null && caret > thenEnd) return true
+        }
+        return false
+    }
+
+    /** True right after a `do { }` missing its `while` — where `while` continues the loop. */
+    private fun doWhileContinuationSpot(leaf: PsiElement?): Boolean {
+        ((prevMeaningfulSibling(leaf) ?: prevMeaningfulSiblingUp(leaf)) as? KtDoWhileExpression)?.let {
+            if (it.condition == null) return true
+        }
+        val caret = leaf?.textRange?.startOffset ?: return false
+        leaf.getParentOfType<KtDoWhileExpression>(strict = false)?.let { d ->
+            val bodyEnd = d.body?.textRange?.endOffset ?: return false
+            if (d.condition == null && caret > bodyEnd) return true
+        }
+        return false
     }
 
     /** The property [leaf] would give an accessor to (right after a `val`/`var` declaration), or null. `get`/

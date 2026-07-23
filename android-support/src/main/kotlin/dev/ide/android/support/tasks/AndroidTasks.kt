@@ -92,9 +92,10 @@ internal class MergeResourcesTask(
 /**
  * Merge [resDirs] (ascending priority) into [outDir] — the reusable core of [MergeResourcesTask], also driven
  * by the layout preview's live resource relink ([dev.ide.android.support.PreviewResourceLinker]). Non-`values`
- * files overlay by path (higher priority wins); `values*` files merge by entry (last wins), deduplicating a
- * resource that arrives from more than one source so it reaches `aapt2 link` once. A values file that fails to
- * parse is copied verbatim under a unique name (so a single broken file doesn't drop the rest of the merge).
+ * files overlay by RESOURCE IDENTITY (higher priority wins, extension-independent); `values*` files merge by
+ * entry (last wins), deduplicating a resource that arrives from more than one source so it reaches `aapt2 link`
+ * once. A values file that fails to parse is copied verbatim under a unique name (so a single broken file
+ * doesn't drop the rest of the merge).
  */
 internal fun mergeResourceDirs(resDirs: List<Path>, outDir: Path) {
     if (Files.exists(outDir)) Files.walk(outDir).use { s ->
@@ -106,21 +107,40 @@ internal fun mergeResourceDirs(resDirs: List<Path>, outDir: Path) {
         Files.copy(from, to, java.nio.file.StandardCopyOption.REPLACE_EXISTING)
     }
     val values = ValuesMerger()
+    // File resources overlay by RESOURCE IDENTITY (qualifier dir + name, extension-INDEPENDENT), not by file
+    // name — so a higher-priority source's `ic_launcher.png` overrides a lower one's `ic_launcher.xml` instead
+    // of BOTH landing in merged-res and failing aapt2 link with "resource 'drawable/ic_launcher' has a
+    // conflicting value". Matches AGP's ResourceMerger (file resources keyed by folder-type + name + qualifier;
+    // higher priority wins). Ascending priority means the later source in [resDirs] wins.
+    val fileResOutput = HashMap<String, Path>()  // resource identity -> the merged path currently holding it
     resDirs.filter { Files.isDirectory(it) }.forEach { dir ->
         Files.walk(dir).use { s ->
-            s.filter { Files.isRegularFile(it) }.forEach { f ->
+            s.filter { Files.isRegularFile(it) }.sorted().forEach { f ->
                 val rel = dir.relativize(f)
                 val qualifier = rel.getName(0).toString()
                 if (qualifier.startsWith("values")) {
                     // Accumulate entries; ascending priority means a later source's entry wins.
                     if (!values.add(qualifier, f)) copyRaw(f, outDir.resolve(qualifier).resolve("unparsed_${values.bump()}_${f.fileName}"))
                 } else {
-                    copyRaw(f, outDir.resolve(rel)) // overlay: a higher-priority source overwrites
+                    val dest = outDir.resolve(rel)
+                    val id = "$qualifier/${fileResourceName(rel.fileName.toString())}"
+                    // A prior same-identity file under a DIFFERENT name (extension) must go, or aapt2 sees two.
+                    fileResOutput.put(id, dest)?.let { prior -> if (prior != dest) runCatching { Files.deleteIfExists(prior) } }
+                    copyRaw(f, dest) // overlay: a higher-priority source overrides the same resource
                 }
             }
         }
     }
     values.writeTo(outDir)
+}
+
+/** The aapt2 resource name of a res FILE, i.e. its name without the type extension (`ic_launcher.png` ->
+ *  `ic_launcher`); a nine-patch keeps its base name (`bg.9.png` -> `bg`). Used so two files that declare the
+ *  same resource in different formats collapse to one identity in [mergeResourceDirs]. */
+private fun fileResourceName(fileName: String): String {
+    val ninePatch = ".9.png"
+    return if (fileName.endsWith(ninePatch, ignoreCase = true)) fileName.dropLast(ninePatch.length)
+    else fileName.substringBeforeLast('.', fileName)
 }
 
 /**
@@ -274,6 +294,8 @@ internal class GenerateLibraryRTask(
     private val throwawayAp: Path,
     private val synthManifest: Path,
     private val aapt2: Aapt2,
+    /** When set, aapt2 also writes the R symbol table (`R.txt`) here — the AAR ships it for consumers. */
+    private val rTxt: Path? = null,
 ) : Task {
     override val inputs: TaskInputs
         get() = TaskInputsImpl().apply {
@@ -282,7 +304,10 @@ internal class GenerateLibraryRTask(
             property("package", packageName)
             property("androidJar", androidJar.toString())
         }
-    override val outputs: TaskOutputs get() = TaskOutputsImpl().apply { dirPath("R", genDir) }
+    override val outputs: TaskOutputs get() = TaskOutputsImpl().apply {
+        dirPath("R", genDir)
+        rTxt?.let { filePath("rTxt", it) }
+    }
 
     override suspend fun execute(ctx: TaskContext): TaskResult {
         ctx.checkCanceled()
@@ -302,6 +327,7 @@ internal class GenerateLibraryRTask(
             genDir,
             throwawayAp,
             nonFinalIds = true,
+            rTxt = rTxt,
         )
         r.log.forEach(ctx.logger())
         ctx.reportToolDiagnostics("aapt2", r.log, DiagnosticKind.RESOURCE)
@@ -862,7 +888,9 @@ internal class DexArchiveBuilderTask(
  * Bumped whenever the bundled D8/R8 (`libs.versions.toml` `r8`) or the archive layout changes, so a tool
  * upgrade can't reuse stale dex from the shared cache. Folded into the cache namespace (see `cacheTag`).
  */
-internal const val DEX_CACHE_FORMAT = "v1-r8-8.13.19"
+// v2: library programs are dexed with @kotlin.Metadata stripped (DexArchives.strippedJar) — bump so caches
+// from the pre-strip format are re-dexed once into the new namespace rather than reused with stale metadata.
+internal const val DEX_CACHE_FORMAT = "v2-r8-8.13.19"
 
 /** Content-addressing + bucket bookkeeping for [DexArchiveBuilderTask]'s per-scope dex archives. */
 internal object DexArchives {
@@ -1076,6 +1104,48 @@ internal object DexArchives {
         return if (found) writer.toByteArray() else bytes
     }
 
+    /**
+     * A copy of [jar] at [dst] with `@kotlin.Metadata` stripped from every class, OR the original [jar]
+     * unchanged when it carries no Kotlin classes (no `.kotlin_module` entry under `META-INF`) so a pure-Java
+     * library is never needlessly re-jarred. Feeding this (rather than the raw jar) to D8 as the *program* stops the
+     * bundled in-process D8/R8 — whose shaded `kotlin-metadata-jvm` predates the app's Kotlin (2.4) — from
+     * logging an "error … parsing kotlin meta data" warning for every library class, and removes the
+     * metadata-rewriter crash path that can silently drop dex output ([strippedKotlinMetadata]). Library
+     * metadata only feeds `kotlin-reflect` over those types (rare in an app, and irrelevant to execution /
+     * Compose), so dropping it matches R8 release, which does not preserve library metadata by default.
+     * Non-class entries are copied byte-for-byte. Callers strip only on a dex *miss*, so a cached library is
+     * never re-jarred.
+     */
+    fun strippedJar(jar: Path, dst: Path): Path {
+        if (!isZip(jar)) return jar
+        val hasKotlin = runCatching {
+            ZipFile(jar.toFile()).use { zf ->
+                val e = zf.entries()
+                while (e.hasMoreElements()) {
+                    val n = e.nextElement().name
+                    if (n.startsWith("META-INF/") && n.endsWith(".kotlin_module")) return@use true
+                }
+                false
+            }
+        }.getOrDefault(false)
+        if (!hasKotlin) return jar
+        dst.parent?.let { Files.createDirectories(it) }
+        ZipFile(jar.toFile()).use { zf ->
+            JarOutputStream(Files.newOutputStream(dst)).use { jos ->
+                val e = zf.entries()
+                while (e.hasMoreElements()) {
+                    val entry = e.nextElement()
+                    if (entry.isDirectory) continue
+                    val bytes = zf.getInputStream(entry).use { it.readBytes() }
+                    jos.putNextEntry(JarEntry(entry.name))
+                    jos.write(if (entry.name.endsWith(".class")) strippedKotlinMetadata(bytes) else bytes)
+                    jos.closeEntry()
+                }
+            }
+        }
+        return dst
+    }
+
     /** Delete immediate child buckets of [root] whose name is not in [keep] (removed/changed inputs). */
     fun prune(root: Path, keep: Set<String>) {
         if (!Files.isDirectory(root)) return
@@ -1232,14 +1302,56 @@ internal class DexExternalLibsTask(
         DexArchives.clearDir(outDexDir); Files.createDirectories(outDexDir)
         // The whole classpath IS the D8 program (so cross-library desugaring resolves); android.jar is the library.
         // Forked big-heap when available (GC-free), else in-process; D8's internal pool parallelizes across cores.
+        // Strip @kotlin.Metadata from each Kotlin library first so the bundled D8's older kotlin-metadata parser
+        // doesn't warn per class (and can't hit the rewriter drop path); pure-Java jars pass through untouched.
+        // The strip is CONTENT-ADDRESSED (a library is immutable, so it is stripped ONCE per machine into the
+        // shared `stripped-libs` cache and reused across builds/cleans/projects — a dep change re-strips only the
+        // genuinely new jars) and PARALLEL across cores, so it is not a serial re-jar of the whole classpath on
+        // every cache miss.
+        val hc = DexArchives.HashCache(stateDir)
+        val hashOf = jars.associateWith { hc.hashOf(it) }   // serial (HashCache isn't thread-safe) but cheap: path+size+mtime
+        hc.flush()
+        val stripCache = cacheRoot?.resolveSibling("stripped-libs")?.also { runCatching { Files.createDirectories(it) } }
+        val stripTmp = outDexDir.resolveSibling("${outDexDir.fileName}.stripping")
+        DexArchives.clearDir(stripTmp); Files.createDirectories(stripTmp)
         val threads = Runtime.getRuntime().availableProcessors().coerceIn(1, 8)
-        val r = dexer.dex(jars, androidJar, minApi, release, outDexDir, threads, desugaredLibConfig)
+        val programs = coroutineScope {
+            val sem = Semaphore(threads)
+            jars.map { j ->
+                async(Dispatchers.IO) { sem.withPermit { ctx.checkCanceled(); strippedProgram(j, hashOf.getValue(j), stripCache, stripTmp) } }
+            }.awaitAll()
+        }
+        val r = try {
+            dexer.dex(programs, androidJar, minApi, release, outDexDir, threads, desugaredLibConfig)
+        } finally {
+            DexArchives.clearDir(stripTmp)   // per-build scratch; the reusable stripped jars live in stripCache
+        }
         r.log.forEach(ctx.logger()); ctx.reportToolDiagnostics("d8", r.log, DiagnosticKind.DEX)
         if (!r.success) return TaskResult.Failed(DexDiagnostics.firstError(r.log) ?: "external dex failed")
         if (!DexArchives.hasDex(outDexDir)) return TaskResult.Failed("external dex produced no output for ${jars.size} libs")
         if (cached != null) runCatching { DexArchives.clearDir(cached); DexArchives.publishToCache(outDexDir, cached) }
         ctx.logger()("${name.value}: dexed ${jars.size} external libraries -> indexed dex")
         return TaskResult.Success
+    }
+
+    /**
+     * The D8 program for library [jar]: a `@kotlin.Metadata`-stripped copy for a Kotlin library, the [jar]
+     * itself for a pure-Java one (never re-jarred). Stripped copies are content-addressed at
+     * `stripCache/<hash>.jar` and reused across builds/projects (an immutable library is stripped once); the
+     * shared write is staged in [tmpDir] then atomically moved so a concurrent stripper can't see a partial jar.
+     * Falls back to a per-build temp when there's no [stripCache].
+     */
+    private fun strippedProgram(jar: Path, hash: String, stripCache: Path?, tmpDir: Path): Path {
+        stripCache?.resolve("$hash.jar")?.let { if (Files.isRegularFile(it)) return it }
+        val tmp = Files.createTempFile(tmpDir, "$hash-", ".jar")
+        val out = DexArchives.strippedJar(jar, tmp)
+        if (out !== tmp) { runCatching { Files.deleteIfExists(tmp) }; return jar }  // pure-Java: nothing written
+        val target = stripCache?.resolve("$hash.jar") ?: return tmp
+        return try {
+            Files.move(tmp, target, StandardCopyOption.ATOMIC_MOVE); target
+        } catch (_: Exception) {
+            if (Files.isRegularFile(target)) { runCatching { Files.deleteIfExists(tmp) }; target } else tmp
+        }
     }
 
     /** Content-address by the library set (path+size+mtime-cached content hashes) + dexing params + format. */

@@ -55,6 +55,21 @@ class KotlinSignatureHelpTest {
         assertEquals(null, help("Use.kt", code))
     }
 
+    @Test
+    fun namedArgumentMarksThatParameterAlreadyNamed() {
+        // `count` is passed by name, so it should be flagged already-named (the popup dims it); `name` isn't.
+        val code = "package demo\n" +
+            "fun greet(name: String, count: Int) {}\n" +
+            "fun m() { greet(count = 1, |CARET|) }\n"
+        val h = help("Use.kt", code)
+        assertNotNull(h, "expected signature help inside greet(...)")
+        val active = h.signatures[h.activeSignature]
+        val nameParam = active.parameters.first { it.label.contains("name") }
+        val countParam = active.parameters.first { it.label.contains("count") }
+        assertEquals(true, countParam.alreadyNamed, "count was supplied by name")
+        assertEquals(false, nameParam.alreadyNamed, "name was not supplied yet")
+    }
+
     companion object {
         val srcDir: Path = tempProject(mapOf(
             "Seed.kt" to "package demo\n",

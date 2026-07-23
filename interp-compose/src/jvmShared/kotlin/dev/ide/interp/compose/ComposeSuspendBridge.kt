@@ -3,6 +3,7 @@ package dev.ide.interp.compose
 import dev.ide.interp.InterpretedLambda
 import dev.ide.interp.SuspendBridge
 import dev.ide.interp.SuspendContext
+import kotlinx.coroutines.CoroutineExceptionHandler
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
@@ -33,12 +34,19 @@ import kotlin.coroutines.resume
  */
 class ComposeSuspendBridge : SuspendBridge {
 
+    /** Absorbs anything that escapes a bridge coroutine's own try/catch, so it never reaches the thread's default
+     *  uncaught-exception handler (which crashes the process). A cancellation is normal teardown and ignored. */
+    private val uncaught = CoroutineExceptionHandler { _, _ -> }
+
     override fun runSuspending(lambda: InterpretedLambda, args: List<Any?>): Any? {
         @Suppress("UNCHECKED_CAST")
         val continuation = args.last() as Continuation<Any?>
         val blockArgs = args.dropLast(1) // strip the trailing Continuation; the receiver/value params remain
-        // Child of the caller's Job (its context carries it) → Compose's cancellation propagates in.
-        CoroutineScope(continuation.context).launch(Dispatchers.Default) {
+        // Child of the caller's Job (its context carries it) → Compose's cancellation propagates in. A last-resort
+        // [CoroutineExceptionHandler] guarantees nothing from this scope reaches the thread's default uncaught
+        // handler (which would crash the whole IDE — the preview runs in-process); the inner catch already
+        // degrades the common cases, this covers anything that escapes it.
+        CoroutineScope(continuation.context + uncaught).launch(Dispatchers.Default) {
             try {
                 runInterruptible(Dispatchers.Default) {
                     SuspendContext.runManaged { lambda.invoke(blockArgs) }
@@ -49,10 +57,11 @@ class ComposeSuspendBridge : SuspendBridge {
                 // Cancelled by Compose: the runtime already resumed the caller's continuation — never double-resume.
                 throw c
             } catch (t: Throwable) {
-                // A suspend call we can't model, or an interpreter error mid-block: degrade — complete the effect
-                // normally so the (partial) preview stands, rather than crashing the composition. Guarded against
-                // a resume race with a just-fired cancellation.
-                if (t is VirtualMachineError) throw t
+                // A suspend call we can't model, an interpreter error, or a StackOverflow/OutOfMemory from runaway
+                // user code inside the effect: degrade — complete the effect normally so the (partial) preview
+                // stands, rather than crashing the app off a bare coroutine with no handler. Contain Error too
+                // (previously a VirtualMachineError was rethrown here, which killed the IDE). Guarded against a
+                // resume race with a just-fired cancellation.
                 runCatching { continuation.resume(Unit) }
             }
         }

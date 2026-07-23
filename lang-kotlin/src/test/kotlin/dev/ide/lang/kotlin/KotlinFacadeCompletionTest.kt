@@ -76,7 +76,7 @@ class KotlinFacadeCompletionTest {
         private val fakeIndex = object : IndexService {
             override fun <V : Any> exact(id: IndexId, key: String): Sequence<V> = when (id) {
                 CLASS_NAMES -> classNames[key]?.asSequence()?.map { it as V } ?: emptySequence()
-                TYPE_SHAPE -> if (key in shapedTypes) sequenceOf(TypeShape(emptyList(), emptyList(), emptyList(), emptyList()) as V) else emptySequence()
+                TYPE_SHAPE -> if (key in shapedTypes) sequenceOf(TypeShape(emptyList(), emptyList(), emptyList(), emptyList(), emptyList()) as V) else emptySequence()
                 else -> emptySequence()
             }
 

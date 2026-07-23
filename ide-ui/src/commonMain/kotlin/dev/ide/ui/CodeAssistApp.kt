@@ -9,6 +9,7 @@ import androidx.compose.foundation.layout.safeContent
 import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -20,26 +21,24 @@ import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontFamily
+import dev.ide.ui.ads.AdController
+import dev.ide.ui.ads.LocalAds
+import dev.ide.ui.backend.AdHost
 import dev.ide.ui.backend.FileActions
 import dev.ide.ui.backend.IdeBackend
-import dev.ide.ui.components.AnalyticsConsentSheet
 import dev.ide.ui.components.BetaInfo
-import dev.ide.ui.components.ErrorDialog
-import dev.ide.ui.components.MigrationNotice
 import dev.ide.ui.components.OnboardingSheet
-import dev.ide.ui.components.PermissionDialog
-import dev.ide.ui.components.RunConflictDialog
 import dev.ide.ui.generated.resources.Res
 import dev.ide.ui.generated.resources.import_unrecognized
 import dev.ide.ui.generated.resources.settings_title
 import dev.ide.ui.navigation.ScreenHost
 import dev.ide.ui.platform.PlatformBackHandler
+import dev.ide.ui.platform.ioDispatcher
 import dev.ide.ui.screens.CreateProjectScreen
 import dev.ide.ui.screens.CodeStyleScreen
 import dev.ide.ui.screens.EditorScreen
 import dev.ide.ui.screens.ExportProjectScreen
 import dev.ide.ui.screens.HomeScreen
-import dev.ide.ui.screens.ImportErrorDialog
 import dev.ide.ui.screens.ImportPreviewScreen
 import dev.ide.ui.screens.LearnScreen
 import dev.ide.ui.screens.LessonPlayerScreen
@@ -53,6 +52,7 @@ import dev.ide.ui.screens.ModuleConfigScreen
 import dev.ide.ui.screens.ModulesTab
 import dev.ide.ui.screens.ProjectPickerScreen
 import dev.ide.ui.screens.RunScreen
+import dev.ide.ui.screens.PluginsScreen
 import dev.ide.ui.screens.SdkManagerScreen
 import dev.ide.ui.screens.SettingsHubScreen
 import dev.ide.ui.screens.SettingsScreen
@@ -63,13 +63,26 @@ import dev.ide.ui.theme.CodeAssistTheme
 import dev.ide.ui.theme.rememberJetBrainsMono
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.collectLatest
+import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.drop
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import org.jetbrains.compose.resources.stringResource
 import kotlin.time.Duration.Companion.milliseconds
 
 /** Preference key remembering the last author entered in the Export-project dialog (not per-project). */
 private const val EXPORT_AUTHOR_PREF = "export.author"
+
+/** App preference holding the workspace root of the project on screen when the app was last used, so a process
+ *  kill (or a normal relaunch) resumes back into it instead of the picker. Blank = the picker was showing. */
+private const val LAST_PROJECT_PREF = "session.lastProject"
+
+/** App preference gating the resume-last-project behavior. Unset/anything-but-"false" = on (the default). */
+private const val REOPEN_LAST_PROJECT_PREF = "session.reopenLastProject"
+
+/** The open-tab session bits that, when any change, should reschedule the debounced tab save (so the persisted
+ *  session tracks the caret / scroll / view surface, not just which files are open). */
+private data class TabSessionKey(val path: String, val caret: Int, val scrollLine: Int, val viewMode: EditorViewMode)
 
 /**
  * Root of the reusable IDE UI. Hosts pick the toolkit (Compose Desktop window, Android activity) and
@@ -86,11 +99,16 @@ fun CodeAssistApp(
     uiFont: FontFamily = FontFamily.SansSerif,
     codeFont: FontFamily = rememberJetBrainsMono(),
     fileActions: FileActions = FileActions.None,
+    /** Platform advertising bridge (AdMob on Android, [AdHost.None] on desktop). Ads render only through this. */
+    adHost: AdHost = AdHost.None,
     composePreviewHost: ComposePreviewHost? = null,
     /** A `.caproj` path handed in from outside the app (Android "Open with"). When it changes to a
      *  non-null value, the import preview opens for it. Null on desktop / normal launch. */
     importPackagePath: String? = null,
 ) {
+    // The AI agent's chat panel is a UI-plugin-contributed RIGHT tool window; register it once, before any
+    // surface triggers UiPluginHost.ensureLoaded() (the command palette / editor sheets do so lazily).
+    remember { dev.ide.ui.ext.UiPluginHost.register(dev.ide.ui.components.AgentUiPlugin); Unit }
     // Persisted IDE settings drive the theme (and seed the editor's live prefs). Re-read after the Settings
     // screen writes; appearance changes then take effect immediately.
     var settings by remember { mutableStateOf(backend.settings.settings()) }
@@ -114,6 +132,8 @@ fun CodeAssistApp(
     val storeEnabled = remember {
         backend.settings.preference("feature.projectsStore")?.toBooleanStrictOrNull() ?: FeatureFlags.PROJECTS_STORE
     }
+    // Ad gating + state, shared with every screen through [LocalAds]. Recreated only if the host swaps.
+    val adController = remember(backend, adHost) { AdController(backend, adHost) }
     var configModule by remember { mutableStateOf<String?>(null) }
     var modulesTab by remember { mutableStateOf(ModulesTab.Settings) }
     var keystoreImportPath by remember { mutableStateOf<String?>(null) }
@@ -145,6 +165,15 @@ fun CodeAssistApp(
     val importUnrecognizedMsg = stringResource(Res.string.import_unrecognized)
     val scope = rememberCoroutineScope()
 
+    // Session resume across a process kill: the project that was on screen last run (captured up-front, before
+    // any effect runs, so the maintenance effect below can't clear it before the resume effect reads it) and
+    // whether resume is enabled (default on). [lastPersistedProject] mirrors the last value written so the
+    // maintenance effect writes only on an actual picker ⇆ project change; it starts at the picker sentinel so
+    // the brief "picker → resumed project" startup window never rewrites (and so can't clear) the on-disk pref.
+    val resumeProject = remember { backend.settings.preference(LAST_PROJECT_PREF)?.takeIf { it.isNotBlank() } }
+    val reopenLast = remember { backend.settings.preference(REOPEN_LAST_PROJECT_PREF)?.toBooleanStrictOrNull() != false }
+    var lastPersistedProject by remember { mutableStateOf("") }
+
     // Create a project backup zip and hand it to the host's share/save sheet.
     val backupAndShare: suspend () -> Unit =
         { backend.projects.backupProjects()?.let { fileActions.share(it) } }
@@ -165,11 +194,39 @@ fun CodeAssistApp(
         if (!state.restoreTabs()) {
             state.defaultFile()?.let { node -> node.filePath?.let { state.open(it, node.name) } }
         }
-        snapshotFlow { state.openFiles.map { it.path } to state.activeIndex }.drop(1)
-            .collectLatest {
-                delay(300.milliseconds)
-                state.backend.projects.saveOpenTabs(state.tabsSnapshot())
-            }
+        snapshotFlow {
+            // Re-emit when the tab set, the active tab, OR any tab's caret / scroll / view mode changes, so the
+            // persisted session records where the user is — not only which files are open. `drop(1)` skips the
+            // just-restored state; `collectLatest` + the debounce coalesce a burst of edits/scrolls into one
+            // write once the user settles.
+            state.openFiles.map {
+                TabSessionKey(it.path, it.session.selection.start, it.session.viewportTopLine, it.viewMode)
+            } to state.activeIndex
+        }.drop(1).collectLatest {
+            delay(600.milliseconds)
+            val snapshot = state.tabsSnapshot() // read the Compose session state on the main thread…
+            withContext(ioDispatcher) { state.backend.projects.saveOpenTabs(snapshot) } // …write off it
+        }
+    }
+
+    // Editor-lifecycle events for plugins: the engine republishes these on the message bus
+    // (IdeEventTopics.EDITOR) and they are no-ops when nothing subscribes. The focused file, whenever it
+    // changes (null once the last tab closes):
+    LaunchedEffect(state) {
+        snapshotFlow { state.active?.path }
+            .distinctUntilChanged()
+            .collect { state.backend.editor.onActiveEditorChanged(it) }
+    }
+    // The caret/selection, debounced so it fires on settle rather than on every keystroke (collectLatest
+    // cancels the pending delay when the selection moves again).
+    LaunchedEffect(state) {
+        snapshotFlow {
+            state.active?.let { Triple(it.path, it.session.selection.start, it.session.selection.end) }
+        }.distinctUntilChanged().collectLatest { sel ->
+            if (sel == null) return@collectLatest
+            delay(150.milliseconds)
+            state.backend.editor.onSelectionChanged(sel.first, sel.second, sel.third)
+        }
     }
 
     // Persist the file-tree expansion (debounced) so the tree reopens the same way next launch — keyed per
@@ -183,6 +240,34 @@ fun CodeAssistApp(
     }
     // A successful create/open advances the epoch — land in the editor on the new project.
     LaunchedEffect(epoch) { if (epoch > 0) screen = Screen.Editor }
+
+    // Resume the last project on a cold launch: reopen whatever project was on screen when the app was last
+    // used, so a background kill (or a normal relaunch) comes back into the editor instead of the picker.
+    // One-shot; opening bumps the epoch → the effect above lands in the editor and `restoreTabs()` reopens the
+    // tabs where the user left them. A deleted/missing project just falls through to the picker.
+    LaunchedEffect(Unit) {
+        val last = resumeProject
+        if (!reopenLast || last == null) return@LaunchedEffect
+        if (backend.projects.projectEpoch.value > 0) return@LaunchedEffect // already in a project
+        val exists = withContext(ioDispatcher) { backend.projects.projects().any { it.rootPath == last } }
+        if (exists) backend.projects.openProject(last)
+    }
+
+    // Track which project (if any) is on screen for the resume effect above: clear it on the picker (so quitting
+    // from the picker reopens to the picker), otherwise record the active project's root while any of its screens
+    // is shown (Editor, Settings, Run, Dependencies…). Compares against the in-memory mirror so it writes only on
+    // a real picker ⇆ project transition, never per navigation.
+    LaunchedEffect(screen, epoch) {
+        val target = when {
+            screen == Screen.Projects -> ""
+            epoch > 0 -> backend.project.rootPath
+            else -> return@LaunchedEffect
+        }
+        if (target != lastPersistedProject) {
+            lastPersistedProject = target
+            backend.settings.setPreference(LAST_PROJECT_PREF, target)
+        }
+    }
 
     // A `.caproj` handed in from outside the app ("Open with"): read its preview and open the import screen.
     // Keyed on the path (the host makes each hand-off a distinct path) so it fires once per inbound package.
@@ -203,9 +288,15 @@ fun CodeAssistApp(
         if (runConsole != null && screen == Screen.Editor) screen = Screen.Run
     }
 
-    // External file writes (e.g. an "Open with" import the UI didn't drive) re-read the tree.
+    // External file writes (e.g. an agent edit, or an "Open with" import the UI didn't drive) re-read the tree
+    // AND re-sync any clean open editor tab whose file changed on disk.
     val fsEpoch by backend.files.fileSystemEpoch.collectAsState()
-    LaunchedEffect(state, fsEpoch) { if (fsEpoch > 0) state.refreshTree() }
+    LaunchedEffect(state, fsEpoch) {
+        if (fsEpoch > 0) {
+            state.refreshTree()
+            state.syncOpenTabsFromDisk()
+        }
+    }
 
     // Theme + accent + code font come from settings; the Settings screen (and the quick toggle) update them
     // live. "system" follows the OS dark-mode signal.
@@ -248,7 +339,8 @@ fun CodeAssistApp(
                 // The keystore Create/Import sub-screens step back to their manager, not all the way out.
                 screen == Screen.KeystoreCreate || screen == Screen.KeystoreImport -> screen = Screen.KeystoreManager
                 // The hub's sub-screens step back to the hub; the keystore manager honours its entry origin.
-                screen == Screen.SdkManager || screen == Screen.Settings || screen == Screen.CodeStyle -> screen = Screen.Hub
+                screen == Screen.SdkManager || screen == Screen.Settings || screen == Screen.CodeStyle ||
+                    screen == Screen.Plugins -> screen = Screen.Hub
                 screen == Screen.KeystoreManager -> screen = keystoreReturn
                 // The hub returns to wherever it was opened from (picker or editor).
                 screen == Screen.Hub -> screen = hubReturn
@@ -274,6 +366,7 @@ fun CodeAssistApp(
         }
         // The brand background fills the whole window edge-to-edge (behind the system bars); content is
         // then inset by `safeDrawing`. On desktop these insets are empty, so this is a no-op there.
+        CompositionLocalProvider(LocalAds provides adController) {
         Box(Modifier.fillMaxSize().background(Ca.colors.bg)) {
             Box(Modifier.fillMaxSize().windowInsetsPadding(WindowInsets.safeDrawing)) {
                 ScreenHost(screen, Modifier.fillMaxSize()) { s ->
@@ -474,6 +567,11 @@ fun CodeAssistApp(
                             onBack = { screen = Screen.Hub },
                         )
 
+                        Screen.Plugins -> PluginsScreen(
+                            backend = state.backend,
+                            onBack = { screen = Screen.Hub },
+                        )
+
                         Screen.CodeStyle -> CodeStyleScreen(
                             backend = state.backend,
                             // The live formatter preview is engine-backed: available when the hub (hence Code
@@ -526,6 +624,7 @@ fun CodeAssistApp(
                             onOpenSdkManager = { screen = Screen.SdkManager },
                             // The hub reached from the editor is a project context; from the picker it isn't.
                             onOpenKeystoreManager = { keystoreReturn = Screen.Hub; keystoreInProject = hubReturn == Screen.Editor; screen = Screen.KeystoreManager },
+                            onOpenPlugins = { screen = Screen.Plugins },
                         )
 
                         // Settings — reached from the hub. With a project open (hub entered from the editor) the
@@ -545,45 +644,30 @@ fun CodeAssistApp(
                     }
                 }
             }
-            // Upgrade notice first (the build-system migration warning), then the feature tour — both over
-            // the picker only, one at a time.
-            MigrationNotice(
-                visible = showMigration && screen == Screen.Projects && homeTab == HomeTab.Projects,
+            AppOverlays(
+                backend = backend,
+                state = state,
+                fileActions = fileActions,
+                onPicker = screen == Screen.Projects && homeTab == HomeTab.Projects,
+                showMigration = showMigration,
                 onBackup = backupAndShare,
-                onDismiss = {
+                onDismissMigration = {
                     showMigration = false
                     backend.settings.setPreference("migration.acknowledged", "true")
                 },
-            )
-            OnboardingSheet(
-                visible = showOnboarding && !showMigration && screen == Screen.Projects && homeTab == HomeTab.Projects,
-                // Final CTA: send the user straight into the Create-Project flow (the same screen the picker's
-                // "New Project" card opens) so the tour ends on a concrete action.
+                showOnboarding = showOnboarding,
                 onGetStarted = { screen = Screen.CreateProject },
-                onFinish = {
+                onFinishOnboarding = {
                     showOnboarding = false
                     backend.settings.setPreference("onboarding.seen", "true")
                 },
+                showAnalytics = showAnalytics,
+                onAllowAnalytics = { showAnalytics = false; backend.diagnostics.setAnalyticsConsent(true) },
+                onDeclineAnalytics = { showAnalytics = false; backend.diagnostics.setAnalyticsConsent(false) },
+                importError = importError,
+                onDismissImportError = { importError = null },
             )
-            // Opt-in analytics consent — last of the first-launch sheets, after onboarding/migration.
-            AnalyticsConsentSheet(
-                visible = showAnalytics && !showOnboarding && !showMigration && screen == Screen.Projects && homeTab == HomeTab.Projects,
-                onAllow = { showAnalytics = false; backend.diagnostics.setAnalyticsConsent(true) },
-                onDecline = { showAnalytics = false; backend.diagnostics.setAnalyticsConsent(false) },
-                onLearnMore = if (fileActions.canOpenUrl) {
-                    { fileActions.openUrl(BetaInfo.PRIVACY_URL) }
-                } else null,
-            )
-            // The run sandbox's permission prompt — overlays everything while a guarded program is blocked.
-            PermissionDialog(backend)
-            // "Already running" confirmation — raised when a new Run is requested while a build/program is
-            // still in flight (e.g. a runaway loop); offers Stop-and-Run with a remembered choice.
-            RunConflictDialog(state)
-            // IntelliJ-style non-fatal error dialog — overlays everything when the engine reports an
-            // unexpected error or an uncaught exception is intercepted (the app keeps running).
-            ErrorDialog(backend)
-            // "Unrecognized file" notice when a picked/opened file wasn't a readable .caproj package.
-            ImportErrorDialog(importError) { importError = null }
+        }
         }
     }
 }

@@ -1,0 +1,18 @@
+# 🚀 CodeAssist 3.5.2
+
+**APP BUNDLE (.aab) BUILDS**
+- **Building a signed `.aab` App Bundle works again.** It previously failed on-device with an `IncompatibleClassChangeError` from bundletool. The bundled Guava flavor is now the correct one, so `.aab` builds complete.
+
+**KOTLIN BUILD**
+- **Fixed a debug build that sometimes failed with "unresolved reference"** to a function or class defined in another file (for example a `@Composable` in your theme file). It only struck on incremental rebuilds and would mysteriously fix itself after a full or release build. Incremental builds now recover correctly instead of getting stuck.
+- **Build errors are no longer silently swallowed.** On Compose projects the on-device compiler could report a build as successful when it actually had errors, leaving you with a broken build and no message. Real compile errors are now always surfaced.
+
+**EDITOR**
+- **Horizontal scrolling stays in the editor.** Scrolling your code sideways no longer drags the navigation drawer out mid-swipe. The drawer opens only when you start a fresh swipe with the editor already scrolled to the left, or when you swipe in from the screen edge.
+
+**COMPOSE & LAYOUT PREVIEW**
+- Constants like `Build.VERSION.SDK_INT` (and other nested-class values) now resolve when rendering a preview.
+- `@file:Suppress(...)` at the top of a file is now honored by the editor's inspections.
+- **Heads-up:** previews of your own custom `View` subclasses now show a placeholder instead of rendering, to comply with Google Play's policy on loading user-compiled code. Framework and library layouts still render normally.
+
+Full changelog: https://github.com/tyron12233/CodeAssist/releases/tag/v3.5.2

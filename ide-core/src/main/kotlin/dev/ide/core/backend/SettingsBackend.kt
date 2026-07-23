@@ -17,6 +17,7 @@ import dev.ide.ui.backend.SettingsService
 import dev.ide.ui.backend.UiAccent
 import dev.ide.ui.backend.UiCodeStyle
 import dev.ide.ui.backend.UiInspection
+import dev.ide.ui.backend.UiPluginInfo
 import dev.ide.ui.backend.UiSeverity
 import dev.ide.ui.backend.UiSettingControl
 import dev.ide.ui.backend.UiSettings
@@ -36,6 +37,28 @@ internal class SettingsBackend(private val ctx: BackendContext) : SettingsServic
 
     override fun setPreference(key: String, value: String) {
         ctx.manager?.setPreference(key, value)
+    }
+
+    override fun pluginCatalog(): List<UiPluginInfo> {
+        val manager = ctx.manager ?: return emptyList()
+        val catalog = manager.env.pluginCatalog
+        val disabled = manager.disabledPlugins()
+        return catalog.all
+            .map { m ->
+                UiPluginInfo(
+                    id = m.id, name = m.name, version = m.version, description = m.description,
+                    essential = m.essential, enabled = m.essential || m.id !in disabled, dependsOn = m.dependsOn,
+                )
+            }
+            .sortedWith(compareByDescending<UiPluginInfo> { it.essential }.thenBy { it.name.lowercase() })
+    }
+
+    override fun setPluginEnabled(id: String, enabled: Boolean) {
+        val manager = ctx.manager ?: return
+        if (manager.env.pluginCatalog.isEssential(id)) return  // essentials can't be disabled
+        val disabled = manager.disabledPlugins().toMutableSet()
+        if (enabled) disabled.remove(id) else disabled.add(id)
+        manager.setDisabledPlugins(disabled)
     }
 
     private val settingsStore = SettingsStore(
@@ -237,9 +260,20 @@ internal class SettingsBackend(private val ctx: BackendContext) : SettingsServic
         val out = ArrayList<UiSettingControl>()
         out += UiSettingControl.Toggle(
             BuiltInSettingsPages.SEPARATE_PROCESS, "Build in a separate process",
-            "Run builds and your program in an isolated process so an out-of-memory crash can't take down the IDE. Off = build in-process (uses less memory, no isolation). Takes effect the next time you open a project.",
+            "Run builds and your program in an isolated process so an out-of-memory crash can't take down the IDE. Off = build in-process (uses less memory, no isolation). Needs notification permission (the isolated process shows a progress notification); without it, builds run in-process. Takes effect the next time you open a project.",
             sepOn, false, null,
         )
+
+        // Re-request the notification permission the isolated build process needs. Shown only where separate-
+        // process builds are possible (Android); handled entirely in the SettingsScreen (it needs the platform
+        // permission launcher), so this descriptor carries no engine-side effect.
+        if (ctx.separateProcessBuildsSupported) {
+            out += UiSettingControl.Action(
+                BuiltInSettingsPages.BUILD_NOTIFICATIONS, "Build notifications",
+                "Show a progress notification while a build or your program runs in the separate process. Required for isolated builds; if it's off, builds run inside the app.",
+                "Enable", false, false, null,
+            )
+        }
 
         val modeDesc = when {
             mode == BuiltInSettingsPages.R8_MODE_INPROCESS ->

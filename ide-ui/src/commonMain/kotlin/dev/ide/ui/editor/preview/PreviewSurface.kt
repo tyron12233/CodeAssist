@@ -126,6 +126,10 @@ private fun deviceLabel(label: String): String = when (label) {
  * button to recentre). A top glass bar carries device / orientation / night plus [topBarExtras]; the bottom
  * bar holds zoom / fit plus [bottomBarExtras]. The view-specific content is drawn inside the card by [card]
  * (given the device viewport in px and its density); free-floating panels go in [overlays].
+ *
+ * In [split] mode (the editor+preview side-by-side/stacked view) the chrome bars are hidden and the fit
+ * scale tracks WIDTH only, so dragging the split divider (which changes the pane's height) no longer
+ * rescales the preview — see [split].
  */
 @Composable
 fun PreviewSurface(
@@ -141,6 +145,11 @@ fun PreviewSurface(
     /** Size the card to its content (a Compose `@Preview` with no device/size declared wraps the composable),
      *  bounded by the selected device as a max. Ignored when [deviceOverride] dictates a fixed size. */
     wrapContent: Boolean = false,
+    /** Rendered inside the Split view (editor + preview together). Hides the top/bottom chrome bars (the pane
+     *  is small and shares space with the editor) and makes the fit scale fit-to-WIDTH only, so the preview
+     *  stays a deterministic size while the split divider is dragged vertically instead of rescaling on it.
+     *  Pan + pinch-zoom stay available without the bars. Full-screen Preview leaves this false. */
+    split: Boolean = false,
     topBarExtras: @Composable RowScope.(compact: Boolean) -> Unit = {},
     bottomBarExtras: @Composable RowScope.(compact: Boolean) -> Unit = {},
     overlays: @Composable BoxScope.() -> Unit = {},
@@ -164,7 +173,13 @@ fun PreviewSurface(
         // Wrap mode (a Compose @Preview with no device/size) sizes the card to the composable, capped at the
         // device viewport as a max. The fit math needs a known size, so wrap renders at 1:1 (still pan/zoomable).
         val wrap = wrapContent && deviceOverride == null
-        val fit = min((maxWidth.value * 0.9f) / devWdp, (maxHeight.value * 0.86f) / devHdp).coerceIn(0.1f, 4f)
+        // Fit-to-window scale. Split mode fits to WIDTH only: the pane's height is what the user drags (the
+        // split divider), and folding height into the fit would rescale the whole preview on every drag —
+        // width-only keeps the scale deterministic as the pane is resized vertically (the card keeps its
+        // device aspect ratio via requiredSize + uniform scale, and simply pans/clips past the pane edge).
+        // Full-screen preview fits both axes so the whole device stays framed under the chrome bars.
+        val widthFit = (maxWidth.value * 0.9f) / devWdp
+        val fit = (if (split) widthFit else min(widthFit, (maxHeight.value * 0.86f) / devHdp)).coerceIn(0.1f, 4f)
         val fitState = rememberUpdatedState(if (wrap) 1f else fit)
         val scale = if (state.userScale <= 0f) (if (wrap) 1f else fit) else state.userScale
 
@@ -225,7 +240,8 @@ fun PreviewSurface(
 
         // Top bar: device / orientation / night + view-specific extras. On a narrow pane it collapses to a
         // compact icon/dimension-only form so the cluster shrinks with the surface instead of squishing.
-        GlassBar(Modifier.align(Alignment.TopCenter).padding(Ca.spacing.s3)) {
+        // Hidden in split mode (the pane is small and shared with the editor); pan/pinch-zoom still work.
+        if (!split) GlassBar(Modifier.align(Alignment.TopCenter).padding(Ca.spacing.s3)) {
             // When a @Preview dictates the device the pill is non-cycling (the device is fixed by the annotation).
             PillButton({ if (deviceOverride == null) state.deviceIndex = (state.deviceIndex + 1) % PREVIEW_DEVICES.size }) {
                 Text(
@@ -250,8 +266,8 @@ fun PreviewSurface(
             topBarExtras(compact)
         }
 
-        // Bottom bar: zoom / fit + view-specific extras.
-        GlassBar(Modifier.align(Alignment.BottomCenter).padding(Ca.spacing.s4)) {
+        // Bottom bar: zoom / fit + view-specific extras. Hidden in split mode (see the top bar).
+        if (!split) GlassBar(Modifier.align(Alignment.BottomCenter).padding(Ca.spacing.s4)) {
             PillButton({ val b = if (state.userScale <= 0f) fit else state.userScale; state.userScale = (b / 1.25f).coerceIn(0.2f, 5f) }) { MinusGlyph() }
             Text("${(scale * 100f).roundToInt()}%", color = Ca.colors.textSecondary, style = Ca.type.caption, modifier = Modifier.width(44.dp), textAlign = TextAlign.Center)
             PillButton({ val b = if (state.userScale <= 0f) fit else state.userScale; state.userScale = (b * 1.25f).coerceIn(0.2f, 5f) }) { Icon(CaIcons.plus, stringResource(Res.string.preview_zoom_in), Modifier.size(16.dp), tint = Ca.colors.textPrimary) }

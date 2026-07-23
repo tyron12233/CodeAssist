@@ -3,7 +3,9 @@ package dev.ide.ui.screens
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -44,6 +46,7 @@ import dev.ide.ui.generated.resources.Res
 import dev.ide.ui.generated.resources.logs_copy_all
 import dev.ide.ui.generated.resources.logs_empty
 import dev.ide.ui.generated.resources.logs_filter_all
+import dev.ide.ui.generated.resources.logs_filter_all_plugins
 import dev.ide.ui.generated.resources.logs_filter_errors
 import dev.ide.ui.generated.resources.logs_filter_hint
 import dev.ide.ui.generated.resources.logs_filter_warnings
@@ -83,6 +86,8 @@ fun LogsScreen(
     var filter by remember { mutableStateOf(LogFilter.All) }
     var query by remember { mutableStateOf("") }
     var paused by remember { mutableStateOf(false) }
+    // The source (plugin id) to show, or null for all. Only surfaced when some record carries a source.
+    var sourceFilter by remember { mutableStateOf<String?>(null) }
     val scope = rememberCoroutineScope()
     val clipboard = LocalClipboardManager.current
 
@@ -96,10 +101,15 @@ fun LogsScreen(
     }
 
     val q = query.trim()
-    val shown = remember(all, filter, q) {
+    val sources = remember(all) { all.mapNotNull { it.source }.distinct().sorted() }
+    // Drop a stale selection if that plugin's records have aged out of the ring buffer.
+    if (sourceFilter != null && sourceFilter !in sources) sourceFilter = null
+    val shown = remember(all, filter, q, sourceFilter) {
         all.asReversed().filter { e ->
             filter.keep(e.level) &&
-                (q.isEmpty() || e.message.contains(q, true) || e.tag.contains(q, true) || (e.stackTrace?.contains(q, true) == true))
+                (sourceFilter == null || e.source == sourceFilter) &&
+                (q.isEmpty() || e.message.contains(q, true) || e.tag.contains(q, true) ||
+                    (e.source?.contains(q, true) == true) || (e.stackTrace?.contains(q, true) == true))
         }
     }
 
@@ -154,6 +164,17 @@ fun LogsScreen(
             LogFilter.entries.forEach { f -> FilterChip(stringResource(f.labelRes), f == filter) { filter = f } }
         }
 
+        // Per-plugin filter chips — only shown once some record carries a source (a plugin logged something).
+        if (sources.isNotEmpty()) {
+            Row(
+                Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(horizontal = 14.dp, vertical = 2.dp),
+                horizontalArrangement = Arrangement.spacedBy(6.dp),
+            ) {
+                FilterChip(stringResource(Res.string.logs_filter_all_plugins), sourceFilter == null) { sourceFilter = null }
+                sources.forEach { s -> FilterChip(s, sourceFilter == s) { sourceFilter = if (sourceFilter == s) null else s } }
+            }
+        }
+
         Box(Modifier.fillMaxWidth().height(1.dp).background(Ca.colors.separator))
 
         // Records
@@ -200,13 +221,16 @@ private fun LogRow(entry: UiLogEntry, reveal: (() -> Float)?, slotPx: Float) {
                 LevelBadge(entry.level, color)
                 Column(Modifier.weight(1f)) {
                     Text(entry.message, color = Ca.colors.textPrimary, style = Ca.type.codeSmall)
-                    Text(
-                        entry.tag,
-                        color = Ca.colors.textTertiary,
-                        style = Ca.type.caption2,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                    )
+                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                        entry.source?.let { SourceBadge(it) }
+                        Text(
+                            entry.tag,
+                            color = Ca.colors.textTertiary,
+                            style = Ca.type.caption2,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                        )
+                    }
                 }
                 if (hasTrace) {
                     Icon(
@@ -219,7 +243,7 @@ private fun LogRow(entry: UiLogEntry, reveal: (() -> Float)?, slotPx: Float) {
             }
             if (expanded && entry.stackTrace != null) {
                 Text(
-                    entry.stackTrace,
+                    entry.stackTrace!!,
                     color = Ca.colors.textSecondary,
                     style = Ca.type.codeSmall,
                     modifier = Modifier.fillMaxWidth().padding(top = 6.dp, start = 4.dp)
@@ -240,6 +264,16 @@ private fun LogRow(entry: UiLogEntry, reveal: (() -> Float)?, slotPx: Float) {
                     .graphicsLayer { translationX = reveal() - slotPx },
             )
         }
+    }
+}
+
+/** A small pill naming the plugin that emitted a record, so plugin output is visually distinct from IDE logs. */
+@Composable
+private fun SourceBadge(source: String) {
+    Box(
+        Modifier.background(Ca.colors.accentSoft, RoundedCornerShape(Ca.radius.sm)).padding(horizontal = 5.dp, vertical = 1.dp),
+    ) {
+        Text(source, color = Ca.colors.accent, style = Ca.type.caption2, fontWeight = FontWeight.Medium, maxLines = 1)
     }
 }
 
@@ -292,6 +326,7 @@ private fun levelColor(level: String): Color = when (level) {
 }
 
 private fun renderForCopy(e: UiLogEntry): String = buildString {
-    append("${e.timeLabel} [${e.level}] ${e.tag} (${e.thread}): ${e.message}")
+    val origin = e.source?.let { "$it/" } ?: ""
+    append("${e.timeLabel} [${e.level}] $origin${e.tag} (${e.thread}): ${e.message}")
     e.stackTrace?.let { append('\n').append(it) }
 }

@@ -49,7 +49,11 @@ internal class SignatureHelpController(private val backend: IdeBackend, private 
         if (!focused) { help = null; return }
         val sel = session.selection
         val caret = sel.start
-        if (sel.start != sel.end || !caretInsideCall(session.doc.chars, caret)) {
+        // Arm inside a call's parens (foo(|)) OR — for XML — inside an attribute value (android:x="|"), where
+        // the hint describes the attribute's accepted values.
+        val armed = caretInsideCall(session.doc.chars, caret) ||
+            (path.endsWith(".xml") && caretInsideXmlAttributeValue(session.doc.chars, caret))
+        if (sel.start != sel.end || !armed) {
             help = null
             dismissed = false
             return

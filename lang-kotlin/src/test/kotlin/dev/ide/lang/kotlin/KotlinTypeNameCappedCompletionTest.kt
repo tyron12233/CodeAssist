@@ -16,23 +16,24 @@ import kotlin.test.assertTrue
 
 /**
  * The classpath `classNames` index answers a prefix with the top-N fuzzy-scored hits, so a broad prefix
- * returns a CAPPED page that a long-named type (`StringBuilder`) only scores into at a longer prefix. If the
+ * returns a CAPPED page that a long-named type (`Superwidget` here) only scores into at a longer prefix. If the
  * capped page is reported as the complete match set, the editor narrows it client-side as the user keeps
- * typing and NEVER re-queries — so `StringBuilder` never surfaces (typing `S`,`t`,`r`,… one by one) until the
+ * typing and NEVER re-queries — so the long type never surfaces (typing `S`,`u`,`p`,… one by one) until the
  * completion session is restarted (move the caret away and back). Regression: [KotlinSymbolService.typeNameCandidates]
  * must flag the capped page so the completion result is marked incomplete and the engine re-queries.
+ *
+ * NOTE: the deep example is a synthetic `com.example.Superwidget`, NOT a real stdlib type — `StringBuilder`
+ * and friends are default-in-scope simple types now, so they surface at `S` regardless of the index page.
  */
 class KotlinTypeNameCappedCompletionTest {
 
     private val CLASS_NAMES = IndexId("java.classNames")
 
-    // A large flat `S…` universe; `StringBuilder` sits deep so a short-prefix top-N page excludes it, exactly
+    // A large flat `S…` universe; `Superwidget` sits deep so a short-prefix top-N page excludes it, exactly
     // like the real fuzzy scorer ranking it below hundreds of shorter `S*` names until the prefix narrows.
     private val allTypes = buildList {
         repeat(500) { add("com.example.S${"a".repeat(1)}class$it") }
-        add("java.lang.StringBuilder")
-        add("java.lang.StringBuffer")
-        add("java.lang.String")
+        add("com.example.Superwidget")
     }
 
     private fun service() = KotlinSymbolService(
@@ -46,16 +47,16 @@ class KotlinTypeNameCappedCompletionTest {
         val svc = service()
         val broad = svc.typeNameCandidates("S", limit = 100)
         assertTrue(broad.capped, "a capped `S` page must be flagged incomplete so completion re-queries")
-        assertFalse(broad.symbols.any { it.name == "StringBuilder" },
-            "sanity: StringBuilder is beyond the capped `S` page in this fixture")
+        assertFalse(broad.symbols.any { it.name == "Superwidget" },
+            "sanity: Superwidget is beyond the capped `S` page in this fixture")
     }
 
     @Test
-    fun narrowedPrefixSurfacesStringBuilderAndIsComplete() {
+    fun narrowedPrefixSurfacesTheDeepTypeAndIsComplete() {
         val svc = service()
-        val narrow = svc.typeNameCandidates("StringBuil", limit = 100)
-        assertTrue(narrow.symbols.any { it.name == "StringBuilder" },
-            "StringBuilder must be offered once the prefix narrows; got ${narrow.symbols.map { it.name }.take(10)}")
+        val narrow = svc.typeNameCandidates("Superwid", limit = 100)
+        assertTrue(narrow.symbols.any { it.name == "Superwidget" },
+            "Superwidget must be offered once the prefix narrows; got ${narrow.symbols.map { it.name }.take(10)}")
         assertFalse(narrow.capped, "a small exact-ish page is complete, so the engine can narrow it locally")
     }
 
@@ -67,8 +68,8 @@ class KotlinTypeNameCappedCompletionTest {
             fuzzy(id, prefix, limit)
 
         // Mimic the real scorer: rank matches by name length (shorter = higher), return only the top [limit].
-        // At prefix "S" the 500 short synthetic names outrank the long `java.lang.String*` types, so the page
-        // fills to the cap without them; a longer prefix filters the noise out and they surface.
+        // At prefix "S" the 500 short synthetic names outrank the longer `Superwidget`, so the page fills to
+        // the cap without it; a longer prefix filters the noise out and it surfaces.
         override fun <V : Any> fuzzy(id: IndexId, pattern: String, limit: Int): Sequence<Hit<V>> {
             if (id != CLASS_NAMES) return emptySequence()
             val p = pattern.lowercase()

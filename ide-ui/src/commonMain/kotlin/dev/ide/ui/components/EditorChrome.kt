@@ -80,6 +80,7 @@ import dev.ide.ui.backend.IndexUiStatus
 import dev.ide.ui.backend.RunTaskOption
 import dev.ide.ui.backend.UiActionItem
 import dev.ide.ui.generated.resources.Res
+import dev.ide.ui.generated.resources.chat_open
 import dev.ide.ui.generated.resources.close
 import dev.ide.ui.generated.resources.edchrome_build_console
 import dev.ide.ui.generated.resources.edchrome_build_variant
@@ -98,6 +99,7 @@ import dev.ide.ui.generated.resources.edchrome_more_actions
 import dev.ide.ui.generated.resources.edchrome_no_matching_tasks
 import dev.ide.ui.generated.resources.edchrome_no_variants
 import dev.ide.ui.generated.resources.edchrome_nothing_to_run
+import dev.ide.ui.generated.resources.edchrome_optimize_imports
 import dev.ide.ui.generated.resources.edchrome_reformat_code
 import dev.ide.ui.generated.resources.edchrome_resolving_dependencies
 import dev.ide.ui.generated.resources.edchrome_search_tasks
@@ -122,7 +124,7 @@ import dev.ide.ui.icons.CaIcons
 import dev.ide.ui.icons.TreeIcon
 import dev.ide.ui.icons.TreeIcons
 import dev.ide.ui.icons.fileIconId
-import dev.ide.ui.icons.resolveTint
+import dev.ide.ui.theme.resolveTint
 import dev.ide.ui.platform.secondaryClickable
 import dev.ide.ui.icons.actionIcon
 import dev.ide.ui.theme.Ca
@@ -163,8 +165,11 @@ fun EditorTopBar(
     onRedo: () -> Unit = {},
     onFind: () -> Unit = {},
     onReformat: () -> Unit = {},
+    onOptimizeImports: () -> Unit = {},
     onToggleConsole: () -> Unit = {},
     consoleOpen: Boolean = false,
+    onToggleChat: () -> Unit = {},
+    chatOpen: Boolean = false,
     inlayHintsOn: Boolean = true,
     onToggleInlayHints: () -> Unit = {},
     showPreview: Boolean = false,
@@ -209,6 +214,7 @@ fun EditorTopBar(
             if (compact) {
                 // On a phone the bar can't hold every control, so Run stays inline and the rest (incl. the
                 // edit actions) collapse into a single ⋯ overflow menu — everything one tap away.
+                IconButtonCa(CaIcons.sparkle, stringResource(Res.string.chat_open), onToggleChat, active = chatOpen)
                 PluginToolbarActions(pluginActions, dim, onPluginAction)
                 if (activeVariant != null) VariantChip(
                     activeVariant,
@@ -226,6 +232,7 @@ fun EditorTopBar(
                     onRedo = onRedo,
                     onFind = onFind,
                     onReformat = onReformat,
+                    onOptimizeImports = onOptimizeImports,
                     inlayHintsOn = inlayHintsOn,
                     onToggleInlayHints = onToggleInlayHints,
                     consoleOpen = consoleOpen,
@@ -253,6 +260,12 @@ fun EditorTopBar(
                     stringResource(Res.string.edchrome_build_console),
                     onToggleConsole,
                     active = consoleOpen
+                )
+                IconButtonCa(
+                    CaIcons.sparkle,
+                    stringResource(Res.string.chat_open),
+                    onToggleChat,
+                    active = chatOpen
                 )
                 // Shown when the open file has @Preview composables — renders/checks them via the interpreter.
                 if (showPreview) IconButtonCa(
@@ -365,6 +378,7 @@ private fun EditorOverflowMenu(
     onRedo: () -> Unit,
     onFind: () -> Unit,
     onReformat: () -> Unit,
+    onOptimizeImports: () -> Unit,
     inlayHintsOn: Boolean,
     onToggleInlayHints: () -> Unit,
     consoleOpen: Boolean,
@@ -381,6 +395,7 @@ private fun EditorOverflowMenu(
                 OverflowItem(CaIcons.redo, stringResource(Res.string.redo), enabled = canRedo) { open = false; onRedo() }
                 OverflowItem(CaIcons.search, stringResource(Res.string.edchrome_find_replace)) { open = false; onFind() }
                 OverflowItem(CaIcons.braces, stringResource(Res.string.edchrome_reformat_code)) { open = false; onReformat() }
+                OverflowItem(CaIcons.layers, stringResource(Res.string.edchrome_optimize_imports)) { open = false; onOptimizeImports() }
             }
             OverflowItem(CaIcons.command, stringResource(Res.string.edchrome_command_palette)) { open = false; onOpenPalette() }
             OverflowItem(

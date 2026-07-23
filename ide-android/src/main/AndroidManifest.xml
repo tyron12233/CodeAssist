@@ -24,9 +24,10 @@
          running, so the OS won't kill it if the user switches away mid-build (docs/build-process-isolation.md).
          "specialUse": a code build/run is a long-running, user-initiated task that fits no other FGS category
          (not data sync / media / location / …); the justification is declared on the <service> below for Play.
-         POST_NOTIFICATIONS (API 33+) lets the ongoing "Building…" notification show; the FGS still runs without
-         it. Being a runtime permission on API 33+, it must be REQUESTED at launch (MainActivity); declaring it
-         here alone is not enough, and without the grant the OS silently suppresses the notification. -->
+         POST_NOTIFICATIONS (API 33+) lets the ongoing "Building…" notification show. Being a runtime permission
+         on API 33+, it must be REQUESTED at runtime (declaring it here alone is not enough); the app asks at the
+         FIRST build (BuildNotificationGate in :ide-ui), and without the grant builds run in-process instead of
+         the separate daemon. -->
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_SPECIAL_USE" />
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
@@ -47,6 +48,11 @@
             android:label="@string/app_name"
             android:supportsRtl="true"
             android:theme="@android:style/Theme.Material.NoActionBar">
+        <!-- AdMob application id, injected per build type (build.gradle.kts): debug/profile use Google's TEST
+             app id, release uses the real one. Required by the ads SDK, which crashes on initialize() if absent. -->
+        <meta-data
+                android:name="com.google.android.gms.ads.APPLICATION_ID"
+                android:value="${admobAppId}" />
         <activity
                 android:name=".MainActivity"
                 android:exported="true"
@@ -120,6 +126,19 @@
                 android:name=".preview.PreviewRenderService"
                 android:process=":preview"
                 android:exported="false" />
+
+        <!-- App-log sink: the debug-only log bridge woven into a built app (a SEPARATE untrusted app) binds to
+             this over Binder and pushes its logs to the IDE's Logcat console tab. A LocalSocket can't cross the
+             untrusted-app boundary (SELinux denies connectto), so this is exported and resolved by the SINK
+             action. Unauthenticated by design (the built app is signed with a different key); the channel gates
+             every frame on the currently-launched package, so a stray bind contributes nothing. -->
+        <service
+                android:name=".applog.AppLogSinkService"
+                android:exported="true">
+            <intent-filter>
+                <action android:name="dev.ide.applog.SINK" />
+            </intent-filter>
+        </service>
 
         <!-- Exposes a single project file to other apps as a content:// URI for Share / "Open with",
              without FileUriExposedException. Folder-level browsing is handled by the DocumentsProvider below. -->

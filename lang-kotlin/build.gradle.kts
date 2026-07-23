@@ -26,6 +26,9 @@ dependencies {
     // comes from :kotlin-compiler-deps - the UNSHADED `-for-ide` split over the real IntelliJ platform,
     // replacing kotlin-compiler-embeddable, so there is one PSI/compiler platform in the whole IDE.
     implementation(project(":kotlin-compiler-deps"))
+    // The shared IntelliJ platform environment (KotlinParserHost delegates its env/lock/forceFullParse to it,
+    // so :lang-xml can register XML PSI onto the SAME application environment — one platform in the process).
+    implementation(project(":intellij-psi-host"))
     // Decode Kotlin libraries' @kotlin.Metadata to recover real Kotlin signatures (extension functions,
     // properties, default args, nullability) that plain bytecode erases. Small + compiler-free.
     implementation(libs.kotlin.metadata.jvm)
@@ -44,6 +47,10 @@ dependencies {
     // it (with the bundled Compose plugin) and asserts the synthetic-param transform. The test self-gates
     // (assumeTrue) when the jar isn't resolvable, so CI without the Compose repo just skips it.
     testImplementation(libs.compose.runtime.desktop)
+    // Real kotlinx.serialization runtime on the test classpath: KotlinSerializationBuildTest compiles a
+    // @Serializable class against it (with the bundled plugin) and asserts the generated serializer. Self-gates
+    // (assumeTrue) when the jar isn't resolvable, so CI without it just skips.
+    testImplementation(libs.kotlinx.serialization.json)
 }
 
 // Bundle the kotlin-stdlib JAR — the SAME version the editor/compiler target (`libs.versions.toml` `kotlin`)
@@ -64,9 +71,25 @@ dependencies { bundledStdlib(libs.kotlin.stdlib) }
 val bundledComposePlugin: Configuration by configurations.creating { isTransitive = false }
 dependencies { bundledComposePlugin(libs.kotlin.compose.compiler.plugin.ide) }
 
+// Bundle the kotlinx.serialization compiler-plugin JAR (`/kotlin-serialization-compiler-plugin.jar`) the same
+// way: when a module carries the serialization runtime, kotlinc is fed this jar via `-Xplugin` so `@Serializable`
+// classes get their generated serializers. `SerializationCompilerPlugin` extracts it; the host applies it
+// per-module. The `-for-ide` build, for the same unshaded-compiler reason as the Compose plugin above.
+val bundledSerializationPlugin: Configuration by configurations.creating { isTransitive = false }
+dependencies { bundledSerializationPlugin(libs.kotlin.serialization.compiler.plugin.ide) }
+
+// Bundle the kotlin-parcelize compiler-plugin JAR (`/kotlin-parcelize-compiler-plugin.jar`) the same way: a
+// module with the parcelize runtime (`@Parcelize`, added by the Build Features toggle) is compiled with it so
+// `@Parcelize` classes get their generated `Parcelable`. `ParcelizeCompilerPlugin` extracts it. `-for-ide` for
+// the same unshaded-compiler reason as the plugins above.
+val bundledParcelizePlugin: Configuration by configurations.creating { isTransitive = false }
+dependencies { bundledParcelizePlugin(libs.kotlin.parcelize.compiler.plugin.ide) }
+
 tasks.processResources {
     from(bundledStdlib) { rename { "kotlin-stdlib.jar" } }
     from(bundledComposePlugin) { rename { "kotlin-compose-compiler-plugin.jar" } }
+    from(bundledSerializationPlugin) { rename { "kotlin-serialization-compiler-plugin.jar" } }
+    from(bundledParcelizePlugin) { rename { "kotlin-parcelize-compiler-plugin.jar" } }
 }
 
 // `src/test/.../Test.kt` is a scratch file for manually comparing completion against IntelliJ in the IDE.

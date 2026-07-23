@@ -21,6 +21,8 @@ import dev.ide.ui.backend.ProjectInfo
 import dev.ide.ui.backend.UiError
 import dev.ide.analytics.AnalyticsService
 import dev.ide.core.backend.ActionBackend
+import dev.ide.core.event.IdeEventTopics
+import dev.ide.core.event.ProjectEvent
 import dev.ide.core.backend.BlockBackend
 import dev.ide.core.backend.BuildBackend
 import dev.ide.core.backend.DependencyBackend
@@ -78,18 +80,27 @@ class IdeServicesBackend(
     initial: IdeServices? = null,
     override val manager: ProjectManager? = null,
     /**
-     * Opt-in usage analytics. Defaults to the no-op service (desktop, or when no transport is configured);
-     * the on-device host injects a [dev.ide.analytics.impl.DefaultAnalyticsService] backed by Supabase. The
-     * backend gates it on the persisted consent preference — see [analyticsConsent]/[setAnalyticsConsent].
-     */
-    private val analytics: AnalyticsService = dev.ide.analytics.NoopAnalyticsService,
-    /**
      * Host-injected factory for an out-of-process build runner (the `:build` daemon, supplied by
      * :ide-android). Null → in-process builds (desktop, or when the separate-process build is off), i.e.
      * each engine's own [IdeServices.buildRunner]. See docs/build-process-isolation.md.
      */
     private val buildRunnerFactory: ((IdeServices) -> BuildRunner)? = null,
+    /**
+     * Whether the host currently permits notifications (Android: the POST_NOTIFICATIONS grant / app toggle).
+     * The isolated `:build` process posts an ongoing progress notification via a foreground service, so with
+     * notifications off we fall back to in-process builds — see [separateBuildProcessEnabled]. Defaults to
+     * `true` (desktop / tests, where it's not gated); the on-device host injects the live check.
+     */
+    private val notificationsAllowed: () -> Boolean = { true },
 ) : IdeBackend, LayoutPreviewBackend, BackendContext {
+
+    /** Opt-in usage analytics, resolved from the application service container (the on-device host registers a
+     *  Supabase-backed [dev.ide.analytics.impl.DefaultAnalyticsService]); absent (desktop / tests) → the no-op
+     *  service. Gated on the persisted consent preference — see [analyticsConsent]/[setAnalyticsConsent]. */
+    private val analytics: AnalyticsService =
+        manager?.applicationContainer?.getServiceOrNull(ANALYTICS_SERVICE) ?: dev.ide.analytics.NoopAnalyticsService
+
+    override val separateProcessBuildsSupported: Boolean get() = buildRunnerFactory != null
 
     /** Per-engine build-runner cache: the chosen runner (remote daemon OR in-process) is decided once per
      *  engine and memoized, so [engineFlow]'s selector and the imperative methods always agree on the same
@@ -105,12 +116,15 @@ class IdeServicesBackend(
             }
         }
 
-    /** The app-global "Build in a separate process" setting (default ON; see [BuiltInSettingsPages]). Read once
-     *  per engine (the cache above freezes the choice), so toggling it applies on the next project open —
-     *  which keeps the build-state flow and the build methods bound to one consistent runner. */
+    /** The app-global "Build in a separate process" setting (default ON; see [BuiltInSettingsPages]) AND-ed
+     *  with [notificationsAllowed]: the isolated process shows an ongoing foreground-service notification, so
+     *  without the notification permission we run in-process instead (the user is asked at the first build —
+     *  see BuildNotificationGate — and can re-enable it from Settings). Read once per engine (the cache above
+     *  freezes the choice), so a change applies on the next project open, keeping the build-state flow and the
+     *  build methods bound to one consistent runner. */
     private fun separateBuildProcessEnabled(): Boolean =
-        manager?.preference("settings.${dev.ide.core.settings.BuiltInSettingsPages.BUILD_RUNTIME}.${dev.ide.core.settings.BuiltInSettingsPages.SEPARATE_PROCESS}")
-            ?.toBooleanStrictOrNull() ?: true
+        (manager?.preference("settings.${dev.ide.core.settings.BuiltInSettingsPages.BUILD_RUNTIME}.${dev.ide.core.settings.BuiltInSettingsPages.SEPARATE_PROCESS}")
+            ?.toBooleanStrictOrNull() ?: true) && notificationsAllowed()
 
     @Volatile
     private var activeServices: IdeServices? = initial
@@ -132,6 +146,11 @@ class IdeServicesBackend(
     override val sdkManager: SdkManagerService? get() = manager?.sdkManager() ?: activeServices?.sdkManager
     override val keystoreRegistry: dev.ide.android.support.tools.KeystoreRegistry?
         get() = manager?.keystoreRegistry() ?: activeServices?.keystoreRegistry
+
+    // The app bus lives on the shared application platform (reached through the manager); the manager-less
+    // single-project path falls back to the active engine, whose per-project platform shares that same bus.
+    override val messageBus: dev.ide.platform.MessageBus?
+        get() = manager?.env?.platform?.messageBus ?: activeServices?.appBus
 
     /**
      * The thread the editor's language work (parse/complete/analyze/hints/actions/rename) runs on.
@@ -251,13 +270,15 @@ class IdeServicesBackend(
     override val sdk: SdkService = SdkBackend(this)
     override val settings: SettingsService = SettingsBackend(this)
     override val actions: ActionService = ActionBackend(this)
+    override val agent: dev.ide.ui.backend.AgentService = AgentBackend(this)
     override val diagnostics: DiagnosticsService = DiagnosticsBackend(this)
 
     init {
         Log.addSink(errorDialogSink)
 
-        // index_perf: time each index build (building → not building) and emit its duration. Low-volume
-        // (once per build/reindex). Re-subscribes per project (collectLatest on the epoch).
+        // index_perf: time each index build (building → not building) and emit its duration + a per-indexer
+        // breakdown, so the fleet reveals WHICH index (and which phase) dominates. Low-volume (once per
+        // build/reindex). Re-subscribes per project (collectLatest on the epoch).
         analyticsScope.launch {
             projectEpoch.collectLatest {
                 val svc = activeServices ?: return@collectLatest
@@ -267,12 +288,31 @@ class IdeServicesBackend(
                     if (st.building && !building) { building = true; startNs = System.nanoTime() }
                     else if (!st.building && building) {
                         building = false
-                        // Heap at index completion (Phase-0 build-isolation instrumentation) so the index
-                        // phase's memory footprint is comparable to a build's peak across the fleet.
-                        track(
-                            dev.ide.analytics.Events.INDEX_PERF,
-                            mapOf("duration_ms" to ((System.nanoTime() - startNs) / 1_000_000).toString()) + MemSample.now().props(),
-                        )
+                        val props = buildMap {
+                            put("duration_ms", ((System.nanoTime() - startNs) / 1_000_000).toString())
+                            // Phase split + cache effectiveness + source-diff counts: is the wall time in the
+                            // library phase or the source phase, and how much came from the on-disk segment
+                            // cache vs. a fresh build. All counts/times — no names or paths.
+                            st.stats?.let { s ->
+                                put("lib_ms", s.libMs.toString())
+                                put("src_ms", s.sourceMs.toString())
+                                put("artifacts", s.artifacts.toString())
+                                put("artifacts_built", s.artifactsBuilt.toString())
+                                put("artifacts_reused", s.artifactsReused.toString())
+                                put("src_files", s.sourceFiles.toString())
+                                put("src_parsed", s.sourceParsed.toString())
+                            }
+                            // Per-indexer time (the "which index is slow" signal), keyed by the stable index
+                            // id (e.g. idx.java.classNames.ms) — never a file/artifact/project name. Skip the
+                            // trivially-fast ones (<1ms) to keep the row bounded.
+                            for (b in st.breakdown) if (b.indexMs >= 1) {
+                                put("idx.${b.id}.ms", b.indexMs.toString())
+                            }
+                            // Heap at index completion (Phase-0 build-isolation instrumentation) so the index
+                            // phase's memory footprint is comparable to a build's peak across the fleet.
+                            putAll(MemSample.now().props())
+                        }
+                        track(dev.ide.analytics.Events.INDEX_PERF, props)
                     }
                 }
             }
@@ -303,7 +343,12 @@ class IdeServicesBackend(
                                     "min_headroom_mb" to it.headroomMb.toString(),
                                     "heap_max_mb" to it.maxMb.toString(),
                                 )
-                            } ?: emptyMap()),
+                            } ?: emptyMap())
+                            // On failure, categorize WHY (compile vs resource vs tool vs oom vs no-diagnostic):
+                            // the ok=false bit alone can't tell a user's compile error from our pipeline throwing.
+                            + (if (bs.status == dev.ide.ui.backend.RunStatus.Failed)
+                                mapOf("failure_kind" to BuildFailureKind.classify(bs.diagnostics, bs.log))
+                              else emptyMap()),
                         )
                     }
                     prev = bs.status
@@ -344,6 +389,19 @@ class IdeServicesBackend(
      *  [IdeServices.composePreviewLibs]). Lowest-priority engine work; preempted by analysis and completion. */
     suspend fun composePreviewLibs(path: String): ComposePreviewLibs? =
         preview { services.composePreviewLibs(Paths.get(path)) }
+
+    /** The preview-sandbox categories the open project restricts (`SandboxCategory.id` strings from the
+     *  project-scoped Compose Preview settings); the preview host builds a `PreviewSandboxPolicy` from them.
+     *  A pref read, but routed through the preview lane like its sibling calls so it never races a swap of
+     *  the inner services on project switch. */
+    suspend fun composePreviewSandbox(): Set<String> =
+        preview { services.composePreviewSandbox() }
+
+    /** The previewed module's resources + R package for interpreter-mediated resource resolution
+     *  (`stringResource`/`R.string.x`/…); the launcher builds a `PreviewResourceResolver` from it. Off the UI
+     *  thread (the first `ResourceRepository` build parses all dependency/AAR res). */
+    suspend fun composePreviewResources(path: String): ComposePreviewResources? =
+        preview { services.composePreviewResources(Paths.get(path)) }
 
     /** Lower a self-contained Learn-lesson Compose snippet [code] (with NO open project) through the Learn
      *  Compose scratch, for the preview host's `LessonPreview`. Rendering uses the bundled Compose runtime, so
@@ -433,7 +491,9 @@ class IdeServicesBackend(
                     dev.ide.analytics.AnalyticsEvent(
                         dev.ide.analytics.Events.APP_CRASH,
                         dev.ide.analytics.EventCategory.CRASH,
-                        dev.ide.analytics.CrashScrub.scrub(t) + ("thread" to thread.name),
+                        // Heap state at the crash: lets OOM-adjacent crashes (the 43 OutOfMemoryErrors, plus
+                        // any that fail from memory pressure without saying so) be told apart from logic bugs.
+                        dev.ide.analytics.CrashScrub.scrub(t) + ("thread" to thread.name) + MemSample.now().props(),
                     )
                 )
                 analytics.flush()
@@ -466,6 +526,15 @@ class IdeServicesBackend(
         // (command actions, synthetic-R, the XML resource host) that resolve the open project through it.
         manager?.env?.activeEngine = next
         _projectEpoch.value += 1
+        // Publish the project lifecycle for plugin subscribers, on the same app bus. Opened for the new engine;
+        // Closed for the one being replaced (before it is disposed). Guarded so a subscriber can't break the swap.
+        val bus = messageBus
+        if (bus != null) {
+            runCatching { bus.syncPublisher(IdeEventTopics.PROJECT).onProjectEvent(ProjectEvent.Opened(next.workspaceRoot.toString())) }
+            if (prev != null && prev !== next) {
+                runCatching { bus.syncPublisher(IdeEventTopics.PROJECT).onProjectEvent(ProjectEvent.Closed(prev.workspaceRoot.toString())) }
+            }
+        }
         if (prev !== next) runCatching { prev?.close() }
     }
 

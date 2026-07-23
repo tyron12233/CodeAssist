@@ -43,7 +43,7 @@ class KotlinLibrarySealedWhenTest {
         // A library sealed type `lib.State` with two subclasses, served straight from the type-shape index.
         private val served: Map<String, TypeShape> = mapOf(
             "lib.State" to TypeShape(
-                emptyList(), emptyList(), emptyList(), emptyList(),
+                emptyList(), emptyList(), emptyList(), emptyList(), emptyList(),
                 isAbstract = true, isKotlin = true, sealedSubclasses = listOf("lib.Loading", "lib.Done"),
             ),
         )

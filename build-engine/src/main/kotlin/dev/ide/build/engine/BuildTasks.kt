@@ -107,16 +107,25 @@ class JarTask(
     override val name: TaskName,
     private val classesDirs: List<Path>,
     private val outJar: Path,
+    /** Resolves the manifest `Main-Class` (the module's runnable entry point), so the jar runs standalone
+     *  (`java -jar`). Evaluated at execution time (the entry point may be detected from now-compiled sources);
+     *  null / blank → a manifest with no `Main-Class` (a plain library jar). */
+    private val mainClass: () -> String? = { null },
 ) : Task {
     constructor(name: TaskName, classesDir: Path, outJar: Path) : this(name, listOf(classesDir), outJar)
 
-    override val inputs: TaskInputs get() = TaskInputsImpl().apply { dirPaths("classes", classesDirs) }
+    override val inputs: TaskInputs get() = TaskInputsImpl().apply {
+        dirPaths("classes", classesDirs)
+        // Part of the fingerprint so a changed entry point (or a main-class override) re-jars with the new
+        // Main-Class instead of being skipped as up-to-date. Detection is best-effort here.
+        property("mainClass", runCatching { mainClass() }.getOrNull().orEmpty())
+    }
     override val outputs: TaskOutputs get() = TaskOutputsImpl().apply { filePath("jar", outJar) }
 
     override suspend fun execute(ctx: TaskContext): TaskResult {
         ctx.checkCanceled()
         return runCatching {
-            writeJar(classesDirs, outJar)
+            writeJar(classesDirs, outJar, mainClass())
             ctx.logger()("${name.value} -> ${outJar.fileName}")
             TaskResult.Success as TaskResult
         }.getOrElse { TaskResult.Failed("jar failed: ${it.message}", it) }

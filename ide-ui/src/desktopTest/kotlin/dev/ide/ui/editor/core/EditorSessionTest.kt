@@ -215,11 +215,32 @@ class EditorSessionTest {
 
     @Test
     fun backspaceInIndentOfNonBlankLinePeelsOneChar() {
-        // line has real content after the indent — stays a normal single-char delete
+        // caret at a MISALIGNED column (col 3, 4-space unit) → normal single-char delete (fine-tuning)
         val s = session("foo\n    bar", 7)
         s.backspace()
         assertEquals("foo\n   bar", s.doc.text)
         assertEquals(TextRange(6), s.selection)
+    }
+
+    @Test
+    fun backspaceAtIndentStopRemovesWholeLevel() {
+        // caret at a proper indent stop (col 8, 4-space unit) with content after → remove one whole level to col 4
+        val code = "fun f() {\n        body()\n}"
+        val caret = code.indexOf("body()") // col 8
+        val s = session(code, caret, language = CodeLanguage.Kotlin)
+        s.backspace()
+        assertEquals("fun f() {\n    body()\n}", s.doc.text)
+        assertEquals(TextRange(caret - 4), s.selection)
+    }
+
+    @Test
+    fun backspaceUnindentsXmlChildAtIndentStop() {
+        // XML child at col 8 → Backspace removes a level to col 4 (context-aware smart delete)
+        val code = "<a>\n        <b/>\n</a>"
+        val caret = code.indexOf("<b/>") // col 8
+        val s = session(code, caret, language = CodeLanguage.Xml)
+        s.backspace()
+        assertEquals("<a>\n    <b/>\n</a>", s.doc.text)
     }
 
     @Test
@@ -305,9 +326,11 @@ class EditorSessionTest {
     }
 
     @Test
-    fun deleteSurroundingNoOpStillResyncsTheIme() {
-        // Backspace on an already-aligned closer is deliberately a no-op in the editor — but the IME that sent
-        // deleteSurroundingText(1, 0) believes a char was deleted, so the session must ask it to resync.
+    fun deleteSurroundingSpaceIsLiteral() {
+        // An IME whitespace delete is contract-exact (one char, no smart rules): SwiftKey's punctuation
+        // swap sends the same deleteSurroundingText(1, 0) a backspace tap does, and the space smart rules
+        // (aligned-closer keep here) applied to a swap eat real code. Because the delete matches the IME's
+        // request exactly, no resync is needed either.
         val code = "class A {\n    fun f() {\n        body()\n    }\n}"
         val caret = code.indexOf("    }") + 4
         val s = session(code, caret)
@@ -317,8 +340,8 @@ class EditorSessionTest {
             override fun onRestartInput() { restarts++ }
         }
         s.imeDeleteSurrounding(1, 0)
-        assertEquals(code, s.doc.text, "aligned closer keeps its indent")
-        assertEquals(1, restarts, "the IME is told its one-char-deleted model is stale")
+        assertEquals(code.replaceFirst("    }", "   }"), s.doc.text, "exactly one indent space goes")
+        assertEquals(0, restarts, "a literal delete keeps the IME's model coherent")
     }
 
     @Test
@@ -662,6 +685,207 @@ class EditorSessionTest {
         assertEquals("foo()", s.doc.text)
         assertTrue(textChanges >= 1, "the edit is pushed to the monitoring IME")
         assertEquals(0, restarts, "a monitoring IME is kept synced without a disruptive restart")
+    }
+
+    /** A monitoring listener that counts restarts and text pushes, for the no-text-change resync cases. */
+    private fun monitoringIme(s: EditorSession): Pair<() -> Int, () -> Int> {
+        var restarts = 0
+        var textChanges = 0
+        s.imeListener = object : EditorSession.ImeListener {
+            override fun onStateChanged() {}
+            override fun onTextChanged(span: EditSpan?) { textChanges++ }
+            override fun onRestartInput() { restarts++ }
+            override fun isSyncingExtractedText() = true
+        }
+        return Pair({ restarts }, { textChanges })
+    }
+
+    @Test
+    fun monitoringImeIsRestartedOnSkipOverCloser() {
+        // The exception to the no-restart rule: skip-over changes NO text, so no onTextChanged push ever
+        // corrects the IME's mirror — which already holds the ')' the IME committed. Without the restart a
+        // mirroring keyboard (SwiftKey) drifts by one char per skipped closer and every later
+        // setComposingRegion/suggestion replacement lands off-target.
+        val s = session("foo()", 4)
+        val (restarts, textChanges) = monitoringIme(s)
+        s.commitText(")")
+        assertEquals("foo()", s.doc.text)
+        assertEquals(TextRange(5), s.selection)
+        assertEquals(0, textChanges(), "no text changed, so no extract push exists to correct the mirror")
+        assertEquals(1, restarts(), "a no-text-change smart edit must restart even a monitoring IME")
+    }
+
+    @Test
+    fun imeSpaceDeleteBeforeAlignedCloserIsLiteral() {
+        // An IME whitespace delete is contract-exact: SwiftKey's punctuation swap sends the same
+        // deleteSurroundingText(1,0) a backspace tap does, so the smart space rules (here the
+        // aligned-closer keep) must not apply — exactly one char goes, and the IME's model stays
+        // coherent without any resync.
+        val text = "    fun f() {\n        x\n    }"
+        val s = session(text, text.length - 1) // in the closer line's indent, right before '}'
+        val (restarts, textChanges) = monitoringIme(s)
+        s.imeDeleteSurrounding(1, 0)
+        assertEquals("    fun f() {\n        x\n   }", s.doc.text, "exactly one indent space goes")
+        assertEquals(TextRange(text.length - 2), s.selection)
+        assertEquals(1, textChanges())
+        assertEquals(0, restarts(), "a literal delete matches the IME's model — no restart")
+    }
+
+    @Test
+    fun hardwareBackspaceStillKeepsTheAlignedCloser() {
+        // The smart keep rule still applies on the editor's own backspace path (hardware key / symbol bar).
+        val text = "    fun f() {\n        x\n    }"
+        val s = session(text, text.length - 1)
+        s.backspace()
+        assertEquals(text, s.doc.text, "the aligned closer keeps the opener's indent")
+    }
+
+    @Test
+    fun imeSpaceDeleteInLeadingIndentIsLiteral() {
+        // The logcat bug: SwiftKey's punctuation swap (delete the auto-space, then commit the symbol) hit
+        // the blank-line-collapse rule and ate 5 chars around the caret. An IME space delete must remove
+        // exactly one char.
+        val (s, restarts) = countingImeSession("foo {\n\n    x", 11) // leading indent, blank line above
+        s.imeDeleteSurrounding(1, 0)
+        assertEquals("foo {\n\n   x", s.doc.text)
+        assertEquals(TextRange(10), s.selection)
+        assertEquals(0, restarts())
+    }
+
+    @Test
+    fun swiftKeyPunctuationSwapKeepsTheUserSpace() {
+        // The full wire shape from the logcat: batch { finishComposing; delete the space before the caret;
+        // commit the symbol; commit the new auto-space }. The deleted space was the USER's — typing `)`
+        // must insert exactly `)`: the space is restored, the symbol lands after it, the trailing
+        // auto-space is swallowed.
+        val (s, restarts) = countingImeSession("f(a ", 4)
+        s.beginBatch()
+        s.imeFinishComposing()
+        s.imeDeleteSurrounding(1, 0)
+        s.imeCommitText(")", 1)
+        s.imeCommitText(" ", 1)
+        s.endBatch()
+        assertEquals("f(a )", s.doc.text, "the user's space survives the keyboard's swap")
+        assertEquals(TextRange(5), s.selection)
+        assertEquals(1, restarts(), "the keyboard's model diverged — one restart at batch end")
+    }
+
+    @Test
+    fun userBackspaceOfASpaceInItsOwnBatchStillDeletes() {
+        // A real backspace tap is a delete-only batch — no symbol commit follows, so nothing is restored.
+        val (s, restarts) = countingImeSession("f(a ", 4)
+        s.beginBatch()
+        s.imeDeleteSurrounding(1, 0)
+        s.endBatch()
+        assertEquals("f(a", s.doc.text)
+        assertEquals(TextRange(3), s.selection)
+        assertEquals(0, restarts())
+    }
+
+    @Test
+    fun monitoringImeIsRestartedOnEnterWhileComposing() {
+        // Enter mid-composition keeps the composed word (deviating from commit-replaces-composition), so the
+        // IME's model — word replaced by "\n" — is stale. An un-indented smart Enter looks like a plain insert
+        // to the divergence check, so the "\n" branch must force the restart itself.
+        val s = session("", 0)
+        val (restarts, _) = monitoringIme(s)
+        s.imeSetComposingText("hello", 1)
+        assertEquals(0, restarts())
+        s.imeCommitText("\n", 1)
+        assertEquals("hello\n", s.doc.text, "the composed word survives Enter")
+        assertNull(s.composing)
+        assertEquals(1, restarts(), "the IME thinks its composed word was replaced — it must re-read")
+    }
+
+    // ---- SwiftKey-style auto-space after punctuation: the keyboard bundles the space into ONE commit
+    // ("; " for a tap on ';'), which both plants a stray space in code and bypasses the single-char smart
+    // path. The symbol is routed through the smart path, the space dropped, and the IME restarted (its own
+    // model holds the phantom space — no extract push can evict it). ----
+
+    @Test
+    fun imeSymbolSpaceCommitDropsTheAutoSpace() {
+        val (s, restarts) = countingImeSession("x", 1)
+        s.imeCommitText("; ", 1)
+        assertEquals("x;", s.doc.text, "the bundled auto-space is dropped in code")
+        assertEquals(TextRange(2), s.selection)
+        assertEquals(1, restarts(), "the IME committed two chars but only one landed — it must re-read")
+    }
+
+    @Test
+    fun imeSymbolSpaceCommitStillSkipsOverTheCloser() {
+        // The two-char commit used to fall through to the plain multi-char path, so SwiftKey users lost
+        // skip-over entirely (typing ')' inside "()" produced "() )"). Stripping restores it.
+        val (s, restarts) = countingImeSession("foo()", 4)
+        s.imeCommitText(") ", 1)
+        assertEquals("foo()", s.doc.text, "the symbol takes the smart path: skip-over, no insert")
+        assertEquals(TextRange(5), s.selection)
+        assertEquals(1, restarts())
+    }
+
+    @Test
+    fun imeSymbolSpaceCommitAutoClosesQuotes() {
+        val (s, restarts) = countingImeSession("val s = ", 8, CodeLanguage.Kotlin)
+        s.imeCommitText("\" ", 1)
+        assertEquals("val s = \"\"", s.doc.text, "the quote takes the smart path: auto-close, no space")
+        assertEquals(TextRange(9), s.selection)
+        assertEquals(1, restarts())
+    }
+
+    @Test
+    fun imeWordCommitKeepsItsTrailingSpace() {
+        // Only SYMBOL+space commits are normalized: a suggestion pick commits "word " and that trailing
+        // auto-space is the keyboard behavior the user chose — it must survive untouched.
+        val (s, restarts) = countingImeSession("", 0)
+        s.imeCommitText("hello ", 1)
+        assertEquals("hello ", s.doc.text)
+        assertEquals(0, restarts(), "a matching multi-char commit must not churn the IME")
+    }
+
+    @Test
+    fun markdownKeepsImeAutoSpace() {
+        // Prose files want the keyboard's punctuation spacing (". " after a sentence), so the strip is
+        // gated to code languages.
+        val (s, restarts) = countingImeSession("hi", 2, CodeLanguage.Markdown)
+        s.imeCommitText(". ", 1)
+        assertEquals("hi. ", s.doc.text)
+        assertEquals(0, restarts())
+    }
+
+    @Test
+    fun imeSplitAutoSpaceInOneBatchIsSwallowed() {
+        // The other wire shape: symbol and auto-space arrive as TWO commits inside one batch edit. A human
+        // tap is one commit, so the batched bare-space follower can only be the keyboard's.
+        val (s, restarts) = countingImeSession("x", 1)
+        s.beginBatch()
+        s.imeCommitText(")", 1)
+        s.imeCommitText(" ", 1)
+        s.endBatch()
+        assertEquals("x)", s.doc.text, "the batched auto-space follower is swallowed")
+        assertEquals(TextRange(2), s.selection)
+        assertEquals(1, restarts(), "the IME's model holds the swallowed space — it must re-read")
+    }
+
+    @Test
+    fun imeSpaceInItsOwnBatchAfterSymbolIsKept() {
+        // A deliberate space tap right after a symbol arrives as its own batch — it must land.
+        val (s, restarts) = countingImeSession("x", 1)
+        s.beginBatch(); s.imeCommitText(")", 1); s.endBatch()
+        s.beginBatch(); s.imeCommitText(" ", 1); s.endBatch()
+        assertEquals("x) ", s.doc.text, "a user-typed space survives")
+        assertEquals(0, restarts())
+    }
+
+    @Test
+    fun imeBundledAutoSpaceOverComposingRegionIsStripped() {
+        // The bundled strip also applies when the commit replaces a composing region ("foo. " committing
+        // the composed word with punctuation and auto-space in one text).
+        val (s, restarts) = countingImeSession("", 0)
+        s.imeSetComposingText("foo", 1)
+        s.imeCommitText("foo. ", 1)
+        assertEquals("foo.", s.doc.text, "the trailing auto-space is stripped from the region commit")
+        assertEquals(TextRange(4), s.selection)
+        assertNull(s.composing)
+        assertEquals(1, restarts())
     }
 
     // ---- extracted-text snapshot arithmetic (the offset contract that, if wrong, lands the caret on the wrong

@@ -17,6 +17,7 @@ dependencies {
     implementation(project(":lang-kotlin"))     // IncrementalKotlinCompiler + ComposeCompilerPlugin — drive K2 directly
     implementation(project(":project-model-impl")) // FacetCodec / FacetCodecRegistry / ModuleTypeRegistry
     implementation(project(":language-api"))   // SyntheticClassProvider — the light `R` class for completion/analysis
+    implementation(project(":lang-xml"))        // XmlTreeParser — error-tolerant PSI recovery for a malformed values file
     implementation(project(":index-api"))       // resource-declaration IndexExtension
     implementation(libs.ow2.asm)                 // ClassReader — scan the classpath for custom View subclasses (no class loading)
     implementation(libs.kotlinx.coroutines.core)
@@ -53,7 +54,23 @@ dependencies {
     desugarLibTest(libs.desugar.jdk.libs)
     desugarLibTest(libs.desugar.jdk.libs.configuration)
 }
+
+// AppLogInjectTest needs the compiled :applog-runtime jar as a real file to hand to the build system as the
+// injectable log-bridge runtime. Resolve the module's default artifact into its own configuration (its only
+// dependency is the compileOnly android stub, which does not reach this runtime classpath, so this is just
+// the tiny runtime jar).
+val appLogRuntimeTest: Configuration by configurations.creating { isCanBeConsumed = false }
+dependencies {
+    appLogRuntimeTest(project(":applog-runtime"))
+}
+
 tasks.test {
-    val files = desugarLibTest
-    jvmArgumentProviders.add(CommandLineArgumentProvider { listOf("-Ddesugar.lib.path=${files.asPath}") })
+    val desugarFiles = desugarLibTest
+    val appLogFiles = appLogRuntimeTest
+    jvmArgumentProviders.add(CommandLineArgumentProvider {
+        listOf(
+            "-Ddesugar.lib.path=${desugarFiles.asPath}",
+            "-Dapplog.runtime.jar=${appLogFiles.asPath}",
+        )
+    })
 }

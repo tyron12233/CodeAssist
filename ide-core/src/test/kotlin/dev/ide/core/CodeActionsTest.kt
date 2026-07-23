@@ -80,6 +80,69 @@ class CodeActionsTest {
     }
 
     @Test
+    fun addExceptionToThrowsAddsClauseAndImport() = demo { ide, main ->
+        // Throw a checked exception with no `throws` / try — the IntelliJ-PSI backend flags it, and the native
+        // fix appends it to `main`'s signature + imports it.
+        val text = Files.readString(main).replace(
+            "System.out.println(formatter.banner(\"CodeAssist\"));",
+            "throw new java.io.IOException();",
+        )
+        runBlocking { ide.analyzeDiagnostics(main, text) } // publish the unhandled-exception error so the fix attaches
+        val at = text.indexOf("new java.io.IOException")
+        val actions = ide.editorActions(main, text, at, at)
+        val idx = actions.indexOfFirst { it.title.startsWith("Add") && it.title.contains("throws") }
+        assertTrue(idx >= 0, "expected add-to-throws, got ${actions.map { it.title }}")
+        val result = applyEdits(text, ide.applyEditorAction(main, text, at, at, idx))
+        assertTrue("throws IOException" in result, "throws clause not added:\n$result")
+        assertTrue("import java.io.IOException;" in result, "IOException import not added:\n$result")
+    }
+
+    @Test
+    fun changeVariableTypeRetypesTheDeclaration() = demo { ide, main ->
+        val text = Files.readString(main).replace(
+            "System.out.println(formatter.banner(\"CodeAssist\"));",
+            "String n = 5;",
+        )
+        runBlocking { ide.analyzeDiagnostics(main, text) } // publish the type-mismatch error so the fix attaches
+        val at = text.indexOf("= 5;") + 2 // on the `5`
+        val actions = ide.editorActions(main, text, at, at)
+        val idx = actions.indexOfFirst { it.title.contains("Change variable type") }
+        assertTrue(idx >= 0, "expected change-variable-type, got ${actions.map { it.title }}")
+        val result = applyEdits(text, ide.applyEditorAction(main, text, at, at, idx))
+        assertTrue(Regex("""\bint n = 5;""").containsMatchIn(result), "declaration not retyped to int:\n$result")
+    }
+
+    @Test
+    fun createMethodFromUsageInsertsStub() = demo { ide, main ->
+        val text = Files.readString(main).replace(
+            "System.out.println(formatter.banner(\"CodeAssist\"));",
+            "int r = compute(1, \"x\");",
+        )
+        runBlocking { ide.analyzeDiagnostics(main, text) } // publish the unresolved-reference error
+        val at = text.indexOf("compute(")
+        val actions = ide.editorActions(main, text, at, at)
+        val idx = actions.indexOfFirst { it.title == "Create method 'compute'" }
+        assertTrue(idx >= 0, "expected create-method, got ${actions.map { it.title }}")
+        val result = applyEdits(text, ide.applyEditorAction(main, text, at, at, idx))
+        // `main` is static; `int r = …` gives the return type; args infer the parameter types.
+        assertTrue(
+            Regex("""private static int compute\(int p0, String p1\)""").containsMatchIn(result),
+            "method stub not created:\n$result",
+        )
+    }
+
+    @Test
+    fun implementMembersGeneratesStubs() = demo { ide, main ->
+        val text = "package com.example.app;\nclass Main implements Runnable {\n}\n"
+        val at = text.indexOf("Runnable") // inside the class declaration
+        val actions = ide.editorActions(main, text, at, at)
+        val idx = actions.indexOfFirst { it.title == "Implement methods" }
+        assertTrue(idx >= 0, "expected implement-methods, got ${actions.map { it.title }}")
+        val result = applyEdits(text, ide.applyEditorAction(main, text, at, at, idx))
+        assertTrue("@Override" in result && "public void run()" in result, "run() stub not generated:\n$result")
+    }
+
+    @Test
     fun removeUnusedImportDeletesTheLine() = demo { ide, main ->
         val text = Files.readString(main).replace(
             "import com.example.util.Formatter;",

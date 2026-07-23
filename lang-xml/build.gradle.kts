@@ -13,6 +13,11 @@ plugins {
 dependencies {
     api(project(":language-api"))
 
+    // The shared IntelliJ platform environment: the XML backend now parses with the real com.intellij.psi.xml.*
+    // PSI (XMLParserDefinition registered onto the one application env, alongside Kotlin) and projects it onto
+    // the neutral XmlNode DOM. Brings the merged compiler/platform jar transitively (kotlin-compiler-deps api).
+    implementation(project(":intellij-psi-host"))
+
     implementation(project(":index-api"))
     implementation(project(":analysis-api")) // owns the XML lint diagnostic provider (host data via XmlResourceHost)
 

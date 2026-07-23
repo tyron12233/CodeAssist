@@ -9,6 +9,9 @@ import dev.ide.lang.completion.CompletionRequest
 import dev.ide.lang.completion.CompletionTrigger
 import dev.ide.lang.incremental.DocumentSnapshot
 import dev.ide.lang.xml.completion.XmlCompletion
+import dev.ide.lang.xml.completion.XmlCompletionKind
+import dev.ide.lang.xml.completion.XmlCompletionPosition
+import dev.ide.lang.dom.TextRange
 import dev.ide.lang.completion.complete
 import dev.ide.platform.ContentHash
 import dev.ide.vfs.VirtualFile
@@ -69,6 +72,50 @@ class AndroidXmlCompletionTest {
         })
         // <Button> inherits TextView.text and View.id from the SDK class hierarchy.
         val labels = complete("<Button android:|", svc = svc)
+        assertTrue("android:text" in labels && "android:id" in labels, "got $labels")
+    }
+
+    private fun valuePos(tag: String, parent: String, attr: String, path: String) = XmlCompletionPosition(
+        kind = XmlCompletionKind.ATTRIBUTE_VALUE, tag = tag, parentTag = parent, attributeName = attr,
+        existingAttributes = emptySet(), prefix = "", replacementRange = TextRange(0, 0), filePath = path,
+    )
+
+    @Test
+    fun describeValueGivesBooleanParameterHint() {
+        val c = AndroidXmlContributor(resources = localResources(repo))
+        val info = c.describeValue(valuePos("application", "manifest", "android:hardwareAccelerated", "app/src/main/AndroidManifest.xml"))
+        assertNotNull(info, "expected a parameter hint inside the value")
+        assertTrue("true | false" in info.label, "boolean hint expected; got '${info.label}'")
+    }
+
+    @Test
+    fun describeValueListsEnumMembers() {
+        val c = AndroidXmlContributor(resources = localResources(repo))
+        val info = c.describeValue(valuePos("activity", "application", "android:launchMode", "app/src/main/AndroidManifest.xml"))
+        assertNotNull(info)
+        assertTrue("singleTop" in info.label, "enum members expected; got '${info.label}'")
+    }
+
+    @Test
+    fun customViewInheritsFrameworkSuperclassAttributes() {
+        // Framework metadata knows Button -> TextView -> View (with text/id styleables).
+        val parsed = AttrsXmlParser.parse(
+            """<resources>
+                 <attr name="text" format="string"/>
+                 <declare-styleable name="View"><attr name="id" format="reference"/></declare-styleable>
+                 <declare-styleable name="TextView"><attr name="text"/></declare-styleable>
+               </resources>"""
+        )
+        val framework = AndroidSdkMetadata(34, parsed.attrs, parsed.styleables,
+            mapOf("Button" to "TextView", "TextView" to "View"),
+            listOf(AndroidSdkMetadata.WidgetInfo("Button", false)))
+        // A custom view's ancestry (as CustomViewScanner would report it): MaterialButton -> Button.
+        val bridged = framework.withCustomHierarchy(mapOf("MaterialButton" to "Button"))
+        val svc = XmlCompletion(contributors = {
+            listOf(AndroidXmlContributor(resources = localResources(repo), layout = { bridged }))
+        })
+        // The custom view inherits Button's chain → TextView.text + View.id, by its fully-qualified tag.
+        val labels = complete("<com.google.android.material.button.MaterialButton android:|", svc = svc)
         assertTrue("android:text" in labels && "android:id" in labels, "got $labels")
     }
 
@@ -201,6 +248,29 @@ class AndroidXmlCompletionTest {
         val local = complete("<TextView android:text=\"@string/|\"", svc = svc)
         assertTrue(local.none { it.startsWith("@android:") }, "framework resources must not flood a local ref: $local")
         assertTrue("@string/app_name" in local, "local resources still complete: $local")
+    }
+
+    @Test
+    fun completesThemeAttributeReferences() {
+        val svc = XmlCompletion(contributors = {
+            listOf(AndroidXmlContributor(
+                resources = { type ->
+                    if (type == ResourceType.ATTR) listOf(ResourceCandidate("colorPrimary"), ResourceCandidate("colorSurface"))
+                    else localResources(repo)(type)
+                },
+                frameworkResources = { type -> if (type == ResourceType.ATTR) listOf("actionBarSize", "colorPrimaryDark") else emptyList() },
+            ))
+        })
+        // Typing `?` on a reference-accepting attribute offers the app/library theme attrs…
+        val theme = complete("<TextView android:textColor=\"?|\"", svc = svc)
+        assertTrue("?attr/colorPrimary" in theme && "?attr/colorSurface" in theme, "got $theme")
+        // …the (large) framework theme-attr set stays behind the extra `?android` opt-in…
+        assertTrue(theme.none { it.startsWith("?android:attr/") }, "framework theme attrs must not flood `?`: $theme")
+        val fw = complete("<TextView android:textColor=\"?android:attr/|\"", svc = svc)
+        assertTrue("?android:attr/actionBarSize" in fw, "got $fw")
+        // …and a plain value never surfaces theme attrs.
+        val plain = complete("<TextView android:textColor=\"|\"", svc = svc)
+        assertTrue(plain.none { it.startsWith("?") }, "theme attrs must not appear without `?`: $plain")
     }
 
     @Test

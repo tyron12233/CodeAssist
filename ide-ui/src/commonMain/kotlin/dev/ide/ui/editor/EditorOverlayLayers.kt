@@ -9,6 +9,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.graphics.drawscope.clipRect
+import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.AnnotatedString
@@ -113,27 +114,30 @@ internal fun SelectionToolbarLayer(
             AboveAnchorPositionProvider(selX.roundToInt(), selTop.roundToInt(), gapPx)
         },
     ) {
-        SelectionToolbar(
-            hasSelection = !session.selection.collapsed,
-            // Keep quick-FIXES out of this clipboard toolbar: on a diagnostic the gutter lightbulb owns them, so
-            // the toolbar stays Copy/Cut/Paste only. Off a diagnostic it still surfaces caret INTENTIONS here.
-            hasActions = acts.available.isNotEmpty() && acts.caretDiagnostic == null,
-            onActions = { interaction.handlesVisible = false; acts.openMenu() },
-            onCopy = {
-                session.selectedText()?.let { clipboard.setText(AnnotatedString(it)) }
-                interaction.handlesVisible = false
-            },
-            onCut = {
-                session.cutSelection()?.let { clipboard.setText(AnnotatedString(it)) }
-                interaction.handlesVisible = false
-            },
-            onPaste = {
-                clipboard.getText()?.text?.let { if (it.isNotEmpty()) session.commitText(it) }
-                interaction.handlesVisible = false
-            },
-            onSelectAll = { session.selectAll() },
-            onDocs = { interaction.handlesVisible = false; onDocs() },
-        )
+        // Report the toolbar's height so the lightbulb (anchored above this same line) can stack above it.
+        Box(Modifier.onSizeChanged { interaction.selectionToolbarHeightPx = it.height }) {
+            SelectionToolbar(
+                hasSelection = !session.selection.collapsed,
+                // Keep quick-FIXES out of this clipboard toolbar: on a diagnostic the gutter lightbulb owns them, so
+                // the toolbar stays Copy/Cut/Paste only. Off a diagnostic it still surfaces caret INTENTIONS here.
+                hasActions = acts.available.isNotEmpty() && acts.caretDiagnostic == null,
+                onActions = { interaction.handlesVisible = false; acts.openMenu() },
+                onCopy = {
+                    session.selectedText()?.let { clipboard.setText(AnnotatedString(it)) }
+                    interaction.handlesVisible = false
+                },
+                onCut = {
+                    session.cutSelection()?.let { clipboard.setText(AnnotatedString(it)) }
+                    interaction.handlesVisible = false
+                },
+                onPaste = {
+                    clipboard.getText()?.text?.let { if (it.isNotEmpty()) session.commitText(it) }
+                    interaction.handlesVisible = false
+                },
+                onSelectAll = { session.selectAll() },
+                onDocs = { interaction.handlesVisible = false; onDocs() },
+            )
+        }
     }
 }
 

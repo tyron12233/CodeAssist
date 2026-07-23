@@ -62,6 +62,21 @@ class NamedArgumentReorderTest {
     }
 
     @Test
+    fun namedThenPositionalBindsPositionalToItsArgumentIndex() {
+        // describe(a = 10, 20) — the named `a` fills slot 0, then the POSITIONAL `20` must bind to parameter 1
+        // (`b`, its argument index), NOT reuse slot 0. This is the `Icon(imageVector = X, "")` shape: a running
+        // positional counter overwrote the named arg, dropping it (→ a null painter for Icon at render).
+        assertEquals("10-20-3", run(describeCall(named("a", 10), named(null, 20))))
+    }
+
+    @Test
+    fun namedThenPositionalReorderKeepsBothArgs() {
+        // The reducer directly: `f(a = 10, 20)` → [10, 20] (both preserved), not [20] (the counter bug).
+        val raw = listOf(named("a", 10), named(null, 20))
+        assertEquals(listOf<Any?>(10, 20), reorderNamedArgs(listOf("a", "b", "c"), raw, listOf<Any?>(10, 20)))
+    }
+
+    @Test
     fun reorderNamedArgsTrimsTrailingOmittedSlots() {
         // describe(a = 10) keeps only [10] (b, c are trailing omissions filled by `$default`), not [10, Om, Om].
         val raw = listOf(named("a", 10))

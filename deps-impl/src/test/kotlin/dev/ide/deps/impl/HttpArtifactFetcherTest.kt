@@ -10,6 +10,7 @@ import kotlin.test.AfterTest
 import kotlin.test.BeforeTest
 import kotlin.test.Test
 import kotlin.test.assertContentEquals
+import kotlin.test.assertFailsWith
 import kotlin.test.assertFalse
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
@@ -35,6 +36,7 @@ class HttpArtifactFetcherTest {
             ex.responseBody.use { it.write(body) }
         }
         server.createContext("/missing") { ex -> ex.sendResponseHeaders(404, -1); ex.close() }
+        server.createContext("/forbidden") { ex -> ex.sendResponseHeaders(403, -1); ex.close() }
         server.createContext("/redirect") { ex ->
             ex.responseHeaders.add("Location", "$base/ok")
             ex.sendResponseHeaders(302, -1); ex.close()
@@ -87,5 +89,22 @@ class HttpArtifactFetcherTest {
     fun fetchBuffersSameBytes() {
         assertContentEquals(body, fetcher.fetch("$base/ok"))
         assertNull(fetcher.fetch("$base/missing"))
+    }
+
+    @Test
+    fun fetchThrowsOn403() {
+        // 403 is a repository REFUSING the request (WAF/geo/rate-limit), NOT an absent artifact — it must
+        // surface as a thrown failure so the resolver logs it + retries, never null (which reads as a 404 miss).
+        assertFailsWith<java.io.IOException> { fetcher.fetch("$base/forbidden") }
+    }
+
+    @Test
+    fun fetchToThrowsOn403() {
+        val dir = createTempDirectory("fetchto403")
+        try {
+            assertFailsWith<java.io.IOException> { fetcher.fetchTo("$base/forbidden", dir.resolve("artifact.bin")) }
+        } finally {
+            dir.toFile().deleteRecursively()
+        }
     }
 }

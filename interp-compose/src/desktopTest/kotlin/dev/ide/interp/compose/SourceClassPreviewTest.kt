@@ -12,6 +12,7 @@ import dev.ide.lang.kotlin.interp.DispatchKind
 import dev.ide.lang.kotlin.interp.RArg
 import dev.ide.lang.kotlin.interp.RClassParam
 import dev.ide.lang.kotlin.interp.RNode
+import dev.ide.lang.kotlin.interp.RParam
 import dev.ide.lang.kotlin.interp.ResolvedCallable
 import dev.ide.lang.kotlin.interp.ResolvedClass
 import dev.ide.lang.kotlin.interp.ResolvedFunction
@@ -72,6 +73,47 @@ class SourceClassPreviewTest {
 
         if (failure != null) throw AssertionError("preview failed", failure)
         assertEquals(listOf("hello"), ItemCapture.items, "the source data class's property should reach the composable")
+    }
+
+    @Test
+    fun composableCallOmittingADefaultedArgumentRenders() {
+        // The Jetpack Compose template shape: a preview calls a top-level source
+        // `@Composable fun Greeting(name: String, greeting: String = "Hi ")` as `Greeting("Compose")`, omitting
+        // the trailing defaulted parameter. The call carries fewer arguments than the declared arity, so the
+        // interpreter must resolve the 2-parameter function (not fail with `no source function Greeting/1`) and
+        // substitute the default. Regression for "Preview failed to render: no source function `Greeting/1`".
+        fun fakeItem(arg: RNode, key: Int) = RNode.Call(
+            ResolvedCallable.Library("FakeItem", facade, "FakeItem", emptyList(), isStatic = true, isConstructor = false, isInline = false, isComposable = true),
+            DispatchKind.TOP_LEVEL, receiver = null, args = listOf(RArg(arg)), callSiteKey = CallSiteKey(key), source = span,
+        )
+        val greeting = ResolvedFunction(
+            name = "Greeting",
+            params = listOf(
+                RParam(SlotId(1), "name", null),
+                RParam(SlotId(2), "greeting", null, default = RNode.Const("Hi ", null, span)),
+            ),
+            body = RNode.Block(
+                listOf(
+                    fakeItem(RNode.Name(Binding.Param(SlotId(1), "name"), span), 10),
+                    fakeItem(RNode.Name(Binding.Param(SlotId(2), "greeting"), span), 11),
+                ), false, span,
+            ),
+            diagnostics = emptyList(), returnsUnit = true,
+        )
+        val greetingCall = RNode.Call(
+            ResolvedCallable.Source("Greeting", "demo.Greeting/2", listOf("name", "greeting"), isComposable = true),
+            DispatchKind.TOP_LEVEL, receiver = null, args = listOf(RArg(RNode.Const("Compose", null, span))),
+            callSiteKey = CallSiteKey(1), source = span,
+        )
+        val entry = ResolvedFunction("Preview", emptyList(), RNode.Block(listOf(greetingCall), false, span), emptyList())
+
+        var failure: Throwable? = null
+        val renderer = ComposePreviewRenderer()
+        composeOnce { renderer.Render(entry, mapOf("Greeting/2" to greeting), emptyList()) { failure = it } }
+
+        if (failure != null) throw AssertionError("preview failed", failure)
+        assertEquals(listOf("Compose", "Hi "), ItemCapture.items,
+            "the supplied argument binds to `name` and the omitted argument takes `greeting`'s default")
     }
 
     // --- headless composition harness (no UI) ---

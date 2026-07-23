@@ -48,6 +48,10 @@ internal class EditorInteraction(initialRevision: Int) {
     var hoveredLine by mutableIntStateOf(-1)
     var handlesVisible by mutableStateOf(false)
 
+    // Measured height of the floating touch selection toolbar (px) while it's shown — the lightbulb anchors
+    // above the same caret line, so it reads this to stack itself above the toolbar instead of under it.
+    var selectionToolbarHeightPx by mutableIntStateOf(0)
+
     // triple-tap → select line: a double-tap "arms" this for a brief window; the next quick tap nearby then
     // selects the whole line instead of placing the caret.
     var tripleArmed by mutableStateOf(false)

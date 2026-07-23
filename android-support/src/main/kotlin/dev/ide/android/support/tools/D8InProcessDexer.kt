@@ -21,6 +21,10 @@ import java.util.concurrent.Executors
  */
 class D8InProcessDexer : Dexer {
 
+    // In-process D8 holds its whole working set in the app heap (ART caps it ~576MB regardless of device RAM),
+    // so a monolithic pass over a big classpath is GC-bound. The build prefers bounded per-library dexing here.
+    override fun runsOffHeap(): Boolean = false
+
     override fun dex(
         inputs: List<Path>,
         androidJar: Path,

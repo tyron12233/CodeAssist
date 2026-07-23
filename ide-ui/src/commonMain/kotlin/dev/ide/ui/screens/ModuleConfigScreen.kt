@@ -65,6 +65,8 @@ import dev.ide.ui.backend.FileActions
 import dev.ide.ui.backend.IdeBackend
 import dev.ide.ui.backend.UiBuildFeature
 import dev.ide.ui.backend.UiBuildFeatures
+import dev.ide.ui.backend.UiCompilerPlugin
+import dev.ide.ui.backend.UiCompilerPlugins
 import dev.ide.ui.backend.UiConfigField
 import dev.ide.ui.backend.UiKeystore
 import dev.ide.ui.backend.UiSigningAssignment
@@ -100,6 +102,9 @@ import dev.ide.ui.generated.resources.modcfg_auto_detect
 import dev.ide.ui.generated.resources.modcfg_auto_detected
 import dev.ide.ui.generated.resources.modcfg_build_features_android_only
 import dev.ide.ui.generated.resources.modcfg_build_features_intro
+import dev.ide.ui.generated.resources.modcfg_compiler_plugin_applied
+import dev.ide.ui.generated.resources.modcfg_compiler_plugins_android_only
+import dev.ide.ui.generated.resources.modcfg_compiler_plugins_intro
 import dev.ide.ui.generated.resources.modcfg_couldnt_create
 import dev.ide.ui.generated.resources.modcfg_couldnt_load_config
 import dev.ide.ui.generated.resources.modcfg_created
@@ -119,6 +124,8 @@ import dev.ide.ui.generated.resources.modcfg_no_roots
 import dev.ide.ui.generated.resources.modcfg_no_rows_yet
 import dev.ide.ui.generated.resources.modcfg_no_source_sets
 import dev.ide.ui.generated.resources.modcfg_output
+import dev.ide.ui.generated.resources.modcfg_platform_sdk
+import dev.ide.ui.generated.resources.modcfg_platform_sdk_auto
 import dev.ide.ui.generated.resources.modcfg_remove
 import dev.ide.ui.generated.resources.modcfg_remove_named
 import dev.ide.ui.generated.resources.modcfg_remove_module
@@ -148,6 +155,7 @@ import dev.ide.ui.generated.resources.modcfg_packaging_merge_desc
 import dev.ide.ui.generated.resources.modcfg_packaging_default_excludes
 import dev.ide.ui.generated.resources.modcfg_packaging_default_merges
 import dev.ide.ui.generated.resources.modcfg_tab_build_features
+import dev.ide.ui.generated.resources.modcfg_tab_compiler_plugins
 import dev.ide.ui.generated.resources.modcfg_tab_dependencies
 import dev.ide.ui.generated.resources.modcfg_tab_packaging
 import dev.ide.ui.generated.resources.modcfg_tab_settings
@@ -172,6 +180,7 @@ private const val ARG_TOKEN = "\u0000"
 enum class ModulesTab(val label: StringResource) {
     Settings(Res.string.modcfg_tab_settings),
     BuildFeatures(Res.string.modcfg_tab_build_features),
+    CompilerPlugins(Res.string.modcfg_tab_compiler_plugins),
     Packaging(Res.string.modcfg_tab_packaging),
     Signing(Res.string.modcfg_tab_signing),
     Dependencies(Res.string.modcfg_tab_dependencies),
@@ -312,6 +321,7 @@ private fun ModuleDetail(backend: IdeBackend, moduleName: String, initialTab: Mo
             when (tab) {
                 ModulesTab.Settings -> ModuleSettingsTab(backend, moduleName, codeFont, Modifier.weight(1f).fillMaxWidth())
                 ModulesTab.BuildFeatures -> BuildFeaturesPane(backend, moduleName, Modifier.weight(1f).fillMaxWidth())
+                ModulesTab.CompilerPlugins -> CompilerPluginsPane(backend, moduleName, Modifier.weight(1f).fillMaxWidth())
                 ModulesTab.Packaging -> PackagingPane(backend, moduleName, codeFont, Modifier.weight(1f).fillMaxWidth())
                 ModulesTab.Signing -> SigningPane(backend, moduleName, onOpenKeystoreManager, Modifier.weight(1f).fillMaxWidth())
                 ModulesTab.Dependencies -> DependenciesPane(backend, moduleName, codeFont, fileActions, Modifier.weight(1f).fillMaxWidth())
@@ -415,6 +425,97 @@ private fun BuildFeatureRow(feature: UiBuildFeature, working: Boolean, switchEna
             else CaSwitch(feature.enabled) { if (switchEnabled) onToggle(it) }
         }
         feature.note?.let {
+            Text(it, color = Ca.colors.textTertiary, style = Ca.type.caption2)
+        }
+    }
+}
+
+// ---- Compiler plugins (Kotlin compiler plugins: Compose, Serialization, Parcelize) ---------------
+
+@Composable
+private fun CompilerPluginsPane(backend: IdeBackend, moduleName: String, modifier: Modifier) {
+    var plugins by remember(moduleName) { mutableStateOf<UiCompilerPlugins?>(null) }
+    var loading by remember(moduleName) { mutableStateOf(true) }
+    var busy by remember(moduleName) { mutableStateOf<String?>(null) } // the plugin id currently toggling
+    var reloadKey by remember(moduleName) { mutableStateOf(0) }
+    var toast by remember { mutableStateOf<ConfigToast?>(null) }
+    val scope = rememberCoroutineScope()
+
+    LaunchedEffect(moduleName, reloadKey) {
+        loading = true
+        plugins = runCatching { backend.modules.getCompilerPlugins(moduleName) }.getOrNull()
+        loading = false
+    }
+    LaunchedEffect(toast) { if (toast != null) { delay(2600); toast = null } }
+
+    Box(modifier) {
+        val p = plugins
+        when {
+            loading -> Box(Modifier.fillMaxSize(), Alignment.Center) { CircularProgressIndicator(color = Ca.colors.accent) }
+            p == null -> Box(Modifier.fillMaxSize().padding(32.dp), Alignment.Center) {
+                Text(
+                    stringResource(Res.string.modcfg_compiler_plugins_android_only),
+                    color = Ca.colors.textTertiary, style = Ca.type.subhead,
+                )
+            }
+            else -> LazyColumn(
+                Modifier.fillMaxSize(),
+                contentPadding = PaddingValues(16.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp),
+            ) {
+                item("intro") {
+                    Text(
+                        stringResource(Res.string.modcfg_compiler_plugins_intro),
+                        color = Ca.colors.textSecondary, style = Ca.type.footnote,
+                    )
+                }
+                items(p.plugins, key = { it.id }) { plugin ->
+                    CompilerPluginRow(
+                        plugin = plugin,
+                        working = busy == plugin.id,
+                        switchEnabled = busy == null,
+                    ) { enabled ->
+                        if (busy == null) {
+                            busy = plugin.id
+                            scope.launch {
+                                val r = backend.modules.setCompilerPlugin(moduleName, plugin.id, enabled)
+                                toast = ConfigToast(r.message, error = !r.success)
+                                busy = null
+                                if (r.success) reloadKey++
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        ConfigToastHost(toast, Modifier.align(Alignment.BottomCenter))
+    }
+}
+
+@Composable
+private fun CompilerPluginRow(plugin: UiCompilerPlugin, working: Boolean, switchEnabled: Boolean, onToggle: (Boolean) -> Unit) {
+    Column(
+        Modifier.fillMaxWidth().background(Ca.colors.surface, RoundedCornerShape(Ca.radius.lg))
+            .border(1.dp, Ca.colors.separator, RoundedCornerShape(Ca.radius.lg)).padding(16.dp),
+        verticalArrangement = Arrangement.spacedBy(6.dp),
+    ) {
+        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+            Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
+                Text(plugin.title, color = Ca.colors.textPrimary, style = Ca.type.subhead, fontWeight = FontWeight.SemiBold)
+                Text(plugin.description, color = Ca.colors.textSecondary, style = Ca.type.footnote)
+            }
+            if (working) CircularProgressIndicator(Modifier.size(22.dp), color = Ca.colors.accent, strokeWidth = 2.dp)
+            else CaSwitch(plugin.enabled) { if (switchEnabled) onToggle(it) }
+        }
+        // "Active on the classpath" badge — the real build behavior, which can differ from the toggle when the
+        // runtime came in transitively (a dependency pulling it in applies the plugin even if not toggled here).
+        if (plugin.applied) {
+            Text(
+                "● " + stringResource(Res.string.modcfg_compiler_plugin_applied),
+                color = Ca.colors.accent, style = Ca.type.caption2,
+            )
+        }
+        plugin.note?.let {
             Text(it, color = Ca.colors.textTertiary, style = Ca.type.caption2)
         }
     }
@@ -836,10 +937,11 @@ private fun ConfigForm(
 ) {
     // Editable state, rebuilt whenever a fresh config is loaded (e.g. after a save).
     var level by remember(config) { mutableStateOf(config.languageLevel) }
+    var sdk by remember(config) { mutableStateOf(config.platformSdk) } // "" = follow the module-type default
     val forms = remember(config) { config.facets.map { it.toForm() } }
     val mainClass = remember(config) { mutableStateOf(config.runConfig?.mainClass ?: "") }
-    val dirty = level != config.languageLevel ||
-        (config.runConfig != null && mainClass.value.trim() != config.runConfig.mainClass)
+    val dirty = level != config.languageLevel || sdk != config.platformSdk ||
+        (config.runConfig != null && mainClass.value.trim() != config.runConfig!!.mainClass)
 
     LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
         // ---- General ----
@@ -854,6 +956,17 @@ private fun ConfigForm(
                 Text(stringResource(Res.string.modcfg_java_version), color = Ca.colors.textSecondary, style = Ca.type.caption, fontWeight = FontWeight.Medium)
                 Row(Modifier.fillMaxWidth().padding(top = 2.dp).horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                     config.languageLevels.forEach { lvl -> LevelChip(prettyLevel(lvl), lvl == level) { level = lvl } }
+                }
+                // Platform SDK: the boot classpath the module compiles/completes against. "Auto" follows the
+                // module type (Java → core-Java, Android → the Android SDK); pinning it is how a console module
+                // is kept off android.jar, or a module is targeted at a specific installed platform.
+                if (config.availableSdks.size > 1) {
+                    Spacer(Modifier.height(6.dp))
+                    Text(stringResource(Res.string.modcfg_platform_sdk), color = Ca.colors.textSecondary, style = Ca.type.caption, fontWeight = FontWeight.Medium)
+                    Row(Modifier.fillMaxWidth().padding(top = 2.dp).horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                        LevelChip(stringResource(Res.string.modcfg_platform_sdk_auto, config.resolvedSdk), sdk == "") { sdk = "" }
+                        config.availableSdks.forEach { opt -> LevelChip(opt.label, sdk == opt.name) { sdk = opt.name } }
+                    }
                 }
             }
         }
@@ -890,6 +1003,7 @@ private fun ConfigForm(
                         languageLevel = level,
                         facetValues = forms.associate { it.table to it.toValues() },
                         mainClass = if (config.runConfig != null) mainClass.value.trim() else null,
+                        platformSdk = sdk,
                     ))
                 })
             }

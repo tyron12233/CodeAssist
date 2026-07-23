@@ -20,6 +20,13 @@ dependencies {
     // :ide-android uses on device). Re-exports :interp-core's ResolvedFunction, which the host consumes.
     implementation(project(":interp-compose"))
 
+    // Project-resource resolution for the preview (`stringResource(R.string.x)`/`colorResource`/…) — the merged
+    // resource repository + aapt-shaped R ids (:android-support) and the value engine (:layout-preview-impl),
+    // wired into a DesktopPreviewResources. Both are pure-JVM and already transitive runtime deps via :ide-core;
+    // added directly for compile visibility.
+    implementation(project(":android-support"))
+    implementation(project(":layout-preview-impl"))
+
     implementation(compose.desktop.currentOs)
     // material3 for the preview host's progress/empty-state chrome (compose.desktop.currentOs bundles M2;
     // :ide-ui keeps material3 as a non-transitive `implementation`).

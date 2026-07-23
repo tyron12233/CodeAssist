@@ -135,21 +135,23 @@ class KotlinTreeResolverTest {
 
     @Test
     fun importedExtensionPropertyResolves() {
-        // The SAME extension, now explicitly imported, resolves to its facade with the extension flag set.
+        // The SAME extension, now explicitly imported, resolves. A SOURCE extension property has no compiled
+        // facade getter to reflect, so it lowers to a source EXTENSION call of its interpreted getter.
         val fn = lower("package other\nimport demo.doubled\nfun f() { 5.doubled }")
-        val get = assertIs<RNode.PropertyGet>(fn.stmts()[0])
-        val prop = assertIs<Binding.Property>(get.binding)
-        assertEquals("doubled", prop.name)
-        assertTrue(prop.isExtension, "doubled is an extension property")
+        val call = assertIs<RNode.Call>(fn.stmts()[0])
+        assertEquals(DispatchKind.EXTENSION, call.dispatch)
+        assertEquals("doubled", call.callee.displayName)
         assertTrue(fn.isComplete, "an imported extension should lower completely; diags=${fn.diagnostics}")
     }
 
     @Test
     fun samePackageExtensionPropertyResolvesWithoutImport() {
-        // An extension declared in the file's OWN package is in scope without an import.
+        // An extension declared in the file's OWN package is in scope without an import. A source extension
+        // property lowers to a source EXTENSION call of its interpreted getter (there's no facade to reflect).
         val fn = lower("package demo\nfun f() { 5.doubled }")
-        val get = assertIs<RNode.PropertyGet>(fn.stmts()[0])
-        assertTrue(assertIs<Binding.Property>(get.binding).isExtension)
+        val call = assertIs<RNode.Call>(fn.stmts()[0])
+        assertEquals(DispatchKind.EXTENSION, call.dispatch)
+        assertEquals("doubled", call.callee.displayName)
         assertTrue(fn.isComplete, "a same-package extension should lower completely; diags=${fn.diagnostics}")
     }
 
@@ -193,9 +195,10 @@ class KotlinTreeResolverTest {
 
     @Test
     fun unsupportedConstructIsRejectedNotGuessed() {
-        // A construct outside the subset (a non-Int range) → Unsupported, not a guess. (Indexed assignment is
-        // now supported — see indexedAssignmentLowersToSetOperator.)
-        val fn = lower("package demo\nfun f() { val r = 1L..5L }")
+        // A construct outside the subset (an anonymous FUNCTION expression) → Unsupported, not a guess.
+        // (Anonymous OBJECTS `object : Foo { }`, non-Int ranges, indexed assignment, and labeled break/continue
+        // are now supported — see AnonymousObjectTest / RangeLoweringTest / LabeledLoopTest.)
+        val fn = lower("package demo\nfun f(): Any = fun(): Int = 5")
         assertFalse(fn.isComplete, "the function should report an incomplete lowering")
         assertTrue(fn.diagnostics.isNotEmpty(), "the gap should be recorded as a diagnostic")
     }
@@ -760,6 +763,39 @@ class KotlinTreeResolverTest {
         val fn = lower("package demo\nfun f(g: Greeter, h: Greeter) { g mystery h }")
         assertIs<RNode.Unsupported>(fn.stmts()[0], "an unresolved infix function must be Unsupported")
         assertFalse(fn.isComplete)
+    }
+
+    @Test
+    fun typeClassLiteralDotJavaLowersToClassLiteral() {
+        // `Greeter::class.java` — a `KtClassLiteralExpression` used to fall through to Unsupported, so
+        // `Intent(context, X::class.java)` blanked the whole preview. It now lowers to a ClassLiteral that
+        // yields a `java.lang.Class`, with the resolved type FQN as the first load candidate.
+        val fn = lower("package demo\nfun f() { val c = Greeter::class.java }")
+        val lit = assertIs<RNode.ClassLiteral>(assertIs<RNode.LocalVar>(fn.stmts()[0]).initializer)
+        assertTrue(lit.asJava, "`.java` yields a Class, not a KClass")
+        assertEquals(null, lit.receiver, "a type literal has no value receiver")
+        assertEquals("demo.Greeter", lit.typeCandidates.firstOrNull(), "the resolved type is the first load candidate")
+        assertTrue(fn.isComplete, "a class literal must lower completely; diags=${fn.diagnostics}")
+    }
+
+    @Test
+    fun bareTypeClassLiteralLowersToKClass() {
+        // `Greeter::class` (no `.java`) yields a KClass.
+        val fn = lower("package demo\nfun f() { val c = Greeter::class }")
+        val lit = assertIs<RNode.ClassLiteral>(assertIs<RNode.LocalVar>(fn.stmts()[0]).initializer)
+        assertFalse(lit.asJava, "a bare `::class` yields a KClass")
+        assertTrue(fn.isComplete, "diags=${fn.diagnostics}")
+    }
+
+    @Test
+    fun instanceClassLiteralCarriesItsReceiver() {
+        // `g::class.java` — an INSTANCE class literal takes the runtime class of the evaluated receiver.
+        val fn = lower("package demo\nfun f(g: Greeter) { val c = g::class.java }")
+        val lit = assertIs<RNode.ClassLiteral>(assertIs<RNode.LocalVar>(fn.stmts()[0]).initializer)
+        assertTrue(lit.asJava)
+        assertIs<RNode.Name>(lit.receiver, "an instance literal carries its receiver expression")
+        assertTrue(lit.typeCandidates.isEmpty(), "an instance literal resolves its class at runtime, not from candidates")
+        assertTrue(fn.isComplete, "diags=${fn.diagnostics}")
     }
 
     companion object {

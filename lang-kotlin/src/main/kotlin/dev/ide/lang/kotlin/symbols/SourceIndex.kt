@@ -142,6 +142,11 @@ class RawClass(
      *  localTypeFqn]) that the resolver recomputes from the same PSI, so member enumeration / diagnostics flow
      *  through the normal FQN machinery. Kept OUT of type-name completion (no one references it by that name). */
     val isLocal: Boolean = false,
+    /** Simple names of the annotations on the class declaration (`@Serializable class Foo` → `["Serializable"]`),
+     *  detected by annotation simple name the same way [RawCallable.isComposable] is — no type resolution. Lets a
+     *  [KotlinSyntheticMemberProvider] recognize its marker annotation (kotlinx.serialization's `@Serializable`,
+     *  Parcelize's `@Parcelize`) off the source model to contribute the members that plugin would generate. */
+    val annotationNames: List<String> = emptyList(),
 )
 
 class SourceFile(
@@ -355,7 +360,8 @@ object SourceIndexBuilder {
             isAnnotation = asClass?.isAnnotation() == true,
             isAbstract = asClass?.let { it.hasModifier(KtTokens.ABSTRACT_KEYWORD) || it.hasModifier(KtTokens.SEALED_KEYWORD) } == true,
             isSealed = asClass?.isSealed() == true,
-            isLocal = isLocal)
+            isLocal = isLocal,
+            annotationNames = c.annotationEntries.mapNotNull { it.shortName?.asString() })
     }
 
     /** ABSTRACT member detection: an explicit `abstract` modifier, or an interface member with no implementation

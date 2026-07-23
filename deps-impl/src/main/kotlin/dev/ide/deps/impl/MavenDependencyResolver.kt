@@ -144,6 +144,9 @@ class MavenDependencyResolver(
 
         val queue = ArrayDeque<Req>()
         for (c0 in coordinates) {
+            // A JVM-irrelevant KMP metadata module (kotlin-stdlib-common) is provided by the platform stdlib —
+            // never fetch it (it 404s in modern Kotlin) or flag it unresolved. See [METADATA_ONLY_MODULES].
+            if (c0.ga in METADATA_ONLY_MODULES) continue
             // A blank version means "take it from a platform BOM" — fill it, or record it unresolved.
             val c = if (c0.version.isBlank()) {
                 val v = platformManaged[c0.ga] ?: run { unresolved += c0; continue }
@@ -229,6 +232,10 @@ class MavenDependencyResolver(
                     }
                     for (d in node.transitives) {
                         val childGa = GA(d.group, d.name)
+                        // A JVM-irrelevant KMP metadata module (kotlin-stdlib-common) pulled transitively (e.g.
+                        // by kotlinx-serialization) is provided by the platform stdlib — never walk/fetch it
+                        // (it 404s in modern Kotlin, surfacing as unresolved). See [METADATA_ONLY_MODULES].
+                        if (childGa in METADATA_ONLY_MODULES) continue
                         // A `strictly` pin forces the version; else a versionless transitive (one whose own
                         // metadata left the version to a BOM it didn't carry) is placeable iff a BOM manages it.
                         val version = d.strictly?.ifBlank { null } ?: d.version?.ifBlank { null } ?: platformManaged[childGa] ?: continue
@@ -613,6 +620,8 @@ class MavenDependencyResolver(
         val properties: Map<String, String>,
         val managed: Map<GA, String>,
         val dependencies: List<PomDependency>,
+        /** Where a `<relocation>` moved this artifact to (null = not relocated). Followed as a compile edge. */
+        val relocation: Coordinate? = null,
     )
 
     private fun loadEffective(coord: Coordinate, repos: List<Repository>, visiting: MutableSet<Coordinate>): EffPom? {
@@ -654,7 +663,16 @@ class MavenDependencyResolver(
                     type = resolveProperties(d.type, props, coord) ?: "jar",
                 )
             }
-            val eff = EffPom(coord, raw.packaging, props, managed, deps)
+            // A `<relocation>` redirects to a new coordinate; any field it omits keeps this POM's value. Kept
+            // as a target here and followed as a compile edge in [toResolvedNode] so the moved-to closure
+            // joins the classpath (the stub itself is usually an artifact-less `pom`).
+            val relocation = raw.relocation?.let { r ->
+                val g = resolveProperties(r.groupId, props, coord) ?: coord.group
+                val a = resolveProperties(r.artifactId, props, coord) ?: coord.name
+                val v = normalizeVersion(resolveProperties(r.version, props, coord)) ?: coord.version
+                Coordinate(g, a, v).takeIf { it != coord }
+            }
+            val eff = EffPom(coord, raw.packaging, props, managed, deps, relocation)
             effCache[coord] = Optional.of(eff)
             return eff
         } finally {
@@ -769,8 +787,12 @@ class MavenDependencyResolver(
 
     private fun EffPom.toResolvedNode(): ResolvedNode = ResolvedNode(
         packaging = packaging,
-        transitives = dependencies.filter { it.isTransitivelyIncluded() }
-            .map { ChildDep(it.groupId, it.artifactId, it.version?.ifBlank { null }, null, it.exclusions, it.type) },
+        // A `<relocation>` is followed by prepending the moved-to coordinate as a compile edge: the stub keeps
+        // its (usually artifact-less `pom`) identity while its whole new closure joins the classpath — e.g.
+        // com.itextpdf:itext7-core relocates to :itext-core, whose aggregator pom pulls the real kernel/io/… jars.
+        transitives = listOfNotNull(relocation?.let { ChildDep(it.group, it.name, it.version, null, emptySet(), "jar") }) +
+            dependencies.filter { it.isTransitivelyIncluded() }
+                .map { ChildDep(it.groupId, it.artifactId, it.version?.ifBlank { null }, null, it.exclusions, it.type) },
         constraints = emptyList(),
         artifacts = emptyList(),   // no GMM → fetch by the default packaging-based URL
         sources = null,
@@ -915,8 +937,14 @@ class MavenDependencyResolver(
         Files.createDirectories(dir)
         val classesJar = dir.resolve("classes.jar")
         val marker = dir.resolve(".extracted")
-        // Re-extract if a prior (pre-manifest) explosion left no manifest, so the package name is available.
-        if (Files.isRegularFile(marker) && Files.isRegularFile(dir.resolve("AndroidManifest.xml"))) {
+        // Reuse the exploded dir only when a PRIOR extraction ran with the CURRENT explosion logic — the marker
+        // records its version ([AAR_EXPLODE_VERSION]). Any older marker (an earlier build wrote an empty one, or a
+        // pre-res/pre-manifest format) is treated as stale and re-extracted: such a dir can hold `classes.jar` +
+        // `AndroidManifest.xml` but NO `res/` (the res/assets/jni unpacking was added later), yet still passes
+        // `AndroidLibraries.isExplodedAar` with no res sibling — so a library's `res/` (its `attr`/
+        // `declare-styleable`s) silently never reaches aapt2 and the app fails to link ("attribute … not found",
+        // e.g. AndroidX Navigation's `navGraph`/`startDestination` from the transitive navigation-runtime/-common).
+        if (runCatching { Files.readString(marker).trim() }.getOrNull() == AAR_EXPLODE_VERSION) {
             // Heal a classes.jar an older build left as a zero-entry zip (resource-only AAR): unusable on ART,
             // where ZipFile rejects an empty archive. Cheap (central-directory read) and only rewrites the bad ones.
             if (Files.isRegularFile(classesJar) && !isUsableJar(classesJar)) writeManifestOnlyJar(classesJar)
@@ -948,7 +976,7 @@ class MavenDependencyResolver(
         }
         // resource-only AAR (no code) → a classes.jar with a single manifest entry (see [writeManifestOnlyJar]).
         if (!foundClasses) writeManifestOnlyJar(classesJar)
-        marker.writeText("")
+        marker.writeText(AAR_EXPLODE_VERSION)
         return classesJar
     }
 
@@ -1001,6 +1029,17 @@ class MavenDependencyResolver(
                 GA("org.jetbrains.kotlin", "kotlin-stdlib-common"),
             ),
         )
+
+        /**
+         * KMP metadata-only modules that must NOT be fetched as JVM artifacts. `kotlin-stdlib-common` carries
+         * only common-module metadata (no JVM bytecode); since Kotlin 1.9.20 it is published through Gradle
+         * Module Metadata / a `.klib`, not a plain `.jar`, so a POM-only JVM resolve (e.g. of
+         * kotlinx-serialization) pulls it transitively and then 404s fetching `kotlin-stdlib-common-<v>.jar` —
+         * surfacing as an unresolved dependency. On a JVM/Android classpath the platform `kotlin-stdlib` (here,
+         * the IDE's injected bundled stdlib) provides the real classes, so this module is redundant: prune it
+         * from the graph rather than fetch it or flag it unresolved.
+         */
+        val METADATA_ONLY_MODULES: Set<GA> = setOf(GA("org.jetbrains.kotlin", "kotlin-stdlib-common"))
     }
 }
 
@@ -1012,6 +1051,13 @@ private fun PomDependency.isTransitivelyIncluded(): Boolean =
 private fun GA.excludedBy(exclusions: Set<GA>): Boolean = exclusions.any {
     (it.group == "*" || it.group == group) && (it.name == "*" || it.name == name)
 }
+
+/** Version of the AAR-explosion layout written into each exploded dir's `.extracted` marker. Bump whenever
+ *  [MavenDependencyResolver.extractClassesJar] changes WHAT it lays down (e.g. the res/assets/jni unpacking
+ *  added after the initial classes.jar-only explosion), so a dir left by an older build is treated as stale
+ *  and re-extracted instead of reused missing its `res/`. Folded into the dependency-reconcile fingerprint so
+ *  a bump forces a one-time re-resolve that heals existing caches on the next open. */
+const val AAR_EXPLODE_VERSION = "2"
 
 const val MAVEN_CENTRAL_SEARCH = "https://search.maven.org/solrsearch/select"
 

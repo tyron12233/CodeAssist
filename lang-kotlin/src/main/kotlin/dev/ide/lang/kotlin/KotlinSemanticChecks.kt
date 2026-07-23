@@ -126,7 +126,13 @@ internal class KotlinSemanticChecks(private val service: KotlinSymbolService) {
         KotlinChecker(KtNameReferenceExpression::class.java) { psi ->
             psi as KtNameReferenceExpression
             KotlinPerf.span("sem.nameRef") {
-                if (resolveReady) report(unresolvedMember(psi, resolver) ?: unresolvedBareReference(psi, resolver))
+                if (resolveReady) {
+                    val unresolved = unresolvedMember(psi, resolver) ?: unresolvedBareReference(psi, resolver)
+                    report(unresolved)
+                    // Only when the reference DOES resolve (to a classifier): a class used as a value must be
+                    // initialized (`GridCells.Fixed` → `GridCells.Fixed(2)`).
+                    if (unresolved == null) report(classifierUsedAsValue(psi, resolver))
+                }
             }
         },
         KotlinChecker(KtUserType::class.java) { psi ->
@@ -440,6 +446,72 @@ internal class KotlinSemanticChecks(private val service: KotlinSymbolService) {
             (arg is KtNamedFunction && arg.name == null)
     }
 
+    /**
+     * A CLASSIFIER (a class/interface) used as a VALUE without being initialized — the reported `columns =
+     * GridCells.Fixed` (where `Fixed` is a `class Fixed(count: Int)`), or a bare `val x = Foo`. A class name in
+     * value position is not itself a value: it must be instantiated (`GridCells.Fixed(2)`); only a class WITH a
+     * companion object refers to that companion. The compiler's "Classifier 'X' does not have a companion object,
+     * and thus must be initialized here". Conservative — fires only when the reference CONFIDENTLY resolves to a
+     * known classifier that is neither an object, a companion, nor a companion-bearing class, sits in a plain
+     * value position (not a constructor call, a further `.member`/`::` access, a type reference, or an import),
+     * and — for a bare name — is not shadowed by a value binding in scope.
+     */
+    private fun classifierUsedAsValue(ref: KtNameReferenceExpression, resolver: KotlinResolver): Diagnostic? {
+        val name = ref.getReferencedName()
+        // Classifiers are conventionally capitalized; the gate keeps this off the hot path for the many lowercase
+        // value reads (locals, properties, calls) that can never be a classifier.
+        if (name.isEmpty() || !name[0].isUpperCase() || name == "Companion") return null
+        if (inImportOrPackage(ref) || inTypeReference(ref)) return null
+        if (ref.parent is org.jetbrains.kotlin.psi.KtInstanceExpressionWithLabel) return null // this/super
+        if (hasAncestor(ref) { it is org.jetbrains.kotlin.psi.KtAnnotationEntry }) return null
+
+        // The full value expression + the name to resolve: for `Outer.Inner` it's the enclosing dot-qualified
+        // expression ("Outer.Inner"); for a bare `Foo` it's the reference itself.
+        val parent = ref.parent
+        val full: KtExpression
+        val qualifiedName: String
+        when {
+            parent is KtDotQualifiedExpression && parent.selectorExpression === ref -> { full = parent; qualifiedName = parent.text }
+            parent is KtQualifiedExpression && parent.selectorExpression === ref -> return null // `a?.X` selector
+            parent is KtQualifiedExpression && parent.receiverExpression === ref -> return null // `X.member` — X is a receiver
+            else -> { full = ref; qualifiedName = name }
+        }
+        // Value-position guards on the FULL expression: not a call callee, a further-member receiver, a `::`
+        // reference, or inside a type reference.
+        val fp = full.parent
+        if (fp is KtCallExpression && fp.calleeExpression === full) return null              // `Foo(...)` / `X.Y(...)`
+        if (fp is KtQualifiedExpression && fp.receiverExpression === full) return null        // `X.Y.more`
+        if (fp is org.jetbrains.kotlin.psi.KtDoubleColonExpression) return null               // `Foo::class` / `Foo::member`
+        if (inTypeReference(full)) return null
+
+        // Resolve to a classifier; back off unless it is confidently a known class that is NOT a valid value.
+        val fqn = runCatching { service.resolveTypeName(qualifiedName, resolver.fileContext) }.getOrNull() ?: return null
+        if (!service.isKnownType(fqn)) return null
+        if (service.isObject(fqn) || service.typeHasCompanionObject(fqn)) return null
+        if (fqn.substringAfterLast('.') == "Companion") return null
+
+        // A bare name might be shadowed by a value in scope (a local/param, an enclosing member, an in-scope
+        // top-level value/function, or a local type) — then it's a legitimate value read, not a classifier. A
+        // qualified `X.Y` can't be shadowed this way.
+        if (full === ref) {
+            val off = ref.textRange.startOffset
+            if (resolver.localsAt(off).any { it.name == name }) return null
+            if (resolver.enclosingClassMembersContain(off, name)) return null
+            if (resolver.localTypesInScope(off).containsKey(name)) return null
+            if (service.topLevelByName(name).any {
+                    (it.kind == SymbolKind.FIELD || it.kind == SymbolKind.METHOD) && resolver.topLevelInScope(it, resolver.fileContext)
+                }
+            ) return null
+        }
+
+        val r = full.textRange
+        return Diagnostic(
+            TextRange(r.startOffset, r.endOffset), Severity.ERROR,
+            "Classifier '$name' does not have a companion object, and thus must be initialized here",
+            KotlinDiagnosticCodes.CLASSIFIER_AS_VALUE,
+        )
+    }
+
     /** The class/object NAME identifier range (for an anonymous object, a short range over its `object` keyword). */
     private fun declNameRange(cls: KtClassOrObject): TextRange {
         cls.nameIdentifier?.let { return TextRange(it.textRange.startOffset, it.textRange.endOffset) }
@@ -518,7 +590,8 @@ internal class KotlinSemanticChecks(private val service: KotlinSymbolService) {
                 }
                 is KtProperty -> {
                     val name = d.name
-                    if (d.nameIdentifier != null && name != null)
+                    // `val _ = …` is the ignore hole (a discarded value), never a real binding — never conflicts.
+                    if (d.nameIdentifier != null && name != null && name != "_")
                         record("P:${d.receiverTypeReference?.text ?: ""}:$name", d)
                 }
                 is KtNamedFunction -> {
@@ -532,13 +605,17 @@ internal class KotlinSemanticChecks(private val service: KotlinSymbolService) {
         return conflicts(byKey.values)
     }
 
-    /** Duplicate parameter names within one parameter list (`fun f(x: Int, x: String)`, `{ a, a -> }`). */
+    /** Duplicate parameter names within one parameter list (`fun f(x: Int, x: String)`, `{ a, a -> }`). The
+     *  `_` placeholder (an unused lambda parameter, `{ _, _ -> … }`) is the ignore hole, not a real binding, so
+     *  repeats of it never conflict. */
     private fun duplicateParams(list: KtParameterList): List<Diagnostic> {
         if (list.parameters.size < 2) return emptyList()
         val byName = LinkedHashMap<String, MutableList<KtNamedDeclaration>>()
         for (p in list.parameters) {
             if (p.nameIdentifier == null) continue
-            byName.getOrPut(p.name ?: continue) { ArrayList() }.add(p)
+            val name = p.name ?: continue
+            if (name == "_") continue
+            byName.getOrPut(name) { ArrayList() }.add(p)
         }
         return conflicts(byName.values)
     }
@@ -1601,8 +1678,12 @@ internal class KotlinSemanticChecks(private val service: KotlinSymbolService) {
      *
      * Conservative over the parse-only model — judged across the full overload set from the index-backed
      * [KotlinResolver.callTargets], and flagged only when EVERY candidate is provably inapplicable:
-     *  - only METHOD candidates (a constructor call resolves to CONSTRUCTOR candidates → none here → backs off,
-     *    leaving it to the constructor checks);
+     *  - only METHOD candidates are judged; but if the callee ALSO resolves to a CONSTRUCTOR (a class with a
+     *    same-named factory function — Compose's `BorderStroke(w, color)` beside the class's `(w, brush)`
+     *    constructor, or `Color(...)`), the whole check backs off: the constructor may accept an argument no
+     *    function overload does (`SolidColor` fits `brush: Brush` but not `color: Color`), and the method-only
+     *    verdict can't see it, so judging by the functions alone would false-flag a valid call. The
+     *    constructor side is owned by [constructorCallMismatch]/[sameFileConstructorMismatch];
      *  - backs off entirely on a spread argument (arity opaque) or if ANY candidate has unknown per-parameter
      *    defaults (its `paramHasDefault` size ≠ its arity — Java bytecode / a stale cache might accept the call);
      *  - the per-argument type check is the same [isMismatch] rule used everywhere else (both types fully-known
@@ -1613,8 +1694,11 @@ internal class KotlinSemanticChecks(private val service: KotlinSymbolService) {
      */
     private fun callNotApplicable(call: KtCallExpression, resolver: KotlinResolver): Diagnostic? {
         if (call.valueArguments.any { it.getSpreadElement() != null }) return null
-        val candidates = runCatching { resolver.callTargets(call) }.getOrDefault(emptyList())
-            .filter { it.kind == SymbolKind.METHOD }
+        val targets = runCatching { resolver.callTargets(call) }.getOrDefault(emptyList())
+        // A same-named constructor overload might accept the call even when no function does — the method-only
+        // judgment below is unsound then, so defer to the constructor checks (see kdoc).
+        if (targets.any { it.kind == SymbolKind.CONSTRUCTOR }) return null
+        val candidates = targets.filter { it.kind == SymbolKind.METHOD }
         if (candidates.isEmpty()) return null
         val verdicts = ArrayList<Applicability>(candidates.size)
         for (c in candidates) verdicts += applicability(c, call, resolver) ?: return null // unjudgeable → back off
@@ -1784,11 +1868,15 @@ internal class KotlinSemanticChecks(private val service: KotlinSymbolService) {
                 val expr = arg.getArgumentExpression()
                 val pt = c.paramTypes.getOrNull(idx) as? KotlinType
                 val at = expr?.let { resolver.inferType(it) }
-                // Skip functional positions entirely (a lambda / callable reference / function-typed parameter or
-                // SAM): a function value's inferred shape vs. the expected type is too imprecise here to flag
-                // soundly, and these dominate Compose call sites.
-                if (expr != null && pt != null && at != null && !isFunctional(pt) && !isFunctional(at)) {
-                    if (isMismatch(pt, at)) { if (typeBad == null) typeBad = Applicability.TypeBad(expr, pt, at, prefix) }
+                // A FUNCTIONAL argument (lambda / callable reference / function-typed value) is left unchecked:
+                // its shape vs. the expected type is too imprecise to flag soundly, and these dominate Compose
+                // call sites. For a NON-function argument we DO check: against a non-function parameter with the
+                // ordinary assignability rule, and against a FUNCTION parameter as a category error — a concrete
+                // non-function value can never be a `() -> R` (the `onClick = handler()` missing-lambda mistake,
+                // which otherwise silently binds a `Unit`/null the clickable NPE-crashes on at tap time).
+                if (expr != null && pt != null && at != null && !isFunctional(at)) {
+                    val bad = if (isFunctional(pt)) isConcreteNonFunction(at) else isMismatch(pt, at)
+                    if (bad) { if (typeBad == null) typeBad = Applicability.TypeBad(expr, pt, at, prefix) }
                     else if (typeBad == null) prefix++ // a matched leading argument (only before the first mismatch)
                 }
             }
@@ -1804,6 +1892,14 @@ internal class KotlinSemanticChecks(private val service: KotlinSymbolService) {
      *  functional argument/parameter slot, excluded from the positional type check (see [applicability]). */
     private fun isFunctional(t: KotlinType): Boolean =
         t.qualifiedName.startsWith("kotlin.Function") || t.isExtensionFunctionType || t.isComposable
+
+    /** Whether [t] is a KNOWN, concrete, non-function type — a value that can NEVER satisfy a function-typed
+     *  parameter (`Unit` from `onClick = handler()`, an `Int`, a data class). Gates the function-expected
+     *  mismatch so an un-inferred / type-parameter / `Nothing` argument (whose type can't be pinned) never
+     *  false-positives; the caller already excluded a functional [t]. */
+    private fun isConcreteNonFunction(t: KotlinType): Boolean =
+        !t.isTypeParameter && t.qualifiedName != "kotlin.Nothing" &&
+            service.isKnownType(canonicalForCheck(t).qualifiedName)
 
     /**
      * An assignment (`x = expr`) whose right-hand side type isn't assignable to the target's declared type
@@ -2257,6 +2353,19 @@ internal class KotlinSemanticChecks(private val service: KotlinSymbolService) {
         // A synthetic local/anonymous type key must not leak into the message — show `<anonymous …>` / the
         // local class's real name instead of the internal `$L<ordinal>` id.
         service.localTypeDisplayName(t.qualifiedName)?.let { return it + if (t.nullable) "?" else "" }
+        // A function type reads far better as `(P) -> R` than `Function1<P, R>` — `kotlin.FunctionN`'s type
+        // arguments are the N parameter types followed by the return type (a receiver function type's first
+        // argument is the receiver: `T.(…) -> R`).
+        if (t.qualifiedName.startsWith("kotlin.Function") && t.typeArguments.isNotEmpty()) {
+            val simple = t.typeArguments.map { it.qualifiedName.substringAfterLast('.') }
+            val ret = simple.last()
+            val params = simple.dropLast(1)
+            val head = if (t.isExtensionFunctionType && params.isNotEmpty())
+                "${params.first()}.(${params.drop(1).joinToString(", ")})"
+            else "(${params.joinToString(", ")})"
+            val fn = "$head -> $ret"
+            return if (t.nullable) "($fn)?" else fn
+        }
         val simple = t.qualifiedName.substringAfterLast('.')
         val args = if (t.typeArguments.isEmpty()) ""
         else t.typeArguments.joinToString(", ", "<", ">") { it.qualifiedName.substringAfterLast('.') }
@@ -2364,8 +2473,14 @@ internal class KotlinSemanticChecks(private val service: KotlinSymbolService) {
         if (parent is KtCallExpression && parent.calleeExpression === expr) {
             (parent.parent as? KtQualifiedExpression)?.let { if (it.selectorExpression === parent) return null }
         }
-        // `x.foo` / `x.foo()` — the receiver `x` could be a package or a type (static access); back off.
-        if (parent is KtQualifiedExpression && parent.receiverExpression === expr) return null
+        // `x.foo` / `x.foo()` — the receiver `x` of a qualified expression. Usually left alone: it may be a
+        // package segment (`androidx.compose.…`) or a not-yet-built same-package class (Android `R`/`BuildConfig`),
+        // neither of which is an error. But it may ALSO be a TYPE the file forgot to import, used for companion/
+        // static access (`FontWeight.Bold` with no `import …FontWeight`) — which Kotlin reports as "Unresolved
+        // reference", and which the selector's [unresolvedMember] can't flag (it can't type the unresolved
+        // receiver, so it backs off). Defer the decision: flag such a receiver ONLY if it's confidently a known,
+        // unimported LIBRARY type (the gate near the end) — never a package/generated-class receiver.
+        val isQualifiedReceiver = parent is KtQualifiedExpression && parent.receiverExpression === expr
         // A callable reference `Type::member` / `::top` — its selector resolves against the receiver type or
         // top-level scope (see [KotlinResolver.callableReferenceTarget]), not the bare-name scope, so it must
         // never be flagged here (both the receiver and the referenced callable are children of the `::`).
@@ -2381,6 +2496,10 @@ internal class KotlinSemanticChecks(private val service: KotlinSymbolService) {
         if (name == "field" && hasAncestor(expr) { it is KtPropertyAccessor }) return null
         val off = expr.textRange.startOffset
         if (resolver.companionInScope(off) || resolver.bareNameResolves(name, off)) return null
+        // A qualified-expression receiver (see above) is flagged only when it's confidently a known, unimported
+        // LIBRARY type — a real missing import — never a package segment or a generated/same-package class the
+        // index doesn't hold as a library type.
+        if (isQualifiedReceiver && !service.hasLibraryType(name)) return null
         val r = expr.textRange
         return Diagnostic(TextRange(r.startOffset, r.endOffset), Severity.ERROR, "Unresolved reference: $name", KotlinDiagnosticCodes.UNRESOLVED)
     }
@@ -2707,8 +2826,10 @@ internal class KotlinSemanticChecks(private val service: KotlinSymbolService) {
         // A qualified type (`java.util.Locale`, `Outer.Inner`) or a qualifier SEGMENT of one (the `gen` in
         // `gen.Txt`) — left alone; only a standalone simple name is checked.
         if (userType.qualifier != null || userType.parent is KtUserType) return null
-        // Annotation type references (`@Composable`) have their own resolution rules — not flagged here.
-        if (hasAncestor(userType) { it is org.jetbrains.kotlin.psi.KtAnnotationEntry }) return null
+        // Annotation type references (`@Foo`) ARE checked here — an unknown/unimported annotation is as much an
+        // error as any unresolved type. They resolve through the same paths below (import / same-package /
+        // builtin / star-import / `resolveTypeName`), so a real annotation (`@Composable`, `@Deprecated`, a
+        // same-package annotation class) never false-positives, while `@Undefined` is flagged.
         val ref = userType.referenceExpression ?: return null
         val name = ref.getReferencedName()
         if (name.isEmpty()) return null

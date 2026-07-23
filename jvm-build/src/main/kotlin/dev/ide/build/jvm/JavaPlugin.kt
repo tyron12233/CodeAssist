@@ -41,7 +41,10 @@ import java.nio.file.Paths
  * `:lib:classes`).
  */
 class JavaPlugin(
-    private val bootClasspath: List<Path> = emptyList(),
+    /** The compile boot (platform) classpath for a given module — its platform SDK, resolved per module so
+     *  a `java-*` console module compiles against the core-Java platform and never `android.jar`. Empty →
+     *  the host JRE (the desktop default). */
+    private val bootClasspathFor: (Module) -> List<Path> = { emptyList() },
     private val kotlin: IncrementalKotlinCompiler? = null,
     /** Kotlin compiler plugins applied by the `compileKotlin` tasks (the `platform.kotlinCompilerPlugin`
      *  EP contents; defaults to the built-ins for direct/test wiring). */
@@ -49,6 +52,9 @@ class JavaPlugin(
     /** Build-time source generators (the `platform.sourceGenerator` EP contents). When a module declares a
      *  `ContentRole.GENERATED` root, a `generateSources` task runs them into it ahead of compilation. */
     private val generators: List<SourceGenerator> = emptyList(),
+    /** The module's runnable entry point → the packaged jar's manifest `Main-Class`, so the jar runs
+     *  standalone (`java -jar`). Null / blank for a library module → a manifest with no `Main-Class`. */
+    private val mainClassFor: (Module) -> String? = { null },
 ) : Plugin {
 
     /** The module's `ContentRole.GENERATED` source roots (where a [GenerateSourcesTask] emits). */
@@ -83,6 +89,7 @@ class JavaPlugin(
             gen
         } else null
 
+        val bootClasspath = bootClasspathFor(module)
         if (hasKt) {
             val kc = TaskName(":${module.name}:compileKotlin")
             tasks.register(kc) { KotlinCompileTask(module, kc, bootClasspath, kotlin, plugins) }.configure {
@@ -108,7 +115,7 @@ class JavaPlugin(
 
         if (withJar) {
             val jar = TaskName(":${module.name}:jar")
-            tasks.register(jar) { JarTask(jar, classOutputs(module), jarPath(module)) }.configure { dependsOn(classes) }
+            tasks.register(jar) { JarTask(jar, classOutputs(module), jarPath(module), { mainClassFor(module) }) }.configure { dependsOn(classes) }
         }
     }
 }

@@ -20,9 +20,8 @@ import kotlin.test.assertTrue
 
 /**
  * End-to-end of running an INSTANCE `main` — a plain `class Test { fun main() {} }` with no static entry point.
- * The JVM launcher can't run that (it requires a static `main`), but the run service detects it (index-backed,
- * no regex) and routes the desktop run through [dev.ide.build.engine.ReflectiveMainLauncher], which constructs
- * the class with its no-arg constructor and calls the instance method. Proves detection + the launcher path.
+ * The run service detects it (index-backed, no regex) and the bytecode interpreter constructs the class with
+ * its no-arg constructor and calls the instance method. Proves detection + the interpreter's instance-main path.
  */
 class InstanceMainRunTest {
 

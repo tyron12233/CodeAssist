@@ -8,6 +8,7 @@ import dev.ide.model.LibraryKind
 import dev.ide.model.ModuleDependency
 import dev.ide.model.OrderEntry
 import dev.ide.model.PlatformDependency
+import dev.ide.model.PlatformKind
 import dev.ide.model.SdkDependency
 
 /**
@@ -23,7 +24,9 @@ import dev.ide.model.SdkDependency
  * and the same model saved-then-reloaded compare equal.
  */
 const val WORKSPACE_SCHEMA_VERSION = 1
-const val MODULE_SCHEMA_VERSION = 1
+// v2: `[module] sdk` — the explicit platform-SDK override. Absent (v1) reads back as null → the module
+// resolves its platform by type (see SdkResolution), so old module.toml files load unchanged.
+const val MODULE_SCHEMA_VERSION = 2
 
 data class WorkspaceData(
     val schemaVersion: Int = WORKSPACE_SCHEMA_VERSION,
@@ -52,6 +55,8 @@ data class ModuleData(
     val sourceSets: List<SourceSetData> = emptyList(),
     val dependencies: List<OrderEntry> = emptyList(),
     val facets: List<FacetData> = emptyList(),
+    /** Explicit platform-SDK override (see [dev.ide.model.Module.sdk]); null = resolve by module type. */
+    val sdk: String? = null,
 )
 
 data class SourceSetData(
@@ -82,6 +87,7 @@ data class SdkData(
     val name: String,
     val bootClasspath: List<String>, // absolute (SDKs live outside the workspace)
     val buildToolsPath: String?,
+    val kind: PlatformKind = PlatformKind.JVM,
 )
 
 // --- canonicalization ---

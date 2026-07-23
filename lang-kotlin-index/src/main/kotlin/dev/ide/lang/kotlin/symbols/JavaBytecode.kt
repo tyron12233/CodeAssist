@@ -293,11 +293,17 @@ object JavaBytecode {
         }
 
         override fun visitTypeArgument() {
-            args += KotlinType("kotlin.Any", context = ctx)
-        } // unbounded `?`
+            args += KotlinType("kotlin.Any", context = ctx, projection = "*")
+        } // unbounded `?` → star projection
 
         override fun visitTypeArgument(wildcard: Char): SignatureVisitor =
-            TypeSigVisitor(ctx) { args += it } // `+`/`-`/`=`: use the bound/invariant type
+            TypeSigVisitor(ctx) { t -> // `+` (extends/out) / `-` (super/in) / `=` (invariant): the bound + projection
+                args += when (wildcard) {
+                    SignatureVisitor.EXTENDS -> t.withProjection("out")
+                    SignatureVisitor.SUPER -> t.withProjection("in")
+                    else -> t
+                }
+            }
 
         override fun visitEnd() {
             classFqn?.let { sink(KotlinType(it, args.toList(), context = ctx)) }

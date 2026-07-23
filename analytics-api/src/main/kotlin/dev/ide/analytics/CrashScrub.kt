@@ -36,15 +36,36 @@ object CrashScrub {
     fun ownFrames(t: Throwable): String {
         val out = ArrayList<String>()
         var skipped = 0
+        var anyOwn = false
         for (f in t.stackTrace) {
             if (out.size >= MAX_FRAMES) break
-            if (ownPackagePrefixes.any { f.className.startsWith(it) }) {
+            if (isOwn(f)) {
                 if (skipped > 0) { out.add("… ($skipped frames)"); skipped = 0 }
-                out.add("${f.className}.${f.methodName}:${f.lineNumber}")
+                out.add(frame(f))
+                anyOwn = true
             } else {
                 skipped++
             }
         }
+        // A deep framework crash (Compose runtime, Android looper) can bury the first of OUR frames past the
+        // cap — or entirely, with our code only on the cause chain — leaving an untriageable report (we saw a
+        // large share of crashes with no own frame at all). Guarantee the deepest own frame anywhere in the
+        // exception's own trace or its causes, so every crash pins to a call site we can act on.
+        if (!anyOwn) deepestOwnFrame(t)?.let { out.add(it) }
         return out.joinToString("\n")
+    }
+
+    private fun isOwn(f: StackTraceElement) = ownPackagePrefixes.any { f.className.startsWith(it) }
+    private fun frame(f: StackTraceElement) = "${f.className}.${f.methodName}:${f.lineNumber}"
+
+    /** The first own frame found walking the exception and its cause chain (cycle-guarded); null if none. */
+    private fun deepestOwnFrame(t: Throwable): String? {
+        val seen = HashSet<Throwable>()
+        var cur: Throwable? = t
+        while (cur != null && seen.add(cur)) {
+            cur.stackTrace.firstOrNull { isOwn(it) }?.let { return frame(it) }
+            cur = cur.cause
+        }
+        return null
     }
 }

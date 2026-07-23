@@ -53,7 +53,11 @@ class CompletionEngine(private val extensions: ExtensionRegistry) {
         }
 
         val ranked = rank(sink.elements, params)
-            .distinctBy { Triple(it.kind, it.label, it.insertText) }
+            // Key on `container` too: two DISTINCT types that share a simple name but live in different
+            // packages (e.g. androidx.compose.ui.Modifier vs java.lang.reflect.Modifier) are not duplicates —
+            // both must survive so the user can pick, disambiguated by package. Without it, whichever a
+            // contributor emitted first shadowed the other (dropping the Compose type on some devices).
+            .distinctBy { listOf(it.kind, it.label, it.insertText, it.container) }
             .take(options.maxItems)
         return CompletionResult(
             ranked,

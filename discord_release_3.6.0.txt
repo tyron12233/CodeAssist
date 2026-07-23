@@ -1,0 +1,26 @@
+# 🚀 CodeAssist 3.6.0
+
+A new Logcat tab, big Compose preview and Kotlin completion fixes, and more reliable builds.
+
+**LOGCAT**
+- **See your running app's logs live.** A new **Logcat** tab in the build console streams a running debug app's output, Android-Studio style: `android.util.Log`, `System.out`/`System.err` (`println`), and uncaught exceptions. No extra setup and no special permission — the logger is woven into your debug build automatically and connects back to the IDE. (Debug builds only; release builds are never touched. Toggle it under Settings → Build Runtime → Forward app logs.)
+- **Familiar formatting, filter, and search.** Each line shows its time, PID-TID, level, and tag, color-coded by severity, with the level as a colored chip. Filter by level (all / warnings / errors), search by message or tag, and clear the buffer. Long lines scroll sideways instead of wrapping.
+
+**COMPOSE PREVIEW**
+- **Menus and dialogs no longer freeze the preview.** `DropdownMenu(expanded = true)`, `Popup`, and `Dialog` now render their content inline instead of trying to open a real OS window, which had no host in the preview and hung it.
+- **Composables built with `forEach` now render.** A `Column { list.forEach { … } }` that generates children by iterating a list now previews correctly, matching how `repeat { … }` already worked.
+- The preview now renders under inspection mode, like a real `@Preview`.
+
+**KOTLIN EDITOR**
+- **Compose types are suggested again.** `Modifier` and other `androidx.*` classes now appear in type completion (e.g. `val modifier: Modifier`) and at value slots (`modifier = Modifier`) — they were being wrongly hidden.
+- **No more false `SolidColor`/`Color` error.** `BorderStroke(width, SolidColor(...))` no longer shows a bogus "inferred type is SolidColor but Color was expected".
+- **Unknown annotations are flagged.** A misspelled or un-imported annotation (like `@Compsable`, or `@Preview` without its import) is now reported as an unresolved reference instead of passing silently, while valid annotations stay unflagged.
+- **Smarter completion in more places:** `return@`/`break@`/`continue@` labels, `when { … }` "add remaining branches", enum values for any annotation argument, KDoc tags and `@param` names, `package`/`import` completion, and more postfix templates (`.when`, `.cast`, `.try`, `.takeIf`, …).
+- **Faster classpath types while indexing.** A type that finishes indexing a moment later (like `Modifier`) no longer stays missing when you type quickly.
+
+**BUILD & RESOURCES**
+- **Builds run in a separate process** for stability, so a heavy build can't take the editor down with it.
+- **Unsaved resource edits show up immediately.** Adding a `<string>` (or other resource) now updates `R.*` completion and the layout/Compose preview before you save.
+- Dependency resolution follows POM `<relocation>` (e.g. `itext7`), and AndroidX Navigation and Firebase apps build and launch correctly.
+
+Full changelog: https://github.com/tyron12233/CodeAssist/releases/tag/v3.6.0

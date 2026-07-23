@@ -3,20 +3,32 @@ package dev.ide.core.services
 import dev.ide.android.support.AndroidFacet
 import dev.ide.android.support.AndroidFeatureDependencies
 import dev.ide.android.support.AndroidPackaging
+import dev.ide.android.support.BuildFeatures
 import dev.ide.android.support.JniLibsPackaging
 import dev.ide.android.support.ResourcePackaging
 import dev.ide.core.EngineContext
+import dev.ide.lang.kotlin.compile.BUILTIN_KOTLIN_COMPILER_PLUGINS
+import dev.ide.lang.kotlin.compile.ComposeCompilerPlugin
+import dev.ide.lang.kotlin.compile.KOTLIN_COMPILER_PLUGIN_EP
+import dev.ide.lang.kotlin.compile.ParcelizeCompilerPlugin
+import dev.ide.lang.kotlin.compile.SerializationCompilerPlugin
+import dev.ide.model.ClasspathEntryKind
 import dev.ide.model.ContentRole
 import dev.ide.model.DependencyScope
 import dev.ide.model.LanguageLevel
 import dev.ide.model.LibraryDependency
 import dev.ide.model.Module
 import dev.ide.model.ModuleDependency
+import dev.ide.model.PlatformKind
+import dev.ide.model.SdkRef
+import dev.ide.model.SdkResolution
 import dev.ide.model.SourceSetTemplate
 import dev.ide.model.impl.ModuleTypeRegistry
 import dev.ide.model.module
 import dev.ide.ui.backend.UiBuildFeature
 import dev.ide.ui.backend.UiBuildFeatures
+import dev.ide.ui.backend.UiCompilerPlugin
+import dev.ide.ui.backend.UiCompilerPlugins
 import dev.ide.ui.backend.UiConfigField
 import dev.ide.ui.backend.UiConfigResult
 import dev.ide.ui.backend.UiFacetConfig
@@ -28,6 +40,7 @@ import dev.ide.ui.backend.UiModuleTypeOption
 import dev.ide.ui.backend.UiPackagingOptions
 import dev.ide.ui.backend.UiPackagingRules
 import dev.ide.ui.backend.UiRunConfig
+import dev.ide.ui.backend.UiSdkOption
 import dev.ide.ui.backend.UiSourceSetInfo
 import java.nio.file.Files
 import java.nio.file.Path
@@ -97,6 +110,11 @@ internal class ModuleService(private val ctx: EngineContext) {
             },
             facets = facets,
             runConfig = runConfig,
+            platformSdk = module.sdk?.name ?: "",
+            resolvedSdk = SdkResolution.sdkFor(ctx.store.workspace, module)?.name ?: "",
+            availableSdks = ctx.store.workspace.sdkTable.sdks.map {
+                UiSdkOption(it.name, "${it.name} · ${if (it.kind == PlatformKind.ANDROID) "Android" else "Java"}")
+            },
         )
     }
 
@@ -128,6 +146,9 @@ internal class ModuleService(private val ctx: EngineContext) {
             project.beginModification().apply {
                 val mod = module(module.id)
                 if (newLevel != null) mod.languageLevel = newLevel
+                // null = leave unchanged; blank = clear the override (follow the module-type default);
+                // otherwise pin the named platform SDK. Drives which platform the module compiles against.
+                edit.platformSdk?.let { mod.sdk = it.ifBlank { null }?.let(::SdkRef) }
                 facets.forEach { mod.putFacet(it) }
                 commit()
             }
@@ -144,7 +165,9 @@ internal class ModuleService(private val ctx: EngineContext) {
         return UiConfigResult(true, "Saved ${module.name}")
     }
 
-    /** The Android `buildFeatures` of [moduleName] as toggle descriptors, or null for a non-Android module. */
+    /** The Android `buildFeatures` of [moduleName] as toggle descriptors, or null for a non-Android module.
+     *  Compiler-plugin features (Compose, Parcelize) live on their own [getCompilerPlugins] tab; Build Features
+     *  keeps only the code-generation toggles (ViewBinding). */
     fun getBuildFeatures(moduleName: String): UiBuildFeatures? {
         val module = ctx.modules().firstOrNull { it.name == moduleName } ?: return null
         val facet = module.facets.get(AndroidFacet.KEY) ?: return null
@@ -158,14 +181,112 @@ internal class ModuleService(private val ctx: EngineContext) {
                     bf.viewBinding,
                     note = "Adds the ViewBinding runtime and generates a <Layout>Binding for every layout.",
                 ),
-                UiBuildFeature(
-                    "compose", "Jetpack Compose",
-                    "Compile @Composable UI with the Compose compiler and render @Preview composables in the editor.",
-                    bf.compose,
-                    note = "Adds the Compose compiler plugin and the Compose runtime + tooling dependencies.",
-                ),
             ),
         )
+    }
+
+    /**
+     * A bundled Kotlin compiler plugin the user can toggle per module. Its enable-state is stored in the
+     * [BuildFeatures] flag ([get]/[set]) — reusing the persistence AGP's `buildFeatures` already drives — and
+     * enabling it adds [coords] (the runtime whose presence auto-applies the plugin). [pluginId] matches the
+     * corresponding [dev.ide.lang.kotlin.compile.KotlinCompilerPlugin.pluginId]. Adding a new toggleable plugin
+     * = register it on the EP + add a [BuildFeatures] field + a dep coordinate list + one row here.
+     */
+    private class ToggleablePlugin(
+        val pluginId: String,
+        val get: (BuildFeatures) -> Boolean,
+        val set: (BuildFeatures, Boolean) -> BuildFeatures,
+        val coords: List<String>,
+    )
+
+    private val toggleablePlugins: List<ToggleablePlugin> = listOf(
+        ToggleablePlugin(ComposeCompilerPlugin.pluginId, { it.compose }, { bf, e -> bf.copy(compose = e) }, AndroidFeatureDependencies.COMPOSE),
+        ToggleablePlugin(SerializationCompilerPlugin.pluginId, { it.serialization }, { bf, e -> bf.copy(serialization = e) }, AndroidFeatureDependencies.SERIALIZATION),
+        ToggleablePlugin(ParcelizeCompilerPlugin.pluginId, { it.parcelize }, { bf, e -> bf.copy(parcelize = e) }, AndroidFeatureDependencies.PARCELIZE),
+    )
+
+    /** The registered compiler plugins (EP contributions, or the built-ins for direct/test wiring), by id. */
+    private fun registeredPlugins(): Map<String, dev.ide.lang.kotlin.compile.KotlinCompilerPlugin> =
+        ctx.platform.extensions.extensions(KOTLIN_COMPILER_PLUGIN_EP)
+            .ifEmpty { BUILTIN_KOTLIN_COMPILER_PLUGINS }
+            .associateBy { it.pluginId }
+
+    /** The LIBRARY jars on [module]'s compile classpath — what a plugin's `appliesTo` classpath probe reads. */
+    private fun compileLibraryClasspath(module: Module): List<Path> =
+        runCatching {
+            module.classpath(DependencyScope.IMPLEMENTATION).entries
+                .filter { it.kind == ClasspathEntryKind.LIBRARY }
+                .mapNotNull { runCatching { Paths.get(it.root.path) }.getOrNull() }
+                .filter { Files.exists(it) }
+        }.getOrDefault(emptyList())
+
+    /** The bundled Kotlin compiler plugins available to [moduleName] with their enable-state, or null for a
+     *  non-Android module. [UiCompilerPlugin.applied] reflects the real build behavior — a plugin auto-applies
+     *  once its runtime is on the classpath, regardless of the toggle (a transitive runtime still applies it). */
+    fun getCompilerPlugins(moduleName: String): UiCompilerPlugins? {
+        val module = ctx.modules().firstOrNull { it.name == moduleName } ?: return null
+        val facet = module.facets.get(AndroidFacet.KEY) ?: return null
+        val bf = facet.buildFeatures
+        val registered = registeredPlugins()
+        val classpath = compileLibraryClasspath(module)
+        val plugins = toggleablePlugins.mapNotNull { tp ->
+            val plugin = registered[tp.pluginId] ?: return@mapNotNull null
+            UiCompilerPlugin(
+                id = tp.pluginId,
+                title = plugin.displayName,
+                description = plugin.description,
+                enabled = tp.get(bf),
+                applied = runCatching { plugin.appliesTo(module, classpath) }.getOrDefault(false),
+                note = "Applies automatically once its runtime is on the module's classpath.",
+            )
+        }
+        return UiCompilerPlugins(moduleName, plugins)
+    }
+
+    /**
+     * Toggle a bundled Kotlin compiler plugin ([pluginId] = its `pluginId`) on [moduleName]. Persists the
+     * enable-state in the module's [BuildFeatures] and — when switching ON — adds the plugin's runtime
+     * dependency, which is what actually activates it (the plugin auto-applies once its runtime resolves) at
+     * build time AND in the editor. Turning it OFF only clears the flag; the dependency is left in place.
+     */
+    suspend fun setCompilerPlugin(
+        moduleName: String, pluginId: String, enabled: Boolean
+    ): UiConfigResult {
+        val module = ctx.modules().firstOrNull { it.name == moduleName }
+            ?: return UiConfigResult(false, "No module '$moduleName'.")
+        val facet = module.facets.get(AndroidFacet.KEY)
+            ?: return UiConfigResult(false, "'$moduleName' is not an Android module.")
+        val project = ctx.projectOf(module)
+            ?: return UiConfigResult(false, "No project owns '$moduleName'.")
+        val tp = toggleablePlugins.firstOrNull { it.pluginId == pluginId }
+            ?: return UiConfigResult(false, "Unknown compiler plugin '$pluginId'.")
+        val bf = facet.buildFeatures
+        val updated = tp.set(bf, enabled)
+        if (updated == bf) return UiConfigResult(true, "No change.")
+        try {
+            project.beginModification().apply {
+                module(module.id).putFacet(facet.copy(buildFeatures = updated))
+                commit()
+            }
+        } catch (e: Exception) {
+            return UiConfigResult(false, "Update failed: ${e.message}")
+        }
+        ctx.store.save()
+
+        // Enabling pulls in the plugin's runtime (its presence is what applies the plugin). A resolution failure
+        // (e.g. offline) doesn't fail the toggle — the flag is set; the deps can be retried from Dependencies.
+        var depNote = ""
+        if (enabled) {
+            val failures = ensureFeatureDependencies(moduleName, tp.coords)
+            if (failures.isNotEmpty()) depNote = " (couldn't add: ${failures.joinToString(", ")})"
+        }
+
+        ctx.invalidateAnalyzers()
+        ctx.invalidateSyntheticClasses()
+        ctx.resyncIndex()
+        val label = registeredPlugins()[pluginId]?.displayName ?: pluginId
+        val verb = if (enabled) "Enabled" else "Disabled"
+        return UiConfigResult(true, "$verb $label on ${module.name}$depNote")
     }
 
     /**
@@ -191,6 +312,7 @@ internal class ModuleService(private val ctx: EngineContext) {
         val updated = when (feature) {
             "viewBinding" -> bf.copy(viewBinding = enabled)
             "compose" -> bf.copy(compose = enabled)
+            "parcelize" -> bf.copy(parcelize = enabled)
             else -> return UiConfigResult(false, "Unknown build feature '$feature'.")
         }
         if (updated == bf) return UiConfigResult(true, "No change.")
@@ -211,6 +333,7 @@ internal class ModuleService(private val ctx: EngineContext) {
             val coords = when (feature) {
                 "viewBinding" -> AndroidFeatureDependencies.VIEW_BINDING
                 "compose" -> AndroidFeatureDependencies.COMPOSE
+                "parcelize" -> AndroidFeatureDependencies.PARCELIZE
                 else -> emptyList()
             }
             val failures = ensureFeatureDependencies(moduleName, coords)

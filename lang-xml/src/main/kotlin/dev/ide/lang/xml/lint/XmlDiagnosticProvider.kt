@@ -43,6 +43,14 @@ class XmlDiagnosticProvider(
             out += Diagnostic(d.range, d.severity, d.message, DiagnosticSource.Analyzer(AnalyzerId("xml.syntax")), d.code)
         }
 
+        // A0) A start tag repeats an attribute name — invalid XML (the excluded xml-analysis annotator's job).
+        for (dup in XmlLintRules.duplicateAttributes(parsed)) {
+            out += finding(
+                dup.range, Severity.ERROR, "Duplicate attribute ${dup.attribute}",
+                "xml.duplicateAttribute", emptyList(),
+            )
+        }
+
         // A) A namespace prefix (android/app/tools) is used but not declared on the root.
         for (hit in XmlLintRules.missingNamespaces(parsed)) {
             out += finding(

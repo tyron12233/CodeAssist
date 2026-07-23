@@ -150,6 +150,7 @@ interface Aapt2 {
         proguardRules: Path? = null,    // aapt2 `--proguard`: keep rules for manifest/layout-referenced classes (for R8)
         protoFormat: Boolean = false,   // aapt2 `--proto-format`: emit proto resources (R8 resource shrinking input)
         overlays: List<Path> = emptyList(), // aapt2 `-R` overlays applied on top of [compiled]
+        rTxt: Path? = null,             // aapt2 `--output-text-symbols`: the R symbol table (`R.txt`) for an AAR
     ): ToolResult
 
     /**
@@ -202,6 +203,19 @@ interface Dexer {
      * *device's available RAM* allows to run at once — see [MergePlan].
      */
     fun mergePlan(inputCount: Int): MergePlan? = null
+
+    /**
+     * Whether this dexer runs a whole-classpath [dex] pass OFF the app heap — a forked VM or a real-JVM
+     * subprocess, each with its own large `-Xmx`. When true (the default, and correct for a desktop subprocess
+     * D8), one monolithic pass over a big library classpath is cheap. When false — an in-process dexer bounded
+     * by ART's ~576MB app heap, e.g. a forked dexer that fell back to in-process on a low-memory device — a
+     * single giant pass is GC-bound (measured in the hundreds of seconds on a small emulator) and can be killed
+     * by the low-memory killer before it finishes or caches. The Android build consults this to decide between
+     * the fast one-pass external dexing (off-heap) and bounded per-library archiving (in-process): the latter
+     * caps each D8 invocation's working set and banks each library to the shared cache as it completes, so a
+     * killed build keeps its progress.
+     */
+    fun runsOffHeap(): Boolean = true
 }
 
 /**

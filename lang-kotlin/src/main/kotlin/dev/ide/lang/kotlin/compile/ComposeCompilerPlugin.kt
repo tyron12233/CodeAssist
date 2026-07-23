@@ -34,6 +34,8 @@ object ComposeCompilerPlugin : KotlinCompilerPlugin {
     const val PLUGIN_ID: String = "androidx.compose.compiler.plugins.kotlin"
 
     override val pluginId: String get() = PLUGIN_ID
+    override val displayName: String get() = "Jetpack Compose"
+    override val description: String get() = "Compiles @Composable functions (the Compose compiler plugin)."
 
     /** Applies when [classpath] carries the Compose runtime; the module then needs the plugin. Ignores [module]. */
     override fun appliesTo(module: Module, classpath: List<Path>): Boolean = isComposeModule(classpath)

@@ -25,6 +25,33 @@ class MergeResourcesTaskTest {
     }
 
     @Test
+    fun sameFileResourceInTwoExtensionsHigherPriorityWins() = runBlocking {
+        val tmp = Files.createTempDirectory("merge-fileres")
+        try {
+            // Lower priority ships a VECTOR ic_launcher; higher priority overrides it with a RASTER ic_launcher.
+            // Same resource identity (drawable/ic_launcher, default config) — AGP keeps only the higher one.
+            val low = tmp.resolve("low")
+            Files.createDirectories(low.resolve("drawable"))
+            Files.writeString(low.resolve("drawable/ic_launcher.xml"), "<vector/>")
+            val high = tmp.resolve("high")
+            Files.createDirectories(high.resolve("drawable"))
+            Files.writeString(high.resolve("drawable/ic_launcher.png"), "PNGDATA")
+            val out = tmp.resolve("merged")
+
+            MergeResourcesTask(TaskName(":app:mergeResources"), listOf(low, high), out)
+                .execute(SimpleTaskContext())
+
+            val files = Files.walk(out.resolve("drawable")).use { s ->
+                s.filter { Files.isRegularFile(it) }.map { it.fileName.toString() }.sorted().toList()
+            }
+            // BUG if this is [ic_launcher.png, ic_launcher.xml] — aapt2 then fails with a conflicting value.
+            assertEquals(listOf("ic_launcher.png"), files, "higher-priority file resource must win regardless of extension; got $files")
+        } finally {
+            tmp.toFile().deleteRecursively()
+        }
+    }
+
+    @Test
     fun duplicateValueAcrossSourcesCollapsesToOneLastWins() = runBlocking {
         val tmp = Files.createTempDirectory("merge-res")
         try {

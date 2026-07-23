@@ -1,11 +1,16 @@
 package dev.ide.interp.compose
 
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.currentComposer
 import androidx.compose.runtime.remember
+import androidx.compose.ui.platform.LocalInspectionMode
 import dev.ide.interp.InterpProfile
 import dev.ide.interp.Interpreter
+import dev.ide.interp.InterpreterHooks
+import dev.ide.interp.LibraryExecutor
+import dev.ide.interp.PreviewResourceResolver
 import dev.ide.lang.kotlin.interp.ResolvedClass
 import dev.ide.lang.kotlin.interp.ResolvedFunction
 import java.util.logging.Logger
@@ -39,9 +44,20 @@ class ComposePreviewRenderer(
      *  a visible error instead of a silently-empty preview (used by Learn lessons, whose snippets we author
      *  and want to fail loudly if a construct doesn't dispatch). */
     private val tolerateGaps: Boolean = true,
+    /** Resolves the previewed project's resources (`R.string.x`, `stringResource(…)`, …). Null (desktop/lessons)
+     *  leaves resource access degrading as before. */
+    private val resources: PreviewResourceResolver? = null,
+    /** The preview sandbox (see [dev.ide.interp.InterpreterHooks]): mediates the interpreter's escapes into
+     *  real code — file/network/Android-system/process calls per the project's settings. Null = unrestricted.
+     *  The host owns the instance (a [dev.ide.interp.PreviewSandboxPolicy]) so it can read the findings. */
+    private val hooks: InterpreterHooks? = null,
+    /** Executes library classes only the project's jars carry — the bytecode VM ([VmLibraryExecutor]) — so
+     *  dependency code runs interpreted instead of through a DexClassLoader. Null → such classes keep the
+     *  honest "cannot load" boundary. */
+    private val libraryExecutor: LibraryExecutor? = null,
 ) {
 
-    private val dispatcher = ComposeDispatcher(loader = loader)
+    private val dispatcher = ComposeDispatcher(loader = loader, resources = resources, libraryExecutor = libraryExecutor)
     private val runtime = ComposeRuntime(dispatcher)
     private val log = Logger.getLogger("ComposePreviewRenderer")
 
@@ -69,7 +85,7 @@ class ComposePreviewRenderer(
         classes: List<ResolvedClass>,
         binding: PreviewParameterBinding,
     ): List<Any?> = runCatching {
-        Interpreter(program, dispatcher, runtime, classLoader = loader, classes = classes, tolerateGaps = tolerateGaps)
+        Interpreter(program, dispatcher, runtime, classLoader = loader, classes = classes, tolerateGaps = tolerateGaps, resources = resources, hooks = hooks, libraryFallback = libraryExecutor)
             .previewParameterValues(binding.providerClass, binding.providerFqn, binding.limit)
     }.getOrElse {
         log.warning("Compose preview @PreviewParameter resolution failed: ${it::class.simpleName}: ${it.message}")
@@ -102,7 +118,7 @@ class ComposePreviewRenderer(
         val interpreter = remember(program, classes) {
             // tolerateGaps: a single unsupported construct skips rather than blanking the whole preview (the
             // editor default); a lesson passes false so a gap surfaces as a visible error instead of a blank.
-            Interpreter(program, dispatcher, runtime, classLoader = loader, classes = classes, tolerateGaps = tolerateGaps, dirtyCallees = dirtyCallees)
+            Interpreter(program, dispatcher, runtime, classLoader = loader, classes = classes, tolerateGaps = tolerateGaps, dirtyCallees = dirtyCallees, resources = resources, hooks = hooks, libraryFallback = libraryExecutor)
         }
         // Phase label for the profiler: the very first composition, an edit that dirtied some functions
         // (live-edit re-render), or a plain re-render. State-driven recompositions of a single child scope are
@@ -117,31 +133,55 @@ class ComposePreviewRenderer(
         // We're inside the IDE's composition: thread its composer, then drive the preview through its own
         // restart group so state changes recompose just the preview subtree.
         dispatcher.composer = currentComposer
-        val failure: Throwable? = try {
-            // The preview root is never skipped (restartable=false → always re-runs): it only recomposes when
-            // state IT read changed, in which case it must run. Skipping is a win for the CHILD composables it
-            // invokes (each routed through the interpreter's restartable=returnsUnit path), not the root itself.
-            InterpProfile.trace("interp.render", phase) {
-                runtime.invokeComposable(entry.name.hashCode(), restartable = false, force = false, args = emptyList()) {
-                    interpreter.call(entry, args)
+        // Render under LocalInspectionMode = true, exactly as Android Studio's @Preview / ComposeViewAdapter do.
+        // Inspection-aware components then behave for tooling instead of for a live device: a Popup / Dialog /
+        // DropdownMenu composes its content INLINE rather than opening a real OS window (which the in-composition
+        // preview has no host window for — it froze/threw), AndroidView shows a placeholder, and animations
+        // settle to their target. Without it, `DropdownMenu(expanded = true)` tried to open a real popup window
+        // and hung the preview. The try/catch lives INSIDE the provider (Compose forbids it AROUND a composable
+        // call like CompositionLocalProvider); `invokeComposable` itself is a plain function, so wrapping it is
+        // fine.
+        var failure: Throwable? = null
+        CompositionLocalProvider(LocalInspectionMode provides true) {
+            failure = try {
+                // The preview root is never skipped (restartable=false → always re-runs): it only recomposes when
+                // state IT read changed, in which case it must run. Skipping is a win for the CHILD composables it
+                // invokes (each routed through the interpreter's restartable=returnsUnit path), not the root itself.
+                InterpProfile.trace("interp.render", phase) {
+                    runtime.invokeComposable(entry.name.hashCode(), restartable = false, force = false, args = emptyList()) {
+                        interpreter.call(entry, args)
+                    }
                 }
+                null
+            } catch (t: Throwable) {
+                // Surface the real cause, not a reflection `InvocationTargetException` wrapper (belt-and-suspenders
+                // for any ITE that reaches here from a non-dispatch reflective path — constructor/getter).
+                val real = unwrapInvocationTarget(t)
+                log.warning("Compose preview render failed: ${real::class.simpleName}: ${real.message}")
+                real
             }
-            null
-        } catch (t: Throwable) {
-            log.warning("Compose preview render failed: ${t::class.simpleName}: ${t.message}")
-            t
         }
         // After each composition pass, drain the content-lambda error (LazyColumn/Scaffold bodies that threw
         // mid-subcompose, outside this try/catch). Reset the field so the NEXT pass starts clean; always call
         // onPartialError so the host knows when the error clears (null) after a fix.
         SideEffect {
-            val partial = dispatcher.contentLambdaError
+            val partial = dispatcher.contentLambdaError?.let { unwrapInvocationTarget(it) }
             if (partial != null) {
                 log.warning("Compose preview partial render error: ${partial::class.simpleName}: ${partial.message}")
                 dispatcher.contentLambdaError = null
             }
             onPartialError(partial)
         }
-        if (failure != null) onError(failure)
+        val f = failure
+        if (f != null) onError(f)
     }
+}
+
+/** Peel [java.lang.reflect.InvocationTargetException] wrappers to the innermost real cause, so a preview error
+ *  shows the underlying exception (a user `NullPointerException`, `IllegalStateException`, …) with its message
+ *  and stack — not the opaque reflection wrapper. */
+private fun unwrapInvocationTarget(thrown: Throwable): Throwable {
+    var cur = thrown
+    while (cur is java.lang.reflect.InvocationTargetException) cur = cur.targetException ?: cur.cause ?: return cur
+    return cur
 }

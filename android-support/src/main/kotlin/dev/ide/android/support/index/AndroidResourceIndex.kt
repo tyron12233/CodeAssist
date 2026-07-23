@@ -1,5 +1,6 @@
 package dev.ide.android.support.index
 
+import dev.ide.android.support.resources.LenientValuesScan
 import dev.ide.android.support.resources.ResourceType
 import dev.ide.index.Externalizer
 import dev.ide.index.IndexExtension
@@ -16,6 +17,7 @@ import org.xml.sax.helpers.DefaultHandler
 import java.io.DataInput
 import java.io.DataOutput
 import java.io.StringReader
+import javax.xml.parsers.SAXParser
 import javax.xml.parsers.SAXParserFactory
 
 /**
@@ -123,7 +125,13 @@ object ResourceFileScanner {
         val base = folder.substringBefore('-')
         val out = ArrayList<ResourceDeclValue>()
         if (base == "values") {
-            runCatching { parse(text, ValuesHandler(filePath, text, out)) }
+            // SAX abandons a malformed file at its first error, losing every declaration after it. On failure,
+            // drop its partial emission and recover ALL declarations leniently so a broken values file still
+            // resolves/completes its `@string/…`, `@color/…`, … references (see [LenientValuesScan]).
+            if (runCatching { parse(text, ValuesHandler(filePath, text, out)) }.isFailure) {
+                out.clear()
+                LenientValuesScan.scan(filePath, text).forEach { out += ResourceDeclValue(it.type.rClass, it.name, filePath, it.offset) }
+            }
         } else {
             val type = ResourceType.fromFolder(base) ?: return out
             out += ResourceDeclValue(type.rClass, baseName(filePath), filePath, 0)
@@ -134,7 +142,9 @@ object ResourceFileScanner {
     }
 
     private fun parse(text: String, handler: DefaultHandler) {
-        newParser().parse(InputSource(StringReader(text)), handler)
+        val p = parserLocal.get()
+        p.reset() // clear any handler/state from the previous file before reusing
+        p.parse(InputSource(StringReader(text)), handler)
     }
 
     /** Value-resource SAX handler: top-level `<resources>` children are declarations; `<declare-styleable>`'s
@@ -202,10 +212,12 @@ object ResourceFileScanner {
     /** File-resource SAX handler: records every `@+id/name` found in any attribute value. */
     private class IdHandler(
         private val filePath: String,
-        text: String,
+        private val text: String,
         private val out: MutableList<ResourceDeclValue>,
     ) : DefaultHandler() {
-        private val lines = LineOffsets(text)
+        // Built on first `@+id/` hit only: most layouts declare none, so the full line-offset array is wasted
+        // work for them. Single-threaded per parse → NONE.
+        private val lines by lazy(LazyThreadSafetyMode.NONE) { LineOffsets(text) }
         private var loc: Locator? = null
 
         override fun setDocumentLocator(locator: Locator) { loc = locator }
@@ -234,7 +246,7 @@ object ResourceFileScanner {
 
     private fun sanitize(name: String): String = name.replace('.', '_').replace('-', '_').trim()
 
-    /** Shared SAX factory (creation does service discovery - do it once); a fresh parser per file is cheap. */
+    /** Shared SAX factory (creation does service discovery - do it once). */
     private val factory: SAXParserFactory by lazy {
         SAXParserFactory.newInstance().apply {
             isNamespaceAware = false
@@ -244,5 +256,11 @@ object ResourceFileScanner {
         }
     }
 
-    private fun newParser() = synchronized(factory) { factory.newSAXParser() }
+    /** One SAX parser per thread, reused across files via [SAXParser.reset]. The resource index now parses
+     *  files concurrently (one batch coroutine per dirty file), so a per-file `factory.newSAXParser()` under a
+     *  shared lock would both allocate on the hot path and serialize the parses. A ThreadLocal parser is
+     *  lock-free and reused; the factory itself is still synchronized on first-use-per-thread (SAXParserFactory
+     *  is not guaranteed thread-safe for newSAXParser). */
+    private val parserLocal: ThreadLocal<SAXParser> =
+        ThreadLocal.withInitial { synchronized(factory) { factory.newSAXParser() } }
 }

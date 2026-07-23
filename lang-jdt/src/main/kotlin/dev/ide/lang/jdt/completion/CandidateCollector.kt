@@ -32,18 +32,34 @@ internal object CandidateCollector {
      * so a completed method inserts just its name; otherwise it inserts `()` and parks the caret inside
      * the parentheses when the method takes arguments. The flag is decided once, by the call site.
      */
-    fun collect(ctx: AnalyzedContext, index: IndexService?, importOffset: Int, appendCallParens: Boolean, docs: dev.ide.lang.jdt.SourceMethodResolver? = null): List<Candidate> = when (ctx.kind) {
+    /**
+     * [excludedTypePrefixes] drops index-backed type/package candidates whose fully-qualified name starts with
+     * any of them — the shared workspace index holds every module's classpath (incl. `android.jar`), but a
+     * non-Android module must not be offered `android.*` to auto-import (its own classpath can't compile it).
+     * The host passes the Android namespaces for a JVM/console module, empty for an Android module.
+     */
+    fun collect(
+        ctx: AnalyzedContext,
+        index: IndexService?,
+        importOffset: Int,
+        appendCallParens: Boolean,
+        docs: dev.ide.lang.jdt.SourceMethodResolver? = null,
+        excludedTypePrefixes: List<String> = emptyList(),
+    ): List<Candidate> = when (ctx.kind) {
         CompletionKind.MEMBER_ACCESS -> members(ctx, appendCallParens, docs)
         CompletionKind.NAME_REFERENCE -> {
             val inScope = names(ctx, appendCallParens, docs)
             val taken = inScope.mapTo(HashSet()) { it.name }
-            inScope + (index?.let { unimportedTypes(ctx, it, importOffset, taken) } ?: emptyList())
+            inScope + (index?.let { unimportedTypes(ctx, it, importOffset, taken, excludedTypePrefixes) } ?: emptyList())
         }
-        CompletionKind.TYPE_REFERENCE -> index?.let { typeReferences(ctx, it, importOffset) } ?: emptyList()
+        CompletionKind.TYPE_REFERENCE -> index?.let { typeReferences(ctx, it, importOffset, excludedTypePrefixes) } ?: emptyList()
         CompletionKind.PACKAGE_REFERENCE, CompletionKind.IMPORT_REFERENCE ->
-            index?.let { packageChildren(ctx, it) } ?: emptyList()
+            index?.let { packageChildren(ctx, it, excludedTypePrefixes) } ?: emptyList()
         CompletionKind.NONE -> emptyList()
     }
+
+    /** Whether [fqn] is barred by any of [excluded] (a dotted-package-prefix filter). */
+    private fun barred(fqn: String, excluded: List<String>): Boolean = excluded.any { fqn.startsWith(it) }
 
     // ---- resolved-binding sources ----
 
@@ -102,11 +118,12 @@ internal object CandidateCollector {
     // ---- index sources ----
 
     /** Unimported types matching the prefix, each with an auto-`import` edit (skipped if already visible). */
-    private fun unimportedTypes(ctx: AnalyzedContext, index: IndexService, importOffset: Int, taken: Set<String>): List<Candidate> {
+    private fun unimportedTypes(ctx: AnalyzedContext, index: IndexService, importOffset: Int, taken: Set<String>, excluded: List<String>): List<Candidate> {
         if (ctx.prefix.isEmpty()) return emptyList()
         val out = ArrayList<Candidate>()
         for (hit in index.fuzzy<ClassNameValue>(CLASS_NAMES, ctx.prefix, 60)) {
             if (hit.key in taken) continue
+            if (barred(hit.value.fqn, excluded)) continue
             out.add(unimportedTypeCandidate(hit.value, ctx, importOffset))
         }
         return out
@@ -132,11 +149,12 @@ internal object CandidateCollector {
      * an expected type (`List x = new |…`), candidates are resolved against the marker's scope so the ranker
      * can float assignable ones (ArrayList, LinkedList) above the rest.
      */
-    private fun typeReferences(ctx: AnalyzedContext, index: IndexService, importOffset: Int): List<Candidate> {
+    private fun typeReferences(ctx: AnalyzedContext, index: IndexService, importOffset: Int, excluded: List<String>): List<Candidate> {
         if (ctx.prefix.isEmpty()) return emptyList() // need a prefix to query the index (can't enumerate all types)
         val rankByType = ctx.expectedType != null && ctx.typeScope != null
         val out = ArrayList<Candidate>()
         for (hit in index.fuzzy<ClassNameValue>(CLASS_NAMES, ctx.prefix, 60)) {
+            if (barred(hit.value.fqn, excluded)) continue
             val resolved = if (rankByType) resolveType(ctx.typeScope!!, hit.value.fqn) else null
             out.add(unimportedTypeCandidate(hit.value, ctx, importOffset, resolved))
         }
@@ -150,7 +168,7 @@ internal object CandidateCollector {
     }.getOrNull()
 
     /** Sub-packages and the types directly under a package path (inserted fully-qualified — no import). */
-    private fun packageChildren(ctx: AnalyzedContext, index: IndexService): List<Candidate> {
+    private fun packageChildren(ctx: AnalyzedContext, index: IndexService, excluded: List<String>): List<Candidate> {
         val q = ctx.qualifierPath ?: ""
         val prefix = ctx.prefix
         val out = ArrayList<Candidate>()
@@ -169,10 +187,13 @@ internal object CandidateCollector {
             }
             val seg = rest.substringBefore('.')
             if (seg.isEmpty() || !matches(seg, prefix) || !seen.add(seg)) continue
+            val segFqn = if (q.isEmpty()) seg else "$q.$seg"
+            if (excluded.any { segFqn == it.trimEnd('.') || segFqn.startsWith(it) }) continue
             out.add(packageCandidate(seg))
         }
         if (q.isNotEmpty()) {
             for (v in index.exact<ClassNameValue>(PACKAGE_TYPES, q)) {
+                if (barred(v.fqn, excluded)) continue
                 val simple = v.fqn.substringAfterLast('.')
                 if (!matches(simple, prefix)) continue
                 out.add(indexTypeCandidate(v, Proximity.NESTED_TYPE, emptyList()))

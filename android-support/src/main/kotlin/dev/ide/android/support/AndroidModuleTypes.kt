@@ -60,7 +60,12 @@ sealed class AndroidModuleType(
 
     companion object {
         const val DEFAULT_COMPILE_SDK = 34
-        const val DEFAULT_MIN_SDK = 21
+        // 26, not 21: below API 26 D8 must desugar (lambdas/default-interface-methods/core-library) every
+        // library on device, and the whole-set desugaring cache key means adding a dependency re-dexes the
+        // entire classpath. At 26+ desugaring is off and each library dexes once into a cross-project bucket,
+        // so a new Compose project's first build is far cheaper and later builds are cache hits. New projects
+        // default here; importing an existing project keeps its declared minSdk (AndroidFacet default stays 21).
+        const val DEFAULT_MIN_SDK = 26
     }
 }
 

@@ -30,6 +30,10 @@ internal fun loadClassAcross(fqn: String, initialize: Boolean, preferred: ClassL
 internal fun mangledNameMatches(jvmName: String, kotlinName: String): Boolean =
     jvmName == kotlinName || (jvmName.startsWith("$kotlinName-") && '$' !in jvmName)
 
+/** Bound on how deep a value class can nest another (`Color`→`ULong`→`long`) when unboxing to a primitive
+ *  param — real chains are 1–2 deep; the cap just stops a pathological/cyclic case. */
+private const val MAX_VALUE_CLASS_NESTING = 8
+
 /**
  * Find an instance method `name`/[argCount] declared on a **public** class or interface of [cls], so it is
  * invokable without `setAccessible` — a concrete impl like `java.util.Arrays$ArrayList` isn't open under the
@@ -80,12 +84,15 @@ fun reorderNamedArgs(paramNames: List<String>, rawArgs: List<RArg>, args: List<A
     // the parens — `onCheckedChange = { }` (named) or a positional `f(x, { })` — is a normal value argument
     // that binds by name/position, NOT to the last parameter.
     val trailingLambda = rawArgs.lastOrNull()?.trailingLambda == true
-    var nextPositional = 0
     for (i in args.indices) {
         val target = when {
             rawArgs[i].name != null -> nameToIndex[rawArgs[i].name] ?: return args
             trailingLambda && i == args.lastIndex -> n - 1
-            else -> nextPositional++
+            // A positional argument binds to its ARGUMENT INDEX — Kotlin's rule, including a positional placed
+            // AFTER a named one (`Icon(imageVector = X, "")` binds `""` to parameter 1, contentDescription).
+            // A running "next positional" counter would instead reuse slot 0 (already filled by the named
+            // `imageVector`), dropping the image → the wrong overload is selected → a null painter at render.
+            else -> i
         }
         if (target !in 0 until n) return args
         slots[target] = args[i]
@@ -141,6 +148,25 @@ interface InterpretedLambda {
  */
 fun interface LambdaProxyStrategy {
     fun proxyOrNull(lambda: InterpretedLambda, functionalInterface: Class<*>, composableParam: Boolean): Any?
+}
+
+/**
+ * The host's strategy for realizing an interpreted `object : SomeClass() { }` (a [SourceObject]) as a real
+ * generated SUBCLASS of the library [superClass] it extends, when the object is passed to library code that
+ * expects that class. A [java.lang.reflect.Proxy] can only implement interfaces, so a class-extending anonymous
+ * object needs bytecode generation (ASM on the JVM, dex on Android) — which lives outside interp-core. The
+ * generated subclass's overridden methods (those whose name is in [overriddenMethods]) route to [invoker]
+ * (method name + args → result); the rest keep the real superclass behaviour. Returns null when it can't
+ * generate one (a final class, no accessible constructor, unsupported shape) — the honest boundary then stands.
+ */
+fun interface ClassProxyFactory {
+    fun proxyOrNull(
+        interpretedObject: Any,
+        superClass: Class<*>,
+        interfaces: List<Class<*>>,
+        overriddenMethods: Set<String>,
+        invoker: (String, List<Any?>) -> Any?,
+    ): Any?
 }
 
 /**
@@ -252,6 +278,13 @@ class ReflectiveDispatcher(
     /** Host strategy for running an interpreted `suspend` block as a real cancellable coroutine (`delay` &c.
      *  actually suspend). Null → the built-in best-effort synchronous run (suspend calls degrade). */
     private val suspendBridge: SuspendBridge? = null,
+    /** Executes library classes the loaders cannot load (project-jar dependency code, run in the bytecode VM
+     *  on device instead of a DexClassLoader). Null → the honest "cannot load" boundary stands. */
+    private val libraryFallback: LibraryExecutor? = null,
+    /** Realizes an interpreted `object : SomeClass()` as a real generated SUBCLASS when it's passed to library
+     *  code expecting that class (a `java.lang.reflect.Proxy`, used for interfaces, can't extend a class). Null →
+     *  a class-extending anonymous object stays the honest boundary (interfaces still proxy). */
+    private val classProxies: ClassProxyFactory? = null,
 ) : Dispatcher {
 
     override fun dispatch(call: RNode.Call, receiver: Any?, args: List<Any?>): Any? =
@@ -355,6 +388,9 @@ class ReflectiveDispatcher(
     }
 
     private fun invokeInstance(target: Any, name: String, args: List<Any?>, composable: List<Boolean>): Any? {
+        // An instance the library executor produced (an interpreted-library object): its methods exist only in
+        // the executor's world, not on the peer class reflection sees.
+        if (libraryFallback?.ownsInstance(target) == true) return libraryFallback.invokeInstance(target, name, args)
         // An omitted (defaulted) parameter has no exact-arity match — go straight to the `$default` synthetic.
         if (args.none { it === OmittedArg }) {
             findMethod(target.javaClass, name, args, static = false)?.let { m ->
@@ -369,6 +405,14 @@ class ReflectiveDispatcher(
         // receiver is not numbered in the `$default` mask → receiverCount = 1).
         invokeViaDefaultSynthetic(target.javaClass, name, listOf(target) + args, listOf(false) + composable, receiverCount = 1)
             ?.let { return it.value }
+        // Last resort (see [invokeStatic]): a same-arity method coerceArg can satisfy (value-class (un)boxing),
+        // AFTER the $default synthetic so a defaulted overload wins over a non-coercible same-arity sibling.
+        if (args.none { it === OmittedArg }) {
+            findByArity(target.javaClass, name, args, static = false)?.let { m ->
+                runCatching { m.isAccessible = true }
+                return m.invoke(target, *bindArgs(m.parameterTypes, args, composable, m.genericParameterTypes))
+            }
+        }
         throw InterpreterException("no method `$name`(${args.size}) on ${target.javaClass.name}")
     }
 
@@ -378,6 +422,7 @@ class ReflectiveDispatcher(
      *  receiver), so `receiverCount = 2`; the synthetic may live on the scope's interface (see
      *  [invokeViaDefaultSynthetic]'s interface search), not the runtime impl class. */
     private fun invokeMemberExtension(scope: Any, name: String, args: List<Any?>, composable: List<Boolean>): Any? {
+        if (libraryFallback?.ownsInstance(scope) == true) return libraryFallback.invokeInstance(scope, name, args, leadingReceivers = 1)
         if (args.none { it === OmittedArg }) {
             findMethod(scope.javaClass, name, args, static = false)?.let { m ->
                 runCatching { m.isAccessible = true }
@@ -391,6 +436,10 @@ class ReflectiveDispatcher(
     }
 
     private fun invokeStatic(ownerFqn: String, name: String, args: List<Any?>, composable: List<Boolean>, receiverCount: Int): Any? {
+        // A facade only the project's library jars carry (not loadable here) executes in the library executor.
+        if (libraryFallback != null && loadClassOrNull(ownerFqn) == null && libraryFallback.hasClass(ownerFqn)) {
+            return libraryFallback.invokeStatic(ownerFqn, name, args, receiverCount)
+        }
         val cls = loadClass(ownerFqn)
         if (args.none { it === OmittedArg }) {
             findMethod(cls, name, args, static = true)?.let { m ->
@@ -400,6 +449,15 @@ class ReflectiveDispatcher(
             findVarargMethod(cls, name, args, static = true)?.let { return invokeVararg(it, null, args, composable) }
         }
         invokeViaDefaultSynthetic(cls, name, args, composable, receiverCount)?.let { return it.value }
+        // Last resort: a same-arity overload none ACCEPTS as-is but [bindArgs]/coerceArg can satisfy (value-class
+        // (un)boxing). AFTER the $default synthetic so a defaulted overload wins over a non-coercible same-arity
+        // sibling (`Color(Float,Float,Float)` -> the Float `Color$default`, not `Color(Int,Int,Int)`).
+        if (args.none { it === OmittedArg }) {
+            findByArity(cls, name, args, static = true)?.let { m ->
+                runCatching { m.isAccessible = true }
+                return m.invoke(null, *bindArgs(m.parameterTypes, args, composable, m.genericParameterTypes))
+            }
+        }
         throw InterpreterException("no static `$name`(${args.size}) on $ownerFqn")
     }
 
@@ -528,9 +586,13 @@ class ReflectiveDispatcher(
     }
 
     private fun construct(ownerFqn: String, args: List<Any?>, composable: List<Boolean>, declaredParamCount: Int): Any? {
+        // A type only the project's library jars carry constructs in the library executor.
+        if (libraryFallback != null && loadClassOrNull(ownerFqn) == null && libraryFallback.hasClass(ownerFqn)) {
+            return libraryFallback.construct(ownerFqn, args)
+        }
         // An unqualified type name (a stdlib exception the resolver couldn't fully qualify, e.g.
         // `IllegalArgumentException`) — try the `java.lang` package before giving up.
-        val cls = runCatching { Class.forName(ownerFqn, false, loader) }.getOrNull()
+        val cls = loadClassOrNull(ownerFqn)
             ?: (if ('.' !in ownerFqn) runCatching { Class.forName("java.lang.$ownerFqn", false, loader) }.getOrNull() else null)
             ?: throw InterpreterException("cannot load class `$ownerFqn`")
         // An interior [OmittedArg] hole means a defaulted param was skipped — there's no exact-arity match, so
@@ -645,13 +707,40 @@ class ReflectiveDispatcher(
      *  expression evaluates to the unboxed underlying value, so the boxed parameter needs the synthetic static
      *  `box-impl` applied first. Anything already the right type, a null, or a primitive param passes through. */
     private fun boxValueClassIfNeeded(value: Any?, paramType: Class<*>): Any? {
-        if (value == null || paramType.isPrimitive || paramType.isInstance(value)) return value
+        if (value == null || paramType.isInstance(value)) return value
+        // Inverse of boxing: a BOXED value-class instance (a `Dp`, `Color`, `TextUnit`, …) reaching a parameter
+        // typed as its UNBOXED underlying — a mangled `offset-<hash>(…, float, float)` wants the `Dp`'s float, not
+        // the boxed `Dp`. The interpreter normally keeps value classes unboxed, but some library calls hand one
+        // back boxed; unbox it here so the reflective invoke doesn't fail with "argument N has type float, got Dp".
+        unboxToUnderlying(value, paramType)?.let { return it }
+        if (paramType.isPrimitive) return value
         val box = paramType.methods.firstOrNull {
             it.name == "box-impl" && Modifier.isStatic(it.modifiers) &&
                 it.parameterCount == 1 && wrap(it.parameterTypes[0]).isInstance(value)
         } ?: return value
         runCatching { box.isAccessible = true }
         return box.invoke(null, value)
+    }
+
+    /** If [value] is a BOXED inline value class (its class has a static `box-impl`) and [paramType] wants the
+     *  unboxed underlying (a primitive, or the underlying's type — NOT the value class itself, which
+     *  [boxValueClassIfNeeded] already short-circuits), unbox via the instance `unbox-impl` until it fits
+     *  [paramType]; else null. RECURSIVE because a value class can wrap another value class: `Color`'s underlying
+     *  is `ULong` (itself a value class over `long`), so `colorResource(...)` reaching a mangled `long` param
+     *  needs Color → ULong → long, not a single unbox. */
+    private fun unboxToUnderlying(value: Any, paramType: Class<*>): Any? {
+        var current: Any = value
+        repeat(MAX_VALUE_CLASS_NESTING) {
+            val cls = current.javaClass
+            if (cls.declaredMethods.none { it.name == "box-impl" && Modifier.isStatic(it.modifiers) }) return null
+            val unbox = cls.methods.firstOrNull {
+                it.name == "unbox-impl" && it.parameterCount == 0 && !Modifier.isStatic(it.modifiers)
+            } ?: return null
+            runCatching { unbox.isAccessible = true }
+            current = runCatching { unbox.invoke(current) }.getOrNull() ?: return null
+            if (wrap(paramType).isInstance(current)) return current
+        }
+        return null
     }
 
     /**
@@ -666,6 +755,18 @@ class ReflectiveDispatcher(
      * element boxed (a `List` stays a `List`, a `Set` stays a `Set`).
      */
     private fun coerceArg(value: Any?, paramType: Class<*>, genericType: java.lang.reflect.Type?): Any? {
+        // An interpreted `object : Foo { }` (a SourceObject) passed to library code that expects the type it
+        // implements/extends. An INTERFACE param wraps it in a JVM Proxy routing each call into the interpreter
+        // (`object : Comparator` → `sortedWith`). A library CLASS param needs a real generated subclass, which
+        // only a [classProxies] factory can make (`object : SomeAbstractClass()`); without one, the honest
+        // boundary stands (the reflective call fails and, under tolerateGaps, the statement degrades).
+        if (value is SourceObject && !paramType.isInstance(value)) {
+            val invoker = value.proxyInvoker
+            if (invoker != null) {
+                if (paramType.isInterface) return sourceObjectProxy(value, invoker, paramType)
+                classProxies?.proxyOrNull(value, paramType, emptyList(), overriddenMethodNames(value), invoker)?.let { return it }
+            }
+        }
         val typeArgs = (genericType as? java.lang.reflect.ParameterizedType)?.actualTypeArguments
         // Collection<VC>: box each element (`List<Color>` built from `listOf(Color.Red, …)`).
         if (value is Collection<*> && Collection::class.java.isAssignableFrom(paramType)) {
@@ -687,7 +788,22 @@ class ReflectiveDispatcher(
                 return out
             }
         }
+        // A List models a Kotlin array in the interpreter (`arrayOf`/`Array(n){}`/`vararg`). When the target is a
+        // real array parameter — a stdlib `ArraysKt` extension's `Object[]`/`int[]` receiver, or an `Array<T>`
+        // parameter — materialize it so the reflective call type-checks.
+        if (paramType.isArray && value is Collection<*>) return toRealArray(value, paramType.componentType)
         return boxValueClassIfNeeded(value, paramType)
+    }
+
+    /** Materialize [value] into a real Java array of [componentType] (boxing value-class elements; a primitive
+     *  component takes the element's unboxed form, a null primitive element its zero). */
+    private fun toRealArray(value: Collection<*>, componentType: Class<*>): Any {
+        val arr = java.lang.reflect.Array.newInstance(componentType, value.size)
+        value.forEachIndexed { i, e ->
+            val elem = if (componentType.isPrimitive && e == null) zeroValue(componentType) else boxValueClassIfNeeded(e, componentType)
+            java.lang.reflect.Array.set(arr, i, elem)
+        }
+        return arr
     }
 
     /** The generic parameter types of the REAL method behind a `<name>$default` synthetic [syn] (whose own
@@ -784,6 +900,33 @@ class ReflectiveDispatcher(
         }
     }
 
+    /** Wrap an interpreted [obj] (an `object : Foo { }` literal or a source-class instance) in a JVM Proxy of the
+     *  library [iface] it implements, routing each interface method to the interpreter's member dispatch via
+     *  [invoker]. `Object` methods delegate to the SourceObject; a `void` method returns null; a failure is
+     *  swallowed to null so a preview degrades instead of crashing the host (a genuine error still surfaces the
+     *  first time via the interpreter's own diagnostics). The JVM unboxes a boxed primitive return for us. */
+    private fun sourceObjectProxy(obj: Any, invoker: (String, List<Any?>) -> Any?, iface: Class<*>): Any =
+        java.lang.reflect.Proxy.newProxyInstance(iface.classLoader ?: loader, arrayOf(iface)) { _, method, callArgs ->
+            val a = callArgs?.toList() ?: emptyList()
+            when {
+                method.declaringClass == Any::class.java -> when (method.name) {
+                    "toString" -> obj.toString()
+                    "hashCode" -> System.identityHashCode(obj)
+                    "equals" -> a.getOrNull(0) === obj
+                    else -> null
+                }
+                else -> {
+                    val r = runCatching { invoker(method.name, a) }.getOrNull()
+                    if (method.returnType == Void.TYPE) null else r
+                }
+            }
+        }
+
+    /** The method NAMES an interpreted [obj] provides (its own class's members) — the set a [ClassProxyFactory]
+     *  overrides in the generated subclass; a name absent here keeps the real superclass method. */
+    private fun overriddenMethodNames(obj: SourceObject): Set<String> =
+        obj.cls.methods.keys.mapTo(HashSet()) { it.substringBeforeLast('/') }
+
     /** Prefer a method declared on a public type (invokable under the module system) that accepts the args.
      *  Matches a mangled JVM name (`name-<hash>`) too, for functions with inline value-class params. Cached. */
     private fun findMethod(cls: Class<*>, name: String, args: List<Any?>, static: Boolean): Method? {
@@ -794,6 +937,19 @@ class ReflectiveDispatcher(
         return findMethodUncached(cls, name, args, static).also { cache[key] = MethodHolder(it) }
     }
 
+    /** A same-arity method to attempt as a LAST RESORT when no overload accepts the args as-is (see
+     *  [findMethodUncached]): [bindArgs]/coerceArg may still satisfy it (value-class (un)boxing). Prefers a
+     *  public-declaring method; for an instance call re-resolves a non-public match to a public supertype so it
+     *  is invokable under the JDK module system. Callers try this only AFTER the `$default` synthetic. */
+    private fun findByArity(cls: Class<*>, name: String, args: List<Any?>, static: Boolean): Method? {
+        val byArity = cls.methods.filter { m ->
+            mangledNameMatches(m.name, name) && !m.isVarArgs && m.parameterCount == args.size && (Modifier.isStatic(m.modifiers) == static)
+        }
+        val m = byArity.firstOrNull { Modifier.isPublic(it.declaringClass.modifiers) } ?: byArity.firstOrNull() ?: return null
+        if (!static && !Modifier.isPublic(m.declaringClass.modifiers)) publicMethod(cls, m.name, m.parameterCount)?.let { return it }
+        return m
+    }
+
     private fun findMethodUncached(cls: Class<*>, name: String, args: List<Any?>, static: Boolean): Method? {
         // Vararg methods are excluded here (`!isVarArgs`) and handled by [findVarargMethod]/[invokeVararg]:
         // their JVM arity counts the array as ONE param, so an exact-arity match would mis-bind the scalar args.
@@ -801,10 +957,26 @@ class ReflectiveDispatcher(
             mangledNameMatches(m.name, name) && !m.isVarArgs && m.parameterCount == args.size && (Modifier.isStatic(m.modifiers) == static)
         }
         val accepting = byArity.filter { paramsAccept(it.parameterTypes, args) }
-        val chosen = accepting.firstOrNull { Modifier.isPublic(it.declaringClass.modifiers) }
-            ?: accepting.firstOrNull()
-            ?: byArity.firstOrNull { Modifier.isPublic(it.declaringClass.modifiers) }
-            ?: byArity.firstOrNull()
+        // Prefer the MOST SPECIFIC applicable overload (Java/Kotlin overload resolution) rather than whichever
+        // getMethods() lists first — that order is JVM-dependent, so an ambiguous set would resolve differently
+        // across runtimes. e.g. RangesKt.rangeTo(Float, Float) fits BOTH rangeTo(float, float) ->
+        // ClosedFloatingPointRange and the generic rangeTo(Comparable, Comparable) -> ClosedRange; the float
+        // overload must win (else 0f..50f is typed as its ClosedRange supertype and a Slider valueRange gets the
+        // wrong type). "Most specific" = every (boxed) parameter is a subtype of the others'; ties/incomparable
+        // sets fall back to the accepting order.
+        val ranked = accepting.filter { cand -> accepting.all { notLessSpecific(cand.parameterTypes, it.parameterTypes) } }
+            // No parameter-type-only most-specific overload (incomparable applicable overloads — e.g.
+            // `Intent.putExtra(String, CharSequence)` vs `(String, Serializable)` for a value that is both):
+            // break the tie by the ARGUMENTS' runtime types rather than JVM getMethods() order.
+            .ifEmpty { mostSpecificForArgs(accepting, args) }
+            .ifEmpty { accepting }
+        // Return null when NO same-arity overload actually accepts the args (ranked is empty iff accepting is):
+        // invoking a non-accepting overload only throws an argument-type mismatch, and it hides the real target —
+        // a DEFAULTED overload reached via its `$default` synthetic (`Color(Float, Float, Float)` -> the 5-param
+        // Float `Color$default`, when a same-arity `Color(Int, Int, Int)` exists but can't take Floats). Returning
+        // null lets [invokeStatic]/[invoke] fall through to that synthetic path instead of crashing.
+        val chosen = ranked.firstOrNull { Modifier.isPublic(it.declaringClass.modifiers) }
+            ?: ranked.firstOrNull()
             ?: return null
         // The match may be declared on a NON-public type that `getMethods()` surfaced as the only override —
         // e.g. `java.util.Arrays$ArrayList.get` (the result of `listOf(…)`): not invokable under the JDK module
@@ -858,27 +1030,67 @@ class ReflectiveDispatcher(
     }
 
     private fun leadingParamsAccept(params: Array<Class<*>>, args: List<Any?>, count: Int): Boolean =
-        (0 until count).all { i ->
-            val p = params[i]
-            when (val a = args[i]) {
-                null -> !p.isPrimitive
-                is InterpretedLambda -> p.isInterface
-                else -> wrap(p).isInstance(a) || acceptsValueClassUnderlying(p, a)
-            }
-        }
+        (0 until count).all { i -> paramAccepts(params[i], args[i]) }
 
     /** Whether each argument fits the (possibly primitive) parameter type — null fits any reference type, an
      *  interpreted lambda fits any functional interface, and an unboxed inline-value-class value fits a boxed
      *  value-class param (`bindArgs` boxes it via `box-impl` at invoke time). */
     private fun paramsAccept(params: Array<Class<*>>, args: List<Any?>): Boolean =
-        params.size == args.size && params.indices.all { i ->
-            val p = params[i]
-            when (val a = args[i]) {
-                null -> !p.isPrimitive
-                is InterpretedLambda -> p.isInterface
-                else -> wrap(p).isInstance(a) || acceptsValueClassUnderlying(p, a)
+        params.size == args.size && params.indices.all { i -> paramAccepts(params[i], args[i]) }
+
+    /** Whether argument [a] fits parameter type [p]. A `Collection` also fits an ARRAY parameter — the
+     *  interpreter models Kotlin arrays (`arrayOf`/`Array(n){}`/`vararg`) as Lists, so an array-typed stdlib
+     *  receiver/parameter (`ArraysKt.map(Object[], …)`) accepts one; [coerceArg] materializes the real array. */
+    private fun paramAccepts(p: Class<*>, a: Any?): Boolean = when (a) {
+        null -> !p.isPrimitive
+        is InterpretedLambda -> p.isInterface
+        else -> wrap(p).isInstance(a) || acceptsValueClassUnderlying(p, a) ||
+            (p.isArray && a is Collection<*> && collectionFitsArray(a, p.componentType))
+    }
+
+    /** Whether a Collection can materialize into an array of [componentType]: every element must fit the
+     *  (boxed) component type. This keeps the array-from-Collection acceptance from matching the WRONG stdlib
+     *  overload — a `List<Item>` fits `map(Object[], …)` but not `map(int[], …)`, while `intArrayOf(1,2,3)`'s
+     *  `List<Int>` fits both `int[]` and `Object[]` (either yields the same result). */
+    private fun collectionFitsArray(c: Collection<*>, componentType: Class<*>): Boolean =
+        c.all { it == null || wrap(componentType).isInstance(it) || acceptsValueClassUnderlying(componentType, it) }
+
+    /** Whether method params [a] are not-less-specific than [b] (each boxed param of a is assignable to the
+     *  corresponding boxed param of b) — the "more specific" relation from Java overload resolution, used to
+     *  pick the tightest applicable overload deterministically (not by JVM getMethods() order). */
+    private fun notLessSpecific(a: Array<Class<*>>, b: Array<Class<*>>): Boolean =
+        a.size == b.size && a.indices.all { wrap(b[it]).isAssignableFrom(wrap(a[it])) }
+
+    /** Break a tie among applicable overloads that have NO parameter-type-only most-specific member (their
+     *  parameter types are pairwise incomparable) by the ARGUMENTS' runtime types: keep the candidates whose
+     *  parameters are the closest supertypes of the actual args (minimal total hierarchy distance). Deterministic
+     *  where `getMethods()` order is not — e.g. a `StringBuilder` (both `CharSequence` and `Serializable`) fed to
+     *  `putExtra(String, CharSequence)` vs `(String, Serializable)` picks the nearer `CharSequence`. Null and
+     *  interpreted-lambda args carry no comparable runtime type, so they don't influence the score. */
+    private fun mostSpecificForArgs(candidates: List<Method>, args: List<Any?>): List<Method> {
+        if (candidates.size < 2) return candidates
+        fun distance(from: Class<*>, to: Class<*>): Int {
+            val target = wrap(to)
+            if (!target.isAssignableFrom(wrap(from))) return Int.MAX_VALUE / 4
+            val seen = HashSet<Class<*>>()
+            val queue = ArrayDeque<Pair<Class<*>, Int>>().apply { add(wrap(from) to 0) }
+            while (queue.isNotEmpty()) {
+                val (c, d) = queue.removeFirst()
+                if (c == target) return d
+                if (!seen.add(c)) continue
+                c.superclass?.let { queue.add(it to d + 1) }
+                c.interfaces.forEach { queue.add(it to d + 1) }
             }
+            return Int.MAX_VALUE / 4
         }
+        fun score(m: Method): Long = args.indices.sumOf { i ->
+            val a = args[i]
+            if (a == null || a is InterpretedLambda) 0L else distance(a.javaClass, m.parameterTypes[i]).toLong()
+        }
+        val scored = candidates.map { it to score(it) }
+        val min = scored.minOf { it.second }
+        return scored.filter { it.second == min }.map { it.first }
+    }
 
     private fun wrap(c: Class<*>): Class<*> = when (c) {
         Int::class.javaPrimitiveType -> Integer::class.java
@@ -906,6 +1118,9 @@ class ReflectiveDispatcher(
         }
         return false
     }
+
+    private fun loadClassOrNull(fqn: String): Class<*>? =
+        runCatching { Class.forName(fqn, false, loader) }.getOrNull()
 
     private fun loadClass(fqn: String): Class<*> =
         runCatching { Class.forName(fqn, false, loader) }.getOrElse {

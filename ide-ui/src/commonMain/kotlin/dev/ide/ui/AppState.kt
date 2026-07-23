@@ -15,6 +15,7 @@ import dev.ide.ui.backend.TreeViewMode
 import dev.ide.ui.backend.UiRenameResult
 import dev.ide.ui.backend.UiSourceRootRole
 import dev.ide.ui.backend.UiNewFileTemplate
+import dev.ide.ui.backend.UiOpenTab
 import dev.ide.ui.backend.UiOpenTabs
 import dev.ide.ui.backend.UiSettings
 import dev.ide.ui.editor.core.EditorSession
@@ -35,7 +36,7 @@ import kotlinx.coroutines.withContext
  * Top-level screens, ordered by depth so the transition helper can infer direction: a move to a
  * higher-ordinal screen animates "forward" (deeper), a lower one "back".
  */
-enum class Screen { Projects, CreateProject, ImportProject, ExportProject, Editor, Hub, Run, ModuleConfig, SdkManager, KeystoreManager, KeystoreCreate, KeystoreImport, Settings, CodeStyle, LessonTrack, LessonPlayer, StoreItem }
+enum class Screen { Projects, CreateProject, ImportProject, ExportProject, Editor, Hub, Run, ModuleConfig, SdkManager, KeystoreManager, KeystoreCreate, KeystoreImport, Settings, CodeStyle, Plugins, LessonTrack, LessonPlayer, StoreItem }
 
 /**
  * The home screen's bottom-navigation destinations (the landing surface shown on [Screen.Projects]): the
@@ -53,6 +54,23 @@ enum class RailDestination { Files, Search, Source, More }
  *  full-pane preview, or [Split] — code and its preview together (so you can edit and watch it update,
  *  the one layout that works on a phone where the panes can't otherwise share the screen). */
 enum class EditorViewMode { Text, Blocks, Preview, Split }
+
+/** Stable persisted id for a tab's [EditorViewMode] (see `UiOpenTab.viewMode`). */
+internal fun EditorViewMode.persistId(): String = when (this) {
+    EditorViewMode.Text -> "text"
+    EditorViewMode.Blocks -> "blocks"
+    EditorViewMode.Preview -> "preview"
+    EditorViewMode.Split -> "split"
+}
+
+/** Parse a persisted [EditorViewMode] id, or null when unknown (so the tab keeps its default surface). */
+internal fun editorViewModeOf(id: String?): EditorViewMode? = when (id) {
+    "text" -> EditorViewMode.Text
+    "blocks" -> EditorViewMode.Blocks
+    "preview" -> EditorViewMode.Preview
+    "split" -> EditorViewMode.Split
+    else -> null
+}
 
 /**
  * One open editor tab. Its buffer-of-record is the [EditorSession] (the rope-backed model both the text
@@ -156,6 +174,8 @@ class IdeUiState(
     var navOpen by mutableStateOf(!isMobilePlatform)
     var searchOpen by mutableStateOf(false)
     var consoleOpen by mutableStateOf(!isMobilePlatform)
+    /** The AI agent chat drawer (right edge; desktop layout). */
+    var chatOpen by mutableStateOf(false)
     var paletteOpen by mutableStateOf(false)
     /** The in-file structure / outline bottom sheet (opened from the breadcrumb tap or Ctrl-F12). */
     var structureOpen by mutableStateOf(false)
@@ -167,14 +187,30 @@ class IdeUiState(
     var runConflict by mutableStateOf<PendingRun?>(null)
         private set
 
+    /** Non-null while the first-build notification-permission gate is deciding; holds the run waiting behind
+     *  it. `BuildNotificationGate` renders the prompt/explanation and resolves it via [resolveNotifGate]. */
+    var notifGate by mutableStateOf<PendingRun?>(null)
+        private set
+
     /**
-     * Funnel every Run/task launch through this. If nothing is running, [action] fires immediately. If a
+     * Funnel every Run/task launch through this. On the very first build (mobile only, until
+     * [NOTIF_BUILD_PROMPT_RESOLVED_PREF] is set) it defers to `BuildNotificationGate`, which asks for the
+     * notification permission the isolated build process needs; the gate then re-enters via [resolveNotifGate]
+     * → [proceedRun]. Otherwise it proceeds straight to [proceedRun].
+     */
+    fun requestRun(action: () -> Unit) {
+        if (isMobilePlatform && !notifPromptResolved) { notifGate = PendingRun(action); return }
+        proceedRun(action)
+    }
+
+    /**
+     * Start [action] once the notification gate is clear. If nothing is running, it fires immediately. If a
      * build or program is already in progress, the user must confirm — either automatically (they earlier
      * chose "don't ask again", which remembers Stop-and-Run) or via the confirmation dialog. This guards a
      * runaway program (e.g. an infinite loop) from being silently shadowed by a second run that can never
      * start (the engine drops a run request while one is already Running).
      */
-    fun requestRun(action: () -> Unit) {
+    private fun proceedRun(action: () -> Unit) {
         if (backend.build.buildState.value.status != RunStatus.Running) {
             action(); return
         }
@@ -182,6 +218,20 @@ class IdeUiState(
             stopThenRun(action); return
         }
         runConflict = PendingRun(action)
+    }
+
+    /** Whether the one-time first-build notification prompt has already run (persisted app-globally). */
+    private val notifPromptResolved: Boolean
+        get() = backend.settings.preference(NOTIF_BUILD_PROMPT_RESOLVED_PREF)?.toBooleanStrictOrNull() == true
+
+    /** `BuildNotificationGate` calls this once it has prompted (granted, denied, or dismissed): remember that
+     *  the one-time prompt is done, then start the deferred run (which now runs in-process when notifications
+     *  were declined — see IdeServicesBackend.separateBuildProcessEnabled). */
+    fun resolveNotifGate() {
+        backend.settings.setPreference(NOTIF_BUILD_PROMPT_RESOLVED_PREF, "true")
+        val pending = notifGate
+        notifGate = null
+        pending?.let { proceedRun(it.action) }
     }
 
     /** The user chose "Stop and Run" in the conflict dialog. [remember] persists that choice so future runs
@@ -327,6 +377,7 @@ class IdeUiState(
         backend.editor.updateDocument(path, text)
         openFiles.add(OpenFile(path, name, text))
         activeIndex = openFiles.lastIndex
+        backend.editor.onFileOpened(path) // a genuinely new tab (focus path returned above), for plugin events
     }
 
     /** Focus the already-open tab for [path] if there is one; returns true when it existed. */
@@ -361,6 +412,7 @@ class IdeUiState(
         if (idx < 0) return
         openFiles.removeAt(idx)
         activeIndex = activeIndex.coerceAtMost(openFiles.lastIndex)
+        backend.editor.onFileClosed(file.path)
     }
 
     /** Close every tab except [keep] (tab context menu). Iterates a copy, so mutating [openFiles] is safe. */
@@ -395,25 +447,46 @@ class IdeUiState(
     fun saveActive() { active?.let(::save) }
 
     /**
-     * Reopen the tabs persisted from a previous session with this project (paths in tab order + the active
-     * tab). Files that no longer exist on disk are skipped. Returns true if at least one tab was restored, so
-     * the caller can fall back to [defaultFile] when there was no remembered session.
+     * Reopen the tabs persisted from a previous session with this project (in tab order + the active tab),
+     * each restored to where the user left it: its view mode, caret, and scroll position. Files that no longer
+     * exist on disk are skipped. Returns true if at least one tab was restored, so the caller can fall back to
+     * [defaultFile] when there was no remembered session.
      */
     suspend fun restoreTabs(): Boolean {
         val saved = backend.projects.openTabs()
-        if (saved.paths.isEmpty()) return false
-        for (path in saved.paths) {
-            val name = path.substringAfterLast('/').substringAfterLast('\\')
-            runCatching { openSuspend(path, name) } // a deleted file throws in readFile — skip it
+        if (saved.tabs.isEmpty()) return false
+        for (tab in saved.tabs) {
+            val name = tab.path.substringAfterLast('/').substringAfterLast('\\')
+            runCatching {
+                openSuspend(tab.path, name) // a deleted file throws in readFile — skip it
+                // Reapply the saved per-tab view state to the tab we just opened. setCaret + the scroll anchor
+                // coerce into the (possibly changed) buffer, so a shrunken file can't strand the caret/scroll.
+                openFiles.firstOrNull { it.path == tab.path }?.let { f ->
+                    editorViewModeOf(tab.viewMode)?.let { f.viewMode = it }
+                    f.session.setCaret(tab.caret)
+                    f.session.viewportTopLine = tab.scrollLine.coerceAtLeast(0)
+                }
+            }
         }
         if (openFiles.isEmpty()) return false
         activeIndex = saved.activeIndex.coerceIn(0, openFiles.lastIndex)
         return true
     }
 
-    /** The current open tabs as a persistable snapshot (paths in tab order + the active index). */
+    /** The current open tabs as a persistable snapshot: each tab's path, caret, scroll line, and view mode,
+     *  plus the active index. */
     fun tabsSnapshot(): UiOpenTabs =
-        UiOpenTabs(openFiles.map { it.path }, activeIndex)
+        UiOpenTabs(
+            openFiles.map { f ->
+                UiOpenTab(
+                    path = f.path,
+                    caret = f.session.selection.start,
+                    scrollLine = f.session.viewportTopLine.coerceAtLeast(0),
+                    viewMode = f.viewMode.persistId(),
+                )
+            },
+            activeIndex,
+        )
 
     /** Pick a sensible first file: a `Main.java`, else the first source file in the tree. */
     fun defaultFile(): TreeNode? {
@@ -478,6 +551,25 @@ class IdeUiState(
                 backend.editor.updateDocument(diskPath, text)
             }
             loadTree()
+        }
+    }
+
+    /**
+     * Re-read any clean open tab whose backing file changed on disk since it was loaded (e.g. the agent, or
+     * any external tool, wrote it). Runs on every file-system-epoch bump. Modified tabs are left untouched so
+     * an external write never clobbers in-progress user edits; unchanged tabs keep their session/undo/caret.
+     */
+    fun syncOpenTabsFromDisk() {
+        scope.launch {
+            for (i in openFiles.indices) {
+                val f = openFiles[i]
+                if (f.modified) continue
+                val text = readTabText(f.path) ?: continue
+                if (text == f.savedText) continue // untouched → preserve session/undo/caret
+                val name = f.path.substringAfterLast('/').substringAfterLast('\\')
+                openFiles[i] = OpenFile(f.path, name, text)
+                backend.editor.updateDocument(f.path, text)
+            }
         }
     }
 
@@ -626,6 +718,10 @@ class IdeUiState(
         /** App preference: "true" once the user checks "don't ask again" on the run-conflict dialog — future
          *  runs then stop the current build/program and start automatically, without prompting. */
         const val RUN_CONFLICT_ALWAYS_STOP_PREF = "run.conflict.alwaysStop"
+
+        /** App preference: "true" once the first-build notification-permission prompt has been shown (see
+         *  `BuildNotificationGate`), so later builds don't re-prompt. Re-request from Settings → Build Runtime. */
+        const val NOTIF_BUILD_PROMPT_RESOLVED_PREF = "notif.buildPromptResolved"
     }
 }
 

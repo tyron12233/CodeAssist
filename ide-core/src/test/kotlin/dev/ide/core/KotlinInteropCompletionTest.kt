@@ -230,6 +230,56 @@ class KotlinInteropCompletionTest {
         assertTrue("if" !in snippetLabels("package com.example.core\nfun g() { val n = 5\n n.i }", "n.i"), "no `.if` on Int")
     }
 
+    /**
+     * `map.forEach { entry -> entry.<caret> }` — the lambda parameter must be a `Map.Entry`, not the map's key
+     * type. Through the index, `MutableMap` resolves its members via the JVM `java.util.Map` shape, so
+     * `forEach(BiConsumer<K,V>)` is an inherited MEMBER whose SAM's first parameter is the KEY; it used to win
+     * over the Kotlin `Map.forEach((Map.Entry<K,V>) -> Unit)` extension on receiver specificity (member beats
+     * extension), typing `entry` as the key (String). Overload resolution now prefers the function-type
+     * parameter over SAM conversion, so `entry` is a `Map.Entry` and `entry.key`/`entry.value` complete.
+     */
+    @Test
+    fun mapForEachEntryIsMapEntryThroughIndex() {
+        val s = bootstrapWithKotlin()
+        val probe = root.resolve("core/src/main/java/com/example/core/Probe.kt")
+        val text = "package com.example.core\nfun f() {\n  val toolbox = mutableMapOf(\"a\" to \"b\")\n  toolbox.forEach { entry -> entry. }\n}"
+        val items = labels(s, probe, text, "entry.")
+        assertTrue("key" in items && "value" in items, "forEach lambda param must be Map.Entry (key/value): $items")
+        assertTrue("length" !in items, "entry must NOT be the String key type (no `length`): $items")
+    }
+
+    /** `map.<caret> { entry -> }` — a member access whose selector is a call with a trailing lambda must still
+     *  complete the receiver's members, not fall through to type/scope names. */
+    @Test
+    fun mapMemberAccessWithTrailingLambdaThroughIndex() {
+        val s = bootstrapWithKotlin()
+        val probe = root.resolve("core/src/main/java/com/example/core/Probe.kt")
+        val text = "package com.example.core\nfun f() {\n  val toolbox = mutableMapOf(\"a\" to \"b\")\n  toolbox. { entry ->\n  }\n}"
+        val items = labels(s, probe, text, "toolbox.")
+        assertTrue("forEach" in items, "map members must complete before a trailing lambda: ${items.take(30)}")
+        assertTrue("String" !in items, "type names must not leak into member access: ${items.take(30)}")
+    }
+
+    /**
+     * `StringBuilder` is a Kotlin typealias to `java.lang.StringBuilder` (`kotlin/text/TypeAliases.kt`) — no
+     * `.kotlin_builtins`, no `.class` — so it used to resolve to a shapeless FQN and complete nothing. Mapped in
+     * `Builtins` so its members (which chain fluently: `append(...)` returns `StringBuilder`) resolve through
+     * the aliased java.lang type.
+     */
+    @Test
+    fun stringBuilderMembersAndFluentChainResolve() {
+        val s = bootstrapWithKotlin()
+        val probe = root.resolve("core/src/main/java/com/example/core/Probe.kt")
+        val direct = labels(s, probe, "package com.example.core\nfun f() { StringBuilder().app }", "StringBuilder().app")
+        assertTrue(direct.any { it.startsWith("append") }, "StringBuilder().append should complete: ${direct.take(20)}")
+        // Fluent: append(...) returns StringBuilder, so a second .append chains.
+        val chained = labels(s, probe, "package com.example.core\nfun f() { StringBuilder().append(\"x\").app }", "append(\"x\").app")
+        assertTrue(chained.any { it.startsWith("append") }, "append() must return StringBuilder so it chains: ${chained.take(20)}")
+        // `with(StringBuilder()) { <caret> }` — the receiver value's members are in scope.
+        val withScope = labels(s, probe, "package com.example.core\nfun f() { with(StringBuilder()) { app } }", "{ app")
+        assertTrue(withScope.any { it.startsWith("append") }, "with(StringBuilder()) block should see append: ${withScope.take(20)}")
+    }
+
     @Test
     fun typeMismatchIsFlaggedInKotlin() {
         val s = bootstrapWithKotlin()

@@ -4,6 +4,8 @@ import dev.ide.analysis.CodeActionKind
 import dev.ide.analysis.DiagnosticTag
 import dev.ide.analytics.Events
 import dev.ide.core.BackendContext
+import dev.ide.core.event.EditorEvent
+import dev.ide.core.event.IdeEventTopics
 import dev.ide.core.settings.CodeStyleSettings
 import dev.ide.core.settings.SettingsStore
 import dev.ide.lang.completion.CaretAction
@@ -131,11 +133,21 @@ internal class EditorBackend(private val ctx: BackendContext) : EditorService {
 
     override fun saveFile(path: String, text: String) = ctx.services.save(Paths.get(path), text)
 
+    // --- Editor-session lifecycle notifications (fire-and-forget from the UI) --------------------------------
+    // The UI reports these; we republish them on the app bus for plugin subscribers (see IdeEventTopics.EDITOR).
+    // Guarded so a throwing subscriber can never disturb the editor; a null bus (no project/manager) is a no-op.
+
+    private fun publishEditor(event: EditorEvent) =
+        runCatching { ctx.messageBus?.syncPublisher(IdeEventTopics.EDITOR)?.onEditorEvent(event) }
+
+    override fun onFileOpened(path: String) { publishEditor(EditorEvent.FileOpened(path)) }
+    override fun onFileClosed(path: String) { publishEditor(EditorEvent.FileClosed(path)) }
+    override fun onActiveEditorChanged(path: String?) { publishEditor(EditorEvent.ActiveEditorChanged(path)) }
+    override fun onSelectionChanged(path: String, start: Int, end: Int) {
+        publishEditor(EditorEvent.SelectionChanged(path, start, end))
+    }
+
     override suspend fun complete(path: String, text: String, offset: Int): UiCompletionResult {
-        // One uniform pipeline for every language: the file's backend publishes its completion as a
-        // contributor, so there is no per-backend routing here. A preemption from inside the pipeline
-        // (a newer keystroke superseded this request) keeps the current popup — the newer request
-        // produces the live list.
         val t0 = System.nanoTime()
         val result = try {
             ctx.interactive { ctx.services.complete(Paths.get(path), text, offset) }
@@ -256,7 +268,7 @@ internal class EditorBackend(private val ctx: BackendContext) : EditorService {
                     label = s.label,
                     parameters = s.parameters.map { p ->
                         UiSignatureParam(
-                            p.label, p.labelStart, p.labelEnd
+                            p.label, p.labelStart, p.labelEnd, alreadyNamed = p.alreadyNamed
                         )
                     },
                     documentation = s.documentation,
@@ -311,10 +323,12 @@ internal class EditorBackend(private val ctx: BackendContext) : EditorService {
 
     override suspend fun actionsAt(
         path: String, text: String, selStart: Int, selEnd: Int
-    ): List<UiAction> = withContext(ctx.engineDispatcher) {
-        ctx.services.editorActions(
-            Paths.get(path), text, selStart, selEnd
-        )
+    ): List<UiAction> = timedPass("actions", path, { it.size }) {
+        // Timed like a daemon pass because a CPU trace showed THIS (lightbulb / import quick-fixes → full
+        // diagnostics → deep inference) as a heavy entry point, yet it was invisible in the perf timeline.
+        withContext(ctx.engineDispatcher) {
+            ctx.services.editorActions(Paths.get(path), text, selStart, selEnd)
+        }
     }.mapIndexed { i, fix -> UiAction(i, fix.title, mapActionKind(fix.kind)) }
 
     override suspend fun applyAction(
@@ -340,6 +354,11 @@ internal class EditorBackend(private val ctx: BackendContext) : EditorService {
             ctx.services.formatRange(Paths.get(path), text, selStart, selEnd, style)
         }.map { UiTextEdit(it.offset, it.offset + it.oldLength, it.newText.toString()) }
     }
+
+    override suspend fun optimizeImports(path: String, text: String): List<UiTextEdit> =
+        withContext(ctx.engineDispatcher) {
+            ctx.services.organizeImports(Paths.get(path), text)
+        }.map { UiTextEdit(it.offset, it.offset + it.oldLength, it.newText.toString()) }
 
     // The active code style, resolved fresh per reformat from the file's language profile (so a settings
     // change applies without restart).

@@ -77,10 +77,24 @@ class RunScreenSnapshot {
         snapshot("run-failed.png", 460, 900, FakeBackend(rc, bs))
     }
 
+    @Test
+    fun renderRunningLightTheme() {
+        val rc = RunConsoleUi(
+            id = 3, moduleName = "app", mainClass = "com.example.MainKt",
+            phase = RunPhase.Running, acceptsInput = true,
+            transcript = listOf(
+                ConsoleChunk("What is your name? ", ConsoleChunkKind.OUTPUT),
+                ConsoleChunk("World\n", ConsoleChunkKind.INPUT),
+                ConsoleChunk("Hello, World!\nFavourite number? ", ConsoleChunkKind.OUTPUT),
+            ),
+        )
+        snapshot("run-running-light.png", 460, 900, FakeBackend(rc, BuildState(status = RunStatus.Running)), dark = false)
+    }
+
     @OptIn(ExperimentalComposeUiApi::class)
-    private fun snapshot(name: String, w: Int, h: Int, backend: IdeBackend) {
+    private fun snapshot(name: String, w: Int, h: Int, backend: IdeBackend, dark: Boolean = true) {
         val scene = ImageComposeScene(width = w, height = h, density = Density(2f)) {
-            CodeAssistTheme(dark = true) {
+            CodeAssistTheme(dark = dark) {
                 Box(Modifier.fillMaxSize().background(Ca.colors.bg)) { RunScreen(backend, onBack = {}) }
             }
         }

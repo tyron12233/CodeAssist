@@ -147,6 +147,28 @@ class SdkManagerService(
     /** Drop the finished (done/failed) entries from the queue. */
     fun clearSdkDownloads() = _state.update { it.copy(downloads = it.downloads.filterNot { d -> d.status == "DONE" || d.status == "FAILED" }).withAggregate() }
 
+    /**
+     * The installed Android framework SOURCES dir the editor should attach for parameter names + javadoc,
+     * resolved from the SDK-Manager install root ([androidSdkRoot]) rather than derived from `android.jar`'s
+     * on-disk layout. This is what makes SDK-Manager-installed sources reach the editor **on device**, where
+     * `android.jar` is a bundled flat asset (no `platforms/android-NN/` parent to derive `sources/android-NN`
+     * from). Prefers the dir matching [compileSdk] (exact or same-major level), else the highest installed
+     * `sources/android-*`, so framework docs still resolve when only an adjacent level's sources are present.
+     * Null when no sources are installed. (Desktop already derives the dir from the real SDK layout; this
+     * dedups against that.)
+     */
+    fun androidSourcesDir(compileSdk: Int? = null): Path? {
+        val root = androidSdkRoot()
+        compileSdk?.let { AndroidSdk.platformSourcesDir(root, "android-$it")?.let { dir -> return dir } }
+        val sources = root.resolve("sources")
+        if (!Files.isDirectory(sources)) return null
+        return Files.list(sources).use { stream ->
+            stream.filter { Files.isDirectory(it) && it.fileName.toString().startsWith("android-") }
+                .sorted(compareByDescending { it.fileName.toString() })
+                .findFirst().orElse(null)
+        }
+    }
+
     /** Status of the Android platform sources for inlay/completion docs, or null when there's no Android SDK.
      *  APPLICATION-scoped (uses the shared [androidSdkRoot]), so the picker's hub reports it with no project. */
     fun androidSourcesInfo(): AndroidSourcesInfo? {

@@ -89,6 +89,8 @@ fun CodeEditor(
     findEpoch: Int = 0,
     /** Bump from the host (a toolbar/menu Reformat action) to reformat the whole file; 0 = no request. */
     formatEpoch: Int = 0,
+    /** Bump from the host (the Optimize Imports menu action) to reorganize imports; 0 = no request. */
+    optimizeImportsEpoch: Int = 0,
     /** Editor text zoom; 1.0 = the theme's code size. Driven by pinch + Ctrl-+/-/0; hoisted so it persists across tabs. */
     fontScale: Float = 1f,
     onFontScaleChange: (Float) -> Unit = {},
@@ -137,6 +139,7 @@ fun CodeEditor(
             onRenamed,
             findEpoch,
             formatEpoch,
+            optimizeImportsEpoch,
             fontScale,
             onFontScaleChange,
             onPreview,
@@ -164,6 +167,7 @@ private fun CodeEditorContent(
     onRenamed: (newPath: String?) -> Unit = {},
     findEpoch: Int = 0,
     formatEpoch: Int = 0,
+    optimizeImportsEpoch: Int = 0,
     fontScale: Float = 1f,
     onFontScaleChange: (Float) -> Unit = {},
     onPreview: (variantId: String) -> Unit = {},
@@ -335,7 +339,11 @@ private fun CodeEditorContent(
         val noOp = item.insertText == chars.subSequence(mainStart, mainEnd).toString() &&
             item.additionalEdits.isEmpty() && item.caret == null
         val nextIsSpace = mainEnd < len && chars[mainEnd].isWhitespace()
-        val insert = if (noOp && !nextIsSpace) item.insertText + " " else item.insertText
+        // Inside an XML attribute value the token sits in quotes; "acknowledge with a space" is wrong there
+        // (it produces android:x="false "). The caret should hop OUT of the quotes instead (see below), so
+        // suppress the no-op space when the next char is a closing quote in a quote-hopping (XML) language.
+        val nextIsCloseQuote = mainEnd < len && (chars[mainEnd] == '"' || chars[mainEnd] == '\'') && wordExtra.isNotEmpty()
+        val insert = if (noOp && !nextIsSpace && !nextIsCloseQuote) item.insertText + " " else item.insertText
 
         val edits = ArrayList<RangeEdit>()
         edits.add(RangeEdit(mainStart, mainEnd, insert, mainStart + insert.length))
@@ -384,18 +392,15 @@ private fun CodeEditorContent(
         editorSession.applyEdits(listOf(edit), TextRange(edit.caret))
     }
 
-    // Reformat Code: ask the backend for the minimal edits to reformat the whole buffer, or just the selection
-    // when `[rangeStart, rangeEnd)` is non-empty, then splice them in. The caret is kept on its logical spot and
-    // the viewport stays anchored on the caret's line. A no-op returns nothing and does nothing.
-    suspend fun runFormat(rangeStart: Int, rangeEnd: Int) {
+    // Apply the minimal edits a backend source-transform (Reformat, Optimize Imports) returns for the whole
+    // buffer, splicing them in while keeping the caret on its logical spot and the viewport anchored on the
+    // caret's line. A no-op ([compute] returns nothing) does nothing.
+    suspend fun applyBufferEdits(compute: suspend (text: String) -> List<dev.ide.ui.backend.UiTextEdit>) {
         completion.dismiss()
         val text = editorSession.doc.text
         val caretBefore = editorSession.selection.start.coerceIn(0, editorSession.doc.length)
         val anchorLine = editorSession.doc.lineForOffset(caretBefore)
-        val raw = runCatching {
-            if (rangeEnd > rangeStart) backend.editor.formatRange(path, text, rangeStart, rangeEnd)
-            else backend.editor.formatDocument(path, text)
-        }.getOrNull().orEmpty()
+        val raw = runCatching { compute(text) }.getOrNull().orEmpty()
         if (raw.isEmpty()) return
         val len = editorSession.doc.length
         val edits = raw.map { e ->
@@ -406,6 +411,16 @@ private fun CodeEditorContent(
         for (e in edits) if (e.start <= caret) caret += e.text.length - (e.end - e.start)
         applyEditsKeepingViewport(edits, TextRange(caret.coerceAtLeast(0)), anchorLine)
     }
+
+    // Reformat Code: the minimal edits to reformat the whole buffer, or just the selection when
+    // `[rangeStart, rangeEnd)` is non-empty.
+    suspend fun runFormat(rangeStart: Int, rangeEnd: Int) = applyBufferEdits { text ->
+        if (rangeEnd > rangeStart) backend.editor.formatRange(path, text, rangeStart, rangeEnd)
+        else backend.editor.formatDocument(path, text)
+    }
+
+    // Optimize Imports: reorder / de-duplicate / wildcard-collapse / drop-unused the file's imports.
+    suspend fun runOptimizeImports() = applyBufferEdits { text -> backend.editor.optimizeImports(path, text) }
 
     // keep the per-line render cache aligned with line splices (a render concern, owned by this surface)
     SideEffect {
@@ -439,18 +454,17 @@ private fun CodeEditorContent(
             }
         }
 
-        when {
-            // A new member-access context (`.`) always needs a fresh candidate set from the backend.
-            before == '.' ->
+        // A member access (`.`) or an annotation start (`@`, Kotlin/Java) opens a fresh candidate set; an
+        // identifier character extends the current token (narrowed client-side when the live set still covers
+        // it, so the keystroke path skips a backend re-query); anything else ends the session.
+        when (completionKeystroke(before, wordExtra)) {
+            CompletionKeystroke.Reopen ->
                 if (completion.autoPopupEnabled) completion.reopen() else completion.dismiss()
-            // Extending an identifier: if the live popup session already covers this token with a complete,
-            // locally-filterable set, the client-side filter narrows it instantly — so skip the backend re-query.
-            before != null && isIdentifierChar(before, wordExtra) ->
+            CompletionKeystroke.Extend ->
                 if (!canNarrowLocally(completion.current, completion.dismissed, d.chars, caret, wordExtra)) {
                     if (completion.autoPopupEnabled) completion.reopen() else completion.dismiss()
                 }
-
-            else -> completion.dismiss()
+            CompletionKeystroke.Dismiss -> completion.dismiss()
         }
     }
 
@@ -477,6 +491,7 @@ private fun CodeEditorContent(
 
     LaunchedEffect(findEpoch) { if (findEpoch > 0) find.openBar(replace = false) }
     LaunchedEffect(formatEpoch) { if (formatEpoch > 0) runFormat(0, 0) }
+    LaunchedEffect(optimizeImportsEpoch) { if (optimizeImportsEpoch > 0) runOptimizeImports() }
 
     // recompute find matches when the query/options change or the buffer edits (debounced).
     LaunchedEffect(find.open, find.query, find.options, editorSession.textRevision) {
@@ -652,6 +667,11 @@ private fun CodeEditorContent(
         if ((ev.isCtrlPressed || ev.isMetaPressed) && ev.isAltPressed && ev.key == Key.L) {
             val sel = editorSession.selection
             scope.launch { if (!sel.collapsed) runFormat(sel.min, sel.max) else runFormat(0, 0) }
+            return true
+        }
+        // Optimize imports (⌘/Ctrl-Alt-O, IntelliJ).
+        if ((ev.isCtrlPressed || ev.isMetaPressed) && ev.isAltPressed && ev.key == Key.O) {
+            scope.launch { runOptimizeImports() }
             return true
         }
         if ((ev.isCtrlPressed || ev.isMetaPressed) && ev.key == Key.S) {
@@ -853,6 +873,7 @@ private fun CodeEditorContent(
                         findMatches = if (find.open) find.matches else emptyList(),
                         currentMatch = find.currentIndex,
                         occurrences = occurrences,
+                        templateFields = snippet?.fieldRanges().orEmpty(),
                         structure = geometry.editorStructure.value,
                         colors = EditorDrawColors(
                             background = colors.editorBg,
@@ -871,6 +892,7 @@ private fun CodeEditorContent(
                             findMatch = colors.warning.copy(alpha = 0.28f),
                             findCurrent = colors.accent.copy(alpha = 0.5f),
                             occurrence = colors.textSecondary.copy(alpha = 0.18f),
+                            templateField = colors.accent.copy(alpha = 0.16f),
                         ),
                         caretVisible = isFocused && (blinkOn || !editorSession.selection.collapsed),
                         caretContent = interaction.caretContent, // animated, content-space; read here → redraw per frame
@@ -924,6 +946,7 @@ private fun CodeEditorContent(
         )
         LightbulbLayer(
             acts = acts,
+            interaction = interaction,
             showPopup = showPopup,
             engaged = engaged,
             caretOffset = caretOffset,
@@ -1132,6 +1155,7 @@ private fun SignatureHelpLayer(
 @Composable
 private fun LightbulbLayer(
     acts: EditorActionsController,
+    interaction: EditorInteraction,
     showPopup: Boolean,
     engaged: Boolean,
     caretOffset: Int,
@@ -1142,10 +1166,16 @@ private fun LightbulbLayer(
         val density = LocalDensity.current
         val (_, bulbX, bulbTop) = caretGeometry(caretOffset)
         val gapPx = with(density) { 6.dp.roundToPx() }
-        val positionProvider = remember(bulbX, bulbTop, gapPx) {
+        // The touch selection toolbar anchors above this same line; when it's up, stack the bulb above it
+        // (toolbar height + its 8dp gap) so a quick-fix like auto-import stays reachable.
+        val toolbarLift =
+            if (interaction.handlesVisible && interaction.lastInputWasTouch) {
+                interaction.selectionToolbarHeightPx + with(density) { 8.dp.roundToPx() }
+            } else 0
+        val positionProvider = remember(bulbX, bulbTop, gapPx, toolbarLift) {
             AboveAnchorPositionProvider(
                 bulbX.roundToInt().coerceAtLeast(gutterWidthPx.roundToInt()),
-                bulbTop.roundToInt(),
+                bulbTop.roundToInt() - toolbarLift,
                 gapPx,
             )
         }

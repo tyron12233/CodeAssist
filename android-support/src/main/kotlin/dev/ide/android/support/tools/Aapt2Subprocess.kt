@@ -58,10 +58,12 @@ class Aapt2Subprocess(private val aapt2: Path) : Aapt2 {
         proguardRules: Path?,
         protoFormat: Boolean,
         overlays: List<Path>,
+        rTxt: Path?,
     ): ToolResult {
         Files.createDirectories(genJavaDir)
         outApk.parent?.let { Files.createDirectories(it) }
         proguardRules?.parent?.let { Files.createDirectories(it) }
+        rTxt?.parent?.let { Files.createDirectories(it) }
         val cmd = buildList {
             add(aapt2.toString()); add("link")
             add("-o"); add(outApk.toString())
@@ -78,6 +80,8 @@ class Aapt2Subprocess(private val aapt2: Path) : Aapt2 {
             proguardRules?.let { add("--proguard"); add(it.toString()) }
             // `--proto-format` emits proto resources (resources.pb), the input form R8's resource shrinker reads.
             if (protoFormat) add("--proto-format")
+            // `--output-text-symbols` writes the R symbol table (`R.txt`) an AAR ships for its consumers.
+            rTxt?.let { add("--output-text-symbols"); add(it.toString()) }
             add("--min-sdk-version"); add(minSdk.toString())
             add("--target-sdk-version"); add(targetSdk.toString())
             add("--auto-add-overlay")
