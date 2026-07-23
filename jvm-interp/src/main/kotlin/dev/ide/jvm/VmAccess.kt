@@ -91,11 +91,14 @@ fun Vm.interpretedStaticFields(fqn: String): Map<String, String> =
     resolve(internalOf(fqn))?.staticFieldDescs ?: emptyMap()
 
 /** Read a static field of interpreted class [fqn] (running its initializer first), in real conventions. */
+@Suppress("UNCHECKED_CAST")
 fun Vm.interpretedStaticValue(fqn: String, field: String): Any? {
     val cls = resolve(internalOf(fqn)) ?: throw VmUnsupportedException("$fqn is not an interpreted class")
     ensureInitialized(cls)
     val desc = cls.staticFieldDescs[field] ?: throw VmUnsupportedException("no static field $field on $fqn")
-    return Marshalling.vmToReal(toReal(cls.statics[field]), desc)
+    val slot = cls.statics[field]
+    val value = if (field in cls.volatileStaticFields) (slot as java.util.concurrent.atomic.AtomicReference<Any?>).get() else slot
+    return Marshalling.vmToReal(toReal(value), desc)
 }
 
 private fun internalOf(fqn: String): String = fqn.replace('.', '/')

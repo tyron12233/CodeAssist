@@ -27,6 +27,14 @@ internal class VmClass(
     val staticFieldDescs: Map<String, String> =
         fields.filter { it.access and Opcodes.ACC_STATIC != 0 }.associate { it.name to it.desc }
 
+    /** Names of the declared VOLATILE (`ACC_VOLATILE`) instance / static fields. Their slot holds an
+     *  [java.util.concurrent.atomic.AtomicReference] so reads/writes have real volatile (acquire/release)
+     *  semantics across threads, instead of a plain map value with relaxed visibility. */
+    val volatileInstanceFields: Set<String> =
+        fields.filter { it.access and Opcodes.ACC_STATIC == 0 && it.access and Opcodes.ACC_VOLATILE != 0 }.mapTo(HashSet()) { it.name }
+    val volatileStaticFields: Set<String> =
+        fields.filter { it.access and Opcodes.ACC_STATIC != 0 && it.access and Opcodes.ACC_VOLATILE != 0 }.mapTo(HashSet()) { it.name }
+
     /** Static field values: defaulted from the descriptor, then seeded from any `ConstantValue` attribute (a
      *  `static final` primitive/String constant), and finally set by the class initializer. The JVM assigns a
      *  `ConstantValue` field during class preparation — before `<clinit>`, which carries no assignment for it —
@@ -36,16 +44,36 @@ internal class VmClass(
      *  [FieldNode.value] (an Integer for int/short/byte/char/boolean, else Long/Float/Double/String), which
      *  already matches the interpreter's value conventions. */
     val statics: HashMap<String, Any?> = HashMap<String, Any?>().apply {
-        fields.filter { it.access and Opcodes.ACC_STATIC != 0 }
-            .forEach { put(it.name, it.value ?: Descriptors.defaultValue(it.desc)) }
+        fields.filter { it.access and Opcodes.ACC_STATIC != 0 }.forEach {
+            val initial = it.value ?: Descriptors.defaultValue(it.desc)
+            // A volatile static's slot is an AtomicReference holder (see volatileStaticFields); putstatic in the
+            // class initializer writes THROUGH it, so the holder identity stays stable.
+            put(it.name, if (it.access and Opcodes.ACC_VOLATILE != 0) java.util.concurrent.atomic.AtomicReference(initial) else initial)
+        }
     }
 
-    var initialized: Boolean = false
+    /** Class-initialization state (JLS 12.4.2), so `<clinit>` runs exactly once even under concurrent first use.
+     *  [initState] is one of [INIT_NONE]/[INIT_INPROGRESS]/[INIT_DONE]/[INIT_FAILED]; it is read without locking
+     *  on the fast path and transitioned under [initLock]. [initThread] is the thread currently running the
+     *  initializer, so its own recursive initialization proceeds while other threads block. */
+    @Volatile @JvmField var initState: Int = INIT_NONE
+    @JvmField var initThread: Thread? = null
+    @JvmField val initLock = Any()
+
+    /** The intrinsic monitor for `synchronized`/`wait`/`notify` on the class object of this type (a static
+     *  `synchronized` method, or `synchronized(T.class)`). Created lazily by [Vm.monitorFor]. */
+    @Volatile @JvmField var monitor: VmMonitor? = null
 
     /** The method declared on this class matching [name] and [descriptor], or null if it declares no such method. */
     fun declaredMethod(name: String, descriptor: String): MethodNode? =
         methods.firstOrNull { it.name == name && it.desc == descriptor }
 }
+
+// Class-initialization states for [VmClass.initState].
+internal const val INIT_NONE = 0
+internal const val INIT_INPROGRESS = 1
+internal const val INIT_DONE = 2
+internal const val INIT_FAILED = 3
 
 /**
  * An instance of an interpreted [VmClass]. Field values are held in [fields], defaulted across the whole
@@ -55,11 +83,23 @@ internal class VmClass(
  * until that path is implemented.
  */
 internal class VmObject(val vmClass: VmClass) {
+    /** Instance-field values, keyed by name. The full key set is populated when the object is allocated (every
+     *  declared instance field across the interpreted chain is defaulted in [Vm.newInstance]) and never grows
+     *  afterward — a `putfield` only replaces an existing key's value. That fixed-key-set invariant makes
+     *  concurrent value replacement structurally safe on a plain [HashMap] (no resize, no re-linking) across the
+     *  real threads a multi-threaded program runs on; per-field visibility is relaxed, matching the VM's
+     *  best-effort (not hardened-JMM) stance — shared state that needs ordering uses the real
+     *  `java.util.concurrent` primitives, which are bridged. */
     val fields: HashMap<String, Any?> = HashMap()
 
     /** The real peer object platform code holds for this instance, created on demand when the object crosses to
-     *  platform code or an interpreted `super` call needs the real supertype. Null until then. */
-    var peer: Any? = null
+     *  platform code or an interpreted `super` call needs the real supertype. Null until then. Volatile +
+     *  created under `synchronized(this)` ([Vm.peerOf]/[Vm.initPeer]) so concurrent threads publish one peer. */
+    @Volatile var peer: Any? = null
+
+    /** The intrinsic monitor for `synchronized`/`wait`/`notify` on this instance, created lazily by
+     *  [Vm.monitorFor]. */
+    @Volatile @JvmField var monitor: VmMonitor? = null
 
     override fun toString(): String = "VmObject(${vmClass.name})"
 }
@@ -75,6 +115,10 @@ internal class VmArray(val elementDescriptor: String, val data: Array<Any?>) {
     /** A cached real Java array used when this array crosses to platform code, kept so in-place mutations by
      *  platform code can be copied back (see [Vm.toReal]). Null until the array first crosses the bridge. */
     var realMirror: Any? = null
+
+    /** The intrinsic monitor for `synchronized`/`wait`/`notify` on this array, created lazily by
+     *  [Vm.monitorFor]. */
+    @Volatile @JvmField var monitor: VmMonitor? = null
 
     /** A shallow copy, for `array.clone()` (Java arrays are `Cloneable`; this one isn't a real array). */
     fun shallowCopy(): VmArray = VmArray(elementDescriptor, data.copyOf())
