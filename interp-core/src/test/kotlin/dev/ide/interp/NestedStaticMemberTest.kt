@@ -34,4 +34,20 @@ class NestedStaticMemberTest {
         val result = Interpreter(emptyMap()).call(fn, emptyList())
         assertEquals("Manifest-Version", result?.toString(), "the nested-class static field should resolve to its value")
     }
+
+    @Test
+    fun staticFieldOnANestedClassAddressedByItsDottedFqnResolves() {
+        // The real preview path: the resolver collapses `Build.VERSION` into ONE ObjectRef carrying the nested
+        // type's DOTTED FQN (`android.os.Build.VERSION`) rather than a two-step `Build`.`VERSION`. The loader
+        // must map the dotted nested name to its `$` binary name so the static field still reads; before the fix
+        // this threw "cannot load `android.os.Build.VERSION` (a project-source object isn't available…)". JVM
+        // analog: `java.util.jar.Attributes.Name.MANIFEST_VERSION` addressed as one dotted reference.
+        val field = RNode.PropertyGet(
+            RNode.Name(Binding.ObjectRef("java.util.jar.Attributes.Name", "Name"), span),
+            Binding.Property("MANIFEST_VERSION", "java.util.jar.Attributes.Name", backingField = false), span,
+        )
+        val fn = ResolvedFunction("f", emptyList(), field, emptyList())
+        val result = Interpreter(emptyMap()).call(fn, emptyList())
+        assertEquals("Manifest-Version", result?.toString(), "a dotted nested-class static field must resolve")
+    }
 }
