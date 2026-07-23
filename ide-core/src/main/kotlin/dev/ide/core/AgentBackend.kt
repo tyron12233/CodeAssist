@@ -379,8 +379,13 @@ internal class AgentBackend(private val ctx: BackendContext) : AgentService {
 
     private fun projectContext(): String? {
         val engine = ctx.servicesOrNull ?: return null
+        val root = engine.workspaceRoot.toString()
         val modules = runCatching { engine.modules().joinToString(", ") { it.name } }.getOrNull().orEmpty()
-        return if (modules.isBlank()) null else "Open project modules: $modules."
+        return buildString {
+            append("Project root: ").append(root).append('.')
+            if (modules.isNotBlank()) append("\nOpen project modules: ").append(modules).append('.')
+            append("\nFile paths are absolute or relative to the project root; a relative path always stays inside the project.")
+        }
     }
 
     private fun PermissionMode.toUi(): UiAgentPermissionMode = when (this) {

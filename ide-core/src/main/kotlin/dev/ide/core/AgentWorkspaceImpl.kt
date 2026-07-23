@@ -26,11 +26,21 @@ internal class IdeAgentWorkspace(private val ctx: BackendContext) : AgentWorkspa
     private fun engine(): IdeServices =
         ctx.servicesOrNull ?: throw IllegalStateException("No project is open.")
 
-    private fun path(p: String): Path = Paths.get(p)
-
-    override fun projectRoot(): String? = ctx.servicesOrNull?.let { e ->
-        e.modules().firstOrNull()?.let { e.moduleRoot(it)?.parent?.toString() }
+    /**
+     * Resolves an agent-supplied path. Absolute paths are used as-is; a relative path is anchored to the
+     * open project's root, never the process working directory. On the Android runtime the working
+     * directory is the filesystem root ("/"), which the app sandbox can neither list nor write, so an
+     * unanchored relative path lands outside the project and fails with a permission error. Anchoring to
+     * [IdeServices.workspaceRoot] keeps the model's workspace-relative paths inside the project folder.
+     */
+    private fun path(p: String): Path {
+        val raw = Paths.get(p)
+        if (raw.isAbsolute) return raw.normalize()
+        val root = ctx.servicesOrNull?.workspaceRoot ?: return raw.normalize()
+        return root.resolve(raw).normalize()
     }
+
+    override fun projectRoot(): String? = ctx.servicesOrNull?.workspaceRoot?.toString()
 
     override suspend fun readFile(path: String, startLine: Int?, endLine: Int?): String = ctx.background {
         sliceLines(engine().readCurrentText(path(path)), startLine, endLine)
