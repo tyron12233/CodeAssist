@@ -3,6 +3,7 @@ package dev.ide.lang.kotlin.interp
 import dev.ide.lang.kotlin.parse.KotlinParsedFile
 import dev.ide.lang.kotlin.resolve.*
 import dev.ide.lang.kotlin.symbols.DefaultImports
+import dev.ide.lang.kotlin.symbols.FileContext
 import dev.ide.lang.kotlin.symbols.KotlinSymbol
 import dev.ide.lang.kotlin.symbols.KotlinSymbolService
 import dev.ide.lang.kotlin.symbols.KotlinType
@@ -156,6 +157,10 @@ class KotlinTreeResolver(
         /** The primary constructor's value-parameter count (0 for a no-arg / primaryless class) — the arity of a
          *  `::Type` constructor reference. */
         val primaryArity: Int = 0,
+        /** File context of the declaring file, for resolving this type's supertype simple names cross-file. Null
+         *  for a same-file entry (its supertypes resolve against the file being lowered, [resolver.fileContext]);
+         *  set for a whole-project entry synthesized by [crossFileClassInfo] (resolve against ITS own file). */
+        val ctx: FileContext? = null,
     ) {
         /** Whether `name(arity args)` is a member declared directly on this type (or a companion member via the
          *  class name, an enum static, or a data-class generated member) — NOT counting inherited ones, which
@@ -215,7 +220,7 @@ class KotlinTreeResolver(
     private fun acceptsSourceMember(info: FileClassInfo, name: String, arity: Int, seen: MutableSet<String> = HashSet()): Boolean {
         if (!seen.add(info.simpleName)) return false
         if (info.declaresOrSynthesizes(name, arity)) return true
-        return info.supertypeSimpleNames.any { sup -> fileClasses[sup]?.let { acceptsSourceMember(it, name, arity, seen) } == true }
+        return info.supertypeSimpleNames.any { sup -> supertypeInfo(sup, info)?.let { acceptsSourceMember(it, name, arity, seen) } == true }
     }
 
     /** The property names and method signatures an instance of [info] exposes including those inherited from
@@ -229,12 +234,48 @@ class KotlinTreeResolver(
             methods.getOrPut(name) { ArrayList() }.add(MethodSig(arity, emptyList()))
         }
         for (sup in info.supertypeSimpleNames) {
-            val si = fileClasses[sup] ?: continue
+            val si = supertypeInfo(sup, info) ?: continue
             val (sp, sm) = inheritedMembers(si, seen)
             props += sp
             sm.forEach { (n, sigs) -> methods.getOrPut(n) { ArrayList() }.addAll(sigs) }
         }
         return props to methods
+    }
+
+    /** A [FileClassInfo] for a WHOLE-PROJECT source class not in this file's index — a cross-file receiver type
+     *  or supertype (via [KotlinSymbolService.sourceClass]). The source index already carries a `data class`'s
+     *  synthesized `copy`/`componentN` in the raw members, so member recovery sees them. Null for a non-source
+     *  (library/unknown) fqn — those keep the reflective path. */
+    private fun crossFileClassInfo(fqn: String): FileClassInfo? {
+        val rc = runCatching { service.sourceClass(fqn) }.getOrNull() ?: return null
+        val flavor = when {
+            rc.isCompanion -> ClassFlavor.COMPANION
+            rc.isObject -> ClassFlavor.OBJECT
+            rc.isEnum -> ClassFlavor.ENUM
+            rc.isInterface -> ClassFlavor.INTERFACE
+            else -> ClassFlavor.CLASS
+        }
+        val own = rc.members.filter { it.receiverText == null } // members ON the type, not extensions
+        val supers = rc.superTypeTexts.mapNotNull {
+            it.substringBefore('<').trim().substringAfterLast('.').takeIf { s -> s.isNotEmpty() }
+        }
+        return FileClassInfo(
+            fqn = rc.fqn, simpleName = rc.simpleName, flavor = flavor, isData = false,
+            propertyNames = own.filterNot { it.isFunction }.map { it.name }.toSet(),
+            methodArities = own.filter { it.isFunction }.map { "${it.name}/${it.paramTexts.size}" }.toSet(),
+            companionMethodArities = emptySet(), enumEntryNames = rc.enumEntries.toSet(),
+            supertypeSimpleNames = supers, primaryArity = rc.constructors.firstOrNull()?.paramTexts?.size ?: 0,
+            ctx = rc.ctx,
+        )
+    }
+
+    /** The [FileClassInfo] for a direct supertype [sup] of [from]: this file's index first (fast, buffer-fresh),
+     *  else the whole-project source class it resolves to in [from]'s file context — so an inherited-member walk
+     *  follows a superclass declared in ANOTHER file. Null for a library/unknown supertype. */
+    private fun supertypeInfo(sup: String, from: FileClassInfo): FileClassInfo? {
+        fileClasses[sup]?.let { return it }
+        val fqn = runCatching { service.resolveTypeName(sup, from.ctx ?: resolver.fileContext) }.getOrNull() ?: return null
+        return crossFileClassInfo(fqn)
     }
 
     /** The source type of [recvExpr]: its inferred type, a bare type-name (object/companion holder), or the
@@ -243,6 +284,9 @@ class KotlinTreeResolver(
         if (recvExpr == null) return null
         runCatching { resolver.inferType(recvExpr)?.qualifiedName }.getOrNull()?.let { fqn ->
             (fileClasses.values.firstOrNull { it.fqn == fqn } ?: fileClasses[fqn.substringAfterLast('.')])?.let { return it }
+            // The receiver's source type is declared in another file (e.g. a `data class` whose `.copy(...)` the
+            // editor resolver didn't surface) — resolve it whole-project so the member dispatches as SOURCE.
+            crossFileClassInfo(fqn)?.let { return it }
         }
         (recvExpr as? KtNameReferenceExpression)?.getReferencedName()?.let { fileClasses[it] }?.let { return it }
         if (recvExpr is KtDotQualifiedExpression) {
@@ -440,11 +484,15 @@ class KotlinTreeResolver(
         // implicit `this` (the receiver instance dispatches them virtually at run time).
         val inhProps = HashSet<String>()
         val inhMethods = HashMap<String, MutableList<MethodSig>>()
-        fileClasses[simpleName]?.supertypeSimpleNames?.forEach { sup ->
-            fileClasses[sup]?.let { si ->
-                val (p, m) = inheritedMembers(si)
-                inhProps += p
-                m.forEach { (n, sigs) -> inhMethods.getOrPut(n) { ArrayList() }.addAll(sigs) }
+        fileClasses[simpleName]?.let { self ->
+            self.supertypeSimpleNames.forEach { sup ->
+                // Resolve the supertype whole-project, so a base class declared in ANOTHER file contributes its
+                // members to `this`/bare-name/`super.prop` visibility inside this subclass's method bodies.
+                supertypeInfo(sup, self)?.let { si ->
+                    val (p, m) = inheritedMembers(si)
+                    inhProps += p
+                    m.forEach { (n, sigs) -> inhMethods.getOrPut(n) { ArrayList() }.addAll(sigs) }
+                }
             }
         }
         // Captured enclosing locals become synthesized `val` properties, so a member body reads them by bare name.
