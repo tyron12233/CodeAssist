@@ -38,8 +38,14 @@ fun interface InterpretPolicy {
  * call through [bridge]. Interpreted code never reaches the host class loader; access to classes the policy
  * excludes is mediated by the bridge.
  *
- * The interpreter is single-threaded, and interpreted calls recurse on the host call stack, so deep
- * interpreted recursion is bounded by the host stack size.
+ * Interpreted calls recurse on the host call stack, so deep interpreted recursion is bounded by the host stack
+ * size. The VM is **multi-threaded**: a program's threads run on real host threads (a `Thread` an interpreted
+ * program starts is a real thread whose `run` re-enters here), each with its own execution state ([Interpreter]
+ * keeps its frame stack thread-local), so they genuinely run in parallel. The shared state below — the class
+ * cache, method-resolution cache, class-initialization, per-object peers, and object monitors — is made
+ * thread-safe accordingly. It is a best-effort concurrency model, not a hardened JMM: `synchronized`,
+ * `wait`/`notify`, and the `java.util.concurrent` primitives (bridged to the real runtime) work, but raw
+ * non-`volatile` field visibility is relaxed.
  */
 class Vm(
     private val source: ClassBytesSource = ClassBytesSource.fromClasspath(),
@@ -47,9 +53,32 @@ class Vm(
     internal val bridge: NativeBridge = ReflectiveBridge(),
     /** Produces the real peer objects that let platform code invoke interpreted overrides. */
     private val peerFactory: PeerFactory = AsmPeerFactory(),
+    /** When > 0, a `java.lang.Thread` the program constructs is given this stack size (bytes). Interpreted
+     *  recursion runs on the host thread stack, so a spawned thread needs a generous stack like the main run
+     *  thread; the default host stack (a few hundred KB) overflows far shallower. 0 = use the host default
+     *  (jvm-interp's own tests, the preview). Covers `new Thread(...)`; executor-pool threads and interpreted
+     *  `Thread` subclasses keep the host default. */
+    private val threadStackSize: Long = 0,
 ) {
-    private val classes = HashMap<String, VmClass?>()
+    private val classes = java.util.concurrent.ConcurrentHashMap<String, VmClass>()
     private val interpreter = Interpreter(this)
+
+    /** Stored for a name known NOT to be interpreted (bridged or absent): [classes] is a [java.util.concurrent
+     *  .ConcurrentHashMap], which cannot hold a null value, so [resolve] uses this sentinel and maps it back to
+     *  null. */
+    private val notInterpreted = VmClass("", null, emptyList(), 0, emptyList(), emptyList())
+
+    /** Monitors for bridged (real) objects used as a lock (`synchronized(someRealList)`); interpreted values
+     *  carry their monitor on the object itself. Guarded by `this` map's own reference. */
+    private val bridgedMonitors = java.util.IdentityHashMap<Any, VmMonitor>()
+
+    /** `Thread(ThreadGroup, Runnable, String, long stackSize)` — the one public constructor that takes a stack
+     *  size; every other Thread construction is remapped to it when [threadStackSize] is set. */
+    private val THREAD_STACK_CTOR = "(Ljava/lang/ThreadGroup;Ljava/lang/Runnable;Ljava/lang/String;J)V"
+
+    /** Names auto-generated threads when the program supplied none (the stack-size constructor, unlike the
+     *  no-name ones, requires a non-null name). */
+    private val threadCounter = java.util.concurrent.atomic.AtomicInteger()
 
     /** Total bytecode instructions the interpreter has executed (diagnostics / throughput measurement). */
     val steps: Long get() = interpreter.steps
@@ -62,13 +91,10 @@ class Vm(
 
     /** Run [body] with the interpreter applying [types] (reified type-parameter name → JVM internal name) to
      *  any `reifiedOperationMarker` it executes — the mechanism that runs a reified inline function without the
-     *  compiler having inlined it. Single-threaded; nested reified executions are not supported (the inner
-     *  clobbers the outer's map, restored on exit). */
-    internal fun <T> withReifiedTypes(types: Map<String, String>, body: () -> T): T {
-        val prev = interpreter.reifiedTypes
-        interpreter.reifiedTypes = types
-        return try { body() } finally { interpreter.reifiedTypes = prev }
-    }
+     *  compiler having inlined it. The substitution is per-thread; nested reified executions on one thread are
+     *  not supported (the inner clobbers the outer's map, restored on exit). */
+    internal fun <T> withReifiedTypes(types: Map<String, String>, body: () -> T): T =
+        interpreter.withReifiedTypes(types, body)
     private val loader: ClassLoader = Vm::class.java.classLoader
     private val peerDispatch = PeerDispatch { peer, vmObject, name, descriptor, args ->
         val obj = vmObject as VmObject
@@ -80,13 +106,35 @@ class Vm(
         runInterpretedOverride(obj, name, descriptor, args)
     }
 
-    /** The interpreted [VmClass] for [internalName], or null when it should be bridged (platform/absent). */
-    internal fun resolve(internalName: String): VmClass? = classes.getOrPut(internalName) {
-        if (!policy.interpret(internalName)) return@getOrPut null
-        val bytes = source.bytesFor(internalName) ?: return@getOrPut null
-        val cn = ClassNode()
-        ClassReader(bytes).accept(cn, ClassReader.SKIP_FRAMES or ClassReader.SKIP_DEBUG)
-        VmClass(cn.name, cn.superName, cn.interfaces ?: emptyList(), cn.access, cn.methods ?: emptyList(), cn.fields ?: emptyList())
+    /** The interpreted [VmClass] for [internalName], or null when it should be bridged (platform/absent).
+     *  [computeIfAbsent] canonicalizes: exactly one [VmClass] instance exists per name even under concurrent
+     *  first use, so identity-keyed state (init, resolution cache, monitor) is never split across duplicates. */
+    internal fun resolve(internalName: String): VmClass? {
+        classes[internalName]?.let { return it.takeIf { c -> c !== notInterpreted } }
+        val resolved = classes.computeIfAbsent(internalName) { name ->
+            if (!policy.interpret(name)) return@computeIfAbsent notInterpreted
+            val bytes = source.bytesFor(name) ?: return@computeIfAbsent notInterpreted
+            val cn = ClassNode()
+            ClassReader(bytes).accept(cn, ClassReader.SKIP_FRAMES or ClassReader.SKIP_DEBUG)
+            VmClass(cn.name, cn.superName, cn.interfaces ?: emptyList(), cn.access, cn.methods ?: emptyList(), cn.fields ?: emptyList())
+        }
+        return resolved.takeIf { it !== notInterpreted }
+    }
+
+    /** The [VmMonitor] for a `synchronized`/`wait`/`notify` on [ref]: attached to the object itself for an
+     *  interpreted value, and to an identity-keyed side table for a bridged real object. One monitor per
+     *  object, created lazily. */
+    internal fun monitorFor(ref: Any?): VmMonitor = when (ref) {
+        null -> throw VmException(NullPointerException("synchronized/wait/notify on null"))
+        is VmObject -> ref.monitor ?: synchronized(ref) { ref.monitor ?: VmMonitor().also { ref.monitor = it } }
+        is VmClass -> ref.monitor ?: synchronized(ref) { ref.monitor ?: VmMonitor().also { ref.monitor = it } }
+        is VmArray -> ref.monitor ?: synchronized(ref) { ref.monitor ?: VmMonitor().also { ref.monitor = it } }
+        // A class literal of an INTERPRETED type is its reflection `Class`; route it to that type's VmClass
+        // monitor so `synchronized(T.class)` and a `static synchronized` method on `T` lock the same monitor.
+        // A genuine (real) `Class` falls through to the bridged-object table.
+        is Class<*> -> peerFactory.interpretedNameOf(ref)?.let { resolve(it) }?.let { monitorFor(it) }
+            ?: synchronized(bridgedMonitors) { bridgedMonitors.getOrPut(ref) { VmMonitor() } }
+        else -> synchronized(bridgedMonitors) { bridgedMonitors.getOrPut(ref) { VmMonitor() } }
     }
 
     // ---- public entry points ----------------------------------------------------------------------
@@ -275,8 +323,36 @@ class Vm(
         return obj
     }
 
-    internal fun bridgeConstruct(owner: String, descriptor: String, vmArgs: List<Any?>): Any? =
-        bridge.construct(owner, descriptor, vmArgs.map { toReal(it) }).also { syncArraysBack(vmArgs) }
+    internal fun bridgeConstruct(owner: String, descriptor: String, vmArgs: List<Any?>): Any? {
+        val real = vmArgs.map { toReal(it) }
+        if (threadStackSize > 0 && owner == "java/lang/Thread") {
+            largeStackThread(descriptor, real)?.let { syncArraysBack(vmArgs); return it }
+        }
+        return bridge.construct(owner, descriptor, real).also { syncArraysBack(vmArgs) }
+    }
+
+    /** Construct a `java.lang.Thread` with the configured [threadStackSize] by remapping the constructor the
+     *  program used to `Thread(ThreadGroup, Runnable, String, long)`, preserving whichever of group/runnable/
+     *  name it supplied. Returns null (so the caller falls back to the plain construction) when the program
+     *  already chose the stack-size constructor, or used a signature this does not recognize. The runnable is
+     *  still proxied by the bridge, so an interpreted `Runnable` re-enters the interpreter as before. */
+    private fun largeStackThread(descriptor: String, real: List<Any?>): Any? {
+        if (descriptor == THREAD_STACK_CTOR) return null // the program set the stack size itself; respect it
+        var group: Any? = null
+        var runnable: Any? = null
+        var name: Any? = null
+        Descriptors.paramTypes(descriptor).forEachIndexed { i, p ->
+            when (p) {
+                "Ljava/lang/ThreadGroup;" -> group = real[i]
+                "Ljava/lang/Runnable;" -> runnable = real[i]
+                "Ljava/lang/String;" -> name = real[i]
+                else -> return null // an unrecognized Thread constructor; fall back to plain construction
+            }
+        }
+        // The stack-size constructor requires a non-null name; supply one when the program used a no-name form.
+        val threadName = name ?: "Thread-${threadCounter.getAndIncrement()}"
+        return bridge.construct("java/lang/Thread", THREAD_STACK_CTOR, listOf(group, runnable, threadName, threadStackSize))
+    }
 
     /** The [Class] of an array component from its type descriptor. An INTERPRETED element type maps to its real
      *  supertype: the elements crossing the bridge are peers, which are instances of that supertype, not of the
@@ -306,17 +382,27 @@ class Vm(
         val spec = peerSpec(o.vmClass)
         if (spec.isTrivial) return
         val realArgs = Descriptors.paramTypes(superDescriptor).mapIndexed { i, d -> Marshalling.toRealArg(toReal(superArgs[i]), d) }
-        // createPeer runs the real super constructor, which may dispatch an overridden method back into the
-        // interpreter and link o.peer to the peer under construction (see peerDispatch). Assign only if that
-        // did not already happen, so the two references stay the same object.
-        val created = peerFactory.createPeer(o, spec, peerDispatch, superDescriptor, realArgs)
-        if (o.peer == null) o.peer = created
+        // Guard so concurrent threads publish one peer for the object. createPeer runs the real super
+        // constructor, which may dispatch an overridden method back into the interpreter and link o.peer to the
+        // peer under construction (see peerDispatch); that re-entry is on this same thread and the intrinsic
+        // lock is reentrant, so it never self-deadlocks. Assign only if that link did not already happen, so the
+        // two references stay the same object.
+        synchronized(o) {
+            if (o.peer != null) return
+            val created = peerFactory.createPeer(o, spec, peerDispatch, superDescriptor, realArgs)
+            if (o.peer == null) o.peer = created
+        }
     }
 
     /** The real peer for [o], created lazily with the real superclass's no-argument constructor when the object
-     *  never reached [initPeer] (a class over `Object` handed to platform code). */
-    internal fun peerOf(o: VmObject): Any =
-        o.peer ?: peerFactory.createPeer(o, peerSpec(o.vmClass), peerDispatch, "()V", emptyList()).also { o.peer = it }
+     *  never reached [initPeer] (a class over `Object` handed to platform code). Guarded so concurrent threads
+     *  share one peer. */
+    internal fun peerOf(o: VmObject): Any {
+        o.peer?.let { return it }
+        return synchronized(o) {
+            o.peer ?: peerFactory.createPeer(o, peerSpec(o.vmClass), peerDispatch, "()V", emptyList()).also { o.peer = it }
+        }
+    }
 
     /** Run the interpreted override [name]/[descriptor] on [o] when its peer method is called by platform code,
      *  marshalling the real arguments in and the result out. */
@@ -457,34 +543,76 @@ class Vm(
 
     // ---- internals used by the interpreter --------------------------------------------------------
 
-    /** A fresh [VmObject] with every instance field (this class + interpreted supers) defaulted. */
+    /** A fresh [VmObject] with every instance field (this class + interpreted supers) defaulted. A volatile
+     *  field's slot is an [java.util.concurrent.atomic.AtomicReference] holder so its reads/writes get real
+     *  volatile semantics (see [isVolatileInstanceField]). */
     internal fun newInstance(cls: VmClass): VmObject {
         val obj = VmObject(cls)
         var c: VmClass? = cls
         while (c != null) {
-            c.instanceFieldDescs.forEach { (n, d) -> obj.fields.putIfAbsent(n, Descriptors.defaultValue(d)) }
-            c = c.superName?.let { resolve(it) }
+            val cur = c
+            cur.instanceFieldDescs.forEach { (n, d) ->
+                val default = Descriptors.defaultValue(d)
+                obj.fields.putIfAbsent(n, if (n in cur.volatileInstanceFields) java.util.concurrent.atomic.AtomicReference(default) else default)
+            }
+            c = cur.superName?.let { resolve(it) }
         }
         return obj
     }
 
-    /** Run [cls]'s `<clinit>` once, lazily, superclass first, mirroring JVM class-initialization order. */
+    /** Whether the interpreted class in [start]'s chain that DECLARES instance field [name] declares it
+     *  `volatile` (so its slot is an AtomicReference holder). Mirrors [vmDeclaresField]'s walk. */
+    internal fun isVolatileInstanceField(start: VmClass, name: String): Boolean {
+        var c: VmClass? = start
+        while (c != null) {
+            if (name in c.instanceFieldDescs) return name in c.volatileInstanceFields
+            c = c.superName?.let { resolve(it) }
+        }
+        return false
+    }
+
+    /** Run [cls]'s `<clinit>` once, lazily, superclass first, mirroring JVM class-initialization order and its
+     *  concurrency rules (JLS 12.4.2): the first thread to reach an uninitialized class runs its initializer
+     *  while other threads block until it completes; the initializing thread's own recursive initialization
+     *  proceeds (a `<clinit>` that touches its own class), and a failed initializer marks the class erroneous. */
     internal fun ensureInitialized(cls: VmClass) {
-        if (cls.initialized) return
-        cls.initialized = true
-        cls.superName?.let { resolve(it) }?.let { ensureInitialized(it) }
-        cls.declaredMethod("<clinit>", "()V")?.let { interpreter.execute(cls, it, receiver = null, args = emptyList()) }
+        if (cls.initState == INIT_DONE) return
+        val current = Thread.currentThread()
+        synchronized(cls.initLock) {
+            while (true) {
+                when (cls.initState) {
+                    INIT_DONE -> return
+                    INIT_FAILED -> throw VmException(NoClassDefFoundError("Could not initialize ${cls.name}"))
+                    INIT_INPROGRESS ->
+                        if (cls.initThread === current) return // recursive init by the initializing thread
+                        else try { (cls.initLock as java.lang.Object).wait() } catch (e: InterruptedException) { throw VmException(e) }
+                    else -> { cls.initState = INIT_INPROGRESS; cls.initThread = current; break }
+                }
+            }
+        }
+        var ok = false
+        try {
+            cls.superName?.let { resolve(it) }?.let { ensureInitialized(it) }
+            cls.declaredMethod("<clinit>", "()V")?.let { interpreter.execute(cls, it, receiver = null, args = emptyList()) }
+            ok = true
+        } finally {
+            synchronized(cls.initLock) {
+                cls.initState = if (ok) INIT_DONE else INIT_FAILED
+                cls.initThread = null
+                (cls.initLock as java.lang.Object).notifyAll()
+            }
+        }
     }
 
     private class Resolved(val target: Pair<VmClass, org.objectweb.asm.tree.MethodNode>?)
-    private val resolveCache = HashMap<VmClass, HashMap<String, Resolved>>()
+    private val resolveCache = java.util.concurrent.ConcurrentHashMap<VmClass, java.util.concurrent.ConcurrentHashMap<String, Resolved>>()
 
     /** Resolve a method by walking [start]'s superclass chain (for static/special resolution and as the base of
      *  virtual dispatch). Returns the declaring class + method, or null when only a bridged/absent super has it.
      *  Memoized per (class, name+descriptor): the walk is deterministic and repeats on every call/recomposition.
-     *  The VM is single-threaded (see the class note), so a plain map matches the existing class cache. */
+     *  Concurrent maps so threads share the cache safely; a benign double-resolve of the same key is harmless. */
     internal fun findInHierarchy(start: VmClass, name: String, descriptor: String): Pair<VmClass, org.objectweb.asm.tree.MethodNode>? {
-        val perClass = resolveCache.getOrPut(start) { HashMap() }
+        val perClass = resolveCache.getOrPut(start) { java.util.concurrent.ConcurrentHashMap() }
         perClass[name + descriptor]?.let { return it.target }
         return findInHierarchyUncached(start, name, descriptor).also { perClass[name + descriptor] = Resolved(it) }
     }

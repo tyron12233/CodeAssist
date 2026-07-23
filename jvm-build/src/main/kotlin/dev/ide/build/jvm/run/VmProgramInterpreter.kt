@@ -41,9 +41,12 @@ import java.util.jar.JarFile
  * `in` to the run's [ProgramIo] for the duration of the run, so BOTH interpreted code and bridged
  * standard-library I/O (e.g. Kotlin's `readln`, which reads the real `System.in`) reach the run console. Runs
  * are sequential so the global redirect is safe, and the IDE's own log sink captured the real streams at
- * startup, so its logs never leak into the program's output. The program runs on a dedicated large-stack
- * thread (interpreted recursion uses the host stack); cancellation asks the VM to stop (its loop unwinds even
- * a tight compute loop) and interrupts the thread (to break a blocked stdin read).
+ * startup, so its logs never leak into the program's output. The program's `main` runs on a dedicated
+ * large-stack thread in its own [ThreadGroup] (interpreted recursion uses the host stack); a `Thread` the
+ * program starts is a REAL host thread that inherits the group and runs interpreted bytecode concurrently on
+ * the multi-threaded [Vm]. As on a real JVM, the run ends when `main` AND every non-daemon thread it started
+ * have finished. Cancellation asks the VM to stop (its loop unwinds even a tight compute loop) and interrupts
+ * the whole group (to break a blocked stdin read, `sleep`, `wait`, or `join` on any thread).
  *
  * [peerFactory] produces the real subclasses that let platform code invoke an interpreted object's overrides
  * (e.g. a `Comparator` handed to `Collections.sort`). Desktop uses the default ASM factory; a device host
@@ -56,9 +59,12 @@ class VmProgramInterpreter(
     override suspend fun run(request: InterpretRunRequest, io: ProgramIo): Int = withContext(Dispatchers.IO) {
         val jars = ArrayList<JarFile>()
         val source = classpathSource(request.classpath, jars)
-        val vm = Vm(source, InterpretPolicy.DEFAULT, RunBridge(javaClass.classLoader), peerFactory)
+        val vm = Vm(source, InterpretPolicy.DEFAULT, RunBridge(javaClass.classLoader), peerFactory, SPAWNED_STACK_BYTES)
         val outcome = Outcome()
-        val thread = Thread(null, {
+        // A dedicated group so every Thread the program starts (a real host thread, created by the creating
+        // thread) inherits it and can be interrupted together on Stop.
+        val group = ThreadGroup("interp-run")
+        val thread = Thread(group, {
             try {
                 runMain(vm, request.mainClass.replace('.', '/'), request.args)
             } catch (t: Throwable) {
@@ -74,20 +80,25 @@ class VmProgramInterpreter(
         System.setOut(programOut); System.setErr(programOut); System.setIn(io.stdin)
         try {
             coroutineScope {
-                // Wakes on cancellation (Stop): ask the VM to unwind its instruction loop and interrupt the
-                // program thread so a blocked stdin read returns too, then give it a moment to finish.
+                // Wakes on cancellation (Stop): ask the VM to unwind every thread's instruction loop and
+                // interrupt the whole group (main + any thread the program started) so a blocked stdin read,
+                // sleep, wait, or join returns too, then give them a moment to finish.
                 val killer = launch {
                     try {
                         awaitCancellation()
                     } finally {
                         vm.requestCancel()
-                        thread.interrupt()
+                        group.interrupt()
                         runCatching { thread.join(2000) }
                     }
                 }
                 thread.start()
                 try {
-                    runInterruptible { thread.join() }
+                    // Wait for main, then for the non-daemon threads it started (JVM exit semantics).
+                    runInterruptible {
+                        thread.join()
+                        awaitNonDaemonThreads(group)
+                    }
                 } finally {
                     killer.cancel()
                 }
@@ -100,6 +111,22 @@ class VmProgramInterpreter(
         val code = exitCodeFor(outcome, io)
         io.exited(code)
         code
+    }
+
+    /** Block until every non-daemon thread the program started (its `Thread`s live in [group]) has finished,
+     *  mirroring the JVM, which keeps running until the last non-daemon thread exits. `main` is already joined
+     *  and is itself a daemon here, so it is not counted. On Stop the group is interrupted and the VM unwinds,
+     *  so those threads die and this returns; an interrupt of the waiting (run) thread propagates out to
+     *  cancellation. */
+    private fun awaitNonDaemonThreads(group: ThreadGroup) {
+        while (true) {
+            val snapshot = arrayOfNulls<Thread>(group.activeCount() + 8)
+            val n = group.enumerate(snapshot, true)
+            val pending = (0 until n).mapNotNull { snapshot[it] }
+                .filter { it.isAlive && !it.isDaemon && it !== Thread.currentThread() }
+            if (pending.isEmpty()) return
+            pending.forEach { it.join() }
+        }
     }
 
     /** Resolve and invoke the program entry point: prefer a static `main` (with or without a `String[]`), else
@@ -176,5 +203,9 @@ class VmProgramInterpreter(
         // Interpreted recursion runs on this thread's host stack, so give it plenty of headroom (matches the
         // old in-process dex runner's user-main thread).
         const val STACK_BYTES = 16L * 1024 * 1024
+        // A Thread the program starts also interprets on its own host stack; give it a generous (if smaller
+        // than main's) stack so deep recursion on a worker doesn't overflow far shallower than on main, while
+        // bounding the reservation for a program that spawns many threads.
+        const val SPAWNED_STACK_BYTES = 8L * 1024 * 1024
     }
 }

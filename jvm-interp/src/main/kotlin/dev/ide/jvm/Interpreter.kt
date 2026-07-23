@@ -18,6 +18,7 @@ import org.objectweb.asm.tree.MultiANewArrayInsnNode
 import org.objectweb.asm.tree.TableSwitchInsnNode
 import org.objectweb.asm.tree.TypeInsnNode
 import org.objectweb.asm.tree.VarInsnNode
+import java.util.concurrent.atomic.AtomicReference
 
 private const val MODE_NEXT = 0
 private const val MODE_GOTO = 1
@@ -51,7 +52,8 @@ private val REIFIED_KINDS_SUPPORTED = setOf(0, 1, 2, 3, 4)
  * fields, arrays, lambda captures).
  *
  * Frames are pooled by call depth (calls are strictly nested on the host stack), so a warm call allocates
- * nothing. The pool makes the engine single-threaded, matching the [Vm] contract.
+ * nothing. The pool and the reification scratch are per-thread ([Exec]), so multiple real threads run
+ * interpreted code in parallel; the decoded-method and call-shape caches are shared and concurrent.
  */
 internal class Interpreter(private val vm: Vm) {
 
@@ -80,6 +82,7 @@ internal class Interpreter(private val vm: Vm) {
         val maxLocals: Int = m.maxLocals
         val maxStack: Int = m.maxStack
         val isStatic: Boolean = m.access and ACC_STATIC != 0
+        val isSynchronized: Boolean = m.access and ACC_SYNCHRONIZED != 0
         val sig: String = m.name + m.desc
 
         val paramDescs: Array<String> = Descriptors.paramTypes(m.desc).toTypedArray()
@@ -116,26 +119,49 @@ internal class Interpreter(private val vm: Vm) {
     private val shapes = java.util.concurrent.ConcurrentHashMap<String, CallShape>()
     private fun shape(desc: String): CallShape = shapes.getOrPut(desc) { CallShape(desc) }
 
-    /** Total bytecode instructions executed, for diagnostics and throughput measurement. */
-    var steps: Long = 0L
-        internal set
+    /**
+     * Per-thread execution state. Each real thread that runs interpreted code (the program's main thread, and
+     * every `Thread` it starts — which is a real host thread whose `run` re-enters here) gets its own frame
+     * stack and reified/reification scratch, so threads execute genuinely in parallel with no shared mutable
+     * frame state. Held in a [ThreadLocal]; fetched once per frame (never per instruction) and threaded down
+     * the call so the hot loop touches only plain fields.
+     */
+    private class Exec {
+        /** Frames pooled by call depth: interpreted calls nest strictly (they recurse on the host stack), so the
+         *  frame at each depth is reused across every call that reaches it on this thread. */
+        val pool = ArrayList<Frame>()
+        var depth = 0
 
-    /** Set by another thread to cancel the running program. Checked once every [CANCEL_CHECK_INTERVAL]
-     *  instructions in the loop, so even a tight compute loop with no bridge calls unwinds promptly. */
+        /** Bytecode instructions this thread has executed; drives the cancel-check cadence and [steps]. */
+        var localSteps = 0L
+
+        /** Reified-type substitution for a running reified inline function on this thread: type-parameter name
+         *  (`R`) → the JVM internal name of the concrete type argument. Set by [withReifiedTypes], empty
+         *  otherwise. */
+        var reifiedTypes: Map<String, String> = emptyMap()
+
+        /** The concrete type a just-executed [reifiedOperationMarker] armed, consumed by the very next type op
+         *  (`INSTANCEOF`/`CHECKCAST`/`ANEWARRAY`); the compiler always emits that op immediately after. */
+        var pendingReified: String? = null
+    }
+
+    private val execLocal = ThreadLocal.withInitial { Exec() }
+
+    /** Bytecode instructions executed by the CURRENT thread (diagnostics / throughput). Readers measure a
+     *  before/after delta on the thread that runs the interpretation, so a per-thread count is exact for them. */
+    val steps: Long get() = execLocal.get().localSteps
+
+    /** Set (from any thread) to cancel a running program. Every thread's instruction loop checks it once every
+     *  [CANCEL_CHECK_INTERVAL] instructions, so even a tight compute loop with no bridge calls unwinds promptly. */
     @Volatile @JvmField var cancelRequested: Boolean = false
 
-    /** Reified-type substitution for a running reified inline function: type-parameter name (`R`) → the JVM
-     *  internal name of the concrete type argument (`java/lang/String`). Set by [Vm.withReifiedTypes] around a
-     *  reified invocation, empty otherwise. Single-threaded, so one map for the whole reified execution. */
-    @JvmField var reifiedTypes: Map<String, String> = emptyMap()
-
-    /** The concrete type a just-executed [reifiedOperationMarker] armed, consumed by the very next type op
-     *  (`INSTANCEOF`/`CHECKCAST`/`ANEWARRAY`). The compiler always emits that op immediately after the marker. */
-    private var pendingReified: String? = null
-
-    /** Serializes interpreter execution across threads (see [execute]). Re-entrant, so nested same-thread calls
-     *  proceed freely; a second thread waits. */
-    private val execMonitor = Any()
+    /** Run [body] applying reified [types] to this thread's reified operations; see [Vm.withReifiedTypes]. */
+    internal fun <T> withReifiedTypes(types: Map<String, String>, body: () -> T): T {
+        val exec = execLocal.get()
+        val prev = exec.reifiedTypes
+        exec.reifiedTypes = types
+        return try { body() } finally { exec.reifiedTypes = prev }
+    }
 
     /**
      * One invocation's operand stack and locals, typed: primitives live unboxed in [prim] (floats and doubles
@@ -255,43 +281,37 @@ internal class Interpreter(private val vm: Vm) {
         fun pop2() { if (isCat2(sp - 1)) popAny() else { popAny(); popAny() } }
     }
 
-    /** Frames pooled by call depth: interpreted calls nest strictly (they recurse on the host stack), so the
-     *  frame at each depth is reused across every call that reaches it. */
-    private val pool = ArrayList<Frame>()
-    private var depth = 0
-
-    private fun acquire(block: MethodBlock): Frame {
-        if (depth == pool.size) pool.add(Frame())
-        val f = pool[depth]
-        depth++
+    private fun acquire(exec: Exec, block: MethodBlock): Frame {
+        if (exec.depth == exec.pool.size) exec.pool.add(Frame())
+        val f = exec.pool[exec.depth]
+        exec.depth++
         f.prepare(block.maxStack, block.maxLocals)
         f.sig = block.sig
         return f
     }
 
-    private fun release() { depth-- }
+    private fun release(exec: Exec) { exec.depth-- }
 
     /**
      * Execute [m], declared in [owner], with [receiver] (null for a static method) and boxed [args]. Returns
      * the method's (boxed) result, or null for a void method. This is the boxed entry point used at the VM
      * boundary; interpreted-to-interpreted calls take the typed fast path in [callInterpreted] instead.
      */
-    fun execute(owner: VmClass, m: MethodNode, receiver: Any?, args: List<Any?>): Any? = synchronized(execMonitor) {
-        // The interpreter is single-threaded (its frame pool + call-depth counter are not thread-safe), but a
-        // host can enter it from more than one thread: a preview renders on its own thread while a view's async
-        // font-load callback re-enters on the main thread. Every execution funnels through here, so a re-entrant
-        // monitor serializes threads without blocking a nested call on the same thread. No deadlock: nothing the
-        // interpreter waits on requires another thread that needs this monitor.
+    fun execute(owner: VmClass, m: MethodNode, receiver: Any?, args: List<Any?>): Any? {
+        // Each thread owns its frame stack ([Exec]), so threads run interpreted code concurrently. This is the
+        // boxed entry point (the VM boundary and re-entry from a peer callback / bridge); interpreted-to-
+        // interpreted calls take the typed fast path in [callInterpreted]. Fetch the thread's Exec once here.
+        val exec = execLocal.get()
         val block = blockFor(m)
-        val frame = acquire(block)
+        val frame = acquire(exec, block)
         try {
             if (!block.isStatic) frame.lRef[0] = receiver
             val slots = block.paramSlots
             val descs = block.paramDescs
             for (i in slots.indices) seedLocal(frame, slots[i], descs[i], args[i])
-            runFrame(block, frame, caller = null)
+            return runFrame(block, frame, caller = null, exec = exec, declaring = owner)
         } finally {
-            release()
+            release(exec)
         }
     }
 
@@ -310,9 +330,9 @@ internal class Interpreter(private val vm: Vm) {
     /** Call an interpreted method with its arguments taken directly from [caller]'s typed stack (no boxing):
      *  each argument entry is copied into the callee's local slot, and the callee's return is pushed back onto
      *  [caller] typed. */
-    private fun callInterpreted(declaring: VmClass, m: MethodNode, hasReceiver: Boolean, caller: Frame) {
+    private fun callInterpreted(declaring: VmClass, m: MethodNode, hasReceiver: Boolean, caller: Frame, exec: Exec) {
         val block = blockFor(m)
-        val callee = acquire(block)
+        val callee = acquire(exec, block)
         try {
             val slots = block.paramSlots
             // Verified bytecode never underflows, so a short caller stack means the interpreter mis-tracked it
@@ -328,26 +348,45 @@ internal class Interpreter(private val vm: Vm) {
                 else callee.lPrim[slot] = caller.prim[sp]
             }
             if (hasReceiver) callee.lRef[0] = deref(caller.popRef())
-            runFrame(block, callee, caller)
+            runFrame(block, callee, caller, exec, declaring)
         } finally {
-            release()
+            release(exec)
         }
     }
 
     /** The instruction loop. With a [caller], a return value is pushed onto the caller's stack typed and null
-     *  is returned; at the VM boundary (null caller) the return value is boxed and returned. */
-    private fun runFrame(block: MethodBlock, frame: Frame, caller: Frame?): Any? {
+     *  is returned; at the VM boundary (null caller) the return value is boxed and returned. A `synchronized`
+     *  method (`ACC_SYNCHRONIZED`) locks the receiver (instance) or the class (static) around the whole run,
+     *  released on every exit — normal return, a thrown/propagating exception, or cancellation. */
+    private fun runFrame(block: MethodBlock, frame: Frame, caller: Frame?, exec: Exec, declaring: VmClass): Any? {
+        val monitor = if (block.isSynchronized) enterSyncMethod(block, frame, declaring) else null
+        try {
+            return runLoop(block, frame, caller, exec)
+        } finally {
+            monitor?.exit()
+        }
+    }
+
+    /** The monitor a `synchronized` method locks: the declaring class's monitor for a static method, else the
+     *  receiver's (`synchronized void m()` locks `this`; `static synchronized void m()` locks the class). */
+    private fun enterSyncMethod(block: MethodBlock, frame: Frame, declaring: VmClass): VmMonitor {
+        val monitor = if (block.isStatic) vm.monitorFor(declaring) else vm.monitorFor(deref(frame.lRef[0]))
+        monitor.enter()
+        return monitor
+    }
+
+    private fun runLoop(block: MethodBlock, frame: Frame, caller: Frame?, exec: Exec): Any? {
         val insns = block.insns
         var pc = 0
         while (true) {
             val insn = insns[pc]
             val op = insn.opcode
             if (op < 0) { pc++; continue } // LabelNode, FrameNode, or LineNumberNode
-            steps++
-            if (steps and CANCEL_CHECK_INTERVAL == 0L && cancelRequested) throw VmInterruptedException()
+            exec.localSteps++
+            if (exec.localSteps and CANCEL_CHECK_INTERVAL == 0L && cancelRequested) throw VmInterruptedException()
             frame.mode = MODE_NEXT
             try {
-                step(insn, op, pc, block, frame, caller)
+                step(insn, op, pc, block, frame, caller, exec)
             } catch (ve: VmException) {
                 val handler = findHandler(block, pc, ve.value)
                 if (handler >= 0) { frame.clearStack(); frame.pushRef(ve.value); pc = handler; continue }
@@ -376,7 +415,7 @@ internal class Interpreter(private val vm: Vm) {
         else -> false
     }
 
-    private fun step(insn: AbstractInsnNode, op: Int, pc: Int, block: MethodBlock, frame: Frame, caller: Frame?) {
+    private fun step(insn: AbstractInsnNode, op: Int, pc: Int, block: MethodBlock, frame: Frame, caller: Frame?, exec: Exec) {
         when (op) {
             NOP -> {}
             ACONST_NULL -> frame.pushRef(null)
@@ -385,7 +424,7 @@ internal class Interpreter(private val vm: Vm) {
             FCONST_0 -> frame.pushF(0f); FCONST_1 -> frame.pushF(1f); FCONST_2 -> frame.pushF(2f)
             DCONST_0 -> frame.pushD(0.0); DCONST_1 -> frame.pushD(1.0)
             BIPUSH, SIPUSH -> frame.pushI((insn as IntInsnNode).operand)
-            LDC -> ldc((insn as LdcInsnNode).cst, frame)
+            LDC -> ldc((insn as LdcInsnNode).cst, frame, exec)
 
             ILOAD -> frame.pushI(frame.lPrim[(insn as VarInsnNode).`var`].toInt())
             LLOAD -> frame.pushJ(frame.lPrim[(insn as VarInsnNode).`var`])
@@ -507,15 +546,15 @@ internal class Interpreter(private val vm: Vm) {
             PUTFIELD -> { val f = insn as FieldInsnNode; val v = deref(frame.popByDesc(f.desc)); fieldPut(deref(frame.popRef()), f.name, f.desc, v) }
 
             // method invocation
-            INVOKESTATIC -> invokeStatic(insn as MethodInsnNode, frame)
-            INVOKESPECIAL -> invokeSpecial(insn as MethodInsnNode, frame)
-            INVOKEVIRTUAL, INVOKEINTERFACE -> invokeVirtual(insn as MethodInsnNode, frame)
+            INVOKESTATIC -> invokeStatic(insn as MethodInsnNode, frame, exec)
+            INVOKESPECIAL -> invokeSpecial(insn as MethodInsnNode, frame, exec)
+            INVOKEVIRTUAL, INVOKEINTERFACE -> invokeVirtual(insn as MethodInsnNode, frame, exec)
             INVOKEDYNAMIC -> invokeDynamic(insn as InvokeDynamicInsnNode, frame)
 
             // object and array creation
             NEW -> frame.pushRef(instantiate((insn as TypeInsnNode).desc))
             NEWARRAY -> frame.pushRef(VmArray.of(primitiveArrayDesc((insn as IntInsnNode).operand), frame.popI()))
-            ANEWARRAY -> { val t = insn as TypeInsnNode; val et = takePendingReified() ?: t.desc; frame.pushRef(VmArray.of(elementDescOf(et), frame.popI())) }
+            ANEWARRAY -> { val t = insn as TypeInsnNode; val et = takePendingReified(exec) ?: t.desc; frame.pushRef(VmArray.of(elementDescOf(et), frame.popI())) }
             MULTIANEWARRAY -> frame.pushRef(multiArray(insn as MultiANewArrayInsnNode, frame))
             ARRAYLENGTH -> frame.pushI(arrayLength(deref(frame.popRef())))
 
@@ -530,11 +569,12 @@ internal class Interpreter(private val vm: Vm) {
             DASTORE -> { val v = frame.popD(); val i = frame.popI(); arraySet(deref(frame.popRef()), i, v) }
             AASTORE -> { val v = deref(frame.popRef()); val i = frame.popI(); arraySet(deref(frame.popRef()), i, v) }
 
-            CHECKCAST -> { val t = takePendingReified() ?: (insn as TypeInsnNode).desc; if (!castOk(deref(frame.peekRef()), t)) throwReal(ClassCastException("cannot cast to $t")) }
-            INSTANCEOF -> { val t = takePendingReified() ?: (insn as TypeInsnNode).desc; frame.pushI(if (instanceOf(deref(frame.popRef()), t)) 1 else 0) }
+            CHECKCAST -> { val t = takePendingReified(exec) ?: (insn as TypeInsnNode).desc; if (!castOk(deref(frame.peekRef()), t)) throwReal(ClassCastException("cannot cast to $t")) }
+            INSTANCEOF -> { val t = takePendingReified(exec) ?: (insn as TypeInsnNode).desc; frame.pushI(if (instanceOf(deref(frame.popRef()), t)) 1 else 0) }
 
             ATHROW -> { val t = deref(frame.popRef()); if (t == null) throwReal(NullPointerException()); throw VmException(t) }
-            MONITORENTER, MONITOREXIT -> frame.popAny() // locking is a no-op in the single-threaded interpreter
+            MONITORENTER -> vm.monitorFor(deref(frame.popRef())).enter()
+            MONITOREXIT -> vm.monitorFor(deref(frame.popRef())).exit()
 
             else -> throw VmUnsupportedException("opcode $op is not supported")
         }
@@ -550,7 +590,7 @@ internal class Interpreter(private val vm: Vm) {
 
     private fun throwReal(t: Throwable): Nothing = throw VmException(t)
 
-    private fun ldc(cst: Any, frame: Frame) {
+    private fun ldc(cst: Any, frame: Frame, exec: Exec) {
         when (cst) {
             is Int -> frame.pushI(cst)
             is Long -> frame.pushJ(cst)
@@ -558,7 +598,7 @@ internal class Interpreter(private val vm: Vm) {
             is Double -> frame.pushD(cst)
             // A class literal (`Foo.class`, `int[].class`). Under a pending reified marker (`T::class.java`,
             // OperationKind JAVA_CLASS) the erased placeholder is replaced by the concrete type's class literal.
-            is Type -> takePendingReified().let { t ->
+            is Type -> takePendingReified(exec).let { t ->
                 frame.pushRef(vm.classLiteral(if (t != null) Type.getObjectType(t) else cst))
             }
             else -> frame.pushRef(cst) // String (or a constant the bridge understands as a reference)
@@ -567,6 +607,7 @@ internal class Interpreter(private val vm: Vm) {
 
     // ---- fields -----------------------------------------------------------------------------------
 
+    @Suppress("UNCHECKED_CAST")
     private fun staticGet(owner: String, name: String, desc: String): Any? {
         val cls = vm.resolve(owner) ?: return vm.bridge.getStatic(owner, name, desc)
         vm.ensureInitialized(cls)
@@ -575,15 +616,18 @@ internal class Interpreter(private val vm: Vm) {
         // the nearest real superclass, whose name is loadable. Mirrors invokeStatic's inherited-method bridge.
         val holder = ownerHolding(cls, name)
             ?: return vm.bridge.getStatic(vm.realSuperName(cls), name, desc)
-        return holder.statics[name]
+        val slot = holder.statics[name]
+        return if (name in holder.volatileStaticFields) (slot as AtomicReference<Any?>).get() else slot
     }
 
+    @Suppress("UNCHECKED_CAST")
     private fun staticPut(owner: String, name: String, desc: String, value: Any?) {
         val cls = vm.resolve(owner) ?: return vm.bridge.putStatic(owner, name, desc, vm.toReal(value))
         vm.ensureInitialized(cls)
         val holder = ownerHolding(cls, name)
             ?: return vm.bridge.putStatic(vm.realSuperName(cls), name, desc, vm.toReal(value))
-        holder.statics[name] = value
+        if (name in holder.volatileStaticFields) (holder.statics[name] as AtomicReference<Any?>).set(value)
+        else holder.statics[name] = value
     }
 
     /** The interpreted class in [start]'s chain that declares static field [name], or null when no interpreted
@@ -595,20 +639,25 @@ internal class Interpreter(private val vm: Vm) {
         return null
     }
 
+    @Suppress("UNCHECKED_CAST")
     private fun fieldGet(receiver: Any?, name: String, desc: String): Any? {
         if (receiver == null) throwReal(NullPointerException("getfield $name on null"))
         if (receiver !is VmObject) return vm.bridge.getField(receiver, name, desc)
         // A field an interpreted class declares lives on the VmObject; a field inherited from a real supertype
-        // lives on the peer (regardless of the field-reference owner the compiler emitted).
-        return if (vm.vmDeclaresField(receiver.vmClass, name)) receiver.fields[name]
-        else vm.bridge.getField(vm.peerOf(receiver), name, desc)
+        // lives on the peer (regardless of the field-reference owner the compiler emitted). A volatile field's
+        // value lives inside an AtomicReference holder for real volatile read semantics.
+        if (!vm.vmDeclaresField(receiver.vmClass, name)) return vm.bridge.getField(vm.peerOf(receiver), name, desc)
+        val slot = receiver.fields[name]
+        return if (vm.isVolatileInstanceField(receiver.vmClass, name)) (slot as AtomicReference<Any?>).get() else slot
     }
 
+    @Suppress("UNCHECKED_CAST")
     private fun fieldPut(receiver: Any?, name: String, desc: String, value: Any?) {
         if (receiver == null) throwReal(NullPointerException("putfield $name on null"))
         if (receiver !is VmObject) { vm.bridge.putField(receiver, name, desc, vm.toReal(value)); return }
-        if (vm.vmDeclaresField(receiver.vmClass, name)) receiver.fields[name] = value
-        else vm.bridge.putField(vm.peerOf(receiver), name, desc, vm.toReal(value))
+        if (!vm.vmDeclaresField(receiver.vmClass, name)) { vm.bridge.putField(vm.peerOf(receiver), name, desc, vm.toReal(value)); return }
+        if (vm.isVolatileInstanceField(receiver.vmClass, name)) (receiver.fields[name] as AtomicReference<Any?>).set(value)
+        else receiver.fields[name] = value
     }
 
     // ---- invocation -------------------------------------------------------------------------------
@@ -628,13 +677,13 @@ internal class Interpreter(private val vm: Vm) {
 
     /** The concrete type a preceding [reifiedOperationMarker] armed, consumed once (cleared). Null when no
      *  marker is pending — the type op then uses its own (erased placeholder) operand. */
-    private fun takePendingReified(): String? {
-        val p = pendingReified
-        pendingReified = null
+    private fun takePendingReified(exec: Exec): String? {
+        val p = exec.pendingReified
+        exec.pendingReified = null
         return p
     }
 
-    private fun invokeStatic(insn: MethodInsnNode, frame: Frame) {
+    private fun invokeStatic(insn: MethodInsnNode, frame: Frame, exec: Exec) {
         // Kotlin's reification marker: `reifiedOperationMarker(int operationKind, String typeParameterName)`.
         // Calling it directly throws (it exists only for the compiler's inliner to strip); here we reproduce the
         // inliner's transform live — consume the operands and ARM the concrete type for the following type op,
@@ -645,7 +694,7 @@ internal class Interpreter(private val vm: Vm) {
             val typeName = deref(frame.popRef()) as? String
             val kind = frame.popI()
             if (kind !in REIFIED_KINDS_SUPPORTED) throw VmUnsupportedException("reified operation kind $kind is not supported")
-            pendingReified = typeName?.let { reifiedTypes[it] }
+            exec.pendingReified = typeName?.let { exec.reifiedTypes[it] }
                 ?: throw VmUnsupportedException("no reified type bound for `$typeName`")
             return
         }
@@ -654,7 +703,7 @@ internal class Interpreter(private val vm: Vm) {
             vm.ensureInitialized(cls)
             val target = vm.findInHierarchy(cls, insn.name, insn.desc)
             if (target != null) {
-                callInterpreted(target.first, target.second, hasReceiver = false, caller = frame)
+                callInterpreted(target.first, target.second, hasReceiver = false, caller = frame, exec = exec)
                 return
             }
             // A static method the interpreted class inherits from a REAL superclass (e.g.
@@ -670,13 +719,13 @@ internal class Interpreter(private val vm: Vm) {
         pushResult(sh, vm.bridgeStatic(insn.owner, insn.name, insn.desc, args), frame)
     }
 
-    private fun invokeSpecial(insn: MethodInsnNode, frame: Frame) {
+    private fun invokeSpecial(insn: MethodInsnNode, frame: Frame, exec: Exec) {
         val cls = vm.resolve(insn.owner)
         if (cls != null) {
             val method = cls.declaredMethod(insn.name, insn.desc)
                 ?: vm.findInHierarchy(cls, insn.name, insn.desc)?.second
             if (method != null) {
-                callInterpreted(cls, method, hasReceiver = true, caller = frame)
+                callInterpreted(cls, method, hasReceiver = true, caller = frame, exec = exec)
                 return
             }
             // The owner is interpreted but declares this method nowhere in its interpreted chain: it is a
@@ -692,12 +741,12 @@ internal class Interpreter(private val vm: Vm) {
         pushResult(sh, dispatchSpecial(insn.owner, insn.name, insn.desc, receiver, args), frame)
     }
 
-    private fun invokeVirtual(insn: MethodInsnNode, frame: Frame) {
+    private fun invokeVirtual(insn: MethodInsnNode, frame: Frame, exec: Exec) {
         val sh = shape(insn.desc)
         val receiver = deref(frame.refAt(sh.params.size))
         if (receiver is VmObject) {
             val found = vm.findInHierarchy(receiver.vmClass, insn.name, insn.desc)
-            if (found != null) { callInterpreted(found.first, found.second, hasReceiver = true, caller = frame); return }
+            if (found != null) { callInterpreted(found.first, found.second, hasReceiver = true, caller = frame, exec = exec); return }
         }
         val args = popBoxedArgs(sh, frame)
         frame.popAny() // the receiver entry (already read)
@@ -762,6 +811,11 @@ internal class Interpreter(private val vm: Vm) {
     private fun dispatchVirtual(name: String, descriptor: String, rawReceiver: Any?, rawArgs: List<Any?>): Any? {
         val receiver = deref(rawReceiver) ?: throwReal(NullPointerException("invoke $name on null"))
         val args = rawArgs.map { deref(it) }
+        // `Object.wait/notify/notifyAll` route to the interpreter's monitor for the receiver, so they pair with
+        // the `MONITORENTER`/`synchronized` the interpreter ran on the same object (an interpreted instance's
+        // real peer has a different monitor). These are final on Object, so an interpreted override never
+        // pre-empts them; a same-named method with a different descriptor is not one of them.
+        if (isObjectMonitorMethod(name, descriptor)) { runObjectMonitorMethod(name, receiver, args); return null }
         return when (receiver) {
             is VmLambda ->
                 if (name == receiver.samName) receiver.invokeSam(args)
@@ -776,6 +830,25 @@ internal class Interpreter(private val vm: Vm) {
             // on its real mirror. (Java arrays are Cloneable, but VmArray is not, so a bridged clone would fail.)
             is VmArray -> if (name == "clone") receiver.shallowCopy() else vm.bridgeVirtual(vm.toReal(receiver)!!, name, descriptor, args)
             else -> vm.bridgeVirtual(receiver, name, descriptor, args)
+        }
+    }
+
+    /** Whether [name]/[descriptor] is one of `Object`'s monitor methods (exact descriptors, so an unrelated
+     *  same-named method is not caught). */
+    private fun isObjectMonitorMethod(name: String, descriptor: String): Boolean = when (name) {
+        "notify", "notifyAll" -> descriptor == "()V"
+        "wait" -> descriptor == "()V" || descriptor == "(J)V" || descriptor == "(JI)V"
+        else -> false
+    }
+
+    /** Run `wait`/`notify`/`notifyAll` against the interpreter's monitor for [receiver]. `wait(J[I])` uses the
+     *  millisecond argument (nanos are ignored, as the JVM effectively does for sub-millisecond waits). */
+    private fun runObjectMonitorMethod(name: String, receiver: Any?, args: List<Any?>) {
+        val monitor = vm.monitorFor(receiver)
+        when (name) {
+            "notify" -> monitor.notifyOne()
+            "notifyAll" -> monitor.notifyEveryone()
+            "wait" -> monitor.await(if (args.isEmpty()) 0L else (args[0] as Long))
         }
     }
 
