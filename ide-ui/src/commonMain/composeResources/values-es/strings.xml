@@ -1,0 +1,169 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="projects">Proyectos</string>
+    <string name="a_new_build_system">Un nuevo sistema de compilación</string>
+    <string name="a_new_build_system_content"><![CDATA[CodeAssist se ha reconstruido con un nuevo sistema de compilación en el dispositivo. Utiliza su propia configuración de proyecto, por lo que los proyectos de versiones anteriores no son compatibles y no se abrirán automáticamente.
+
+Haga una copia de seguridad de sus proyectos en un archivo .zip ahora, sus archivos fuente permanecerán seguros y podrá volver a agregarlos a un nuevo proyecto.]]></string>
+    <string name="preparing_backup">Preparando copia de seguridad…</string>
+    <string name="backup_projects">Respaldar proyectos</string>
+    <string name="got_it">Entendido</string>
+    <string name="help_improve_codeassist">Ayuda a mejorar CodeAssist</string>
+    <string name="help_improve_codeassist_content"><![CDATA[Comparta datos de rendimiento anónimos para que podamos ver qué es lento y qué está fallando, y solucionar las cosas correctas.
+
+Recopilamos: la versión de su aplicación y el modelo de su dispositivo, cuánto tiempo toman las compilaciones, la indexación y la finalización del código, el éxito o fracaso de la compilación y los informes de fallos limpios.
+
+Nunca recopilamos su código, nombres de archivos o proyectos, qué funciones usa o cualquier cosa que lo identifique. Puede cambiar esto en cualquier momento en Más mientras un proyecto está abierto.]]></string>
+    <string name="learn_more">Más información</string>
+    <string name="allow">Permitir</string>
+    <string name="no_thanks">No, gracias</string>
+    <string name="on_device">En el dispositivo</string>
+    <string name="on_device_title">Un IDE real. En tu teléfono.</string>
+    <string name="on_device_content">Escribe, navega y compila proyectos Android y Java de extremo a extremo, sin necesidad de portátil.</string>
+    <string name="continue">Continuar</string>
+    <string name="maybe_later">Tal vez más tarde</string>
+    <string name="skip_for_now">Omitir por ahora</string>
+    <string name="code_completion">Autocompletado de código</string>
+    <string name="code_completion_title">Completado que conoce tu código.</string>
+    <string name="code_completion_content">Eclipse JDT impulsa sugerencias precisas y clasificadas, con firmas y documentación a medida que escribes.</string>
+    <string name="block_editing">Edición por bloques</string>
+    <string name="block_editing_title">Edita como código o como bloques.</string>
+    <string name="block_editing_content">Proyecta cualquier archivo Java en bloques entrelazados, una vista en vivo del mismo código fuente, byte por byte.</string>
+    <string name="build_and_run">Compilar y ejecutar</string>
+    <string name="build_and_run_title">Compila APKs reales en el dispositivo.</string>
+    <string name="build_and_run_content">Resuelve, compila, convierte a dex, empaqueta, firma e instala directamente en tu teléfono.</string>
+    <string name="command_palette">Paleta de comandos</string>
+    <string name="command_palette_title">Salta a cualquier lugar, al instante.</string>
+    <string name="command_palette_content">Una entrada para comandos, archivos y símbolos: el acelerador detrás de todo.</string>
+    <string name="kotlin_beta">Kotlin · Beta</string>
+    <string name="kotlin_beta_title">Autocompletado de Kotlin, ahora en beta.</string>
+    <string name="kotlin_beta_content">Autocompletado completo de código Kotlin, adaptado a la misma experiencia tranquila y clasificada que Java.</string>
+    <string name="xml">XML</string>
+    <string name="xml_title">Diseños, totalmente asistidos.</string>
+    <string name="xml_content">Autocompletado de etiquetas, atributos y recursos para XML de Android con validación en vivo.</string>
+    <string name="your_files">Tus archivos</string>
+    <string name="your_files_title">Tus proyectos, en una carpeta real.</string>
+    <string name="your_files_content">Los proyectos se almacenan en el almacenamiento de la aplicación y puedes abrirlos desde cualquier administrador de archivos, arrastrar íconos, diseños o recursos, o editarlos desde una PC. Sin permisos especiales, nada oculto.</string>
+    <string name="jetpack_compose">Jetpack Compose</string>
+    <string name="jetpack_compose_title">Reconstruido en Jetpack Compose.</string>
+    <string name="jetpack_compose_content">Un CodeAssist más rápido y fluido, Compose nativo en todas partes, con @Preview en vivo.</string>
+    <string name="create_your_first_project">Crea tu primer proyecto</string>
+    <string name="open_a_project">Abre un proyecto o comienza uno nuevo.</string>
+    <string name="new_project">Nuevo Proyecto</string>
+    <string name="new_project_content">Aplicación de Android, aplicación de consola de Java, biblioteca…</string>
+    <string name="import_project">Importar proyecto</string>
+    <string name="import_action">Importar</string>
+    <string name="import_created_with">Creado con %1$s</string>
+    <string name="import_by">por %1$s</string>
+    <string name="import_section_contents">Contenidos</string>
+    <string name="import_more">+%1$d más</string>
+    <string name="import_incompatible">Este paquete necesita una versión más reciente de CodeAssist para importarse.</string>
+    <string name="import_deps_bundled">Dependencias incluidas</string>
+    <string name="import_failed">No se pudo importar el paquete del proyecto.</string>
+    <string name="import_unrecognized_title">No se puede importar este archivo</string>
+    <string name="import_unrecognized">CodeAssist no reconoce este archivo. Elige un paquete de proyecto .caproj para importar.</string>
+    <plurals name="caproj_files">
+        <item quantity="one">%1$d archivo</item>
+        <item quantity="other">%1$d archivos</item>
+    </plurals>
+    <string name="export_title">Exportar proyecto</string>
+    <string name="export_intro">Empaqueta este proyecto como un archivo .caproj que puedes compartir con cualquiera.</string>
+    <string name="export_bundle_deps">Incluir dependencias</string>
+    <string name="export_bundle_deps_desc">Incluye bibliotecas descargadas para que se importe y compile sin conexión. Hace que el archivo sea más grande.</string>
+    <string name="export_author_label">Autor (opcional)</string>
+    <string name="export_author_hint">Tu nombre</string>
+    <string name="export_description_label">Descripción (opcional)</string>
+    <string name="export_description_hint">¿Qué hace este proyecto?</string>
+    <string name="export_action">Exportar</string>
+    <string name="export_share">Compartir proyecto</string>
+    <string name="export_failed">No se pudo exportar el proyecto.</string>
+    <string name="export_exporting">Exportando…</string>
+    <string name="export_success_title">Proyecto exportado</string>
+    <string name="export_success_subtitle">Tu paquete de proyecto está listo.</string>
+    <string name="export_locate">Mostrar en administrador de archivos</string>
+    <string name="export_save_copy">Guardar una copia…</string>
+    <string name="export_done">Hecho</string>
+    <string name="export_retry">Reintentar</string>
+    <string name="join_the_community">Únete a la comunidad</string>
+    <string name="join_the_community_content">Chatea, obtén ayuda y comparte lo que construyes en Discord.</string>
+    <string name="support_title">Apoya a CodeAssist</string>
+    <string name="support_content">Construido en mi tiempo libre y mantenido gratuito para todos. Si te ayuda, un patrocinio o una estrella significan mucho.</string>
+    <string name="support_chip_free">100% gratis</string>
+    <string name="support_chip_open_source">Código abierto</string>
+    <string name="support_sponsor">Patrocinar</string>
+    <string name="support_star">Dar estrella en GitHub</string>
+    <string name="support_show_ads">Mostrar anuncios</string>
+    <string name="support_show_ads_desc">Mostrar anuncios en la aplicación. Puedes desactivarlos en cualquier momento.</string>
+    <string name="ad_label">Anuncio</string>
+    <string name="house_ad_support_title">¿Disfrutas de CodeAssist?</string>
+    <string name="house_ad_support_content">Apoya el proyecto en GitHub Sponsors.</string>
+    <string name="no_project_yet">Aún no hay proyectos. Crea uno para comenzar.</string>
+    <string name="your_projects">Tus proyectos</string>
+    <string name="project_kind_android">Android</string>
+    <string name="project_opened_just_now">Abierto justo ahora</string>
+    <plurals name="project_opened_minutes">
+        <item quantity="one">Abierto hace %1$d minuto</item>
+        <item quantity="other">Abierto hace %1$d minutos</item>
+    </plurals>
+    <plurals name="project_opened_hours">
+        <item quantity="one">Abierto hace %1$d hora</item>
+        <item quantity="other">Abierto hace %1$d horas</item>
+    </plurals>
+    <plurals name="project_opened_days">
+        <item quantity="one">Abierto hace %1$d día</item>
+        <item quantity="other">Abierto hace %1$d días</item>
+    </plurals>
+    <plurals name="project_opened_weeks">
+        <item quantity="one">Abierto hace %1$d semana</item>
+        <item quantity="other">Abierto hace %1$d semanas</item>
+    </plurals>
+    <plurals name="modules">
+        <item quantity="one">%1$d módulo</item>
+        <item quantity="other">%1$d módulos</item>
+    </plurals>
+    <string name="beta_notice">Estás en el %1$s</string>
+    <string name="beta_notice_content">Algunas funciones pueden estar incompletas o cambiar. Nos encantaría recibir tus comentarios, dinos qué falta o qué está roto.</string>
+    <string name="submit_suggestion">Enviar sugerencias</string>
+    <string name="your_codeassist_files">Tus archivos de CodeAssist</string>
+    <string name="your_codeassist_files_content">Abre esta carpeta en cualquier administrador de archivos para examinar tus proyectos, agregar íconos o recursos, o editar desde una PC.</string>
+    <string name="open_in_the_file_manager">Abrir en administrador de archivos</string>
+    <string name="choose_start_point">Elige un punto de partida.</string>
+    <string name="backup">Hacer copia de seguridad</string>
+    <string name="delete_project">¿Eliminar proyecto?</string>
+    <string name="delete_project_content">“%1$s” y todos sus archivos se eliminarán permanentemente. Esto no se puede deshacer.</string>
+    <string name="cancel">Cancelar</string>
+    <string name="delete">Eliminar</string>
+    <string name="project_name">Nombre del proyecto</string>
+    <string name="package_name">Nombre del paquete</string>
+    <string name="creating">Creando…</string>
+    <string name="create_project">Crear Proyecto</string>
+    <string name="no_templates_available">No hay plantillas disponibles.</string>
+    <string name="performance_analytics">Análisis de rendimiento</string>
+    <string name="sharing_performance_data">Compartiendo datos de rendimiento anónimos</string>
+    <string name="not_sharing_performance_data">No compartiendo datos de rendimiento</string>
+    <string name="compatibility">Compatibilidad</string>
+    <plurals name="recovered_projects">
+        <item quantity="one">Recuperado %1$d proyecto de una versión anterior</item>
+        <item quantity="other">Recuperados %1$d proyectos de una versión anterior</item>
+    </plurals>
+    <string name="recovered_projects_content">Estos usan Gradle y se abren en un modo de compatibilidad limitado. Es posible que algunas funciones no funcionen hasta que se vuelvan a agregar las dependencias. Sus archivos originales se mantienen seguros.</string>
+
+    <!-- AI coding agent -->
+    <string name="chat_title">Asistente de IA</string>
+    <string name="chat_open">Asistente IA</string>
+    <string name="chat_close">Cerrar chat</string>
+    <string name="chat_empty_title">Agente de código IA</string>
+    <string name="chat_empty_body">Pregunta sobre tu código o dile al asistente qué cambiar. Puede leer, buscar y editar tus archivos según el modo de permiso que elijas.</string>
+    <string name="chat_mode_ask">Preguntar</string>
+    <string name="chat_mode_auto">Auto</string>
+    <string name="chat_mode_plan">Plan</string>
+    <string name="chat_need_key">Agrega una clave de API para comenzar a chatear.</string>
+    <string name="chat_add_key">Agregar clave de API</string>
+    <string name="chat_manage_keys">Gestionar proveedores y claves</string>
+    <string name="chat_placeholder">Pregunta o describe un cambio…</string>
+    <string name="chat_send">Enviar</string>
+    <string name="chat_stop">Detener</string>
+    <string name="chat_new">Nueva sesión</string>
+    <string name="chat_retry">Reintentar</string>
+    <string name="chat_thinking">Pensando…</string>
+</resources>
