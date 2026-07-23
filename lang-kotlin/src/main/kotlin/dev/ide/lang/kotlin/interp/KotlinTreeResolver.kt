@@ -1484,7 +1484,13 @@ class KotlinTreeResolver(
             val outerFqn = ((receiverNode as? RNode.Name)?.binding as? Binding.ObjectRef)?.fqn
             if (callName != null && outerFqn != null && callName.first().isUpperCase()) {
                 val nestedDotted = "$outerFqn.$callName"
-                fileClasses[callName]?.takeIf { it.fqn == nestedDotted && it.flavor == ClassFlavor.CLASS }?.let {
+                // A nested SOURCE class builds a SourceObject — same-file via the live [fileClasses] index (fresh
+                // for the buffer being edited), OR any WHOLE-PROJECT source class: a sealed interface's subtype
+                // usually lives in a DIFFERENT file than the @Preview, so it's absent from fileClasses. The
+                // cross-file merge pulls the nested type's declaring file in (`expandPreviewModel` → the source
+                // callee's simple name). Only a genuine LIBRARY nested class is reflected (its `$` JVM name).
+                val sameFileNested = fileClasses[callName]?.takeIf { it.fqn == nestedDotted && it.flavor == ClassFlavor.CLASS }
+                if (sameFileNested != null || (service.isSourceClass(nestedDotted) && !service.isObject(nestedDotted))) {
                     val callee = ResolvedCallable.Source(callName, "$nestedDotted/$arity", emptyList(), isConstructor = true)
                     return RNode.Call(callee, DispatchKind.CONSTRUCTOR, null, lowerArgs(call), csk(call.textRange.startOffset), span(call))
                 }
@@ -1502,6 +1508,14 @@ class KotlinTreeResolver(
                     return RNode.Call(callee, DispatchKind.CONSTRUCTOR, null, lowerArgs(call), csk(call.textRange.startOffset), span(call))
                 }
                 runCatching { service.resolveTypeName(callName, resolver.fileContext) }.getOrNull()?.let { typeFqn ->
+                    // A cross-file source class the same-file [fileClasses] fast path above missed (e.g. a bare,
+                    // imported sealed subtype `Title(...)` whose declaration lives in another file): build a
+                    // SourceObject, NOT a reflective instance — the type isn't compiled at preview time, so
+                    // `Class.forName` would fail with "cannot load class `<dotted fqn>`".
+                    if (service.isSourceClass(typeFqn) && !service.isObject(typeFqn)) {
+                        val callee = ResolvedCallable.Source(callName, "$typeFqn/$arity", emptyList(), isConstructor = true)
+                        return RNode.Call(callee, DispatchKind.CONSTRUCTOR, null, lowerArgs(call), csk(call.textRange.startOffset), span(call))
+                    }
                     // Only fabricate a reflective constructor when there's POSITIVE evidence the name is a
                     // constructible type: a known/loadable type, or a name being THROWN
                     // (`throw IllegalArgumentException("x")` — a stdlib exception the resolver couldn't qualify,
