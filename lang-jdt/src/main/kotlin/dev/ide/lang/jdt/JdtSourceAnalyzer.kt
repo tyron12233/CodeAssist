@@ -287,7 +287,7 @@ class JdtSourceAnalyzer(ctx: CompilationContext) : SourceAnalyzer, Disposable, J
      * quick-fix can recover a problem's structured arguments (an unhandled exception's FQN, an undefined
      * method's owner/name/parameter types) without re-running the compiler when the buffer is unchanged.
      */
-    private class ProblemsCacheEntry(val path: String, val text: String, val problems: Array<out IProblem>)
+    private class ProblemsCacheEntry(val path: String, val text: String, val overlayFp: Int, val problems: Array<out IProblem>)
 
     @Volatile
     private var problemsCache: ProblemsCacheEntry? = null
@@ -298,13 +298,29 @@ class JdtSourceAnalyzer(ctx: CompilationContext) : SourceAnalyzer, Disposable, J
         problemsCache = null
     }
 
-    /** The in-memory compiler's raw problems for [text], content-cached so repeat queries are free. */
+    /** The in-memory compiler's raw problems for [text], content-cached so repeat queries are free. The problems
+     *  also depend on the OTHER files' unsaved-buffer overlay (a dependency edited but not yet saved), so a
+     *  fingerprint of that overlay is part of the key — else this file's cached problems go stale after an
+     *  unsaved edit to a dependency (a false "cannot be resolved"/"method undefined" that persists until save). */
     private fun problemsFor(file: VirtualFile, text: CharSequence): Array<out IProblem> {
         val t = text.toString()
-        problemsCache?.let { if (it.path == file.path && it.text == t) return it.problems }
-        val problems = completionContributor.resolveProblems(fqcnFor(file), t, overlayProvider(), compilerOptions)
-        problemsCache = ProblemsCacheEntry(file.path, t, problems)
+        val overlay = overlayProvider() // read once: the same map keys the cache and feeds the resolve
+        val fp = overlayFingerprint(overlay, file.path)
+        problemsCache?.let { if (it.path == file.path && it.text == t && it.overlayFp == fp) return it.problems }
+        val problems = completionContributor.resolveProblems(fqcnFor(file), t, overlay, compilerOptions)
+        problemsCache = ProblemsCacheEntry(file.path, t, fp, problems)
         return problems
+    }
+
+    /** Order-independent fingerprint of the unsaved-buffer overlay, excluding [selfPath] (its text is already in
+     *  the key). A change to any OTHER buffer changes it, so this file's stale problems are recomputed. */
+    private fun overlayFingerprint(overlay: Map<String, CharArray>, selfPath: String): Int {
+        var h = overlay.size
+        for ((p, buf) in overlay) {
+            if (p == selfPath) continue
+            h = h xor (p.hashCode() * 31 + buf.contentHashCode())
+        }
+        return h
     }
 
     /**
