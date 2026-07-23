@@ -559,7 +559,10 @@ class Interpreter(
         val owner = callee.ownerFqn ?: return null
         val types = HashMap<String, String>()
         callee.typeParameterNames.forEachIndexed { i, name ->
-            call.typeArguments.getOrNull(i)?.fqn?.let { types[name] = (KOTLIN_TYPE_TO_JVM[it] ?: it).replace('.', '/') }
+            val ta = call.typeArguments.getOrNull(i) ?: return@forEachIndexed
+            // A project-SOURCE type argument isn't compiled, so hand the VM its nearest reflectable supertype
+            // (loadCandidates) rather than the unloadable source fqn.
+            (ta.loadCandidates.firstOrNull() ?: ta.fqn)?.let { types[name] = (KOTLIN_TYPE_TO_JVM[it] ?: it).replace('.', '/') }
         }
         if (types.isEmpty()) return null
         val jvmArgs = when (call.dispatch) {
@@ -1606,9 +1609,11 @@ class Interpreter(
         return Handled(readSourceProperty(objectSingleton(holder), name))
     }
 
-    /** Interpret a member function body with [receiver] bound to its receiver slot. */
-    private fun callMethod(fn: ResolvedFunction, receiver: SourceObject, args: List<Any?>): Any? {
+    /** Interpret a member function body with [receiver] bound to its receiver slot. [reified] threads a reified
+     *  inline member's type arguments so `x is T` / `T::class` in its body resolve to the call-site type. */
+    private fun callMethod(fn: ResolvedFunction, receiver: SourceObject, args: List<Any?>, reified: Map<String, RTypeArg> = emptyMap()): Any? {
         val env = Env()
+        env.defineReified(reified)
         fn.receiverSlot?.let { env.define(it, receiver) }
         bindParams(env, fn.params, args)
         return try {
@@ -1627,7 +1632,7 @@ class Interpreter(
             ?: findSourceMethod(receiver.cls, "$name/$arity")
         if (m != null) {
             val argv = reorderNamedArgs(m.params.map { it.name }, call.args, call.args.map { eval(it.value, env) })
-            return callMethod(m, receiver, argv)
+            return callMethod(m, receiver, argv, reifiedBindingsFor(call, env))
         }
         synthesizedMember(receiver, name, call, env)?.let { return it.value }
         // A member the class inherits via `: I by delegate` (not overridden): forward it to the delegate object.

@@ -259,11 +259,18 @@ class KotlinTreeResolver(
         val supers = rc.superTypeTexts.mapNotNull {
             it.substringBefore('<').trim().substringAfterLast('.').takeIf { s -> s.isNotEmpty() }
         }
+        // A data class: the index synthesizes `copy` with `returnText` == the class fqn, so its presence marks
+        // one — enabling the `equals`/`hashCode`/`toString` synthesized-member fallback in `declaresOrSynthesizes`.
+        val isData = own.any { it.isFunction && it.name == "copy" && it.returnText == rc.fqn }
+        val companionArities = rc.companionObjectName?.let { cn ->
+            runCatching { service.sourceClass("${rc.fqn}.$cn") }.getOrNull()
+                ?.members?.filter { it.isFunction && it.receiverText == null }?.map { "${it.name}/${it.paramTexts.size}" }?.toSet()
+        }.orEmpty()
         return FileClassInfo(
-            fqn = rc.fqn, simpleName = rc.simpleName, flavor = flavor, isData = false,
+            fqn = rc.fqn, simpleName = rc.simpleName, flavor = flavor, isData = isData,
             propertyNames = own.filterNot { it.isFunction }.map { it.name }.toSet(),
             methodArities = own.filter { it.isFunction }.map { "${it.name}/${it.paramTexts.size}" }.toSet(),
-            companionMethodArities = emptySet(), enumEntryNames = rc.enumEntries.toSet(),
+            companionMethodArities = companionArities, enumEntryNames = rc.enumEntries.toSet(),
             supertypeSimpleNames = supers, primaryArity = rc.constructors.firstOrNull()?.paramTexts?.size ?: 0,
             ctx = rc.ctx,
         )
@@ -288,7 +295,12 @@ class KotlinTreeResolver(
             // editor resolver didn't surface) — resolve it whole-project so the member dispatches as SOURCE.
             crossFileClassInfo(fqn)?.let { return it }
         }
-        (recvExpr as? KtNameReferenceExpression)?.getReferencedName()?.let { fileClasses[it] }?.let { return it }
+        (recvExpr as? KtNameReferenceExpression)?.getReferencedName()?.let { name ->
+            fileClasses[name]?.let { return it }
+            // A bare cross-file TYPE name used as a receiver (`Foo.create()` where `Foo` is in another file) —
+            // resolve it whole-project so a cross-file companion / static-style member dispatches as SOURCE.
+            runCatching { service.resolveTypeName(name, resolver.fileContext) }.getOrNull()?.let { crossFileClassInfo(it) }?.let { return it }
+        }
         if (recvExpr is KtDotQualifiedExpression) {
             val base = (recvExpr.receiverExpression as? KtNameReferenceExpression)?.getReferencedName()
             val sel = (recvExpr.selectorExpression as? KtNameReferenceExpression)?.getReferencedName()
@@ -720,6 +732,9 @@ class KotlinTreeResolver(
      *  access binds to it, then the value parameters, then the body — all with [ctx] active. */
     private fun lowerMemberFunction(fn: KtNamedFunction, ctx: ClassContext): ResolvedFunction {
         reset(fn.textRange.startOffset)
+        // The member's OWN type parameters (a `reified T`), so `x is T` / `T::class` in the body lower as reified
+        // nodes re-bound from the call frame — mirroring `lowerFunction`. Without this a reified member is erased.
+        currentTypeParams = fn.typeParameters.mapNotNull { it.name }
         scopes.addLast(HashMap())
         classStack.addLast(ctx)
         val thisSlot = newSlot() // slot 0
@@ -1529,8 +1544,15 @@ class KotlinTreeResolver(
             val arity = call.valueArguments.size
             val srcCls = if (receiverNode != null) sourceClassOfReceiver(receiverExpr) else null
             if (callName != null && srcCls != null && acceptsSourceMember(srcCls, callName, arity)) {
-                val callee = ResolvedCallable.Source(callName, "${srcCls.fqn}.$callName/$arity", emptyList(), isConstructor = false)
-                return RNode.Call(callee, DispatchKind.MEMBER, receiverNode, lowerArgs(call), csk(call.textRange.startOffset), span(call))
+                // Carry a reified inline MEMBER's type-parameter names + explicit type arguments so the interpreter
+                // threads reified bindings into the body (else `x is T` there is erased). A non-generic member
+                // yields empty lists, so this is a no-op for the common case.
+                val member = runCatching { service.sourceClass(srcCls.fqn) }.getOrNull()
+                    ?.members?.firstOrNull { it.name == callName && it.receiverText == null && it.paramTexts.size == arity }
+                val typeParams = member?.typeParameterNames.orEmpty()
+                val typeArgs = if (typeParams.isEmpty()) emptyList() else explicitTypeArgs(call, typeParams)
+                val callee = ResolvedCallable.Source(callName, "${srcCls.fqn}.$callName/$arity", emptyList(), isConstructor = false, typeParameterNames = typeParams)
+                return RNode.Call(callee, DispatchKind.MEMBER, receiverNode, lowerArgs(call), csk(call.textRange.startOffset), span(call), typeArguments = typeArgs)
             }
             // A qualified call `Type.Nested(args)` on a TYPE receiver whose selector is a NESTED CLASS is a
             // CONSTRUCTOR of that nested class (`GridCells.Fixed(2)`) — not a member of the outer type, so
@@ -1638,6 +1660,21 @@ class KotlinTreeResolver(
      * (`bar<T>()` inside `fun <reified T> foo()`) becomes a [RTypeArg.typeParamRef] re-bound at interpret time;
      * a concrete type gets its [classLoadCandidates] so `T::class` can materialize a reflectable stand-in.
      */
+    /** Lower a call's EXPLICIT `<...>` type arguments positionally against [names] — the reified case used by the
+     *  cross-file member recovery, which has no resolved symbol to drive [resolveCallTypeArgs]'s inference. */
+    private fun explicitTypeArgs(call: KtCallExpression, names: List<String>): List<RTypeArg> {
+        val explicit = call.typeArgumentList?.arguments ?: return emptyList()
+        return names.mapIndexed { i, _ ->
+            val t = explicit.getOrNull(i)?.typeReference?.text?.let { service.typeFromText(it, resolver.fileContext) }
+            when {
+                t == null -> RTypeArg(fqn = null)
+                t.qualifiedName in currentTypeParams -> RTypeArg(fqn = null, typeParamRef = t.qualifiedName)
+                t.isTypeParameter -> RTypeArg(fqn = null)
+                else -> RTypeArg(fqn = t.qualifiedName, loadCandidates = classLoadCandidates(t.qualifiedName))
+            }
+        }
+    }
+
     private fun resolveCallTypeArgs(call: KtCallExpression, chosen: KotlinSymbol): List<RTypeArg> {
         val names = chosen.typeParameters
         if (names.isEmpty()) return emptyList()
