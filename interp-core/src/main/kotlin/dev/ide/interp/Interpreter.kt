@@ -1814,9 +1814,30 @@ class Interpreter(
      *  which keeps the existing instance path for those. */
     private fun staticHolderReceiver(receiverNode: RNode?): Class<*>? {
         val ref = (receiverNode as? RNode.Name)?.binding as? Binding.ObjectRef ?: return null
+        // A Kotlin primitive-companion const read (`Float.POSITIVE_INFINITY`, `Int.MAX_VALUE`, `Double.NaN`):
+        // there is no loadable `kotlin.Float` class, and these consts live as static fields on the JVM wrapper
+        // (`java.lang.Float.POSITIVE_INFINITY`), so route the static read there instead of failing to load the
+        // Kotlin type as an object.
+        primitiveCompanionHolder(ref.fqn)?.let { return it }
         val cls = loadInitialized(ref.fqn) ?: return null
         val hasSingleton = runCatching { cls.getField("INSTANCE") }.getOrNull() != null || companionField(cls) != null
         return if (hasSingleton) null else cls
+    }
+
+    /** The JVM wrapper class hosting a Kotlin primitive type's `Companion` constants (`kotlin.Float` →
+     *  `java.lang.Float`, `kotlin.Int` → `java.lang.Integer`, …). The common consts (`POSITIVE_INFINITY`,
+     *  `NEGATIVE_INFINITY`, `NaN`, `MAX_VALUE`, `MIN_VALUE`) share the wrapper's static-field names; the rare
+     *  renamed ones (`SIZE_BYTES`) still fail the honest "no static member" boundary. Null for a non-primitive. */
+    private fun primitiveCompanionHolder(fqn: String): Class<*>? = when (fqn) {
+        "kotlin.Int" -> Integer::class.java
+        "kotlin.Long" -> java.lang.Long::class.java
+        "kotlin.Float" -> java.lang.Float::class.java
+        "kotlin.Double" -> java.lang.Double::class.java
+        "kotlin.Short" -> java.lang.Short::class.java
+        "kotlin.Byte" -> java.lang.Byte::class.java
+        "kotlin.Char" -> Character::class.java
+        "kotlin.Boolean" -> java.lang.Boolean::class.java
+        else -> null
     }
 
     /** The resource id an `R.<type>.<name>` read denotes, via the injected [resources] resolver. The read lowers
@@ -1958,6 +1979,13 @@ class Interpreter(
      *  (`Dp`/`TextUnit` → `getDp-<hash>`), which [mangledNameMatches] accepts. */
     private fun readExtensionProperty(receiver: Any, ownerFqn: String, name: String): Any? {
         hookPropertyRead(ownerFqn, name, receiver)?.let { return it.value }
+        // A preview-specific override for a getter the real facade can't serve on an interpreted receiver — a
+        // `SourceObject` extending a library type (`viewModelScope` on an interpreted `ViewModel`, whose real
+        // getter needs a headless-unavailable `Dispatchers.Main` scope). The Compose dispatcher supplies one;
+        // the plain reflective dispatcher returns null, so ordinary extension-property reads are unchanged.
+        if (receiver is SourceObject) {
+            dispatcher.readExtensionPropertyOverride(receiver, ownerFqn, name)?.let { return it.value }
+        }
         val getterName = "get" + name.replaceFirstChar { if (it.isLowerCase()) it.titlecase() else it.toString() }
         val cls = loadClassAcross(ownerFqn, initialize = false, preferred = classLoader)
             ?: run {

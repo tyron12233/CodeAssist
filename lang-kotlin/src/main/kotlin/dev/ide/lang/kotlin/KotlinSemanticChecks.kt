@@ -82,6 +82,7 @@ import org.jetbrains.kotlin.psi.KtWhenExpression
 import org.jetbrains.kotlin.psi.KtWhileExpression
 import org.jetbrains.kotlin.psi.psiUtil.getStrictParentOfType
 import dev.ide.lang.kotlin.symbols.KotlinType
+import org.jetbrains.kotlin.analysis.api.components.resolveToCall
 
 /**
  * The Kotlin editor's semantic diagnostics: the per-declaration checks (unresolved references, type
@@ -102,6 +103,7 @@ internal class KotlinSemanticChecks(private val service: KotlinSymbolService) {
         out += duplicateDeclarations(ktFile.declarations)
         out += unusedImports(ktFile, refNames)
         out += conflictingImports(ktFile)
+        out += unresolvedImports(ktFile)
         unusedPrivateDeclarations(ktFile, refNames, out)
         return out
     }
@@ -1454,6 +1456,77 @@ internal class KotlinSemanticChecks(private val service: KotlinSymbolService) {
             out += Diagnostic(TextRange(r.startOffset, r.endOffset), Severity.WARNING, "Unused import directive", KotlinDiagnosticCodes.UNUSED_IMPORT)
         }
         return out
+    }
+
+    /**
+     * Explicit imports whose target does not exist — Kotlin's "Unresolved reference" on the import line (`import
+     * com.example.ordersystem.models.Food` when that package/type isn't anywhere on the classpath). Deliberately
+     * narrow, to stay false-positive-free where it matters:
+     *  - Runs ONLY when a WIRED classpath index has finished building ([classpathIndexReady]). With no index, or
+     *    in "dumb mode" while it's still building, imports are trusted (any false positive there is transient and
+     *    clears once indexing completes — acceptable by design).
+     *  - Both CLASSIFIER-style imports (a Capitalized final segment) AND lowercase CALLABLE imports (a top-level
+     *    or extension function/property — `import kotlinx.coroutines.flow.map`) are checked, each by its own
+     *    existence rule. Callables were once skipped because the class-name index answers by NAME only; the
+     *    per-package callable index ([KotlinSymbolService.callablePackages], proven complete + package-precise by
+     *    `KotlinCallableIndexCompletenessTest`) now makes a package-precise callable check safe.
+     *  - A classifier's existence is checked by NAME via the class-name index ([typeFqnKnown]), so a library type
+     *    the index holds by name only (no bytecode shape) still resolves — matching how the codebase already
+     *    trusts such types. A callable's existence is checked by PACKAGE + name ([callablePackages]).
+     *  - A member/nested/enum-entry import into a REAL type backs off (an ancestor segment is a known type — a
+     *    static/companion/object member or a Java static import like `java.lang.Math.max`), a Capitalized
+     *    top-level factory function of that name backs off, so only a genuinely dead path is reported.
+     */
+    private fun unresolvedImports(file: KtFile): List<Diagnostic> {
+        if (!service.classpathIndexReady()) return emptyList()
+        val out = ArrayList<Diagnostic>()
+        for (imp in file.importDirectives) {
+            if (imp.isAllUnder) continue
+            val fq = imp.importedFqName?.asString()?.takeIf { it.isNotBlank() } ?: continue
+            if ('.' !in fq) continue
+            val leaf = fq.substringAfterLast('.')
+            val resolves = if (leaf.firstOrNull()?.isUpperCase() == true)
+                importedClassifierResolves(fq, leaf)
+            else
+                importedCallableResolves(fq, leaf)
+            if (resolves) continue
+            val ref = imp.importedReference ?: continue
+            val r = ref.textRange
+            out += Diagnostic(
+                TextRange(r.startOffset, r.endOffset), Severity.ERROR,
+                "Unresolved reference: $leaf", KotlinDiagnosticCodes.UNRESOLVED,
+            )
+        }
+        return out
+    }
+
+    /** Whether a Capitalized import [fqn] (final segment [leaf]) names something real: the type itself (incl. a
+     *  nested type via [KotlinSymbolService.isKnownType]), a member/nested/enum-entry of a known parent type, or a
+     *  Capitalized top-level factory function. See [unresolvedImports] for the rationale. */
+    private fun importedClassifierResolves(fqn: String, leaf: String): Boolean {
+        if (service.typeFqnKnown(fqn)) return true
+        val parent = fqn.substringBeforeLast('.', "")
+        if (parent.isNotEmpty() && service.typeFqnKnown(parent)) return true
+        return service.topLevelByName(leaf).isNotEmpty()
+    }
+
+    /** Whether a lowercase (callable-style) import [fqn] (final segment [leaf]) names something real: a lowercase
+     *  TYPE (rare but legal), a member imported THROUGH a known enclosing type (any ANCESTOR segment is a type — a
+     *  static/companion/object member or `java.lang.Math.max`), or a top-level / extension callable named [leaf]
+     *  declared in the parent PACKAGE ([KotlinSymbolService.callablePackages]). The ancestor-type back-off errs
+     *  toward NOT flagging (a member the callable index can't see is trusted, never a false error). See
+     *  [unresolvedImports]. */
+    private fun importedCallableResolves(fqn: String, leaf: String): Boolean {
+        if (service.typeFqnKnown(fqn)) return true // a lowercase type declared with this exact name
+        val parent = fqn.substringBeforeLast('.', "")
+        if (parent.isEmpty()) return true
+        // Member/static/companion import: any ancestor being a known TYPE means `leaf` imports through it.
+        var prefix = parent
+        while (prefix.isNotEmpty()) {
+            if (service.typeFqnKnown(prefix)) return true
+            prefix = prefix.substringBeforeLast('.', "")
+        }
+        return parent in service.callablePackages(leaf)
     }
 
     /**

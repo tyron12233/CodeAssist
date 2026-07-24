@@ -2,6 +2,7 @@ package dev.ide.interp.compose
 
 import dev.ide.interp.ComposablePropertyValue
 import dev.ide.interp.Dispatcher
+import dev.ide.interp.ExtensionPropertyValue
 import dev.ide.jvm.AsmPeerFactory
 import dev.ide.interp.InterpretedLambda
 import dev.ide.interp.InterpreterException
@@ -91,6 +92,16 @@ class ComposeDispatcher(
     @Volatile
     var contentLambdaError: Throwable? = null
 
+    /** Set while an interpreted NON-composable lambda (a [guardedLambdaProxy] body — a `LazyListScope.() ->
+     *  Unit` list builder, a `Modifier.drawBehind`, an `onClick`) is running, so a `@Composable` call made
+     *  ILLEGALLY inside it is skipped instead of composed. Such a builder runs at MEASURE time, after the
+     *  composition pass, when [composer] still holds the LAST (completed) composition's composer — threading a
+     *  composable there composes into that finished composition and triggers endless recomposition (the
+     *  reported `LazyColumn { Text(…) }` freeze that hangs the IDE; a composable belongs in an `item { }`).
+     *  A composable content lambda ([composableLambdaProxy]) clears it, so `LazyColumn { items { Text } }`
+     *  still composes normally. Thread-local + save/restore: the proxies nest and also run on the bridge thread. */
+    private val composablesSuppressed = ThreadLocal.withInitial { false }
+
     override fun dispatch(call: RNode.Call, receiver: Any?, args: List<Any?>): Any? {
         val c = composer
         val callee = call.callee
@@ -154,6 +165,10 @@ class ComposeDispatcher(
             if (callee.isComposable || ComposableAbi.isComposableCall(callee.ownerFqn!!, callee.methodName, loader) ||
                 vmComposables?.isComposableCallable(callee.ownerFqn!!, callee.methodName) == true
             ) {
+                // A composable called directly inside a NON-composable lambda (`LazyColumn { Text(…) }`, a
+                // composable in a list builder instead of an `item { }`) is illegal — composing it here threads
+                // the stale composer and hangs the IDE with endless recomposition. Skip it (it returns Unit).
+                if (composablesSuppressed.get()) return null
                 return invokeComposable(call, callee, c, receiver, args)
             }
             // Treated as non-composable → plain dispatch. If that fails (e.g. `no static Text(1)`, which is
@@ -183,11 +198,19 @@ class ComposeDispatcher(
                 "invoke" -> {
                     val a = callArgs?.toList() ?: emptyList()
                     if (a.lastOrNull() is kotlin.coroutines.Continuation<*>) suspendBridge.runSuspending(lambda, a)
-                    else try {
-                        lambda.invoke(a)
-                    } catch (t: Throwable) {
-                        contentLambdaError = contentLambdaError ?: t
-                        zeroReturn(method.returnType)
+                    else {
+                        // Inside a non-composable lambda, a stray `@Composable` call is illegal — suppress it
+                        // (see [composablesSuppressed]) so it can't compose into the stale composer and hang.
+                        val prevSuppressed = composablesSuppressed.get()
+                        composablesSuppressed.set(true)
+                        try {
+                            lambda.invoke(a)
+                        } catch (t: Throwable) {
+                            contentLambdaError = contentLambdaError ?: t
+                            zeroReturn(method.returnType)
+                        } finally {
+                            composablesSuppressed.set(prevSuppressed)
+                        }
                     }
                 }
                 "toString" -> "InterpretedLambda"
@@ -223,6 +246,25 @@ class ComposeDispatcher(
         }
         val result = ComposableAbi.readComposableProperty(receiver, propertyName, c)
         return if (result === ComposableAbi.NotComposableProperty) null else ComposablePropertyValue(result)
+    }
+
+    /**
+     * `androidx.lifecycle` `viewModelScope` on an interpreted `ViewModel` subclass. The real getter lazily
+     * builds a scope on `Dispatchers.Main.immediate`, which a headless / non-Android preview has no main
+     * dispatcher for (it throws `IllegalStateException`). A static `@Preview` only CONSTRUCTS the ViewModel
+     * (e.g. `remember { OrderViewModel() }`) — it never drives the scope's flows — so hand it a plain,
+     * Main-free scope: construction and any `…​.stateIn(scope = viewModelScope, …)` property initializer then
+     * complete without crashing. One scope per dispatcher (per render); the preview never launches on it.
+     */
+    override fun readExtensionPropertyOverride(receiver: Any, ownerFqn: String, name: String): ExtensionPropertyValue? {
+        if (name == "viewModelScope" && ownerFqn.startsWith("androidx.lifecycle")) {
+            return ExtensionPropertyValue(previewViewModelScope)
+        }
+        return null
+    }
+
+    private val previewViewModelScope: Any by lazy {
+        kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.SupervisorJob())
     }
 
     /** Drive the caller-side group the plugin would emit (keyed by call site), then invoke the composable with
@@ -340,6 +382,13 @@ class ComposeDispatcher(
                     val real = a.takeWhile { !COMPOSER.isInstance(it) } // receiver/value params, before the composer
                     val prev = composer
                     if (composerArg != null) composer = composerArg
+                    // Whether composable calls are legal inside THIS lambda is decided by the actual invocation:
+                    // Compose passes a composer to a `@Composable` lambda (a `Column {}`/`items {}` content slot →
+                    // composables allowed) but NOT to a non-composable one (a `LazyListScope.() -> Unit` list
+                    // builder → a stray composable there is suppressed, so it can't compose against the stale
+                    // composer and hang). Runtime-derived, so it's robust to how ComposableAbi bound the args.
+                    val prevSuppressed = composablesSuppressed.get()
+                    composablesSuppressed.set(composerArg == null)
                     try {
                         lambda.invoke(real)
                     } catch (ce: kotlin.coroutines.cancellation.CancellationException) {
@@ -360,6 +409,7 @@ class ComposeDispatcher(
                         Unit
                     } finally {
                         composer = prev
+                        composablesSuppressed.set(prevSuppressed)
                     }
                 }
                 "toString" -> "InterpretedComposableLambda"

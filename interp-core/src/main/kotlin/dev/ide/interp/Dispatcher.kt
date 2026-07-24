@@ -151,11 +151,23 @@ interface Dispatcher {
      *  [propertyName] getter isn't a composable getter (then the interpreter reads it plainly / reports the
      *  honest boundary). The default reflective dispatcher has no `Composer` to thread, so it returns null. */
     fun readComposableProperty(receiver: Any, propertyName: String): ComposablePropertyValue? = null
+
+    /** A preview-specific value for an extension-property read the real facade getter cannot serve on an
+     *  interpreted [receiver] — an interpreted class extending a library type (a `SourceObject`) whose
+     *  extension the getter can't accept, most notably `androidx.lifecycle` `viewModelScope` (its real getter
+     *  builds a `Dispatchers.Main` scope, unavailable in a headless preview). Returns the value boxed in
+     *  [ExtensionPropertyValue], or null to read it normally (reflection). Default: null (no override); only
+     *  the Compose preview dispatcher supplies one. */
+    fun readExtensionPropertyOverride(receiver: Any, ownerFqn: String, name: String): ExtensionPropertyValue? = null
 }
 
 /** The result of a [Dispatcher.readComposableProperty] — a box so a legitimately-`null` property value is
  *  distinguishable from "not a composable getter" (null box). */
 class ComposablePropertyValue(val value: Any?)
+
+/** The result of a [Dispatcher.readExtensionPropertyOverride] — a box so a legitimately-`null` override value
+ *  is distinguishable from "no override" (null box). */
+class ExtensionPropertyValue(val value: Any?)
 
 /**
  * An interpreted lambda value. When a lambda is passed to a library function, the dispatcher wraps this in a
@@ -548,10 +560,34 @@ class ReflectiveDispatcher(
         val key = "d|$name|${argShape(realArgs)}"
         cache[key]?.let { InterpProfile.count("cacheHit"); return it.method }
         InterpProfile.count("cacheMiss")
-        val m = (cls.methods.asSequence() + interfaceDefaultSynthetics(cls, name))
+        val fitting = (cls.methods.asSequence() + interfaceDefaultSynthetics(cls, name))
             .filter { Modifier.isStatic(it.modifiers) && isDefaultSynthetic(it.name, name) && fitsDefaultSynthetic(it, realArgs) }
-            .minByOrNull { it.parameterCount }
+            .toList()
+        val minArity = fitting.minOfOrNull { it.parameterCount }
+        // Among the smallest-arity fitting synthetics, prefer the MOST SPECIFIC for the args — else two
+        // overloads a collection arg fits ambiguously (`arrayOf(stop to color)`, a `List<Pair>`, fits both
+        // `linearGradient(vararg colorStops: Pair)` (`Pair[]`) and `linearGradient(colors: List<Color>)` (an
+        // element-blind erased `List`)) would resolve by JVM `getMethods()` order — non-deterministic, so the
+        // gradient rendered (or crashed) differently run to run. [defaultSyntheticSpecificity] favors an ARRAY
+        // param whose component the elements exactly fit (the vararg), disambiguating deterministically.
+        val m = fitting.filter { it.parameterCount == minArity }
+            .maxByOrNull { defaultSyntheticSpecificity(it, realArgs) }
         return m.also { cache[key] = MethodHolder(it) }
+    }
+
+    /** Specificity score for a `$default` synthetic against [realArgs] (higher = more specific): +1 per arg
+     *  slot where the arg is a collection AND the param is an ARRAY whose component every element fits. A raw
+     *  `Collection`/`List` param scores 0 there (erasure hides its element type), so a vararg overload wins the
+     *  tie over a same-arity `List` overload for a homogeneous array-shaped arg. */
+    private fun defaultSyntheticSpecificity(m: Method, realArgs: List<Any?>): Int {
+        val params = m.parameterTypes
+        var score = 0
+        for (i in realArgs.indices) {
+            val a = realArgs[i]
+            val p = params.getOrNull(i) ?: continue
+            if (a is Collection<*> && p.isArray && a.all { it == null || wrap(p.componentType).isInstance(it) }) score++
+        }
+        return score
     }
 
     /** Static `<name>$default` synthetics declared on [cls]'s interfaces (transitively) and their `$DefaultImpls`
@@ -749,6 +785,22 @@ class ReflectiveDispatcher(
         return box.invoke(null, value)
     }
 
+    /** Box an inline value-class component of a [Pair] the interpreter kept UNBOXED. `0f to Color(0xFF000000)`
+     *  builds `Pair(0f, <Long>)` (Color unboxed to Long), but a `Pair<Float, Color>` param is read back with
+     *  `pair.second as Color` (`Brush.linearGradient(colorStops = arrayOf(stop to color))`) — a raw Long there
+     *  ClassCastExceptions deep in the callee. [pairType] is the parameter's `Pair<A, B>` generic type; each
+     *  component is boxed only when its type argument is a value class. Returns [value] unchanged when it isn't
+     *  a Pair, the type isn't a resolvable `Pair<A, B>`, or no component needs boxing. */
+    private fun boxPairIfNeeded(value: Any?, pairType: java.lang.reflect.Type?): Any? {
+        if (value !is Pair<*, *>) return value
+        val args = (pairType as? java.lang.reflect.ParameterizedType)
+            ?.takeIf { it.rawType == Pair::class.java }?.actualTypeArguments ?: return value
+        if (args.size != 2) return value
+        val first = valueClassOf(args[0])?.let { boxValueClassIfNeeded(value.first, it) } ?: value.first
+        val second = valueClassOf(args[1])?.let { boxValueClassIfNeeded(value.second, it) } ?: value.second
+        return if (first === value.first && second === value.second) value else Pair(first, second)
+    }
+
     /** If [value] is a BOXED inline value class (its class has a static `box-impl`) and [paramType] wants the
      *  unboxed underlying (a primitive, or the underlying's type — NOT the value class itself, which
      *  [boxValueClassIfNeeded] already short-circuits), unbox via the instance `unbox-impl` until it fits
@@ -802,6 +854,25 @@ class ReflectiveDispatcher(
                 return if (value is Set<*>) LinkedHashSet(boxed) else boxed
             }
         }
+        // A Pair<…, VC> param — box the value-class component(s) (`0f to Color(…)` → `Pair<Float, Color>`).
+        if (value is Pair<*, *>) return boxPairIfNeeded(value, genericType)
+        // A Collection or Array of `Pair<…, VC>` (`colorStops = arrayOf(stop to color)` → `Array<Pair<Float,
+        // Color>>`): box each element's value-class components, then materialize the container as usual. The
+        // element's generic type comes off a GenericArrayType (vararg / array param) or the collection's type arg.
+        val elementType: java.lang.reflect.Type? = when (genericType) {
+            is java.lang.reflect.GenericArrayType -> genericType.genericComponentType
+            else -> typeArgs?.firstOrNull()
+        }
+        if (value is Collection<*> && elementType is java.lang.reflect.ParameterizedType &&
+            elementType.rawType == Pair::class.java && elementType.actualTypeArguments.any { valueClassOf(it) != null }
+        ) {
+            val boxedPairs = value.map { boxPairIfNeeded(it, elementType) }
+            return when {
+                paramType.isArray -> toRealArray(boxedPairs, paramType.componentType)
+                value is Set<*> -> LinkedHashSet(boxedPairs)
+                else -> boxedPairs
+            }
+        }
         // Map<K, VC> / Map<VC, V>: box value-class keys/values (`Map<String, Color>`).
         if (value is Map<*, *> && Map::class.java.isAssignableFrom(paramType) && typeArgs?.size == 2) {
             val keyVc = valueClassOf(typeArgs[0])
@@ -819,6 +890,11 @@ class ReflectiveDispatcher(
         // real array parameter — a stdlib `ArraysKt` extension's `Object[]`/`int[]` receiver, or an `Array<T>`
         // parameter — materialize it so the reflective call type-checks.
         if (paramType.isArray && value is Collection<*>) return toRealArray(value, paramType.componentType)
+        // Kotlin adapts an integer literal to the expected integer type (`WhileSubscribed(5000)` → a `Long`
+        // param), but the parse-only lowerer typed the literal as `Int`. Reflection won't widen Integer→long,
+        // so convert an integer arg to the exact integer param type. Only fires on a genuine mismatch — an
+        // exact-type arg already `isInstance`s its wrapper above; integer↔float is left alone.
+        if (isIntegerValue(value) && isIntegerType(paramType) && !wrap(paramType).isInstance(value)) return coerceNumber(value as Number, paramType)
         return boxValueClassIfNeeded(value, paramType)
     }
 
@@ -1082,6 +1158,7 @@ class ReflectiveDispatcher(
         null -> !p.isPrimitive
         is InterpretedLambda -> p.isInterface
         else -> wrap(p).isInstance(a) || acceptsValueClassUnderlying(p, a) || acceptsBoxedValueClassUnboxed(p, a) ||
+            (isIntegerValue(a) && isIntegerType(p)) ||
             (p.isArray && a is Collection<*> && collectionFitsArray(a, p.componentType))
     }
 
@@ -1139,6 +1216,32 @@ class ReflectiveDispatcher(
         Byte::class.javaPrimitiveType -> java.lang.Byte::class.java
         Short::class.javaPrimitiveType -> java.lang.Short::class.java
         else -> c
+    }
+
+    /** An INTEGER primitive or its wrapper (Byte/Short/Int/Long). Kotlin adapts an integer LITERAL to the
+     *  expected integer type (`SharingStarted.WhileSubscribed(5000)` where the param is `Long`), but the
+     *  parse-only lowerer types the literal as `Int`; [paramAccepts] admits an integer value for such a param
+     *  and [coerceArg]/[coerceNumber] converts it, since JVM reflection won't widen Integer→long. Deliberately
+     *  integer-only: Kotlin does NOT implicitly convert between integer and floating-point types (a `Float`
+     *  arg must NOT satisfy an `Int` param — that would mis-pick `f(Int,Int,Int)` over `f(Float,…)`). An
+     *  exact-type overload still wins ([mostSpecificForArgs] scores it nearer), so this only ADDS an integer
+     *  arg where no exact overload accepts it. */
+    private fun isIntegerType(p: Class<*>): Boolean = when (p) {
+        Int::class.javaPrimitiveType, Integer::class.java,
+        Long::class.javaPrimitiveType, java.lang.Long::class.java,
+        Short::class.javaPrimitiveType, java.lang.Short::class.java,
+        Byte::class.javaPrimitiveType, java.lang.Byte::class.java -> true
+        else -> false
+    }
+
+    private fun isIntegerValue(a: Any?): Boolean = a is Int || a is Long || a is Short || a is Byte
+
+    private fun coerceNumber(n: Number, p: Class<*>): Any = when (wrap(p)) {
+        java.lang.Long::class.java -> n.toLong()
+        Integer::class.java -> n.toInt()
+        java.lang.Short::class.java -> n.toShort()
+        java.lang.Byte::class.java -> n.toByte()
+        else -> n
     }
 
     /** Whether [value]'s runtime type is a `kotlinx.coroutines.flow.Flow` — matched by interface NAME across the

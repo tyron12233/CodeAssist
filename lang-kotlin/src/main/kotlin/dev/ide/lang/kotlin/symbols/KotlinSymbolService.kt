@@ -19,7 +19,9 @@ import dev.ide.lang.kotlin.compile.BundledKotlinStdlib
 import dev.ide.lang.kotlin.index.CallableShape
 import dev.ide.lang.kotlin.index.KotlinBuiltinCallableIndex
 import dev.ide.lang.kotlin.index.KotlinCallableIndex
+import dev.ide.lang.kotlin.index.KotlinPackageDeclIndex
 import dev.ide.lang.kotlin.index.KotlinSourceCallableIndex
+import dev.ide.lang.kotlin.index.PkgDecl
 import dev.ide.lang.synthetic.SyntheticClass
 import dev.ide.lang.synthetic.SyntheticField
 import dev.ide.lang.synthetic.SyntheticMethod
@@ -639,8 +641,16 @@ class KotlinSymbolService(
         //    that happens to share the simple name (e.g. `import icons.automirrored.filled.List` → the icon
         //    object must not displace `kotlin.collections.List` in type-annotation position).
         Builtins.DEFAULT_SIMPLE_TYPES[simple]?.let { return it }
-        // 2. An explicit (non-star) import.
-        ctx?.imports?.firstOrNull { !it.isStar && it.simpleName == simple }?.let { return it.fqn }
+        // 2. An explicit (non-star) import. It wins when it resolves to a KNOWN type. When the imported FQN is
+        //    NOT known (a stale/typo'd import whose target doesn't exist — `import com.foo.Food` alongside a
+        //    same-file `data class Food`), it must NOT shadow a real same-file/same-package declaration of the
+        //    same simple name: Kotlin resolves the name to that local type and flags the import, rather than
+        //    treating every use as the missing import's (unknown) type — which suppresses member checks on the
+        //    real, known local type (an unknown receiver backs off). So an unknown import is remembered and used
+        //    only as the LAST resort below, preserving the "return the intended FQN so the unresolved-type
+        //    diagnostic points at it" behaviour when nothing local shadows it.
+        val explicitImportFqn = ctx?.imports?.firstOrNull { !it.isStar && it.simpleName == simple }?.fqn
+        explicitImportFqn?.let { if (isKnownType(it)) return it }
         // 3. The file's own package (source, then classpath) — a same-package type needs no import.
         ctx?.packageName?.takeIf { it.isNotEmpty() }?.let { pkg ->
             "$pkg.$simple".let { cand -> if (cand in model().classByFqn || typeShape(cand) != null) return cand }
@@ -662,6 +672,10 @@ class KotlinSymbolService(
             val cand = "$pkg.$simple"
             if (typeShape(cand) != null) return cand
         }
+        // 7. An explicit import whose target is not a known type and that nothing local shadowed: return its FQN
+        //    so the unresolved-type/import diagnostic still points at the intended name (the pre-fix behaviour
+        //    for the no-conflict case — a genuinely missing import with no same-named local declaration).
+        explicitImportFqn?.let { return it }
         // NOT brought into scope by any import. Deliberately NO blind classpath lookup by simple name — that
         // fallback masked missing-import errors (e.g. `ComponentActivity` silently resolving to
         // `androidx.activity.ComponentActivity`, then its members/extensions completing as if imported). The
@@ -1506,6 +1520,54 @@ class KotlinSymbolService(
         name.isNotEmpty() &&
             index?.exact<ClassNameValue>(CLASS_NAMES, name)?.any { it.origin == IndexOrigin.LIBRARY } == true
 
+    /**
+     * Whether the classpath/source knows a type with exactly this [fqn], resolved by NAME (index-backed). Unlike
+     * [isKnownType] this is satisfied by a name-only class-name index entry (no type shape / bytecode needed), so
+     * it stays reliable for a library type the index holds by name only — the existence signal the import check
+     * needs (an explicitly-imported `androidx.activity.ComponentActivity` is real even when its shape isn't read).
+     */
+    fun typeFqnKnown(fqn: String): Boolean {
+        if (isKnownType(fqn)) return true
+        return index?.exact<ClassNameValue>(CLASS_NAMES, fqn.substringAfterLast('.'))?.any { it.fqn == fqn } == true
+    }
+
+    /**
+     * Packages declaring a top-level OR extension callable (function/property) named [name] — the existence
+     * signal an unresolved-callable-IMPORT check needs: `import a.b.c.foo` names something real iff `a.b.c` is
+     * in this set. Package-PRECISE (unlike the name-only [typeFqnKnown]/[topLevelByName]), so
+     * `import kotlin.collections.println` — `println` lives in `kotlin.io` — is correctly seen as dead. Unions
+     * the project source model (top-levels + extensions), the library/source/builtin callable indexes (top-level
+     * `top:` keys via [topLevelByName] + the receiver-blind extension `name:` keys), each carrying its package.
+     * Callable MEMBERS of a type are deliberately absent (they import through the owning type, checked by the
+     * caller via [typeFqnKnown]); this only answers "is there a package-level callable [name] in package X".
+     */
+    fun callablePackages(name: String): Set<String> {
+        if (name.isEmpty()) return emptySet()
+        val out = HashSet<String>()
+        // Top-level callables (functions + properties) — `topLevelByName` queries only the `top:` keys, so its
+        // results are exactly the non-extension top-levels; each carries its package (or its facade FQN).
+        topLevelByName(name).forEach { s ->
+            (s.packageName ?: s.declaringClassFqn?.substringBeforeLast('.', "")?.ifEmpty { null })?.let { out += it }
+        }
+        // Project-source EXTENSIONS (receiver-keyed; absent from `topLevelByName`'s `top:`-only query).
+        model().extensions.filter { it.name == name }.forEach { rc -> rc.ctx.packageName.ifEmpty { null }?.let { out += it } }
+        // Library + cross-file-source + builtin extensions via the receiver-blind name key.
+        index?.let { idx ->
+            for (id in listOf(KotlinCallableIndex.id, KotlinSourceCallableIndex.id, KotlinBuiltinCallableIndex.id)) {
+                idx.exact<CallableShape>(id, KotlinCallableIndex.nameKey(name)).forEach { shape ->
+                    shape.packageName?.let { out += it }
+                }
+            }
+        }
+        return out
+    }
+
+    /** Whether a WIRED classpath index has finished building — the gate for negative conclusions that need a
+     *  complete classpath view (the unresolved-import check). False when no index is wired or it's still in
+     *  "dumb mode", so those runs never draw a false conclusion. Distinct from [classpathReady], which treats a
+     *  missing index as ready (for checks that degrade gracefully without one). */
+    fun classpathIndexReady(): Boolean = index?.status?.ready == true
+
     fun topLevelByName(name: String): List<KotlinSymbol> {
         val src = model().topLevel.filter { it.name == name }.map { toSymbol(it, null) }
         val idx = index
@@ -1559,6 +1621,10 @@ class KotlinSymbolService(
                 if (v.origin != IndexOrigin.SOURCE && isKotlinFacade(v.fqn, simple)) return@forEach
                 out.getOrPut(v.fqn) { KotlinSymbol(simple, classNameKind(v.kind), typeByFqn(v.fqn), origin = BINARY) }
             }
+            // Classpath (library/SDK) top-level callables + extensions declared in the package — so import
+            // completion after a package dot offers `map`/`collect`/`stateIn`, not just types (same-project
+            // source callables are added from the live model below).
+            classpathPackageCallables(idx, packageFqn, m, limit).forEach { s -> out.getOrPut("cbl:" + s.name) { s } }
         }
         // Same-project source classes declared in this package (the index lags the live buffer).
         model().classByFqn.values
@@ -1571,6 +1637,32 @@ class KotlinSymbolService(
             .filter { it.ctx.packageName == packageFqn && (prefix.isEmpty() || m.matches(it.name)) }
             .forEach { rc -> out.getOrPut("cbl:" + rc.name) { toSymbol(rc, null) } }
         return out.values.take(limit)
+    }
+
+    /**
+     * Classpath (library/SDK) top-level callables + extensions declared directly in [packageFqn], matching
+     * [m] — the classpath half of import completion after a package dot. The candidate NAMES come from the
+     * package-keyed [KotlinPackageDeclIndex] (the only per-package enumeration); each is then SHAPED and
+     * VISIBILITY-FILTERED through the callable index (its public `top:`/`name:` entries — a private/internal
+     * library callable isn't indexed there, so it's dropped, matching completion's visibility rule that
+     * `kotlin.pkgDecls` itself doesn't apply), keeping only an entry actually declared in [packageFqn].
+     */
+    private fun classpathPackageCallables(idx: IndexService, packageFqn: String, m: PrefixMatcher, limit: Int): List<KotlinSymbol> {
+        val out = ArrayList<KotlinSymbol>()
+        val seen = HashSet<String>()
+        for (decl in idx.exact<PkgDecl>(KotlinPackageDeclIndex.id, packageFqn)) {
+            if (decl.classifier) continue // types are served by the PACKAGE_TYPES scan
+            val name = decl.name
+            if ((m.prefix.isNotEmpty() && !m.matches(name)) || !seen.add(name)) continue
+            val sym = (idx.exact<CallableShape>(KotlinCallableIndex.id, KotlinCallableIndex.topKey(name)) +
+                idx.exact<CallableShape>(KotlinCallableIndex.id, KotlinCallableIndex.nameKey(name)))
+                .firstOrNull { it.packageName == packageFqn }?.toSymbol(this)
+            if (sym != null) {
+                out += sym
+                if (out.size >= limit) break
+            }
+        }
+        return out
     }
 
     /** Top-level package segments (`androidx`, `kotlin`, `com`, `java`, …) matching [prefix] — the candidates

@@ -455,7 +455,20 @@ internal fun KotlinResolver.typeOfCall(
                 call
             )
         }
-        service.resolveTypeName(name, fileContext)?.let { return constructorResultType(it, call) }
+        service.resolveTypeName(name, fileContext)?.let { typeFqn ->
+            // A capitalized no-receiver call on a name that resolves to a TYPE is normally a constructor
+            // (`Box("s")` → `Box<String>`). But an INTERFACE has no constructor: a call on its name is either a
+            // SAM / `fun interface` constructor (`Comparator { … }`, whose result IS the interface type) or a
+            // same-named top-level FACTORY function that returns it (`fun <T> MutableStateFlow(value: T):
+            // MutableStateFlow<T>`, which shadows the `MutableStateFlow` interface). Route to the factory
+            // function — falling through to the function path below — ONLY when one actually exists, so its type
+            // parameters infer from the arguments (`T = TextFieldValue`) instead of `constructorResultType`
+            // returning the bare, un-parameterized interface type. Absent a factory it's the SAM case, so keep
+            // the constructor path.
+            val factoryFunction = service.isInterfaceType(typeFqn) == true &&
+                service.topLevelByName(name).any { it.kind == SymbolKind.METHOD }
+            if (!factoryFunction) return constructorResultType(typeFqn, call)
+        }
     }
     // No function callee → maybe the callee is a VALUE with an `invoke` operator (`val g = Greeter(); g()`).
     val sym = resolveCalleeFunction(call)

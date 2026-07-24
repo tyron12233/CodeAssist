@@ -24,7 +24,7 @@ internal class IncrementalSemanticAnalysis(
     /** Supplies the per-snapshot memo caches shared with the Compose preview lowerer, so the two passes a
      *  keystroke runs over the same snapshot don't each recompute inference/overload resolution cold. Null →
      *  a private cache per pass (standalone use / tests). */
-    private val cachesFor: ((KotlinParsedFile) -> dev.ide.lang.kotlin.resolve.KotlinResolverCaches)? = null,
+    private val cachesFor: ((KotlinParsedFile) -> KotlinResolverCaches)? = null,
 ) {
 
     private val checks = KotlinSemanticChecks(service)
