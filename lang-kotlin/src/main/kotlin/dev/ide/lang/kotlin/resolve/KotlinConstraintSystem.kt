@@ -153,9 +153,9 @@ internal class KotlinConstraintSystem(private val service: KotlinSymbolService) 
 
     /**
      * Fix every variable: its EXACT bound, else the common supertype of its lower bounds (constrained to its
-     * upper bounds), else its (single/first) upper bound — `emptyList<T>() : List<String>` fixes `T = String`
-     * from the upper bound — else [fallback] (typically the declared erased bound). Returns only variables it
-     * could fix.
+     * upper bounds), else the MOST SPECIFIC of its upper bounds — `emptyList<T>() : List<String>` fixes
+     * `T = String` from the upper bound — else [fallback] (typically the declared erased bound). Returns only
+     * variables it could fix.
      */
     fun solve(fallback: Map<String, TypeRef> = emptyMap()): Map<String, TypeRef> {
         val out = HashMap<String, TypeRef>()
@@ -163,13 +163,26 @@ internal class KotlinConstraintSystem(private val service: KotlinSymbolService) 
             val fixed: TypeRef? = when {
                 v.exact != null -> v.exact
                 v.lower.isNotEmpty() -> commonSupertype(v.lower)
-                v.upper.isNotEmpty() -> v.upper.first()
+                v.upper.isNotEmpty() -> mostSpecificUpperBound(v.upper)
                 else -> fallback[name]
             }
             if (fixed != null) out[name] = fixed
         }
         return out
     }
+
+    /**
+     * The tightest of a return-position variable's upper bounds — the one that is a subtype of every other.
+     * A generic method whose result flows into a more specific expected type carries BOTH its declared bound
+     * and that expected type as upper bounds (`findViewById(): T` where `T : View`, assigned to `Button`, gets
+     * `T <: View` and `T <: Button`); the compiler fixes `T` to the expected `Button` (`Button <: View`), not
+     * the declared bound — so the initializer types as `Button`, not `View`. Picking the FIRST upper bound
+     * (the declared bound, registered before the constraint) mis-fixed it to the bound and false-flagged the
+     * assignment. Falls back to the first when the bounds are incomparable (unrelated types — no single
+     * greatest lower bound is modeled), matching the prior behavior in that case.
+     */
+    private fun mostSpecificUpperBound(uppers: List<KotlinType>): KotlinType =
+        uppers.firstOrNull { cand -> uppers.all { it === cand || it.isAssignableFrom(cand) } } ?: uppers.first()
 
     /** The nearest common supertype of [types] — the fixation of a variable's lower bounds. Agreement is the
      *  common case; otherwise walk the first type's supertype chain for one every other is assignable to

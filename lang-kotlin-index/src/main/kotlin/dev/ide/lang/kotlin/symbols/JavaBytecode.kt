@@ -70,11 +70,14 @@ object JavaBytecode {
                     typeParamBounds += v.typeParameterBounds
                     superTypes += v.superTypes
                 } else {
-                    // No generic signature: raw superclass + interfaces (no type arguments).
-                    superName?.let { superTypes += KotlinType(it.replace('/', '.'), context = ctx) }
+                    // No generic signature: raw superclass + interfaces (no type arguments). Normalize the
+                    // binary `$` nested separator to dot-form (as the self-FQN and every other path do), so a
+                    // supertype-chain walk up a nested class (`FrameLayout.LayoutParams`'s super
+                    // `ViewGroup$MarginLayoutParams`) compares equal to the dot-form declared/inferred types.
+                    superName?.let { superTypes += KotlinType(it.replace('/', '.').replace('$', '.'), context = ctx) }
                     interfaces?.forEach {
                         superTypes += KotlinType(
-                            it.replace('/', '.'), context = ctx
+                            it.replace('/', '.').replace('$', '.'), context = ctx
                         )
                     }
                 }
@@ -323,7 +326,13 @@ object JavaBytecode {
         Type.LONG -> KotlinType("kotlin.Long", context = ctx)
         Type.DOUBLE -> KotlinType("kotlin.Double", context = ctx)
         Type.ARRAY -> KotlinType("kotlin.Array", listOf(erased(t.elementType, ctx)), context = ctx)
-        else -> KotlinType(t.className, context = ctx)
+        // ASM's `Type.className` keeps the binary `$` nested separator (`android.view.ViewGroup$LayoutParams`),
+        // but every other type FQN in the model is dot-form: the class self-FQN (`selfName.replace('$', '.')`),
+        // the generic-signature path ([TypeSigVisitor]), and `typeFromText`. A nested library type reached
+        // through an ERASED (no-generic-signature) member — `getLayoutParams(): ViewGroup.LayoutParams` — would
+        // otherwise carry the `$` form, and an assignment/return check comparing it to the dot-form declared type
+        // false-flagged a mismatch (both resolve, so the check didn't back off). Normalize to dot-form to match.
+        else -> KotlinType(t.className.replace('$', '.'), context = ctx)
     }
 
     private fun primitive(descriptor: Char, ctx: KotlinTypeContext?): KotlinType = KotlinType(
