@@ -1025,6 +1025,30 @@ class KotlinTreeResolver(
                 )
             }
         }
+        // A bare INHERITED member property, or an in-scope EXTENSION property, on the enclosing class's implicit
+        // `this` — e.g. `viewModelScope` (`val ViewModel.viewModelScope`, a library extension) inside a
+        // `class VM : ViewModel()`. The `name in ctx.propertyNames` check above sees only the class's OWN
+        // declared properties; an inherited/extension property needs a receiver-typed lookup against the class
+        // type (its supertype chain + extension index). Placed BEFORE the top-level-property fallback so an
+        // extension is read as `this.<ext>` (with the receiver its getter needs), not as a receiver-less
+        // top-level property (which would reflect the facade getter with no argument and fail).
+        classStack.lastOrNull()?.let { ctx ->
+            val classType = service.typeByFqn(ctx.fqn)
+            val hasProp = runCatching {
+                service.membersForCompletion(ctx.fqn, emptyList(), name)
+                    .any { it.name == name && it.kind == SymbolKind.FIELD && (!it.isExtension || extensionInScope(it)) }
+            }.getOrDefault(false)
+            if (hasProp) {
+                // A SOURCE extension property has no compiled facade getter — interpret its getter via a source
+                // EXTENSION call (receiver = `this`), mirroring [propertyGet].
+                sourceExtensionProperty(name, classType)?.let { sym ->
+                    return RNode.Call(toCallable(sym), DispatchKind.EXTENSION, thisRef(ctx, e), emptyList(), csk(e.textRange.startOffset), span(e))
+                }
+                propertyBinding(name, classType)?.let {
+                    return RNode.PropertyGet(thisRef(ctx, e), it, span(e))
+                }
+            }
+        }
         // A bare top-level property (`PI`) reads as a property get with no receiver. Member properties of an
         // enclosing class without an explicit receiver are not yet modeled → Unsupported (sound, not guessed).
         val prop = service.topLevelByName(name).firstOrNull { it.kind == SymbolKind.FIELD }

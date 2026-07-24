@@ -284,7 +284,8 @@ class KotlinCompletion(
                 followingChar,
                 it.relevance(),
                 infix = pos.infixInsert,
-                callableRef = callableRef
+                callableRef = callableRef,
+                bareCallable = pos.bareCallable,
             )
         }
 
@@ -369,6 +370,10 @@ class KotlinCompletion(
          *  through its qualifier, so it needs NO auto-import (unlike a bare type-reference or a top-level
          *  extension, which do). Gates the import-edit computation below. */
         val memberAccess: Boolean = false,
+        /** The completion is a segment of an `import`/`package` directive, so a callable candidate is inserted as
+         *  its BARE name (`import a.b.map`), never the call form `map()` — unlike a fully-qualified call in code
+         *  (`a.b.map(...)`), where the parens are wanted. */
+        val bareCallable: Boolean = false,
     )
 
     private fun classifyPosition(
@@ -451,10 +456,12 @@ class KotlinCompletion(
             return PositionResult(raw, memberAccess = true)
         }
         // Receiver is a package/FQN prefix (`java.util.`, `android.`) — complete its sub-packages + the types in
-        // it (inserted fully-qualified, so it needs no auto-import).
+        // it (inserted fully-qualified, so it needs no auto-import). Inside an `import`/`package` directive a
+        // callable candidate inserts its bare name (`import a.b.map`), not the `map()` call form.
         val pkg = packagePathOf(receiver)
+        val inImportOrPackage = climbTo<KtImportDirective>(receiver) != null || climbTo<KtPackageDirective>(receiver) != null
         return if (pkg != null) PositionResult(
-            service.packageMembers(pkg, prefix), packageCompletion = true
+            service.packageMembers(pkg, prefix), packageCompletion = true, bareCallable = inImportOrPackage
         )
         else PositionResult(emptyList())
     }

@@ -44,6 +44,9 @@ internal object KotlinCompletionItems {
         /** The item completes the name after `::` (a callable REFERENCE — `::foo`, `String::length`): insert the
          *  BARE name, never the call form (`::foo()`) or a trailing lambda. A `::` reference is a function value. */
         callableRef: Boolean = false,
+        /** The item is a segment of an `import`/`package` directive: a callable inserts its BARE name
+         *  (`import a.b.map`), never the call form `map()` — unlike a fully-qualified call in code. */
+        bareCallable: Boolean = false,
     ): CompletionItem {
         val isFunction = s.kind == SymbolKind.METHOD || s.kind == SymbolKind.CONSTRUCTOR
         val sig = s.signature
@@ -51,13 +54,15 @@ internal object KotlinCompletionItems {
         // The call syntax may already be present after the caret (`foo|(x)`, `Column| { }`) — don't add a second
         // `(`/`{`; just insert the name and let the existing arguments/lambda stand.
         val callSyntaxFollows = followingChar == '(' || followingChar == '{'
-        val trailingLambda = if (isFunction && !infix && !callableRef && !callSyntaxFollows) trailingLambdaParam(s) else null
+        val trailingLambda = if (isFunction && !infix && !callableRef && !bareCallable && !callSyntaxFollows) trailingLambdaParam(s) else null
         val (insert, caret) = when {
             // A PACKAGE segment (`import com.tyron.█`, `java.util.█`) is a navigational prefix, never a terminal
             // completion — append `.` so the next segment can be typed/completed right away (unless a `.` already
             // follows the caret, which would otherwise double it).
             s.kind == SymbolKind.PACKAGE ->
                 (if (followingChar == '.') s.name else "${s.name}.") to CaretAction.AtEnd
+            // An `import`/`package` segment: a callable is a bare name (`import a.b.map`), never `map()`.
+            bareCallable -> s.name to CaretAction.AtEnd
             // A callable reference (`::foo`, `String::length`): the bare name is the function value — no `()`, no lambda.
             callableRef -> s.name to CaretAction.AtEnd
             // Infix use (`a downTo b`): the name followed by a space, ready for the right operand — not `downTo()`.
