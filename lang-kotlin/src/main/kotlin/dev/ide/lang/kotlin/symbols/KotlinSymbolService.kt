@@ -1564,6 +1564,12 @@ class KotlinSymbolService(
         model().classByFqn.values
             .filter { it.fqn.substringBeforeLast('.', "") == packageFqn && (prefix.isEmpty() || m.matches(it.simpleName)) }
             .forEach { out.getOrPut(it.fqn) { KotlinSymbol(it.simpleName, SymbolKind.CLASS, typeByFqn(it.fqn), origin = SOURCE, declarationNode = it.node) } }
+        // Same-project source TOP-LEVEL CALLABLES (functions + properties, extensions included) declared in this
+        // package: they are importable by name (`import com.foo.Test`) and callable fully-qualified, so they
+        // belong here alongside the types — a package-member completion that offered only types omitted them.
+        (model().topLevel.asSequence() + model().extensions.asSequence())
+            .filter { it.ctx.packageName == packageFqn && (prefix.isEmpty() || m.matches(it.name)) }
+            .forEach { rc -> out.getOrPut("cbl:" + rc.name) { toSymbol(rc, null) } }
         return out.values.take(limit)
     }
 

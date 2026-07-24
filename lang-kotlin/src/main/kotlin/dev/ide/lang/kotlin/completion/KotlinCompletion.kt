@@ -23,6 +23,8 @@ import dev.ide.lang.kotlin.symbols.KotlinType
 import dev.ide.lang.resolve.Modifier
 import dev.ide.lang.resolve.SymbolKind
 import com.intellij.psi.PsiElement
+import dev.ide.lang.incremental.DocumentSnapshot
+import dev.ide.lang.kotlin.symbols.SourceIndexBuilder
 import org.jetbrains.kotlin.kdoc.psi.api.KDoc
 import org.jetbrains.kotlin.lexer.KtTokens
 import org.jetbrains.kotlin.psi.KtBinaryExpression
@@ -129,7 +131,7 @@ class KotlinCompletion(
     }
 
     private fun completeInner(
-        document: dev.ide.lang.incremental.DocumentSnapshot, requestedOffset: Int
+        document: DocumentSnapshot, requestedOffset: Int
     ): CompletionResult {
         KotlinPerf.span("onBefore") { onBeforeComplete() }
         val original = document.text.toString()
@@ -162,7 +164,7 @@ class KotlinCompletion(
         // (a no-op when already synced); the marker sits at the caret, leaving referenced declarations intact.
         runCatching {
             service.syncFocal(document.file.path, original.hashCode()) {
-                dev.ide.lang.kotlin.symbols.SourceIndexBuilder.extractFrom(
+                SourceIndexBuilder.extractFrom(
                     kt, parsed, document.file.path
                 )
             }
