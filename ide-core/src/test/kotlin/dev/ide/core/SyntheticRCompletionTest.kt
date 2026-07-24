@@ -99,9 +99,10 @@ class SyntheticRCompletionTest {
         awaitIndexed(s)
         val probe = root.resolve("app/src/main/kotlin/com/example/app/Probe.kt")
 
-        // `java.ut<caret>` → the sub-package `util`.
+        // `java.ut<caret>` → the sub-package `util`, inserted WITH a trailing `.` (a package is a navigational
+        // prefix — selecting it continues into the next segment).
         val subPkgs = kotlinLabels(s, probe, "package com.example.app\nfun m() { val x = java.ut }", "java.ut")
-        assertTrue("util" in subPkgs, "java.ut should complete the sub-package 'util': $subPkgs")
+        assertTrue("util." in subPkgs, "java.ut should complete the sub-package 'util' with a trailing dot: $subPkgs")
 
         // `java.util.<caret>` → types in the package (and sub-packages).
         val inUtil = kotlinLabels(s, probe, "package com.example.app\nfun m() { val x = java.util. }", "java.util.")
