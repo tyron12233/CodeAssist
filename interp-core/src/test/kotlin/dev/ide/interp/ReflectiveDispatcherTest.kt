@@ -366,6 +366,29 @@ class ReflectiveDispatcherTest {
     }
 
     @Test
+    fun boxedValueClassArgFitsADefaultedExtensionSyntheticParam() {
+        // The reported preview crash `no static background(2) on androidx.compose.foundation.BackgroundKt`:
+        // `Modifier.background(color)` where `background(color: Color, shape: Shape = RectangleShape)`. Three
+        // things stack here: (1) `color` arrived BOXED — it was read through `State<Color>.value` (a JVM getter
+        // returning `Object`), whereas a `Color(…)` LITERAL is the UNBOXED `long` and already worked; (2) the
+        // function's value-class param mangles the JVM name to `background-<hash>` and unboxes the param to
+        // `long`; (3) `shape` is DEFAULTED, so the receiver+color call (arity 2) has no exact-arity match
+        // against the arity-3 method and must route through the `background-<hash>$default` synthetic — whose
+        // per-slot fit check rejected the boxed value class (a plain `isInstance` can't see through it), even
+        // though the bind's `coerceArg` would have unboxed it. `StyleTarget.tint(Swatch(5))` mirrors it exactly:
+        // a top-level EXTENSION (a static `…Kt` facade with the receiver first), `Swatch`→`int`, `blend`
+        // defaulted, fed a boxed `Swatch`.
+        val callee = ResolvedCallable.Library(
+            displayName = "tint", ownerFqn = "dev.ide.interp.ReflectiveDispatcherTestKt", methodName = "tint",
+            paramTypes = emptyList(), isStatic = true, isConstructor = false, isInline = false, descriptorPrecise = true,
+        )
+        val call = RNode.Call(callee, DispatchKind.EXTENSION, receiver = null, args = emptyList(), callSiteKey = CallSiteKey(0), source = SourceSpan(0, 0))
+        // `listOf<Any?>(Swatch(5))` BOXES the value class (element type `Any?`), as a value-class-typed state read produces.
+        assertEquals(1 + 5 + 3, dispatcher.dispatch(call, receiver = StyleTarget(1), args = listOf<Any?>(Swatch(5))),
+            "a boxed value-class extension arg must reach a mangled unboxed-underlying param through the \$default synthetic")
+    }
+
+    @Test
     fun incomparableOverloadsAreBrokenByArgumentRuntimeType() {
         // Two applicable overloads whose parameter types are pairwise INCOMPARABLE (neither a subtype of the
         // other) — the `Intent.putExtra(String, CharSequence)` vs `(String, Serializable)` shape. With no
@@ -450,3 +473,18 @@ class ReflectiveDispatcherTest {
     interface ScopeIface { fun Mod.weighted(w: Int, fill: Boolean = true): String }
     class ScopeImpl : ScopeIface { override fun Mod.weighted(w: Int, fill: Boolean): String = "w=$w fill=$fill" }
 }
+
+/** An extension-receiver stand-in for `Modifier` in `Modifier.background(…)`. */
+class StyleTarget(val base: Int)
+
+/** An inline value class whose unboxed underlying is a primitive — `Color`→`long` in miniature (`Swatch`→
+ *  `int`). The interpreter hands `background` a BOXED one (a `State<Color>.value` read returns `Object`). */
+@JvmInline
+value class Swatch(val rgb: Int)
+
+/** Mirrors `Modifier.background(color: Color, shape: Shape = RectangleShape)`: a top-level EXTENSION (→ a
+ *  static `…Kt` facade method taking the receiver first) whose value parameter is an inline value class (→ the
+ *  JVM name is mangled `tint-<hash>` and the param is the unboxed `int`) plus a DEFAULTED trailing param (→ a
+ *  receiver+swatch call has no exact-arity match against the arity-3 method and routes through the
+ *  `tint-<hash>$default` synthetic). The exact shape that produced `no static background(2)`. */
+fun StyleTarget.tint(swatch: Swatch, blend: Int = 3): Int = base + swatch.rgb + blend
