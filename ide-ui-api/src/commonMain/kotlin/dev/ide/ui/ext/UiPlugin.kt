@@ -21,6 +21,7 @@ interface UiContributionScope {
     fun toolWindow(toolWindow: ToolWindowContribution): Registration
     fun screen(screen: ScreenContribution): Registration
     fun viewMode(mode: EditorViewModeContribution): Registration
+    fun overlay(overlay: OverlayContribution): Registration
 
     /** Register (or override) the file-tree icon for [iconId]. Tree icons are a persistent lookup, so the
      *  returned handle is a no-op today (nothing unregisters an icon). */
@@ -28,9 +29,15 @@ interface UiContributionScope {
 }
 
 /**
- * A plugin that contributes Compose-bearing UI. Parallels plugin-api's `Plugin`; loaded once per process by
- * [UiPluginHost] (the UI is a single process-global surface, unlike the per-project engine the `PluginManager`
- * drives, so UI contributions register once rather than per opened project).
+ * A plugin that contributes Compose-bearing UI. Parallels plugin-api's `Plugin` — the Compose-side facet of a
+ * feature whose engine facet is an engine `Plugin`. Both the engine `PluginManager` and [UiPluginHost] are
+ * process-global and load once, so the two facets share a lifetime; they stay separate objects only because a
+ * `@Composable` body can't live in the engine module (nor cross the neutral `IdeBackend` boundary as data).
+ *
+ * A built-in feature co-declares its two facets in `ide-core`'s `BuiltInPlugins` (a `BuiltInPlugin(engine, ui)`
+ * pair). The engine facet's enabled state gates BOTH: only enabled plugins' UI facets are handed to the shell
+ * (via `IdeBackend.uiPlugins`) and registered here, so a disabled plugin contributes no UI — no per-plugin
+ * gating in the UI layer.
  */
 interface UiPlugin {
     val id: String
@@ -48,7 +55,9 @@ object UiPluginHost {
     private var loaded = false
 
     /** Register an additional UI plugin. Call before [ensureLoaded]; a plugin added after is loaded on the
-     *  next (still-once) load only if nothing has loaded yet. */
+     *  next (still-once) load only if nothing has loaded yet. The shell registers `IdeBackend.uiPlugins`, which
+     *  is already filtered to enabled plugins by the engine's `PluginCatalog` — so a disabled plugin never
+     *  reaches here. */
     fun register(plugin: UiPlugin) {
         if (plugins.none { it.id == plugin.id }) plugins.add(plugin)
     }
@@ -66,6 +75,7 @@ object UiPluginHost {
             ToolWindowRegistry.register(toolWindow)
         override fun screen(screen: ScreenContribution): Registration = ScreenRegistry.register(screen)
         override fun viewMode(mode: EditorViewModeContribution): Registration = ViewModeRegistry.register(mode)
+        override fun overlay(overlay: OverlayContribution): Registration = OverlayRegistry.register(overlay)
         override fun treeIcon(iconId: String, icon: TreeIcon): Registration {
             TreeIcons.register(iconId, icon)
             return Registration {}

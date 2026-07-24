@@ -1,4 +1,6 @@
-package dev.ide.ui.components
+package dev.ide.agent.ui
+
+import dev.ide.ui.components.*
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -28,11 +30,11 @@ import androidx.compose.ui.unit.dp
 import dev.ide.ui.backend.IdeBackend
 import dev.ide.ui.backend.UiAgentPermissionDecision
 import dev.ide.ui.backend.UiAgentPermissionRequest
-import dev.ide.ui.generated.resources.Res
-import dev.ide.ui.generated.resources.chat_allow
-import dev.ide.ui.generated.resources.chat_allow_session
-import dev.ide.ui.generated.resources.chat_deny
-import dev.ide.ui.generated.resources.chat_perm_title
+import dev.ide.agent.ui.generated.resources.Res
+import dev.ide.agent.ui.generated.resources.chat_allow
+import dev.ide.agent.ui.generated.resources.chat_allow_session
+import dev.ide.agent.ui.generated.resources.chat_deny
+import dev.ide.agent.ui.generated.resources.chat_perm_title
 import dev.ide.ui.theme.Ca
 import org.jetbrains.compose.resources.stringResource
 

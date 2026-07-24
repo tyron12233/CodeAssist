@@ -70,6 +70,14 @@ interface IdeBackend {
 
     /** The AI coding agent (chat + tool use). Optional — a backend that wires none inherits [AgentService.Unsupported]. */
     val agent: AgentService get() = AgentService.Unsupported
+
+    /**
+     * The Compose UI facets (tool windows, actions, screens) contributed by the currently-ENABLED plugins. The
+     * shell registers these into `UiPluginHost` at startup — a plugin's UI is thus governed by the same
+     * enable/disable decision as its engine half, so a disabled plugin contributes no UI. Empty by default (a
+     * backend that wires no plugins).
+     */
+    fun uiPlugins(): List<dev.ide.ui.ext.UiPlugin> = emptyList()
 }
 
 // ---- logging DTOs ----

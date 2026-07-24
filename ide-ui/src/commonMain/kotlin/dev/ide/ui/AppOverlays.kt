@@ -1,6 +1,7 @@
 package dev.ide.ui
 
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.remember
 import dev.ide.ui.backend.FileActions
 import dev.ide.ui.backend.IdeBackend
 import dev.ide.ui.components.AnalyticsConsentSheet
@@ -9,9 +10,10 @@ import dev.ide.ui.components.BuildNotificationGate
 import dev.ide.ui.components.ErrorDialog
 import dev.ide.ui.components.MigrationNotice
 import dev.ide.ui.components.OnboardingSheet
-import dev.ide.ui.components.AgentPermissionDialog
 import dev.ide.ui.components.PermissionDialog
 import dev.ide.ui.components.RunConflictDialog
+import dev.ide.ui.ext.OverlayContext
+import dev.ide.ui.ext.OverlayRegistry
 import dev.ide.ui.screens.ImportErrorDialog
 
 /**
@@ -59,8 +61,11 @@ internal fun AppOverlays(
     )
     // The run sandbox's permission prompt — overlays everything while a guarded program is blocked.
     PermissionDialog(backend)
-    // The AI agent's write-permission prompt (ASK_EACH) — overlays while a mutating tool call awaits approval.
-    AgentPermissionDialog(backend)
+    // Plugin-contributed app-wide overlays (e.g. the AI agent's write-permission prompt). Each decides its own
+    // visibility (typically observing a backend flow). Registered via UiPlugin's `overlay { }` and populated
+    // once UiPluginHost has loaded — a disabled plugin contributes none.
+    val overlayCtx = remember(backend) { object : OverlayContext { override val backend = backend } }
+    OverlayRegistry.all().forEach { it.content(overlayCtx) }
     // First-build notification-permission gate — asks for the permission the isolated build process needs, and
     // falls back to in-process builds (with an explanation) if declined. No-op after the one-time prompt.
     BuildNotificationGate(state)

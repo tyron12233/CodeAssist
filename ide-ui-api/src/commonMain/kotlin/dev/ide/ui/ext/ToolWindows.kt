@@ -53,6 +53,37 @@ object ToolWindowRegistry {
 }
 
 // ---------------------------------------------------------------------------
+// Overlays (app-wide floating layers: dialogs, prompts)
+// ---------------------------------------------------------------------------
+
+/** What an overlay body is handed: the backend it observes (e.g. a plugin's permission-request flow). */
+interface OverlayContext {
+    val backend: IdeBackend
+}
+
+/**
+ * An app-wide overlay layer rendered above every screen (the host composes all registered overlays in
+ * `AppOverlays`). A plugin uses this for a floating surface it must show regardless of the current screen —
+ * e.g. the AI agent's write-permission prompt. The body decides its own visibility (it typically observes a
+ * backend flow and renders nothing until there's something to show).
+ */
+class OverlayContribution(
+    val id: String,
+    val content: @Composable (OverlayContext) -> Unit,
+)
+
+object OverlayRegistry {
+    private val items = mutableStateListOf<OverlayContribution>()
+
+    fun register(overlay: OverlayContribution): Registration {
+        items.add(overlay)
+        return Registration { items.remove(overlay) }
+    }
+
+    fun all(): List<OverlayContribution> = items.toList()
+}
+
+// ---------------------------------------------------------------------------
 // Screens (top-level destinations)
 // ---------------------------------------------------------------------------
 

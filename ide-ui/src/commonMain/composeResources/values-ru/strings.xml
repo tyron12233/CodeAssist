@@ -121,23 +121,6 @@
     <string name="compatibility">Совместимость</string>
 
     <!-- AI coding agent -->
-    <string name="chat_title">ИИ-ассистент</string>
-    <string name="chat_open">ИИ-ассистент</string>
-    <string name="chat_close">Закрыть чат</string>
-    <string name="chat_empty_title">ИИ-агент программирования</string>
-    <string name="chat_empty_body">Спросите о вашем коде или скажите агенту, что изменить. Он может читать, искать и редактировать ваши файлы в выбранном режиме разрешений.</string>
-    <string name="chat_mode_ask">Спросить</string>
-    <string name="chat_mode_auto">Авто</string>
-    <string name="chat_mode_plan">План</string>
-    <string name="chat_need_key">Добавьте API-ключ, чтобы начать чат.</string>
-    <string name="chat_add_key">Добавить API-ключ</string>
-    <string name="chat_manage_keys">Управление провайдерами и ключами</string>
-    <string name="chat_placeholder">Спросите или опишите изменение…</string>
-    <string name="chat_send">Отправить</string>
-    <string name="chat_stop">Остановить</string>
-    <string name="chat_new">Новая сессия</string>
-    <string name="chat_retry">Повторить</string>
-    <string name="chat_thinking">Думаю…</string>
     <!-- ==== Added for parity with English source ==== -->
     <string name="recovered_projects_content">Такие проекты используют Gradle и открываются в режиме ограниченной совместимости, некоторые функции могут не работать, а сборка может не выполняться, пока зависимости не будут добавлены заново. Ваши исходные файлы надёжно сохранены в папке хранилища.</string>
     <string name="block_cannot_project">Этот файл пока нельзя спроецировать в блоки.</string>
@@ -880,20 +863,6 @@
     <string name="install">Установить</string>
     <string name="modcfg_platform_sdk">SDK платформы</string>
     <string name="modcfg_platform_sdk_auto">Авто (%1$s)</string>
-    <string name="chat_providers_title">Провайдеры AI</string>
-    <string name="chat_providers_subtitle">Выберите провайдера и добавьте свой ключ. Ключи хранятся на этом устройстве.</string>
-    <string name="chat_api_key">API-ключ</string>
-    <string name="chat_base_url">Базовый URL</string>
-    <string name="chat_model">Модель</string>
-    <string name="chat_connected">Подключено</string>
-    <string name="chat_show">Показать</string>
-    <string name="chat_hide">Скрыть</string>
-    <string name="chat_gateway_hint">Совместимо с OpenAI: OpenRouter, LiteLLM или собственный размещённый эндпоинт.</string>
-    <string name="chat_done">Готово</string>
-    <string name="chat_perm_title">Разрешить это изменение?</string>
-    <string name="chat_allow">Разрешить</string>
-    <string name="chat_allow_session">Разрешить в этой сессии</string>
-    <string name="chat_deny">Запретить</string>
     <string name="set_page_appearance">Внешний вид</string>
     <string name="set_page_editor">Редактор</string>
     <string name="set_page_completion">Автодополнение кода</string>

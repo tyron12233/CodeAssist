@@ -16,13 +16,19 @@ import dev.ide.plugin.PluginRegistration
  */
 internal class AgentPlugin : Plugin {
     override val manifest = PluginManifest(
-        id = "agent",
+        id = ID,
         name = "AI Agent",
         description = "An AI coding assistant: chat, read and edit files, and run tools under a permission policy.",
     )
 
     override fun register(reg: PluginRegistration) {
         reg.register(SETTINGS_PAGE_EP, AgentSettingsPage)
+    }
+
+    companion object {
+        /** The plugin id (non-essential; disablable from Settings > Plugins). [IdeServicesBackend] gates the
+         *  agent service on it, and the UI hides the chat surfaces when it's off. */
+        const val ID = "agent"
     }
 }
 

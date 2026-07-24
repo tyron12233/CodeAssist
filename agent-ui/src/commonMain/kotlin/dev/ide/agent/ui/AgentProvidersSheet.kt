@@ -1,4 +1,6 @@
-package dev.ide.ui.components
+package dev.ide.agent.ui
+
+import dev.ide.ui.components.*
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -37,18 +39,18 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import dev.ide.ui.backend.IdeBackend
 import dev.ide.ui.backend.UiAgentProvider
-import dev.ide.ui.generated.resources.Res
-import dev.ide.ui.generated.resources.chat_api_key
-import dev.ide.ui.generated.resources.chat_base_url
-import dev.ide.ui.generated.resources.chat_close
-import dev.ide.ui.generated.resources.chat_connected
-import dev.ide.ui.generated.resources.chat_done
-import dev.ide.ui.generated.resources.chat_gateway_hint
-import dev.ide.ui.generated.resources.chat_hide
-import dev.ide.ui.generated.resources.chat_model
-import dev.ide.ui.generated.resources.chat_providers_subtitle
-import dev.ide.ui.generated.resources.chat_providers_title
-import dev.ide.ui.generated.resources.chat_show
+import dev.ide.agent.ui.generated.resources.Res
+import dev.ide.agent.ui.generated.resources.chat_api_key
+import dev.ide.agent.ui.generated.resources.chat_base_url
+import dev.ide.agent.ui.generated.resources.chat_close
+import dev.ide.agent.ui.generated.resources.chat_connected
+import dev.ide.agent.ui.generated.resources.chat_done
+import dev.ide.agent.ui.generated.resources.chat_gateway_hint
+import dev.ide.agent.ui.generated.resources.chat_hide
+import dev.ide.agent.ui.generated.resources.chat_model
+import dev.ide.agent.ui.generated.resources.chat_providers_subtitle
+import dev.ide.agent.ui.generated.resources.chat_providers_title
+import dev.ide.agent.ui.generated.resources.chat_show
 import dev.ide.ui.icons.CaIcons
 import dev.ide.ui.theme.Ca
 import org.jetbrains.compose.resources.stringResource

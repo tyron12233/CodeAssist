@@ -44,7 +44,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.height
 import kotlinx.coroutines.launch
 import dev.ide.ui.components.BuildConsole
-import dev.ide.ui.components.ChatOverlay
+import dev.ide.ui.components.RightToolOverlay
 import dev.ide.ui.components.BuildDock
 import dev.ide.ui.components.DockBarHeight
 import dev.ide.ui.components.FileNavigator
@@ -56,7 +56,6 @@ import dev.ide.ui.theme.Motion
 import dev.ide.ui.ext.ToolWindowAnchor
 import dev.ide.ui.ext.ToolWindowContext
 import dev.ide.ui.ext.ToolWindowRegistry
-import dev.ide.ui.ext.UiPluginHost
 import dev.ide.ui.components.NewSourceLang
 import dev.ide.ui.components.PushDrawer
 import dev.ide.ui.components.SideRail
@@ -185,13 +184,14 @@ internal fun ExpandedLayout(
                     )
                 }
             }
-            // The AI agent chat drawer, right edge. Plugin-based: rendered from the RIGHT tool-window anchor,
-            // so any UI plugin can contribute a right-edge panel (the chat is AgentUiPlugin's contribution).
-            // Slides in/out from the end so opening/closing the drawer is animated, matching the mobile overlay.
-            if (state.chatOpen) UiPluginHost.ensureLoaded()
-            val rightTool = ToolWindowRegistry.forAnchor(ToolWindowAnchor.RIGHT).firstOrNull()
+            // Right-edge tool-window pane. Fully plugin-derived: any UI plugin's RIGHT ToolWindowContribution
+            // docks here, toggled by its own top-bar button (state.openRightTool); the AI chat is one such
+            // plugin. Slides in/out from the end. `openTool` falls back to the first registered window so its
+            // content stays rendered through the close (exit) animation.
+            val rightTools = ToolWindowRegistry.forAnchor(ToolWindowAnchor.RIGHT)
+            val openTool = rightTools.firstOrNull { it.id == state.openRightTool } ?: rightTools.firstOrNull()
             AnimatedVisibility(
-                visible = state.chatOpen && rightTool != null,
+                visible = state.openRightTool != null,
                 enter = expandHorizontally(tween(Motion.BASE, easing = Motion.quiet), expandFrom = Alignment.End) +
                     fadeIn(tween(Motion.BASE)),
                 exit = shrinkHorizontally(tween(Motion.BASE, easing = Motion.quiet), shrinkTowards = Alignment.End) +
@@ -208,7 +208,7 @@ internal fun ExpandedLayout(
                                 override val activeFilePath = twActive
                             }
                         }
-                        rightTool?.content(twCtx)
+                        openTool?.content(twCtx)
                     }
                 }
             }
@@ -375,9 +375,10 @@ internal fun CompactLayout(
 
         DestinationSheets(state, compact = true, onOpenModuleConfig, onToggleTheme, onOpenHub, onCloseProject, fileActions)
         PaletteOverlay(state, onToggleTheme, onOpenHub, onOpenDependencies)
-        // The AI agent chat: a right-edge drawer overlay (the phone counterpart of the desktop pane). It owns
-        // its own continuous right-edge-swipe-to-open gesture, so the finger drags the panel in directly.
-        ChatOverlay(state)
+        // Right-edge tool-window drawer (the phone counterpart of the desktop pane). Owns its own continuous
+        // swipe-to-open gesture; self-gates on there being a RIGHT tool window, so it lays down nothing (not
+        // even the gesture strip) when no plugin contributes one.
+        RightToolOverlay(state)
     }
 }
 

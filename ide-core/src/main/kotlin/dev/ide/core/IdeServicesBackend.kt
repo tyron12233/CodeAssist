@@ -270,7 +270,17 @@ class IdeServicesBackend(
     override val sdk: SdkService = SdkBackend(this)
     override val settings: SettingsService = SettingsBackend(this)
     override val actions: ActionService = ActionBackend(this)
-    override val agent: dev.ide.ui.backend.AgentService = AgentBackend(this)
+    // The AI agent is a disablable, non-essential plugin ([AgentPlugin.ID]). When the user turns it off in
+    // Settings > Plugins the plugin isn't loaded, so we hand the UI the no-op service — the chat panel, the
+    // sparkle toggle, and the agent loop all disappear (the UI keys these surfaces off this being Unsupported).
+    // A manager-less backend (tests / single-project) has no catalog, so the agent stays wired.
+    override val agent: dev.ide.ui.backend.AgentService =
+        if (manager?.env?.pluginCatalog?.isEnabled(AgentPlugin.ID) != false) AgentBackend(this)
+        else dev.ide.ui.backend.AgentService.Unsupported
+
+    // The Compose UI facets of the enabled built-in plugins (see BuiltInPlugins). The shell registers them into
+    // UiPluginHost; a disabled plugin's facet isn't in this list, so its UI never appears. Empty with no manager.
+    override fun uiPlugins(): List<dev.ide.ui.ext.UiPlugin> = manager?.env?.enabledUiPlugins ?: emptyList()
     override val diagnostics: DiagnosticsService = DiagnosticsBackend(this)
 
     init {

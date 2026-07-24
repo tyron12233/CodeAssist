@@ -149,23 +149,6 @@ Nunca recopilamos su código, nombres de archivos o proyectos, qué funciones us
     <string name="recovered_projects_content">Estos usan Gradle y se abren en un modo de compatibilidad limitado. Es posible que algunas funciones no funcionen hasta que se vuelvan a agregar las dependencias. Sus archivos originales se mantienen seguros.</string>
 
     <!-- AI coding agent -->
-    <string name="chat_title">Asistente de IA</string>
-    <string name="chat_open">Asistente IA</string>
-    <string name="chat_close">Cerrar chat</string>
-    <string name="chat_empty_title">Agente de código IA</string>
-    <string name="chat_empty_body">Pregunta sobre tu código o dile al asistente qué cambiar. Puede leer, buscar y editar tus archivos según el modo de permiso que elijas.</string>
-    <string name="chat_mode_ask">Preguntar</string>
-    <string name="chat_mode_auto">Auto</string>
-    <string name="chat_mode_plan">Plan</string>
-    <string name="chat_need_key">Agrega una clave de API para comenzar a chatear.</string>
-    <string name="chat_add_key">Agregar clave de API</string>
-    <string name="chat_manage_keys">Gestionar proveedores y claves</string>
-    <string name="chat_placeholder">Pregunta o describe un cambio…</string>
-    <string name="chat_send">Enviar</string>
-    <string name="chat_stop">Detener</string>
-    <string name="chat_new">Nueva sesión</string>
-    <string name="chat_retry">Reintentar</string>
-    <string name="chat_thinking">Pensando…</string>
 
     <!-- Block editor -->
     <string name="block_cannot_project">Este archivo aún no se puede proyectar en bloques.</string>
@@ -1018,20 +1001,6 @@ Nunca recopilamos su código, nombres de archivos o proyectos, qué funciones us
     <string name="modcfg_platform_sdk_auto">Automático (%1$s)</string>
 
     <!-- AI chat providers -->
-    <string name="chat_providers_title">Proveedores de IA</string>
-    <string name="chat_providers_subtitle">Elige un proveedor y agrega tu clave. Las claves se almacenan en este dispositivo.</string>
-    <string name="chat_api_key">Clave de API</string>
-    <string name="chat_base_url">URL base</string>
-    <string name="chat_model">Modelo</string>
-    <string name="chat_connected">Conectado</string>
-    <string name="chat_show">Mostrar</string>
-    <string name="chat_hide">Ocultar</string>
-    <string name="chat_gateway_hint">Compatible con OpenAI: OpenRouter, LiteLLM o un endpoint autoalojado.</string>
-    <string name="chat_done">Hecho</string>
-    <string name="chat_perm_title">¿Permitir este cambio?</string>
-    <string name="chat_allow">Permitir</string>
-    <string name="chat_allow_session">Permitir en esta sesión</string>
-    <string name="chat_deny">Denegar</string>
 
     <!-- Settings pages -->
     <string name="set_page_appearance">Apariencia</string>
