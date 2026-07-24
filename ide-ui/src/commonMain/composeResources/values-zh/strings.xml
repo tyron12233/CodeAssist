@@ -1,10 +1,10 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="projects">项目</string>
-    <string name="a_new_build_system">一个新的构建系统</string>
-    <string name="a_new_build_system_content"><![CDATA[CodeAssist 已基于全新端内构建系统重构。新版本采用独立项目配置，旧版本工程不兼容，无法自动打开。
+    <string name="a_new_build_system">全新的构建系统</string>
+    <string name="a_new_build_system_content"><![CDATA[CodeAssist 已基于全新端内构建系统重构。新版本采用独立的项目配置，因此旧版本工程不兼容，无法打开。
 
-立即备份你的工程为.zip压缩文件——这样您的源文件将安全无虞，并且你可以重新添加他们在新项目中。]]></string>
+请立即将工程备份为.zip压缩包，保障项目文件安全，后续可在新项目内重新导入。]]></string>
     <string name="preparing_backup">准备备份…</string>
     <string name="backup_projects">备份工程项目</string>
     <string name="got_it">知道了</string>
@@ -13,37 +13,37 @@
 
 我们会收集以下信息：您的应用版本和设备型号、构建、索引和代码补全所需时间、构建成功/失败情况以及已清理的崩溃报告。
 
-我们绝不会收集您的代码、文件或项目名称、您使用的功能，或任何可以识别您身份的信息。您可以在项目打开时随时在 “更多” 选项中更改此设置。]]></string>
+我们不会收集代码、项目文件、项目名、使用记录以及任何个人身份信息。您可以在项目打开时随时在 “更多” 选项中更改此设置。]]></string>
     <string name="learn_more">了解更多</string>
     <string name="allow">允许</string>
     <string name="no_thanks">不需要</string>
     <string name="on_device">本地设备</string>
-    <string name="on_device_title">一款在手机上的真实IDE</string>
-    <string name="on_device_content">无需笔记本电脑，即可编写、浏览和构建端到端的 Android 和 Java 项目。</string>
+    <string name="on_device_title">原生运行于Android系统的完整开发环境</string>
+    <string name="on_device_content">无需PC，即可编写、预览、构建 Android、Java、Kotlin 项目</string>
     <string name="continue">继续</string>
-    <string name="maybe_later">以后再说</string>
-    <string name="skip_for_now">暂时跳过</string>
+    <string name="maybe_later">稍后再说</string>
+    <string name="skip_for_now">稍后再说</string>
     <string name="code_completion">代码补全</string>
-    <string name="code_completion_title">能够识别你代码的自动补全功能。</string>
-    <string name="code_completion_content">Eclipse JDT 可在您输入时提供精确的、排名靠前的建议（带有签名和文档）。</string>
+    <string name="code_completion_title">上下文感知智能代码补全</string>
+    <string name="code_completion_content">Eclipse JDT 可在您输入时提供精确的、排名靠前的代码提示</string>
     <string name="block_editing">积木式编程</string>
-    <string name="block_editing_title">可以通过代码编程，也可以通过积木式编程</string>
-    <string name="block_editing_content">可将任意Java文件转换为联动积木视图，该视图与原始源码逐字节实时同步。</string>
+    <string name="block_editing_title">可使用代码编程，也可使用积木式编程</string>
+    <string name="block_editing_content">Java代码一键切换积木视图，源码与积木逐字节实时双向同步</string>
     <string name="build_and_run">构建 &amp; 运行</string>
-    <string name="build_and_run_title">在设备上构建真实的APK安装包</string>
-    <string name="build_and_run_content">解析、编译、dex、打包、签名——然后直接安装到您的手机上。</string>
+    <string name="build_and_run_title">在设备上构建完整的APK安装包</string>
+    <string name="build_and_run_content">完成解析、编译、Dex转换、打包、签名，直接在本机安装APK</string>
     <string name="command_palette">命令面板</string>
-    <string name="command_palette_title">一键直达任意位置</string>
-    <string name="command_palette_content">单一输入框可检索命令、文件与代码符号，全局快捷操作核心入口。</string>
-    <string name="kotlin_beta">Kotlin · 测试版</string>
-    <string name="kotlin_beta_title">Kotlin 自动补全功能目前处于测试的beta阶段</string>
-    <string name="kotlin_beta_content">完整Kotlin代码补全功能，优化出与Java一致流畅、分级排序的使用体验。</string>
+    <string name="command_palette_title">一键跳转任意位置</string>
+    <string name="command_palette_content">全局搜索输入框，一键检索命令、文件、代码符号，快捷操作一站式直达</string>
+    <string name="kotlin_beta">Kotlin · Beta</string>
+    <string name="kotlin_beta_title">Kotlin 自动补全目前处于测试阶段</string>
+    <string name="kotlin_beta_content">完整的Kotlin智能代码补全，流畅体验与Java一致，补全结果智能分级排序</string>
     <string name="xml">XML</string>
-    <string name="xml_title">布局设计，全程协助~</string>
-    <string name="xml_content">支持Android XML标签、属性、资源代码补全，并实时语法校验。</string>
-    <string name="your_files">你的文件</string>
-    <string name="your_files_title">你的项目文件存放于真实文件夹中</string>
-    <string name="your_files_content">项目文件保存在应用存储空间中，您可以使用任何文件管理器打开它们——拖放图标、布局或素材，或者在电脑上进行编辑。无需特殊权限，没有任何隐藏内容。</string>
+    <string name="xml_title">布局设计，全程协助</string>
+    <string name="xml_content">支持Android XML标签、属性、资源代码补全，并实时进行语法校验</string>
+    <string name="your_files">项目文件</string>
+    <string name="your_files_title">项目文件存放于独立文件夹中</string>
+    <string name="your_files_content">项目文件存储于应用独立目录，任意文件管理器均可查看、编辑，也可复制至电脑修改；无需额外权限，无任何隐藏文件</string>
     <string name="jetpack_compose">Jetpack Compose</string>
     <string name="jetpack_compose_title">基于 Jetpack Compose 全新重构</string>
     <string name="jetpack_compose_content">CodeAssist 运行更快、操作更流畅，全界面原生搭载 Jetpack Compose，支持 @Preview 实时预览。</string>
@@ -58,11 +58,11 @@
     <string name="import_by">作者：%1$s</string>
     <string name="import_section_contents">内容</string>
     <string name="import_more">还有 %1$d 项</string>
-    <string name="import_incompatible">导入该项目工程包需要更高版本的CodeAssist!</string>
+    <string name="import_incompatible">导入该项目工程包需要更高版本的CodeAssist！</string>
     <string name="import_deps_bundled">已内置依赖库</string>
-    <string name="import_failed">无法导入该项目工程包!</string>
+    <string name="import_failed">无法导入该项目工程包！</string>
     <string name="import_unrecognized_title">该文件导入失败!</string>
-    <string name="import_unrecognized">CodeAssist 无法识别此文件!请选择 .caproj 格式项目工程包进行导入</string>
+    <string name="import_unrecognized">CodeAssist 无法识别此文件！请选择 .caproj 格式项目工程包进行导入。</string>
     <plurals name="caproj_files">
         <item quantity="one">%1$d 个文件</item>
         <item quantity="other">%1$d 个文件</item>
@@ -77,9 +77,9 @@
     <string name="export_description_hint">该项目具备什么功能？</string>
     <string name="export_action">导出</string>
     <string name="export_share">分享工程项目</string>
-    <string name="export_failed">无法导出!导出失败了</string>
+    <string name="export_failed">导出失败！</string>
     <string name="export_exporting">正在导出…</string>
-    <string name="export_success_title">项目导出成功!</string>
+    <string name="export_success_title">项目导出成功！</string>
     <string name="export_success_subtitle">你的项目包已生成完毕</string>
     <string name="export_locate">在文件管理器中查看</string>
     <string name="export_save_copy">另存副本…</string>
@@ -88,7 +88,7 @@
     <string name="join_the_community">加入交流社区</string>
     <string name="join_the_community_content">可在Discord内交流、寻求帮助、分享你开发的项目</string>
     <string name="support_title">支持 CodeAssist</string>
-    <string name="support_content">这是我用业余时间开发的，坚持对每个人免费。如果它帮助到了你，赞助项目或者收藏项目仓库便是对我极大的支持</string>
+    <string name="support_content">本项目由我业余独立开发的，坚持免费开源。如果它帮助到了你，赞助或收藏项目仓库便是极大的鼓励支持</string>
     <string name="support_chip_free">100% 免费</string>
     <string name="support_chip_open_source">开源</string>
     <string name="support_sponsor">赞助</string>
@@ -96,8 +96,8 @@
     <string name="support_show_ads">展示广告</string>
     <string name="support_show_ads_desc">应用内可能会展示广告，但你可以随时关闭</string>
     <string name="ad_label">广告</string>
-    <string name="house_ad_support_title">爱用 CodeAssist 吗?</string>
-    <string name="house_ad_support_content">译文：可通过GitHub赞助渠道支持本项目开发</string>
+    <string name="house_ad_support_title">喜欢 CodeAssist 吗?</string>
+    <string name="house_ad_support_content">可通过GitHub赞助渠道支持本项目开发</string>
     <string name="no_project_yet">还没有项目哦~新建项目即可开始开发</string>
     <string name="your_projects">你的项目</string>
     <string name="project_kind_android">Android</string>
@@ -122,16 +122,16 @@
         <item quantity="one">%1$d 个模块</item>
         <item quantity="other">%1$d 个模块</item>
     </plurals>
-    <string name="beta_notice">您当前使用的是 %1$s</string>
+    <string name="beta_notice">您当前使用的是 %1$s 版本</string>
     <string name="beta_notice_content">部分功能尚未完善，后续可能调整。欢迎反馈问题，告诉我们缺失或异常的功能。</string>
     <string name="submit_suggestion">提交建议</string>
     <string name="your_codeassist_files">你的 CodeAssist 文件</string>
-    <string name="your_codeassist_files_content">可使用文件管理器打开该目录管理项目（存放在Projects目录的旧版项目也包含在内），添加图标、资源文件，或是在电脑端编辑文件。</string>
+    <string name="your_codeassist_files_content">可使用文件管理器打开该目录管理项目（存放在Projects目录的旧版项目也包含在内），可添加图标、资源文件，或在电脑端编辑文件。</string>
     <string name="open_in_the_file_manager">在文件管理器中打开</string>
     <string name="choose_start_point">选择起始位置</string>
     <string name="backup">备份</string>
     <string name="delete_project">删除项目</string>
-    <string name="delete_project_content">“%1$s” 及其所有文件将被永久删除，无法撤销!要执行删除操作吗？</string>
+    <string name="delete_project_content">“%1$s” 及其所有文件将被永久删除，无法撤销！要执行删除操作吗？</string>
     <string name="cancel">取消</string>
     <string name="delete">删除</string>
     <string name="project_name">项目名称</string>
@@ -147,7 +147,7 @@
         <item quantity="one">已从旧版本恢复 %1$d 个项目</item>
         <item quantity="other">已从旧版本恢复 %1$d 个项目</item>
     </plurals>
-    <string name="recovered_projects_content">这类项目基于Gradle构建，将以有限兼容模式打开；部分功能可能无法使用，需要重新补充依赖后才能正常构建。原始文件会安全保存在存储目录内。</string>
+    <string name="recovered_projects_content">旧版Gradle项目以兼容模式打开，部分功能受限，重新配置依赖后可完整构建；原始文件完整保留，不会丢失。</string>
 
 
     <!-- ============================================================ -->
@@ -166,7 +166,7 @@
     <string name="block_trash">回收站</string>
     <string name="block_drop_to_delete">拖到这里删除</string>
     <string name="block_button">积木</string>
-    <string name="block_live_projection">实时视图·与代码同步</string>
+    <string name="block_live_projection">实时视图，源码双向同步</string>
     <string name="block_add_a_block">新增积木</string>
     <string name="block_statement_slot">语句插槽</string>
     <string name="block_searching_index">搜索索引中…</string>
@@ -251,7 +251,7 @@
     <string name="buildc_filter_errors">错误 %1$d</string>
     <string name="buildc_filter_warnings">警告 %1$d</string>
     <string name="buildc_no_problems">没有问题。</string>
-    <string name="buildc_no_problems_match">没有符合此筛选条件的问题。</string>
+    <string name="buildc_no_problems_match">没有符合此筛选条件的问题！</string>
     <string name="buildc_ungroup">取消分组</string>
     <string name="buildc_group_by_task">按任务分组</string>
     <string name="buildc_empty_log">点击“运行”以构建并运行此模块。</string>
@@ -290,7 +290,7 @@
     <string name="sig_peek_tip">点按查看完整定义</string>
     <string name="sig_peek_collapse">点按收起</string>
     <string name="edsheet_source_control">源代码管理</string>
-    <string name="edsheet_source_control_desc">Git 集成功能正在规划中：暂存、差异、提交和推送。</string>
+    <string name="edsheet_source_control_desc">Git 集成功能正在规划中，将支持暂存、差异、提交和推送功能。</string>
     <string name="symbolbar_move_line_up">上移行</string>
     <string name="symbolbar_move_line_down">下移行</string>
     <string name="symbolbar_duplicate_line">复制行</string>
@@ -375,7 +375,7 @@
     <string name="store_all">全部</string>
     <string name="store_unavailable">发现页暂不可用</string>
     <string name="store_unavailable_content">当前构建版本不支持发现页。</string>
-    <string name="store_coming_soon">即将推出</string>
+    <string name="store_coming_soon">即将开放投稿</string>
     <string name="store_community_content">开放投稿后，社区项目将显示在这里。</string>
     <string name="store_no_matches">没有匹配项</string>
     <string name="store_soon">即将推出</string>
@@ -526,7 +526,7 @@
     <string name="edoverlay_renaming">正在重命名…</string>
     <string name="edoverlay_rename_hint">按 Enter 重命名“%1$s”，按 Esc 取消</string>
     <string name="edoverlay_go_to_line">转到行</string>
-    <string name="edoverlay_go_to_line_hint">第 1–%1$d 行（行号或 行号:列号）</string>
+    <string name="edoverlay_go_to_line_hint">第 1–%1$d 行（行号或 行号：列号）</string>
     <string name="edoverlay_no_documentation">没有文档</string>
     <string name="edoverlay_cut">剪切</string>
     <string name="edoverlay_paste">粘贴</string>
@@ -790,7 +790,7 @@
     <string name="dep_version_conflict_tooltip">版本冲突：%1$s → 使用 %2$s</string>
     <string name="dep_version_conflict">版本冲突</string>
     <string name="dep_extra_auto_resolved">+%1$d 项自动解析</string>
-    <string name="dep_repo_invalid">请输入尚未添加的有效 http(s) URL。</string>
+    <string name="dep_repo_invalid">请输入有效http(s)URL!</string>
     <string name="dep_subtitle_module">模块</string>
     <string name="dep_subtitle_platform">平台（BOM）</string>
     <string name="dep_subtitle_local_aar">本地 aar</string>
@@ -817,7 +817,7 @@
     <string name="modcfg_tab_dependencies">依赖</string>
     <string name="modcfg_title_modules">模块</string>
     <string name="modcfg_new_module_action">新建模块</string>
-    <string name="modcfg_no_modules">没有模块。点按 + 添加模块。</string>
+    <string name="modcfg_no_modules">没有模块，点击 + 添加模块。</string>
     <string name="modcfg_remove_named">移除 %1$s</string>
     <string name="modcfg_removed">已移除 %1$s</string>
     <string name="modcfg_build_features_android_only">构建功能仅适用于 Android 模块。</string>
@@ -832,7 +832,7 @@
     <string name="modcfg_packaging_glob_hint">模式为相对 APK 的 glob：** 可跨文件夹，* 仅匹配单个文件夹，开头的 / 可省略。</string>
     <string name="modcfg_packaging_resources">Java 资源</string>
     <string name="modcfg_packaging_jni">原生库</string>
-    <string name="modcfg_packaging_jni_note">原生库会原样打包（设备端不执行 NDK 精简）。</string>
+    <string name="modcfg_packaging_jni_note">原生库会原样打包（设备端不执行 NDK 精简）</string>
     <string name="modcfg_packaging_excludes">排除</string>
     <string name="modcfg_packaging_excludes_desc">移除路径匹配的所有文件。</string>
     <string name="modcfg_packaging_pick_first">保留第一个</string>
@@ -847,7 +847,7 @@
     <string name="modcfg_created">创建于 %1$s</string>
     <string name="modcfg_couldnt_create">无法创建 %1$s</string>
     <string name="modcfg_remove_module">移除模块</string>
-    <string name="modcfg_remove_module_content">要从项目中移除“%1$s”吗？其文件将保留在磁盘上，其他模块对它的依赖将被移除。</string>
+    <string name="modcfg_remove_module_content">要从项目中移除“%1$s”吗？其文件将保留，但其他模块对它的依赖将被移除。</string>
     <string name="modcfg_remove">移除</string>
     <string name="modcfg_no_module_types">没有可用的模块类型。</string>
     <string name="modcfg_new_module">新建模块</string>
@@ -967,7 +967,7 @@
     <string name="dismiss">关闭</string>
     <string name="hide_details">隐藏详情</string>
     <string name="show_details">显示详情</string>
-    <string name="create">创建</string>
+    <string name="create">新建</string>
     <string name="add">添加</string>
     <string name="remove">移除</string>
     <string name="rename">重命名</string>
@@ -978,6 +978,37 @@
     <string name="modcfg_platform_sdk_auto">自动（%1$s）</string>
 
     <!-- AI coding agent -->
+    <string name="chat_open">AI 助理</string>
+    <string name="chat_title">AI</string>
+    <string name="chat_new">新建对话</string>
+    <string name="chat_close">关闭</string>
+    <string name="chat_stop">停止</string>
+    <string name="chat_send">发送</string>
+    <string name="chat_retry">重试</string>
+    <string name="chat_manage_keys">管理服务商</string>
+    <string name="chat_providers_title">AI 服务商</string>
+    <string name="chat_providers_subtitle">选择服务商并添加密钥，密钥仅存储在此设备上</string>
+    <string name="chat_api_key">API 密钥</string>
+    <string name="chat_base_url">URL 请求地址</string>
+    <string name="chat_model">模型</string>
+    <string name="chat_connected">已连接</string>
+    <string name="chat_add_key">添加 API 密钥</string>
+    <string name="chat_show">显示</string>
+    <string name="chat_hide">隐藏</string>
+    <string name="chat_gateway_hint">兼容 OpenAI：OpenRouter、LiteLLM 或其他平台</string>
+    <string name="chat_done">完成</string>
+    <string name="chat_placeholder">询问代码问题，或描述需求</string>
+    <string name="chat_empty_title">AI 编程助理</string>
+    <string name="chat_empty_body">询问代码问题，或告诉代理需要修改什么。它可按照你选择的权限模式读取、搜索和编辑文件。</string>
+    <string name="chat_need_key">请在设置中添加 API 密钥后开始！</string>
+    <string name="chat_thinking">正在思考</string>
+    <string name="chat_mode_ask">逐项询问</string>
+    <string name="chat_mode_auto">自动接受</string>
+    <string name="chat_mode_plan">仅规划</string>
+    <string name="chat_perm_title">允许此修改？</string>
+    <string name="chat_allow">允许</string>
+    <string name="chat_allow_session">本次会话中允许</string>
+    <string name="chat_deny">拒绝</string>
 
     <!-- 设置页面内容（对应 ide-core/BuiltInSettingsPages.kt + SettingsBackend；由 UI 层的 SettingsLocalization.kt 覆盖显示） -->
     <!-- 页面标题 -->
@@ -1080,19 +1111,19 @@
     <string name="set_br_r8heap">R8 独立 VM 堆内存</string>
     <string name="set_br_dexoff">堆外 Dex 转换阈值</string>
     <string name="set_br_dexbatch">Dex 合并批大小</string>
-    <string name="set_br_dexbatch_desc">在非常大的应用中，最后的 Dex 转换步骤会分批合并类，以免一次性把所有类都放入内存。较小的批次可降低内存占用（适合低内存设备），但会略微增大 APK 体积（跨类共享压缩更少）；较大的批次打包更紧凑，但每次合并需要更多内存。大多数应用永远不会触及此设置，它只在类数超过数千时才会生效。</string>
+    <string name="set_br_dexbatch_desc">大型项目Dex转换支持分批次合并类：小批次省内存、包体积略大；大体积打包更紧凑、内存消耗更高。仅数千类以上工程需要调整此选项。</string>
     <string name="set_br_dexfork">最大并发 Dex 进程数</string>
     <!-- 隐私与数据 -->
     <string name="set_privacy_analytics">分享性能分析数据</string>
-    <string name="set_privacy_analytics_desc">仅匿名性能指标，绝不包含你的代码或文件名</string>
+    <string name="set_privacy_analytics_desc">仅共享匿名性能指标，绝不共享你的代码或文件名</string>
     <string name="set_privacy_clear">清除缓存</string>
-    <string name="set_privacy_clear_desc">释放可再生的依赖 / 语言 / 预览缓存（绝不包含源代码）</string>
+    <string name="set_privacy_clear_desc">释放可再生的依赖 / 语言 / 预览缓存（绝不清除源代码）</string>
     <string name="set_privacy_clear_btn">清除</string>
     <string name="set_privacy_logs">查看日志</string>
     <string name="set_privacy_logs_desc">最近的编辑器、分析和构建活动</string>
     <string name="set_privacy_logs_btn">打开</string>
     <string name="set_privacy_backup">备份工程项目</string>
-    <string name="set_privacy_backup_desc">将每个项目导出为单个 zip</string>
+    <string name="set_privacy_backup_desc">将每个项目分别导出为 zip</string>
     <string name="set_privacy_backup_btn">备份</string>
 
     <!-- 本地化补充：此前在 composable 中硬编码的零散界面文本 -->
