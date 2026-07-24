@@ -591,12 +591,10 @@ class ReflectiveDispatcher(
             if (a === OmittedArg) continue // an omitted slot fits any param (the synthetic supplies its default)
             val slot = if (trailingLambda && i == k - 1) n - 1 else i
             if (slot !in 0 until n) return false
-            val p = params[slot]
-            when (a) {
-                is InterpretedLambda -> if (!p.isInterface) return false
-                null -> if (p.isPrimitive) return false
-                else -> if (!wrap(p).isInstance(a)) return false
-            }
+            // Same acceptance as the exact-arity path — including a boxed value-class arg for a mangled
+            // unboxed-underlying param (`Modifier.background(color)`, whose `shape` is defaulted so the call
+            // routes here): the bind unboxes it via [coerceArg], so the fit check must admit it.
+            if (!paramAccepts(params[slot], a)) return false
         }
         return true
     }
@@ -721,8 +719,9 @@ class ReflectiveDispatcher(
                 is InterpretedLambda -> p.isInterface
                 null -> !p.isPrimitive
                 // A boxed value-class param (`SpanStyle.fontStyle: FontStyle?`) also accepts the unboxed
-                // underlying value the interpreter produced — [boxValueClassIfNeeded] boxes it at invoke time.
-                else -> wrap(p).isInstance(a) || acceptsValueClassUnderlying(p, a)
+                // underlying value the interpreter produced, and (the inverse) a mangled unboxed-underlying param
+                // accepts a BOXED value-class arg — [boxValueClassIfNeeded]/[coerceArg] (un)box it at invoke time.
+                else -> wrap(p).isInstance(a) || acceptsValueClassUnderlying(p, a) || acceptsBoxedValueClassUnboxed(p, a)
             }
             if (!ok) return false
         }
@@ -888,6 +887,16 @@ class ReflectiveDispatcher(
         } ?: return false
         return wrap(box.parameterTypes[0]).isInstance(value)
     }
+
+    /** The inverse of [acceptsValueClassUnderlying]: whether [value] is a BOXED inline value-class instance
+     *  (a `Color`, `Dp`, … — as a library call returning `Object`/a generic `T` hands one back, e.g. a
+     *  `State<Color>.value` read) whose unboxed underlying fits [paramType] — a mangled primitive param
+     *  (`background-<hash>(…, long, …)` wants the `Color`'s `long`) or the underlying reference type. Delegates
+     *  to [unboxToUnderlying] so this fit check exactly matches what [boxValueClassIfNeeded]/[coerceArg] perform
+     *  at bind time (no false accept: a non-value-class or an unfit arg yields null there); recursive value-class
+     *  nesting (`Color`→`ULong`→`long`) is handled by that helper. */
+    private fun acceptsBoxedValueClassUnboxed(paramType: Class<*>, value: Any?): Boolean =
+        value != null && value !is InterpretedLambda && unboxToUnderlying(value, paramType) != null
 
     /** Convert an interpreted lambda arg into a JVM functional-interface proxy of the target parameter type
      *  (composable params route through [lambdaProxies] so the Compose bridge can thread a Composer); pass
@@ -1072,7 +1081,7 @@ class ReflectiveDispatcher(
     private fun paramAccepts(p: Class<*>, a: Any?): Boolean = when (a) {
         null -> !p.isPrimitive
         is InterpretedLambda -> p.isInterface
-        else -> wrap(p).isInstance(a) || acceptsValueClassUnderlying(p, a) ||
+        else -> wrap(p).isInstance(a) || acceptsValueClassUnderlying(p, a) || acceptsBoxedValueClassUnboxed(p, a) ||
             (p.isArray && a is Collection<*> && collectionFitsArray(a, p.componentType))
     }
 

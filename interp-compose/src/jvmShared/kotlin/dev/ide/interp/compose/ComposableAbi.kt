@@ -427,11 +427,13 @@ object ComposableAbi {
                 // slot → `materializeModifier` calls `.all(…)` on the proxy, which returns null → NPE (`Box.kt`).
                 is InterpretedLambda -> if (!isFunctionalInterface(p)) return false
                 null -> if (p.isPrimitive) return false
-                // A boxed value-class parameter (`TextAlign?`) accepts the unboxed underlying value too.
-                else -> if (!boxed(p).isInstance(a) && !acceptsValueClassUnderlying(
-                        p,
-                        a
-                    )
+                // A boxed value-class parameter (`TextAlign?`) accepts the unboxed underlying value; and the
+                // inverse — a mangled unboxed-underlying param (`color: Color` → `long`) accepts a BOXED
+                // value-class arg (a `State<Color>.value` / `animateColorAsState` read), which the slot bind then
+                // unboxes. Without the inverse, a composable with a value-class param fed a boxed value has the
+                // right overload wrongly rejected here — masked for a lone overload, mis-selected among siblings.
+                else -> if (!boxed(p).isInstance(a) && !acceptsValueClassUnderlying(p, a) &&
+                    !acceptsBoxedValueClassUnboxed(p, a)
                 ) return false
             }
         }
@@ -493,6 +495,13 @@ object ComposableAbi {
         } ?: return false
         return boxed(box.parameterTypes[0]).isInstance(value)
     }
+
+    /** The inverse of [acceptsValueClassUnderlying]: whether [value] is a BOXED inline value-class instance
+     *  (`State<Color>.value` / `animateColorAsState` hand one back — an `Object`-typed getter) whose unboxed
+     *  underlying fits a mangled unboxed-underlying [paramType]. Delegates to [unboxToUnderlying] so overload
+     *  SELECTION admits exactly the args the slot bind ([boxValueClassIfNeeded]) then unboxes. */
+    private fun acceptsBoxedValueClassUnboxed(paramType: Class<*>, value: Any?): Boolean =
+        value != null && value !is InterpretedLambda && unboxToUnderlying(value, paramType) != null
 
     private fun boxed(c: Class<*>): Class<*> = when (c) {
         Int::class.javaPrimitiveType -> Integer::class.java
