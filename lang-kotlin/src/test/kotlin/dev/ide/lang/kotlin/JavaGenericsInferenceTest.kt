@@ -73,6 +73,42 @@ class JavaGenericsInferenceTest {
         assertTrue("kt.typeMismatch" in ctorCodes("fun f() { gen.Num(\"x\") }"), "String arg to Num(Int) is a mismatch")
     }
 
+    @Test
+    fun genericMethodReturnUsesTheExpectedTypeNotItsBound() {
+        // `<T extends View> T findViewById(int)` (gen.Finder mirrors Android's) assigned to a `Button`: the
+        // EXPECTED type pins T = Button (`Button <: View`), so the result is Button, not the erased bound View.
+        // The reported false "inferred type is View but Button was expected" — the constraint solver had fixed
+        // T to its FIRST upper bound (the declared bound View, registered before the expected-type bound Button).
+        assertTrue(
+            "kt.typeMismatch" !in ctorCodes("fun f(v: gen.Finder) { val b: gen.Button = v.findViewById(0) }"),
+            "findViewById's T must infer to the expected Button, not the bound View",
+        )
+        // Assigning to the bound itself (T = View) stays valid.
+        assertTrue(
+            "kt.typeMismatch" !in ctorCodes("fun f(v: gen.Finder) { val w: gen.View = v.findViewById(0) }"),
+            "assigning findViewById to the bound View is fine",
+        )
+    }
+
+    @Test
+    fun nestedLibraryTypeThroughErasedMemberMatchesTheDotFormDeclaration() {
+        // The reported layout-params false mismatch (`inferred type is LayoutParams but ViewGroup$LayoutParams
+        // was expected`): a nested library type reached through an ERASED member (`Panel.getParams():
+        // Panel.Params`, mirroring `getLayoutParams(): ViewGroup.LayoutParams`) arrived in `$`-nested form
+        // while the declared `gen.Panel.Params` was dot-form, so the assignment check false-flagged them as
+        // different types even though they are the SAME class.
+        assertTrue(
+            "kt.typeMismatch" !in ctorCodes("fun f(p: gen.Panel) { val x: gen.Panel.Params = p.getParams() }"),
+            "the erased nested return type must match the dot-form declared type",
+        )
+        // A nested SUBTYPE assigned to its nested supertype (the `FrameLayout.LayoutParams` → `ViewGroup.LayoutParams`
+        // case) must also match — the supertype walk now compares dot-form names on both sides.
+        assertTrue(
+            "kt.typeMismatch" !in ctorCodes("fun f(p: gen.Panel) { val x: gen.Panel.Params = p.getSub() }"),
+            "a nested subtype must be assignable to its nested supertype",
+        )
+    }
+
     private fun ctorCodes(code: String): List<String?> = runBlocking {
         val doc = SnippetDoc(code, DiskFile(srcDir.resolve("D.kt")))
         analyzer.incrementalParser.parseFull(doc)
@@ -101,6 +137,12 @@ class JavaGenericsInferenceTest {
                 "gen/Strm" to strm(),
                 "gen/Widget" to widget(),
                 "gen/Num" to num(),
+                "gen/View" to view(),
+                "gen/Button" to button(),
+                "gen/Finder" to finder(),
+                "gen/Panel" to panel(),
+                "gen/Panel\$Params" to panelParams(),
+                "gen/Panel\$SubParams" to panelSubParams(),
             )
             val jar = Files.createTempFile("gen-fixture", ".jar")
             JarOutputStream(Files.newOutputStream(jar)).use { out ->
@@ -139,6 +181,60 @@ class JavaGenericsInferenceTest {
             val cw = ClassWriter(0)
             cw.visit(V, PUB, "gen/Num", null, OBJ, null)
             cw.visitMethod(PUB, "<init>", "(I)V", null, null).visitEnd()
+            cw.visitEnd()
+            return cw.toByteArray()
+        }
+
+        /** class View {} — the bound for [finder]'s generic `findViewById` (mirrors android.view.View). */
+        private fun view(): ByteArray {
+            val cw = ClassWriter(0)
+            cw.visit(V, PUB, "gen/View", null, OBJ, null)
+            cw.visitEnd()
+            return cw.toByteArray()
+        }
+
+        /** class Button extends View {} — a View subtype, the expected type in the reported case. */
+        private fun button(): ByteArray {
+            val cw = ClassWriter(0)
+            cw.visit(V, PUB, "gen/Button", null, "gen/View", null)
+            cw.visitEnd()
+            return cw.toByteArray()
+        }
+
+        /** class Finder { public &lt;T extends View&gt; T findViewById(int); } — Android's `findViewById` shape:
+         *  a bytecode method whose generic signature returns the type variable `T` bounded by `View`. */
+        private fun finder(): ByteArray {
+            val cw = ClassWriter(0)
+            cw.visit(V, PUB, "gen/Finder", null, OBJ, null)
+            cw.visitMethod(PUB, "findViewById", "(I)Lgen/View;", "<T:Lgen/View;>(I)TT;", null).visitEnd()
+            cw.visitEnd()
+            return cw.toByteArray()
+        }
+
+        /** class Panel { Panel$Params getParams(); Panel$SubParams getSub(); } — the ViewGroup/getLayoutParams
+         *  shape: methods returning a NESTED type through the ERASED descriptor (no generic signature), so the
+         *  reader must not leave the return FQN in `$`-nested form. */
+        private fun panel(): ByteArray {
+            val cw = ClassWriter(0)
+            cw.visit(V, PUB, "gen/Panel", null, OBJ, null)
+            cw.visitMethod(PUB, "getParams", "()Lgen/Panel\$Params;", null, null).visitEnd()
+            cw.visitMethod(PUB, "getSub", "()Lgen/Panel\$SubParams;", null, null).visitEnd()
+            cw.visitEnd()
+            return cw.toByteArray()
+        }
+
+        /** class Panel$Params {} — a nested class (mirrors ViewGroup.LayoutParams). */
+        private fun panelParams(): ByteArray {
+            val cw = ClassWriter(0)
+            cw.visit(V, PUB, "gen/Panel\$Params", null, OBJ, null)
+            cw.visitEnd()
+            return cw.toByteArray()
+        }
+
+        /** class Panel$SubParams extends Panel$Params {} — a nested subtype (mirrors a FrameLayout.LayoutParams). */
+        private fun panelSubParams(): ByteArray {
+            val cw = ClassWriter(0)
+            cw.visit(V, PUB, "gen/Panel\$SubParams", null, "gen/Panel\$Params", null)
             cw.visitEnd()
             return cw.toByteArray()
         }
