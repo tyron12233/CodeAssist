@@ -1,0 +1,34 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="chat_open">AI 代理</string>
+    <string name="chat_title">AI</string>
+    <string name="chat_new">新建对话</string>
+    <string name="chat_close">关闭</string>
+    <string name="chat_stop">停止</string>
+    <string name="chat_send">发送</string>
+    <string name="chat_retry">重试</string>
+    <string name="chat_manage_keys">管理服务商</string>
+    <string name="chat_providers_title">AI 服务商</string>
+    <string name="chat_providers_subtitle">选择服务商并添加密钥。密钥仅存储在此设备上。</string>
+    <string name="chat_api_key">API 密钥</string>
+    <string name="chat_base_url">基础 URL</string>
+    <string name="chat_model">模型</string>
+    <string name="chat_connected">已连接</string>
+    <string name="chat_add_key">添加 API 密钥</string>
+    <string name="chat_show">显示</string>
+    <string name="chat_hide">隐藏</string>
+    <string name="chat_gateway_hint">兼容 OpenAI：OpenRouter、LiteLLM 或自托管端点。</string>
+    <string name="chat_done">完成</string>
+    <string name="chat_placeholder">询问代码问题，或描述需要的修改</string>
+    <string name="chat_empty_title">AI 编程代理</string>
+    <string name="chat_empty_body">询问代码问题，或告诉代理需要修改什么。它可按照你选择的权限模式读取、搜索和编辑文件。</string>
+    <string name="chat_need_key">请在设置中添加 API 密钥后开始。</string>
+    <string name="chat_thinking">正在思考</string>
+    <string name="chat_mode_ask">逐项询问</string>
+    <string name="chat_mode_auto">自动接受</string>
+    <string name="chat_mode_plan">仅规划</string>
+    <string name="chat_perm_title">允许此修改？</string>
+    <string name="chat_allow">允许</string>
+    <string name="chat_allow_session">本次会话中允许</string>
+    <string name="chat_deny">拒绝</string>
+</resources>

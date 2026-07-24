@@ -40,6 +40,8 @@ import dev.ide.ui.editor.preview.ResourcePreviewPane
 import dev.ide.ui.editor.preview.isLayoutPreviewable
 import dev.ide.ui.editor.preview.isMarkdownPreviewable
 import dev.ide.ui.editor.preview.isPreviewable
+import dev.ide.ui.ext.ToolWindowAnchor
+import dev.ide.ui.ext.ToolWindowRegistry
 import dev.ide.ui.theme.Ca
 import dev.ide.ui.theme.Motion
 import kotlinx.coroutines.launch
@@ -135,8 +137,9 @@ internal fun EditorCenter(
                 onOptimizeImports = { if (active != null) optimizeImportsEpoch++ },
                 onToggleConsole = { state.consoleOpen = !state.consoleOpen },
                 consoleOpen = state.consoleOpen,
-                onToggleChat = { state.chatOpen = !state.chatOpen },
-                chatOpen = state.chatOpen,
+                rightTools = ToolWindowRegistry.forAnchor(ToolWindowAnchor.RIGHT),
+                openRightTool = state.openRightTool,
+                onToggleRightTool = { state.toggleRightTool(it) },
                 inlayHintsOn = state.inlayHintsEnabled,
                 onToggleInlayHints = { state.inlayHintsEnabled = !state.inlayHintsEnabled },
                 showPreview = hasPreview,

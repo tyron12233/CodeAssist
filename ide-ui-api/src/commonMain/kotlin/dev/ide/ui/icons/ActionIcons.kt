@@ -26,6 +26,7 @@ fun actionIcon(iconId: String?): ImageVector = when (iconId) {
     "command" -> CaIcons.command
     "eye" -> CaIcons.eye
     "image" -> CaIcons.image
+    "sparkle", "ai", "chat" -> CaIcons.sparkle
     "layers", "modules" -> CaIcons.layers
     "pkg", "sdk" -> CaIcons.pkg
     "key", "keystore", "signing" -> CaIcons.key

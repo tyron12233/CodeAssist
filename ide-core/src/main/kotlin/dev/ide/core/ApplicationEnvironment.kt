@@ -7,6 +7,7 @@ import dev.ide.platform.impl.ApplicationContainer
 import dev.ide.platform.impl.PlatformCore
 import dev.ide.plugin.impl.PluginCatalog
 import dev.ide.plugin.impl.PluginManager
+import dev.ide.ui.ext.UiPlugin
 
 /** APPLICATION-scoped Create-Project template registry key (resolved from [ApplicationEnvironment.container]
  *  so the picker can enumerate templates with no project open). */
@@ -60,6 +61,14 @@ class ApplicationEnvironment(disabledPluginIds: Set<String> = emptySet()) : Auto
      */
     val pluginCatalog: PluginCatalog
 
+    /**
+     * The Compose UI facets ([dev.ide.ui.ext.UiPlugin]) of the ENABLED built-in plugins, in load order. The
+     * Compose shell reads these (through `IdeBackend.uiPlugins`) and registers them into `UiPluginHost`, so a
+     * plugin's tool windows / actions / screens are governed by the SAME enable/disable decision as its engine
+     * facet — a disabled plugin contributes no UI at all.
+     */
+    val enabledUiPlugins: List<UiPlugin>
+
     init {
         // Load every ENABLED built-in contribution ONCE on the app registry, in dependency order. The catalog
         // keeps essentials (and their transitive dependencies) on regardless of the disabled set, and drops a
@@ -67,8 +76,10 @@ class ApplicationEnvironment(disabledPluginIds: Set<String> = emptySet()) : Auto
         // synthetic-R, the XML resource host) resolve the open project lazily through [activeEngine] at callback
         // time — safe to pass `this` mid-construction (it is dereferenced only later, never during register()).
         val allPlugins = BuiltInPlugins.assemble(this, codecs)
-        pluginCatalog = PluginCatalog(allPlugins.map { it.manifest }, disabledPluginIds)
-        pluginManager.loadAll(allPlugins.filter { pluginCatalog.isEnabled(it.manifest.id) })
+        pluginCatalog = PluginCatalog(allPlugins.map { it.engine.manifest }, disabledPluginIds)
+        val enabled = allPlugins.filter { pluginCatalog.isEnabled(it.engine.manifest.id) }
+        pluginManager.loadAll(enabled.map { it.engine })
+        enabledUiPlugins = enabled.mapNotNull { it.ui }
         container.registerServiceIfAbsent(PROJECT_TEMPLATES) { ProjectTemplateRegistry(platform.extensions) }
     }
 

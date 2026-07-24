@@ -43,18 +43,22 @@ import kotlinx.coroutines.launch
 import kotlin.math.abs
 import kotlin.math.roundToInt
 
-/** The right-edge zone where a leftward swipe grabs the chat drawer open. */
+/** The right-edge zone where a leftward swipe grabs the drawer open. */
 private val EdgeGrabWidth = 24.dp
 
 /** Fling speed (px/s, expressed in dp) past which a release commits to open/close regardless of position. */
 private val FlingCommit = 320.dp
 
 /**
- * The phone chat drawer: a right-edge overlay that tracks the finger continuously, mirroring [PushDrawer]
- * (which is left-only). An [Animatable] `shown` (0 = closed, panel off-screen right → openPx = fully open)
- * is driven live: a leftward swipe from the right edge opens, a drag or tap on the scrim closes, and a
- * release settles to the nearer edge (a fling commits). External toggles ([IdeUiState.chatOpen], the top-bar
- * button, back) animate the same value.
+ * The phone right-edge tool-window drawer: an overlay that tracks the finger continuously, mirroring
+ * [PushDrawer] (which is left-only). It is fully plugin-derived — it hosts the RIGHT-anchored
+ * `ToolWindowContribution` (the AI chat is the first such plugin), so it self-gates: when no plugin
+ * contributes a RIGHT tool window it renders nothing, not even the gesture strip.
+ *
+ * An [Animatable] `shown` (0 = closed, panel off-screen right → openPx = fully open) is driven live: a
+ * leftward swipe from the right edge opens, a drag or tap on the scrim closes, and a release settles to the
+ * nearer edge (a fling commits). External toggles ([IdeUiState.openRightTool], the top-bar button, back)
+ * animate the same value.
  *
  * IMPORTANT: while closed, the ONLY overlay laid over the editor is a thin right-edge catcher strip, so the
  * editor stays fully touchable — the dimming scrim (which is modal and does block touches) is composed only
@@ -62,7 +66,13 @@ private val FlingCommit = 320.dp
  * driving the drag (pointer capture) even after the panel appears and the finger travels off the strip.
  */
 @Composable
-internal fun ChatOverlay(state: IdeUiState) {
+internal fun RightToolOverlay(state: IdeUiState) {
+    UiPluginHost.ensureLoaded()
+    val tools = ToolWindowRegistry.forAnchor(ToolWindowAnchor.RIGHT)
+    if (tools.isEmpty()) return
+    // The drawer hosts a single panel; it opens the currently-selected window, defaulting to the first.
+    val primaryId = tools.first().id
+
     BoxWithConstraints(Modifier.fillMaxSize()) {
         val density = LocalDensity.current
         val panelWidth = if (maxWidth < 480.dp) maxWidth - 48.dp else 420.dp
@@ -75,7 +85,7 @@ internal fun ChatOverlay(state: IdeUiState) {
         val shown = remember { Animatable(0f) }
         shown.updateBounds(0f, openPx)
         // Composited while open OR mid-animation; a fully closed drawer composes nothing over the editor.
-        val visible by remember { derivedStateOf { shown.value > 0.5f || state.chatOpen } }
+        val visible by remember { derivedStateOf { shown.value > 0.5f || state.openRightTool != null } }
 
         // A leftward drag (negative delta) opens; a rightward drag closes.
         fun dragBy(delta: Float) {
@@ -91,12 +101,12 @@ internal fun ChatOverlay(state: IdeUiState) {
             }
             // `shown` moves opposite to the pointer, so its initial velocity is the negated pointer velocity.
             shown.animateTo(target, tween(Motion.BASE, easing = Motion.quiet), initialVelocity = -velocityX)
-            state.chatOpen = target >= openPx / 2f
+            state.openRightTool = if (target >= openPx / 2f) primaryId else null
         }
 
-        // External toggles (top-bar sparkle, back press, initial state) animate to the same offset.
-        LaunchedEffect(state.chatOpen, openPx) {
-            val target = if (state.chatOpen) openPx else 0f
+        // External toggles (top-bar button, back press, initial state) animate to the same offset.
+        LaunchedEffect(state.openRightTool, openPx) {
+            val target = if (state.openRightTool != null) openPx else 0f
             if (shown.value != target) shown.animateTo(target, tween(Motion.BASE, easing = Motion.quiet))
         }
 
@@ -148,7 +158,7 @@ internal fun ChatOverlay(state: IdeUiState) {
                 Modifier.fillMaxSize()
                     .graphicsLayer { alpha = (shown.value / openPx).coerceIn(0f, 1f) }
                     .background(Color.Black.copy(alpha = 0.32f))
-                    .pointerInput(Unit) { detectTapGestures { state.chatOpen = false } }
+                    .pointerInput(Unit) { detectTapGestures { state.openRightTool = null } }
                     .draggable(
                         rememberDraggableState { dragBy(it) },
                         Orientation.Horizontal,
@@ -156,8 +166,8 @@ internal fun ChatOverlay(state: IdeUiState) {
                         onDragStopped = { velocity -> scope.launch { settle(velocity) } },
                     ),
             )
-            UiPluginHost.ensureLoaded()
-            val tool = ToolWindowRegistry.forAnchor(ToolWindowAnchor.RIGHT).firstOrNull()
+            // The open window, falling back to the first so its content stays rendered through the close animation.
+            val tool = tools.firstOrNull { it.id == state.openRightTool } ?: tools.first()
             Box(
                 Modifier.align(Alignment.CenterEnd)
                     .width(panelWidth)
@@ -166,17 +176,15 @@ internal fun ChatOverlay(state: IdeUiState) {
                     .offset { IntOffset((openPx - shown.value).roundToInt(), 0) },
             ) {
                 GlassSurface(Modifier.fillMaxSize(), GlassMaterial.Thick) {
-                    if (tool != null) {
-                        val backend = state.backend
-                        val active = state.active?.path
-                        val ctx = remember(backend, active) {
-                            object : ToolWindowContext {
-                                override val backend = backend
-                                override val activeFilePath = active
-                            }
+                    val backend = state.backend
+                    val active = state.active?.path
+                    val ctx = remember(backend, active) {
+                        object : ToolWindowContext {
+                            override val backend = backend
+                            override val activeFilePath = active
                         }
-                        tool.content(ctx)
                     }
+                    tool.content(ctx)
                 }
             }
         }

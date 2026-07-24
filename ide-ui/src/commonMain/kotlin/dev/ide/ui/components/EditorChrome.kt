@@ -80,7 +80,6 @@ import dev.ide.ui.backend.IndexUiStatus
 import dev.ide.ui.backend.RunTaskOption
 import dev.ide.ui.backend.UiActionItem
 import dev.ide.ui.generated.resources.Res
-import dev.ide.ui.generated.resources.chat_open
 import dev.ide.ui.generated.resources.close
 import dev.ide.ui.generated.resources.edchrome_build_console
 import dev.ide.ui.generated.resources.edchrome_build_variant
@@ -120,6 +119,7 @@ import dev.ide.ui.generated.resources.tab_close_others
 import dev.ide.ui.generated.resources.tab_close_to_the_left
 import dev.ide.ui.generated.resources.tab_close_to_the_right
 import dev.ide.ui.generated.resources.undo
+import dev.ide.ui.ext.ToolWindowContribution
 import dev.ide.ui.icons.CaIcons
 import dev.ide.ui.icons.TreeIcon
 import dev.ide.ui.icons.TreeIcons
@@ -168,8 +168,13 @@ fun EditorTopBar(
     onOptimizeImports: () -> Unit = {},
     onToggleConsole: () -> Unit = {},
     consoleOpen: Boolean = false,
-    onToggleChat: () -> Unit = {},
-    chatOpen: Boolean = false,
+    /** RIGHT-anchored tool windows (plugin-contributed side panels). The bar renders one toggle button per
+     *  entry — icon + title from the contribution — so the button set is fully plugin-derived: empty when no
+     *  plugin contributes one, and a disabled plugin's window simply isn't here. */
+    rightTools: List<ToolWindowContribution> = emptyList(),
+    /** Id of the currently-open right tool window (its button shows active), or null. */
+    openRightTool: String? = null,
+    onToggleRightTool: (String) -> Unit = {},
     inlayHintsOn: Boolean = true,
     onToggleInlayHints: () -> Unit = {},
     showPreview: Boolean = false,
@@ -214,7 +219,9 @@ fun EditorTopBar(
             if (compact) {
                 // On a phone the bar can't hold every control, so Run stays inline and the rest (incl. the
                 // edit actions) collapse into a single ⋯ overflow menu — everything one tap away.
-                IconButtonCa(CaIcons.sparkle, stringResource(Res.string.chat_open), onToggleChat, active = chatOpen)
+                rightTools.forEach { tw ->
+                    IconButtonCa(actionIcon(tw.iconId), tw.title, { onToggleRightTool(tw.id) }, active = openRightTool == tw.id)
+                }
                 PluginToolbarActions(pluginActions, dim, onPluginAction)
                 if (activeVariant != null) VariantChip(
                     activeVariant,
@@ -261,12 +268,14 @@ fun EditorTopBar(
                     onToggleConsole,
                     active = consoleOpen
                 )
-                IconButtonCa(
-                    CaIcons.sparkle,
-                    stringResource(Res.string.chat_open),
-                    onToggleChat,
-                    active = chatOpen
-                )
+                rightTools.forEach { tw ->
+                    IconButtonCa(
+                        actionIcon(tw.iconId),
+                        tw.title,
+                        { onToggleRightTool(tw.id) },
+                        active = openRightTool == tw.id,
+                    )
+                }
                 // Shown when the open file has @Preview composables — renders/checks them via the interpreter.
                 if (showPreview) IconButtonCa(
                     CaIcons.image,

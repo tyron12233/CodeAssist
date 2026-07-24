@@ -88,6 +88,8 @@ import dev.ide.plugin.Plugin
 import dev.ide.plugin.PluginManifest
 import dev.ide.plugin.PluginRegistration
 import dev.ide.plugin.impl.ActionManager
+import dev.ide.agent.ui.AgentUiPlugin
+import dev.ide.ui.ext.UiPlugin
 
 /**
  * The IDE's own built-in plugins and the ordered set the [ApplicationEnvironment] loads.
@@ -106,27 +108,37 @@ import dev.ide.plugin.impl.ActionManager
  * resource host, the app-compat action, the command actions) take [ApplicationEnvironment] and read
  * `env.activeEngine` lazily at callback time — never during `register`.
  */
+/**
+ * One built-in feature's UNIFIED registration: its engine [Plugin] (the identity — manifest/id/enabled state
+ * live here) paired with an OPTIONAL Compose [UiPlugin] facet. The two facets can't be one object (platform-core
+ * vs Compose worlds; a `@Composable` body can't live in the engine module), so a feature co-declares them here
+ * in one entry. [ApplicationEnvironment] loads the engine facet into the plugin manager and exposes the UI facet
+ * of ENABLED plugins to the shell — so disabling the plugin drops BOTH halves through the one decision.
+ */
+class BuiltInPlugin(val engine: Plugin, val ui: UiPlugin? = null)
+
 object BuiltInPlugins {
-    fun assemble(env: ApplicationEnvironment, codecs: FacetCodecRegistry): List<Plugin> = listOf(
-        PlatformPlugin(),
-        JdtLanguagePlugin(),
-        JavaPsiLanguagePlugin(),
-        XmlLanguagePlugin(),
-        KotlinLanguagePlugin(),
-        JavaSupportPlugin(),
-        KotlinSupportPlugin(),
-        AndroidSupportPlugin(env, codecs),
-        SamplesPlugin(),
-        CompletionBuiltinsPlugin(env),
-        IndexingPlugin(),
-        JdtAnalysisPlugin(),
-        JavaPsiAnalysisPlugin(),
-        KotlinAnalysisPlugin(),
-        XmlAnalysisPlugin(env),
-        AndroidXmlPlugin(env),
-        IdeCoreServicesPlugin(),
-        IdeCoreActionsPlugin(env),
-        AgentPlugin(),
+    fun assemble(env: ApplicationEnvironment, codecs: FacetCodecRegistry): List<BuiltInPlugin> = listOf(
+        BuiltInPlugin(PlatformPlugin()),
+        BuiltInPlugin(JdtLanguagePlugin()),
+        BuiltInPlugin(JavaPsiLanguagePlugin()),
+        BuiltInPlugin(XmlLanguagePlugin()),
+        BuiltInPlugin(KotlinLanguagePlugin()),
+        BuiltInPlugin(JavaSupportPlugin()),
+        BuiltInPlugin(KotlinSupportPlugin()),
+        BuiltInPlugin(AndroidSupportPlugin(env, codecs)),
+        BuiltInPlugin(SamplesPlugin()),
+        BuiltInPlugin(CompletionBuiltinsPlugin(env)),
+        BuiltInPlugin(IndexingPlugin()),
+        BuiltInPlugin(JdtAnalysisPlugin()),
+        BuiltInPlugin(JavaPsiAnalysisPlugin()),
+        BuiltInPlugin(KotlinAnalysisPlugin()),
+        BuiltInPlugin(XmlAnalysisPlugin(env)),
+        BuiltInPlugin(AndroidXmlPlugin(env)),
+        BuiltInPlugin(IdeCoreServicesPlugin()),
+        BuiltInPlugin(IdeCoreActionsPlugin(env)),
+        // The AI agent: engine facet (settings page + AgentBackend wiring) + its Compose chat UI, one entry.
+        BuiltInPlugin(AgentPlugin(), ui = AgentUiPlugin),
     )
 }
 

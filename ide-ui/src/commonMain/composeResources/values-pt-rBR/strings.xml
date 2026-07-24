@@ -121,23 +121,6 @@ Nunca coletamos seu código, nomes de arquivos ou projetos, quais recursos você
     <string name="compatibility">Compatibilidade</string>
 
     <!-- AI coding agent -->
-    <string name="chat_title">Assistente de IA</string>
-    <string name="chat_open">Assistente IA</string>
-    <string name="chat_close">Fechar chat</string>
-    <string name="chat_empty_title">Agente de programação IA</string>
-    <string name="chat_empty_body">Pergunte sobre seu código ou diga ao agente o que alterar. Ele pode ler, pesquisar e editar seus arquivos sob o modo de permissão que você escolher.</string>
-    <string name="chat_mode_ask">Perguntar</string>
-    <string name="chat_mode_auto">Automático</string>
-    <string name="chat_mode_plan">Plano</string>
-    <string name="chat_need_key">Adicione uma chave de API para começar a conversar.</string>
-    <string name="chat_add_key">Adicionar chave de API</string>
-    <string name="chat_manage_keys">Gerenciar provedores e chaves</string>
-    <string name="chat_placeholder">Pergunte ou descreva uma alteração…</string>
-    <string name="chat_send">Enviar</string>
-    <string name="chat_stop">Parar</string>
-    <string name="chat_new">Nova sessão</string>
-    <string name="chat_retry">Tentar novamente</string>
-    <string name="chat_thinking">Pensando…</string>
 
     <!-- ============================================================ -->
     <!-- Parity pass: strings present in EN, added to pt-rBR -->
@@ -972,20 +955,6 @@ Nunca coletamos seu código, nomes de arquivos ou projetos, quais recursos você
     <string name="install">Instalar</string>
 
     <!-- AI coding agent (providers/permission/keys) -->
-    <string name="chat_providers_title">Provedores de IA</string>
-    <string name="chat_providers_subtitle">Escolha um provedor e adicione sua chave. As chaves são armazenadas neste dispositivo.</string>
-    <string name="chat_api_key">Chave de API</string>
-    <string name="chat_base_url">URL base</string>
-    <string name="chat_model">Modelo</string>
-    <string name="chat_connected">Conectado</string>
-    <string name="chat_show">Mostrar</string>
-    <string name="chat_hide">Ocultar</string>
-    <string name="chat_gateway_hint">Compatível com OpenAI: OpenRouter, LiteLLM ou um endpoint auto-hospedado.</string>
-    <string name="chat_done">Concluído</string>
-    <string name="chat_perm_title">Permitir esta alteração?</string>
-    <string name="chat_allow">Permitir</string>
-    <string name="chat_allow_session">Permitir nesta sessão</string>
-    <string name="chat_deny">Negar</string>
 
     <!-- Settings page content (set_*) -->
     <string name="set_page_appearance">Aparência</string>

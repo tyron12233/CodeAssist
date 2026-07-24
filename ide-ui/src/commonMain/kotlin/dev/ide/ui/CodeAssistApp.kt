@@ -106,9 +106,16 @@ fun CodeAssistApp(
      *  non-null value, the import preview opens for it. Null on desktop / normal launch. */
     importPackagePath: String? = null,
 ) {
-    // The AI agent's chat panel is a UI-plugin-contributed RIGHT tool window; register it once, before any
-    // surface triggers UiPluginHost.ensureLoaded() (the command palette / editor sheets do so lazily).
-    remember { dev.ide.ui.ext.UiPluginHost.register(dev.ide.ui.components.AgentUiPlugin); Unit }
+    // Register the UI facets of the enabled plugins, then load once. The backend reports exactly the plugins
+    // whose engine half is enabled (see BuiltInPlugins' unified engine+UI declaration), so this shell code names
+    // no specific plugin and a disabled plugin contributes nothing. Loaded eagerly (idempotent) so the tool-
+    // window/action registries are populated before the editor composes — the top-bar toggles + side panes read
+    // straight from ToolWindowRegistry.
+    remember(backend) {
+        backend.uiPlugins().forEach { dev.ide.ui.ext.UiPluginHost.register(it) }
+        dev.ide.ui.ext.UiPluginHost.ensureLoaded()
+        Unit
+    }
     // Persisted IDE settings drive the theme (and seed the editor's live prefs). Re-read after the Settings
     // screen writes; appearance changes then take effect immediately.
     var settings by remember { mutableStateOf(backend.settings.settings()) }

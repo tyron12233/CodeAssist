@@ -121,23 +121,6 @@
     <string name="compatibility">التوافق</string>
 
     <!-- AI coding agent -->
-    <string name="chat_title">مساعد الذكاء الاصطناعي</string>
-    <string name="chat_open">مساعد الذكاء الاصطناعي</string>
-    <string name="chat_close">إغلاق الدردشة</string>
-    <string name="chat_empty_title">وكيل البرمجة بالذكاء الاصطناعي</string>
-    <string name="chat_empty_body">اسأل عن الكود الخاص بك، أو أخبر الوكيل بما يجب تغييره. يمكنه قراءة ملفاتك والبحث فيها وتعديلها بموجب وضع الإذن الذي تختاره.</string>
-    <string name="chat_mode_ask">سؤال</string>
-    <string name="chat_mode_auto">تلقائي</string>
-    <string name="chat_mode_plan">خطة</string>
-    <string name="chat_need_key">أضف مفتاح API لبدء الدردشة.</string>
-    <string name="chat_add_key">إضافة مفتاح API</string>
-    <string name="chat_manage_keys">إدارة المزودين والمفاتيح</string>
-    <string name="chat_placeholder">اسأل أو صف تغييرًا…</string>
-    <string name="chat_send">إرسال</string>
-    <string name="chat_stop">إيقاف</string>
-    <string name="chat_new">جلسة جديدة</string>
-    <string name="chat_retry">إعادة المحاولة</string>
-    <string name="chat_thinking">جاري التفكير…</string>
 
     <!-- ==================== Added to reach parity with English ==================== -->
     <!-- Plurals: projects, files, modules -->
@@ -1059,20 +1042,6 @@
     <string name="modcfg_platform_sdk_auto">تلقائي (%1$s)</string>
 
     <!-- AI chat providers -->
-    <string name="chat_providers_title">مزودو الذكاء الاصطناعي</string>
-    <string name="chat_providers_subtitle">اختر مزودًا وأضف مفتاحك. تُخزَّن المفاتيح على هذا الجهاز.</string>
-    <string name="chat_api_key">مفتاح API</string>
-    <string name="chat_base_url">عنوان URL الأساسي</string>
-    <string name="chat_model">النموذج</string>
-    <string name="chat_connected">متصل</string>
-    <string name="chat_show">إظهار</string>
-    <string name="chat_hide">إخفاء</string>
-    <string name="chat_gateway_hint">متوافق مع OpenAI: OpenRouter أو LiteLLM أو نقطة نهاية مستضافة ذاتيًا.</string>
-    <string name="chat_done">تم</string>
-    <string name="chat_perm_title">السماح بهذا التغيير؟</string>
-    <string name="chat_allow">سماح</string>
-    <string name="chat_allow_session">السماح لهذه الجلسة</string>
-    <string name="chat_deny">رفض</string>
 
     <!-- Settings pages -->
     <string name="set_page_appearance">المظهر</string>

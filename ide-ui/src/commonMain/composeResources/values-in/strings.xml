@@ -121,23 +121,6 @@ Kami tidak pernah mengumpulkan kode, nama file atau proyek Anda, fitur apa yang 
     <string name="compatibility">Kompatibilitas</string>
 
     <!-- AI coding agent -->
-    <string name="chat_title">Asisten AI</string>
-    <string name="chat_open">Asisten AI</string>
-    <string name="chat_close">Tutup obrolan</string>
-    <string name="chat_empty_title">Agen Pengodean AI</string>
-    <string name="chat_empty_body">Tanyakan tentang kode Anda, atau beri tahu agen apa yang perlu diubah. Agen dapat membaca, mencari, dan mengedit file Anda di bawah mode izin yang Anda pilih.</string>
-    <string name="chat_mode_ask">Tanya</string>
-    <string name="chat_mode_auto">Otomatis</string>
-    <string name="chat_mode_plan">Rencana</string>
-    <string name="chat_need_key">Tambahkan kunci API untuk mulai mengobrol.</string>
-    <string name="chat_add_key">Tambah kunci API</string>
-    <string name="chat_manage_keys">Kelola penyedia dan kunci</string>
-    <string name="chat_placeholder">Tanyakan atau jelaskan perubahan…</string>
-    <string name="chat_send">Kirim</string>
-    <string name="chat_stop">Hentikan</string>
-    <string name="chat_new">Sesi baru</string>
-    <string name="chat_retry">Coba lagi</string>
-    <string name="chat_thinking">Berpikir…</string>
     <!-- ===== Localized entries added for full English parity ===== -->
     <plurals name="caproj_files">
         <item quantity="other">%1$d file</item>
@@ -925,20 +908,6 @@ Kami tidak pernah mengumpulkan kode, nama file atau proyek Anda, fitur apa yang 
     <string name="install">Pasang</string>
     <string name="modcfg_platform_sdk">Platform SDK</string>
     <string name="modcfg_platform_sdk_auto">Otomatis (%1$s)</string>
-    <string name="chat_providers_title">Penyedia AI</string>
-    <string name="chat_providers_subtitle">Pilih penyedia dan tambahkan kunci Anda. Kunci disimpan di perangkat ini.</string>
-    <string name="chat_api_key">Kunci API</string>
-    <string name="chat_base_url">URL dasar</string>
-    <string name="chat_model">Model</string>
-    <string name="chat_connected">Terhubung</string>
-    <string name="chat_show">Tampilkan</string>
-    <string name="chat_hide">Sembunyikan</string>
-    <string name="chat_gateway_hint">Kompatibel dengan OpenAI: OpenRouter, LiteLLM, atau endpoint yang di-host sendiri.</string>
-    <string name="chat_done">Selesai</string>
-    <string name="chat_perm_title">Izinkan perubahan ini?</string>
-    <string name="chat_allow">Izinkan</string>
-    <string name="chat_allow_session">Izinkan untuk sesi ini</string>
-    <string name="chat_deny">Tolak</string>
     <string name="set_page_appearance">Tampilan</string>
     <string name="set_page_editor">Editor</string>
     <string name="set_page_completion">Penyelesaian Kode</string>

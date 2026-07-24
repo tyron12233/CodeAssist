@@ -174,8 +174,17 @@ class IdeUiState(
     var navOpen by mutableStateOf(!isMobilePlatform)
     var searchOpen by mutableStateOf(false)
     var consoleOpen by mutableStateOf(!isMobilePlatform)
-    /** The AI agent chat drawer (right edge; desktop layout). */
-    var chatOpen by mutableStateOf(false)
+    /**
+     * The id of the currently-open RIGHT-anchored tool window (a plugin-contributed side panel), or null.
+     * Right tool windows are fully plugin-derived: the top bar renders a toggle button per registered RIGHT
+     * `ToolWindowContribution`, the desktop layout docks the open one as a side pane, and the phone layout
+     * shows it as a swipe-in overlay. The AI agent chat is simply the first such plugin — no agent-specific
+     * chrome remains, so a disabled plugin contributes nothing and leaves no trace. */
+    var openRightTool by mutableStateOf<String?>(null)
+
+    /** Toggle a RIGHT tool window open/closed by id (the top-bar button and the phone swipe both route here). */
+    fun toggleRightTool(id: String) { openRightTool = if (openRightTool == id) null else id }
+
     var paletteOpen by mutableStateOf(false)
     /** The in-file structure / outline bottom sheet (opened from the breadcrumb tap or Ctrl-F12). */
     var structureOpen by mutableStateOf(false)
