@@ -53,6 +53,11 @@ internal object KotlinCompletionItems {
         val callSyntaxFollows = followingChar == '(' || followingChar == '{'
         val trailingLambda = if (isFunction && !infix && !callableRef && !callSyntaxFollows) trailingLambdaParam(s) else null
         val (insert, caret) = when {
+            // A PACKAGE segment (`import com.tyron.█`, `java.util.█`) is a navigational prefix, never a terminal
+            // completion — append `.` so the next segment can be typed/completed right away (unless a `.` already
+            // follows the caret, which would otherwise double it).
+            s.kind == SymbolKind.PACKAGE ->
+                (if (followingChar == '.') s.name else "${s.name}.") to CaretAction.AtEnd
             // A callable reference (`::foo`, `String::length`): the bare name is the function value — no `()`, no lambda.
             callableRef -> s.name to CaretAction.AtEnd
             // Infix use (`a downTo b`): the name followed by a space, ready for the right operand — not `downTo()`.
