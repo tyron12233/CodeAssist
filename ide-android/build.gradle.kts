@@ -308,6 +308,7 @@ android {
     sourceSets.getByName("main").assets.srcDir(layout.buildDirectory.dir("compose-runtime-asset").get().asFile)
     sourceSets.getByName("main").assets.srcDir(layout.buildDirectory.dir("compose-fonts-asset").get().asFile)
     sourceSets.getByName("main").assets.srcDir(layout.buildDirectory.dir("compose-strings-asset").get().asFile)
+    sourceSets.getByName("main").assets.srcDir(layout.buildDirectory.dir("agent-ui-strings-asset").get().asFile)
     sourceSets.getByName("main").assets.srcDir(layout.buildDirectory.dir("compose-drawables-asset").get().asFile)
     sourceSets.getByName("main").assets.srcDir(layout.buildDirectory.dir("r8-dex-asset").get().asFile)
     sourceSets.getByName("main").assets.srcDir(layout.buildDirectory.dir("applog-runtime-asset").get().asFile)
@@ -628,7 +629,7 @@ val fetchAndroidBuildTools = tasks.register("fetchAndroidBuildTools") {
 // Run before anything AGP does, so the freshly-fetched lib*.so are on disk when the native-lib merge runs,
 // and the staged kotlin-stdlib.jar asset is present when the asset merge runs.
 tasks.named("preBuild").configure {
-    dependsOn(fetchAndroidBuildTools, bundleKotlinStdlibAsset, bundleKotlincResourcesAsset, bundleComposeRuntimeAsset, bundleComposeFontsAsset, bundleComposeStringAsset, bundleComposeDrawablesAsset, bundleR8DexAsset, bundleAppLogRuntimeAsset, bundleVmSpikeComposeRuntimeAsset)
+    dependsOn(fetchAndroidBuildTools, bundleKotlinStdlibAsset, bundleKotlincResourcesAsset, bundleComposeRuntimeAsset, bundleComposeFontsAsset, bundleComposeStringAsset, bundleAgentUiComposeStringAsset, bundleComposeDrawablesAsset, bundleR8DexAsset, bundleAppLogRuntimeAsset, bundleVmSpikeComposeRuntimeAsset)
 }
 
 // Same Android packaging gap as the fonts above, for the i18n string resources. :ide-ui's
@@ -644,6 +645,20 @@ val bundleComposeStringAsset = tasks.register<Copy>("bundleComposeStringAsset") 
         include("values*/**/*.cvr")
     }
     into(layout.buildDirectory.dir("compose-strings-asset/composeResources/dev.ide.ui.generated.resources"))
+}
+
+// The SAME Android packaging gap, for :agent-ui's OWN compose-resource strings (the chat_* i18n keys, which
+// live in this module's composeResources under package dev.ide.agent.ui.generated.resources — migrated out of
+// :ide-ui). Its compiled `.cvr` files must be staged under THAT resClass-package segment; without this the
+// agent chat panel crashes on device with `MissingResourceException: composeResources/
+// dev.ide.agent.ui.generated.resources/values/strings.commonMain.cvr`. Mirrors bundleComposeStringAsset.
+val bundleAgentUiComposeStringAsset = tasks.register<Copy>("bundleAgentUiComposeStringAsset") {
+    description = "Stage :agent-ui's i18n compose-resource strings into the APK assets (Android packaging gap)."
+    dependsOn(":agent-ui:desktopProcessResources")
+    from(project(":agent-ui").layout.buildDirectory.dir("processedResources/desktop/main/composeResources/dev.ide.agent.ui.generated.resources")) {
+        include("values*/**/*.cvr")
+    }
+    into(layout.buildDirectory.dir("agent-ui-strings-asset/composeResources/dev.ide.agent.ui.generated.resources"))
 }
 
 // The stock Eclipse jars we relocate for ART (ecj, core.runtime, equinox.common) reach the app's runtime
