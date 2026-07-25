@@ -174,19 +174,27 @@ internal fun DrawScope.drawEditor(
         val l = layoutFor(line)
         val top = lineTop(line)
         val marker = if (trailingMarker) metrics.charWidth * 0.6f else 0f
+        // Callers pass columns derived from offsets remembered against the document (selection, find/occurrence
+        // matches, template fields). A one-frame-stale offset can land a column past the freshly laid-out line's
+        // end, and getHorizontalPosition/getLineForOffset throw on an out-of-range column (seen in the wild as an
+        // IllegalArgumentException from this draw path). Clamp into the layout like xOf does; vEnd == -1 is the
+        // "to end of line" sentinel and must survive the clamp.
+        val maxCol = l.layoutInput.text.length
+        val startCol = vStart.coerceIn(0, maxCol)
+        val endCol = if (vEnd < 0) -1 else vEnd.coerceIn(0, maxCol)
         if (!wrap) {
-            val x0 = textLeft + l.getHorizontalPosition(vStart, usePrimaryDirection = true)
-            val x1 = if (vEnd >= 0) textLeft + l.getHorizontalPosition(vEnd, usePrimaryDirection = true)
+            val x0 = textLeft + l.getHorizontalPosition(startCol, usePrimaryDirection = true)
+            val x1 = if (endCol >= 0) textLeft + l.getHorizontalPosition(endCol, usePrimaryDirection = true)
             else textLeft + l.size.width + marker
             if (x1 > x0) drawRect(color, Offset(x0, top), Size(x1 - x0, lineH))
             return
         }
-        val firstSub = l.getLineForOffset(vStart)
-        val lastSub = if (vEnd >= 0) l.getLineForOffset(vEnd) else (l.lineCount - 1).coerceAtLeast(0)
+        val firstSub = l.getLineForOffset(startCol)
+        val lastSub = if (endCol >= 0) l.getLineForOffset(endCol) else (l.lineCount - 1).coerceAtLeast(0)
         for (s in firstSub..lastSub) {
-            val x0 = textLeft + (if (s == firstSub) l.getHorizontalPosition(vStart, usePrimaryDirection = true) else l.getLineLeft(s))
+            val x0 = textLeft + (if (s == firstSub) l.getHorizontalPosition(startCol, usePrimaryDirection = true) else l.getLineLeft(s))
             val x1 = textLeft + when {
-                s == lastSub && vEnd >= 0 -> l.getHorizontalPosition(vEnd, usePrimaryDirection = true)
+                s == lastSub && endCol >= 0 -> l.getHorizontalPosition(endCol, usePrimaryDirection = true)
                 else -> l.getLineRight(s) + if (s == lastSub) marker else 0f
             }
             if (x1 > x0) drawRect(color, Offset(x0, top + s * lineH), Size(x1 - x0, lineH))
