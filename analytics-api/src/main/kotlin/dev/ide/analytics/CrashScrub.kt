@@ -14,6 +14,20 @@ object CrashScrub {
     var ownPackagePrefixes: List<String> = listOf("dev.ide.")
     private const val MAX_FRAMES = 30
 
+    /**
+     * Platform/library packages that are safe to name when a crash has NONE of our own frames anywhere (neither
+     * the exception nor its cause chain). These hold no user data — the user's program runs on the interpreter
+     * VM, never as real host JVM frames — so a `kotlin.collections.CollectionsKt.first` or
+     * `androidx.compose.*` frame is a class+method+line of the framework, not PII. Without this, a crash buried
+     * entirely in framework code reports an EMPTY `frames` and is untriageable (we saw a large `NoSuchElement`/
+     * `ClassCast` cluster with nothing to act on). Bounded to a few top frames of the deepest cause.
+     */
+    private val platformPackagePrefixes: List<String> = listOf(
+        "androidx.", "android.", "java.", "javax.", "kotlin.", "kotlinx.",
+        "org.jetbrains.", "com.google.", "com.android.", "dalvik.", "sun.", "libcore.",
+    )
+    private const val MAX_FALLBACK_FRAMES = 8
+
     /** `{exception: "Type <- CauseType <- …", frames: "Class.method:line\n…"}` — scrubbed. */
     fun scrub(t: Throwable): Map<String, String> = mapOf(
         "exception" to exceptionChain(t),
@@ -50,12 +64,18 @@ object CrashScrub {
         // A deep framework crash (Compose runtime, Android looper) can bury the first of OUR frames past the
         // cap — or entirely, with our code only on the cause chain — leaving an untriageable report (we saw a
         // large share of crashes with no own frame at all). Guarantee the deepest own frame anywhere in the
-        // exception's own trace or its causes, so every crash pins to a call site we can act on.
-        if (!anyOwn) deepestOwnFrame(t)?.let { out.add(it) }
+        // exception's own trace or its causes, so every crash pins to a call site we can act on. If there is no
+        // own frame ANYWHERE, fall back to the deepest cause's top platform frames so the crash site is still
+        // visible instead of an empty report.
+        if (!anyOwn) {
+            val own = deepestOwnFrame(t)
+            if (own != null) out.add(own) else out.addAll(platformFallbackFrames(t))
+        }
         return out.joinToString("\n")
     }
 
     private fun isOwn(f: StackTraceElement) = ownPackagePrefixes.any { f.className.startsWith(it) }
+    private fun isPlatform(f: StackTraceElement) = platformPackagePrefixes.any { f.className.startsWith(it) }
     private fun frame(f: StackTraceElement) = "${f.className}.${f.methodName}:${f.lineNumber}"
 
     /** The first own frame found walking the exception and its cause chain (cycle-guarded); null if none. */
@@ -67,5 +87,23 @@ object CrashScrub {
             cur = cur.cause
         }
         return null
+    }
+
+    /**
+     * When no own frame exists anywhere, the top platform frames of the deepest cause (the actual origin) — so
+     * a crash that lives entirely in framework/stdlib code still reports WHERE it threw. Privacy-safe: only
+     * recognized platform packages, class+method+line, no messages. Empty if the trace has no platform frame.
+     */
+    private fun platformFallbackFrames(t: Throwable): List<String> {
+        val chain = ArrayList<Throwable>()
+        val seen = HashSet<Throwable>()
+        var cur: Throwable? = t
+        while (cur != null && seen.add(cur)) { chain.add(cur); cur = cur.cause }
+        for (e in chain.asReversed()) { // deepest cause first
+            val frames = e.stackTrace.asSequence().filter { isPlatform(it) }.take(MAX_FALLBACK_FRAMES)
+                .map { frame(it) }.toList()
+            if (frames.isNotEmpty()) return frames
+        }
+        return emptyList()
     }
 }
