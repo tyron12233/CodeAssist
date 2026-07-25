@@ -57,6 +57,10 @@ data class LlmRequest(
     val maxTokens: Int = 8192,
     /** Request adaptive reasoning when the model supports it. Providers ignore it on models that do not. */
     val thinking: Boolean = true,
+    /** Optional cap on the provider's reasoning ("thinking") tokens; null leaves the model default. Only
+     *  providers that expose a reasoning budget honor it (Gemini 2.5's `thinkingConfig`); others ignore it.
+     *  A lower budget trims token spend, which matters on token-metered free tiers. */
+    val thinkingBudget: Int? = null,
 )
 
 /** A normalized streaming event. Providers emit these; the agent loop assembles them into a turn. */

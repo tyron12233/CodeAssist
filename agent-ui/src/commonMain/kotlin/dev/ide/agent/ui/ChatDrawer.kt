@@ -60,6 +60,10 @@ import androidx.compose.ui.input.key.type
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.ui.platform.LocalClipboardManager
+import androidx.compose.ui.text.AnnotatedString
+import kotlinx.coroutines.delay
 import dev.ide.ui.backend.IdeBackend
 import dev.ide.ui.backend.UiAgentConfig
 import dev.ide.ui.backend.UiAgentMessage
@@ -71,6 +75,8 @@ import dev.ide.ui.backend.UiAgentToolStatus
 import dev.ide.agent.ui.generated.resources.Res
 import dev.ide.agent.ui.generated.resources.chat_add_key
 import dev.ide.agent.ui.generated.resources.chat_close
+import dev.ide.agent.ui.generated.resources.chat_copied
+import dev.ide.agent.ui.generated.resources.chat_copy
 import dev.ide.agent.ui.generated.resources.chat_manage_keys
 import dev.ide.agent.ui.generated.resources.chat_empty_body
 import dev.ide.agent.ui.generated.resources.chat_empty_title
@@ -249,7 +255,11 @@ private fun MessageItem(msg: UiAgentMessage, onRetry: (() -> Unit)? = null) {
     Box(Modifier.fillMaxWidth().entranceSlideUp()) {
         when {
             msg.isError -> ErrorMessage(msg.text, onRetry)
-            msg.role == UiAgentRole.USER -> Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
+            msg.role == UiAgentRole.USER -> Column(
+                Modifier.fillMaxWidth(),
+                horizontalAlignment = Alignment.End,
+                verticalArrangement = Arrangement.spacedBy(2.dp),
+            ) {
                 Box(
                     Modifier.widthIn(max = 320.dp)
                         // Chat-bubble rounding: a small corner on the tail side (bottom-end for the user).
@@ -258,6 +268,7 @@ private fun MessageItem(msg: UiAgentMessage, onRetry: (() -> Unit)? = null) {
                 ) {
                     Text(msg.text, color = Ca.colors.textPrimary, style = Ca.type.footnote)
                 }
+                CopyButton(msg.text)
             }
             else -> AssistantMessage(msg)
         }
@@ -276,22 +287,25 @@ private fun ErrorMessage(text: String, onRetry: (() -> Unit)?) {
             Icon(CaIcons.warning, null, Modifier.size(15.dp), tint = Ca.colors.error)
             Text(text, color = Ca.colors.error, style = Ca.type.footnote)
         }
-        if (onRetry != null) {
-            val interaction = remember { MutableInteractionSource() }
-            Row(
-                Modifier.clip(RoundedCornerShape(Ca.radius.pill))
-                    .background(Ca.colors.error.copy(alpha = 0.16f))
-                    .pressScale(interaction)
-                    .clickable(interactionSource = interaction, indication = null, onClick = onRetry)
-                    .padding(horizontal = 12.dp, vertical = 6.dp),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(5.dp),
-            ) {
-                Icon(CaIcons.refresh, null, Modifier.size(13.dp), tint = Ca.colors.error)
-                Text(
-                    stringResource(Res.string.chat_retry),
-                    color = Ca.colors.error, style = Ca.type.caption, fontWeight = FontWeight.SemiBold,
-                )
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+            CopyButton(text, tint = Ca.colors.error)
+            if (onRetry != null) {
+                val interaction = remember { MutableInteractionSource() }
+                Row(
+                    Modifier.clip(RoundedCornerShape(Ca.radius.pill))
+                        .background(Ca.colors.error.copy(alpha = 0.16f))
+                        .pressScale(interaction)
+                        .clickable(interactionSource = interaction, indication = null, onClick = onRetry)
+                        .padding(horizontal = 12.dp, vertical = 6.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(5.dp),
+                ) {
+                    Icon(CaIcons.refresh, null, Modifier.size(13.dp), tint = Ca.colors.error)
+                    Text(
+                        stringResource(Res.string.chat_retry),
+                        color = Ca.colors.error, style = Ca.type.caption, fontWeight = FontWeight.SemiBold,
+                    )
+                }
             }
         }
     }
@@ -301,14 +315,88 @@ private fun ErrorMessage(text: String, onRetry: (() -> Unit)?) {
 private fun AssistantMessage(msg: UiAgentMessage) {
     Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(8.dp)) {
         if (msg.thinking.isNotBlank()) ThinkingBlock(msg.thinking, msg.streaming)
-        msg.toolCalls.forEach { ToolCallRow(it) }
+        if (msg.toolCalls.isNotEmpty()) ToolCallsSection(msg.toolCalls)
         if (msg.text.isNotBlank()) AssistantMarkdown(msg.text)
         // A blinking caret while the answer is still streaming in.
         if (msg.streaming && msg.text.isNotBlank()) TypingCaret()
         if (msg.streaming && msg.text.isBlank() && msg.thinking.isBlank() && msg.toolCalls.isEmpty()) {
             ThinkingBlock(thinking = "", streaming = true)
         }
+        // Copy the finished answer.
+        if (!msg.streaming && msg.text.isNotBlank()) CopyButton(msg.text)
     }
+}
+
+/**
+ * The turn's tool calls. A single call renders as one row; several collapse under a header (chevron +
+ * aggregate status + count, plus the latest tool's title when collapsed) so a long tool-heavy turn does not
+ * flood the transcript. Expanded by default; the collapse state is remembered per message.
+ */
+@Composable
+private fun ToolCallsSection(calls: List<UiAgentToolCall>) {
+    if (calls.size <= 1) {
+        calls.forEach { ToolCallRow(it) }
+        return
+    }
+    var expanded by rememberSaveable { mutableStateOf(true) }
+    Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        ToolGroupHeader(calls, expanded) { expanded = !expanded }
+        if (expanded) {
+            Column(verticalArrangement = Arrangement.spacedBy(6.dp)) { calls.forEach { ToolCallRow(it) } }
+        }
+    }
+}
+
+@Composable
+private fun ToolGroupHeader(calls: List<UiAgentToolCall>, expanded: Boolean, onToggle: () -> Unit) {
+    val interaction = remember { MutableInteractionSource() }
+    Row(
+        Modifier.fillMaxWidth().clip(RoundedCornerShape(10.dp))
+            .clickable(interactionSource = interaction, indication = null, onClick = onToggle)
+            .padding(vertical = 2.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        val rotation by animateFloatAsState(if (expanded) 0f else -90f, label = "toolChevron")
+        Icon(CaIcons.chevronDown, null, Modifier.size(14.dp).rotate(rotation), tint = Ca.colors.textTertiary)
+        ToolStatusIcon(aggregateStatus(calls))
+        // A bare count is locale-safe (no pluralized label needed).
+        Text("${calls.size}", style = Ca.type.caption, color = Ca.colors.textSecondary, fontWeight = FontWeight.SemiBold)
+        if (!expanded) {
+            Text(
+                calls.last().title,
+                style = Ca.type.caption2, color = Ca.colors.textTertiary,
+                maxLines = 1, overflow = TextOverflow.Ellipsis,
+            )
+        }
+    }
+}
+
+/** The status shown on a collapsed tool group: running wins, then error, then denied, else all-ok. */
+private fun aggregateStatus(calls: List<UiAgentToolCall>): UiAgentToolStatus = when {
+    calls.any { it.status == UiAgentToolStatus.RUNNING } -> UiAgentToolStatus.RUNNING
+    calls.any { it.status == UiAgentToolStatus.ERROR } -> UiAgentToolStatus.ERROR
+    calls.any { it.status == UiAgentToolStatus.DENIED } -> UiAgentToolStatus.DENIED
+    else -> UiAgentToolStatus.OK
+}
+
+/** One-tap copy of a message's text, flipping to a check for ~1.5s as confirmation. */
+@Composable
+private fun CopyButton(text: String, tint: androidx.compose.ui.graphics.Color = Ca.colors.textTertiary) {
+    val clipboard = LocalClipboardManager.current
+    var copied by remember { mutableStateOf(false) }
+    LaunchedEffect(copied) { if (copied) { delay(1500); copied = false } }
+    IconButtonCa(
+        if (copied) CaIcons.check else CaIcons.copy,
+        stringResource(if (copied) Res.string.chat_copied else Res.string.chat_copy),
+        onClick = {
+            clipboard.setText(AnnotatedString(text))
+            copied = true
+        },
+        iconSize = 14,
+        boxSize = 26,
+        tint = if (copied) Ca.colors.success else tint,
+    )
 }
 
 @Composable

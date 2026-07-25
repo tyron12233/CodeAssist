@@ -11,6 +11,7 @@ object AgentProviders {
             AnthropicProvider(transport),
             OpenAiProvider(transport),
             GeminiProvider(transport),
+            AntigravityProvider(transport),
         )
 
     fun registry(transport: LlmTransport = OkHttpLlmTransport()): LlmProviderRegistry =

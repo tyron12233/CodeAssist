@@ -67,10 +67,13 @@ internal object LlmErrors {
 
     private fun classify(status: Int?, type: String, code: String, msg: String?): LlmErrorKind {
         val m = msg.orEmpty().lowercase()
-        val quota = type.contains("insufficient_quota") || code.contains("insufficient_quota") ||
-            type.contains("billing") || m.contains("exceeded your current quota") ||
-            m.contains("billing details") || m.contains("out of credit") || m.contains("credit balance")
-        if (quota) return LlmErrorKind.QUOTA
+        // True billing exhaustion — a retry will NOT clear it. OpenAI marks it `insufficient_quota`;
+        // Anthropic reports a spent credit balance. This is deliberately narrow: it must NOT catch the generic
+        // "you exceeded your current quota / billing details" wording, because Gemini's free tier returns that
+        // exact text for a transient per-minute rate limit (see the 429 branch below).
+        val billingExhausted = type.contains("insufficient_quota") || code.contains("insufficient_quota") ||
+            m.contains("out of credit") || m.contains("credit balance")
+        if (billingExhausted) return LlmErrorKind.QUOTA
         val auth = status == 401 || status == 403 || type.contains("authentication") ||
             type.contains("unauthenticated") || type.contains("permission") || type.contains("forbidden") ||
             m.contains("api key not valid") || m.contains("invalid api key") || m.contains("incorrect api key")
@@ -78,10 +81,18 @@ internal object LlmErrors {
         val context = code.contains("context_length") || type.contains("context_length") ||
             m.contains("context length") || m.contains("maximum context") || m.contains("prompt is too long")
         if (context) return LlmErrorKind.CONTEXT_LENGTH
+        // A 429 / RESOURCE_EXHAUSTED clears with time — it is a retryable rate limit, honoring any RetryInfo
+        // delay. This MUST win over the residual quota-text heuristic so Gemini's free-tier rate limit (which
+        // reuses "quota"/"billing" wording and carries a short retryDelay) is not mistaken for permanent
+        // billing exhaustion.
         if (status == 429 || type.contains("rate_limit") || code.contains("rate_limit") ||
             type.contains("resource_exhausted")
         ) {
             return LlmErrorKind.RATE_LIMIT
+        }
+        // Residual billing signals, for a provider that reports exhaustion WITHOUT a 429.
+        if (type.contains("billing") || m.contains("exceeded your current quota") || m.contains("billing details")) {
+            return LlmErrorKind.QUOTA
         }
         if (status == 529 || type.contains("overloaded") || type.contains("unavailable") || m.contains("overloaded")) {
             return LlmErrorKind.OVERLOADED

@@ -15,6 +15,7 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.flow.flow
 import kotlinx.serialization.json.JsonArray
+import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.add
 import kotlinx.serialization.json.buildJsonArray
 import kotlinx.serialization.json.buildJsonObject
@@ -39,11 +40,16 @@ class AnthropicProvider(private val transport: LlmTransport) : LlmProvider {
         val base = config.baseUrl?.trimEnd('/') ?: DEFAULT_BASE
         val sse = SseRequest(
             url = "$base/v1/messages",
-            headers = mapOf(
-                "x-api-key" to config.apiKey,
-                "anthropic-version" to ANTHROPIC_VERSION,
-                "content-type" to "application/json",
-            ),
+            headers = buildMap {
+                put("x-api-key", config.apiKey)
+                put("anthropic-version", ANTHROPIC_VERSION)
+                put("content-type", "application/json")
+                // Let the model keep reasoning across tool calls within a turn (reasons about tool results,
+                // not only up front) — the agentic-loop quality lever.
+                if (request.thinking && modelSupportsThinking(request.model)) {
+                    put("anthropic-beta", INTERLEAVED_THINKING_BETA)
+                }
+            },
             jsonBody = buildBody(request),
         )
         stream(sse)
@@ -84,23 +90,50 @@ class AnthropicProvider(private val transport: LlmTransport) : LlmProvider {
         put("model", request.model)
         put("max_tokens", request.maxTokens)
         put("stream", true)
-        request.system?.takeIf { it.isNotBlank() }?.let { put("system", it) }
+        // Prompt caching: the system prompt, the tool set, and the conversation prefix are re-sent verbatim
+        // on every step of a turn, so a cache breakpoint on each lets the API bill them once and reuse them
+        // (big token + latency win over a long agentic loop). Breakpoints on a prefix below the provider
+        // minimum are simply ignored, so this never hurts.
+        request.system?.takeIf { it.isNotBlank() }?.let { put("system", systemBlocks(it)) }
         if (request.thinking && modelSupportsThinking(request.model)) {
             put("thinking", buildJsonObject { put("type", "adaptive") })
         }
-        if (request.tools.isNotEmpty()) {
-            put("tools", buildJsonArray {
-                request.tools.forEach { spec ->
-                    add(buildJsonObject {
-                        put("name", spec.name)
-                        put("description", spec.description)
-                        put("input_schema", AgentJson.parseToJsonElement(spec.parameters))
-                    })
-                }
+        if (request.tools.isNotEmpty()) put("tools", toolBlocks(request.tools))
+        put("messages", cacheLastBlock(messages(request.messages)))
+    }.toString()
+
+    /** The system prompt as a single cached text block. */
+    private fun systemBlocks(text: String): JsonArray = buildJsonArray {
+        add(buildJsonObject {
+            put("type", "text")
+            put("text", text)
+            put("cache_control", ephemeral())
+        })
+    }
+
+    /** Tool declarations with a cache breakpoint on the last one, so the whole tool block is cached. */
+    private fun toolBlocks(tools: List<dev.ide.agent.ToolSpec>): JsonArray = buildJsonArray {
+        tools.forEachIndexed { i, spec ->
+            add(buildJsonObject {
+                put("name", spec.name)
+                put("description", spec.description)
+                put("input_schema", AgentJson.parseToJsonElement(spec.parameters))
+                if (i == tools.lastIndex) put("cache_control", ephemeral())
             })
         }
-        put("messages", messages(request.messages))
-    }.toString()
+    }
+
+    /** Marks the last content block of the last message as a cache breakpoint, caching the conversation
+     *  prefix incrementally as it grows across tool rounds. */
+    private fun cacheLastBlock(messages: JsonArray): JsonArray {
+        val lastMsg = messages.lastOrNull() as? JsonObject ?: return messages
+        val content = lastMsg["content"] as? JsonArray ?: return messages
+        val lastBlock = content.lastOrNull() as? JsonObject ?: return messages
+        val newContent = JsonArray(content.dropLast(1) + JsonObject(lastBlock + ("cache_control" to ephemeral())))
+        return JsonArray(messages.dropLast(1) + JsonObject(lastMsg + ("content" to newContent)))
+    }
+
+    private fun ephemeral(): JsonObject = buildJsonObject { put("type", "ephemeral") }
 
     private fun messages(messages: List<LlmMessage>): JsonArray = buildJsonArray {
         var i = 0
@@ -175,6 +208,7 @@ class AnthropicProvider(private val transport: LlmTransport) : LlmProvider {
     companion object {
         const val DEFAULT_BASE = "https://api.anthropic.com"
         const val ANTHROPIC_VERSION = "2023-06-01"
+        const val INTERLEAVED_THINKING_BETA = "interleaved-thinking-2025-05-14"
     }
 }
 

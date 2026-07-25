@@ -31,4 +31,10 @@
     <string name="chat_allow">Allow</string>
     <string name="chat_allow_session">Allow for this session</string>
     <string name="chat_deny">Deny</string>
+    <string name="chat_copy">Copy</string>
+    <string name="chat_copied">Copied</string>
+    <string name="chat_antigravity_warning">Experimental. Uses a Google account through the Antigravity endpoint, which violates the Google Terms of Service and has led to account bans. Paste an OAuth refresh or access token (optionally as token|projectId).</string>
+    <string name="chat_antigravity_signin">Sign in with Google</string>
+    <string name="chat_antigravity_waiting">Waiting for the browser — approve access, then return to CodeAssist</string>
+    <string name="chat_cancel">Cancel</string>
 </resources>

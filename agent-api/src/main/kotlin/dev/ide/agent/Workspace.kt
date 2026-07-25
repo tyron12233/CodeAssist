@@ -56,7 +56,29 @@ interface AgentWorkspace {
 
     /** Adds a Maven-coordinate dependency to a module, returning a human-readable confirmation. */
     suspend fun addDependency(module: String, coordinate: String): String
+
+    // Build / run.
+
+    /** Compiles [module] (defaulting to the project's main module when null) and runs its `main` on the
+     *  in-process VM, feeding [stdin] then EOF, capturing output + exit code + compile errors. Headless: it
+     *  does not touch the interactive run console. Defaults to unsupported so a non-engine host / test fake
+     *  need not implement it. */
+    suspend fun runProgram(module: String?, stdin: String = ""): RunResult =
+        RunResult(compiled = false, finished = false, output = "", exitCode = null, diagnostics = listOf("Running a program is not supported here."))
 }
+
+/**
+ * The outcome of [AgentWorkspace.runProgram]: whether the module [compiled] (its `main` started), [finished]
+ * running (vs. timed out), its captured [output], its process [exitCode] (null if it never finished), and any
+ * compile-error [diagnostics].
+ */
+data class RunResult(
+    val compiled: Boolean,
+    val finished: Boolean,
+    val output: String,
+    val exitCode: Int?,
+    val diagnostics: List<String>,
+)
 
 /** An offset-based text edit: replace [oldLength] characters at [offset] with [newText]. */
 data class TextEdit(val offset: Int, val oldLength: Int, val newText: String)

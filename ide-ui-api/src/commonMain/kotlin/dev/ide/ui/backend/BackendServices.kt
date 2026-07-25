@@ -892,6 +892,17 @@ interface AgentService {
     /** Configure the custom OpenAI-compatible gateway (base URL + model name). */
     fun setGateway(baseUrl: String, model: String)
 
+    /** Live status of the experimental Antigravity "Sign in with Google" (OAuth PKCE) flow. */
+    val antigravitySignIn: StateFlow<UiAntigravitySignIn>
+        get() = kotlinx.coroutines.flow.MutableStateFlow(UiAntigravitySignIn())
+
+    /** Start the Antigravity Google sign-in. Surfaces the consent URL via [antigravitySignIn].authUrl for the
+     *  UI to open in a browser; on the redirect back, stores the minted OAuth token as the antigravity key. */
+    fun signInAntigravity() {}
+
+    /** Cancel an in-flight Antigravity sign-in. */
+    fun cancelAntigravitySignIn() {}
+
     /** Send a user message; streams the agent's response into [chatState]. */
     fun send(text: String)
 

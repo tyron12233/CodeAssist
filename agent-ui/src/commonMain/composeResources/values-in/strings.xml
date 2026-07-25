@@ -31,4 +31,10 @@
     <string name="chat_allow">Izinkan</string>
     <string name="chat_allow_session">Izinkan untuk sesi ini</string>
     <string name="chat_deny">Tolak</string>
+    <string name="chat_copy">Salin</string>
+    <string name="chat_copied">Disalin</string>
+    <string name="chat_antigravity_warning">Eksperimental. Menggunakan akun Google melalui endpoint Antigravity, yang melanggar Persyaratan Layanan Google dan pernah menyebabkan akun diblokir. Tempel token refresh atau akses OAuth (opsional sebagai token|projectId).</string>
+    <string name="chat_antigravity_signin">Masuk dengan Google</string>
+    <string name="chat_antigravity_waiting">Menunggu browser — setujui akses, lalu kembali ke CodeAssist</string>
+    <string name="chat_cancel">Batal</string>
 </resources>

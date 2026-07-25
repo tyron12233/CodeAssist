@@ -2,6 +2,7 @@ package dev.ide.agent.impl
 
 import dev.ide.agent.AgentTool
 import dev.ide.agent.AgentWorkspace
+import dev.ide.agent.RunResult
 import dev.ide.agent.TextEdit
 import dev.ide.agent.ToolArgs
 import dev.ide.agent.ToolExecutionResult
@@ -186,7 +187,38 @@ fun builtinTools(ws: AgentWorkspace): List<AgentTool> = listOf(
         mutating = true,
         summary = { "add ${it.optString("coordinate").orEmpty()} to ${it.optString("module").orEmpty()}" },
     ) { args -> ToolExecutionResult.ok(ws.addDependency(args.string("module"), args.string("coordinate"))) },
+
+    tool(
+        name = "run_program",
+        description = "Compile a module and run its main() on the in-process VM, returning the program output, " +
+            "exit code, and any compile errors. Optionally pipe text to standard input (consumed line by line, " +
+            "then EOF). Use this to verify that a change actually builds and behaves correctly. The run is " +
+            "sandboxed and time-limited.",
+        parameters = toolSchema {
+            string("module", "Module to run. Defaults to the project's main module.", required = false)
+            string("stdin", "Text piped to the program's standard input.", required = false)
+        },
+        // Executes code with real side effects, so it is permission-gated like the other impactful tools.
+        mutating = true,
+        summary = { "run ${it.optString("module") ?: "program"}" },
+    ) { args -> formatRun(ws.runProgram(args.optString("module"), args.optString("stdin").orEmpty())) },
 )
+
+private fun formatRun(r: RunResult): ToolExecutionResult {
+    if (!r.compiled) {
+        val detail = if (r.diagnostics.isEmpty()) "" else "\n" + r.diagnostics.joinToString("\n")
+        return ToolExecutionResult.error("Compilation failed; the program did not start.$detail")
+    }
+    val sb = StringBuilder()
+    sb.append(
+        if (r.finished) "Program finished with exit code ${r.exitCode ?: "unknown"}."
+        else "Program did not finish (it timed out or is still waiting).",
+    )
+    if (r.output.isNotBlank()) sb.append("\n\n--- output ---\n").append(r.output.trimEnd())
+    if (r.diagnostics.isNotEmpty()) sb.append("\n\n--- notes ---\n").append(r.diagnostics.joinToString("\n"))
+    val failed = !r.finished || (r.exitCode != null && r.exitCode != 0)
+    return ToolExecutionResult(sb.toString(), isError = failed)
+}
 
 private suspend fun editFile(ws: AgentWorkspace, args: ToolArgs): ToolExecutionResult {
     val path = args.string("path")

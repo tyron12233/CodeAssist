@@ -9,6 +9,8 @@ import dev.ide.agent.SimpleToolRegistry
 import dev.ide.agent.WriteRequest
 import dev.ide.agent.impl.AgentLoop
 import dev.ide.agent.impl.AgentProviders
+import dev.ide.agent.impl.AntigravityOAuth
+import dev.ide.agent.impl.OkHttpLlmTransport
 import dev.ide.agent.impl.SystemPrompt
 import dev.ide.agent.impl.builtinTools
 import dev.ide.ui.backend.AgentService
@@ -23,6 +25,8 @@ import dev.ide.ui.backend.UiAgentProvider
 import dev.ide.ui.backend.UiAgentRole
 import dev.ide.ui.backend.UiAgentToolCall
 import dev.ide.ui.backend.UiAgentToolStatus
+import dev.ide.ui.backend.UiAntigravitySignIn
+import dev.ide.ui.backend.UiAntigravitySignInStatus
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
@@ -45,7 +49,9 @@ import java.util.concurrent.atomic.AtomicLong
  */
 internal class AgentBackend(private val ctx: BackendContext) : AgentService {
 
-    private val registry = AgentProviders.registry()
+    private val transport = OkHttpLlmTransport()
+    private val registry = AgentProviders.registry(transport)
+    private val oauth = AntigravityOAuth(transport)
     private val workspace = IdeAgentWorkspace(ctx)
     private val tools = SimpleToolRegistry(builtinTools(workspace))
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
@@ -58,6 +64,11 @@ internal class AgentBackend(private val ctx: BackendContext) : AgentService {
 
     private val _models = MutableStateFlow<List<UiAgentModel>>(emptyList())
     override val models: StateFlow<List<UiAgentModel>> = _models.asStateFlow()
+
+    private val _antigravitySignIn = MutableStateFlow(UiAntigravitySignIn())
+    override val antigravitySignIn: StateFlow<UiAntigravitySignIn> = _antigravitySignIn.asStateFlow()
+
+    private var signInJob: Job? = null
 
     private val permIds = AtomicInteger(0)
     private val msgIds = AtomicLong(0)
@@ -76,6 +87,8 @@ internal class AgentBackend(private val ctx: BackendContext) : AgentService {
 
     private fun pref(key: String): String? =
         ctx.manager?.preference("settings.$AI_PAGE.$key")?.takeIf { it.isNotBlank() }
+
+    private fun prefInt(key: String): Int? = pref(key)?.toIntOrNull()
 
     private fun modePref(): PermissionMode =
         runCatching { PermissionMode.valueOf(ctx.manager?.preference(MODE_PREF).orEmpty()) }
@@ -115,6 +128,7 @@ internal class AgentBackend(private val ctx: BackendContext) : AgentService {
     private fun keyField(providerId: String): String = when (providerId) {
         "openai" -> "openaiKey"
         "gemini" -> "geminiKey"
+        "antigravity" -> "antigravityKey"
         GATEWAY -> "gatewayKey"
         else -> "anthropicKey"
     }
@@ -173,6 +187,35 @@ internal class AgentBackend(private val ctx: BackendContext) : AgentService {
         ctx.manager?.setPreference("settings.$AI_PAGE.gatewayBaseUrl", baseUrl)
         ctx.manager?.setPreference("settings.$AI_PAGE.gatewayModel", model)
         resetLoop()
+    }
+
+    override fun signInAntigravity() {
+        if (signInJob?.isActive == true) return
+        _antigravitySignIn.value = UiAntigravitySignIn(UiAntigravitySignInStatus.WAITING)
+        signInJob = scope.launch {
+            try {
+                // The OAuth flow surfaces the consent URL through the state flow; the UI opens it in a browser.
+                val token = oauth.signIn { url -> _antigravitySignIn.update { it.copy(authUrl = url) } }
+                ctx.manager?.setPreference("settings.$AI_PAGE.${keyField("antigravity")}", token)
+                ctx.manager?.setPreference("settings.$AI_PAGE.provider", "antigravity")
+                resetLoop()
+                _antigravitySignIn.value = UiAntigravitySignIn(UiAntigravitySignInStatus.SUCCESS)
+            } catch (e: CancellationException) {
+                _antigravitySignIn.value = UiAntigravitySignIn(UiAntigravitySignInStatus.IDLE)
+                throw e
+            } catch (e: Exception) {
+                _antigravitySignIn.value =
+                    UiAntigravitySignIn(UiAntigravitySignInStatus.ERROR, message = e.message ?: "Sign-in failed.")
+            }
+        }
+    }
+
+    override fun cancelAntigravitySignIn() {
+        signInJob?.cancel()
+        signInJob = null
+        if (_antigravitySignIn.value.status == UiAntigravitySignInStatus.WAITING) {
+            _antigravitySignIn.value = UiAntigravitySignIn(UiAntigravitySignInStatus.IDLE)
+        }
     }
 
     override fun refreshModels() {
@@ -261,10 +304,19 @@ internal class AgentBackend(private val ctx: BackendContext) : AgentService {
         }
 
         val model = cfg.model.ifBlank { provider.defaultModel }
-        val signature = "${cfg.selectedId}|$model|${cfg.baseUrl}|${cfg.apiKey.hashCode()}"
+        val maxIterations = prefInt("maxIterations") ?: DEFAULT_MAX_ITERATIONS
+        val maxTokens = prefInt("maxTokens") ?: DEFAULT_MAX_TOKENS
+        val thinkingBudget = prefInt("thinkingBudget")
+        val signature =
+            "${cfg.selectedId}|$model|${cfg.baseUrl}|${cfg.apiKey.hashCode()}|$maxIterations|$maxTokens|$thinkingBudget"
         if (loop == null || loopSignature != signature) {
             val client = provider.client(ProviderConfig(cfg.apiKey, cfg.baseUrl))
-            loop = AgentLoop(client, model, tools, gate, ::systemPrompt)
+            loop = AgentLoop(
+                client, model, tools, gate, ::systemPrompt,
+                maxTokens = maxTokens,
+                maxIterations = maxIterations,
+                thinkingBudget = thinkingBudget,
+            )
             loopSignature = signature
         }
         val activeLoop = loop ?: return
@@ -404,5 +456,10 @@ internal class AgentBackend(private val ctx: BackendContext) : AgentService {
         const val AI_PAGE = "ai"
         const val MODE_PREF = "agent.permissionMode"
         const val GATEWAY = "gateway"
+
+        /** Ceiling on tool-call rounds per user turn; the "settings.ai.maxIterations" pref overrides it. */
+        const val DEFAULT_MAX_ITERATIONS = 24
+        /** Per-response output-token cap; the "settings.ai.maxTokens" pref overrides it. */
+        const val DEFAULT_MAX_TOKENS = 8192
     }
 }

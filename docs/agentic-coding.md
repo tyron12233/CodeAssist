@@ -60,12 +60,18 @@ Provider-neutral contracts, extensible by third-party plugins:
 ### `agent-impl`
 
 - `OkHttpLlmTransport`: the single HTTP + SSE transport (OkHttp `EventSource`), shared by all providers
-  and identical on desktop and ART. A `LlmTransport` interface keeps it swappable for offline tests.
+  and identical on desktop and ART. A `LlmTransport` interface (streaming `sse`, plus non-streaming `get`
+  for model listing and `post` for out-of-band calls like creating a context cache) keeps it swappable for
+  offline tests. It retries transient pre-stream failures with backoff, honoring a provider-suggested delay.
 - `AnthropicProvider`, `OpenAiProvider`, `GeminiProvider`: each maps the neutral model to and from its
   wire format and translates its streaming shape into `LlmStreamEvent`. `@Serializable` DTOs, decoded
   per SSE event with `ignoreUnknownKeys`.
 - `AgentLoop`: drives request -> stream -> execute tool calls -> append results -> repeat until the model
-  stops. Emits `AgentEvent`s and enforces the permission policy before any write tool runs.
+  stops. Emits `AgentEvent`s and enforces the permission policy before any write tool runs. Each step is
+  built through a `HistoryCompactor` so a long task does not re-bill the whole transcript (see below).
+  Within a step, read-only tool calls run **concurrently** (a turn that reads several files pays one file's
+  latency, not the sum); mutating/unknown calls run sequentially afterward so permission prompts never race
+  and writes stay ordered. Result order always matches the model's call order.
 - `builtinTools(workspace)`: the built-in tool set bound to an `AgentWorkspace`.
 - `SystemPrompt`: assembles the CodeAssist grounding plus live project context.
 
@@ -84,9 +90,79 @@ sets streaming and, for capable models, adaptive thinking). Each provider owns:
   (`text` and `functionCall`). All three normalize to `LlmStreamEvent`.
 - Tool round-trip: tool specs and tool results serialized to each provider's function-calling shape.
 
+`LlmRequest` also carries an optional `thinkingBudget` (a cap on provider reasoning tokens; null leaves
+the model default) — only providers that expose a reasoning budget honor it.
+
 Default model per provider is the strongest current model; the model is user-selectable in Settings.
 Adding a provider is implementing `LlmProvider`; the client resolves providers through a registry, so a
 plugin can contribute its own.
+
+### Antigravity gateway (experimental, opt-in)
+
+`AntigravityProvider` reaches Google's Code Assist backend
+(`cloudcode-pa.googleapis.com/v1internal:streamGenerateContent`) with an OAuth **Bearer** token instead of
+an API key, giving access to Gemini 3 / Claude / GPT-OSS at Antigravity's rate limits. It speaks the same
+Gemini `contents`/`parts` dialect as `GeminiProvider` — both now share the request builders in `GeminiWire`
+and the `GeminiStreamDecoder` — but wraps the call in a `{project, model, request, userAgent, requestId}`
+envelope, nests each streamed candidate under `response`, and sends the Antigravity IDE's identity headers
+(`User-Agent` / `X-Goog-Api-Client` / `Client-Metadata`). Reasoning level is carried in the model id
+(`…-high` / `…-low` / `…-thinking`), so no `thinkingConfig` is sent.
+
+The credential (`ProviderConfig.apiKey`) is an OAuth **refresh token** (starts with `1//`, exchanged for
+short-lived access tokens here via `postForm` to `oauth2.googleapis.com/token`, cached until near expiry) or
+a raw **access token**, optionally suffixed with an explicit project id: `<token>` or `<token>|<projectId>`.
+With no project id, the free-tier project is discovered via `loadCodeAssist` (falling back to `onboardUser`).
+`AntigravitySession` holds this token + project state per client session behind a mutex.
+
+**Sign-in flow (`AntigravityOAuth`, mobile + desktop):** the provider card's "Sign in with Google" button
+runs an OAuth authorization-code + PKCE flow that mints the refresh token. Because the reproduced client only
+registers a loopback redirect (`http://localhost:36742/oauth-callback`), the flow stands up a one-shot local
+HTTP listener on that fixed port (`java.net` sockets — identical on ART and the JVM), surfaces the consent URL
+through `AgentService.antigravitySignIn` for the UI to open in the platform browser (a Custom Tab on Android
+via `LocalUriHandler`; the default browser on desktop), waits for the browser to redirect back to the
+listener, validates the CSRF `state`, exchanges the code, and stores the refresh token as the antigravity key.
+Cancellation tears the listener down; a five-minute timeout guards an abandoned consent screen. Pasting a
+token directly into the card still works as a fallback.
+
+**This is off by default and warned in the provider sheet: it talks to an undocumented internal endpoint by
+impersonating the Antigravity IDE's OAuth client, violates Google's Terms of Service, and has led to account
+bans.** It is a best-effort, fragile integration (the endpoint and client identity can change without
+notice), not a supported path.
+
+## Request cost and error categorization
+
+An agentic turn re-sends the growing history on every step, so an agent is unusually hard on token- and
+request-metered tiers (a single free-tier Gemini task can exhaust the per-minute or per-day cap). Four
+mechanisms keep the cost down and the failures legible:
+
+- **History compaction** (`HistoryCompactor`, applied per step by `AgentLoop`): a stale, oversized tool
+  result (older than the most recent few) has its body elided to a head excerpt plus a "call the tool
+  again for the full result" marker. The recent tool results — the model's working set — and all user and
+  assistant text are kept verbatim. Compaction produces a fresh view; stored history is untouched, so a
+  retry re-derives the same result.
+- **Bounded turn** (`AgentLoop`): `maxIterations` (tool-call rounds) and `maxTokens` (per-response output)
+  are configurable via the `settings.ai.maxIterations` / `settings.ai.maxTokens` prefs (defaults 24 / 8192).
+- **Gemini context caching** (`GeminiContextCache`): the stable system instruction + tool declarations are
+  the largest payload re-sent each step, so they are cached provider-side via `cachedContents` and
+  referenced by name (the request then omits them). The policy is conservative — nothing on a single-shot
+  first turn, skipped when the payload is below the provider's minimum cacheable size, and a graceful
+  fall back to inline (remembered per payload) on any error — so caching is never a net loss.
+- **Gemini thinking budget** (`thinkingConfig`): the request's `thinking` flag + `thinkingBudget` map to a
+  `thinkingConfig.thinkingBudget` (0 disables reasoning; 2.5 Pro, which cannot disable it, clamps up to the
+  minimum), trimming reasoning-token spend against tight TPM limits.
+- **Anthropic prompt caching + interleaved thinking** (`AnthropicProvider`): the system prompt, the tool
+  block, and the conversation prefix each carry an `ephemeral` `cache_control` breakpoint, so the API bills
+  them once and reuses them across a turn's steps (a breakpoint below the cache minimum is ignored, so it
+  never hurts). When thinking is on, the `interleaved-thinking` beta header lets the model keep reasoning
+  across tool calls (about tool results, not only up front).
+
+`LlmErrors` categorizes an HTTP or in-stream error into an `LlmErrorKind` so the transport knows whether a
+retry helps and the chat shows something actionable. A subtlety worth preserving: a Gemini free-tier **rate
+limit** is an HTTP 429 `RESOURCE_EXHAUSTED` that reuses the same "you exceeded your current quota / billing
+details" wording a truly-exhausted paid quota uses, but it is transient and carries a short `RetryInfo`
+delay. The classifier therefore treats a 429 / `resource_exhausted` as a retryable `RATE_LIMIT` and reserves
+the non-retryable `QUOTA` verdict for narrow true-billing signals (`insufficient_quota`, spent credit
+balance) — so a per-minute limit auto-retries instead of surfacing a dead-end "billing exhausted" message.
 
 ## Tools and the engine seam
 
@@ -101,6 +177,11 @@ dependencies, facets).
 
 Write tools (permission-gated): `create_file`, `edit_file`, `create_dir`, `rename_path`, `move_path`,
 `delete_path`, `add_dependency`, `edit_module_config`.
+
+Build/run tool (permission-gated): `run_program` compiles a module and runs its `main` on the in-process VM
+via `IdeServices.runAndCapture` (headless — it does not touch the interactive run console), feeding optional
+stdin then EOF and returning output + exit code + compile errors. This closes the agent's edit → run →
+read-failure → fix loop; it is time-limited so a blocked or long run can't stall a turn.
 
 Two engine additions fill the one gap (there was no public disk-persisting multi-file edit):
 

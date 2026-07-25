@@ -31,4 +31,10 @@
     <string name="chat_allow">Permitir</string>
     <string name="chat_allow_session">Permitir en esta sesión</string>
     <string name="chat_deny">Denegar</string>
+    <string name="chat_copy">Copiar</string>
+    <string name="chat_copied">Copiado</string>
+    <string name="chat_antigravity_warning">Experimental. Usa una cuenta de Google a través del endpoint de Antigravity, lo que infringe las Condiciones del Servicio de Google y ha provocado el bloqueo de cuentas. Pega un token de actualización o de acceso de OAuth (opcionalmente como token|projectId).</string>
+    <string name="chat_antigravity_signin">Iniciar sesión con Google</string>
+    <string name="chat_antigravity_waiting">Esperando al navegador: autoriza el acceso y vuelve a CodeAssist</string>
+    <string name="chat_cancel">Cancelar</string>
 </resources>

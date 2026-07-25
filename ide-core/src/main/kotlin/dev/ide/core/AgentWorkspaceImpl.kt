@@ -5,6 +5,7 @@ import dev.ide.agent.DiagnosticInfo
 import dev.ide.agent.DiagnosticSeverity
 import dev.ide.agent.ModuleInfo
 import dev.ide.agent.ProjectOverview
+import dev.ide.agent.RunResult
 import dev.ide.agent.SymbolHit
 import dev.ide.agent.TextEdit
 import dev.ide.agent.TextMatch
@@ -168,6 +169,23 @@ internal class IdeAgentWorkspace(private val ctx: BackendContext) : AgentWorkspa
         return "Added $coordinate to $module."
     }
 
+    override suspend fun runProgram(module: String?, stdin: String): RunResult {
+        val e = engine()
+        // Default to the sole/first module; runAndCapture reports a clear error if it has no runnable main,
+        // which tells the model to pick another module.
+        val moduleName = module?.takeIf { it.isNotBlank() }
+            ?: e.modules().firstOrNull()?.name
+            ?: throw IllegalStateException("No modules in the project to run.")
+        val capture = e.runAndCapture(moduleName, stdin, timeoutMs = RUN_TIMEOUT_MS)
+        return RunResult(
+            compiled = capture.compiled,
+            finished = capture.ran,
+            output = capture.stdout,
+            exitCode = capture.exitCode,
+            diagnostics = capture.diagnostics,
+        )
+    }
+
     private fun sliceLines(text: String, startLine: Int?, endLine: Int?): String {
         if (startLine == null && endLine == null) return text
         val lines = text.split('\n')
@@ -201,5 +219,10 @@ internal class IdeAgentWorkspace(private val ctx: BackendContext) : AgentWorkspa
             s.contains("WARN") -> DiagnosticSeverity.WARNING
             else -> DiagnosticSeverity.INFO
         }
+    }
+
+    private companion object {
+        /** Cap an agent-triggered run so a long-running or blocked program can't stall the turn. */
+        const val RUN_TIMEOUT_MS = 120_000L
     }
 }
