@@ -1,9 +1,11 @@
 package dev.ide.core.services
 
 import dev.ide.core.EngineContext
-import dev.ide.index.IndexId
 import dev.ide.index.MemberValue
+import dev.ide.index.MembersIndex
+import dev.ide.index.SourceSymbolIndex
 import dev.ide.index.SymbolValue
+import dev.ide.index.fuzzyAll
 import dev.ide.ui.backend.UiSearchOptions
 import dev.ide.ui.backend.UiTextMatch
 import java.nio.file.Files
@@ -24,16 +26,15 @@ internal class SearchService(private val ctx: EngineContext) {
 
     /** Go-to-symbol over project declarations (navigable). */
     fun searchSymbols(query: String, limit: Int = 50): List<SymbolValue> =
-        ctx.indexService.fuzzy<SymbolValue>(IndexId("java.sourceSymbols"), query, limit)
-            .map { it.value }.toList()
+        ctx.indexService.fuzzyAll<SymbolValue>(SourceSymbolIndex.ALL, query, limit)
+            .map { it.value }
 
     /** Resolve a [SymbolValue.fileId] (interned, path stored once) back to its file path for navigation. */
     fun symbolFilePath(fileId: Int): String? = ctx.indexService.filePath(fileId)
 
     /** Member search across the classpath (informational). */
     fun searchMembers(query: String, limit: Int = 50): List<MemberValue> =
-        ctx.indexService.fuzzy<MemberValue>(IndexId("java.members"), query, limit).map { it.value }
-            .toList()
+        ctx.indexService.fuzzyAll<MemberValue>(MembersIndex.ALL, query, limit).map { it.value }
 
     /**
      * Full-text find-in-files over every surfaced workspace file (code, resources, assets). Reads the live

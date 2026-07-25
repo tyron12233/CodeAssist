@@ -117,3 +117,18 @@ object StringKeyDescriptor : KeyDescriptor<String> {
 
 /** The platform extension point every index registers on. */
 val INDEX_EP = ExtensionPoint<IndexExtension<*, *>>("platform.index")
+
+// --- multi-index queries -------------------------------------------------------------------------------
+// The read side of the per-language producer split (e.g. [ClassNameIndex.ALL] = the Java + Kotlin class-name
+// indexes): query several ids of the same value shape and merge. [exactAll] concatenates in list order;
+// [prefixAll]/[fuzzyAll] merge every id's hits and re-rank by score (a stable sort, so on a score tie the
+// earlier id wins) so one language can't crowd the other out before the [limit] cut.
+
+fun <V : Any> IndexService.exactAll(ids: List<IndexId>, key: String): Sequence<V> =
+    ids.asSequence().flatMap { id -> exact<V>(id, key) }
+
+fun <V : Any> IndexService.prefixAll(ids: List<IndexId>, prefix: String, limit: Int = 100): List<Hit<V>> =
+    ids.flatMap { id -> this.prefix<V>(id, prefix, limit).toList() }.sortedByDescending { it.score }.take(limit)
+
+fun <V : Any> IndexService.fuzzyAll(ids: List<IndexId>, pattern: String, limit: Int = 100): List<Hit<V>> =
+    ids.flatMap { id -> fuzzy<V>(id, pattern, limit).toList() }.sortedByDescending { it.score }.take(limit)

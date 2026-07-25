@@ -112,6 +112,47 @@ object AnnotationIndex {
     fun key(annotationName: String) = annotationName.substringAfterLast('.')
 }
 
+// The workspace class/symbol/package/member indexes are split one-producer-per-language for the SAME reason
+// the subtype/annotation indexes are (index ids are one-producer-per-service, and each source language needs
+// its own parser — JDT/ASM for Java + binaries, PSI for Kotlin source). The `java.*` ids ALSO carry the
+// binary (SDK/library `.class`) side; the `kotlin.*` ids are Kotlin SOURCE only. Consumers query `ALL` and
+// merge (see [exactAll]/[prefixAll]/[fuzzyAll]).
+
+/** Class-name indexes (simple name → [ClassNameValue]) powering auto-import + type-name completion. */
+object ClassNameIndex {
+    val JAVA = IndexId("java.classNames")
+    val KOTLIN = IndexId("kotlin.classNames")
+    val ALL = listOf(JAVA, KOTLIN)
+}
+
+/** Go-to-symbol indexes (declaration name → [SymbolValue]) over project source. */
+object SourceSymbolIndex {
+    val JAVA = IndexId("java.sourceSymbols")
+    val KOTLIN = IndexId("kotlin.sourceSymbols")
+    val ALL = listOf(JAVA, KOTLIN)
+}
+
+/** Package-contents indexes (package FQN → the [ClassNameValue]s directly in it). */
+object PackageTypesIndex {
+    val JAVA = IndexId("java.packageTypes")
+    val KOTLIN = IndexId("kotlin.packageTypes")
+    val ALL = listOf(JAVA, KOTLIN)
+}
+
+/** Package-name indexes (every package prefix → itself) for sub-package completion. */
+object PackagesIndex {
+    val JAVA = IndexId("java.packages")
+    val KOTLIN = IndexId("kotlin.packages")
+    val ALL = listOf(JAVA, KOTLIN)
+}
+
+/** Member indexes (member name → owner/kind/signature [MemberValue]) for member search. */
+object MembersIndex {
+    val JAVA = IndexId("java.members")
+    val KOTLIN = IndexId("kotlin.members")
+    val ALL = listOf(JAVA, KOTLIN)
+}
+
 object SubtypeExternalizer : Externalizer<SubtypeValue> {
     override fun write(out: DataOutput, value: SubtypeValue) {
         out.writeUTF(value.fqn); out.writeUTF(value.kind); out.writeUTF(value.supertype); out.writeInt(value.fileId)

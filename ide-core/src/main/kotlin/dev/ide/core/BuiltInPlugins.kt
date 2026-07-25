@@ -65,12 +65,17 @@ import dev.ide.lang.kotlin.index.BinarySubtypeIndex
 import dev.ide.lang.kotlin.index.KotlinBuiltinCallableIndex
 import dev.ide.lang.kotlin.index.KotlinBuiltinsIndex
 import dev.ide.lang.kotlin.index.KotlinCallableIndex
+import dev.ide.lang.kotlin.index.KotlinClassNamesIndex
 import dev.ide.lang.kotlin.index.KotlinMainIndex
+import dev.ide.lang.kotlin.index.KotlinMembersIndex
 import dev.ide.lang.kotlin.index.KotlinPackageDeclIndex
+import dev.ide.lang.kotlin.index.KotlinPackageTypesIndex
+import dev.ide.lang.kotlin.index.KotlinPackagesIndex
 import dev.ide.lang.kotlin.index.KotlinSourceAnnotationIndex
 import dev.ide.lang.kotlin.index.KotlinSourceCallableIndex
 import dev.ide.lang.kotlin.index.KotlinSourceDocIndex
 import dev.ide.lang.kotlin.index.KotlinSourceSubtypeIndex
+import dev.ide.lang.kotlin.index.KotlinSourceSymbolsIndex
 import dev.ide.lang.kotlin.index.KotlinTypeShapeIndex
 import dev.ide.lang.kotlin.synthetic.KotlinSyntheticClassProvider
 import dev.ide.lang.postfix.POSTFIX_TEMPLATE_EP
@@ -379,6 +384,11 @@ private class IndexingPlugin : Plugin {
             JavaSourceSymbolsIndex,
             JavaMembersIndex,
             JavaMembersByOwnerIndex,
+            KotlinClassNamesIndex,
+            KotlinPackagesIndex,
+            KotlinPackageTypesIndex,
+            KotlinSourceSymbolsIndex,
+            KotlinMembersIndex,
             KotlinTypeShapeIndex,
             KotlinBuiltinsIndex,
             KotlinCallableIndex,
