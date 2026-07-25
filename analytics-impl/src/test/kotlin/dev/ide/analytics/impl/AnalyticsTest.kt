@@ -120,6 +120,26 @@ class AnalyticsTest {
     }
 
     @Test
+    fun crashWithNoOwnFrameAnywhereFallsBackToPlatformFrames() {
+        // A crash buried ENTIRELY in framework/stdlib code (e.g. NoSuchElementException from an empty-list
+        // access inside a Compose lambda that R8 inlined our frame out of): no dev.ide.* frame anywhere. The
+        // scrubber must surface the top platform frames of the deepest cause instead of an empty report.
+        val boom = NoSuchElementException("List is empty.").apply {
+            stackTrace = arrayOf(
+                StackTraceElement("kotlin.collections.CollectionsKt___CollectionsKt", "first", "_Collections.kt", 233),
+                StackTraceElement("androidx.compose.runtime.ComposerImpl", "recompose", "Composer.kt", 3210),
+                StackTraceElement("android.os.Handler", "dispatchMessage", "Handler.java", 99),
+            )
+        }
+        val frames = dev.ide.analytics.CrashScrub.ownFrames(boom)
+        assertTrue(frames.isNotEmpty(), "must not be empty when only platform frames exist")
+        assertTrue(frames.startsWith("kotlin.collections.CollectionsKt___CollectionsKt.first:233"), "surfaces the origin: $frames")
+        // still no messages leaked
+        val props = dev.ide.analytics.CrashScrub.scrub(boom)
+        assertFalse((props.values.joinToString(" ")).contains("List is empty"), "no exception message: $props")
+    }
+
+    @Test
     fun analyticsLogSinkForwardsErrorsScrubbedAndThrottled() {
         val sink = FakeSink()
         val svc = DefaultAnalyticsService("i", "s", device, sink, initialConsent = true, batchSize = 100)
