@@ -31,8 +31,11 @@ import dev.ide.lang.java.index.JavaSourceIndexer.DeclKind
 private fun isClassFile(i: IndexInput) =
     (i.origin == IndexOrigin.SDK || i.origin == IndexOrigin.LIBRARY) && i.unitName?.endsWith(".class") == true
 
+// `.java` only: a `.kt` source needs the Kotlin PSI, not the Java parser — Kotlin project source is indexed
+// by the parallel `kotlin.*` producers in lang-kotlin (KotlinWorkspaceIndexes), which consumers merge via
+// [dev.ide.index.ClassNameIndex] etc. (Binary Kotlin still flows through `isClassFile`, read from bytecode.)
 private fun isSource(i: IndexInput) =
-    i.origin == IndexOrigin.SOURCE && i.unitName?.let { it.endsWith(".java") || it.endsWith(".kt") } == true
+    i.origin == IndexOrigin.SOURCE && i.unitName?.endsWith(".java") == true
 
 private val TYPE_KINDS =
     setOf(DeclKind.CLASS, DeclKind.INTERFACE, DeclKind.ENUM, DeclKind.RECORD, DeclKind.ANNOTATION)

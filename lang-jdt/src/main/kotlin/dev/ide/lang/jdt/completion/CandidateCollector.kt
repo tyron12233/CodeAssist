@@ -1,8 +1,13 @@
 package dev.ide.lang.jdt.completion
 
+import dev.ide.index.ClassNameIndex
 import dev.ide.index.ClassNameValue
-import dev.ide.index.IndexId
 import dev.ide.index.IndexService
+import dev.ide.index.PackageTypesIndex
+import dev.ide.index.PackagesIndex
+import dev.ide.index.exactAll
+import dev.ide.index.fuzzyAll
+import dev.ide.index.prefixAll
 import dev.ide.lang.completion.CaretAction
 import dev.ide.lang.completion.CompletionItemKind
 import dev.ide.lang.completion.TextEdit
@@ -23,9 +28,10 @@ import org.eclipse.jdt.internal.compiler.lookup.TypeBinding
  */
 internal object CandidateCollector {
 
-    private val CLASS_NAMES = IndexId("java.classNames")
-    private val PACKAGES = IndexId("java.packages")
-    private val PACKAGE_TYPES = IndexId("java.packageTypes")
+    // Java + Kotlin source producers merged (see [ClassNameIndex]); the `.class`/binary side rides the Java id.
+    private val CLASS_NAMES = ClassNameIndex.ALL
+    private val PACKAGES = PackagesIndex.ALL
+    private val PACKAGE_TYPES = PackageTypesIndex.ALL
 
     /**
      * [appendCallParens] is false when the caret is already followed by an argument list (`foo.bar|()`),
@@ -121,7 +127,7 @@ internal object CandidateCollector {
     private fun unimportedTypes(ctx: AnalyzedContext, index: IndexService, importOffset: Int, taken: Set<String>, excluded: List<String>): List<Candidate> {
         if (ctx.prefix.isEmpty()) return emptyList()
         val out = ArrayList<Candidate>()
-        for (hit in index.fuzzy<ClassNameValue>(CLASS_NAMES, ctx.prefix, 60)) {
+        for (hit in index.fuzzyAll<ClassNameValue>(CLASS_NAMES, ctx.prefix, 60)) {
             if (hit.key in taken) continue
             if (barred(hit.value.fqn, excluded)) continue
             out.add(unimportedTypeCandidate(hit.value, ctx, importOffset))
@@ -153,7 +159,7 @@ internal object CandidateCollector {
         if (ctx.prefix.isEmpty()) return emptyList() // need a prefix to query the index (can't enumerate all types)
         val rankByType = ctx.expectedType != null && ctx.typeScope != null
         val out = ArrayList<Candidate>()
-        for (hit in index.fuzzy<ClassNameValue>(CLASS_NAMES, ctx.prefix, 60)) {
+        for (hit in index.fuzzyAll<ClassNameValue>(CLASS_NAMES, ctx.prefix, 60)) {
             if (barred(hit.value.fqn, excluded)) continue
             val resolved = if (rankByType) resolveType(ctx.typeScope!!, hit.value.fqn) else null
             out.add(unimportedTypeCandidate(hit.value, ctx, importOffset, resolved))
@@ -178,7 +184,7 @@ internal object CandidateCollector {
         // querying bare `q` matches only `q` itself, which is then filtered out (→ nothing). With a typed
         // prefix it's `q.prefix`; at the top level (no `q`) it's just the prefix.
         val full = if (q.isEmpty()) prefix else "$q.$prefix"
-        for (hit in index.prefix<String>(PACKAGES, full, 200)) {
+        for (hit in index.prefixAll<String>(PACKAGES, full, 200)) {
             val pkg = hit.value
             val rest = when {
                 q.isEmpty() -> pkg
@@ -192,7 +198,7 @@ internal object CandidateCollector {
             out.add(packageCandidate(seg))
         }
         if (q.isNotEmpty()) {
-            for (v in index.exact<ClassNameValue>(PACKAGE_TYPES, q)) {
+            for (v in index.exactAll<ClassNameValue>(PACKAGE_TYPES, q)) {
                 if (barred(v.fqn, excluded)) continue
                 val simple = v.fqn.substringAfterLast('.')
                 if (!matches(simple, prefix)) continue

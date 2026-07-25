@@ -9,8 +9,9 @@ import dev.ide.analysis.FixContext
 import dev.ide.analysis.QuickFix
 import dev.ide.analysis.QuickFixProvider
 import dev.ide.analysis.WorkspaceEdit
+import dev.ide.index.ClassNameIndex
 import dev.ide.index.ClassNameValue
-import dev.ide.index.IndexId
+import dev.ide.index.fuzzyAll
 import dev.ide.lang.LanguageId
 import dev.ide.lang.dom.DomNode
 import dev.ide.lang.dom.NodeKind
@@ -33,7 +34,7 @@ import dev.ide.lang.incremental.DocumentEdit
  * through `IdeBackend.actionsAt` / `applyAction`.
  */
 private val JAVA = LanguageId("java")
-private val CLASS_NAMES = IndexId("java.classNames")
+private val CLASS_NAMES = ClassNameIndex.ALL
 
 // ---------------------------------------------------------------------------------------------------
 // Quick fixes (diagnostic-keyed)
@@ -58,7 +59,7 @@ class AddImportQuickFixProvider : QuickFixProvider {
         if (name.isEmpty() || !name[0].isJavaIdentifierStart() || !name[0].isUpperCase()) return emptyList()
         if (!name.all { it.isJavaIdentifierPart() }) return emptyList()
 
-        val candidates = target.index.fuzzy<ClassNameValue>(CLASS_NAMES, name, 50)
+        val candidates = target.index.fuzzyAll<ClassNameValue>(CLASS_NAMES, name, 50)
             .map { it.value.fqn }
             .filter { it.substringAfterLast('.') == name }
             .filter { it.substringBeforeLast('.', "").let { p -> p.isNotEmpty() && p != "java.lang" } }

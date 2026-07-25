@@ -14,9 +14,10 @@ import com.intellij.psi.PsiReferenceExpression
 import com.intellij.psi.PsiReturnStatement
 import com.intellij.psi.PsiVariable
 import com.intellij.psi.util.PsiTreeUtil
+import dev.ide.index.ClassNameIndex
 import dev.ide.index.ClassNameValue
-import dev.ide.index.IndexId
 import dev.ide.index.IndexService
+import dev.ide.index.prefixAll
 import dev.ide.lang.AnalysisResult
 import dev.ide.lang.JvmIndexScopeProvider
 import dev.ide.lang.SourceAnalyzer
@@ -115,7 +116,7 @@ class JavaSourceAnalyzer(private val env: JavaEnvironment) : SourceAnalyzer, Jvm
         env,
         typeSearch = { prefix ->
             // Read `indexService` lazily (host sets it after construction). Simple-name prefix → candidate types.
-            indexService?.prefix<ClassNameValue>(IndexId("java.classNames"), prefix, 50)
+            indexService?.prefixAll<ClassNameValue>(ClassNameIndex.ALL, prefix, 50)
                 ?.map { JavaCompletion.IndexedType(it.value.fqn, it.value.kind) }
                 ?.toList()
                 ?: emptyList()

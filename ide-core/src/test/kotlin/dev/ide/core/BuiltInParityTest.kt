@@ -47,7 +47,9 @@ class BuiltInParityTest {
 
     @Test
     fun `all built-in index extensions are registered`() {
-        assertEquals(24, ext.extensions(INDEX_EP).size)
+        // The 24 prior producers plus the 5 kotlin.* workspace-index producers added with the per-language
+        // index split (class names / packages / package types / go-to-symbol / members over Kotlin source).
+        assertEquals(29, ext.extensions(INDEX_EP).size)
     }
 
     @Test
