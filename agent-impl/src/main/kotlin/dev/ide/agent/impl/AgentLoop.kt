@@ -14,7 +14,9 @@ import dev.ide.agent.StopReason
 import dev.ide.agent.TokenUsage
 import dev.ide.agent.ToolExecutionResult
 import dev.ide.agent.WriteRequest
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.flow.collect
+import kotlinx.coroutines.launch
 
 /**
  * Drives one conversation: request -> stream a turn -> if the model called tools, execute them (gating
@@ -33,6 +35,10 @@ class AgentLoop(
     private val systemPrompt: () -> String,
     private val maxTokens: Int = 8192,
     private val maxIterations: Int = 24,
+    /** Provider reasoning-token cap forwarded to each request; null leaves the model default. */
+    private val thinkingBudget: Int? = null,
+    /** Trims re-sent tool output so a long task does not re-bill the whole transcript each step. */
+    private val compactor: HistoryCompactor = HistoryCompactor(),
 ) {
     private val history = mutableListOf<LlmMessage>()
 
@@ -63,10 +69,11 @@ class AgentLoop(
             val request = LlmRequest(
                 model = model,
                 system = systemPrompt(),
-                messages = history.toList(),
+                messages = compactor.compact(history),
                 tools = tools.specs(),
                 maxTokens = maxTokens,
                 thinking = true,
+                thinkingBudget = thinkingBudget,
             )
             val turn = Turn()
             client.chat(request).collect { event -> turn.consume(event, sink) }
@@ -80,11 +87,32 @@ class AgentLoop(
                 return
             }
 
-            val results = ArrayList<LlmMessage>(calls.size)
-            for (call in calls) results += executeCall(call, sink)
-            history += results
+            history += executeCalls(calls, sink)
         }
         sink.emit(AgentEvent.Error("Stopped after $maxIterations tool iterations without finishing."))
+    }
+
+    /**
+     * Runs the turn's tool calls, preserving their order in the returned results. Read-only calls run
+     * concurrently (a turn that reads several files pays one file's latency, not the sum); mutating and
+     * unknown calls run sequentially afterward so their permission prompts never race and writes stay
+     * ordered and deterministic.
+     */
+    private suspend fun executeCalls(calls: List<ContentPart.ToolUse>, sink: AgentEventSink): List<LlmMessage> {
+        if (calls.size == 1) return listOf(executeCall(calls[0], sink))
+        val results = arrayOfNulls<LlmMessage>(calls.size)
+        coroutineScope {
+            calls.forEachIndexed { i, call ->
+                val tool = tools.find(call.name)
+                if (tool != null && !tool.mutating) {
+                    launch { results[i] = executeCall(call, sink) }
+                }
+            }
+        }
+        calls.forEachIndexed { i, call ->
+            if (results[i] == null) results[i] = executeCall(call, sink)
+        }
+        return results.map { it!! }
     }
 
     private suspend fun executeCall(call: ContentPart.ToolUse, sink: AgentEventSink): LlmMessage {

@@ -31,4 +31,10 @@
     <string name="chat_allow">允许</string>
     <string name="chat_allow_session">本次会话中允许</string>
     <string name="chat_deny">拒绝</string>
+    <string name="chat_copy">复制</string>
+    <string name="chat_copied">已复制</string>
+    <string name="chat_antigravity_warning">实验性功能。通过 Antigravity 端点使用 Google 账号，这违反 Google 服务条款，并已导致账号被封禁。请粘贴 OAuth 刷新令牌或访问令牌（可选格式 token|projectId）。</string>
+    <string name="chat_antigravity_signin">使用 Google 登录</string>
+    <string name="chat_antigravity_waiting">正在等待浏览器 — 授权后请返回 CodeAssist</string>
+    <string name="chat_cancel">取消</string>
 </resources>

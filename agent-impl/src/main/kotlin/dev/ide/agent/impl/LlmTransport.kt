@@ -9,6 +9,7 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.callbackFlow
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.withContext
+import okhttp3.FormBody
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
 import okhttp3.Request
@@ -31,6 +32,16 @@ interface LlmTransport {
     /** A plain GET returning the response body (used to list a provider's models). */
     suspend fun get(url: String, headers: Map<String, String>): String =
         throw UnsupportedOperationException("get not supported by this transport")
+
+    /** A non-streaming JSON POST returning the response body (used for out-of-band calls such as creating a
+     *  provider-side context cache). Throws an [LlmHttpException] on an error response. */
+    suspend fun post(url: String, headers: Map<String, String>, jsonBody: String): String =
+        throw UnsupportedOperationException("post not supported by this transport")
+
+    /** A non-streaming `application/x-www-form-urlencoded` POST returning the response body (used for OAuth
+     *  token exchange). Throws an [LlmHttpException] on an error response. */
+    suspend fun postForm(url: String, headers: Map<String, String>, form: Map<String, String>): String =
+        throw UnsupportedOperationException("postForm not supported by this transport")
 }
 
 data class SseRequest(val url: String, val headers: Map<String, String>, val jsonBody: String)
@@ -129,6 +140,35 @@ class OkHttpLlmTransport(
             body
         }
     }
+
+    override suspend fun post(url: String, headers: Map<String, String>, jsonBody: String): String =
+        withContext(Dispatchers.IO) {
+            val request = Request.Builder()
+                .url(url)
+                .post(jsonBody.toRequestBody(jsonMedia))
+                .apply { headers.forEach { (k, v) -> header(k, v) } }
+                .build()
+            http.newCall(request).execute().use { response ->
+                val body = response.body?.string().orEmpty()
+                if (!response.isSuccessful) throw toException(null, response, body)
+                body
+            }
+        }
+
+    override suspend fun postForm(url: String, headers: Map<String, String>, form: Map<String, String>): String =
+        withContext(Dispatchers.IO) {
+            val formBody = FormBody.Builder().apply { form.forEach { (k, v) -> add(k, v) } }.build()
+            val request = Request.Builder()
+                .url(url)
+                .post(formBody)
+                .apply { headers.forEach { (k, v) -> header(k, v) } }
+                .build()
+            http.newCall(request).execute().use { response ->
+                val body = response.body?.string().orEmpty()
+                if (!response.isSuccessful) throw toException(null, response, body)
+                body
+            }
+        }
 
     /** Build a categorized, user-facing [LlmHttpException] from a failure (network) or error response. */
     private fun toException(t: Throwable?, response: Response?, prefetchedBody: String? = null): LlmHttpException {

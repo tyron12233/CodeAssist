@@ -21,9 +21,12 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -32,6 +35,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
@@ -39,9 +43,14 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import dev.ide.ui.backend.IdeBackend
 import dev.ide.ui.backend.UiAgentProvider
+import dev.ide.ui.backend.UiAntigravitySignInStatus
 import dev.ide.agent.ui.generated.resources.Res
+import dev.ide.agent.ui.generated.resources.chat_antigravity_signin
+import dev.ide.agent.ui.generated.resources.chat_antigravity_waiting
+import dev.ide.agent.ui.generated.resources.chat_antigravity_warning
 import dev.ide.agent.ui.generated.resources.chat_api_key
 import dev.ide.agent.ui.generated.resources.chat_base_url
+import dev.ide.agent.ui.generated.resources.chat_cancel
 import dev.ide.agent.ui.generated.resources.chat_close
 import dev.ide.agent.ui.generated.resources.chat_connected
 import dev.ide.agent.ui.generated.resources.chat_done
@@ -96,6 +105,7 @@ internal fun AgentProvidersSheet(backend: IdeBackend, onClose: () -> Unit) {
                         selected = provider.id == cfg.selectedProvider,
                         gatewayBaseUrl = cfg.gatewayBaseUrl,
                         gatewayModel = cfg.gatewayModel,
+                        backend = backend,
                         onSelect = { backend.agent.selectProvider(provider.id); cfg = backend.agent.config() },
                         onSetKey = { backend.agent.setProviderKey(provider.id, it) },
                         onSetGateway = { url, model -> backend.agent.setGateway(url, model) },
@@ -113,6 +123,7 @@ private fun ProviderCard(
     selected: Boolean,
     gatewayBaseUrl: String,
     gatewayModel: String,
+    backend: IdeBackend,
     onSelect: () -> Unit,
     onSetKey: (String) -> Unit,
     onSetGateway: (String, String) -> Unit,
@@ -148,12 +159,69 @@ private fun ProviderCard(
             }
         }
         if (selected) {
+            if (provider.id == "antigravity") {
+                Text(
+                    stringResource(Res.string.chat_antigravity_warning),
+                    color = Ca.colors.warning, style = Ca.type.caption2,
+                )
+                AntigravitySignIn(backend) { key = it }
+            }
             SecretField(key, stringResource(Res.string.chat_api_key)) { key = it; onSetKey(it) }
             if (isGateway) {
                 PlainField(baseUrl, stringResource(Res.string.chat_base_url)) { baseUrl = it; onSetGateway(it, model) }
                 PlainField(model, stringResource(Res.string.chat_model)) { model = it; onSetGateway(baseUrl, it) }
                 Text(stringResource(Res.string.chat_gateway_hint), color = Ca.colors.textTertiary, style = Ca.type.caption2)
             }
+        }
+    }
+}
+
+/**
+ * The Antigravity "Sign in with Google" control. Kicks off the backend OAuth (PKCE loopback) flow, opens the
+ * consent URL it surfaces via the platform browser (Custom Tab on Android), shows a waiting state with a
+ * cancel, and on success feeds the minted key back so the card flips to "Connected".
+ */
+@Composable
+private fun AntigravitySignIn(backend: IdeBackend, onSignedIn: (String) -> Unit) {
+    val signIn by backend.agent.antigravitySignIn.collectAsState()
+    val uriHandler = LocalUriHandler.current
+    // Open the consent page as soon as it is ready (once per URL).
+    LaunchedEffect(signIn.authUrl) {
+        signIn.authUrl?.let { runCatching { uriHandler.openUri(it) } }
+    }
+    LaunchedEffect(signIn.status) {
+        if (signIn.status == UiAntigravitySignInStatus.SUCCESS) {
+            backend.agent.config().providers.firstOrNull { it.id == "antigravity" }?.apiKey
+                ?.takeIf { it.isNotBlank() }?.let(onSignedIn)
+        }
+    }
+    if (signIn.status == UiAntigravitySignInStatus.WAITING) {
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            modifier = Modifier.fillMaxWidth(),
+        ) {
+            CircularProgressIndicator(Modifier.size(14.dp), color = Ca.colors.accent, strokeWidth = 2.dp)
+            Text(
+                stringResource(Res.string.chat_antigravity_waiting),
+                color = Ca.colors.textTertiary, style = Ca.type.caption, modifier = Modifier.weight(1f),
+            )
+            Text(
+                stringResource(Res.string.chat_cancel),
+                color = Ca.colors.accent, style = Ca.type.caption, fontWeight = FontWeight.SemiBold,
+                modifier = Modifier.clip(RoundedCornerShape(Ca.radius.pill))
+                    .clickable { backend.agent.cancelAntigravitySignIn() }
+                    .padding(horizontal = 6.dp, vertical = 2.dp),
+            )
+        }
+    } else {
+        PrimaryButton(
+            stringResource(Res.string.chat_antigravity_signin),
+            { backend.agent.signInAntigravity() },
+            Modifier.fillMaxWidth(),
+        )
+        if (signIn.status == UiAntigravitySignInStatus.ERROR) {
+            signIn.message?.let { Text(it, color = Ca.colors.error, style = Ca.type.caption2) }
         }
     }
 }

@@ -31,4 +31,10 @@
     <string name="chat_allow">سماح</string>
     <string name="chat_allow_session">السماح لهذه الجلسة</string>
     <string name="chat_deny">رفض</string>
+    <string name="chat_copy">نسخ</string>
+    <string name="chat_copied">تم النسخ</string>
+    <string name="chat_antigravity_warning">تجريبي. يستخدم حساب Google عبر نقطة نهاية Antigravity، وهو ما يخالف شروط خدمة Google وأدى إلى حظر حسابات. الصق رمز تحديث أو وصول OAuth (اختياريًا بالصيغة token|projectId).</string>
+    <string name="chat_antigravity_signin">تسجيل الدخول بحساب Google</string>
+    <string name="chat_antigravity_waiting">في انتظار المتصفح — امنح الإذن ثم عُد إلى CodeAssist</string>
+    <string name="chat_cancel">إلغاء</string>
 </resources>
