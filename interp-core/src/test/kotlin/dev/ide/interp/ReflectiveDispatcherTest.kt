@@ -93,6 +93,44 @@ class ReflectiveDispatcherTest {
     }
 
     @Test
+    fun internalMemberMangledWithModuleSuffixIsFoundAndInvoked() {
+        // The reported "material 3 expressive" preview crash `no method `expressive`(0) on
+        // androidx.compose.material3.MotionScheme$Companion`: `MotionScheme.Companion.expressive()` is an
+        // `internal` function, so Kotlin mangles its JVM name to `expressive$material3`. Dispatch must match the
+        // Kotlin name `expressive` against that mangled JVM name. `InternalHolder.reveal()` is `internal`, so it
+        // is mangled `reveal$<module>` exactly like `expressive$material3`.
+        val callee = ResolvedCallable.Library(
+            displayName = "reveal", ownerFqn = InternalHolder::class.java.name, methodName = "reveal",
+            paramTypes = emptyList(), isStatic = false, isConstructor = false, isInline = false, descriptorPrecise = true,
+        )
+        // Guard: the fixture is only meaningful if the compiler actually mangled the name (else the OLD matcher
+        // would already find `reveal` and this wouldn't test the fix).
+        assertTrue(
+            InternalHolder::class.java.methods.none { it.name == "reveal" } &&
+                InternalHolder::class.java.methods.any { it.name.startsWith("reveal\$") },
+            "expected the internal member to be mangled to reveal\$<module>",
+        )
+        assertEquals("secret", dispatcher.dispatch(call(DispatchKind.MEMBER, callee), receiver = InternalHolder(), args = emptyList()))
+    }
+
+    @Test
+    fun mangledNameMatchesHandlesValueClassAndInternalManglings() {
+        // Plain + value-class manglings (unchanged behavior).
+        assertTrue(mangledNameMatches("expressive", "expressive"))
+        assertTrue(mangledNameMatches("Text-Nvy7gAk", "Text"), "value-class name-<hash>")
+        // internal `$<module>` mangling (the MotionScheme case) — and layered on the value-class form.
+        assertTrue(mangledNameMatches("expressive\$material3", "expressive"), "internal name\$module")
+        assertTrue(mangledNameMatches("blur-7f3a2b1\$ui", "blur"), "internal on top of value-class mangling")
+        // A DIFFERENT internal member on the same companion must NOT match.
+        assertTrue(!mangledNameMatches("standard\$material3", "expressive"))
+        // Compiler synthetics that also carry a `$` must NOT be read as the internal form of the base name.
+        assertTrue(!mangledNameMatches("expressive\$default", "expressive"), "\$default is a synthetic, not a member")
+        assertTrue(!mangledNameMatches("getRed\$annotations", "getRed"), "\$annotations is a synthetic")
+        // A multi-segment `$` suffix isn't an internal module suffix (a lambda/accessor synthetic).
+        assertTrue(!mangledNameMatches("foo\$lambda\$0", "foo"))
+    }
+
+    @Test
     fun kotlinMappedTypeOwnerResolves() {
         // A Kotlin classifier owner (kotlin.text.StringBuilder) maps to its JVM class for reflection.
         val sb = dispatcher.dispatch(call(DispatchKind.CONSTRUCTOR, lib("kotlin.text.StringBuilder", "StringBuilder", isCtor = true)), null, emptyList())
@@ -416,6 +454,10 @@ class ReflectiveDispatcherTest {
 
     /** A Kotlin class with a mutable `value` property → `getValue()`/`setValue(x)` (a `MutableState` stand-in). */
     class Holder(var value: String)
+
+    /** A class with an `internal` member — Kotlin mangles its JVM name to `reveal$<module>`, exactly like
+     *  Material3's internal `MotionScheme.Companion.expressive()` (`expressive$material3`). */
+    class InternalHolder { internal fun reveal(): String = "secret" }
 
     /** A method taking a value class's UNBOXED underlying primitive (`Int`), like `offset(…, float, float)` takes
      *  the `Dp`'s float — a boxed value-class arg must be unboxed to bind. */

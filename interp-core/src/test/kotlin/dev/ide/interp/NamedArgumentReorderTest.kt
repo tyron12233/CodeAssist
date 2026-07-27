@@ -101,6 +101,32 @@ class NamedArgumentReorderTest {
         val original = listOf<Any?>(1, 2)
         assertSame(original, reorderNamedArgs(listOf("a", "b"), raw, original), "no names → return the same list")
     }
+
+    @Test
+    fun positionalTrailingLambdaSkipsDefaultedLeadingParams() {
+        // The reported `MaterialExpressiveTheme(content = null)` NPE, one level up: `Theme { content }` for
+        // `fun Theme(dark: Boolean = …, content: () -> Unit)`. The SYNTACTIC trailing lambda binds to the LAST
+        // parameter and `dark` defaults — NOT the lambda to `dark` (which would leave the required `content`
+        // null). A purely positional call, so the old reorder early-returned and bound the lambda to `dark`.
+        val lambda = Any()
+        val raw = listOf(RArg(RNode.Const(null, null, span), name = null, spread = false, trailingLambda = true))
+        val out = reorderNamedArgs(listOf("dark", "content"), raw, listOf<Any?>(lambda))
+        assertEquals(2, out.size)
+        assertSame(OmittedArg, out[0], "the defaulted leading param is left omitted (filled by its default)")
+        assertSame(lambda, out[1], "the trailing lambda binds to the last parameter")
+    }
+
+    @Test
+    fun fullySuppliedPositionalTrailingLambdaStaysOnTheFastPath() {
+        // `f(x, { })` — both params supplied positionally, so the args already line up 1:1 and no remap is
+        // needed; the reorder stays a no-op (returns the same list).
+        val original = listOf<Any?>(1, Any())
+        val raw = listOf(
+            RArg(RNode.Const(1, null, span), name = null, spread = false, trailingLambda = false),
+            RArg(RNode.Const(null, null, span), name = null, spread = false, trailingLambda = true),
+        )
+        assertSame(original, reorderNamedArgs(listOf("x", "content"), raw, original))
+    }
 }
 
 /** A top-level function with all-defaulted params → a `describe$default(int,int,int,int,Object)` synthetic. */

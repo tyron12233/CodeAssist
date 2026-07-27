@@ -53,11 +53,23 @@ object ComposableAbi {
     }
 
     /** Whether a JVM method name corresponds to the Kotlin function [kotlinName]. Kotlin MANGLES the JVM name
-     *  of any function that takes/returns an inline value class (Compose's `Text` has `Color`/`TextUnit`
-     *  params) to `name-<hash>` for binary-compat — so the literal name won't match; the prefix does. The hash
-     *  never contains `$`, so excluding `$` skips sibling synthetics (`…$annotations`, `…$default`). */
-    private fun nameMatches(jvmName: String, kotlinName: String): Boolean =
-        jvmName == kotlinName || (jvmName.startsWith("$kotlinName-") && '$' !in jvmName)
+     *  two ways this must see through (kept in sync with interp-core's `mangledNameMatches`):
+     *   - a function taking/returning an inline value class (Compose's `Text` has `Color`/`TextUnit` params) →
+     *     `name-<hash>`; the hash never contains `$`, so excluding `$` skips sibling synthetics
+     *     (`…$annotations`, `…$default`);
+     *   - an `internal` function → `name$<module>` (much of Material3 Expressive is internal, e.g.
+     *     `MotionScheme.Companion.expressive()` → `expressive$material3`), optionally on top of the value-class
+     *     form. The module suffix must be a single segment and not a known compiler synthetic. */
+    private fun nameMatches(jvmName: String, kotlinName: String): Boolean {
+        if (jvmName == kotlinName) return true
+        if (jvmName.startsWith("$kotlinName-") && '$' !in jvmName) return true
+        val dollar = jvmName.indexOf('$')
+        if (dollar <= 0) return false
+        val base = jvmName.substring(0, dollar)
+        val suffix = jvmName.substring(dollar + 1)
+        val baseMatches = base == kotlinName || base.startsWith("$kotlinName-")
+        return baseMatches && '$' !in suffix && suffix != "default" && suffix != "annotations"
+    }
 
     /** A `Composer` parameter — matched by simple name as a fallback too, in case a relocated/shaded build
      *  reports a package-qualified name we don't expect (we still want to detect the composer slot). */
