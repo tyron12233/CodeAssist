@@ -23,6 +23,7 @@ import dev.ide.index.packagePrefixes
 import org.jetbrains.kotlin.psi.KtClass
 import org.jetbrains.kotlin.psi.KtClassOrObject
 import org.jetbrains.kotlin.psi.KtDeclaration
+import org.jetbrains.kotlin.psi.KtEnumEntry
 import org.jetbrains.kotlin.psi.KtFile
 import org.jetbrains.kotlin.psi.KtNamedDeclaration
 import org.jetbrains.kotlin.psi.KtNamedFunction
@@ -61,11 +62,16 @@ private fun kindOf(c: KtClassOrObject): String = when {
 private fun offsetOf(d: KtDeclaration): Int =
     (d as? KtNamedDeclaration)?.nameIdentifier?.textOffset ?: d.textOffset
 
-/** Depth-first over every class/object (including nested), with each one's true (nested-aware) FQN + kind. */
+/** Depth-first over every class/object (including nested), with each one's true (nested-aware) FQN + kind.
+ *  A `KtEnumEntry` IS a `KtClassOrObject` (it extends `KtClass`), but an enum CONSTANT is a VALUE of the enum
+ *  type, not a classifier — indexing `Direction.LEFT` as a source class made `isKnownType("Direction.LEFT")`
+ *  true, so `Direction.LEFT` mis-resolved to a classifier and drew a spurious "does not have a companion
+ *  object, and thus must be initialized here". Skipped here (its constants are surfaced via the symbol/callable
+ *  side), matching [dev.ide.lang.kotlin.symbols.SourceIndex]'s `collectClasses`. */
 private fun forEachType(kt: KtFile, action: (KtClassOrObject, String, String) -> Unit) {
     fun visit(decls: List<KtDeclaration>) {
         for (d in decls) {
-            val c = d as? KtClassOrObject ?: continue
+            val c = (d as? KtClassOrObject)?.takeUnless { it is KtEnumEntry } ?: continue
             c.fqName?.asString()?.let { action(c, it, kindOf(c)) }
             visit(c.declarations)
         }
@@ -76,7 +82,9 @@ private fun forEachType(kt: KtFile, action: (KtClassOrObject, String, String) ->
 /** `kotlin.classNames`: simple type name → FQN/origin/kind, for auto-import + type-name completion. */
 object KotlinClassNamesIndex : IndexExtension<String, ClassNameValue> {
     override val id = ClassNameIndex.KOTLIN
-    override val version = 1
+    // v2: stopped indexing enum CONSTANTS as classifiers (see [forEachType]) — bump discards persisted `v1`
+    // partitions that still hold the bad `Enum.CONSTANT` class entries for unchanged files.
+    override val version = 2
     override val keyDescriptor: KeyDescriptor<String> = StringKeyDescriptor
     override val valueExternalizer = ClassNameExternalizer
     override val matching = MatchingMode.PREFIX_AND_FUZZY
