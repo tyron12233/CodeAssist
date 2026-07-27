@@ -137,6 +137,10 @@ object CaIcons {
     val eye = build("eye", s("M2.5 12s3.4-6.3 9.5-6.3S21.5 12 21.5 12 18.1 18.3 12 18.3 2.5 12 2.5 12z"), circle(12f, 12f, 2.7f))
     val gitBranch = build("git-branch", circle(7f, 6f, 2.5f), circle(7f, 18f, 2.5f), circle(17f, 9f, 2.5f), s("M7 8.5v7M17 11.5c0 3-4 2.5-7 4"))
     val pin = build("pin", s("M9 4h6l-.8 5 2.3 2.5h-9L9.8 9z"), s("M12 13.5V20"))
+    /** A closed padlock (shackle latched on both sides) — the preview "lock the view" toggle when active. */
+    val lock = build("lock", roundRect(5f, 11f, 14f, 9f, 2f), s("M8 11V8a4 4 0 0 1 8 0v3"))
+    /** An open padlock (shackle raised, right leg unlatched) — the "unlock" state of the same toggle. */
+    val lockOpen = build("lock-open", roundRect(5f, 11f, 14f, 9f, 2f), s("M8 11V8a4 4 0 0 1 8 0"))
     /** A four-point concave star — code completion. */
     val sparkle = build(
         "sparkle",

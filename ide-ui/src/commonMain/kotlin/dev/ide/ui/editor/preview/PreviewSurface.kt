@@ -1,5 +1,15 @@
 package dev.ide.ui.editor.preview
 
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.EnterTransition
+import androidx.compose.animation.ExitTransition
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.scaleIn
+import androidx.compose.animation.scaleOut
+import androidx.compose.animation.slideInVertically
+import androidx.compose.animation.slideOutVertically
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.gestures.calculatePan
@@ -45,6 +55,7 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.input.pointer.PointerEventPass
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.input.pointer.positionChanged
@@ -61,12 +72,16 @@ import dev.ide.ui.generated.resources.preview_copy_problems
 import dev.ide.ui.generated.resources.preview_device_compact
 import dev.ide.ui.generated.resources.preview_device_phone
 import dev.ide.ui.generated.resources.preview_device_tablet
+import dev.ide.ui.generated.resources.preview_collapse_toolbar
+import dev.ide.ui.generated.resources.preview_expand_toolbar
 import dev.ide.ui.generated.resources.preview_fit
+import dev.ide.ui.generated.resources.preview_lock
 import dev.ide.ui.generated.resources.preview_night
 import dev.ide.ui.generated.resources.preview_night_mode
 import dev.ide.ui.generated.resources.preview_problems
 import dev.ide.ui.generated.resources.preview_problems_count
 import dev.ide.ui.generated.resources.preview_rotate
+import dev.ide.ui.generated.resources.preview_unlock
 import dev.ide.ui.generated.resources.preview_zoom_in
 import dev.ide.ui.icons.CaIcons
 import dev.ide.ui.theme.Ca
@@ -100,6 +115,14 @@ class PreviewSurfaceState {
     var userScale by mutableStateOf(0f)
     var offset by mutableStateOf(Offset.Zero)
 
+    /**
+     * "Lock the view" mode. While locked the surface stops intercepting drag/pinch, so pointer events fall
+     * through to the previewed content — the user can scroll a list, drag a slider, or tap a button inside a
+     * Compose `@Preview` instead of panning the canvas. Pan/zoom via the bar buttons still work; toggled from
+     * the bottom bar. Held per file (reset with the rest of the surface state on a file switch).
+     */
+    var locked by mutableStateOf(false)
+
     val device: DeviceProfile get() = PREVIEW_DEVICES[deviceIndex]
     val wdp: Int get() = if (landscape) device.hdp else device.wdp
     val hdp: Int get() = if (landscape) device.wdp else device.hdp
@@ -124,12 +147,17 @@ private fun deviceLabel(label: String): String = when (label) {
  * The common preview surface both Preview views render into: a device card floating over a dotted (or
  * blueprint) ground with free pan + pinch/zoom (drag to scroll, pinch or the bottom bar to zoom, the fit
  * button to recentre). A top glass bar carries device / orientation / night plus [topBarExtras]; the bottom
- * bar holds zoom / fit plus [bottomBarExtras]. The view-specific content is drawn inside the card by [card]
- * (given the device viewport in px and its density); free-floating panels go in [overlays].
+ * bar holds zoom / fit / a lock toggle plus [bottomBarExtras]. Either bar collapses to a small edge handle
+ * (so the render can use the full pane) and expands back on tap. The view-specific content is drawn inside
+ * the card by [card] (given the device viewport in px and its density); free-floating panels go in [overlays].
  *
- * In [split] mode (the editor+preview side-by-side/stacked view) the chrome bars are hidden and the fit
- * scale tracks WIDTH only, so dragging the split divider (which changes the pane's height) no longer
- * rescales the preview — see [split].
+ * The bottom bar's **Lock** toggle ([PreviewSurfaceState.locked]) suspends pan/zoom so pointer events reach
+ * the previewed content — the user scrolls/taps/drags inside a live Compose `@Preview` instead of moving the
+ * canvas.
+ *
+ * In [split] mode (the editor+preview side-by-side/stacked view) the bars start collapsed (the pane is small
+ * and shared with the editor) and the fit scale tracks WIDTH only, so dragging the split divider (which
+ * changes the pane's height) no longer rescales the preview — see [split].
  */
 @Composable
 fun PreviewSurface(
@@ -145,10 +173,11 @@ fun PreviewSurface(
     /** Size the card to its content (a Compose `@Preview` with no device/size declared wraps the composable),
      *  bounded by the selected device as a max. Ignored when [deviceOverride] dictates a fixed size. */
     wrapContent: Boolean = false,
-    /** Rendered inside the Split view (editor + preview together). Hides the top/bottom chrome bars (the pane
-     *  is small and shares space with the editor) and makes the fit scale fit-to-WIDTH only, so the preview
-     *  stays a deterministic size while the split divider is dragged vertically instead of rescaling on it.
-     *  Pan + pinch-zoom stay available without the bars. Full-screen Preview leaves this false. */
+    /** Rendered inside the Split view (editor + preview together). Starts the top/bottom chrome bars collapsed
+     *  (the pane is small and shares space with the editor — the user expands them on demand) and makes the fit
+     *  scale fit-to-WIDTH only, so the preview stays a deterministic size while the split divider is dragged
+     *  vertically instead of rescaling on it. Pan + pinch-zoom stay available regardless. Full-screen Preview
+     *  leaves this false (bars start expanded). */
     split: Boolean = false,
     topBarExtras: @Composable RowScope.(compact: Boolean) -> Unit = {},
     bottomBarExtras: @Composable RowScope.(compact: Boolean) -> Unit = {},
@@ -186,6 +215,13 @@ fun PreviewSurface(
         // Re-fit (and recentre) whenever the device viewport changes — rotation or device switch.
         LaunchedEffect(widthPx, heightPx, wrap) { state.userScale = 0f; state.offset = Offset.Zero }
 
+        // Each chrome bar collapses to a small edge handle so the render can use the full pane. They start
+        // collapsed in split (the pane is small and shared with the editor — the old behaviour hid them
+        // outright; now the user can expand them on demand) and expanded full-screen. Keyed on state (per
+        // file) + split so a file switch or a split toggle re-applies the default.
+        var topBarExpanded by remember(state, split) { mutableStateOf(!split) }
+        var bottomBarExpanded by remember(state, split) { mutableStateOf(!split) }
+
         // The canvas surface: a dotted neutral ground, or a flat blueprint-blue ground for the wireframe.
         Box(
             Modifier.fillMaxSize()
@@ -193,26 +229,31 @@ fun PreviewSurface(
                     if (blueprint) drawRect(BlueprintGround)
                     else drawDotGrid(dotColor, 15.dp.toPx(), 1.dp.toPx())
                 }
-                .pointerInput(state) {
-                    // Drive pan/zoom on the INITIAL pass so the surface wins over any interactive previewed
-                    // content (a Compose @Preview can hold scrollables/buttons that would otherwise eat the
-                    // drag/pinch). Only consume once the gesture actually moves, so a plain tap still falls
-                    // through to the card (the XML hit-test) and the deselect handler below.
-                    awaitPointerEventScope {
-                        while (true) {
-                            val event = awaitPointerEvent(PointerEventPass.Initial)
-                            if (event.changes.none { it.pressed }) continue
-                            val zoom = event.calculateZoom()
-                            val pan = event.calculatePan()
-                            if (zoom != 1f || pan != Offset.Zero) {
-                                val base = if (state.userScale <= 0f) fitState.value else state.userScale
-                                state.userScale = (base * zoom).coerceIn(0.2f, 5f)
-                                state.offset += pan
-                                event.changes.forEach { if (it.positionChanged()) it.consume() }
+                // Pan/zoom is suspended in Lock mode (see [PreviewSurfaceState.locked]) so pointer events reach
+                // the previewed content instead — the user interacts with the render rather than moving it.
+                .then(
+                    if (state.locked) Modifier
+                    else Modifier.pointerInput(state) {
+                        // Drive pan/zoom on the INITIAL pass so the surface wins over any interactive previewed
+                        // content (a Compose @Preview can hold scrollables/buttons that would otherwise eat the
+                        // drag/pinch). Only consume once the gesture actually moves, so a plain tap still falls
+                        // through to the card (the XML hit-test) and the deselect handler below.
+                        awaitPointerEventScope {
+                            while (true) {
+                                val event = awaitPointerEvent(PointerEventPass.Initial)
+                                if (event.changes.none { it.pressed }) continue
+                                val zoom = event.calculateZoom()
+                                val pan = event.calculatePan()
+                                if (zoom != 1f || pan != Offset.Zero) {
+                                    val base = if (state.userScale <= 0f) fitState.value else state.userScale
+                                    state.userScale = (base * zoom).coerceIn(0.2f, 5f)
+                                    state.offset += pan
+                                    event.changes.forEach { if (it.positionChanged()) it.consume() }
+                                }
                             }
                         }
-                    }
-                }
+                    },
+                )
                 .pointerInput(Unit) { detectTapGestures(onTap = { tapHandler.value?.invoke() }) },
             contentAlignment = Alignment.Center,
         ) {
@@ -239,41 +280,84 @@ fun PreviewSurface(
         }
 
         // Top bar: device / orientation / night + view-specific extras. On a narrow pane it collapses to a
-        // compact icon/dimension-only form so the cluster shrinks with the surface instead of squishing.
-        // Hidden in split mode (the pane is small and shared with the editor); pan/pinch-zoom still work.
-        if (!split) GlassBar(Modifier.align(Alignment.TopCenter).padding(Ca.spacing.s3)) {
-            // When a @Preview dictates the device the pill is non-cycling (the device is fixed by the annotation).
-            PillButton({ if (deviceOverride == null) state.deviceIndex = (state.deviceIndex + 1) % PREVIEW_DEVICES.size }) {
-                Text(
-                    if (compact) "$wdp×$hdp" else "${deviceLabel(device.label)} · $wdp×$hdp",
-                    color = if (deviceOverride != null) Ca.colors.accent else Ca.colors.textSecondary,
-                    style = Ca.type.caption, maxLines = 1,
-                    modifier = Modifier.padding(horizontal = if (compact) Ca.spacing.s1 else Ca.spacing.s2),
-                )
-            }
-            Divider()
-            PillButton({ state.landscape = !state.landscape }) {
-                Icon(CaIcons.refresh, stringResource(Res.string.preview_rotate), Modifier.size(15.dp), tint = if (state.landscape) Ca.colors.accent else Ca.colors.textSecondary)
-            }
-            Divider()
-            PillButton({ state.night = !state.night }) {
-                if (compact) {
-                    Icon(CaIcons.moon, stringResource(Res.string.preview_night_mode), Modifier.size(15.dp), tint = if (state.night) Ca.colors.accent else Ca.colors.textTertiary)
-                } else {
-                    Text(stringResource(Res.string.preview_night), color = if (state.night) Ca.colors.accent else Ca.colors.textTertiary, style = Ca.type.caption, modifier = Modifier.padding(horizontal = Ca.spacing.s1))
+        // compact icon/dimension-only form so the cluster shrinks with the surface instead of squishing. When
+        // collapsed (default in split) the full bar slides away and a small expand handle tucks into the top-
+        // right corner (out of the way of the content + the problem chip at top-left); pan/pinch-zoom work
+        // either way. The bar and its handle crossfade so the transition is animated, not a hard swap.
+        AnimatedVisibility(
+            visible = topBarExpanded,
+            modifier = Modifier.align(Alignment.TopCenter).padding(Ca.spacing.s3),
+            enter = barEnter(fromTop = true), exit = barExit(fromTop = true),
+        ) {
+            GlassBar(Modifier) {
+                // When a @Preview dictates the device the pill is non-cycling (the device is fixed by the annotation).
+                PillButton({ if (deviceOverride == null) state.deviceIndex = (state.deviceIndex + 1) % PREVIEW_DEVICES.size }) {
+                    Text(
+                        if (compact) "$wdp×$hdp" else "${deviceLabel(device.label)} · $wdp×$hdp",
+                        color = if (deviceOverride != null) Ca.colors.accent else Ca.colors.textSecondary,
+                        style = Ca.type.caption, maxLines = 1,
+                        modifier = Modifier.padding(horizontal = if (compact) Ca.spacing.s1 else Ca.spacing.s2),
+                    )
                 }
+                Divider()
+                PillButton({ state.landscape = !state.landscape }) {
+                    Icon(CaIcons.refresh, stringResource(Res.string.preview_rotate), Modifier.size(15.dp), tint = if (state.landscape) Ca.colors.accent else Ca.colors.textSecondary)
+                }
+                Divider()
+                PillButton({ state.night = !state.night }) {
+                    if (compact) {
+                        Icon(CaIcons.moon, stringResource(Res.string.preview_night_mode), Modifier.size(15.dp), tint = if (state.night) Ca.colors.accent else Ca.colors.textTertiary)
+                    } else {
+                        Text(stringResource(Res.string.preview_night), color = if (state.night) Ca.colors.accent else Ca.colors.textTertiary, style = Ca.type.caption, modifier = Modifier.padding(horizontal = Ca.spacing.s1))
+                    }
+                }
+                topBarExtras(compact)
+                Divider()
+                CollapseToggle(CaIcons.chevronUp) { topBarExpanded = false }
             }
-            topBarExtras(compact)
+        }
+        AnimatedVisibility(
+            visible = !topBarExpanded,
+            modifier = Modifier.align(Alignment.TopEnd).padding(Ca.spacing.s3),
+            enter = handleEnter, exit = handleExit,
+        ) {
+            ExpandHandle(Modifier, CaIcons.chevronDown) { topBarExpanded = true }
         }
 
-        // Bottom bar: zoom / fit + view-specific extras. Hidden in split mode (see the top bar).
-        if (!split) GlassBar(Modifier.align(Alignment.BottomCenter).padding(Ca.spacing.s4)) {
-            PillButton({ val b = if (state.userScale <= 0f) fit else state.userScale; state.userScale = (b / 1.25f).coerceIn(0.2f, 5f) }) { MinusGlyph() }
-            Text("${(scale * 100f).roundToInt()}%", color = Ca.colors.textSecondary, style = Ca.type.caption, modifier = Modifier.width(44.dp), textAlign = TextAlign.Center)
-            PillButton({ val b = if (state.userScale <= 0f) fit else state.userScale; state.userScale = (b * 1.25f).coerceIn(0.2f, 5f) }) { Icon(CaIcons.plus, stringResource(Res.string.preview_zoom_in), Modifier.size(16.dp), tint = Ca.colors.textPrimary) }
-            Divider()
-            PillButton({ state.userScale = 0f; state.offset = Offset.Zero }) { Icon(CaIcons.refresh, stringResource(Res.string.preview_fit), Modifier.size(15.dp), tint = Ca.colors.textSecondary) }
-            bottomBarExtras(compact)
+        // Bottom bar: zoom / fit / lock + view-specific extras (same collapse behaviour as the top bar; its
+        // handle tucks into the bottom-right corner).
+        AnimatedVisibility(
+            visible = bottomBarExpanded,
+            modifier = Modifier.align(Alignment.BottomCenter).padding(Ca.spacing.s4),
+            enter = barEnter(fromTop = false), exit = barExit(fromTop = false),
+        ) {
+            GlassBar(Modifier) {
+                PillButton({ val b = if (state.userScale <= 0f) fit else state.userScale; state.userScale = (b / 1.25f).coerceIn(0.2f, 5f) }) { MinusGlyph() }
+                Text("${(scale * 100f).roundToInt()}%", color = Ca.colors.textSecondary, style = Ca.type.caption, modifier = Modifier.width(44.dp), textAlign = TextAlign.Center)
+                PillButton({ val b = if (state.userScale <= 0f) fit else state.userScale; state.userScale = (b * 1.25f).coerceIn(0.2f, 5f) }) { Icon(CaIcons.plus, stringResource(Res.string.preview_zoom_in), Modifier.size(16.dp), tint = Ca.colors.textPrimary) }
+                Divider()
+                PillButton({ state.userScale = 0f; state.offset = Offset.Zero }) { Icon(CaIcons.refresh, stringResource(Res.string.preview_fit), Modifier.size(15.dp), tint = Ca.colors.textSecondary) }
+                Divider()
+                // Lock the view: stop the surface eating drags so the user can interact with the previewed content.
+                PillButton({ state.locked = !state.locked }) {
+                    Icon(
+                        if (state.locked) CaIcons.lock else CaIcons.lockOpen,
+                        if (state.locked) stringResource(Res.string.preview_unlock) else stringResource(Res.string.preview_lock),
+                        Modifier.size(15.dp),
+                        tint = if (state.locked) Ca.colors.accent else Ca.colors.textSecondary,
+                    )
+                }
+                bottomBarExtras(compact)
+                Divider()
+                CollapseToggle(CaIcons.chevronDown) { bottomBarExpanded = false }
+            }
+        }
+        AnimatedVisibility(
+            visible = !bottomBarExpanded,
+            modifier = Modifier.align(Alignment.BottomEnd).padding(Ca.spacing.s4),
+            enter = handleEnter, exit = handleExit,
+        ) {
+            ExpandHandle(Modifier, CaIcons.chevronUp) { bottomBarExpanded = true }
         }
 
         overlays()
@@ -388,6 +472,33 @@ internal fun PillButton(onClick: () -> Unit, content: @Composable () -> Unit) {
         contentAlignment = Alignment.Center,
         content = { content() },
     )
+}
+
+// Collapse/expand animation: the full bar fades + slides toward its edge; its corner handle fades + scales.
+private const val CHROME_ANIM_MS = 180
+private fun barEnter(fromTop: Boolean): EnterTransition =
+    fadeIn(tween(CHROME_ANIM_MS)) + slideInVertically(tween(CHROME_ANIM_MS)) { h -> if (fromTop) -h else h }
+private fun barExit(fromTop: Boolean): ExitTransition =
+    fadeOut(tween(CHROME_ANIM_MS)) + slideOutVertically(tween(CHROME_ANIM_MS)) { h -> if (fromTop) -h else h }
+private val handleEnter: EnterTransition = fadeIn(tween(CHROME_ANIM_MS)) + scaleIn(tween(CHROME_ANIM_MS), initialScale = 0.8f)
+private val handleExit: ExitTransition = fadeOut(tween(CHROME_ANIM_MS)) + scaleOut(tween(CHROME_ANIM_MS), targetScale = 0.8f)
+
+/** The chevron that collapses a chrome bar (sits at the bar's end). Muted so it reads as secondary chrome. */
+@Composable
+private fun CollapseToggle(icon: ImageVector, onClick: () -> Unit) {
+    PillButton(onClick) {
+        Icon(icon, stringResource(Res.string.preview_collapse_toolbar), Modifier.size(14.dp), tint = Ca.colors.textTertiary)
+    }
+}
+
+/** The small glass handle a collapsed bar leaves behind — one chevron that expands the bar back open. */
+@Composable
+private fun ExpandHandle(modifier: Modifier, icon: ImageVector, onClick: () -> Unit) {
+    GlassBar(modifier) {
+        PillButton(onClick) {
+            Icon(icon, stringResource(Res.string.preview_expand_toolbar), Modifier.size(15.dp), tint = Ca.colors.textSecondary)
+        }
+    }
 }
 
 @Composable
