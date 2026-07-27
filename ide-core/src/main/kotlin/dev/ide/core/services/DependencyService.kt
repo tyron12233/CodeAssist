@@ -1301,6 +1301,25 @@ internal class DependencyService(private val ctx: EngineContext) : Disposable {
     }
 
     /**
+     * Versions of the library `group:name` currently downloaded to the shared cache, each with the disk space
+     * it occupies (newest-first) — for the Dependencies screen's downloaded-versions cleanup list. Disk-only
+     * (no network); empty when nothing is cached for the artifact.
+     */
+    fun cachedVersions(group: String, name: String): List<Pair<String, Long>> {
+        if (group.isBlank() || name.isBlank()) return emptyList()
+        return runCatching { depsCache.cachedVersions(group, name) }.getOrDefault(emptyList())
+    }
+
+    /**
+     * Delete the cached [version] of `group:name` from the shared download store to reclaim disk. Returns true
+     * when the version was present. Safe: a later build that needs it simply re-downloads it.
+     */
+    fun deleteCachedVersion(group: String, name: String, version: String): Boolean {
+        if (group.isBlank() || name.isBlank() || version.isBlank()) return false
+        return runCatching { depsCache.deleteVersion(group, name, version) }.getOrDefault(false)
+    }
+
+    /**
      * Update an already-declared library dependency of [moduleName] in ONE re-resolve: change its [version],
      * [scope], and/or transitive [exclusions]. [coordinate] identifies the declaration by its `group:name`
      * (the displayed/resolved coordinate may differ from the persisted one after a newest-wins bump, so the

@@ -68,6 +68,59 @@ class ResolverCache(val root: Path) {
     fun explodedDir(c: Coordinate): Path =
         base.resolve(c.group.replace('.', '/')).resolve(c.name).resolve(c.version).resolve("${c.name}-${c.version}-exploded")
 
+    // --- cached-version management ---------------------------------------------------------------
+    // The Dependencies screen lets the user see which versions of an artifact are downloaded (each version
+    // is a directory under `<groupPath>/<name>/`) and delete old ones to reclaim disk — the fine-grained
+    // counterpart to the Storage screen's bulk "clear dependencies".
+
+    /** The directory holding every cached version of `group:name` (a Maven `<groupPath>/<name>` dir). */
+    private fun artifactDir(group: String, name: String): Path =
+        base.resolve(group.replace('.', '/')).resolve(name)
+
+    /**
+     * Every version of `group:name` present on disk, each with the total bytes it occupies (artifacts +
+     * exploded AAR), newest-first. Empty when nothing is cached for the artifact.
+     */
+    fun cachedVersions(group: String, name: String): List<Pair<String, Long>> {
+        val dir = artifactDir(group, name)
+        if (!Files.isDirectory(dir)) return emptyList()
+        return Files.newDirectoryStream(dir).use { stream -> stream.filter { Files.isDirectory(it) }.toList() }
+            .map { it.fileName.toString() to treeSize(it) }
+            .sortedWith(compareByDescending(VERSION_ORDER) { it.first })
+    }
+
+    /**
+     * Delete the cached [version] of `group:name` (its whole version dir, incl. the exploded AAR) and any
+     * negative-cache sidecars for it. Returns true when a version dir was present and removed. A build that
+     * still needs the version simply re-downloads it.
+     */
+    fun deleteVersion(group: String, name: String, version: String): Boolean {
+        val groupPath = group.replace('.', '/')
+        val dir = base.resolve(groupPath).resolve(name).resolve(version)
+        val existed = Files.isDirectory(dir)
+        deleteTree(dir)
+        deleteTree(missBase.resolve(groupPath).resolve(name).resolve(version))
+        return existed
+    }
+
+    /** Sum of regular-file sizes under [path] (0 if absent). */
+    private fun treeSize(path: Path): Long {
+        if (!Files.exists(path)) return 0L
+        var total = 0L
+        runCatching {
+            Files.walk(path).use { s -> s.filter { Files.isRegularFile(it) }.forEach { total += runCatching { Files.size(it) }.getOrDefault(0L) } }
+        }
+        return total
+    }
+
+    /** Recursively delete [path] (reverse order so dirs empty before removal); a no-op if absent. */
+    private fun deleteTree(path: Path) {
+        if (!Files.exists(path)) return
+        runCatching {
+            Files.walk(path).use { s -> s.sorted(Comparator.reverseOrder()).forEach { runCatching { Files.deleteIfExists(it) } } }
+        }
+    }
+
     // --- negative cache --------------------------------------------------------------------------
     // A genuine 404 (the resource is absent from every repo, NOT a network error) is remembered so a later
     // open doesn't re-probe the network for something that doesn't exist — the dominant repeat-download cause
@@ -111,5 +164,20 @@ class ResolverCache(val root: Path) {
 
     private companion object {
         const val MISS_TTL_MS = 7L * 24 * 60 * 60 * 1000   // 7 days
+
+        private val NUM = Regex("\\d+")
+
+        /** Ascending version order: numeric segments compared as numbers (so 10 > 9), with the raw string as
+         *  a stable tiebreak. Best-effort for display ordering — not a full semver pre-release ranking. */
+        val VERSION_ORDER: Comparator<String> = Comparator { a, b ->
+            val na = NUM.findAll(a).map { it.value.toLongOrNull() ?: 0L }.toList()
+            val nb = NUM.findAll(b).map { it.value.toLongOrNull() ?: 0L }.toList()
+            var result = 0
+            for (i in 0 until maxOf(na.size, nb.size)) {
+                val c = (na.getOrElse(i) { 0L }).compareTo(nb.getOrElse(i) { 0L })
+                if (c != 0) { result = c; break }
+            }
+            if (result != 0) result else a.compareTo(b)
+        }
     }
 }

@@ -5,6 +5,7 @@ import dev.ide.ui.backend.DependencyService
 import dev.ide.ui.backend.DepsResolveState
 import dev.ide.ui.backend.UiAddResult
 import dev.ide.ui.backend.UiArtifactHit
+import dev.ide.ui.backend.UiCachedVersion
 import dev.ide.ui.backend.UiDepModule
 import dev.ide.ui.backend.UiModuleDeps
 import dev.ide.ui.backend.UiRepository
@@ -64,6 +65,14 @@ internal class DependencyBackend(private val ctx: BackendContext) : DependencySe
 
     override suspend fun availableVersions(moduleName: String, coordinate: String): List<String> =
         withContext(Dispatchers.IO) { ctx.services.dependencies.availableVersions(moduleName, coordinate) }
+
+    override suspend fun cachedVersions(group: String, name: String): List<UiCachedVersion> =
+        withContext(Dispatchers.IO) {
+            ctx.services.dependencies.cachedVersions(group, name).map { (version, bytes) -> UiCachedVersion(version, bytes) }
+        }
+
+    override suspend fun deleteCachedVersion(group: String, name: String, version: String): Boolean =
+        withContext(Dispatchers.IO) { ctx.services.dependencies.deleteCachedVersion(group, name, version) }
 
     override suspend fun updateDependency(
         moduleName: String, coordinate: String, version: String, scope: String, exclusions: List<String>
