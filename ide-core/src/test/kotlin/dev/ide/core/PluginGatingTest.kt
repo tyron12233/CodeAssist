@@ -1,5 +1,6 @@
 package dev.ide.core
 
+import dev.ide.block.BLOCK_MAPPING_EP
 import dev.ide.lang.LANGUAGE_BACKEND_EP
 import dev.ide.lang.java.JavaLanguageBackend
 import dev.ide.lang.kotlin.KotlinLanguageBackend
@@ -34,6 +35,23 @@ class PluginGatingTest {
             assertFalse(env.pluginCatalog.isEnabled("kotlin-analysis"))
             // The essential Java (IntelliJ-PSI) editor backend is untouched.
             assertTrue(backends(env).contains(JavaLanguageBackend::class))
+        }
+    }
+
+    @Test
+    fun `the block editor is a togglable plugin`() {
+        // Enabled by default: the Java block mapping is registered, so the block editor projects.
+        ApplicationEnvironment().use { env ->
+            assertTrue(env.pluginCatalog.isEnabled("blocks"))
+            assertTrue(env.platform.extensions.extensions(BLOCK_MAPPING_EP).isNotEmpty(), "block mapping present by default")
+        }
+        // Disabled: no block mapping is registered, so the engine reports the block editor unavailable and the
+        // UI hides the Blocks view-mode segment. Nothing depends on it, so no other plugin drops.
+        ApplicationEnvironment(disabledPluginIds = setOf("blocks")).use { env ->
+            assertFalse(env.pluginCatalog.isEnabled("blocks"))
+            assertTrue(env.platform.extensions.extensions(BLOCK_MAPPING_EP).isEmpty(), "block mapping gone when disabled")
+            // Java support (which used to own the mapping) is unaffected — the toggle is independent.
+            assertTrue(env.pluginCatalog.isEnabled("java-support"))
         }
     }
 

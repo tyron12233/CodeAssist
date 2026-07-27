@@ -95,10 +95,14 @@ analysis plugins declare `dependsOn = ["jdt-language"]`).
 
 ## The IDE dogfoods it (`ide-core`)
 
-`ide-core/BuiltInPlugins.kt` holds the IDE's own built-ins as ~16 `Plugin`s (`platform`, `jdt-language`,
-`kotlin-language`, `xml-language`, `java-support`, `kotlin-support`, `android-support`, `samples`,
-`completion-builtins`, `indexing`, `jdt-analysis`, `kotlin-analysis`, `xml-analysis`, `android-xml`,
-`ide-core-services`, `ide-core-actions`), each mapping to the `PluginId` it contributed under before.
+`ide-core/BuiltInPlugins.kt` holds the IDE's own built-ins as a set of `Plugin`s (`platform`, `jdt-language`,
+`java-psi-language`, `kotlin-language`, `xml-language`, `java-support`, `kotlin-support`, `blocks`,
+`android-support`, `samples`, `completion-builtins`, `indexing`, `jdt-analysis`, `kotlin-analysis`,
+`xml-analysis`, `android-xml`, `ide-core-services`, `ide-core-actions`, …), each mapping to the `PluginId` it
+contributed under before. Most are non-essential and can be disabled; the essentials (`platform`,
+`jdt-language`, `java-psi-language`, `ide-core-services`) cannot. For example `blocks` contributes the Java
+block decomposition on the `blockMapping` EP — disabling it drops the only mapping, so the engine's
+`BlockService` reports the block editor unavailable and the UI hides the Code/Blocks toggle.
 `ApplicationEnvironment` builds a `PluginManager` over the application registry and loads
 `BuiltInPlugins.assemble(...)`; there is no imperative "register everything" block anymore.
 

@@ -269,12 +269,14 @@ internal fun EditorCenter(
                     }
                 }
                 when (active.viewMode) {
-                    EditorViewMode.Blocks -> BlockEditor(
+                    // Guard: only render blocks while the `blocks` plugin is enabled; otherwise fall through to
+                    // the code surface (the toggle omits Blocks when disabled, so this is defence-in-depth).
+                    EditorViewMode.Blocks -> if (state.blocksEnabled) BlockEditor(
                         path = active.path,
                         session = active.session,
                         backend = state.backend,
                         modifier = Modifier.weight(1f).fillMaxWidth(),
-                    )
+                    ) else codeSurface(Modifier.weight(1f).fillMaxWidth())
 
                     EditorViewMode.Preview -> previewSurface(Modifier.weight(1f).fillMaxWidth(), false)
                     // Edit + watch at once: stacked on a phone (the only way both fit), side-by-side when wide.

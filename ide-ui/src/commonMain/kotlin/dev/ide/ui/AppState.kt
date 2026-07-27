@@ -400,6 +400,13 @@ class IdeUiState(
         softKeyboardSuggestions = s.softKeyboardSuggestions
     }
 
+    /**
+     * Whether the projectional block editor is available (the `blocks` plugin is enabled). Read once from the
+     * backend at construction — the plugin set is app-global and restart-applied, so it can't change within a
+     * session. Gates the Code/Blocks view-mode toggle and the restore of a persisted `blocks` tab.
+     */
+    val blocksEnabled: Boolean = backend.blocks.blocksEnabled()
+
     /** Whether the Logs viewer sheet (editor & analysis logs, opened from the More menu) is showing. */
     var logsOpen by mutableStateOf(false)
 
@@ -514,7 +521,10 @@ class IdeUiState(
                 // Reapply the saved per-tab view state to the tab we just opened. setCaret + the scroll anchor
                 // coerce into the (possibly changed) buffer, so a shrunken file can't strand the caret/scroll.
                 openFiles.firstOrNull { it.path == tab.path }?.let { f ->
-                    editorViewModeOf(tab.viewMode)?.let { f.viewMode = it }
+                    // Drop a persisted Blocks mode if the block editor is disabled (plugin off) — restore as text.
+                    editorViewModeOf(tab.viewMode)
+                        ?.takeUnless { it == EditorViewMode.Blocks && !blocksEnabled }
+                        ?.let { f.viewMode = it }
                     f.session.setCaret(tab.caret)
                     f.session.viewportTopLine = tab.scrollLine.coerceAtLeast(0)
                 }
