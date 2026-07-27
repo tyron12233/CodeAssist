@@ -171,5 +171,6 @@ private fun iconForKind(kind: String): ImageVector = when (kind) {
     "method", "fun", "function", "constructor" -> CaIcons.code
     "field", "property", "val", "var" -> CaIcons.code
     "resource" -> CaIcons.resources
+    "library" -> CaIcons.box // a compiled library class (opens read-only: decompiled / attached source)
     else -> CaIcons.dot
 }

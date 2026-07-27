@@ -357,6 +357,9 @@ We never collect your code, file or project names, which features you use, or an
     <string name="sources_download">Download</string>
     <string name="sources_downloading">Downloading…</string>
     <string name="sources_download_failed">Download failed: %1$s</string>
+    <string name="library_readonly_source">Library source · read-only</string>
+    <string name="library_readonly_decompiled">Decompiled · read-only</string>
+    <string name="library_decompile_java">Decompile to Java</string>
     <string name="structure_title">Structure</string>
     <string name="structure_filter">Filter…</string>
     <string name="structure_no_symbols">No symbols in this file</string>

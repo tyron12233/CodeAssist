@@ -89,8 +89,20 @@ internal fun editorViewModeOf(id: String?): EditorViewMode? = when (id) {
  * materializes the document `String`. The host observes the session's snapshot state ([EditorSession.textRevision],
  * selection) and pulls [text] lazily, only in debounced effects (analyze/breadcrumb/project/save).
  */
-class OpenFile(val path: String, val name: String, initial: String) {
-    val session = EditorSession(initial, languageFor(name))
+/** The synthetic tab-path scheme for a compiled library class opened read-only (decompiled / attached source).
+ *  A path with this prefix has no disk file — it never participates in save / disk-sync / persistence. */
+internal const val LIBRARY_SCHEME = "library://"
+
+class OpenFile(
+    val path: String,
+    val name: String,
+    initial: String,
+    val readOnly: Boolean = false,
+    /** For a `library://…` tab: how its text was obtained (`source`/`decompiled_java`/`decompiled_kotlin`),
+     *  driving the read-only banner + the "Decompile to Java" affordance. Null for a normal disk file. */
+    val libraryKind: String? = null,
+) {
+    val session = EditorSession(initial, languageFor(name), editable = !readOnly)
     var modified by mutableStateOf(false)
         private set
     /** Which surface this tab shows — text, blocks, or resource preview (text/blocks edit the one [session]).
@@ -446,12 +458,59 @@ class IdeUiState(
         return false
     }
 
-    /** Open [path] and move the caret to [offset] (go-to-symbol). */
+    /** Open [path] and move the caret to [offset] (go-to-symbol). A `library://…` path routes through
+     *  [openLibrary] (fetch decompiled/attached-source content, open read-only) instead of a disk read. */
     fun openAt(path: String, offset: Int) {
+        if (path.startsWith(LIBRARY_SCHEME)) { openLibrary(path); return }
         val name = path.substringAfterLast('/').substringAfterLast('\\')
         scope.launch {
             openSuspend(path, name)
             active?.session?.setCaret(offset) // setCaret coerces into the buffer
+        }
+    }
+
+    /**
+     * Open a compiled LIBRARY class in a read-only tab. [libPath] is `library://<fqn>[#member]`; the content
+     * (attached source, else a decompiled view) is fetched from the backend off the main thread against the
+     * active tab's module, then shown read-only with the caret on [member] (searched in the fetched text), or
+     * the top. [forceJava] runs the Java decompiler on any class ("Decompile to Java"). Re-opening focuses the
+     * existing tab (keyed by the canonical `library://<fqn>[?java]` path the backend returns).
+     */
+    fun openLibrary(libPath: String, forceJava: Boolean = false) {
+        val raw = libPath.removePrefix(LIBRARY_SCHEME).substringBefore("?")
+        val fqn = raw.substringBefore('#')
+        val member = raw.substringAfter('#', "").ifEmpty { null }
+        val contextPath = active?.path?.takeUnless { it.startsWith(LIBRARY_SCHEME) }
+        scope.launch {
+            val content = withContext(ioDispatcher) {
+                runCatching { backend.editor.libraryContent(contextPath ?: fqn, fqn, forceJava) }.getOrNull()
+            } ?: return@launch
+            if (focusOpenTab(content.path)) {
+                active?.session?.let { placeLibraryCaret(it, member ?: fqn.substringAfterLast('.')) }
+                return@launch
+            }
+            val tab = OpenFile(content.path, content.name, content.text, readOnly = true, libraryKind = content.kind)
+            openFiles.add(tab)
+            activeIndex = openFiles.lastIndex
+            placeLibraryCaret(tab.session, member ?: fqn.substringAfterLast('.'))
+            backend.editor.onFileOpened(content.path)
+        }
+    }
+
+    /** Move [session]'s caret to the first occurrence of [name] as a whole word (a best-effort landing on the
+     *  declaration in decompiled/library text), else leave it at the top. */
+    private fun placeLibraryCaret(session: EditorSession, name: String) {
+        val text = session.doc.text
+        var from = 0
+        while (true) {
+            val i = text.indexOf(name, from)
+            if (i < 0) break
+            val before = if (i > 0) text[i - 1] else ' '
+            val after = if (i + name.length < text.length) text[i + name.length] else ' '
+            if (!before.isLetterOrDigit() && before != '_' && !after.isLetterOrDigit() && after != '_') {
+                session.setCaret(i); return
+            }
+            from = i + name.length
         }
     }
 
@@ -496,7 +555,7 @@ class IdeUiState(
 
     /** Persist [file]'s buffer to disk, rebase its saved baseline, and clear the dirty flag. No-op if clean. */
     fun save(file: OpenFile) {
-        if (!file.modified) return
+        if (file.readOnly || !file.modified) return
         val text = file.text // one lazy materialization, on save (not per keystroke)
         backend.editor.saveFile(file.path, text)
         file.onSaved(text)
@@ -537,9 +596,12 @@ class IdeUiState(
 
     /** The current open tabs as a persistable snapshot: each tab's path, caret, scroll line, and view mode,
      *  plus the active index. */
-    fun tabsSnapshot(): UiOpenTabs =
-        UiOpenTabs(
-            openFiles.map { f ->
+    fun tabsSnapshot(): UiOpenTabs {
+        // Read-only library tabs (`library://…`) have no disk file — never persist them (they'd fail to reopen).
+        val persistable = openFiles.filter { !it.readOnly }
+        val newActive = active?.takeUnless { it.readOnly }?.let { persistable.indexOf(it) } ?: 0
+        return UiOpenTabs(
+            persistable.map { f ->
                 UiOpenTab(
                     path = f.path,
                     caret = f.session.selection.start,
@@ -547,8 +609,9 @@ class IdeUiState(
                     viewMode = f.viewMode.persistId(),
                 )
             },
-            activeIndex,
+            newActive.coerceAtLeast(0),
         )
+    }
 
     /** Pick a sensible first file: a `Main.java`, else the first source file in the tree. */
     fun defaultFile(): TreeNode? {
@@ -603,6 +666,7 @@ class IdeUiState(
         scope.launch {
             for (i in openFiles.indices) {
                 val f = openFiles[i]
+                if (f.readOnly) continue
                 val followsFileRename = newPath != null && f.path == activePath
                 if (!followsFileRename && f.modified) continue
                 val diskPath = if (followsFileRename) newPath!! else f.path
@@ -625,7 +689,7 @@ class IdeUiState(
         scope.launch {
             for (i in openFiles.indices) {
                 val f = openFiles[i]
-                if (f.modified) continue
+                if (f.readOnly || f.modified) continue
                 val text = readTabText(f.path) ?: continue
                 if (text == f.savedText) continue // untouched → preserve session/undo/caret
                 val name = f.path.substringAfterLast('/').substringAfterLast('\\')
@@ -642,7 +706,7 @@ class IdeUiState(
     /** Re-push every open buffer to the editor backend so it re-analyzes against the current classpath — used
      *  after switching the active build variant (the engine has already invalidated the per-module analyzers). */
     fun reanalyzeOpenFiles() {
-        for (f in openFiles) backend.editor.updateDocument(f.path, f.text)
+        for (f in openFiles) if (!f.readOnly) backend.editor.updateDocument(f.path, f.text)
     }
 
     /** Create a new file through the backend (off the main thread), refresh the tree, and open it in the editor. */

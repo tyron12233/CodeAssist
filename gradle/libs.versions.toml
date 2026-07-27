@@ -28,6 +28,7 @@ bouncycastle = "1.78.1"   # org.bouncycastle — in-process keystore creation (k
 playServicesAds = "23.6.0"  # com.google.android.gms:play-services-ads — AdMob native ads (Android launcher only)
 androidStub = "4.1.1.4"     # com.google.android:android — the throwaway stub android.jar (compileOnly) :applog-runtime compiles against
 okhttp = "4.12.0"           # com.squareup.okhttp3 — HTTP + SSE transport for the agent's LLM client (:agent-impl); runs on JVM and ART
+cfr = "0.152"               # org.benf:cfr — single-jar Java decompiler for the "navigate into library class" view (:decompiler). Chosen over Fernflower/Vineflower because those NPE on ART (their plugin loader calls Class.getProtectionDomain(), null on Android); CFR is self-contained and runs on-device.
 
 [libraries]
 kotlinx-coroutines-core = { module = "org.jetbrains.kotlinx:kotlinx-coroutines-core", version.ref = "coroutines" }
@@ -100,6 +101,7 @@ desugar-jdk-libs-configuration = { module = "com.android.tools:desugar_jdk_libs_
 ow2-asm = { module = "org.ow2.asm:asm", version.ref = "asm" }
 ow2-asm-tree = { module = "org.ow2.asm:asm-tree", version.ref = "asm" }
 ow2-asm-commons = { module = "org.ow2.asm:asm-commons", version.ref = "asm" } # ClassRemapper/Remapper — bridge reparent + type remap
+cfr = { module = "org.benf:cfr", version.ref = "cfr" }
 # Bouncy Castle: generate an RSA keypair + self-signed X.509 cert and write a PKCS12 keystore IN-PROCESS, so
 # users can create signing keystores on-device (ART has no `keytool`). compileOnly+test in :android-support,
 # bundled into the launchers (:ide-android, :ide-desktop). bcpkix pulls bcprov transitively.

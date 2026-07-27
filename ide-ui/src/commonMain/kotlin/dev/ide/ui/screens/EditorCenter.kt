@@ -192,6 +192,7 @@ internal fun EditorCenter(
                 EditorDaemonEffect(state, active, indexStatus) { hasPreview = it }
                 BreadcrumbBar(state, active, hasPreview)
                 AndroidSourcesBanner(state)
+                ReadOnlyBanner(state, active)
                 // The code editor and the preview, each as a Modifier-parameterized slot, so the single-pane modes
                 // and the Split layout can place the SAME surfaces without duplicating their (long) wiring.
                 // The editor is covered when an app-level overlay sits on top of it: the command palette or a

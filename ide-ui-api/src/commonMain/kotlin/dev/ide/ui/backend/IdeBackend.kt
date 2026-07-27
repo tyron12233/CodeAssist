@@ -1291,6 +1291,11 @@ data class UiNavTarget(val path: String, val offset: Int, val label: String, val
  *  (precomputed, so the Go-to menu shows only usable actions and a pick is instant). */
 data class UiNavOption(val kind: UiNavKind, val targets: List<UiNavTarget>)
 
+/** The read-only display of a compiled LIBRARY class: [path] is the synthetic tab path (`library://<fqn>`,
+ *  the host opens it read-only), [name] the file/tab name (`Foo.kt`/`Foo.java`), [text] the content, and
+ *  [kind] one of `"source"`/`"decompiled_java"`/`"decompiled_kotlin"` (drives the banner + syntax language). */
+data class UiLibraryContent(val path: String, val name: String, val text: String, val kind: String)
+
 /** A gutter "implementations / is subclassed" marker: [offset] anchors the type declaration's name;
  *  [targets] are its direct inheritors. [isInterface] picks the glyph (implemented vs subclassed). */
 data class UiInheritorMarker(val offset: Int, val isInterface: Boolean, val targets: List<UiInheritorTarget>)
