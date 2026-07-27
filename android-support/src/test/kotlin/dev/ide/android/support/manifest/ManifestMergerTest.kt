@@ -74,6 +74,46 @@ class ManifestMergerTest {
         assertEquals(1, descendants(root, "activity").size)
     }
 
+    // A manifest that hard-codes its version (imported/legacy projects). The build config overrides it only
+    // when authoritative — modelled here by the stripVersion flags.
+    private val APP_WITH_VERSION = """
+        <?xml version="1.0" encoding="utf-8"?>
+        <manifest xmlns:android="http://schemas.android.com/apk/res/android"
+            package="com.example.app"
+            android:versionCode="5" android:versionName="2.0">
+            <application android:label="App"/>
+        </manifest>
+    """.trimIndent()
+
+    @Test
+    fun stripsManifestVersionWhenBuildConfigIsAuthoritative() {
+        // Facet value wins: the manifest's own versionCode/versionName are dropped so aapt2 injects the facet's.
+        val r = ManifestMerger.mergeXml(APP_WITH_VERSION, emptyList(), stripVersionCode = true, stripVersionName = true)
+        assertFalse(r.hasErrors, "unexpected errors: ${r.messages}")
+        val root = parse(r.xml)
+        assertEquals("", android(root, "versionCode"), "versionCode must be stripped")
+        assertEquals("", android(root, "versionName"), "versionName must be stripped")
+        // Everything else survives.
+        assertEquals("com.example.app", root.getAttribute("package"))
+    }
+
+    @Test
+    fun keepsManifestVersionWhenBuildConfigDefers() {
+        // Facet at its default (unset) → the manifest's declared version is respected.
+        val r = ManifestMerger.mergeXml(APP_WITH_VERSION, emptyList())
+        val root = parse(r.xml)
+        assertEquals("5", android(root, "versionCode"), "manifest versionCode must be kept")
+        assertEquals("2.0", android(root, "versionName"), "manifest versionName must be kept")
+    }
+
+    @Test
+    fun stripsVersionCodeIndependentlyOfVersionName() {
+        val r = ManifestMerger.mergeXml(APP_WITH_VERSION, emptyList(), stripVersionCode = true, stripVersionName = false)
+        val root = parse(r.xml)
+        assertEquals("", android(root, "versionCode"), "versionCode stripped")
+        assertEquals("2.0", android(root, "versionName"), "versionName kept")
+    }
+
     @Test
     fun substitutesApplicationIdPlaceholder() {
         val r = ManifestMerger.mergeXml(APP, listOf(FIREBASE_LIB), mapOf("applicationId" to "com.example.app"))
