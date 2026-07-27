@@ -43,6 +43,10 @@ import androidx.compose.ui.window.Popup
 import androidx.compose.ui.window.PopupProperties
 import dev.ide.ui.backend.IdeBackend
 import dev.ide.ui.backend.UiCompletionItem
+import dev.ide.ui.backend.UiAction
+import dev.ide.ui.backend.UiNavKind
+import dev.ide.ui.backend.UiNavOption
+import dev.ide.ui.backend.UiNavTarget
 import dev.ide.ui.backend.UiQuickDoc
 import dev.ide.ui.backend.UiRenameResult
 import dev.ide.ui.editor.core.EditorImeHandle
@@ -239,6 +243,35 @@ private fun CodeEditorContent(
     var rename by remember(path) { mutableStateOf<RenameUiState?>(null) }
     var renameBusy by remember(path) { mutableStateOf(false) }
     var renameError by remember(path) { mutableStateOf<String?>(null) }
+    // The source-navigation dropdown / target picker (Go to Declaration / Implementation / Type / Super).
+    var navMenu by remember(path) { mutableStateOf<NavMenuState?>(null) }
+
+    /** Run one source go-to for [kind] (a keyboard shortcut): exactly one target navigates immediately; 0 or
+     *  many open the dropdown (a "nothing found" note, or a target picker). */
+    fun runNav(kind: UiNavKind) {
+        val text = editorSession.doc.text
+        val caret = editorSession.selection.start
+        scope.launch {
+            val targets = runCatching { backend.editor.navigationTargets(path, text, caret, kind) }.getOrDefault(emptyList())
+            if (targets.size == 1) {
+                navMenu = null
+                onNavigate(targets[0].path, targets[0].offset)
+            } else {
+                navMenu = NavMenuState.Results(targets)
+            }
+        }
+    }
+
+    /** Open the Go-to menu (the long-press "Go to" affordance): resolve which actions APPLY at the caret and
+     *  show only those. */
+    fun openNavMenu() {
+        val text = editorSession.doc.text
+        val caret = editorSession.selection.start
+        scope.launch {
+            val options = runCatching { backend.editor.navigationOptions(path, text, caret) }.getOrDefault(emptyList())
+            navMenu = NavMenuState.Menu(options)
+        }
+    }
 
     fun showQuickDoc() {
         val caret = editorSession.selection.start
@@ -703,15 +736,20 @@ private fun CodeEditorContent(
         if ((ev.isCtrlPressed || ev.isMetaPressed) && ev.key == Key.Q) {
             showQuickDoc(); completion.dismiss(); return true
         }
-        // Go to definition (⌘/Ctrl-B): resolve the resource/symbol at the caret and jump to it.
+        // Go to: Declaration ⌘/Ctrl-B, Implementation(s) +Alt, Type declaration +Shift; Super ⌘/Ctrl-U. A
+        // single target jumps; several open a picker. Declaration also resolves an Android resource reference.
         if ((ev.isCtrlPressed || ev.isMetaPressed) && ev.key == Key.B) {
-            val text = editorSession.doc.text
-            val caret = editorSession.selection.start
-            scope.launch {
-                runCatching { backend.editor.definitionAt(path, text, caret) }.getOrNull()
-                    ?.let { onNavigate(it.path, it.offset) }
-            }
+            runNav(
+                when {
+                    ev.isAltPressed -> UiNavKind.IMPLEMENTATION
+                    ev.isShiftPressed -> UiNavKind.TYPE_DECLARATION
+                    else -> UiNavKind.DECLARATION
+                },
+            )
             return true
+        }
+        if ((ev.isCtrlPressed || ev.isMetaPressed) && ev.key == Key.U) {
+            runNav(UiNavKind.SUPER); return true
         }
         if ((ev.isCtrlPressed || ev.isMetaPressed) && ev.key == Key.Spacebar) {
             completion.reopen(immediate = true); return true
@@ -923,8 +961,8 @@ private fun CodeEditorContent(
             session = editorSession,
             geometry = geometry,
             interaction = interaction,
-            acts = acts,
             onDocs = { showQuickDoc() },
+            onMenu = { interaction.handlesVisible = false; openNavMenu() },
         )
 
         // completion popup, anchored at the token start (extracted so ART can compile these emission blocks).
@@ -1024,6 +1062,29 @@ private fun CodeEditorContent(
                 onDismiss = { acts.closeSheet() },
             )
         }
+
+        // source-navigation dropdown — the Go-to menu (from long-press / shortcuts) and its target picker,
+        // anchored under the caret like the code-actions menu.
+        NavMenuLayer(
+            state = navMenu,
+            actions = acts.available,
+            engaged = engaged,
+            caretOffset = caretOffset,
+            caretGeometry = { geometry.caretGeometry(it) },
+            metrics = metrics,
+            gutterWidthPx = gutterWidthPx,
+            onOption = { opt ->
+                if (opt.targets.size == 1) {
+                    navMenu = null
+                    onNavigate(opt.targets[0].path, opt.targets[0].offset)
+                } else {
+                    navMenu = NavMenuState.Results(opt.targets)
+                }
+            },
+            onAction = { a -> val i = acts.available.indexOf(a); navMenu = null; if (i >= 0) acts.applyAt(i) },
+            onPick = { navMenu = null; onNavigate(it.path, it.offset) },
+            onDismiss = { navMenu = null },
+        )
 
         // find / replace bar, docked at the top of the editor
         if (find.open) {
@@ -1227,6 +1288,44 @@ private fun CodeActionsMenuLayer(
                     onPick = { acts.applyAt(it) },
                 )
             }
+        }
+    }
+}
+
+/** The source-navigation dropdown — the Go-to menu and its target picker — anchored under the caret line, the
+ *  same position machinery as the code-actions menu. Dismisses on an outside tap / Esc. */
+@Composable
+private fun NavMenuLayer(
+    state: NavMenuState?,
+    actions: List<UiAction>,
+    engaged: Boolean,
+    caretOffset: Int,
+    caretGeometry: (Int) -> Triple<Int, Float, Float>,
+    metrics: EditorMetrics,
+    gutterWidthPx: Float,
+    onOption: (UiNavOption) -> Unit,
+    onAction: (UiAction) -> Unit,
+    onPick: (UiNavTarget) -> Unit,
+    onDismiss: () -> Unit,
+) {
+    if (state == null || !engaged) return
+    val density = LocalDensity.current
+    val (_, anchorX, anchorTop) = caretGeometry(caretOffset)
+    val lineBottomPx = anchorTop + metrics.lineHeight
+    val gapPx = with(density) { 6.dp.roundToPx() }
+    val marginPx = with(density) { 8.dp.roundToPx() }
+    val positionProvider = remember(anchorX, lineBottomPx, gapPx, marginPx) {
+        CompletionPopupPositionProvider(
+            anchorX.roundToInt().coerceAtLeast(gutterWidthPx.roundToInt()),
+            lineBottomPx.roundToInt(),
+            gapPx,
+            marginPx,
+        )
+    }
+    Popup(popupPositionProvider = positionProvider, onDismissRequest = onDismiss) {
+        BoxWithConstraints {
+            val width = if (maxWidth < 600.dp) (maxWidth * 0.9f).coerceIn(240.dp, 360.dp) else 360.dp
+            NavMenu(state, actions, width, onOption, onAction, onPick)
         }
     }
 }

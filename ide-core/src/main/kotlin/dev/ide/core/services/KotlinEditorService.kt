@@ -3,6 +3,8 @@ package dev.ide.core.services
 import dev.ide.core.EngineContext
 import dev.ide.lang.kotlin.InheritorMarker
 import dev.ide.lang.kotlin.KotlinLanguageBackend
+import dev.ide.lang.kotlin.NavKind
+import dev.ide.lang.kotlin.NavTarget
 import dev.ide.lang.kotlin.KotlinSourceAnalyzer
 import dev.ide.lang.kotlin.interp.PreviewInfo
 import java.nio.file.Path
@@ -41,5 +43,19 @@ internal class KotlinEditorService(private val ctx: EngineContext) {
     fun implementationLocation(contextFile: Path, fqn: String): Pair<Path, Int>? {
         val analyzer = kotlinAnalyzer(contextFile) ?: return null
         return analyzer.declarationLocation(fqn)?.let { (vf, off) -> Paths.get(vf.path) to off }
+    }
+
+    /** Source go-to targets ([kind]: declaration / implementation / type / super) for the symbol at [offset] in
+     *  [file]'s live buffer. Empty for non-Kotlin files; every target is project source. */
+    fun navigationTargets(file: Path, text: String, offset: Int, kind: NavKind): List<NavTarget> {
+        val analyzer = kotlinAnalyzer(file) ?: return emptyList()
+        return analyzer.navigationTargets(ctx.store.vfs.fileFor(file), text, offset, kind)
+    }
+
+    /** The navigation actions applicable at [offset] (each with its resolved source targets). Empty for
+     *  non-Kotlin files. */
+    fun navigationOptions(file: Path, text: String, offset: Int): List<Pair<NavKind, List<NavTarget>>> {
+        val analyzer = kotlinAnalyzer(file) ?: return emptyList()
+        return analyzer.navigationOptions(ctx.store.vfs.fileFor(file), text, offset)
     }
 }
