@@ -2,16 +2,20 @@ package dev.ide.android
 
 import android.content.Context
 import android.os.Build
+import android.os.Environment
+import androidx.core.app.NotificationManagerCompat
 import dev.ide.analytics.DeviceInfo
 import dev.ide.build.jvm.run.VmProgramInterpreter
 import dev.ide.analytics.impl.AnalyticsLogSink
 import dev.ide.analytics.impl.DefaultAnalyticsService
 import dev.ide.analytics.impl.SupabaseSink
+import dev.ide.core.ANALYTICS_SERVICE
 import dev.ide.core.IdeServicesBackend
 import dev.ide.core.ProjectManager
 import dev.ide.core.settings.BuiltInSettingsPages
 import dev.ide.platform.log.Log.addSink
 import java.io.File
+import java.io.IOException
 import java.nio.file.Path
 import java.util.zip.ZipInputStream
 import java.nio.file.Paths
@@ -60,7 +64,7 @@ object AndroidIde {
         // IdeServicesBackend.buildRunnerFor. A build OOM then kills only that process, not the IDE.
         val appContext = context.applicationContext
         // Analytics is an application-scoped host service now; register it before the backend resolves it.
-        manager.applicationContainer.registerServiceIfAbsent(dev.ide.core.ANALYTICS_SERVICE) { analytics }
+        manager.applicationContainer.registerServiceIfAbsent(ANALYTICS_SERVICE) { analytics }
         val backend = IdeServicesBackend(
             initial = null, manager = manager,
             buildRunnerFactory = { svc ->
@@ -73,7 +77,7 @@ object AndroidIde {
             // pointless, so fall back to in-process builds. The first-build prompt (BuildNotificationGate) asks
             // for the grant; this is the live check the runner selection reads. See docs/build-process-isolation.md.
             notificationsAllowed = {
-                androidx.core.app.NotificationManagerCompat.from(appContext).areNotificationsEnabled()
+                NotificationManagerCompat.from(appContext).areNotificationsEnabled()
             },
         )
         // Process-wide uncaught-exception handler: report app_crash + surface the non-fatal dialog + keep the
@@ -227,8 +231,12 @@ object AndroidIde {
         // the backup and the file manager (this dir is a sibling of our home, both under [externalHome]).
         val legacyProjectsDir = File(externalHome(context), "Projects").toPath()
         val legacyInternalHome = File(context.filesDir, "codeassist").toPath()
-        val legacyDataDirs =
-            listOf(legacyProjectsDir, legacyInternalHome).filter { java.nio.file.Files.exists(it) }
+        // When external storage is unusable, [externalHome] falls back to internal `filesDir`, so the ACTIVE
+        // home (`home`, above) IS `filesDir/codeassist` = legacyInternalHome. Never list the active home as a
+        // legacy source — it would import a directory into itself. (In the normal external case they differ.)
+        val activeHome = home.toPath()
+        val legacyDataDirs = listOf(legacyProjectsDir, legacyInternalHome)
+            .filter { java.nio.file.Files.exists(it) && it != activeHome }
         return ProjectManager.onDevice(
             projectsRoot, bootClasspath, nativeLibDir, debugKeystore.toPath(),
             storageRoot = externalHome(context).toPath(),
@@ -291,10 +299,29 @@ object AndroidIde {
     fun provisionAndroidJar(context: Context): File =
         copyAsset(context, "android.jar", File(appHomeDir(context), "android.jar"))
 
-    /** App-specific external storage base (`Android/data/<pkg>/files`), or internal `filesDir` if external
-     *  isn't currently mounted. Resolved the same way by [bootstrap] and [ProjectsDocumentsProvider] so both
-     *  see one projects directory. */
-    fun externalHome(context: Context): File = context.getExternalFilesDir(null) ?: context.filesDir
+    /**
+     * App-specific external storage base (`Android/data/<pkg>/files`), or the ALWAYS-available internal
+     * `filesDir` when external storage isn't usable. Resolved the same way by [bootstrap] and
+     * [ProjectsDocumentsProvider] so both see one projects directory.
+     *
+     * `getExternalFilesDir(null)` returns a non-null path even when the underlying volume is **unmounted or
+     * unwritable** — a removed/ejected SD card, the app installed on removable storage that isn't present, or
+     * storage simply not ready this early in a cold start. Writing into that stale path then fails with
+     * `ENOENT` (the `codeassist/android.jar` startup crash). So don't just null-check: require the volume to be
+     * `MEDIA_MOUNTED` AND actually creatable/writable, else fall back to internal storage (which the app already
+     * treats as a valid home — see `legacyInternalHome` / `importLegacyProjects`).
+     */
+    fun externalHome(context: Context): File {
+        val external = context.getExternalFilesDir(null)
+        if (external != null &&
+            Environment.getExternalStorageState(external) == Environment.MEDIA_MOUNTED &&
+            (external.isDirectory || external.mkdirs()) &&
+            external.canWrite()
+        ) {
+            return external
+        }
+        return context.filesDir
+    }
 
     /** The whole CodeAssist app directory (`<external-files>/codeassist`): projects, the SDK `android.jar`,
      *  the debug keystore, the kotlinc home, shared caches. This is the root surfaced to file managers. */
@@ -348,10 +375,17 @@ object AndroidIde {
         val upToDate =
             dest.exists() && dest.length() > 0L && marker.exists() && marker.readText() == stamp
         if (!upToDate) {
-            dest.parentFile?.mkdirs()
+            // Ensure the target directory exists BEFORE the write. On unusable external storage (unmounted SD,
+            // storage not ready) mkdirs fails and `dest.outputStream()` would throw a bare `ENOENT` on the
+            // path; [externalHome] already steers off a dead volume, so this is a clear last-line diagnostic.
+            val parent = dest.parentFile
+            if (parent != null && !parent.isDirectory && !parent.mkdirs()) {
+                throw IOException("Cannot create app storage directory ${parent.absolutePath} (storage unavailable?)")
+            }
             context.assets.open(name).use { input ->
                 dest.outputStream().use { output -> input.copyTo(output) }
             }
+            if (dest.length() <= 0L) throw IOException("Provisioned asset '$name' is empty at ${dest.absolutePath}")
             runCatching { marker.writeText(stamp) }
         }
         return dest
