@@ -47,6 +47,7 @@ import dev.ide.ui.generated.resources.preview_choose_preview
 import dev.ide.ui.generated.resources.preview_live
 import dev.ide.ui.generated.resources.preview_no_preview_found
 import dev.ide.ui.generated.resources.preview_paused
+import dev.ide.ui.generated.resources.preview_preparing
 import dev.ide.ui.generated.resources.preview_rebuild
 import dev.ide.ui.generated.resources.preview_renders_on_device
 import dev.ide.ui.generated.resources.preview_resume_live
@@ -59,6 +60,9 @@ import kotlin.time.Duration.Companion.milliseconds
 
 /** Idle delay before the live buffer is re-interpreted, so a burst of typing settles into one re-composition. */
 private const val PREVIEW_DEBOUNCE_MS = 400L
+
+/** How often to re-check index readiness while the preview waits for library composables to become resolvable. */
+private const val PREVIEW_READINESS_POLL_MS = 500L
 
 /**
  * The Compose `@Preview` pane. Shares the exact [PreviewSurface] chrome with the layout-XML preview —
@@ -79,8 +83,8 @@ fun ComposePreviewPane(
     modifier: Modifier,
     /** Which `@Preview` function to render (chosen from the editor gutter); null/unknown → the first one. */
     selected: String? = null,
-    /** Rendered in the editor's Split view: hides the surface's chrome bars and fits the preview to width so
-     *  dragging the split divider doesn't rescale it (see [PreviewSurface]). */
+    /** Rendered in the editor's Split view: starts the surface's chrome bars collapsed (expandable on demand)
+     *  and fits the preview to width so dragging the split divider doesn't rescale it (see [PreviewSurface]). */
     split: Boolean = false,
 ) {
     val state = rememberPreviewSurfaceState(path)
@@ -97,6 +101,20 @@ fun ComposePreviewPane(
         if (!live) return@LaunchedEffect
         delay(PREVIEW_DEBOUNCE_MS.milliseconds)
         renderText = text
+    }
+    // Gate rendering on the workspace index being ready to resolve LIBRARY composables. Interpreting a preview
+    // while the index is still building resolves library calls (e.g. material3's `lightColorScheme`) to zero
+    // candidates and latches a "unresolved call" failure that never self-heals on its own. Poll readiness and
+    // re-attempt the render (bump `nonce`) the moment the index catches up. Defaults ready=true (no host / a
+    // backend that doesn't index), so nothing changes when the index is already built.
+    var ready by remember(path) { mutableStateOf(true) }
+    LaunchedEffect(path, nonce) {
+        if (host == null) { ready = true; return@LaunchedEffect }
+        if (backend.preview.composePreviewReady(path)) { ready = true; return@LaunchedEffect }
+        ready = false
+        while (!backend.preview.composePreviewReady(path)) delay(PREVIEW_READINESS_POLL_MS.milliseconds)
+        ready = true
+        nonce++ // library composables resolve now — re-run the interpreter
     }
     // The engine is "working" either while the host is actively lowering/interpreting the rendered buffer
     // (it reports this via onBusy) or while a live edit is still settling through the debounce before the
@@ -255,6 +273,28 @@ fun ComposePreviewPane(
         val contentMod = if (wrap) Modifier.wrapContentSize() else Modifier.fillMaxSize()
         Box(contentMod, contentAlignment = Alignment.Center) {
             when {
+                host != null && current != null && !ready -> {
+                    // The index is still building — wait rather than render a preview whose library composables
+                    // (material3, etc.) would resolve to zero candidates and fail. The poll above flips `ready`
+                    // and re-renders once it's built.
+                    LaunchedEffect(Unit) { problems = emptyList(); busy = false }
+                    Column(
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        verticalArrangement = Arrangement.spacedBy(12.dp),
+                    ) {
+                        CircularProgressIndicator(
+                            modifier = Modifier.size(28.dp),
+                            color = if (state.night) Color(0xFFA0A1AA) else Ca.colors.textTertiary,
+                        )
+                        Text(
+                            stringResource(Res.string.preview_preparing),
+                            color = if (state.night) Color(0xFFA0A1AA) else Ca.colors.textTertiary,
+                            style = Ca.type.caption,
+                            textAlign = TextAlign.Center,
+                        )
+                    }
+                }
+
                 host != null && current != null -> key(nonce, current.variantId) {
                     // Render at DEVICE scale by lowering the DENSITY the content sees: the card is already
                     // sized to the device viewport in px, so telling the content it has the device's density

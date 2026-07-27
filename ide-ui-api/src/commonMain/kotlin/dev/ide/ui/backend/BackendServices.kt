@@ -214,6 +214,13 @@ interface PreviewService {
     suspend fun runComposePreview(path: String, text: String, functionName: String): UiPreviewResult =
         UiPreviewResult(ok = false, message = "Compose preview is not available")
 
+    /** Whether [path]'s module can resolve library composables yet (the workspace index has finished building).
+     *  The preview pane gates rendering on this: interpreting a preview while the index is still building resolves
+     *  library calls (e.g. material3's `lightColorScheme`) to zero candidates and would latch a permanent
+     *  "unresolved call" failure that never self-heals. Defaults to true so stub/non-indexing backends render
+     *  immediately (unchanged behavior). */
+    suspend fun composePreviewReady(path: String): Boolean = true
+
     // ---- Real-view layout attribute editor ----
     // Backs the Preview's editable attribute sheet: it edits the layout XML source (the same buffer the Code
     // view shows) driven by the SAME allowed-attribute metadata + completion the XML editor uses. [sourceOffset]
