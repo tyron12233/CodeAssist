@@ -204,9 +204,12 @@ class ReflectiveBridge(
                     val paramTypes = method.parameterTypes
                     val vmArgs = (callArgs ?: emptyArray()).mapIndexed { i, a -> realArgToVm(a, paramTypes[i]) }
                     val sink = proxyExceptionSink
-                    if (sink == null) marshalReturn(lambda.invokeSam(vmArgs), method.returnType)
+                    // invokeSamReal (not invokeSam): the result crosses to platform code here, so an interpreted
+                    // object return (e.g. a `DisposableEffectResult` from an inlined `onDispose { }`) is converted
+                    // to its real peer — else the raw VmObject reaches the caller and ClassCastExceptions there.
+                    if (sink == null) marshalReturn(lambda.invokeSamReal(vmArgs), method.returnType)
                     else try {
-                        marshalReturn(lambda.invokeSam(vmArgs), method.returnType)
+                        marshalReturn(lambda.invokeSamReal(vmArgs), method.returnType)
                     } catch (t: Throwable) {
                         sink(t)
                         zeroReturn(method.returnType)
