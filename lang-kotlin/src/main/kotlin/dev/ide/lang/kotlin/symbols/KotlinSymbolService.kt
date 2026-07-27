@@ -343,6 +343,16 @@ class KotlinSymbolService(
             if (seen.add(vf.path)) {
                 vfByPath[vf.path] = vf
                 sourceFileFor(vf, ov)?.let(files::add)
+            } else if (vf.path == focalPath) {
+                // The focal file is excluded from the disk-walk SourceFile above (its LIVE version is appended
+                // below via `files.add(focal)`), but its VirtualFile must still be registered here — otherwise
+                // previewSourceFile() can't resolve it as a cross-file preview dependency. Concretely: previewing
+                // file A which calls a top-level helper declared in file B fails with "no source function"
+                // whenever B is the focal file (e.g. the user visited B, then switched back to A and the preview
+                // re-rendered before A was re-analyzed and made focal). The model already carries B's declarations
+                // (via the focal SourceFile), so without this the lookup FINDS the declaration but can't produce a
+                // PreviewSourceFile for it, silently dropping it from the cross-file expansion.
+                vfByPath[vf.path] = vf
             }
         }
         if (focal != null) files.add(focal)

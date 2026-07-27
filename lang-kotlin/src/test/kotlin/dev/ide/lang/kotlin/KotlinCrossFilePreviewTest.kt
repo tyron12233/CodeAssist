@@ -237,6 +237,44 @@ class KotlinCrossFilePreviewTest {
     }
 
     @Test
+    fun mergesATopLevelFunctionEvenWhenItsDeclaringFileIsFocal() {
+        // Regression ("no source function `HaimiyaTheme/1`" after switching files and back): previewing file A
+        // which calls a top-level helper declared in file B must still merge B even when B is the FOCAL file (the
+        // file the editor last analyzed). The real case: a Compose preview open on MainActivity.kt (GreetingPreview)
+        // calls a @Composable declared in Theme.kt; the user switches to Theme.kt and back, so the preview
+        // re-renders while Theme.kt is still focal. buildModel excludes the focal file's VirtualFile from
+        // sourceVfByPath, so sourceFilesDeclaringFunction found B's declaration in the model but previewSourceFile
+        // returned null for it — silently dropping it from the cross-file expansion.
+        val entry = """
+            package com.example.compose
+            fun caller(): Int = helper(2)
+        """.trimIndent()
+        val helperText = "package com.example.compose\n\nfun helper(n: Int): Int = n + 1\n"
+        val (service, dir) = serviceOver(
+            mapOf(
+                "Helper.kt" to helperText,
+                "Use.kt" to entry,
+            ),
+        )
+        // Make Helper.kt (the DECLARING file) focal, as if the user just switched to it.
+        val helperVf = DiskFile(dir.resolve("Helper.kt"))
+        service.syncFocal(helperVf.path, helperText.hashCode()) {
+            dev.ide.lang.kotlin.symbols.SourceIndexBuilder.extract(helperVf, helperText)
+        }
+
+        assertTrue(
+            service.sourceFilesDeclaringFunction("helper").any { it.file.path == helperVf.path },
+            "the focal file declaring `helper` must still resolve as a cross-file preview source",
+        )
+        val model = lowerCrossFile(service, dir, "Use.kt", entry)
+        assertTrue(model.program["caller/0"]?.isComplete == true, "caller should lower")
+        assertNotNull(
+            model.program["helper/1"],
+            "the cross-file helper declared in the FOCAL file must be merged; got ${model.program.keys}",
+        )
+    }
+
+    @Test
     fun selfContainedPreviewDoesNotPullExtraFiles() {
         // A preview that references nothing cross-file lowers exactly as before (only its own declarations).
         val entry = """

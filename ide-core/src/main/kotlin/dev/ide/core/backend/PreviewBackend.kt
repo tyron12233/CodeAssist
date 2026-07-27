@@ -48,6 +48,9 @@ internal class PreviewBackend(private val ctx: BackendContext) : PreviewService 
         ctx.preview { ctx.services.runComposePreview(Paths.get(path), text, functionName) }
             .let { UiPreviewResult(it.ok, it.message) }
 
+    override suspend fun composePreviewReady(path: String): Boolean =
+        ctx.background { ctx.services.composePreviewReady(Paths.get(path)) }
+
     override suspend fun drawablePreview(path: String, text: String): UiDrawable? =
         ctx.services.drawablePreview(Paths.get(path), text)?.let(DrawableMapping::toUi)
 

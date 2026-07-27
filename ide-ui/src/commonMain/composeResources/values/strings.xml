@@ -507,6 +507,7 @@ We never collect your code, file or project names, which features you use, or an
     <string name="preview_choose_preview">Choose preview</string>
     <string name="preview_no_preview_found">No @Preview found</string>
     <string name="preview_renders_on_device">Compose preview renders on device</string>
+    <string name="preview_preparing">Preparing preview (indexing libraries)…</string>
     <string name="preview_device_phone">Phone</string>
     <string name="preview_device_compact">Compact</string>
     <string name="preview_device_tablet">Tablet</string>
