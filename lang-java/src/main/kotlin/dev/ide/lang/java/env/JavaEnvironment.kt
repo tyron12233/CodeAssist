@@ -9,6 +9,7 @@ import com.intellij.psi.PsiFileFactory
 import com.intellij.psi.PsiJavaFile
 import com.intellij.psi.impl.PsiModificationTrackerImpl
 import com.intellij.psi.util.PsiModificationTracker
+import dev.ide.platform.log.Log
 import dev.ide.psi.IntellijPsiHost
 import org.jetbrains.kotlin.cli.common.messages.MessageCollector
 import org.jetbrains.kotlin.cli.create
@@ -125,6 +126,9 @@ class JavaEnvironment private constructor(
             // rather than racing to create a second application env.
             IntellijPsiHost.warmUp()
 
+            // Drop any corrupt/unreadable classpath jar so one bad library can't crash the whole env.
+            val usable = usableClasspath(classpath)
+
             val configuration = CompilerConfiguration.create(
                 diagnosticsCollector = BaseDiagnosticsCollector.DoNothing,
                 messageCollector = MessageCollector.NONE,
@@ -136,14 +140,37 @@ class JavaEnvironment private constructor(
                 } else {
                     put(JVMConfigurationKeys.NO_JDK, true)
                 }
-                addJvmClasspathRoots(classpath)
+                addJvmClasspathRoots(usable)
                 addJavaSourceRoots(sourceRoots)
             }
             val disposable = Disposer.newDisposable("java-env-$moduleName")
             val env = KotlinCoreEnvironment.createForProduction(
                 disposable, configuration, EnvironmentConfigFiles.JVM_CONFIG_FILES,
             )
-            JavaEnvironment(env, disposable, classpath, sourceRoots, jdkHome).also { it.installInjectedFinder() }
+            JavaEnvironment(env, disposable, usable, sourceRoots, jdkHome).also { it.installInjectedFinder() }
+        }
+
+        private val log = Log.logger("JavaEnvironment")
+
+        /** Cache of jar usability keyed by path+size+mtime, so a warm env re-uses the verdict (never re-opens). */
+        private val jarUsable = java.util.concurrent.ConcurrentHashMap<String, Boolean>()
+
+        /**
+         * Drop any classpath JAR that can't be opened as a well-formed zip — a truncated or partially-written
+         * cache entry (e.g. an AAR exploded by an interrupted run). The Kotlin compiler reads classpath jars
+         * through the mmap-backed `FastJarFileSystem`, which THROWS out of [KotlinCoreEnvironment.createForProduction]
+         * on a corrupt central directory (`IllegalArgumentException: 0: 67324752` — a local-header signature where
+         * the directory should be), taking down the ENTIRE Java analyzer for the module over one bad library.
+         * Dropping the unreadable jar degrades that library to "unresolved" instead. Class dirs / non-jars pass
+         * through untouched; a valid jar is always kept (so this is inert on a healthy classpath, incl. desktop).
+         */
+        private fun usableClasspath(classpath: List<File>): List<File> = classpath.filter { f ->
+            if (!f.isFile || !f.name.endsWith(".jar", ignoreCase = true)) return@filter true
+            jarUsable.getOrPut("${f.path}|${f.length()}|${f.lastModified()}") {
+                runCatching { java.util.zip.ZipFile(f).use { it.entries().hasMoreElements() } }
+                    .getOrDefault(false)
+                    .also { ok -> if (!ok) log.warn("dropping unreadable classpath jar from the Java resolution env: ${f.path}") }
+            }
         }
     }
 

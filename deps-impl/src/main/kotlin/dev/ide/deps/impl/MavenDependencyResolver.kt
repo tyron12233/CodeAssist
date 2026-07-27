@@ -27,7 +27,6 @@ import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.atomic.AtomicInteger
 import java.util.zip.ZipEntry
 import java.util.zip.ZipFile
-import java.util.zip.ZipInputStream
 import java.util.zip.ZipOutputStream
 import kotlin.io.path.writeText
 
@@ -952,26 +951,34 @@ class MavenDependencyResolver(
         }
 
         var foundClasses = false
-        ZipInputStream(Files.newInputStream(aar)).use { zin ->
-            var entry = zin.nextEntry
-            while (entry != null) {
+        // Read via ZipFile (random access through the central directory), NOT ZipInputStream. A nested
+        // `classes.jar` is almost always STORED (a jar is already compressed) and an AAR may write STORED
+        // entries with a trailing data descriptor (sizes 0 in the local header) — a shape ZipInputStream, which
+        // trusts local-header sizes, cannot find the boundary of, so it truncates/over-reads the copy. The
+        // resulting `classes.jar` has a central directory that no longer aligns, and the Kotlin compiler's
+        // memory-mapped FastJarFileSystem then reads a local-header signature where the central directory should
+        // be ("IllegalArgumentException: 0: 67324752"). ZipFile reads each entry by its central-directory
+        // size/offset, so the copy is byte-exact regardless of data descriptors or ZIP64.
+        ZipFile(aar.toFile()).use { zf ->
+            val entries = zf.entries()
+            while (entries.hasMoreElements()) {
+                val entry = entries.nextElement()
+                if (entry.isDirectory) { continue }
                 val name = entry.name
                 when {
                     name == "classes.jar" -> {
-                        Files.copy(zin, classesJar, StandardCopyOption.REPLACE_EXISTING)
+                        zf.getInputStream(entry).use { Files.copy(it, classesJar, StandardCopyOption.REPLACE_EXISTING) }
                         foundClasses = true
                     }
-                    !entry.isDirectory && (name.startsWith("res/") || name.startsWith("assets/") ||
-                        name.startsWith("jni/") || name == "AndroidManifest.xml") -> {
+                    name.startsWith("res/") || name.startsWith("assets/") ||
+                        name.startsWith("jni/") || name == "AndroidManifest.xml" -> {
                         val target = dir.resolve(name).normalize()
                         if (target.startsWith(dir)) { // zip-slip guard
                             Files.createDirectories(target.parent)
-                            Files.copy(zin, target, StandardCopyOption.REPLACE_EXISTING)
+                            zf.getInputStream(entry).use { Files.copy(it, target, StandardCopyOption.REPLACE_EXISTING) }
                         }
                     }
                 }
-                zin.closeEntry()
-                entry = zin.nextEntry
             }
         }
         // resource-only AAR (no code) → a classes.jar with a single manifest entry (see [writeManifestOnlyJar]).
@@ -1057,7 +1064,7 @@ private fun GA.excludedBy(exclusions: Set<GA>): Boolean = exclusions.any {
  *  added after the initial classes.jar-only explosion), so a dir left by an older build is treated as stale
  *  and re-extracted instead of reused missing its `res/`. Folded into the dependency-reconcile fingerprint so
  *  a bump forces a one-time re-resolve that heals existing caches on the next open. */
-const val AAR_EXPLODE_VERSION = "2"
+const val AAR_EXPLODE_VERSION = "3"
 
 const val MAVEN_CENTRAL_SEARCH = "https://search.maven.org/solrsearch/select"
 
