@@ -325,7 +325,14 @@ internal object JavaSemanticDiagnostics {
                     // The flow policy also tracks `this.field`, so this list can include instance fields read in
                     // a method that doesn't assign them — but such a field is legally assigned in a constructor
                     // (checked separately in JavaDeclarationChecks). Restrict to true LOCALS to stay zero-FP.
-                    if (ref.resolve() !is PsiLocalVariable) return@forEach
+                    val local = ref.resolve() as? PsiLocalVariable ?: return@forEach
+                    // The whole-method flow's read-before-write verdict is only reliable when the read and the
+                    // variable's declaration share one executable scope. A read from inside a nested class or
+                    // lambda is a CAPTURE of an outer local, definite-assignment-checked at the capture site, not
+                    // by this flow — the method-level flow spuriously reports such captured reads (a definitely-
+                    // assigned `final` local read inside an anonymous class), so skip them (zero-FP).
+                    val readScope = PsiTreeUtil.getParentOfType(ref, PsiClass::class.java, PsiLambdaExpression::class.java)
+                    if (readScope != null && !PsiTreeUtil.isAncestor(readScope, local, true)) return@forEach
                     val name = ref.referenceName ?: return@forEach
                     out += diag(ref, "Variable '$name' might not have been initialized", JavaDiagnosticCodes.NOT_INITIALIZED)
                 }
