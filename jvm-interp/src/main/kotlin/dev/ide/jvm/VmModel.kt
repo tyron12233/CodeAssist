@@ -147,10 +147,20 @@ internal class VmLambda(
     val samDescriptor: String,
     val impl: MethodHandleRef,
     val captured: List<Any?>,
+    /** Converts the SAM result from interpreter conventions to a real value — an interpreted object becomes its
+     *  peer — for when the lambda is invoked ACROSS the bridge by platform code (see [invokeSamReal]). Identity
+     *  for a lambda whose results never leave the VM. */
+    private val toReal: (Any?) -> Any? = { it },
     private val invoker: SamInvoker,
 ) {
     /** Run the implementation for a call to the abstract method with [samArgs] (interpreter value conventions). */
     fun invokeSam(samArgs: List<Any?>): Any? = invoker.invoke(this, samArgs)
+
+    /** Like [invokeSam] but converts the result to a REAL value for a platform (bridge-proxy) caller: an
+     *  interpreted object returned across the boundary (e.g. a `DisposableEffectScope.onDispose` result — an
+     *  interpreted `DisposableEffectResult` the real Compose runtime casts) becomes its peer. Without this the
+     *  raw [VmObject] reaches real code and a `ClassCastException` fires deep in the caller. */
+    fun invokeSamReal(samArgs: List<Any?>): Any? = toReal(invokeSam(samArgs))
 
     override fun toString(): String = "VmLambda($interfaceType.$samName)"
 }

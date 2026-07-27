@@ -56,6 +56,15 @@ class VmPeerTest {
         assertEquals(15, op.andThen { it + 1 }.applyAsInt(7), "a non-overridden default composes with the interpreted body")
     }
 
+    @Test fun lambdaResultCrossingTheBridgeIsPeeredNotRawVmObject() {
+        // The reported Compose preview crash `VmObject cannot be cast to DisposableEffectResult`: a lambda
+        // (`DisposableEffect`'s effect) returns an interpreted object implementing a real interface, and real
+        // code (`DisposableEffectImpl.onRemembered` → here `Factory.make`) casts the result. The lambda's SAM
+        // result must cross the bridge proxy as a real PEER, not the raw VmObject. `suppliedTagViaHost` mirrors
+        // it: `Factory.make(() -> new Tagged(){ … })` casts `s.get()` to `Tagged`.
+        assertEquals(Peers.suppliedTagViaHost(), vm.invokeStatic(PEERS, "suppliedTagViaHost", "()Ljava/lang/String;"))
+    }
+
     @Test fun realSuperConstructorCallsInterpretedOverrideDuringConstruction() {
         // Eager's real constructor calls tag() while the interpreted subclass is still inside super() — its
         // field initializers haven't run, exactly like a real Java subclass at that point.

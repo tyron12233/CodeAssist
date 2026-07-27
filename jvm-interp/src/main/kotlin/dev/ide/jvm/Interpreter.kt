@@ -927,7 +927,7 @@ internal class Interpreter(private val vm: Vm) {
         val interfaceType = Type.getReturnType(insn.desc).internalName
         val samType = insn.bsmArgs[0] as Type
         val impl = handleRef(insn.bsmArgs[1] as Handle)
-        frame.pushRef(VmLambda(interfaceType, insn.name, samType.descriptor, impl, captured.asList()) { lambda, samArgs ->
+        frame.pushRef(VmLambda(interfaceType, insn.name, samType.descriptor, impl, captured.asList(), vm::toReal) { lambda, samArgs ->
             invokeHandle(lambda.impl, lambda.captured + samArgs)
         })
     }

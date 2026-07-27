@@ -110,4 +110,16 @@ public final class Peers {
 
     /** Reads a static array + scalar inherited from the real super, via a subclass-owner getstatic. */
     public static int triangleStateSum() { return new Triangle().stateSum(); }
+
+    /** Passes a lambda whose result is an interpreted implementation of a real interface to a bridged API that
+     *  invokes the lambda and CASTS the result (the `Factory.make` → `s.get()` cast) — the Compose
+     *  `DisposableEffect { … onDispose { } }` shape. The lambda's SAM result must cross the bridge as a real
+     *  peer, or the cast in `make` throws ClassCastException. */
+    public static String suppliedTagViaHost() {
+        dev.ide.jvm.host.Tagged t = dev.ide.jvm.host.Factory.make(
+            () -> new dev.ide.jvm.host.Tagged() {
+                @Override public String tag() { return "made"; }
+            });
+        return t.tag();
+    }
 }
