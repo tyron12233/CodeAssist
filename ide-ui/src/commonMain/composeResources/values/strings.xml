@@ -516,6 +516,10 @@ We never collect your code, file or project names, which features you use, or an
     <string name="preview_night">Night</string>
     <string name="preview_zoom_in">Zoom in</string>
     <string name="preview_fit">Fit</string>
+    <string name="preview_lock">Lock the view so taps reach the preview (disables pan &amp; zoom)</string>
+    <string name="preview_unlock">Unlock the view to pan &amp; zoom again</string>
+    <string name="preview_collapse_toolbar">Collapse toolbar</string>
+    <string name="preview_expand_toolbar">Expand toolbar</string>
     <string name="preview_problems">Preview problems</string>
     <string name="preview_copy_problems">Copy problems</string>
     <string name="preview_render_error">render error</string>
