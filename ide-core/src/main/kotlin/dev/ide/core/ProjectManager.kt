@@ -102,6 +102,11 @@ class ProjectManager private constructor(
     /** The process-global application service container (see [env]); parents every project container. */
     val applicationContainer: ServiceContainer get() = env.container
 
+    /** The shared toolchain/cache root (== [storageRoot] on desktop): holds the cross-project `caches/`
+     *  and `.platform/` dirs an engine writes. Exposed so the backend's storage report can size and
+     *  clear those shared caches without an open project. */
+    val sharedRoot: Path get() = homeDir
+
     /**
      * The Create-Project gallery templates, enumerable without an open project (the picker shows them
      * before any engine exists). Resolved from the APPLICATION-scoped [PROJECT_TEMPLATES] service.

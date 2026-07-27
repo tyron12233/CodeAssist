@@ -9,6 +9,7 @@ import dev.ide.model.template.ProjectTemplate
 import dev.ide.model.template.TemplateParameter
 import dev.ide.model.template.TextValidation
 import dev.ide.platform.log.Log
+import dev.ide.platform.storage.StorageUsage
 import dev.ide.ui.backend.ProjectInfo
 import dev.ide.ui.backend.ProjectService
 import dev.ide.ui.backend.UiCompatibilityInfo
@@ -20,6 +21,9 @@ import dev.ide.ui.backend.UiOpenTab
 import dev.ide.ui.backend.UiOpenTabs
 import dev.ide.ui.backend.UiProjectResult
 import dev.ide.ui.backend.UiProjectTemplate
+import dev.ide.ui.backend.UiStorageCategory
+import dev.ide.ui.backend.UiStorageProject
+import dev.ide.ui.backend.UiStorageReport
 import dev.ide.ui.backend.UiSyncResult
 import dev.ide.ui.backend.UiTemplateParam
 import kotlinx.coroutines.Dispatchers
@@ -118,6 +122,58 @@ internal class ProjectBackend(private val ctx: BackendContext) : ProjectService 
     override suspend fun backupProjects(): String? {
         val mgr = ctx.manager ?: return null
         return withContext(Dispatchers.IO) { runCatching { mgr.exportBackup().toString() }.getOrNull() }
+    }
+
+    // ---- storage usage + cleanup ----
+
+    override suspend fun storageReport(): UiStorageReport? {
+        val mgr = ctx.manager ?: return null
+        return withContext(Dispatchers.IO) {
+            runCatching {
+                val summaries = mgr.list()
+                val androidByPath = summaries.associate { it.rootPath to it.isAndroid }
+                val r = StorageUsage.report(mgr.storageRoot, summaries.map { Paths.get(it.rootPath) }, mgr.sharedRoot)
+                UiStorageReport(
+                    storageRootPath = r.storageRoot,
+                    totalBytes = r.totalBytes,
+                    categories = r.categories.map { c ->
+                        UiStorageCategory(
+                            id = c.id,
+                            bytes = c.bytes,
+                            colorId = storageColorId(c.id),
+                            clearable = c.id in StorageUsage.CLEARABLE,
+                            destructive = c.id in StorageUsage.DESTRUCTIVE,
+                        )
+                    },
+                    projects = r.projects.map { p ->
+                        UiStorageProject(p.name, p.rootPath, p.bytes, androidByPath[p.rootPath] ?: false)
+                    },
+                    openProjectRootPath = ctx.servicesOrNull?.workspaceRoot?.toString(),
+                )
+            }.getOrElse { e -> log.error("Couldn't compute the storage report", e); null }
+        }
+    }
+
+    override suspend fun clearStorageCategory(id: String): Boolean {
+        val mgr = ctx.manager ?: return false
+        return withContext(Dispatchers.IO) {
+            runCatching {
+                StorageUsage.clearCategory(id, mgr.list().map { Paths.get(it.rootPath) }, mgr.sharedRoot)
+                true
+            }.getOrElse { e -> log.error("Couldn't clear storage category $id", e); false }
+        }
+    }
+
+    /** Map a storage category id to the theme color token the Storage screen tints its segment/dot with. */
+    private fun storageColorId(id: String): String = when (id) {
+        StorageUsage.DEPENDENCIES -> "accent"
+        StorageUsage.INDEX -> "info"
+        StorageUsage.BUILD -> "run"
+        StorageUsage.PREVIEW -> "success"
+        StorageUsage.LANGUAGE -> "gitModified"
+        StorageUsage.SDK -> "warning"
+        StorageUsage.PROJECTS -> "accentStrong"
+        else -> "textTertiary"
     }
 
     // ---- Gradle compatibility mode ----

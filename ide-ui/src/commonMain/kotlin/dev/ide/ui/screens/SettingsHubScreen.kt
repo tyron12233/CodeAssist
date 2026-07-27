@@ -41,6 +41,8 @@ import dev.ide.ui.generated.resources.settings_sdk_manager
 import dev.ide.ui.generated.resources.settings_sdk_manager_subtitle
 import dev.ide.ui.generated.resources.settings_settings
 import dev.ide.ui.generated.resources.settings_settings_subtitle
+import dev.ide.ui.generated.resources.settings_storage
+import dev.ide.ui.generated.resources.settings_storage_subtitle
 import dev.ide.ui.icons.CaIcons
 import dev.ide.ui.theme.Ca
 import org.jetbrains.compose.resources.stringResource
@@ -59,6 +61,7 @@ fun SettingsHubScreen(
     onOpenSdkManager: () -> Unit,
     onOpenKeystoreManager: () -> Unit,
     onOpenPlugins: () -> Unit,
+    onOpenStorage: () -> Unit,
 ) {
     Box(Modifier.fillMaxSize().background(Ca.colors.bg)) {
         Column(Modifier.fillMaxSize()) {
@@ -84,6 +87,7 @@ fun SettingsHubScreen(
                 HubRow(CaIcons.pkg, stringResource(Res.string.settings_sdk_manager), stringResource(Res.string.settings_sdk_manager_subtitle), onOpenSdkManager)
                 HubRow(CaIcons.key, stringResource(Res.string.settings_keystore_manager), stringResource(Res.string.settings_keystore_manager_subtitle), onOpenKeystoreManager)
                 HubRow(CaIcons.box, stringResource(Res.string.settings_plugins), stringResource(Res.string.settings_plugins_subtitle), onOpenPlugins)
+                HubRow(CaIcons.layers, stringResource(Res.string.settings_storage), stringResource(Res.string.settings_storage_subtitle), onOpenStorage)
             }
         }
     }
