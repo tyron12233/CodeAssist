@@ -1759,6 +1759,10 @@ class KotlinSymbolService(
      */
     fun topLevelCallables(prefix: String = ""): List<KotlinSymbol> {
         val m = PrefixMatcher(prefix)
+        // Private top-levels are NOT filtered here — this feeds RESOLUTION too, where a same-file reference to a
+        // `private` top-level (`HaimiyaTheme` reading its own file's `private val lightColorScheme`) must still
+        // resolve. Cross-file private visibility is enforced at the two USE sites instead: completion
+        // (`scopeSymbolsAt`) and the unresolved-reference diagnostic (`bareNameResolves`).
         val src = model().topLevel
             .filter { prefix.isEmpty() || m.matches(it.name) }
             .map { toSymbol(it, null) }
@@ -1914,6 +1918,8 @@ class KotlinSymbolService(
     fun classpathIndexReady(): Boolean = index?.status?.ready == true
 
     fun topLevelByName(name: String): List<KotlinSymbol> {
+        // Not filtered by visibility — see [topLevelCallables]; cross-file private is enforced at the use sites
+        // (completion / the unresolved-reference diagnostic), so same-file private resolution keeps working.
         val src = model().topLevel.filter { it.name == name }.map { toSymbol(it, null) }
         val idx = index
         val cp = if (idx != null) {

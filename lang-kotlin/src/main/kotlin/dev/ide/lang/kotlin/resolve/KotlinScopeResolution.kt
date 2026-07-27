@@ -4,6 +4,7 @@ import dev.ide.lang.kotlin.symbols.FileContext
 import dev.ide.lang.kotlin.symbols.KotlinSymbol
 import dev.ide.lang.kotlin.symbols.KotlinSymbolService
 import dev.ide.lang.kotlin.symbols.KotlinType
+import dev.ide.lang.resolve.Modifier
 import dev.ide.lang.resolve.SymbolKind
 import com.intellij.psi.PsiElement
 import com.intellij.psi.util.PsiTreeUtil
@@ -495,7 +496,9 @@ fun KotlinResolver.bareNameResolves(name: String, offset: Int): Boolean {
     // A top-level callable (`remember`, `mutableStateOf`) resolves bare only when it is actually in
     // scope — explicitly imported, star-imported, same-package, or default-imported. A classpath
     // callable that was never imported stays unresolved, as Kotlin reports (mirrors the extension rule).
-    if (service.topLevelByName(name).any { topLevelInScope(it, fileContext) }) return true
+    // A `private` top-level from ANOTHER file is out of scope (this file's own privates already resolved above
+    // via `ktFile.declarations`), so a cross-file private reference stays unresolved — as the compiler reports.
+    if (service.topLevelByName(name).any { Modifier.PRIVATE !in it.modifiers && topLevelInScope(it, fileContext) }) return true
     if (fileContext.imports.any { !it.isStar && it.simpleName == name }) return true
     return service.resolveTypeName(name, fileContext)?.let { service.isKnownType(it) } == true
 }
@@ -650,9 +653,13 @@ fun KotlinResolver.scopeSymbolsAt(
         exactName -> out.filter { it.name == namePrefix }
         else -> out.filter { m.matches(it.name) }
     }
-    return scoped + (if (exactName) service.topLevelByName(namePrefix) else service.topLevelCallables(
-        namePrefix
-    ))
+    // A `private` top-level declaration is file-scoped: from ANOTHER file it must not be offered. Same-file
+    // privates are already in `out`/`scoped` (added by [sameFileScopeSymbols] from the live buffer), so dropping
+    // private from the project-wide top-level results here removes exactly the cross-file ones without losing the
+    // current file's. (The symbol service stays unfiltered so RESOLUTION of a same-file private still works.)
+    val topLevel = (if (exactName) service.topLevelByName(namePrefix) else service.topLevelCallables(namePrefix))
+        .filterNot { Modifier.PRIVATE in it.modifiers }
+    return scoped + topLevel
 }
 
 /**
