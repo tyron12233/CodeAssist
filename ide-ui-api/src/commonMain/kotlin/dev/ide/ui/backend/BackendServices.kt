@@ -382,6 +382,14 @@ interface DependencyService {
     /** Published versions of the declared library [coordinate]'s artifact, newest-first (the version picker). */
     suspend fun availableVersions(moduleName: String, coordinate: String): List<String> = emptyList()
 
+    /** Versions of the library [group]:[name] currently downloaded to the shared cache, each with its size
+     *  on disk (newest-first) — the Dependencies editor's downloaded-versions cleanup list. */
+    suspend fun cachedVersions(group: String, name: String): List<UiCachedVersion> = emptyList()
+
+    /** Delete the cached [version] of [group]:[name] from the shared download store to reclaim disk; a later
+     *  build re-downloads it if needed. Returns true when the version was present. */
+    suspend fun deleteCachedVersion(group: String, name: String, version: String): Boolean = false
+
     /** Update a declared library [coordinate] — change its version/scope/exclusions in one re-resolve. */
     suspend fun updateDependency(moduleName: String, coordinate: String, version: String, scope: String, exclusions: List<String>): UiAddResult =
         UiAddResult(false, "Dependency management not supported by this backend")

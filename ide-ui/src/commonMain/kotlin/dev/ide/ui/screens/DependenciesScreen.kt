@@ -72,6 +72,7 @@ import dev.ide.ui.backend.FileActions
 import dev.ide.ui.backend.IdeBackend
 import dev.ide.ui.backend.UiAddResult
 import dev.ide.ui.backend.UiArtifactHit
+import dev.ide.ui.backend.UiCachedVersion
 import dev.ide.ui.backend.UiDepKind
 import dev.ide.ui.backend.UiDependencyNode
 import dev.ide.ui.backend.UiModuleDeps
@@ -153,6 +154,11 @@ import dev.ide.ui.generated.resources.dep_edit_dependency
 import dev.ide.ui.generated.resources.dep_section_version
 import dev.ide.ui.generated.resources.dep_section_scope
 import dev.ide.ui.generated.resources.dep_section_exclusions
+import dev.ide.ui.generated.resources.dep_section_downloaded
+import dev.ide.ui.generated.resources.dep_downloaded_help
+import dev.ide.ui.generated.resources.dep_downloaded_empty
+import dev.ide.ui.generated.resources.dep_in_use
+import dev.ide.ui.generated.resources.dep_delete_version_named
 import dev.ide.ui.generated.resources.dep_exclusions_help
 import dev.ide.ui.generated.resources.dep_exclusions_hint
 import dev.ide.ui.generated.resources.dep_version_hint
@@ -175,6 +181,7 @@ import org.jetbrains.compose.resources.pluralStringResource
 import org.jetbrains.compose.resources.stringResource
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import kotlin.math.roundToInt
 
 /** Top-level split: what the module DECLARES (the roots you added) vs the RESOLVED transitive closure. The
  *  Declared tab is the place a declared-but-unresolved dependency stays visible (with a red badge) instead of
@@ -1144,50 +1151,79 @@ private fun EditDependencySheet(
         versions = runCatching { backend.deps.availableVersions(moduleName, node.coordinate) }.getOrDefault(emptyList())
         loadingVersions = false
     }
+    // Versions of this artifact already downloaded to the shared cache, so old ones can be pruned to free
+    // disk. Reloaded after a delete. Only meaningful for a Maven artifact (a local jar has no coordinate).
+    val showDownloaded = node.group.isNotBlank() && node.name.isNotBlank() && !node.local
+    var cached by remember(node.coordinate) { mutableStateOf<List<UiCachedVersion>>(emptyList()) }
+    var cachedReload by remember(node.coordinate) { mutableStateOf(0) }
+    val coroutine = rememberCoroutineScope()
+    LaunchedEffect(node.coordinate, cachedReload) {
+        cached = if (showDownloaded) runCatching { backend.deps.cachedVersions(node.group, node.name) }.getOrDefault(emptyList()) else emptyList()
+    }
     // The list is newest-first, so a newer release exists when the current version isn't at the top of it.
     val newest = versions.firstOrNull()
     val updateAvailable = newest != null && node.version in versions && newest != node.version
     val scopeOptions = listOf("implementation", "api", "compileOnly", "runtimeOnly", "testImplementation")
 
     val card: @Composable () -> Unit = {
-        Column(
-            Modifier.padding(horizontal = if (expanded) 12.dp else 0.dp).widthIn(max = 540.dp).fillMaxWidth()
-                .then(if (expanded) Modifier.background(Ca.colors.glassThick, RoundedCornerShape(Ca.radius.xl)).border(1.dp, Ca.colors.glassEdge, RoundedCornerShape(Ca.radius.xl)) else Modifier)
-                .padding(if (expanded) 20.dp else 4.dp),
-        ) {
-            Text(stringResource(Res.string.dep_edit_dependency), color = Ca.colors.textPrimary, style = Ca.type.subhead, fontWeight = FontWeight.SemiBold)
-            Spacer(Modifier.height(4.dp))
-            Text(shortCoord(node.coordinate), color = Ca.colors.textSecondary, style = Ca.type.caption.copy(fontFamily = codeFont))
+        BoxWithConstraints {
+            // Cap the card at the room the host gives it (screen minus the dropdown's top inset on desktop,
+            // the sheet's height on phone) so a tall body scrolls instead of overflowing on a small screen.
+            val maxCardHeight = maxHeight
+            Column(
+                Modifier.padding(horizontal = if (expanded) 12.dp else 0.dp).widthIn(max = 540.dp).fillMaxWidth()
+                    .then(if (expanded) Modifier.background(Ca.colors.glassThick, RoundedCornerShape(Ca.radius.xl)).border(1.dp, Ca.colors.glassEdge, RoundedCornerShape(Ca.radius.xl)) else Modifier)
+                    .heightIn(max = maxCardHeight)
+                    .padding(if (expanded) 20.dp else 4.dp),
+            ) {
+                // Fixed header.
+                Text(stringResource(Res.string.dep_edit_dependency), color = Ca.colors.textPrimary, style = Ca.type.subhead, fontWeight = FontWeight.SemiBold)
+                Spacer(Modifier.height(4.dp))
+                Text(shortCoord(node.coordinate), color = Ca.colors.textSecondary, style = Ca.type.caption.copy(fontFamily = codeFont))
 
-            // ---- version ----
-            SheetSection(stringResource(Res.string.dep_section_version))
-            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                Box(Modifier.weight(1f)) { SheetField(versionText, stringResource(Res.string.dep_version_hint), codeFont, leading = CaIcons.pkg) { versionText = it } }
-                if (loadingVersions) CircularProgressIndicator(Modifier.size(16.dp), color = Ca.colors.textTertiary, strokeWidth = 2.dp)
-                else if (updateAvailable && newest != null) UpdateHintChip(newest) { versionText = newest }
-            }
-            VersionList(versions, selected = versionText, loading = loadingVersions, codeFont = codeFont) { versionText = it }
+                // Scrollable body — takes the space left between the header and the pinned buttons.
+                Column(Modifier.weight(1f, fill = false).verticalScroll(rememberScrollState())) {
+                    // ---- version ----
+                    SheetSection(stringResource(Res.string.dep_section_version))
+                    Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Box(Modifier.weight(1f)) { SheetField(versionText, stringResource(Res.string.dep_version_hint), codeFont, leading = CaIcons.pkg) { versionText = it } }
+                        if (loadingVersions) CircularProgressIndicator(Modifier.size(16.dp), color = Ca.colors.textTertiary, strokeWidth = 2.dp)
+                        else if (updateAvailable && newest != null) UpdateHintChip(newest) { versionText = newest }
+                    }
+                    VersionList(versions, selected = versionText, loading = loadingVersions, codeFont = codeFont) { versionText = it }
 
-            // ---- scope ----
-            SheetSection(stringResource(Res.string.dep_section_scope))
-            Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
-                scopeOptions.forEach { s -> ScopeChip(s, s == scope) { scope = s } }
-            }
+                    // ---- downloaded (cached) versions ----
+                    if (showDownloaded) {
+                        SheetSection(stringResource(Res.string.dep_section_downloaded))
+                        Text(stringResource(Res.string.dep_downloaded_help), color = Ca.colors.textTertiary, style = Ca.type.caption2)
+                        DownloadedList(cached, activeVersion = node.version, codeFont = codeFont) { v ->
+                            coroutine.launch { backend.deps.deleteCachedVersion(node.group, node.name, v); cachedReload++ }
+                        }
+                    }
 
-            // ---- exclusions ----
-            SheetSection(stringResource(Res.string.dep_section_exclusions))
-            Text(stringResource(Res.string.dep_exclusions_help),
-                color = Ca.colors.textTertiary, style = Ca.type.caption2)
-            Spacer(Modifier.height(8.dp))
-            SheetField(exclText, stringResource(Res.string.dep_exclusions_hint), codeFont, leading = CaIcons.close, singleLine = false) { exclText = it }
+                    // ---- scope ----
+                    SheetSection(stringResource(Res.string.dep_section_scope))
+                    Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
+                        scopeOptions.forEach { s -> ScopeChip(s, s == scope) { scope = s } }
+                    }
 
-            Spacer(Modifier.height(16.dp))
-            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                Spacer(Modifier.weight(1f))
-                DialogButton(stringResource(Res.string.cancel), destructive = false, onClick = onDismiss)
-                DialogButton(stringResource(Res.string.save), destructive = false, onClick = {
-                    onSave(versionText.trim(), scope, exclText.split(',', ' ', '\n', '\t').map { it.trim() }.filter { it.isNotEmpty() })
-                })
+                    // ---- exclusions ----
+                    SheetSection(stringResource(Res.string.dep_section_exclusions))
+                    Text(stringResource(Res.string.dep_exclusions_help),
+                        color = Ca.colors.textTertiary, style = Ca.type.caption2)
+                    Spacer(Modifier.height(8.dp))
+                    SheetField(exclText, stringResource(Res.string.dep_exclusions_hint), codeFont, leading = CaIcons.close, singleLine = false) { exclText = it }
+                }
+
+                // Pinned action row — always visible, never scrolled off a small screen.
+                Spacer(Modifier.height(16.dp))
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                    Spacer(Modifier.weight(1f))
+                    DialogButton(stringResource(Res.string.cancel), destructive = false, onClick = onDismiss)
+                    DialogButton(stringResource(Res.string.save), destructive = false, onClick = {
+                        onSave(versionText.trim(), scope, exclText.split(',', ' ', '\n', '\t').map { it.trim() }.filter { it.isNotEmpty() })
+                    })
+                }
             }
         }
     }
@@ -1263,6 +1299,58 @@ private fun VersionList(versions: List<String>, selected: String, loading: Boole
             }
         }
     }
+}
+
+/**
+ * The versions of an artifact already downloaded to the shared cache, each with its size on disk and a
+ * delete button. The version currently in use is highlighted and can't be deleted from here (a build needs
+ * it); the rest are old downloads that can be removed to reclaim storage. Internally scrolls when long.
+ */
+@Composable
+private fun DownloadedList(cached: List<UiCachedVersion>, activeVersion: String, codeFont: FontFamily, onDelete: (String) -> Unit) {
+    Spacer(Modifier.height(8.dp))
+    if (cached.isEmpty()) {
+        Text(stringResource(Res.string.dep_downloaded_empty), color = Ca.colors.textTertiary, style = Ca.type.caption2, modifier = Modifier.padding(vertical = 6.dp))
+        return
+    }
+    Column(
+        Modifier.fillMaxWidth().heightIn(max = 176.dp).verticalScroll(rememberScrollState())
+            .background(Ca.colors.surface2, RoundedCornerShape(Ca.radius.control))
+            .border(1.dp, Ca.colors.hairline, RoundedCornerShape(Ca.radius.control)),
+    ) {
+        cached.forEach { cv ->
+            val active = cv.version == activeVersion
+            Row(
+                Modifier.fillMaxWidth().height(38.dp)
+                    .background(if (active) Ca.colors.accentSoft else Color.Transparent)
+                    .padding(start = 12.dp, end = 4.dp),
+                verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                Text(cv.version, color = if (active) Ca.colors.accent else Ca.colors.textPrimary,
+                    style = Ca.type.caption.copy(fontFamily = codeFont), fontWeight = if (active) FontWeight.SemiBold else FontWeight.Normal,
+                    maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
+                Text(formatBytes(cv.bytes), color = Ca.colors.textTertiary, style = Ca.type.caption2, maxLines = 1)
+                if (active) Text(stringResource(Res.string.dep_in_use), color = Ca.colors.accent, style = Ca.type.caption2, fontWeight = FontWeight.SemiBold, modifier = Modifier.padding(horizontal = 6.dp))
+                else IconButtonCa(CaIcons.close, stringResource(Res.string.dep_delete_version_named, cv.version), onClick = { onDelete(cv.version) }, boxSize = 28, iconSize = 15, tint = Ca.colors.textTertiary)
+            }
+        }
+    }
+}
+
+/** Human-readable byte size (B / KB / MB / GB), one decimal — matches the Storage screen's formatting. */
+private fun formatBytes(bytes: Long): String {
+    if (bytes <= 0) return "0 B"
+    if (bytes < 1024) return "$bytes B"
+    val kb = bytes / 1024.0
+    if (kb < 1024) return "${round1(kb)} KB"
+    val mb = kb / 1024.0
+    if (mb < 1024) return "${round1(mb)} MB"
+    return "${round1(mb / 1024.0)} GB"
+}
+
+private fun round1(v: Double): String {
+    val scaled = (v * 10).roundToInt()
+    return "${scaled / 10}.${scaled % 10}"
 }
 
 @Composable

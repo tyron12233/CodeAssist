@@ -509,6 +509,10 @@ data class UiDependencyNode(
 /** A resolved version clash: [artifact] (`group:name`) was requested at [requested]; [chosen] won. */
 data class UiVersionConflict(val artifact: String, val requested: List<String>, val chosen: String)
 
+/** One downloaded/cached version of a library artifact and the disk space [bytes] it occupies. Backs the
+ *  Dependencies editor's "downloaded versions" list, where old ones can be deleted to reclaim storage. */
+data class UiCachedVersion(val version: String, val bytes: Long)
+
 /** Everything the Dependencies screen renders for one module. */
 data class UiModuleDeps(
     val moduleName: String,

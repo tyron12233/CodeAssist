@@ -809,6 +809,11 @@ We never collect your code, file or project names, which features you use, or an
     <string name="dep_section_version">Version</string>
     <string name="dep_section_scope">Scope</string>
     <string name="dep_section_exclusions">Exclusions</string>
+    <string name="dep_section_downloaded">Downloaded</string>
+    <string name="dep_downloaded_help">Versions still cached on disk. Delete ones you no longer use to free space; they re-download if a build needs them.</string>
+    <string name="dep_downloaded_empty">No versions downloaded yet.</string>
+    <string name="dep_in_use">In use</string>
+    <string name="dep_delete_version_named">Delete version %1$s</string>
     <string name="dep_exclusions_help">Transitive group:name entries to drop (either side may be *), comma/space separated.</string>
     <string name="dep_exclusions_hint">e.g. com.google.guava:guava, org.json:*</string>
     <string name="dep_version_hint">version</string>
