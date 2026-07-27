@@ -418,6 +418,8 @@ class KotlinCompletion(
         callableRef: Boolean = false
     ): PositionResult {
         val prefix = matcher.prefix
+        // Classes the caret sits inside — a private member of one of them is accessible via `.`.
+        val enclosing = enclosingClasses(receiver)
         // A bare type-parameter receiver (`t.` where `t: T`, `<T : Bound>`) completes against the parameter's
         // upper bound; a normal type is unchanged, an unbounded parameter drops to the package/empty path.
         val recvType = KotlinPerf.span("infer") {
@@ -428,7 +430,7 @@ class KotlinCompletion(
             val typeReceiver = resolver.isTypeReceiver(receiver)
             val members = KotlinPerf.span("members") {
                 service.membersForCompletion(recvType.qualifiedName, recvType.typeArguments, prefix)
-            }.filter { callableRef || memberVisibleOn(it, typeReceiver) }
+            }.filter { callableRef || memberVisibleOn(it, typeReceiver, enclosing) }
             // A bare `Type.` where the type has a companion object resolves to the companion instance, so the
             // companion's own members (Compose's `Color.Black`/`White`) and the extensions applicable to it
             // (`Modifier.Companion : Modifier` → `Modifier.padding`/`background`) are in scope too
@@ -447,7 +449,7 @@ class KotlinCompletion(
                 val nestedTypes = service.nestedTypesOf(recvType.qualifiedName, prefix)
                 members + nestedTypes + enumConstants + listOfNotNull(companion) + service.companionMembersFor(
                     recvType.qualifiedName, prefix
-                ).filter { memberVisibleOn(it, typeReceiver = false) }
+                ).filter { memberVisibleOn(it, typeReceiver = false, enclosing) }
             } else {
                 // Member-extensions in scope on an instance receiver (`map.printMap()` where `printMap` is a
                 // `Map<…>` extension declared in the enclosing class, `Modifier.weight` inside a `Row { }`).
@@ -1068,13 +1070,37 @@ class KotlinCompletion(
 
     // --- position predicates / leaf utilities ---
 
-    /** Instance receiver → non-static members (+ extensions); type receiver → statics + nested types. */
-    private fun memberVisibleOn(s: KotlinSymbol, typeReceiver: Boolean): Boolean {
+    /** Instance receiver → non-static members (+ extensions); type receiver → statics + nested types.
+     *  A `private` member is offered via `.` only when its declaring class is one the caret sits inside
+     *  ([enclosing]) — Kotlin allows private access within the class (`this.field`, another instance of that
+     *  class, and a nested/inner class reaching an enclosing class's privates), so completing inside the class
+     *  must surface its privates while a `.` from outside still hides them. */
+    private fun memberVisibleOn(s: KotlinSymbol, typeReceiver: Boolean, enclosing: EnclosingClasses): Boolean {
         if (s.kind == SymbolKind.CONSTRUCTOR) return false // never reached via `.`
-        if (Modifier.PRIVATE in s.modifiers) return false // private members aren't accessible via an explicit `.`
+        if (Modifier.PRIVATE in s.modifiers && !enclosing.declares(s)) return false
         if (s.isInternal && !s.origin.fromSource) return false // a library's `internal` isn't accessible cross-module
         val isStatic = Modifier.STATIC in s.modifiers
         return if (typeReceiver) isStatic || s.kind in TYPE_KINDS else !isStatic
+    }
+
+    /** The classes/objects [anchor] is lexically nested inside — the scope in which a `private` member is
+     *  accessible via `.`. Captured by FQN (a binary member carries [KotlinSymbol.declaringClassFqn]) AND by
+     *  simple name (a SOURCE member carries only a simple owner name — its `declaringClassFqn` is null), so
+     *  [EnclosingClasses.declares] matches either. Anonymous objects (no name) drop out. */
+    private fun enclosingClasses(anchor: PsiElement): EnclosingClasses {
+        val fqns = HashSet<String>()
+        val simpleNames = HashSet<String>()
+        generateSequence(anchor as PsiElement?) { it.parent }.filterIsInstance<KtClassOrObject>().forEach { c ->
+            c.fqName?.asString()?.let { fqns += it }
+            c.name?.let { simpleNames += it }
+        }
+        return EnclosingClasses(fqns, simpleNames)
+    }
+
+    /** Enclosing-class identity used to gate private-member visibility (see [memberVisibleOn]/[enclosingClasses]). */
+    private class EnclosingClasses(val fqns: Set<String>, val simpleNames: Set<String>) {
+        /** Whether [s]'s declaring class is one the caret is inside — matched by FQN (binary) or simple name (source). */
+        fun declares(s: KotlinSymbol): Boolean = s.declaringClassFqn in fqns || s.owner?.name in simpleNames
     }
 
     /** Inside the literal text of a string (suppress completion), but NOT inside a `${ }`/`$name` entry. */
