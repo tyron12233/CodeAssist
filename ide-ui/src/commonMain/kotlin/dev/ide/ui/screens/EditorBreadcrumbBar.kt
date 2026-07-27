@@ -77,7 +77,7 @@ internal fun BreadcrumbBar(
     ) {
         // Tapping the location line opens the Structure panel in the left sidebar (IntelliJ-style outline).
         Box(Modifier.weight(1f).clickable { state.selectLeftPanel(LeftPanelId.STRUCTURE) }) { Breadcrumb(crumbs) }
-        ViewModeToggle(active.viewMode, canPreview) { active.viewMode = it }
+        ViewModeToggle(active.viewMode, canPreview, state.blocksEnabled) { active.viewMode = it }
     }
 }
 
@@ -92,6 +92,7 @@ private val EditorToolbarHeight = 34.dp
 private fun ViewModeToggle(
     mode: EditorViewMode,
     canPreview: Boolean,
+    blocksEnabled: Boolean,
     onSelect: (EditorViewMode) -> Unit
 ) {
     Row(
@@ -109,10 +110,13 @@ private fun ViewModeToggle(
             stringResource(Res.string.breadcrumb_code),
             mode == EditorViewMode.Text
         ) { onSelect(EditorViewMode.Text) }
-        SegmentItem(CaIcons.layers, stringResource(Res.string.breadcrumb_blocks), mode == EditorViewMode.Blocks) {
-            onSelect(
-                EditorViewMode.Blocks
-            )
+        // The Blocks segment is present only when the `blocks` plugin is enabled (see IdeUiState.blocksEnabled).
+        if (blocksEnabled) {
+            SegmentItem(CaIcons.layers, stringResource(Res.string.breadcrumb_blocks), mode == EditorViewMode.Blocks) {
+                onSelect(
+                    EditorViewMode.Blocks
+                )
+            }
         }
         if (canPreview) {
             SegmentItem(CaIcons.image, stringResource(Res.string.breadcrumb_preview), mode == EditorViewMode.Preview) {

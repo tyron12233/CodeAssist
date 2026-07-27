@@ -20,7 +20,15 @@ import java.nio.file.Path
  */
 internal class BlockService(private val ctx: EngineContext) {
 
-    private val engine = BlockProjectionEngine(ctx.platform.extensions.extensions(BLOCK_MAPPING_EP))
+    private val mappings = ctx.platform.extensions.extensions(BLOCK_MAPPING_EP)
+    private val engine = BlockProjectionEngine(mappings)
+
+    /**
+     * Whether the block editor is available — i.e. at least one block-mapping is registered on
+     * [BLOCK_MAPPING_EP]. Disabling the `blocks` built-in plugin drops the only mapping, so this goes false and
+     * the UI hides the Blocks view-mode segment. With no mapping the projection would be an inert opaque tree.
+     */
+    val enabled: Boolean get() = mappings.isNotEmpty()
 
     /** Project [file]'s live buffer [text] into a [BlockTree], or null if [file] is outside the project. */
     fun projectBlocks(file: Path, text: String): BlockTree? =

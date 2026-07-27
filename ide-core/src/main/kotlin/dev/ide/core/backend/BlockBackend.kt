@@ -27,6 +27,8 @@ import kotlinx.coroutines.withContext
  *  block edit back to surgical text edits. Runs on the serialized engine dispatcher. */
 internal class BlockBackend(private val ctx: BackendContext) : BlockService {
 
+    override fun blocksEnabled(): Boolean = ctx.servicesOrNull?.blocks?.enabled ?: false
+
     override suspend fun projectBlocks(path: String, text: String): UiBlockNode? =
         withContext(ctx.engineDispatcher) {
             ctx.services.blocks.projectBlocks(

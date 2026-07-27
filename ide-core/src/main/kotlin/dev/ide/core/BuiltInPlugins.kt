@@ -131,6 +131,7 @@ object BuiltInPlugins {
         BuiltInPlugin(KotlinLanguagePlugin()),
         BuiltInPlugin(JavaSupportPlugin()),
         BuiltInPlugin(KotlinSupportPlugin()),
+        BuiltInPlugin(BlocksPlugin()),
         BuiltInPlugin(AndroidSupportPlugin(env, codecs)),
         BuiltInPlugin(SamplesPlugin()),
         BuiltInPlugin(CompletionBuiltinsPlugin(env)),
@@ -248,11 +249,11 @@ private class KotlinLanguagePlugin : Plugin {
     }
 }
 
-/** Java support: the java-library module type, Java Create-Project templates, and the block decomposition. */
+/** Java support: the java-library module type and the Java Create-Project templates. */
 private class JavaSupportPlugin : Plugin {
     override val manifest = PluginManifest(
         id = "java-support", name = "Java Support",
-        description = "Java-library module type, Java Create-Project templates, and block-editor decomposition.",
+        description = "Java-library module type and Java Create-Project templates.",
     )
     override fun register(reg: PluginRegistration) {
         reg.contributeVia { ext, pid ->
@@ -261,6 +262,23 @@ private class JavaSupportPlugin : Plugin {
             templates.register(JavaConsoleAppTemplate, pid)
             templates.register(JavaLibraryTemplate, pid)
         }
+    }
+}
+
+/**
+ * The projectional (block) editor: contributes the Java block decomposition ([JavaBlockMapping]) onto
+ * [BLOCK_MAPPING_EP], the one thing that makes the Code/Blocks toggle do anything. Non-essential — disabling
+ * it drops the only block mapping, so the engine's [dev.ide.core.services.BlockService] reports no mappings and
+ * the UI hides the Blocks view-mode segment (the whole feature turns off through this one decision). The
+ * generic projection plumbing (the WORKSPACE-scoped `BlockService`) stays in [IdeCoreServicesPlugin]; with no
+ * mapping registered it is simply inert.
+ */
+private class BlocksPlugin : Plugin {
+    override val manifest = PluginManifest(
+        id = "blocks", name = "Block Editor",
+        description = "The projectional block editor — a Scratch-style visual view of the same code, toggled per file.",
+    )
+    override fun register(reg: PluginRegistration) {
         reg.register(BLOCK_MAPPING_EP, JavaBlockMapping)
     }
 }
