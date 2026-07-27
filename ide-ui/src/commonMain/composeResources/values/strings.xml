@@ -361,6 +361,7 @@ We never collect your code, file or project names, which features you use, or an
     <string name="structure_filter">Filter…</string>
     <string name="structure_no_symbols">No symbols in this file</string>
     <string name="structure_no_matches">No matches</string>
+    <string name="structure_no_file">Open a file to see its structure</string>
     <string name="comingsoon_footnote">Coming soon</string>
     <string name="edscreen_project_root">project root</string>
     <!-- NOTE: CodeAssistApp.kt reuses settings_title (must exist — expect from settings batch); dep flagged -->

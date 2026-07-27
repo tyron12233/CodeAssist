@@ -4,8 +4,10 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -23,16 +25,14 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import dev.ide.ui.IdeUiState
-import dev.ide.ui.OpenFile
 import dev.ide.ui.backend.UiFileSymbol
-import dev.ide.ui.components.BottomSheet
 import dev.ide.ui.generated.resources.Res
 import dev.ide.ui.generated.resources.structure_filter
+import dev.ide.ui.generated.resources.structure_no_file
 import dev.ide.ui.generated.resources.structure_no_matches
 import dev.ide.ui.generated.resources.structure_no_symbols
 import dev.ide.ui.generated.resources.structure_title
@@ -42,34 +42,49 @@ import kotlin.time.Duration.Companion.milliseconds
 import org.jetbrains.compose.resources.stringResource
 
 /**
- * The in-file structure / outline as a bottom sheet: the file's declarations (classes, methods, fields…),
- * nested by depth, with a filter field. Tapping an item navigates the caret to it and dismisses. The list is
- * fetched from [dev.ide.ui.backend.EditorService.fileStructure] whenever the sheet is open, refreshed
- * (debounced) as the buffer changes so it stays current.
+ * The in-file structure / outline as a sidebar panel: the active file's declarations (classes, methods,
+ * fields…), nested by depth, with a filter field. Tapping an item navigates the caret to it (and calls
+ * [onNavigated] so the compact drawer can close). The list is fetched from
+ * [dev.ide.ui.backend.EditorService.fileStructure] and refreshed (debounced) as the buffer changes.
+ *
+ * This is the panel body behind the `Structure` LEFT tool window; the enclosing pane/rail owns visibility, so
+ * unlike the old bottom sheet it isn't gated on an "open" flag — it renders for whatever file is active (an
+ * empty state when none is).
  */
 @Composable
-internal fun StructureSheet(state: IdeUiState, active: OpenFile) {
-    var symbols by remember(active.path) { mutableStateOf<List<UiFileSymbol>>(emptyList()) }
-    var filter by remember(active.path) { mutableStateOf("") }
-    // (Re)load while the sheet is open; key on the buffer revision so edits made before reopening are reflected.
-    LaunchedEffect(state.structureOpen, active.path, active.session.textRevision) {
-        if (!state.structureOpen) return@LaunchedEffect
-        delay(120.milliseconds)
-        symbols = runCatching { state.backend.editor.fileStructure(active.path, active.text) }.getOrDefault(emptyList())
-    }
-    val shown = remember(symbols, filter) {
-        if (filter.isBlank()) symbols
-        else symbols.filter { it.name.contains(filter, ignoreCase = true) }
-    }
-    BottomSheet(visible = state.structureOpen, onDismiss = { state.structureOpen = false }, heightFraction = 0.6f) {
+internal fun StructureOutline(state: IdeUiState, onNavigated: () -> Unit = {}, modifier: Modifier = Modifier) {
+    val active = state.active
+    Column(modifier.fillMaxSize()) {
         Text(
             stringResource(Res.string.structure_title),
             color = Ca.colors.textSecondary,
             style = Ca.type.caption,
             fontWeight = FontWeight.SemiBold,
-            modifier = Modifier.padding(start = 16.dp, top = 4.dp, bottom = 8.dp),
+            modifier = Modifier.padding(start = 16.dp, top = 12.dp, bottom = 8.dp),
         )
-        // Filter field — a structure sheet that also narrows by name (handy in a big file).
+        if (active == null) {
+            Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                Text(
+                    stringResource(Res.string.structure_no_file),
+                    color = Ca.colors.textTertiary,
+                    style = Ca.type.body,
+                    modifier = Modifier.padding(16.dp),
+                )
+            }
+            return@Column
+        }
+        var symbols by remember(active.path) { mutableStateOf<List<UiFileSymbol>>(emptyList()) }
+        var filter by remember(active.path) { mutableStateOf("") }
+        // (Re)load on the active file + each settled edit (keyed on the buffer revision) so the outline stays current.
+        LaunchedEffect(active.path, active.session.textRevision) {
+            delay(120.milliseconds)
+            symbols = runCatching { state.backend.editor.fileStructure(active.path, active.text) }.getOrDefault(emptyList())
+        }
+        val shown = remember(symbols, filter) {
+            if (filter.isBlank()) symbols
+            else symbols.filter { it.name.contains(filter, ignoreCase = true) }
+        }
+        // Filter field — a structure panel that also narrows by name (handy in a big file).
         Box(
             Modifier.fillMaxWidth().padding(horizontal = 12.dp)
                 .background(Ca.colors.surface2, RoundedCornerShape(Ca.radius.control))
@@ -98,7 +113,7 @@ internal fun StructureSheet(state: IdeUiState, active: OpenFile) {
                 items(shown) { sym ->
                     StructureRow(sym) {
                         state.openAt(active.path, sym.nameOffset)
-                        state.structureOpen = false
+                        onNavigated()
                     }
                 }
             }

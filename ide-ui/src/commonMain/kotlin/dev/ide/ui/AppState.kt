@@ -45,10 +45,21 @@ enum class Screen { Projects, CreateProject, ImportProject, ExportProject, Edito
 enum class HomeTab { Projects, Store, Learn }
 
 /**
- * Top-level editor destinations in the side rail / bottom nav. Per Apple's HIG these are peer
- * *destinations* (not actions): building/running is the Run button + the console sheet, not a tab.
+ * The phone bottom-nav slots (the compact counterpart to the desktop activity rail). Each maps to opening a
+ * left sidebar panel (Files/Search/Source) or the More menu — see [IdeUiState.onBottomNav]. The desktop rail
+ * itself is now data-driven (a `SidebarPanel` list of built-in + plugin tool windows), so it no longer uses
+ * this enum. Kept as the fixed mobile slot model.
  */
 enum class RailDestination { Files, Search, Source, More }
+
+/** Stable ids of the built-in LEFT sidebar panels (peers of plugin-contributed LEFT tool windows). These
+ *  double as the persisted "which panel is open" key and the bottom-nav → panel mapping. */
+object LeftPanelId {
+    const val FILES = "files"
+    const val SEARCH = "search"
+    const val STRUCTURE = "structure"
+    const val SOURCE = "source"
+}
 
 /** Editor surface for a tab: the plain text editor, the projectional block editor over the same AST, a
  *  full-pane preview, or [Split] — code and its preview together (so you can edit and watch it update,
@@ -168,26 +179,67 @@ class IdeUiState(
     /** Cancel in-flight async work (file opens). Call when this state leaves composition. */
     fun dispose() { scope.cancel() }
 
-    var rail by mutableStateOf(RailDestination.Files)
-    // On mobile the tree + console are space-consuming sheets — start them closed; on desktop they're
-    // persistent panes, so keep them open by default.
-    var navOpen by mutableStateOf(!isMobilePlatform)
-    var searchOpen by mutableStateOf(false)
-    var consoleOpen by mutableStateOf(!isMobilePlatform)
-    /**
-     * The id of the currently-open RIGHT-anchored tool window (a plugin-contributed side panel), or null.
-     * Right tool windows are fully plugin-derived: the top bar renders a toggle button per registered RIGHT
-     * `ToolWindowContribution`, the desktop layout docks the open one as a side pane, and the phone layout
-     * shows it as a swipe-in overlay. The AI agent chat is simply the first such plugin — no agent-specific
-     * chrome remains, so a disabled plugin contributes nothing and leaves no trace. */
-    var openRightTool by mutableStateOf<String?>(null)
+    // ---- sidebar panels (the LEFT + RIGHT activity rails) ----
+    // Both sides are a list of `SidebarPanel`s (built-in + plugin tool windows); the rail shows one icon per
+    // panel and selects which one is docked. `null` = that side is collapsed.
 
-    /** Toggle a RIGHT tool window open/closed by id (the top-bar button and the phone swipe both route here). */
-    fun toggleRightTool(id: String) { openRightTool = if (openRightTool == id) null else id }
+    /** Which LEFT panel is open (a [LeftPanelId] or a plugin tool-window id), or null when the left sidebar is
+     *  collapsed. On desktop this is the docked pane; on mobile it's the panel shown in the push drawer.
+     *  Seeded from the persisted last panel in [init] (desktop opens it; mobile starts collapsed). */
+    var selectedLeftPanel by mutableStateOf<String?>(null)
+    /** The panel to reopen when the left sidebar is toggled back on (survives a collapse). */
+    private var lastLeftPanel: String = LeftPanelId.FILES
+    /** Which RIGHT panel is open (a plugin tool-window id — e.g. the AI chat), or null when collapsed. Right
+     *  panels are fully plugin-derived; a disabled plugin contributes nothing and leaves no rail icon. */
+    var selectedRightPanel by mutableStateOf<String?>(null)
+
+    /** True while the left sidebar is showing a panel (drives the top-bar toggle glyph, the compact push
+     *  drawer's open state, and the back handler). */
+    val leftOpen: Boolean get() = selectedLeftPanel != null
+
+    /** Desktop rail: tap an icon to open/switch to it; tap the already-selected one to collapse the side. */
+    fun toggleLeftPanel(id: String) {
+        if (selectedLeftPanel == id) selectedLeftPanel = null else rememberAndSelectLeft(id)
+    }
+    /** Open (and switch to) a LEFT panel — the mobile segmented switcher, bottom nav, and breadcrumb use this. */
+    fun selectLeftPanel(id: String) = rememberAndSelectLeft(id)
+    /** The top-bar sidebar button: reopen the last panel, or collapse if one is already open. */
+    fun toggleLeftSidebar() { if (leftOpen) selectedLeftPanel = null else rememberAndSelectLeft(lastLeftPanel) }
+    /** Open the left sidebar to its last panel (the compact push-drawer's swipe-open). No-op if already open. */
+    fun openLeftSidebar() { if (!leftOpen) rememberAndSelectLeft(lastLeftPanel) }
+
+    private fun rememberAndSelectLeft(id: String) {
+        selectedLeftPanel = id
+        lastLeftPanel = id
+        backend.settings.setPreference(LEFT_PANEL_PREF, id)
+    }
+
+    /** RIGHT rail: tap an icon to open/switch; tap the selected one to collapse (the phone swipe routes here too). */
+    fun toggleRightPanel(id: String) { selectedRightPanel = if (selectedRightPanel == id) null else id }
+    /** Open (and switch to) a RIGHT panel — the mobile right-overlay switcher uses this. */
+    fun selectRightPanel(id: String) { selectedRightPanel = id }
+
+    /** The bottom-nav slot that reflects the current state (or null when none of its slots is active). */
+    fun bottomNavSelection(): RailDestination? = when {
+        moreOpen -> RailDestination.More
+        selectedLeftPanel == LeftPanelId.SEARCH -> RailDestination.Search
+        selectedLeftPanel == LeftPanelId.SOURCE -> RailDestination.Source
+        else -> null
+    }
+    /** Route a bottom-nav tap: open the left drawer to the matching panel, or open the More menu. */
+    fun onBottomNav(dest: RailDestination) = when (dest) {
+        RailDestination.Files -> selectLeftPanel(LeftPanelId.FILES)
+        RailDestination.Search -> selectLeftPanel(LeftPanelId.SEARCH)
+        RailDestination.Source -> selectLeftPanel(LeftPanelId.SOURCE)
+        RailDestination.More -> { moreOpen = true }
+    }
+
+    // On mobile the console is a space-consuming sheet — start it closed; on desktop it's a persistent pane.
+    var consoleOpen by mutableStateOf(!isMobilePlatform)
 
     var paletteOpen by mutableStateOf(false)
-    /** The in-file structure / outline bottom sheet (opened from the breadcrumb tap or Ctrl-F12). */
-    var structureOpen by mutableStateOf(false)
+    /** Whether the "More" actions sheet is showing (rail footer / bottom-nav More). */
+    var moreOpen by mutableStateOf(false)
 
     // ---- run-conflict gate: guard a new Run while a build/program is already running ----
 
@@ -298,6 +350,10 @@ class IdeUiState(
     init {
         applySettings(backend.settings.settings())
         loadTreeExpansion()
+        // Restore the last-open left panel: desktop reopens it as a docked pane; mobile starts collapsed but
+        // remembers it for the next time the drawer is toggled on.
+        backend.settings.preference(LEFT_PANEL_PREF)?.let { lastLeftPanel = it }
+        if (!isMobilePlatform) selectedLeftPanel = lastLeftPanel
     }
 
     /**
@@ -344,9 +400,6 @@ class IdeUiState(
         softKeyboardSuggestions = s.softKeyboardSuggestions
     }
 
-    /** A transient destination shown as a sheet/overlay (Source, More) — null when none is open. */
-    var sheetDest by mutableStateOf<RailDestination?>(null)
-
     /** Whether the Logs viewer sheet (editor & analysis logs, opened from the More menu) is showing. */
     var logsOpen by mutableStateOf(false)
 
@@ -355,16 +408,6 @@ class IdeUiState(
 
     /** The module whose Add-Source-Root dialog is open, or null when closed. */
     var addSourceRootModule by mutableStateOf<String?>(null)
-
-    /** Route to a rail destination: Files/Search toggle their side panes; Source/More open as a sheet. */
-    fun selectRail(dest: RailDestination) {
-        rail = dest
-        when (dest) {
-            RailDestination.Files -> { navOpen = !navOpen; searchOpen = false; sheetDest = null }
-            RailDestination.Search -> { searchOpen = !searchOpen; navOpen = false; sheetDest = null }
-            RailDestination.Source, RailDestination.More -> { sheetDest = dest }
-        }
-    }
 
     val active: OpenFile? get() = openFiles.getOrNull(activeIndex)
 
@@ -731,6 +774,10 @@ class IdeUiState(
         /** App preference: "true" once the first-build notification-permission prompt has been shown (see
          *  `BuildNotificationGate`), so later builds don't re-prompt. Re-request from Settings → Build Runtime. */
         const val NOTIF_BUILD_PROMPT_RESOLVED_PREF = "notif.buildPromptResolved"
+
+        /** App preference: the last-open LEFT sidebar panel id ([LeftPanelId] or a plugin tool-window id), so
+         *  the activity rail reopens to the same panel next launch. */
+        const val LEFT_PANEL_PREF = "sidebar.leftPanel"
     }
 }
 

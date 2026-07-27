@@ -13,7 +13,6 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -25,13 +24,11 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import dev.ide.ui.IdeUiState
-import dev.ide.ui.RailDestination
 import dev.ide.ui.backend.FileActions
 import dev.ide.ui.backend.IdeBackend
 import dev.ide.ui.backend.UiActionPlaces
 import dev.ide.ui.components.AnalyticsToggleRow
 import dev.ide.ui.components.BottomSheet
-import dev.ide.ui.components.ComingSoon
 import dev.ide.ui.components.CommandPalette
 import dev.ide.ui.components.DropdownOverlay
 import dev.ide.ui.ext.UiPluginHost
@@ -39,8 +36,6 @@ import dev.ide.ui.ext.UiActionHost
 import dev.ide.ui.ext.UiActionRegistry
 import dev.ide.ui.ext.UiDestinations
 import dev.ide.ui.generated.resources.Res
-import dev.ide.ui.generated.resources.edsheet_source_control
-import dev.ide.ui.generated.resources.edsheet_source_control_desc
 import dev.ide.ui.generated.resources.more
 import dev.ide.ui.icons.CaIcons
 import dev.ide.ui.icons.actionIcon
@@ -81,8 +76,8 @@ internal fun PaletteOverlay(state: IdeUiState, onToggleTheme: () -> Unit, onOpen
 }
 
 /**
- * The destinations that present as sheets rather than panes: Search (phone only — it's a side pane on
- * desktop), the Source-control "coming soon" placeholder, and the More menu of secondary actions.
+ * The destinations that present as sheets rather than panes: the More menu of secondary actions and the Logs
+ * viewer. (Files/Search/Structure/Source are now left sidebar panels; the compact drawer hosts them.)
  */
 @Composable
 internal fun DestinationSheets(
@@ -94,33 +89,14 @@ internal fun DestinationSheets(
     onCloseProject: () -> Unit,
     fileActions: FileActions,
 ) {
-    val indexStatus by state.backend.search.indexStatus.collectAsState()
-    if (compact) {
-        BottomSheet(visible = state.searchOpen, onDismiss = { state.searchOpen = false }, heightFraction = 0.85f) {
-            SearchScreen(
-                backend = state.backend,
-                indexing = indexStatus.building,
-                onOpenAt = { p, o -> state.openAt(p, o); state.searchOpen = false },
-                modifier = Modifier.fillMaxWidth().weight(1f),
-            )
-        }
-    }
-    BottomSheet(visible = state.sheetDest == RailDestination.Source, onDismiss = { state.sheetDest = null }, heightFraction = 0.55f) {
-        ComingSoon(
-            icon = CaIcons.gitBranch,
-            title = stringResource(Res.string.edsheet_source_control),
-            description = stringResource(Res.string.edsheet_source_control_desc),
-            modifier = Modifier.fillMaxWidth().weight(1f),
-        )
-    }
-    BottomSheet(visible = state.sheetDest == RailDestination.More, onDismiss = { state.sheetDest = null }, heightFraction = 0.62f) {
+    BottomSheet(visible = state.moreOpen, onDismiss = { state.moreOpen = false }, heightFraction = 0.62f) {
         // The "More" rows are UI-side actions resolved from the registry; the host bridges them to the app's
         // navigation/theme callbacks. Adding a row is a registration (see BuiltInUiActions), not an edit here.
         val moreHost = remember(state) {
             object : UiActionHost {
                 override val backend: IdeBackend = state.backend
                 override fun navigate(destination: String) {
-                    state.sheetDest = null
+                    state.moreOpen = false
                     when (destination) {
                         UiDestinations.HUB -> onOpenHub()
                         UiDestinations.MODULES -> onOpenModuleConfig(null)
@@ -128,8 +104,8 @@ internal fun DestinationSheets(
                         UiDestinations.PROJECTS -> onCloseProject()
                     }
                 }
-                override fun toggleTheme() { state.sheetDest = null; onToggleTheme() }
-                override fun openFile(path: String, offset: Int) { state.sheetDest = null; state.openAt(path, offset) }
+                override fun toggleTheme() { state.moreOpen = false; onToggleTheme() }
+                override fun openFile(path: String, offset: Int) { state.moreOpen = false; state.openAt(path, offset) }
             }
         }
         MoreSheetContent(

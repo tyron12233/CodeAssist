@@ -119,7 +119,6 @@ import dev.ide.ui.generated.resources.tab_close_others
 import dev.ide.ui.generated.resources.tab_close_to_the_left
 import dev.ide.ui.generated.resources.tab_close_to_the_right
 import dev.ide.ui.generated.resources.undo
-import dev.ide.ui.ext.ToolWindowContribution
 import dev.ide.ui.icons.CaIcons
 import dev.ide.ui.icons.TreeIcon
 import dev.ide.ui.icons.TreeIcons
@@ -168,13 +167,13 @@ fun EditorTopBar(
     onOptimizeImports: () -> Unit = {},
     onToggleConsole: () -> Unit = {},
     consoleOpen: Boolean = false,
-    /** RIGHT-anchored tool windows (plugin-contributed side panels). The bar renders one toggle button per
-     *  entry — icon + title from the contribution — so the button set is fully plugin-derived: empty when no
-     *  plugin contributes one, and a disabled plugin's window simply isn't here. */
-    rightTools: List<ToolWindowContribution> = emptyList(),
-    /** Id of the currently-open right tool window (its button shows active), or null. */
-    openRightTool: String? = null,
-    onToggleRightTool: (String) -> Unit = {},
+    /** Compact (phone) top bar only: a single button opening the RIGHT tool-window drawer — the phone has no
+     *  right activity rail (that's the desktop surface), so this is the entry point. Null icon = no plugin
+     *  contributes a RIGHT tool window, so nothing shows. On desktop the right rail owns this instead. */
+    rightToolIconId: String? = null,
+    rightToolTitle: String = "",
+    rightToolOpen: Boolean = false,
+    onToggleRightTool: () -> Unit = {},
     inlayHintsOn: Boolean = true,
     onToggleInlayHints: () -> Unit = {},
     showPreview: Boolean = false,
@@ -218,9 +217,10 @@ fun EditorTopBar(
             IconButtonCa(CaIcons.save, stringResource(Res.string.save), onSave, active = hasUnsavedChanges)
             if (compact) {
                 // On a phone the bar can't hold every control, so Run stays inline and the rest (incl. the
-                // edit actions) collapse into a single ⋯ overflow menu — everything one tap away.
-                rightTools.forEach { tw ->
-                    IconButtonCa(actionIcon(tw.iconId), tw.title, { onToggleRightTool(tw.id) }, active = openRightTool == tw.id)
+                // edit actions) collapse into a single ⋯ overflow menu — everything one tap away. The RIGHT
+                // tool windows get one button (the swipe-in overlay's switcher handles multiple).
+                if (rightToolIconId != null) {
+                    IconButtonCa(actionIcon(rightToolIconId), rightToolTitle, onToggleRightTool, active = rightToolOpen)
                 }
                 PluginToolbarActions(pluginActions, dim, onPluginAction)
                 if (activeVariant != null) VariantChip(
@@ -268,14 +268,6 @@ fun EditorTopBar(
                     onToggleConsole,
                     active = consoleOpen
                 )
-                rightTools.forEach { tw ->
-                    IconButtonCa(
-                        actionIcon(tw.iconId),
-                        tw.title,
-                        { onToggleRightTool(tw.id) },
-                        active = openRightTool == tw.id,
-                    )
-                }
                 // Shown when the open file has @Preview composables — renders/checks them via the interpreter.
                 if (showPreview) IconButtonCa(
                     CaIcons.image,

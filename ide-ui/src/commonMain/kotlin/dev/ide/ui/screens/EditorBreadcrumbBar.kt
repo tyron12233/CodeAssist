@@ -23,6 +23,7 @@ import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import dev.ide.ui.EditorViewMode
 import dev.ide.ui.IdeUiState
+import dev.ide.ui.LeftPanelId
 import dev.ide.ui.OpenFile
 import dev.ide.ui.components.Breadcrumb
 import dev.ide.ui.editor.preview.isLayoutPreviewable
@@ -74,8 +75,8 @@ internal fun BreadcrumbBar(
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(6.dp),
     ) {
-        // Tapping the location line opens the file structure / outline sheet (IntelliJ-style).
-        Box(Modifier.weight(1f).clickable { state.structureOpen = true }) { Breadcrumb(crumbs) }
+        // Tapping the location line opens the Structure panel in the left sidebar (IntelliJ-style outline).
+        Box(Modifier.weight(1f).clickable { state.selectLeftPanel(LeftPanelId.STRUCTURE) }) { Breadcrumb(crumbs) }
         ViewModeToggle(active.viewMode, canPreview) { active.viewMode = it }
     }
 }

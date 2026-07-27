@@ -33,7 +33,7 @@ import org.jetbrains.compose.resources.stringResource
  *  Draws no surface of its own: it renders as the collapsed face of the [dev.ide.ui.components.BuildDock],
  *  which owns the glass bar and the swipe-up-to-console gesture. */
 @Composable
-internal fun BottomNav(selected: RailDestination, onSelect: (RailDestination) -> Unit) {
+internal fun BottomNav(selected: RailDestination?, onSelect: (RailDestination) -> Unit) {
     Row(
         Modifier.fillMaxWidth().height(60.dp),
         horizontalArrangement = Arrangement.SpaceEvenly,
