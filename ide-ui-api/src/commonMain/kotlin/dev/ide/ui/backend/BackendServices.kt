@@ -172,6 +172,14 @@ interface EditorService {
 
 /** The projectional (block) editor projection + edit compilation. */
 interface BlockService {
+    /**
+     * Whether the block editor is available at all — false when the `blocks` plugin is disabled (no block
+     * mapping is registered). The shell reads this once to decide whether to offer the Blocks view-mode
+     * segment; when false the toggle omits it and a persisted `blocks` tab restores as plain text. Defaults to
+     * false so a backend that wires no block editor never shows the toggle.
+     */
+    fun blocksEnabled(): Boolean = false
+
     /** Project the live buffer [text] of [path] into a block tree, or null when unsupported. */
     suspend fun projectBlocks(path: String, text: String): UiBlockNode? = null
 
