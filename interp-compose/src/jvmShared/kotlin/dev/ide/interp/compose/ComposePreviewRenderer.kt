@@ -2,12 +2,15 @@ package dev.ide.interp.compose
 
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.currentComposer
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.ui.platform.LocalInspectionMode
 import dev.ide.interp.InterpProfile
 import dev.ide.interp.Interpreter
+import dev.ide.interp.InterpreterException
 import dev.ide.interp.InterpreterHooks
 import dev.ide.interp.LibraryExecutor
 import dev.ide.interp.PreviewResourceResolver
@@ -130,6 +133,22 @@ class ComposePreviewRenderer(
             else -> "render"
         }
         firstPass[0] = false
+        // Runaway-recomposition breaker: a library composable that keeps invalidating itself (writing a state it
+        // reads during composition — e.g. a preview-overlay library that walks the LIVE host view's semantics)
+        // recomposes nonstop and freezes the IDE. [ComposeDispatcher] detects that on the content-lambda path and
+        // fires [onRunaway]; here that flips a state THIS composable reads, so on the next pass we DON'T compose
+        // the interpreter subtree — removing (disposing) the offending composable so its effects/state-writes
+        // stop and the loop ends. Reset per program so an edit retries. The render then reports the failure.
+        val aborted = remember(program) { mutableStateOf(false) }
+        DisposableEffect(dispatcher) {
+            val listener = { aborted.value = true }
+            dispatcher.addRunawayListener(listener)
+            onDispose { dispatcher.removeRunawayListener(listener) }
+        }
+        if (aborted.value) {
+            onError(InterpreterException("preview stopped: runaway recomposition (a library kept invalidating the composition, e.g. by writing state it reads while composing). Remove or guard that composable."))
+            return
+        }
         // We're inside the IDE's composition: thread its composer, then drive the preview through its own
         // restart group so state changes recompose just the preview subtree.
         dispatcher.composer = currentComposer
