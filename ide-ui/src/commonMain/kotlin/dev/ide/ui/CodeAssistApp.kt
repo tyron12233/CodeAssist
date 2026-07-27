@@ -54,6 +54,7 @@ import dev.ide.ui.screens.ProjectPickerScreen
 import dev.ide.ui.screens.RunScreen
 import dev.ide.ui.screens.PluginsScreen
 import dev.ide.ui.screens.SdkManagerScreen
+import dev.ide.ui.screens.StorageScreen
 import dev.ide.ui.screens.SettingsHubScreen
 import dev.ide.ui.screens.SettingsScreen
 import dev.ide.ui.screens.SettingsView
@@ -347,7 +348,7 @@ fun CodeAssistApp(
                 screen == Screen.KeystoreCreate || screen == Screen.KeystoreImport -> screen = Screen.KeystoreManager
                 // The hub's sub-screens step back to the hub; the keystore manager honours its entry origin.
                 screen == Screen.SdkManager || screen == Screen.Settings || screen == Screen.CodeStyle ||
-                    screen == Screen.Plugins -> screen = Screen.Hub
+                    screen == Screen.Plugins || screen == Screen.Storage -> screen = Screen.Hub
                 screen == Screen.KeystoreManager -> screen = keystoreReturn
                 // The hub returns to wherever it was opened from (picker or editor).
                 screen == Screen.Hub -> screen = hubReturn
@@ -579,6 +580,11 @@ fun CodeAssistApp(
                             onBack = { screen = Screen.Hub },
                         )
 
+                        Screen.Storage -> StorageScreen(
+                            backend = state.backend,
+                            onBack = { screen = Screen.Hub },
+                        )
+
                         Screen.CodeStyle -> CodeStyleScreen(
                             backend = state.backend,
                             // The live formatter preview is engine-backed: available when the hub (hence Code
@@ -632,6 +638,7 @@ fun CodeAssistApp(
                             // The hub reached from the editor is a project context; from the picker it isn't.
                             onOpenKeystoreManager = { keystoreReturn = Screen.Hub; keystoreInProject = hubReturn == Screen.Editor; screen = Screen.KeystoreManager },
                             onOpenPlugins = { screen = Screen.Plugins },
+                            onOpenStorage = { screen = Screen.Storage },
                         )
 
                         // Settings — reached from the hub. With a project open (hub entered from the editor) the

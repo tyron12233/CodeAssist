@@ -568,6 +568,20 @@ interface ProjectService {
     /** Back up the user's projects into a single `.zip`, returning its path, or null. */
     suspend fun backupProjects(): String? = null
 
+    /**
+     * A breakdown of what's using disk under the app storage root — total plus per-category sizes and
+     * per-project sizes — for the Storage screen's usage graph. Walks the managed storage, so it suspends
+     * off the main thread. Null when the backend has no project manager.
+     */
+    suspend fun storageReport(): UiStorageReport? = null
+
+    /**
+     * Delete the regenerable storage the category [id] owns (see [UiStorageCategory.id]) — caches, or the
+     * app-owned SDK/toolchain dirs. A no-op returning false for a read-only category (project source, other
+     * files) or an unknown id; never removes source, config, or keystores. Suspends off the main thread.
+     */
+    suspend fun clearStorageCategory(id: String): Boolean = false
+
     /** The editor tabs open the last time the active project was used. */
     fun openTabs(): UiOpenTabs = UiOpenTabs()
 
@@ -615,6 +629,42 @@ interface ProjectService {
     suspend fun importPackage(archivePath: String): UiProjectResult =
         UiProjectResult(false, "Project import not supported by this backend")
 }
+
+/**
+ * The Storage screen's usage report: a total plus per-category and per-project sizes, all in bytes so the
+ * UI can draw proportional segments and format the numbers itself. Titles/descriptions are NOT carried here
+ * — the UI resolves them (and each category's color) from [UiStorageCategory.id], keeping user-facing text
+ * in the localized resource bundle. [openProjectRootPath] is the currently-open project (so the screen can
+ * refuse to delete it), or null when none is open.
+ */
+data class UiStorageReport(
+    val storageRootPath: String,
+    val totalBytes: Long,
+    val categories: List<UiStorageCategory>,
+    val projects: List<UiStorageProject>,
+    val openProjectRootPath: String?,
+)
+
+/**
+ * One slice of storage. [id] is a stable key (e.g. `"dependencies"`, `"sdk"`, `"projects"`) the UI maps to a
+ * title, description, and color. [clearable] shows a Clear action; [destructive] means it needs a
+ * confirmation first (the SDK/toolchain). Read-only categories (project source, other files) have both false.
+ */
+data class UiStorageCategory(
+    val id: String,
+    val bytes: Long,
+    val colorId: String,
+    val clearable: Boolean,
+    val destructive: Boolean,
+)
+
+/** One managed project in the Storage screen's delete list. [bytes] is the full size freed by deleting it. */
+data class UiStorageProject(
+    val name: String,
+    val rootPath: String,
+    val bytes: Long,
+    val isAndroid: Boolean,
+)
 
 // ---------------------------------------------------------------------------
 // Projects Store (the featured/searchable catalog of templates + sample projects)
