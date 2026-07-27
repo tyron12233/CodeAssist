@@ -459,6 +459,31 @@ class JavaDiagnosticsTest {
         assertTrue(ok.isEmpty(), "enum with constructor-assigned final must be clean; got ${ok.map { it.message }}")
     }
 
+    @Test
+    fun definitelyAssignedLocalCapturedByNestedScopeIsNotFalsePositive() {
+        // A definitely-assigned local read inside an anonymous class / lambda is a captured read, checked at the
+        // capture site — the whole-method flow must not spuriously report it as read-before-write.
+        val ok = codes(
+            """
+            package com.foo;
+            class Use {
+                void anon() {
+                    final String status = "Disabled";
+                    Runnable r = new Runnable() {
+                        @Override public void run() { System.out.println(status); }
+                    };
+                }
+                void lambda() {
+                    int count = 3;
+                    Runnable r = () -> System.out.println(count);
+                }
+            }
+            """.trimIndent(),
+            JavaDiagnosticCodes.NOT_INITIALIZED,
+        )
+        assertTrue(ok.isEmpty(), "a definitely-assigned local captured by a nested scope must not be flagged; got ${ok.map { it.message }}")
+    }
+
     // --- abstract instantiation ---------------------------------------------------------------------------
 
     @Test
