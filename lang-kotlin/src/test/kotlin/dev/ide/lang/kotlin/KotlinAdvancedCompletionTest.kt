@@ -225,12 +225,44 @@ class KotlinAdvancedCompletionTest {
         assertTrue("true" in ls && "false" in ls, "a Boolean named-arg value should offer true/false; got $ls")
     }
 
+    // --- private-member visibility on `.` (accessible only inside the declaring class) ---
+
+    @Test
+    fun privateMemberHiddenFromOutsideTheClass() {
+        // `a.` from a top-level function: the public member completes, the private one must not.
+        val ls = labels("Use.kt", "package demo\nfun f(a: Acc) { a.| }")
+        assertTrue("visible" in ls, "the public member should complete; got ${ls.take(20)}")
+        assertFalse("secret" in ls, "a private member must NOT complete on a `.` from outside its class; got ${ls.take(20)}")
+    }
+
+    @Test
+    fun privateMemberOfferedWithinTheSameClass() {
+        // `this.` inside the class body — Kotlin allows private access there, so completion must surface it.
+        val ls = labels(
+            "Inside.kt",
+            "package demo\nclass Inside {\n  private val secret: Int = 1\n  val visible: Int = 2\n  fun use() { this.| }\n}",
+        )
+        assertTrue("secret" in ls, "a private member must complete on `this.` inside its own class; got ${ls.take(20)}")
+        assertTrue("visible" in ls, "the public member is offered too; got ${ls.take(20)}")
+    }
+
+    @Test
+    fun privateMemberOfferedOnAnotherInstanceOfTheSameClass() {
+        // Kotlin private is class-scoped, not instance-scoped: `other.secret` is legal inside the class.
+        val ls = labels(
+            "Inside2.kt",
+            "package demo\nclass Inside2 {\n  private val secret: Int = 1\n  fun use(other: Inside2) { other.| }\n}",
+        )
+        assertTrue("secret" in ls, "a private member is accessible on another instance inside the class; got ${ls.take(20)}")
+    }
+
     companion object {
         val srcDir: Path = tempProject(
             mapOf(
                 "Models.kt" to """
                     package demo
                     data class User(val name: String, val age: Int)
+                    class Acc { private val secret: Int = 1; val visible: Int = 2 }
                     fun makeUser(name: String, age: Int): User = User(name, age)
                     enum class Color { RED, GREEN, BLUE }
                     fun paint(c: Color) {}
