@@ -24,6 +24,7 @@ import dev.ide.ui.backend.UiCompletionItem
 import dev.ide.ui.backend.UiCompletionKind
 import dev.ide.ui.backend.UiCompletionResult
 import dev.ide.ui.backend.UiDefinition
+import dev.ide.ui.backend.UiLibraryContent
 import dev.ide.ui.backend.UiNavKind
 import dev.ide.ui.backend.UiNavOption
 import dev.ide.ui.backend.UiNavTarget
@@ -99,6 +100,19 @@ internal class EditorBackend(private val ctx: BackendContext) : EditorService {
             .map { (kind, targets) ->
                 UiNavOption(fromNavKind(kind), targets.map { UiNavTarget(it.file.path, it.offset, it.label, it.kind) })
             }
+
+    override suspend fun libraryContent(contextPath: String, fqn: String, forceJava: Boolean): UiLibraryContent? =
+        // Decompilation reads jars + runs Vineflower — keep it off the engine's serialized dispatcher (IO).
+        withContext(kotlinx.coroutines.Dispatchers.IO) {
+            ctx.services.libraryContent(Paths.get(contextPath), fqn, forceJava)
+        }?.let {
+            UiLibraryContent(
+                path = "library://$fqn" + if (forceJava) "?java" else "",
+                name = it.name,
+                text = it.text,
+                kind = it.kind.name.lowercase(),
+            )
+        }
 
     private fun toNavKind(kind: UiNavKind): dev.ide.lang.kotlin.NavKind = when (kind) {
         UiNavKind.DECLARATION -> dev.ide.lang.kotlin.NavKind.DECLARATION

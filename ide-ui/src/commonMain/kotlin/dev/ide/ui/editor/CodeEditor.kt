@@ -230,8 +230,11 @@ private fun CodeEditorContent(
     var paneBottomInWindow by remember(path) { mutableFloatStateOf(0f) }
 
     // ---- feature controllers (state + async behaviour live in the *Controller classes) ----
+    // A read-only buffer (a decompiled / library-source view) never mutates, so completion has nothing to
+    // commit into — suppress the auto-popup so it doesn't hover over inert text.
+    val readOnly = !editorSession.editable
     val completion = rememberCompletionController(path, editorSession, backend)
-    completion.autoPopupEnabled = completionAutoPopup
+    completion.autoPopupEnabled = completionAutoPopup && !readOnly
     completion.delayMs = completionDelayMs
     // Active snippet/template expansion (tab-stop stepping), or null. Reset when the file changes.
     var snippet by remember(path) { mutableStateOf<SnippetSession?>(null) }
@@ -752,7 +755,7 @@ private fun CodeEditorContent(
             runNav(UiNavKind.SUPER); return true
         }
         if ((ev.isCtrlPressed || ev.isMetaPressed) && ev.key == Key.Spacebar) {
-            completion.reopen(immediate = true); return true
+            if (!readOnly) completion.reopen(immediate = true); return true
         }
         // Parameter info (Ctrl/Cmd-P): force the signature-help panel even if it was dismissed.
         if ((ev.isCtrlPressed || ev.isMetaPressed) && ev.key == Key.P) {

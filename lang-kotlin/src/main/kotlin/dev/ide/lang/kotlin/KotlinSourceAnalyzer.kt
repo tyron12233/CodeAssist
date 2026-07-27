@@ -17,6 +17,7 @@ import dev.ide.lang.kotlin.parse.KotlinDomNode
 import dev.ide.lang.kotlin.parse.KotlinIncrementalParser
 import dev.ide.lang.kotlin.parse.KotlinParsedFile
 import dev.ide.lang.kotlin.resolve.*
+import dev.ide.lang.kotlin.symbols.BuiltinStubRenderer
 import dev.ide.lang.kotlin.symbols.KotlinSymbolService
 import dev.ide.lang.resolve.ResolveResult
 import dev.ide.lang.resolve.Scope
@@ -363,15 +364,16 @@ class KotlinSourceAnalyzer(ctx: CompilationContext) : SourceAnalyzer, Disposable
     }
 
     /**
-     * Source go-to targets at [offset] for the requested [kind] — the engine behind Go to Declaration /
+     * Go-to targets at [offset] for the requested [kind] — the engine behind Go to Declaration /
      * Implementation(s) / Type Declaration / Super. Resolves the reference under the caret to a [KotlinSymbol]
-     * (reusing [resolve]); every returned target is PROJECT SOURCE (a classpath-only destination has no
-     * navigable source and is dropped), so navigation never lands in a decompiled library. Empty when nothing
-     * applies — the caller may then fall back (e.g. a resource reference for Declaration).
+     * (reusing [resolve]); a target is PROJECT SOURCE when the destination is declared in the project, else a
+     * compiled LIBRARY class ([libraryPath] — the host opens it read-only, showing attached source or a
+     * decompiled view). Empty when nothing applies — the caller may then fall back (e.g. a resource reference
+     * for Declaration).
      */
     fun navigationTargets(file: VirtualFile, text: CharSequence, offset: Int, kind: NavKind): List<NavTarget> {
-        val (symbol, leaf) = resolveAt(file, text, offset) ?: return emptyList()
-        return targetsFor(kind, symbol, leaf)
+        val (symbol, leaf, typeRefFqn) = resolveAt(file, text, offset) ?: return emptyList()
+        return targetsFor(kind, symbol, leaf, typeRefFqn)
     }
 
     /**
@@ -380,60 +382,92 @@ class KotlinSourceAnalyzer(ctx: CompilationContext) : SourceAnalyzer, Disposable
      * instant). In [NavKind] order. The caret is resolved once and reused across the four kinds.
      */
     fun navigationOptions(file: VirtualFile, text: CharSequence, offset: Int): List<Pair<NavKind, List<NavTarget>>> {
-        val (symbol, leaf) = resolveAt(file, text, offset) ?: return emptyList()
+        val (symbol, leaf, typeRefFqn) = resolveAt(file, text, offset) ?: return emptyList()
         return NavKind.entries.mapNotNull { kind ->
-            targetsFor(kind, symbol, leaf).takeIf { it.isNotEmpty() }?.let { kind to it }
+            targetsFor(kind, symbol, leaf, typeRefFqn).takeIf { it.isNotEmpty() }?.let { kind to it }
         }
     }
 
-    /** Resolve the reference/symbol at [offset] once (symbol + PSI leaf), for the nav queries. Null when the
-     *  buffer is empty. */
-    private fun resolveAt(file: VirtualFile, text: CharSequence, offset: Int): Pair<KotlinSymbol?, PsiElement?>? {
+    /** Resolve the reference/symbol at [offset] once (symbol + PSI leaf + the resolved FQN when the caret is on
+     *  a TYPE reference), for the nav queries. Null when the buffer is empty. */
+    private fun resolveAt(file: VirtualFile, text: CharSequence, offset: Int): Triple<KotlinSymbol?, PsiElement?, String?>? {
         val ktFile = KotlinParserHost.parse(file.name, text)
         if (ktFile.textLength == 0) return null
         val off = offset.coerceIn(0, ktFile.textLength)
         val leaf = ktFile.findElementAt(off.coerceAtMost(ktFile.textLength - 1))
         val symbol = (resolve(KotlinParsedFile(ktFile, file, 0L).nodeAt(off)) as? ResolveResult.Resolved)
             ?.symbol as? KotlinSymbol
-        return symbol to leaf
+        return Triple(symbol, leaf, typeRefFqnAt(ktFile, leaf))
     }
 
-    private fun targetsFor(kind: NavKind, symbol: KotlinSymbol?, leaf: PsiElement?): List<NavTarget> = when (kind) {
-        NavKind.DECLARATION -> declarationTargets(symbol)
+    /** The resolved type FQN when [leaf] sits inside a TYPE reference (`List` in `List<Int>` → `kotlin.collections.List`),
+     *  so navigation lands on the TYPE rather than a same-named callable (the `List(size, init)` factory). Null when
+     *  the caret isn't on a type reference or the name doesn't resolve to a known type. */
+    private fun typeRefFqnAt(ktFile: KtFile, leaf: PsiElement?): String? {
+        leaf ?: return null
+        val userType = com.intellij.psi.util.PsiTreeUtil.getParentOfType(
+            leaf, org.jetbrains.kotlin.psi.KtUserType::class.java, false
+        ) ?: return null
+        val name = userType.referencedName ?: return null
+        val imports = ktFile.importDirectives.mapNotNull { imp ->
+            imp.importedFqName?.asString()?.let {
+                dev.ide.lang.kotlin.symbols.ImportInfo(it, imp.aliasName, imp.isAllUnder)
+            }
+        }
+        val ctx = dev.ide.lang.kotlin.symbols.FileContext(ktFile.name, ktFile.packageFqName.asString(), imports)
+        val fqn = service.resolveTypeName(name, ctx) ?: return null
+        return fqn.takeIf { service.isKnownType(it) || service.isBuiltinType(it) }
+    }
+
+    private fun targetsFor(kind: NavKind, symbol: KotlinSymbol?, leaf: PsiElement?, typeRefFqn: String?): List<NavTarget> = when (kind) {
+        NavKind.DECLARATION -> declarationTargets(symbol, typeRefFqn)
         NavKind.TYPE_DECLARATION -> typeDeclarationTargets(symbol)
-        NavKind.IMPLEMENTATION -> implementationTargets(contextTypeFqn(symbol, leaf))
+        NavKind.IMPLEMENTATION -> implementationTargets(typeRefFqn ?: contextTypeFqn(symbol, leaf))
         NavKind.SUPER -> superTargets(symbol, leaf)
     }
 
-    /** Go to Declaration: the resolved symbol's source declaration node, else its type's declaring source file.
-     *  Lands on the name identifier (not the leading `fun`/`val`/modifiers), matching [declarationLocation]. */
-    private fun declarationTargets(symbol: KotlinSymbol?): List<NavTarget> {
+    /** Go to Declaration: a TYPE reference under the caret → its type declaration; else the resolved symbol's
+     *  source declaration node, else — for a classpath symbol — its declaring type opened as a read-only library
+     *  view (a member lands the caret on its own name). Lands on the name identifier, matching [declarationLocation]. */
+    private fun declarationTargets(symbol: KotlinSymbol?, typeRefFqn: String? = null): List<NavTarget> {
+        typeRefFqn?.let { sourceOrLibrary(it)?.let { t -> return listOf(t) } }
         symbol ?: return emptyList()
         (symbol.declaration() as? KotlinDomNode)?.takeIf { symbol.origin.fromSource }?.let { dn ->
             val at = (dn.psi as? org.jetbrains.kotlin.psi.KtNamedDeclaration)?.nameIdentifier?.textRange?.startOffset
                 ?: dn.range.start
             return listOf(NavTarget(dn.owner.file, at, symbol.name, symbol.kind.name.lowercase()))
         }
+        // A classpath symbol: navigate to the declaring type (a member opens its owner, caret on the member).
+        if (!symbol.origin.fromSource) {
+            val isType = symbol.kind == SymbolKind.CLASS || symbol.kind == SymbolKind.INTERFACE
+            val owner = if (isType) symbol.type?.qualifiedName else (symbol.declaringClassFqn ?: symbol.type?.qualifiedName)
+            val member = if (isType) null else symbol.name
+            owner?.let { sourceOrLibrary(it, member)?.let { t -> return listOf(t) } }
+        }
         val fqn = symbol.type?.qualifiedName ?: return emptyList()
-        return declarationLocation(fqn)?.let { listOf(NavTarget(it.first, it.second, navLabel(fqn), "class")) } ?: emptyList()
+        return listOfNotNull(sourceOrLibrary(fqn))
     }
 
-    /** Go to Type Declaration: the declaration of the resolved symbol's TYPE (`val x: Foo` → `class Foo`). */
+    /** Go to Type Declaration: the declaration of the resolved symbol's TYPE (`val x: Foo` → `class Foo`),
+     *  in project source or a read-only library view. */
     private fun typeDeclarationTargets(symbol: KotlinSymbol?): List<NavTarget> {
         val fqn = symbol?.type?.qualifiedName ?: return emptyList()
-        return declarationLocation(fqn)?.let { listOf(NavTarget(it.first, it.second, navLabel(fqn), "class")) } ?: emptyList()
+        return listOfNotNull(sourceOrLibrary(fqn))
     }
 
-    /** Go to Implementation(s): the direct source inheritors of the type in context (via the SubtypeIndex). */
+    /** Go to Implementation(s): the direct inheritors of the type in context (via the SubtypeIndex) — each a
+     *  source declaration, or a read-only library view for a classpath inheritor. */
     private fun implementationTargets(typeFqn: String?): List<NavTarget> {
         typeFqn ?: return emptyList()
         return service.directInheritors(typeFqn).mapNotNull { sub ->
-            declarationLocation(sub.fqn)?.let { NavTarget(it.first, it.second, navLabel(sub.fqn), sub.kind) }
+            sourceOrLibrary(sub.fqn)?.let {
+                if (it.kind == "library") it else it.copy(kind = sub.kind)
+            }
         }.sortedBy { it.label }
     }
 
     /** Go to Super: for an overriding member, the same-named member in each supertype; otherwise the supertypes
-     *  of the type in context. Source destinations only. */
+     *  of the type in context. Each destination is project source, or a read-only library view. */
     private fun superTargets(symbol: KotlinSymbol?, leaf: PsiElement?): List<NavTarget> {
         val enclosing = leaf?.let { com.intellij.psi.util.PsiTreeUtil.getParentOfType(it, KtClassOrObject::class.java, false) }
         val member = leaf?.let { com.intellij.psi.util.PsiTreeUtil.getParentOfType(it, KtCallableDeclaration::class.java, false) }
@@ -443,19 +477,38 @@ class KotlinSourceAnalyzer(ctx: CompilationContext) : SourceAnalyzer, Disposable
             if (ownerFqn != null && name != null) {
                 val members = service.supertypesOf(ownerFqn).flatMap { st ->
                     service.membersNamed(st.qualifiedName, emptyList(), name).mapNotNull { sm ->
+                        val label = "$name  ·  ${st.qualifiedName.substringAfterLast('.')}"
                         (sm.declaration() as? KotlinDomNode)?.takeIf { sm.origin.fromSource }?.let {
-                            NavTarget(it.owner.file, it.range.start, "$name  ·  ${st.qualifiedName.substringAfterLast('.')}", "fun")
+                            NavTarget(it.owner.file, it.range.start, label, "fun")
                         }
+                        // The overridden member lives in a library supertype → open that type, caret on the member.
+                            ?: if (service.isClasspathType(st.qualifiedName) || service.isBuiltinType(st.qualifiedName))
+                                NavTarget(LibraryFile(libraryPath(st.qualifiedName, name)), 0, label, "library")
+                            else null
                     }
                 }.distinctBy { it.file.path to it.offset }
                 if (members.isNotEmpty()) return members
             }
         }
         val fqn = contextTypeFqn(symbol, leaf) ?: enclosing?.fqName?.asString() ?: return emptyList()
-        return service.supertypesOf(fqn).mapNotNull { st ->
-            declarationLocation(st.qualifiedName)?.let { NavTarget(it.first, it.second, navLabel(st.qualifiedName), "class") }
-        }.sortedBy { it.label }
+        return service.supertypesOf(fqn).mapNotNull { st -> sourceOrLibrary(st.qualifiedName) }.sortedBy { it.label }
     }
+
+    /** A nav target for type [fqn]: its project-SOURCE declaration if present, else a read-only DECOMPILED
+     *  library view ([libraryPath]) when [fqn] is a known classpath type; null otherwise. [member] (a member
+     *  simple name) refines the caret the host searches for in the opened text. */
+    private fun sourceOrLibrary(fqn: String, member: String? = null): NavTarget? {
+        declarationLocation(fqn)?.let { (vf, off) -> return NavTarget(vf, off, navLabel(fqn), "class") }
+        // A classpath binary OR a Kotlin built-in (List/Int/String — no `.class`, reconstructed from a stub).
+        if (!service.isClasspathType(fqn) && !service.isBuiltinType(fqn)) return null
+        return NavTarget(LibraryFile(libraryPath(fqn, member)), 0, navLabel(fqn), "library")
+    }
+
+    /** A declaration-only Kotlin stub for a BUILT-IN type [fqn] (`kotlin.collections.List`, `kotlin.Int`, …),
+     *  reconstructed from its `.kotlin_builtins` shape — the read-only "go to declaration" text for a type that
+     *  has no bytecode to decompile. Null when [fqn] isn't a built-in. Called by the engine's `libraryContent`. */
+    fun builtinStub(fqn: String): String? =
+        service.builtinShapeFor(fqn)?.let { BuiltinStubRenderer.render(fqn, it) }
 
     /** The type FQN a type-scoped navigation (implementation/super) operates on: the resolved type symbol, else
      *  the class/object the caret sits in. */

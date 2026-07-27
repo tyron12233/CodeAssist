@@ -18,6 +18,7 @@ dependencies {
     implementation(project(":lang-java")) // IntelliJ-PSI Java backend (native resolution/inference); JDT is still the .java default
     implementation(project(":lang-xml")) // XML language backend (Android layouts/values/manifest)
     implementation(project(":lang-kotlin")) // editor-only Kotlin language backend (PSI parse + own completion)
+    implementation(project(":decompiler")) // navigate-into-library: attached source, else Vineflower/@Metadata decompile
     implementation(project(":index-api"))
     implementation(project(":index-impl"))
     implementation(project(":analysis-api"))

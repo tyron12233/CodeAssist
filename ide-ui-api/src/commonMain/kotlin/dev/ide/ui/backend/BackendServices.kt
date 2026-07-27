@@ -155,6 +155,11 @@ interface EditorService {
      *  only usable actions. Empty when nothing applies. Kotlin source only for now. */
     suspend fun navigationOptions(path: String, text: String, offset: Int): List<UiNavOption> = emptyList()
 
+    /** The read-only content for a `library://<fqn>` target: attached source, else a decompiled view (full-body
+     *  Java, or a Kotlin declaration stub). [forceJava] runs the Java decompiler on any class ("Decompile to
+     *  Java"). Resolved against [contextPath]'s module classpath. Null when the class isn't found. */
+    suspend fun libraryContent(contextPath: String, fqn: String, forceJava: Boolean = false): UiLibraryContent? = null
+
     /** Gutter inheritor ("implementations") markers for [text] — one per inheritable type with direct subtypes.
      *  Empty for languages/files without the subtype relation indexed. */
     suspend fun inheritorMarkers(path: String, text: String): List<UiInheritorMarker> = emptyList()

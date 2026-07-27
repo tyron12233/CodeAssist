@@ -97,6 +97,18 @@ object KotlinMetadata {
         }
     }
 
+    /**
+     * For a MULTI-FILE class facade (`CollectionsKt`, `MathKt` — a public aggregator that carries no members
+     * of its own; its top-level declarations live in `…__…Kt` PART classes), the part classes' internal names
+     * (`kotlin/collections/CollectionsKt__CollectionsKt`). Null for anything else (a plain class, a single-file
+     * facade, non-Kotlin bytecode). Lets a decompiler expand the near-empty facade into its real declarations.
+     */
+    fun multifileFacadeParts(classBytes: ByteArray): List<String>? {
+        val metadata = extract(classBytes) ?: return null
+        val km = runCatching { KotlinClassMetadata.readLenient(metadata) }.getOrNull()
+        return (km as? KotlinClassMetadata.MultiFileClassFacade)?.partClassNames
+    }
+
     /** One-shot guard so a decode failure (e.g. `kotlin-metadata-jvm` missing on ART) is logged once, not per class. */
     private val loggedDecodeFailure = java.util.concurrent.atomic.AtomicBoolean(false)
 

@@ -263,6 +263,21 @@ class KotlinSymbolService(
      */
     fun classpathReady(): Boolean = index?.status?.ready ?: true
 
+    /** Whether [fqn] is a compiled class on this module's CLASSPATH (library/SDK type). The gate for offering a
+     *  decompiled "go to declaration/type" when no project source declares it. Cheap: one classpath lookup. */
+    fun isClasspathType(fqn: String): Boolean = reader.classBytes(fqn) != null
+
+    /** Whether [fqn] is a Kotlin BUILT-IN type (`kotlin.collections.List`, `kotlin.Int`, `kotlin.String`, …):
+     *  declared in the stdlib's `.kotlin_builtins`, with NO `.class` file. Navigable via a reconstructed
+     *  declaration stub ([builtinShapeFor]) rather than a bytecode decompile. */
+    fun isBuiltinType(fqn: String): Boolean =
+        builtinShape(fqn) != null || fqn in Builtins.DEFAULT_SIMPLE_TYPES.values
+
+    /** The decoded shape of a Kotlin BUILT-IN type [fqn] (members, supertypes, type parameters + variances),
+     *  or null when [fqn] is not a built-in (or the index isn't ready yet). The public seam for rendering a
+     *  read-only "go to declaration" stub of a built-in that has no bytecode to decompile. */
+    fun builtinShapeFor(fqn: String): TypeShape? = builtinShape(fqn)
+
     /**
      * Replace the live editor buffers (VirtualFile path → text) the source model overlays on top of disk, so
      * cross-file completion/resolution/diagnostics see UNSAVED edits in other open files. Diffs against the

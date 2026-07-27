@@ -38,6 +38,10 @@ class EditorSession(
     initialText: String,
     val language: CodeLanguage,
     initialSelection: TextRange = TextRange(0),
+    /** When false the buffer is READ-ONLY: content mutations (typing/IME/paste/delete/format/code-actions —
+     *  everything funnels through [replaceRange]) are inert; caret/selection navigation stays live so the text
+     *  can still be read, selected, and copied. Used for decompiled/library views. */
+    val editable: Boolean = true,
 ) {
 
     var doc by mutableStateOf(EditorDocument.of(initialText))
@@ -225,6 +229,8 @@ class EditorSession(
             updateSelectionAndComposing(newSelection, newComposing)
             return
         }
+        // Read-only buffer: reject the content change (caret navigation goes through the branch above / setCaret).
+        if (!editable) return
         batchImeSpaceDeleteOffset = -1 // any real edit breaks the swap-op adjacency (the delete re-arms after)
         val removedText = if (applyingUndo) "" else doc.substring(s, e)
         val selBefore = selection
