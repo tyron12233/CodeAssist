@@ -28,6 +28,10 @@ internal class ManifestMergeTask(
     private val minSdk: Int,
     private val targetSdk: Int,
     private val outManifest: Path,
+    // When the build config's version is authoritative, drop the manifest's own android:versionCode/
+    // versionName from the merged output so aapt2 injects the facet value instead (AGP's DSL-wins rule).
+    private val stripVersionCode: Boolean = false,
+    private val stripVersionName: Boolean = false,
 ) : Task {
     override val inputs: TaskInputs
         get() = TaskInputsImpl().apply {
@@ -41,6 +45,10 @@ internal class ManifestMergeTask(
             // Not part of the output, but the edge-to-edge advisory depends on it: re-run so the warning
             // appears/clears when the resolved target crosses the threshold.
             property("targetSdk", targetSdk)
+            // Whether the manifest's version is stripped changes the output, so bumping the facet version
+            // from/to its default (which flips authority) must re-run the merge.
+            property("stripVersionCode", stripVersionCode)
+            property("stripVersionName", stripVersionName)
         }
     override val outputs: TaskOutputs get() = TaskOutputsImpl().apply { filePath("manifest", outManifest) }
 
@@ -52,7 +60,10 @@ internal class ManifestMergeTask(
         // Catch Throwable (not just Exception): an XML/regex impl quirk on ART can surface as an Error
         // (e.g. ExceptionInInitializerError) — report it as a build failure with the cause, never crash.
         val result = try {
-            ManifestMerger.merge(primaryManifest, libs, placeholders, appMinSdk = minSdk)
+            ManifestMerger.merge(
+                primaryManifest, libs, placeholders, appMinSdk = minSdk,
+                stripVersionCode = stripVersionCode, stripVersionName = stripVersionName,
+            )
         } catch (t: Throwable) {
             val cause = t.cause ?: t
             return TaskResult.Failed("manifest merge crashed: ${cause::class.simpleName}: ${cause.message}", t)

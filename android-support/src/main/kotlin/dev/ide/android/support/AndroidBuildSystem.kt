@@ -267,6 +267,13 @@ class AndroidBuildSystem(
         val versionName = (flavorVersionName ?: facet.versionName) +
             (facet.buildType(variant.buildTypeName)?.versionNameSuffix ?: "")
         val versionCode = facet.versionCode
+        // AGP DSL-wins: the facet value overrides a manifest-declared android:versionCode/versionName only
+        // when it is authoritative — an explicit non-default value, or (for versionName) a flavor override.
+        // Left at the default it is treated as unset, so a manifest-declared value is respected. When
+        // authoritative we strip the manifest's attribute in the merge so aapt2 injects `versionCode`/
+        // `versionName` (its --version-code/--version-name inject only when the manifest declares none).
+        val versionCodeAuthoritative = facet.versionCode != AndroidFacet.DEFAULT_VERSION_CODE
+        val versionNameAuthoritative = flavorVersionName != null || facet.versionName != AndroidFacet.DEFAULT_VERSION_NAME
 
         // applicationId (AGP: flavor override else namespace, + flavor & build-type suffixes) — the value of
         // the ${applicationId} manifest placeholder Firebase/Play Services authorities depend on.
@@ -334,7 +341,11 @@ class AndroidBuildSystem(
         // Merge dependency-library + AAR manifests into the app manifest (so their components/permissions
         // land in the APK), substituting ${applicationId} etc. The linked manifest is the merged one.
         tasks.task(processManifest, listOf(checkAarMeta)) {
-            ManifestMergeTask(processManifest, layout.manifest(facet), libraryManifests, manifestPlaceholders, facet.minSdk, facet.targetSdk, layout.mergedManifest)
+            ManifestMergeTask(
+                processManifest, layout.manifest(facet), libraryManifests, manifestPlaceholders,
+                facet.minSdk, facet.targetSdk, layout.mergedManifest,
+                stripVersionCode = versionCodeAuthoritative, stripVersionName = versionNameAuthoritative,
+            )
         }
         // On a debug build, splice the log-bridge <provider> into the merged manifest before linking; aapt2
         // then links the instrumented copy. Non-debug builds link the plain merged manifest directly.

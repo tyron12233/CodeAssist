@@ -47,8 +47,8 @@ object AndroidFacetCodec : FacetCodec<AndroidFacet> {
             minSdk = minSdk,
             targetSdk = values.int("targetSdk") ?: minSdk,
             manifest = values["manifest"] as? String ?: "src/main/AndroidManifest.xml",
-            versionCode = values.int("versionCode") ?: 1,
-            versionName = values["versionName"] as? String ?: "1.0",
+            versionCode = values.int("versionCode") ?: AndroidFacet.DEFAULT_VERSION_CODE,
+            versionName = values["versionName"] as? String ?: AndroidFacet.DEFAULT_VERSION_NAME,
             isApplication = values["isApplication"] as? Boolean ?: true,
             flavorDimensions = values.stringList("flavorDimensions"),
             buildTypes = values.tableList("buildTypes").map { decodeBuildType(it) }

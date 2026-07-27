@@ -24,10 +24,14 @@ data class AndroidFacet(
     val targetSdk: Int = minSdk,
     /** Manifest path relative to the module dir. */
     val manifest: String = "src/main/AndroidManifest.xml",
-    /** `defaultConfig.versionCode` — injected into the manifest at link (AGP defaults to 1). */
-    val versionCode: Int = 1,
-    /** `defaultConfig.versionName` — injected into the manifest at link (AGP defaults to "1.0"). */
-    val versionName: String = "1.0",
+    /** `defaultConfig.versionCode`. Authoritative when set to a non-default value: it then overrides a
+     *  manifest-declared `android:versionCode` at link (AGP's DSL-wins rule). Left at [DEFAULT_VERSION_CODE]
+     *  it is treated as unset, so a manifest-declared value is respected. See `AndroidBuildSystem`. */
+    val versionCode: Int = DEFAULT_VERSION_CODE,
+    /** `defaultConfig.versionName`. Authoritative when set to a non-default value (or overridden by a
+     *  flavor): it then overrides a manifest-declared `android:versionName` at link. Left at
+     *  [DEFAULT_VERSION_NAME] it is unset, so a manifest-declared value is respected. */
+    val versionName: String = DEFAULT_VERSION_NAME,
     /** true == `android-app` (produces an APK); false == `android-lib` (produces an AAR). */
     val isApplication: Boolean = true,
     /** Flavor dimension order; a variant picks one flavor per dimension in this order. */
@@ -60,6 +64,12 @@ data class AndroidFacet(
     companion object {
         /** The single shared key — facet lookup is identity-based, so always reference this instance. */
         val KEY = FacetKey<AndroidFacet>("android")
+
+        /** AGP's `defaultConfig` version defaults. A facet still holding these is treated as "unset", so a
+         *  manifest-declared `android:versionCode`/`versionName` is respected; an explicit non-default value
+         *  is authoritative and overrides the manifest at link. */
+        const val DEFAULT_VERSION_CODE = 1
+        const val DEFAULT_VERSION_NAME = "1.0"
 
         val DEFAULT_BUILD_TYPES: List<BuildType> = listOf(
             BuildType("debug", debuggable = true, minifyEnabled = false),

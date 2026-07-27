@@ -72,17 +72,27 @@ object ManifestMerger {
         libraries: List<Path>,
         placeholders: Map<String, String> = emptyMap(),
         appMinSdk: Int? = null,
+        stripVersionCode: Boolean = false,
+        stripVersionName: Boolean = false,
     ): Result {
         val primaryXml = Files.readAllBytes(primary).toString(Charsets.UTF_8)
         val libXmls = libraries.mapNotNull { lib ->
             runCatching { lib to Files.readAllBytes(lib).toString(Charsets.UTF_8) }.getOrNull()
         }
-        return mergeXml(primaryXml, libXmls.map { it.second }, placeholders, libXmls.map { it.first.toString() }, appMinSdk)
+        return mergeXml(
+            primaryXml, libXmls.map { it.second }, placeholders, libXmls.map { it.first.toString() },
+            appMinSdk, stripVersionCode, stripVersionName,
+        )
     }
 
     /**
      * Merge raw manifest XML — the testable core. [libraries] are in decreasing priority; [libraryNames]
      * (optional, parallel to [libraries]) name each library in diagnostics and back `tools:selector`.
+     *
+     * [stripVersionCode]/[stripVersionName] drop the root `<manifest>`'s `android:versionCode`/`versionName`
+     * from the output so the build config's value (fed to `aapt2 link --version-code/--version-name`, which
+     * only injects when the manifest declares none) wins — AGP's DSL-overrides-manifest rule. The caller
+     * passes true only when the facet value is authoritative (see `AndroidBuildSystem`).
      */
     fun mergeXml(
         primary: String,
@@ -90,6 +100,8 @@ object ManifestMerger {
         placeholders: Map<String, String> = emptyMap(),
         libraryNames: List<String> = emptyList(),
         appMinSdk: Int? = null,
+        stripVersionCode: Boolean = false,
+        stripVersionName: Boolean = false,
     ): Result {
         val messages = ArrayList<Message>()
         val mergedDoc = runCatching { parse(primary) }.getOrElse {
@@ -134,6 +146,10 @@ object ManifestMerger {
         // must be a valid Java package name") — surface it here as a precise, actionable error instead of
         // letting aapt2 fail on a line number. Matches AGP, which treats an unresolved placeholder as an error.
         validateIdentifierAttributes(mergedDoc.documentElement, messages)
+        // Build config wins over a manifest-declared version when the facet is authoritative: drop the root
+        // attribute so aapt2's --version-code/--version-name (inject-if-absent) supplies the facet value.
+        if (stripVersionCode) mergedDoc.documentElement.removeAttributeNS(ANDROID_NS, "versionCode")
+        if (stripVersionName) mergedDoc.documentElement.removeAttributeNS(ANDROID_NS, "versionName")
         return Result(serialize(mergedDoc), messages)
     }
 
