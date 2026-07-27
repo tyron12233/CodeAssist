@@ -1,0 +1,10 @@
+# 🚀 CodeAssist 3.7.4
+
+A quick stability hotfix on top of 3.7.3.
+
+**FIXES**
+- Fixed a **crash when opening the AI assistant** on 3.7.2 and 3.7.3 — the chat panel could close the app the moment it appeared (a missing bundled resource). It now opens reliably.
+- Fixed a rare **editor crash** while drawing selection and search highlights right after a fast edit.
+- Improved **crash reporting** so hard-to-reach faults point at a real location, helping us fix the next batch faster.
+
+Full changelog: https://github.com/tyron12233/CodeAssist/releases/tag/v3.7.4

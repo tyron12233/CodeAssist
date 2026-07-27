@@ -1,0 +1,22 @@
+# 🚀 CodeAssist 3.7.1
+
+**RUN & PREVIEW**
+- Programs that use **threads now run in genuine parallel** on the interpreter. Code that starts a thread and waits on it (`Thread.start()` + `join()`, `synchronized`, `wait`/`notify`) no longer deadlocks and behaves like a real JVM.
+- The **Compose preview** now resolves **fully-qualified references** (for example `androidx.compose.material.icons.Icons.Default.Remove`) and **nested types** reached through their outer type (`LineHeightStyle.Alignment`), so more previews render instead of failing.
+- `var count by remember { mutableStateOf(0) }` and similar **state-delegate** patterns now resolve correctly in the editor and preview.
+
+**LANGUAGES**
+- CodeAssist is now fully translated into **six new languages**: **简体中文 (Chinese)**, **Español (Spanish)**, **العربية (Arabic)**, **Bahasa Indonesia (Indonesian)**, **Português (Brasil)**, and **Русский (Russian)**. Every screen, including **Settings**, is localized; anything not yet translated falls back to English.
+
+**CODE EDITOR**
+- Kotlin completion now offers a type's **nested classes and objects** (and a sealed interface's nested subclasses) when you type `Owner.`, matching how types from libraries already behaved.
+- Fixed `data` being highlighted as a keyword when it is just an identifier (outside `data class` / `data object`).
+
+**AI ASSISTANT**
+- Fixed the assistant's file operations failing on device: a relative file path now resolves **inside your project** instead of the phone's filesystem root.
+- Themed the **model picker** dropdown to match the rest of the app.
+
+**ANDROID BUILD**
+- A manifest placeholder that is never defined (for example a dependency expecting a `${...}` value you don't set) now fails with a **clear, actionable error** that names the element, instead of a cryptic `aapt2` "must be a valid Java package name" failure.
+
+Full changelog: https://github.com/tyron12233/CodeAssist/releases/tag/v3.7.1

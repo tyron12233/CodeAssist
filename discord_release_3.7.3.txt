@@ -1,0 +1,19 @@
+# 🚀 CodeAssist 3.7.3
+
+**COMPOSE PREVIEW**
+- `viewModelScope` now works in previews — a `ViewModel` that launches from `viewModelScope` renders instead of failing.
+- Gradient brushes with color stops (`Brush.linearGradient(colorStops = arrayOf(0f to Color(...)))`) render instead of crashing.
+- Flow previews resolve correctly, including `SharingStarted.WhileSubscribed(5000)` and `MutableStateFlow`/`stateIn` chains.
+- Primitive constants like `Float.POSITIVE_INFINITY`, `Int.MAX_VALUE` and `Double.NaN` resolve in previews.
+- A `@Composable` called directly inside a non-composable builder lambda (e.g. a `Text(...)` sitting in `LazyColumn { }` outside an `item { }`) no longer freezes the IDE.
+
+**KOTLIN EDITOR**
+- `combine` / `stateIn` / `MutableStateFlow(...)` lambda parameters now get a real inferred type, so members resolve and completion works inside them.
+- A stale or non-existent `import` no longer hides a declaration from the same file or package.
+- A genuinely dead `import` is now flagged as an unresolved reference — both a missing type **and** a missing top-level or extension function/property.
+- `viewModelScope` and other inherited or in-scope extension properties resolve on the implicit `this` inside a subclass.
+
+**CODE COMPLETION**
+- Completing an `import` now suggests a package's top-level functions and extensions (`map`, `stateIn`, ...), not just its types — and inserts the bare name, never a `map()` call form.
+
+Full changelog: https://github.com/tyron12233/CodeAssist/releases/tag/v3.7.3

@@ -1,0 +1,27 @@
+# 🚀 CodeAssist 3.7.0
+
+**AI CODING AGENT (NEW)**
+- Meet the built-in **AI assistant**: chat with it right inside the IDE and let it read your project, write and edit files, edit configuration, and run tools for you.
+- Open it from the **sparkle button** in the top bar, or **swipe in from the right edge** on your phone.
+- **Bring your own key** and it works out of the box with **Anthropic (Claude)**, **OpenAI**, and **Google Gemini**, plus any **OpenAI-compatible gateway** (OpenRouter, LiteLLM, or a self-hosted endpoint).
+- **You stay in control**: pick **Ask each time**, **Auto-accept**, or **Plan-only**. See the assistant's reasoning and every tool call as it works, and tap **Retry** if a request hits a snag.
+- A clean **provider and key manager** with masked keys, live model lists, and one-tap switching.
+- Friendly, clear messages for rate limits, quota, and busy servers, with automatic retry.
+
+**CODE EDITOR**
+- **Auto-import** now inserts imports in sorted order, and a new **Optimize Imports** command cleans up and reorders existing ones.
+- Smarter **Java completion**: context-aware ranking, keyword suggestions, better caret positioning, and postfix completions.
+- **Live templates** now highlight the editable snippet fields as you tab through them.
+
+**COMPOSE PREVIEW & KOTLIN**
+- The preview interpreter now **reports the underlying cause** when something throws, and understands a **wider slice of Kotlin** (control flow, local functions, operators, generics, delegation, ranges, sequences, and more) for more accurate previews and runs.
+- Fixed three Kotlin resolution and interpreter faults affecting the editor and Compose preview.
+
+**ANDROID BUILD**
+- Fixed resource merging so a resource declared in two formats (for example `ic_launcher.png` overriding `ic_launcher.xml`) no longer breaks `aapt2 link` with a "conflicting value" error. Higher-priority sources now override by resource identity.
+
+**FIXES & POLISH**
+- Reworked app-log forwarding onto a Binder bound service for more reliable run and log output.
+- Fixed the editor becoming unresponsive while the AI chat drawer was closed, and smoothed out the chat (animated messages, continuous edge-swipe drawer).
+
+Full changelog: https://github.com/tyron12233/CodeAssist/releases/tag/v3.7.0

@@ -1,0 +1,34 @@
+# 🚀 CodeAssist 3.7.2
+
+**COMPOSE PREVIEW**
+A big push on **cross-file** support — previews of composables that rely on code in *other* files now render instead of failing:
+- Functions, properties, **inherited members**, and classes declared in another file now resolve in the preview.
+- A cross-file **superclass** is included so its `init` block actually runs, and a cross-file **nested subtype** constructs correctly.
+- **Constructor references** to a type from another file (`::MyType`) resolve.
+- A type used only as a **generic type argument** works — `enumValues<Suit>()` / `enumValueOf<Suit>()` over an `enum` in another file no longer hard-fails.
+- Reading a nested **`object`** (e.g. a sealed interface's `State.Loading`) works even while indexing is still warming up.
+- **Reified** type parameters now work in inline **member** functions (an `x is T` inside an inline member), threaded from the call site.
+- Nested library/type names resolve whether written with a `.` or a `$`.
+- A **`Color` read from state** (`animateColorAsState`, `State<Color>.value`, …) applied with `Modifier.background(color)` now renders instead of erroring.
+
+**CODE EDITOR — fewer false errors (Kotlin)**
+- `val button: Button = findViewById(R.id.…)` and `ViewGroup.LayoutParams` assignments no longer show a spurious **"type mismatch"**.
+- `Button(onClick = { }) { Text(…) }` and similar no longer falsely flag **"Composable invocations may only happen from a Composable"** when the callee is a library or not-yet-resolved function.
+- No more false **"only safe (?.) calls allowed"** after a `require(x != null)` / `check(x != null)` precondition.
+- No more false **"conflicting import"** on two same-named functions (`import a.process; import b.process` is a legal overload set); a real type clash still reports.
+- No more false **"nothing to override"** on an `override` of a framework member (e.g. `override fun onDraw(…)` on a `View` subclass).
+
+**CODE EDITOR — completion & Java**
+- **Import completion**: selecting a package now inserts the trailing `.` so you keep typing the next segment, and a package's **top-level functions and properties** are suggested after `import your.pkg.` (previously only classes were).
+- Java **`@`-annotation completion** now offers annotations from your libraries, not just framework ones.
+- Java errors in a file that depends on **another unsaved file** now refresh correctly — no need to save the dependency first.
+- The **"avoid System.out for logging"** hint no longer misfires on your own members like `System.outLog.append(…)`.
+
+**ANDROID BUILD**
+- Manifest and XML writing now uses an **on-device-safe** path, fixing a build failure on some devices; and a **bundletool** failure now surfaces a clear, actionable error.
+- Added an experimental **R8-minified** build variant, and trimmed dead dex stubs from app bundles.
+
+**UNDER THE HOOD**
+- Disabling a built-in plugin (for example the **AI assistant**) now also removes its **UI**, not just its engine — one unified enable/disable per feature.
+
+Full changelog: https://github.com/tyron12233/CodeAssist/releases/tag/v3.7.2

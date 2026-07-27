@@ -1,0 +1,24 @@
+# 🚀 CodeAssist 3.7.5
+
+**COMPOSE PREVIEW**
+- **Material 3 Expressive** previews now render — components and themes built on the expressive APIs (`MaterialExpressiveTheme`, `MotionScheme.expressive()`, ...) no longer fail with a "no method" error.
+- A theme wrapper that forwards its `content` (e.g. `MyTheme { ... }` with a defaulted first parameter like `darkTheme`) now passes the content through correctly instead of crashing on a null slot.
+- `DisposableEffect { ... onDispose { } }` inside a previewed library composable no longer crashes.
+- A preview that keeps re-rendering itself in a loop (a library that writes state while composing) no longer **freezes the IDE** — it stops with a clear error and the IDE stays responsive.
+
+**UI**
+- The left and right sidebars are unified into **plugin-driven activity rails** (IntelliJ / VS Code style), so tools contribute their own rail entries.
+
+**CODE INTELLIGENCE**
+- **Kotlin project source is now indexed across languages** — Kotlin declarations surface where you need them (including from Java files).
+- Code completion no longer suggests **`private` top-level functions/composables from other files** (they are file-scoped); your own file's still resolve as before.
+- Fixed an inlay-hint glitch for implicit lambda parameters.
+
+**AI ASSISTANT**
+- New **Antigravity (Google)** provider with in-app Google sign-in.
+
+**RELIABILITY**
+- Large libraries such as **`material-icons-extended`** no longer fail to load in the editor (more robust AAR unpacking), and a single unreadable dependency jar no longer breaks code analysis for the whole module.
+- On-device projects fall back to internal storage when external storage is unavailable.
+
+Full changelog: https://github.com/tyron12233/CodeAssist/releases/tag/v3.7.5
