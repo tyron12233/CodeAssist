@@ -139,14 +139,17 @@ fun SearchScreen(
         }
 
         // Tabs
-        Row(Modifier.fillMaxWidth().padding(horizontal = 14.dp), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+        Row(
+            Modifier.fillMaxWidth().padding(start = 14.dp, end = 14.dp, bottom = 10.dp),
+            horizontalArrangement = Arrangement.spacedBy(6.dp),
+        ) {
             SearchTab.entries.forEach { t -> TabPill(t, t == tab) { tab = t } }
         }
 
         // Text-search options (only on the Text tab)
         if (tab == SearchTab.Text) {
             Row(
-                Modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = 10.dp),
+                Modifier.fillMaxWidth().padding(start = 14.dp, end = 14.dp, bottom = 10.dp),
                 horizontalArrangement = Arrangement.spacedBy(6.dp),
             ) {
                 OptionToggle("Aa", "Case sensitive", options.caseSensitive) { options = options.copy(caseSensitive = it) }

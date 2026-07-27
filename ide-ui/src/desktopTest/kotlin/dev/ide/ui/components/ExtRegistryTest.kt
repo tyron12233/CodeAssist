@@ -78,6 +78,20 @@ class ExtRegistryTest {
         }
     }
 
+    /** A LEFT-anchored tool window is available to the left activity rail through the same registry the
+     *  built-in Files/Search/Structure/Source panels and the RIGHT/BOTTOM windows use (see `buildLeftPanels`). */
+    @Test
+    fun leftToolWindowRegisters() {
+        val reg = ToolWindowRegistry.register(
+            ToolWindowContribution("test.explorer", "Explorer", "folder", ToolWindowAnchor.LEFT) {}
+        )
+        try {
+            assertTrue(ToolWindowRegistry.forAnchor(ToolWindowAnchor.LEFT).any { it.id == "test.explorer" })
+        } finally {
+            reg.dispose()
+        }
+    }
+
     @OptIn(ExperimentalComposeUiApi::class)
     @Test
     fun renderConsoleWithPluginTab() {

@@ -42,6 +42,7 @@ import dev.ide.ui.editor.preview.isMarkdownPreviewable
 import dev.ide.ui.editor.preview.isPreviewable
 import dev.ide.ui.ext.ToolWindowAnchor
 import dev.ide.ui.ext.ToolWindowRegistry
+import dev.ide.ui.ext.UiPluginHost
 import dev.ide.ui.theme.Ca
 import dev.ide.ui.theme.Motion
 import kotlinx.coroutines.launch
@@ -58,7 +59,7 @@ internal fun EditorCenter(
     compact: Boolean,
     modifier: Modifier,
     /** Live navigator-open fraction from the compact layout's push drawer (gesture-accurate); null on
-     *  layouts without one — the top-bar icon then eases 0↔1 off [IdeUiState.navOpen] instead. */
+     *  layouts without one — the top-bar icon then eases 0↔1 off [IdeUiState.leftOpen] instead. */
     navFraction: (() -> Float)? = null,
 ) {
     val project = state.backend.project
@@ -102,16 +103,20 @@ internal fun EditorCenter(
     }
 
     val easedNav by animateFloatAsState(
-        if (state.navOpen) 1f else 0f,
+        if (state.leftOpen) 1f else 0f,
         tween(Motion.BASE, easing = Motion.quiet),
         label = "navIconFraction",
     )
+    // The primary RIGHT tool window (if any). On a phone the top bar shows one button to open its swipe-in
+    // drawer (the desktop uses the right activity rail instead); the compact branch of EditorTopBar renders it.
+    UiPluginHost.ensureLoaded()
+    val rightPrimary = ToolWindowRegistry.forAnchor(ToolWindowAnchor.RIGHT).firstOrNull()
     Box(modifier) {
         Column(Modifier.fillMaxSize().background(Ca.colors.editorBg)) {
             EditorTopBar(
                 projectName = project.name,
                 indexStatus = indexStatus,
-                onToggleNav = { state.navOpen = !state.navOpen },
+                onToggleNav = { state.toggleLeftSidebar() },
                 navFraction = navFraction ?: { easedNav },
                 onOpenPalette = { state.paletteOpen = true },
                 runTasks = { state.backend.build.runTasks() },
@@ -137,9 +142,10 @@ internal fun EditorCenter(
                 onOptimizeImports = { if (active != null) optimizeImportsEpoch++ },
                 onToggleConsole = { state.consoleOpen = !state.consoleOpen },
                 consoleOpen = state.consoleOpen,
-                rightTools = ToolWindowRegistry.forAnchor(ToolWindowAnchor.RIGHT),
-                openRightTool = state.openRightTool,
-                onToggleRightTool = { state.toggleRightTool(it) },
+                rightToolIconId = rightPrimary?.iconId,
+                rightToolTitle = rightPrimary?.title ?: "",
+                rightToolOpen = state.selectedRightPanel != null,
+                onToggleRightTool = { rightPrimary?.let { state.toggleRightPanel(it.id) } },
                 inlayHintsOn = state.inlayHintsEnabled,
                 onToggleInlayHints = { state.inlayHintsEnabled = !state.inlayHintsEnabled },
                 showPreview = hasPreview,
@@ -192,8 +198,8 @@ internal fun EditorCenter(
                 // destination sheet (either layout), or — on a phone — the file-tree / build-console bottom sheets
                 // (on desktop those are docked side panes that leave the editor interactive). A covered editor
                 // dismisses its floating popups so they don't hang over the overlay.
-                val editorObscured = state.paletteOpen || state.sheetDest != null ||
-                        (compact && (state.navOpen || state.consoleOpen))
+                val editorObscured = state.paletteOpen || state.moreOpen ||
+                        (compact && (state.leftOpen || state.consoleOpen))
                 val codeSurface: @Composable (Modifier) -> Unit = { mod ->
                     CodeEditor(
                         path = active.path,
@@ -285,8 +291,6 @@ internal fun EditorCenter(
                 NoOpenFilesView(Modifier.weight(1f).fillMaxWidth())
             }
         }
-        // In-file structure / outline overlay (opened from the breadcrumb tap or Ctrl-F12).
-        active?.let { StructureSheet(state, it) }
     }
 }
 
