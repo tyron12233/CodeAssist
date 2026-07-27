@@ -81,7 +81,7 @@ class KotlinInlayHintService(
             val lBrace = lambda.functionLiteral.lBrace // always present on a parsed lambda
             out += InlayHint(
                 lBrace.textRange.endOffset,
-                listOf(InlayHintPart("it: " + it), InlayHintPart(" ->")),
+                listOf(InlayHintPart("it: $it"), InlayHintPart(" ->")),
                 InlayHintKind.TYPE, tooltip = it.qualifiedName, paddingLeft = true, paddingRight = true,
             )
         } else {
