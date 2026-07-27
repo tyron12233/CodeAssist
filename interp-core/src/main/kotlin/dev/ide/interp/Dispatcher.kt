@@ -51,12 +51,29 @@ private fun nestedNameCandidates(fqn: String): List<String> {
 }
 
 /** Whether a JVM method/field name corresponds to the Kotlin name [kotlinName]. Kotlin MANGLES the JVM name
- *  of anything that takes/returns an inline value class (`Color`, `Dp`, `TextUnit`, …) to `name-<hash>` — so
- *  the literal name won't match; the `name-` prefix does. The mangling hash never contains `$`, so a `$`
- *  excludes the OTHER synthetics that share the prefix — `getRed-<hash>$annotations` (returns void) and
- *  `foo-<hash>$default` — which must NOT be mistaken for the real member. */
-internal fun mangledNameMatches(jvmName: String, kotlinName: String): Boolean =
-    jvmName == kotlinName || (jvmName.startsWith("$kotlinName-") && '$' !in jvmName)
+ *  in two ways this must see through:
+ *   - a member that takes/returns an inline value class (`Color`, `Dp`, `TextUnit`, …) → `name-<hash>`; the
+ *     hash never contains `$`, so a `$` excludes the sibling synthetics that share the prefix
+ *     (`getRed-<hash>$annotations` (returns void), `foo-<hash>$default`);
+ *   - an `internal` member → `name$<module>` (Material3's `MotionScheme.Companion.expressive()` compiles to
+ *     `expressive$material3`), optionally layered on the value-class form (`name-<hash>$<module>`).
+ *  For the internal case the part before the module suffix must be the Kotlin name (or its value-class-mangled
+ *  form) and the suffix must be a SINGLE segment that isn't a known compiler synthetic (`default`/`annotations`
+ *  have their own handling and must not be read as a real member). */
+internal fun mangledNameMatches(jvmName: String, kotlinName: String): Boolean {
+    if (jvmName == kotlinName) return true
+    if (jvmName.startsWith("$kotlinName-") && '$' !in jvmName) return true
+    val dollar = jvmName.indexOf('$')
+    if (dollar <= 0) return false
+    val base = jvmName.substring(0, dollar)
+    val suffix = jvmName.substring(dollar + 1)
+    val baseMatches = base == kotlinName || base.startsWith("$kotlinName-")
+    return baseMatches && '$' !in suffix && suffix !in NON_INTERNAL_DOLLAR_SUFFIXES
+}
+
+/** The `$`-suffixed synthetics [mangledNameMatches] must NOT treat as an `internal` module suffix — they are
+ *  compiler-generated siblings of a real member (handled elsewhere), not the member itself. */
+private val NON_INTERNAL_DOLLAR_SUFFIXES = setOf("default", "annotations")
 
 /** Bound on how deep a value class can nest another (`Color`→`ULong`→`long`) when unboxing to a primitive
  *  param — real chains are 1–2 deep; the cap just stops a pathological/cyclic case. */
@@ -98,12 +115,21 @@ object OmittedArg
  * Reorder evaluated [args] (in source order, 1:1 with [rawArgs]) into the callee's declared parameter order
  * when the call uses NAMED arguments, returning a dense list of size [paramNames].size with [OmittedArg] in
  * every slot no argument targets. A trailing lambda still binds to the LAST parameter (Kotlin's
- * trailing-lambda rule). Returns [args] unchanged when there are no named arguments, the parameter names
- * aren't known, or an argument can't be mapped — so the positional fast paths stay untouched, and a second
- * call on an already-reordered list (size ≠ [rawArgs].size) is a no-op.
+ * trailing-lambda rule). Returns [args] unchanged when the parameter names aren't known, an argument can't be
+ * mapped, or the call is purely positional with nothing to remap — so the positional fast paths stay
+ * untouched, and a second call on an already-reordered list (size ≠ [rawArgs].size) is a no-op.
+ *
+ * A purely POSITIONAL call is also reordered when it ends in a syntactic trailing lambda that must SKIP
+ * defaulted parameters to reach the last one: `Theme { content }` for `fun Theme(dark: Boolean = …, content:
+ * () -> Unit)` binds the lambda to `content` and defaults `dark` — not the lambda to `dark` (which would leave
+ * the required `content` null). Only when fewer args than parameters are supplied; a fully-supplied positional
+ * call already lines up 1:1, so it stays on the untouched fast path.
  */
 fun reorderNamedArgs(paramNames: List<String>, rawArgs: List<RArg>, args: List<Any?>): List<Any?> {
-    if (paramNames.isEmpty() || args.size != rawArgs.size || rawArgs.none { it.name != null }) return args
+    if (paramNames.isEmpty() || args.size != rawArgs.size) return args
+    val hasNamed = rawArgs.any { it.name != null }
+    val trailingLambdaSkipsDefaults = rawArgs.lastOrNull()?.trailingLambda == true && args.size < paramNames.size
+    if (!hasNamed && !trailingLambdaSkipsDefaults) return args
     val n = paramNames.size
     val nameToIndex = HashMap<String, Int>(n * 2)
     paramNames.forEachIndexed { i, nm -> nameToIndex.putIfAbsent(nm, i) }
