@@ -1,8 +1,12 @@
 package dev.ide.ui.editor
 
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -29,9 +33,14 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.input.key.KeyEventType
 import androidx.compose.ui.input.key.key
@@ -50,6 +59,10 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.PopupPositionProvider
 import dev.ide.ui.backend.UiCompletionItem
+import dev.ide.ui.components.entrancePop
+import dev.ide.ui.components.pressScale
+import dev.ide.ui.theme.Motion
+import kotlinx.coroutines.delay
 import dev.ide.ui.backend.UiQuickDoc
 import dev.ide.ui.backend.UiSeverity
 import dev.ide.ui.generated.resources.Res
@@ -288,6 +301,15 @@ internal fun DiagnosticChip(severity: UiSeverity, unused: Boolean, message: Stri
     }
 }
 
+/** Delay step (ms) between the toolbar's items cascading in when it appears. */
+private const val ToolbarItemStaggerMs = 30
+
+/**
+ * The floating touch selection toolbar: Copy / Cut / Paste / Select all, then (past a divider) the quick-doc
+ * and quick-fix icons. A frosted-glass pill that pops up from the selection ([entrancePop]); its items cascade
+ * in left-to-right, and each gives a scale + accent-tint press response. Clipboard actions appear only with a
+ * live selection; the two utility icons only when relevant.
+ */
 @Composable
 internal fun SelectionToolbar(
     hasSelection: Boolean,
@@ -299,53 +321,101 @@ internal fun SelectionToolbar(
     onSelectAll: () -> Unit,
     onDocs: (() -> Unit)? = null,
 ) {
+    val shape = RoundedCornerShape(Ca.radius.pill)
     Row(
         Modifier
-            .background(Ca.colors.surface2, RoundedCornerShape(Ca.radius.sm))
-            .padding(horizontal = 4.dp, vertical = 2.dp),
-        horizontalArrangement = Arrangement.spacedBy(2.dp),
+            .entrancePop()
+            .shadow(12.dp, shape, clip = false)
+            .background(Ca.colors.glassThick, shape)
+            .border(1.dp, Ca.colors.glassEdge, shape)
+            .padding(horizontal = 4.dp, vertical = 3.dp),
+        horizontalArrangement = Arrangement.spacedBy(1.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
+        var i = 0
         if (hasSelection) {
-            ToolbarAction(stringResource(Res.string.copy), onCopy)
-            ToolbarAction(stringResource(Res.string.edoverlay_cut), onCut)
+            ToolbarTextItem(stringResource(Res.string.copy), i++, onCopy)
+            ToolbarTextItem(stringResource(Res.string.edoverlay_cut), i++, onCut)
         }
-        ToolbarAction(stringResource(Res.string.edoverlay_paste), onPaste)
-        ToolbarAction(stringResource(Res.string.edoverlay_select_all), onSelectAll)
+        ToolbarTextItem(stringResource(Res.string.edoverlay_paste), i++, onPaste)
+        ToolbarTextItem(stringResource(Res.string.edoverlay_select_all), i++, onSelectAll)
+        if (onDocs != null || hasActions) ToolbarDivider()
         // Quick documentation for the symbol under the caret (the touch path for Ctrl-Q).
         if (onDocs != null) {
-            Box(
-                Modifier.clickable(onClick = onDocs).padding(horizontal = 9.dp, vertical = 6.dp),
-                contentAlignment = Alignment.Center,
-            ) {
-                Icon(CaIcons.info, stringResource(Res.string.edoverlay_quick_documentation), Modifier.size(16.dp), tint = Ca.colors.textSecondary)
-            }
+            ToolbarIconItem(CaIcons.info, stringResource(Res.string.edoverlay_quick_documentation), i++, Ca.colors.textSecondary, onDocs)
         }
         // Quick-fixes / intentions for the caret position, when any exist.
         if (hasActions) {
-            Box(
-                Modifier
-                    .clickable(onClick = onActions)
-                    .padding(horizontal = 9.dp, vertical = 6.dp),
-                contentAlignment = Alignment.Center,
-            ) {
-                Icon(CaIcons.lightbulb, stringResource(Res.string.edoverlay_quick_actions), Modifier.size(16.dp), tint = Ca.colors.warning)
-            }
+            ToolbarIconItem(CaIcons.lightbulb, stringResource(Res.string.edoverlay_quick_actions), i++, Ca.colors.warning, onActions)
         }
     }
 }
 
 @Composable
-private fun ToolbarAction(label: String, onClick: () -> Unit) {
-    Text(
-        label,
-        color = Ca.colors.textPrimary,
-        style = Ca.type.caption,
-        fontWeight = FontWeight.Medium,
-        modifier = Modifier
-            .clickable { onClick() }
-            .padding(horizontal = 10.dp, vertical = 7.dp),
+private fun ToolbarTextItem(label: String, index: Int, onClick: () -> Unit) {
+    val interaction = remember { MutableInteractionSource() }
+    val pressed by interaction.collectIsPressedAsState()
+    Box(
+        Modifier
+            .toolbarItemEntrance(index)
+            .pressScale(interaction)
+            .clip(RoundedCornerShape(Ca.radius.xs))
+            .background(if (pressed) Ca.colors.accentSoft else Color.Transparent)
+            .clickable(interaction, indication = null, onClick = onClick)
+            .padding(horizontal = 11.dp, vertical = 7.dp),
+        contentAlignment = Alignment.Center,
+    ) {
+        Text(
+            label,
+            color = if (pressed) Ca.colors.accent else Ca.colors.textPrimary,
+            style = Ca.type.caption,
+            fontWeight = FontWeight.Medium,
+            maxLines = 1,
+        )
+    }
+}
+
+@Composable
+private fun ToolbarIconItem(icon: ImageVector, description: String, index: Int, tint: Color, onClick: () -> Unit) {
+    val interaction = remember { MutableInteractionSource() }
+    val pressed by interaction.collectIsPressedAsState()
+    Box(
+        Modifier
+            .toolbarItemEntrance(index)
+            .pressScale(interaction)
+            .clip(RoundedCornerShape(Ca.radius.xs))
+            .background(if (pressed) Ca.colors.accentSoft else Color.Transparent)
+            .clickable(interaction, indication = null, onClick = onClick)
+            .padding(horizontal = 9.dp, vertical = 6.dp),
+        contentAlignment = Alignment.Center,
+    ) {
+        Icon(icon, description, Modifier.size(16.dp), tint = if (pressed) Ca.colors.accent else tint)
+    }
+}
+
+/** A thin vertical rule separating the clipboard actions from the utility (docs / quick-fix) icons. */
+@Composable
+private fun ToolbarDivider() {
+    Box(Modifier.padding(horizontal = 3.dp).width(1.dp).height(18.dp).background(Ca.colors.separator))
+}
+
+/** Per-item cascade: fade + a slight rise, delayed by [index] steps, so the items flow in left-to-right. */
+@Composable
+private fun Modifier.toolbarItemEntrance(index: Int): Modifier {
+    var appeared by remember { mutableStateOf(false) }
+    LaunchedEffect(Unit) {
+        if (index > 0) delay(index.toLong() * ToolbarItemStaggerMs)
+        appeared = true
+    }
+    val progress by animateFloatAsState(
+        targetValue = if (appeared) 1f else 0f,
+        animationSpec = tween(durationMillis = Motion.FAST, easing = Motion.quiet),
+        label = "toolbarItem",
     )
+    return this.graphicsLayer {
+        alpha = progress
+        translationY = (1f - progress) * 5.dp.toPx()
+    }
 }
 
 // ---- popup positioning ----

@@ -106,8 +106,11 @@ internal fun SelectionToolbarLayer(
     if (!(interaction.handlesVisible && interaction.lastInputWasTouch)) return
     val density = LocalDensity.current
     @Suppress("DEPRECATION") val clipboard = LocalClipboardManager.current
-    val selMin = session.selection.min
-    val (_, selX, selTop) = geometry.caretGeometry(selMin)
+    // Anchor at the ACTIVE end of the selection (`end` is always the moving handle — see the handle-drag in
+    // EditorInputModifier), so the toolbar follows the finger and lands where the user finished selecting
+    // rather than staying back at where the selection started.
+    val selActive = session.selection.end
+    val (_, selX, selTop) = geometry.caretGeometry(selActive)
     val gapPx = with(density) { 8.dp.roundToPx() }
     Popup(
         popupPositionProvider = remember(selX, selTop, gapPx) {
