@@ -518,12 +518,17 @@ internal fun KotlinResolver.topLevelInScope(sym: KotlinSymbol, ctx: FileContext)
 }
 
 /** Whether [name] is a member (function/property or a constructor `val/var` param) of any class enclosing
- *  [offset] in the live buffer. Resolves same-file members the disk-based symbol service can't see yet. */
+ *  [offset] in the live buffer — including an enclosing enum's own CONSTANTS, which are bare-accessible within
+ *  its body (`fun opp() = LEFT`, `when (this) { LEFT -> … }`). Resolves same-file members the disk-based symbol
+ *  service can't see yet. */
 internal fun KotlinResolver.enclosingClassMembersContain(offset: Int, name: String): Boolean {
     var node: PsiElement? = elementAt(offset)
     while (node != null) {
         if (node is KtClassOrObject) {
-            if (node.declarations.any { (it is KtNamedFunction && it.name == name) || (it is KtProperty && it.name == name) }) return true
+            if (node.declarations.any {
+                    (it is KtNamedFunction && it.name == name) || (it is KtProperty && it.name == name) ||
+                        (it is org.jetbrains.kotlin.psi.KtEnumEntry && it.name == name)
+                }) return true
             if (node.primaryConstructorParameters.any { it.hasValOrVar() && it.name == name }) return true
         }
         node = node.parent

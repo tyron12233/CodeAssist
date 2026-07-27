@@ -56,6 +56,11 @@ class KotlinWorkspaceIndexesTest {
         assertEquals("object", out["Registry"]?.first()?.kind, "a Kotlin object keeps its own kind")
         // Nested types carry their true (nested-aware) FQN, keyed by simple name.
         assertEquals("com.example.Greeter.Listener", out["Listener"]?.first()?.fqn)
+        // An enum CONSTANT is a value of the enum type, NOT a classifier — indexing it as a source class made
+        // `isKnownType("Color.RED")` true, so a `Color.RED` use mis-resolved to a classifier and drew a spurious
+        // "does not have a companion object, and thus must be initialized here" error.
+        assertTrue("RED" !in out.keys, "an enum constant is not a class name; got ${out.keys}")
+        assertTrue("GREEN" !in out.keys, "an enum constant is not a class name; got ${out.keys}")
     }
 
     @Test
