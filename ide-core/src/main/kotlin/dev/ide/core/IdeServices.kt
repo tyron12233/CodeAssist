@@ -2149,6 +2149,47 @@ class IdeServices private constructor(
         kotlinEditor.implementationLocation(contextFile, fqn)
 
     /**
+     * Source go-to targets for the symbol at [offset] in [file]'s live buffer ([text]), for the requested
+     * navigation [kind] — Declaration / Implementation(s) / Type Declaration / Super. Kotlin source only;
+     * a [dev.ide.lang.kotlin.NavKind.DECLARATION] that resolves no code symbol falls back to the Android
+     * resource reference under the caret (so ⌘B still jumps `@string/…` / `R.…`). Empty when nothing applies.
+     */
+    fun navigationTargets(
+        file: Path,
+        text: String,
+        offset: Int,
+        kind: dev.ide.lang.kotlin.NavKind,
+    ): List<dev.ide.lang.kotlin.NavTarget> {
+        val targets = kotlinEditor.navigationTargets(file, text, offset, kind)
+        if (targets.isNotEmpty() || kind != dev.ide.lang.kotlin.NavKind.DECLARATION) return targets
+        return resourceDeclaration(file, text, offset) ?: emptyList()
+    }
+
+    /**
+     * The navigation actions applicable at [offset] in [file]'s buffer — each with its precomputed source
+     * targets — so the Go-to menu shows only what's usable. Declaration also covers an Android resource
+     * reference (`@type/name` / `R.type.name`) when no code symbol resolves. In [dev.ide.lang.kotlin.NavKind]
+     * order. Empty when nothing applies.
+     */
+    fun navigationOptions(
+        file: Path,
+        text: String,
+        offset: Int,
+    ): List<Pair<dev.ide.lang.kotlin.NavKind, List<dev.ide.lang.kotlin.NavTarget>>> {
+        val opts = kotlinEditor.navigationOptions(file, text, offset).toMutableList()
+        if (opts.none { it.first == dev.ide.lang.kotlin.NavKind.DECLARATION }) {
+            resourceDeclaration(file, text, offset)?.let { opts.add(dev.ide.lang.kotlin.NavKind.DECLARATION to it) }
+        }
+        return opts.sortedBy { it.first.ordinal }
+    }
+
+    /** A single-element DECLARATION target list for the Android resource reference under [offset], or null. */
+    private fun resourceDeclaration(file: Path, text: String, offset: Int): List<dev.ide.lang.kotlin.NavTarget>? =
+        resources.definitionAt(file, text, offset)?.let { (p, o) ->
+            listOf(dev.ide.lang.kotlin.NavTarget(store.vfs.fileFor(p), o, p.fileName.toString(), "resource"))
+        }
+
+    /**
      * Run the `@Preview` composable [functionName] in [file] (buffer [text]): lower the file, verify the
      * preview is fully interpretable, then render it through the injected [composePreviewRunner] (on device)
      * — or, with no runner wired, report that it is interpretable.

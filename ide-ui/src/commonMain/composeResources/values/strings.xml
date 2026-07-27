@@ -539,6 +539,14 @@ We never collect your code, file or project names, which features you use, or an
     <string name="edoverlay_select_all">Select all</string>
     <string name="edoverlay_quick_documentation">Quick documentation</string>
     <string name="edoverlay_quick_actions">Quick actions</string>
+    <string name="nav_go_to">Go to</string>
+    <string name="nav_declaration">Declaration</string>
+    <string name="nav_implementations">Implementations</string>
+    <string name="nav_type_declaration">Type declaration</string>
+    <string name="nav_super">Super</string>
+    <string name="nav_none">Nothing found in source.</string>
+    <string name="ctxmenu_actions">Actions</string>
+    <string name="ctxmenu_intentions">Intentions</string>
 
     <!-- dialogs: NewFileDialog (enums hold StringResource label) -->
     <string name="newfile_title">New file</string>

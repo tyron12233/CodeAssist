@@ -24,6 +24,9 @@ import dev.ide.ui.backend.UiCompletionItem
 import dev.ide.ui.backend.UiCompletionKind
 import dev.ide.ui.backend.UiCompletionResult
 import dev.ide.ui.backend.UiDefinition
+import dev.ide.ui.backend.UiNavKind
+import dev.ide.ui.backend.UiNavOption
+import dev.ide.ui.backend.UiNavTarget
 import dev.ide.ui.backend.UiFileSymbol
 import dev.ide.ui.backend.UiInheritorMarker
 import dev.ide.ui.backend.UiInheritorTarget
@@ -85,6 +88,31 @@ internal class EditorBackend(private val ctx: BackendContext) : EditorService {
                 Paths.get(path), text, offset
             )
         }?.let { (p, o) -> UiDefinition(p.toString(), o) }
+
+    override suspend fun navigationTargets(path: String, text: String, offset: Int, kind: UiNavKind): List<UiNavTarget> =
+        withContext(ctx.engineDispatcher) {
+            ctx.services.navigationTargets(Paths.get(path), text, offset, toNavKind(kind))
+        }.map { UiNavTarget(it.file.path, it.offset, it.label, it.kind) }
+
+    override suspend fun navigationOptions(path: String, text: String, offset: Int): List<UiNavOption> =
+        withContext(ctx.engineDispatcher) { ctx.services.navigationOptions(Paths.get(path), text, offset) }
+            .map { (kind, targets) ->
+                UiNavOption(fromNavKind(kind), targets.map { UiNavTarget(it.file.path, it.offset, it.label, it.kind) })
+            }
+
+    private fun toNavKind(kind: UiNavKind): dev.ide.lang.kotlin.NavKind = when (kind) {
+        UiNavKind.DECLARATION -> dev.ide.lang.kotlin.NavKind.DECLARATION
+        UiNavKind.IMPLEMENTATION -> dev.ide.lang.kotlin.NavKind.IMPLEMENTATION
+        UiNavKind.TYPE_DECLARATION -> dev.ide.lang.kotlin.NavKind.TYPE_DECLARATION
+        UiNavKind.SUPER -> dev.ide.lang.kotlin.NavKind.SUPER
+    }
+
+    private fun fromNavKind(kind: dev.ide.lang.kotlin.NavKind): UiNavKind = when (kind) {
+        dev.ide.lang.kotlin.NavKind.DECLARATION -> UiNavKind.DECLARATION
+        dev.ide.lang.kotlin.NavKind.IMPLEMENTATION -> UiNavKind.IMPLEMENTATION
+        dev.ide.lang.kotlin.NavKind.TYPE_DECLARATION -> UiNavKind.TYPE_DECLARATION
+        dev.ide.lang.kotlin.NavKind.SUPER -> UiNavKind.SUPER
+    }
 
     override suspend fun inheritorMarkers(path: String, text: String): List<UiInheritorMarker> =
         withContext(ctx.engineDispatcher) { ctx.services.inheritorMarkers(Paths.get(path), text) }

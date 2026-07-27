@@ -1280,6 +1280,17 @@ data class UiLayoutElement(
 /** A go-to-definition target: open [path] and move the caret to [offset]. */
 data class UiDefinition(val path: String, val offset: Int)
 
+/** The source navigation actions the editor offers (Kotlin sources for now). */
+enum class UiNavKind { DECLARATION, IMPLEMENTATION, TYPE_DECLARATION, SUPER }
+
+/** One navigation destination: open [path] at [offset]. [label] names it in the multi-target picker and
+ *  [kind] (a lowercase symbol/declaration kind, e.g. "class"/"method") picks its icon. */
+data class UiNavTarget(val path: String, val offset: Int, val label: String, val kind: String)
+
+/** A navigation action that's APPLICABLE at the caret: its [kind] plus the source [targets] it resolves to
+ *  (precomputed, so the Go-to menu shows only usable actions and a pick is instant). */
+data class UiNavOption(val kind: UiNavKind, val targets: List<UiNavTarget>)
+
 /** A gutter "implementations / is subclassed" marker: [offset] anchors the type declaration's name;
  *  [targets] are its direct inheritors. [isInterface] picks the glyph (implemented vs subclassed). */
 data class UiInheritorMarker(val offset: Int, val isInterface: Boolean, val targets: List<UiInheritorTarget>)

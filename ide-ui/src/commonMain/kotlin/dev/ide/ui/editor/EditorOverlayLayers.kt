@@ -100,8 +100,8 @@ internal fun SelectionToolbarLayer(
     session: EditorSession,
     geometry: EditorGeometry,
     interaction: EditorInteraction,
-    acts: EditorActionsController,
     onDocs: () -> Unit,
+    onMenu: () -> Unit,
 ) {
     if (!(interaction.handlesVisible && interaction.lastInputWasTouch)) return
     val density = LocalDensity.current
@@ -121,10 +121,6 @@ internal fun SelectionToolbarLayer(
         Box(Modifier.onSizeChanged { interaction.selectionToolbarHeightPx = it.height }) {
             SelectionToolbar(
                 hasSelection = !session.selection.collapsed,
-                // Keep quick-FIXES out of this clipboard toolbar: on a diagnostic the gutter lightbulb owns them, so
-                // the toolbar stays Copy/Cut/Paste only. Off a diagnostic it still surfaces caret INTENTIONS here.
-                hasActions = acts.available.isNotEmpty() && acts.caretDiagnostic == null,
-                onActions = { interaction.handlesVisible = false; acts.openMenu() },
                 onCopy = {
                     session.selectedText()?.let { clipboard.setText(AnnotatedString(it)) }
                     interaction.handlesVisible = false
@@ -139,6 +135,7 @@ internal fun SelectionToolbarLayer(
                 },
                 onSelectAll = { session.selectAll() },
                 onDocs = { interaction.handlesVisible = false; onDocs() },
+                onMenu = onMenu,
             )
         }
     }

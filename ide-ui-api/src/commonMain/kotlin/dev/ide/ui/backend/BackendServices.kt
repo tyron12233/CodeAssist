@@ -147,6 +147,14 @@ interface EditorService {
     /** Go-to-definition for the symbol/reference at [offset], or null. */
     suspend fun definitionAt(path: String, text: String, offset: Int): UiDefinition? = null
 
+    /** Source go-to targets for the symbol at [offset] ([kind]: declaration / implementation / type / super).
+     *  0 → nothing found; 1 → navigate; >1 → the caller shows a picker. Kotlin source only for now. */
+    suspend fun navigationTargets(path: String, text: String, offset: Int, kind: UiNavKind): List<UiNavTarget> = emptyList()
+
+    /** The navigation actions APPLICABLE at [offset] (each with its resolved targets) — so the Go-to menu shows
+     *  only usable actions. Empty when nothing applies. Kotlin source only for now. */
+    suspend fun navigationOptions(path: String, text: String, offset: Int): List<UiNavOption> = emptyList()
+
     /** Gutter inheritor ("implementations") markers for [text] — one per inheritable type with direct subtypes.
      *  Empty for languages/files without the subtype relation indexed. */
     suspend fun inheritorMarkers(path: String, text: String): List<UiInheritorMarker> = emptyList()
