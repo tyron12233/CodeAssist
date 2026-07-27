@@ -14,6 +14,7 @@ import java.util.zip.ZipEntry
 import java.util.zip.ZipOutputStream
 import kotlin.io.path.createTempDirectory
 import kotlin.test.Test
+import kotlin.test.assertContentEquals
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertNotNull
@@ -183,6 +184,30 @@ class MavenDependencyResolverTest {
         // the AAR's res/ is exploded next to classes.jar, for the IDE's resource model
         val res = Path.of(art.classesRoot.path).parent.resolve("res/values/strings.xml")
         assertTrue(Files.isRegularFile(res), "AAR res/ should be extracted next to classes.jar: $res")
+    }
+
+    @Test
+    fun extractsAClassesJarStoredWithADataDescriptor() {
+        // The FastJarFileSystem preview crash class: an AAR whose nested `classes.jar` is STORED (a jar is
+        // already compressed) with a trailing DATA DESCRIPTOR. `ZipInputStream` (the old extractor) throws
+        // "only DEFLATED entries can have EXT descriptor" on that shape / can't find the entry boundary;
+        // `ZipFile` reads it by its central-directory size, byte-exact. The exploded classes.jar must be a
+        // valid, openable archive with the nested jar's entries.
+        val inner = nestedClassesJar()
+        val files = FakeRepo()
+        files.put("iconpack", "1.0", packaging = "aar", jarBytes = aarWithStoredDataDescriptorClassesJar(inner))
+        val (resolver, _) = newResolver(files)
+
+        val result = runBlocking { resolver.resolve(listOf(coord("iconpack", "1.0")), listOf(repo), ConflictPolicy.NEWEST, noProgress) }
+        assertTrue(result.unresolved.isEmpty(), "unexpected unresolved: ${result.unresolved}")
+        val classesJar = Path.of(result.resolved.single().classesRoot.path)
+        assertTrue(Files.isRegularFile(classesJar), "classes.jar must be extracted")
+        assertContentEquals(inner, Files.readAllBytes(classesJar), "the STORED+data-descriptor classes.jar must extract byte-exact")
+        val names = mutableListOf<String>()
+        java.util.zip.ZipFile(classesJar.toFile()).use { zf ->
+            val e = zf.entries(); while (e.hasMoreElements()) names.add(e.nextElement().name)
+        }
+        assertEquals(setOf("pkg/Foo.class", "pkg/Bar.class"), names.toSet())
     }
 
     @Test
@@ -1146,6 +1171,49 @@ class MavenDependencyResolverTest {
         val out = java.io.ByteArrayOutputStream()
         ZipOutputStream(out).use { }
         return out.toByteArray()
+    }
+
+    /** A small nested `classes.jar` with real entries (the content the exploded jar must reproduce). */
+    private fun nestedClassesJar(): ByteArray {
+        val out = java.io.ByteArrayOutputStream()
+        ZipOutputStream(out).use { z ->
+            z.putNextEntry(ZipEntry("pkg/Foo.class")); z.write(ByteArray(200) { it.toByte() }); z.closeEntry()
+            z.putNextEntry(ZipEntry("pkg/Bar.class")); z.write(ByteArray(200) { (it * 2).toByte() }); z.closeEntry()
+        }
+        return out.toByteArray()
+    }
+
+    /**
+     * Hand-craft an outer zip (the "AAR") holding [inner] as a STORED `classes.jar` entry that uses a DATA
+     * DESCRIPTOR — GP-flag bit 3 set, sizes/crc = 0 in the local header, the real values in a trailing
+     * descriptor. `java.util.zip.ZipOutputStream` cannot produce this shape, so the bytes are written directly.
+     * This is exactly what makes a streaming `ZipInputStream` reader fail while a random-access `ZipFile`
+     * (central-directory-driven) reads the entry byte-exact.
+     */
+    private fun aarWithStoredDataDescriptorClassesJar(inner: ByteArray): ByteArray {
+        fun java.io.ByteArrayOutputStream.i16(v: Int) { write(v and 0xff); write((v ushr 8) and 0xff) }
+        fun java.io.ByteArrayOutputStream.i32(v: Long) {
+            write((v and 0xff).toInt()); write(((v ushr 8) and 0xff).toInt())
+            write(((v ushr 16) and 0xff).toInt()); write(((v ushr 24) and 0xff).toInt())
+        }
+        val name = "classes.jar".toByteArray()
+        val crc = java.util.zip.CRC32().apply { update(inner) }.value
+        val sz = inner.size.toLong()
+        val o = java.io.ByteArrayOutputStream()
+        // local file header: STORED (method 0), GP flag bit 3 (data descriptor), crc/sizes = 0
+        o.i32(0x04034b50); o.i16(20); o.i16(0x0008); o.i16(0); o.i16(0); o.i16(0)
+        o.i32(0); o.i32(0); o.i32(0); o.i16(name.size); o.i16(0); o.write(name)
+        o.write(inner)
+        o.i32(0x08074b50); o.i32(crc); o.i32(sz); o.i32(sz) // data descriptor (real crc/sizes)
+        val cdOffset = o.size()
+        // central directory header carries the REAL sizes/crc + the local-header offset
+        o.i32(0x02014b50); o.i16(20); o.i16(20); o.i16(0x0008); o.i16(0); o.i16(0); o.i16(0)
+        o.i32(crc); o.i32(sz); o.i32(sz); o.i16(name.size); o.i16(0); o.i16(0); o.i16(0); o.i16(0)
+        o.i32(0); o.i32(0L); o.write(name)
+        val cdSize = o.size() - cdOffset
+        // end of central directory
+        o.i32(0x06054b50); o.i16(0); o.i16(0); o.i16(1); o.i16(1); o.i32(cdSize.toLong()); o.i32(cdOffset.toLong()); o.i16(0)
+        return o.toByteArray()
     }
 
     /** An AAR with resources/manifest but NO `classes.jar` (a resource-only Android library). */
