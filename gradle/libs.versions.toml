@@ -29,6 +29,22 @@ playServicesAds = "23.6.0"  # com.google.android.gms:play-services-ads — AdMob
 androidStub = "4.1.1.4"     # com.google.android:android — the throwaway stub android.jar (compileOnly) :applog-runtime compiles against
 okhttp = "4.12.0"           # com.squareup.okhttp3 — HTTP + SSE transport for the agent's LLM client (:agent-impl); runs on JVM and ART
 cfr = "0.152"               # org.benf:cfr — single-jar Java decompiler for the "navigate into library class" view (:decompiler). Chosen over Fernflower/Vineflower because those NPE on ART (their plugin loader calls Class.getProtectionDomain(), null on Android); CFR is self-contained and runs on-device.
+# KSP2 (Kotlin Symbol Processing, standalone Analysis-API runner). 2.3.10 explicitly supports Kotlin 2.4.0
+# ("Sanitize ':' in internal-name module suffix so KSP works with Kotlin 2.4.0 default module names", #2964)
+# and bundles kotlinx.coroutines into the -aa-embeddable uber jar (#2938). The `-aa-embeddable` runner renames
+# its bundled Analysis API / IntelliJ platform, so it coexists on a classpath with :kotlin-compiler-deps'
+# unshaded `-for-ide` compiler without a name clash. Standalone entry: KotlinSymbolProcessing(KSPJvmConfig,
+# providers, logger).execute(). See docs/kotlin-compiler-plugins-and-codegen.md.
+ksp = "2.3.10"
+# Room is the reference bundled KSP processor. 2.8.x is the KSP2-based line (drops KSP1/kapt), so it pairs
+# with the KSP2 runner above; room-runtime/-common go on the compile classpath, room-compiler on the
+# processor classpath.
+room = "2.8.4"
+# The other blessed bundled KSP processors. Each ships its processor's closure as /processors/<id>.zip and
+# activates on a classpath probe of its runtime (Compose-plugin style — add the runtime, the processor runs).
+moshi = "1.15.2"   # com.squareup.moshi — moshi-kotlin-codegen (KSP-native JSON adapters)
+glide = "5.0.9"    # com.github.bumptech.glide — the `ksp` processor + `annotations` (@GlideModule) marker
+dagger = "2.60.1"  # com.google.dagger — Hilt/Dagger; hilt-compiler is the KSP processor, hilt-core the marker
 
 [libraries]
 kotlinx-coroutines-core = { module = "org.jetbrains.kotlinx:kotlinx-coroutines-core", version.ref = "coroutines" }
@@ -121,6 +137,31 @@ android-stub = { module = "com.google.android:android", version.ref = "androidSt
 # desktop and ART (bundled into :ide-android like the other in-process tools). okhttp-sse tracks okhttp.
 okhttp = { module = "com.squareup.okhttp3:okhttp", version.ref = "okhttp" }
 okhttp-sse = { module = "com.squareup.okhttp3:okhttp-sse", version.ref = "okhttp" }
+# KSP2 standalone runner. `symbol-processing-api` = the processor SPI (SymbolProcessor/…Provider/KSPLogger/
+# Resolver/CodeGenerator), on the compile classpath so a bundled processor and our runner see the types.
+# `symbol-processing-common-deps` = KSPConfig/KSPJvmConfig. `symbol-processing-aa-embeddable` = the ~78 MB
+# uber-jar runner (renamed Analysis API). Desktop: real jars. ART (:ide-android): dexed like the compiler.
+ksp-api = { module = "com.google.devtools.ksp:symbol-processing-api", version.ref = "ksp" }
+ksp-common-deps = { module = "com.google.devtools.ksp:symbol-processing-common-deps", version.ref = "ksp" }
+ksp-aa-embeddable = { module = "com.google.devtools.ksp:symbol-processing-aa-embeddable", version.ref = "ksp" }
+# The NON-embeddable runner: same uber jar but with the Analysis API left UN-relocated (`org.jetbrains.kotlin.
+# analysis.*`). Used by the thin-KSP spike, which extracts only KSP's own `com.google.devtools.ksp.**` classes
+# from it and links them against OUR bundled AA (:kotlin-compiler-deps) instead of its own — the path to a
+# <100 MB base APK (reuse the compiler we already ship, no second 78 MB platform).
+ksp-aa = { module = "com.google.devtools.ksp:symbol-processing-aa", version.ref = "ksp" }
+# Room: the reference bundled processor. room-compiler is the KSP `SymbolProcessorProvider` (processor
+# classpath); room-runtime carries the annotations + RoomDatabase the generated code and the user compile
+# against. Test-only in :lang-ksp (the Room desktop spike); self-gates when unresolvable.
+room-compiler = { module = "androidx.room:room-compiler", version.ref = "room" }
+room-runtime = { module = "androidx.room:room-runtime", version.ref = "room" }
+# The other blessed processors: `*-compiler`/`ksp` = the bundled KSP processor closure; the runtime module
+# (moshi/glide-annotations/hilt-core) carries the marker class the catalog probes to auto-activate it.
+moshi-kotlin-codegen = { module = "com.squareup.moshi:moshi-kotlin-codegen", version.ref = "moshi" }
+moshi-runtime = { module = "com.squareup.moshi:moshi", version.ref = "moshi" }
+glide-ksp = { module = "com.github.bumptech.glide:ksp", version.ref = "glide" }
+glide-annotations = { module = "com.github.bumptech.glide:annotations", version.ref = "glide" }
+hilt-compiler = { module = "com.google.dagger:hilt-compiler", version.ref = "dagger" }
+hilt-core = { module = "com.google.dagger:hilt-core", version.ref = "dagger" }
 
 [plugins]
 kotlin-jvm = { id = "org.jetbrains.kotlin.jvm", version.ref = "kotlin" }
