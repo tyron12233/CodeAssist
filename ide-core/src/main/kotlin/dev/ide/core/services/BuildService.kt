@@ -204,6 +204,7 @@ internal class BuildService(private val ctx: EngineContext) : Disposable {
                 bootClasspath = ctx.compileBootClasspath,
                 kotlin = incrementalKotlin,
                 plugins = kotlinCompilerPlugins,
+                generators = sourceGenerators,
                 dexCacheRoot = dexCache,
                 signingResolver = signingResolver,
                 // On ART, run R8 in a forked VM with a bigger heap (self-falls-back to in-process if forking
@@ -238,6 +239,7 @@ internal class BuildService(private val ctx: EngineContext) : Disposable {
             bootClasspath = ctx.compileBootClasspath,
             kotlin = incrementalKotlin,
             plugins = kotlinCompilerPlugins,
+            generators = sourceGenerators,
             dexCacheRoot = dexCache,
             signingResolver = signingResolver,
         )

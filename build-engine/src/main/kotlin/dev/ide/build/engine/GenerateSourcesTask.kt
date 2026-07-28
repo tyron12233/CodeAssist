@@ -33,12 +33,16 @@ class GenerateSourcesTask(
     private val classpath: () -> List<Path>,
 ) : Task {
 
-    /** The module's hand-written source files of [ext] (SOURCE roots only; excludes the generated root). */
-    private fun handWritten(ext: String): List<Path> = module.sourceSets
+    /** The module's `ContentRole.SOURCE` root directories (excludes the generated root, so a generator never
+     *  sees its own output as an input and can't ping-pong the up-to-date check). */
+    private fun sourceRootDirs(): List<Path> = module.sourceSets
         .flatMap { it.contentRoots }
         .filter { ContentRole.SOURCE in it.roles }
         .map { Paths.get(it.dir.path) }
         .filter { Files.isDirectory(it) }
+
+    /** The module's hand-written source files of [ext] (SOURCE roots only; excludes the generated root). */
+    private fun handWritten(ext: String): List<Path> = sourceRootDirs()
         .flatMap { root -> Files.walk(root).use { s -> s.filter { it.toString().endsWith(ext) }.collect(Collectors.toList()) } }
 
     private fun request(): SourceGenRequest = SourceGenRequest(
@@ -47,6 +51,7 @@ class GenerateSourcesTask(
         javaSources = handWritten(".java"),
         classpath = classpath(),
         outputDir = outputDir,
+        sourceRoots = sourceRootDirs(),
     )
 
     override val inputs: TaskInputs

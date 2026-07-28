@@ -53,6 +53,7 @@ import dev.ide.android.support.tools.SigningConfig
 import dev.ide.build.BuildGoal
 import dev.ide.build.BuildRequest
 import dev.ide.build.BuildSystem
+import dev.ide.build.SourceGenerator
 import dev.ide.build.SyncResult
 import dev.ide.build.Task
 import dev.ide.build.TaskDescriptor
@@ -60,6 +61,7 @@ import dev.ide.build.TaskGraph
 import dev.ide.build.TaskName
 import dev.ide.build.TaskContainer
 import dev.ide.build.engine.DefaultTaskContainer
+import dev.ide.build.engine.GenerateSourcesTask
 import dev.ide.build.engine.JarTask
 import dev.ide.build.engine.LifecycleTask
 import dev.ide.build.engine.ProcessResourcesTask
@@ -120,6 +122,11 @@ class AndroidBuildSystem(
     /** Kotlin compiler plugins applied per module (the `platform.kotlinCompilerPlugin` EP contents; defaults
      *  to the built-ins). Shared with the [JavaPlugin] used for plain library modules in this project. */
     private val plugins: List<KotlinCompilerPlugin> = BUILTIN_KOTLIN_COMPILER_PLUGINS,
+    /** Build-time source generators (the `platform.sourceGenerator` EP contents, e.g. the KSP runner). When
+     *  present, each android app/lib gets a `generateSources` step ahead of its `compileKotlin`/`compileJava`,
+     *  emitting into a per-variant `generated/ksp` root added to the compile source roots. Empty (the default)
+     *  ⇒ no step is added and the build is byte-identical — dormant until a generator is contributed. */
+    private val generators: List<SourceGenerator> = emptyList(),
     /** Global content-addressed library-dex cache (e.g. the host's shared caches dir); null = per-project only. */
     private val dexCacheRoot: Path? = null,
     /** Core-library-desugaring artifacts (desugar runtime + config jar); null = host ships none, so a module's
@@ -304,6 +311,18 @@ class AndroidBuildSystem(
         // The Java compile resolves `R` from the generated R.jar (Kotlin keeps resolving it from `R.java` source).
         val compileClasspath = kotlinClasspath + listOf(layout.rJar) + if (appHasKotlin) listOf(layout.kotlinClasses) else emptyList()
 
+        // generateSources (KSP etc.): run the source generators into the module's `generated/ksp` root ahead of
+        // the compile tasks; that root joins the compile source roots below so generated .kt/.java compile +
+        // index like hand-written code. KSP's `libraries` = the compile classpath (android.jar + deps + libs;
+        // the generator drops not-yet-existing entries like R.jar/kotlin-classes). Dormant when no generator is
+        // contributed (`generators` empty ⇒ no task, `sourceRoots` unchanged, build byte-identical).
+        val generateSources: TaskName? = if (generators.isNotEmpty()) {
+            val gs = step("generateSources")
+            tasks.task(gs, directDepCompiles + directDepKotlin) { GenerateSourcesTask(app, gs, generators, layout.kspGen) { kotlinClasspath } }
+            gs
+        } else null
+        val genSourceRoots = sourceRoots + listOfNotNull(generateSources?.let { layout.kspGen })
+
         val mergeRes = step("mergeResources")
         val processManifest = step("processManifest")
         val aapt2Compile = step("aapt2Compile")
@@ -388,11 +407,11 @@ class AndroidBuildSystem(
         // Package the generated R.java (app + every --extra-package) as R.jar bytecode instead of compiling it.
         tasks.task(generateRFile, listOf(aapt2Link)) { GenerateRJarTask(generateRFile, layout.genJava, layout.rJar) }
         if (appHasKotlin) {
-            tasks.task(compileKotlin, listOf(aapt2Link) + directDepCompiles + directDepKotlin + vbDep) {
+            tasks.task(compileKotlin, listOf(aapt2Link) + directDepCompiles + directDepKotlin + vbDep + listOfNotNull(generateSources)) {
                 AndroidKotlinCompileTask(
                     app,
                     compileKotlin,
-                    sourceRoots,
+                    genSourceRoots,
                     layout.genJava,
                     kotlinClasspath,
                     layout.kotlinClasses,
@@ -409,11 +428,11 @@ class AndroidBuildSystem(
         // classpath, not as compiled source. Non-R generated files (e.g. Manifest.java) are still compiled.
         tasks.task(
             compile,
-            listOf(aapt2Link, generateRFile) + directDepCompiles + (if (appHasKotlin) listOf(compileKotlin) else emptyList()) + vbDep
+            listOf(aapt2Link, generateRFile) + directDepCompiles + (if (appHasKotlin) listOf(compileKotlin) else emptyList()) + vbDep + listOfNotNull(generateSources)
         ) {
             AndroidCompileTask(
                 compile,
-                sourceRoots,
+                genSourceRoots,
                 layout.genJava,
                 compileClasspath,
                 layout.classes,
@@ -735,6 +754,21 @@ class AndroidBuildSystem(
         }
         val libVbGenDirs = listOfNotNull(libViewBinding).map { vbDir }
 
+        // generateSources (KSP etc.) for the lib: emit into its variant `generated/ksp` root ahead of compile;
+        // that root joins the compile source roots so generated code compiles into the AAR/jar. KSP `libraries`
+        // = the lib's base compile classpath (snapshot now; R/kotlin-classes are added later and aren't needed).
+        // Dormant when no generator is contributed (`generators` empty ⇒ no task, source roots unchanged).
+        val kspGen = buildDir.resolve("generated").resolve("ksp").resolve(libVariant?.name ?: "main")
+        val libGenerateSources: TaskName? = if (generators.isNotEmpty()) {
+            val gs = TaskName(":${m.name}:generateSources")
+            val genClasspath = classpath.toList()
+            val gsDeps = compileDeps.toList()
+            tasks.task(gs, gsDeps) { GenerateSourcesTask(m, gs, generators, kspGen) { genClasspath } }
+            compileDeps.add(gs)
+            gs
+        } else null
+        val libGenSourceRoots = sourceRoots + listOfNotNull(libGenerateSources?.let { kspGen })
+
         // compileKotlin (when the lib has `.kt`): runs against android.jar + the lib's own non-final R, ahead
         // of compileJava, which then sees its output. The Kotlin output IS dexed (it's the lib's code) — only
         // the R classes are kept out. Emits to the `kotlin-classes` sibling so dependers' classpaths find it.
@@ -745,7 +779,7 @@ class AndroidBuildSystem(
             val depKotlin = directModuleDeps(m, byId).filter { moduleHasKotlin(it) }.map { TaskName(":${it.name}:compileKotlin") }
             val kotlinCp = compileBootclasspath + libs.compileJars + moduleOutputs + upstreamKotlin + listOf(rJar)
             tasks.task(compileKotlin, listOf(compileR) + compileDeps.filter { it != compileR } + depKotlin) {
-                AndroidKotlinCompileTask(m, compileKotlin, sourceRoots, rRoot.resolve("gen"), kotlinCp, libKotlin, level, bootClasspath, kotlin, plugins, extraGenDirs = libVbGenDirs)
+                AndroidKotlinCompileTask(m, compileKotlin, libGenSourceRoots, rRoot.resolve("gen"), kotlinCp, libKotlin, level, bootClasspath, kotlin, plugins, extraGenDirs = libVbGenDirs)
             }
             classpath.add(libKotlin); compileDeps.add(compileKotlin)
         }
@@ -754,7 +788,7 @@ class AndroidBuildSystem(
         tasks.task(compile, compileDeps) {
             AndroidCompileTask(
                 compile,
-                sourceRoots,
+                libGenSourceRoots,
                 classesOut.resolveSibling("nogen"),
                 classpath,
                 classesOut,
@@ -872,6 +906,9 @@ class AndroidBuildSystem(
         // AGP's compile_and_runtime_not_namespaced_r_class_jar: the R classes as bytecode, not compiled R.java.
         val rJar: Path = inter.resolve("compile_and_runtime_not_namespaced_r_class_jar").resolve("R.jar")
         val viewBindingGen: Path = inter.resolve("gen-view-binding")  // ViewBinding <Layout>Binding.java
+        // KSP source-generation output root (AGP's build/generated/ksp/<variant>); KSP emits kotlin/ + java/
+        // under it, added to the compile source roots so both are compiled + indexed like hand-written code.
+        val kspGen: Path = moduleDirField.resolve("build").resolve("generated").resolve("ksp").resolve(variantName)
         val classes: Path = inter.resolve("classes")
         val kotlinClasses: Path = inter.resolve("kotlin-classes")   // K2 output (dexed as project scope)
         val dexArchives: Path = inter.resolve("dex-archives")   // dexBuilder scope roots + the project staging jar
@@ -1003,8 +1040,8 @@ class AndroidBuildSystem(
          * Desktop wiring: every tool is a subprocess over an installed SDK (`java -cp d8.jar …`,
          * `java -jar apksigner.jar …`, native aapt2/zipalign). No statically-linked tool jars needed.
          */
-        fun subprocess(sdk: AndroidSdk, signing: SigningConfig, bootClasspath: List<Path> = emptyList(), kotlin: IncrementalKotlinCompiler? = null, plugins: List<KotlinCompilerPlugin> = BUILTIN_KOTLIN_COMPILER_PLUGINS, dexCacheRoot: Path? = null, desugarLib: DesugarLib? = null, signingResolver: ((Module, String) -> SigningConfig?)? = null, appLogRuntime: () -> AndroidAppLogRuntime? = { null }): AndroidBuildSystem =
-            AndroidBuildSystem(sdk, signing, bootClasspath, kotlin = kotlin, plugins = plugins, dexCacheRoot = dexCacheRoot, desugarLib = desugarLib, signingResolver = signingResolver, appLogRuntime = appLogRuntime)
+        fun subprocess(sdk: AndroidSdk, signing: SigningConfig, bootClasspath: List<Path> = emptyList(), kotlin: IncrementalKotlinCompiler? = null, plugins: List<KotlinCompilerPlugin> = BUILTIN_KOTLIN_COMPILER_PLUGINS, generators: List<SourceGenerator> = emptyList(), dexCacheRoot: Path? = null, desugarLib: DesugarLib? = null, signingResolver: ((Module, String) -> SigningConfig?)? = null, appLogRuntime: () -> AndroidAppLogRuntime? = { null }): AndroidBuildSystem =
+            AndroidBuildSystem(sdk, signing, bootClasspath, kotlin = kotlin, plugins = plugins, generators = generators, dexCacheRoot = dexCacheRoot, desugarLib = desugarLib, signingResolver = signingResolver, appLogRuntime = appLogRuntime)
 
         /**
          * On-device-shaped wiring: the native tools (aapt2, zipalign) run as subprocesses against the
@@ -1013,7 +1050,7 @@ class AndroidBuildSystem(
          * ART (where `java -jar` is impossible); the desktop test runs it too, so the on-device dex/sign
          * code path is exercised on the host.
          */
-        fun inProcess(sdk: AndroidSdk, signing: SigningConfig, bootClasspath: List<Path> = emptyList(), kotlin: IncrementalKotlinCompiler? = null, plugins: List<KotlinCompilerPlugin> = BUILTIN_KOTLIN_COMPILER_PLUGINS, dexCacheRoot: Path? = null, desugarLib: DesugarLib? = null, signingResolver: ((Module, String) -> SigningConfig?)? = null, shrinker: Shrinker? = null, dexer: Dexer? = null, mergeDexer: Dexer? = null, mergeChunk: () -> Int = { DexMergeTask.DEFAULT_MERGE_CHUNK }, appLogRuntime: () -> AndroidAppLogRuntime? = { null }): AndroidBuildSystem =
+        fun inProcess(sdk: AndroidSdk, signing: SigningConfig, bootClasspath: List<Path> = emptyList(), kotlin: IncrementalKotlinCompiler? = null, plugins: List<KotlinCompilerPlugin> = BUILTIN_KOTLIN_COMPILER_PLUGINS, generators: List<SourceGenerator> = emptyList(), dexCacheRoot: Path? = null, desugarLib: DesugarLib? = null, signingResolver: ((Module, String) -> SigningConfig?)? = null, shrinker: Shrinker? = null, dexer: Dexer? = null, mergeDexer: Dexer? = null, mergeChunk: () -> Int = { DexMergeTask.DEFAULT_MERGE_CHUNK }, appLogRuntime: () -> AndroidAppLogRuntime? = { null }): AndroidBuildSystem =
             AndroidBuildSystem(
                 sdk, signing, bootClasspath,
                 // The dexBuilder ARCHIVE dexer. The host can inject a forked-VM D8 (an [OffHeapArchiveDexer]) so a
@@ -1029,6 +1066,7 @@ class AndroidBuildSystem(
                 bundleSigner = ApksigBundleSigner(),   // ART: v1-sign the .aab in-process (no jarsigner)
                 kotlin = kotlin,
                 plugins = plugins,
+                generators = generators,
                 dexCacheRoot = dexCacheRoot,
                 desugarLib = desugarLib,
                 signingResolver = signingResolver,

@@ -40,8 +40,12 @@ class ArtKotlinPluginLoader(
             check(r.success) { "failed to dex compiler-plugin classpath: ${r.log.joinToString("\n")}" }
             packageDex(dexDir, pluginJar)
         }
-        // optimizedDirectory is deprecated and ignored since API 26 (this app's minSdk), so null is fine.
-        return DexClassLoader(pluginJar.toString(), null, null, javaClass.classLoader)
+        // optimizedDirectory is deprecated but must NOT be null: on API 26 `DexClassLoader.<init>` still does
+        // `new File(optimizedDirectory)`, which NPEs on null (surfaced by KspArtSpikeTest — the first thing to
+        // actually exercise this path on device). Pass an app-private odex dir; it is ignored on newer APIs.
+        val odex = cacheDir.resolve("odex")
+        Files.createDirectories(odex)
+        return DexClassLoader(pluginJar.toString(), odex.toString(), null, javaClass.classLoader)
     }
 
     /** Zip D8's `classes*.dex` output into one jar a [DexClassLoader] can read. */

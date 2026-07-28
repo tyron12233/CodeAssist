@@ -72,6 +72,8 @@ object ArtPatchPasses {
         IntrospectorArtPass(),    // java.beans.Introspector absent on ART → decapitalize/flushCaches shim
                                   // (unbreaks PsiMethod.findSuperMethods on device: StringUtil/PropertyUtilBase/
                                   //  ExtensibleQueryFactory/GCUtil)
+        EdtHeadlessArtPass(),     // com.intellij.util.ui.EDT.isCurrentThreadEdt → java.awt.EventQueue (absent on
+                                  // ART) → return false (headless); on KSP2's AA write-action path (KspArtSpikeTest)
     )
 
     /** True if any registered pass rewrites [classFqn]. */

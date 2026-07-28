@@ -90,8 +90,15 @@ import dev.ide.model.impl.ProjectTemplateRegistry
 import dev.ide.model.module
 import dev.ide.platform.ServiceScopeLevel
 import dev.ide.plugin.Plugin
+import dev.ide.build.SOURCE_GENERATOR_EP
+import dev.ide.ksp.DefaultKspProcessorLoader
+import dev.ide.ksp.KspProcessorCatalog
+import dev.ide.ksp.KspProcessorLoader
+import dev.ide.ksp.KspSourceGenerator
 import dev.ide.plugin.PluginManifest
 import dev.ide.plugin.PluginRegistration
+import java.nio.file.Files
+import java.nio.file.Paths
 import dev.ide.plugin.impl.ActionManager
 import dev.ide.agent.ui.AgentUiPlugin
 import dev.ide.ui.ext.UiPlugin
@@ -131,6 +138,7 @@ object BuiltInPlugins {
         BuiltInPlugin(KotlinLanguagePlugin()),
         BuiltInPlugin(JavaSupportPlugin()),
         BuiltInPlugin(KotlinSupportPlugin()),
+        BuiltInPlugin(KspSupportPlugin(env)),
         BuiltInPlugin(BlocksPlugin()),
         BuiltInPlugin(AndroidSupportPlugin(env, codecs)),
         BuiltInPlugin(SamplesPlugin()),
@@ -307,6 +315,48 @@ private class KotlinSupportPlugin : Plugin {
             templates.register(KotlinConsoleAppTemplate, pid)
             templates.register(KotlinLibraryTemplate, pid)
         }
+    }
+}
+
+/**
+ * KSP2 source generation: contributes [KspSourceGenerator] on [SOURCE_GENERATOR_EP], so the build's
+ * `generateSources` tasks run the IDE's **bundled** KSP2 processors (Room, …) on the IDE's OWN compiler/AA
+ * (the ~776 KB thin runner + the bundled processor jars — nothing 78 MB or downloaded, so it stays within
+ * Play's dynamic-code-loading policy). Activation is probe-based, exactly like the Compose/serialization
+ * plugins: a module that carries a processor's runtime (e.g. `room-runtime`) trips [KspProcessorCatalog] and
+ * the processor runs — no per-module toggle. The generated `.kt`/`.java` land in the module's
+ * `ContentRole.GENERATED` root and compile + index like hand-written code.
+ *
+ * The processor classloader is the injected [KOTLIN_PLUGIN_LOADER] (a plain `URLClassLoader` on desktop, a
+ * `DexClassLoader` over bundled dex on ART) — its parent is the app classloader, which carries our compiler/AA
+ * + `symbol-processing-api`, so the thin runner + processors resolve those parent-first. `jdkHome` is a real
+ * JDK on desktop and null on ART (where android.jar on the module's compile classpath supplies `java.*`).
+ */
+private class KspSupportPlugin(private val env: ApplicationEnvironment) : Plugin {
+    override val manifest = PluginManifest(
+        id = "ksp-support", name = "KSP Source Generation",
+        description = "Runs bundled KSP2 processors (Room, …) at build time on the IDE's own compiler; generated sources compile + index like hand-written code.",
+    )
+
+    override fun register(reg: PluginRegistration) {
+        val catalog = KspProcessorCatalog.bundled()
+        // Reuse the injected Kotlin-plugin loader; read lazily (it may be registered after assemble()), falling
+        // back to the desktop URLClassLoader when no host loader is wired.
+        val loader = KspProcessorLoader { cp ->
+            env.container.getServiceOrNull(KOTLIN_PLUGIN_LOADER)?.load(cp) ?: DefaultKspProcessorLoader.load(cp)
+        }
+        // A real modular JDK (desktop) exposes lib/jrt-fs.jar; ART's java.home does not — there KSP resolves
+        // java.* from android.jar on the module's compile classpath instead, so jdkHome stays null.
+        val jdkHome = System.getProperty("java.home")?.let { Paths.get(it) }
+            ?.takeIf { Files.exists(it.resolve("lib/jrt-fs.jar")) }
+        reg.register(
+            SOURCE_GENERATOR_EP,
+            KspSourceGenerator(
+                processors = { req -> catalog.classpathFor(req.classpath) },
+                loader = loader,
+                jdkHome = jdkHome,
+            ),
+        )
     }
 }
 

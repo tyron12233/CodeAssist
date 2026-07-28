@@ -38,6 +38,13 @@ class SourceGenRequest(
     val classpath: List<Path>,
     /** The `ContentRole.GENERATED` source root to emit into. */
     val outputDir: Path,
+    /**
+     * The module's `ContentRole.SOURCE` root **directories** (never the generated root). KSP/APT-style
+     * generators want source ROOTS (for package inference + directory scanning), not the flattened
+     * [kotlinSources]/[javaSources] file lists. Defaults to empty for generators that only need the file
+     * lists; [GenerateSourcesTask] always populates it.
+     */
+    val sourceRoots: List<Path> = emptyList(),
 )
 
 class SourceGenResult(val success: Boolean, val messages: List<String> = emptyList()) {

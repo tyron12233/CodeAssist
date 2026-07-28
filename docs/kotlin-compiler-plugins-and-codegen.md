@@ -250,29 +250,48 @@ shared by both plugins and processors.
      jar without a desugaring classpath (its references to the compiler classes resolve at runtime via the
      parent app classloader, but D8 may warn), and `-P` option processing on the registrar path is not wired
      yet (no current plugin uses options there).
-3. **Source generation.** Seam [DONE], KSP2 runner pending.
+3. **Source generation.** Seam [DONE]; KSP2 desktop feasibility + delivery direction [PROVEN, 2026-07];
+   on-device productionization pending.
    - The generic build seam is built + verified: `SourceGenerator` SPI + `SOURCE_GENERATOR_EP` (build-api),
      `GenerateSourcesTask` (build-engine), wired in `JavaPlugin`/`JavaBuildSystem` (and resolved from the EP
      in `IdeServices`, dormant until a generator is contributed). A generator emits into the module's
      `ContentRole.GENERATED` root; the existing `compileKotlin`/`compileJava` compile it with NO compile-task
      change (they already read GENERATED roots), and `JavaPlugin` adds an explicit `compile -> generateSources`
      edge (the gen dir is empty at graph-build time, so output/input inference alone wouldn't catch it — same
-     as Android's aapt2 R.java). `SourceGenerationTest` proves it end to end (stub generator -> compiled +
-     used by hand-written code -> runs; unchanged rebuild up-to-date, generator runs once).
-   - Remaining: a KSP2 `SourceGenerator` impl, thread `generators` through `AndroidBuildSystem` too (this
-     increment wired only `JavaBuildSystem`), prove with Room on desktop, then on device. KSP2-on-ART is
-     device-bound like K2 (see `docs/kotlin-compiler-on-art.md`).
-   - **KSP2 API recon (KSP 2.3.9, the latest):** standalone entry is
-     `com.google.devtools.ksp.impl.KotlinSymbolProcessing(config: KSPConfig, providers: List<SymbolProcessorProvider>, logger: KSPLogger).execute(): ExitCode`.
-     The runner is `symbol-processing-aa-embeddable` (~84 MB; bundles a relocated Kotlin Analysis API, so it
-     is decoupled from the host kotlinc — runs its own frontend). The SPI (`SymbolProcessor`,
-     `SymbolProcessorProvider`, `KSPLogger`) is in `symbol-processing-api`, but `KSPConfig`/`KSPJvmConfig` are
-     NOT there in 2.3.9 (likely in `symbol-processing-common-deps`/`-cmdline` — confirm before wiring).
-     Processors load via step 2's `KotlinPluginLoader` (URLClassLoader desktop / DexClassLoader ART).
-   - **Blocker/risk:** no KSP build matches Kotlin 2.4.0 (KSP's new independent versioning tops out at 2.3.9);
-     2.3.9-on-2.4.0 is unverified. A focused desktop spike (resolve the 3 KSP artifacts + a trivial
-     `SymbolProcessor` + one `KotlinSymbolProcessing().execute()`) should confirm compatibility BEFORE adding
-     KSP/Room as real deps or wiring the production generator.
+     as Android's aapt2 R.java). `SourceGenerationTest` proves it end to end. `SourceGenRequest` gained
+     `sourceRoots` (the SOURCE root DIRS — KSP wants roots, not the flattened file lists).
+   - **KSP2 works (`:lang-ksp`, desktop-verified, 5 green tests):** the new module `:lang-ksp` holds
+     `KspSourceGenerator : SourceGenerator` + `KspProcessorLoader`. The standalone entry is
+     `com.google.devtools.ksp.impl.KotlinSymbolProcessing(KSPJvmConfig, providers, logger).execute()`
+     (`KSPConfig`/`KSPJvmConfig` in `symbol-processing-common-deps`; SPI in `symbol-processing-api`). **KSP
+     2.3.10 supports Kotlin 2.4.0** (release note #2964), so the "no KSP matches 2.4.0" blocker is gone.
+     `KspEngineSpikeTest` runs a trivial processor; `RoomKspSpikeTest` runs the real `room-compiler` 2.8.4 via
+     ServiceLoader → generates `AppDatabase_Impl.kt`; `KspSourceGeneratorTest` drives Room through the
+     production `KspSourceGenerator`.
+   - **DELIVERY = thin KSP on OUR compiler (the <100 MB, Play-compliant answer).** Runtime Maven download of
+     the runner/processors violates Play's dynamic-code-loading policy, and the `-aa-embeddable` runner is
+     78 MB — too big for the base APK next to the 80 MB compiler we already ship. But KSP's runner is just an
+     uber jar bundling its OWN Analysis API; `ThinKspOnOurAaSpikeTest` PROVES we can extract KSP's own classes
+     (`com/google/devtools/ksp/**`, **776 KB**, 288 classes) from the non-embeddable `symbol-processing-aa`,
+     drop its bundled AA, and run them on the AA we already bundle (`:kotlin-compiler-deps`,
+     `analysis-api-*-for-ide` @ 2.4.20-dev-6138) — the trivial processor AND the real Room processor both
+     generate correctly. So the AA drift (KSP built vs 2.3.20 → our 2.4.20-dev) is survivable at the bytecode
+     level; ship a ~776 KB thin KSP on the compiler already in the APK. **GOTCHA:** set `KSPJvmConfig.jdkHome`
+     (android.jar on ART) or a real processor fails with `[MissingType] ... references a type that is not
+     present` (mapped types like `List` → `java.util.List` don't resolve); the trivial processor passes
+     without it because it only reads names.
+   - **Remaining (on-device productionization):** (a) a `ksp-thin` artifact — extract KSP's own classes from
+     `symbol-processing-aa` (like `:kotlin-compiler-deps`' merge) so `KspSourceGenerator` gets
+     `KotlinSymbolProcessing`/`KSPJvmConfig` on OUR AA classloader; (b) thread `generators` through
+     `AndroidBuildSystem` (this increment wired only `JavaBuildSystem`) + a `generateSources` step ahead of the
+     android `compileKotlin`/`compileJava`; (c) bundle the blessed processors (Room/Moshi/Hilt/Glide) — EXECUTED
+     by the IDE so they must ship in-app (Play DCL), dexed from in-APK jars; keep the base < 100 MB by putting
+     Room in base and the rest in a Play on-demand dynamic-feature module if the closures push size; (d) a
+     `KspArtSpikeTest` (androidTest) run on device — thin KSP rides our already-ART-patched compiler/AA, so the
+     `ksp.*`-relocated-platform pass problem of the embeddable does NOT apply; (e) wire `KspSourceGenerator`
+     into `ide-core` on `SOURCE_GENERATOR_EP` (provide the thin-KSP runner + per-module processor classpath,
+     resolved from a Build-Features/catalog toggle). RUNTIMES (`room-runtime`) stay Maven-resolved (data the
+     user's app compiles against, not executed by the IDE).
 4. **Editor hybrid.** ViewBinding/DataBinding synthetic providers (Tier 1 quick win); then
    background-KSP-with-invalidation (Tier 2) plus the reindex/overlay-invalidate signal.
 
