@@ -9,6 +9,8 @@ import dev.ide.index.IndexOrigin
 import dev.ide.index.InputFilter
 import dev.ide.index.KeyDescriptor
 import dev.ide.index.MatchingMode
+import dev.ide.index.MemberExternalizer
+import dev.ide.index.MemberValue
 import dev.ide.index.StringExternalizer
 import dev.ide.index.StringKeyDescriptor
 import java.nio.file.Files
@@ -48,6 +50,17 @@ class SegmentTest {
     }
 
     private fun entry(term: String, value: String, origin: IndexOrigin = IndexOrigin.SDK) = IndexEntry(term, value, origin)
+
+    /** A member index (value = [MemberValue]) — several string fields per value, so it exercises the pool. */
+    private class MemberIndex : IndexExtension<String, MemberValue> {
+        override val id = IndexId("test.members")
+        override val version = 1
+        override val keyDescriptor: KeyDescriptor<String> = StringKeyDescriptor
+        override val valueExternalizer = MemberExternalizer
+        override val matching = MatchingMode.PREFIX_AND_FUZZY
+        override val inputFilter = InputFilter { true }
+        override fun index(input: IndexInput): Map<String, Collection<MemberValue>> = emptyMap()
+    }
 
     private fun prefix(s: Segment, p: String, cap: Int = 1000): List<Hit<Any>> =
         ArrayList<Hit<Any>>().also { s.prefix(p, it, cap) }
@@ -320,6 +333,110 @@ class SegmentTest {
             val hits = fuzzy(s, "st").map { it.key }
             assertTrue("String" in hits && "stack" in hits, "expected both cases, got $hits")
             s.close()
+        } finally {
+            dir.toFile().deleteRecursively()
+        }
+    }
+
+    /**
+     * The v2 format folds a uniform segment's origin into one footer byte (dropping the per-posting byte), and
+     * falls back to the per-posting byte for a mixed corpus. Origin drives the score (`Scoring.originBonus`:
+     * LIBRARY 12 > SDK 0), so a preserved 12-point gap proves the origin round-trips on both paths.
+     */
+    @Test
+    fun originRoundTripsWhetherFoldedOrPerPosting() {
+        val dir = Files.createTempDirectory("seg")
+        try {
+            // Uniform (single-origin) segments: origin lives once in the footer, yet still ranks each value.
+            val libSeg = seg(Files.createDirectory(dir.resolve("lib")), listOf(entry("Foo", "Foo", IndexOrigin.LIBRARY)))
+            val sdkSeg = seg(Files.createDirectory(dir.resolve("sdk")), listOf(entry("Foo", "Foo", IndexOrigin.SDK)))
+            val libScore = prefix(libSeg, "Foo").single().score
+            val sdkScore = prefix(sdkSeg, "Foo").single().score
+            assertEquals(12, libScore - sdkScore, "the LIBRARY origin bonus must survive the per-segment fold")
+            libSeg.close(); sdkSeg.close()
+
+            // Mixed origins under one segment fall back to the per-posting byte, each preserved independently.
+            val mixSeg = seg(
+                Files.createDirectory(dir.resolve("mix")),
+                listOf(entry("Foo", "lib", IndexOrigin.LIBRARY), entry("Foo", "sdk", IndexOrigin.SDK)),
+            )
+            val byValue = prefix(mixSeg, "Foo").associate { (it.value as String) to it.score }
+            assertEquals(
+                12, byValue.getValue("lib") - byValue.getValue("sdk"),
+                "a mixed-origin segment must keep each posting's own origin",
+            )
+            mixSeg.close()
+        } finally {
+            dir.toFile().deleteRecursively()
+        }
+    }
+
+    /**
+     * A query whose key can't fall inside the segment's [minTerm]..[maxTerm] range is answered from the
+     * resident footer alone — zero block reads. This is the win at classpath scale, where a single query
+     * would otherwise seek into hundreds of per-artifact segments that can't possibly match.
+     */
+    @Test
+    fun outOfRangeQuerySkipsTheSegmentWithoutTouchingDisk() {
+        val dir = Files.createTempDirectory("seg")
+        try {
+            val entries = (0 until 300).map { entry("Item%03d".format(it), "v$it", IndexOrigin.LIBRARY) }
+            val cache = BlockCache(8L * 1024 * 1024)
+            val s = seg(dir, entries, cache = cache) // range is Item000..Item299
+
+            val before = cache.blockReads.get()
+            assertTrue(exact(s, "ZZZ").isEmpty())        // past the max term
+            assertTrue(prefix(s, "ZZZ").isEmpty())       // window sorts after everything
+            assertTrue(prefix(s, "AAA").isEmpty())        // window sorts before everything
+            assertEquals(before, cache.blockReads.get(), "an out-of-range query must not read any block")
+
+            // Sanity: an in-range query DOES page from disk, so the counter is genuinely wired.
+            assertEquals(1, exact(s, "Item150").size)
+            assertTrue(cache.blockReads.get() > before, "an in-range query must actually read blocks")
+            s.close()
+        } finally {
+            dir.toFile().deleteRecursively()
+        }
+    }
+
+    /**
+     * The constant pool stores a string shared across values ONCE. Two segments hold 500 members each: one where
+     * every member shares a single long owner FQN + signature, one where each owner is distinct. The shared-owner
+     * segment must be dramatically smaller (the owner is pooled, not repeated 500×), and values round-trip intact.
+     */
+    @Test
+    fun constantPoolDedupsStringsSharedAcrossValues() {
+        val dir = Files.createTempDirectory("seg")
+        val ext = MemberIndex()
+        try {
+            val owner = "com.example.some.deeply.nested.pkg.VeryLongOwnerTypeName"
+            val shared = (0 until 500).map {
+                IndexEntry("m$it", MemberValue("m$it", owner, "method", "(Ljava/lang/String;)V"), IndexOrigin.LIBRARY)
+            }
+            val sharedFile = dir.resolve("shared.seg"); Segment.write(sharedFile, ext, shared)
+
+            val distinct = (0 until 500).map {
+                val o = "com.example.some.deeply.nested.pkg.OwnerTypeNumber%05d".format(it)
+                IndexEntry("m$it", MemberValue("m$it", o, "method", "(Ljava/lang/String;)V"), IndexOrigin.LIBRARY)
+            }
+            val distinctFile = dir.resolve("distinct.seg"); Segment.write(distinctFile, ext, distinct)
+
+            // Owner (56 bytes) + signature + kind stored once vs 500× ⇒ the shared segment is well under half the
+            // distinct one (which must repeat each unique owner in the pool).
+            assertTrue(
+                Files.size(sharedFile) * 2 < Files.size(distinctFile),
+                "pooling must dedup the shared owner (shared=${Files.size(sharedFile)}, distinct=${Files.size(distinctFile)})",
+            )
+
+            // Values still round-trip exactly through the pool (a tiny block cache paging the pool region).
+            val s = Segment.open(sharedFile, ext, BlockCache(maxBytes = 256, blockSize = 64), 0)
+            try {
+                val v = exact(s, "m42").single() as MemberValue
+                assertEquals("m42", v.name)
+                assertEquals(owner, v.owner)
+                assertEquals("method", v.kind)
+                assertEquals("(Ljava/lang/String;)V", v.signature)
+            } finally { s.close() }
         } finally {
             dir.toFile().deleteRecursively()
         }
