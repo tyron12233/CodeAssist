@@ -35,6 +35,10 @@ internal class BlockCache(
     private val maxBlocks = maxOf(1, (maxBytes / blockSize).toInt())
     private val lock = Any()
 
+    /** Cumulative count of physical block reads (cache misses that reached disk). Test instrumentation for the
+     *  segment-skip optimization: a query the segment can prove empty from its resident term range must add zero. */
+    internal val blockReads = java.util.concurrent.atomic.AtomicLong()
+
     // accessOrder=true → get() moves the entry to the MRU end; removeEldestEntry evicts the LRU end.
     private val map = object : LinkedHashMap<Long, ByteArray>(256, 0.75f, true) {
         override fun removeEldestEntry(eldest: MutableMap.MutableEntry<Long, ByteArray>?): Boolean = size > maxBlocks
@@ -88,6 +92,7 @@ internal class BlockCache(
             // snapshot of the live segments, so this only races a concurrent reset).
             val channel = channelFor(segId) ?: throw ClosedChannelException()
             try {
+                blockReads.incrementAndGet()
                 val buf = ByteBuffer.allocate(blockSize)
                 var read = 0
                 while (read < blockSize) {

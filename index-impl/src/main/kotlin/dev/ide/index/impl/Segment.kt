@@ -10,7 +10,9 @@ import java.io.BufferedOutputStream
 import java.io.ByteArrayInputStream
 import java.io.ByteArrayOutputStream
 import java.io.Closeable
+import java.io.DataInput
 import java.io.DataInputStream
+import java.io.DataOutput
 import java.io.DataOutputStream
 import java.io.OutputStream
 import java.nio.ByteBuffer
@@ -35,15 +37,23 @@ internal class IndexEntry(val term: String, val value: Any, val origin: IndexOri
  *
  * File layout (all offsets inside a region are region-relative; absolute = regionBase + relative):
  * ```
- *   [postings region]        per term: varint count, then count × { originByte, varint len, value bytes }
+ *   [postings region]        per term: varint count, then count × { (originByte,) varint len, value bytes }
  *   [names region]           sorted; per term: varint termLen, term bytes, varint postingsRel
  *   [trigram names region]   sorted; per gram: varint gramLen, gram bytes, varint tgPostingsRel   (fuzzy only)
  *   [trigram postings region] per gram: varint count, then count × varint(delta of nameRel)        (fuzzy only)
+ *   [pool strings region]    per pooled string (id order): varint len, UTF-8 bytes
+ *   [pool table region]      numStrings × uN (big-endian; N = 1..4, the min width for the pool size): id → offset
  *   [footer]                 sparse term index + (sparse trigram index) + region bases/lens + magic
  *   [last 8 bytes]           footer start offset (big-endian long)
  * ```
  * Trigram postings store *name* offsets (monotonic, so delta+varint is compact): a fuzzy candidate
  * resolves straight to a name entry without any resident term→offset table.
+ *
+ * **String constant pool:** inside a value payload every string (written by the externalizer's `writeUTF`) is
+ * a varint POOL-ID, not inline bytes. The distinct strings are held once in the pool strings region; the u32
+ * pool table turns an id into an offset in O(1). Both pool regions are read on demand through the same
+ * [BlockCache], so the pool adds ZERO resident memory — a string shared across many values (an owner FQN
+ * repeated on every member of a type, a low-cardinality `kind`) costs one copy on disk instead of one per value.
  */
 internal class Segment private constructor(
     private val cache: BlockCache,
@@ -51,6 +61,21 @@ internal class Segment private constructor(
     private val externalizer: Externalizer<Any>,
     private val fuzzyEnabled: Boolean,
     private val numTerms: Int,
+    // Origin is a per-artifact property (a jar is all LIBRARY, the SDK all SDK), so a segment's postings almost
+    // always share ONE origin; when they do ([uniformOrigin]) the postings drop the per-entry origin byte and
+    // every value takes [segOrigin]. A mixed-origin corpus (only tests today) falls back to the per-posting byte.
+    private val uniformOrigin: Boolean,
+    private val segOrigin: IndexOrigin,
+    // The (inclusive) term range this segment covers — [minTerm]..[maxTerm], both empty when [numTerms] == 0.
+    // An exact/prefix query whose key can't fall inside it skips the whole segment without any disk read.
+    private val minTerm: String,
+    private val maxTerm: String,
+    // String constant pool: a payload's strings are varint ids into it. [numStrings] pool ids exist; the u32
+    // table at [poolTableBase] maps an id to its byte offset within the strings region at [poolStringsBase].
+    private val numStrings: Int,
+    private val poolTableWidth: Int,
+    private val poolStringsBase: Long,
+    private val poolTableBase: Long,
     private val postingsBase: Long,
     private val namesBase: Long,
     private val namesLen: Long,
@@ -71,6 +96,7 @@ internal class Segment private constructor(
     /** Append every value stored under [key] exactly. */
     fun exact(key: String, out: MutableList<Any>) {
         if (numTerms == 0) return
+        if (key < minTerm || key > maxTerm) return // outside this segment's term range — nothing to read
         val cur = Cursor(namesBase + sparseTerms.offAt(sparseTerms.floor(key)))
         val end = namesBase + namesLen
         while (cur.pos < end) {
@@ -85,6 +111,10 @@ internal class Segment private constructor(
     /** Append up to [cap] prefix hits, scored as [Scoring.scorePrefix]. */
     fun prefix(p: String, out: MutableList<Hit<Any>>, cap: Int) {
         if (numTerms == 0) return
+        // Skip the whole segment when the prefix window can't overlap [minTerm, maxTerm]: either p sorts past the
+        // last term, or the first term already lies beyond p's window (it sorts after p yet doesn't start with p,
+        // so it — and everything after it — is >= the window's exclusive upper bound). No disk read either way.
+        if (p.isNotEmpty() && (p > maxTerm || (p < minTerm && !minTerm.startsWith(p)))) return
         val cur = Cursor(namesBase + sparseTerms.offAt(sparseTerms.floor(p)))
         val end = namesBase + namesLen
         while (cur.pos < end) {
@@ -214,20 +244,34 @@ internal class Segment private constructor(
         val cur = Cursor(postingsBase + postingsRel)
         val count = cur.readVarLong().toInt()
         repeat(count) {
-            val origin = IndexOrigin.entries[cur.readByte()]
+            // A uniform-origin segment stored its origin once in the footer; only a mixed one carries a byte here.
+            val origin = if (uniformOrigin) segOrigin else IndexOrigin.entries[cur.readByte()]
             // Each payload is independently length-framed, so [cur] is advanced past this value BEFORE the
             // externalizer runs — a value that fails to deserialize (a stale/corrupt segment: e.g. a shared
             // externalizer whose format drifted without a version bump) is skipped, not fatal, and the cursor
             // stays aligned for the next value. Degrading a query beats crashing the caller (e.g. completion).
             val payload = cur.readBytes(cur.readVarLong().toInt())
             val value = try {
-                DataInputStream(ByteArrayInputStream(payload)).use { externalizer.read(it) }
+                // The externalizer reads its strings via [PoolingDataInput.readUTF], which turns the payload's
+                // varint pool-id back into the pooled string; every other field is read inline as before.
+                DataInputStream(ByteArrayInputStream(payload)).use { dis ->
+                    externalizer.read(PoolingDataInput(dis) { id -> poolString(id) })
+                }
             } catch (t: Throwable) {
                 warnCorruptOnce(t)
                 return@repeat
             }
             emit(value, origin)
         }
+    }
+
+    /** The pooled string for [id]: read its offset from the u32 table, then the length-framed bytes. Both reads
+     *  are served by the [BlockCache] (no resident pool), and hot strings keep their blocks cache-warm. */
+    private fun poolString(id: Int): String {
+        if (id < 0 || id >= numStrings) return "" // a corrupt id degrades to empty rather than crashing the query
+        val off = Cursor(poolTableBase + id.toLong() * poolTableWidth).readFixedUInt(poolTableWidth)
+        val sc = Cursor(poolStringsBase + off)
+        return String(sc.readBytes(sc.readVarLong().toInt()), Charsets.UTF_8)
     }
 
     /** Log the first unreadable value in this segment (throttled to once); the query then skips it and continues. */
@@ -273,6 +317,13 @@ internal class Segment private constructor(
         }
 
         fun readString(): String = String(readBytes(readVarLong().toInt()), Charsets.UTF_8)
+
+        /** A big-endian unsigned int of [width] bytes (a pool-table entry), returned widened to Long. */
+        fun readFixedUInt(width: Int): Long {
+            var r = 0L
+            repeat(width) { r = (r shl 8) or readByte().toLong() }
+            return r
+        }
     }
 
     /**
@@ -317,7 +368,12 @@ internal class Segment private constructor(
     }
 
     companion object {
-        internal const val MAGIC = 0x49445831 // "IDX1"
+        // "IDX3": v3 adds a per-segment string constant pool — value payloads store a varint pool-id in place
+        // of each inline string, so a string repeated across values (an owner FQN, a package prefix, a `kind`)
+        // is stored ONCE. v2 folded a uniform postings origin into one footer byte and added the [minTerm]..
+        // [maxTerm] skip range; v1 was the original. Each bump so a stale segment fails [open] (require) and is
+        // transparently rebuilt (indexArtifact's runCatching skips the failed open → the artifact needs a build).
+        internal const val MAGIC = 0x49445833 // "IDX3"
         const val SPARSE_INTERVAL = 64
         private val LOG = dev.ide.platform.log.Log.logger("index")
 
@@ -338,6 +394,14 @@ internal class Segment private constructor(
 
                 r.readInt() // ext.version — informational; the cache path already keys on it
                 val numTerms = r.readVarLong().toInt()
+                val uniformOrigin = r.readByte() != 0
+                val segOrigin = IndexOrigin.entries[r.readByte()]
+                val minTerm = r.readString()
+                val maxTerm = r.readString()
+                val numStrings = r.readVarLong().toInt()
+                val poolTableWidth = r.readByte()
+                val poolStringsBase = r.readVarLong()
+                val poolTableBase = r.readVarLong()
                 val postingsBase = r.readVarLong()
                 r.readVarLong() // postingsLen (unused at read time)
                 val namesBase = r.readVarLong(); val namesLen = r.readVarLong()
@@ -349,7 +413,9 @@ internal class Segment private constructor(
                 @Suppress("UNCHECKED_CAST")
                 Segment(
                     cache, segId, ext.valueExternalizer as Externalizer<Any>,
-                    fuzzy, numTerms, postingsBase, namesBase, namesLen,
+                    fuzzy, numTerms, uniformOrigin, segOrigin, minTerm, maxTerm,
+                    numStrings, poolTableWidth, poolStringsBase, poolTableBase,
+                    postingsBase, namesBase, namesLen,
                     tgNamesBase, tgNamesLen, tgPostingsBase,
                     sparseTerms, sparseGrams,
                 )
@@ -414,6 +480,20 @@ internal class Segment private constructor(
     }
 }
 
+/** The fewest bytes (1–4) that can hold any offset in `[0, size)` — the pool table's per-entry width. */
+internal fun poolOffsetWidth(size: Int): Int = when {
+    size <= 0x100 -> 1
+    size <= 0x10000 -> 2
+    size <= 0x1000000 -> 3
+    else -> 4
+}
+
+/** Write [v] as a fixed [width]-byte big-endian unsigned int (a pool-table entry). */
+internal fun DataOutputStream.writeFixedUInt(v: Int, width: Int) {
+    var shift = (width - 1) * 8
+    while (shift >= 0) { writeByte((v ushr shift) and 0xFF); shift -= 8 }
+}
+
 /** Unsigned LEB128 — small values cost one byte; offsets/counts/deltas in a segment are all non-negative. */
 internal fun DataOutputStream.writeVarLong(v0: Long) {
     var v = v0
@@ -453,6 +533,52 @@ internal fun DataInputStream.readVarLong(): Long {
         if (b < 0x80) return r
         shift += 7
     }
+}
+
+/**
+ * A [DataOutput] that transparently interns every [writeUTF]'d string into the segment's constant pool: it
+ * writes a varint pool-id in place of the string's inline bytes, so a value externalizer needs no change to
+ * benefit from pooling. Every other write delegates verbatim to the underlying payload stream.
+ */
+private class PoolingDataOutput(private val d: DataOutputStream, private val intern: (String) -> Int) : DataOutput {
+    override fun writeUTF(s: String) { d.writeVarLong(intern(s).toLong()) }
+    override fun write(b: Int) = d.write(b)
+    override fun write(b: ByteArray) = d.write(b)
+    override fun write(b: ByteArray, off: Int, len: Int) = d.write(b, off, len)
+    override fun writeBoolean(v: Boolean) = d.writeBoolean(v)
+    override fun writeByte(v: Int) = d.writeByte(v)
+    override fun writeShort(v: Int) = d.writeShort(v)
+    override fun writeChar(v: Int) = d.writeChar(v)
+    override fun writeInt(v: Int) = d.writeInt(v)
+    override fun writeLong(v: Long) = d.writeLong(v)
+    override fun writeFloat(v: Float) = d.writeFloat(v)
+    override fun writeDouble(v: Double) = d.writeDouble(v)
+    override fun writeBytes(s: String) = d.writeBytes(s)
+    override fun writeChars(s: String) = d.writeChars(s)
+}
+
+/**
+ * The read mirror of [PoolingDataOutput]: [readUTF] reads a varint pool-id and resolves it to the pooled
+ * string via [deref]; every other read delegates to the payload stream. Reading past the framed payload
+ * (a drifted/corrupt value) throws exactly as before, so the skip-and-continue path is preserved.
+ */
+private class PoolingDataInput(private val d: DataInputStream, private val deref: (Int) -> String) : DataInput {
+    override fun readUTF(): String = deref(d.readVarLong().toInt())
+    override fun readFully(b: ByteArray) = d.readFully(b)
+    override fun readFully(b: ByteArray, off: Int, len: Int) = d.readFully(b, off, len)
+    override fun skipBytes(n: Int): Int = d.skipBytes(n)
+    override fun readBoolean(): Boolean = d.readBoolean()
+    override fun readByte(): Byte = d.readByte()
+    override fun readUnsignedByte(): Int = d.readUnsignedByte()
+    override fun readShort(): Short = d.readShort()
+    override fun readUnsignedShort(): Int = d.readUnsignedShort()
+    override fun readChar(): Char = d.readChar()
+    override fun readInt(): Int = d.readInt()
+    override fun readLong(): Long = d.readLong()
+    override fun readFloat(): Float = d.readFloat()
+    override fun readDouble(): Double = d.readDouble()
+    @Suppress("DEPRECATION", "OVERRIDE_DEPRECATION")
+    override fun readLine(): String? = d.readLine()
 }
 
 /**
@@ -583,6 +709,19 @@ internal class SegmentWriter(
     private val tmpDir: Path = file.parent
     private var seq = 0L
     private var added = 0
+    // Origin is a per-artifact property, so every entry of a real segment shares one; track that so [finish]
+    // can fold it into a single footer byte instead of repeating it on every posting (a mixed corpus — only
+    // tests today — flips [uniformOrigin] off and keeps the per-posting byte).
+    private var firstOrigin = -1
+    private var uniformOrigin = true
+
+    // The string constant pool, built as values are serialized: [poolIds] assigns each distinct string a
+    // first-seen id and [poolStrings] holds them in id order. Bounded by the DISTINCT-string count (far below
+    // the entry count), so it stays small even for a big artifact; written to disk once by [finish].
+    private val poolIds = HashMap<String, Int>()
+    private val poolStrings = ArrayList<String>()
+
+    private fun intern(s: String): Int = poolIds.getOrPut(s) { poolStrings.size.also { poolStrings.add(s) } }
 
     /** One indexed entry, pre-serialized; [seq] preserves insertion order within equal terms (a stable sort). */
     private class Rec(val term: String, val seq: Long, val origin: Int, val value: ByteArray)
@@ -604,8 +743,14 @@ internal class SegmentWriter(
     val count: Int get() = added
 
     fun add(term: String, value: Any, origin: IndexOrigin) {
-        val vb = ByteArrayOutputStream().also { bos -> DataOutputStream(bos).use { ser.write(it, value) } }.toByteArray()
-        entries.add(Rec(term, seq++, origin.ordinal, vb))
+        val o = origin.ordinal
+        if (firstOrigin == -1) firstOrigin = o else if (o != firstOrigin) uniformOrigin = false
+        // Serialize through [PoolingDataOutput] so each string field becomes a varint pool-id (deduped) rather
+        // than inline bytes; the id is stable (first-seen) and identical whether or not the build spills.
+        val vb = ByteArrayOutputStream().also { bos ->
+            DataOutputStream(bos).use { dos -> ser.write(PoolingDataOutput(dos) { s -> intern(s) }, value) }
+        }.toByteArray()
+        entries.add(Rec(term, seq++, o, vb))
         added++
     }
 
@@ -623,17 +768,26 @@ internal class SegmentWriter(
         val sparseTerms = ArrayList<String>(); val sparseTermOff = ArrayList<Long>()
         val sparseGrams = ArrayList<String>(); val sparseGramOff = ArrayList<Long>()
         var numTerms = 0
+        // Terms are emitted in sorted order, so the first is the segment's min term and the last its max.
+        var minTerm: String? = null
+        var maxTerm = ""
         try {
             // Pass 1: merge entries in (term, seq) order → postings + names regions, emitting trigram tuples.
             val it = entries.sortedIterator()
             var head: Rec? = if (it.hasNext()) it.next() else null
             while (head != null) {
                 val term = head.term
+                if (minTerm == null) minTerm = term
+                maxTerm = term
                 val postingsRel = postings.length()
                 val group = ArrayList<Rec>()
                 while (head != null && head.term == term) { group.add(head); head = if (it.hasNext()) it.next() else null }
                 pOut.writeVarLong(group.size.toLong())
-                for (r in group) { pOut.writeByte(r.origin); pOut.writeVarLong(r.value.size.toLong()); pOut.write(r.value) }
+                // Omit the per-posting origin byte for a uniform segment (the common case); it lives in the footer.
+                for (r in group) {
+                    if (!uniformOrigin) pOut.writeByte(r.origin)
+                    pOut.writeVarLong(r.value.size.toLong()); pOut.write(r.value)
+                }
 
                 val nameRel = names.length()
                 val tb = term.toByteArray(Charsets.UTF_8)
@@ -678,6 +832,29 @@ internal class SegmentWriter(
                     val namesBase = pos; names.copyTo(out); pos += names.length()
                     val tgNamesBase = pos; tgNames.copyTo(out); pos += tgNames.length()
                     val tgPostingsBase = pos; tgPostings.copyTo(out); pos += tgPostings.length()
+
+                    // Pool: the distinct strings (length-framed, in id order) followed by a fixed-width u32 table
+                    // mapping id → its offset within the strings region. The strings are deduped, so this buffers
+                    // far less than the inline copies it replaces; the table is numStrings × 4 bytes.
+                    val poolStringsBase = pos
+                    val poolOffsets = IntArray(poolStrings.size)
+                    val poolBuf = ByteArrayOutputStream()
+                    DataOutputStream(poolBuf).use { pd ->
+                        for (i in poolStrings.indices) {
+                            poolOffsets[i] = poolBuf.size()
+                            val sb = poolStrings[i].toByteArray(Charsets.UTF_8)
+                            pd.writeVarLong(sb.size.toLong()); pd.write(sb)
+                        }
+                    }
+                    val poolBytes = poolBuf.toByteArray()
+                    out.write(poolBytes); pos += poolBytes.size
+                    // Table entries are the fewest bytes that hold any offset into the strings region — 1 byte
+                    // for a <256B pool, up to 4 — so the table doesn't pay a flat u32 on a small segment.
+                    val poolTableWidth = poolOffsetWidth(poolBytes.size)
+                    val poolTableBase = pos
+                    for (o in poolOffsets) out.writeFixedUInt(o, poolTableWidth)
+                    pos += poolOffsets.size.toLong() * poolTableWidth
+
                     val footerStart = pos
 
                     out.writeVarLong(sparseTerms.size.toLong())
@@ -695,6 +872,15 @@ internal class SegmentWriter(
                     }
                     out.writeInt(ext.version)
                     out.writeVarLong(numTerms.toLong())
+                    out.writeByte(if (uniformOrigin) 1 else 0)
+                    out.writeByte(if (uniformOrigin) firstOrigin.coerceAtLeast(0) else 0)
+                    val minB = (minTerm ?: "").toByteArray(Charsets.UTF_8)
+                    out.writeVarLong(minB.size.toLong()); out.write(minB)
+                    val maxB = maxTerm.toByteArray(Charsets.UTF_8)
+                    out.writeVarLong(maxB.size.toLong()); out.write(maxB)
+                    out.writeVarLong(poolStrings.size.toLong())
+                    out.writeByte(poolTableWidth)
+                    out.writeVarLong(poolStringsBase); out.writeVarLong(poolTableBase)
                     out.writeVarLong(postingsBase); out.writeVarLong(postings.length())
                     out.writeVarLong(namesBase); out.writeVarLong(names.length())
                     out.writeVarLong(tgNamesBase); out.writeVarLong(tgNames.length())
