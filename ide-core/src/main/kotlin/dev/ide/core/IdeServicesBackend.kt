@@ -46,9 +46,11 @@ import dev.ide.platform.log.Log
 import dev.ide.platform.log.LogLevel
 import dev.ide.platform.log.LogSink
 import dev.ide.preview.LayoutPreviewBackend
+import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.asCoroutineDispatcher
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
@@ -58,6 +60,7 @@ import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import java.util.concurrent.Executors
 import java.util.concurrent.atomic.AtomicInteger
 import java.nio.file.Paths
 
@@ -163,10 +166,20 @@ class IdeServicesBackend(
      *
      * Confining them to a single background thread keeps the serialization (one worker → never two
      * analyzer calls at once) while freeing the UI thread, so typing stays smooth no matter how slow a
-     * given analysis is. `limitedParallelism(1)` borrows one worker from the shared Default pool (no
-     * dedicated thread to close).
+     * given analysis is.
+     *
+     * This is a DEDICATED single thread, not `Dispatchers.Default.limitedParallelism(1)`. The latter
+     * serializes (mutual exclusion) but HOPS between the shared pool's physical workers between calls, so the
+     * analyzer state is written on one thread and read on the next — correctness then rests on the runtime
+     * honouring the dispatcher's cross-thread happens-before (memory barriers). On some 32-bit ARM ARTs (e.g.
+     * Unisoc SC9863A, issues #1396/#1332) that reliance produced a hard SIGSEGV (a torn reference read the
+     * runtime never turned into an NPE) on this worker during editing. A single pinned thread gives true
+     * single-thread confinement — what ecj/JDT expects, and immune to any weak-memory hand-off bug — for a
+     * thread that never closes for the life of the backend. Named so a future tombstone points straight here.
      */
-    override val engineDispatcher = Dispatchers.Default.limitedParallelism(1)
+    private val engineExecutor =
+        Executors.newSingleThreadExecutor { r -> Thread(r, "ide-engine").apply { isDaemon = true } }
+    override val engineDispatcher: CoroutineDispatcher = engineExecutor.asCoroutineDispatcher()
 
     /**
      * The priority scheduler the editor's engine calls run through (extracted to [EngineScheduler] so the
@@ -522,6 +535,7 @@ class IdeServicesBackend(
         runCatching { analytics.flush() }
         runCatching { analytics.close() }
         activeServices?.close()
+        runCatching { engineExecutor.shutdown() } // stop the dedicated ide-engine thread on teardown
     }
 
     private companion object {
