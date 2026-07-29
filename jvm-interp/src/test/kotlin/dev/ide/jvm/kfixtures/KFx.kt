@@ -57,3 +57,15 @@ inline fun <reified T> classOf(): Class<T> = T::class.java
 
 /** A reified inline whose body casts with `as` (OperationKind AS) — exercises the CHECKCAST rewrite. */
 inline fun <reified T> castTo(x: Any?): T = x as T
+
+/** A `boolean`-returning lambda passed to REAL (bridged) code that invokes it: `Optional.orElseGet(Supplier)`.
+ *  Kotlin compiles `{ false }` to an `invokedynamic` whose implementation method returns primitive `Z`, adapted
+ *  to the erased `Supplier.get():Object` SAM; when the real `orElseGet` calls the proxied supplier, the VM must
+ *  box the result as `java.lang.Boolean` (metafactory's contract), not `Integer` (the interpreter's `Int`
+ *  representation shared by boolean/byte/char/short), or a Compose `CompositionLocal<Boolean>` default-factory
+ *  read `(Boolean) …` throws a ClassCastException. `int…` is the already-correct control. */
+fun boolViaBridge(): Any? = java.util.Optional.empty<Boolean>().orElseGet { false }
+fun byteViaBridge(): Any? = java.util.Optional.empty<Byte>().orElseGet { 7.toByte() }
+fun charViaBridge(): Any? = java.util.Optional.empty<Char>().orElseGet { 'Q' }
+fun shortViaBridge(): Any? = java.util.Optional.empty<Short>().orElseGet { 9.toShort() }
+fun intViaBridge(): Any? = java.util.Optional.empty<Int>().orElseGet { 42 }

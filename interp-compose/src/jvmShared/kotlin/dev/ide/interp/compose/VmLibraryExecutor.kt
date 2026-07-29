@@ -49,6 +49,9 @@ class VmLibraryExecutor(
     private val hostLoadable: ((String) -> Boolean)? = null,
     /** Test seam: overrides where class bytes come from (default: the [jars]). */
     source: ClassBytesSource? = null,
+    /** Test seam: the namespaces interpreted from the project jars even when host-loadable (see
+     *  [PROJECT_PREFERRED_PREFIXES], the production default). */
+    private val projectPreferredPrefixes: List<String> = PROJECT_PREFERRED_PREFIXES,
 ) : LibraryExecutor, AutoCloseable {
 
     /** When set (the preview dispatcher wires it to its partial-render channel), a failure inside an
@@ -75,6 +78,14 @@ class VmLibraryExecutor(
             ?: (runCatching { Class.forName(binaryName, false, hostLoader) }.getOrNull() != null)
     }
 
+    /** The VM interpret gate: run a class from the project jars when the host can't load it (a downloaded
+     *  Maven jar / AAR) OR when it's a [PROJECT_PREFERRED_PREFIXES] namespace we prefer the project's own
+     *  (version-correct) copy for even though the host bundles one. [Vm.resolve] still requires the class
+     *  bytes to actually be present in the jars, so a project that ships no Material3 of its own keeps
+     *  bridging to the bundled build unchanged. */
+    private fun shouldInterpret(binaryName: String): Boolean =
+        projectPreferredPrefixes.any { binaryName.startsWith(it) } || !isHostLoadable(binaryName)
+
     /** Class bytes for the project's library jars (a downloaded Maven jar / AAR), keyed by internal name. Shared
      *  by the main VM and the reified-inline executor (a library reified inline lives in one of these jars). */
     private val jarSource: ClassBytesSource = source ?: ClassBytesSource { internalName ->
@@ -96,7 +107,7 @@ class VmLibraryExecutor(
 
     private val vm = Vm(
         source = jarSource,
-        policy = InterpretPolicy { internalName -> !isHostLoadable(internalName.replace('/', '.')) },
+        policy = InterpretPolicy { internalName -> shouldInterpret(internalName.replace('/', '.')) },
         peerFactory = peerFactory,
     )
 
@@ -469,6 +480,25 @@ class VmLibraryExecutor(
     private companion object {
         const val COMPOSER_DESC = "Landroidx/compose/runtime/Composer;"
         const val BITS_PER_DEFAULT_INT = 31
+
+        /** Namespaces the VM interprets from the PROJECT's library jars even when the host can load them —
+         *  i.e. where the IDE-bundled build is version-skewed against what the project actually depends on.
+         *  Material3 is the motivating case: the bundled Compose Multiplatform Material3 lags the project's
+         *  `androidx.compose.material3:material3` (it lacks the Expressive `ButtonDefaults.shapes()` /
+         *  `Button(shapes=…)` APIs), so bridging to it drops any composable the project's version added.
+         *
+         *  ENABLED for Material3 after the VM-hardening below was validated on ART: `MaterialExpressiveTheme`,
+         *  `ButtonDefaults.buttonColors()`, and a full DRAWING `Button` (Surface + ripple + Row, the ripple
+         *  `Indication` crossing into bridged foundation) all interpret cleanly on device (`VmButtonArtSpike`,
+         *  `VmPrimitiveLambdaBoxingArtSpike`). The enabling fix was the VM's primitive-return `invokedynamic`
+         *  lambda boxing (`jvm-interp` `Interpreter.boxLambdaReturn`) — a `CompositionLocal<Boolean>` default
+         *  factory `{ false }` was boxing as `Integer` not `Boolean`, crashing every Material3 theme.
+         *
+         *  A Material3 composable the VM can't yet interpret surfaces as `… [in <method>@<pc>]` (the enriched
+         *  `CHECKCAST`/dispatch message) — fix it in `:jvm-interp` and re-verify. The runtime/ui/foundation stay
+         *  bridged; widen this list (foundation/ui) only if their value types also need to be the project's copy.
+         *  See [[jvm-interp-bytecode-vm]]. */
+        val PROJECT_PREFERRED_PREFIXES = listOf("androidx.compose.material3.")
     }
 
     private fun primClass(d: Char): Class<*> = when (d) {

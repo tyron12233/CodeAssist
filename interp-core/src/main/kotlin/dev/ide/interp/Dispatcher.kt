@@ -502,8 +502,10 @@ class ReflectiveDispatcher(
     }
 
     private fun invokeStatic(ownerFqn: String, name: String, args: List<Any?>, composable: List<Boolean>, receiverCount: Int): Any? {
-        // A facade only the project's library jars carry (not loadable here) executes in the library executor.
-        if (libraryFallback != null && loadClassOrNull(ownerFqn) == null && libraryFallback.hasClass(ownerFqn)) {
+        // A facade the library executor owns runs there: one the host can't load at all (a project-only jar),
+        // OR one it prefers the project's version of over a version-skewed bundled build (Material3). Keying on
+        // `hasClass` (not host-loadability) lets the latter win — the executor's own gate decides.
+        if (libraryFallback != null && libraryFallback.hasClass(ownerFqn)) {
             return libraryFallback.invokeStatic(ownerFqn, name, args, receiverCount)
         }
         val cls = loadClass(ownerFqn)
@@ -674,8 +676,10 @@ class ReflectiveDispatcher(
     }
 
     private fun construct(ownerFqn: String, args: List<Any?>, composable: List<Boolean>, declaredParamCount: Int): Any? {
-        // A type only the project's library jars carry constructs in the library executor.
-        if (libraryFallback != null && loadClassOrNull(ownerFqn) == null && libraryFallback.hasClass(ownerFqn)) {
+        // A type the library executor owns constructs there — one the host can't load, or one it prefers the
+        // project's version of (Material3). Keyed on `hasClass` so the executor's own gate decides (see
+        // [invokeStatic]).
+        if (libraryFallback != null && libraryFallback.hasClass(ownerFqn)) {
             return libraryFallback.construct(ownerFqn, args)
         }
         // An unqualified type name (a stdlib exception the resolver couldn't fully qualify, e.g.

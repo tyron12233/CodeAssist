@@ -115,7 +115,11 @@ class Vm(
             if (!policy.interpret(name)) return@computeIfAbsent notInterpreted
             val bytes = source.bytesFor(name) ?: return@computeIfAbsent notInterpreted
             val cn = ClassNode()
+            val t0 = System.nanoTime()
             ClassReader(bytes).accept(cn, ClassReader.SKIP_FRAMES or ClassReader.SKIP_DEBUG)
+            VmProfile.parseNanos.addAndGet(System.nanoTime() - t0)
+            VmProfile.parseCount.incrementAndGet()
+            VmProfile.parseBytes.addAndGet(bytes.size.toLong())
             VmClass(cn.name, cn.superName, cn.interfaces ?: emptyList(), cn.access, cn.methods ?: emptyList(), cn.fields ?: emptyList())
         }
         return resolved.takeIf { it !== notInterpreted }

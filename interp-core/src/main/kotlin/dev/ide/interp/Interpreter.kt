@@ -1443,12 +1443,13 @@ class Interpreter(
      *  modifier; `Color` for `Color.Red`). Read from the runtime class — works for library objects on the
      *  classpath; a project-source object isn't compiled at preview time, so it fails the honest boundary. */
     private fun objectInstance(fqn: String): Any? {
+        // A class the library executor interprets (project-jar bytes) OWNS its singleton — even when the host
+        // can also load it. That happens when the executor prefers the project's copy over a version-skewed
+        // bundled one (Material3), and its singleton must be the interpreted instance so member calls on it
+        // dispatch into the same interpreted world, not the bundled reflective one.
+        libraryFallback?.takeIf { it.hasClass(fqn) }?.let { return it.objectInstance(fqn) }
         val cls = loadInitialized(fqn)
-            ?: run {
-                // An object only the project's library jars carry materializes in the library executor.
-                libraryFallback?.takeIf { it.hasClass(fqn) }?.objectInstance(fqn)?.let { return it }
-                throw InterpreterException("cannot load `$fqn` (a project-source object isn't available to the interpreter)")
-            }
+            ?: throw InterpreterException("cannot load `$fqn` (a project-source object isn't available to the interpreter)")
         runCatching { cls.getField("INSTANCE") }.getOrNull()?.let { return it.get(null) } // a Kotlin `object`
         // A type's companion — `Companion` by default, but a NAMED companion (`kotlin.random.Random.Default`)
         // uses its own name, so find it by pattern rather than by the literal name `Companion`.
@@ -1982,11 +1983,11 @@ class Interpreter(
     private fun readTopLevelProperty(ownerFqn: String, name: String): Any? {
         hookPropertyRead(ownerFqn, name, null)?.let { return it.value }
         val getterName = "get" + name.replaceFirstChar { if (it.isLowerCase()) it.titlecase() else it.toString() }
+        // A facade the executor interprets (project-jar bytes it prefers over a bundled build, or one the host
+        // can't load at all) serves the getter there.
+        libraryFallback?.takeIf { it.hasClass(ownerFqn) }?.let { return it.invokeStatic(ownerFqn, getterName, emptyList()) }
         val cls = loadInitialized(ownerFqn)
-            ?: run {
-                libraryFallback?.takeIf { it.hasClass(ownerFqn) }?.let { return it.invokeStatic(ownerFqn, getterName, emptyList()) }
-                throw InterpreterBoundaryException("cannot load facade `$ownerFqn` for top-level property `$name`")
-            }
+            ?: throw InterpreterBoundaryException("cannot load facade `$ownerFqn` for top-level property `$name`")
         val getter = getterName
         val m = cls.methods.firstOrNull {
             java.lang.reflect.Modifier.isStatic(it.modifiers) && it.parameterCount == 0 && KotlinJvmNames.matches(cls, it.name, getter)
@@ -2009,13 +2010,13 @@ class Interpreter(
             dispatcher.readExtensionPropertyOverride(receiver, ownerFqn, name)?.let { return it.value }
         }
         val getterName = "get" + name.replaceFirstChar { if (it.isLowerCase()) it.titlecase() else it.toString() }
+        // A facade the executor interprets (project-jar bytes it prefers over a bundled build, or one the host
+        // can't load at all) serves the extension getter there, receiver as the leading argument.
+        libraryFallback?.takeIf { it.hasClass(ownerFqn) }?.let { return it.invokeStatic(ownerFqn, getterName, listOf(receiver), leadingReceivers = 1) }
         val cls = loadClassAcross(ownerFqn, initialize = false, preferred = classLoader)
-            ?: run {
-                libraryFallback?.takeIf { it.hasClass(ownerFqn) }?.let { return it.invokeStatic(ownerFqn, getterName, listOf(receiver), leadingReceivers = 1) }
-                // A missing library facade (e.g. a Compose icon's per-icon `…Kt`) is a recoverable boundary:
-                // partial rendering skips the one statement rather than failing the whole preview.
-                throw InterpreterBoundaryException("cannot load facade `$ownerFqn` for extension property `$name`")
-            }
+            // A missing library facade (e.g. a Compose icon's per-icon `…Kt`) is a recoverable boundary:
+            // partial rendering skips the one statement rather than failing the whole preview.
+            ?: throw InterpreterBoundaryException("cannot load facade `$ownerFqn` for extension property `$name`")
         val getter = getterName
         val m = cls.methods.firstOrNull {
             java.lang.reflect.Modifier.isStatic(it.modifiers) && it.parameterCount == 1 && KotlinJvmNames.matches(cls, it.name, getter)

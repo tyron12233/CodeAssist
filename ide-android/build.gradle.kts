@@ -136,6 +136,25 @@ val bundleVmSpikeComposeRuntimeAsset = tasks.register<Copy>("bundleVmSpikeCompos
     into(layout.buildDirectory.dir("vm-spike-asset/vmbench"))
 }
 
+// --- Android material3 classes.jar (androidTest VM interpret spike) ------------------------------
+// VmButtonArtSpike interprets a real DRAWING Material3 composable (Button -> Surface -> ripple -> Row) with
+// the :jvm-interp VM against the app's real dexed Compose runtime/foundation/ui bridged — the piece the
+// desktop harness can't reach (Material3 Surface graphics need Skiko, absent headless). Stage the artifact's
+// classes.jar (non-transitive: only material3's own classes are interpreted; foundation/ui/runtime bridge).
+val vmSpikeMaterial3Aar: Configuration by configurations.creating {
+    isCanBeConsumed = false
+    isCanBeResolved = true
+    isTransitive = false
+}
+dependencies { vmSpikeMaterial3Aar("androidx.compose.material3:material3-android:1.4.0-beta01@aar") }
+
+val bundleVmSpikeMaterial3Asset = tasks.register<Copy>("bundleVmSpikeMaterial3Asset") {
+    description = "Stage the androidx material3 classes.jar as an androidTest asset for the VM Button interpret spike."
+    from(vmSpikeMaterial3Aar.elements.map { zipTree(it.single().asFile) }) { include("classes.jar") }
+    rename { "material3-android.jar" }
+    into(layout.buildDirectory.dir("vm-spike-asset/vmbench"))
+}
+
 // --- Moshi runtime jars (androidTest KSP-on-ART real-processor spike) -----------------------------
 // KspArtSpikeTest.bundledMoshiRunsOnArt runs the REAL bundled Moshi processor on ART via the production
 // KspSourceGenerator path. Moshi's runtime (com.squareup.moshi:moshi + okio) is pure JVM — plain jars, no
@@ -646,7 +665,7 @@ val fetchAndroidBuildTools = tasks.register("fetchAndroidBuildTools") {
 // Run before anything AGP does, so the freshly-fetched lib*.so are on disk when the native-lib merge runs,
 // and the staged kotlin-stdlib.jar asset is present when the asset merge runs.
 tasks.named("preBuild").configure {
-    dependsOn(fetchAndroidBuildTools, bundleKotlinStdlibAsset, bundleKotlincResourcesAsset, bundleComposeRuntimeAsset, bundleComposeFontsAsset, bundleComposeStringAsset, bundleAgentUiComposeStringAsset, bundleComposeDrawablesAsset, bundleR8DexAsset, bundleAppLogRuntimeAsset, bundleVmSpikeComposeRuntimeAsset, bundleMoshiLibsAsset)
+    dependsOn(fetchAndroidBuildTools, bundleKotlinStdlibAsset, bundleKotlincResourcesAsset, bundleComposeRuntimeAsset, bundleComposeFontsAsset, bundleComposeStringAsset, bundleAgentUiComposeStringAsset, bundleComposeDrawablesAsset, bundleR8DexAsset, bundleAppLogRuntimeAsset, bundleVmSpikeComposeRuntimeAsset, bundleVmSpikeMaterial3Asset, bundleMoshiLibsAsset)
 }
 
 // Same Android packaging gap as the fonts above, for the i18n string resources. :ide-ui's
