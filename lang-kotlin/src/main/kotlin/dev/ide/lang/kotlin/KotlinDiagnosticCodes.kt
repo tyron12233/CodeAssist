@@ -68,6 +68,16 @@ object KotlinDiagnosticCodes {
     const val FUNCTION_NO_BODY = "kt.functionNoBody"
     /** A use of a `@Deprecated` declaration (call, member read). */
     const val DEPRECATION = "kt.deprecation"
+    /** Use of an experimental API (a `@RequiresOptIn(level = WARNING)` marker) without opting in — the
+     *  compiler's OPT_IN_USAGE. Resolved via [KotlinSymbolService.optInMarkersOf]. */
+    const val OPT_IN_USAGE = "kt.optInUsage"
+    /** Use of an experimental API whose marker is `@RequiresOptIn(level = ERROR)` (the default) without opting
+     *  in — the compiler's OPT_IN_USAGE_ERROR. */
+    const val OPT_IN_USAGE_ERROR = "kt.optInUsageError"
+    /** A reference to a declaration that exists but is not accessible from here — specifically a library
+     *  `internal` member/type (invisible across the module boundary). The compiler's INVISIBLE_REFERENCE/
+     *  INVISIBLE_MEMBER, reported instead of a bare "unresolved reference" when the only match is internal. */
+    const val INVISIBLE_REFERENCE = "kt.invisibleReference"
     /** A read of a local `val`/`var` that is (on some path) not yet initialized (control-flow definite-assignment). */
     const val UNINITIALIZED_VARIABLE = "kt.uninitializedVariable"
     /** An assignment whose left side is not something that can be assigned to (`foo() = 1`, `5 = x`). */

@@ -97,6 +97,10 @@ class RawCallable(
     val jvmOverloads: Boolean = false,
     /** `@JvmName("x")` value — the Java-visible name override for a function (null ⇒ use [name]). */
     val jvmName: String? = null,
+    /** FQNs of the annotations on this declaration, resolved against the declaring file's imports (best-effort;
+     *  an unresolvable star-imported name is dropped — a miss, never a wrong FQN). Drives the opt-in usage check
+     *  (which of these are `@RequiresOptIn` markers is decided at check time by [KotlinSymbolService]). */
+    val annotationFqns: List<String> = emptyList(),
 )
 
 class RawClass(
@@ -147,6 +151,12 @@ class RawClass(
      *  [KotlinSyntheticMemberProvider] recognize its marker annotation (kotlinx.serialization's `@Serializable`,
      *  Parcelize's `@Parcelize`) off the source model to contribute the members that plugin would generate. */
     val annotationNames: List<String> = emptyList(),
+    /** FQNs of the annotations on the class declaration, resolved against the declaring file's imports
+     *  (best-effort). Drives the opt-in usage check for experimental TYPES (`@ExperimentalFoo class Bar`). */
+    val annotationFqns: List<String> = emptyList(),
+    /** When THIS class is a `@RequiresOptIn` marker annotation, its declared level (`"ERROR"` / `"WARNING"`,
+     *  default `"ERROR"`); null when it is not a marker. Lets a source-defined opt-in marker be recognized. */
+    val optInLevel: String? = null,
 )
 
 class SourceFile(
@@ -361,7 +371,34 @@ object SourceIndexBuilder {
             isAbstract = asClass?.let { it.hasModifier(KtTokens.ABSTRACT_KEYWORD) || it.hasModifier(KtTokens.SEALED_KEYWORD) } == true,
             isSealed = asClass?.isSealed() == true,
             isLocal = isLocal,
-            annotationNames = c.annotationEntries.mapNotNull { it.shortName?.asString() })
+            annotationNames = c.annotationEntries.mapNotNull { it.shortName?.asString() },
+            annotationFqns = annoFqns(c, ctx),
+            optInLevel = sourceOptInLevel(c))
+    }
+
+    /** FQNs of [decl]'s annotations, resolved against the declaring file's [ctx] (imports + same package). An
+     *  annotation whose simple name can't be resolved (a star-import) is dropped — a miss, never a wrong FQN. */
+    private fun annoFqns(decl: org.jetbrains.kotlin.psi.KtAnnotated, ctx: FileContext): List<String> =
+        decl.annotationEntries.mapNotNull { resolveAnnoFqn(it, ctx) }
+
+    private fun resolveAnnoFqn(entry: org.jetbrains.kotlin.psi.KtAnnotationEntry, ctx: FileContext): String? {
+        val typeText = entry.typeReference?.text?.substringBefore('<')?.trim() ?: return null
+        if ('.' in typeText) return typeText // written fully-qualified in source
+        val name = entry.shortName?.asString() ?: return null
+        ctx.imports.firstOrNull { !it.isStar && it.simpleName == name }?.let { return it.fqn }
+        // Same package (a source-defined marker, or a same-package annotation). Wrong only for a star-imported
+        // name — which then simply won't match a real marker (a miss), so this is sound (never a false positive).
+        return if (ctx.packageName.isNotEmpty()) "${ctx.packageName}.$name" else name
+    }
+
+    /** When [c] is a `@RequiresOptIn` marker annotation, its declared level (`"ERROR"`/`"WARNING"`, default
+     *  `"ERROR"`); null otherwise. Read from the annotation's `level = …` argument text. */
+    private fun sourceOptInLevel(c: KtClassOrObject): String? {
+        val entry = c.annotationEntries.firstOrNull { it.shortName?.asString() == "RequiresOptIn" } ?: return null
+        val levelText = entry.valueArguments.firstOrNull { it.getArgumentName()?.asName?.asString() == "level" }
+            ?.getArgumentExpression()?.text
+            ?: entry.valueArguments.firstOrNull { it.getArgumentName() == null }?.getArgumentExpression()?.text
+        return if (levelText != null && "WARNING" in levelText) "WARNING" else "ERROR"
     }
 
     /** ABSTRACT member detection: an explicit `abstract` modifier, or an interface member with no implementation
@@ -436,6 +473,7 @@ object SourceIndexBuilder {
         jvmStatic = hasAnno(f, "JvmStatic"),
         jvmOverloads = hasAnno(f, "JvmOverloads"),
         jvmName = annoArg(f, "JvmName"),
+        annotationFqns = annoFqns(f, ctx),
     )
 
     private fun property(p: KtProperty, ctx: FileContext, parsed: KotlinParsedFile) = RawCallable(
@@ -453,6 +491,7 @@ object SourceIndexBuilder {
         isAbstract = isAbstractProperty(p),
         jvmStatic = hasAnno(p, "JvmStatic"),
         jvmField = hasAnno(p, "JvmField"),
+        annotationFqns = annoFqns(p, ctx),
     )
 
     /** True if [decl] carries an annotation whose simple name is [simpleName] (matches `@X` and `@pkg.X`). */

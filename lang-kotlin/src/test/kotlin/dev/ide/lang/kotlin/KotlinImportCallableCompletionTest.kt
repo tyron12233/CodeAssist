@@ -71,8 +71,23 @@ class KotlinImportCallableCompletionTest {
             "a callable from another package must not be offered here")
     }
 
+    @Test
+    fun privateSourceCallableIsNotOfferedForImport() {
+        // The reported bug: a `private` top-level source function is file-scoped — it can't be imported (or
+        // qualified) from another file, so import completion must not offer it. Its public sibling still is.
+        val items = names("package other\nimport demo.|\n")
+        assertTrue("visibleHelper" in items, "a public top-level source callable must be offered; got ${items.take(30)}")
+        assertFalse("secretHelper" in items, "a PRIVATE top-level source callable must not be offered for import; got ${items.take(30)}")
+    }
+
     companion object {
-        val srcDir: Path = tempProject(mapOf("Seed.kt" to "package demo\n"))
+        val srcDir: Path = tempProject(
+            mapOf(
+                "Seed.kt" to "package demo\n",
+                // A source package with a public + a PRIVATE top-level callable, for the private-import filter.
+                "helpers.kt" to "package demo\nprivate fun secretHelper() {}\nfun visibleHelper() {}\n",
+            )
+        )
 
         private const val FLOW = "kotlinx.coroutines.flow"
 

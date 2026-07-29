@@ -83,6 +83,10 @@ class KotlinSymbol(
     val isSuspend: Boolean = false,
     /** A `@Deprecated` declaration — for semantic highlighting (strikethrough on its uses). */
     val isDeprecated: Boolean = false,
+    /** FQNs of the annotations on this declaration. TRANSIENT (not persisted): populated for SOURCE symbols
+     *  (rebuilt each analysis); a library symbol read back from the index carries none, and the opt-in check
+     *  recovers its markers lazily from bytecode via [declaringClassFqn]. Drives the opt-in usage diagnostic. */
+    val annotationFqns: List<String> = emptyList(),
     /** The index of the `vararg` value parameter (`listOf`, `mutableStateListOf(vararg …)`), or -1 if none.
      *  A vararg parameter absorbs any number of trailing positional arguments at a call site. */
     val varargParamIndex: Int = -1,
@@ -129,6 +133,7 @@ class KotlinSymbol(
             isInfix = isInfix,
             isSuspend = isSuspend,
             isDeprecated = isDeprecated,
+            annotationFqns = annotationFqns,
             varargParamIndex = varargParamIndex,
             paramHasDefault = paramHasDefault,
             declarationNode = declarationNode,
@@ -162,6 +167,7 @@ class KotlinSymbol(
             isInfix = isInfix,
             isSuspend = isSuspend,
             isDeprecated = isDeprecated,
+            annotationFqns = annotationFqns,
             varargParamIndex = varargParamIndex,
             paramHasDefault = paramHasDefault,
             declarationNode = declarationNode,
