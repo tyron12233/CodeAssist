@@ -14,12 +14,20 @@ import java.util.zip.ZipFile
 class KspProcessor(
     val id: String,
     val displayName: String,
+    /** One-line description for the toggle UI. */
+    val description: String,
     /**
      * A `.class` entry whose presence on the module classpath means "this processor applies" — the same
      * probe the Compose/serialization/Parcelize compiler plugins use (add the runtime, the processor turns on
      * with no extra wiring). E.g. Room's `androidx/room/RoomDatabase.class`.
      */
     val probeClassEntry: String,
+    /**
+     * The runtime Maven coordinate(s) that carry [probeClassEntry]. Enabling the processor's toggle adds these
+     * (like a Build Feature adding its runtime), which is what trips the probe and activates the processor —
+     * so the toggle works exactly like the Compose/Parcelize compiler-plugin toggles.
+     */
+    val runtimeCoordinates: List<String>,
     /** The processor's classpath (bundled in-app). Empty ⇒ the processor isn't bundled in this build → skipped. */
     val jars: () -> List<Path>,
 )
@@ -63,10 +71,22 @@ class KspProcessorCatalog(val processors: List<KspProcessor>) {
         fun blessed(bundledJars: (id: String) -> List<Path> = { emptyList() }): KspProcessorCatalog =
             KspProcessorCatalog(
                 listOf(
-                    KspProcessor("room", "Room", ROOM_MARKER) { bundledJars("room") },
-                    KspProcessor("moshi", "Moshi", MOSHI_MARKER) { bundledJars("moshi") },
-                    KspProcessor("hilt", "Hilt / Dagger", HILT_MARKER) { bundledJars("hilt") },
-                    KspProcessor("glide", "Glide", GLIDE_MARKER) { bundledJars("glide") },
+                    KspProcessor(
+                        "room", "Room", "Generate @Database/@Dao implementations for the Room persistence library.",
+                        ROOM_MARKER, listOf("androidx.room:room-runtime:2.8.4"),
+                    ) { bundledJars("room") },
+                    KspProcessor(
+                        "moshi", "Moshi", "Generate JSON adapters for @JsonClass(generateAdapter = true) classes.",
+                        MOSHI_MARKER, listOf("com.squareup.moshi:moshi:1.15.2"),
+                    ) { bundledJars("moshi") },
+                    KspProcessor(
+                        "hilt", "Hilt / Dagger", "Generate Hilt/Dagger dependency-injection components.",
+                        HILT_MARKER, listOf("com.google.dagger:hilt-android:2.60.1"),
+                    ) { bundledJars("hilt") },
+                    KspProcessor(
+                        "glide", "Glide", "Generate Glide's GlideApp/module API from @GlideModule.",
+                        GLIDE_MARKER, listOf("com.github.bumptech.glide:glide:5.0.9"),
+                    ) { bundledJars("glide") },
                 ),
             )
 
