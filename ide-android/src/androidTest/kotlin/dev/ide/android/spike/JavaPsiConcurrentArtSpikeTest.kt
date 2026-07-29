@@ -20,16 +20,18 @@ import java.util.concurrent.TimeUnit
 import java.util.zip.ZipInputStream
 
 /**
- * The load-bearing parallel-parse experiment ON ART. Two things this settles that the desktop
- * `ConcurrentParseSpikeTest` cannot:
- *   1. Does IntelliJ's **Java** PSI parse at all on ART (the `:lang-java` backend's premise)?
- *   2. Is **concurrent** `buildTree` on the ONE shared env safe on ART **after a single-threaded warm-up**?
- *      (The hypothesis: the ART concurrent-parse SIGSEGV is first-touch lazy init, so warming up fully,
- *      single-threaded, before any concurrency makes steady-state concurrent reads safe.)
+ * Drives IntelliJ's **Java** PSI from many threads ON ART, settling what the desktop `ConcurrentParseSpikeTest`
+ * cannot: does the Java PSI parse at all on ART (the `:lang-java` backend's premise), and does the shared env
+ * hold up under many concurrent callers?
  *
- * A clean pass ⇒ migrate source indexing onto the RW-lock read path (`IntellijPsiHost.parseConcurrent`) for
- * real parallel indexing. A native crash (the process dies → instrumentation reports it) or captured
- * `errors` ⇒ concurrent `buildTree` is NOT ART-safe; fall back to the lock-free `JavaLexer` scan.
+ * This began as the "is **concurrent** `buildTree` ART-safe after a single-threaded warm-up?" experiment (the
+ * hypothesis being that the ART concurrent-parse SIGSEGV was only first-touch lazy init). It passed here on
+ * Android 8.0, and source indexing was migrated onto a shared-read-lock path on the strength of that. **The
+ * field disproved it**: a 32-bit ART tombstone (Infinix X6823C, Android 12) caught a native SIGSEGV inside a
+ * concurrent index `buildTree`. Concurrent tree building is forbidden again — [IntellijPsiHost.parseStructural]
+ * serializes — so a clean pass here no longer licenses parallel `buildTree`; it only confirms Java PSI works on
+ * ART and that concurrent callers funnel through the lock correctly. A pass on ONE device is not evidence that
+ * a lock-free parse is safe on every ART build.
  *
  *     ./gradlew :ide-android:connectedDebugAndroidTest \
  *       -Pandroid.testInstrumentationRunnerArguments.class=dev.ide.android.spike.JavaPsiConcurrentArtSpikeTest
@@ -57,7 +59,7 @@ class JavaPsiConcurrentArtSpikeTest {
         )
         Log.i(TAG, "single-threaded Java parse OK on ART (${warm.decls.size} decls)")
 
-        // 2. Hammer concurrent structural parses through the RW-lock read path.
+        // 2. Hammer structural parses from many threads (they serialize inside the host's parse lock).
         val n = 300
         val sources = (0 until n).map { i ->
             i to "package p$i;\npublic class C$i extends B$i { public int m$i(String a){ return $i; } int f$i; }"
@@ -69,7 +71,7 @@ class JavaPsiConcurrentArtSpikeTest {
             sources.map { (i, src) ->
                 pool.submit {
                     try {
-                        val d = IntellijPsiHost.parseConcurrent("C$i.java", JavaLanguage.INSTANCE, src) { psi ->
+                        val d = IntellijPsiHost.parseStructural("C$i.java", JavaLanguage.INSTANCE, src) { psi ->
                             JavaSourceIndexer.declsOf(psi as PsiJavaFile)
                         }
                         correct[i] = d.decls.any { it.name == "C$i" } &&

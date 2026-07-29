@@ -12,6 +12,7 @@ import kotlin.test.AfterTest
 import kotlin.test.BeforeTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
 import kotlin.test.assertNotNull
 import kotlin.test.assertTrue
 
@@ -48,6 +49,25 @@ class JavaEnvironmentTest {
     fun tearDown() {
         env.close()
         srcRoot.deleteRecursively()
+    }
+
+    /**
+     * `PsiFileImpl` keeps its `FileElement` by a hard reference only while
+     * `isKeepTreeElementByHardReference()` — i.e. `!viewProvider.isEventSystemEnabled` — holds. With an
+     * event-system-enabled file the tree hangs off a `SoftReference`, so memory pressure can collect it and
+     * the next node access reparses the file OUTSIDE `IntellijPsiHost`'s parse lock, which is exactly the
+     * concurrent `buildTree` that SIGSEGVs on 32-bit ART. Resolution does not depend on physicality here (a
+     * core project environment's only `ResolveScopeManager` is `MockResolveScopeManager`, which returns
+     * `allScope` for every element), and the rest of this class covers that resolution still works.
+     */
+    @Test
+    fun `parsed file holds its tree by a hard reference`() {
+        val file = env.parse("Hold.java", "package com.foo;\nclass Hold { void m() { int x = 1; } }")
+        assertFalse(
+            file.viewProvider.isEventSystemEnabled,
+            "an event-system-enabled file holds its tree softly — it can be collected and reparsed " +
+                "outside the parse lock",
+        )
     }
 
     @Test

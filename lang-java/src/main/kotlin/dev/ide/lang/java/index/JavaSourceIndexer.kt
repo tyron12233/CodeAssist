@@ -23,10 +23,12 @@ import dev.ide.psi.IntellijPsiHost
  * binding-free contract and emitting the identical [DeclKind] strings + offsets.
  *
  * The parse is shared per-input via [IndexInput.shared] (ONE [PsiJavaFile] for all of a file's indexes in a
- * pass) and content-cached across passes ([cache]). NOTE: PSI parsing serializes under the global parse lock,
- * so a large parallel index build funnels Java source parses through it — correct, but a known perf tradeoff
- * versus the JDT parser, and it is most pronounced for LIBRARY_SOURCE (JDK `src.zip` / Android sources); a
- * lighter stub-based indexer is the future optimization (as `:lang-kotlin-index` did for Kotlin).
+ * pass) and content-cached across passes ([cache]). NOTE: PSI parsing serializes under the global parse lock
+ * (concurrent `buildTree` is not ART-safe — see [IntellijPsiHost]), so a large parallel index build funnels
+ * Java source parses through it — correct, but a known perf tradeoff versus the JDT parser, and most
+ * pronounced for LIBRARY_SOURCE (JDK `src.zip` / Android sources). What keeps it affordable is that the parse
+ * is genuinely structural: method bodies stay unexpanded chameleons, since nothing here reads one. A lighter
+ * stub-based indexer is the future optimization (as `:lang-kotlin-index` did for Kotlin).
  */
 object JavaSourceIndexer {
 

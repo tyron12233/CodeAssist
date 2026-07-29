@@ -13,15 +13,15 @@ import kotlin.test.assertEquals
 import kotlin.test.assertTrue
 
 /**
- * The parallel-parse validation (the pivotal experiment for "parallelize source indexing"): after a
- * single-threaded warm-up, hammer concurrent structural parses of DISTINCT sources on the ONE shared
- * [IntellijPsiHost] env from many threads via [IntellijPsiHost.parseConcurrent] (shared read lock, real
- * concurrent `buildTree`), asserting every extraction is correct and nothing corrupts/crashes.
+ * Hammers structural parses of DISTINCT sources on the ONE shared [IntellijPsiHost] env from many threads,
+ * asserting every extraction is correct and nothing corrupts or crashes.
  *
- * On the desktop JVM this is expected to pass (the real IDE parses concurrently). Its load-bearing purpose is
- * to be re-run ON DEVICE (ART) to settle whether concurrent `buildTree` is safe there after a thorough
- * warm-up — the fact that decides whether the RW-lock read path can back parallel indexing, or whether we
- * must fall back to a non-PSI lexer scan.
+ * History: this began as the experiment for "parallelize source indexing" — it parsed through a shared read
+ * lock, so `buildTree` really did run concurrently, and it passed on the desktop JVM and on an Android 8.0
+ * device. A 32-bit ART tombstone from the field then caught a native SIGSEGV inside exactly that concurrent
+ * `buildTree`, so the host serializes every parse again ([IntellijPsiHost.withParseLock]) and the concurrency
+ * here is now on the CALLERS, not on tree building. The test is kept because it still exercises what matters:
+ * many threads driving the shared env through the lock must each get a correct, complete extraction.
  */
 class ConcurrentParseSpikeTest {
 
@@ -46,7 +46,7 @@ class ConcurrentParseSpikeTest {
             val futures = sources.map { (i, src) ->
                 pool.submit {
                     try {
-                        val parsed = IntellijPsiHost.parseConcurrent("C$i.java", JavaLanguage.INSTANCE, src) { psi ->
+                        val parsed = IntellijPsiHost.parseStructural("C$i.java", JavaLanguage.INSTANCE, src) { psi ->
                             JavaSourceIndexer.declsOf(psi as PsiJavaFile)
                         }
                         correct[i] = parsed.decls.any { it.name == "C$i" && it.kind == JavaSourceIndexer.DeclKind.CLASS } &&

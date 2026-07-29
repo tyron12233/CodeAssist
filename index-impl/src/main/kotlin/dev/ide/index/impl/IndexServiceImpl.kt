@@ -612,9 +612,12 @@ class IndexServiceImpl(
         try {
             val (inputs, closeable) = art.open()
             try {
-                // Parse inputs in PARALLEL per batch (the parse dominates and is concurrent-safe on the primed
-                // read lock; `async` inherits this coroutine's buildDispatcher, so total width stays capped by
-                // its limitedParallelism), but WRITE each input's entries to the per-ext SegmentWriters on THIS
+                // Parse inputs in PARALLEL per batch (`async` inherits this coroutine's buildDispatcher, so
+                // total width stays capped by its limitedParallelism). NOTE: a SOURCE input's PSI parse
+                // serializes inside IntellijPsiHost's parse lock (concurrent `buildTree` is not ART-safe), so
+                // the width here only really buys parallelism for binary (`.class`) inputs and for the
+                // non-parse work around a source parse; it is not a claim that PSI parses run concurrently.
+                // Entries are WRITTEN to the per-ext SegmentWriters on THIS
                 // coroutine in INPUT ORDER. So the writers — and the resulting segment bytes — are byte-identical
                 // to the old serial build; only the parse is parallelized. This lets one big LIBRARY_SOURCE
                 // artifact (`sources-android-NN`, thousands of large files) use the idle cores instead of a
