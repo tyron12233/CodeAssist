@@ -155,7 +155,10 @@ object AndroidIde {
         val kotlinPluginLoader = ArtKotlinPluginLoader(
             androidJar.toPath(),
             File(context.cacheDir, "kotlinc-plugins").toPath(),
-            Build.VERSION.SDK_INT,
+            // D8 (r8 8.13.19) supports min-api up to 36; a newer device (SDK_INT 37+) would trip a
+            // "not supported by this compiler" warning, so cap it. The dexed plugin/processor code still runs
+            // on the device — min-api only bounds desugaring, and 36 is a safe floor for anything >= 36.
+            minOf(Build.VERSION.SDK_INT, 36),
         )
         // Runs the release/minify R8 pass in a forked dalvikvm with a heap above the app cap (the bundled
         // r8.dex asset is its classpath). Self-falls-back to in-process R8 if forking isn't usable here.

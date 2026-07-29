@@ -66,6 +66,11 @@ val appProvidedJarPrefixes = listOf("kotlin-stdlib", "kotlinx-coroutines", "symb
 fun bundleProcessor(id: String, dep: Provider<*>) {
     val cfg = configurations.create("ksp_${id}_bundle")
     dependencies.add(cfg.name, dep)
+    // com.intellij:annotations:12.0 (an ancient transitive of some processor closures, e.g. Room) and
+    // org.jetbrains:annotations both define org.intellij.lang.annotations.* — packaging both makes D8 fail
+    // "Duplicate class ...Identifier" when dexing the bundle on device. Drop the stale com.intellij one; the
+    // org.jetbrains:annotations already in the closure supplies the same classes.
+    cfg.exclude(group = "com.intellij", module = "annotations")
     val zip = tasks.register<Zip>("ksp${id.replaceFirstChar { it.uppercase() }}ProcessorZip") {
         description = "Packages the $id KSP processor closure as /processors/$id.zip (zip of jars; app-provided jars dropped)."
         archiveFileName.set("$id.zip")
