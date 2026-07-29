@@ -13,6 +13,8 @@ import dev.ide.lang.kotlin.symbols.DefaultImports
 import dev.ide.lang.kotlin.symbols.FileContext
 import dev.ide.lang.kotlin.symbols.KotlinSymbol
 import dev.ide.lang.kotlin.symbols.KotlinSymbolService
+import dev.ide.lang.kotlin.symbols.OptInLevel
+import dev.ide.lang.kotlin.symbols.OptInMarker
 import dev.ide.lang.resolve.SymbolKind
 import com.intellij.psi.PsiElement
 import org.jetbrains.kotlin.lexer.KtModifierKeywordToken
@@ -145,6 +147,7 @@ internal class KotlinSemanticChecks(private val service: KotlinSymbolService) {
                     report(typeArgumentCountMismatch(psi, resolver))
                     reportAll(typeArgumentBoundViolation(psi, resolver))
                     reportAll(useSiteProjectionMisuse(psi, resolver))
+                    report(optInTypeUsage(psi, resolver))
                 }
             }
         },
@@ -243,6 +246,7 @@ internal class KotlinSemanticChecks(private val service: KotlinSymbolService) {
                 KotlinPerf.span("call.composable") { report(composableInvocation(psi, resolver)) }
                 KotlinPerf.span("call.suspend") { report(suspendInvocation(psi, resolver)) }
                 KotlinPerf.span("call.deprecation") { if (resolveReady) report(deprecatedCall(psi, resolver)) }
+                KotlinPerf.span("call.optIn") { if (resolveReady) report(optInCallUsage(psi, resolver)) }
                 KotlinPerf.span("call.inferType") { report(cannotInferType(psi, resolver)) }
                 KotlinPerf.span("call.abstractInst") { if (resolveReady) report(abstractInstantiation(psi, resolver)) }
             }
@@ -2987,6 +2991,15 @@ internal class KotlinSemanticChecks(private val service: KotlinSymbolService) {
         // empty set for an unknown type and was skipped; `isKnownType` is that same guard without enumerating).
         if (!service.isKnownType(recvType.qualifiedName)) return null
         val r = expr.textRange
+        // Refine a would-be "unresolved" into the precise INVISIBLE_REFERENCE when the ONLY declaration of this
+        // name on the (library) receiver is `internal` — inaccessible across the module boundary, not missing.
+        service.invisibleInternalMemberOwner(recvType.qualifiedName, name)?.let { owner ->
+            return Diagnostic(
+                TextRange(r.startOffset, r.endOffset), Severity.ERROR,
+                "Cannot access '$name': it is internal in '${owner.substringAfterLast('.')}'",
+                KotlinDiagnosticCodes.INVISIBLE_REFERENCE,
+            )
+        }
         return Diagnostic(TextRange(r.startOffset, r.endOffset), Severity.ERROR, "Unresolved reference: $name", KotlinDiagnosticCodes.UNRESOLVED)
     }
 
@@ -3106,6 +3119,81 @@ internal class KotlinSemanticChecks(private val service: KotlinSymbolService) {
             TextRange(r.startOffset, r.endOffset), Severity.WARNING,
             "'${callee.name}' is deprecated", KotlinDiagnosticCodes.DEPRECATION,
         )
+    }
+
+    /**
+     * A call to an experimental API — a callee gated by one or more `@RequiresOptIn` markers (its own or its
+     * declaring type's) — from a site that has NOT opted in. Kotlin's OPT_IN_USAGE (`@RequiresOptIn(level =
+     * WARNING)`) / OPT_IN_USAGE_ERROR (level ERROR, the default). Conservative on both ends: a marker is only
+     * recognized when [KotlinSymbolService.optInLevelOf] can decide it (unknown → no report), and opt-in
+     * recognition errs toward "opted in" (a loose simple-name match of `@OptIn(M::class)` / a propagating `@M`),
+     * so an actually-opted-in usage is never falsely flagged.
+     */
+    private fun optInCallUsage(call: KtCallExpression, resolver: KotlinResolver): Diagnostic? {
+        val callee = resolver.calleeFunctionOf(call) ?: return null
+        return reportOptInUsage(service.optInMarkersOf(callee), call.calleeExpression ?: call)
+    }
+
+    /** A reference to an experimental TYPE (`@ExperimentalFoo class Bar`) from a site that hasn't opted in. */
+    private fun optInTypeUsage(userType: KtUserType, resolver: KotlinResolver): Diagnostic? {
+        if (userType.qualifier != null || userType.parent is KtUserType) return null
+        val ref = userType.referenceExpression ?: return null
+        val name = ref.getReferencedName()
+        if (name.isEmpty() || resolver.isTypeParameterInScope(name, userType.textRange.startOffset)) return null
+        val fqn = service.resolveTypeName(name, resolver.fileContext) ?: return null
+        return reportOptInUsage(service.optInMarkersOfType(fqn), ref)
+    }
+
+    /** Report the strongest unsatisfied [markers] at [anchor], or null when none apply / all are opted in. */
+    private fun reportOptInUsage(markers: List<OptInMarker>, anchor: org.jetbrains.kotlin.psi.KtElement): Diagnostic? {
+        if (markers.isEmpty()) return null
+        val unsatisfied = markers.filterNot { optedIn(anchor, it.fqn.substringAfterLast('.')) }
+        if (unsatisfied.isEmpty()) return null
+        val error = unsatisfied.firstOrNull { it.level == OptInLevel.ERROR }
+        val marker = error ?: unsatisfied.first()
+        val simple = marker.fqn.substringAfterLast('.')
+        val r = anchor.textRange
+        val severity = if (error != null) Severity.ERROR else Severity.WARNING
+        val code = if (error != null) KotlinDiagnosticCodes.OPT_IN_USAGE_ERROR else KotlinDiagnosticCodes.OPT_IN_USAGE
+        return Diagnostic(
+            TextRange(r.startOffset, r.endOffset), severity,
+            "This declaration is experimental and its usage must be marked with '@OptIn($simple::class)' or '@$simple'",
+            code,
+        )
+    }
+
+    /** Whether the use at [useSite] is opted in to the marker [markerSimple] — an enclosing declaration (or the
+     *  file) carries `@OptIn(marker::class)` / `@UseExperimental(...)`, or is itself annotated with the marker
+     *  (propagation). Matched by SIMPLE name — deliberately loose so a genuine opt-in is never missed (a miss
+     *  here would falsely flag opted-in code); the marker-existence side is what stays strict. */
+    private fun optedIn(useSite: org.jetbrains.kotlin.psi.KtElement, markerSimple: String): Boolean {
+        var node: com.intellij.psi.PsiElement? = useSite
+        while (node != null) {
+            when (node) {
+                is org.jetbrains.kotlin.psi.KtFile ->
+                    if (annotationsOptIn(node.fileAnnotationList?.annotationEntries.orEmpty() + node.annotationEntries, markerSimple)) return true
+                is org.jetbrains.kotlin.psi.KtAnnotated ->
+                    if (annotationsOptIn(node.annotationEntries, markerSimple)) return true
+            }
+            node = node.parent
+        }
+        return false
+    }
+
+    private fun annotationsOptIn(entries: List<org.jetbrains.kotlin.psi.KtAnnotationEntry>, markerSimple: String): Boolean {
+        for (entry in entries) {
+            val name = entry.shortName?.asString() ?: continue
+            if (name == markerSimple) return true // a propagating `@Marker` on the enclosing declaration/file
+            if (name == "OptIn" || name == "UseExperimental") {
+                val hit = entry.valueArguments.any { va ->
+                    val text = va.getArgumentExpression()?.text ?: return@any false
+                    // `Marker::class`, `pkg.Marker::class`, `Marker::class as …` → the class simple name.
+                    text.substringBefore("::").substringAfterLast('.').substringBefore('<').trim() == markerSimple
+                }
+                if (hit) return true
+            }
+        }
+        return false
     }
 
     /**

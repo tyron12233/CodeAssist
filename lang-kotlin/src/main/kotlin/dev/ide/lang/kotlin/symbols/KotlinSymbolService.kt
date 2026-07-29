@@ -59,6 +59,12 @@ import java.util.concurrent.ConcurrentHashMap
  * The expensive bits (the source-model build, the classpath extension scan, per-type bytecode reads) are
  * lazy and cached; an edit invalidates the source model via [setOverlay].
  */
+/** The severity a `@RequiresOptIn` marker declares — `ERROR` (the Kotlin default) or `WARNING`. */
+enum class OptInLevel { WARNING, ERROR }
+
+/** A `@RequiresOptIn` marker annotation ([fqn]) gating an experimental API, at its declared [level]. */
+data class OptInMarker(val fqn: String, val level: OptInLevel)
+
 class KotlinSymbolService(
     private val sourceRoots: List<VirtualFile>,
     classpathJars: List<Path>,
@@ -266,6 +272,74 @@ class KotlinSymbolService(
     /** Whether [fqn] is a compiled class on this module's CLASSPATH (library/SDK type). The gate for offering a
      *  decompiled "go to declaration/type" when no project source declares it. Cheap: one classpath lookup. */
     fun isClasspathType(fqn: String): Boolean = reader.classBytes(fqn) != null
+
+    // ---- opt-in (@RequiresOptIn / experimental API) --------------------------------------------------------
+
+    /** Level → not-null Optional so a "not a marker" answer is cached too. */
+    private val optInLevelCache = java.util.concurrent.ConcurrentHashMap<String, java.util.Optional<OptInLevel>>()
+    private val optInScanCache = java.util.concurrent.ConcurrentHashMap<String, java.util.Optional<KotlinMetadata.OptInScan>>()
+
+    /** The opt-in [OptInLevel] of annotation class [annotationFqn] IF it is a `@RequiresOptIn` marker (source
+     *  or library), else null. Cached. This is what turns "is this annotation experimental?" into a decision. */
+    fun optInLevelOf(annotationFqn: String): OptInLevel? =
+        optInLevelCache.getOrPut(annotationFqn) {
+            val fromSource = model().classByFqn[annotationFqn]?.optInLevel
+            val level = fromSource ?: reader.classBytes(annotationFqn)?.let { KotlinMetadata.scanOptIn(it)?.requiresOptInLevel }
+            java.util.Optional.ofNullable(level?.let { if (it == "WARNING") OptInLevel.WARNING else OptInLevel.ERROR })
+        }.orElse(null)
+
+    /** The ASM opt-in scan of library class [classFqn]'s bytecode (annotations on the class + its methods),
+     *  cached. Null for a source class / one not on the classpath. */
+    private fun optInScanOf(classFqn: String): KotlinMetadata.OptInScan? =
+        optInScanCache.getOrPut(classFqn) {
+            java.util.Optional.ofNullable(reader.classBytes(classFqn)?.let { KotlinMetadata.scanOptIn(it) })
+        }.orElse(null)
+
+    /** The `@RequiresOptIn` markers that gate USE of [target] — those placed on the declaration itself, plus
+     *  those on its declaring class (an experimental type makes its members experimental). Empty when [target]
+     *  is not experimental or nothing can be decided (sound: the usage check then reports nothing). */
+    fun optInMarkersOf(target: KotlinSymbol): List<OptInMarker> {
+        val candidates = LinkedHashSet<String>()
+        // The declaration's own annotations: source symbols carry them directly; a library symbol's are read
+        // lazily from bytecode (by the demangled member name — value-class mangling is normalized in the scan).
+        candidates += target.annotationFqns
+        val owner = target.declaringClassFqn
+        if (owner != null && !target.origin.fromSource) {
+            optInScanOf(owner)?.let { scan ->
+                candidates += scan.classAnnotations
+                scan.methodAnnotations[target.name]?.let { candidates += it }
+                if (target.kind == dev.ide.lang.resolve.SymbolKind.FIELD) {
+                    scan.methodAnnotations["get" + target.name.replaceFirstChar { c -> if (c.isLowerCase()) c.titlecase() else c.toString() }]
+                        ?.let { candidates += it }
+                }
+            }
+        }
+        // The declaring class's own markers (source path — a library owner's class markers are added above).
+        if (owner != null && target.origin.fromSource) candidates += optInMarkerFqnsOfType(owner)
+        return candidates.mapNotNull { fqn -> optInLevelOf(fqn)?.let { OptInMarker(fqn, it) } }
+    }
+
+    /** The `@RequiresOptIn` markers annotating TYPE [fqn] (an experimental class/interface). */
+    fun optInMarkersOfType(fqn: String): List<OptInMarker> =
+        optInMarkerFqnsOfType(fqn).mapNotNull { a -> optInLevelOf(a)?.let { OptInMarker(a, it) } }
+
+    /** The annotation FQNs on class [fqn] (source model or library bytecode), unfiltered by marker-ness. */
+    private fun optInMarkerFqnsOfType(fqn: String): List<String> =
+        model().classByFqn[fqn]?.annotationFqns ?: optInScanOf(fqn)?.classAnnotations ?: emptyList()
+
+    /** The library type (in [typeFqn]'s hierarchy) that declares an `internal` member/property named [name],
+     *  or null. Lets the unresolved-member check report the precise INVISIBLE_REFERENCE ("it is internal") for
+     *  a library-internal access instead of a bare "unresolved reference". A SOURCE type is never a hit — its
+     *  `internal` is same-module and therefore accessible. Only consulted on the already-unresolved path. */
+    fun invisibleInternalMemberOwner(typeFqn: String, name: String): String? {
+        if (model().classByFqn.containsKey(typeFqn)) return null
+        for (t in listOf(typeFqn) + kotlinSupertypesMemo(typeFqn)) {
+            if (model().classByFqn.containsKey(t)) continue // a source supertype: its internal is accessible
+            val decoded = reader.decoded(t, this) ?: continue
+            if (decoded.ownMembers.any { it.name == name && it.isInternal }) return t
+        }
+        return null
+    }
 
     /** Whether [fqn] is a Kotlin BUILT-IN type (`kotlin.collections.List`, `kotlin.Int`, `kotlin.String`, …):
      *  declared in the stdlib's `.kotlin_builtins`, with NO `.class` file. Navigable via a reconstructed
@@ -2058,8 +2132,12 @@ class KotlinSymbolService(
         // Same-project source TOP-LEVEL CALLABLES (functions + properties, extensions included) declared in this
         // package: they are importable by name (`import com.foo.Test`) and callable fully-qualified, so they
         // belong here alongside the types — a package-member completion that offered only types omitted them.
+        // A `private` top-level is file-scoped: it can't be imported (or qualified) from another file, so it is
+        // dropped here — matching the classpath half (whose callable index omits private/internal) and the
+        // bare-name filter in [KotlinScopeResolution.scopeSymbolsAt]. `internal` stays: it is same-module-visible,
+        // hence importable within the project.
         (model().topLevel.asSequence() + model().extensions.asSequence())
-            .filter { it.ctx.packageName == packageFqn && (prefix.isEmpty() || m.matches(it.name)) }
+            .filter { it.visibility != "private" && it.ctx.packageName == packageFqn && (prefix.isEmpty() || m.matches(it.name)) }
             .forEach { rc -> out.getOrPut("cbl:" + rc.name) { toSymbol(rc, null) } }
         return out.values.take(limit)
     }
@@ -2627,6 +2705,7 @@ class KotlinSymbolService(
             isInfix = rc.isInfix,
             isSuspend = rc.isSuspend,
             isDeprecated = rc.isDeprecated,
+            annotationFqns = rc.annotationFqns,
             varargParamIndex = if (rc.isFunction) rc.varargParamIndex else -1,
             paramHasDefault = if (rc.isFunction) rc.paramHasDefault else emptyList(),
             // Top-level callables (no owner) carry their package for import-visibility; members don't.
