@@ -95,13 +95,27 @@ class JavaEnvironment private constructor(
     /**
      * Parse [text] into a [PsiJavaFile] belonging to THIS project (so [facade] resolution sees the classpath +
      * source roots), named [name]. Never throws on invalid input — broken regions become `PsiErrorElement`s.
-     * Fully materialized under the shared parse lock, so no `buildTree` runs during the unlocked traversal that
-     * follows. [name] should end in `.java`; it need not correspond to a real file on disk.
+     * Fully materialized under the shared parse lock, so the unlocked traversal that follows walks a built tree.
+     * [name] should end in `.java`; it need not correspond to a real file on disk.
+     *
+     * `eventSystemEnabled = false` is what makes "materialized under the lock" actually stick: `PsiFileImpl`
+     * keeps its `FileElement` by a hard reference only for a non-event-system file, and by a `SoftReference`
+     * otherwise — and a collected soft reference means the next node access REPARSES the file, i.e. a
+     * `buildTree` outside the parse lock, which is the corruption the lock exists to prevent (a real risk on a
+     * tight-heap device). Resolution is unaffected: the only `ResolveScopeManager` a core project environment
+     * has is `MockResolveScopeManager` (`CoreProjectEnvironment.createResolveScopeManager`, not overridden by
+     * `JavaCoreProjectEnvironment`/`KotlinCoreProjectEnvironment`), and it returns `allScope` for every element
+     * without ever consulting physicality. `markAsCopy = false` likewise only drops IntelliJ's
+     * `GeneratedMarkerVisitor` pass, whose tree walk [IntellijPsiHost.forceFullParse] already does properly —
+     * and whose per-node "generated" marking is untrue of a file that mirrors user text. See
+     * [dev.ide.psi.IntellijPsiHost.parse], which uses the same shape for the same reasons.
      */
     fun parse(name: String, text: CharSequence): PsiJavaFile = IntellijPsiHost.withParseLock {
         val fileName = if (name.endsWith(".java")) name else "$name.java"
-        val file =
-            fileFactory.createFileFromText(fileName, JavaLanguage.INSTANCE, text) as PsiJavaFile
+        val file = fileFactory.createFileFromText(
+            fileName, JavaLanguage.INSTANCE, text,
+            /* eventSystemEnabled = */ false, /* markAsCopy = */ false,
+        ) as PsiJavaFile
         IntellijPsiHost.forceFullParse(file)
         file
     }
