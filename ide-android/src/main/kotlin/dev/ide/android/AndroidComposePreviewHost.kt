@@ -110,7 +110,11 @@ class AndroidComposePreviewHost(private val backend: IdeServicesBackend) : Compo
         val libraryExecutor by produceState<VmLibraryExecutor?>(null, path) {
             value = runCatching {
                 backend.composePreviewLibs(path)?.let { libs ->
-                    withContext(Dispatchers.IO) { VmLibraryExecutor(libs.jars, peerFactory = DexPeerFactory()) }
+                    // Disk-backed peer-dex cache (workspace-wide, shared across previews): a rebuilt executor —
+                    // and the first preview after an app restart — reuses previously-dexed peers instead of
+                    // re-running D8 (~0.4s → ~40ms per open; see DexPeerFactory).
+                    val peerDexCache = runCatching { libs.cacheDir.resolveSibling("vm-peer-dex") }.getOrNull()
+                    withContext(Dispatchers.IO) { VmLibraryExecutor(libs.jars, peerFactory = DexPeerFactory(peerDexCache)) }
                 }
             }.getOrNull()
         }

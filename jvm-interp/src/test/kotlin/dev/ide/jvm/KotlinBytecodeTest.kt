@@ -28,6 +28,28 @@ class KotlinBytecodeTest {
 
     private fun call(name: String, desc: String, vararg args: Any?): Any? = vm.invokeStatic(KFX, name, desc, args.toList())
 
+    /**
+     * A `boolean`/`byte`/`char`/`short`-returning lambda linked via `LambdaMetafactory` (its impl returns the
+     * primitive, adapted to the erased `Function0.invoke():Object`) must box to ITS OWN wrapper when its result
+     * crosses to real code — not default to `Integer`, since the interpreter represents all four as `Int`.
+     * Regression for a Compose preview crash: `((Boolean) LocalUsingExpressiveTheme's default factory.invoke())`
+     * threw `ClassCastException: cannot cast java.lang.Integer to java.lang.Boolean`.
+     */
+    @Test fun primitiveReturningLambdaBoxesToItsOwnWrapperAcrossTheBridge() {
+        fun invoked(name: String): Any? = call(name, "()Ljava/lang/Object;")
+        fun typeOf(name: String): String = invoked(name)!!.javaClass.name
+        assertEquals("java.lang.Boolean", typeOf("boolViaBridge"), "boolean lambda")
+        assertEquals(false, invoked("boolViaBridge"))
+        assertEquals("java.lang.Byte", typeOf("byteViaBridge"), "byte lambda")
+        assertEquals(7.toByte(), invoked("byteViaBridge"))
+        assertEquals("java.lang.Character", typeOf("charViaBridge"), "char lambda")
+        assertEquals('Q', invoked("charViaBridge"))
+        assertEquals("java.lang.Short", typeOf("shortViaBridge"), "short lambda")
+        assertEquals(9.toShort(), invoked("shortViaBridge"))
+        assertEquals("java.lang.Integer", typeOf("intViaBridge"), "int lambda (control)")
+        assertEquals(42, invoked("intViaBridge"))
+    }
+
     @Test fun inlineValueClass() {
         assertEquals(dpAdd(3f, 4f), call("dpAdd", "(FF)F", 3f, 4f))
         assertEquals(dpScaled(2f, 2.5f), call("dpScaled", "(FF)F", 2f, 2.5f))

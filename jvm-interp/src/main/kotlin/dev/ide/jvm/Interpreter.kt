@@ -569,7 +569,7 @@ internal class Interpreter(private val vm: Vm) {
             DASTORE -> { val v = frame.popD(); val i = frame.popI(); arraySet(deref(frame.popRef()), i, v) }
             AASTORE -> { val v = deref(frame.popRef()); val i = frame.popI(); arraySet(deref(frame.popRef()), i, v) }
 
-            CHECKCAST -> { val t = takePendingReified(exec) ?: (insn as TypeInsnNode).desc; if (!castOk(deref(frame.peekRef()), t)) throwReal(ClassCastException("cannot cast to $t")) }
+            CHECKCAST -> { val t = takePendingReified(exec) ?: (insn as TypeInsnNode).desc; val cv = deref(frame.peekRef()); if (!castOk(cv, t)) throwReal(ClassCastException("cannot cast ${cv?.javaClass?.name ?: "null"} to $t [in ${block.sig}@$pc]")) }
             INSTANCEOF -> { val t = takePendingReified(exec) ?: (insn as TypeInsnNode).desc; frame.pushI(if (instanceOf(deref(frame.popRef()), t)) 1 else 0) }
 
             ATHROW -> { val t = deref(frame.popRef()); if (t == null) throwReal(NullPointerException()); throw VmException(t) }
@@ -928,8 +928,30 @@ internal class Interpreter(private val vm: Vm) {
         val samType = insn.bsmArgs[0] as Type
         val impl = handleRef(insn.bsmArgs[1] as Handle)
         frame.pushRef(VmLambda(interfaceType, insn.name, samType.descriptor, impl, captured.asList(), vm::toReal) { lambda, samArgs ->
-            invokeHandle(lambda.impl, lambda.captured + samArgs)
+            boxLambdaReturn(invokeHandle(lambda.impl, lambda.captured + samArgs), lambda.impl.descriptor, lambda.samDescriptor)
         })
+    }
+
+    /**
+     * Adapt a lambda implementation's result to the SAM's return type, the way `LambdaMetafactory` does. When
+     * the impl returns a `boolean`/`byte`/`char`/`short` (all the interpreter's computational [Int]) but the SAM
+     * erases the return to a reference (`Function0.invoke():Object`), box the Int to the SPECIFIC wrapper the
+     * impl's type names — otherwise it would autobox to `Integer`, and a caller's `checkcast java/lang/Boolean`
+     * (e.g. a `CompositionLocal<Boolean>` default factory `{ false }` — exactly how Material3's
+     * `LocalUsingExpressiveTheme` fails) throws `ClassCastException`. `int`/`long`/`float`/`double` and a
+     * reference result already box unambiguously, so they pass through; so does a SAM that returns a primitive
+     * (the interpreted caller wants the computational form there).
+     */
+    private fun boxLambdaReturn(value: Any?, implDescriptor: String, samDescriptor: String): Any? {
+        val samRet = Type.getReturnType(samDescriptor).sort
+        if (samRet != Type.OBJECT && samRet != Type.ARRAY) return value
+        return when (Type.getReturnType(implDescriptor).sort) {
+            Type.BOOLEAN -> (value as? Int)?.let { it != 0 } ?: value
+            Type.BYTE -> (value as? Int)?.toByte() ?: value
+            Type.CHAR -> (value as? Int)?.toChar() ?: value
+            Type.SHORT -> (value as? Int)?.toShort() ?: value
+            else -> value
+        }
     }
 
     /**

@@ -12,6 +12,7 @@ import dev.ide.lang.kotlin.interp.ResolvedCallable
 import dev.ide.lang.kotlin.interp.SourceSpan
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 
 /**
@@ -105,6 +106,26 @@ class VmLibraryExecutorTest {
         val counter = d.dispatch(call, receiver = null, args = listOf(5))!!
         // The peer flows back through the dispatcher's instance path on the next call.
         assertEquals(6, d.dispatch(memberCall("add"), counter, listOf(1)))
+    }
+
+    @Test fun projectPreferredNamespaceIsInterpretedEvenWhenHostLoadable() {
+        // The version-skew shadow that fixes Material3 Expressive previews: even when the host CAN load the
+        // class (hostLoadable = true — the IDE's own bundled Compose Material3), a project-preferred namespace
+        // is interpreted from the project's OWN bytes, so the project's (newer) API surface renders instead of
+        // the bundled build's. Here the libfixture package stands in for `androidx.compose.material3.`.
+        val src = ClassBytesSource.fromClasspath()
+        // Baseline: host-loadable + no matching preferred prefix (the production default is material3 only) →
+        // bridged, not interpreted. This is the pre-fix behavior for the bundled runtime.
+        val bridged = VmLibraryExecutor(hostLoadable = { true }, source = src)
+        assertFalse(bridged.hasClass("$pkg.Registry"), "a host-loadable class outside a preferred prefix stays bridged")
+
+        // Flip: mark the fixture namespace preferred and the same class is now interpreted DESPITE being
+        // host-loadable, with its singleton the VM-owned interpreted instance (not the bundled one).
+        val preferred = VmLibraryExecutor(hostLoadable = { true }, source = src, projectPreferredPrefixes = listOf("$pkg."))
+        assertTrue(preferred.hasClass("$pkg.Registry"), "a preferred-namespace class is interpreted despite being host-loadable")
+        val registry = preferred.objectInstance("$pkg.Registry")!!
+        assertTrue(preferred.ownsInstance(registry), "its singleton is the VM-owned interpreted instance")
+        assertEquals("registry", preferred.propertyOrNull(registry, "name")!!.value)
     }
 
     private fun memberCall(name: String): RNode.Call {
