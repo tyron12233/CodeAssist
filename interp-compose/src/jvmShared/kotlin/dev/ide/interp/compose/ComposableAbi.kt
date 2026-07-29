@@ -2,6 +2,7 @@ package dev.ide.interp.compose
 
 import dev.ide.interp.InterpProfile
 import dev.ide.interp.InterpretedLambda
+import dev.ide.interp.KotlinJvmNames
 import dev.ide.interp.OmittedArg
 import java.lang.reflect.Method
 import java.lang.reflect.Modifier
@@ -42,33 +43,11 @@ object ComposableAbi {
         val owner = loadClassNoInit(ownerFqn, loader) ?: return false
         val result = runCatching {
             owner.methods.any { m ->
-                nameMatches(
-                    m.name,
-                    method
-                ) && m.parameterTypes.any { isComposerType(it) }
+                KotlinJvmNames.matches(owner, m.name, method) && m.parameterTypes.any { isComposerType(it) }
             }
         }.getOrDefault(false)
         composableFormCache[key] = result // class loaded → answer is stable
         return result
-    }
-
-    /** Whether a JVM method name corresponds to the Kotlin function [kotlinName]. Kotlin MANGLES the JVM name
-     *  two ways this must see through (kept in sync with interp-core's `mangledNameMatches`):
-     *   - a function taking/returning an inline value class (Compose's `Text` has `Color`/`TextUnit` params) →
-     *     `name-<hash>`; the hash never contains `$`, so excluding `$` skips sibling synthetics
-     *     (`…$annotations`, `…$default`);
-     *   - an `internal` function → `name$<module>` (much of Material3 Expressive is internal, e.g.
-     *     `MotionScheme.Companion.expressive()` → `expressive$material3`), optionally on top of the value-class
-     *     form. The module suffix must be a single segment and not a known compiler synthetic. */
-    private fun nameMatches(jvmName: String, kotlinName: String): Boolean {
-        if (jvmName == kotlinName) return true
-        if (jvmName.startsWith("$kotlinName-") && '$' !in jvmName) return true
-        val dollar = jvmName.indexOf('$')
-        if (dollar <= 0) return false
-        val base = jvmName.substring(0, dollar)
-        val suffix = jvmName.substring(dollar + 1)
-        val baseMatches = base == kotlinName || base.startsWith("$kotlinName-")
-        return baseMatches && '$' !in suffix && suffix != "default" && suffix != "annotations"
     }
 
     /** A `Composer` parameter — matched by simple name as a fallback too, in case a relocated/shaded build
@@ -102,7 +81,7 @@ object ComposableAbi {
     fun diagnose(ownerFqn: String, method: String, loader: ClassLoader? = null): String {
         val owner = loadClassNoInit(ownerFqn, loader)
             ?: return " [composer-path skipped: class `$ownerFqn` is not loadable from the IDE runtime here]"
-        val named = owner.methods.filter { nameMatches(it.name, method) }
+        val named = owner.methods.filter { KotlinJvmNames.matches(owner, it.name, method) }
         val withComposer = named.count { m -> m.parameterTypes.any { isComposerType(it) } }
         val sigs = named.take(4)
             .joinToString(" ; ") { m -> m.parameterTypes.joinToString(",") { it.simpleName } }
@@ -276,7 +255,7 @@ object ComposableAbi {
         val getter =
             "get" + propertyName.replaceFirstChar { if (it.isLowerCase()) it.titlecase() else it.toString() }
         val m = receiver.javaClass.methods.firstOrNull { method ->
-            nameMatches(method.name, getter) && composerIndex(method) == 0 &&
+            KotlinJvmNames.matches(receiver.javaClass, method.name, getter) && composerIndex(method) == 0 &&
                     (1 until method.parameterCount).all { method.parameterTypes[it] == Int::class.javaPrimitiveType }
         } ?: return NotComposableProperty
         // Shape: (Composer, $changed…) — no value params. Thread the composer, zero the trailing $changed ints.
@@ -379,7 +358,7 @@ object ComposableAbi {
         InterpProfile.count("composeCacheMiss")
         val k = suppliedArgs.size
         val shaped = owner.methods.filter { m ->
-            nameMatches(m.name, name) && composerIndex(m).let { ci ->
+            KotlinJvmNames.matches(owner, m.name, name) && composerIndex(m).let { ci ->
                 ci >= k && (ci + 1 until m.parameterCount).all { m.parameterTypes[it] == Int::class.javaPrimitiveType }
             }
         }

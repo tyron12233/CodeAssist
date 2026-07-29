@@ -131,6 +131,26 @@ class ReflectiveDispatcherTest {
     }
 
     @Test
+    fun kotlinJvmNamesResolvesFromMetadataNotNameShape() {
+        // The proper resolution kotlin-reflect uses: read the ACTUAL emitted JVM name out of the class's
+        // `@kotlin.Metadata` (the compiler stores the mangled name there) instead of guessing the shape.
+        val cls = InternalHolder::class.java
+        val emitted = cls.methods.first { it.name.startsWith("reveal\$") }.name // reveal$<this-module>
+        // Authoritative match: the name the compiler really emitted for the internal `reveal` resolves.
+        assertTrue(KotlinJvmNames.matches(cls, emitted, "reveal"), "the emitted internal name must resolve")
+        // Precision the shape heuristic lacks: a DIFFERENT `$module` suffix is not what the compiler emitted,
+        // so metadata rejects it — while `mangledNameMatches` (loosely) accepts any single-segment `$suffix`.
+        assertTrue(mangledNameMatches("reveal\$othermodule", "reveal"), "heuristic accepts any \$module")
+        assertTrue(
+            !KotlinJvmNames.matches(cls, "reveal\$othermodule", "reveal"),
+            "metadata rejects a name the compiler never emitted for `reveal`",
+        )
+        // Graceful fallback: a class with no `@Metadata` (plain Java) has no authoritative answer, so matching
+        // still works through the heuristic — nothing metadata doesn't describe is wrongly rejected.
+        assertTrue(KotlinJvmNames.matches(String::class.java, "length", "length"), "non-Kotlin class falls back")
+    }
+
+    @Test
     fun kotlinMappedTypeOwnerResolves() {
         // A Kotlin classifier owner (kotlin.text.StringBuilder) maps to its JVM class for reflection.
         val sb = dispatcher.dispatch(call(DispatchKind.CONSTRUCTOR, lib("kotlin.text.StringBuilder", "StringBuilder", isCtor = true)), null, emptyList())

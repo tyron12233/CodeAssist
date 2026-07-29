@@ -29,6 +29,9 @@ import org.objectweb.asm.MethodVisitor
 import kotlin.metadata.isSuspend
 import kotlin.metadata.jvm.KotlinClassMetadata
 import kotlin.metadata.jvm.annotations
+import kotlin.metadata.jvm.getterSignature
+import kotlin.metadata.jvm.setterSignature
+import kotlin.metadata.jvm.signature
 
 /**
  * Decodes a classpath `.class` file's `@kotlin.Metadata` into neutral symbols. Recovers the Kotlin view
@@ -108,6 +111,55 @@ object KotlinMetadata {
         val km = runCatching { KotlinClassMetadata.readLenient(metadata) }.getOrNull()
         return (km as? KotlinClassMetadata.MultiFileClassFacade)?.partClassNames
     }
+
+    /**
+     * Maps each name a caller resolves a Kotlin declaration by — a function's Kotlin name, and a property's
+     * conventional accessor names (`getX`/`setX`) — to the ACTUAL JVM method names the compiler emitted for it,
+     * INCLUDING the value-class `name-<hash>` and `internal` `name$module` manglings. This is the authoritative
+     * mapping (the JVM signature is stored verbatim in `@Metadata`, exactly what kotlin-reflect reads), so a
+     * caller can match a mangled `java.lang.reflect.Method` by EXACT name instead of guessing the mangling
+     * shape. Returns null when [metadata] carries no members to map (a multi-file FACADE — its members live in
+     * `…__…Kt` PART classes — or an unparseable/newer blob); a caller treats that as "no authoritative answer"
+     * and falls back to its shape heuristic.
+     *
+     * The accessor keys are derived with the SAME `get`/`set` + first-char-titlecase convention the reflective
+     * reader forms its lookup name with, so a value-class-typed property whose getter mangles to
+     * `getBalance-<hash>` is found by the reader's `getBalance` lookup — and a boolean `isX` property (getter
+     * `isX`, which the reader would still probe as `getIsX`) is picked up by its `getIsX` key too.
+     */
+    fun jvmNameIndex(metadata: Metadata): Map<String, Set<String>>? {
+        val km = runCatching { KotlinClassMetadata.readLenient(metadata) }.getOrNull() ?: return null
+        val functions: List<KmFunction>
+        val properties: List<KmProperty>
+        when (km) {
+            is KotlinClassMetadata.Class -> {
+                functions = km.kmClass.functions; properties = km.kmClass.properties
+            }
+            is KotlinClassMetadata.FileFacade -> {
+                functions = km.kmPackage.functions; properties = km.kmPackage.properties
+            }
+            is KotlinClassMetadata.MultiFileClassPart -> {
+                functions = km.kmPackage.functions; properties = km.kmPackage.properties
+            }
+            else -> return null // a multi-file facade (members live in the parts) / synthetic / unknown blob
+        }
+        val out = HashMap<String, MutableSet<String>>()
+        fun put(lookup: String, jvm: String) = out.getOrPut(lookup) { HashSet() }.add(jvm)
+        functions.forEach { f -> put(f.name, f.signature?.name ?: f.name) }
+        properties.forEach { p ->
+            p.getterSignature?.let { put("get" + p.name.capitalizeAscii(), it.name) }
+            p.setterSignature?.let { put("set" + p.name.capitalizeAscii(), it.name) }
+        }
+        return if (out.isEmpty()) null else out
+    }
+
+    /** [jvmNameIndex] off a class's raw bytes (the jar-reading path) — decodes its `@Metadata` first. */
+    fun jvmNameIndex(classBytes: ByteArray): Map<String, Set<String>>? =
+        extract(classBytes)?.let { jvmNameIndex(it) }
+
+    /** First-char titlecase, matching the reflective reader's `get`/`set` accessor-name convention. */
+    private fun String.capitalizeAscii(): String =
+        replaceFirstChar { if (it.isLowerCase()) it.titlecase() else it.toString() }
 
     /** One-shot guard so a decode failure (e.g. `kotlin-metadata-jvm` missing on ART) is logged once, not per class. */
     private val loggedDecodeFailure = java.util.concurrent.atomic.AtomicBoolean(false)

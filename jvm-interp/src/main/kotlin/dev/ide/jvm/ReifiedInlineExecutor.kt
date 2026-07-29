@@ -16,12 +16,26 @@ package dev.ide.jvm
  * top-level and extension functions live, plus their `@JvmMultifileClass` parts) and bridges all other
  * classes, so a reified facade function runs interpreted while its body's calls into `kotlin`/`java` stay real.
  */
+/**
+ * Whether an interpreted [method] is the compiler's emission of Kotlin [kotlinName]. A host with
+ * `@kotlin.Metadata` access injects an authoritative matcher (reading the mangled JVM name the compiler
+ * recorded, as kotlin-reflect does); the built-in default reads only the name SHAPE (the inline value-class
+ * `name-<hash>` form) so the VM stays dependency-free when embedded standalone.
+ */
+fun interface JvmNameMatcher {
+    fun matches(method: VmMethodView, kotlinName: String): Boolean
+}
+
 class ReifiedInlineExecutor(
     /** Extra class bytes (a project's library jars) tried before the host classpath — for a reified inline that
      *  lives in a dependency rather than the standard library. */
     extraSource: ClassBytesSource? = null,
     private val loader: ClassLoader = ReifiedInlineExecutor::class.java.classLoader,
     peerFactory: PeerFactory = AsmPeerFactory(),
+    /** How a VM method name is matched to a Kotlin name. Defaults to the shape check; a metadata-backed host
+     *  ([dev.ide.interp.compose.VmLibraryExecutor]) injects the authoritative resolver so the whole VM library
+     *  path resolves mangled names the one way. */
+    private val nameMatcher: JvmNameMatcher = JvmNameMatcher { m, k -> shapeNameMatches(m.name, k) },
 ) {
     private val classpath = ClassBytesSource.fromClasspath(loader)
 
@@ -48,7 +62,7 @@ class ReifiedInlineExecutor(
      */
     fun invoke(ownerFqn: String, name: String, reifiedTypes: Map<String, String>, args: List<Any?>): Box? {
         val view = methodsFor(ownerFqn).firstOrNull {
-            it.isStatic && !it.isAbstract && nameMatches(it.name, name) && it.paramDescriptors.size == args.size
+            it.isStatic && !it.isAbstract && nameMatcher.matches(it, name) && it.paramDescriptors.size == args.size
         } ?: return null
         return try {
             Box(vm.withReifiedTypes(reifiedTypes) { view.invoke(null, args) })
@@ -66,10 +80,11 @@ class ReifiedInlineExecutor(
         return facade + part
     }
 
-    /** Whether [jvmName] is Kotlin [kotlinName], allowing the inline value-class mangling `name-<hash>`. */
-    private fun nameMatches(jvmName: String, kotlinName: String): Boolean =
-        jvmName == kotlinName || (jvmName.startsWith("$kotlinName-") && '$' !in jvmName)
-
     /** A result box so a legitimately-null return is distinct from "could not run" (a null [Box]). */
     class Box(val value: Any?)
 }
+
+/** The dependency-free default: [jvmName] is Kotlin [kotlinName], allowing the inline value-class mangling
+ *  `name-<hash>` (the hash never contains `$`, so a `$` excludes the compiler synthetics). */
+internal fun shapeNameMatches(jvmName: String, kotlinName: String): Boolean =
+    jvmName == kotlinName || (jvmName.startsWith("$kotlinName-") && '$' !in jvmName)
