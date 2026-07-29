@@ -2,6 +2,7 @@ package dev.ide.core.services
 
 import dev.ide.android.support.AndroidFacet
 import dev.ide.android.support.AndroidFeatureDependencies
+import dev.ide.ksp.KspProcessorCatalog
 import dev.ide.android.support.AndroidPackaging
 import dev.ide.android.support.BuildFeatures
 import dev.ide.android.support.JniLibsPackaging
@@ -205,6 +206,12 @@ internal class ModuleService(private val ctx: EngineContext) {
         ToggleablePlugin(ParcelizeCompilerPlugin.pluginId, { it.parcelize }, { bf, e -> bf.copy(parcelize = e) }, AndroidFeatureDependencies.PARCELIZE),
     )
 
+    /** The bundled KSP annotation processors (Room/Moshi/Hilt/Glide), toggled the same way as the compiler
+     *  plugins above: enabled-state stored in [BuildFeatures.kspProcessors], enabling adds the runtime whose
+     *  presence runs the processor at build time. The catalog is the source of truth (id/name/description/
+     *  runtime coords/probe). `blessed()` here is metadata-only — no bundled jars needed to describe a toggle. */
+    private val kspProcessors: List<dev.ide.ksp.KspProcessor> = KspProcessorCatalog.blessed().processors
+
     /** The registered compiler plugins (EP contributions, or the built-ins for direct/test wiring), by id. */
     private fun registeredPlugins(): Map<String, dev.ide.lang.kotlin.compile.KotlinCompilerPlugin> =
         ctx.platform.extensions.extensions(KOTLIN_COMPILER_PLUGIN_EP)
@@ -240,7 +247,19 @@ internal class ModuleService(private val ctx: EngineContext) {
                 note = "Applies automatically once its runtime is on the module's classpath.",
             )
         }
-        return UiCompilerPlugins(moduleName, plugins)
+        // The bundled KSP processors, toggled the same way (enabled = the facet set; applied = the runtime
+        // marker probe, which is what actually runs the processor at build time — including a transitive runtime).
+        val kspRows = kspProcessors.map { p ->
+            UiCompilerPlugin(
+                id = p.id,
+                title = p.displayName,
+                description = p.description,
+                enabled = p.id in bf.kspProcessors,
+                applied = KspProcessorCatalog.classpathHasClass(classpath, p.probeClassEntry),
+                note = "KSP annotation processor. Runs once its runtime is on the module's classpath.",
+            )
+        }
+        return UiCompilerPlugins(moduleName, plugins + kspRows)
     }
 
     /**
@@ -259,9 +278,13 @@ internal class ModuleService(private val ctx: EngineContext) {
         val project = ctx.projectOf(module)
             ?: return UiConfigResult(false, "No project owns '$moduleName'.")
         val tp = toggleablePlugins.firstOrNull { it.pluginId == pluginId }
-            ?: return UiConfigResult(false, "Unknown compiler plugin '$pluginId'.")
+        val ksp = if (tp == null) kspProcessors.firstOrNull { it.id == pluginId } else null
+        if (tp == null && ksp == null) return UiConfigResult(false, "Unknown compiler plugin '$pluginId'.")
         val bf = facet.buildFeatures
-        val updated = tp.set(bf, enabled)
+        val updated = when {
+            tp != null -> tp.set(bf, enabled)
+            else -> bf.copy(kspProcessors = if (enabled) bf.kspProcessors + ksp!!.id else bf.kspProcessors - ksp!!.id)
+        }
         if (updated == bf) return UiConfigResult(true, "No change.")
         try {
             project.beginModification().apply {
@@ -277,14 +300,14 @@ internal class ModuleService(private val ctx: EngineContext) {
         // (e.g. offline) doesn't fail the toggle — the flag is set; the deps can be retried from Dependencies.
         var depNote = ""
         if (enabled) {
-            val failures = ensureFeatureDependencies(moduleName, tp.coords)
+            val failures = ensureFeatureDependencies(moduleName, tp?.coords ?: ksp!!.runtimeCoordinates)
             if (failures.isNotEmpty()) depNote = " (couldn't add: ${failures.joinToString(", ")})"
         }
 
         ctx.invalidateAnalyzers()
         ctx.invalidateSyntheticClasses()
         ctx.resyncIndex()
-        val label = registeredPlugins()[pluginId]?.displayName ?: pluginId
+        val label = tp?.let { registeredPlugins()[pluginId]?.displayName } ?: ksp?.displayName ?: pluginId
         val verb = if (enabled) "Enabled" else "Disabled"
         return UiConfigResult(true, "$verb $label on ${module.name}$depNote")
     }

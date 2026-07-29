@@ -38,7 +38,7 @@ class AndroidFacetCodecTest {
         ),
         r8FullMode = false,
         coreLibraryDesugaringEnabled = true,
-        buildFeatures = BuildFeatures(viewBinding = true, compose = true, parcelize = true, serialization = true),
+        buildFeatures = BuildFeatures(viewBinding = true, compose = true, parcelize = true, serialization = true, kspProcessors = setOf("room", "moshi")),
         packaging = AndroidPackaging(
             resources = ResourcePackaging(
                 excludes = linkedSetOf("/META-INF/extra.txt"),
@@ -82,6 +82,8 @@ class AndroidFacetCodecTest {
         assertEquals(true, values["compose"])
         assertEquals(true, values["parcelize"])
         assertEquals(true, values["serialization"])
+        // Enabled KSP processors persist as a sorted string array.
+        assertEquals(listOf("moshi", "room"), values["kspProcessors"])
         // shrinkResources is always emitted (like minifyEnabled) so the Module Settings UI can render a
         // toggle to turn it ON — a key omitted when false would leave no control for it.
         assertEquals(false, bts[0]["shrinkResources"])
@@ -97,6 +99,7 @@ class AndroidFacetCodecTest {
         assertEquals(null, values["compose"])
         assertEquals(null, values["parcelize"])
         assertEquals(null, values["serialization"])
+        assertEquals(null, values["kspProcessors"])
         assertEquals(BuildFeatures(), AndroidFacetCodec.decode(values).buildFeatures)
     }
 

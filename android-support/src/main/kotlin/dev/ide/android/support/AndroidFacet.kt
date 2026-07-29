@@ -114,9 +114,16 @@ data class BuildFeatures(
      * then also resolves/completes the generated `serializer()` members.
      */
     val serialization: Boolean = false,
+    /**
+     * The ids of the bundled KSP annotation processors enabled for the module (e.g. `room`, `moshi`, `hilt`,
+     * `glide` — see `KspProcessorCatalog`). Toggled exactly like the compiler-plugin features above: enabling
+     * one adds its runtime dependency, whose presence on the classpath is what runs the processor at build
+     * time. A set (not a flag per processor) so adding a processor to the catalog needs no new field.
+     */
+    val kspProcessors: Set<String> = emptySet(),
 ) {
     /** True when at least one build feature is enabled (drives "emit only when set" persistence). */
-    val anyEnabled: Boolean get() = viewBinding || compose || parcelize || serialization
+    val anyEnabled: Boolean get() = viewBinding || compose || parcelize || serialization || kspProcessors.isNotEmpty()
 }
 
 /** A build type (`debug`/`release`/…): how a variant is assembled regardless of flavor. */
