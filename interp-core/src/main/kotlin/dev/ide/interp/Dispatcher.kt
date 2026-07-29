@@ -587,7 +587,7 @@ class ReflectiveDispatcher(
         cache[key]?.let { InterpProfile.count("cacheHit"); return it.method }
         InterpProfile.count("cacheMiss")
         val fitting = (cls.methods.asSequence() + interfaceDefaultSynthetics(cls, name))
-            .filter { Modifier.isStatic(it.modifiers) && isDefaultSynthetic(it.name, name) && fitsDefaultSynthetic(it, realArgs) }
+            .filter { Modifier.isStatic(it.modifiers) && isDefaultSynthetic(cls, it.name, name) && fitsDefaultSynthetic(it, realArgs) }
             .toList()
         val minArity = fitting.minOfOrNull { it.parameterCount }
         // Among the smallest-arity fitting synthetics, prefer the MOST SPECIFIC for the args — else two
@@ -628,15 +628,15 @@ class ReflectiveDispatcher(
             val iface = queue.removeFirst()
             if (!seen.add(iface.name)) continue
             iface.interfaces.forEach(queue::add)
-            runCatching { iface.declaredMethods.filterTo(out) { Modifier.isStatic(it.modifiers) && isDefaultSynthetic(it.name, name) } }
+            runCatching { iface.declaredMethods.filterTo(out) { Modifier.isStatic(it.modifiers) && isDefaultSynthetic(cls, it.name, name) } }
             runCatching { Class.forName("${iface.name}\$DefaultImpls", false, iface.classLoader ?: loader) }
-                .getOrNull()?.let { di -> runCatching { di.declaredMethods.filterTo(out) { Modifier.isStatic(it.modifiers) && isDefaultSynthetic(it.name, name) } } }
+                .getOrNull()?.let { di -> runCatching { di.declaredMethods.filterTo(out) { Modifier.isStatic(it.modifiers) && isDefaultSynthetic(cls, it.name, name) } } }
         }
         return out
     }
 
-    private fun isDefaultSynthetic(jvmName: String, kotlinName: String): Boolean =
-        jvmName.endsWith("\$default") && mangledNameMatches(jvmName.removeSuffix("\$default"), kotlinName)
+    private fun isDefaultSynthetic(cls: Class<*>, jvmName: String, kotlinName: String): Boolean =
+        jvmName.endsWith("\$default") && KotlinJvmNames.matches(cls, jvmName.removeSuffix("\$default"), kotlinName)
 
     /** The synthetic is `(realParams…, int mask, Object marker)`; [realArgs] must fit the first `n` reals. */
     private fun fitsDefaultSynthetic(m: Method, realArgs: List<Any?>): Boolean {
@@ -1082,7 +1082,7 @@ class ReflectiveDispatcher(
      *  is invokable under the JDK module system. Callers try this only AFTER the `$default` synthetic. */
     private fun findByArity(cls: Class<*>, name: String, args: List<Any?>, static: Boolean): Method? {
         val byArity = cls.methods.filter { m ->
-            mangledNameMatches(m.name, name) && !m.isVarArgs && m.parameterCount == args.size && (Modifier.isStatic(m.modifiers) == static)
+            KotlinJvmNames.matches(cls, m.name, name) && !m.isVarArgs && m.parameterCount == args.size && (Modifier.isStatic(m.modifiers) == static)
         }
         val m = byArity.firstOrNull { Modifier.isPublic(it.declaringClass.modifiers) } ?: byArity.firstOrNull() ?: return null
         if (!static && !Modifier.isPublic(m.declaringClass.modifiers)) publicMethod(cls, m.name, m.parameterCount)?.let { return it }
@@ -1093,7 +1093,7 @@ class ReflectiveDispatcher(
         // Vararg methods are excluded here (`!isVarArgs`) and handled by [findVarargMethod]/[invokeVararg]:
         // their JVM arity counts the array as ONE param, so an exact-arity match would mis-bind the scalar args.
         val byArity = cls.methods.filter { m ->
-            mangledNameMatches(m.name, name) && !m.isVarArgs && m.parameterCount == args.size && (Modifier.isStatic(m.modifiers) == static)
+            KotlinJvmNames.matches(cls, m.name, name) && !m.isVarArgs && m.parameterCount == args.size && (Modifier.isStatic(m.modifiers) == static)
         }
         val accepting = byArity.filter { paramsAccept(it.parameterTypes, args) }
         // Prefer the MOST SPECIFIC applicable overload (Java/Kotlin overload resolution) rather than whichever
@@ -1139,7 +1139,7 @@ class ReflectiveDispatcher(
 
     private fun findVarargMethodUncached(cls: Class<*>, name: String, args: List<Any?>, static: Boolean): Method? {
         val candidates = cls.methods.filter { m ->
-            m.isVarArgs && mangledNameMatches(m.name, name) && Modifier.isStatic(m.modifiers) == static &&
+            m.isVarArgs && KotlinJvmNames.matches(cls, m.name, name) && Modifier.isStatic(m.modifiers) == static &&
                 m.parameterCount >= 1 && args.size >= m.parameterCount - 1 &&
                 leadingParamsAccept(m.parameterTypes, args, m.parameterCount - 1)
         }

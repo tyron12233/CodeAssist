@@ -15,6 +15,9 @@ class VmMethodView internal constructor(
     private val node: MethodNode,
 ) {
     val name: String get() = node.name
+    /** Internal name (slashes) of the class that DECLARES this method — for a host that resolves the Kotlin
+     *  calling convention (JVM name mangling) from the declaring class's `@kotlin.Metadata`. */
+    val ownerInternalName: String get() = declaring.name
     val isStatic: Boolean = node.access and Opcodes.ACC_STATIC != 0
     val isConstructor: Boolean = node.name == "<init>"
     val isVarargs: Boolean = node.access and Opcodes.ACC_VARARGS != 0

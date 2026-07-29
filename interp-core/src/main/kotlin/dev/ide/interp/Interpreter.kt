@@ -939,7 +939,7 @@ class Interpreter(
         if (call.dispatch != DispatchKind.TOP_LEVEL && call.dispatch != DispatchKind.EXTENSION) return original
         val owner = callee.ownerFqn ?: return original
         val cls = loadClassAcross(owner, initialize = false, preferred = classLoader) ?: return original
-        val hasMethod = cls.methods.any { mangledNameMatches(it.name, callee.displayName) }
+        val hasMethod = cls.methods.any { KotlinJvmNames.matches(cls, it.name, callee.displayName) }
         if (hasMethod) return original // a real inline method exists → the failure is something else
         return InterpreterException(
             "`${callee.displayName}` is an inline-only function (no JVM method on `$owner`) the interpreter " +
@@ -1868,13 +1868,35 @@ class Interpreter(
             ?.let { runCatching { it.isAccessible = true }; return it.get(null) }
         val getter = "get" + name.replaceFirstChar { if (it.isLowerCase()) it.titlecase() else it.toString() }
         cls.methods.firstOrNull {
-            java.lang.reflect.Modifier.isStatic(it.modifiers) && it.parameterCount == 0 && mangledNameMatches(it.name, getter)
+            java.lang.reflect.Modifier.isStatic(it.modifiers) && it.parameterCount == 0 && KotlinJvmNames.matches(cls, it.name, getter)
         }?.let { runCatching { it.isAccessible = true }; return it.invoke(null) }
+        // A companion-object CLASS receiver (`PathFillType.Companion`, `StrokeCap.Companion`, …): its members are
+        // INSTANCE getters on the companion SINGLETON, not statics — and a value-class-typed companion val
+        // (`PathFillType.NonZero`, `StrokeCap.Butt`) compiles to a NAME-MANGLED getter (`getNonZero-<hash>`).
+        // Read it off the singleton, mangling-aware. Without this the getter is missed and an explicit
+        // `PathFillType.Companion.NonZero` (as generated icon code writes it) throws, which fails the enclosing
+        // `ImageVector.Builder.path(...)` call — the icon's vector then builds empty and the Icon renders blank.
+        companionSingletonOf(cls)?.let { singleton ->
+            singleton.javaClass.methods.firstOrNull {
+                it.parameterCount == 0 && KotlinJvmNames.matches(singleton.javaClass, it.name, getter)
+            }?.let { runCatching { it.isAccessible = true }; return it.invoke(singleton) }
+        }
         // Not a static field/getter — but `name` may be a NESTED CLASS reached through its enclosing type
         // (`Build.VERSION`, `Build.VERSION_CODES`); return that Class so a further static read off it resolves
         // (`Build.VERSION.SDK_INT`). The PropertyGet handler treats a Class-valued receiver as a static holder.
         loadInitialized("${cls.name}\$$name")?.let { return it }
         throw InterpreterException("no static member `$name` on ${cls.name}")
+    }
+
+    /** The companion-object singleton for a `<Enclosing>$Companion` class: the enclosing type's static field
+     *  whose type IS the companion class (named `Companion` by default, the companion's name for a named
+     *  companion). Null when [cls] is not a companion object. Lets a member read off a companion CLASS receiver
+     *  fall through to the companion INSTANCE's (mangling-aware) getters. */
+    private fun companionSingletonOf(cls: Class<*>): Any? {
+        val enclosing = cls.enclosingClass ?: return null
+        return enclosing.declaredFields.firstOrNull {
+            java.lang.reflect.Modifier.isStatic(it.modifiers) && it.type == cls
+        }?.let { runCatching { it.isAccessible = true; it.get(null) }.getOrNull() }
     }
 
     /** The singleton of a nested `object` named [name] declared inside [enclosing] — `Icons.AutoMirrored`
@@ -1950,7 +1972,7 @@ class Interpreter(
     /** A one-arg method matching [name] (mangling-aware), preferring a public-declaring type. */
     private fun oneArgMethod(receiver: Any, name: String): java.lang.reflect.Method? =
         publicMethod(receiver.javaClass, name, 1)
-            ?: receiver.javaClass.methods.firstOrNull { mangledNameMatches(it.name, name) && it.parameterCount == 1 }
+            ?: receiver.javaClass.methods.firstOrNull { KotlinJvmNames.matches(receiver.javaClass, it.name, name) && it.parameterCount == 1 }
                 ?.also { runCatching { it.isAccessible = true } }
 
     /** Read a top-level property (`LocalTextStyle`, `kotlin.math.PI`): it compiles to a STATIC getter on its
@@ -1967,7 +1989,7 @@ class Interpreter(
             }
         val getter = getterName
         val m = cls.methods.firstOrNull {
-            java.lang.reflect.Modifier.isStatic(it.modifiers) && it.parameterCount == 0 && mangledNameMatches(it.name, getter)
+            java.lang.reflect.Modifier.isStatic(it.modifiers) && it.parameterCount == 0 && KotlinJvmNames.matches(cls, it.name, getter)
         } ?: throw InterpreterException("no top-level property getter `$name` on `$ownerFqn`")
         runCatching { m.isAccessible = true }
         return m.invoke(null)
@@ -1976,7 +1998,7 @@ class Interpreter(
     /** Read an extension property (`16.dp`, `density.sp`): its getter is a STATIC method on the declaring
      *  `…Kt` facade taking the receiver as its only argument (`DpKt.getDp(int): Dp`). The JVM name is the
      *  Kotlin getter (`get` + capitalized name), MANGLED when the property's type is an inline value class
-     *  (`Dp`/`TextUnit` → `getDp-<hash>`), which [mangledNameMatches] accepts. */
+     *  (`Dp`/`TextUnit` → `getDp-<hash>`), which [KotlinJvmNames.matches] resolves from the facade's `@Metadata`. */
     private fun readExtensionProperty(receiver: Any, ownerFqn: String, name: String): Any? {
         hookPropertyRead(ownerFqn, name, receiver)?.let { return it.value }
         // A preview-specific override for a getter the real facade can't serve on an interpreted receiver — a
@@ -1996,7 +2018,7 @@ class Interpreter(
             }
         val getter = getterName
         val m = cls.methods.firstOrNull {
-            java.lang.reflect.Modifier.isStatic(it.modifiers) && it.parameterCount == 1 && mangledNameMatches(it.name, getter)
+            java.lang.reflect.Modifier.isStatic(it.modifiers) && it.parameterCount == 1 && KotlinJvmNames.matches(cls, it.name, getter)
         } ?: throw InterpreterException("no extension-property getter `$name` on `$ownerFqn`")
         runCatching { m.isAccessible = true }
         return m.invoke(null, receiver)
@@ -2016,7 +2038,7 @@ class Interpreter(
         val perClass = noArgMethodCache.getOrPut(cls) { java.util.concurrent.ConcurrentHashMap() }
         perClass[name]?.let { return it.method }
         val m = publicMethod(cls, name, 0)
-            ?: cls.methods.firstOrNull { mangledNameMatches(it.name, name) && it.parameterCount == 0 }
+            ?: cls.methods.firstOrNull { KotlinJvmNames.matches(cls, it.name, name) && it.parameterCount == 0 }
                 ?.also { runCatching { it.isAccessible = true } }
         perClass[name] = NoArgMethodHolder(m)
         return m
