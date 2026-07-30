@@ -22,6 +22,10 @@ import java.nio.file.Path
  */
 internal class ComposePreviewService(private val ctx: EngineContext) {
 
+    private companion object {
+        const val INDEXING_MESSAGE = "Preparing preview — indexing dependencies…"
+    }
+
     /**
      * The cross-MODULE-expanded preview model for [vf] (already parsed in [entry]'s analyzer): seed from the
      * entry file, then run the reachable-declaration expansion across [module] PLUS its transitive dependency
@@ -77,6 +81,11 @@ internal class ComposePreviewService(private val ctx: EngineContext) {
         if (analyzer.hasSyntaxErrors(vf)) return PreviewRunResult(
             false, "the file has syntax errors — fix them to preview"
         )
+        // Dumb mode: until the classpath callable index is ready, lowering can't tell a genuinely-unresolved
+        // call from a not-yet-indexed one, so every stdlib/library call lowers to `candidates=0`. Report
+        // "preparing" (the editor's diagnostics/completion honor the same gate) instead of a wall of false
+        // "unresolved call" errors that wrongly blame the user's code.
+        if (!analyzer.classpathReady()) return PreviewRunResult(false, INDEXING_MESSAGE)
         val model = previewModelFor(module, vf, analyzer)
         val program = model?.program ?: emptyMap()
         val entry = previewEntry(program, functionName, 0)
@@ -126,6 +135,8 @@ internal class ComposePreviewService(private val ctx: EngineContext) {
         val vf = ctx.store.vfs.fileFor(file)
         ctx.refreshParse(analyzer, file, text)
         if (analyzer.hasSyntaxErrors(vf)) return listOf("the file has syntax errors — fix them to preview")
+        // Dumb mode (see [runComposePreview]): don't report the not-yet-indexed calls as unresolved.
+        if (!analyzer.classpathReady()) return listOf(INDEXING_MESSAGE)
         val model = previewModelFor(module, vf, analyzer)
         val program = model?.program ?: emptyMap()
         val entry = previewEntry(program, functionName, arity)
@@ -163,6 +174,10 @@ internal class ComposePreviewService(private val ctx: EngineContext) {
         // A file with syntax errors mis-shapes declarations when parsed error-tolerantly — interpreting it builds
         // a garbage program that crashes the real Compose runtime in a phase nothing can catch. Don't render it.
         if (analyzer.hasSyntaxErrors(vf)) return null
+        // Dumb mode (see [runComposePreview]): a not-yet-ready callable index lowers valid calls to `candidates=0`,
+        // so the entry/reachable classes look incomplete. Don't render a half-resolved tree; the host polls
+        // [composePreviewReady] and re-lowers once indexing finishes.
+        if (!analyzer.classpathReady()) return null
         val model = previewModelFor(module, vf, analyzer) ?: return null
         val program = model.program
         val entry = previewEntry(program, functionName, arity)?.takeIf { it.isComplete } ?: return null
