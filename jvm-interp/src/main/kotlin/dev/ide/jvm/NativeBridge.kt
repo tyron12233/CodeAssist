@@ -66,11 +66,30 @@ class ReflectiveBridge(
     private fun paramDescs(descriptor: String): List<String> =
         paramDescCache.getOrPut(descriptor) { Descriptors.paramTypes(descriptor) }
 
-    /** The method for (class, name+descriptor), resolved once and made accessible; null cached too. */
+    /** The method for (class, name+descriptor), resolved once and made accessible; null cached too. The RETURN
+     *  type disambiguates overloads with identical params: a class can declare two methods with the same name
+     *  and parameter types but different return types (Kotlin does — e.g. `RememberSaveableKt.rememberSaveable`
+     *  has `(…Function0;Composer;I)Object` AND `(…Function0;Composer;I)MutableState`), which the invoked
+     *  bytecode distinguishes by the full descriptor. Matching params-only would pick between them by
+     *  `Class.getDeclaredMethods()` order (unspecified, varies per JVM/ART run) — and invoking the wrong overload
+     *  (whose body casts its result, e.g. to `MutableState`) throws a `ClassCastException`. Falls back to a
+     *  params-only match when no return-type match exists (a covariant/bridge return the descriptor names more
+     *  precisely than the reflected method reports). */
     private fun resolveMethod(cls: Class<*>, name: String, descriptor: String): Method? =
         methodCache.getOrPut(cls) { ConcurrentHashMap() }.getOrPut(name + descriptor) {
-            MethodRef(findMethod(cls, name, paramClasses(descriptor))?.also { runCatching { it.isAccessible = true } })
+            val params = paramClasses(descriptor)
+            val ret = returnClass(descriptor)
+            // Prefer a return-type match; retry params-only only when the return type was known AND matched nothing.
+            val m = findMethod(cls, name, params, ret) ?: if (ret != null) findMethod(cls, name, params, null) else null
+            MethodRef(m?.also { runCatching { it.isAccessible = true } })
         }.m
+
+    /** The real [Class] the [descriptor]'s return type names (`Void.TYPE` for `V`), or null when it isn't
+     *  loadable here — then return-type disambiguation is skipped and resolution falls back to params-only. */
+    private fun returnClass(descriptor: String): Class<*>? = runCatching {
+        val r = Descriptors.returnType(descriptor)
+        if (r == "V") Void.TYPE else classFor(r)
+    }.getOrNull()
 
     /** The constructor for (class, descriptor), resolved once and made accessible; null cached too. */
     private fun resolveConstructor(cls: Class<*>, descriptor: String): Constructor<*>? =
@@ -254,18 +273,18 @@ class ReflectiveBridge(
      * module (for example `java.util.stream.IntPipeline`), so the public interface method it overrides
      * (`IntStream.map`) is used instead. Falls back to any matching method up the hierarchy.
      */
-    private fun findMethod(cls: Class<*>, name: String, paramTypes: Array<Class<*>>): Method? {
-        publicMethod(cls, name, paramTypes)?.let { return it }
+    private fun findMethod(cls: Class<*>, name: String, paramTypes: Array<Class<*>>, returnType: Class<*>?): Method? {
+        publicMethod(cls, name, paramTypes, returnType)?.let { return it }
         var c: Class<*>? = cls
         while (c != null) {
-            c.declaredMethods.firstOrNull { it.name == name && paramsMatch(it.parameterTypes, paramTypes) }?.let { return it }
+            c.declaredMethods.firstOrNull { matches(it, name, paramTypes, returnType) }?.let { return it }
             c = c.superclass
         }
-        return cls.methods.firstOrNull { it.name == name && paramsMatch(it.parameterTypes, paramTypes) }
+        return cls.methods.firstOrNull { matches(it, name, paramTypes, returnType) }
     }
 
     /** A matching method declared on a public type in [cls]'s hierarchy (superclasses and interfaces), or null. */
-    private fun publicMethod(cls: Class<*>, name: String, paramTypes: Array<Class<*>>): Method? {
+    private fun publicMethod(cls: Class<*>, name: String, paramTypes: Array<Class<*>>, returnType: Class<*>?): Method? {
         val seen = HashSet<Class<*>>()
         val queue = ArrayDeque<Class<*>>()
         queue.add(cls)
@@ -273,15 +292,19 @@ class ReflectiveBridge(
             val c = queue.removeFirst()
             if (!seen.add(c)) continue
             if (Modifier.isPublic(c.modifiers)) {
-                c.declaredMethods.firstOrNull {
-                    it.name == name && Modifier.isPublic(it.modifiers) && paramsMatch(it.parameterTypes, paramTypes)
-                }?.let { return it }
+                c.declaredMethods.firstOrNull { Modifier.isPublic(it.modifiers) && matches(it, name, paramTypes, returnType) }
+                    ?.let { return it }
             }
             c.superclass?.let { queue.add(it) }
             c.interfaces.forEach { queue.add(it) }
         }
         return null
     }
+
+    /** Name + parameter types must match; the [returnType] must match too when given (null = don't constrain it,
+     *  the params-only fallback). This is what separates two overloads that differ ONLY by return type. */
+    private fun matches(m: Method, name: String, paramTypes: Array<Class<*>>, returnType: Class<*>?): Boolean =
+        m.name == name && paramsMatch(m.parameterTypes, paramTypes) && (returnType == null || m.returnType == returnType)
 
     private fun paramsMatch(actual: Array<Class<*>>, expected: Array<Class<*>>): Boolean =
         actual.size == expected.size && actual.indices.all { actual[it] == expected[it] }

@@ -505,11 +505,18 @@ class ComposeDispatcher(
 
     /**
      * Windowed composables the preview renders inline instead of opening a real OS window. `Popup`/`Dialog` are
-     * the primitives; `DropdownMenu` is the common Material component (its content is a `ColumnScope` lambda).
-     * Multi-slot dialogs (`AlertDialog`) are handled by [renderMultiSlotDialogInline], not here.
+     * the primitives; `DropdownMenu`/`ModalBottomSheet` are the common Material components (their content is a
+     * `ColumnScope` lambda). Multi-slot dialogs (`AlertDialog`) are handled by [renderMultiSlotDialogInline].
+     *
+     * `ModalBottomSheet` opens a real `ModalBottomSheetDialog` OS window the in-app preview has no host for
+     * (like `Dialog`/`DropdownMenu`), so a static preview shows its content column inline. (The `SheetState`-
+     * peer-cast-to-`MutableState` crash that first surfaced this call is fixed at the root — the VM's bridged
+     * overload resolution now disambiguates same-param/different-return methods like `rememberSaveable(...)Object`
+     * vs `(...)MutableState` by the descriptor's return type; see `NativeBridge.resolveMethod`.)
      */
     private val windowed = listOf(
         Windowed("androidx.compose.material3", "DropdownMenu", "androidx.compose.foundation.layout.ColumnScopeInstance"),
+        Windowed("androidx.compose.material3", "ModalBottomSheet", "androidx.compose.foundation.layout.ColumnScopeInstance"),
         Windowed("androidx.compose.ui.window", "Popup", null),
         Windowed("androidx.compose.ui.window", "Dialog", null),
     )
