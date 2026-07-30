@@ -1,6 +1,5 @@
 package dev.ide.android.support
 
-import dev.ide.android.support.tools.AndroidSdk
 import dev.ide.android.support.tools.DebugKeystore
 import dev.ide.build.BuildGoal
 import dev.ide.build.BuildRequest
@@ -22,11 +21,10 @@ import dev.ide.model.impl.FacetCodecRegistry
 import dev.ide.model.impl.ModuleTypeRegistry
 import dev.ide.model.impl.ProjectModel
 import dev.ide.platform.PluginId
-import dev.ide.platform.impl.PlatformCore
+import dev.ide.testkit.testEnv
+import dev.ide.testkit.writeSource
 import kotlinx.coroutines.runBlocking
-import org.junit.jupiter.api.Assumptions.assumeTrue
 import java.nio.file.Files
-import java.nio.file.Path
 import java.util.concurrent.ConcurrentHashMap
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -50,13 +48,11 @@ class AndroidAgpTasksTest {
 
     @Test
     fun libraryModulesHaveAgpTasksAndStatuses() {
-        val sdk = AndroidSdk.findSdkRoot()?.let { AndroidSdk.detect(it) }
-        assumeTrue(sdk != null && sdk.isComplete(), "Android SDK not installed; skipping")
-        sdk!!
+        val sdk = assumeAndroidSdk()
 
-        val dir = Files.createTempDirectory("android-agp")
-        val platform = PlatformCore()
-        try {
+        testEnv("android-agp") { env ->
+            val dir = env.dir
+            val platform = env.platform
             val store = ProjectModel.open(dir, platform, FacetCodecRegistry().register(AndroidFacetCodec))
             val types = ModuleTypeRegistry(platform.extensions)
             types.register(JavaLib, PluginId("java-support"))
@@ -76,10 +72,10 @@ class AndroidAgpTasksTest {
                 }
                 commit()
             }
-            write(dir, "core/src/main/java/com/example/core/Greeter.java", "package com.example.core; public class Greeter { public static String hi() { return \"hi\"; } }")
-            write(dir, "app/src/main/java/com/example/app/MainActivity.java", ACTIVITY)
-            write(dir, "app/src/main/AndroidManifest.xml", MANIFEST)
-            write(dir, "app/src/main/res/values/strings.xml", STRINGS)
+            dir.writeSource("core/src/main/java/com/example/core/Greeter.java", "package com.example.core; public class Greeter { public static String hi() { return \"hi\"; } }")
+            dir.writeSource("app/src/main/java/com/example/app/MainActivity.java", ACTIVITY)
+            dir.writeSource("app/src/main/AndroidManifest.xml", MANIFEST)
+            dir.writeSource("app/src/main/res/values/strings.xml", STRINGS)
 
             val signing = DebugKeystore.getOrCreate(dir.resolve(".keystore/debug.ks"), sdk.keytool)
             val graph = AndroidBuildSystem.inProcess(sdk, signing).createBuildGraph(
@@ -117,13 +113,7 @@ class AndroidAgpTasksTest {
             assertEquals(TaskStatus.UpToDate, events2[":core:classes"], "unchanged classes lifecycle is up-to-date")
             assertEquals(TaskStatus.UpToDate, events2[":core:jar"], "unchanged jar is up-to-date")
             assertEquals(TaskStatus.NoSource, events2[":core:processResources"], "still NO-SOURCE")
-        } finally {
-            platform.dispose(); dir.toFile().deleteRecursively()
         }
-    }
-
-    private fun write(root: Path, rel: String, content: String) {
-        val f = root.resolve(rel); Files.createDirectories(f.parent); Files.writeString(f, content.trimIndent())
     }
 
     private companion object {

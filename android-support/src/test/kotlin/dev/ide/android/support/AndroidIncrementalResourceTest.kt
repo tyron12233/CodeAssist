@@ -1,6 +1,5 @@
 package dev.ide.android.support
 
-import dev.ide.android.support.tools.AndroidSdk
 import dev.ide.android.support.tools.DebugKeystore
 import dev.ide.build.BuildGoal
 import dev.ide.build.BuildRequest
@@ -14,11 +13,9 @@ import dev.ide.model.ModuleId
 import dev.ide.model.impl.FacetCodecRegistry
 import dev.ide.model.impl.ModuleTypeRegistry
 import dev.ide.model.impl.ProjectModel
-import dev.ide.platform.impl.PlatformCore
+import dev.ide.testkit.testEnv
+import dev.ide.testkit.writeSource
 import kotlinx.coroutines.runBlocking
-import org.junit.jupiter.api.Assumptions.assumeTrue
-import java.nio.file.Files
-import java.nio.file.Path
 import kotlin.test.Test
 import kotlin.test.assertTrue
 
@@ -31,13 +28,11 @@ class AndroidIncrementalResourceTest {
 
     @Test
     fun revertingAResourceErrorRecoversTheBuild() {
-        val sdk = AndroidSdk.findSdkRoot()?.let { AndroidSdk.detect(it) }
-        assumeTrue(sdk != null && sdk.isComplete(), "Android SDK not installed; skipping")
-        sdk!!
+        val sdk = assumeAndroidSdk()
 
-        val dir = Files.createTempDirectory("android-incres")
-        val platform = PlatformCore()
-        try {
+        testEnv("android-incres") { env ->
+            val dir = env.dir
+            val platform = env.platform
             val store = ProjectModel.open(dir, platform, FacetCodecRegistry().register(AndroidFacetCodec))
             ModuleTypeRegistry(platform.extensions).register(AndroidAppModuleType, AndroidSupport.PLUGIN)
             val appType = ModuleTypeRegistry(platform.extensions).resolve("android-app")
@@ -49,10 +44,10 @@ class AndroidIncrementalResourceTest {
                 }
                 commit()
             }
-            write(dir, "app/src/main/AndroidManifest.xml", MANIFEST)
-            write(dir, "app/src/main/res/values/strings.xml", STRINGS)
-            write(dir, "app/src/main/res/values/styles.xml", GOOD_STYLES)
-            write(dir, "app/src/main/java/com/example/app/MainActivity.java", ACTIVITY)
+            dir.writeSource("app/src/main/AndroidManifest.xml", MANIFEST)
+            dir.writeSource("app/src/main/res/values/strings.xml", STRINGS)
+            dir.writeSource("app/src/main/res/values/styles.xml", GOOD_STYLES)
+            dir.writeSource("app/src/main/java/com/example/app/MainActivity.java", ACTIVITY)
 
             val signing = DebugKeystore.getOrCreate(dir.resolve(".keystore/debug.ks"), sdk.keytool)
             val buildSystem = AndroidBuildSystem.subprocess(sdk, signing) // the wiring the IDE uses
@@ -67,18 +62,12 @@ class AndroidIncrementalResourceTest {
 
             assertTrue(build(), "initial build should succeed")
 
-            write(dir, "app/src/main/res/values/styles.xml", BROKEN_STYLES) // references a missing color
+            dir.writeSource("app/src/main/res/values/styles.xml", BROKEN_STYLES) // references a missing color
             assertTrue(!build(), "build with the broken resource must fail")
 
-            write(dir, "app/src/main/res/values/styles.xml", GOOD_STYLES) // revert
+            dir.writeSource("app/src/main/res/values/styles.xml", GOOD_STYLES) // revert
             assertTrue(build(), "reverting the resource error must let the build recover (not stay stuck)")
-        } finally {
-            platform.dispose(); dir.toFile().deleteRecursively()
         }
-    }
-
-    private fun write(root: Path, rel: String, content: String) {
-        val f = root.resolve(rel); Files.createDirectories(f.parent); Files.writeString(f, content.trimIndent())
     }
 
     private companion object {

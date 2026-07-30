@@ -5,7 +5,7 @@ import dev.ide.model.impl.FacetCodecRegistry
 import dev.ide.model.impl.ModuleTypeRegistry
 import dev.ide.model.impl.ProjectModel
 import dev.ide.platform.impl.PlatformCore
-import java.nio.file.Files
+import dev.ide.testkit.testEnv
 import kotlin.test.Test
 import kotlin.test.assertEquals
 
@@ -124,9 +124,9 @@ class AndroidFacetCodecTest {
     /** Build with a facet, save, reload -> identical. */
     @Test
     fun facetSurvivesModuleTomlSaveAndReload() {
-        val dir = Files.createTempDirectory("android-facet-roundtrip")
-        val platform = PlatformCore()
-        try {
+        testEnv("android-facet-roundtrip") { env ->
+            val dir = env.dir
+            val platform = env.platform
             val store = ProjectModel.open(dir, platform, FacetCodecRegistry().register(AndroidFacetCodec))
             ModuleTypeRegistry(platform.extensions).register(AndroidAppModuleType, AndroidSupport.PLUGIN)
             val appType = ModuleTypeRegistry(platform.extensions).resolve("android-app")
@@ -150,8 +150,6 @@ class AndroidFacetCodecTest {
             } finally {
                 platform2.dispose()
             }
-        } finally {
-            platform.dispose(); dir.toFile().deleteRecursively()
         }
     }
 }

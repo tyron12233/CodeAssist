@@ -91,6 +91,7 @@ include(
     ":layout-preview-api",  // owned XML-layout preview: render contracts (RCanvas/RenderNode/Renderer), android-free
     ":layout-preview-impl", // the preview engine: resource value resolver, inflater, built-in renderers, ASM bridge remapper
     ":bench-support", // test-only: shared regression/benchmark harness (consumed via testImplementation)
+    ":test-support",  // test-only: shared fixtures/infrastructure (temp dirs, stubs, jars, contexts) — auto-wired
 )
 
 // The IDE shells (Compose Multiplatform + AGP). These apply the Android Gradle plugin / Compose KMP plugin,

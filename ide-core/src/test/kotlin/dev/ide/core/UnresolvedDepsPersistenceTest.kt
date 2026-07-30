@@ -13,6 +13,7 @@ import dev.ide.model.impl.ModuleTypeRegistry
 import dev.ide.model.impl.ProjectModel
 import dev.ide.platform.PluginId
 import dev.ide.platform.impl.PlatformCore
+import dev.ide.testkit.withTempDir
 import java.nio.file.Files
 import java.nio.file.Path
 import kotlin.test.Test
@@ -70,8 +71,7 @@ class UnresolvedDepsPersistenceTest {
     }
 
     @Test
-    fun unresolvedDepBannerShowsOnOpenBeforeAnyResolve() {
-        val dir = Files.createTempDirectory("ide-unresolved-persist")
+    fun unresolvedDepBannerShowsOnOpenBeforeAnyResolve() = withTempDir("ide-unresolved-persist") { dir ->
         val moduleId = createWorkspaceWithUnresolvableDep(dir)
 
         // The state a prior session that couldn't resolve this dep leaves behind: the sidecar carries the
@@ -95,6 +95,5 @@ class UnresolvedDepsPersistenceTest {
                 "the persisted unresolved dependency should surface immediately on open: $unresolved",
             )
         }
-        dir.toFile().deleteRecursively()
     }
 }

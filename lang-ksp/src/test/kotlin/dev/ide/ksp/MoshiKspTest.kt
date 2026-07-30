@@ -1,6 +1,7 @@
 package dev.ide.ksp
 
 import dev.ide.build.SourceGenRequest
+import dev.ide.testkit.withTempDir
 import java.io.File
 import java.nio.file.Files
 import java.nio.file.Path
@@ -27,8 +28,7 @@ class MoshiKspTest {
         assumeTrue(runner.isNotEmpty() && moshiLibs.isNotEmpty(), "KSP runner / Moshi runtime classpaths not injected — skipping")
 
         val catalog = KspProcessorCatalog.bundled()
-        val root = Files.createTempDirectory("ksp-moshi")
-        try {
+        withTempDir("ksp-moshi") { root ->
             val srcRoot = root.resolve("src/main/kotlin")
             Files.createDirectories(srcRoot)
             Files.writeString(
@@ -65,8 +65,6 @@ class MoshiKspTest {
                 "bundled Moshi did not generate PersonJsonAdapter.kt:\n${result.messages.joinToString("\n")}\n" +
                     emitted.joinToString("\n") { genRoot.relativize(it).toString() },
             )
-        } finally {
-            root.toFile().deleteRecursively()
         }
     }
 }

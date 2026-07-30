@@ -24,6 +24,8 @@ import dev.ide.model.impl.ProjectModel
 import dev.ide.model.impl.ProjectModelStore
 import dev.ide.platform.PluginId
 import dev.ide.platform.impl.PlatformCore
+import dev.ide.testkit.testEnv
+import dev.ide.testkit.writeSource
 import kotlinx.coroutines.cancelAndJoin
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -78,17 +80,17 @@ class JavaBuildTest {
             }
             commit()
         }
-        write(dir, "core/src/main/java/com/example/core/Greeter.java", GREETER)
-        write(dir, "util/src/main/java/com/example/util/Formatter.java", FORMATTER)
-        write(dir, "app/src/main/java/com/example/app/Main.java", MAIN)
+        dir.writeSource("core/src/main/java/com/example/core/Greeter.java", GREETER)
+        dir.writeSource("util/src/main/java/com/example/util/Formatter.java", FORMATTER)
+        dir.writeSource("app/src/main/java/com/example/app/Main.java", MAIN)
         return store to store.workspace.projects.single()
     }
 
     @Test
     fun buildsAndRunsAMultiModuleJavaCli() {
-        val dir = Files.createTempDirectory("javabuild")
-        val platform = PlatformCore()
-        try {
+        testEnv("javabuild") { env ->
+            val dir = env.dir
+            val platform = env.platform
             val (_, project) = buildWorkspace(dir, platform)
             val graph = javaBuildSystem().createBuildGraph(
                 project, BuildRequest(listOf(ModuleId("app")), VariantSelector("main"), BuildGoal.PACKAGE),
@@ -104,8 +106,6 @@ class JavaBuildTest {
 
             val again = runBlocking { exec.execute(graph, SimpleTaskContext(), 2) }
             assertTrue(again.ranTasks.isEmpty(), "re-build must be up-to-date, ran=${again.ranTasks.map { it.value }}")
-        } finally {
-            platform.dispose(); dir.toFile().deleteRecursively()
         }
     }
 
@@ -113,9 +113,9 @@ class JavaBuildTest {
     fun packagedJarHasARunnableManifestAndRunsStandalone() {
         // The reported bug: a built .jar had no META-INF/MANIFEST.MF, so it couldn't run outside the app.
         // A single self-contained module now packages a manifest with Main-Class and runs via `java -jar`.
-        val dir = Files.createTempDirectory("jarmanifest")
-        val platform = PlatformCore()
-        try {
+        testEnv("jarmanifest") { env ->
+            val dir = env.dir
+            val platform = env.platform
             ModuleTypeRegistry(platform.extensions).register(JavaLib(), PluginId("java-support"))
             val store = ProjectModel.open(dir, platform, FacetCodecRegistry())
             val javaLib = ModuleTypeRegistry(platform.extensions).resolve("java-lib")
@@ -123,7 +123,7 @@ class JavaBuildTest {
             store.workspace.projects.single().beginModification().apply {
                 addModule("solo", javaLib).addSourceSet(mainSources()); commit()
             }
-            write(dir, "solo/src/main/java/com/example/solo/App.java", SOLO)
+            dir.writeSource("solo/src/main/java/com/example/solo/App.java", SOLO)
             val project = store.workspace.projects.single()
 
             // Wire the host's main-class resolver (here a fixed value) — as BuildService does from its Run config.
@@ -142,16 +142,14 @@ class JavaBuildTest {
                 assertEquals("com.example.solo.App", mf.mainAttributes.getValue("Main-Class"), "Main-Class must name the module's entry point")
             }
             assertTrue("STANDALONE OK" in runJar(jar), "the jar must run standalone via `java -jar`")
-        } finally {
-            platform.dispose(); dir.toFile().deleteRecursively()
         }
     }
 
     @Test
     fun runsConsoleAppViaTheRunTask() {
-        val dir = Files.createTempDirectory("javarun")
-        val platform = PlatformCore()
-        try {
+        testEnv("javarun") { env ->
+            val dir = env.dir
+            val platform = env.platform
             val (_, project) = buildWorkspace(dir, platform)
             val app = project.modules.first { it.name == "app" }
             val graph = javaBuildSystem().createInterpretRunGraph(project, app, "com.example.app.Main", VmProgramInterpreter())
@@ -165,18 +163,16 @@ class JavaBuildTest {
             // The compiles are now up-to-date, but the `run` task must execute again (AlwaysRun).
             val again = runBlocking { exec.execute(graph, SimpleTaskContext(), 2) }
             assertTrue(again.ranTasks.any { it.value.endsWith(":run") }, "run must always execute: ${again.ranTasks.map { it.value }}")
-        } finally {
-            platform.dispose(); dir.toFile().deleteRecursively()
         }
     }
 
     @Test
     fun runsAnInteractiveConsoleAppFeedingStdin() {
-        val dir = Files.createTempDirectory("javarunio")
-        val platform = PlatformCore()
-        try {
+        testEnv("javarunio") { env ->
+            val dir = env.dir
+            val platform = env.platform
             val (_, project) = buildWorkspace(dir, platform)
-            write(dir, "app/src/main/java/com/example/app/Echo.java", ECHO)
+            dir.writeSource("app/src/main/java/com/example/app/Echo.java", ECHO)
             val app = project.modules.first { it.name == "app" }
             val io = CapturingIo("World\n")
             val graph = javaBuildSystem().createInterpretRunGraph(project, app, "com.example.app.Echo", VmProgramInterpreter(), programIo = io)
@@ -190,18 +186,16 @@ class JavaBuildTest {
             // The program printed a prompt (no trailing newline) then echoed the line it read from our stdin.
             assertTrue("Enter name:" in io.out.toString(), "the prompt should reach stdout:\n${io.out}")
             assertTrue("Hello, World!" in io.out.toString(), "the program should echo the stdin we fed:\n${io.out}")
-        } finally {
-            platform.dispose(); dir.toFile().deleteRecursively()
         }
     }
 
     @Test
     fun stopTerminatesANeverEndingProgram() {
-        val dir = Files.createTempDirectory("javarunloop")
-        val platform = PlatformCore()
-        try {
+        testEnv("javarunloop") { env ->
+            val dir = env.dir
+            val platform = env.platform
             val (_, project) = buildWorkspace(dir, platform)
-            write(dir, "app/src/main/java/com/example/app/Loop.java", LOOP)
+            dir.writeSource("app/src/main/java/com/example/app/Loop.java", LOOP)
             val app = project.modules.first { it.name == "app" }
             val io = CapturingIo("") // never reads input; loops forever printing nothing
             val graph = javaBuildSystem().createInterpretRunGraph(project, app, "com.example.app.Loop", VmProgramInterpreter(), programIo = io)
@@ -214,8 +208,6 @@ class JavaBuildTest {
                 // interpreted loop and interrupting the program thread breaks the bridged Thread.sleep.
                 withTimeout(10_000) { job.cancelAndJoin() }
             }
-        } finally {
-            platform.dispose(); dir.toFile().deleteRecursively()
         }
     }
 
@@ -228,10 +220,6 @@ class JavaBuildTest {
         override fun stdout(text: String) { synchronized(out) { out.append(text) } }
         override fun started() { started = true }
         override fun exited(code: Int) { exitCode = code }
-    }
-
-    private fun write(root: Path, rel: String, content: String) {
-        val f = root.resolve(rel); Files.createDirectories(f.parent); Files.writeString(f, content.trimIndent())
     }
 
     private fun runJava(classpath: List<Path>, mainClass: String): String {

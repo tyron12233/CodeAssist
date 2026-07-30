@@ -1,6 +1,6 @@
 package dev.ide.android.support.tools
 
-import java.nio.file.Files
+import dev.ide.testkit.withTempDir
 import kotlin.io.path.writeText
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -14,27 +14,30 @@ class AarMetadataTest {
 
     @Test
     fun readsMinCompileSdkFromPropertiesFile() {
-        val dir = Files.createTempDirectory("aarmeta")
-        val f = dir.resolve("aar-metadata.properties")
-        f.writeText(
-            """
-            aarFormatVersion=1.0
-            aarMetadataVersion=1.0
-            minCompileSdk=34
-            minCompileSdkExtension=0
-            minAndroidGradlePluginVersion=7.2.0
-            """.trimIndent()
-        )
-        val info = AarMetadata.read(f)
-        assertEquals("34", info.minCompileSdk)
-        assertEquals("7.2.0", info.minAgpVersion)
-        assertTrue(!info.isEmpty)
+        withTempDir("aarmeta") { dir ->
+            val f = dir.resolve("aar-metadata.properties")
+            f.writeText(
+                """
+                aarFormatVersion=1.0
+                aarMetadataVersion=1.0
+                minCompileSdk=34
+                minCompileSdkExtension=0
+                minAndroidGradlePluginVersion=7.2.0
+                """.trimIndent()
+            )
+            val info = AarMetadata.read(f)
+            assertEquals("34", info.minCompileSdk)
+            assertEquals("7.2.0", info.minAgpVersion)
+            assertTrue(!info.isEmpty)
+        }
     }
 
     @Test
     fun missingFileIsEmpty() {
-        val absent = Files.createTempDirectory("aarmeta").resolve("nope.properties")
-        assertTrue(AarMetadata.read(absent).isEmpty, "a missing metadata file must impose no constraint")
+        withTempDir("aarmeta") { dir ->
+            val absent = dir.resolve("nope.properties")
+            assertTrue(AarMetadata.read(absent).isEmpty, "a missing metadata file must impose no constraint")
+        }
     }
 
     @Test

@@ -27,9 +27,11 @@ import dev.ide.model.impl.ProjectModel
 import dev.ide.model.impl.ProjectModelStore
 import dev.ide.platform.PluginId
 import dev.ide.platform.impl.PlatformCore
+import dev.ide.testkit.TestJars
+import dev.ide.testkit.testEnv
+import dev.ide.testkit.writeSource
 import kotlinx.coroutines.runBlocking
 import java.io.File
-import java.nio.file.Files
 import java.nio.file.Path
 import java.util.jar.JarFile
 import kotlin.test.Test
@@ -54,16 +56,13 @@ class KotlinJavaInteropBuildTest {
         override fun supportedBuildSystems(): Set<BuildSystemId> = setOf(BuildSystemId.NATIVE)
     }
 
-    /** The loaded kotlin-stdlib jar — added as a module library so the program links + runs. */
-    private fun stdlibJar(): Path = Path.of(Unit::class.java.protectionDomain.codeSource.location.toURI())
-
     private fun buildWorkspace(dir: Path, platform: PlatformCore): Pair<ProjectModelStore, Project> {
         ModuleTypeRegistry(platform.extensions).register(JavaLib(), PluginId("java-support"))
         val store = ProjectModel.open(dir, platform, FacetCodecRegistry())
         val javaLib = ModuleTypeRegistry(platform.extensions).resolve("java-lib")
         store.workspace.beginModification().apply { addProject("demo", BuildSystemId.NATIVE, store.vfs.root()); commit() }
         store.workspace.libraryTable.create("kotlin-stdlib")
-            .apply { kind = LibraryKind.JAR; addClassesRoot(store.vfs.fileFor(stdlibJar())); commit() }
+            .apply { kind = LibraryKind.JAR; addClassesRoot(store.vfs.fileFor(TestJars.kotlinStdlib())); commit() }
         val mixed = SourceSetTemplate(
             "main", DependencyScope.IMPLEMENTATION,
             mapOf("src/main/java" to setOf(ContentRole.SOURCE), "src/main/kotlin" to setOf(ContentRole.SOURCE)),
@@ -75,17 +74,17 @@ class KotlinJavaInteropBuildTest {
             }
             commit()
         }
-        write(dir, "app/src/main/java/com/example/JavaUtil.java", JAVA_UTIL)
-        write(dir, "app/src/main/kotlin/com/example/Greeter.kt", GREETER)
-        write(dir, "app/src/main/java/com/example/Main.java", MAIN)
+        dir.writeSource("app/src/main/java/com/example/JavaUtil.java", JAVA_UTIL)
+        dir.writeSource("app/src/main/kotlin/com/example/Greeter.kt", GREETER)
+        dir.writeSource("app/src/main/java/com/example/Main.java", MAIN)
         return store to store.workspace.projects.single()
     }
 
     @Test
     fun buildsAndRunsAMixedKotlinJavaModule() {
-        val dir = Files.createTempDirectory("ktjava-interop")
-        val platform = PlatformCore()
-        try {
+        testEnv("ktjava-interop") { env ->
+            val dir = env.dir
+            val platform = env.platform
             val (_, project) = buildWorkspace(dir, platform)
             // Desktop wiring, exactly as IdeServices builds it: empty boot classpath (ecj/K2 use the host
             // JRE) and the real incremental K2 compiler. compileJava/compileKotlin call ecj/K2 directly.
@@ -110,19 +109,13 @@ class KotlinJavaInteropBuildTest {
             assertTrue("com/example/Main.class" in names, "Java entrypoint missing from jar: $names")
 
             // Run it (real java fork): proves Java to Kotlin to Java links and executes against the stdlib.
-            val runtime = listOf(jar, stdlibJar())
+            val runtime = listOf(jar, TestJars.kotlinStdlib())
             assertTrue("HELLO, WORLD!" in runJava(runtime, "com.example.Main"), "wrong program output")
 
             // A clean rebuild does nothing: both compiles are up-to-date.
             val again = runBlocking { exec.execute(graph, SimpleTaskContext(), 2) }
             assertTrue(again.ranTasks.isEmpty(), "re-build must be up-to-date, ran=${again.ranTasks.map { it.value }}")
-        } finally {
-            platform.dispose(); dir.toFile().deleteRecursively()
         }
-    }
-
-    private fun write(root: Path, rel: String, content: String) {
-        val f = root.resolve(rel); Files.createDirectories(f.parent); Files.writeString(f, content.trimIndent())
     }
 
     private fun runJava(classpath: List<Path>, mainClass: String): String {

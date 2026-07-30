@@ -1,5 +1,6 @@
 package dev.ide.core
 
+import dev.ide.testkit.withTempDir
 import java.nio.file.Files
 import java.nio.file.Paths
 import kotlin.test.Test
@@ -16,8 +17,7 @@ import kotlin.test.assertTrue
 class KotlinStdlibProvisionHealTest {
 
     @Test
-    fun reExtractsAndRepointsADanglingKotlinStdlib() {
-        val dir = Files.createTempDirectory("stdlib-heal")
+    fun reExtractsAndRepointsADanglingKotlinStdlib() = withTempDir("stdlib-heal") { dir ->
         IdeServices.bootstrapDemo(dir).use { ide ->
             // Make the app module Kotlin so the bundled stdlib is provisioned (the demo is Java-only otherwise).
             val ktRoot = dir.resolve("app/src/main/kotlin/com/example/app")

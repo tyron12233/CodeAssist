@@ -1,5 +1,6 @@
 package dev.ide.core
 
+import dev.ide.testkit.withTempDir
 import dev.ide.bench.Bench
 import dev.ide.bench.Direction
 import dev.ide.bench.MetricUnit
@@ -31,8 +32,7 @@ import kotlin.test.assertTrue
 class PreemptionBenchmark {
 
     @Test
-    fun completionLatencyIdleVsUnderBackgroundAnalysis() {
-        val dir = Files.createTempDirectory("ide-preempt-bench")
+    fun completionLatencyIdleVsUnderBackgroundAnalysis() = withTempDir("ide-preempt-bench") { dir ->
         IdeServices.bootstrapJavaDemo(dir).use { ide ->
             val backend = IdeServicesBackend(initial = ide)
             try {

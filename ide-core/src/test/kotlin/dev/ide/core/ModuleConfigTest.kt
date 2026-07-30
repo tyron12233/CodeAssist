@@ -1,5 +1,6 @@
 package dev.ide.core
 
+import dev.ide.testkit.withTempDir
 import dev.ide.ui.backend.UiConfigField
 import dev.ide.ui.backend.UiFacetConfig
 import dev.ide.ui.backend.UiModuleConfigEdit
@@ -19,8 +20,7 @@ import kotlin.test.assertTrue
 class ModuleConfigTest {
 
     @Test
-    fun readsCoreFieldsAndAGenericAndroidFacetPanel() {
-        val dir = Files.createTempDirectory("ide-cfg")
+    fun readsCoreFieldsAndAGenericAndroidFacetPanel() = withTempDir("ide-cfg") { dir ->
         IdeServices.bootstrapDemo(dir).use { ide ->
             val config = assertNotNull(ide.moduleService.getModuleConfig("app"), "app config should load")
             assertEquals("app", config.name)
@@ -43,8 +43,7 @@ class ModuleConfigTest {
     }
 
     @Test
-    fun editingLanguageLevelAndAFacetFieldPersistsAndReloads() {
-        val dir = Files.createTempDirectory("ide-cfg-edit")
+    fun editingLanguageLevelAndAFacetFieldPersistsAndReloads() = withTempDir("ide-cfg-edit") { dir ->
         IdeServices.bootstrapDemo(dir).use { ide ->
             val before = assertNotNull(ide.moduleService.getModuleConfig("app"))
             val android = assertNotNull(before.facets.firstOrNull { it.table == "android" })
@@ -85,8 +84,7 @@ class ModuleConfigTest {
      *  explicit override persists through module.toml. This is the "console apps don't see android.*" fix,
      *  surfaced in Module Config. */
     @Test
-    fun platformSdkResolvesByTypeAndOverridePersists() {
-        val dir = Files.createTempDirectory("ide-cfg-sdk")
+    fun platformSdkResolvesByTypeAndOverridePersists() = withTempDir("ide-cfg-sdk") { dir ->
         IdeServices.bootstrapDemo(dir).use { ide ->
             val core = assertNotNull(ide.moduleService.getModuleConfig("core")) // a java-lib
             assertTrue(core.availableSdks.isNotEmpty(), "SDK table is populated")
@@ -123,8 +121,7 @@ class ModuleConfigTest {
     }
 
     @Test
-    fun packagingOptionsRoundTripAndPersist() {
-        val dir = Files.createTempDirectory("ide-pkg")
+    fun packagingOptionsRoundTripAndPersist() = withTempDir("ide-pkg") { dir ->
         IdeServices.bootstrapDemo(dir).use { ide ->
             // Defaults exposed; a fresh module has no configured rules.
             val initial = assertNotNull(ide.moduleService.getPackagingOptions("app"), "android module has packaging options")
@@ -158,8 +155,7 @@ class ModuleConfigTest {
     }
 
     @Test
-    fun settingsSaveDoesNotClobberPackaging() {
-        val dir = Files.createTempDirectory("ide-pkg-preserve")
+    fun settingsSaveDoesNotClobberPackaging() = withTempDir("ide-pkg-preserve") { dir ->
         IdeServices.bootstrapDemo(dir).use { ide ->
             ide.moduleService.updatePackagingOptions(
                 "app",
@@ -182,8 +178,7 @@ class ModuleConfigTest {
     }
 
     @Test
-    fun findInFilesMatchesProjectSources() {
-        val dir = Files.createTempDirectory("ide-find")
+    fun findInFilesMatchesProjectSources() = withTempDir("ide-find") { dir ->
         IdeServices.bootstrapJavaDemo(dir).use { ide ->
             // "package" appears in every Java source — a stable probe.
             val hits = ide.search.findInFiles("package", UiSearchOptions(), limit = 200)

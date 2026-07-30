@@ -1,7 +1,6 @@
 package dev.ide.android.support
 
 import dev.ide.android.support.tasks.ApkPackaging
-import dev.ide.android.support.tools.AndroidSdk
 import dev.ide.android.support.tools.DebugKeystore
 import dev.ide.build.BuildGoal
 import dev.ide.build.BuildRequest
@@ -20,9 +19,9 @@ import dev.ide.model.ModuleId
 import dev.ide.model.impl.FacetCodecRegistry
 import dev.ide.model.impl.ModuleTypeRegistry
 import dev.ide.model.impl.ProjectModel
-import dev.ide.platform.impl.PlatformCore
+import dev.ide.testkit.testEnv
+import dev.ide.testkit.writeSource
 import kotlinx.coroutines.runBlocking
-import org.junit.jupiter.api.Assumptions.assumeTrue
 import java.nio.file.Files
 import java.nio.file.Path
 import kotlin.test.Test
@@ -39,13 +38,11 @@ class AndroidAarAttributeTest {
 
     @Test
     fun resolvesCustomAttributeFromExplodedAar() {
-        val sdk = AndroidSdk.findSdkRoot()?.let { AndroidSdk.detect(it) }
-        assumeTrue(sdk != null && sdk.isComplete(), "Android SDK not installed; skipping")
-        sdk!!
+        val sdk = assumeAndroidSdk()
 
-        val dir = Files.createTempDirectory("android-aar-attr")
-        val platform = PlatformCore()
-        try {
+        testEnv("android-aar-attr") { env ->
+            val dir = env.dir
+            val platform = env.platform
             // The exploded-AAR layout the Maven resolver produces: classes.jar + res/ + manifest + .extracted.
             val exploded = explodeAar(dir.resolve("exploded/customview"), sdk.androidJar)
 
@@ -68,9 +65,9 @@ class AndroidAarAttributeTest {
                 commit()
             }
 
-            write(dir, "app/src/main/AndroidManifest.xml", APP_MANIFEST)
-            write(dir, "app/src/main/res/layout/main.xml", APP_LAYOUT)   // uses app:customText from the AAR
-            write(dir, "app/src/main/java/com/example/app/MainActivity.java", APP_ACTIVITY)
+            dir.writeSource("app/src/main/AndroidManifest.xml", APP_MANIFEST)
+            dir.writeSource("app/src/main/res/layout/main.xml", APP_LAYOUT)   // uses app:customText from the AAR
+            dir.writeSource("app/src/main/java/com/example/app/MainActivity.java", APP_ACTIVITY)
 
             val signing = DebugKeystore.getOrCreate(dir.resolve(".keystore/debug.ks"), sdk.keytool)
             val buildSystem = AndroidBuildSystem.inProcess(sdk, signing)
@@ -87,27 +84,21 @@ class AndroidAarAttributeTest {
             // aapt2 --extra-packages generated the AAR's own R (so its classes + attrs resolve).
             val aarR = dir.resolve("app/build/intermediates/android/debug/gen/io/example/customview/R.java")
             assertTrue(Files.isRegularFile(aarR), "AAR package R.java not generated (extra-packages missing): $aarR")
-        } finally {
-            platform.dispose(); dir.toFile().deleteRecursively()
         }
     }
 
     /** Lay out an already-exploded AAR (classes.jar + res/values/attrs.xml + manifest + marker); returns the jar. */
     private fun explodeAar(dir: Path, androidJar: Path): Path {
-        write(dir.resolve("src"), "io/example/customview/CustomView.java", CUSTOM_VIEW)
+        dir.resolve("src").writeSource("io/example/customview/CustomView.java", CUSTOM_VIEW)
         val r = JdtBatchCompiler.compile(listOf(dir.resolve("src/io/example/customview/CustomView.java")),
             listOf(androidJar), dir.resolve("classes"), "17")
         check(r.success) { "AAR class compile failed: ${r.messages}" }
         val classesJar = dir.resolve("classes.jar")
         ApkPackaging.jarClasses(dir.resolve("classes"), classesJar)
-        write(dir, "res/values/attrs.xml", AAR_ATTRS)
-        write(dir, "AndroidManifest.xml", AAR_MANIFEST)
+        dir.writeSource("res/values/attrs.xml", AAR_ATTRS)
+        dir.writeSource("AndroidManifest.xml", AAR_MANIFEST)
         Files.writeString(dir.resolve(".extracted"), "")
         return classesJar
-    }
-
-    private fun write(root: Path, rel: String, content: String) {
-        val f = root.resolve(rel); Files.createDirectories(f.parent); Files.writeString(f, content.trimIndent())
     }
 
     private companion object {

@@ -5,9 +5,9 @@ import com.google.devtools.ksp.processing.KSPJvmConfig
 import com.google.devtools.ksp.processing.KSPLogger
 import com.google.devtools.ksp.processing.SymbolProcessorProvider
 import com.google.devtools.ksp.symbol.KSNode
+import dev.ide.testkit.withTempDir
 import java.io.File
 import java.net.URLClassLoader
-import java.nio.file.Files
 import java.util.ServiceLoader
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -46,8 +46,8 @@ class RoomKspSpikeTest {
         assumeTrue(processorClasspath.isNotEmpty(), "room.processor.classpath not injected — skipping Room spike")
         assumeTrue(roomLibs.isNotEmpty(), "room.libs.classpath not injected — skipping Room spike")
 
-        val root = Files.createTempDirectory("ksp-room-spike").toFile()
-        try {
+        withTempDir("ksp-room-spike") { dir ->
+            val root = dir.toFile()
             val src = File(root, "src").apply { mkdirs() }
             File(src, "Db.kt").writeText(
                 """
@@ -137,8 +137,6 @@ class RoomKspSpikeTest {
                 "Room did not generate UserDao_Impl. Generated:\n" +
                     generated.joinToString("\n") { it.relativeTo(out).path },
             )
-        } finally {
-            root.deleteRecursively()
         }
     }
 }

@@ -5,6 +5,7 @@ import dev.ide.vfs.FileDeleted
 import dev.ide.vfs.VfsEvent
 import dev.ide.vfs.VfsListener
 import dev.ide.vfs.VfsTopics
+import dev.ide.testkit.withTempDir
 import java.nio.file.Files
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -22,7 +23,7 @@ class WorkspaceEventsTest {
 
     @Test
     fun savePublishesFileChangedOnTheBus() {
-        val dir = Files.createTempDirectory("events-save")
+        withTempDir("events-save") { dir ->
         IdeServices.bootstrapJavaDemo(dir).use { ide ->
             val seen = ArrayList<VfsEvent>()
             val conn = ide.platform.messageBus.connect()
@@ -39,12 +40,12 @@ class WorkspaceEventsTest {
             assertEquals(file.toString(), changed.single().file.path)
             assertTrue(changed.single().newHash.value.isNotEmpty(), "save carries the new content hash")
         }
-        dir.toFile().deleteRecursively()
+        }
     }
 
     @Test
     fun deletePublishesFileDeletedOnTheBus() {
-        val dir = Files.createTempDirectory("events-del")
+        withTempDir("events-del") { dir ->
         IdeServices.bootstrapJavaDemo(dir).use { ide ->
             val core = ide.modules().first { it.name == "core" }
             val file = ide.sourceRoots(core).first().resolve("com/example/core/Scratch.java")
@@ -62,12 +63,12 @@ class WorkspaceEventsTest {
             assertEquals(1, deleted.size, "one FileDeleted per delete, got: $seen")
             assertEquals(file.toString(), deleted.single().file.path)
         }
-        dir.toFile().deleteRecursively()
+        }
     }
 
     @Test
     fun configurationChangesBumpTheStampAndNotifyListeners() {
-        val dir = Files.createTempDirectory("events-config")
+        withTempDir("events-config") { dir ->
         IdeServices.bootstrapJavaDemo(dir).use { ide ->
             val before = ide.events.configStamp.get()
             var notified = 0
@@ -91,6 +92,6 @@ class WorkspaceEventsTest {
                 "a model commit bumps the config stamp",
             )
         }
-        dir.toFile().deleteRecursively()
+        }
     }
 }

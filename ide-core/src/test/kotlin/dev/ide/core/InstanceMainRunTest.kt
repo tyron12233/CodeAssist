@@ -11,6 +11,7 @@ import dev.ide.model.impl.ModuleTypeRegistry
 import dev.ide.model.impl.ProjectModel
 import dev.ide.platform.PluginId
 import dev.ide.platform.impl.PlatformCore
+import dev.ide.testkit.withTempDir
 import dev.ide.ui.backend.RunPhase
 import java.nio.file.Files
 import java.nio.file.Path
@@ -68,8 +69,7 @@ class InstanceMainRunTest {
     }
 
     @Test
-    fun runsAnInstanceMain() {
-        val dir = Files.createTempDirectory("instance-main-run")
+    fun runsAnInstanceMain() = withTempDir("instance-main-run") { dir ->
         createWorkspace(dir)
         IdeServices.open(dir).use { ide ->
             // Detection: a plain class with an instance `fun main` is offered as a run task.
@@ -87,7 +87,6 @@ class InstanceMainRunTest {
             assertEquals(0, rc?.exitCode, "the program should exit 0; transcript:\n$text")
             assertTrue("hello from instance main" in text, "the instance main() should have run:\n$text")
         }
-        dir.toFile().deleteRecursively()
     }
 
     private fun await(timeoutMs: Long, cond: () -> Boolean) {

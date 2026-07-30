@@ -1,6 +1,7 @@
 package dev.ide.android.support.tasks
 
 import dev.ide.android.support.AndroidFacet
+import dev.ide.testkit.withTempDir
 import org.objectweb.asm.ClassReader
 import org.objectweb.asm.ClassVisitor
 import org.objectweb.asm.Opcodes
@@ -43,8 +44,7 @@ class StrippedJarTest {
 
     @Test
     fun stripsMetadataFromAKotlinLibraryJarAndCopiesEverythingElse() {
-        val tmp = Files.createTempDirectory("stripped-jar")
-        try {
+        withTempDir("stripped-jar") { tmp ->
             val src = tmp.resolve("kotlin-lib.jar")
             JarOutputStream(Files.newOutputStream(src)).use { jos ->
                 jos.putNextEntry(JarEntry("dev/ide/android/support/AndroidFacet.class")); jos.write(facetBytes()); jos.closeEntry()
@@ -63,15 +63,12 @@ class StrippedJarTest {
             // Non-class entries copied byte-for-byte (services, the kotlin_module marker, etc.).
             assertTrue(entries.containsKey("META-INF/kotlin-lib.kotlin_module"), "non-class entries are preserved")
             assertEquals("impl", entries.getValue("META-INF/services/some.Service").decodeToString(), "resource entries copied byte-for-byte")
-        } finally {
-            tmp.toFile().deleteRecursively()
         }
     }
 
     @Test
     fun pureJavaJarWithoutKotlinModuleIsReturnedUnchanged() {
-        val tmp = Files.createTempDirectory("stripped-jar-java")
-        try {
+        withTempDir("stripped-jar-java") { tmp ->
             val src = tmp.resolve("java-lib.jar")
             JarOutputStream(Files.newOutputStream(src)).use { jos ->
                 jos.putNextEntry(JarEntry("com/example/Foo.class")); jos.write(byteArrayOf(0xCA.toByte(), 0xFE.toByte())); jos.closeEntry()
@@ -80,8 +77,6 @@ class StrippedJarTest {
             val out = DexArchives.strippedJar(src, dst)
             assertSame(src, out, "a jar with no .kotlin_module is returned as-is (never re-jarred)")
             assertFalse(Files.exists(dst), "no destination jar is written for a pure-Java library")
-        } finally {
-            tmp.toFile().deleteRecursively()
         }
     }
 }

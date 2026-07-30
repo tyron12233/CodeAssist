@@ -13,9 +13,9 @@ import dev.ide.lang.xml.completion.XmlCompletionKind
 import dev.ide.lang.xml.completion.XmlCompletionPosition
 import dev.ide.lang.dom.TextRange
 import dev.ide.lang.completion.complete
-import dev.ide.platform.ContentHash
-import dev.ide.vfs.VirtualFile
 import dev.ide.lang.completion.CompletionItem
+import dev.ide.testkit.TestDocument
+import dev.ide.testkit.virtualFile
 import kotlinx.coroutines.test.runTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -346,21 +346,5 @@ class AndroidXmlCompletionTest {
         assertTrue("true" in complete("<activity android:exported=\"|\"", path), "boolean values")
     }
 
-    private class Doc(override val text: CharSequence, path: String) : DocumentSnapshot {
-        override val file: VirtualFile = FakeFile(path)
-        override val version: Long = 1
-        override fun length(): Int = text.length
-    }
-
-    private class FakeFile(override val path: String) : VirtualFile {
-        override val name: String = path.substringAfterLast('/')
-        override val isDirectory: Boolean = false
-        override val exists: Boolean = true
-        override val length: Long = 0
-        override fun parent(): VirtualFile? = null
-        override fun children(): List<VirtualFile> = emptyList()
-        override fun contentHash(): ContentHash = ContentHash("")
-        override fun readBytes(): ByteArray = ByteArray(0)
-        override fun readText(): CharSequence = ""
-    }
+    private class Doc(text: CharSequence, path: String) : DocumentSnapshot by TestDocument(text, virtualFile(path))
 }

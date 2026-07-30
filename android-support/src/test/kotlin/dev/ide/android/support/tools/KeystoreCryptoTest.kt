@@ -1,10 +1,10 @@
 package dev.ide.android.support.tools
 
+import dev.ide.testkit.withTempDir
 import java.nio.file.Files
 import java.security.KeyStore
 import java.security.PrivateKey
 import java.security.cert.X509Certificate
-import kotlin.io.path.createTempDirectory
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
@@ -19,8 +19,7 @@ class KeystoreCryptoTest {
 
     @Test
     fun `create then validate and inspect`() {
-        val dir = createTempDirectory("ks-crypto")
-        try {
+        withTempDir("ks-crypto") { dir ->
             val file = dir.resolve("release.jks")
             val r = KeystoreCrypto.create(
                 file,
@@ -42,15 +41,12 @@ class KeystoreCryptoTest {
 
             // A wrong password fails cleanly (not valid, no exception escaping).
             assertFalse(KeystoreCrypto.validate(file, "nope").valid)
-        } finally {
-            dir.toFile().deleteRecursively()
         }
     }
 
     @Test
     fun `created keystore is consumable by the signer PKCS12 path`() {
-        val dir = createTempDirectory("ks-signer")
-        try {
+        withTempDir("ks-signer") { dir ->
             val file = dir.resolve("k.jks")
             assertTrue(KeystoreCrypto.create(file, KeystoreCreateSpec("secretpw", "k0", "Test")).success)
             // Exactly what ApksigSigner does: stock PKCS12 read → getKey → getCertificateChain (one password).
@@ -59,8 +55,6 @@ class KeystoreCryptoTest {
             assertTrue(ks.getKey("k0", "secretpw".toCharArray()) is PrivateKey)
             val chain = ks.getCertificateChain("k0")
             assertTrue(chain != null && chain.isNotEmpty() && chain[0] is X509Certificate)
-        } finally {
-            dir.toFile().deleteRecursively()
         }
     }
 }

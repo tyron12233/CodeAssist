@@ -1,5 +1,6 @@
 package dev.ide.android.support.viewbinding
 
+import dev.ide.testkit.withTempDir
 import java.nio.file.Files
 import java.nio.file.Path
 import kotlin.io.path.createTempDirectory
@@ -118,20 +119,21 @@ class LayoutBindingTest {
 
     @Test
     fun `config variants union their ids`() {
-        val res = createTempDirectory("vb-res-variants")
-        for ((dir, extra) in listOf("layout" to "phone_only", "layout-land" to "land_only")) {
-            val d = res.resolve(dir); Files.createDirectories(d)
-            d.resolve("activity_main.xml").writeText(
-                """
-                <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android">
-                    <TextView android:id="@+id/shared"/>
-                    <TextView android:id="@+id/$extra"/>
-                </LinearLayout>
-                """.trimIndent(),
-            )
+        withTempDir("vb-res-variants") { res ->
+            for ((dir, extra) in listOf("layout" to "phone_only", "layout-land" to "land_only")) {
+                val d = res.resolve(dir); Files.createDirectories(d)
+                d.resolve("activity_main.xml").writeText(
+                    """
+                    <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android">
+                        <TextView android:id="@+id/shared"/>
+                        <TextView android:id="@+id/$extra"/>
+                    </LinearLayout>
+                    """.trimIndent(),
+                )
+            }
+            val binding = LayoutBindingModel.bindingsFor(listOf(res), "com.example.app").single()
+            assertEquals(setOf("shared", "phoneOnly", "landOnly"), binding.fields.map { it.name }.toSet())
         }
-        val binding = LayoutBindingModel.bindingsFor(listOf(res), "com.example.app").single()
-        assertEquals(setOf("shared", "phoneOnly", "landOnly"), binding.fields.map { it.name }.toSet())
     }
 
     @Test
@@ -158,10 +160,11 @@ class LayoutBindingTest {
 
     @Test
     fun `non-layout resource dirs are ignored`() {
-        val res = createTempDirectory("vb-res-values")
-        val values = res.resolve("values"); Files.createDirectories(values)
-        values.resolve("strings.xml").writeText("<resources><string name=\"app\">x</string></resources>")
-        assertTrue(LayoutBindingModel.bindingsFor(listOf(res), "com.example.app").isEmpty())
+        withTempDir("vb-res-values") { res ->
+            val values = res.resolve("values"); Files.createDirectories(values)
+            values.resolve("strings.xml").writeText("<resources><string name=\"app\">x</string></resources>")
+            assertTrue(LayoutBindingModel.bindingsFor(listOf(res), "com.example.app").isEmpty())
+        }
     }
 
     @Test

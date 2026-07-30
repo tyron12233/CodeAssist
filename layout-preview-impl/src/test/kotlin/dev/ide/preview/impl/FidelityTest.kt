@@ -1,5 +1,6 @@
 package dev.ide.preview.impl
 
+import dev.ide.testkit.withTempDir
 import dev.ide.android.support.resources.ResourceItem
 import dev.ide.android.support.resources.ResourceRepository
 import dev.ide.android.support.resources.ResourceType
@@ -18,8 +19,7 @@ import kotlin.test.assertTrue
 
 class FidelityTest {
 
-    @Test fun `gradient shape background sets a gradient paint`() {
-        val dir = Files.createTempDirectory("preview-grad")
+    @Test fun `gradient shape background sets a gradient paint`() = withTempDir("preview-grad") { dir ->
         val shape = dir.resolve("g.xml")
         shape.writeText(
             """

@@ -1,6 +1,5 @@
 package dev.ide.android.support
 
-import dev.ide.android.support.tools.AndroidSdk
 import dev.ide.android.support.tools.DebugKeystore
 import dev.ide.build.BuildGoal
 import dev.ide.build.BuildRequest
@@ -14,9 +13,9 @@ import dev.ide.model.ModuleId
 import dev.ide.model.impl.FacetCodecRegistry
 import dev.ide.model.impl.ModuleTypeRegistry
 import dev.ide.model.impl.ProjectModel
-import dev.ide.platform.impl.PlatformCore
+import dev.ide.testkit.testEnv
+import dev.ide.testkit.writeSource
 import kotlinx.coroutines.runBlocking
-import org.junit.jupiter.api.Assumptions.assumeTrue
 import java.nio.file.Files
 import java.nio.file.Path
 import kotlin.test.Test
@@ -31,13 +30,11 @@ class AndroidPerClassDexTest {
 
     @Test
     fun editingOneClassReDexesOnlyThatClass() {
-        val sdk = AndroidSdk.findSdkRoot()?.let { AndroidSdk.detect(it) }
-        assumeTrue(sdk != null && sdk.isComplete(), "Android SDK not installed; skipping")
-        sdk!!
+        val sdk = assumeAndroidSdk()
 
-        val dir = Files.createTempDirectory("android-perclass")
-        val platform = PlatformCore()
-        try {
+        testEnv("android-perclass") { env ->
+            val dir = env.dir
+            val platform = env.platform
             val store = ProjectModel.open(dir, platform, FacetCodecRegistry().register(AndroidFacetCodec))
             ModuleTypeRegistry(platform.extensions).register(AndroidAppModuleType, AndroidSupport.PLUGIN)
             val appType = ModuleTypeRegistry(platform.extensions).resolve("android-app")
@@ -52,10 +49,10 @@ class AndroidPerClassDexTest {
                 }
                 commit()
             }
-            write(dir, "app/src/main/AndroidManifest.xml", MANIFEST)
-            write(dir, "app/src/main/res/values/strings.xml", STRINGS)
-            write(dir, "app/src/main/java/com/example/app/Helper.java", HELPER)
-            write(dir, "app/src/main/java/com/example/app/MainActivity.java", activity("one"))
+            dir.writeSource("app/src/main/AndroidManifest.xml", MANIFEST)
+            dir.writeSource("app/src/main/res/values/strings.xml", STRINGS)
+            dir.writeSource("app/src/main/java/com/example/app/Helper.java", HELPER)
+            dir.writeSource("app/src/main/java/com/example/app/MainActivity.java", activity("one"))
 
             val signing = DebugKeystore.getOrCreate(dir.resolve(".keystore/debug.ks"), sdk.keytool)
             val buildSystem = AndroidBuildSystem.inProcess(sdk, signing, bootClasspath = listOf(sdk.androidJar))
@@ -79,24 +76,18 @@ class AndroidPerClassDexTest {
             val mainBefore = Files.readAllBytes(mainDex)
 
             // Edit ONLY MainActivity.
-            write(dir, "app/src/main/java/com/example/app/MainActivity.java", activity("two"))
+            dir.writeSource("app/src/main/java/com/example/app/MainActivity.java", activity("two"))
             assertTrue(build().succeeded, "incremental build failed")
 
             val helperClassStable = Files.readAllBytes(classes.resolve("Helper.class")).contentEquals(helperClassBefore)
             assertTrue(Files.readAllBytes(helperDex).contentEquals(helperBefore),
                 "unedited Helper must NOT be re-dexed (its .dex changed); Helper.class stable across recompile=$helperClassStable")
             assertTrue(!Files.readAllBytes(mainDex).contentEquals(mainBefore), "edited MainActivity must be re-dexed (its .dex is unchanged)")
-        } finally {
-            platform.dispose(); dir.toFile().deleteRecursively()
         }
     }
 
     private fun listing(dir: Path): List<String> =
         if (Files.isDirectory(dir)) Files.list(dir).use { s -> s.map { it.fileName.toString() }.toList() } else emptyList()
-
-    private fun write(root: Path, rel: String, content: String) {
-        val f = root.resolve(rel); Files.createDirectories(f.parent); Files.writeString(f, content.trimIndent())
-    }
 
     private fun activity(tag: String) = """
         package com.example.app;

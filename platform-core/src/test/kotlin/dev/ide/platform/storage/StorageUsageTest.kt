@@ -1,5 +1,6 @@
 package dev.ide.platform.storage
 
+import dev.ide.testkit.TestEnv
 import java.nio.file.Files
 import java.nio.file.Path
 import kotlin.test.AfterTest
@@ -16,14 +17,11 @@ import kotlin.test.assertTrue
  */
 class StorageUsageTest {
 
-    private val root: Path = Files.createTempDirectory("storage-usage-test")
+    private val env = TestEnv("storage-usage-test")
+    private val root: Path = env.dir
 
     @AfterTest
-    fun cleanup() {
-        if (Files.exists(root)) {
-            Files.walk(root).use { s -> s.sorted(Comparator.reverseOrder()).forEach { Files.deleteIfExists(it) } }
-        }
-    }
+    fun cleanup() = env.close()
 
     /** Write a file of exactly [size] bytes, creating parent dirs. */
     private fun file(relative: String, size: Int): Path {

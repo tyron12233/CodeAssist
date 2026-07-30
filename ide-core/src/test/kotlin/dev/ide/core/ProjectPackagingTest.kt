@@ -1,5 +1,6 @@
 package dev.ide.core
 
+import dev.ide.testkit.withTempDir
 import org.junit.jupiter.api.Test
 import java.nio.file.Files
 import java.nio.file.Paths
@@ -17,8 +18,7 @@ class ProjectPackagingTest {
 
     @Test
     fun exportsAndImportsAProjectRoundTrip() {
-        val root = Files.createTempDirectory("cm-caproj")
-        try {
+        withTempDir("cm-caproj") { root ->
             val manager = ProjectManager.desktop(root.resolve("projects"))
             var originalRoot = ""
             var originalModules: List<String> = emptyList()
@@ -79,15 +79,12 @@ class ProjectPackagingTest {
                 assertEquals(originalName, imported.projectDisplayName())
                 assertNotEquals(originalRoot, imported.workspaceRoot.toString(), "imports into a fresh project dir")
             }
-        } finally {
-            root.toFile().deleteRecursively()
         }
     }
 
     @Test
     fun roundTripsExploreStoreMetadataAndScreenshots() {
-        val root = Files.createTempDirectory("cm-caproj-store")
-        try {
+        withTempDir("cm-caproj-store") { root ->
             val manager = ProjectManager.desktop(root.resolve("projects"))
             var src = ""
             manager.create("java-console", mapOf("name" to "Storeable", "packageName" to "com.acme.s")).use { ide ->
@@ -119,8 +116,6 @@ class ProjectPackagingTest {
             ProjectPackaging.unpack(pkg, dest)
             assertFalse(Files.exists(dest.resolve("store")), "store/ is package-only metadata, never extracted")
             assertTrue(Files.exists(dest.resolve(".platform/workspace.json")))
-        } finally {
-            root.toFile().deleteRecursively()
         }
     }
 

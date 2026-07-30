@@ -1,5 +1,6 @@
 package dev.ide.core
 
+import dev.ide.testkit.withTempDir
 import dev.ide.model.ContentRole
 import java.nio.file.Files
 import java.nio.file.Paths
@@ -22,8 +23,7 @@ class SourceSetManagementTest {
             .firstOrNull { Paths.get(it.dir.path).fileName.toString() == dirName }?.roles
 
     @Test
-    fun addSourceRootCreatesDirAndRegistersRole() {
-        val dir = Files.createTempDirectory("ide-srcset")
+    fun addSourceRootCreatesDirAndRegistersRole() = withTempDir("ide-srcset") { dir ->
         IdeServices.bootstrapJavaDemo(dir).use { ide ->
             val created = assertNotNull(ide.moduleService.addSourceRoot("core", "main", "kotlin", setOf(ContentRole.SOURCE)))
             assertTrue(Files.isDirectory(created), "the new source root dir is created on disk")
@@ -33,8 +33,7 @@ class SourceSetManagementTest {
     }
 
     @Test
-    fun creatingResourcesFolderUnderSourceSetBaseAutoRegisters() {
-        val dir = Files.createTempDirectory("ide-autodetect")
+    fun creatingResourcesFolderUnderSourceSetBaseAutoRegisters() = withTempDir("ide-autodetect") { dir ->
         IdeServices.bootstrapJavaDemo(dir).use { ide ->
             val backend = IdeServicesBackend(ide)
             val moduleRoot = assertNotNull(ide.moduleRoot(ide.modules().first { it.name == "core" }))

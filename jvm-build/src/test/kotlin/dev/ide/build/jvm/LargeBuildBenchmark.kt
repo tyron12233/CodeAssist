@@ -24,6 +24,8 @@ import dev.ide.model.impl.ModuleTypeRegistry
 import dev.ide.model.impl.ProjectModel
 import dev.ide.platform.PluginId
 import dev.ide.platform.impl.PlatformCore
+import dev.ide.testkit.testEnv
+import dev.ide.testkit.writeSource
 import kotlinx.coroutines.runBlocking
 import org.junit.jupiter.api.Tag
 import java.io.File
@@ -87,13 +89,13 @@ class LargeBuildBenchmark {
             }
             commit()
         }
-        write(dir, "core/src/main/java/com/example/core/Core.java",
+        dir.writeSource("core/src/main/java/com/example/core/Core.java",
             "package com.example.core; public class Core { public int one() { return 1; } }")
         for (k in 0 until libCount) {
-            write(dir, "lib$k/src/main/java/com/example/lib$k/Lib$k.java",
+            dir.writeSource("lib$k/src/main/java/com/example/lib$k/Lib$k.java",
                 "package com.example.lib$k; import com.example.core.Core; public class Lib$k { public int count() { return new Core().one(); } }")
         }
-        write(dir, "app/src/main/java/com/example/app/Main.java", mainSource())
+        dir.writeSource("app/src/main/java/com/example/app/Main.java", mainSource())
         return store.workspace.projects.single()
     }
 
@@ -114,9 +116,9 @@ class LargeBuildBenchmark {
 
     @Test
     fun buildsAndRunsALargeMultiModuleProjectIncrementally() {
-        val dir = Files.createTempDirectory("large-build")
-        val platform = PlatformCore()
-        try {
+        testEnv("large-build") { env ->
+            val dir = env.dir
+            val platform = env.platform
             val project = buildWorkspace(dir, platform)
             val moduleCount = project.modules.size // core + libs + app
             val graph = javaBuildSystem().createBuildGraph(
@@ -142,7 +144,7 @@ class LargeBuildBenchmark {
 
             // 3) Edit ONE lib in the middle; only it + the app recompile (core + the other libs are skipped).
             val edited = libCount / 2
-            write(dir, "lib$edited/src/main/java/com/example/lib$edited/Lib$edited.java",
+            dir.writeSource("lib$edited/src/main/java/com/example/lib$edited/Lib$edited.java",
                 "package com.example.lib$edited; import com.example.core.Core; public class Lib$edited { public int count() { return new Core().one() + 0; } }")
             val incr = runBlocking { exec.execute(graph, SimpleTaskContext(), 4) }
             val ranValues = incr.ranTasks.map { it.value }
@@ -177,13 +179,7 @@ class LargeBuildBenchmark {
             suite.latencyNs("fullBuild.ns", fullMs * 1_000_000.0, tolerance = 9.0, ceilingNs = 180_000_000_000.0)
             suite.count("modules", moduleCount, tolerance = 0.0)
             suite.finishAndAssert()
-        } finally {
-            platform.dispose(); dir.toFile().deleteRecursively()
         }
-    }
-
-    private fun write(root: Path, rel: String, content: String) {
-        val f = root.resolve(rel); Files.createDirectories(f.parent); Files.writeString(f, content.trimIndent())
     }
 
     private fun runJava(classpath: List<Path>, mainClass: String): String {

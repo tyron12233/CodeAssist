@@ -1,7 +1,7 @@
 package dev.ide.deps.impl
 
 import dev.ide.model.Coordinate
-import java.nio.file.Files
+import dev.ide.testkit.TestEnv
 import java.nio.file.Path
 import kotlin.test.AfterTest
 import kotlin.test.Test
@@ -16,13 +16,12 @@ import kotlin.test.assertTrue
  */
 class ResolverCacheVersionsTest {
 
-    private val root: Path = Files.createTempDirectory("resolver-cache-versions")
+    private val env = TestEnv("resolver-cache-versions")
+    private val root: Path = env.dir
     private val cache = ResolverCache(root)
 
     @AfterTest
-    fun cleanup() {
-        if (Files.exists(root)) Files.walk(root).use { s -> s.sorted(Comparator.reverseOrder()).forEach { Files.deleteIfExists(it) } }
-    }
+    fun cleanup() = env.close()
 
     /** Populate the cache with a jar + pom for [group]:[name]:[version] the way the resolver would. */
     private fun seed(group: String, name: String, version: String, jarBytes: Int) {

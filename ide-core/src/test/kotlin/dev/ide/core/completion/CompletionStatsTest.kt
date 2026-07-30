@@ -1,5 +1,6 @@
 package dev.ide.core.completion
 
+import dev.ide.testkit.withTempDir
 import java.nio.file.Files
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -9,8 +10,7 @@ class CompletionStatsTest {
 
     @Test
     fun countsIncrementAndPersistAcrossInstances() {
-        val dir = Files.createTempDirectory("stats")
-        try {
+        withTempDir("stats") { dir ->
             val file = dir.resolve("completion-stats.properties")
             val stats = CompletionStats(file)
             assertEquals(0, stats.countFor("Text"))
@@ -23,8 +23,6 @@ class CompletionStatsTest {
             val reloaded = CompletionStats(file)
             assertEquals(2, reloaded.countFor("Text"))
             assertEquals(1, reloaded.countFor("remember"))
-        } finally {
-            dir.toFile().deleteRecursively()
         }
     }
 

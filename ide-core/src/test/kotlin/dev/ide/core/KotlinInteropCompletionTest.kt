@@ -3,7 +3,7 @@ package dev.ide.core
 import kotlinx.coroutines.runBlocking
 
 import dev.ide.lang.completion.CompletionItemKind
-import java.nio.file.Files
+import dev.ide.testkit.writeSource
 import java.nio.file.Path
 import kotlin.io.path.createTempDirectory
 import kotlin.test.AfterTest
@@ -31,7 +31,7 @@ class KotlinInteropCompletionTest {
     private fun bootstrapWithKotlin(): IdeServices {
         val s = IdeServices.bootstrapJavaDemo(root).also { services = it }
         // Drop a Kotlin file under the `core` module's source root (com.example.core).
-        write(
+        root.writeSource(
             "core/src/main/java/com/example/core/Greetings.kt",
             """
             package com.example.core
@@ -47,6 +47,7 @@ class KotlinInteropCompletionTest {
             class Overloaded { @JvmOverloads fun box(a: Int, b: Int = 1): Int = a + b }
             class Multi { fun describe(): String = "x"; constructor(a: Int) {}; constructor(a: Int, b: Int) {} }
             """.trimIndent(),
+            trim = false,
         )
         s.invalidateSyntheticClasses() // the .kt was written after bootstrap; rebuild the facade overlay
         awaitIndexReady(s)
@@ -59,10 +60,6 @@ class KotlinInteropCompletionTest {
     private fun awaitIndexReady(s: IdeServices) {
         val deadline = System.currentTimeMillis() + 90_000
         while (System.currentTimeMillis() < deadline && !s.indexService.status.ready) Thread.sleep(50)
-    }
-
-    private fun write(rel: String, content: String) {
-        val f = root.resolve(rel); Files.createDirectories(f.parent); Files.writeString(f, content)
     }
 
     private fun labels(s: IdeServices, probe: Path, text: String, anchor: String): List<String> {

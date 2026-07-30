@@ -1,5 +1,6 @@
 package dev.ide.lang.kotlin
 
+import dev.ide.testkit.withTempDir
 import dev.ide.bench.Bench
 import dev.ide.bench.RegressionSuite
 import dev.ide.index.IndexScope
@@ -49,13 +50,10 @@ class KotlinColdStartBenchmark {
 
         // Full index build, fresh cache each op so every run is a real rebuild (not a segment reopen).
         val buildNs = Bench.nsPerOp(warmup = 1, runs = 3, ops = 1) {
-            val cache = Files.createTempDirectory("coldstart-idx")
-            try {
+            withTempDir("coldstart-idx") { cache ->
                 IndexServiceImpl(listOf(KotlinTypeShapeIndex, KotlinCallableIndex), cacheRoot = cache).use { idx ->
                     runBlocking { idx.ensureUpToDate(IndexScope(libraryJars = jars)) }
                 }
-            } finally {
-                cache.toFile().deleteRecursively()
             }
             jars.size.toLong()
         }

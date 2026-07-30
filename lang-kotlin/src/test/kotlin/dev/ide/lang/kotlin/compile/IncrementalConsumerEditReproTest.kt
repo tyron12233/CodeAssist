@@ -1,5 +1,7 @@
 package dev.ide.lang.kotlin.compile
 
+import dev.ide.testkit.withTempDir
+import dev.ide.testkit.writeSource
 import dev.ide.lang.kotlin.parse
 import org.junit.jupiter.api.Assumptions.assumeTrue
 import java.io.File
@@ -27,9 +29,7 @@ class IncrementalConsumerEditReproTest {
             .map { Path.of(it) }.filter { Files.exists(it) }
             .filter { ComposeCompilerPlugin.isComposeModule(listOf(it)) }
 
-    private fun write(root: Path, rel: String, content: String): Path {
-        val f = root.resolve(rel); Files.createDirectories(f.parent); Files.writeString(f, content.trimIndent()); return f
-    }
+    private fun write(root: Path, rel: String, content: String): Path = root.writeSource(rel, content)
 
     @Test
     fun consumerBodyEditKeepsCrossFileComposableResolvable() {
@@ -38,8 +38,7 @@ class IncrementalConsumerEditReproTest {
         val runtime = composeRuntimeJars()
         assumeTrue(runtime.isNotEmpty(), "Compose runtime jar not on the test classpath")
 
-        val dir = Files.createTempDirectory("kt-ic-consumer")
-        try {
+        withTempDir("kt-ic-consumer") { dir ->
             val src = dir.resolve("src"); val out = dir.resolve("out")
             // Provider: a top-level @Composable in its own file (compiles to ThemeKt.class).
             write(
@@ -94,8 +93,6 @@ class IncrementalConsumerEditReproTest {
                 second.success,
                 "consumer body edit failed to compile (mode=${second.mode}): ${second.messages}",
             )
-        } finally {
-            dir.toFile().deleteRecursively()
         }
     }
 
@@ -108,8 +105,7 @@ class IncrementalConsumerEditReproTest {
      */
     @Test
     fun failedFullCompileDoesNotStrandStaleManifest() {
-        val dir = Files.createTempDirectory("kt-ic-stale")
-        try {
+        withTempDir("kt-ic-stale") { dir ->
             val src = dir.resolve("src"); val out = dir.resolve("out")
             val provider = "package demo\nfun myTheme(): Int = 41\n"
             write(src, "demo/Theme.kt", provider)
@@ -137,8 +133,6 @@ class IncrementalConsumerEditReproTest {
                 third.success,
                 "post-recovery build failed (mode=${third.mode}) — stale manifest drove a bad incremental: ${third.messages}",
             )
-        } finally {
-            dir.toFile().deleteRecursively()
         }
     }
 }

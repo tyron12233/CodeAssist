@@ -1,5 +1,6 @@
 package dev.ide.lang.jdt
 
+import dev.ide.testkit.withTempDir
 import dev.ide.lang.AnnotationProcessor
 import dev.ide.lang.CompilationContext
 import dev.ide.model.ClasspathEntry
@@ -28,8 +29,7 @@ import kotlin.test.assertNull
 class AndroidPlatformSourcesTest {
 
     @Test
-    fun frameworkParamNamesResolveAcrossMinorVersionSkew() {
-        val sdk = Files.createTempDirectory("fake-sdk")
+    fun frameworkParamNamesResolveAcrossMinorVersionSkew() = withTempDir("fake-sdk") { sdk ->
         val androidJar = sdk.resolve("platforms/android-36/android.jar")
         Files.createDirectories(androidJar.parent)
         ZipOutputStream(Files.newOutputStream(androidJar)).close() // a valid (empty) jar — JDT opens it
@@ -61,8 +61,7 @@ class AndroidPlatformSourcesTest {
      * [JdtSourceAnalyzer.addSourceDirs]; without that attach the method must NOT resolve.
      */
     @Test
-    fun bundledFlatJarResolvesFrameworkDocsOnlyAfterExplicitSourceDirAttach() {
-        val home = Files.createTempDirectory("device-home")
+    fun bundledFlatJarResolvesFrameworkDocsOnlyAfterExplicitSourceDirAttach() = withTempDir("device-home") { home ->
         val androidJar = home.resolve("android.jar")
         ZipOutputStream(Files.newOutputStream(androidJar)).close()
 

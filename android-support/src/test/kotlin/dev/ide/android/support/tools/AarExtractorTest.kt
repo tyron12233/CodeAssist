@@ -1,5 +1,6 @@
 package dev.ide.android.support.tools
 
+import dev.ide.testkit.withTempDir
 import java.nio.file.Files
 import java.nio.file.Path
 import java.util.Base64
@@ -41,7 +42,7 @@ class AarExtractorTest {
 
     @Test
     fun explodesEveryPartByteForByte() {
-        val work = Files.createTempDirectory("aar-explode")
+        withTempDir("aar-explode") { work ->
         val aar = makeAar(work)
         val into = work.resolve("exploded")
 
@@ -54,12 +55,12 @@ class AarExtractorTest {
         assertContentEquals(ASSET_BYTES, Files.readAllBytes(into.resolve("assets/data.bin")), "asset bytes intact")
         assertTrue(Files.isRegularFile(into.resolve(".exploded")), "completion marker written")
 
-        work.toFile().deleteRecursively()
+        }
     }
 
     @Test
     fun reExtractsWhenAPreviousExtractionWasInterrupted() {
-        val work = Files.createTempDirectory("aar-partial")
+        withTempDir("aar-partial") { work ->
         val aar = makeAar(work)
         val into = work.resolve("exploded")
         // Simulate a crash mid-extract: classes.jar landed (truncated), but no marker and no res/assets.
@@ -72,12 +73,12 @@ class AarExtractorTest {
         assertTrue(Files.exists(into.resolve("assets/data.bin")), "assets/ re-extracted")
         assertTrue(Files.isRegularFile(into.resolve(".exploded")), "completion marker written")
 
-        work.toFile().deleteRecursively()
+        }
     }
 
     @Test
     fun reusesACompleteExtraction() {
-        val work = Files.createTempDirectory("aar-reuse")
+        withTempDir("aar-reuse") { work ->
         val aar = makeAar(work)
         val into = work.resolve("exploded")
 
@@ -88,6 +89,6 @@ class AarExtractorTest {
         AarExtractor.explode(aar, into) // marker present → reuse, no re-extract
         assertTrue(Files.exists(sentinel), "a complete extraction is reused, not swapped out from under callers")
 
-        work.toFile().deleteRecursively()
+        }
     }
 }

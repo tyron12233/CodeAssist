@@ -1,5 +1,6 @@
 package dev.ide.core
 
+import dev.ide.testkit.withTempDir
 import kotlinx.coroutines.runBlocking
 
 import dev.ide.android.support.templates.JetpackComposeAppTemplate
@@ -17,8 +18,7 @@ class ProjectManagerTest {
     /** Create a Java console app from the template, reopen it, and confirm the model round-trips + runs. */
     @Test
     fun createsListsAndReopensJavaConsoleProject() {
-        val root = Files.createTempDirectory("cm-test")
-        try {
+        withTempDir("cm-test") { root ->
             val manager = ProjectManager.desktop(root.resolve("projects"))
             assertTrue(manager.isEmpty(), "a fresh projects root has no projects")
 
@@ -38,16 +38,13 @@ class ProjectManagerTest {
             manager.open(listed.first().rootPath).use { reopened ->
                 assertEquals(listOf("app"), reopened.moduleNames())
             }
-        } finally {
-            root.toFile().deleteRecursively()
         }
     }
 
     /** A backup zips project sources (and skips build outputs). */
     @Test
     fun backsUpProjectSourcesToZip() {
-        val root = Files.createTempDirectory("cm-backup")
-        try {
+        withTempDir("cm-backup") { root ->
             val manager = ProjectManager.desktop(root.resolve("projects"))
             manager.create("java-console", mapOf("name" to "Zip Me", "packageName" to "com.acme.zip")).use { }
             val zip = manager.exportBackup()
@@ -57,8 +54,6 @@ class ProjectManagerTest {
                 assertTrue(names.any { it.endsWith("Main.java") }, "sources in backup; got $names")
                 assertTrue(names.none { it.contains("/build/") }, "build outputs excluded")
             }
-        } finally {
-            root.toFile().deleteRecursively()
         }
     }
 
@@ -68,8 +63,7 @@ class ProjectManagerTest {
      */
     @Test
     fun importsLegacyProjectsFromAPreviousStorageLocation() {
-        val tmp = Files.createTempDirectory("cm-legacy")
-        try {
+        withTempDir("cm-legacy") { tmp ->
             // A previous internal-storage home with one project under its `projects/` dir.
             val legacyHome = tmp.resolve("internal/codeassist")
             ProjectManager.desktop(legacyHome.resolve("projects"))
@@ -93,16 +87,13 @@ class ProjectManagerTest {
             newManager.open(newManager.list().first().rootPath).use { ide ->
                 assertEquals(listOf("app"), ide.moduleNames())
             }
-        } finally {
-            tmp.toFile().deleteRecursively()
         }
     }
 
     /** The built-in template gallery exposes the shipped Java, Kotlin, and Android templates. */
     @Test
     fun exposesBuiltInTemplates() {
-        val root = Files.createTempDirectory("cm-templates")
-        try {
+        withTempDir("cm-templates") { root ->
             val manager = ProjectManager.desktop(root.resolve("projects"))
             manager.create("java-library", mapOf("name" to "Lib", "packageName" to "com.acme.lib")).use { ide ->
                 val ids = ide.projectTemplates().map { it.id.value }.toSet()
@@ -117,8 +108,6 @@ class ProjectManagerTest {
                     "got $ids",
                 )
             }
-        } finally {
-            root.toFile().deleteRecursively()
         }
     }
 
@@ -126,8 +115,7 @@ class ProjectManagerTest {
      *  "Syntax error / insert ';'" on `package`/`println`). Kotlin routes to its own tolerant parser. */
     @Test
     fun kotlinFileGetsNoJavaDiagnostics() {
-        val root = Files.createTempDirectory("cm-kdiag")
-        try {
+        withTempDir("cm-kdiag") { root ->
             val manager = ProjectManager.desktop(root.resolve("projects"))
             manager.create("kotlin-console", mapOf("name" to "KDiag", "packageName" to "com.acme.kt")).use { ide ->
                 val main = java.nio.file.Path.of(manager.list().first().rootPath)
@@ -139,16 +127,13 @@ class ProjectManagerTest {
                     "valid Kotlin should produce no error diagnostics; got $diags",
                 )
             }
-        } finally {
-            root.toFile().deleteRecursively()
         }
     }
 
     /** Create a Kotlin console project: a `src/main/kotlin` tree with a top-level `fun main()`. */
     @Test
     fun createsKotlinConsoleProject() {
-        val root = Files.createTempDirectory("cm-kotlin")
-        try {
+        withTempDir("cm-kotlin") { root ->
             val manager = ProjectManager.desktop(root.resolve("projects"))
             manager.create("kotlin-console", mapOf("name" to "KDemo", "packageName" to "com.acme.kt")).use { ide ->
                 assertEquals(listOf("app"), ide.moduleNames())
@@ -160,8 +145,6 @@ class ProjectManagerTest {
             val text = Files.readString(main)
             assertTrue("fun main" in text, "has a top-level main(); got:\n$text")
             assertTrue(text.startsWith("package com.acme.kt"), "kotlin package header (no semicolon); got:\n$text")
-        } finally {
-            root.toFile().deleteRecursively()
         }
     }
 
@@ -174,8 +157,7 @@ class ProjectManagerTest {
      */
     @Test
     fun templateDependenciesAreDeclaredInModuleTomlIndependentOfResolution() {
-        val root = Files.createTempDirectory("cm-template-deps")
-        try {
+        withTempDir("cm-template-deps") { root ->
             val manager = ProjectManager.desktop(root.resolve("projects"))
             // The Compose template's own declared set is the source of truth for what must end up in module.toml.
             val expected = JetpackComposeAppTemplate.dependencies(TemplateArgs(emptyMap()))
@@ -196,8 +178,6 @@ class ProjectManagerTest {
             manager.open(manager.list().first().rootPath).use { reopened ->
                 assertTrue(declaredLibs(reopened).containsAll(expected), "declared deps survive a reopen via module.toml")
             }
-        } finally {
-            root.toFile().deleteRecursively()
         }
     }
 
@@ -206,8 +186,7 @@ class ProjectManagerTest {
      *  toggle lives on the Compiler-plugins tab ([ModuleService.getCompilerPlugins]), not Build Features. */
     @Test
     fun composeTemplateEnablesComposeBuildFeature() {
-        val root = Files.createTempDirectory("cm-compose-feature")
-        try {
+        withTempDir("cm-compose-feature") { root ->
             val manager = ProjectManager.desktop(root.resolve("projects"))
             fun composeOn(ide: IdeServices): Boolean =
                 ide.moduleService.getCompilerPlugins("app")
@@ -221,8 +200,6 @@ class ProjectManagerTest {
             manager.open(manager.list().first().rootPath).use { reopened ->
                 assertTrue(composeOn(reopened), "the Compose compiler plugin round-trips through module.toml")
             }
-        } finally {
-            root.toFile().deleteRecursively()
         }
     }
 
@@ -231,8 +208,7 @@ class ProjectManagerTest {
      *  toggle still succeeds and the enable-state persists, which is what this asserts. */
     @Test
     fun compilerPluginToggleRoundTrips() {
-        val root = Files.createTempDirectory("cm-serialization-toggle")
-        try {
+        withTempDir("cm-serialization-toggle") { root ->
             val manager = ProjectManager.desktop(root.resolve("projects"))
             fun serializationOn(ide: IdeServices): Boolean =
                 ide.moduleService.getCompilerPlugins("app")
@@ -248,8 +224,6 @@ class ProjectManagerTest {
             manager.open(manager.list().first().rootPath).use { reopened ->
                 assertTrue(serializationOn(reopened), "the serialization toggle round-trips through module.toml")
             }
-        } finally {
-            root.toFile().deleteRecursively()
         }
     }
 

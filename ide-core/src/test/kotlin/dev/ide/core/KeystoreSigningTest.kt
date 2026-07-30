@@ -1,6 +1,7 @@
 package dev.ide.core
 
 import dev.ide.ui.backend.UiKeystoreSpec
+import dev.ide.testkit.withTempDir
 import java.nio.file.Files
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -17,8 +18,7 @@ import kotlin.test.assertTrue
 class KeystoreSigningTest {
 
     @Test
-    fun `create, assign to release, and read back`() {
-        val dir = Files.createTempDirectory("ide-keystore-signing")
+    fun `create, assign to release, and read back`() = withTempDir("ide-keystore-signing") { dir ->
         IdeServices.bootstrapDemo(dir, sharedCachesRoot = dir).use { ide ->
             val created = ide.signing.createKeystore(
                 UiKeystoreSpec(name = "release", storePass = "android123", keyAlias = "upload", commonName = "Acme"),

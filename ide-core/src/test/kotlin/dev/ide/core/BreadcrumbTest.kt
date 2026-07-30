@@ -1,5 +1,6 @@
 package dev.ide.core
 
+import dev.ide.testkit.withTempDir
 import java.nio.file.Files
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -14,8 +15,7 @@ class BreadcrumbTest {
     }
 
     @Test
-    fun breadcrumbReflectsEnclosingTypeAndMethod() {
-        val dir = Files.createTempDirectory("ide-crumb")
+    fun breadcrumbReflectsEnclosingTypeAndMethod() = withTempDir("ide-crumb") { dir ->
         IdeServices.bootstrapJavaDemo(dir).use { ide ->
             // caret inside a method → [type, method]
             assertEquals(

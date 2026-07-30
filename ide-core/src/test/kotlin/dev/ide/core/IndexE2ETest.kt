@@ -1,5 +1,6 @@
 package dev.ide.core
 
+import dev.ide.testkit.withTempDir
 import java.nio.file.Files
 import java.nio.file.Path
 import kotlin.test.Test
@@ -30,8 +31,7 @@ class IndexE2ETest {
 
     @Test
     fun indexWritesDiskSegmentsServesQueriesAndReusesAcrossLaunches() {
-        val dir = Files.createTempDirectory("ide-index-e2e")
-        try {
+        withTempDir("ide-index-e2e") { dir ->
             // 1. First launch: real bootstrap → the init block launches ensureUpToDate in the background.
             IdeServices.bootstrapJavaDemo(dir).use { ide ->
                 awaitIndexed(ide)
@@ -62,8 +62,6 @@ class IndexE2ETest {
                 println("E2E launch#2 (reuse): searchMembers('toString')=${reused.size}, ${segFiles(dir).size} .seg still on disk")
                 assertTrue(reused.isNotEmpty(), "reused index returned nothing after a second launch")
             }
-        } finally {
-            dir.toFile().deleteRecursively()
         }
     }
 }

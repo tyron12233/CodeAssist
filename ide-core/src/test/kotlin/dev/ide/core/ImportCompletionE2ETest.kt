@@ -1,5 +1,6 @@
 package dev.ide.core
 
+import dev.ide.testkit.withTempDir
 import kotlinx.coroutines.runBlocking
 
 import dev.ide.index.IndexId
@@ -11,8 +12,7 @@ import kotlin.test.assertTrue
 class ImportCompletionE2ETest {
 
     @Test
-    fun emptyPrefixImportShowsPackagesEndToEnd() {
-        val dir = Files.createTempDirectory("ide-import")
+    fun emptyPrefixImportShowsPackagesEndToEnd() = withTempDir("ide-import") { dir ->
         IdeServices.bootstrapJavaDemo(dir).use { ide ->
             // wait until the background package index has indexed java's children (deep package present)
             val deadline = System.currentTimeMillis() + 90_000

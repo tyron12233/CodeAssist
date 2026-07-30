@@ -6,6 +6,7 @@ import dev.ide.build.TaskInputs
 import dev.ide.build.TaskName
 import dev.ide.build.TaskOutputs
 import dev.ide.build.TaskResult
+import dev.ide.testkit.withTempDir
 import kotlinx.coroutines.runBlocking
 import java.nio.file.Files
 import java.nio.file.Path
@@ -33,8 +34,7 @@ class IncrementalEngineTest {
 
     @Test
     fun reRunDoesZeroWorkAndOneChangeReRunsOnlyTheAffectedSubgraph() = runBlocking {
-        val dir = Files.createTempDirectory("engine")
-        try {
+        withTempDir("engine") { dir ->
             val a = dir.resolve("a.txt").also { Files.writeString(it, "1") }
             val d = dir.resolve("d.txt").also { Files.writeString(it, "x") }
             val out = dir.resolve("out")
@@ -66,8 +66,6 @@ class IncrementalEngineTest {
             val afterEdit = exec.execute(graph(), ctx, maxParallel = 2)
             assertEquals(setOf("A", "B", "C"), afterEdit.ranTasks.map { it.value }.toSet(), "only the affected subgraph re-runs")
             assertEquals(setOf("D"), afterEdit.skippedTasks.map { it.value }.toSet(), "the independent task stays up-to-date")
-        } finally {
-            dir.toFile().deleteRecursively()
         }
     }
 }

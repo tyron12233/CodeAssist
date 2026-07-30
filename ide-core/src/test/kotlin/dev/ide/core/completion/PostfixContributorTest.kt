@@ -17,9 +17,10 @@ import dev.ide.lang.postfix.PostfixExpansion
 import dev.ide.lang.postfix.PostfixTemplate
 import dev.ide.lang.resolve.TypeRef
 import dev.ide.lang.template.SnippetExpansion
-import dev.ide.platform.ContentHash
 import dev.ide.platform.PluginId
 import dev.ide.platform.impl.ExtensionRegistryImpl
+import dev.ide.testkit.TestDocument
+import dev.ide.testkit.virtualFile
 import dev.ide.vfs.VirtualFile
 import kotlinx.coroutines.runBlocking
 import kotlin.test.Test
@@ -116,26 +117,12 @@ class PostfixContributorTest {
         override val parent: DomNode? = null
         override val children = emptyList<DomNode>()
         override fun text(): CharSequence = txt
-        override val file: VirtualFile = FakeFile
+        override val file: VirtualFile = virtualFile("/f.kt")
         override val documentVersion = 1L
         override val diagnostics = emptyList<dev.ide.lang.dom.Diagnostic>()
         override fun nodeAt(offset: Int): DomNode = Node(NodeKind.NAME_REF)
         override fun nodesIn(range: TextRange): Sequence<DomNode> = emptySequence()
     }
 
-    private class Doc(override val text: CharSequence) : DocumentSnapshot {
-        override val file: VirtualFile = FakeFile
-        override val version = 1L
-        override fun length() = text.length
-    }
-
-    private object FakeFile : VirtualFile {
-        override val path = "/f.kt"; override val name = "f.kt"
-        override val isDirectory = false; override val exists = true; override val length = 0L
-        override fun parent(): VirtualFile? = null
-        override fun children() = emptyList<VirtualFile>()
-        override fun contentHash() = ContentHash("")
-        override fun readBytes() = ByteArray(0)
-        override fun readText(): CharSequence = ""
-    }
+    private class Doc(text: CharSequence) : DocumentSnapshot by TestDocument(text, virtualFile("/f.kt"))
 }

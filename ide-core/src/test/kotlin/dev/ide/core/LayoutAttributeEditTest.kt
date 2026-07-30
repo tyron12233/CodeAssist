@@ -1,5 +1,6 @@
 package dev.ide.core
 
+import dev.ide.testkit.withTempDir
 import dev.ide.lang.completion.TextEdit
 import java.nio.file.Files
 import java.nio.file.Paths
@@ -25,8 +26,7 @@ class LayoutAttributeEditTest {
     }
 
     @Test
-    fun addReplaceRemoveAndNamespaceAutoDeclare() {
-        val dir = Files.createTempDirectory("ide-attr-edit")
+    fun addReplaceRemoveAndNamespaceAutoDeclare() = withTempDir("ide-attr-edit") { dir ->
         IdeServices.bootstrapDemo(dir).use { ide ->
             // setLayoutAttributeEdits parses the passed text, so an arbitrary path is fine here.
             val file = Paths.get("res/layout/scratch.xml")
@@ -51,8 +51,7 @@ class LayoutAttributeEditTest {
     }
 
     @Test
-    fun escapesAttributeValue() {
-        val dir = Files.createTempDirectory("ide-attr-escape")
+    fun escapesAttributeValue() = withTempDir("ide-attr-escape") { dir ->
         IdeServices.bootstrapDemo(dir).use { ide ->
             val file = Paths.get("res/layout/scratch.xml")
             val xml = """<TextView xmlns:android="http://schemas.android.com/apk/res/android"/>"""
@@ -63,8 +62,7 @@ class LayoutAttributeEditTest {
     }
 
     @Test
-    fun elementModelAndValueCompletionFromRealMetadata() {
-        val dir = Files.createTempDirectory("ide-attr-model")
+    fun elementModelAndValueCompletionFromRealMetadata() = withTempDir("ide-attr-model") { dir ->
         IdeServices.bootstrapDemo(dir).use { ide ->
             val layout = ide.workspaceRoot.resolve("app/src/main/res/layout/activity_main.xml")
             val text = layout.readText()

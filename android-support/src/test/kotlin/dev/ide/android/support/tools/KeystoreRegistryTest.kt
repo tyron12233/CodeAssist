@@ -1,7 +1,7 @@
 package dev.ide.android.support.tools
 
+import dev.ide.testkit.withTempDir
 import java.nio.file.Files
-import kotlin.io.path.createTempDirectory
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
@@ -16,8 +16,7 @@ class KeystoreRegistryTest {
 
     @Test
     fun `create, resolve, persist, import and delete`() {
-        val dir = createTempDirectory("ks-reg")
-        try {
+        withTempDir("ks-reg") { dir ->
             val reg = KeystoreRegistry(dir)
             val created = reg.create("My Release Key", KeystoreCreateSpec("storepass", "upload", "Acme"))
             assertTrue(created.isSuccess, created.exceptionOrNull()?.message)
@@ -43,21 +42,16 @@ class KeystoreRegistryTest {
 
             assertTrue(reg.delete(entry.id))
             assertEquals(setOf("backup"), reg.all().map { it.id }.toSet())
-        } finally {
-            dir.toFile().deleteRecursively()
         }
     }
 
     @Test
     fun `import rejects a wrong password`() {
-        val dir = createTempDirectory("ks-reg-bad")
-        try {
+        withTempDir("ks-reg-bad") { dir ->
             val reg = KeystoreRegistry(dir)
             val entry = reg.create("k", KeystoreCreateSpec("rightpw", "a0", "CN")).getOrThrow()
             val cfg = reg.signingConfigFor(entry.id)!!
             assertTrue(reg.import("bad", cfg.keystore, "wrong-password", "a0", "wrong-password").isFailure)
-        } finally {
-            dir.toFile().deleteRecursively()
         }
     }
 }

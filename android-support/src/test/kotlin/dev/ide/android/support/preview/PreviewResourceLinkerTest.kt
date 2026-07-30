@@ -6,9 +6,9 @@ import dev.ide.android.support.AndroidFacet
 import dev.ide.android.support.AndroidFacetCodec
 import dev.ide.android.support.AndroidSupport
 import dev.ide.android.support.PreviewResourceLinker
+import dev.ide.android.support.assumeAndroidSdk
 import dev.ide.android.support.resources.AndroidResources
 import dev.ide.android.support.tools.Aapt2Subprocess
-import dev.ide.android.support.tools.AndroidSdk
 import dev.ide.android.support.tools.DebugKeystore
 import dev.ide.build.BuildGoal
 import dev.ide.build.BuildRequest
@@ -25,8 +25,9 @@ import dev.ide.model.impl.ModuleTypeRegistry
 import dev.ide.model.impl.ProjectModel
 import dev.ide.model.impl.ProjectModelStore
 import dev.ide.platform.impl.PlatformCore
+import dev.ide.testkit.testEnv
+import dev.ide.testkit.writeSource
 import kotlinx.coroutines.runBlocking
-import org.junit.jupiter.api.Assumptions.assumeTrue
 import java.nio.file.Files
 import java.nio.file.Path
 import java.util.zip.ZipFile
@@ -47,13 +48,11 @@ class PreviewResourceLinkerTest {
 
     @Test
     fun relinksLiveBufferAndNewLayoutOverTheBuild() {
-        val sdk = AndroidSdk.findSdkRoot()?.let { AndroidSdk.detect(it) }
-        assumeTrue(sdk != null && sdk.isComplete(), "Android SDK not installed; skipping")
-        sdk!!
+        val sdk = assumeAndroidSdk()
 
-        val dir = Files.createTempDirectory("preview-relink")
-        val platform = PlatformCore()
-        try {
+        testEnv("preview-relink") { env ->
+            val dir = env.dir
+            val platform = env.platform
             val store = buildAppWorkspace(dir, platform)
             val project = store.workspace.projects.single()
             val module: Module = project.modules.single { it.name == "app" }
@@ -99,20 +98,16 @@ class PreviewResourceLinkerTest {
             // (c) Re-linking the same text is cached (same output, no error).
             val again = linker.link(module, "debug", resDirs, layoutDir.resolve("fragment_surahs.xml"), baseLayout, manifest, "com.example.app", 24, 34)
             assertEquals(newAp, again.resourcesAp, "cached relink should return the same resources.ap_")
-        } finally {
-            platform.dispose(); dir.toFile().deleteRecursively()
         }
     }
 
     @Test
     fun relinksWithoutAPriorBuild() {
-        val sdk = AndroidSdk.findSdkRoot()?.let { AndroidSdk.detect(it) }
-        assumeTrue(sdk != null && sdk.isComplete(), "Android SDK not installed; skipping")
-        sdk!!
+        val sdk = assumeAndroidSdk()
 
-        val dir = Files.createTempDirectory("preview-relink-nobuild")
-        val platform = PlatformCore()
-        try {
+        testEnv("preview-relink-nobuild") { env ->
+            val dir = env.dir
+            val platform = env.platform
             val store = buildAppWorkspace(dir, platform)   // writes res + manifest, but we never build
             val module: Module = store.workspace.projects.single().modules.single { it.name == "app" }
 
@@ -131,20 +126,16 @@ class PreviewResourceLinkerTest {
             val entries = zipEntries(ap)
             assertTrue("resources.arsc" in entries, "ap_ lacks resources.arsc: $entries")
             assertTrue(entries.any { it.endsWith("activity_main.xml") }, "ap_ lacks the layout: $entries")
-        } finally {
-            platform.dispose(); dir.toFile().deleteRecursively()
         }
     }
 
     @Test
     fun generatesPreviewRJarWithPerExtraPackageRClasses() {
-        val sdk = AndroidSdk.findSdkRoot()?.let { AndroidSdk.detect(it) }
-        assumeTrue(sdk != null && sdk.isComplete(), "Android SDK not installed; skipping")
-        sdk!!
+        val sdk = assumeAndroidSdk()
 
-        val dir = Files.createTempDirectory("preview-rjar")
-        val platform = PlatformCore()
-        try {
+        testEnv("preview-rjar") { env ->
+            val dir = env.dir
+            val platform = env.platform
             val store = buildAppWorkspace(dir, platform)   // no build: the linker self-builds its base
             val module: Module = store.workspace.projects.single().modules.single { it.name == "app" }
 
@@ -176,8 +167,6 @@ class PreviewResourceLinkerTest {
                 extraPackages = listOf("com.example.lib"),
             )
             assertEquals(rJar, again.rJar, "cached relink should return the same preview R.jar")
-        } finally {
-            platform.dispose(); dir.toFile().deleteRecursively()
         }
     }
 
@@ -197,15 +186,11 @@ class PreviewResourceLinkerTest {
             }
             commit()
         }
-        write(dir, "app/src/main/AndroidManifest.xml", MANIFEST)
-        write(dir, "app/src/main/res/values/strings.xml", STRINGS)
-        write(dir, "app/src/main/res/layout/activity_main.xml", LAYOUT)
-        write(dir, "app/src/main/java/com/example/app/MainActivity.java", ACTIVITY)
+        dir.writeSource("app/src/main/AndroidManifest.xml", MANIFEST)
+        dir.writeSource("app/src/main/res/values/strings.xml", STRINGS)
+        dir.writeSource("app/src/main/res/layout/activity_main.xml", LAYOUT)
+        dir.writeSource("app/src/main/java/com/example/app/MainActivity.java", ACTIVITY)
         return store
-    }
-
-    private fun write(root: Path, rel: String, content: String) {
-        val f = root.resolve(rel); Files.createDirectories(f.parent); Files.writeString(f, content.trimIndent())
     }
 
     private companion object {

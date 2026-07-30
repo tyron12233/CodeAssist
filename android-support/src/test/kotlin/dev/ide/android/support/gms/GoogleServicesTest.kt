@@ -2,6 +2,7 @@ package dev.ide.android.support.gms
 
 import dev.ide.android.support.AndroidVariant
 import dev.ide.model.VariantId
+import dev.ide.testkit.withTempDir
 import java.nio.file.Files
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -95,20 +96,15 @@ class GoogleServicesTest {
     }
 
     @Test
-    fun locatesJsonByVariantSpecificityThenModuleRoot() {
-        val dir = Files.createTempDirectory("gms")
-        try {
-            val variant = AndroidVariant(VariantId("app:debug"), "debug", "debug", emptyList(), emptyList())
-            // Module root first.
-            val root = dir.resolve("google-services.json"); Files.writeString(root, "{}")
-            assertEquals(root, GoogleServices.findJson(dir, variant))
-            // A build-type-specific file wins over the root.
-            val btFile = dir.resolve("src/debug/google-services.json")
-            Files.createDirectories(btFile.parent); Files.writeString(btFile, "{}")
-            assertEquals(btFile, GoogleServices.findJson(dir, variant))
-        } finally {
-            dir.toFile().deleteRecursively()
-        }
+    fun locatesJsonByVariantSpecificityThenModuleRoot() = withTempDir("gms") { dir ->
+        val variant = AndroidVariant(VariantId("app:debug"), "debug", "debug", emptyList(), emptyList())
+        // Module root first.
+        val root = dir.resolve("google-services.json"); Files.writeString(root, "{}")
+        assertEquals(root, GoogleServices.findJson(dir, variant))
+        // A build-type-specific file wins over the root.
+        val btFile = dir.resolve("src/debug/google-services.json")
+        Files.createDirectories(btFile.parent); Files.writeString(btFile, "{}")
+        assertEquals(btFile, GoogleServices.findJson(dir, variant))
     }
 
     @Test

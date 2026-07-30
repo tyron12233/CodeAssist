@@ -11,6 +11,7 @@ import dev.ide.model.impl.ModuleTypeRegistry
 import dev.ide.model.impl.ProjectModel
 import dev.ide.platform.PluginId
 import dev.ide.platform.impl.PlatformCore
+import dev.ide.testkit.withTempDir
 import dev.ide.ui.backend.RunPhase
 import java.nio.file.Files
 import java.nio.file.Path
@@ -72,8 +73,7 @@ class KotlinRunTest {
     }
 
     @Test
-    fun runsAKotlinConsoleAppAndFeedsStdin() {
-        val dir = Files.createTempDirectory("kotlin-run")
+    fun runsAKotlinConsoleAppAndFeedsStdin() = withTempDir("kotlin-run") { dir ->
         createKotlinWorkspace(dir)
         IdeServices.open(dir).use { ide ->
             // Detection: a top-level Kotlin `fun main()` must surface a `run` task (the feature's core fix).
@@ -98,7 +98,6 @@ class KotlinRunTest {
             assertTrue("Enter name:" in text, "the prompt (no trailing newline) should appear:\n$text")
             assertTrue("Hello, World!" in text, "the program should echo the fed stdin:\n$text")
         }
-        dir.toFile().deleteRecursively()
     }
 
     private fun await(timeoutMs: Long, cond: () -> Boolean) {

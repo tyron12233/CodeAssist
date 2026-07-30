@@ -1,5 +1,6 @@
 package dev.ide.lang.kotlin
 
+import dev.ide.testkit.withTempDir
 import dev.ide.lang.kotlin.symbols.ClasspathReader
 import java.nio.file.Files
 import kotlin.test.Test
@@ -12,8 +13,7 @@ import kotlin.test.assertTrue
 class ClasspathCacheTest {
 
     @Test
-    fun extensionScanPersistsAndReloads() {
-        val cacheDir = Files.createTempDirectory("kxt-cache")
+    fun extensionScanPersistsAndReloads() = withTempDir("kxt-cache") { cacheDir ->
         val jar = stdlibJarPath()
 
         ClasspathReader(listOf(jar), cacheDir).use { first ->

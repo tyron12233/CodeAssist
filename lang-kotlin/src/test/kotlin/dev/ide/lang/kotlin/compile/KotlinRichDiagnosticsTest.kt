@@ -1,5 +1,6 @@
 package dev.ide.lang.kotlin.compile
 
+import dev.ide.testkit.withTempDir
 import dev.ide.build.BuildDiagnostic
 import dev.ide.build.BuildSeverity
 import dev.ide.build.engine.CompilerOutputParser
@@ -26,8 +27,7 @@ class KotlinRichDiagnosticsTest {
 
     @Test
     fun compileErrorParsesIntoLocatedDiagnostic() {
-        val dir = Files.createTempDirectory("kt-rich-diag")
-        try {
+        withTempDir("kt-rich-diag") { dir ->
             val src = dir.resolve("src"); val out = dir.resolve("out")
             val bad = src.resolve("demo/Bad.kt")
             Files.createDirectories(bad.parent)
@@ -48,8 +48,6 @@ class KotlinRichDiagnosticsTest {
             assertNotNull(loc, "the diagnostic must carry a source location for navigation")
             assertTrue(loc.path.endsWith("Bad.kt"), "location should point at Bad.kt; was $loc")
             assertTrue(loc.line >= 1, "location should carry a 1-based line; was $loc")
-        } finally {
-            dir.toFile().deleteRecursively()
         }
     }
 }

@@ -1,5 +1,6 @@
 package dev.ide.core
 
+import dev.ide.testkit.withTempDir
 import dev.ide.model.ModuleDependency
 import java.nio.file.Files
 import kotlin.test.Test
@@ -16,8 +17,7 @@ import kotlin.test.assertTrue
 class ModuleManagementTest {
 
     @Test
-    fun availableTypesIncludeJavaAndAndroid() {
-        val dir = Files.createTempDirectory("ide-modtypes")
+    fun availableTypesIncludeJavaAndAndroid() = withTempDir("ide-modtypes") { dir ->
         IdeServices.bootstrapJavaDemo(dir).use { ide ->
             val ids = ide.moduleService.availableModuleTypes().map { it.id }
             assertTrue("java-lib" in ids, "java-lib is creatable")
@@ -29,8 +29,7 @@ class ModuleManagementTest {
     }
 
     @Test
-    fun createModuleAddsItWithSourceDirs() {
-        val dir = Files.createTempDirectory("ide-createmod")
+    fun createModuleAddsItWithSourceDirs() = withTempDir("ide-createmod") { dir ->
         IdeServices.bootstrapJavaDemo(dir).use { ide ->
             val r = ide.moduleService.createModule("newlib", "java-lib", "JAVA_17", emptyMap())
             assertTrue(r.success, r.message)
@@ -53,7 +52,7 @@ class ModuleManagementTest {
         // A freshly-created Android module declares main/debug/release source sets, but only `main`'s primary
         // source dir + res are laid down on disk — the empty variant sets and optional roots (a second-language
         // dir, assets) stay uncreated so the tree isn't cluttered with a dozen empty folders.
-        val dir = Files.createTempDirectory("ide-androidmod")
+        withTempDir("ide-androidmod") { dir ->
         IdeServices.bootstrapJavaDemo(dir).use { ide ->
             val r = ide.moduleService.createModule("feature", "android-lib", "JAVA_17", emptyMap())
             assertTrue(r.success, r.message)
@@ -66,12 +65,11 @@ class ModuleManagementTest {
             assertFalse(Files.exists(moduleRoot.resolve("src/main/kotlin")), "the empty second-language dir is not created")
             assertFalse(Files.exists(moduleRoot.resolve("src/main/assets")), "the empty assets dir is not created")
         }
-        dir.toFile().deleteRecursively()
+        }
     }
 
     @Test
-    fun moduleDependencyAddRemoveAndCycleGuard() {
-        val dir = Files.createTempDirectory("ide-moddep")
+    fun moduleDependencyAddRemoveAndCycleGuard() = withTempDir("ide-moddep") { dir ->
         IdeServices.bootstrapJavaDemo(dir).use { ide ->
             // app already depends on util (→ core). app may additionally depend on core, but not the reverse.
             val targets = ide.dependencies.moduleDependencyTargets("app")
@@ -102,8 +100,7 @@ class ModuleManagementTest {
     }
 
     @Test
-    fun removeModuleDropsDependersEdges() {
-        val dir = Files.createTempDirectory("ide-rmmod")
+    fun removeModuleDropsDependersEdges() = withTempDir("ide-rmmod") { dir ->
         IdeServices.bootstrapJavaDemo(dir).use { ide ->
             // util depends on core; removing core must also drop util's edge onto it.
             assertTrue(ide.moduleService.removeModule("core"))
@@ -115,8 +112,7 @@ class ModuleManagementTest {
     }
 
     @Test
-    fun customRepositoriesPersistAndDedup() {
-        val dir = Files.createTempDirectory("ide-repos")
+    fun customRepositoriesPersistAndDedup() = withTempDir("ide-repos") { dir ->
         IdeServices.bootstrapJavaDemo(dir).use { ide ->
             val builtins = ide.dependencies.repositories()
             assertTrue(builtins.all { it.builtin } && builtins.size >= 2, "the built-in repos are present and locked")

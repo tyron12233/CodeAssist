@@ -1,6 +1,5 @@
 package dev.ide.android.support
 
-import dev.ide.android.support.tools.AndroidSdk
 import dev.ide.android.support.tools.DebugKeystore
 import dev.ide.build.BuildGoal
 import dev.ide.build.BuildRequest
@@ -14,9 +13,9 @@ import dev.ide.model.ModuleId
 import dev.ide.model.impl.FacetCodecRegistry
 import dev.ide.model.impl.ModuleTypeRegistry
 import dev.ide.model.impl.ProjectModel
-import dev.ide.platform.impl.PlatformCore
+import dev.ide.testkit.testEnv
+import dev.ide.testkit.writeSource
 import kotlinx.coroutines.runBlocking
-import org.junit.jupiter.api.Assumptions.assumeTrue
 import java.nio.file.Files
 import java.nio.file.Path
 import java.util.zip.ZipFile
@@ -34,13 +33,11 @@ class AndroidResourceShrinkTest {
 
     @Test
     fun unusedResourceIsStrippedAndUsedOneSurvives() {
-        val sdk = AndroidSdk.findSdkRoot()?.let { AndroidSdk.detect(it) }
-        assumeTrue(sdk != null && sdk.isComplete(), "Android SDK not installed; skipping")
-        sdk!!
+        val sdk = assumeAndroidSdk()
 
-        val dir = Files.createTempDirectory("android-shrink-res")
-        val platform = PlatformCore()
-        try {
+        testEnv("android-shrink-res") { env ->
+            val dir = env.dir
+            val platform = env.platform
             val store = ProjectModel.open(dir, platform, FacetCodecRegistry().register(AndroidFacetCodec))
             ModuleTypeRegistry(platform.extensions).register(AndroidAppModuleType, AndroidSupport.PLUGIN)
             val appType = ModuleTypeRegistry(platform.extensions).resolve("android-app")
@@ -59,12 +56,12 @@ class AndroidResourceShrinkTest {
                 }
                 commit()
             }
-            write(dir, "app/src/main/AndroidManifest.xml", MANIFEST)
-            write(dir, "app/src/main/res/values/strings.xml", STRINGS)
+            dir.writeSource("app/src/main/AndroidManifest.xml", MANIFEST)
+            dir.writeSource("app/src/main/res/values/strings.xml", STRINGS)
             // Two raw file resources with unique content markers; only the used one is referenced from code.
-            write(dir, "app/src/main/res/raw/used_blob.txt", "USED_MARKER_${MARKER}_padding_${"u".repeat(2000)}")
-            write(dir, "app/src/main/res/raw/unused_blob.txt", "UNUSED_MARKER_${MARKER}_padding_${"x".repeat(2000)}")
-            write(dir, "app/src/main/java/com/example/app/MainActivity.java", ACTIVITY)
+            dir.writeSource("app/src/main/res/raw/used_blob.txt", "USED_MARKER_${MARKER}_padding_${"u".repeat(2000)}")
+            dir.writeSource("app/src/main/res/raw/unused_blob.txt", "UNUSED_MARKER_${MARKER}_padding_${"x".repeat(2000)}")
+            dir.writeSource("app/src/main/java/com/example/app/MainActivity.java", ACTIVITY)
 
             val signing = DebugKeystore.getOrCreate(dir.resolve(".keystore/debug.ks"), sdk.keytool)
             val buildSystem = AndroidBuildSystem.inProcess(sdk, signing)
@@ -86,8 +83,6 @@ class AndroidResourceShrinkTest {
 
             assertTrue(apkContainsBytes(apk, "USED_MARKER_$MARKER"), "the referenced raw resource must survive")
             assertFalse(apkContainsBytes(apk, "UNUSED_MARKER_$MARKER"), "the unreferenced raw resource must be shrunk away")
-        } finally {
-            platform.dispose(); dir.toFile().deleteRecursively()
         }
     }
 
@@ -105,10 +100,6 @@ class AndroidResourceShrinkTest {
             }
         }
         return false
-    }
-
-    private fun write(root: Path, rel: String, content: String) {
-        val f = root.resolve(rel); Files.createDirectories(f.parent); Files.writeString(f, content.trimIndent())
     }
 
     private companion object {

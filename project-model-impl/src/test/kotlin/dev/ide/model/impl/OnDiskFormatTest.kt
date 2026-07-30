@@ -1,5 +1,6 @@
 package dev.ide.model.impl
 
+import dev.ide.testkit.withTempDir
 import dev.ide.model.BuildSystemId
 import dev.ide.model.ContentRole
 import dev.ide.model.DependencyScope
@@ -23,8 +24,7 @@ import kotlin.test.assertContains
 class OnDiskFormatTest {
 
     @Test
-    fun writesReadableWorkspaceJsonAndModuleToml() {
-        val dir = Files.createTempDirectory("codeassist-format")
+    fun writesReadableWorkspaceJsonAndModuleToml() = withTempDir("codeassist-format") { dir ->
         val platform = PlatformCore()
         platform.registerTestTypes()
         try {
@@ -74,8 +74,7 @@ class OnDiskFormatTest {
     /** A variant-qualified dependency lands under a nested `[dependencies.<config>]` table; the bare
      *  `[dependencies]` table keeps only the shared (unqualified) entries, byte-identical to the old format. */
     @Test
-    fun variantQualifiedDependenciesUseNestedTables() {
-        val dir = Files.createTempDirectory("codeassist-variant-format")
+    fun variantQualifiedDependenciesUseNestedTables() = withTempDir("codeassist-variant-format") { dir ->
         val platform = PlatformCore()
         platform.registerTestTypes()
         try {

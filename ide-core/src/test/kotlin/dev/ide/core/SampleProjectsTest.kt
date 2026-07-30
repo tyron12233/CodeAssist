@@ -1,5 +1,6 @@
 package dev.ide.core
 
+import dev.ide.testkit.withTempDir
 import dev.ide.core.services.RunCapture
 import dev.ide.model.LanguageLevel
 import dev.ide.model.template.TemplateArgs
@@ -19,14 +20,11 @@ class SampleProjectsTest {
 
     /** Create the sample from its template, then compile + run it feeding [input] to its stdin. */
     private fun createAndRun(templateId: String, input: String): RunCapture {
-        val dir = Files.createTempDirectory("sample-$templateId")
-        try {
+        withTempDir("sample-$templateId") { dir ->
             IdeServices.createProjectAt(
                 dir, templateId, mapOf(TemplateArgs.NAME to templateId),
                 IdeServices.defaultDesktopSdk(), LanguageLevel.JAVA_17,
             ).use { ide -> return runBlocking { ide.runAndCapture("app", stdin = input) } }
-        } finally {
-            dir.toFile().deleteRecursively()
         }
     }
 

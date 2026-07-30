@@ -2,6 +2,7 @@ package dev.ide.core
 
 import kotlinx.coroutines.runBlocking
 
+import dev.ide.testkit.writeSource
 import java.nio.file.Files
 import kotlin.io.path.createTempDirectory
 import kotlin.test.AfterTest
@@ -25,16 +26,13 @@ class UnifiedLanguageAnalysisTest {
         root.toFile().deleteRecursively()
     }
 
-    private fun write(rel: String, content: String) =
-        root.resolve(rel).also { Files.createDirectories(it.parent); Files.writeString(it, content) }
-
     @Test
     fun kotlinSyntaxDiagnosticFlowsThroughTheEngine() {
         val s = IdeServices.bootstrapJavaDemo(root).also { services = it }
         // A blatant syntax error — the tolerant Kotlin parser flags it `kt.syntax`, which is NOT gated by
         // the index "dumb mode" (that only suppresses unresolved-symbol *semantic* findings), so this is
         // deterministic without awaiting the index.
-        val kt = write("core/src/main/java/com/example/core/Broken.kt", "package com.example.core\nfun broken( { }\n")
+        val kt = root.writeSource("core/src/main/java/com/example/core/Broken.kt", "package com.example.core\nfun broken( { }\n", trim = false)
         val text = Files.readString(kt)
         val diags = runBlocking { s.analyzeDiagnostics(kt, text) }
         assertTrue(diags.any { it.code == "kt.syntax" }, "Kotlin syntax diagnostic should reach the unified engine: ${diags.map { it.code to it.message }}")
@@ -45,7 +43,7 @@ class UnifiedLanguageAnalysisTest {
         val s = IdeServices.bootstrapDemo(root).also { services = it }
         // Uses `android:` attributes with no `xmlns:android` declaration → the missing-namespace lint rule.
         // Pure detection (no resource index), so it's deterministic on a fresh workspace.
-        val layout = write("app/src/main/res/layout/unified_test.xml", "<LinearLayout android:orientation=\"vertical\"></LinearLayout>")
+        val layout = root.writeSource("app/src/main/res/layout/unified_test.xml", "<LinearLayout android:orientation=\"vertical\"></LinearLayout>", trim = false)
         val text = Files.readString(layout)
 
         val diags = runBlocking { s.analyzeDiagnostics(layout, text) }

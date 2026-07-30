@@ -1,6 +1,7 @@
 package dev.ide.ksp
 
 import dev.ide.build.SourceGenRequest
+import dev.ide.testkit.withTempDir
 import java.io.File
 import java.nio.file.Files
 import java.nio.file.Path
@@ -36,8 +37,7 @@ class KspSourceGeneratorTest {
         assumeTrue(room.isNotEmpty(), "room.processor.classpath not injected — skipping")
         assumeTrue(roomLibs.isNotEmpty(), "room.libs.classpath not injected — skipping")
 
-        val root = Files.createTempDirectory("ksp-gen-test")
-        try {
+        withTempDir("ksp-gen-test") { root ->
             val srcRoot = root.resolve("src/main/kotlin")
             Files.createDirectories(srcRoot)
             Files.writeString(
@@ -108,8 +108,6 @@ class KspSourceGeneratorTest {
                 "Room did not emit AppDatabase_Impl.kt into the generated root. Emitted:\n" +
                     emitted.joinToString("\n") { generatedRoot.relativize(it).toString() },
             )
-        } finally {
-            root.toFile().deleteRecursively()
         }
     }
 }

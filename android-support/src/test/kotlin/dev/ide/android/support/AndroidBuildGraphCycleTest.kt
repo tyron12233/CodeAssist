@@ -19,8 +19,7 @@ import dev.ide.model.impl.FacetCodecRegistry
 import dev.ide.model.impl.ModuleTypeRegistry
 import dev.ide.model.impl.ProjectModel
 import dev.ide.platform.PluginId
-import dev.ide.platform.impl.PlatformCore
-import java.nio.file.Files
+import dev.ide.testkit.testEnv
 import java.nio.file.Paths
 import kotlin.test.Test
 import kotlin.test.fail
@@ -44,9 +43,9 @@ class AndroidBuildGraphCycleTest {
 
     @Test
     fun demoGraphIsAcyclic() {
-        val dir = Files.createTempDirectory("android-cycle")
-        val platform = PlatformCore()
-        try {
+        testEnv("android-cycle") { env ->
+            val dir = env.dir
+            val platform = env.platform
             val store = ProjectModel.open(dir, platform, FacetCodecRegistry().register(AndroidFacetCodec))
             val types = ModuleTypeRegistry(platform.extensions)
             types.register(JavaLib, PluginId("java-support"))
@@ -83,8 +82,6 @@ class AndroidBuildGraphCycleTest {
                     fail("demo build graph has a cycle (goal=$goal): ${e.cycle.joinToString(" -> ") { it.value }}")
                 }
             }
-        } finally {
-            platform.dispose(); dir.toFile().deleteRecursively()
         }
     }
 }

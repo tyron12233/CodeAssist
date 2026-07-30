@@ -7,6 +7,7 @@ import dev.ide.lang.completion.CompletionTrigger
 import dev.ide.lang.completion.complete
 import dev.ide.lang.incremental.DocumentSnapshot
 import dev.ide.lang.java.env.JavaEnvironment
+import dev.ide.testkit.TestDocument
 import dev.ide.vfs.VirtualFile
 import dev.ide.vfs.local.LocalFileSystem
 import kotlinx.coroutines.runBlocking
@@ -49,13 +50,7 @@ class JavaCompletionTest {
         srcRoot.deleteRecursively()
     }
 
-    private class Snap(
-        override val file: VirtualFile,
-        override val text: CharSequence,
-        override val version: Long = 1,
-    ) : DocumentSnapshot {
-        override fun length(): Int = text.length
-    }
+    private class Snap(file: VirtualFile, text: CharSequence, version: Long = 1) : DocumentSnapshot by TestDocument(text, file, version)
 
     /** The full completion items at the `|` marker in [source] (the marker char is stripped before parsing). */
     private fun itemsAt(source: String): List<CompletionItem> = runBlocking {

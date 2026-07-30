@@ -5,6 +5,7 @@ import dev.ide.android.support.tools.ToolResult
 import dev.ide.build.TaskName
 import dev.ide.build.TaskResult
 import dev.ide.build.engine.SimpleTaskContext
+import dev.ide.testkit.withTempDir
 import kotlinx.coroutines.runBlocking
 import org.objectweb.asm.ClassWriter
 import org.objectweb.asm.Opcodes
@@ -56,8 +57,7 @@ class DexArchiveProjectRExclusionTest {
 
     @Test
     fun staleRClassesInProjectScopeAreNotDexed() = runBlocking {
-        val tmp = Files.createTempDirectory("dex-r-exclude")
-        try {
+        withTempDir("dex-r-exclude") { tmp ->
             val classes = tmp.resolve("classes")
             // A real app class (must be dexed) alongside stale generated R classes an old compile-R build left.
             writeClass(classes, "com/example/myproject/MainActivity.class")
@@ -92,8 +92,6 @@ class DexArchiveProjectRExclusionTest {
             assertFalse(dexed("androidx/appcompat/R.dex"), "extra-package R must not be dexed in the project scope")
             assertFalse(dexed("androidx/appcompat/R\$styleable.dex"), "extra-package R\$styleable must not be dexed in the project scope")
             assertFalse(dexed("com/google/android/material/R\$attr.dex"), "extra-package R\$attr must not be dexed in the project scope")
-        } finally {
-            tmp.toFile().deleteRecursively()
         }
     }
 }

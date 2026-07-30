@@ -2,6 +2,7 @@ package dev.ide.android.support.tools
 
 import dev.ide.android.support.AndroidFacet
 import dev.ide.android.support.tasks.DexArchives
+import dev.ide.testkit.withTempDir
 import org.objectweb.asm.ClassReader
 import org.objectweb.asm.ClassVisitor
 import org.objectweb.asm.Opcodes
@@ -50,8 +51,7 @@ class D8KotlinMetadataDexTest {
 
     @Test
     fun strippedClassDexesWithoutTouchingKotlinMetadata() {
-        val tmp = Files.createTempDirectory("d8-kotlin-meta")
-        try {
+        withTempDir("d8-kotlin-meta") { tmp ->
             val classRel = "dev/ide/android/support/AndroidFacet.class"
             val jar = tmp.resolve("input.jar")
             JarOutputStream(Files.newOutputStream(jar)).use { jos ->
@@ -68,8 +68,6 @@ class D8KotlinMetadataDexTest {
                 r.log.any { it.contains("kotlin metadata", ignoreCase = true) || it.contains("Kotlin metadata") },
                 "D8 still entered its Kotlin-metadata path for a stripped class — strip ineffective: ${r.log}",
             )
-        } finally {
-            tmp.toFile().deleteRecursively()
         }
     }
 }

@@ -8,7 +8,7 @@ import dev.ide.model.LibraryRef
 import dev.ide.model.impl.FacetCodecRegistry
 import dev.ide.model.impl.ModuleTypeRegistry
 import dev.ide.model.impl.ProjectModel
-import dev.ide.platform.impl.PlatformCore
+import dev.ide.testkit.testEnv
 import java.nio.file.Files
 import java.nio.file.Path
 import kotlin.test.Test
@@ -28,9 +28,9 @@ class AndroidStdlibDedupTest {
 
     @Test
     fun collapsesBundledAndMavenKotlinStdlib() {
-        val dir = Files.createTempDirectory("stdlib-dedup")
-        val platform = PlatformCore()
-        try {
+        testEnv("stdlib-dedup") { env ->
+            val dir = env.dir
+            val platform = env.platform
             // The bundled stdlib: a non-Maven path, so it has no coordinate the graph-level dedup can read.
             val bundled = touchJar(dir.resolve(".platform/kotlin-stdlib-2.4.0.jar"))
             // A Maven-resolved stdlib at an older version, in repository layout.
@@ -63,8 +63,6 @@ class AndroidStdlibDedupTest {
             assertEquals(1, stdlibs.size, "exactly one kotlin-stdlib should survive the dex input: ${libs.dexJars}")
             assertEquals("kotlin-stdlib-2.4.0.jar", stdlibs.single().fileName.toString(), "the newest (bundled) stdlib should win")
             assertTrue(libs.dexJars.any { it == other }, "the unrelated library must pass through: ${libs.dexJars}")
-        } finally {
-            platform.dispose(); dir.toFile().deleteRecursively()
         }
     }
 

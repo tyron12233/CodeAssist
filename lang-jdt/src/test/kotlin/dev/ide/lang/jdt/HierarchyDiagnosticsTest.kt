@@ -1,5 +1,6 @@
 package dev.ide.lang.jdt
 
+import dev.ide.testkit.withTempDir
 import dev.ide.lang.AnnotationProcessor
 import dev.ide.lang.CompilationContext
 import dev.ide.model.ClasspathEntry
@@ -28,8 +29,7 @@ class HierarchyDiagnosticsTest {
     @Test
     fun inconsistentHierarchyNamesTheMissingBinaryAncestor() {
         val javac = ToolProvider.getSystemJavaCompiler() ?: return // JRE-only environment → skip
-        val tmp = Files.createTempDirectory("jdt-hier")
-        try {
+        withTempDir("jdt-hier") { tmp ->
             // Compile lib.A + lib.B (B extends A), then jar ONLY B.class so A is absent from the classpath.
             val classes = tmp.resolve("classes").also { Files.createDirectories(it) }
             val srcA = tmp.resolve("lib/A.java").also { Files.createDirectories(it.parent) }
@@ -53,8 +53,6 @@ class HierarchyDiagnosticsTest {
 
             assertTrue(msgs.any { "inconsistent" in it && "lib.A" in it }, "missing ancestor must be named: $msgs")
             assertTrue(msgs.any { "required by lib.B" in it }, "the requiring supertype must be named: $msgs")
-        } finally {
-            tmp.toFile().deleteRecursively()
         }
     }
 

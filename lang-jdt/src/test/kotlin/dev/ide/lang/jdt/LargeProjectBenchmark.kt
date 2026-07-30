@@ -1,5 +1,6 @@
 package dev.ide.lang.jdt
 
+import dev.ide.testkit.withTempDir
 import dev.ide.bench.Bench
 import dev.ide.bench.MemoryProbe
 import dev.ide.bench.RegressionSuite
@@ -71,8 +72,7 @@ class LargeProjectBenchmark {
     @Test
     fun largeProjectCompletionHoldsAgainstBaseline() {
         val heapBefore = MemoryProbe.settledUsedHeap()
-        val dir = Files.createTempDirectory("large-project")
-        try {
+        withTempDir("large-project") { dir ->
             val fileCount = generateProject(dir)
             val jars = classpathJars()
             val analyzer = JdtSourceAnalyzer(context(dir, jars))
@@ -121,8 +121,6 @@ class LargeProjectBenchmark {
             suite.finishAndAssert()
 
             assertTrue(present == scenarios().size, "every expected symbol must resolve at scale (got $present/${scenarios().size})")
-        } finally {
-            dir.toFile().deleteRecursively()
         }
     }
 

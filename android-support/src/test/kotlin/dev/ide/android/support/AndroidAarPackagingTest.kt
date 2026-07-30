@@ -1,7 +1,6 @@
 package dev.ide.android.support
 
 import dev.ide.android.support.tools.AarMetadata
-import dev.ide.android.support.tools.AndroidSdk
 import dev.ide.android.support.tools.DebugKeystore
 import dev.ide.build.BuildGoal
 import dev.ide.build.BuildRequest
@@ -18,9 +17,8 @@ import dev.ide.model.impl.FacetCodecRegistry
 import dev.ide.model.impl.ModuleTypeRegistry
 import dev.ide.model.impl.ProjectModel
 import dev.ide.platform.PluginId
-import dev.ide.platform.impl.PlatformCore
+import dev.ide.testkit.testEnv
 import kotlinx.coroutines.runBlocking
-import org.junit.jupiter.api.Assumptions.assumeTrue
 import java.nio.file.Files
 import java.util.zip.ZipFile
 import java.util.zip.ZipInputStream
@@ -44,13 +42,11 @@ class AndroidAarPackagingTest {
 
     @Test
     fun theAndroidLibraryAssemblesToAnAar() {
-        val sdk = AndroidSdk.findSdkRoot()?.let { AndroidSdk.detect(it) }
-        assumeTrue(sdk != null && sdk.isComplete(), "Android SDK not installed; skipping")
-        sdk!!
+        val sdk = assumeAndroidSdk()
 
-        val dir = Files.createTempDirectory("android-aar")
-        val platform = PlatformCore()
-        try {
+        testEnv("android-aar") { env ->
+            val dir = env.dir
+            val platform = env.platform
             val store = ProjectModel.open(dir, platform, FacetCodecRegistry().register(AndroidFacetCodec))
             val types = ModuleTypeRegistry(platform.extensions)
             types.register(JavaLib, PluginId("java-support"))
@@ -93,8 +89,6 @@ class AndroidAarPackagingTest {
                 val rtxt = zf.getInputStream(zf.getEntry("R.txt")).readBytes().toString(Charsets.UTF_8)
                 assertTrue("feature_title" in rtxt, "R.txt should list the lib's resources: $rtxt")
             }
-        } finally {
-            platform.dispose(); dir.toFile().deleteRecursively()
         }
     }
 }

@@ -2,6 +2,7 @@ package dev.ide.android.support.tasks
 
 import dev.ide.android.support.tools.Dexer
 import dev.ide.android.support.tools.ToolResult
+import dev.ide.testkit.withTempDir
 import kotlinx.coroutines.runBlocking
 import java.nio.file.Files
 import java.nio.file.Path
@@ -28,15 +29,12 @@ class SharedLibraryDexerReadinessTest {
 
     @Test
     fun everyLibraryIsUndexedWhenTheCacheIsEmpty() {
-        val dir = Files.createTempDirectory("dexcheck")
-        try {
+        withTempDir("dexcheck") { dir ->
             val a = jar(dir.resolve("a.jar"), "com/example/Foo.class")
             val b = jar(dir.resolve("b.jar"), "com/example/Bar.class")
             val u = SharedLibraryDexer.computeUniverse(listOf(a, b), dir.resolve("hc"), minApi = 34, desugaredLibConfig = null)
             val undexed = SharedLibraryDexer.undexedLibraries(listOf(a, b), u, dir.resolve("dex"), minApi = 34, release = false)
             assertEquals(setOf(a, b), undexed.toSet(), "an empty cache means every class-bearing library needs dexing")
-        } finally {
-            dir.toFile().deleteRecursively()
         }
     }
 
@@ -68,8 +66,7 @@ class SharedLibraryDexerReadinessTest {
      */
     @Test
     fun combinedUniverseReadinessMissesTheBuildsScopedExternalBucketsBelowApi26() = runBlocking {
-        val dir = Files.createTempDirectory("dexscope")
-        try {
+        withTempDir("dexscope") { dir ->
             val extA = jar(dir.resolve("extA.jar"), "ext/A.class")
             val extB = jar(dir.resolve("extB.jar"), "ext/B.class")
             val modC = jar(dir.resolve("modC.jar"), "mod/C.class")   // a dependency-module output
@@ -107,22 +104,17 @@ class SharedLibraryDexerReadinessTest {
             assertTrue(libDexer.dexScope(listOf(modC), dir.resolve("subRoot"), subUniverse), "build sub-scope dexing")
             // Now BOTH scopes are dexed → the gate is fully clear → "prepare libraries" dismisses.
             assertTrue(previewUndexed().isEmpty(), "fix: with both build scopes dexed the gate flips")
-        } finally {
-            dir.toFile().deleteRecursively()
         }
     }
 
     @Test
     fun aResourceOnlyJarIsNeverReportedUndexed() {
-        val dir = Files.createTempDirectory("dexcheck2")
-        try {
+        withTempDir("dexcheck2") { dir ->
             // No `.class` entries → dexes to nothing → must not be treated as "needs dexing" (else the preview
             // would prompt to build forever over a resource-only AAR's classes.jar).
             val res = jar(dir.resolve("res.jar"), "res/values/strings.xml")
             val u = SharedLibraryDexer.computeUniverse(listOf(res), dir.resolve("hc"), minApi = 34, desugaredLibConfig = null)
             assertTrue(SharedLibraryDexer.undexedLibraries(listOf(res), u, dir.resolve("dex"), minApi = 34, release = false).isEmpty())
-        } finally {
-            dir.toFile().deleteRecursively()
         }
     }
 }

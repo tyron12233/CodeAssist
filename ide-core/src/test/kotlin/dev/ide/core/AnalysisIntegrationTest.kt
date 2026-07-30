@@ -1,5 +1,6 @@
 package dev.ide.core
 
+import dev.ide.testkit.withTempDir
 import kotlinx.coroutines.runBlocking
 
 import dev.ide.analysis.DiagnosticSource
@@ -16,8 +17,7 @@ import kotlin.test.assertTrue
 class AnalysisIntegrationTest {
 
     @Test
-    fun compilerErrorAndAnalyzerWarningsMergeForOneFile() {
-        val dir = Files.createTempDirectory("ide-analysis")
+    fun compilerErrorAndAnalyzerWarningsMergeForOneFile() = withTempDir("ide-analysis") { dir ->
         IdeServices.bootstrapJavaDemo(dir).use { ide ->
             val app = ide.modules().first { it.name == "app" }
             // A probe in :app's source root (need not exist on disk — analysis runs off the live overlay).
@@ -50,8 +50,7 @@ class AnalysisIntegrationTest {
     }
 
     @Test
-    fun suppressionSilencesAnAnalyzerWarning() {
-        val dir = Files.createTempDirectory("ide-suppress")
+    fun suppressionSilencesAnAnalyzerWarning() = withTempDir("ide-suppress") { dir ->
         IdeServices.bootstrapJavaDemo(dir).use { ide ->
             val app = ide.modules().first { it.name == "app" }
             val probe = ide.sourceRoots(app).first().resolve("com/example/app/Probe.java")

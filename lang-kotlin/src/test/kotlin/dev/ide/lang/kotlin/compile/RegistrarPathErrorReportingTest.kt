@@ -1,5 +1,7 @@
 package dev.ide.lang.kotlin.compile
 
+import dev.ide.testkit.withTempDir
+import dev.ide.testkit.writeSource
 import dev.ide.lang.kotlin.parse
 import org.junit.jupiter.api.Assumptions.assumeTrue
 import java.io.File
@@ -28,9 +30,7 @@ class RegistrarPathErrorReportingTest {
             .map { Path.of(it) }.filter { Files.exists(it) }
             .filter { ComposeCompilerPlugin.isComposeModule(listOf(it)) }
 
-    private fun write(root: Path, rel: String, content: String): Path {
-        val f = root.resolve(rel); Files.createDirectories(f.parent); Files.writeString(f, content.trimIndent()); return f
-    }
+    private fun write(root: Path, rel: String, content: String): Path = root.writeSource(rel, content)
 
     @Test
     fun brokenSourceIsReportedAsFailureOnBothPaths() {
@@ -39,8 +39,7 @@ class RegistrarPathErrorReportingTest {
         val runtime = composeRuntimeJars()
         assumeTrue(runtime.isNotEmpty(), "Compose runtime jar not on the test classpath")
 
-        val dir = Files.createTempDirectory("kt-registrar-err")
-        try {
+        withTempDir("kt-registrar-err") { dir ->
             val src = dir.resolve("src")
             val broken = write(src, "demo/Broken.kt", "package demo\nfun broken(): Int = notARealSymbolAnywhere()\n")
             val cp = listOf(stdlib) + runtime
@@ -58,8 +57,6 @@ class RegistrarPathErrorReportingTest {
             println("REGISTRAR success=${reg.success} msgs=${reg.messages}")
             assertFalse(reg.success, "registrar path must also reject a broken file (else it swallows compile errors)")
             assertTrue(reg.messages.isNotEmpty(), "registrar path must surface the diagnostic, not swallow it")
-        } finally {
-            dir.toFile().deleteRecursively()
         }
     }
 }

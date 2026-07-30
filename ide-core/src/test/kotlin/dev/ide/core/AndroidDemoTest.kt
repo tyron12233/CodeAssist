@@ -1,5 +1,6 @@
 package dev.ide.core
 
+import dev.ide.testkit.withTempDir
 import dev.ide.ui.backend.TreeNode
 import java.nio.file.Files
 import java.nio.file.Paths
@@ -17,8 +18,7 @@ import kotlin.test.assertTrue
 class AndroidDemoTest {
 
     @Test
-    fun demoIsAnAndroidAppWithVisibleManifestAndResources() {
-        val dir = Files.createTempDirectory("ide-android-demo")
+    fun demoIsAnAndroidAppWithVisibleManifestAndResources() = withTempDir("ide-android-demo") { dir ->
         IdeServices.bootstrapDemo(dir).use { ide ->
             assertEquals(setOf("app", "feature", "core"), ide.modules().map { it.name }.toSet())
             assertEquals("android-app", ide.modules().first { it.name == "app" }.type.id)
@@ -43,8 +43,7 @@ class AndroidDemoTest {
     }
 
     @Test
-    fun runPickerOffersAndroidAssembleVariants() {
-        val dir = Files.createTempDirectory("ide-android-run")
+    fun runPickerOffersAndroidAssembleVariants() = withTempDir("ide-android-run") { dir ->
         IdeServices.bootstrapDemo(dir).use { ide ->
             val ids = IdeServicesBackend(ide).build.runTasks().map { it.id }.toSet()
             assertTrue("assemble:app:debug" in ids, "Run picker should offer assemble debug: $ids")
@@ -63,8 +62,7 @@ class AndroidDemoTest {
      * (source → res → manifest) resolves it.
      */
     @Test
-    fun resourceFileResolvesToItsModuleForBuildActions() {
-        val dir = Files.createTempDirectory("ide-android-resmod")
+    fun resourceFileResolvesToItsModuleForBuildActions() = withTempDir("ide-android-resmod") { dir ->
         IdeServices.bootstrapDemo(dir).use { ide ->
             val backend = IdeServicesBackend(ide)
             fun flatten(n: TreeNode): List<TreeNode> = listOf(n) + n.children.flatMap { flatten(it) }
@@ -86,8 +84,7 @@ class AndroidDemoTest {
     /** The Run picker surfaces tasks from EVERY module, not just the app: an android-lib packages an .aar,
      *  and a plain-Java library (no main) still offers a build task. Enumeration is SDK-independent. */
     @Test
-    fun runPickerOffersLibraryBuildAndAarTasks() {
-        val dir = Files.createTempDirectory("ide-android-run-lib")
+    fun runPickerOffersLibraryBuildAndAarTasks() = withTempDir("ide-android-run-lib") { dir ->
         IdeServices.bootstrapDemo(dir).use { ide ->
             val ids = IdeServicesBackend(ide).build.runTasks().map { it.id }.toSet()
             // The android-lib ("feature") packages an .aar per variant — visible from Run.

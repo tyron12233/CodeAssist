@@ -3,9 +3,9 @@ package dev.ide.core
 import dev.ide.lang.incremental.DocumentSnapshot
 import dev.ide.lang.xml.XmlIncrementalParser
 import dev.ide.lang.xml.XmlParsedFile
-import dev.ide.platform.ContentHash
 import dev.ide.preview.PreviewViewNode
-import dev.ide.vfs.VirtualFile
+import dev.ide.testkit.TestDocument
+import dev.ide.testkit.virtualFile
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNull
@@ -103,21 +103,5 @@ class LayoutSourceMapperTest {
         assertEquals(xml.indexOf("<TextView", xml.indexOf("<TextView") + 1), kids[1].sourceOffset)
     }
 
-    private class Doc(override val text: CharSequence) : DocumentSnapshot {
-        override val file: VirtualFile = FakeFile("res/layout/a.xml")
-        override val version: Long = 1
-        override fun length(): Int = text.length
-    }
-
-    private class FakeFile(override val path: String) : VirtualFile {
-        override val name: String get() = path.substringAfterLast('/')
-        override val isDirectory: Boolean = false
-        override val exists: Boolean = true
-        override val length: Long = 0
-        override fun parent(): VirtualFile? = null
-        override fun children(): List<VirtualFile> = emptyList()
-        override fun contentHash(): ContentHash = ContentHash("")
-        override fun readBytes(): ByteArray = ByteArray(0)
-        override fun readText(): CharSequence = ""
-    }
+    private class Doc(text: CharSequence) : DocumentSnapshot by TestDocument(text, virtualFile("res/layout/a.xml"))
 }

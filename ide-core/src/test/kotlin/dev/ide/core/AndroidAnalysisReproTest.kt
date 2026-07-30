@@ -1,5 +1,6 @@
 package dev.ide.core
 
+import dev.ide.testkit.withTempDir
 import kotlinx.coroutines.runBlocking
 
 import dev.ide.android.support.tools.AndroidSdk
@@ -18,8 +19,7 @@ import kotlin.test.assertTrue
 class AndroidAnalysisReproTest {
 
     @Test
-    fun analysisRunsOnTheAndroidDemo() {
-        val dir = Files.createTempDirectory("ide-andan")
+    fun analysisRunsOnTheAndroidDemo() = withTempDir("ide-andan") { dir ->
         IdeServices.bootstrapDemo(dir).use { ide ->
             // a plain-Java module (`core`) with a syntax error — analysis must run (not throw) and flag it
             val calc = dir.resolve("core/src/main/java/com/example/core/Calc.java")
@@ -73,7 +73,7 @@ class AndroidAnalysisReproTest {
     fun stringConcatResolvesAgainstAndroidJar() {
         val sdkPresent = AndroidSdk.findSdkRoot()?.let { AndroidSdk.detect(it) }?.isComplete() == true
         Assumptions.assumeTrue(sdkPresent, "needs an installed Android SDK (android.jar + build-tools)")
-        val dir = Files.createTempDirectory("ide-strcat")
+        withTempDir("ide-strcat") { dir ->
         IdeServices.bootstrapDemo(dir).use { ide ->
             val main = dir.resolve("app/src/main/java/com/example/app/MainActivity.java")
             val withConcat = Files.readString(main).replace(
@@ -87,6 +87,6 @@ class AndroidAnalysisReproTest {
                 "no unresolved indirect platform type: $diags",
             )
         }
-        dir.toFile().deleteRecursively()
+        }
     }
 }

@@ -5,6 +5,7 @@ import dev.ide.android.support.tools.ToolResult
 import dev.ide.build.TaskName
 import dev.ide.build.TaskResult
 import dev.ide.build.engine.SimpleTaskContext
+import dev.ide.testkit.withTempDir
 import kotlinx.coroutines.runBlocking
 import java.nio.file.Files
 import java.nio.file.Path
@@ -46,8 +47,7 @@ class DexMergeIncrementalTest {
 
     @Test
     fun externalLibsDexedOncePassAndReusedFromCache() = runBlocking {
-        val tmp = Files.createTempDirectory("dexextlibs")
-        try {
+        withTempDir("dexextlibs") { tmp ->
             val libs = tmp.resolve("libs")
             val jars = listOf(jar(libs, "a.jar", "a/A.class"), jar(libs, "b.jar", "b/B.class"))
             val cache = tmp.resolve("ext-indexed")
@@ -66,8 +66,6 @@ class DexMergeIncrementalTest {
             assertEquals(TaskResult.Success, task(out2).execute(SimpleTaskContext()))
             assertEquals(0, dexer.mergeCalls.get(), "the same library set reuses the cached indexed dex")
             assertTrue(hasDexUnder(out2), "reused indexed dex is materialized into the fresh output dir")
-        } finally {
-            tmp.toFile().deleteRecursively()
         }
     }
 
@@ -76,8 +74,7 @@ class DexMergeIncrementalTest {
 
     @Test
     fun editingOneClassReMergesOnlyItsBucket() = runBlocking {
-        val tmp = Files.createTempDirectory("dexmerge-inc")
-        try {
+        withTempDir("dexmerge-inc") { tmp ->
             // Project-scope archive layout: per-class dex directly under the root (no hash subdir).
             val arch = tmp.resolve("project-archives")
             val classes = (0 until 24).map { "pkg/C$it.dex" }
@@ -103,15 +100,12 @@ class DexMergeIncrementalTest {
             dexer.mergeCalls.set(0)
             assertEquals(TaskResult.Success, task().execute(SimpleTaskContext()))
             assertEquals(1, dexer.mergeCalls.get(), "editing one class re-merges exactly its one bucket, reusing the rest")
-        } finally {
-            tmp.toFile().deleteRecursively()
         }
     }
 
     @Test
     fun mergedExtDexIsReusedFromSharedCacheAcrossCleans() = runBlocking {
-        val tmp = Files.createTempDirectory("dexmerge-cache")
-        try {
+        withTempDir("dexmerge-cache") { tmp ->
             // External scope: per-library content-hash buckets, each with per-class dex.
             val arch = tmp.resolve("ext-archives")
             writeDex(arch.resolve("a".repeat(24)), "androidx/a/A.dex", byteArrayOf(1))
@@ -132,15 +126,12 @@ class DexMergeIncrementalTest {
             assertEquals(TaskResult.Success, task(out2).execute(SimpleTaskContext()))
             assertEquals(0, dexer.mergeCalls.get(), "a clean rebuild reuses the merged ext dex from the shared cache")
             assertTrue(hasDexUnder(out2), "reused merged dex is materialized into the fresh output dir")
-        } finally {
-            tmp.toFile().deleteRecursively()
         }
     }
 
     @Test
     fun staleDirectDexFromOldLayoutIsRemoved() = runBlocking {
-        val tmp = Files.createTempDirectory("dexmerge-stale")
-        try {
+        withTempDir("dexmerge-stale") { tmp ->
             val arch = tmp.resolve("project-archives")
             writeDex(arch, "pkg/A.dex", byteArrayOf(1))
             val out = tmp.resolve("project-dex")
@@ -155,8 +146,6 @@ class DexMergeIncrementalTest {
             assertTrue(hasDexUnder(out), "bucketed output dex is present")
             val directDex = Files.list(out).use { s -> s.filter { Files.isRegularFile(it) && it.toString().endsWith(".dex") }.count() }
             assertEquals(0L, directDex, "no .dex directly under the output root; every output dex lives in a bucket dir")
-        } finally {
-            tmp.toFile().deleteRecursively()
         }
     }
 }

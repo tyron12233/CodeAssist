@@ -1,5 +1,6 @@
 package dev.ide.lang.jdt
 
+import dev.ide.testkit.withTempDir
 import dev.ide.lang.AnnotationProcessor
 import dev.ide.lang.CompilationContext
 import dev.ide.model.ClasspathEntry
@@ -61,8 +62,7 @@ class LocaleSplitPackageReproTest {
     @Test
     fun localeIsResolvableUnderTheAndroidPlatform() {
         val jar = androidJar() ?: run { println("[LocaleSplitPackageRepro] no Android SDK — skipping"); return }
-        val dir = Files.createTempDirectory("locale-repro")
-        try {
+        withTempDir("locale-repro") { dir ->
             val analyzer = androidAnalyzer(dir, jar)
             val file = StubFile(dir.resolve("app/T.java").toString(), code)
 
@@ -75,8 +75,6 @@ class LocaleSplitPackageReproTest {
                 "Locale must not trip the java.base/<unnamed> split on the editor path: $editorMsgs")
             assertTrue(editorMsgs.isEmpty(), "well-formed Locale code should produce no editor diagnostics: $editorMsgs")
             // The well-formed code also resolves: a clean diagnose() means Locale.getDefault() bound fine.
-        } finally {
-            dir.toFile().deleteRecursively()
         }
     }
 }

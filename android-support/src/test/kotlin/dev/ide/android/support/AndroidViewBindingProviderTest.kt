@@ -10,10 +10,9 @@ import dev.ide.model.Workspace
 import dev.ide.model.impl.FacetCodecRegistry
 import dev.ide.model.impl.ModuleTypeRegistry
 import dev.ide.model.impl.ProjectModel
-import dev.ide.platform.impl.PlatformCore
+import dev.ide.testkit.testEnv
 import java.nio.file.Files
 import java.nio.file.Paths
-import kotlin.io.path.createTempDirectory
 import kotlin.io.path.writeText
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -25,32 +24,27 @@ import kotlin.test.assertTrue
  */
 class AndroidViewBindingProviderTest {
 
-    private fun withApp(viewBinding: Boolean, block: (Module, Workspace) -> Unit) {
-        val dir = createTempDirectory("vb-provider")
-        val platform = PlatformCore()
+    private fun withApp(viewBinding: Boolean, block: (Module, Workspace) -> Unit) = testEnv("vb-provider") { env ->
+        val dir = env.dir
+        val platform = env.platform
         val moduleTypes = ModuleTypeRegistry(platform.extensions)
         val codecs = FacetCodecRegistry()
         AndroidSupport.register(moduleTypes, codecs)
         val store = ProjectModel.open(dir, platform, codecs)
-        try {
-            store.workspace.beginModification().apply { addProject("demo", BuildSystemId.NATIVE, store.vfs.root()); commit() }
-            store.workspace.projects.single().beginModification().apply {
-                addModule("app", moduleTypes.resolve("android-app")).apply {
-                    putFacet(
-                        AndroidFacet(
-                            namespace = "com.example.app", compileSdk = 34,
-                            buildFeatures = BuildFeatures(viewBinding = viewBinding),
-                        ),
-                    )
-                }
-                commit()
+        store.workspace.beginModification().apply { addProject("demo", BuildSystemId.NATIVE, store.vfs.root()); commit() }
+        store.workspace.projects.single().beginModification().apply {
+            addModule("app", moduleTypes.resolve("android-app")).apply {
+                putFacet(
+                    AndroidFacet(
+                        namespace = "com.example.app", compileSdk = 34,
+                        buildFeatures = BuildFeatures(viewBinding = viewBinding),
+                    ),
+                )
             }
-            val app = store.workspace.projects.single().modules.first { it.name == "app" }
-            block(app, store.workspace)
-        } finally {
-            platform.dispose()
-            dir.toFile().deleteRecursively()
+            commit()
         }
+        val app = store.workspace.projects.single().modules.first { it.name == "app" }
+        block(app, store.workspace)
     }
 
     /** Write `layout/<name>.xml` into the module's own ANDROID_RES root (where the provider reads). */

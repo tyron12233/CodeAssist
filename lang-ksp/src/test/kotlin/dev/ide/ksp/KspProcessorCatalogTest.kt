@@ -1,6 +1,7 @@
 package dev.ide.ksp
 
 import dev.ide.build.SourceGenRequest
+import dev.ide.testkit.withTempDir
 import java.io.File
 import java.nio.file.Files
 import java.nio.file.Path
@@ -51,8 +52,7 @@ class KspProcessorCatalogTest {
 
         val catalog = KspProcessorCatalog.blessed(bundledJars = { id -> if (id == "room") roomJars else emptyList() })
 
-        val root = Files.createTempDirectory("ksp-catalog-test")
-        try {
+        withTempDir("ksp-catalog-test") { root ->
             val srcRoot = root.resolve("src/main/kotlin")
             Files.createDirectories(srcRoot)
             Files.writeString(
@@ -93,8 +93,6 @@ class KspProcessorCatalogTest {
                 "catalog-selected Room did not generate AppDatabase_Impl.kt:\n${result.messages.joinToString("\n")}\n" +
                     emitted.joinToString("\n") { genRoot.relativize(it).toString() },
             )
-        } finally {
-            root.toFile().deleteRecursively()
         }
     }
 }

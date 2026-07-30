@@ -1,5 +1,6 @@
 package dev.ide.core
 
+import dev.ide.testkit.withTempDir
 import dev.ide.build.BUILD_SYSTEM_EP
 import dev.ide.build.BuildRequest
 import dev.ide.build.BuildSystem
@@ -46,8 +47,7 @@ class BuildSystemExtensionTest {
     }
 
     @Test
-    fun pluginBuildSystemSelectedForItsTypeButBuiltinsWin() {
-        val dir = Files.createTempDirectory("build-system-ep")
+    fun pluginBuildSystemSelectedForItsTypeButBuiltinsWin() = withTempDir("build-system-ep") { dir ->
         IdeServices.bootstrapJavaDemo(dir).use { ide ->
             val foo = FakeBuildSystem("custom-foo")
             ide.platform.extensions.register(BUILD_SYSTEM_EP, foo, PluginId("test-plugin"))
@@ -65,8 +65,7 @@ class BuildSystemExtensionTest {
     }
 
     @Test
-    fun runTaskProviderOptionsMergedIntoRunTasks() {
-        val dir = Files.createTempDirectory("run-task-ep")
+    fun runTaskProviderOptionsMergedIntoRunTasks() = withTempDir("run-task-ep") { dir ->
         IdeServices.bootstrapJavaDemo(dir).use { ide ->
             assertTrue(ide.build.runTasks().none { it.id.startsWith("lint:") }, "no lint tasks before the provider")
             ide.platform.extensions.register(RUN_TASK_PROVIDER_EP, FakeRunTaskProvider(), PluginId("test-plugin"))

@@ -1,5 +1,6 @@
 package dev.ide.lang.jdt
 
+import dev.ide.testkit.withTempDir
 import dev.ide.lang.AnnotationProcessor
 import dev.ide.lang.CompilationContext
 import dev.ide.model.ClasspathEntry
@@ -58,8 +59,7 @@ class LanguageLevelCompletionReproTest {
     }
 
     @Test
-    fun completionAcrossLanguageLevels() {
-        val dir = Files.createTempDirectory("jdt-lvl-test")
+    fun completionAcrossLanguageLevels() = withTempDir("jdt-lvl-test") { dir ->
         val f = dir.resolve("com/example/Main.java")
         Files.createDirectories(f.parent)
         val code = """

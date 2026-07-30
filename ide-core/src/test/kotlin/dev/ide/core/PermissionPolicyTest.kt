@@ -2,6 +2,7 @@ package dev.ide.core
 
 import dev.ide.build.engine.GuardCategory
 import dev.ide.ui.backend.UiPermissionDecision
+import dev.ide.testkit.withTempDir
 import java.nio.file.Files
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -14,8 +15,8 @@ class PermissionPolicyTest {
 
     @Test
     fun onceIsNotRemembered_runIsRemembered_untilReset() {
-        val file = Files.createTempDirectory("perm").resolve("permissions.properties")
-        try {
+        withTempDir("perm") { dir ->
+            val file = dir.resolve("permissions.properties")
             val policy = PermissionPolicy(file)
             assertNull(policy.decided(GuardCategory.NETWORK), "undecided initially")
 
@@ -26,24 +27,21 @@ class PermissionPolicyTest {
             assertEquals(true, policy.decided(GuardCategory.NETWORK), "allow-for-run is remembered")
             policy.resetRun()
             assertNull(policy.decided(GuardCategory.NETWORK), "run scope clears on reset")
-        } finally { file.parent.toFile().deleteRecursively() }
+        }
     }
 
     @Test
-    fun denyIsRememberedForTheRun() {
-        val file = Files.createTempDirectory("perm").resolve("permissions.properties")
-        try {
-            val policy = PermissionPolicy(file)
-            assertEquals(false, policy.apply(GuardCategory.EXEC, UiPermissionDecision.DENY))
-            assertEquals(false, policy.decided(GuardCategory.EXEC), "deny holds for the run (no re-prompt loop)")
-            policy.resetRun()
-            assertNull(policy.decided(GuardCategory.EXEC), "deny clears on the next run")
-        } finally { file.parent.toFile().deleteRecursively() }
+    fun denyIsRememberedForTheRun() = withTempDir("perm") { dir ->
+        val file = dir.resolve("permissions.properties")
+        val policy = PermissionPolicy(file)
+        assertEquals(false, policy.apply(GuardCategory.EXEC, UiPermissionDecision.DENY))
+        assertEquals(false, policy.decided(GuardCategory.EXEC), "deny holds for the run (no re-prompt loop)")
+        policy.resetRun()
+        assertNull(policy.decided(GuardCategory.EXEC), "deny clears on the next run")
     }
 
     @Test
-    fun alwaysPersistsAcrossPolicyInstancesAndResets() {
-        val dir = Files.createTempDirectory("perm")
+    fun alwaysPersistsAcrossPolicyInstancesAndResets() = withTempDir("perm") { dir ->
         val file = dir.resolve(".platform/permissions.properties")
         try {
             PermissionPolicy(file).apply(GuardCategory.FILE_WRITE, UiPermissionDecision.ALLOW_ALWAYS)

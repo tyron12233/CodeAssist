@@ -1,5 +1,6 @@
 package dev.ide.model.impl
 
+import dev.ide.testkit.withTempDir
 import dev.ide.model.BuildSystemId
 import dev.ide.model.ContentRole
 import dev.ide.model.Coordinate
@@ -27,8 +28,7 @@ import kotlin.test.assertEquals
 class PersistenceRoundTripTest {
 
     @Test
-    fun threeModuleProjectSavesAndReloadsToIdenticalSnapshot() {
-        val dir = Files.createTempDirectory("codeassist-roundtrip")
+    fun threeModuleProjectSavesAndReloadsToIdenticalSnapshot() = withTempDir("codeassist-roundtrip") { dir ->
         val platform = PlatformCore()
         platform.registerTestTypes()
         try {
@@ -126,8 +126,7 @@ class PersistenceRoundTripTest {
 
     /** Build-variant-qualified dependencies (debug/freeDebug) survive a save→reload unchanged. */
     @Test
-    fun variantQualifiedDependenciesRoundTrip() {
-        val dir = Files.createTempDirectory("codeassist-variant-deps")
+    fun variantQualifiedDependenciesRoundTrip() = withTempDir("codeassist-variant-deps") { dir ->
         val platform = PlatformCore()
         platform.registerTestTypes()
         try {
@@ -171,8 +170,7 @@ class PersistenceRoundTripTest {
 
     /** addContentRoot appends typed roots (creating a set when missing); removeContentRoot drops one; both round-trip. */
     @Test
-    fun addAndRemoveContentRootRoundTrips() {
-        val dir = Files.createTempDirectory("codeassist-roots")
+    fun addAndRemoveContentRootRoundTrips() = withTempDir("codeassist-roots") { dir ->
         val platform = PlatformCore()
         platform.registerTestTypes()
         try {

@@ -1,7 +1,6 @@
 package dev.ide.android.support
 
 import dev.ide.android.support.tools.AndroidAppLogRuntime
-import dev.ide.android.support.tools.AndroidSdk
 import dev.ide.android.support.tools.DebugKeystore
 import dev.ide.build.BuildGoal
 import dev.ide.build.BuildRequest
@@ -17,6 +16,8 @@ import dev.ide.model.impl.ModuleTypeRegistry
 import dev.ide.model.impl.ProjectModel
 import dev.ide.model.impl.ProjectModelStore
 import dev.ide.platform.impl.PlatformCore
+import dev.ide.testkit.testEnv
+import dev.ide.testkit.writeSource
 import kotlinx.coroutines.runBlocking
 import org.junit.jupiter.api.Assumptions.assumeTrue
 import java.io.File
@@ -38,9 +39,7 @@ class AppLogInjectTest {
 
     @Test
     fun instrumentsDebugButNeverRelease() {
-        val sdk = AndroidSdk.findSdkRoot()?.let { AndroidSdk.detect(it) }
-        assumeTrue(sdk != null && sdk.isComplete(), "Android SDK (platform + build-tools) not installed; skipping")
-        sdk!!
+        val sdk = assumeAndroidSdk()
         val runtimeJar = resolveRuntimeJar()
         assumeTrue(runtimeJar != null, "applog-runtime jar not provided (-Dapplog.runtime.jar); skipping")
         runtimeJar!!
@@ -50,9 +49,9 @@ class AppLogInjectTest {
             AndroidAppLogRuntime.DEFAULT_PROVIDER_CLASS,
             AndroidAppLogRuntime.DEFAULT_AUTHORITY_SUFFIX,
         )
-        val dir = Files.createTempDirectory("android-applog")
-        val platform = PlatformCore()
-        try {
+        testEnv("android-applog") { env ->
+            val dir = env.dir
+            val platform = env.platform
             val store = buildAppWorkspace(dir, platform)
             val project = store.workspace.projects.single()
             val signing = DebugKeystore.getOrCreate(dir.resolve(".keystore/debug.ks"), sdk.keytool)
@@ -79,8 +78,6 @@ class AppLogInjectTest {
             val relInstrumented = dir.resolve("app/build/intermediates/android/release/instrumented-manifest/AndroidManifest.xml")
             assertTrue(!Files.exists(relInstrumented), "release build must not instrument the manifest")
             assertTrue(!dexContainsType(releaseApk, PROVIDER_DESC), "release APK must not contain the log bridge")
-        } finally {
-            platform.dispose(); dir.toFile().deleteRecursively()
         }
     }
 
@@ -137,14 +134,10 @@ class AppLogInjectTest {
             commit()
         }
 
-        write(dir, "app/src/main/AndroidManifest.xml", MANIFEST)
-        write(dir, "app/src/main/res/values/strings.xml", STRINGS)
-        write(dir, "app/src/main/java/com/example/app/MainActivity.java", ACTIVITY)
+        dir.writeSource("app/src/main/AndroidManifest.xml", MANIFEST)
+        dir.writeSource("app/src/main/res/values/strings.xml", STRINGS)
+        dir.writeSource("app/src/main/java/com/example/app/MainActivity.java", ACTIVITY)
         return store
-    }
-
-    private fun write(root: Path, rel: String, content: String) {
-        val f = root.resolve(rel); Files.createDirectories(f.parent); Files.writeString(f, content.trimIndent())
     }
 
     private companion object {

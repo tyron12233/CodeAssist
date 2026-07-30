@@ -1,5 +1,6 @@
 package dev.ide.core
 
+import dev.ide.testkit.withTempDir
 import dev.ide.ui.backend.UiOpenTab
 import dev.ide.ui.backend.UiOpenTabs
 import java.nio.file.Files
@@ -15,8 +16,7 @@ import kotlin.test.assertTrue
 class OpenTabsPersistenceTest {
 
     @Test
-    fun roundTripsOpenTabsWithPerTabState() {
-        val dir = Files.createTempDirectory("ide-tabs")
+    fun roundTripsOpenTabsWithPerTabState() = withTempDir("ide-tabs") { dir ->
         IdeServices.bootstrapJavaDemo(dir).use { ide ->
             val backend = IdeServicesBackend(ide)
 
@@ -43,8 +43,7 @@ class OpenTabsPersistenceTest {
     }
 
     @Test
-    fun toleratesAMissingOrEmptyActiveIndex() {
-        val dir = Files.createTempDirectory("ide-tabs-empty")
+    fun toleratesAMissingOrEmptyActiveIndex() = withTempDir("ide-tabs-empty") { dir ->
         IdeServices.bootstrapJavaDemo(dir).use { ide ->
             val backend = IdeServicesBackend(ide)
             backend.projects.saveOpenTabs(UiOpenTabs(emptyList(), activeIndex = -1))
@@ -56,8 +55,7 @@ class OpenTabsPersistenceTest {
     }
 
     @Test
-    fun readsLegacyV1Format() {
-        val dir = Files.createTempDirectory("ide-tabs-v1")
+    fun readsLegacyV1Format() = withTempDir("ide-tabs-v1") { dir ->
         IdeServices.bootstrapJavaDemo(dir).use { ide ->
             val backend = IdeServicesBackend(ide)
             // An old (pre-caret/scroll) session file: active index, then bare paths.

@@ -1,5 +1,6 @@
 package dev.ide.core
 
+import dev.ide.testkit.withTempDir
 import dev.ide.ui.backend.NodeKind
 import dev.ide.ui.backend.TreeNode
 import java.nio.file.Files
@@ -18,8 +19,7 @@ class FileTreeIconsTest {
     private fun flatten(n: TreeNode): List<TreeNode> = listOf(n) + n.children.flatMap(::flatten)
 
     @Test
-    fun javaTreeHasIconsCompactedPackagesAndCreatesAClass() {
-        val dir = Files.createTempDirectory("ide-tree-java")
+    fun javaTreeHasIconsCompactedPackagesAndCreatesAClass() = withTempDir("ide-tree-java") { dir ->
         IdeServices.bootstrapJavaDemo(dir).use { ide ->
             val backend = IdeServicesBackend(ide)
             val nodes = flatten(backend.files.fileTree())
@@ -46,8 +46,7 @@ class FileTreeIconsTest {
     }
 
     @Test
-    fun markdownAtWorkspaceRootIsVisibleWithIcon() {
-        val dir = Files.createTempDirectory("ide-tree-md")
+    fun markdownAtWorkspaceRootIsVisibleWithIcon() = withTempDir("ide-tree-md") { dir ->
         IdeServices.bootstrapJavaDemo(dir).use { ide ->
             val backend = IdeServicesBackend(ide)
             // A top-level README.md (the sample templates put one here) — a workspace-root file that sits
@@ -67,8 +66,7 @@ class FileTreeIconsTest {
     }
 
     @Test
-    fun androidTreeHasResAndModuleIcons() {
-        val dir = Files.createTempDirectory("ide-tree-android")
+    fun androidTreeHasResAndModuleIcons() = withTempDir("ide-tree-android") { dir ->
         IdeServices.bootstrapDemo(dir).use { ide ->
             val backend = IdeServicesBackend(ide)
             val nodes = flatten(backend.files.fileTree())

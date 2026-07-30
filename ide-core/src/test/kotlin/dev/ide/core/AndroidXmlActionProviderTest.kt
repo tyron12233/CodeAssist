@@ -9,7 +9,8 @@ import dev.ide.lang.dom.TextRange
 import dev.ide.lang.incremental.DocumentSnapshot
 import dev.ide.lang.xml.XmlIncrementalParser
 import dev.ide.model.Module
-import dev.ide.platform.ContentHash
+import dev.ide.testkit.TestDocument
+import dev.ide.testkit.virtualFile
 import dev.ide.vfs.VirtualFile
 import kotlinx.coroutines.test.runTest
 import kotlin.test.Test
@@ -61,7 +62,7 @@ class AndroidXmlActionProviderTest {
     private fun target(xml: String): AnalysisTarget = FakeTarget(XmlIncrementalParser().parseFull(Doc(xml)))
 
     private class FakeTarget(override val parsed: ParsedFile) : AnalysisTarget {
-        override val file: VirtualFile = Fake
+        override val file: VirtualFile = virtualFile("res/layout/a.xml")
         override val documentVersion = 1L
         override val resolver: SourceAnalyzer get() = error("unused")
         override val index: IndexService get() = error("unused")
@@ -73,19 +74,5 @@ class AndroidXmlActionProviderTest {
         override fun checkCanceled() {}
     }
 
-    private class Doc(override val text: CharSequence) : DocumentSnapshot {
-        override val file: VirtualFile = Fake
-        override val version = 1L
-        override fun length() = text.length
-    }
-
-    private object Fake : VirtualFile {
-        override val path = "res/layout/a.xml"; override val name = "a.xml"
-        override val isDirectory = false; override val exists = true; override val length = 0L
-        override fun parent(): VirtualFile? = null
-        override fun children(): List<VirtualFile> = emptyList()
-        override fun contentHash() = ContentHash("")
-        override fun readBytes() = ByteArray(0)
-        override fun readText(): CharSequence = ""
-    }
+    private class Doc(text: CharSequence) : DocumentSnapshot by TestDocument(text, virtualFile("res/layout/a.xml"))
 }

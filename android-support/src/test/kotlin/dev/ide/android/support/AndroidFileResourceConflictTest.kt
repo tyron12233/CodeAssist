@@ -1,6 +1,5 @@
 package dev.ide.android.support
 
-import dev.ide.android.support.tools.AndroidSdk
 import dev.ide.android.support.tools.DebugKeystore
 import dev.ide.build.BuildGoal
 import dev.ide.build.BuildRequest
@@ -14,9 +13,9 @@ import dev.ide.model.ModuleId
 import dev.ide.model.impl.FacetCodecRegistry
 import dev.ide.model.impl.ModuleTypeRegistry
 import dev.ide.model.impl.ProjectModel
-import dev.ide.platform.impl.PlatformCore
+import dev.ide.testkit.testEnv
+import dev.ide.testkit.writeSource
 import kotlinx.coroutines.runBlocking
-import org.junit.jupiter.api.Assumptions.assumeTrue
 import java.nio.file.Files
 import java.nio.file.Path
 import kotlin.test.Test
@@ -35,13 +34,11 @@ class AndroidFileResourceConflictTest {
 
     @Test
     fun sameResourceInTwoFileFormatsDoesNotBreakTheBuild() {
-        val sdk = AndroidSdk.findSdkRoot()?.let { AndroidSdk.detect(it) }
-        assumeTrue(sdk != null && sdk.isComplete(), "Android SDK not installed; skipping")
-        sdk!!
+        val sdk = assumeAndroidSdk()
 
-        val dir = Files.createTempDirectory("android-fileresconflict")
-        val platform = PlatformCore()
-        try {
+        testEnv("android-fileresconflict") { env ->
+            val dir = env.dir
+            val platform = env.platform
             val store = ProjectModel.open(dir, platform, FacetCodecRegistry().register(AndroidFacetCodec))
             ModuleTypeRegistry(platform.extensions).register(AndroidAppModuleType, AndroidSupport.PLUGIN)
             val appType = ModuleTypeRegistry(platform.extensions).resolve("android-app")
@@ -53,12 +50,12 @@ class AndroidFileResourceConflictTest {
                 }
                 commit()
             }
-            write(dir, "app/src/main/AndroidManifest.xml", MANIFEST)
-            write(dir, "app/src/main/res/values/strings.xml", STRINGS)
-            write(dir, "app/src/main/java/com/example/app/MainActivity.java", ACTIVITY)
+            dir.writeSource("app/src/main/AndroidManifest.xml", MANIFEST)
+            dir.writeSource("app/src/main/res/values/strings.xml", STRINGS)
+            dir.writeSource("app/src/main/java/com/example/app/MainActivity.java", ACTIVITY)
             // drawable/ic_launcher declared as BOTH a raster and a vector — one resource, two files.
             writeBytes(dir, "app/src/main/res/drawable/ic_launcher.png", validPng())
-            write(dir, "app/src/main/res/drawable/ic_launcher.xml", VECTOR)
+            dir.writeSource("app/src/main/res/drawable/ic_launcher.xml", VECTOR)
 
             val signing = DebugKeystore.getOrCreate(dir.resolve(".keystore/debug.ks"), sdk.keytool)
             val buildSystem = AndroidBuildSystem.subprocess(sdk, signing) // the wiring the IDE uses
@@ -76,13 +73,7 @@ class AndroidFileResourceConflictTest {
                 s.map { it.fileName.toString() }.filter { it.startsWith("ic_launcher.") }.sorted().toList()
             }
             assertEquals(1, launchers.size, "exactly one ic_launcher file in merged-res; got $launchers")
-        } finally {
-            platform.dispose(); dir.toFile().deleteRecursively()
         }
-    }
-
-    private fun write(root: Path, rel: String, content: String) {
-        val f = root.resolve(rel); Files.createDirectories(f.parent); Files.writeString(f, content.trimIndent())
     }
 
     private fun writeBytes(root: Path, rel: String, content: ByteArray) {

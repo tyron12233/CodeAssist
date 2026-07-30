@@ -1,5 +1,6 @@
 package dev.ide.android.support.resources
 
+import dev.ide.testkit.withTempDir
 import org.objectweb.asm.ClassWriter
 import org.objectweb.asm.Opcodes
 import java.nio.file.Files
@@ -24,18 +25,19 @@ class FrameworkResourceScannerTest {
 
     @Test
     fun readsFrameworkResourceNamesByType() {
-        val tmp = Files.createTempDirectory("fwres")
-        val jar = jar(tmp, mapOf(
-            "android/R\$string" to rClass("string", listOf("ok", "cancel", "yes")),
-            "android/R\$color" to rClass("color", listOf("holo_blue_dark", "white")),
-            // A non-resource class is ignored.
-            "android/view/View" to rClass("ignored", emptyList()),
-        ))
+        withTempDir("fwres") { tmp ->
+            val jar = jar(tmp, mapOf(
+                "android/R\$string" to rClass("string", listOf("ok", "cancel", "yes")),
+                "android/R\$color" to rClass("color", listOf("holo_blue_dark", "white")),
+                // A non-resource class is ignored.
+                "android/view/View" to rClass("ignored", emptyList()),
+            ))
 
-        val scanned = FrameworkResourceScanner.scan(jar)
-        assertEquals(listOf("cancel", "ok", "yes"), scanned[ResourceType.STRING], "sorted string names")
-        assertTrue(scanned[ResourceType.COLOR]?.containsAll(listOf("holo_blue_dark", "white")) == true)
-        assertTrue(scanned[ResourceType.LAYOUT].isNullOrEmpty(), "no R\$layout class → no layout names")
+            val scanned = FrameworkResourceScanner.scan(jar)
+            assertEquals(listOf("cancel", "ok", "yes"), scanned[ResourceType.STRING], "sorted string names")
+            assertTrue(scanned[ResourceType.COLOR]?.containsAll(listOf("holo_blue_dark", "white")) == true)
+            assertTrue(scanned[ResourceType.LAYOUT].isNullOrEmpty(), "no R\$layout class → no layout names")
+        }
     }
 
     private fun jar(dir: Path, classes: Map<String, ByteArray>): Path {

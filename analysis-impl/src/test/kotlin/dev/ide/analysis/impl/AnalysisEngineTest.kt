@@ -28,7 +28,7 @@ import dev.ide.lang.dom.Severity
 import dev.ide.lang.dom.TextRange
 import dev.ide.lang.incremental.DocumentEdit
 import dev.ide.model.Module
-import dev.ide.platform.ContentHash
+import dev.ide.testkit.InMemoryVirtualFile
 import dev.ide.vfs.VirtualFile
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
@@ -451,14 +451,5 @@ private class FakeParsed(
     }
 }
 
-private class FakeFile(override val path: String) : VirtualFile {
-    override val name = path.substringAfterLast('/')
-    override val isDirectory = false
-    override val exists = true
-    override val length = 0L
-    override fun parent(): VirtualFile? = null
-    override fun children(): List<VirtualFile> = emptyList()
-    override fun contentHash() = ContentHash("")
-    override fun readBytes() = ByteArray(0)
-    override fun readText(): CharSequence = ""
-}
+/** A bare [VirtualFile] backed only by a path — enough for these engine tests. */
+private typealias FakeFile = InMemoryVirtualFile

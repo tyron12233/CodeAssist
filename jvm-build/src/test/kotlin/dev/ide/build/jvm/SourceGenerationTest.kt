@@ -24,6 +24,8 @@ import dev.ide.model.impl.ProjectModel
 import dev.ide.model.impl.ProjectModelStore
 import dev.ide.platform.PluginId
 import dev.ide.platform.impl.PlatformCore
+import dev.ide.testkit.testEnv
+import dev.ide.testkit.writeSource
 import kotlinx.coroutines.runBlocking
 import java.io.File
 import java.nio.file.Files
@@ -77,16 +79,16 @@ class SourceGenerationTest {
             addModule("app", javaLib).addSourceSet(main); commit()
         }
         // Main references com.gen.Greeting, which only the generator produces.
-        write(dir, "app/src/main/java/com/example/app/Main.java", MAIN)
+        dir.writeSource("app/src/main/java/com/example/app/Main.java", MAIN)
         return store.workspace.projects.single()
     }
 
     @Test
     fun generatedSourceIsCompiledAndUsableByHandWrittenCode() {
-        val dir = Files.createTempDirectory("srcgen")
-        val platform = PlatformCore()
-        val runs = AtomicInteger(0)
-        try {
+        testEnv("srcgen") { env ->
+            val dir = env.dir
+            val platform = env.platform
+            val runs = AtomicInteger(0)
             val project = buildWorkspace(dir, platform)
             val build = JavaBuildSystem(generators = listOf(StubGenerator(runs)))
             val graph = build.createBuildGraph(
@@ -118,13 +120,7 @@ class SourceGenerationTest {
             val again = runBlocking { exec.execute(graph, SimpleTaskContext(), 2) }
             assertTrue(again.ranTasks.isEmpty(), "rebuild must be up-to-date, ran=${again.ranTasks.map { it.value }}")
             assertEquals(1, runs.get(), "the generator must NOT re-run on an unchanged rebuild")
-        } finally {
-            platform.dispose(); dir.toFile().deleteRecursively()
         }
-    }
-
-    private fun write(root: Path, rel: String, content: String) {
-        val f = root.resolve(rel); Files.createDirectories(f.parent); Files.writeString(f, content.trimIndent())
     }
 
     private fun runJava(classpath: List<Path>, mainClass: String): String {

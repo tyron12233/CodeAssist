@@ -1,12 +1,11 @@
 package dev.ide.android.support
 
-import dev.ide.android.support.tools.AndroidSdk
 import dev.ide.android.support.tools.R8InProcessShrinker
 import dev.ide.android.support.tools.ShrinkRequest
+import dev.ide.testkit.TestJars
+import dev.ide.testkit.withTempDir
 import org.junit.jupiter.api.Assumptions.assumeTrue
 import java.nio.file.Files
-import java.util.zip.ZipEntry
-import java.util.zip.ZipOutputStream
 import javax.tools.ToolProvider
 import kotlin.test.Test
 import kotlin.test.assertTrue
@@ -28,14 +27,11 @@ class R8MissingClassToleranceTest {
 
     @Test
     fun minifyToleratesAClassReferencedButMissingFromTheClasspath() {
-        val sdk = AndroidSdk.findSdkRoot()?.let { AndroidSdk.detect(it) }
-        assumeTrue(sdk != null && sdk.isComplete(), "Android SDK not installed; skipping")
-        sdk!!
+        val sdk = assumeAndroidSdk()
         val javac = ToolProvider.getSystemJavaCompiler()
         assumeTrue(javac != null, "no system javac (test not run on a JDK); skipping")
 
-        val dir = Files.createTempDirectory("r8-missing")
-        try {
+        withTempDir("r8-missing") { dir ->
             val src = Files.createDirectories(dir.resolve("src"))
             val anno = src.resolve("Anno.java").also { Files.writeString(it, "public @interface Anno {}") }
             val a = src.resolve("A.java").also { Files.writeString(it, "@Anno public class A { public void m() {} }") }
@@ -45,9 +41,8 @@ class R8MissingClassToleranceTest {
             }
             // Drop the annotation class so A now references a type absent from the program + classpath.
             Files.delete(classes.resolve("Anno.class"))
-            val programJar = dir.resolve("program.jar")
-            ZipOutputStream(Files.newOutputStream(programJar)).use { z ->
-                z.putNextEntry(ZipEntry("A.class")); Files.copy(classes.resolve("A.class"), z); z.closeEntry()
+            val programJar = TestJars.buildJar(dir.resolve("program.jar")) {
+                entry("A.class", Files.readAllBytes(classes.resolve("A.class")))
             }
 
             val keep = dir.resolve("keep.pro").also { Files.writeString(it, "-keep class A { *; }") }
@@ -69,8 +64,6 @@ class R8MissingClassToleranceTest {
                 result.log.any { it.startsWith("warning:") && it.contains("Missing class", ignoreCase = true) },
                 "the missing class must still surface as a warning (not silently dropped):\n${result.log.joinToString("\n")}",
             )
-        } finally {
-            dir.toFile().deleteRecursively()
         }
     }
 }

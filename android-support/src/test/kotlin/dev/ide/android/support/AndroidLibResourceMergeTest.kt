@@ -1,6 +1,5 @@
 package dev.ide.android.support
 
-import dev.ide.android.support.tools.AndroidSdk
 import dev.ide.android.support.tools.DebugKeystore
 import dev.ide.build.BuildGoal
 import dev.ide.build.BuildRequest
@@ -16,11 +15,10 @@ import dev.ide.model.ModuleId
 import dev.ide.model.impl.FacetCodecRegistry
 import dev.ide.model.impl.ModuleTypeRegistry
 import dev.ide.model.impl.ProjectModel
-import dev.ide.platform.impl.PlatformCore
+import dev.ide.testkit.testEnv
+import dev.ide.testkit.writeSource
 import kotlinx.coroutines.runBlocking
-import org.junit.jupiter.api.Assumptions.assumeTrue
 import java.nio.file.Files
-import java.nio.file.Path
 import java.util.zip.ZipFile
 import kotlin.test.Test
 import kotlin.test.assertTrue
@@ -36,13 +34,11 @@ class AndroidLibResourceMergeTest {
 
     @Test
     fun mergesAndroidLibDependencyResources() {
-        val sdk = AndroidSdk.findSdkRoot()?.let { AndroidSdk.detect(it) }
-        assumeTrue(sdk != null && sdk.isComplete(), "Android SDK not installed; skipping")
-        sdk!!
+        val sdk = assumeAndroidSdk()
 
-        val dir = Files.createTempDirectory("android-libres")
-        val platform = PlatformCore()
-        try {
+        testEnv("android-libres") { env ->
+            val dir = env.dir
+            val platform = env.platform
             val store = ProjectModel.open(dir, platform, FacetCodecRegistry().register(AndroidFacetCodec))
             val types = ModuleTypeRegistry(platform.extensions)
             AndroidSupport.register(types, FacetCodecRegistry())
@@ -63,11 +59,11 @@ class AndroidLibResourceMergeTest {
                 commit()
             }
 
-            write(dir, "liba/src/main/res/values/strings.xml", LIB_STRINGS)
-            write(dir, "liba/src/main/java/com/example/liba/LibGreeter.java", LIB_GREETER)
-            write(dir, "app/src/main/AndroidManifest.xml", APP_MANIFEST)
-            write(dir, "app/src/main/res/values/strings.xml", APP_STRINGS)
-            write(dir, "app/src/main/java/com/example/app/MainActivity.java", APP_ACTIVITY)
+            dir.writeSource("liba/src/main/res/values/strings.xml", LIB_STRINGS)
+            dir.writeSource("liba/src/main/java/com/example/liba/LibGreeter.java", LIB_GREETER)
+            dir.writeSource("app/src/main/AndroidManifest.xml", APP_MANIFEST)
+            dir.writeSource("app/src/main/res/values/strings.xml", APP_STRINGS)
+            dir.writeSource("app/src/main/java/com/example/app/MainActivity.java", APP_ACTIVITY)
 
             val signing = DebugKeystore.getOrCreate(dir.resolve(".keystore/debug.ks"), sdk.keytool)
             val buildSystem = AndroidBuildSystem.inProcess(sdk, signing)
@@ -104,13 +100,7 @@ class AndroidLibResourceMergeTest {
                 assertTrue(zf.getEntry("com/example/liba/R\$string.class") != null,
                     "the library R.jar should hold the lib's own R classes")
             }
-        } finally {
-            platform.dispose(); dir.toFile().deleteRecursively()
         }
-    }
-
-    private fun write(root: Path, rel: String, content: String) {
-        val f = root.resolve(rel); Files.createDirectories(f.parent); Files.writeString(f, content.trimIndent())
     }
 
     private companion object {

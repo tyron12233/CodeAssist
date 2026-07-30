@@ -2,8 +2,7 @@ package dev.ide.core
 
 import kotlinx.coroutines.runBlocking
 
-import java.nio.file.Files
-import java.nio.file.Path
+import dev.ide.testkit.writeSource
 import kotlin.io.path.createTempDirectory
 import kotlin.test.AfterTest
 import kotlin.test.Test
@@ -22,10 +21,6 @@ class KotlinSuspendDiagnosticTest {
 
     @AfterTest fun tearDown() { services?.close(); root.toFile().deleteRecursively() }
 
-    private fun write(rel: String, content: String): Path {
-        val f = root.resolve(rel); Files.createDirectories(f.parent); Files.writeString(f, content); return f
-    }
-
     private fun awaitIndexReady(s: IdeServices) {
         val deadline = System.currentTimeMillis() + 90_000
         while (System.currentTimeMillis() < deadline && !s.indexService.status.ready) Thread.sleep(50)
@@ -34,7 +29,7 @@ class KotlinSuspendDiagnosticTest {
     private fun bootstrap(): IdeServices {
         val s = IdeServices.bootstrapJavaDemo(root).also { services = it }
         // A saved (indexed) suspend function in the core module — the cross-file callee.
-        write("core/src/main/java/com/example/core/Work.kt", "package com.example.core\nsuspend fun doWork() {}")
+        root.writeSource("core/src/main/java/com/example/core/Work.kt", "package com.example.core\nsuspend fun doWork() {}", trim = false)
         s.invalidateSyntheticClasses()
         awaitIndexReady(s)
         return s

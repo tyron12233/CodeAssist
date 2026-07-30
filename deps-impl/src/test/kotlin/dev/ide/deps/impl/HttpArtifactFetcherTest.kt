@@ -1,10 +1,10 @@
 package dev.ide.deps.impl
 
 import com.sun.net.httpserver.HttpServer
+import dev.ide.testkit.withTempDir
 import java.net.InetAddress
 import java.net.InetSocketAddress
 import java.nio.file.Files
-import kotlin.io.path.createTempDirectory
 import kotlin.random.Random
 import kotlin.test.AfterTest
 import kotlin.test.BeforeTest
@@ -52,36 +52,27 @@ class HttpArtifactFetcherTest {
 
     @Test
     fun fetchToStreamsFullBodyToDisk() {
-        val dir = createTempDirectory("fetchto")
-        try {
+        withTempDir("fetchto") { dir ->
             val dest = dir.resolve("artifact.bin")
             assertTrue(fetcher.fetchTo("$base/ok", dest))
             assertContentEquals(body, Files.readAllBytes(dest), "streamed file must match the served bytes exactly")
-        } finally {
-            dir.toFile().deleteRecursively()
         }
     }
 
     @Test
     fun fetchToReturnsFalseOn404() {
-        val dir = createTempDirectory("fetchto404")
-        try {
+        withTempDir("fetchto404") { dir ->
             val dest = dir.resolve("artifact.bin")
             assertFalse(fetcher.fetchTo("$base/missing", dest))
-        } finally {
-            dir.toFile().deleteRecursively()
         }
     }
 
     @Test
     fun fetchToFollowsRedirect() {
-        val dir = createTempDirectory("fetchtoredir")
-        try {
+        withTempDir("fetchtoredir") { dir ->
             val dest = dir.resolve("artifact.bin")
             assertTrue(fetcher.fetchTo("$base/redirect", dest))
             assertContentEquals(body, Files.readAllBytes(dest))
-        } finally {
-            dir.toFile().deleteRecursively()
         }
     }
 
@@ -100,11 +91,8 @@ class HttpArtifactFetcherTest {
 
     @Test
     fun fetchToThrowsOn403() {
-        val dir = createTempDirectory("fetchto403")
-        try {
+        withTempDir("fetchto403") { dir ->
             assertFailsWith<java.io.IOException> { fetcher.fetchTo("$base/forbidden", dir.resolve("artifact.bin")) }
-        } finally {
-            dir.toFile().deleteRecursively()
         }
     }
 }

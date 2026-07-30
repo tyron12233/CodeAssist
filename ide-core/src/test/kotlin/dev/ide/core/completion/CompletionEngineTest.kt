@@ -18,9 +18,9 @@ import dev.ide.lang.dom.TextRange
 import dev.ide.lang.incremental.DocumentSnapshot
 import dev.ide.lang.patterns.DomPatterns
 import dev.ide.platform.PluginId
-import dev.ide.platform.ContentHash
 import dev.ide.platform.impl.ExtensionRegistryImpl
-import dev.ide.vfs.VirtualFile
+import dev.ide.testkit.TestDocument
+import dev.ide.testkit.virtualFile
 import kotlinx.coroutines.runBlocking
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -279,22 +279,5 @@ class CompletionEngineTest {
         override fun text(): CharSequence = txt
     }
 
-    private class Doc(override val text: CharSequence) : DocumentSnapshot {
-        override val file: VirtualFile = FakeFile
-        override val version = 1L
-        override fun length() = text.length
-    }
-
-    private object FakeFile : VirtualFile {
-        override val path = "/f.kt"
-        override val name = "f.kt"
-        override val isDirectory = false
-        override val exists = true
-        override val length = 0L
-        override fun parent(): VirtualFile? = null
-        override fun children() = emptyList<VirtualFile>()
-        override fun contentHash() = ContentHash("")
-        override fun readBytes() = ByteArray(0)
-        override fun readText(): CharSequence = ""
-    }
+    private class Doc(text: CharSequence) : DocumentSnapshot by TestDocument(text, virtualFile("/f.kt"))
 }

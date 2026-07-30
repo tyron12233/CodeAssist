@@ -1,5 +1,6 @@
 package dev.ide.lang.jdt.context
 
+import dev.ide.testkit.withTempDir
 import dev.ide.model.BuildSystemId
 import dev.ide.model.DependencyScope
 import dev.ide.model.FacetTemplate
@@ -40,8 +41,7 @@ class ModuleCompilationContextExportTest {
         override fun supportedBuildSystems(): Set<BuildSystemId> = setOf(BuildSystemId.NATIVE)
     }
 
-    private fun withWorkspace(block: (ProjectModelStore) -> Unit) {
-        val dir = Files.createTempDirectory("mcc-export")
+    private fun withWorkspace(block: (ProjectModelStore) -> Unit) = withTempDir("mcc-export") { dir ->
         val platform = PlatformCore()
         ModuleTypeRegistry(platform.extensions).register(TestType("java-lib"), PluginId("java-support"))
         try {

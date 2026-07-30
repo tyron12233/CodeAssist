@@ -1,12 +1,8 @@
 package dev.ide.decompiler
 
-import java.io.File
-import java.nio.file.Files
+import dev.ide.testkit.TestJars
+import dev.ide.testkit.withTempDir
 import java.nio.file.Path
-import java.util.zip.ZipEntry
-import java.util.zip.ZipFile
-import java.util.zip.ZipOutputStream
-import kotlin.io.path.deleteIfExists
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNotNull
@@ -19,15 +15,7 @@ import kotlin.test.assertTrue
  */
 class DecompilerTest {
 
-    private fun stdlibJar(): Path {
-        val cp = System.getProperty("java.class.path").split(File.pathSeparator)
-        val hit = cp.firstOrNull { entry ->
-            entry.endsWith(".jar") && runCatching {
-                ZipFile(entry).use { it.getEntry("kotlin/Pair.class") != null }
-            }.getOrDefault(false)
-        } ?: error("kotlin-stdlib jar not found on test classpath")
-        return File(hit).toPath()
-    }
+    private fun stdlibJar(): Path = TestJars.kotlinStdlib()
 
     @Test
     fun `isKotlin true for a stdlib class, false otherwise`() {
@@ -74,16 +62,14 @@ class DecompilerTest {
 
     @Test
     fun `library sources map fqn to whole-file text, longest package prefix and nested types`() {
-        val dir = Files.createTempDirectory("decomp-src")
-        val jar = dir.resolve("sources.jar")
-        val fooText = "package com.example\n\nclass Foo { class Bar }\n"
-        val listText = "package java.util;\npublic interface List {}\n"
-        ZipOutputStream(Files.newOutputStream(jar)).use { zos ->
-            zos.putNextEntry(ZipEntry("com/example/Foo.kt")); zos.write(fooText.toByteArray()); zos.closeEntry()
-            // JDK src.zip carries a module prefix before the package path.
-            zos.putNextEntry(ZipEntry("java.base/java/util/List.java")); zos.write(listText.toByteArray()); zos.closeEntry()
-        }
-        try {
+        withTempDir("decomp-src") { dir ->
+            val fooText = "package com.example\n\nclass Foo { class Bar }\n"
+            val listText = "package java.util;\npublic interface List {}\n"
+            val jar = TestJars.buildJar(dir.resolve("sources.jar")) {
+                entry("com/example/Foo.kt", fooText.toByteArray())
+                // JDK src.zip carries a module prefix before the package path.
+                entry("java.base/java/util/List.java", listText.toByteArray())
+            }
             val src = LibrarySources(sourceJars = listOf(jar), sourceDirs = emptyList())
             assertEquals("Foo.kt" to fooText, src.read("com.example.Foo"))
             // A nested type resolves to its top-level file.
@@ -91,8 +77,6 @@ class DecompilerTest {
             // Module-prefixed JDK source entry.
             assertEquals("List.java" to listText, src.read("java.util.List"))
             assertEquals(null, src.read("com.example.Missing"))
-        } finally {
-            jar.deleteIfExists(); dir.deleteIfExists()
         }
     }
 }

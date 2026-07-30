@@ -2,6 +2,7 @@ package dev.ide.android.support.tasks
 
 import dev.ide.build.TaskName
 import dev.ide.build.engine.SimpleTaskContext
+import dev.ide.testkit.withTempDir
 import kotlinx.coroutines.runBlocking
 import java.nio.file.Files
 import java.nio.file.Path
@@ -26,8 +27,7 @@ class MergeResourcesTaskTest {
 
     @Test
     fun sameFileResourceInTwoExtensionsHigherPriorityWins() = runBlocking {
-        val tmp = Files.createTempDirectory("merge-fileres")
-        try {
+        withTempDir("merge-fileres") { tmp ->
             // Lower priority ships a VECTOR ic_launcher; higher priority overrides it with a RASTER ic_launcher.
             // Same resource identity (drawable/ic_launcher, default config) — AGP keeps only the higher one.
             val low = tmp.resolve("low")
@@ -46,15 +46,12 @@ class MergeResourcesTaskTest {
             }
             // BUG if this is [ic_launcher.png, ic_launcher.xml] — aapt2 then fails with a conflicting value.
             assertEquals(listOf("ic_launcher.png"), files, "higher-priority file resource must win regardless of extension; got $files")
-        } finally {
-            tmp.toFile().deleteRecursively()
         }
     }
 
     @Test
     fun duplicateValueAcrossSourcesCollapsesToOneLastWins() = runBlocking {
-        val tmp = Files.createTempDirectory("merge-res")
-        try {
+        withTempDir("merge-res") { tmp ->
             // Two sources both define string/app_name + string/tooltip_label for the same (default) config —
             // exactly the shape that made aapt2 link fail. low/ is lower priority than high/.
             val low = writeValues(tmp.resolve("low"), "values",
@@ -78,8 +75,6 @@ class MergeResourcesTaskTest {
             assertTrue(!text.contains(">Low<"), "lower-priority value must be overridden: $text")
             assertTrue(text.contains("tooltip_label"), "non-overlapping low entry kept")
             assertTrue(text.contains("only_high"), "non-overlapping high entry kept")
-        } finally {
-            tmp.toFile().deleteRecursively()
         }
     }
 
@@ -92,8 +87,7 @@ class MergeResourcesTaskTest {
      */
     @Test
     fun sameNamedStyleableUnionsChildAttrs() = runBlocking {
-        val tmp = Files.createTempDirectory("merge-styleable")
-        try {
+        withTempDir("merge-styleable") { tmp ->
             // AppCompat-shaped SearchView: bare references + its own attrs.
             val appcompat = writeValues(tmp.resolve("appcompat"), "values",
                 "<declare-styleable name=\"SearchView\">" +
@@ -126,8 +120,6 @@ class MergeResourcesTaskTest {
             // `layout` is shared by both sources but must appear exactly once after dedup.
             assertEquals(1, Regex("name=\"layout\"").findAll(text).count(),
                 "shared attr deduped to one declaration")
-        } finally {
-            tmp.toFile().deleteRecursively()
         }
     }
 }

@@ -1,6 +1,7 @@
 package dev.ide.ksp
 
 import dev.ide.build.SourceGenRequest
+import dev.ide.testkit.withTempDir
 import java.io.File
 import java.nio.file.Files
 import java.nio.file.Path
@@ -37,8 +38,7 @@ class BundledRoomProcessorTest {
 
         val catalog = KspProcessorCatalog.bundled()   // sources processors from BundledKspProcessors
 
-        val root = Files.createTempDirectory("ksp-bundled-room")
-        try {
+        withTempDir("ksp-bundled-room") { root ->
             val srcRoot = root.resolve("src/main/kotlin")
             Files.createDirectories(srcRoot)
             Files.writeString(
@@ -78,8 +78,6 @@ class BundledRoomProcessorTest {
                 "bundled Room did not generate AppDatabase_Impl.kt:\n${result.messages.joinToString("\n")}\n" +
                     emitted.joinToString("\n") { genRoot.relativize(it).toString() },
             )
-        } finally {
-            root.toFile().deleteRecursively()
         }
     }
 }

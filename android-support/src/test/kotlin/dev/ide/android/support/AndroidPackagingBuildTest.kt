@@ -1,7 +1,6 @@
 package dev.ide.android.support
 
 import dev.ide.android.support.tasks.ApkPackaging
-import dev.ide.android.support.tools.AndroidSdk
 import dev.ide.android.support.tools.DebugKeystore
 import dev.ide.build.BuildGoal
 import dev.ide.build.BuildRequest
@@ -20,9 +19,9 @@ import dev.ide.model.ModuleId
 import dev.ide.model.impl.FacetCodecRegistry
 import dev.ide.model.impl.ModuleTypeRegistry
 import dev.ide.model.impl.ProjectModel
-import dev.ide.platform.impl.PlatformCore
+import dev.ide.testkit.testEnv
+import dev.ide.testkit.writeSource
 import kotlinx.coroutines.runBlocking
-import org.junit.jupiter.api.Assumptions.assumeTrue
 import java.nio.file.Files
 import java.nio.file.Path
 import java.util.zip.ZipEntry
@@ -45,13 +44,11 @@ class AndroidPackagingBuildTest {
 
     @Test
     fun packagesNativeLibsAndJavaResourcesFaithfully() {
-        val sdk = AndroidSdk.findSdkRoot()?.let { AndroidSdk.detect(it) }
-        assumeTrue(sdk != null && sdk.isComplete(), "Android SDK not installed; skipping")
-        sdk!!
+        val sdk = assumeAndroidSdk()
 
-        val dir = Files.createTempDirectory("android-packaging")
-        val platform = PlatformCore()
-        try {
+        testEnv("android-packaging") { env ->
+            val dir = env.dir
+            val platform = env.platform
             // A runtime JAR dependency whose non-class content must reach the APK: a native lib, a service
             // registration, and manifest noise (which the default excludes must strip).
             val depJar = buildDepJar(dir.resolve("depjar-build"), dir.resolve("depjar.jar"), sdk.androidJar)
@@ -71,13 +68,13 @@ class AndroidPackagingBuildTest {
                 commit()
             }
 
-            write(dir, "app/src/main/AndroidManifest.xml", APP_MANIFEST)
-            write(dir, "app/src/main/res/values/strings.xml", APP_STRINGS)
-            write(dir, "app/src/main/java/com/example/app/MainActivity.java", APP_ACTIVITY)
+            dir.writeSource("app/src/main/AndroidManifest.xml", APP_MANIFEST)
+            dir.writeSource("app/src/main/res/values/strings.xml", APP_STRINGS)
+            dir.writeSource("app/src/main/java/com/example/app/MainActivity.java", APP_ACTIVITY)
             // The module's own native lib + Java resource + a service registration.
             writeBytes(dir, "app/src/main/jniLibs/x86/libapp.so", "app-native".toByteArray())
-            write(dir, "app/src/main/resources/foo/data.txt", "hello from java resources")
-            write(dir, "app/src/main/resources/META-INF/services/com.example.Svc", "com.example.AppImpl")
+            dir.writeSource("app/src/main/resources/foo/data.txt", "hello from java resources")
+            dir.writeSource("app/src/main/resources/META-INF/services/com.example.Svc", "com.example.AppImpl")
 
             val signing = DebugKeystore.getOrCreate(dir.resolve(".keystore/debug.ks"), sdk.keytool)
             val buildSystem = AndroidBuildSystem.inProcess(sdk, signing)
@@ -116,8 +113,6 @@ class AndroidPackagingBuildTest {
             val mergedNames = ZipFile(mergedJavaRes.toFile()).use { z -> z.entries().asSequence().map { it.name }.toSet() }
             assertFalse("META-INF/MANIFEST.MF" in mergedNames, "MANIFEST.MF should be excluded by default: $mergedNames")
             assertTrue("foo/data.txt" in mergedNames && "META-INF/services/com.example.Svc" in mergedNames)
-        } finally {
-            platform.dispose(); dir.toFile().deleteRecursively()
         }
     }
 
@@ -125,7 +120,7 @@ class AndroidPackagingBuildTest {
     private fun buildDepJar(workDir: Path, jar: Path, androidJar: Path): Path {
         val srcDir = workDir.resolve("src")
         val classes = workDir.resolve("classes")
-        write(srcDir, "com/example/dep/DepUtil.java", DEP_UTIL)
+        srcDir.writeSource("com/example/dep/DepUtil.java", DEP_UTIL)
         val r = JdtBatchCompiler.compile(listOf(srcDir.resolve("com/example/dep/DepUtil.java")), listOf(androidJar), classes, "17")
         check(r.success) { "dep compile failed: ${r.messages}" }
         Files.createDirectories(jar.parent)
@@ -142,10 +137,6 @@ class AndroidPackagingBuildTest {
             put("META-INF/MANIFEST.MF", "Manifest-Version: 1.0\n".toByteArray())
         }
         return jar
-    }
-
-    private fun write(root: Path, rel: String, content: String) {
-        val f = root.resolve(rel); Files.createDirectories(f.parent); Files.writeString(f, content.trimIndent())
     }
 
     private fun writeBytes(root: Path, rel: String, bytes: ByteArray) {

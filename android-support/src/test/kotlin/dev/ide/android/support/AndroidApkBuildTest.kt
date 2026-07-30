@@ -17,8 +17,9 @@ import dev.ide.model.impl.ModuleTypeRegistry
 import dev.ide.model.impl.ProjectModel
 import dev.ide.model.impl.ProjectModelStore
 import dev.ide.platform.impl.PlatformCore
+import dev.ide.testkit.testEnv
+import dev.ide.testkit.writeSource
 import kotlinx.coroutines.runBlocking
-import org.junit.jupiter.api.Assumptions.assumeTrue
 import java.nio.file.Files
 import java.nio.file.Path
 import java.util.zip.ZipFile
@@ -48,13 +49,11 @@ class AndroidApkBuildTest {
     }
 
     private fun buildAndVerify(makeBuildSystem: (AndroidSdk, SigningConfig) -> AndroidBuildSystem) {
-        val sdk = AndroidSdk.findSdkRoot()?.let { AndroidSdk.detect(it) }
-        assumeTrue(sdk != null && sdk.isComplete(), "Android SDK (platform + build-tools) not installed; skipping")
-        sdk!!
+        val sdk = assumeAndroidSdk()
 
-        val dir = Files.createTempDirectory("android-apk")
-        val platform = PlatformCore()
-        try {
+        testEnv("android-apk") { env ->
+            val dir = env.dir
+            val platform = env.platform
             val store = buildAppWorkspace(dir, platform)
             val project = store.workspace.projects.single()
             val signing = DebugKeystore.getOrCreate(dir.resolve(".keystore/debug.ks"), sdk.keytool)
@@ -79,8 +78,6 @@ class AndroidApkBuildTest {
 
             val again = runBlocking { TaskExecutorImpl(cache).execute(graph, SimpleTaskContext(), 2) }
             assertTrue(again.ranTasks.isEmpty(), "rebuild should do no work, ran=${again.ranTasks.map { it.value }}")
-        } finally {
-            platform.dispose(); dir.toFile().deleteRecursively()
         }
     }
 
@@ -100,15 +97,11 @@ class AndroidApkBuildTest {
             commit()
         }
 
-        write(dir, "app/src/main/AndroidManifest.xml", MANIFEST)
-        write(dir, "app/src/main/res/values/strings.xml", STRINGS)
-        write(dir, "app/src/main/java/com/example/app/MainActivity.java", ACTIVITY)
-        write(dir, "app/src/main/assets/hello.txt", "hello from assets\n")
+        dir.writeSource("app/src/main/AndroidManifest.xml", MANIFEST)
+        dir.writeSource("app/src/main/res/values/strings.xml", STRINGS)
+        dir.writeSource("app/src/main/java/com/example/app/MainActivity.java", ACTIVITY)
+        dir.writeSource("app/src/main/assets/hello.txt", "hello from assets\n")
         return store
-    }
-
-    private fun write(root: Path, rel: String, content: String) {
-        val f = root.resolve(rel); Files.createDirectories(f.parent); Files.writeString(f, content.trimIndent())
     }
 
     private companion object {

@@ -1,5 +1,6 @@
 package dev.ide.android.support.resources
 
+import dev.ide.testkit.withTempDir
 import java.nio.file.Files
 import kotlin.io.path.createTempDirectory
 import kotlin.test.Test
@@ -11,59 +12,62 @@ class AndroidManifestTest {
 
     @Test
     fun parsesPackageSdkPermissionsAndComponents() {
-        val dir = createTempDirectory("manifest")
-        val file = dir.resolve("AndroidManifest.xml")
-        Files.writeString(file, """
-            <manifest xmlns:android="http://schemas.android.com/apk/res/android" package="com.example.app">
-              <uses-sdk android:minSdkVersion="24" android:targetSdkVersion="34"/>
-              <uses-permission android:name="android.permission.INTERNET"/>
-              <application>
-                <activity android:name=".MainActivity"/>
-                <service android:name="com.example.app.SyncService"/>
-              </application>
-            </manifest>
-        """.trimIndent())
+        withTempDir("manifest") { dir ->
+            val file = dir.resolve("AndroidManifest.xml")
+            Files.writeString(file, """
+                <manifest xmlns:android="http://schemas.android.com/apk/res/android" package="com.example.app">
+                  <uses-sdk android:minSdkVersion="24" android:targetSdkVersion="34"/>
+                  <uses-permission android:name="android.permission.INTERNET"/>
+                  <application>
+                    <activity android:name=".MainActivity"/>
+                    <service android:name="com.example.app.SyncService"/>
+                  </application>
+                </manifest>
+            """.trimIndent())
 
-        val info = AndroidManifestParser.parse(file)!!
-        assertEquals("com.example.app", info.packageName)
-        assertEquals(24, info.minSdk)
-        assertEquals(34, info.targetSdk)
-        assertTrue("android.permission.INTERNET" in info.permissions)
-        // relative `.MainActivity` resolves against the package; an already-qualified name is kept.
-        assertTrue(ManifestComponent("activity", "com.example.app.MainActivity") in info.components)
-        assertTrue(ManifestComponent("service", "com.example.app.SyncService") in info.components)
+            val info = AndroidManifestParser.parse(file)!!
+            assertEquals("com.example.app", info.packageName)
+            assertEquals(24, info.minSdk)
+            assertEquals(34, info.targetSdk)
+            assertTrue("android.permission.INTERNET" in info.permissions)
+            // relative `.MainActivity` resolves against the package; an already-qualified name is kept.
+            assertTrue(ManifestComponent("activity", "com.example.app.MainActivity") in info.components)
+            assertTrue(ManifestComponent("service", "com.example.app.SyncService") in info.components)
+        }
     }
 
     @Test
     fun parsesApplicationIconReferences() {
-        val dir = createTempDirectory("manifest")
-        val file = dir.resolve("AndroidManifest.xml")
-        Files.writeString(file, """
-            <manifest xmlns:android="http://schemas.android.com/apk/res/android" package="com.example.app">
-              <application android:icon="@mipmap/ic_launcher" android:roundIcon="@mipmap/ic_launcher_round">
-                <activity android:name=".MainActivity"/>
-              </application>
-            </manifest>
-        """.trimIndent())
+        withTempDir("manifest") { dir ->
+            val file = dir.resolve("AndroidManifest.xml")
+            Files.writeString(file, """
+                <manifest xmlns:android="http://schemas.android.com/apk/res/android" package="com.example.app">
+                  <application android:icon="@mipmap/ic_launcher" android:roundIcon="@mipmap/ic_launcher_round">
+                    <activity android:name=".MainActivity"/>
+                  </application>
+                </manifest>
+            """.trimIndent())
 
-        val info = AndroidManifestParser.parse(file)!!
-        assertEquals("@mipmap/ic_launcher", info.appIcon)
-        assertEquals("@mipmap/ic_launcher_round", info.appRoundIcon)
+            val info = AndroidManifestParser.parse(file)!!
+            assertEquals("@mipmap/ic_launcher", info.appIcon)
+            assertEquals("@mipmap/ic_launcher_round", info.appRoundIcon)
+        }
     }
 
     @Test
     fun absentIconReferencesAreNull() {
-        val dir = createTempDirectory("manifest")
-        val file = dir.resolve("AndroidManifest.xml")
-        Files.writeString(file, """
-            <manifest xmlns:android="http://schemas.android.com/apk/res/android" package="com.example.app">
-              <application/>
-            </manifest>
-        """.trimIndent())
+        withTempDir("manifest") { dir ->
+            val file = dir.resolve("AndroidManifest.xml")
+            Files.writeString(file, """
+                <manifest xmlns:android="http://schemas.android.com/apk/res/android" package="com.example.app">
+                  <application/>
+                </manifest>
+            """.trimIndent())
 
-        val info = AndroidManifestParser.parse(file)!!
-        assertNull(info.appIcon)
-        assertNull(info.appRoundIcon)
+            val info = AndroidManifestParser.parse(file)!!
+            assertNull(info.appIcon)
+            assertNull(info.appRoundIcon)
+        }
     }
 
     @Test

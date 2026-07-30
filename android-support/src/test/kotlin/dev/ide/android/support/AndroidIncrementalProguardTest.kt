@@ -1,6 +1,5 @@
 package dev.ide.android.support
 
-import dev.ide.android.support.tools.AndroidSdk
 import dev.ide.android.support.tools.DebugKeystore
 import dev.ide.build.BuildGoal
 import dev.ide.build.BuildRequest
@@ -14,11 +13,9 @@ import dev.ide.model.ModuleId
 import dev.ide.model.impl.FacetCodecRegistry
 import dev.ide.model.impl.ModuleTypeRegistry
 import dev.ide.model.impl.ProjectModel
-import dev.ide.platform.impl.PlatformCore
+import dev.ide.testkit.testEnv
+import dev.ide.testkit.writeSource
 import kotlinx.coroutines.runBlocking
-import org.junit.jupiter.api.Assumptions.assumeTrue
-import java.nio.file.Files
-import java.nio.file.Path
 import kotlin.test.Test
 import kotlin.test.assertTrue
 
@@ -32,13 +29,11 @@ class AndroidIncrementalProguardTest {
 
     @Test
     fun addingAReferencedKeepFileReRunsR8() {
-        val sdk = AndroidSdk.findSdkRoot()?.let { AndroidSdk.detect(it) }
-        assumeTrue(sdk != null && sdk.isComplete(), "Android SDK not installed; skipping")
-        sdk!!
+        val sdk = assumeAndroidSdk()
 
-        val dir = Files.createTempDirectory("android-incr-proguard")
-        val platform = PlatformCore()
-        try {
+        testEnv("android-incr-proguard") { env ->
+            val dir = env.dir
+            val platform = env.platform
             val store = ProjectModel.open(dir, platform, FacetCodecRegistry().register(AndroidFacetCodec))
             ModuleTypeRegistry(platform.extensions).register(AndroidAppModuleType, AndroidSupport.PLUGIN)
             val appType = ModuleTypeRegistry(platform.extensions).resolve("android-app")
@@ -55,9 +50,9 @@ class AndroidIncrementalProguardTest {
                 }
                 commit()
             }
-            write(dir, "app/src/main/AndroidManifest.xml", MANIFEST)
-            write(dir, "app/src/main/res/values/strings.xml", STRINGS)
-            write(dir, "app/src/main/java/com/example/app/MainActivity.java", ACTIVITY)
+            dir.writeSource("app/src/main/AndroidManifest.xml", MANIFEST)
+            dir.writeSource("app/src/main/res/values/strings.xml", STRINGS)
+            dir.writeSource("app/src/main/java/com/example/app/MainActivity.java", ACTIVITY)
 
             val signing = DebugKeystore.getOrCreate(dir.resolve(".keystore/debug.ks"), sdk.keytool)
             val buildSystem = AndroidBuildSystem.inProcess(sdk, signing)
@@ -79,17 +74,11 @@ class AndroidIncrementalProguardTest {
             assertTrue(r8 in build(), "R8 must run on the first minified build")
 
             // The user adds the keep file at the module root.
-            write(dir, "app/proguard-rules.pro", "-keep class com.example.app.MainActivity { *; }")
+            dir.writeSource("app/proguard-rules.pro", "-keep class com.example.app.MainActivity { *; }")
 
             // Build 2 on the SAME cache: the newly-added keep file must force R8 to re-run (not up-to-date).
             assertTrue(r8 in build(), "adding a referenced keep-rule file must re-run R8 on the incremental build")
-        } finally {
-            platform.dispose(); dir.toFile().deleteRecursively()
         }
-    }
-
-    private fun write(root: Path, rel: String, content: String) {
-        val f = root.resolve(rel); Files.createDirectories(f.parent); Files.writeString(f, content.trimIndent())
     }
 
     private companion object {

@@ -23,12 +23,14 @@ import dev.ide.model.ClasspathEntryKind
 import dev.ide.model.ClasspathSnapshot
 import dev.ide.model.LanguageLevel
 import dev.ide.platform.ContentHash
+import dev.ide.testkit.TestDocument
 import dev.ide.vfs.VirtualFile
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNotNull
 import kotlin.test.assertTrue
 
+/** A [VirtualFile] identified by a path with optional in-memory content. */
 /**
  * The projection engine over the real JDT DOM (the tree the IDE actually uses): a Java file projects
  * into a block tree, and block edits compile to surgical [DocumentEdit]s that leave untouched
@@ -327,18 +329,6 @@ class BlockProjectionTest {
 
     // --- minimal DOM plumbing (mirrors lang-jdt TestSupport) ---
 
-    private class StubFile(override val path: String, private val content: String = "") : VirtualFile {
-        override val name get() = path.substringAfterLast('/')
-        override val isDirectory = false
-        override val exists = true
-        override val length get() = content.length.toLong()
-        override fun parent(): VirtualFile? = null
-        override fun children(): List<VirtualFile> = emptyList()
-        override fun contentHash() = ContentHash(content.hashCode().toString())
-        override fun readBytes() = content.toByteArray()
-        override fun readText(): CharSequence = content
-    }
-
     private object EmptyClasspath : ClasspathSnapshot {
         override val entries: List<ClasspathEntry> = emptyList()
         override fun fingerprint() = ContentHash("")
@@ -350,10 +340,8 @@ class BlockProjectionTest {
     }
 
     private class Snapshot(
-        override val file: VirtualFile,
-        override val version: Long,
-        override val text: CharSequence,
-    ) : DocumentSnapshot {
-        override fun length() = text.length
-    }
+        file: VirtualFile,
+        version: Long,
+        text: CharSequence,
+    ) : DocumentSnapshot by TestDocument(text, file, version)
 }

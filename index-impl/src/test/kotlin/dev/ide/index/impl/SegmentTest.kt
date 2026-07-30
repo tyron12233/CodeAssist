@@ -13,6 +13,7 @@ import dev.ide.index.MemberExternalizer
 import dev.ide.index.MemberValue
 import dev.ide.index.StringExternalizer
 import dev.ide.index.StringKeyDescriptor
+import dev.ide.testkit.withTempDir
 import java.nio.file.Files
 import java.nio.file.Path
 import kotlin.test.Test
@@ -72,8 +73,7 @@ class SegmentTest {
 
     @Test
     fun exactPrefixFuzzyOverSmallCorpus() {
-        val dir = Files.createTempDirectory("seg")
-        try {
+        withTempDir("seg") { dir ->
             val entries = listOf(
                 entry("ArrayList", "java.util.ArrayList"),
                 entry("ArrayDeque", "java.util.ArrayDeque"),
@@ -99,15 +99,12 @@ class SegmentTest {
             assertTrue(fuzzy(s, "rray").any { (it.value as String).endsWith("ArrayList") })
 
             s.close()
-        } finally {
-            dir.toFile().deleteRecursively()
         }
     }
 
     @Test
     fun correctUnderATinyBlockCache() {
-        val dir = Files.createTempDirectory("seg")
-        try {
+        withTempDir("seg") { dir ->
             // 300 fixed-width terms (so lexicographic == numeric order) → many KB on disk.
             val entries = (0 until 300).map { entry("Item%03d".format(it), "v$it") }
             // 64-byte blocks, 128-byte cap ⇒ at most 2 blocks resident: the engine MUST page from disk.
@@ -123,30 +120,24 @@ class SegmentTest {
             assertTrue(fuzzy(s, "tem25").any { it.key == "Item250" }) // trigram lookup served from disk
 
             s.close()
-        } finally {
-            dir.toFile().deleteRecursively()
         }
     }
 
     @Test
     fun fuzzyMatchesWhenSomeTrigramsAreAbsent() {
-        val dir = Files.createTempDirectory("seg")
-        try {
+        withTempDir("seg") { dir ->
             val s = seg(dir, listOf(entry("String", "String"), entry("StringBuilder", "StringBuilder"), entry("Integer", "Integer")))
             // "Strng" (typo, missing 'i') → grams str / trn / rng; only "str" exists in the corpus. The other
             // two must be skipped, leaving "String"/"StringBuilder" as candidates that the subsequence scorer keeps.
             val hits = fuzzy(s, "Strng").map { it.key }
             assertTrue("String" in hits, "expected String via the surviving trigram + scorer, got $hits")
             s.close()
-        } finally {
-            dir.toFile().deleteRecursively()
         }
     }
 
     @Test
     fun prefixOnlySegmentFallsBackForFuzzy() {
-        val dir = Files.createTempDirectory("seg")
-        try {
+        withTempDir("seg") { dir ->
             val s = seg(
                 dir,
                 listOf(entry("Apple", "Apple"), entry("Apricot", "Apricot"), entry("Banana", "Banana")),
@@ -156,8 +147,6 @@ class SegmentTest {
             assertEquals(listOf("Apple"), fuzzy(s, "App").map { it.key })
             assertEquals(listOf("Apple", "Apricot"), prefix(s, "Ap").map { it.key })
             s.close()
-        } finally {
-            dir.toFile().deleteRecursively()
         }
     }
 
@@ -169,8 +158,7 @@ class SegmentTest {
      */
     @Test
     fun spillingWriteEqualsInMemoryWriteByteForByte() {
-        val dir = Files.createTempDirectory("segw")
-        try {
+        withTempDir("segw") { dir ->
             val ext = StringIndex(MatchingMode.PREFIX_AND_FUZZY)
             // 300 distinct terms (cross the 64-term sparse interval several times); some carry a 2nd value with
             // a distinct origin (multi-value postings + insertion-order-within-a-term sensitivity).
@@ -209,8 +197,6 @@ class SegmentTest {
                 assertEquals(setOf("v7", "alt7"), exact(s, "Item007").toSet())
                 assertTrue(fuzzy(s, "tem25").any { it.key == "Item250" })
             } finally { s.close() }
-        } finally {
-            dir.toFile().deleteRecursively()
         }
     }
 
@@ -224,8 +210,7 @@ class SegmentTest {
      */
     @Test
     fun unreadableValueIsSkippedNotFatal() {
-        val dir = Files.createTempDirectory("seg")
-        try {
+        withTempDir("seg") { dir ->
             val driftExt = object : IndexExtension<String, String> {
                 override val id = IndexId("test.drift")
                 override val version = 1
@@ -259,29 +244,23 @@ class SegmentTest {
                 assertEquals(listOf("Baz.good"), exact(s, "Baz")) // a later term is unaffected (cursor stayed aligned)
                 assertEquals(setOf("Baz.good"), prefix(s, "Ba").map { it.value as String }.toSet())
             } finally { s.close() }
-        } finally {
-            dir.toFile().deleteRecursively()
         }
     }
 
     @Test
     fun emptySegmentIsQueryable() {
-        val dir = Files.createTempDirectory("seg")
-        try {
+        withTempDir("seg") { dir ->
             val s = seg(dir, emptyList())
             assertTrue(exact(s, "x").isEmpty())
             assertTrue(prefix(s, "x").isEmpty())
             assertTrue(fuzzy(s, "xyz").isEmpty())
             s.close()
-        } finally {
-            dir.toFile().deleteRecursively()
         }
     }
 
     @Test
     fun camelHumpPatternsSurfaceThroughFuzzy() {
-        val dir = Files.createTempDirectory("seg")
-        try {
+        withTempDir("seg") { dir ->
             val s = seg(
                 dir,
                 listOf(
@@ -301,15 +280,12 @@ class SegmentTest {
                     (npe.firstOrNull { it.key == "NoSuchElementException" }?.score ?: Int.MIN_VALUE),
             )
             s.close()
-        } finally {
-            dir.toFile().deleteRecursively()
         }
     }
 
     @Test
     fun humpQueriesWorkWithoutATrigramIndex() {
-        val dir = Files.createTempDirectory("seg")
-        try {
+        withTempDir("seg") { dir ->
             val s = seg(
                 dir,
                 listOf(entry("NullPointerException", "NPEv"), entry("Apple", "Apple")),
@@ -318,23 +294,18 @@ class SegmentTest {
             // The window scan needs no trigram dictionary, so hump queries survive PREFIX_ONLY segments.
             assertTrue(fuzzy(s, "NPE").any { it.key == "NullPointerException" })
             s.close()
-        } finally {
-            dir.toFile().deleteRecursively()
         }
     }
 
     @Test
     fun shortPatternsMatchCaseInsensitivelyThroughFuzzy() {
-        val dir = Files.createTempDirectory("seg")
-        try {
+        withTempDir("seg") { dir ->
             val s = seg(dir, listOf(entry("String", "String"), entry("stack", "stack"), entry("List", "List")))
             // Below trigram length the fuzzy path used to degrade to the case-sensitive prefix scan;
             // the first-character window scan keeps it case-insensitive.
             val hits = fuzzy(s, "st").map { it.key }
             assertTrue("String" in hits && "stack" in hits, "expected both cases, got $hits")
             s.close()
-        } finally {
-            dir.toFile().deleteRecursively()
         }
     }
 
@@ -345,8 +316,7 @@ class SegmentTest {
      */
     @Test
     fun originRoundTripsWhetherFoldedOrPerPosting() {
-        val dir = Files.createTempDirectory("seg")
-        try {
+        withTempDir("seg") { dir ->
             // Uniform (single-origin) segments: origin lives once in the footer, yet still ranks each value.
             val libSeg = seg(Files.createDirectory(dir.resolve("lib")), listOf(entry("Foo", "Foo", IndexOrigin.LIBRARY)))
             val sdkSeg = seg(Files.createDirectory(dir.resolve("sdk")), listOf(entry("Foo", "Foo", IndexOrigin.SDK)))
@@ -366,8 +336,6 @@ class SegmentTest {
                 "a mixed-origin segment must keep each posting's own origin",
             )
             mixSeg.close()
-        } finally {
-            dir.toFile().deleteRecursively()
         }
     }
 
@@ -378,8 +346,7 @@ class SegmentTest {
      */
     @Test
     fun outOfRangeQuerySkipsTheSegmentWithoutTouchingDisk() {
-        val dir = Files.createTempDirectory("seg")
-        try {
+        withTempDir("seg") { dir ->
             val entries = (0 until 300).map { entry("Item%03d".format(it), "v$it", IndexOrigin.LIBRARY) }
             val cache = BlockCache(8L * 1024 * 1024)
             val s = seg(dir, entries, cache = cache) // range is Item000..Item299
@@ -394,8 +361,6 @@ class SegmentTest {
             assertEquals(1, exact(s, "Item150").size)
             assertTrue(cache.blockReads.get() > before, "an in-range query must actually read blocks")
             s.close()
-        } finally {
-            dir.toFile().deleteRecursively()
         }
     }
 
@@ -406,9 +371,8 @@ class SegmentTest {
      */
     @Test
     fun constantPoolDedupsStringsSharedAcrossValues() {
-        val dir = Files.createTempDirectory("seg")
-        val ext = MemberIndex()
-        try {
+        withTempDir("seg") { dir ->
+            val ext = MemberIndex()
             val owner = "com.example.some.deeply.nested.pkg.VeryLongOwnerTypeName"
             val shared = (0 until 500).map {
                 IndexEntry("m$it", MemberValue("m$it", owner, "method", "(Ljava/lang/String;)V"), IndexOrigin.LIBRARY)
@@ -437,8 +401,6 @@ class SegmentTest {
                 assertEquals("method", v.kind)
                 assertEquals("(Ljava/lang/String;)V", v.signature)
             } finally { s.close() }
-        } finally {
-            dir.toFile().deleteRecursively()
         }
     }
 }

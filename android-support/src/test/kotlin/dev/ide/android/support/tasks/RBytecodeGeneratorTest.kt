@@ -1,5 +1,6 @@
 package dev.ide.android.support.tasks
 
+import dev.ide.testkit.withTempDir
 import java.net.URLClassLoader
 import java.nio.file.Files
 import kotlin.test.Test
@@ -15,8 +16,7 @@ class RBytecodeGeneratorTest {
 
     @Test
     fun generatesLoadableRWithConstantsAndStyleableArrays() {
-        val dir = Files.createTempDirectory("rbytecode")
-        try {
+        withTempDir("rbytecode") { dir ->
             val rJava = dir.resolve("R.java")
             Files.write(rJava, """
                 /* AUTO-GENERATED FILE. DO NOT MODIFY. */
@@ -61,8 +61,6 @@ class RBytecodeGeneratorTest {
                 assertEquals(1, st.getField("SearchView_android_text").getInt(null))
                 assertEquals(2, st.getField("SearchView_extra").getInt(null))
             }
-        } finally {
-            dir.toFile().deleteRecursively()
         }
     }
 }

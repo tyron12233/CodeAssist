@@ -14,6 +14,7 @@ import dev.ide.index.KeyDescriptor
 import dev.ide.index.MatchingMode
 import dev.ide.index.StringKeyDescriptor
 import dev.ide.index.classEntryToFqn
+import dev.ide.testkit.withTempDir
 import kotlinx.coroutines.runBlocking
 import java.nio.file.Files
 import java.nio.file.Path
@@ -48,8 +49,7 @@ class IndexEngineTest {
 
     @Test
     fun indexesAccessibleJdkTypesAndExcludesInternals() {
-        val cache = Files.createTempDirectory("idx")
-        try {
+        withTempDir("idx") { cache ->
             val svc = service(cache)
             runBlocking { svc.ensureUpToDate(IndexScope(jdkHome = jdk())) }
             val list = svc.prefix<ClassNameValue>(CLASS, "List", 200).map { it.value.fqn }.toList()
@@ -57,8 +57,6 @@ class IndexEngineTest {
             // JPMS visibility: jdk.internal.* is never exported, so it must not be indexed.
             val internals = svc.prefix<ClassNameValue>(CLASS, "L", 5000).count { it.value.fqn.startsWith("jdk.internal.") }
             assertTrue(internals == 0, "jdk.internal.* leaked into the index ($internals hits)")
-        } finally {
-            cache.toFile().deleteRecursively()
         }
     }
 
@@ -66,8 +64,7 @@ class IndexEngineTest {
      *  detail view + analytics can answer "which index took the time". */
     @Test
     fun buildRecordsPerIndexerBreakdownAndStats() {
-        val cache = Files.createTempDirectory("idx")
-        try {
+        withTempDir("idx") { cache ->
             val svc = service(cache)
             runBlocking { svc.ensureUpToDate(IndexScope(jdkHome = jdk())) }
             val st = svc.status
@@ -85,28 +82,22 @@ class IndexEngineTest {
             assertTrue(mine != null, "expected a breakdown entry for ${CLASS.value}, got ${st.breakdown.map { it.id }}")
             assertTrue(mine!!.entries > 0, "expected indexed entries recorded, got ${mine.entries}")
             assertTrue(mine.indexMs >= 0, "index time must be non-negative")
-        } finally {
-            cache.toFile().deleteRecursively()
         }
     }
 
     @Test
     fun fuzzyFindsArrayList() {
-        val cache = Files.createTempDirectory("idx")
-        try {
+        withTempDir("idx") { cache ->
             val svc = service(cache)
             runBlocking { svc.ensureUpToDate(IndexScope(jdkHome = jdk())) }
             val hits = svc.fuzzy<ClassNameValue>(CLASS, "rray", 200).map { it.value.fqn }.toList()
             assertTrue(hits.any { it.endsWith(".ArrayList") }, "fuzzy 'rray' should surface ArrayList: ${hits.take(10)}")
-        } finally {
-            cache.toFile().deleteRecursively()
         }
     }
 
     @Test
     fun fuzzyFindsCamelHumpMatchesOverTheRealJdk() {
-        val cache = Files.createTempDirectory("idx")
-        try {
+        withTempDir("idx") { cache ->
             val svc = service(cache)
             runBlocking { svc.ensureUpToDate(IndexScope(jdkHome = jdk())) }
             val npe = svc.fuzzy<ClassNameValue>(CLASS, "NPE", 200).map { it.value.fqn }.toList()
@@ -116,15 +107,12 @@ class IndexEngineTest {
                 "java.lang.IndexOutOfBoundsException" in aioobe,
                 "IOOBE should hump-match: ${aioobe.take(10)}",
             )
-        } finally {
-            cache.toFile().deleteRecursively()
         }
     }
 
     @Test
     fun invalidateClearsBuiltDataAndAllowsRebuild() {
-        val cache = Files.createTempDirectory("idx")
-        try {
+        withTempDir("idx") { cache ->
             val svc = service(cache)
             runBlocking { svc.ensureUpToDate(IndexScope(jdkHome = jdk())) }
             assertTrue(svc.prefix<ClassNameValue>(CLASS, "List", 50).any { it.value.fqn == "java.util.List" })
@@ -135,21 +123,16 @@ class IndexEngineTest {
 
             runBlocking { svc.ensureUpToDate(IndexScope(jdkHome = jdk())) }
             assertTrue(svc.prefix<ClassNameValue>(CLASS, "List", 50).any { it.value.fqn == "java.util.List" }, "rebuild after invalidate")
-        } finally {
-            cache.toFile().deleteRecursively()
         }
     }
 
     @Test
     fun reusesPersistedCacheAcrossInstances() {
-        val cache = Files.createTempDirectory("idx")
-        try {
+        withTempDir("idx") { cache ->
             runBlocking { service(cache).ensureUpToDate(IndexScope(jdkHome = jdk())) }
             val svc2 = service(cache)
             runBlocking { svc2.ensureUpToDate(IndexScope(jdkHome = jdk())) }
             assertTrue(svc2.prefix<ClassNameValue>(CLASS, "List", 200).any { it.value.fqn == "java.util.List" })
-        } finally {
-            cache.toFile().deleteRecursively()
         }
     }
 
@@ -161,8 +144,7 @@ class IndexEngineTest {
      * "tiny/empty segments, no symbols" failure. The good jar must still index.
      */
     @Test
-    fun oneUnreadableJarDoesNotAbortTheIndexBuild() {
-        val cache = Files.createTempDirectory("idx")
+    fun oneUnreadableJarDoesNotAbortTheIndexBuild() = withTempDir("idx") { cache ->
         val libs = Files.createTempDirectory("idxlibs")
         try {
             val good = libs.resolve("good.jar")
@@ -186,8 +168,7 @@ class IndexEngineTest {
      *  OWN segments, not another project's segments living in the same content-addressed root. */
     @Test
     fun invalidateRemovesOnlyThisServicesSegmentsNotTheSharedRoot() {
-        val cache = Files.createTempDirectory("idx")
-        try {
+        withTempDir("idx") { cache ->
             val svc = service(cache)
             runBlocking { svc.ensureUpToDate(IndexScope(jdkHome = jdk())) }
             // A segment another project put in the SHARED root (a different index id); invalidate must keep it.
@@ -203,8 +184,6 @@ class IndexEngineTest {
 
             runBlocking { svc.ensureUpToDate(IndexScope(jdkHome = jdk())) }
             assertTrue(svc.prefix<ClassNameValue>(CLASS, "List", 50).any { it.value.fqn == "java.util.List" }, "rebuild after invalidate")
-        } finally {
-            cache.toFile().deleteRecursively()
         }
     }
 
@@ -218,8 +197,7 @@ class IndexEngineTest {
      * collides deterministically rather than racing.
      */
     @Test
-    fun sameNamedJarsAtDifferentPathsDoNotCollide() {
-        val cache = Files.createTempDirectory("idx")
+    fun sameNamedJarsAtDifferentPathsDoNotCollide() = withTempDir("idx") { cache ->
         val a = Files.createTempDirectory("aarA")
         val b = Files.createTempDirectory("aarB")
         try {
@@ -249,8 +227,7 @@ class IndexEngineTest {
      * `foo-1.2.3`), not the meaningless `classes.jar` file name every AAR shares. A plain jar keeps its name.
      */
     @Test
-    fun explodedAarLabeledByLibraryNotClassesJar() {
-        val cache = Files.createTempDirectory("idx")
+    fun explodedAarLabeledByLibraryNotClassesJar() = withTempDir("idx") { cache ->
         val aar = Files.createTempDirectory("aar")
         try {
             val exploded = Files.createDirectories(aar.resolve("foo-1.2.3-exploded"))
@@ -297,8 +274,7 @@ class IndexEngineTest {
      * given the same mtime change, forces a full re-index.
      */
     @Test
-    fun stableKeyedJarSurvivesMtimeChangeUnlikeDefaultKey() {
-        val dir = Files.createTempDirectory("lib")
+    fun stableKeyedJarSurvivesMtimeChangeUnlikeDefaultKey() = withTempDir("lib") { dir ->
         val stableCache = Files.createTempDirectory("idxStable")
         val defaultCache = Files.createTempDirectory("idxDefault")
         try {
@@ -348,8 +324,7 @@ class IndexEngineTest {
      * project's source.
      */
     @Test
-    fun reindexesOnlyChangedSourceFilesAcrossLaunches() {
-        val cache = Files.createTempDirectory("idx")
+    fun reindexesOnlyChangedSourceFilesAcrossLaunches() = withTempDir("idx") { cache ->
         val srcCache = Files.createTempDirectory("idxsrc")
         val src = Files.createTempDirectory("src")
         try {
@@ -399,8 +374,7 @@ class IndexEngineTest {
      * fileId would point at the wrong file after a restart.
      */
     @Test
-    fun fileIdsAreStableAcrossLaunchesAndResolveToPaths() {
-        val cache = Files.createTempDirectory("idx")
+    fun fileIdsAreStableAcrossLaunchesAndResolveToPaths() = withTempDir("idx") { cache ->
         val srcCache = Files.createTempDirectory("idxsrc")
         val src = Files.createTempDirectory("src")
         try {

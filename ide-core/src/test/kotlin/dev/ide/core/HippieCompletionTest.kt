@@ -1,5 +1,6 @@
 package dev.ide.core
 
+import dev.ide.testkit.withTempDir
 import kotlinx.coroutines.runBlocking
 
 import dev.ide.lang.completion.CompletionItemKind
@@ -16,8 +17,7 @@ import kotlin.test.assertTrue
 class HippieCompletionTest {
 
     @Test
-    fun bufferWordCompletesFromAnywhereInTheFile() {
-        val dir = Files.createTempDirectory("ide-hippie")
+    fun bufferWordCompletesFromAnywhereInTheFile() = withTempDir("ide-hippie") { dir ->
         IdeServices.bootstrapJavaDemo(dir).use { ide ->
             val app = ide.modules().first { it.name == "app" }
             val probe = ide.sourceRoots(app).first().resolve("com/example/app/Probe.java")

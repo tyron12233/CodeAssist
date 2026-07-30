@@ -42,6 +42,16 @@ subprojects {
             "testImplementation"(libs.junit.jupiter)
             "testImplementation"(libs.kotlin.test)
             "testRuntimeOnly"(libs.junit.platform.launcher)
+            // Shared test infrastructure (dev.ide.testkit): temp dirs, source seeding, VFS/document stubs,
+            // classpath/jar builders, compilation contexts, fake index, workspace helpers. Auto-wired into
+            // every framework module so tests never re-implement scaffolding. It is only ever a
+            // `testImplementation` dependency, so a module in :test-support's own main-dependency chain
+            // (e.g. project-model-impl) still wires it without a cycle (test→main is acyclic). Excluded only
+            // from the shared harness modules themselves. :bench-support carries the benchmark/regression
+            // primitives and is reached transitively through :test-support.
+            if (project.name !in setOf("test-support", "bench-support")) {
+                "testImplementation"(project(":test-support"))
+            }
         }
         // Two kinds of test task:
         //   * `test` (and `check`/`build`) — the fast correctness suite. It EXCLUDES the slow, opt-in

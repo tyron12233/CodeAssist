@@ -1,5 +1,6 @@
 package dev.ide.core
 
+import dev.ide.testkit.withTempDir
 import dev.ide.android.support.templates.Game2048SampleTemplate
 import dev.ide.android.support.templates.MemoryMatchSampleTemplate
 import dev.ide.android.support.templates.SnakeSampleTemplate
@@ -37,8 +38,7 @@ class ComposeSampleProjectsTest {
     fun composeSamplesGenerateExpectedFiles() {
         for (case in cases) {
             val id = case.template.id.value
-            val dir = Files.createTempDirectory("compose-sample-$id")
-            try {
+            withTempDir("compose-sample-$id") { dir ->
                 IdeServices.createProjectAt(
                     dir, id, mapOf(TemplateArgs.NAME to id),
                     IdeServices.defaultDesktopSdk(), LanguageLevel.JAVA_17,
@@ -78,8 +78,6 @@ class ComposeSampleProjectsTest {
                         "$id: launcher background color missing",
                     )
                 }
-            } finally {
-                dir.toFile().deleteRecursively()
             }
         }
     }

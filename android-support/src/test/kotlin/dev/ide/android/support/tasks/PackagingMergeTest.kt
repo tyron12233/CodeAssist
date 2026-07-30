@@ -2,6 +2,7 @@ package dev.ide.android.support.tasks
 
 import dev.ide.android.support.JniLibsPackaging
 import dev.ide.android.support.ResourcePackaging
+import dev.ide.testkit.withTempDir
 import java.nio.file.Files
 import java.nio.file.Path
 import java.util.zip.ZipEntry
@@ -59,8 +60,7 @@ class PackagingMergeTest {
 
     @Test
     fun javaResMergeAppliesDefaultsAndMergesServices() {
-        val dir = Files.createTempDirectory("javares")
-        try {
+        withTempDir("javares") { dir ->
             // A "project" resources dir and two jars each registering a service + carrying manifest noise.
             val projRes = dir.resolve("proj-res")
             write(projRes.resolve("app.properties"), "from-app")
@@ -94,30 +94,24 @@ class PackagingMergeTest {
             // Services concatenated across project + both jars, newline-separated, project first.
             val svc = entries["META-INF/services/com.x.Svc"]!!.trim().lines().toSet()
             assertEquals(setOf("com.x.AppImpl", "com.x.AImpl", "com.x.BImpl"), svc)
-        } finally {
-            dir.toFile().deleteRecursively()
         }
     }
 
     @Test
     fun javaResPickFirstKeepsProjectCopy() {
-        val dir = Files.createTempDirectory("javares-pick")
-        try {
+        withTempDir("javares-pick") { dir ->
             val projRes = dir.resolve("proj"); write(projRes.resolve("conf/app.cfg"), "project-wins")
             val jar = makeJar(dir.resolve("dep.jar"), mapOf("conf/app.cfg" to "dep-loses"))
             val filter = PackagingRules.resourceFilter(ResourcePackaging(pickFirsts = setOf("**/app.cfg")))
             val out = dir.resolve("m.jar")
             JavaResMerger.merge(listOf(projRes), listOf(jar), filter, out)
             assertEquals("project-wins", zipEntries(out)["conf/app.cfg"])
-        } finally {
-            dir.toFile().deleteRecursively()
         }
     }
 
     @Test
     fun javaResMergeWritesReadableEmptyJarWhenNothingToPackage() {
-        val dir = Files.createTempDirectory("javares-empty")
-        try {
+        withTempDir("javares-empty") { dir ->
             // No resource dirs, and a jar with only a class → nothing to package.
             val jar = makeJar(dir.resolve("classes.jar"), mapOf("com/x/A.class" to "cafebabe"))
             val out = dir.resolve("empty.jar")
@@ -126,8 +120,6 @@ class PackagingMergeTest {
             // The output must exist and be openable (a zero-entry ZipOutputStream would throw "No entries" on ART).
             assertTrue(Files.isRegularFile(out))
             assertEquals(0, zipEntries(out).size)
-        } finally {
-            dir.toFile().deleteRecursively()
         }
     }
 
@@ -135,8 +127,7 @@ class PackagingMergeTest {
 
     @Test
     fun nativeLibsMergeCollectsDirsAndJarsWithDedup() {
-        val dir = Files.createTempDirectory("jni")
-        try {
+        withTempDir("jni") { dir ->
             // project jniLibs dir laid out <abi>/name.so
             val jniDir = dir.resolve("jniLibs")
             write(jniDir.resolve("x86/libapp.so"), "app-x86")
@@ -161,15 +152,12 @@ class PackagingMergeTest {
             assertEquals("aar-only", read(out.resolve("x86/libaar.so")))
             assertEquals("jar-arm", read(out.resolve("arm64-v8a/libjar.so")))
             assertFalse(Files.exists(out.resolve("x86/libskip.so")), "non-lib/ jar entry must be ignored")
-        } finally {
-            dir.toFile().deleteRecursively()
         }
     }
 
     @Test
     fun nativeLibsExcludeDropsMatch() {
-        val dir = Files.createTempDirectory("jni-excl")
-        try {
+        withTempDir("jni-excl") { dir ->
             val jniDir = dir.resolve("jniLibs")
             write(jniDir.resolve("x86/libkeep.so"), "keep")
             write(jniDir.resolve("x86/libc++_shared.so"), "drop")
@@ -178,8 +166,6 @@ class PackagingMergeTest {
             NativeLibsMerger.merge(listOf(jniDir), emptyList(), filter, out)
             assertTrue(Files.exists(out.resolve("x86/libkeep.so")))
             assertFalse(Files.exists(out.resolve("x86/libc++_shared.so")), "excluded .so must not be packaged")
-        } finally {
-            dir.toFile().deleteRecursively()
         }
     }
 

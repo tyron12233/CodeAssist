@@ -1,5 +1,6 @@
 package dev.ide.lang.jdt
 
+import dev.ide.testkit.withTempDir
 import org.eclipse.jdt.core.JavaCore
 import org.eclipse.jdt.core.dom.AST
 import org.eclipse.jdt.core.dom.ASTParser
@@ -15,8 +16,7 @@ import kotlin.test.assertTrue
 class JdtProbeTest {
 
     @Test
-    fun toleratesBrokenCodeAndResolvesCrossFileAndPlatform() {
-        val dir = Files.createTempDirectory("jdt-probe")
+    fun toleratesBrokenCodeAndResolvesCrossFileAndPlatform() = withTempDir("jdt-probe") { dir ->
         val coreDir = dir.resolve("core")
         write(coreDir.resolve("com/example/A.java"), "package com.example; public class A { public static String hi() { return \"x\"; } public int n; }")
 

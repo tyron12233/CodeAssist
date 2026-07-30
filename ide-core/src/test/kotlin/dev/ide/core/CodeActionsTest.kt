@@ -3,6 +3,7 @@ package dev.ide.core
 import kotlinx.coroutines.runBlocking
 
 import dev.ide.lang.incremental.DocumentEdit
+import dev.ide.testkit.withTempDir
 import java.nio.file.Files
 import java.nio.file.Path
 import kotlin.test.Test
@@ -18,10 +19,8 @@ import kotlin.test.assertTrue
  */
 class CodeActionsTest {
 
-    private fun demo(block: (IdeServices, Path) -> Unit) {
-        val dir = Files.createTempDirectory("ide-actions")
+    private fun demo(block: (IdeServices, Path) -> Unit) = withTempDir("ide-actions") { dir ->
         IdeServices.bootstrapJavaDemo(dir).use { block(it, dir.resolve("app/src/main/java/com/example/app/Main.java")) }
-        dir.toFile().deleteRecursively()
     }
 
     /** Apply DocumentEdits descending-by-offset (the editor's contract), so multi-edit actions don't drift. */

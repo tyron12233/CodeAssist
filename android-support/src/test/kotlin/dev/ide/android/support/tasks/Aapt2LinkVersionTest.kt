@@ -5,6 +5,7 @@ import dev.ide.android.support.tools.Aapt2CompileResult
 import dev.ide.android.support.tools.ToolResult
 import dev.ide.build.TaskName
 import dev.ide.build.engine.SimpleTaskContext
+import dev.ide.testkit.withTempDir
 import kotlinx.coroutines.runBlocking
 import java.nio.file.Files
 import java.nio.file.Path
@@ -38,8 +39,7 @@ class Aapt2LinkVersionTest {
 
     @Test
     fun linkForwardsVersionCodeAndName() = runBlocking {
-        val tmp = Files.createTempDirectory("aapt2-link-version")
-        try {
+        withTempDir("aapt2-link-version") { tmp ->
             val compiledDir = Files.createDirectories(tmp.resolve("compiled"))
             val manifest = tmp.resolve("AndroidManifest.xml")
             Files.writeString(manifest, "<manifest package=\"com.example.app\"/>")
@@ -54,8 +54,6 @@ class Aapt2LinkVersionTest {
 
             assertEquals(7, aapt2.versionCode, "versionCode must reach aapt2 link")
             assertEquals("2.3-debug", aapt2.versionName, "versionName (with build-type suffix) must reach aapt2 link")
-        } finally {
-            tmp.toFile().deleteRecursively()
         }
     }
 }

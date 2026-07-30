@@ -8,6 +8,7 @@ import dev.ide.build.TaskInputs
 import dev.ide.build.TaskName
 import dev.ide.build.TaskOutputs
 import dev.ide.build.TaskResult
+import dev.ide.testkit.withTempDir
 import kotlinx.coroutines.runBlocking
 import java.nio.file.Files
 import java.nio.file.Path
@@ -50,8 +51,7 @@ class EngineDependencyTest {
 
     @Test
     fun readingAnotherTasksOutputInfersTheDependency() {
-        val dir = Files.createTempDirectory("dep")
-        try {
+        withTempDir("dep") { dir ->
             val a = dir.resolve("a").also { Files.writeString(it, "1") }
             val x = dir.resolve("x")
             val y = dir.resolve("y")
@@ -60,13 +60,12 @@ class EngineDependencyTest {
             val graph = TaskGraphImpl(listOf(taskB, taskA)) // declaration order shouldn't matter, no explicit deps
             assertEquals(listOf("A"), graph.dependencies(taskB).map { it.name.value }, "B reads A's output ⇒ depends on A")
             assertTrue(levelOf(graph, "A") < levelOf(graph, "B"), "A must be scheduled before B")
-        } finally { dir.toFile().deleteRecursively() }
+        }
     }
 
     @Test
     fun inferredDependencyIsIncremental() = runBlocking {
-        val dir = Files.createTempDirectory("dep-inc")
-        try {
+        withTempDir("dep-inc") { dir ->
             val a = dir.resolve("a").also { Files.writeString(it, "1") }
             val x = dir.resolve("x"); val y = dir.resolve("y")
             val exec = TaskExecutorImpl(BuildCache(dir.resolve("cache")))
@@ -79,7 +78,7 @@ class EngineDependencyTest {
             assertTrue(exec.execute(graph(), ctx).ranTasks.isEmpty(), "unchanged re-run does zero work")
             Files.writeString(a, "2")
             assertEquals(setOf("A", "B"), exec.execute(graph(), ctx).ranTasks.map { it.value }.toSet(), "editing A re-runs A then B")
-        } finally { dir.toFile().deleteRecursively() }
+        }
     }
 
     @Test
@@ -124,8 +123,7 @@ class EngineDependencyTest {
         // the dir `jar` reads, and `jar`'s artifact lands *inside* a tracked dir (a path-containment
         // coincidence). Inference must not then make `classes` depend on `jar` — that forged the on-device
         // `:feature:classes -> :feature:jar -> :feature:classes` cycle.
-        val dir = Files.createTempDirectory("infer-rev")
-        try {
+        withTempDir("infer-rev") { dir ->
             val classesDir = dir.resolve("build/classes")
             val jarFile = classesDir.resolve("libs/feature.jar")   // jar's output nested UNDER classes' tracked dir
             val compile = TestTask(TaskName("compile"), outPaths = listOf(classesDir.resolve("Main.class")))
@@ -137,7 +135,7 @@ class EngineDependencyTest {
             graph.topologicalLevels()   // must NOT throw CyclicTaskDependencyException
             assertFalse(graph.dependencies(classes).any { it.name.value == "jar" }, "classes must not depend on jar")
             assertTrue(levelOf(graph, "classes") < levelOf(graph, "jar"), "explicit order kept: classes before jar")
-        } finally { dir.toFile().deleteRecursively() }
+        }
     }
 
     @Test
@@ -150,8 +148,7 @@ class EngineDependencyTest {
         // an explicit dep, so the one-hop guard misses them — together with the two explicit `jar -> classes`
         // edges they close a cycle. Inferred edges are a convenience, never required for correctness, so an
         // inferred edge must never close a cycle over the authoritative explicit graph.
-        val dir = Files.createTempDirectory("infer-xmod")
-        try {
+        withTempDir("infer-xmod") { dir ->
             val shared = dir.resolve("build")                       // a shared/overlapping output root
             val coreJar = shared.resolve("libs/core.jar")
             val featureJar = shared.resolve("libs/feature.jar")     // both jars land UNDER `shared`
@@ -171,18 +168,17 @@ class EngineDependencyTest {
             assertFalse(graph.dependencies(featClasses).any { it.name.value == ":feature:jar" }, "feature:classes must not depend on feature:jar")
             assertTrue(levelOf(graph, ":core:classes") < levelOf(graph, ":core:jar"))
             assertTrue(levelOf(graph, ":feature:classes") < levelOf(graph, ":feature:jar"))
-        } finally { dir.toFile().deleteRecursively() }
+        }
     }
 
     @Test
     fun taskWithNoInputsIsSkippedAsNoSource() = runBlocking {
-        val dir = Files.createTempDirectory("nosrc")
-        try {
+        withTempDir("nosrc") { dir ->
             val empty = TestTask(TaskName("E"), noInputs = true)
             val outcome = TaskExecutorImpl(BuildCache(dir.resolve("cache"))).execute(TaskGraphImpl(listOf(empty)), SimpleTaskContext())
             assertFalse(empty.executed, "a task with no declared inputs must not execute (NO-SOURCE)")
             assertTrue(outcome.ranTasks.isEmpty())
             assertEquals(listOf("E"), outcome.skippedTasks.map { it.value })
-        } finally { dir.toFile().deleteRecursively() }
+        }
     }
 }

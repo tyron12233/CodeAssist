@@ -1,5 +1,6 @@
 package dev.ide.lang.jdt
 
+import dev.ide.testkit.withTempDir
 import dev.ide.lang.jdt.compile.JdtBatchCompiler
 import java.nio.file.Files
 import java.nio.file.Path
@@ -19,8 +20,7 @@ class JdtImageFreeCompileTest {
     fun compilesJava17AgainstAndroidJarWithoutJrtImage() {
         val androidJar = androidJar() ?: run { println("[ImageFreeCompile] no Android SDK — skipping"); return }
         val stubs = coreLambdaStubs() ?: run { println("[ImageFreeCompile] no core-lambda-stubs — skipping"); return }
-        val dir = Files.createTempDirectory("imagefree")
-        try {
+        withTempDir("imagefree") { dir ->
             val src = dir.resolve("src").also { Files.createDirectories(it.resolve("p")) }
             // Two units with a cross-file reference + Java 17 features (records, sealed, switch-expr, var, text
             // block, string concat) + android types.
@@ -60,8 +60,6 @@ class JdtImageFreeCompileTest {
             val bytes = Files.readAllBytes(demo)
             val major = ((bytes[6].toInt() and 0xff) shl 8) or (bytes[7].toInt() and 0xff)
             assertEquals(61, major, "Demo.class should be Java 17 (major 61), proving no level-8 clamp")
-        } finally {
-            dir.toFile().deleteRecursively()
         }
     }
 
@@ -74,8 +72,7 @@ class JdtImageFreeCompileTest {
     @Test
     fun resolvesTypesFromADirectoryClasspathEntry() {
         val androidJar = androidJar() ?: run { println("[ImageFreeCompile] no Android SDK — skipping"); return }
-        val dir = Files.createTempDirectory("imagefree-dir")
-        try {
+        withTempDir("imagefree-dir") { dir ->
             val libOut = dir.resolve("libout")
             val lib = JdtBatchCompiler.compile(
                 listOf(write(dir, "p/Lib.java", "package p; public class Lib { public static int v(){ return 7; } }")),
@@ -91,8 +88,6 @@ class JdtImageFreeCompileTest {
             )
             assertTrue(app.success, "app resolves p.Lib from the directory classpath entry: ${app.messages}")
             assertTrue(Files.exists(appOut.resolve("q/App.class")), "app class emitted")
-        } finally {
-            dir.toFile().deleteRecursively()
         }
     }
 

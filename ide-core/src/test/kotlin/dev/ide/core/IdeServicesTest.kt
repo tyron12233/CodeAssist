@@ -1,5 +1,6 @@
 package dev.ide.core
 
+import dev.ide.testkit.withTempDir
 import kotlinx.coroutines.runBlocking
 
 import dev.ide.ui.backend.RunStatus
@@ -12,8 +13,7 @@ import kotlin.test.assertTrue
 class IdeServicesTest {
 
     @Test
-    fun runBuildCompilesAndRunsTheConsoleApp() {
-        val dir = Files.createTempDirectory("ide-run")
+    fun runBuildCompilesAndRunsTheConsoleApp() = withTempDir("ide-run") { dir ->
         IdeServices.bootstrapJavaDemo(dir).use { ide ->
             ide.build.runBuild()
             awaitBuild(ide)
@@ -29,8 +29,7 @@ class IdeServicesTest {
     }
 
     @Test
-    fun runBuildReflectsUnsavedEditorChanges() {
-        val dir = Files.createTempDirectory("ide-edit")
+    fun runBuildReflectsUnsavedEditorChanges() = withTempDir("ide-edit") { dir ->
         IdeServices.bootstrapJavaDemo(dir).use { ide ->
             val app = ide.modules().first { it.name == "app" }
             val main = ide.sourceRoots(app).first().resolve("com/example/app/Main.java")
@@ -50,8 +49,7 @@ class IdeServicesTest {
     }
 
     @Test
-    fun runBuildFailsOnACompileError() {
-        val dir = Files.createTempDirectory("ide-err")
+    fun runBuildFailsOnACompileError() = withTempDir("ide-err") { dir ->
         IdeServices.bootstrapJavaDemo(dir).use { ide ->
             val app = ide.modules().first { it.name == "app" }
             val main = ide.sourceRoots(app).first().resolve("com/example/app/Main.java")
@@ -72,8 +70,7 @@ class IdeServicesTest {
     }
 
     @Test
-    fun bootstrapsDemoProjectWithModulesAndSources() {
-        val dir = Files.createTempDirectory("ide-demo")
+    fun bootstrapsDemoProjectWithModulesAndSources() = withTempDir("ide-demo") { dir ->
         IdeServices.bootstrapJavaDemo(dir).use { ide ->
             assertEquals(setOf("core", "util", "app"), ide.modules().map { it.name }.toSet())
             val core = ide.modules().first { it.name == "core" }
@@ -85,8 +82,7 @@ class IdeServicesTest {
     }
 
     @Test
-    fun completesDirectTransitiveAndPlatformMembers() {
-        val dir = Files.createTempDirectory("ide-demo")
+    fun completesDirectTransitiveAndPlatformMembers() = withTempDir("ide-demo") { dir ->
         IdeServices.bootstrapJavaDemo(dir).use { ide ->
             val app = ide.modules().first { it.name == "app" }
             // A probe file in :app's source root (JDT requires the unit name to match the class).
@@ -114,8 +110,7 @@ class IdeServicesTest {
     }
 
     @Test
-    fun completesInsideAnOnDiskFileBeingEdited() {
-        val dir = Files.createTempDirectory("ide-demo")
+    fun completesInsideAnOnDiskFileBeingEdited() = withTempDir("ide-demo") { dir ->
         IdeServices.bootstrapJavaDemo(dir).use { ide ->
             val app = ide.modules().first { it.name == "app" }
             val mainFile = ide.sourceRoots(app).first().resolve("com/example/app/Main.java") // exists on disk
@@ -134,8 +129,7 @@ class IdeServicesTest {
     }
 
     @Test
-    fun editingADependencyInTheEditorIsReflectedInDependents() {
-        val dir = Files.createTempDirectory("ide-demo")
+    fun editingADependencyInTheEditorIsReflectedInDependents() = withTempDir("ide-demo") { dir ->
         IdeServices.bootstrapJavaDemo(dir).use { ide ->
             val core = ide.modules().first { it.name == "core" }
             val util = ide.modules().first { it.name == "util" }

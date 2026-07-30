@@ -1,5 +1,7 @@
 package dev.ide.lang.kotlin.compile
 
+import dev.ide.testkit.withTempDir
+import dev.ide.testkit.writeSource
 import dev.ide.lang.kotlin.parse
 import java.net.URLClassLoader
 import java.nio.file.Files
@@ -29,17 +31,13 @@ class IncrementalKotlinCompilerTest {
     @BeforeTest
     fun pinParserHost() { parse("package warmup\nfun warmup() {}") }
 
-    private fun write(root: Path, rel: String, content: String): Path {
-        val f = root.resolve(rel); Files.createDirectories(f.parent); Files.writeString(f, content.trimIndent())
-        return f
-    }
+    private fun write(root: Path, rel: String, content: String): Path = root.writeSource(rel, content)
 
     private fun bytes(p: Path): ByteArray = Files.readAllBytes(p)
 
     @Test
     fun bodyEditRecompilesOnlyTheChangedFile() {
-        val dir = Files.createTempDirectory("kt-ic")
-        try {
+        withTempDir("kt-ic") { dir ->
             val src = dir.resolve("src"); val out = dir.resolve("out")
             // B depends on A: B.compute() calls A().value(). A body edit must not recompile B.
             val a = write(src, "demo/A.kt", "package demo\nclass A {\n  fun value(): Int = 41\n  fun helper(): Int = 1\n}")
@@ -67,15 +65,12 @@ class IncrementalKotlinCompilerTest {
             assertFalse(aBefore.contentEquals(bytes(aClass)), "A.class must have been recompiled")
             // Runtime is still correct: B (unchanged bytecode) calls the rebuilt A → 42 + 1 = 43.
             assertEquals(43, invoke(out, "demo.B", "compute"), "B().compute() should reflect the new A.value() = 42")
-        } finally {
-            dir.toFile().deleteRecursively()
         }
     }
 
     @Test
     fun signatureChangeFallsBackToFullRecompile() {
-        val dir = Files.createTempDirectory("kt-ic-abi")
-        try {
+        withTempDir("kt-ic-abi") { dir ->
             val src = dir.resolve("src"); val out = dir.resolve("out")
             val a = write(src, "demo/A.kt", "package demo\nclass A {\n  fun value(): Int = 1\n}")
             val b = write(src, "demo/B.kt", "package demo\nclass B {\n  fun compute(): Int = A().value()\n}")
@@ -91,8 +86,6 @@ class IncrementalKotlinCompilerTest {
             val r = ic.compile(listOf(a, b), emptyList(), cp, out)
             assertTrue(r.success, "rebuild failed: ${r.messages}")
             assertEquals(IncrementalKotlinCompiler.Mode.FULL, r.mode, "a public-signature change must force a full recompile")
-        } finally {
-            dir.toFile().deleteRecursively()
         }
     }
 

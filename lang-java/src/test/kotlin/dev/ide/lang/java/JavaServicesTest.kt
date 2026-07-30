@@ -8,6 +8,7 @@ import dev.ide.lang.incremental.DocumentSnapshot
 import dev.ide.lang.java.env.JavaEnvironment
 import dev.ide.lang.signature.SignatureHelpRequest
 import dev.ide.lang.signature.SignatureHelpTrigger
+import dev.ide.testkit.TestDocument
 import dev.ide.vfs.VirtualFile
 import dev.ide.vfs.local.LocalFileSystem
 import kotlinx.coroutines.runBlocking
@@ -53,10 +54,7 @@ class JavaServicesTest {
         return fs.fileFor(f.toPath())
     }
 
-    private class Snap(override val file: VirtualFile, override val text: CharSequence) : DocumentSnapshot {
-        override val version: Long = 1
-        override fun length(): Int = text.length
-    }
+    private class Snap(file: VirtualFile, text: CharSequence) : DocumentSnapshot by TestDocument(text, file)
 
     @Test
     fun foldsImportsAndMethodBodies() {

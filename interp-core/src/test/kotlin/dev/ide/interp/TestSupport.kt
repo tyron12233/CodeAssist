@@ -6,43 +6,24 @@ import dev.ide.lang.kotlin.interp.ResolvedFunction
 import dev.ide.lang.kotlin.parse.KotlinParsedFile
 import dev.ide.lang.kotlin.parse.KotlinParserHost
 import dev.ide.lang.kotlin.symbols.KotlinSymbolService
-import dev.ide.platform.ContentHash
-import dev.ide.vfs.VirtualFile
+import dev.ide.testkit.DiskVirtualFile
+import dev.ide.testkit.TestJars
+import dev.ide.testkit.writeSource
 import org.jetbrains.kotlin.psi.KtNamedFunction
 import org.jetbrains.kotlin.psi.KtProperty
-import java.io.File
 import java.nio.file.Files
 import java.nio.file.Path
-import java.util.zip.ZipFile
 
-/** A [VirtualFile] backed by a real path — enough for source-root walking + classpath reads in tests. */
-class DiskFile(val p: Path) : VirtualFile {
-    override val path: String get() = p.toString()
-    override val name: String get() = p.fileName.toString()
-    override val isDirectory: Boolean get() = Files.isDirectory(p)
-    override val exists: Boolean get() = Files.exists(p)
-    override val length: Long get() = if (exists && !isDirectory) Files.size(p) else 0
-    override fun parent(): VirtualFile? = p.parent?.let { DiskFile(it) }
-    override fun children(): List<VirtualFile> =
-        if (isDirectory) Files.list(p).use { s -> s.toList() }.map { DiskFile(it) } else emptyList()
-    override fun contentHash(): ContentHash = ContentHash("")
-    override fun readBytes(): ByteArray = if (exists && !isDirectory) Files.readAllBytes(p) else ByteArray(0)
-    override fun readText(): CharSequence = if (exists && !isDirectory) Files.readString(p) else ""
-}
+/** A [dev.ide.vfs.VirtualFile] backed by a real path — enough for source-root walking + classpath reads. */
+typealias DiskFile = DiskVirtualFile
 
 /** The kotlin-stdlib jar on the test classpath (the one carrying `kotlin/Pair.class`). */
-fun stdlibJarPath(): Path {
-    val cp = System.getProperty("java.class.path").split(File.pathSeparator)
-    val entry = cp.firstOrNull { e ->
-        e.endsWith(".jar") && runCatching { ZipFile(e).use { it.getEntry("kotlin/Pair.class") != null } }.getOrDefault(false)
-    } ?: error("kotlin-stdlib jar not found on test classpath")
-    return Path.of(entry)
-}
+fun stdlibJarPath(): Path = TestJars.kotlinStdlib()
 
 /** Write [code] into a fresh temp source dir as `Prog.kt`, returning the dir. */
 fun tempProject(code: String): Path {
     val dir = Files.createTempDirectory("interp-core-test")
-    Files.writeString(dir.resolve("Prog.kt"), code)
+    dir.writeSource("Prog.kt", code, trim = false)
     return dir
 }
 

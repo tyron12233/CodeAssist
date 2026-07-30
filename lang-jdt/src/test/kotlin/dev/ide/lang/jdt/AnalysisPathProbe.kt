@@ -1,5 +1,6 @@
 package dev.ide.lang.jdt
 
+import dev.ide.testkit.withTempDir
 import dev.ide.lang.AnnotationProcessor
 import dev.ide.lang.CompilationContext
 import dev.ide.model.ClasspathEntry
@@ -50,8 +51,7 @@ class AnalysisPathProbe {
         val jars = jarsOnClasspath()
         if (jars.isEmpty()) { println("\n[AnalysisPathProbe] no stand-in jar found — skipping\n"); return }
 
-        val dir = Files.createTempDirectory("analysis-probe")
-        try {
+        withTempDir("analysis-probe") { dir ->
             val analyzer = analyzerWithJars(dir, jars)
             val code = """
                 package app;
@@ -78,8 +78,6 @@ class AnalysisPathProbe {
                     "new diagnose()              : ${ms(lowNs)}\n" +
                     "speedup ${"%.2f".format(domNs / lowNs)}x\n"
             )
-        } finally {
-            dir.toFile().deleteRecursively()
         }
     }
 

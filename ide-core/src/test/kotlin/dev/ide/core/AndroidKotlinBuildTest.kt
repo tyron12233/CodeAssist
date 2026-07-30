@@ -25,11 +25,12 @@ import dev.ide.model.ModuleId
 import dev.ide.model.impl.FacetCodecRegistry
 import dev.ide.model.impl.ModuleTypeRegistry
 import dev.ide.model.impl.ProjectModel
-import dev.ide.platform.impl.PlatformCore
+import dev.ide.testkit.TestJars
+import dev.ide.testkit.testEnv
+import dev.ide.testkit.writeSource
 import kotlinx.coroutines.runBlocking
 import org.junit.jupiter.api.Assumptions.assumeTrue
 import java.nio.file.Files
-import java.nio.file.Path
 import kotlin.test.Test
 import kotlin.test.assertTrue
 
@@ -48,15 +49,15 @@ class AndroidKotlinBuildTest {
         assumeTrue(sdk != null && sdk.isComplete(), "Android SDK not installed; skipping")
         sdk!!
 
-        val dir = Files.createTempDirectory("android-kotlin")
-        val platform = PlatformCore()
-        try {
+        testEnv("android-kotlin") { env ->
+            val dir = env.dir
+            val platform = env.platform
             val store = ProjectModel.open(dir, platform, FacetCodecRegistry().register(AndroidFacetCodec))
             ModuleTypeRegistry(platform.extensions).register(AndroidAppModuleType, AndroidSupport.PLUGIN)
             val appType = ModuleTypeRegistry(platform.extensions).resolve("android-app")
             store.workspace.beginModification().apply { addProject("demo", BuildSystemId.NATIVE, store.vfs.root()); commit() }
             store.workspace.libraryTable.create("kotlin-stdlib")
-                .apply { kind = LibraryKind.JAR; addClassesRoot(store.vfs.fileFor(stdlibJar())); commit() }
+                .apply { kind = LibraryKind.JAR; addClassesRoot(store.vfs.fileFor(TestJars.kotlinStdlib())); commit() }
             store.workspace.projects.single().beginModification().apply {
                 addModule("app", appType).apply {
                     languageLevel = LanguageLevel.JAVA_8   // compile against android.jar as -bootclasspath (< 9)
@@ -65,10 +66,10 @@ class AndroidKotlinBuildTest {
                 }
                 commit()
             }
-            write(dir, "app/src/main/AndroidManifest.xml", MANIFEST)
-            write(dir, "app/src/main/res/values/strings.xml", STRINGS)
-            write(dir, "app/src/main/kotlin/com/example/app/Greeting.kt", GREETING)
-            write(dir, "app/src/main/java/com/example/app/MainActivity.java", ACTIVITY)
+            dir.writeSource("app/src/main/AndroidManifest.xml", MANIFEST)
+            dir.writeSource("app/src/main/res/values/strings.xml", STRINGS)
+            dir.writeSource("app/src/main/kotlin/com/example/app/Greeting.kt", GREETING)
+            dir.writeSource("app/src/main/java/com/example/app/MainActivity.java", ACTIVITY)
 
             val signing = DebugKeystore.getOrCreate(dir.resolve(".keystore/debug.ks"), sdk.keytool)
             // Subprocess wiring (SDK's d8/apksigner) — ide-core's test classpath has no in-process r8/apksig.
@@ -90,15 +91,7 @@ class AndroidKotlinBuildTest {
 
             val apk = AndroidBuildSystem.signedApkPath(store.workspace.projects.single().modules.single(), "debug")
             assertTrue(Files.isRegularFile(apk), "signed APK missing: $apk\n$log")
-        } finally {
-            platform.dispose(); dir.toFile().deleteRecursively()
         }
-    }
-
-    private fun stdlibJar(): Path = Path.of(Unit::class.java.protectionDomain.codeSource.location.toURI())
-
-    private fun write(root: Path, rel: String, content: String) {
-        val f = root.resolve(rel); Files.createDirectories(f.parent); Files.writeString(f, content.trimIndent())
     }
 
     private companion object {

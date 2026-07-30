@@ -10,8 +10,7 @@ import dev.ide.model.impl.FacetCodecRegistry
 import dev.ide.model.impl.ModuleTypeRegistry
 import dev.ide.model.impl.ProjectModel
 import dev.ide.model.impl.ProjectModelStore
-import dev.ide.platform.impl.PlatformCore
-import java.nio.file.Files
+import dev.ide.testkit.testEnv
 import kotlin.test.Test
 import kotlin.test.assertEquals
 
@@ -88,9 +87,9 @@ class AndroidVariantTest {
 
     @Test
     fun matchLibraryVariantIsDimensionAwareWithDebuggabilityFallback() {
-        val dir = Files.createTempDirectory("android-match")
-        val platform = PlatformCore()
-        try {
+        testEnv("android-match") { env ->
+            val dir = env.dir
+            val platform = env.platform
             val store = ProjectModel.open(dir, platform, FacetCodecRegistry().register(AndroidFacetCodec))
             ModuleTypeRegistry(platform.extensions).register(AndroidLibModuleType, AndroidSupport.PLUGIN)
             val libType = ModuleTypeRegistry(platform.extensions).resolve("android-lib")
@@ -121,8 +120,6 @@ class AndroidVariantTest {
             assertEquals("paidRelease", AndroidVariants.matchLibraryVariant(lib, consumer("paidRelease", "release", listOf("paid")), appFacet)?.name)
             // `staging` (debuggable) isn't a lib build type → fall back to the lib's debuggable variant of the same flavor.
             assertEquals("freeDebug", AndroidVariants.matchLibraryVariant(lib, consumer("freeStaging", "staging", listOf("free")), appFacet)?.name)
-        } finally {
-            platform.dispose(); dir.toFile().deleteRecursively()
         }
     }
 
@@ -133,9 +130,9 @@ class AndroidVariantTest {
         extraSourceSets: List<String>,
         body: (Module) -> Unit,
     ) {
-        val dir = Files.createTempDirectory("android-variant")
-        val platform = PlatformCore()
-        try {
+        testEnv("android-variant") { env ->
+            val dir = env.dir
+            val platform = env.platform
             val store: ProjectModelStore = ProjectModel.open(dir, platform, FacetCodecRegistry().register(AndroidFacetCodec))
             ModuleTypeRegistry(platform.extensions).register(AndroidAppModuleType, AndroidSupport.PLUGIN)
             val appType = ModuleTypeRegistry(platform.extensions).resolve("android-app")
@@ -150,8 +147,6 @@ class AndroidVariantTest {
                 commit()
             }
             body(store.workspace.projects.single().modules.single { it.name == "app" })
-        } finally {
-            platform.dispose(); dir.toFile().deleteRecursively()
         }
     }
 }

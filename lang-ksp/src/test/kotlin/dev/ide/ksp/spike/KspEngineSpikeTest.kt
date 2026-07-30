@@ -4,8 +4,8 @@ import com.google.devtools.ksp.impl.KotlinSymbolProcessing
 import com.google.devtools.ksp.processing.KSPJvmConfig
 import com.google.devtools.ksp.processing.KSPLogger
 import com.google.devtools.ksp.symbol.KSNode
+import dev.ide.testkit.withTempDir
 import java.io.File
-import java.nio.file.Files
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
@@ -34,8 +34,8 @@ class KspEngineSpikeTest {
 
     @Test
     fun runsKsp2StandaloneAndGeneratesSource() {
-        val root = Files.createTempDirectory("ksp-engine-spike").toFile()
-        try {
+        withTempDir("ksp-engine-spike") { dir ->
+            val root = dir.toFile()
             val src = File(root, "src").apply { mkdirs() }
             File(src, "Model.kt").writeText(
                 """
@@ -80,8 +80,6 @@ class KspEngineSpikeTest {
             )
             val text = generated.readText()
             assertTrue("Foo" in text && "Bar" in text, "generated content did not resolve both classes:\n$text")
-        } finally {
-            root.deleteRecursively()
         }
     }
 }

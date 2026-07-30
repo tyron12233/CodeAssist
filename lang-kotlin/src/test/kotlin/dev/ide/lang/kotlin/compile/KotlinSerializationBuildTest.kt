@@ -1,5 +1,7 @@
 package dev.ide.lang.kotlin.compile
 
+import dev.ide.testkit.withTempDir
+import dev.ide.testkit.writeSource
 import dev.ide.lang.kotlin.parse
 import org.junit.jupiter.api.Assumptions.assumeTrue
 import java.nio.file.Files
@@ -39,8 +41,7 @@ class KotlinSerializationBuildTest {
         val runtime = serializationRuntimeJars()
         assumeTrue(runtime.isNotEmpty(), "serialization runtime jar not on the test classpath")
 
-        val dir = Files.createTempDirectory("kt-serialization")
-        try {
+        withTempDir("kt-serialization") { dir ->
             val src = dir.resolve("src")
             val source = write(
                 src, "demo/Model.kt",
@@ -72,8 +73,6 @@ class KotlinSerializationBuildTest {
                 hasGeneratedSerializer(noPlugin),
                 "a \$serializer class was generated WITHOUT the plugin",
             )
-        } finally {
-            dir.toFile().deleteRecursively()
         }
     }
 
@@ -83,8 +82,5 @@ class KotlinSerializationBuildTest {
             s.anyMatch { Files.isRegularFile(it) && it.fileName.toString().endsWith("\$serializer.class") }
         }
 
-    private fun write(root: Path, rel: String, content: String): Path {
-        val f = root.resolve(rel); Files.createDirectories(f.parent); Files.writeString(f, content.trimIndent())
-        return f
-    }
+    private fun write(root: Path, rel: String, content: String): Path = root.writeSource(rel, content)
 }

@@ -6,6 +6,7 @@ import dev.ide.android.support.tools.OffHeapArchiveDexer
 import dev.ide.android.support.tools.ToolResult
 import dev.ide.build.TaskName
 import dev.ide.build.engine.SimpleTaskContext
+import dev.ide.testkit.withTempDir
 import kotlinx.coroutines.runBlocking
 import java.nio.file.Files
 import java.nio.file.Path
@@ -97,8 +98,7 @@ class DexArchiveCacheTest {
 
     @Test
     fun sharedCacheDexesEachLibraryOnceAcrossProjects() = runBlocking {
-        val tmp = Files.createTempDirectory("dexcache")
-        try {
+        withTempDir("dexcache") { tmp ->
             val cache = tmp.resolve("shared-dex")
             val libs = tmp.resolve("libs")
             Files.createDirectories(libs)
@@ -121,8 +121,6 @@ class DexArchiveCacheTest {
             val dexerA2 = CountingDexer()
             buildTask(":a:dexBuilder", jars, tmp.resolve("a/ext"), dexerA2, cache, tmp.resolve("a")).execute(SimpleTaskContext())
             assertEquals(0, dexerA2.archiveCalls.get(), "unchanged module buckets are reused without dexing")
-        } finally {
-            tmp.toFile().deleteRecursively()
         }
     }
 
@@ -135,8 +133,7 @@ class DexArchiveCacheTest {
      */
     @Test
     fun contentHashesSurviveMtimeOnlyRebuildAndFlipOnContentChange() {
-        val tmp = Files.createTempDirectory("chash")
-        try {
+        withTempDir("chash") { tmp ->
             val cacheDir = tmp.resolve("hashcache")
             val lib = jar(tmp, "lib.jar", "a/B.class", "a/C.class")
             val h1 = SharedLibraryDexer.contentHashes(listOf(lib), cacheDir)[lib]
@@ -151,8 +148,6 @@ class DexArchiveCacheTest {
             jar(tmp, "lib.jar", "a/B.class", "a/C.class", "a/D.class")
             val h3 = SharedLibraryDexer.contentHashes(listOf(lib), cacheDir)[lib]
             assertTrue(h3 != null && h3 != h1, "a content change must change the content hash")
-        } finally {
-            tmp.toFile().deleteRecursively()
         }
     }
 
@@ -165,8 +160,7 @@ class DexArchiveCacheTest {
      */
     @Test
     fun changingRJarDoesNotReDexStableLibraries() = runBlocking {
-        val tmp = Files.createTempDirectory("dexRcache")
-        try {
+        withTempDir("dexRcache") { tmp ->
             val cache = tmp.resolve("shared-dex")
             val libs = tmp.resolve("libs"); Files.createDirectories(libs)
             // A material-style set: several stable library jars + the app's volatile R.jar.
@@ -197,15 +191,12 @@ class DexArchiveCacheTest {
             buildTask(":app:dexBuilder", libJars, tmp.resolve("app2/ext"), warm, cache, tmp.resolve("app2"), rJars = listOf(rJar), rRoot = tmp.resolve("app2/r"))
                 .execute(SimpleTaskContext())
             assertEquals(1, warm.archiveCalls.get(), "a resource edit re-dexes only R.jar; the stable libraries hit the shared cache")
-        } finally {
-            tmp.toFile().deleteRecursively()
         }
     }
 
     @Test
     fun duplicateLibraryOnClasspathDoesNotCrashDexing() = runBlocking {
-        val tmp = Files.createTempDirectory("dexdup")
-        try {
+        withTempDir("dexdup") { tmp ->
             val libs = tmp.resolve("libs"); Files.createDirectories(libs)
             // Same artifact via two paths (byte-identical → same content hash), e.g. two resolver cache paths.
             val dupA = jar(libs, "stdlib-a.jar", "kotlin/sequences/SequencesKt.class")
@@ -227,15 +218,12 @@ class DexArchiveCacheTest {
                 .execute(SimpleTaskContext())
             assertEquals(dev.ide.build.TaskResult.Success, result, "class-level dedup must keep duplicate types off the classpath")
             assertTrue(DexArchivesProbe.hasDexUnder(extRoot), "the deduped library set still produces dex output")
-        } finally {
-            tmp.toFile().deleteRecursively()
         }
     }
 
     @Test
     fun classFreeLibraryJarsAreSkippedNotDexedOrCrashed() = runBlocking {
-        val tmp = Files.createTempDirectory("dexempty")
-        try {
+        withTempDir("dexempty") { tmp ->
             val libs = tmp.resolve("libs"); Files.createDirectories(libs)
             val normal = jar(libs, "real.jar", "a/A.class")
             // A resource-only AAR's classes.jar has no `.class` entries. Two shapes: the manifest-only jar the
@@ -255,8 +243,6 @@ class DexArchiveCacheTest {
                 .execute(SimpleTaskContext())
             assertEquals(dev.ide.build.TaskResult.Success, result, "class-free jars must not break the dex build")
             assertEquals(1, dexer.archiveCalls.get(), "only the class-bearing jar is dexed; class-free jars are skipped")
-        } finally {
-            tmp.toFile().deleteRecursively()
         }
     }
 
@@ -279,8 +265,7 @@ class DexArchiveCacheTest {
 
     @Test
     fun coldLibraryArchivingRoutesOffHeapWhenSupported() = runBlocking {
-        val tmp = Files.createTempDirectory("dexoffheap")
-        try {
+        withTempDir("dexoffheap") { tmp ->
             val libs = tmp.resolve("libs"); Files.createDirectories(libs)
             val jars = listOf(jar(libs, "a.jar", "a/A.class"), jar(libs, "b.jar", "b/B.class"), jar(libs, "c.jar", "c/C.class"))
             val dexer = OffHeapCountingDexer()
@@ -291,15 +276,12 @@ class DexArchiveCacheTest {
             assertEquals(3, dexer.offHeapCalls.get(), "cold library archives run off-heap (forked) when the dexer supports it")
             assertEquals(0, dexer.inProcessArchiveCalls.get(), "library archiving must not fall back to the in-process dexArchive path")
             assertTrue(DexArchivesProbe.hasDexUnder(extRoot), "each library still produces its own per-jar bucket")
-        } finally {
-            tmp.toFile().deleteRecursively()
         }
     }
 
     @Test
     fun incompleteLibraryBucketIsReDexedNotReused() = runBlocking {
-        val tmp = Files.createTempDirectory("dexincomplete")
-        try {
+        withTempDir("dexincomplete") { tmp ->
             val libs = tmp.resolve("libs"); Files.createDirectories(libs)
             val lib = jar(libs, "lib.jar", "a/A.class", "a/B.class")
             val extRoot = tmp.resolve("ext")
@@ -314,8 +296,6 @@ class DexArchiveCacheTest {
             assertEquals(dev.ide.build.TaskResult.Success, result)
             assertEquals(1, dexer.archiveCalls.get(), "an incomplete bucket must be re-dexed, not reused")
             assertTrue(Files.isRegularFile(bucket.resolve("a/B.dex")), "the previously-missing class is now dexed")
-        } finally {
-            tmp.toFile().deleteRecursively()
         }
     }
 
@@ -331,8 +311,7 @@ class DexArchiveCacheTest {
 
     @Test
     fun droppedLibraryClassFailsTheBuildLoudly() = runBlocking {
-        val tmp = Files.createTempDirectory("dexdrop")
-        try {
+        withTempDir("dexdrop") { tmp ->
             val libs = tmp.resolve("libs"); Files.createDirectories(libs)
             val lib = jar(libs, "lib.jar", "a/A.class", "a/B.class")
             val result = buildTask(":x:dexBuilder", listOf(lib), tmp.resolve("ext"), DroppingDexer(omit = "a/B.class"), tmp.resolve("cache"), tmp.resolve("x"))
@@ -341,8 +320,6 @@ class DexArchiveCacheTest {
             assertTrue(result is dev.ide.build.TaskResult.Failed, "a dropped class must fail the build, not ship a broken APK")
             val msg = (result as dev.ide.build.TaskResult.Failed).message
             assertTrue("a.B" in msg && "dropped" in msg, "the failure names the dropped class + cause: $msg")
-        } finally {
-            tmp.toFile().deleteRecursively()
         }
     }
 

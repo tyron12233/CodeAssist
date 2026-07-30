@@ -40,8 +40,8 @@ class ReifiedInlineExecutor(
     private val classpath = ClassBytesSource.fromClasspath(loader)
 
     private val vm = Vm(
-        source = ClassBytesSource { name -> extraSource?.bytesFor(name) ?: classpath.bytesFor(name) },
-        policy = InterpretPolicy { name -> isKotlinFacade(name) },
+        source = { name -> extraSource?.bytesFor(name) ?: classpath.bytesFor(name) },
+        policy = { name -> isKotlinFacade(name) },
         peerFactory = peerFactory,
     )
 

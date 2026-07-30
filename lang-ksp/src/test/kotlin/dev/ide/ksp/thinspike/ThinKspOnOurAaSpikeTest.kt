@@ -1,10 +1,10 @@
 package dev.ide.ksp.thinspike
 
 import dev.ide.ksp.spike.ListClassesProcessorProvider
+import dev.ide.testkit.withTempDir
 import java.io.File
 import java.lang.reflect.InvocationTargetException
 import java.net.URLClassLoader
-import java.nio.file.Files
 import java.util.zip.ZipFile
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -58,8 +58,8 @@ class ThinKspOnOurAaSpikeTest {
         }
         assumeTrue(aaJar != null, "symbol-processing-aa (non-embeddable) not on the classpath — skipping")
 
-        val work = Files.createTempDirectory("thin-ksp-spike").toFile()
-        try {
+        withTempDir("thin-ksp-spike") { dir ->
+            val work = dir.toFile()
             // 1. Extract ONLY KSP's own classes; leave its bundled AA behind (our merged jar supplies the AA).
             val kspThinDir = extract(aaJar!!, "com/google/devtools/ksp/", File(work, "ksp-classes"))
             val classCount = kspThinDir.walkTopDown().count { it.isFile && it.extension == "class" }
@@ -96,8 +96,6 @@ class ThinKspOnOurAaSpikeTest {
                 "KSP ran on our AA but generated nothing.\n$result\nout tree:\n" +
                     outBase.walkTopDown().filter { it.isFile }.joinToString("\n") { it.relativeTo(outBase).path },
             )
-        } finally {
-            work.deleteRecursively()
         }
     }
 
@@ -121,8 +119,8 @@ class ThinKspOnOurAaSpikeTest {
         }
         assumeTrue(aaJar != null, "symbol-processing-aa (non-embeddable) not on the classpath — skipping")
 
-        val work = Files.createTempDirectory("thin-ksp-room-spike").toFile()
-        try {
+        withTempDir("thin-ksp-room-spike") { dir ->
+            val work = dir.toFile()
             val kspThinDir = extract(aaJar!!, "com/google/devtools/ksp/", File(work, "ksp-classes"))
             val testClassesDir = File(ListClassesProcessorProvider::class.java.protectionDomain.codeSource.location.toURI())
 
@@ -170,8 +168,6 @@ class ThinKspOnOurAaSpikeTest {
                 "Room ran on our AA but did not emit AppDatabase_Impl.kt.\n$result\nemitted:\n" +
                     emitted.joinToString("\n") { it.relativeTo(outBase).path },
             )
-        } finally {
-            work.deleteRecursively()
         }
     }
 }

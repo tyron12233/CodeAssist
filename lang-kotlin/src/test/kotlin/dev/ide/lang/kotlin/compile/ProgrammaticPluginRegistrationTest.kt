@@ -1,5 +1,7 @@
 package dev.ide.lang.kotlin.compile
 
+import dev.ide.testkit.withTempDir
+import dev.ide.testkit.writeSource
 import dev.ide.lang.kotlin.parse
 import org.jetbrains.kotlin.compiler.plugin.ExperimentalCompilerApi
 import org.junit.jupiter.api.Assumptions.assumeTrue
@@ -57,8 +59,7 @@ class ProgrammaticPluginRegistrationTest {
         val runtime = composeRuntimeJars()
         assumeTrue(runtime.isNotEmpty(), "Compose runtime jar not on the test classpath")
 
-        val dir = Files.createTempDirectory("kt-runtime-plugin")
-        try {
+        withTempDir("kt-runtime-plugin") { dir ->
             val src = dir.resolve("src")
             val source = write(
                 src, "demo/Screen.kt",
@@ -86,8 +87,6 @@ class ProgrammaticPluginRegistrationTest {
             )
             // The source -> .class mapping must still be captured on this path (incremental compile needs it).
             assertTrue(r.outputs.keys.any { it.toString().endsWith("Screen.kt") }, "no output mapping captured: ${r.outputs}")
-        } finally {
-            dir.toFile().deleteRecursively()
         }
     }
 
@@ -107,8 +106,5 @@ class ProgrammaticPluginRegistrationTest {
         return descriptor
     }
 
-    private fun write(root: Path, rel: String, content: String): Path {
-        val f = root.resolve(rel); Files.createDirectories(f.parent); Files.writeString(f, content.trimIndent())
-        return f
-    }
+    private fun write(root: Path, rel: String, content: String): Path = root.writeSource(rel, content)
 }

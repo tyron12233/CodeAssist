@@ -1,6 +1,5 @@
 package dev.ide.android.support
 
-import dev.ide.android.support.tools.AndroidSdk
 import dev.ide.android.support.tools.DebugKeystore
 import dev.ide.android.support.tools.DesugarLib
 import dev.ide.build.BuildGoal
@@ -15,7 +14,8 @@ import dev.ide.model.ModuleId
 import dev.ide.model.impl.FacetCodecRegistry
 import dev.ide.model.impl.ModuleTypeRegistry
 import dev.ide.model.impl.ProjectModel
-import dev.ide.platform.impl.PlatformCore
+import dev.ide.testkit.testEnv
+import dev.ide.testkit.writeSource
 import kotlinx.coroutines.runBlocking
 import org.junit.jupiter.api.Assumptions.assumeTrue
 import java.io.ByteArrayOutputStream
@@ -41,15 +41,14 @@ class AndroidCoreLibraryDesugaringTest {
     fun releaseBuildDesugarsAndPackagesTheRuntime() = buildAndAssertDesugarRuntime("release", minify = true)
 
     private fun buildAndAssertDesugarRuntime(variant: String, minify: Boolean) {
-        val sdk = AndroidSdk.findSdkRoot()?.let { AndroidSdk.detect(it) }
-        assumeTrue(sdk != null && sdk.isComplete(), "Android SDK not installed; skipping")
+        val sdk = assumeAndroidSdk()
         val desugar = desugarLib()
         assumeTrue(desugar != null, "desugar_jdk_libs artifacts not on the test classpath; skipping")
-        sdk!!; desugar!!
+        desugar!!
 
-        val dir = Files.createTempDirectory("android-desugar-$variant")
-        val platform = PlatformCore()
-        try {
+        testEnv("android-desugar-$variant") { env ->
+            val dir = env.dir
+            val platform = env.platform
             val store = ProjectModel.open(dir, platform, FacetCodecRegistry().register(AndroidFacetCodec))
             ModuleTypeRegistry(platform.extensions).register(AndroidAppModuleType, AndroidSupport.PLUGIN)
             val appType = ModuleTypeRegistry(platform.extensions).resolve("android-app")
@@ -73,9 +72,9 @@ class AndroidCoreLibraryDesugaringTest {
                 }
                 commit()
             }
-            write(dir, "app/src/main/AndroidManifest.xml", MANIFEST)
-            write(dir, "app/src/main/res/values/strings.xml", STRINGS)
-            write(dir, "app/src/main/java/com/example/app/MainActivity.java", ACTIVITY)
+            dir.writeSource("app/src/main/AndroidManifest.xml", MANIFEST)
+            dir.writeSource("app/src/main/res/values/strings.xml", STRINGS)
+            dir.writeSource("app/src/main/java/com/example/app/MainActivity.java", ACTIVITY)
 
             val signing = DebugKeystore.getOrCreate(dir.resolve(".keystore/debug.ks"), sdk.keytool)
             val buildSystem = AndroidBuildSystem.inProcess(sdk, signing, desugarLib = desugar)
@@ -94,8 +93,6 @@ class AndroidCoreLibraryDesugaringTest {
             // The desugared runtime classes live under the `j$` package; their presence proves both that the
             // app's java.time references were rewritten and that L8 dexed the runtime into the APK.
             assertTrue(dexContains(apkDexBytes(apk), "Lj$/time/"), "the desugared j\$ runtime must be packaged")
-        } finally {
-            platform.dispose(); dir.toFile().deleteRecursively()
         }
     }
 
@@ -124,10 +121,6 @@ class AndroidCoreLibraryDesugaringTest {
             return true
         }
         return false
-    }
-
-    private fun write(root: Path, rel: String, content: String) {
-        val f = root.resolve(rel); Files.createDirectories(f.parent); Files.writeString(f, content.trimIndent())
     }
 
     private companion object {

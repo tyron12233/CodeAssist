@@ -2,7 +2,8 @@ package dev.ide.android.support.index
 
 import dev.ide.android.support.resources.ResourceType
 import dev.ide.android.support.resources.StdlibResourceModel
-import java.nio.file.Files
+import dev.ide.testkit.withTempDir
+import dev.ide.testkit.writeSource
 import kotlin.test.Test
 import kotlin.test.assertTrue
 
@@ -40,10 +41,11 @@ class ApostropheStringResourceTest {
     @Test
     fun repositoryParserExtractsAllStrings() {
         for ((label, text) in listOf("unescaped" to unescaped, "escaped" to escaped)) {
-            val dir = Files.createTempDirectory("res")
-            Files.writeString(Files.createDirectories(dir.resolve("values")).resolve("strings.xml"), text)
-            val names = StdlibResourceModel.parse(listOf(dir)).names(ResourceType.STRING).toSet()
-            assertTrue("rgb_instruction" in names && "added_after" in names, "$label: repository dropped strings: $names")
+            withTempDir("res") { dir ->
+                dir.writeSource("values/strings.xml", text, trim = false)
+                val names = StdlibResourceModel.parse(listOf(dir)).names(ResourceType.STRING).toSet()
+                assertTrue("rgb_instruction" in names && "added_after" in names, "$label: repository dropped strings: $names")
+            }
         }
     }
 }

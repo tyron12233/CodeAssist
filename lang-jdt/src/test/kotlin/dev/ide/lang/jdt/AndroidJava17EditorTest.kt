@@ -1,5 +1,6 @@
 package dev.ide.lang.jdt
 
+import dev.ide.testkit.withTempDir
 import dev.ide.lang.AnnotationProcessor
 import dev.ide.lang.CompilationContext
 import dev.ide.model.ClasspathEntry
@@ -50,8 +51,7 @@ class AndroidJava17EditorTest {
     fun java17EditorResolvesAgainstAndroidJarWithDesugarStubs() {
         val androidJar = androidJar() ?: run { println("[AndroidJava17Editor] no Android SDK — skipping"); return }
         val stubs = coreLambdaStubs() ?: run { println("[AndroidJava17Editor] no core-lambda-stubs.jar — skipping"); return }
-        val dir = Files.createTempDirectory("android-j17")
-        try {
+        withTempDir("android-j17") { dir ->
             val file = StubFile(dir.resolve("app/T.java").toString(), code)
 
             // Without the desugar stubs: the string concatenation can't bind StringConcatFactory at Java 17.
@@ -66,8 +66,6 @@ class AndroidJava17EditorTest {
             println("[AndroidJava17Editor] with stubs: $withStubs")
             assertFalse(withStubs.any { "StringConcatFactory" in it }, "stubs must resolve StringConcatFactory: $withStubs")
             assertTrue(withStubs.isEmpty(), "well-formed Java 17 buffer should produce no editor diagnostics: $withStubs")
-        } finally {
-            dir.toFile().deleteRecursively()
         }
     }
 

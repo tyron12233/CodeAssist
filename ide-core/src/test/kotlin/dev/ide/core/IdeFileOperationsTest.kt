@@ -1,5 +1,6 @@
 package dev.ide.core
 
+import dev.ide.testkit.withTempDir
 import kotlinx.coroutines.runBlocking
 import java.nio.file.Files
 import java.util.Base64
@@ -22,8 +23,7 @@ import kotlin.test.assertTrue
 class IdeFileOperationsTest {
 
     @Test
-    fun deletesAFileAndReportsMissingTargets() {
-        val dir = Files.createTempDirectory("fileops-del")
+    fun deletesAFileAndReportsMissingTargets() = withTempDir("fileops-del") { dir ->
         IdeServices.bootstrapJavaDemo(dir).use { ide ->
             val core = ide.modules().first { it.name == "core" }
             val scratch = ide.sourceRoots(core).first().resolve("com/example/core/Scratch.java")
@@ -36,8 +36,7 @@ class IdeFileOperationsTest {
     }
 
     @Test
-    fun renamesAJavaClassAndItsReferencesAcrossFiles() {
-        val dir = Files.createTempDirectory("fileops-rename")
+    fun renamesAJavaClassAndItsReferencesAcrossFiles() = withTempDir("fileops-rename") { dir ->
         IdeServices.bootstrapJavaDemo(dir).use { ide ->
             val core = ide.modules().first { it.name == "core" }
             val greeter = ide.sourceRoots(core).first().resolve("com/example/core/Greeter.java")
@@ -61,8 +60,7 @@ class IdeFileOperationsTest {
     }
 
     @Test
-    fun renamesANonSourceFileInPlace() {
-        val dir = Files.createTempDirectory("fileops-rename2")
+    fun renamesANonSourceFileInPlace() = withTempDir("fileops-rename2") { dir ->
         IdeServices.bootstrapJavaDemo(dir).use { ide ->
             val core = ide.modules().first { it.name == "core" }
             val notes = ide.sourceRoots(core).first().resolveSibling("notes.txt")
@@ -76,8 +74,7 @@ class IdeFileOperationsTest {
     }
 
     @Test
-    fun movesAndCopiesFilesWithConflictGuards() {
-        val dir = Files.createTempDirectory("fileops-move")
+    fun movesAndCopiesFilesWithConflictGuards() = withTempDir("fileops-move") { dir ->
         IdeServices.bootstrapJavaDemo(dir).use { ide ->
             val core = ide.modules().first { it.name == "core" }
             val pkg = ide.sourceRoots(core).first().resolve("com/example/core")
@@ -103,8 +100,7 @@ class IdeFileOperationsTest {
     }
 
     @Test
-    fun movingAJavaFileRewritesItsPackageAndUpdatesImports() {
-        val dir = Files.createTempDirectory("fileops-pkgmove")
+    fun movingAJavaFileRewritesItsPackageAndUpdatesImports() = withTempDir("fileops-pkgmove") { dir ->
         IdeServices.bootstrapJavaDemo(dir).use { ide ->
             val core = ide.modules().first { it.name == "core" }
             val root = ide.sourceRoots(core).first()
@@ -132,8 +128,7 @@ class IdeFileOperationsTest {
     }
 
     @Test
-    fun copyingAJavaFileRewritesTheCopysPackageOnly() {
-        val dir = Files.createTempDirectory("fileops-pkgcopy")
+    fun copyingAJavaFileRewritesTheCopysPackageOnly() = withTempDir("fileops-pkgcopy") { dir ->
         IdeServices.bootstrapJavaDemo(dir).use { ide ->
             val core = ide.modules().first { it.name == "core" }
             val root = ide.sourceRoots(core).first()
@@ -159,7 +154,7 @@ class IdeFileOperationsTest {
     fun buildFlushNeverOverwritesAnOpenedBinaryAsset() {
         // Regression: opening a PNG seeds the editor overlay with FileBackend.readFile's placeholder text;
         // the build-time flushOpenDocuments() then used to write that placeholder over the real bytes.
-        val dir = Files.createTempDirectory("fileops-binflush")
+        withTempDir("fileops-binflush") { dir ->
         IdeServices.bootstrapJavaDemo(dir).use { ide ->
             val png = ide.workspaceRoot.resolve("logo.png")
             Files.write(png, PNG_1X1)
@@ -180,12 +175,11 @@ class IdeFileOperationsTest {
             ide.flushOpenDocuments()
             assertEquals("new content", Files.readString(src), "a text overlay still flushes to disk")
         }
-        dir.toFile().deleteRecursively()
+        }
     }
 
     @Test
-    fun renamesAndDeletesADirectory() {
-        val dir = Files.createTempDirectory("fileops-dir")
+    fun renamesAndDeletesADirectory() = withTempDir("fileops-dir") { dir ->
         IdeServices.bootstrapJavaDemo(dir).use { ide ->
             val core = ide.modules().first { it.name == "core" }
             val pkg = ide.sourceRoots(core).first().resolve("com/example/core")

@@ -6,8 +6,8 @@ import dev.ide.lang.incremental.DocumentSnapshot
 import dev.ide.lang.xml.XmlIncrementalParser
 import dev.ide.lang.xml.lint.AttrInfo
 import dev.ide.lang.xml.lint.XmlLintRules
-import dev.ide.platform.ContentHash
-import dev.ide.vfs.VirtualFile
+import dev.ide.testkit.TestDocument
+import dev.ide.testkit.virtualFile
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertIs
@@ -129,19 +129,5 @@ class AndroidXmlCheckerTest {
 
     private fun parse(xml: String) = XmlIncrementalParser().parseFull(Doc(xml))
 
-    private class Doc(override val text: CharSequence) : DocumentSnapshot {
-        override val file: VirtualFile = Fake
-        override val version: Long = 1
-        override fun length(): Int = text.length
-    }
-
-    private object Fake : VirtualFile {
-        override val path = "res/layout/a.xml"; override val name = "a.xml"
-        override val isDirectory = false; override val exists = true; override val length = 0L
-        override fun parent(): VirtualFile? = null
-        override fun children(): List<VirtualFile> = emptyList()
-        override fun contentHash() = ContentHash("")
-        override fun readBytes() = ByteArray(0)
-        override fun readText(): CharSequence = ""
-    }
+    private class Doc(text: CharSequence) : DocumentSnapshot by TestDocument(text, virtualFile("res/layout/a.xml"))
 }

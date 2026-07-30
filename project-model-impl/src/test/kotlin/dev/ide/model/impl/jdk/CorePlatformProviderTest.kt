@@ -1,5 +1,6 @@
 package dev.ide.model.impl.jdk
 
+import dev.ide.testkit.withTempDir
 import dev.ide.model.PlatformKind
 import java.nio.file.Files
 import java.nio.file.Path
@@ -42,8 +43,7 @@ class CorePlatformProviderTest {
 
     @Test
     fun stripsAndroidNamespacesKeepsStandardJava() {
-        val dir = Files.createTempDirectory("core-platform")
-        try {
+        withTempDir("core-platform") { dir ->
             val androidJar = fakeAndroidJar(dir)
             val cache = dir.resolve("cache")
             val sdk = CorePlatformProvider.coreJavaSdk(androidJar, extraStubs = emptyList(), cacheDir = cache)
@@ -67,30 +67,24 @@ class CorePlatformProviderTest {
             assertTrue("java/util/List.class" in names)
             assertTrue("javax/net/SocketFactory.class" in names)
             assertTrue("org/json/JSONObject.class" in names)
-        } finally {
-            dir.toFile().deleteRecursively()
         }
     }
 
     @Test
     fun cachesByContentSoSecondCallReusesTheJar() {
-        val dir = Files.createTempDirectory("core-platform-cache")
-        try {
+        withTempDir("core-platform-cache") { dir ->
             val androidJar = fakeAndroidJar(dir)
             val cache = dir.resolve("cache")
             val first = CorePlatformProvider.ensureFiltered(androidJar, cache)
             val second = CorePlatformProvider.ensureFiltered(androidJar, cache)
             assertNotNull(first)
             assertEquals(first, second, "second call should reuse the cached jar path")
-        } finally {
-            dir.toFile().deleteRecursively()
         }
     }
 
     @Test
     fun extraStubsJoinBootClasspathAfterFilteredJar() {
-        val dir = Files.createTempDirectory("core-platform-stubs")
-        try {
+        withTempDir("core-platform-stubs") { dir ->
             val androidJar = fakeAndroidJar(dir)
             val stub = Files.createFile(dir.resolve("core-lambda-stubs.jar"))
             val sdk = CorePlatformProvider.coreJavaSdk(androidJar, extraStubs = listOf(stub), cacheDir = dir.resolve("cache"))
@@ -98,8 +92,6 @@ class CorePlatformProviderTest {
             assertEquals(2, sdk.bootClasspath.size)
             assertTrue(sdk.bootClasspath[0].endsWith(".jar"))
             assertEquals(stub.toAbsolutePath().normalize().toString(), sdk.bootClasspath[1])
-        } finally {
-            dir.toFile().deleteRecursively()
         }
     }
 }

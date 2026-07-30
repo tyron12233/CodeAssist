@@ -1,6 +1,7 @@
 package dev.ide.android.support.tools
 
 import dev.ide.android.support.AndroidFacet
+import dev.ide.testkit.withTempDir
 import org.objectweb.asm.ClassReader
 import org.objectweb.asm.ClassVisitor
 import org.objectweb.asm.Opcodes
@@ -38,8 +39,7 @@ class DexInputPrepTest {
 
     @Test
     fun stripsKotlinJarsAndPassesJavaJarsThrough() {
-        val tmp = Files.createTempDirectory("dexinputprep")
-        try {
+        withTempDir("dexinputprep") { tmp ->
             assertTrue(hasKotlinMetadata(facetBytes()), "fixture must be a Kotlin class with @Metadata")
             val kotlinJar = tmp.resolve("kotlin-lib.jar")
             JarOutputStream(Files.newOutputStream(kotlinJar)).use { jos ->
@@ -56,8 +56,6 @@ class DexInputPrepTest {
             assertTrue(out[0] != kotlinJar, "the Kotlin jar is replaced by a stripped copy")
             assertFalse(hasKotlinMetadata(classBytes(out[0], "dev/ide/android/support/AndroidFacet.class")), "@Metadata stripped from the Kotlin jar's class")
             assertSame(javaJar, out[1], "a pure-Java jar (no .kotlin_module) passes through unchanged")
-        } finally {
-            tmp.toFile().deleteRecursively()
         }
     }
 }

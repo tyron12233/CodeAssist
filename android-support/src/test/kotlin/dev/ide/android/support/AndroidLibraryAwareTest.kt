@@ -1,7 +1,6 @@
 package dev.ide.android.support
 
 import dev.ide.android.support.tasks.ApkPackaging
-import dev.ide.android.support.tools.AndroidSdk
 import dev.ide.android.support.tools.DebugKeystore
 import dev.ide.build.BuildGoal
 import dev.ide.build.BuildRequest
@@ -21,9 +20,9 @@ import dev.ide.model.impl.FacetCodecRegistry
 import dev.ide.model.impl.ModuleTypeRegistry
 import dev.ide.model.impl.ProjectModel
 import dev.ide.model.impl.ProjectModelStore
-import dev.ide.platform.impl.PlatformCore
+import dev.ide.testkit.testEnv
+import dev.ide.testkit.writeSource
 import kotlinx.coroutines.runBlocking
-import org.junit.jupiter.api.Assumptions.assumeTrue
 import java.nio.file.Files
 import java.nio.file.Path
 import java.util.zip.ZipEntry
@@ -43,13 +42,11 @@ class AndroidLibraryAwareTest {
 
     @Test
     fun buildsApkWithJarAndAarDependencies() {
-        val sdk = AndroidSdk.findSdkRoot()?.let { AndroidSdk.detect(it) }
-        assumeTrue(sdk != null && sdk.isComplete(), "Android SDK not installed; skipping")
-        sdk!!
+        val sdk = assumeAndroidSdk()
 
-        val dir = Files.createTempDirectory("android-libs")
-        val platform = PlatformCore()
-        try {
+        testEnv("android-libs") { env ->
+            val dir = env.dir
+            val platform = env.platform
             // Two prebuilt artifacts living under the workspace root.
             val jarLib = compileJar(dir.resolve("jarlib"), "jarlib", "com/example/jarlib/JarGreeter.java", JAR_GREETER, sdk.androidJar)
             val aar = buildAar(dir.resolve("aarlib-build"), dir.resolve("aarlib.aar"), sdk.androidJar)
@@ -72,10 +69,10 @@ class AndroidLibraryAwareTest {
                 commit()
             }
 
-            write(dir, "app/src/main/AndroidManifest.xml", APP_MANIFEST)
-            write(dir, "app/src/main/res/values/strings.xml", APP_STRINGS)
-            write(dir, "app/src/main/java/com/example/app/MainActivity.java", APP_ACTIVITY)
-            write(dir, "app/src/main/assets/app_asset.txt", "from app\n")
+            dir.writeSource("app/src/main/AndroidManifest.xml", APP_MANIFEST)
+            dir.writeSource("app/src/main/res/values/strings.xml", APP_STRINGS)
+            dir.writeSource("app/src/main/java/com/example/app/MainActivity.java", APP_ACTIVITY)
+            dir.writeSource("app/src/main/assets/app_asset.txt", "from app\n")
 
             val signing = DebugKeystore.getOrCreate(dir.resolve(".keystore/debug.ks"), sdk.keytool)
             val buildSystem = AndroidBuildSystem.inProcess(sdk, signing)
@@ -94,8 +91,6 @@ class AndroidLibraryAwareTest {
             assertTrue("classes.dex" in entries, "no dex: $entries")
             assertTrue("assets/app_asset.txt" in entries, "app asset missing: $entries")
             assertTrue("assets/aar_asset.txt" in entries, "AAR asset not packaged: $entries")
-        } finally {
-            platform.dispose(); dir.toFile().deleteRecursively()
         }
     }
 
@@ -103,7 +98,7 @@ class AndroidLibraryAwareTest {
     private fun compileJar(workDir: Path, name: String, srcRel: String, src: String, androidJar: Path): Path {
         val srcDir = workDir.resolve("src")
         val classes = workDir.resolve("classes")
-        write(srcDir, srcRel, src)
+        srcDir.writeSource(srcRel, src)
         val r = JdtBatchCompiler.compile(listOf(srcDir.resolve(srcRel)), listOf(androidJar), classes, "17")
         check(r.success) { "library compile failed: ${r.messages}" }
         val jar = workDir.resolve("$name.jar")
@@ -123,10 +118,6 @@ class AndroidLibraryAwareTest {
             put("assets/aar_asset.txt", "from aar\n".toByteArray())
         }
         return aar
-    }
-
-    private fun write(root: Path, rel: String, content: String) {
-        val f = root.resolve(rel); Files.createDirectories(f.parent); Files.writeString(f, content.trimIndent())
     }
 
     private companion object {

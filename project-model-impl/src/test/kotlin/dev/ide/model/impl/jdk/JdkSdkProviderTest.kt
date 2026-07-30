@@ -1,5 +1,6 @@
 package dev.ide.model.impl.jdk
 
+import dev.ide.testkit.withTempDir
 import java.nio.file.Files
 import java.nio.file.Path
 import kotlin.test.Test
@@ -19,30 +20,24 @@ class JdkSdkProviderTest {
 
     @Test
     fun detectsAClassicJreByRtJar() {
-        val fakeHome = Files.createTempDirectory("fake-jre")
-        try {
+        withTempDir("fake-jre") { fakeHome ->
             val rt = fakeHome.resolve("lib").resolve("rt.jar")
             Files.createDirectories(rt.parent)
             Files.writeString(rt, "") // presence is enough for detection
             val sdk = JdkSdkProvider.detect(fakeHome)
             assertEquals(listOf(rt.toString()), sdk.bootClasspath)
-        } finally {
-            fakeHome.toFile().deleteRecursively()
         }
     }
 
     @Test
     fun fallsBackToSyntheticWhenNoJdkPresent() {
-        val emptyHome = Files.createTempDirectory("no-jdk")
-        try {
+        withTempDir("no-jdk") { emptyHome ->
             val sdk = JdkSdkProvider.detect(emptyHome)
             assertEquals("synthetic", sdk.name)
             val stubRoot = Path.of(sdk.bootClasspath.single())
             assertTrue(Files.exists(stubRoot.resolve("java/lang/String.java")), "synthetic String stub should exist")
             assertTrue(Files.exists(stubRoot.resolve("java/lang/Object.java")))
             stubRoot.toFile().deleteRecursively()
-        } finally {
-            emptyHome.toFile().deleteRecursively()
         }
     }
 }

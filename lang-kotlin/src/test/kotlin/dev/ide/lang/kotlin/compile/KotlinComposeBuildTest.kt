@@ -1,5 +1,7 @@
 package dev.ide.lang.kotlin.compile
 
+import dev.ide.testkit.withTempDir
+import dev.ide.testkit.writeSource
 import dev.ide.lang.kotlin.parse
 import org.junit.jupiter.api.Assumptions.assumeTrue
 import org.objectweb.asm.ClassReader
@@ -43,8 +45,7 @@ class KotlinComposeBuildTest {
         val runtime = composeRuntimeJars()
         assumeTrue(runtime.isNotEmpty(), "Compose runtime jar not on the test classpath")
 
-        val dir = Files.createTempDirectory("kt-compose")
-        try {
+        withTempDir("kt-compose") { dir ->
             val src = dir.resolve("src")
             val source = write(
                 src, "demo/Screen.kt",
@@ -80,8 +81,6 @@ class KotlinComposeBuildTest {
                 plain.contains("Landroidx/compose/runtime/Composer;"),
                 "Greeting gained a Composer param WITHOUT the plugin — descriptor was: $plain",
             )
-        } finally {
-            dir.toFile().deleteRecursively()
         }
     }
 
@@ -102,8 +101,5 @@ class KotlinComposeBuildTest {
         return descriptor
     }
 
-    private fun write(root: Path, rel: String, content: String): Path {
-        val f = root.resolve(rel); Files.createDirectories(f.parent); Files.writeString(f, content.trimIndent())
-        return f
-    }
+    private fun write(root: Path, rel: String, content: String): Path = root.writeSource(rel, content)
 }

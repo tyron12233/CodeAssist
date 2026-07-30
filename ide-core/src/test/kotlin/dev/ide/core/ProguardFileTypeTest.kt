@@ -1,5 +1,6 @@
 package dev.ide.core
 
+import dev.ide.testkit.withTempDir
 import kotlinx.coroutines.runBlocking
 
 import dev.ide.ui.backend.TreeNode
@@ -17,8 +18,7 @@ class ProguardFileTypeTest {
     private fun flatten(n: TreeNode): List<TreeNode> = listOf(n) + n.children.flatMap(::flatten)
 
     @Test
-    fun proguardFileGetsItsIconAndNoJavaDiagnostics() {
-        val dir = Files.createTempDirectory("ide-proguard-filetype")
+    fun proguardFileGetsItsIconAndNoJavaDiagnostics() = withTempDir("ide-proguard-filetype") { dir ->
         IdeServices.bootstrapDemo(dir).use { ide ->
             val backend = IdeServicesBackend(ide)
             val appDir = ide.moduleRoot(ide.modules().first { it.name == "app" })!!

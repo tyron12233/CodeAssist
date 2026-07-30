@@ -14,6 +14,7 @@ import dev.ide.model.LanguageLevel
 import dev.ide.model.template.TemplateArgs
 import dev.ide.platform.PluginId
 import dev.ide.platform.impl.PlatformCore
+import dev.ide.testkit.withTempDir
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withTimeoutOrNull
@@ -67,8 +68,7 @@ class LearnRunCaptureTest {
     }
 
     @Test
-    fun capturesOutputOfAPassingExercise() {
-        val dir = Files.createTempDirectory("learn-run-ok")
+    fun capturesOutputOfAPassingExercise() = withTempDir("learn-run-ok") { dir ->
         workspace(
             dir,
             """
@@ -85,15 +85,13 @@ class LearnRunCaptureTest {
             assertEquals(0, cap.exitCode, "should exit 0; stdout=${cap.stdout}")
             assertTrue("LEARN_RUN_OK" in cap.stdout, "captured stdout should hold the marker; was: ${cap.stdout}")
         }
-        dir.toFile().deleteRecursively()
     }
 
     @Test
-    fun computesInlayHintsForALessonBuffer() {
+    fun computesInlayHintsForALessonBuffer() = withTempDir("learn-hints") { dir ->
         // The lesson editor's inlay hints (LearnService.hints → LearnBackend.hints) delegate to
         // IdeServices.inlayHints over the scratch module's default-package Main — the same shape this workspace
         // builds. A `var` in the live buffer must get its inferred type hinted.
-        val dir = Files.createTempDirectory("learn-hints")
         val code = """
             public class Main {
                 public static void main(String[] args) {
@@ -113,7 +111,6 @@ class LearnRunCaptureTest {
                 "var greeting should be inferred String; got ${typeHint.parts}",
             )
         }
-        dir.toFile().deleteRecursively()
     }
 
     @Test
@@ -124,8 +121,7 @@ class LearnRunCaptureTest {
         // (deleting the packaged source, bypassing the save→reindex path), so the index now names a since-deleted
         // class. runAndCapture must launch the on-disk `Main`, not the stale `com.example.app.Main` (which failed
         // on device with "Could not find or load main class com.example.app.Main").
-        val dir = Files.createTempDirectory("learn-stale-main")
-        try {
+        withTempDir("learn-stale-main") { dir ->
             IdeServices.createProjectAt(
                 dir, "java-console", mapOf(TemplateArgs.NAME to "learn"),
                 IdeServices.defaultDesktopSdk(), LanguageLevel.JAVA_17,
@@ -157,14 +153,11 @@ class LearnRunCaptureTest {
                     "should run the on-disk Main, not a stale com.example.app.Main; stdout=${cap.stdout}, diagnostics=${cap.diagnostics}",
                 )
             }
-        } finally {
-            dir.toFile().deleteRecursively()
         }
     }
 
     @Test
-    fun reportsCompileErrorsWithoutRunning() {
-        val dir = Files.createTempDirectory("learn-run-err")
+    fun reportsCompileErrorsWithoutRunning() = withTempDir("learn-run-err") { dir ->
         workspace(
             dir,
             """
@@ -180,6 +173,5 @@ class LearnRunCaptureTest {
             assertFalse(cap.compiled, "code with an error must not be reported as compiled; stdout=${cap.stdout}")
             assertTrue(cap.diagnostics.isNotEmpty(), "a compile failure should surface diagnostics")
         }
-        dir.toFile().deleteRecursively()
     }
 }

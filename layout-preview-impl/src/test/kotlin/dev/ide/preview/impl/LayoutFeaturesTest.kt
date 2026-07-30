@@ -1,5 +1,6 @@
 package dev.ide.preview.impl
 
+import dev.ide.testkit.withTempDir
 import dev.ide.android.support.resources.ResourceItem
 import dev.ide.android.support.resources.ResourceRepository
 import dev.ide.android.support.resources.ResourceType
@@ -112,8 +113,7 @@ class LayoutFeaturesTest {
         assertTrue(inflater.problems.any { it.tag == "com.example.app.MyChart" }, "custom view reported")
     }
 
-    @Test fun `drawable shape background paints its solid colour`() {
-        val dir = Files.createTempDirectory("preview-bg")
+    @Test fun `drawable shape background paints its solid colour`() = withTempDir("preview-bg") { dir ->
         val shape = dir.resolve("bg.xml")
         shape.writeText(
             """

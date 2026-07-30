@@ -6,6 +6,7 @@ import dev.ide.android.support.tools.ToolResult
 import dev.ide.build.TaskName
 import dev.ide.build.TaskResult
 import dev.ide.build.engine.SimpleTaskContext
+import dev.ide.testkit.withTempDir
 import kotlinx.coroutines.runBlocking
 import java.nio.file.Files
 import java.nio.file.Path
@@ -38,8 +39,7 @@ class DexMergePassthroughTest {
 
     @Test
     fun mergesEveryInputDexWithoutDropping() = runBlocking {
-        val tmp = Files.createTempDirectory("dexmerge")
-        try {
+        withTempDir("dexmerge") { tmp ->
             val ext = tmp.resolve("ext-archives")
             // Two content-hash buckets that both define the same class plus a unique one each.
             val a = ext.resolve("a".repeat(24)); val b = ext.resolve("b".repeat(24))
@@ -56,8 +56,6 @@ class DexMergePassthroughTest {
             // No dedup: BOTH copies of the shared class reach D8 (a clean graph is the resolver's responsibility).
             assertEquals(2, names.count { it == "ArrayMapKt.dex" }, "the merge passes every input through, deduping nothing: $names")
             assertTrue("OnlyA.dex" in names && "OnlyB.dex" in names, "every unique class is merged: $names")
-        } finally {
-            tmp.toFile().deleteRecursively()
         }
     }
 
@@ -68,8 +66,7 @@ class DexMergePassthroughTest {
 
     @Test
     fun perLibraryMergeCollapsesDuplicateClassWhenBatched() = runBlocking {
-        val tmp = Files.createTempDirectory("dexmerge-dup")
-        try {
+        withTempDir("dexmerge-dup") { tmp ->
             val ext = tmp.resolve("ext-archives")
             // Two libraries that BOTH ship kotlin.ArrayIntrinsicsKt (a shaded/duplicated stdlib the resolver
             // can't coordinate-dedup), each plus a unique class.
@@ -87,8 +84,6 @@ class DexMergePassthroughTest {
             val names = dexer.merged.map { it.fileName.toString() }
             assertEquals(1, names.count { it == "ArrayIntrinsicsKt.dex" }, "the duplicate class is collapsed to one copy across libraries: $names")
             assertTrue("OnlyA.dex" in names && "OnlyB.dex" in names, "every unique class survives: $names")
-        } finally {
-            tmp.toFile().deleteRecursively()
         }
     }
 }

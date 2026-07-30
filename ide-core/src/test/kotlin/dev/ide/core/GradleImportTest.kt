@@ -1,5 +1,6 @@
 package dev.ide.core
 
+import dev.ide.testkit.withTempDir
 import dev.ide.model.DependencyScope
 import org.junit.jupiter.api.Test
 import java.nio.file.Files
@@ -55,8 +56,7 @@ class GradleImportTest {
     /** The tolerant reader extracts modules, types, the android SDK/namespace, and dependency coordinates+scopes. */
     @Test
     fun parsesModulesTypesAndDependencies() {
-        val tmp = Files.createTempDirectory("gradle-parse")
-        try {
+        withTempDir("gradle-parse") { tmp ->
             val proj = tmp.resolve("MyApp")
             writeLegacyGradleProject(proj)
 
@@ -82,16 +82,13 @@ class GradleImportTest {
             val core = spec.modules.first { it.name == "core" }
             assertEquals(GradleImport.Kind.JAVA, core.kind)
             assertEquals(listOf("com.google.guava:guava:31.1-jre"), core.mavenDeps.map { it.coordinate })
-        } finally {
-            tmp.toFile().deleteRecursively()
         }
     }
 
     /** End to end: a legacy Gradle project in a legacy data dir is imported into the picker in compatibility mode. */
     @Test
     fun importsGradleProjectInCompatibilityMode() {
-        val tmp = Files.createTempDirectory("gradle-import")
-        try {
+        withTempDir("gradle-import") { tmp ->
             val legacyHome = tmp.resolve("legacy")
             writeLegacyGradleProject(legacyHome.resolve("MyApp"))
 
@@ -118,8 +115,6 @@ class GradleImportTest {
                 Files.exists(dest.resolve("app/src/main/java/com/example/myapp/MainActivity.java")),
                 "sources were copied into the imported project",
             )
-        } finally {
-            tmp.toFile().deleteRecursively()
         }
     }
 
@@ -211,8 +206,7 @@ class GradleImportTest {
     /** The tolerant reader resolves version-catalog accessors, `$var`/property interpolation, and BOM platforms. */
     @Test
     fun parsesCatalogVariablesAndPlatforms() {
-        val tmp = Files.createTempDirectory("gradle-modern")
-        try {
+        withTempDir("gradle-modern") { tmp ->
             val proj = tmp.resolve("Modern")
             writeModernGradleProject(proj)
 
@@ -257,16 +251,13 @@ class GradleImportTest {
             val core = spec.modules.first { it.name == "core" }
             assertEquals(GradleImport.Kind.JAVA, core.kind)
             assertEquals(listOf("com.google.guava:guava:32.1.3-jre"), core.mavenDeps.map { it.coordinate })
-        } finally {
-            tmp.toFile().deleteRecursively()
         }
     }
 
     /** An unresolved catalog/variable reference is reported in the sync notes rather than silently dropped. */
     @Test
     fun reportsUnresolvedReferences() {
-        val tmp = Files.createTempDirectory("gradle-report")
-        try {
+        withTempDir("gradle-report") { tmp ->
             val proj = tmp.resolve("Rep")
             Files.createDirectories(proj)
             proj.resolve("settings.gradle").writeText("rootProject.name = 'Rep'\ninclude ':app'")
@@ -287,16 +278,13 @@ class GradleImportTest {
             assertTrue(spec.modules.first().mavenDeps.isEmpty(), "neither unresolved dep is added")
             assertTrue(spec.report.notes.any { "libs.does.not.exist" in it }, "catalog miss noted")
             assertTrue(spec.report.notes.any { "undefinedVersion" in it }, "variable miss noted")
-        } finally {
-            tmp.toFile().deleteRecursively()
         }
     }
 
     /** Re-sync re-reads the (edited) scripts into an open project: a new module + a new dependency appear. */
     @Test
     fun resyncsFromEditedScripts() {
-        val tmp = Files.createTempDirectory("gradle-resync")
-        try {
+        withTempDir("gradle-resync") { tmp ->
             val legacyHome = tmp.resolve("legacy")
             writeLegacyGradleProject(legacyHome.resolve("MyApp"))
             val manager = ProjectManager.desktop(tmp.resolve("projects"), legacyDataDirs = listOf(legacyHome))
@@ -318,8 +306,6 @@ class GradleImportTest {
                 assertContains(ide.moduleNames().toSet(), "lib")
                 assertTrue(ide.isCompatibilityMode(), "still flagged as compatibility mode after a sync")
             }
-        } finally {
-            tmp.toFile().deleteRecursively()
         }
     }
 }

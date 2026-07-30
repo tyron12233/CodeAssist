@@ -1,5 +1,6 @@
 package dev.ide.core
 
+import dev.ide.testkit.withTempDir
 import dev.ide.index.ClassNameValue
 import dev.ide.index.IndexId
 import java.nio.file.Files
@@ -11,8 +12,7 @@ import kotlin.test.assertTrue
 class TypeVisibilityE2ETest {
 
     @Test
-    fun packagePrivateSdkClassIsNotSuggested() {
-        val dir = Files.createTempDirectory("ide-vis")
+    fun packagePrivateSdkClassIsNotSuggested() = withTempDir("ide-vis") { dir ->
         IdeServices.bootstrapJavaDemo(dir).use { ide ->
             val id = IndexId("java.classNames")
             // wait until the public java.util.Arrays has been indexed

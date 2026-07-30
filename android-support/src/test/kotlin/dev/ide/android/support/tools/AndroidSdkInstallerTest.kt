@@ -1,5 +1,6 @@
 package dev.ide.android.support.tools
 
+import dev.ide.testkit.withTempDir
 import org.w3c.dom.Element
 import java.nio.file.Files
 import java.nio.file.Path
@@ -91,24 +92,26 @@ class AndroidSdkInstallerTest {
 
     @Test
     fun installPlacesPackageAndTracksCompletion() {
-        val tmp = Files.createTempDirectory("sdktest")
-        val sdkRoot = tmp.resolve("sdk")
-        val downloads = tmp.resolve("dl")
-        val pkg = AndroidSdkInstaller.parsePackages(xml).first { it.path == "sources;android-34" }
+        withTempDir("sdktest") { tmp ->
+            val sdkRoot = tmp.resolve("sdk")
+            val downloads = tmp.resolve("dl")
+            val pkg = AndroidSdkInstaller.parsePackages(xml).first { it.path == "sources;android-34" }
 
-        val err = AndroidSdkInstaller.install(pkg, sdkRoot, downloads, zipFetcher("Foo.java", "class Foo {}"))
+            val err = AndroidSdkInstaller.install(pkg, sdkRoot, downloads, zipFetcher("Foo.java", "class Foo {}"))
 
-        assertNull(err)
-        assertTrue(Files.isRegularFile(sdkRoot.resolve("sources").resolve("android-34").resolve("Foo.java")))
-        assertEquals(setOf("sources;android-34"), AndroidSdkInstaller.installedPackages(sdkRoot))
-        assertTrue(AndroidSdkInstaller.incompletePackages(sdkRoot).isEmpty())
-        // The cached archive is dropped once installed.
-        assertTrue(Files.list(downloads).use { it.findAny().isEmpty })
+            assertNull(err)
+            assertTrue(Files.isRegularFile(sdkRoot.resolve("sources").resolve("android-34").resolve("Foo.java")))
+            assertEquals(setOf("sources;android-34"), AndroidSdkInstaller.installedPackages(sdkRoot))
+            assertTrue(AndroidSdkInstaller.incompletePackages(sdkRoot).isEmpty())
+            // The cached archive is dropped once installed.
+            assertTrue(Files.list(downloads).use { it.findAny().isEmpty })
+        }
     }
 
     @Test
     fun interruptedInstallReportsIncompleteNotInstalled() {
-        val sdkRoot = Files.createTempDirectory("sdktest2").resolve("sdk")
+        withTempDir("sdktest2") { tmp ->
+        val sdkRoot = tmp.resolve("sdk")
         val dir = sdkRoot.resolve("sources").resolve("android-34")
         Files.createDirectories(dir)
         // An interrupted install leaves the dir plus its `.installing` marker.
@@ -122,6 +125,7 @@ class AndroidSdkInstallerTest {
         assertNull(AndroidSdkInstaller.install(pkg, sdkRoot, sdkRoot.resolve("dl"), zipFetcher("Foo.java", "class Foo {}")))
         assertTrue(AndroidSdkInstaller.incompletePackages(sdkRoot).isEmpty())
         assertEquals(setOf("sources;android-34"), AndroidSdkInstaller.installedPackages(sdkRoot))
+        }
     }
 
     /** A fetcher that "downloads" a one-entry zip (wrapped in a single root dir, as the SDK repo zips are). */
