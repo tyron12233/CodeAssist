@@ -5,6 +5,7 @@ import dev.ide.android.support.tools.D8InProcessDexer
 import dev.ide.lang.kotlin.compile.KotlinPluginLoader
 import java.nio.file.Files
 import java.nio.file.Path
+import java.nio.file.StandardCopyOption
 import java.nio.file.attribute.BasicFileAttributes
 import java.security.MessageDigest
 import java.util.stream.Collectors
@@ -48,18 +49,36 @@ class ArtKotlinPluginLoader(
         return DexClassLoader(pluginJar.toString(), odex.toString(), null, javaClass.classLoader)
     }
 
-    /** Zip D8's `classes*.dex` output into one jar a [DexClassLoader] can read. */
+    /**
+     * Zip D8's `classes*.dex` output into one jar a [DexClassLoader] can read, written READ-ONLY.
+     *
+     * The read-only part is load-bearing on Android 14+ (API 34): the runtime refuses to load a WRITABLE
+     * dex/jar through a class loader (`SecurityException: Writable dex file '…' is not allowed`), the same W^X
+     * rule [R8ForkSupport] handles for the forked-VM classpath. Written to a temp sibling then atomically moved
+     * into place so a crash mid-write never leaves a half-written (and now read-only, hence un-rewritable)
+     * `plugin.jar` the content-addressed cache's bare existence check would then reuse forever.
+     */
     private fun packageDex(dexDir: Path, pluginJar: Path) {
         val dexes = Files.list(dexDir).use { s ->
             s.filter { it.toString().endsWith(".dex") }.sorted().collect(Collectors.toList())
         }
         check(dexes.isNotEmpty()) { "D8 produced no dex for the compiler-plugin classpath" }
-        ZipOutputStream(Files.newOutputStream(pluginJar)).use { zip ->
-            for (dex in dexes) {
-                zip.putNextEntry(ZipEntry(dex.fileName.toString()))
-                Files.copy(dex, zip)
-                zip.closeEntry()
+        // A UNIQUE temp per attempt: two `load()`s for the same plugin classpath (parallel module compiles) can
+        // both miss the cache and package concurrently — a shared temp path would let them corrupt each other's
+        // write. Whichever wins the atomic move publishes byte-identical dex, so the loser is harmless.
+        val tmp = Files.createTempFile(pluginJar.parent, "plugin", ".jar.tmp")
+        try {
+            ZipOutputStream(Files.newOutputStream(tmp)).use { zip ->
+                for (dex in dexes) {
+                    zip.putNextEntry(ZipEntry(dex.fileName.toString()))
+                    Files.copy(dex, zip)
+                    zip.closeEntry()
+                }
             }
+            tmp.toFile().setReadOnly() // Android 14+ won't load a writable dex/jar through a class loader (W^X)
+            Files.move(tmp, pluginJar, StandardCopyOption.ATOMIC_MOVE, StandardCopyOption.REPLACE_EXISTING)
+        } finally {
+            runCatching { tmp.toFile().setWritable(true); Files.deleteIfExists(tmp) }
         }
     }
 
