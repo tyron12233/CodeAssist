@@ -40,15 +40,20 @@ import java.util.concurrent.atomic.AtomicLong
  *  - [FileChanged], single file (an editor save): drop the JDT binding caches; a `res/` file refreshes the
  *    synthetic classes (and re-indexes a `.xml`); a `.kt` refreshes the synthetic facades. Deliberately
  *    LIGHT; this is the hot path, and open-buffer overlays already make the new text visible.
- *  - [FileChanged] batch of 2+ (a refactoring's multi-file edit): the light per-file work, plus a full
- *    analyzer invalidation + index re-sync (a cross-file rename changes declared type names, which the
- *    cached name environments won't see through overlays alone).
- *  - [FileCreated]: a `res/` file refreshes synthetics (+ `.xml` re-index); a source file (.java/.kt)
- *    invalidates analyzers + re-syncs (a created-but-never-opened file (e.g. a copy) is invisible to the
- *    cached name environments otherwise; widened from the old create-file path, which relied on the file
- *    being opened); other files re-sync the index only; directories are no-ops.
- *  - [FileDeleted]: drop overlays under it, invalidate analyzers, refresh synthetics, re-sync.
+ *  - [FileChanged] batch of 2+ (a refactoring's multi-file edit): the light per-file work (each file is
+ *    reindexed), plus a full analyzer invalidation (a cross-file rename changes declared type names, which
+ *    the cached name environments won't see through overlays alone) — but NO full index re-sync: the
+ *    classpath is unchanged and each file was already reindexed per-file.
+ *  - [FileCreated]: a `res/` file refreshes synthetics (+ `.xml` re-index); a source file (.java/.kt) is
+ *    ADDED to the index with a targeted single-file reindex + an analyzer invalidation (a created-but-never-
+ *    opened file (e.g. a copy) is invisible to the cached name environments otherwise), but NOT a full
+ *    re-sync (its classpath is unchanged); a non-source file (a dropped jar) re-syncs; directories are no-ops.
+ *  - [FileDeleted]: drop overlays under it, invalidate analyzers, refresh synthetics, re-sync (a gone path is
+ *    ambiguously a source file / package dir / classpath jar, so the full walk is the safe catch-all).
  *  - [FileMoved]: re-key overlays, invalidate analyzers, refresh synthetics, re-sync.
+ *
+ * `invalidate` (analyzer/name-env teardown) is DECOUPLED from `resync` (full library+SDK re-index): a
+ * source-set change needs only the former; a full re-sync is reserved for actual CLASSPATH changes.
  *  - model events (any commit): invalidate analyzers + refresh synthetics + re-sync + bump [configStamp].
  *    This is the subscriber that was MISSING pre-hub: a `DependenciesChanged` commit now invalidates
  *    without relying on the mutation site to remember to.
@@ -171,65 +176,8 @@ internal class WorkspaceEventHub(
 
     private fun onVfs(events: List<VfsEvent>) {
         if (!active) return
-        var invalidate = false
-        var synthetic = false
-        var resync = false
-        var changed = 0
-        // The SET of source files changed (create/delete/move): part of the projected model the Analysis
-        // API daemon derives from source roots, so it bumps the config stamp (a content edit does not).
-        var membershipChanged = false
-        for (e in events) {
-            val p = Paths.get(e.file.path)
-            when (e) {
-                is FileChanged -> {
-                    changed++
-                    if (reactions.isResourcePath(p)) {
-                        synthetic = true
-                        if (p.toString().endsWith(".xml")) reactions.reindexSourceAsync(p)
-                    } else if (isSource(p)) {
-                        // Keep the source index current on SAVE so a query against it sees the edit — e.g. a newly
-                        // declared `View` subclass must appear as a custom-view tag in XML-layout completion. This is
-                        // a single-file incremental reindex (O(this file)); it deliberately does NOT invalidate
-                        // analyzers (disposing every module container on each save would evict the warm Kotlin/JDT
-                        // caches — too heavy). Consumers that snapshot the index refresh off its generation stamp.
-                        reactions.reindexSourceAsync(p)
-                        if (isKotlin(p)) synthetic = true
-                    }
-                }
-
-                is FileCreated -> if (!e.file.isDirectory) {
-                    if (reactions.isResourcePath(p)) {
-                        synthetic = true
-                        if (p.toString().endsWith(".xml")) reactions.reindexSourceAsync(p)
-                    } else if (isSource(p)) {
-                        invalidate = true; membershipChanged = true
-                        if (isKotlin(p)) synthetic = true
-                    } else {
-                        resync = true
-                    }
-                }
-
-                is FileDeleted -> {
-                    reactions.dropOverlaysUnder(p)
-                    // Extension can't be trusted for a deleted directory (a package), so count any delete.
-                    invalidate = true; synthetic = true; membershipChanged = true
-                }
-
-                is FileMoved -> {
-                    reactions.rekeyOverlays(Paths.get(e.from), Paths.get(e.to))
-                    invalidate = true; synthetic = true; membershipChanged = true
-                }
-            }
-        }
-        if (changed > 0) reactions.dropJavaBindingCaches()
-        if (changed > 1) invalidate = true // a multi-file edit is a refactoring: declared names changed
-        if (invalidate) {
-            reactions.invalidateAnalyzers()
-            synthetic = true; resync = true
-        }
-        if (synthetic) reactions.invalidateSyntheticClasses()
-        if (resync) reactions.resyncIndex()
-        if (membershipChanged) {
+        react(events, reactions) {
+            // membership (source-file SET) changed: bump the config stamp + notify configuration listeners.
             configStamp.incrementAndGet()
             reactions.configurationChanged()
         }
@@ -255,14 +203,6 @@ internal class WorkspaceEventHub(
         reactions.configurationChanged()
     }
 
-    private fun isKotlin(p: Path): Boolean =
-        p.fileName?.toString()?.let { it.endsWith(".kt") || it.endsWith(".kts") } == true
-
-    private fun isSource(p: Path): Boolean {
-        val name = p.fileName?.toString() ?: return false
-        return name.endsWith(".java") || name.endsWith(".kt") || name.endsWith(".kts")
-    }
-
     override fun close() {
         runCatching { connection.dispose() }
     }
@@ -270,5 +210,92 @@ internal class WorkspaceEventHub(
     companion object {
         /** The engine-scoped pref-key prefix an active-variant change publishes under (page `build`). */
         const val VARIANT_KEY_PREFIX = "variant."
+
+        /**
+         * The per-batch reaction DECISION — extracted so it is unit-testable with a recording [Reactions] (no
+         * store / message bus). Fires whatever the batch needs (see the reaction table on the class KDoc);
+         * [onMembershipChanged] runs when the source-file SET changed (create/delete/move), so the caller bumps
+         * the config stamp + notifies configuration listeners.
+         */
+        internal fun react(events: List<VfsEvent>, reactions: Reactions, onMembershipChanged: () -> Unit) {
+            var invalidate = false
+            var synthetic = false
+            var resync = false
+            var changed = 0
+            var membershipChanged = false
+            for (e in events) {
+                val p = Paths.get(e.file.path)
+                when (e) {
+                    is FileChanged -> {
+                        changed++
+                        if (reactions.isResourcePath(p)) {
+                            synthetic = true
+                            if (p.toString().endsWith(".xml")) reactions.reindexSourceAsync(p)
+                        } else if (isSource(p)) {
+                            // Keep the source index current on SAVE so a query sees the edit — e.g. a newly declared
+                            // `View` subclass appears as a custom-view tag in XML-layout completion. Single-file
+                            // incremental reindex (O(this file)); it deliberately does NOT invalidate analyzers
+                            // (disposing every module container on each save evicts the warm Kotlin/JDT caches — too
+                            // heavy). Consumers that snapshot the index refresh off its generation stamp.
+                            reactions.reindexSourceAsync(p)
+                            if (isKotlin(p)) synthetic = true
+                        }
+                    }
+
+                    is FileCreated -> if (!e.file.isDirectory) {
+                        if (reactions.isResourcePath(p)) {
+                            synthetic = true
+                            if (p.toString().endsWith(".xml")) reactions.reindexSourceAsync(p)
+                        } else if (isSource(p)) {
+                            // A created source file changes the file SET, so the cached name environments must be
+                            // rebuilt to see it (invalidate) — but the CLASSPATH is unchanged, so ADD it to the index
+                            // with a targeted single-file reindex, NOT a full `resyncIndex()` (which reopens every
+                            // library/SDK segment + re-walks the whole source tree just to pick up one new file).
+                            reactions.reindexSourceAsync(p)
+                            invalidate = true; membershipChanged = true
+                            if (isKotlin(p)) synthetic = true
+                        } else {
+                            resync = true // a non-source file (a dropped jar) can change the classpath
+                        }
+                    }
+
+                    is FileDeleted -> {
+                        reactions.dropOverlaysUnder(p)
+                        // A deleted path is ambiguous once gone — a source file, a package directory, OR a classpath
+                        // jar (its extension can't be trusted) — so keep the full re-sync: its source walk drops the
+                        // gone files and it re-syncs the classpath.
+                        invalidate = true; synthetic = true; membershipChanged = true; resync = true
+                    }
+
+                    is FileMoved -> {
+                        reactions.rekeyOverlays(Paths.get(e.from), Paths.get(e.to))
+                        invalidate = true; synthetic = true; membershipChanged = true; resync = true
+                    }
+                }
+            }
+            if (changed > 0) reactions.dropJavaBindingCaches()
+            // A multi-file FileChanged batch is a refactoring (a cross-file rename): declared names changed, so
+            // the cached name environments must be rebuilt (invalidate). Each edited file was already reindexed
+            // per-file above and the classpath is unchanged, so this needs NO full `resyncIndex()`.
+            if (changed > 1) invalidate = true
+            // `invalidate` (analyzer/name-env teardown) is DECOUPLED from `resync` (full library+SDK re-index):
+            // a source-set change needs only the former; a full re-sync is reserved for CLASSPATH changes (a
+            // jar, a model/settings edit, an ambiguous delete/move — set explicitly by those branches).
+            if (invalidate) {
+                reactions.invalidateAnalyzers()
+                synthetic = true
+            }
+            if (synthetic) reactions.invalidateSyntheticClasses()
+            if (resync) reactions.resyncIndex()
+            if (membershipChanged) onMembershipChanged()
+        }
+
+        private fun isKotlin(p: Path): Boolean =
+            p.fileName?.toString()?.let { it.endsWith(".kt") || it.endsWith(".kts") } == true
+
+        private fun isSource(p: Path): Boolean {
+            val name = p.fileName?.toString() ?: return false
+            return name.endsWith(".java") || name.endsWith(".kt") || name.endsWith(".kts")
+        }
     }
 }
