@@ -1122,7 +1122,17 @@ class ReflectiveDispatcher(
         val byArity = cls.methods.filter { m ->
             KotlinJvmNames.matches(cls, m.name, name) && !m.isVarArgs && m.parameterCount == args.size && (Modifier.isStatic(m.modifiers) == static)
         }
-        val accepting = byArity.filter { paramsAccept(it.parameterTypes, args) }
+        // Among the accepting candidates, prefer one whose JVM name EXACTLY equals the looked-up name over a
+        // `@JvmName` sibling that `@Metadata` records under the SAME Kotlin name. `CollectionsKt` emits both
+        // `flatMap` (transform: (T)->Iterable) and `@JvmName("flatMapSequence") flatMap` (transform: (T)->Sequence)
+        // — both Kotlin-named `flatMap`, so [KotlinJvmNames.matches] accepts both, and their ERASED params are
+        // identical (Iterable, Function1). Without this the pick falls to JVM `getMethods()` order (a per-run
+        // heisenbug); choosing `flatMapSequence` makes the lambda's `List` result get used as a `Sequence`
+        // (ClassCastException). The resolver already selected the exact JVM name, so honor it when a literal match
+        // ACCEPTS the args; fall back to the metadata/mangled match otherwise (a value-class `toString` has only
+        // `toString-impl`, no literal `toString`, and an `internal` `f` only `f$module`).
+        val acceptingAll = byArity.filter { paramsAccept(it.parameterTypes, args) }
+        val accepting = acceptingAll.filter { it.name == name }.ifEmpty { acceptingAll }
         // Prefer the MOST SPECIFIC applicable overload (Java/Kotlin overload resolution) rather than whichever
         // getMethods() lists first — that order is JVM-dependent, so an ambiguous set would resolve differently
         // across runtimes. e.g. RangesKt.rangeTo(Float, Float) fits BOTH rangeTo(float, float) ->
