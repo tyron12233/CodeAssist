@@ -23,6 +23,7 @@ import dev.ide.build.engine.SimpleTaskContext
 import dev.ide.build.engine.TaskExecutorImpl
 import dev.ide.build.engine.TaskStatus
 import dev.ide.deps.ArtifactKind
+import dev.ide.deps.ResolvedArtifact
 import dev.ide.deps.ConflictPolicy
 import dev.ide.deps.Repository
 import dev.ide.deps.impl.MavenDependencyResolver
@@ -416,6 +417,221 @@ class OnDeviceBuildBenchmarkTest {
 
         runCatching { File(home, "compose-build-bench-report.txt").writeText(report.toString()) }
         Log.i(TAG, "report written to ${File(home, "compose-build-bench-report.txt")}")
+    }
+
+    /**
+     * The headline "run a real Gradle Compose sample on device" case: takes a **Gradle project** pushed to
+     * the app's external files dir (`-e gradleSrc <dir>`, default `jetsnack-src`), converts it to a native
+     * CodeAssist project with the tolerant Gradle importer ([GradleImport]), resolves its declared dependency
+     * graph (incl. the Compose BOM) from the network on-device, and assembles a debug APK ON ART — the same
+     * in-process toolchain the app uses (bundled `android.jar` + native aapt2, in-process/forked D8, the K2
+     * compiler + bundled Compose plugin). This is how a checked-out sample like android/compose-samples'
+     * **Jetsnack** compiles on the device.
+     *
+     *     adb push <checkout>/Jetsnack /sdcard/Android/data/com.tyron.code/files/jetsnack-src
+     *     ./gradlew :ide-android:connectedDebugAndroidTest \
+     *       -Pandroid.testInstrumentationRunnerArguments.class=dev.ide.android.bench.OnDeviceBuildBenchmarkTest#assembleImportedGradleProject
+     *     adb logcat -s BuildBench
+     */
+    @Test
+    fun assembleImportedGradleProject() {
+        val ctx = InstrumentationRegistry.getInstrumentation().targetContext
+        val args = InstrumentationRegistry.getArguments()
+        val srcName = args.getString("gradleSrc") ?: "jetsnack-src"
+        val src = File(ctx.getExternalFilesDir(null), srcName)
+        assumeTrue(
+            "push a Gradle project to ${src.absolutePath} (adb push <checkout> $src)",
+            src.isDirectory && (File(src, "settings.gradle.kts").exists() || File(src, "settings.gradle").exists()),
+        )
+
+        val home = File(ctx.getExternalFilesDir(null) ?: ctx.filesDir, "codeassist")
+        val projectsRoot = File(home, "projects").apply { mkdirs() }
+        val work = File(ctx.filesDir, "build-bench").apply { mkdirs() }
+
+        val androidJar = copyAsset(ctx, "android.jar", File(work, "android.jar")).toPath()
+        val stubs = copyAsset(ctx, "core-lambda-stubs.jar", File(work, "core-lambda-stubs.jar")).toPath()
+        val debugKeystore = copyAsset(ctx, "debug.keystore", File(work, "debug.keystore")).toPath()
+        val nativeLibDir = File(ctx.applicationInfo.nativeLibraryDir).toPath()
+        val sdk = AndroidSdk.forDevice(androidJar, nativeLibDir)
+        assumeTrue("Native aapt2/zipalign not extracted at $nativeLibDir — can't build here", sdk.hasNativeTools())
+        val signing = SigningConfig(debugKeystore, DebugKeystore.STORE_PASS, DebugKeystore.KEY_ALIAS, DebugKeystore.KEY_PASS)
+
+        System.setProperty("kotlin.environment.keepalive", "true")
+        System.setProperty("kotlinc.art.home", provisionKotlincHome(ctx, File(work, "kotlinc-home")).absolutePath)
+
+        // Convert the Gradle project into a native workspace (a copy, so the build writes alongside it).
+        val ws = File(projectsRoot, "imported-$srcName").apply { deleteRecursively(); mkdirs() }
+        copyGradleProject(src, ws)
+
+        val platform = PlatformCore()
+        try {
+            AndroidSupport.register(ModuleTypeRegistry(platform.extensions), FacetCodecRegistry())
+            val store = ProjectModel.open(ws.toPath(), platform, FacetCodecRegistry().register(AndroidFacetCodec))
+
+            val spec = dev.ide.core.GradleImport.parse(ws.toPath())
+                ?: throw AssertionError("not an importable Gradle project: $ws")
+            Log.i(TAG, "import: '${spec.name}' modules=${spec.modules.map { "${it.name}:${it.kind}(compose=${it.isCompose})" }}")
+            // JVM 17: the Compose/AndroidX libraries are JVM-11 bytecode, so kotlinc's jvmTarget must be ≥ 11 to
+            // inline their code (JetSnack itself targets 17). JAVA_8 fails compileKotlin with a "cannot inline" error.
+            dev.ide.core.GradleImport.populate(store, spec, LanguageLevel.JAVA_17)
+            store.save()
+
+            val project = store.workspace.projects.firstOrNull { p -> p.modules.any { it.type.id == "android-app" } }
+                ?: throw AssertionError("import produced no android-app module")
+            val app = project.modules.first { it.type.id == "android-app" }
+
+            // Resolve the module's declared compile dependencies (+ its BOM platforms) from the network, ON DEVICE.
+            val coords = app.dependencies.filterIsInstance<dev.ide.model.LibraryDependency>()
+                .filter { it.scope.onCompile }
+                .mapNotNull { coordinateOf(it.library.name) }
+            val boms = app.dependencies.filterIsInstance<dev.ide.model.PlatformDependency>().map { it.bom }
+            Log.i(TAG, "resolving ${coords.size} dep(s) + ${boms.size} BOM(s) on device…")
+            val lfs = LocalFileSystem(ws.toPath())
+            val resolver = MavenDependencyResolver(ResolverCache(ws.toPath()), { p -> lfs.fileFor(p) })
+            val repos = listOf(
+                Repository("Google", "https://dl.google.com/android/maven2"),
+                Repository("Maven Central", "https://repo1.maven.org/maven2"),
+            )
+            val result = runBlocking {
+                resolver.resolve(coords, repos, ConflictPolicy.NEWEST, NoopProgress, boms, emptyMap())
+            }
+            Log.i(TAG, "resolved ${result.resolved.size} artifacts (unresolved=${result.unresolved})")
+            assumeTrue("dependency resolution failed (network?): unresolved=${result.unresolved}", result.unresolved.isEmpty() && result.resolved.isNotEmpty())
+
+            // Attach ONE library per DECLARED dependency (exactly as the real DependencyService does), with the
+            // whole-graph closure partitioned back across the declarers. This matters for the KSP gate: the
+            // module's DIRECT LibraryDependency set is then JetSnack's ~18 declared coordinates — a transitive
+            // like `room-runtime` (pulled through Glance, never declared) is folded into a declarer's library
+            // roots and is NOT a direct dependency, so the Room processor must not activate. (Res is unaffected
+            // by the grouping: AndroidLibraries derives each AAR's res from its own exploded root, and the
+            // flattened root set is identical either way — so Glance's glance_default_loading_layout still links.)
+            val directs: List<Pair<String, Coordinate>> = app.dependencies.filterIsInstance<LibraryDependency>()
+                .filter { it.scope.onCompile }
+                .mapNotNull { d -> coordinateOf(d.library.name)?.let { d.library.name to it } }
+            val buckets = partitionClosure(directs, result.resolved)
+            project.beginModification().apply {
+                val m = module(app.id)
+                // Drop the importer's declarations first (as DependencyService.reconcile does): the versionless
+                // ones (`androidx.compose.ui:ui`, resolved via the BOM) have no library and would shadow the
+                // resolved, versioned libraries in classpath assembly — leaving most libs (and their res) out.
+                app.dependencies.filter { it is LibraryDependency || it is dev.ide.model.PlatformDependency }
+                    .forEach { m.removeDependency(it) }
+                for ((libName, coord) in directs) {
+                    val artifacts = buckets[libName].orEmpty()
+                    if (artifacts.isEmpty()) continue
+                    val primary = artifacts.firstOrNull { it.coordinate.group == coord.group && it.coordinate.name == coord.name }
+                    store.workspace.libraryTable.create(libName).apply {
+                        kind = if ((primary ?: artifacts.first()).kind == ArtifactKind.AAR) LibraryKind.AAR else LibraryKind.JAR
+                        artifacts.forEach { a -> addClassesRoot(a.classesRoot); a.extraClassesRoots.forEach { addClassesRoot(it) } }
+                        commit()
+                    }
+                    m.addDependency(LibraryDependency(LibraryRef(libName), DependencyScope.IMPLEMENTATION))
+                }
+                commit()
+            }
+            store.save()
+
+            // Re-fetch the project AFTER the commit: this model publishes a fresh immutable snapshot on commit,
+            // so the pre-modification `project`/`app` are stale and would build without the just-attached libraries.
+            val builtProject = store.workspace.projects.first { p -> p.modules.any { it.type.id == "android-app" } }
+            val builtApp = builtProject.modules.first { it.type.id == "android-app" }
+            Log.i(TAG, "attached: app depends on ${builtApp.dependencies.count { it is LibraryDependency }} libraries")
+
+            // Assemble on ART with the real Kotlin+Compose toolchain (K2 + bundled Compose plugin) + forked D8.
+            clearBuildDirs(ws)
+            val kotlin = IncrementalKotlinCompiler(KotlinJvmCompiler())
+            val plugins: List<KotlinCompilerPlugin> = listOf(ComposeCompilerPlugin)
+            val d8 = ForkedD8Dexer(ctx.applicationContext)
+            // Wire the bundled KSP generator exactly as the app does (BuiltInPlugins.KspSupportPlugin), so
+            // generateSources runs KSP over the imported project — this is what the users hit on JetSnack.
+            val ksp = dev.ide.ksp.KspSourceGenerator(
+                runnerClasspath = { listOfNotNull(dev.ide.ksp.BundledKspThin.jar()) },
+                processors = { req -> dev.ide.ksp.KspProcessorCatalog.bundled().classpathFor(req.classpath, req.declaredDependencies) },
+                loader = dev.ide.ksp.KspProcessorLoader { cp ->
+                    dev.ide.android.ArtKotlinPluginLoader(androidJar, File(work, "ksp-loader-cache").toPath(), minApi = 26).load(cp)
+                },
+                jdkHome = null,
+                log = { Log.i(TAG, "  [ksp] $it") },
+            )
+            val build = AndroidBuildSystem.inProcess(
+                sdk, signing,
+                bootClasspath = listOf(androidJar, stubs),
+                kotlin = kotlin, plugins = plugins,
+                generators = listOf(ksp),
+                dexCacheRoot = File(home, "caches/dex").toPath(),
+                dexer = d8, mergeDexer = d8,
+            )
+            val graph = build.createBuildGraph(
+                builtProject, BuildRequest(listOf(builtApp.id), VariantSelector("debug"), BuildGoal.PACKAGE),
+            )
+            val log = StringBuilder()
+            val startNs = System.nanoTime()
+            val outcome = runBlocking {
+                TaskExecutorImpl(BuildCache(File(work, "buildcache-import").toPath())).execute(
+                    graph, SimpleTaskContext(log = { line -> log.appendLine(line); Log.i(TAG, "  $line") }), 2,
+                )
+            }
+            val totalMs = (System.nanoTime() - startNs) / 1_000_000
+            Log.i(TAG, "== imported build ${if (outcome.succeeded) "OK" else "FAILED"} total=${totalMs}ms ==")
+            runCatching { File(home, "imported-build-report.txt").writeText(log.toString()) }
+            if (!outcome.succeeded) {
+                log.toString().lines().filter { it.contains("error", ignoreCase = true) || it.contains("FAILED") }
+                    .takeLast(30).forEach { Log.e(TAG, "  ! $it") }
+            }
+            assertTrue("on-device assemble of '$srcName' failed — see logcat -s $TAG / imported-build-report.txt", outcome.succeeded)
+        } finally {
+            platform.dispose()
+        }
+    }
+
+    /** Parse a `group:name[:version]` coordinate string; versionless (`g:n`) resolves its version via a BOM. */
+    private fun coordinateOf(s: String): Coordinate? = s.split(":").let {
+        when (it.size) { 2 -> Coordinate(it[0], it[1], ""); 3 -> Coordinate(it[0], it[1], it[2]); else -> null }
+    }
+
+    /**
+     * Partition a whole-graph resolution closure back across its declarers — a local copy of the real
+     * `dev.ide.core.DependencyPartition` (internal to ide-core, so unavailable from this androidTest module).
+     * Each artifact goes to the FIRST declarer (declaration order) whose `dependsOn` chain reaches it; leftovers
+     * attach to the first declarer so nothing is dropped from the classpath.
+     */
+    private fun partitionClosure(
+        directs: List<Pair<String, Coordinate>>,
+        resolved: List<ResolvedArtifact>,
+    ): LinkedHashMap<String, MutableList<ResolvedArtifact>> {
+        val byGa = HashMap<Pair<String, String>, ResolvedArtifact>()
+        resolved.forEach { byGa[it.coordinate.group to it.coordinate.name] = it }
+        val claimed = HashSet<Pair<String, String>>()
+        val out = LinkedHashMap<String, MutableList<ResolvedArtifact>>()
+        for ((libName, coord) in directs) {
+            val bucket = out.getOrPut(libName) { ArrayList() }
+            val queue = ArrayDeque<Pair<String, String>>()
+            (coord.group to coord.name).let { if (byGa.containsKey(it)) queue.add(it) }
+            val seen = HashSet<Pair<String, String>>()
+            while (queue.isNotEmpty()) {
+                val ga = queue.removeFirst()
+                if (!seen.add(ga)) continue
+                val art = byGa[ga] ?: continue
+                if (claimed.add(ga)) bucket.add(art)
+                art.dependsOn.forEach { queue.add(it.group to it.name) }
+            }
+        }
+        resolved.filter { (it.coordinate.group to it.coordinate.name) !in claimed }
+            .takeIf { it.isNotEmpty() }
+            ?.let { leftover -> out.values.firstOrNull()?.addAll(leftover) }
+        return out
+    }
+
+    /** Copy a Gradle project into [dst], skipping Gradle's own output/metadata dirs. */
+    private fun copyGradleProject(src: File, dst: File) {
+        src.walkTopDown()
+            .onEnter { it.name !in setOf("build", ".gradle", ".git", ".idea") }
+            .filter { it.isFile }
+            .forEach { f ->
+                val target = File(dst, f.relativeTo(src).path)
+                target.parentFile?.mkdirs()
+                f.copyTo(target, overwrite = true)
+            }
     }
 
     /** The workspace with the requested [name], else the first one containing an android-app module. */
