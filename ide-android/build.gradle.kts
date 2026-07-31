@@ -305,8 +305,8 @@ android {
         minSdk = 26
         targetSdk = 36
         // versionCode must exceed the last published release (the previous-codebase app reached ~29).
-        versionCode = 69
-        versionName = "3.8.3"
+        versionCode = 70
+        versionName = "3.8.4"
         // connectedAndroidTest harness (the on-device Kotlin-compiler discovery spike).
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 
