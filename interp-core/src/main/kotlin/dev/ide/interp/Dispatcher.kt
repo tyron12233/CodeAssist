@@ -479,7 +479,30 @@ class ReflectiveDispatcher(
                 return m.invoke(target, *bindArgs(m.parameterTypes, args, composable, m.genericParameterTypes))
             }
         }
+        // A BOXED inline value-class receiver (a Color/Dp/Role handed back boxed by a `State.value` read or a
+        // generic `get`): value-class members compile to STATIC `name-<hash>` forms, and @Metadata authoritatively
+        // names the boxed class's `Any`-override bridges (`toString`/`hashCode`/`equals`) `…-impl` — so every
+        // instance lookup above matches nothing (`KotlinJvmNames.matches` rejects the plainly-named bridge, and a
+        // regular member has no boxed bridge at all). Route to the static impl on the receiver's own class, the
+        // receiver coerced to the impl's unboxed parameter — how the compiler always calls a value-class member.
+        // Only reached on the miss path, so a normal member call never pays for the value-class probe.
+        boxedValueClassMember(target, name, args, composable)?.let { return it.value }
         throw InterpreterException("no method `$name`(${args.size}) on ${target.javaClass.name}")
+    }
+
+    /** A member call on a BOXED inline value-class [receiver], routed to its static `name-<hash>` impl (see the
+     *  call site in [invokeInstance]). Null when [receiver] isn't a boxed value class, an argument is omitted, or
+     *  no matching impl exists (then the caller's honest "no method" stands). The receiver rides as the leading
+     *  argument; [bindArgs] unboxes it to the impl's underlying-typed first parameter (`Role`→`int`, recursively
+     *  `Color`→`ULong`→`long`), exactly as a value-class argument at any other call site. */
+    private fun boxedValueClassMember(receiver: Any, name: String, args: List<Any?>, composable: List<Boolean>): Invoked? {
+        val cls = receiver.javaClass
+        if (args.any { it === OmittedArg }) return null
+        if (cls.declaredMethods.none { it.name == "box-impl" && Modifier.isStatic(it.modifiers) }) return null
+        val all = listOf(receiver) + args
+        val m = findMethod(cls, name, all, static = true) ?: findByArity(cls, name, all, static = true) ?: return null
+        runCatching { m.isAccessible = true }
+        return Invoked(m.invoke(null, *bindArgs(m.parameterTypes, all, listOf(false) + composable, m.genericParameterTypes)))
     }
 
     /** Invoke a member extension on its scope [scope]: an instance method `name(extensionReceiver, value…)`.
