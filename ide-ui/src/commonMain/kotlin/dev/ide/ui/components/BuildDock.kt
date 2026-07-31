@@ -108,7 +108,10 @@ fun BuildDock(
     BoxWithConstraints(modifier.fillMaxWidth()) {
         val density = LocalDensity.current
         val barPx = with(density) { DockBarHeight.toPx() }
-        val fullPx = constraints.maxHeight.toFloat()
+        // Clamp to at least the bar height: a degenerate measure pass (split-screen, a transient zero/short
+        // maxHeight) can hand us a maxHeight below the bar, and `Animatable.updateBounds(barPx, fullPx)` below
+        // then throws (lowerBound > upperBound). Reported as a top crash in the 3.8.x line.
+        val fullPx = maxOf(barPx, constraints.maxHeight.toFloat())
         val halfPx = fullPx * HalfDetentFraction
         val flingPx = with(density) { DockFlingCommit.toPx() }
         val scope = rememberCoroutineScope()
