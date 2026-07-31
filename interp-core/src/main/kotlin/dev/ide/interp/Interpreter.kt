@@ -1,6 +1,7 @@
 package dev.ide.interp
 
 import dev.ide.lang.kotlin.interp.Binding
+import dev.ide.lang.kotlin.interp.CallSiteKey
 import dev.ide.lang.kotlin.interp.ClassFlavor
 import dev.ide.lang.kotlin.interp.DispatchKind
 import dev.ide.lang.kotlin.interp.RArg
@@ -12,6 +13,7 @@ import dev.ide.lang.kotlin.interp.ResolvedClass
 import dev.ide.lang.kotlin.interp.ResolvedFunction
 import dev.ide.lang.kotlin.interp.SecondaryCtor
 import dev.ide.lang.kotlin.interp.SlotId
+import dev.ide.lang.kotlin.interp.SourceSpan
 
 /**
  * A tree-walking interpreter over the [ResolvedFunction] / [RNode] contract from `:lang-kotlin` (see
@@ -172,11 +174,31 @@ class Interpreter(
         declaredArity(callee)?.let { functions["${callee.displayName}/$it"] }
             ?: functions["${callee.displayName}/$argCount"]
 
+    /** The [topLevelPropertyState] key when [node] is a read of a top-level `var` backing field (a no-arg
+     *  TOP_LEVEL call to a source property whose function is [ResolvedFunction.mutableBackingField]) — the same
+     *  `name/0` key the read path uses; null otherwise. Lets an assignment whose LHS lowered to that getter Call
+     *  route to storage. */
+    private fun mutableTopLevelPropertyKey(node: RNode): String? {
+        val call = node as? RNode.Call ?: return null
+        if (call.dispatch != DispatchKind.TOP_LEVEL || call.args.isNotEmpty()) return null
+        val callee = call.callee as? ResolvedCallable.Source ?: return null
+        if (sourceFunctionFor(callee, 0)?.mutableBackingField != true) return null
+        return "${callee.displayName}/0"
+    }
+
     fun call(fn: ResolvedFunction, args: List<Any?>): Any? = invokeFunction(fn, NO_RECEIVER, args)
 
     /** Marker for [invokeFunction]: no receiver to bind (a plain call), distinct from a genuine `null` receiver
      *  (a nullable extension receiver, `fun String?.f()` called on null). */
     private val NO_RECEIVER = Any()
+
+    /** Live values of top-level `var` backing fields ([ResolvedFunction.mutableBackingField]), keyed `name/0`
+     *  (their synthetic-getter program key). Lazily initialized from the initializer on first read; a write
+     *  updates it — so a getter's `if (_x != null) return _x!!; _x = build(); return _x!!` sees its own write.
+     *  Per-interpreter (statics reset between runs, like a fresh class load). `NO_VALUE` distinguishes an
+     *  uninitialized slot from one holding a genuine `null` (the icon backing field starts null). */
+    private val topLevelPropertyState = HashMap<String, Any?>()
+    private val NO_VALUE = Any()
 
     /** Marker distinguishing a `getValue` call (no value argument) from a `setValue` in [callDelegateOp] —
      *  a real `setValue(null)` writes a genuine null, so a plain nullable default would be ambiguous. */
@@ -298,12 +320,19 @@ class Interpreter(
         is RNode.Assign -> {
             val target = node.target
             val binding = (target as? RNode.Name)?.binding
+            val topLevelKey = mutableTopLevelPropertyKey(target)
             when {
                 // A local `by`-delegate write: `delegate.setValue(null, property, value)`.
                 binding is Binding.DelegatedConvention ->
                     delegateSetValue(env.read(binding.slot), binding.propertyName, thisRef = null, value = eval(node.value, env))
                 binding is Binding.Local || binding is Binding.Param ->
                     env.assign(slotOf(binding), eval(node.value, env))
+                // A top-level `var` backing-field WRITE (`_more_vert = …`): its READ lowered to the synthetic
+                // getter Call, so the assignment target IS that Call — store into the property's live state
+                // (read back by the top-level mutable-property branch in [evalCall]). This is what makes the
+                // generated-icon lazy-cache pattern render instead of failing with "unsupported assignment
+                // target: Call".
+                topLevelKey != null -> topLevelPropertyState[topLevelKey] = eval(node.value, env)
                 else -> throw InterpreterException("unsupported assignment target: ${target::class.simpleName}")
             }
             Unit
@@ -411,7 +440,15 @@ class Interpreter(
                 ?: throw InterpreterException("top-level property write `${node.binding.name}` not supported")
             val receiver = eval(receiverNode, env)
                 ?: throw InterpreterException("cannot write property `${node.binding.name}` on a null receiver")
-            writeProperty(receiver, node.binding.name, eval(node.value, env))
+            val value = eval(node.value, env)
+            // A LIBRARY extension property (`var SemanticsPropertyReceiver.role`, written `role = …` inside a
+            // `semantics { }` receiver lambda) has NO member setter — its setter is a STATIC method on the `…Kt`
+            // facade taking the receiver as the leading argument. Route it there, mirroring the extension-property
+            // READ in [RNode.PropertyGet]; otherwise `writeProperty`'s member-setter lookup fails with the opaque
+            // "no writable property `role` on …SemanticsConfiguration".
+            val extOwner = (node.binding as? Binding.Property)?.takeIf { it.isExtension }?.ownerFqn
+            if (extOwner != null) writeExtensionProperty(receiver, extOwner, node.binding.name, value, node.source)
+            else writeProperty(receiver, node.binding.name, value)
             Unit
         }
         is RNode.NotNull -> eval(node.value, env)
@@ -751,6 +788,15 @@ class Interpreter(
             // by [bindParams].
             val target = sourceFunctionFor(callee, call.args.size)
                 ?: throw InterpreterException("no source function `${callee.displayName}/${call.args.size}`")
+            // A top-level `var` backing-field READ: return its live storage value, lazily initialized from the
+            // initializer ([target.body]) on first read. Keeps `_x` reads consistent with prior `_x = …` writes
+            // (the write path is in [RNode.Assign]), so a lazy-cache getter returns what it just built.
+            if (target.mutableBackingField && call.args.isEmpty()) {
+                val key = "${callee.displayName}/0"
+                val current = topLevelPropertyState.getOrDefault(key, NO_VALUE)
+                if (current !== NO_VALUE) return current
+                return invokeFunction(target, NO_RECEIVER, emptyList()).also { topLevelPropertyState[key] = it }
+            }
             val argv = reorderNamedArgs(target.params.map { it.name }, call.args, call.args.map { eval(it.value, env) })
             val reified = reifiedBindingsFor(call, env)
             val invoke = { invokeFunction(target, NO_RECEIVER, argv, reified) }
@@ -958,6 +1004,8 @@ class Interpreter(
      * "cannot load class `kotlin`/`kotlin.Array`" boundary). Each result is a `List` — the interpreter's index
      * (`a[i]`), size (`a.size`), iteration (`for`/`forEach`), and transform (`map`/…) paths all work on List,
      * whereas a raw Java array responds to none of them; the `vararg` parameter model uses the same List form.
+     * The `List(size){}`/`MutableList(size){}` collection factories are the same shape (`@InlineOnly`, no JVM
+     * method, size + per-index `init`) and build the same List, so they're handled here too.
      * Gated to a non-source callee so a user's own `class Array` / `fun arrayOf` isn't hijacked.
      */
     private fun arrayConstructionIntrinsic(call: RNode.Call, env: Env): Handled? {
@@ -980,6 +1028,16 @@ class Interpreter(
             }
             // Array(size) { init } / IntArray(size) { init } / … → apply `init` to each index 0 until size.
             name in ARRAY_CONSTRUCTORS && call.args.size == 2 -> {
+                val n = intArg(call.args[0], env)
+                val init = eval(call.args[1].value, env) as? InterpretedLambda
+                Handled(ArrayList<Any?>(n).apply { for (i in 0 until n) add(init?.invoke(listOf(i))) })
+            }
+            // List(size) { init } / MutableList(size) { init } → same as `Array(size){}` but a read-only /
+            // mutable List. The resolver surfaces these either as a top-level `CollectionsKt.List` call OR —
+            // when the callable index misses the factory — as a fabricated constructor of the
+            // `kotlin.collections.List` type; both carry displayName "List"/"MutableList" with (size, init)
+            // args, so match on that rather than the dispatch kind. Modeled as an ArrayList like every list here.
+            (name == "List" || name == "MutableList") && call.args.size == 2 -> {
                 val n = intArg(call.args[0], env)
                 val init = eval(call.args[1].value, env) as? InterpretedLambda
                 Handled(ArrayList<Any?>(n).apply { for (i in 0 until n) add(init?.invoke(listOf(i))) })
@@ -2023,6 +2081,24 @@ class Interpreter(
         } ?: throw InterpreterException("no extension-property getter `$name` on `$ownerFqn`")
         runCatching { m.isAccessible = true }
         return m.invoke(null, receiver)
+    }
+
+    /** Write an extension property (`role = Role.RadioButton` inside a `semantics { }` lambda): its setter is a
+     *  STATIC method on the declaring `…Kt` facade taking the receiver as its FIRST argument
+     *  (`SemanticsPropertiesKt.setRole(SemanticsPropertyReceiver, Role)`), NOT an instance setter on the
+     *  receiver's class. Route it through the dispatcher as an EXTENSION call so its mangling-aware resolution
+     *  (the setter mangles when the property type is an inline value class, `Role` → `setRole-<hash>`) and
+     *  value-class argument coercion both apply — exactly as for [readExtensionProperty]'s getter and for a
+     *  normal `Modifier.background(Color.Red)`. The synthetic callee carries no parameter names, so
+     *  [reorderNamedArgs] passes the value through untouched. */
+    private fun writeExtensionProperty(receiver: Any, ownerFqn: String, name: String, value: Any?, source: SourceSpan) {
+        val setterName = "set" + name.replaceFirstChar { if (it.isLowerCase()) it.titlecase() else it.toString() }
+        val setter = ResolvedCallable.Library(
+            displayName = setterName, ownerFqn = ownerFqn, methodName = setterName,
+            paramTypes = listOf(null), isStatic = true, isConstructor = false, isInline = false,
+        )
+        val call = RNode.Call(setter, DispatchKind.EXTENSION, receiver = null, args = emptyList(), callSiteKey = CallSiteKey(0), source = source)
+        checkedDispatch(call, receiver, listOf(value))
     }
 
     /** A no-arg method matching [name], allowing a mangled `name-<hash>` (a value-class-typed getter like

@@ -61,4 +61,29 @@ class ArrayConstructionTest {
     @Test fun toTypedArrayRoundTrips() {
         assertEquals(2, run(item + "fun f(): Int = listOf(Item(\"x\"), Item(\"y\")).toTypedArray().size"))
     }
+
+    // `List(size){}` / `MutableList(size){}` are @InlineOnly collection factories (no JVM method, like
+    // `Array(size){}`); the interpreter builds them directly. Before this they died at render as an unmodeled
+    // inline-only function ("`List` is an inline-only function … the interpreter doesn't model yet").
+
+    @Test fun listConstructorAppliesInitPerIndex() {
+        assertEquals(listOf(0, 2, 4), run("package demo\nfun f(): List<Int> = List(3) { it * 2 }"))
+    }
+
+    @Test fun mutableListConstructorAppliesInit() {
+        assertEquals(listOf(0, 1, 2, 3), run("package demo\nfun f(): List<Int> = MutableList(4) { it }"))
+    }
+
+    @Test fun listConstructorOfSourceObjects() {
+        val code = item + "fun f(): String { val a = List(2) { Item(\"n\" + it) }; return a[0].name + a[1].name }"
+        assertEquals("n0n1", run(code))
+    }
+
+    @Test fun listConstructorWithTemplateForEach() {
+        // The reported failing preview shape, minus the Compose `Text(it)` sink: a `List(n){}` built from a
+        // string-template init, then iterated with `forEach`.
+        val code = "package demo\nfun f(): List<String> { val out = mutableListOf<String>(); " +
+            "List(10) { \"Option: \${it + 1}\" }.forEach { out.add(it) }; return out }"
+        assertEquals((1..10).map { "Option: $it" }, run(code))
+    }
 }

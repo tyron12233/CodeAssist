@@ -293,6 +293,12 @@ data class ResolvedFunction(
     val diagnostics: List<LoweringDiagnostic>,
     val receiverSlot: SlotId? = null,
     val returnsUnit: Boolean = false,
+    /** True for a top-level `var` with a plain backing field (no custom accessors), where [body] is its
+     *  initializer. The interpreter backs it with mutable STORAGE (lazily initialized from [body] on first
+     *  read) so reads see prior writes — powering the lazy-cache idiom of generated `ImageVector`/icon files:
+     *  `if (_x != null) return _x!!; _x = build(); return _x!!`. A plain `val` / a property with a custom
+     *  getter stays re-evaluated per read (false). */
+    val mutableBackingField: Boolean = false,
 ) {
     val isComplete: Boolean get() = diagnostics.isEmpty()
 }

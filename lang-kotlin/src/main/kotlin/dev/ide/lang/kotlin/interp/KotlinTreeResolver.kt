@@ -421,7 +421,14 @@ class KotlinTreeResolver(
         }
         if (pushedReceiver) receiverScopes.removeLast()
         scopes.removeLast()
-        return ResolvedFunction(prop.name ?: "<anonymous>", emptyList(), body, diagnostics.toList(), receiverSlot = receiverSlot)
+        // A `var` with a plain backing field (no custom get/set) is storage-backed by the interpreter, so its
+        // writes persist and its reads see them — the icon lazy-cache idiom. A custom accessor (which computes)
+        // or a `val` (never written) stays re-evaluated per read.
+        val mutableBackingField = prop.isVar && prop.getter == null && prop.setter == null
+        return ResolvedFunction(
+            prop.name ?: "<anonymous>", emptyList(), body, diagnostics.toList(),
+            receiverSlot = receiverSlot, mutableBackingField = mutableBackingField,
+        )
     }
 
     /** Whether [fn] returns `Unit` — a block body with no explicit return type, or one declared `: Unit`. An
