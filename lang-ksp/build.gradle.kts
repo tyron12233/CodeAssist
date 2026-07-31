@@ -62,6 +62,21 @@ tasks.processResources { from(kspThinJar) }
 // from the parent regardless. kotlin-reflect / kotlinpoet / guava / antlr etc. stay (the app may not have them).
 val appProvidedJarPrefixes = listOf("kotlin-stdlib", "kotlinx-coroutines", "symbol-processing-api", "symbol-processing-common-deps")
 
+// Room's `room-compiler` pulls `org.xerial:sqlite-jdbc` (12.8 MB) for its compile-time SQL query verifier,
+// which loads a native SQLite library. sqlite-jdbc has no build for Android/aarch64, and Room's
+// `DatabaseVerifier` calls the native loader from a class static initializer with no fallback — so on device
+// the real jar crashes the whole KSP run ("No native library found for os.name=Linux-Android"). We replace it
+// in the Room bundle with a tiny native-free stub (`src/sqliteStub`, three `org.sqlite.*` classes): the
+// verifier's static init then succeeds, its connection attempt throws a caught SQLException, and Room falls
+// into its own `CANNOT_CREATE_VERIFICATION_DATABASE` path — generating the `_Impl` code (identical either way)
+// without compile-time SQL verification. Also drops 12.8 MB from the APK.
+val sqliteStub by sourceSets.creating
+val sqliteStubJar by tasks.registering(Jar::class) {
+    description = "Native-free org.sqlite stub that replaces sqlite-jdbc in the Room processor bundle (see src/sqliteStub)."
+    archiveBaseName.set("sqlite-jdbc-stub")
+    from(sqliteStub.output)
+}
+
 /** A resolvable config for [id]'s processor closure + a Zip packaging its (deduped) jars as /processors/<id>.zip. */
 fun bundleProcessor(id: String, dep: Provider<*>) {
     val cfg = configurations.create("ksp_${id}_bundle")
@@ -71,11 +86,14 @@ fun bundleProcessor(id: String, dep: Provider<*>) {
     // "Duplicate class ...Identifier" when dexing the bundle on device. Drop the stale com.intellij one; the
     // org.jetbrains:annotations already in the closure supplies the same classes.
     cfg.exclude(group = "com.intellij", module = "annotations")
+    // Room only: drop the native sqlite-jdbc and bundle the stub instead (see the note above).
+    if (id == "room") cfg.exclude(group = "org.xerial", module = "sqlite-jdbc")
     val zip = tasks.register<Zip>("ksp${id.replaceFirstChar { it.uppercase() }}ProcessorZip") {
         description = "Packages the $id KSP processor closure as /processors/$id.zip (zip of jars; app-provided jars dropped)."
         archiveFileName.set("$id.zip")
         destinationDirectory.set(layout.buildDirectory.dir("generated/processors"))
         from(provider { cfg.filter { f -> f.name.endsWith(".jar") && appProvidedJarPrefixes.none { f.name.startsWith(it) } } })
+        if (id == "room") from(sqliteStubJar)
         duplicatesStrategy = DuplicatesStrategy.EXCLUDE
     }
     tasks.processResources { from(zip) { into("processors") } }
@@ -119,6 +137,7 @@ dependencies {
 tasks.named<Test>("test") {
     maxHeapSize = "3g"
     setForkEvery(1)
+    dependsOn(sqliteStubJar)   // RoomWithoutSqliteJdbcTest swaps the stub in for the real sqlite-jdbc
     // Hand the isolated Room + runner classpaths to the spikes / KspSourceGeneratorTest, resolved lazily at
     // execution time (so unrelated task graphs don't resolve them during configuration).
     doFirst {
@@ -127,5 +146,6 @@ tasks.named<Test>("test") {
         systemProperty("moshi.libs.classpath", moshiLibs.asPath)
         systemProperty("ksp.runner.classpath", kspRunner.asPath)
         systemProperty("ksp.thin.runtime.classpath", kspThinRuntime.asPath)
+        systemProperty("sqlite.stub.jar", sqliteStubJar.get().archiveFile.get().asFile.absolutePath)
     }
 }
