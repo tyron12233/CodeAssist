@@ -112,9 +112,25 @@ class KspSourceGenerator(
                     else SourceGenResult(false, messages.ifEmpty { listOf("ksp: processing failed for ${request.moduleName}") })
                 },
                 onFailure = { e ->
-                    val m = "ksp: crashed for ${request.moduleName}: ${e.message}"
+                    // KSP is invoked reflectively, so a crash arrives wrapped in InvocationTargetException whose
+                    // own message is null ("crashed for app: null"). Unwrap to the real cause and report its type
+                    // + message (the type alone is informative when the message is null, e.g. a bare NPE) plus a
+                    // short stack, so the actual failure is visible instead of a useless null.
+                    val root = unwrapReflection(e)
+                    val detail = root.message?.takeIf { it.isNotBlank() } ?: "(${root.javaClass.name}; no message)"
+                    val m = "ksp: crashed for ${request.moduleName}: $detail"
                     log(m)
-                    SourceGenResult(false, messages + m)
+                    val trace = root.stackTrace.take(10).joinToString("\n") { "    at $it" }
+                    log("ksp: cause ${root.javaClass.name}: ${root.message}\n$trace")
+                    // A bundled processor that needs a native library (Room's SQLite query verifier via
+                    // sqlite-jdbc) can't load it on ART — there's no `.so` for Android/aarch64 — so the run dies
+                    // with an opaque "No native library found". Say so plainly: it's a device limitation, not a
+                    // project error, and the (declared) processor's code generation isn't supported on-device yet.
+                    val hint = if (needsUnavailableNativeLibrary(root))
+                        "ksp: a bundled processor needs a native library not available on this device; its code generation isn't supported on-device yet"
+                    else null
+                    hint?.let(log)
+                    SourceGenResult(false, messages + m + "ksp: cause ${root.javaClass.name}: ${root.message}" + listOfNotNull(hint))
                 },
             )
     }
@@ -140,7 +156,15 @@ class KspSourceGenerator(
             }
         }
         return names.mapNotNull { name ->
-            runCatching { Class.forName(name, true, cl).getDeclaredConstructor().newInstance() as SymbolProcessorProvider }.getOrNull()
+            runCatching { Class.forName(name, true, cl).getDeclaredConstructor().newInstance() as SymbolProcessorProvider }
+                .onFailure { e ->
+                    // Don't drop the reason silently: a provider that fails to load (a missing transitive on the
+                    // processor classpath, an ART class-init failure) otherwise surfaces only as the opaque
+                    // "no SymbolProcessorProvider found". Report the real cause.
+                    val root = unwrapReflection(e)
+                    log("ksp: failed to load processor provider '$name': ${root.javaClass.name}: ${root.message}")
+                }
+                .getOrNull()
         }
     }
 
@@ -161,6 +185,27 @@ class KspSourceGenerator(
         val instance = ctor.newInstance(config, providers, logger)
         val exit = kspClass.getMethod("execute").invoke(instance)
         return (exit as? Enum<*>)?.name == "OK"
+    }
+
+    /** True when [t] is (or its message reports) a missing/failed native library load — the sqlite-jdbc
+     *  "No native library found for os.name=…" that Room's verifier hits on ART, or a plain
+     *  `UnsatisfiedLinkError`. Used only to attach a clear on-device-limitation hint to the failure. */
+    private fun needsUnavailableNativeLibrary(t: Throwable): Boolean =
+        t is UnsatisfiedLinkError ||
+            (t.message?.let { "No native library found" in it || "UnsatisfiedLinkError" in it } == true)
+
+    /** Peel reflection wrappers (`InvocationTargetException`/`UndeclaredThrowableException`/
+     *  `ExceptionInInitializerError`) — whose own message is null — off [e] to reach the real cause. */
+    private fun unwrapReflection(e: Throwable): Throwable {
+        var t: Throwable = e
+        while (t.cause != null && t.cause !== t &&
+            (t is java.lang.reflect.InvocationTargetException ||
+                t is java.lang.reflect.UndeclaredThrowableException ||
+                t is ExceptionInInitializerError)
+        ) {
+            t = t.cause!!
+        }
+        return t
     }
 
     /** KSP rejects a module name with `:` (Kotlin 2.4 default module suffix); KSP 2.3.10 sanitizes internally,
