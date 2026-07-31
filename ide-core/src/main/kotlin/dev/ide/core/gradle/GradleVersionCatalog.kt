@@ -28,6 +28,9 @@ internal class GradleVersionCatalog private constructor(
     /** The libraries in bundle accessor [path] (stripped of `libs.bundles.`). */
     fun bundle(path: String): List<CatalogEntry> = (bundles[normalize(path)] ?: emptyList()).mapNotNull { libraries[it] }
 
+    /** The version string for accessor [path] (stripped of `libs.versions.`), or null. */
+    fun version(path: String): String? = versions[normalize(path)]
+
     companion object {
         val EMPTY = GradleVersionCatalog(emptyMap(), emptyMap(), emptyMap(), emptyMap())
 

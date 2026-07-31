@@ -362,7 +362,7 @@ class AndroidBuildSystem(
         tasks.task(processManifest, listOf(checkAarMeta)) {
             ManifestMergeTask(
                 processManifest, layout.manifest(facet), libraryManifests, manifestPlaceholders,
-                facet.minSdk, facet.targetSdk, layout.mergedManifest,
+                facet.minSdk, facet.targetSdk, layout.mergedManifest, facet.namespace,
                 stripVersionCode = versionCodeAuthoritative, stripVersionName = versionNameAuthoritative,
             )
         }

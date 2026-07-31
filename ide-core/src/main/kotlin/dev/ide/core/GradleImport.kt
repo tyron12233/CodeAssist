@@ -41,7 +41,7 @@ internal data class GradleSyncOutcome(val ok: Boolean, val message: String, val 
  * surfaced in the UI. Imported projects are marked with [markCompatibilityMode]. Full Gradle sync is
  * roadmap step 9.
  */
-internal object GradleImport {
+object GradleImport {
 
     private val SETTINGS_FILES = listOf("settings.gradle", "settings.gradle.kts")
     private val BUILD_FILES = listOf("build.gradle", "build.gradle.kts")
@@ -170,9 +170,9 @@ internal object GradleImport {
             namespace = (android?.let { firstGroup(it, """namespace\s*=?\s*['"]([\w.]+)['"]""") })
                 ?: firstGroup(build, """applicationId\s*=?\s*['"]([\w.]+)['"]""")
                 ?: manifestPackage(dir),
-            compileSdk = androidInt(android ?: build, """compileSdk(?:Version)?"""),
-            minSdk = androidInt(android ?: build, """minSdk(?:Version)?"""),
-            targetSdk = androidInt(android ?: build, """targetSdk(?:Version)?"""),
+            compileSdk = androidInt(android ?: build, """compileSdk(?:Version)?""", catalog),
+            minSdk = androidInt(android ?: build, """minSdk(?:Version)?""", catalog),
+            targetSdk = androidInt(android ?: build, """targetSdk(?:Version)?""", catalog),
             isKotlin = isKotlin,
             isCompose = isCompose,
             mavenDeps = maven,
@@ -235,33 +235,57 @@ internal object GradleImport {
             else maven.putIfAbsent("$coord|$variant", Dep(coord, scope, variant))
         }
 
-        for (st in GradleScript.statements(depBody)) {
-            val (scope, variant) = scopeAndVariant(st) ?: continue
-            val isPlatform = Regex("""\b(?:enforced)?[Pp]latform\s*\(""").containsMatchIn(st)
+        // Resolve a dependency *reference* — a catalog accessor (`libs.x` / `libs.bundles.x`), a
+        // `kotlin("x")` shorthand, or an inline `"g:a:v"` coordinate — into [addLib].
+        fun addRef(text: String, scope: DependencyScope, variant: String?, isPlatform: Boolean) {
             when {
-                "project(" in st -> {
-                    firstGroup(st, """project\s*\(\s*(?:path\s*[:=]\s*)?['"](:[\w:\-]+)['"]""")?.let { path ->
-                        val n = path.trimEnd(':').substringAfterLast(':')
-                        if (n.isNotEmpty()) modules.putIfAbsent(n, ModuleDep(n, scope, variant))
-                    }
-                }
-                "libs.bundles." in st -> {
-                    val alias = firstGroup(st, """libs\.bundles\.([\w.]+)""") ?: continue
+                "libs.bundles." in text -> {
+                    val alias = firstGroup(text, """libs\.bundles\.([\w.]+)""") ?: return
                     val entries = catalog.bundle(alias)
                     if (entries.isEmpty()) notes.add("$module: unresolved catalog bundle `libs.bundles.$alias`.")
                     for (e in entries) addLib(e.coordinate, scope, variant, isPlatform)
                 }
-                Regex("""\blibs\.[\w.]+""").containsMatchIn(st) && "libs.plugins." !in st -> {
-                    val alias = firstGroup(st, """\blibs\.([\w.]+)""") ?: continue
+                Regex("""\blibs\.[\w.]+""").containsMatchIn(text) && "libs.plugins." !in text -> {
+                    val alias = firstGroup(text, """\blibs\.([\w.]+)""") ?: return
                     val e = catalog.library(alias)
                     if (e == null) notes.add("$module: unresolved catalog reference `libs.$alias`.")
                     else addLib(e.coordinate, scope, variant, isPlatform)
                 }
-                Regex("""\bkotlin\s*\(\s*['"]""").containsMatchIn(st) -> {
-                    GradleScript.firstQuoted(st.substringAfter("kotlin"))
+                Regex("""\bkotlin\s*\(\s*['"]""").containsMatchIn(text) -> {
+                    GradleScript.firstQuoted(text.substringAfter("kotlin"))
                         ?.let { addLib("org.jetbrains.kotlin:kotlin-$it", scope, variant, isPlatform) }
                 }
-                else -> coordinateFrom(st, vars, module, notes)?.let { addLib(it, scope, variant, isPlatform) }
+                else -> coordinateFrom(text, vars, module, notes)?.let { addLib(it, scope, variant, isPlatform) }
+            }
+        }
+
+        val statements = GradleScript.statements(depBody)
+
+        // A BOM bound to a local val — `val composeBom = platform(libs.androidx.compose.bom)` — then used as
+        // `implementation(composeBom)`. Map the var to the platform's reference so those uses resolve as a BOM
+        // (otherwise every versionless catalog library the BOM aligns would fail to resolve a version).
+        val platformVals = HashMap<String, String>()
+        for (st in statements) {
+            firstTwo(st, """^(?:val|def)\s+(\w+)\s*=\s*(?:enforced)?[Pp]latform\s*\(\s*(.+?)\s*\)\s*$""")
+                ?.let { (name, arg) -> platformVals[name] = arg.trim() }
+        }
+
+        for (st in statements) {
+            val (scope, variant) = scopeAndVariant(st) ?: continue
+            val isPlatform = Regex("""\b(?:enforced)?[Pp]latform\s*\(""").containsMatchIn(st)
+            // `implementation(composeBom)` where `composeBom = platform(...)` → resolve the BOM reference.
+            val soleArg = firstGroup(st, """^[A-Za-z]\w*\s*\(?\s*([A-Za-z_]\w*)\s*\)?\s*$""")
+            if (soleArg != null && soleArg in platformVals) {
+                addRef(platformVals.getValue(soleArg), scope, variant, isPlatform = true)
+                continue
+            }
+            if ("project(" in st) {
+                firstGroup(st, """project\s*\(\s*(?:path\s*[:=]\s*)?['"](:[\w:\-]+)['"]""")?.let { path ->
+                    val n = path.trimEnd(':').substringAfterLast(':')
+                    if (n.isNotEmpty()) modules.putIfAbsent(n, ModuleDep(n, scope, variant))
+                }
+            } else {
+                addRef(st, scope, variant, isPlatform)
             }
         }
         return Triple(maven.values.toList(), modules.values.toList(), platforms.values.toList())
@@ -299,8 +323,20 @@ internal object GradleImport {
 
     // --- android block ---
 
-    private fun androidInt(text: String, keyPattern: String): Int? =
-        firstGroup(text, """$keyPattern\s*=?\s*\(?\s*(\d+)""")?.toIntOrNull()
+    /** An android SDK int like `compileSdk 34` / `compileSdk = 34`, or the catalog form
+     *  `compileSdk = libs.versions.compileSdk.get().toInt()` resolved through the version [catalog]. */
+    private fun androidInt(text: String, keyPattern: String, catalog: GradleVersionCatalog): Int? {
+        firstGroup(text, """$keyPattern\s*=?\s*\(?\s*(\d+)""")?.toIntOrNull()?.let { return it }
+        val accessor = firstGroup(text, """$keyPattern\s*=?\s*\(?\s*libs\.versions\.([\w.]+)""") ?: return null
+        // Drop trailing method calls (`.get`, `.toInt`, …) a segment at a time until the accessor resolves.
+        var a = accessor
+        repeat(5) {
+            catalog.version(a)?.toIntOrNull()?.let { return it }
+            if ('.' !in a) return null
+            a = a.substringBeforeLast('.')
+        }
+        return null
+    }
 
     private fun flavorDimensions(android: String): List<String> =
         GradleScript.statements(android).filter { it.trimStart().startsWith("flavorDimensions") }
@@ -354,7 +390,9 @@ internal object GradleImport {
         vars.mapValues { interpolate(it.value, vars) }
 
     private fun interpolate(s: String, vars: Map<String, String>): String {
-        var r = Regex("""\$\{([^}]+)}""").replace(s) { m -> vars[m.groupValues[1].trim()] ?: m.value }
+        // NB: the closing brace is escaped (`\}`). The JVM regex engine tolerates a bare `}`, but ART's ICU
+        // engine rejects it as a syntax error — so an unescaped `}` here throws PatternSyntaxException on device.
+        var r = Regex("""\$\{([^}]+)\}""").replace(s) { m -> vars[m.groupValues[1].trim()] ?: m.value }
         r = Regex("""\$([A-Za-z_][\w.]*)""").replace(r) { m -> vars[m.groupValues[1]] ?: m.value }
         return r
     }

@@ -28,6 +28,8 @@ internal class ManifestMergeTask(
     private val minSdk: Int,
     private val targetSdk: Int,
     private val outManifest: Path,
+    /** The module namespace, injected as the manifest `package` when it declares none (modern AGP style). */
+    private val packageName: String,
     // When the build config's version is authoritative, drop the manifest's own android:versionCode/
     // versionName from the merged output so aapt2 injects the facet value instead (AGP's DSL-wins rule).
     private val stripVersionCode: Boolean = false,
@@ -45,6 +47,8 @@ internal class ManifestMergeTask(
             // Not part of the output, but the edge-to-edge advisory depends on it: re-run so the warning
             // appears/clears when the resolved target crosses the threshold.
             property("targetSdk", targetSdk)
+            // The package injected into the merged manifest (from the module namespace) is part of the output.
+            property("packageName", packageName)
             // Whether the manifest's version is stripped changes the output, so bumping the facet version
             // from/to its default (which flips authority) must re-run the merge.
             property("stripVersionCode", stripVersionCode)
@@ -75,8 +79,11 @@ internal class ManifestMergeTask(
         ctx.reportToolDiagnostics("manifest-merger", logs, DiagnosticKind.GENERIC)
         if (result.hasErrors) return TaskResult.Failed("manifest merge failed (see diagnostics)")
 
+        // Modern AGP apps declare `namespace` in Gradle and omit `package` from the manifest; AGP injects it
+        // into the merged manifest before aapt2 (which still requires a `package` on `<manifest>`). Same here.
+        val merged = ensurePackage(result.xml, packageName)
         outManifest.parent?.let { Files.createDirectories(it) }
-        Files.write(outManifest, result.xml.toByteArray(Charsets.UTF_8))
+        Files.write(outManifest, merged.toByteArray(Charsets.UTF_8))
         ctx.logger()("processManifest -> ${outManifest.fileName} (merged ${libs.size} library manifest(s))")
         return TaskResult.Success
     }
@@ -84,6 +91,23 @@ internal class ManifestMergeTask(
     companion object {
         /** Android 15 (VANILLA_ICE_CREAM): an app targeting this or higher gets edge-to-edge enforced by default. */
         const val EDGE_TO_EDGE_SDK = 35
+
+        /**
+         * Ensure the `<manifest>` opening tag carries a `package` attribute, injecting [packageName] (the module
+         * namespace) when it has none. aapt2 still requires `package`, but AGP-style projects declare only
+         * `namespace` in Gradle and omit it from the manifest — AGP injects it, and so must we.
+         */
+        fun ensurePackage(xml: String, packageName: String): String {
+            if (packageName.isBlank()) return xml
+            val start = xml.indexOf("<manifest")
+            if (start < 0) return xml
+            val tagEnd = xml.indexOf('>', start)
+            if (tagEnd < 0) return xml
+            val openTag = xml.substring(start, tagEnd)
+            if (Regex("""\bpackage\s*=""").containsMatchIn(openTag)) return xml
+            val insertAt = start + "<manifest".length
+            return xml.substring(0, insertAt) + " package=\"$packageName\"" + xml.substring(insertAt)
+        }
 
         /**
          * Heads-up returned when the app declares no `targetSdkVersion` (so the build config, via aapt2's
