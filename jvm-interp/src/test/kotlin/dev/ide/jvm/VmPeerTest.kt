@@ -4,6 +4,7 @@ import dev.ide.jvm.fixtures.Peers
 import dev.ide.jvm.host.Shape
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFailsWith
 import kotlin.test.assertTrue
 
 /**
@@ -63,6 +64,32 @@ class VmPeerTest {
         // result must cross the bridge proxy as a real PEER, not the raw VmObject. `suppliedTagViaHost` mirrors
         // it: `Factory.make(() -> new Tagged(){ … })` casts `s.get()` to `Tagged`.
         assertEquals(Peers.suppliedTagViaHost(), vm.invokeStatic(PEERS, "suppliedTagViaHost", "()Ljava/lang/String;"))
+    }
+
+    @Test fun proxyPeerExceptionPropagatesWithoutASinkAndDegradesWithOne() {
+        // A peer method invoked by platform code can be called OUTSIDE a render's error boundary (a layout /
+        // measure / draw pass, a posted callback), so a preview host guards it with a sink: the failure is
+        // reported and the method returns a zero value instead of crashing the process (a console run leaves the
+        // sink null so the failure propagates). Reproduces the 3.8.3 crash surface (an interpreted object's
+        // interface method throwing through AsmPeerFactory.createProxyPeer).
+        val spec = PeerSpec(
+            superClass = Any::class.java,
+            interfaces = listOf(java.util.function.IntUnaryOperator::class.java),
+            methods = listOf(PeerMethod("applyAsInt", "(I)I", "java/util/function/IntUnaryOperator", ownerIsInterface = true)),
+            abstractStubs = emptyList(),
+            className = "test/Boom",
+        )
+        val dispatch = PeerDispatch { _, _, _, _, _ -> throw RuntimeException("boom") }
+
+        val unguarded = AsmPeerFactory().createPeer(Any(), spec, dispatch, "()V", emptyList())
+            as java.util.function.IntUnaryOperator
+        assertFailsWith<RuntimeException> { unguarded.applyAsInt(7) }
+
+        var reported: Throwable? = null
+        val guarded = AsmPeerFactory(proxyExceptionSink = { reported = it }).createPeer(Any(), spec, dispatch, "()V", emptyList())
+            as java.util.function.IntUnaryOperator
+        assertEquals(0, guarded.applyAsInt(7), "a guarded peer method returns a zero value on failure")
+        assertTrue(reported is RuntimeException, "the failure is reported to the sink")
     }
 
     @Test fun realSuperConstructorCallsInterpretedOverrideDuringConstruction() {

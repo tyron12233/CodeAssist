@@ -31,6 +31,13 @@ import org.objectweb.asm.commons.Method as AsmMethod
  */
 open class AsmPeerFactory(
     private val parent: ClassLoader = AsmPeerFactory::class.java.classLoader,
+    /** When set, an exception thrown by a proxy peer method that re-enters interpreted code (an overridden or
+     *  default interface method invoked by platform code, e.g. during a layout/measure/draw pass or a posted
+     *  callback outside the render's error boundary) is reported here and the method returns a zero value,
+     *  instead of propagating into the platform caller. A preview host sets this so such a failure degrades
+     *  instead of crashing the process; a console run leaves it null so failures propagate. Mirrors
+     *  [dev.ide.jvm.ReflectiveBridge]'s sink for the lambda-proxy path. */
+    private val proxyExceptionSink: ((Throwable) -> Unit)? = null,
 ) : PeerFactory {
 
     private val loader = PeerClassLoader(parent)
@@ -74,7 +81,7 @@ open class AsmPeerFactory(
             val args = rawArgs ?: EMPTY_ARGS
             val descriptor = Type.getMethodDescriptor(method)
             val key = method.name + descriptor
-            when {
+            fun dispatchMethod(): Any? = when {
                 method.declaringClass == VmPeer::class.java -> vmObject
                 key in overridden -> dispatch.invoke(proxy, vmObject, method.name, descriptor, args)
                 key in stubs -> throw AbstractMethodError("the interpreted class does not override $key")
@@ -84,9 +91,31 @@ open class AsmPeerFactory(
                 method.name == "equals" && args.size == 1 -> args[0] === proxy
                 else -> dispatch.invoke(proxy, vmObject, method.name, descriptor, args)
             }
+            val sink = proxyExceptionSink
+            if (sink == null) dispatchMethod()
+            else try {
+                dispatchMethod()
+            } catch (t: Throwable) {
+                sink(t)
+                zeroReturn(method.returnType)
+            }
         }
         proxy = Proxy.newProxyInstance(parent, interfaces, handler)
         return proxy
+    }
+
+    /** A type-correct zero for [returnType], returned when a guarded peer method fails (see [proxyExceptionSink]). */
+    private fun zeroReturn(returnType: Class<*>): Any? = when (returnType) {
+        Void.TYPE -> null
+        Boolean::class.javaPrimitiveType -> false
+        Char::class.javaPrimitiveType -> ' '
+        Byte::class.javaPrimitiveType -> 0.toByte()
+        Short::class.javaPrimitiveType -> 0.toShort()
+        Int::class.javaPrimitiveType -> 0
+        Long::class.javaPrimitiveType -> 0L
+        Float::class.javaPrimitiveType -> 0f
+        Double::class.javaPrimitiveType -> 0.0
+        else -> null
     }
 
     override fun peerClass(spec: PeerSpec, superConstructorDescriptor: String): Class<*> =

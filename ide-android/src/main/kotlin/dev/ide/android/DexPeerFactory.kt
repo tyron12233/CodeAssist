@@ -27,7 +27,10 @@ import java.util.concurrent.atomic.AtomicLong
  * restarts) is loaded straight into an [InMemoryDexClassLoader]. Correctness is unchanged — same input bytes
  * dex to the same output.
  */
-class DexPeerFactory(private val diskCacheDir: Path? = null) : AsmPeerFactory() {
+class DexPeerFactory(
+    private val diskCacheDir: Path? = null,
+    proxyExceptionSink: ((Throwable) -> Unit)? = null,
+) : AsmPeerFactory(proxyExceptionSink = proxyExceptionSink) {
 
     override fun define(binaryName: String, bytes: ByteArray): Class<*> {
         val dex = dexFor(binaryName, bytes)

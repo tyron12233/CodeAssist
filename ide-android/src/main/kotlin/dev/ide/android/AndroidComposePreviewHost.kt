@@ -114,7 +114,19 @@ class AndroidComposePreviewHost(private val backend: IdeServicesBackend) : Compo
                     // and the first preview after an app restart — reuses previously-dexed peers instead of
                     // re-running D8 (~0.4s → ~40ms per open; see DexPeerFactory).
                     val peerDexCache = runCatching { libs.cacheDir.resolveSibling("vm-peer-dex") }.getOrNull()
-                    withContext(Dispatchers.IO) { VmLibraryExecutor(libs.jars, peerFactory = DexPeerFactory(peerDexCache)) }
+                    withContext(Dispatchers.IO) {
+                        // Guard the peer proxies: an interpreted object realized as a real interface (a Compose
+                        // Node, a Runnable/Comparator) can have its methods invoked by platform code on a
+                        // measure/layout/draw pass or a posted callback, OUTSIDE the render's error boundary — an
+                        // exception there would crash the app (seen in 3.8.3 as VmException/NoSuchMethodError at
+                        // AsmPeerFactory.createProxyPeer). The sink degrades that to a skipped call.
+                        VmLibraryExecutor(
+                            libs.jars,
+                            peerFactory = DexPeerFactory(peerDexCache, proxyExceptionSink = { t ->
+                                log.warn("interpreted preview peer call failed (skipped): ${t.message ?: t.javaClass.simpleName}")
+                            }),
+                        )
+                    }
                 }
             }.getOrNull()
         }

@@ -36,6 +36,7 @@ import dev.ide.interp.SandboxFinding
 import dev.ide.interp.compose.ComposePreviewRenderer
 import dev.ide.interp.compose.PreviewParameterBinding
 import dev.ide.interp.compose.VmLibraryExecutor
+import dev.ide.jvm.AsmPeerFactory
 import dev.ide.platform.log.Log
 import dev.ide.ui.ComposePreviewHost
 import dev.ide.ui.backend.UiComposePreview
@@ -74,7 +75,16 @@ class DesktopComposePreviewHost(private val backend: IdeServicesBackend) : Compo
         // bridged to the bundled Compose-for-Desktop) — the same path the device host uses, so desktop tests
         // exercise the on-device behavior. Keyed on path; null while resolving (the bundled runtime serves).
         val libraryExecutor by produceState<VmLibraryExecutor?>(null, path) {
-            value = runCatching { backend.composePreviewLibs(path)?.let { VmLibraryExecutor(it.jars) } }.getOrNull()
+            value = runCatching {
+                backend.composePreviewLibs(path)?.let {
+                    // Guard the peer proxies so a peer method that throws when platform code invokes it (outside
+                    // the render's error boundary) degrades to a skipped call instead of crashing (see the
+                    // AndroidComposePreviewHost note).
+                    VmLibraryExecutor(it.jars, peerFactory = AsmPeerFactory(proxyExceptionSink = { t ->
+                        log.warn("interpreted preview peer call failed (skipped): ${t.message ?: t.javaClass.simpleName}")
+                    }))
+                }
+            }.getOrNull()
         }
         // Close the executor's open library-jar handles when it is replaced (a new file/path produces a fresh
         // one) or the preview leaves composition — produceState never disposes the value it superseded, so
