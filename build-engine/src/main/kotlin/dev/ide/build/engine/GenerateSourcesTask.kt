@@ -9,6 +9,7 @@ import dev.ide.build.TaskName
 import dev.ide.build.TaskOutputs
 import dev.ide.build.TaskResult
 import dev.ide.model.ContentRole
+import dev.ide.model.LibraryDependency
 import dev.ide.model.Module
 import java.nio.file.Files
 import java.nio.file.Path
@@ -45,6 +46,14 @@ class GenerateSourcesTask(
     private fun handWritten(ext: String): List<Path> = sourceRootDirs()
         .flatMap { root -> Files.walk(root).use { s -> s.filter { it.toString().endsWith(ext) }.collect(Collectors.toList()) } }
 
+    /** The module's directly-declared library coordinates as `group:name` — the opt-in signal probe-based
+     *  generators gate on (a transitive dependency is folded into a declaring library's roots, so it never
+     *  appears here). */
+    private fun declaredDependencyCoordinates(): List<String> = module.dependencies
+        .filterIsInstance<LibraryDependency>()
+        .mapNotNull { groupName(it.library.name) }
+        .distinct()
+
     private fun request(): SourceGenRequest = SourceGenRequest(
         moduleName = module.name,
         kotlinSources = handWritten(".kt"),
@@ -52,7 +61,14 @@ class GenerateSourcesTask(
         classpath = classpath(),
         outputDir = outputDir,
         sourceRoots = sourceRootDirs(),
+        declaredDependencies = declaredDependencyCoordinates(),
     )
+
+    /** `group:name` from a `group:name[:version[:classifier]]` coordinate, or null when it isn't one. */
+    private fun groupName(coordinate: String): String? {
+        val parts = coordinate.split(':')
+        return if (parts.size >= 2 && parts[0].isNotBlank() && parts[1].isNotBlank()) "${parts[0]}:${parts[1]}" else null
+    }
 
     override val inputs: TaskInputs
         get() = TaskInputsImpl().apply {

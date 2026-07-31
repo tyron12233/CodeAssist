@@ -43,6 +43,63 @@ class KspProcessorCatalogTest {
         assertTrue(catalog.applicable(emptyList()).isEmpty(), "no processor should apply on an empty classpath")
     }
 
+    /** A jar carrying only [entries] (zero-byte class entries) — enough to trip [classpathHasClass]. */
+    private fun jarWith(dir: Path, name: String, vararg entries: String): Path {
+        val jar = dir.resolve(name)
+        java.util.zip.ZipOutputStream(Files.newOutputStream(jar)).use { zos ->
+            entries.forEach { e -> zos.putNextEntry(java.util.zip.ZipEntry(e)); zos.closeEntry() }
+        }
+        return jar
+    }
+
+    /**
+     * The AGP-faithful activation rule: a processor runs only when its runtime is a **directly-declared**
+     * dependency — a runtime that merely arrives transitively (its marker on the classpath, but not declared)
+     * must NOT activate the processor. This is the JetSnack fix: JetSnack pulls `room-runtime` transitively
+     * (through Glance) but never declares Room, so the Room processor must not fire (and crash on ART's missing
+     * SQLite native). Self-contained — the marker jar is synthesized here, no injected classpath needed.
+     */
+    @Test
+    fun processorActivatesOnlyWhenItsRuntimeIsDirectlyDeclared() {
+        val catalog = KspProcessorCatalog.blessed()
+        withTempDir("ksp-gate-test") { root ->
+            // A transitive room-runtime: its marker is on the classpath, but Room is not declared.
+            val roomMarkerJar = jarWith(root, "room-runtime.jar", KspProcessorCatalog.ROOM_MARKER)
+            val classpath = listOf(roomMarkerJar)
+
+            // Marker-only probe still sees it (that path drives UI display, not activation).
+            assertEquals(listOf("room"), catalog.applicable(classpath).map { it.id })
+
+            // Declared-aware activation: nothing declared, or something else declared → Room does NOT run.
+            assertTrue(
+                catalog.applicable(classpath, declaredDependencies = emptyList()).isEmpty(),
+                "a transitive-only room-runtime must not activate Room",
+            )
+            assertTrue(
+                catalog.applicable(classpath, declaredDependencies = listOf("androidx.glance:glance-appwidget")).isEmpty(),
+                "declaring an unrelated library must not activate Room",
+            )
+
+            // Room IS declared (with or without a version) → Room runs.
+            assertEquals(
+                listOf("room"),
+                catalog.applicable(classpath, declaredDependencies = listOf("androidx.room:room-runtime")).map { it.id },
+                "declaring room-runtime must activate Room",
+            )
+            assertEquals(
+                listOf("room"),
+                catalog.applicable(classpath, declaredDependencies = listOf("androidx.room:room-runtime:2.8.4")).map { it.id },
+                "a versioned room-runtime coordinate must match by group:name",
+            )
+
+            // Declared but the marker isn't actually present (unresolved/offline) → don't run.
+            assertTrue(
+                catalog.applicable(emptyList(), declaredDependencies = listOf("androidx.room:room-runtime")).isEmpty(),
+                "declared but absent from the classpath → not run",
+            )
+        }
+    }
+
     @Test
     fun kspSourceGeneratorRunsTheCatalogSelectedProcessor() {
         val runner = classpathProp("ksp.runner.classpath")

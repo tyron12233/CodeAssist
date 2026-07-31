@@ -42,13 +42,38 @@ class KspProcessor(
  */
 class KspProcessorCatalog(val processors: List<KspProcessor>) {
 
-    /** The bundled processors whose runtime marker is on [classpath]. */
+    /** The bundled processors whose runtime marker is on [classpath] — marker-only, ignoring how the runtime
+     *  got there. Used for UI/display probes; build-time activation goes through the declared-aware overload
+     *  ([applicable] with `declaredDependencies`) so a merely-transitive runtime never activates a processor. */
     fun applicable(classpath: List<Path>): List<KspProcessor> =
         processors.filter { classpathHasClass(classpath, it.probeClassEntry) }
 
-    /** The union of applicable processors' bundled jars (skipping any that aren't bundled in this build). */
+    /**
+     * The bundled processors that should RUN for a module: those whose runtime is a **directly-declared**
+     * dependency ([declaredDependencies], `group:name`) AND whose marker is present on [classpath]. Gating on
+     * the declared set (not the transitive classpath) is the AGP-faithful rule — KSP runs a processor only on
+     * an explicit opt-in. A project that merely reaches a processor's runtime transitively (e.g. JetSnack pulls
+     * `room-runtime` through another library but never declares Room) must NOT run that processor: doing so is
+     * both wrong (no Room is used) and, for processors with a native toolchain like Room's SQLite verifier,
+     * would crash the build on a device that lacks that native library.
+     */
+    fun applicable(classpath: List<Path>, declaredDependencies: List<String>): List<KspProcessor> {
+        val declared = declaredDependencies.mapNotNull { groupName(it) }.toSet()
+        if (declared.isEmpty()) return emptyList()
+        return processors.filter { p ->
+            p.runtimeCoordinates.mapNotNull { groupName(it) }.any { it in declared } &&
+                classpathHasClass(classpath, p.probeClassEntry)
+        }
+    }
+
+    /** The union of applicable (marker-only) processors' bundled jars. Prefer the declared-aware overload for
+     *  build-time activation. */
     fun classpathFor(classpath: List<Path>): List<Path> =
         applicable(classpath).flatMap { it.jars() }.filter { Files.exists(it) }
+
+    /** The union of the RUN-eligible processors' bundled jars (declared-aware; skips any not bundled here). */
+    fun classpathFor(classpath: List<Path>, declaredDependencies: List<String>): List<Path> =
+        applicable(classpath, declaredDependencies).flatMap { it.jars() }.filter { Files.exists(it) }
 
     companion object {
         /** Marker class entries for the blessed catalog (the runtime each ships in). */
@@ -89,6 +114,12 @@ class KspProcessorCatalog(val processors: List<KspProcessor>) {
                     ) { bundledJars("glide") },
                 ),
             )
+
+        /** `group:name` from a `group:name[:version[:classifier]]` coordinate, or null when it isn't one. */
+        internal fun groupName(coordinate: String): String? {
+            val parts = coordinate.split(':')
+            return if (parts.size >= 2 && parts[0].isNotBlank() && parts[1].isNotBlank()) "${parts[0]}:${parts[1]}" else null
+        }
 
         /** True when [classpath] carries [classEntry] (a jar entry or a file under a class dir). Cheap; stops
          *  at the first hit. Mirrors `SerializationCompilerPlugin.usesSerialization`. */

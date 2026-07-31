@@ -45,6 +45,15 @@ class SourceGenRequest(
      * lists; [GenerateSourcesTask] always populates it.
      */
     val sourceRoots: List<Path> = emptyList(),
+    /**
+     * The module's **directly-declared** dependency coordinates in `group:name` form (never the transitive
+     * closure). Probe-based generators (KSP) gate activation on this so a processor turns on only when its
+     * runtime is a dependency the module actually declares — matching AGP, where KSP runs a processor on an
+     * explicit `ksp(...)`/runtime opt-in, not because that runtime happened to arrive transitively through some
+     * other library. Empty ⇒ no declared-dependency signal (marker-only probing). [GenerateSourcesTask]
+     * populates it from the module's direct library dependencies.
+     */
+    val declaredDependencies: List<String> = emptyList(),
 )
 
 class SourceGenResult(val success: Boolean, val messages: List<String> = emptyList()) {

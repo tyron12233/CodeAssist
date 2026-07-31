@@ -322,9 +322,11 @@ private class KotlinSupportPlugin : Plugin {
  * KSP2 source generation: contributes [KspSourceGenerator] on [SOURCE_GENERATOR_EP], so the build's
  * `generateSources` tasks run the IDE's **bundled** KSP2 processors (Room, …) on the IDE's OWN compiler/AA
  * (the ~776 KB thin runner + the bundled processor jars — nothing 78 MB or downloaded, so it stays within
- * Play's dynamic-code-loading policy). Activation is probe-based, exactly like the Compose/serialization
- * plugins: a module that carries a processor's runtime (e.g. `room-runtime`) trips [KspProcessorCatalog] and
- * the processor runs — no per-module toggle. The generated `.kt`/`.java` land in the module's
+ * Play's dynamic-code-loading policy). Activation is marker + declared-dependency: a processor runs when its
+ * runtime is a **directly-declared** dependency of the module (added via the Dependencies screen or the KSP
+ * toggle) and its marker is on the compile classpath. Matching AGP's explicit `ksp(...)` opt-in, a runtime
+ * that only arrives transitively (e.g. a Compose app that pulls `room-runtime` through another library but
+ * never declares Room) does NOT activate the processor. The generated `.kt`/`.java` land in the module's
  * `ContentRole.GENERATED` root and compile + index like hand-written code.
  *
  * The processor classloader is the injected [KOTLIN_PLUGIN_LOADER] (a plain `URLClassLoader` on desktop, a
@@ -352,7 +354,7 @@ private class KspSupportPlugin(private val env: ApplicationEnvironment) : Plugin
         reg.register(
             SOURCE_GENERATOR_EP,
             KspSourceGenerator(
-                processors = { req -> catalog.classpathFor(req.classpath) },
+                processors = { req -> catalog.classpathFor(req.classpath, req.declaredDependencies) },
                 loader = loader,
                 jdkHome = jdkHome,
             ),

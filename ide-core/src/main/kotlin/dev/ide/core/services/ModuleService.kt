@@ -218,6 +218,12 @@ internal class ModuleService(private val ctx: EngineContext) {
             .ifEmpty { BUILTIN_KOTLIN_COMPILER_PLUGINS }
             .associateBy { it.pluginId }
 
+    /** `group:name` from a `group:name[:version[:classifier]]` coordinate, or null when it isn't one. */
+    private fun groupName(coordinate: String): String? {
+        val parts = coordinate.split(':')
+        return if (parts.size >= 2 && parts[0].isNotBlank() && parts[1].isNotBlank()) "${parts[0]}:${parts[1]}" else null
+    }
+
     /** The LIBRARY jars on [module]'s compile classpath — what a plugin's `appliesTo` classpath probe reads. */
     private fun compileLibraryClasspath(module: Module): List<Path> =
         runCatching {
@@ -247,16 +253,20 @@ internal class ModuleService(private val ctx: EngineContext) {
                 note = "Applies automatically once its runtime is on the module's classpath.",
             )
         }
-        // The bundled KSP processors, toggled the same way (enabled = the facet set; applied = the runtime
-        // marker probe, which is what actually runs the processor at build time — including a transitive runtime).
+        // The bundled KSP processors, toggled the same way (enabled = the facet set; applied = what actually
+        // runs at build time: the runtime is a DIRECTLY-declared dependency AND its marker is on the classpath.
+        // A merely-transitive runtime does not activate the processor, matching AGP's explicit-opt-in rule.)
+        val declaredCoords = module.dependencies.filterIsInstance<LibraryDependency>()
+            .mapNotNull { groupName(it.library.name) }.toSet()
         val kspRows = kspProcessors.map { p ->
             UiCompilerPlugin(
                 id = p.id,
                 title = p.displayName,
                 description = p.description,
                 enabled = p.id in bf.kspProcessors,
-                applied = KspProcessorCatalog.classpathHasClass(classpath, p.probeClassEntry),
-                note = "KSP annotation processor. Runs once its runtime is on the module's classpath.",
+                applied = p.runtimeCoordinates.mapNotNull { groupName(it) }.any { it in declaredCoords } &&
+                    KspProcessorCatalog.classpathHasClass(classpath, p.probeClassEntry),
+                note = "KSP annotation processor. Runs once its runtime is a declared dependency of the module.",
             )
         }
         return UiCompilerPlugins(moduleName, plugins + kspRows)
