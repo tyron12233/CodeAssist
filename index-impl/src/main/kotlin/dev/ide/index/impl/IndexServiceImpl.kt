@@ -1192,9 +1192,25 @@ class IndexServiceImpl(
         override val sourcePath: Path? = null,
         private val readBytes: () -> ByteArray,
     ) : IndexInput {
-        override fun bytes(): ByteArray = readBytes()
+        // Inflate the zip entry (or read the jrt bytes) ONCE — this input is handed to every extension for the
+        // class in one pass, so without memoization a library `.class` was re-inflated per extension (~8× for
+        // android.jar: 3 java.* + 5 kotlin.* binary indexes each calling `bytes()`).
+        private val bytes by lazy { readBytes() }
+        override fun bytes(): ByteArray = bytes
         override fun text(): String? = null
         override fun dom(): ParsedFile? = null
+
+        // FileContent-style per-input memo (see SourceInput below): the class is handed to every extension in
+        // ONE pass on ONE coroutine (buildArtifact fans out per input; computeEntries runs a file's extensions
+        // sequentially), so the java.* indexes share one `JavaBytecode.read` and the kotlin.* indexes share one
+        // `@Metadata` decode via `IndexInput.shared(...)` instead of each re-parsing the class.
+        private val memo = HashMap<String, Any?>()
+
+        @Suppress("UNCHECKED_CAST")
+        override fun <T> shared(key: String, compute: () -> T): T {
+            if (memo.containsKey(key)) return memo[key] as T
+            val v = compute(); memo[key] = v; return v
+        }
     }
 
     /** A `.java`/`.kt` entry from an attached SOURCE archive/dir: immutable, carries source text. */

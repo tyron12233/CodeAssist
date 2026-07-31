@@ -10,7 +10,6 @@ import dev.ide.index.KeyDescriptor
 import dev.ide.index.MatchingMode
 import dev.ide.index.StringKeyDescriptor
 import dev.ide.index.classEntryToFqn
-import dev.ide.lang.kotlin.symbols.KotlinMetadata
 import java.io.DataInput
 import java.io.DataOutput
 
@@ -53,10 +52,9 @@ object KotlinPackageDeclIndex : IndexExtension<String, PkgDecl> {
     }
 
     override fun index(input: IndexInput): Map<String, Collection<PkgDecl>> {
-        val bytes = runCatching { input.bytes() }.getOrNull() ?: return emptyMap()
         // Only a Kotlin @Metadata class/facade contributes here; a plain Java/Android .class decodes to null.
-        val decoded =
-            runCatching { KotlinMetadata.decode(bytes, null) }.getOrNull() ?: return emptyMap()
+        // The decode is SHARED with the other kotlin.* binary indexes for this class ([sharedMetadata]).
+        val decoded = sharedMetadata(input) ?: return emptyMap()
         val unit = input.unitName ?: return emptyMap()
         val out = HashMap<String, MutableList<PkgDecl>>()
 

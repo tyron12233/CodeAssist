@@ -114,6 +114,50 @@ class JavaIndexTest {
         assertEquals("class", JavaClassNamesIndex.index(cls)["Greeter"]?.first()?.kind)
     }
 
+    /** Mirrors the real `LibraryInput` (memoized `bytes()` + a per-input `shared` memo) but records how many
+     *  times `bytes()` is called and how many times each `shared` key's compute actually runs — so a test can
+     *  assert the binary indexes parse a class ONCE, not once per index. */
+    private class RecordingInput(
+        override val origin: IndexOrigin,
+        override val unitName: String?,
+        private val b: ByteArray,
+    ) : IndexInput {
+        override val contentHash = ContentHash.of(b)
+        override val sourcePath: Path? = null
+        var bytesCalls = 0
+            private set
+        val computeRuns = HashMap<String, Int>()
+        override fun bytes(): ByteArray { bytesCalls++; return b }
+        override fun text(): String? = null
+        override fun dom() = null
+
+        private val memo = HashMap<String, Any?>()
+
+        @Suppress("UNCHECKED_CAST")
+        override fun <T> shared(key: String, compute: () -> T): T {
+            if (memo.containsKey(key)) return memo[key] as T
+            computeRuns[key] = (computeRuns[key] ?: 0) + 1
+            val v = compute(); memo[key] = v; return v
+        }
+    }
+
+    @Test
+    fun binaryIndexesShareOneBytecodeReadPerClass() {
+        // classNames, packageTypes, and members each need the ASM class shape. They must share ONE
+        // `JavaBytecode.read` (and one zip inflation) via `IndexInput.shared`, not re-parse the class per index —
+        // the redundant-parse-per-class cold-build cost on android.jar (~40k classes × 3).
+        val input = RecordingInput(IndexOrigin.LIBRARY, "com/foo/Greeter.class", greeterClassBytes())
+
+        // Correctness is unchanged: each index still produces its entries.
+        assertEquals("com.foo.Greeter", JavaClassNamesIndex.index(input)["Greeter"]?.first()?.fqn)
+        assertEquals("com.foo.Greeter", JavaPackageTypesIndex.index(input)["com.foo"]?.first()?.fqn)
+        assertNotNull(JavaMembersIndex.index(input)["greet"]?.firstOrNull(), "greet still indexed")
+
+        // …but the class is read + inflated exactly once across all three.
+        assertEquals(1, input.computeRuns["java.classfile"], "one shared JavaBytecode.read per class")
+        assertEquals(1, input.bytesCalls, "one byte inflation per class")
+    }
+
     @Test
     fun sourceDeclarationsFromPsiParse() {
         val src = "package com.foo;\npublic class Use { public int run(String a) { return 0; } int field; }"

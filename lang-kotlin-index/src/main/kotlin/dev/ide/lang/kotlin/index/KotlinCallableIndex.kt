@@ -9,7 +9,6 @@ import dev.ide.index.InputFilter
 import dev.ide.index.KeyDescriptor
 import dev.ide.index.MatchingMode
 import dev.ide.index.StringKeyDescriptor
-import dev.ide.lang.kotlin.symbols.KotlinMetadata
 import dev.ide.lang.kotlin.symbols.KotlinSymbol
 import dev.ide.lang.kotlin.symbols.KotlinType
 import dev.ide.lang.kotlin.symbols.KotlinTypeContext
@@ -85,11 +84,10 @@ object KotlinCallableIndex : IndexExtension<String, CallableShape> {
     fun nameKey(name: String) = "$NAME_PREFIX$name"
 
     override fun index(input: IndexInput): Map<String, Collection<CallableShape>> {
-        val bytes = runCatching { input.bytes() }.getOrNull() ?: return emptyMap()
         // Only a Kotlin @Metadata facade carries top-level/extension callables; plain Java/Android .class
-        // (no metadata) yields nothing here (its member shape is the `kotlin.typeShape` index's job).
-        val decoded =
-            runCatching { KotlinMetadata.decode(bytes, null) }.getOrNull() ?: return emptyMap()
+        // (no metadata) yields nothing here (its member shape is the `kotlin.typeShape` index's job). The decode
+        // is SHARED with the other kotlin.* binary indexes for this class ([sharedMetadata]).
+        val decoded = sharedMetadata(input) ?: return emptyMap()
         if (decoded.topLevel.isEmpty() && decoded.extensions.isEmpty()) return emptyMap()
         val unit = input.unitName?.removeSuffix(".class")
         val pkg = unit?.substringBeforeLast('/', "")?.replace('/', '.')?.ifEmpty { null }

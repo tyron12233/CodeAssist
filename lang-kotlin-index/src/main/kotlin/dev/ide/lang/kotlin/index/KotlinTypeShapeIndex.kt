@@ -58,8 +58,9 @@ object KotlinTypeShapeIndex : IndexExtension<String, TypeShape> {
         // FACADE (@Metadata k=4) isn't handled by KotlinMetadata.decode, so it would otherwise fall through and
         // be indexed as a bogus type (its members duplicating the parts' top-level callables).
         if (KotlinMetadata.isFacadeOrSynthetic(bytes)) return emptyMap()
-        // A Kotlin @Metadata class; otherwise plain Java/Android bytecode.
-        runCatching { KotlinMetadata.decode(bytes, null) }.getOrNull()?.let { d ->
+        // A Kotlin @Metadata class; otherwise plain Java/Android bytecode. The decode is SHARED with the other
+        // kotlin.* binary indexes for this class ([sharedMetadata]).
+        sharedMetadata(input)?.let { d ->
             val fqn = d.classFqn ?: return emptyMap()
             return mapOf(fqn to listOf(TypeShape.of(d, null)))
         }

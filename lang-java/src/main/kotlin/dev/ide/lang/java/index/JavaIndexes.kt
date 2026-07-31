@@ -40,13 +40,19 @@ private fun isSource(i: IndexInput) =
 private val TYPE_KINDS =
     setOf(DeclKind.CLASS, DeclKind.INTERFACE, DeclKind.ENUM, DeclKind.RECORD, DeclKind.ANNOTATION)
 
+/** The ASM class shape for [input], read ONCE per class and SHARED across the `java.*` binary indexes that
+ *  need it (`classNames`, `packageTypes`, `members`) via [IndexInput.shared] — a library `.class` was
+ *  previously parsed once PER index. The result (incl. a null for unreadable bytecode) is cached on the input. */
+private fun sharedBytecode(input: IndexInput): JavaBytecode.ClassInfo? =
+    input.shared("java.classfile") { JavaBytecode.read(input.bytes()) }
+
 /** The declaration kind of a library/SDK class file if it declares a `public` top-level type (JPMS gates
  *  packages, not the package-private types inside them), read from the ASM access flags; null when the type
  *  is non-public or the bytecode can't be read. Returning the kind (not just a boolean) lets the class-name
  *  indexes label a binary annotation/interface/enum correctly instead of the blanket `"class"` — so e.g. an
  *  `@`-annotation completion filter can tell `@Composable` from an ordinary class. */
 private fun publicBytecodeKind(input: IndexInput): String? =
-    JavaBytecode.read(input.bytes())?.takeIf { JavaBytecode.isPublic(it.access) }?.let { JavaBytecode.kindOf(it.access) }
+    sharedBytecode(input)?.takeIf { JavaBytecode.isPublic(it.access) }?.let { JavaBytecode.kindOf(it.access) }
 
 /** classNames: simple type name -> FQN/origin/kind. Library/SDK from the entry path; source from the PSI parse. */
 object JavaClassNamesIndex : IndexExtension<String, ClassNameValue> {
@@ -154,7 +160,7 @@ object JavaMembersIndex : IndexExtension<String, MemberValue> {
     private fun indexBytecode(input: IndexInput): Map<String, Collection<MemberValue>> {
         val owner = input.unitName?.removeSuffix(".class")?.replace('/', '.')?.takeIf { '$' !in it }
             ?: return emptyMap()
-        val info = JavaBytecode.read(input.bytes()) ?: return emptyMap()
+        val info = sharedBytecode(input) ?: return emptyMap()
         val out = HashMap<String, MutableList<MemberValue>>()
         info.methods.forEach { m ->
             if (m.name == "<init>" || m.name == "<clinit>") return@forEach
