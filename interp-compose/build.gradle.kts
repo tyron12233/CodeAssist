@@ -68,6 +68,12 @@ kotlin {
                 implementation(kotlin("test"))
                 implementation(compose.runtime)
                 implementation(compose.material3) // verify mangled-name composable detection against real Material3
+                // The Skiko native runtime (per-OS). Constructing a real Compose `LayoutNode` runs
+                // `InnerNodeCoordinator`'s static `Paint()` → `SkiaBackedPaint`, which loads the Skiko native lib
+                // — so the milestone-A phase-B node-tree spikes (which emit real `LayoutNode`s through the
+                // interpreted ui/foundation stack) need the graphics floor present even headless. No display is
+                // opened; only the native lib is loaded. currentOs resolves the matching skiko-awt-runtime.
+                implementation(compose.desktop.currentOs)
             }
         }
     }

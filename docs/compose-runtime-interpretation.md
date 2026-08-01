@@ -1,6 +1,7 @@
 # Interpreting the Compose runtime (milestone A) — resolving the preview version ceiling
 
-Status: phase A proven and committed; phases B–D are the remaining integration.
+Status: phase A proven and committed; phase B's first increment (a real `foundation` composable emits a real
+`LayoutNode` tree through the interpreted UI stack) proven on desktop; the rest of B–D is the remaining integration.
 
 ## The problem
 
@@ -86,13 +87,31 @@ Two consequences worth stating plainly, since they change what the integration i
 
 ### Phase B — the full UI stack composes to a node tree (interpreted)
 
-Extend the phase-A harness to interpret `androidx.compose.ui` + `foundation` + `material3` and compose a real
-UI composable (`Text`, `Column`) into a collecting `Applier`, verifying the node tree. Open harness detail: a
-`ComposeNode` + `AbstractApplier` fixture returned an empty tree even for real Compose across several attempts —
-resolve with a known-good node/applier pattern (model on androidx.compose.runtime's own test doubles) before
-asserting the interpreted tree. The interpreted UI stack will re-encounter the boundary crossings the device
-material3-flip spike mapped (Style, LayoutNode, Modifier, invokeDefault) — three of those already have
-committed VM fixes; the rest (pervasive value types — Alignment/Dp/Color/Arrangement) are the known tail.
+**First increment proven on desktop** (`InterpretedUiStackSpike` + `UiStackSpikeFixture`): the VM interprets
+`androidx.compose.{runtime,ui,foundation}` together and composes a real `Column { Box(); Box() }`, emitting a
+real `LayoutNode` tree (`(((),()))` — a Column node with two Box leaves) that matches running the same code for
+real. `Column`/`Box` emit via `ReusableComposeNode<ComposeUiNode, Applier<Any>>`, so the harness supplies an
+`AbstractApplier<Any>` and the emitted nodes arrive as `Any` — the fixture never names the internal `LayoutNode`
+type. It records each node's parent (the applier's `current`) rather than calling the internal `insertAt`, so a
+shallow initial composition reads back structurally without the Owner-bound node linkage.
+
+Two boundary conditions surfaced and are handled in the harness:
+
+- **The graphics floor is needed at node CONSTRUCTION, not just draw.** `LayoutNode.<init>` → `NodeChain.<init>`
+  → `InnerNodeCoordinator.<clinit>` creates a static `Paint()` (`SkiaBackedPaint`), which loads the graphics
+  native. So the ui NODE layer is *not* platform-agnostic (correcting the assumption that "much of ui" iterates
+  on desktop unaided) — real `LayoutNode`s need the graphics floor on both platforms (Skiko on desktop,
+  `android.graphics` on device). Desktop iteration now bundles the Skiko native runtime in `interp-compose`
+  `desktopTest` (`compose.desktop.currentOs`); only the native lib loads, no display is opened.
+- **Owner-supplied CompositionLocals must be provided.** `LayoutNode.setCompositionLocalMap` eagerly reads
+  `LocalDensity` / `LocalLayoutDirection` / `LocalViewConfiguration` when a node's resolved locals apply; a real
+  Owner provides them, so the headless harness wraps the content in a `CompositionLocalProvider` supplying
+  minimal values.
+
+Remaining in phase B: `Text` (needs `LocalFontFamilyResolver` and more Owner-provided locals — deferred toward
+the device/render path), and the deeper value-type tail the device material3-flip spike mapped (Style, Modifier,
+Alignment/Dp/Color/Arrangement) as the interpreted set widens toward material3. Three boundary-crossing VM fixes
+are already committed; the pervasive value types are the known tail.
 
 ### Phase C — rendering: interpreted node tree → pixels
 
@@ -113,9 +132,12 @@ orchestrates it by invoking one entry point — the productized form of the phas
 ## Iteration
 
 Phases A–B iterate on **desktop** (`./gradlew :interp-compose:desktopTest`, seconds) because
-`androidx.compose.runtime` and much of ui are platform-agnostic. Phase C onward needs the device (the render
-boundary is `android.graphics`). The device material3-flip spike (`VmTextFieldArtSpike`, ~2.5 min/cycle) remains
-the end-to-end check for the too-new-project case.
+`androidx.compose.runtime` and the composition-driving parts of ui/foundation are platform-agnostic. The one
+platform tie in the node layer — a real `LayoutNode` needs the graphics native at construction (see phase B) —
+is bridged on desktop by bundling the Skiko native runtime, so node-tree construction iterates on desktop too;
+actual measure/layout/**draw** (phase C) is where `android.graphics` makes the device authoritative. The device
+material3-flip spike (`VmTextFieldArtSpike`, ~2.5 min/cycle) remains the end-to-end check for the
+too-new-project case.
 
 See also: `material3-flip-version-ceiling` (the root-cause analysis and the boundary-crossing map),
 `docs/compose-interpreter.md` (the reflective ABI bridge and the flip), `docs/compose-preview-isolation.md`
