@@ -1,5 +1,24 @@
 # Interpreting the Compose runtime (milestone A) — resolving the preview version ceiling
 
+## Decision (2026-08-02): the flip is the mainline; interpreting the runtime (#2) is the fallback
+
+After proving #2 (interpret the whole stack at the project's version) end-to-end through composition AND
+recomposition on real hardware, phase C (render → pixels) hit a hard wall: rendering an interpreted `LayoutNode`
+tree needs an `Owner`, and a from-scratch minimal `Owner` for full render is impractical (verified — see phase C).
+So the **shipping mainline is the material3-flip**: keep the composer + runtime + `ui.node` **bridged** to the
+IDE's own Compose (a real `AndroidComposeView` owner then renders real host nodes — no render wall), interpret only
+the project's own too-new material3/foundation/ui-**logic**. The flip's one weakness is the composer version
+ceiling (proportional to project-vs-bundled Compose distance); we mitigate it two ways:
+1. **Bundle a newer Compose in the IDE** (done: CMP 1.10.3 → 1.11.1) so more projects fall inside the flip's range.
+2. **Run the preview in the `:preview` service, off the IDE main thread** (`compose-preview-isolation`) so
+   interpreted project code can't freeze or crash the IDE.
+
+Everything below (#2 — interpret the runtime, one interpreted composer) stays the **proven fallback** for
+extreme-version-gap projects the flip can't align; its only open blocker is phase C (render). It composes and
+recomposes on ART today; it just can't rasterize without the Owner work.
+
+---
+
 Status: phases A, B, and B′ proven on desktop. B: the interpreted UI stack composes real `LayoutNode` trees
 through material3 (Column/Row/Box/BasicText, material3 `Text`/`Button`). B′: the two-interpreter threading — a
 source-interpreted `@Composable` body drives an interpreted (project-version) composer via a VM-backed
