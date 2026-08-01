@@ -38,6 +38,12 @@ public final class Lambdas {
         return IntStream.range(0, n).map(v -> v + add).sum();
     }
 
+    /** A throwing lambda passed to a platform API that invokes it — used to check a bridge proxyFallback
+     *  supplies a substitute return so the platform caller sees a value rather than the failure. */
+    public static int mapThrowing(int n) {
+        return IntStream.range(0, n).map(v -> { throw new IllegalStateException("boom"); }).sum();
+    }
+
     /** String concatenation with a constant and dynamic arguments (StringConcatFactory). */
     public static String describe(String name, int count) {
         return name + " x" + count + "!";

@@ -160,7 +160,17 @@ internal class VmLambda(
      *  interpreted object returned across the boundary (e.g. a `DisposableEffectScope.onDispose` result — an
      *  interpreted `DisposableEffectResult` the real Compose runtime casts) becomes its peer. Without this the
      *  raw [VmObject] reaches real code and a `ClassCastException` fires deep in the caller. */
-    fun invokeSamReal(samArgs: List<Any?>): Any? = toReal(invokeSam(samArgs))
+    fun invokeSamReal(samArgs: List<Any?>): Any? =
+        try {
+            toReal(invokeSam(samArgs))
+        } catch (ve: VmException) {
+            // This is the boundary where the lambda is invoked ACROSS the bridge by platform code, so an
+            // interpreted exception that escaped the lambda body must surface as the REAL throwable — never the
+            // internal [VmException] carrier, which has no message or stack (a leak reads as a bare
+            // `dev.ide.jvm.VmException` FATAL on the caller's thread, e.g. a Compose measure/effect lambda).
+            // Mirrors [Vm.surfacing] for the peer path.
+            throw (ve.value as? Throwable) ?: RuntimeException("uninterpreted exception escaped a lambda: ${ve.value}")
+        }
 
     override fun toString(): String = "VmLambda($interfaceType.$samName)"
 }

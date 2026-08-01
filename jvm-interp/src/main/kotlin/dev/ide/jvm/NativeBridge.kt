@@ -42,6 +42,11 @@ class ReflectiveBridge(
      *  Looper, running outside the render's error boundary) degrades instead of crashing the process; a console
      *  run leaves it null so failures propagate. */
     private val proxyExceptionSink: ((Throwable) -> Unit)? = null,
+    /** When set, supplies the value a guarded proxy method returns after a failure (given the method, the real
+     *  arguments, and the error) — for a caller that cannot tolerate the type's zero value. A Compose measure
+     *  lambda whose zero (null `MeasureResult`) would NPE the layout pass hands back an empty result instead.
+     *  Return null to fall back to [zeroReturn]. Consulted after [proxyExceptionSink]. */
+    private val proxyFallback: ((java.lang.reflect.Method, Array<Any?>, Throwable) -> Any?)? = null,
 ) : NativeBridge {
 
     // Reflection resolution is deterministic given the class + name + descriptor and is repeated on every
@@ -222,16 +227,16 @@ class ReflectiveBridge(
                 else -> {
                     val paramTypes = method.parameterTypes
                     val vmArgs = (callArgs ?: emptyArray()).mapIndexed { i, a -> realArgToVm(a, paramTypes[i]) }
-                    val sink = proxyExceptionSink
                     // invokeSamReal (not invokeSam): the result crosses to platform code here, so an interpreted
                     // object return (e.g. a `DisposableEffectResult` from an inlined `onDispose { }`) is converted
                     // to its real peer — else the raw VmObject reaches the caller and ClassCastExceptions there.
-                    if (sink == null) marshalReturn(lambda.invokeSamReal(vmArgs), method.returnType)
+                    val guarded = proxyExceptionSink != null || proxyFallback != null
+                    if (!guarded) marshalReturn(lambda.invokeSamReal(vmArgs), method.returnType)
                     else try {
                         marshalReturn(lambda.invokeSamReal(vmArgs), method.returnType)
                     } catch (t: Throwable) {
-                        sink(t)
-                        zeroReturn(method.returnType)
+                        proxyExceptionSink?.invoke(t)
+                        proxyFallback?.invoke(method, callArgs ?: emptyArray(), t) ?: zeroReturn(method.returnType)
                     }
                 }
             }

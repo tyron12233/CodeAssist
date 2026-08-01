@@ -314,7 +314,7 @@ class Vm(
      *  constructor matching the argument count, marshal the real arguments in, run its `<init>`, and return the
      *  interpreted object (the interpreted caller uses it directly; it becomes a peer only if it later crosses to
      *  real code). */
-    private fun constructReflectively(internalName: String, realArgs: List<Any?>): Any {
+    private fun constructReflectively(internalName: String, realArgs: List<Any?>): Any = surfacing {
         val cls = resolve(internalName) ?: throw VmUnsupportedException("$internalName is not interpreted")
         ensureInitialized(cls)
         val ctor = cls.methods.firstOrNull {
@@ -324,7 +324,7 @@ class Vm(
         val vmArgs = realArgs.mapIndexed { i, a -> Marshalling.realToVm(a, params[i]) }
         val obj = newInstance(cls)
         interpreter.execute(cls, ctor, obj, vmArgs)
-        return obj
+        obj
     }
 
     internal fun bridgeConstruct(owner: String, descriptor: String, vmArgs: List<Any?>): Any? {

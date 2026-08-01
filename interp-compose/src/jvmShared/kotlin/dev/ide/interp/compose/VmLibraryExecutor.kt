@@ -1,5 +1,6 @@
 package dev.ide.interp.compose
 
+import androidx.compose.ui.layout.MeasureScope
 import dev.ide.interp.InterpretedLambda
 import dev.ide.interp.InterpreterException
 import dev.ide.interp.LibraryExecutor
@@ -9,6 +10,7 @@ import dev.ide.jvm.AsmPeerFactory
 import dev.ide.jvm.ClassBytesSource
 import dev.ide.jvm.InterpretPolicy
 import dev.ide.jvm.PeerFactory
+import dev.ide.jvm.ReflectiveBridge
 import dev.ide.jvm.ReifiedInlineExecutor
 import dev.ide.jvm.Vm
 import dev.ide.jvm.VmMethodView
@@ -108,6 +110,20 @@ class VmLibraryExecutor(
     private val vm = Vm(
         source = jarSource,
         policy = InterpretPolicy { internalName -> shouldInterpret(internalName.replace('/', '.')) },
+        // Route a failure inside an interpreted lambda invoked by REAL code (a Compose measure/effect/callback
+        // lambda the VM handed to the runtime) to the same [lambdaErrorSink] the VM-executed path uses, so it
+        // degrades + is reported instead of the raw [dev.ide.jvm.VmException] escaping to the host's main thread
+        // and crashing the IDE. Read the var lazily so the dispatcher can wire the sink after construction; when
+        // it is null (no preview channel) the bridge still degrades (this executor is preview-only).
+        bridge = ReflectiveBridge(
+            proxyExceptionSink = { t -> lambdaErrorSink?.invoke(t) },
+            // A failed MEASURE lambda would otherwise return null, and the layout pass NPEs on
+            // MeasureResult.getWidth(); hand back an empty 0x0 result so a broken interpreted composable
+            // (e.g. a Material3 TextField whose SubcomposeLayout measure can't be interpreted) degrades to a
+            // blank instead of crashing the IDE. Detected by the receiver being a MeasureScope — the SAM's
+            // erased return type is Object, so it can't be matched on the return type.
+            proxyFallback = { _, args, _ -> (args.firstOrNull() as? MeasureScope)?.layout(0, 0) {} },
+        ),
         peerFactory = peerFactory,
     )
 
