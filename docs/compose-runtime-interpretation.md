@@ -179,9 +179,20 @@ Both novel risks of the threading are retired at the spike level (`InterpretedCo
   scope registration) on an interpreted composer and `composeInitial` balances; the existing 126 reflective-path
   tests are unchanged.
 
-So the remaining threading work: (b) wire interp-core's tree-walker so a trivial user `@Composable` (a `remember`
-+ a `Text`) composes through the VM-backed driver end-to-end, matching real; (c) B′.2 (interpreted
-snapshot/recomposition — the current loop rides on real host `MutableState`).
+- **End-to-end wire proven** (`InterpretedSourceComposableSpike`): a source-interpreted user `@Composable` body
+  drives an interpreted composer, calling a library composable through the VM-backed driver — the whole #2
+  threading in one path. interp-core's `Interpreter` tree-walks a hand-built `Preview` `ResolvedFunction` (as the
+  resolver lowers real source), wrapped in `ComposeRuntime`'s restart group; `ComposeRuntime`/`ComposeDispatcher`
+  drive the interpreted (`VmObject`) composer through `VmComposerOps` (selected because it's VM-owned); the nested
+  composable routes through `ComposeDispatcher` → `VmLibraryExecutor.callComposable`, threading that composer into
+  the interpreted library composable, which runs its own interpreted restart group. This is the productized form
+  of `ComposePreviewRenderer`'s wiring with the composer swapped for an interpreted one — the two interpreters
+  thread through a single interpreted composer, composition balances.
+
+So the remaining threading work: (c) node emission end-to-end (the source body composing a real `Box`/`Text` into
+an interpreted applier — phase B proved the node tree; this routes it through the source-interpreter path, which
+needs the RNode composable-lambda arg + Owner locals); and (d) B′.2 (interpreted snapshot/recomposition — the
+current loop rides on real host `MutableState`).
 
 This preserves live-edit — the reason for keeping the source interpreter rather than compiling the user code.
 
