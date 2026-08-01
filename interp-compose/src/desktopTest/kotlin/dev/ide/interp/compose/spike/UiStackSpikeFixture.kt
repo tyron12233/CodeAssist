@@ -4,6 +4,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.text.BasicText
+import androidx.compose.material3.Text
 import androidx.compose.runtime.AbstractApplier
 import androidx.compose.runtime.BroadcastFrameClock
 import androidx.compose.runtime.Composable
@@ -157,6 +158,29 @@ object UiStackSpikeFixture {
                     BasicText("b")
                     Box {}
                 }
+            }
+        }
+    }
+
+    /**
+     * Compose `Column { Text("hello"); Text("world") }` with **material3** `Text` on the interpreted stack and
+     * return the emitted tree (`(((),()))`). This adds `androidx.compose.material3` to the interpreted set:
+     * material3 `Text` resolves `LocalContentColor`/`LocalTextStyle` (both defaulted) and delegates to
+     * foundation `BasicText`, so it exercises the material3 layer over the same node machinery. Each `Text` is a
+     * leaf LayoutNode under the Column — the shape is the box tree's, but the significance is material3 composing
+     * interpreted, the widening step toward the version-skewed material3 the ceiling is about.
+     */
+    @JvmStatic
+    fun composeMaterialText(): String = drive {
+        CompositionLocalProvider(
+            LocalDensity provides Density(1f),
+            LocalLayoutDirection provides LayoutDirection.Ltr,
+            LocalViewConfiguration provides viewConfiguration,
+            LocalFontFamilyResolver provides createFontFamilyResolver(),
+        ) {
+            Column {
+                Text("hello")
+                Text("world")
             }
         }
     }

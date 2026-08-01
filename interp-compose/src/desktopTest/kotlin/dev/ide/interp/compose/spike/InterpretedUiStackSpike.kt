@@ -27,6 +27,18 @@ class InterpretedUiStackSpike {
             name.startsWith("dev/ide/interp/compose/spike/")
     })
 
+    /** Broadens [newVm] to also interpret `androidx.compose.material3` (and its `material`/`animation` deps), for
+     *  the spike that composes a material3 composable on the fully-interpreted stack. */
+    private fun newVmWithMaterial3() = Vm(policy = InterpretPolicy { name ->
+        name.startsWith("androidx/compose/runtime/") ||
+            name.startsWith("androidx/compose/ui/") ||
+            name.startsWith("androidx/compose/foundation/") ||
+            name.startsWith("androidx/compose/material3/") ||
+            name.startsWith("androidx/compose/material/") ||
+            name.startsWith("androidx/compose/animation/") ||
+            name.startsWith("dev/ide/interp/compose/spike/")
+    })
+
     @Test fun interpretsRealUiStackNodeTree() {
         val expected = UiStackSpikeFixture.composeColumnOfBoxes() // run for real
         assertEquals("(((),()))", expected, "sanity: real ui stack emits Column with two Box leaf children")
@@ -42,5 +54,12 @@ class InterpretedUiStackSpike {
         )
         val interpreted = newVm().invokeStatic(OWNER, "composeTextTree", "()Ljava/lang/String;", emptyList())
         assertEquals(expected, interpreted, "interpreted stack composes BasicText + nested Row/Box to the same tree")
+    }
+
+    @Test fun interpretsMaterial3Text() {
+        val expected = UiStackSpikeFixture.composeMaterialText() // run for real
+        assertEquals("(((),()))", expected, "sanity: real material3 Text emits a Column with two text leaves")
+        val interpreted = newVmWithMaterial3().invokeStatic(OWNER, "composeMaterialText", "()Ljava/lang/String;", emptyList())
+        assertEquals(expected, interpreted, "interpreted material3 Text composes the same LayoutNode tree")
     }
 }

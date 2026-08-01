@@ -113,11 +113,13 @@ Two boundary conditions surfaced and are handled in the harness:
   content in a `CompositionLocalProvider` supplying minimal values (`Density(1f)`, `LayoutDirection.Ltr`, a
   4-member `ViewConfiguration`, `createFontFamilyResolver()`).
 
-Remaining in phase B: material3 (`Text`/`Button`/… read theme locals — `LocalContentColor`, `LocalTextStyle`,
-`MaterialTheme` — so they need those provided or a `MaterialTheme` wrapper interpreted), and the deeper
-value-type tail the device material3-flip spike mapped (Style, Modifier, Alignment/Dp/Color/Arrangement) as the
-interpreted set widens. Three boundary-crossing VM fixes are already committed; the pervasive value types are the
-known tail.
+material3 has started: `Column { Text("hello"); Text("world") }` with **material3** `Text` composes interpreted
+(policy widened to `androidx.compose.{material3,material,animation}`), emitting `(((),()))` — material3 `Text`
+resolves `LocalContentColor`/`LocalTextStyle` (defaulted, so no `MaterialTheme` wrapper needed) and delegates to
+foundation `BasicText`. Remaining in phase B: the heavier material3 components (`Button`/`Surface`/`TextField` —
+ripple `Indication`, shape/color/elevation, `SubcomposeLayout`) and the value-type tail the device material3-flip
+spike mapped (Style, Modifier, Alignment/Dp/Color/Arrangement). Three boundary-crossing VM fixes are already
+committed; the pervasive value types are the known tail.
 
 ### Phase C — rendering: interpreted node tree → pixels
 
