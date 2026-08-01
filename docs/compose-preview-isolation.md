@@ -234,15 +234,18 @@ mirroring how `RemoteRealViewRuntime` falls back to `AndroidRealViewRuntime`.
   `AndroidComposePreviewHost` renders via `RemoteComposePreview` (opens a session, draws streamed frames, pushes
   edits, closes on dispose) when the `PREVIEW_ISOLATE` toggle is on (experimental, default OFF) — `@PreviewParameter`
   / locale previews stay in-process, and any remote failure (bind/open/render error or no frame within the
-  deadline) flips back to the in-process renderer. **Not yet:** HardwareBuffer zero-copy transport (file-per-frame
-  for now); content-size measurement (fixed off-screen canvas → whitespace for wrap-content previews); resource
-  handoff (a `stringResource` preview errors remotely → falls back in-process).
+  deadline) flips back to the in-process renderer. **Resources handed off:** the IDE passes the module's res-dir
+  paths + R namespace (`composePreviewResourceRoots`); `:preview` rebuilds the `ResourceRepository`
+  (`ResourceModel.parse`) + `AndroidPreviewResources` itself, so `stringResource(R.string.x)`/`colorResource`/…
+  resolve remotely (`ComposePreviewResourceHandoffSpike`). **Not yet:** HardwareBuffer zero-copy transport
+  (file-per-frame for now); content-size measurement (fixed off-screen canvas → whitespace for wrap-content
+  previews); live res-file edits (`:preview` re-parses from disk, so an unsaved res edit isn't seen until save).
 - **Phase 3 — input.** `PreviewSurface` interactive-mode capture + coordinate mapping + `dispatchInput`;
   `:preview` MotionEvent reconstruction + dispatch. Clicks/scroll/gestures reach real nodes.
 - **Phase 4 — resilience + parity.** Hang watchdog (`heartbeat` → kill+rebind, the real freeze win) +
   `DeathRecipient` fallback; verify the storm/loop guards now only affect `:preview`; migrate the sandbox
-  (`PreviewSandboxPolicy`) + problem/finding reporting over `onProblems`; close the Phase-2 parity gaps
-  (HardwareBuffer transport, content sizing, resource handoff) so the toggle can become the default.
+  (`PreviewSandboxPolicy`) + problem/finding reporting over `onProblems`; close the remaining Phase-2 parity gaps
+  (HardwareBuffer transport, content sizing) so the toggle can become the default.
 
 ## Testing
 
@@ -253,8 +256,13 @@ mirroring how `RemoteRealViewRuntime` falls back to `AndroidRealViewRuntime`.
 
 ## Open questions
 
-- Resource handoff: rebuild `ResourceRepository` in `:preview` from res roots vs. relink a `resources.ap_` like
-  the XML path (decide in Phase 1).
+- ~~Resource handoff: rebuild `ResourceRepository` in `:preview` from res roots vs. relink a `resources.ap_`~~
+  **Decided (2026-08-02): rebuild from res roots.** The IDE passes the res-dir paths + R namespace
+  (`composePreviewResourceRoots`); `:preview` re-parses them with `ResourceModel.parse` into a fresh
+  `ResourceRepository` and wraps it in `AndroidPreviewResources` (same construction as the in-process host, just
+  rebuilt from disk since the in-memory repo can't cross the boundary). Cheaper than relinking a `resources.ap_`,
+  and `:preview` is same-uid so it reads the project res dirs directly. Caveat: disk-read, so an unsaved res-file
+  edit isn't seen until save (rare during a Compose preview; a `textOverride` handoff can close it later).
 - ~~One `:preview` process shared by XML + Compose, or a second `android:process` for Compose sessions?~~
   **Decided (2026-08-02): shared process, separate services.** Compose renders in the SAME `:preview` OS process
   as XML (`ComposePreviewSessionService` is `android:process=":preview"`) — one warm process, one android.jar

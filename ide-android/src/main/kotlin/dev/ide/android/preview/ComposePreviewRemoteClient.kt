@@ -132,6 +132,8 @@ class ComposePreviewRemoteClient(context: Context) {
         density: Float,
         night: Boolean,
         classpath: Array<String> = emptyArray(),
+        resRoots: Array<String> = emptyArray(),
+        namespace: String = "",
         timeoutMs: Long = 8_000,
     ): RemoteFrame? {
         val latch = CountDownLatch(1)
@@ -140,7 +142,7 @@ class ComposePreviewRemoteClient(context: Context) {
             override fun onFrame(bitmap: Bitmap, seq: Long) { if (first.compareAndSet(null, bitmap)) latch.countDown() }
             override fun onError(message: String) { latch.countDown() }
         }
-        val session = openSession(lowered, widthPx, heightPx, density, night, sink, classpath) ?: return null
+        val session = openSession(lowered, widthPx, heightPx, density, night, sink, classpath, resRoots, namespace) ?: return null
         return try {
             latch.await(timeoutMs, TimeUnit.MILLISECONDS)
             first.get()?.let { RemoteFrame(it, session.remotePid) }

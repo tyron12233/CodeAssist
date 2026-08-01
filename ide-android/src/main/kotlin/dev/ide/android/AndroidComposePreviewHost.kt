@@ -253,6 +253,15 @@ class AndroidComposePreviewHost(private val backend: IdeServicesBackend) : Compo
         val remoteJars by produceState(emptyArray<String>(), path) {
             value = runCatching { backend.composePreviewLibs(path)?.jars?.map { it.toString() }?.toTypedArray() }.getOrNull() ?: emptyArray()
         }
+        // The module's res dirs + R namespace, so :preview rebuilds the resource repository itself (it can't
+        // receive the in-memory one) → `stringResource(R.string.x)`/`colorResource`/… resolve remotely too. The
+        // `.second` flag makes the remote render WAIT for this (else it opens with no resources and R.* fails).
+        val remoteResLoad by produceState(null as Pair<Array<String>, String>? to false, path) {
+            val roots = runCatching { backend.composePreviewResourceRoots(path) }.getOrNull()
+            value = roots?.let { it.resDirs.map { d -> d.toString() }.toTypedArray() to it.namespace } to true
+        }
+        val remoteRes = remoteResLoad.first
+        val remoteResReady = remoteResLoad.second
         val remoteEligible by produceState(false, path, preview.variantId) {
             value = runCatching { backend.composePreviewIsolated() }.getOrDefault(false) &&
                 !preview.hasParameter && preview.config.locale == null
@@ -264,11 +273,12 @@ class AndroidComposePreviewHost(private val backend: IdeServicesBackend) : Compo
                     is PreviewState.Loading -> CircularProgressIndicator(Modifier.size(28.dp))
                     // Wait for the resource load to settle before the first render, so `stringResource`/`R.*`
                     // have their resolver (else the first pass fails "no resolver" and that error latches).
-                    is PreviewState.Ready -> if (!resourcesReady) CircularProgressIndicator(Modifier.size(28.dp)) else if (useRemote) {
+                    is PreviewState.Ready -> if (!resourcesReady || (useRemote && !remoteResReady)) CircularProgressIndicator(Modifier.size(28.dp)) else if (useRemote) {
                         val widthPx = ((preview.config.widthDp ?: DEFAULT_PREVIEW_WIDTH_DP) * density).toInt().coerceIn(1, MAX_PREVIEW_PX)
                         val heightPx = ((preview.config.heightDp ?: DEFAULT_PREVIEW_HEIGHT_DP) * density).toInt().coerceIn(1, MAX_PREVIEW_PX)
                         RemoteComposePreview(
                             client = remoteClient, lowered = s.lowered, jars = remoteJars,
+                            resRoots = remoteRes?.first ?: emptyArray(), namespace = remoteRes?.second ?: "",
                             widthPx = widthPx, heightPx = heightPx, density = density, night = night,
                             onUnavailable = { useRemote = false }, modifier = Modifier.fillMaxWidth(),
                         )
@@ -415,6 +425,8 @@ private fun RemoteComposePreview(
     client: ComposePreviewRemoteClient,
     lowered: LoweredComposePreview,
     jars: Array<String>,
+    resRoots: Array<String>,
+    namespace: String,
     widthPx: Int,
     heightPx: Int,
     density: Float,
@@ -430,7 +442,7 @@ private fun RemoteComposePreview(
 
     // Open the session off the main thread (the :preview bind can block) and stream frames in; re-open only on a
     // surface change (size / night / classpath), NOT on a program edit — that goes through update().
-    DisposableEffect(client, widthPx, heightPx, density, night, jars.joinToString("\n")) {
+    DisposableEffect(client, widthPx, heightPx, density, night, jars.joinToString("\n"), resRoots.joinToString("\n"), namespace) {
         var opened: ComposePreviewRemoteClient.Session? = null
         var disposed = false
         val sink = object : ComposePreviewRemoteClient.FrameSink {
@@ -438,7 +450,7 @@ private fun RemoteComposePreview(
             override fun onError(message: String) { main.post { fallback() } }
         }
         Thread {
-            val s = client.openSession(openLowered, widthPx, heightPx, density, night, sink, jars)
+            val s = client.openSession(openLowered, widthPx, heightPx, density, night, sink, jars, resRoots, namespace)
             main.post { if (disposed) s?.close() else { opened = s; session = s; if (s == null) fallback() } }
         }.apply { isDaemon = true; name = "compose-preview-open"; start() }
         onDispose { disposed = true; opened?.close(); opened = null }

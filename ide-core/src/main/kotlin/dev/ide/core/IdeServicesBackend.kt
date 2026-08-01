@@ -425,6 +425,11 @@ class IdeServicesBackend(
     suspend fun composePreviewIsolated(): Boolean =
         preview { services.composePreviewIsolated() }
 
+    /** The previewed module's res-dir paths + R namespace, so the `:preview` process can rebuild the resource
+     *  repository (it can't receive the in-memory one). Null for a non-Android module / one with no res dirs. */
+    suspend fun composePreviewResourceRoots(path: String): ComposePreviewResourceRoots? =
+        preview { services.composePreviewResourceRoots(Paths.get(path)) }
+
     /** The previewed module's resources + R package for interpreter-mediated resource resolution
      *  (`stringResource`/`R.string.x`/…); the launcher builds a `PreviewResourceResolver` from it. Off the UI
      *  thread (the first `ResourceRepository` build parses all dependency/AAR res). */

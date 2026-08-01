@@ -12,9 +12,12 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.platform.LocalConfiguration
+import dev.ide.android.AndroidPreviewResources
 import dev.ide.android.DexPeerFactory
+import dev.ide.android.support.resources.ResourceModel
 import dev.ide.core.LoweredComposePreview
 import dev.ide.core.preview.ComposePreviewWireCodec
+import dev.ide.interp.PreviewResourceResolver
 import dev.ide.interp.compose.ComposePreviewRenderer
 import dev.ide.interp.compose.VmLibraryExecutor
 import dev.ide.platform.log.Log
@@ -60,7 +63,12 @@ class ComposePreviewSessionService : Service() {
         ): Int = runCatching {
             val lowered = ComposePreviewWireCodec.decode(File(blobFile!!).readBytes())
             val id = nextId.getAndIncrement()
-            val session = Session(id, widthPx, heightPx, density, night, File(frameDir!!).apply { mkdirs() }, cb!!, buildExecutor(classpath))
+            val session = Session(
+                id, widthPx, heightPx, density, night, File(frameDir!!).apply { mkdirs() }, cb!!,
+                buildExecutor(classpath),
+                resDirs = resRoots?.filter { it.isNotBlank() }.orEmpty(),
+                namespace = packageName?.takeIf { it.isNotBlank() },
+            )
             session.start(lowered)
             sessions[id] = session
             log.info(":preview(pid=${Process.myPid()}): opened compose session $id (${widthPx}x$heightPx)")
@@ -84,6 +92,19 @@ class ComposePreviewSessionService : Service() {
         override fun close(sessionId: Int) {
             sessions.remove(sessionId)?.let { runCatching { it.close() } }
         }
+    }
+
+    /** Rebuild the previewed module's resource resolver from its res dirs (the IDE can't hand us the in-memory
+     *  repo across the process boundary) so `stringResource(R.string.x)`/`colorResource`/… resolve against the
+     *  project. Re-parses the res XML off the IDE thread; null (bundled-only / no resources) leaves them degrading
+     *  as before. [night] is baked in (a `-night` qualifier), so this is rebuilt when night changes (resize). */
+    private fun buildResources(resDirs: List<String>, namespace: String?, density: Float, night: Boolean): PreviewResourceResolver? {
+        val ns = namespace?.takeIf { it.isNotBlank() } ?: return null
+        val dirs = resDirs.map { Paths.get(it) }.takeIf { it.isNotEmpty() } ?: return null
+        return runCatching {
+            val repo = ResourceModel.DEFAULT.parse(dirs) { null }
+            if (repo.isEmpty()) null else AndroidPreviewResources(repo, ns, density, night)
+        }.getOrElse { log.warn("compose preview resource rebuild failed", it); null }
     }
 
     /** The bytecode VM executor for library composables the bundled Compose lacks; null when the classpath is
@@ -121,6 +142,8 @@ class ComposePreviewSessionService : Service() {
         val frameDir: File,
         val cb: IComposePreviewCallback,
         val executor: VmLibraryExecutor?,
+        val resDirs: List<String>,
+        val namespace: String?,
     ) {
         private var surface = newSurface()
         private val programState = mutableStateOf<LoweredComposePreview?>(null)
@@ -132,6 +155,8 @@ class ComposePreviewSessionService : Service() {
         fun start(lowered: LoweredComposePreview) {
             programState.value = lowered
             val forceNight = night
+            // Rebuild the project resource resolver per surface (night is baked in); mirrors the in-process host.
+            val resources = buildResources(resDirs, namespace, density, forceNight)
             surface.onFrame = { frame -> pushFrame(frame) }
             surface.start {
                 val program by programState
@@ -147,7 +172,7 @@ class ComposePreviewSessionService : Service() {
                         }
                     }
                     CompositionLocalProvider(LocalConfiguration provides cfg) {
-                        val renderer = remember { ComposePreviewRenderer(libraryExecutor = executor) }
+                        val renderer = remember { ComposePreviewRenderer(resources = resources, libraryExecutor = executor) }
                         val onErr: @Composable (Throwable) -> Unit = { t -> reportError(t) }
                         renderer.Render(p.entry, p.program, p.classes, emptyList(), onErr) {}
                     }

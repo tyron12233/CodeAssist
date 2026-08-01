@@ -359,6 +359,17 @@ data class ComposePreviewResources(
 )
 
 /**
+ * The previewed module's resource-directory paths + R [namespace], so an OUT-OF-PROCESS (`:preview`) renderer can
+ * REBUILD the [ResourceRepository] itself — the in-memory repo of [ComposePreviewResources] can't cross a process
+ * boundary, but the res dirs are on disk and `:preview` (same uid) can re-parse them. See
+ * `IdeServices.composePreviewResourceRoots`.
+ */
+data class ComposePreviewResourceRoots(
+    val resDirs: List<Path>,
+    val namespace: String,
+)
+
+/**
  * Renders a lowered `@Preview` composable into the real Compose runtime (the interpreter half lives in
  * :interp-core / :ide-android). Supplied by :ide-android (it needs the real `androidx.compose.runtime` + a
  * composition surface); null on the desktop / until wired, where preview "runs" report only interpretability.
@@ -2323,6 +2334,21 @@ class IdeServices private constructor(
             log.warn("composePreviewResources: repo for ${module.name} is EMPTY; resDirs=${runCatching { dev.ide.android.support.resources.AndroidResources.resourceDirs(module, store.workspace) }.getOrNull()}")
         }
         return ComposePreviewResources(repo, namespace)
+    }
+
+    /**
+     * The previewed module's res-dir paths + R namespace, for an out-of-process (`:preview`) renderer to rebuild
+     * the [ResourceRepository] itself (it can't receive the in-memory repo across a process boundary). Mirrors
+     * [composePreviewResources] but returns the serializable roots instead of the parsed repo. Null for a
+     * non-Android module or one with no res dirs.
+     */
+    fun composePreviewResourceRoots(file: Path): ComposePreviewResourceRoots? {
+        val module = moduleForEditableFile(file) ?: moduleForFile(file) ?: return null
+        val namespace = module.facets.get(AndroidFacet.KEY)?.namespace?.takeIf { it.isNotBlank() } ?: return null
+        val dirs = runCatching { dev.ide.android.support.resources.AndroidResources.resourceDirs(module, store.workspace) }
+            .getOrDefault(emptyList())
+            .takeIf { it.isNotEmpty() } ?: return null
+        return ComposePreviewResourceRoots(dirs, namespace)
     }
 
 
