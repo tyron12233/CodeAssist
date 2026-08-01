@@ -1,10 +1,11 @@
 # Compose preview process isolation
 
-Status: **Phase 1 DONE on ART** (2026-08-02) — a real `@Preview` renders **out-of-process** end-to-end: the IDE
-lowers + serializes it, `:preview` interprets + renders it off-screen against the bundled Compose, and the frame
-comes back as a `Bitmap` (proven rendered in a different pid). Phases 2–4 (streaming frames, input, live-edit +
-watchdog, and rewiring the live UI onto the remote path) are the remaining build. Supersedes the in-process
-Compose `@Preview` render path described in `docs/compose-interpreter.md` for the Android launcher only.
+Status: **Phase 2 DONE + live UI rewired** (2026-08-02) — a real `@Preview` streams **out-of-process**: a
+persistent `:preview` session renders it off-screen against the bundled Compose and streams frames back, a live
+edit re-renders remotely, and the editor's preview pane draws the streamed frames (behind an experimental,
+default-off toggle, with in-process fallback). Input forwarding (Phase 3) and the live-edit hang watchdog
+(Phase 4) are the remaining build. Supersedes the in-process Compose `@Preview` render path described in
+`docs/compose-interpreter.md` for the Android launcher only.
 
 Phase 0 result (`ComposePreviewIsolationSpike`, `ide-android` androidTest, emulator-5554): a `ComposeView` inside a
 `Presentation` on an app-owned `VirtualDisplay` + `ImageReader` (from a Service-style context, minimal RESUMED
@@ -223,13 +224,25 @@ mirroring how `RemoteRealViewRuntime` falls back to `AndroidRealViewRuntime`.
     `DeathRecipient`. `ComposePreviewRemoteRenderSpike` (emulator-5554): a `Text` preview rendered `myPid → :preview
     pid` (different process) with drawn (non-uniform) pixels. The out-of-process render pipeline is proven; the live
     UI still runs the in-process `AndroidComposePreviewHost` (rewired onto the remote path in Phases 2-4).
-- **Phase 2 — continuous frames.** HardwareBuffer transport (+ file fallback), dirty-driven throttle,
-  `resize`/night. Animations tick.
+- **Phase 2 — streaming sessions + live-UI rewire. ✅ DONE (green on ART, 2026-08-02).** `IComposePreviewSession`
+  reshaped to `open`/`update`/`resize`/`close` + `IComposePreviewCallback` (oneway `onFrame(frameFile,w,h,seq)`/
+  `onError`); frames stream as per-seq pixel files on the shared FS (throttled to actually-drawn frames — Compose
+  only redraws on invalidation). `OffscreenComposeSurface.start` keeps the composition alive + streams; the
+  session's program is a Compose state so `update` re-renders on the main thread (remembered state survives) and
+  night is applied via `LocalConfiguration`. `ComposePreviewStreamingSpike`: a `Text("Hello")` session streams a
+  frame from a different pid, then `update(Text("World"))` streams a new, different frame. **Live UI rewired:**
+  `AndroidComposePreviewHost` renders via `RemoteComposePreview` (opens a session, draws streamed frames, pushes
+  edits, closes on dispose) when the `PREVIEW_ISOLATE` toggle is on (experimental, default OFF) — `@PreviewParameter`
+  / locale previews stay in-process, and any remote failure (bind/open/render error or no frame within the
+  deadline) flips back to the in-process renderer. **Not yet:** HardwareBuffer zero-copy transport (file-per-frame
+  for now); content-size measurement (fixed off-screen canvas → whitespace for wrap-content previews); resource
+  handoff (a `stringResource` preview errors remotely → falls back in-process).
 - **Phase 3 — input.** `PreviewSurface` interactive-mode capture + coordinate mapping + `dispatchInput`;
   `:preview` MotionEvent reconstruction + dispatch. Clicks/scroll/gestures reach real nodes.
-- **Phase 4 — live edit + resilience.** `update(program)` on edit (state survives); hang watchdog +
+- **Phase 4 — resilience + parity.** Hang watchdog (`heartbeat` → kill+rebind, the real freeze win) +
   `DeathRecipient` fallback; verify the storm/loop guards now only affect `:preview`; migrate the sandbox
-  (`PreviewSandboxPolicy`) + problem/finding reporting over `onProblems`.
+  (`PreviewSandboxPolicy`) + problem/finding reporting over `onProblems`; close the Phase-2 parity gaps
+  (HardwareBuffer transport, content sizing, resource handoff) so the toggle can become the default.
 
 ## Testing
 

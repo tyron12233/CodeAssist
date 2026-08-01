@@ -420,6 +420,11 @@ class IdeServicesBackend(
     suspend fun composePreviewSandbox(): Set<String> =
         preview { services.composePreviewSandbox() }
 
+    /** Whether the `@Preview` should render in the `:preview` OS process (the isolation toggle, default OFF).
+     *  The Android host reads this to choose the remote streaming path over the in-process renderer. */
+    suspend fun composePreviewIsolated(): Boolean =
+        preview { services.composePreviewIsolated() }
+
     /** The previewed module's resources + R package for interpreter-mediated resource resolution
      *  (`stringResource`/`R.string.x`/…); the launcher builds a `PreviewResourceResolver` from it. Off the UI
      *  thread (the first `ResourceRepository` build parses all dependency/AAR res). */

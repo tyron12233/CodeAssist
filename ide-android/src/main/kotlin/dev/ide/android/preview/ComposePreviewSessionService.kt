@@ -2,13 +2,16 @@ package dev.ide.android.preview
 
 import android.app.Service
 import android.content.Intent
+import android.content.res.Configuration
 import android.os.IBinder
 import android.os.Process
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.platform.LocalConfiguration
 import dev.ide.android.DexPeerFactory
 import dev.ide.core.LoweredComposePreview
 import dev.ide.core.preview.ComposePreviewWireCodec
@@ -57,7 +60,7 @@ class ComposePreviewSessionService : Service() {
         ): Int = runCatching {
             val lowered = ComposePreviewWireCodec.decode(File(blobFile!!).readBytes())
             val id = nextId.getAndIncrement()
-            val session = Session(id, widthPx, heightPx, density, File(frameDir!!).apply { mkdirs() }, cb!!, buildExecutor(classpath))
+            val session = Session(id, widthPx, heightPx, density, night, File(frameDir!!).apply { mkdirs() }, cb!!, buildExecutor(classpath))
             session.start(lowered)
             sessions[id] = session
             log.info(":preview(pid=${Process.myPid()}): opened compose session $id (${widthPx}x$heightPx)")
@@ -75,7 +78,7 @@ class ComposePreviewSessionService : Service() {
         }
 
         override fun resize(sessionId: Int, widthPx: Int, heightPx: Int, density: Float, night: Boolean) {
-            sessions[sessionId]?.resize(widthPx, heightPx, density)
+            sessions[sessionId]?.resize(widthPx, heightPx, density, night)
         }
 
         override fun close(sessionId: Int) {
@@ -114,6 +117,7 @@ class ComposePreviewSessionService : Service() {
         @Volatile var width: Int,
         @Volatile var height: Int,
         @Volatile var density: Float,
+        @Volatile var night: Boolean,
         val frameDir: File,
         val cb: IComposePreviewCallback,
         val executor: VmLibraryExecutor?,
@@ -127,14 +131,26 @@ class ComposePreviewSessionService : Service() {
 
         fun start(lowered: LoweredComposePreview) {
             programState.value = lowered
+            val forceNight = night
             surface.onFrame = { frame -> pushFrame(frame) }
             surface.start {
                 val program by programState
                 val p = program
                 if (p != null) {
-                    val renderer = remember { ComposePreviewRenderer(libraryExecutor = executor) }
-                    val onErr: @Composable (Throwable) -> Unit = { t -> reportError(t) }
-                    renderer.Render(p.entry, p.program, p.classes, emptyList(), onErr) {}
+                    // Force the requested night scheme so a theme reading isSystemInDarkTheme() renders Light or
+                    // Dark to match the surface's Night toggle (mirrors AndroidComposePreviewHost).
+                    val base = LocalConfiguration.current
+                    val cfg = remember(base, forceNight) {
+                        Configuration(base).apply {
+                            uiMode = (uiMode and Configuration.UI_MODE_NIGHT_MASK.inv()) or
+                                (if (forceNight) Configuration.UI_MODE_NIGHT_YES else Configuration.UI_MODE_NIGHT_NO)
+                        }
+                    }
+                    CompositionLocalProvider(LocalConfiguration provides cfg) {
+                        val renderer = remember { ComposePreviewRenderer(libraryExecutor = executor) }
+                        val onErr: @Composable (Throwable) -> Unit = { t -> reportError(t) }
+                        renderer.Render(p.entry, p.program, p.classes, emptyList(), onErr) {}
+                    }
                 }
             }
         }
@@ -143,10 +159,10 @@ class ComposePreviewSessionService : Service() {
             surface.runOnMain { programState.value = lowered }
         }
 
-        fun resize(newWidth: Int, newHeight: Int, newDensity: Float) {
+        fun resize(newWidth: Int, newHeight: Int, newDensity: Float, newNight: Boolean) {
             val current = programState.value ?: return
             runCatching { surface.close() }
-            width = newWidth; height = newHeight; density = newDensity
+            width = newWidth; height = newHeight; density = newDensity; night = newNight
             surface = newSurface()
             start(current)
         }

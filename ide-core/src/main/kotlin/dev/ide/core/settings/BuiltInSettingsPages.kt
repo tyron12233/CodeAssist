@@ -88,6 +88,12 @@ object BuiltInSettingsPages {
     const val SANDBOX_ANDROID = "sandboxAndroidSystem"
     const val SANDBOX_PROCESS = "sandboxProcessControl"
 
+    /** Render the Compose `@Preview` in the `:preview` OS process (docs/compose-preview-isolation.md). Default
+     *  OFF (experimental): a runaway recomposition then pegs only `:preview`, not the IDE, but the isolated path
+     *  doesn't yet match the in-process host on content sizing / `@PreviewParameter` / locale (it falls back
+     *  in-process for those and on any remote failure). Read by `ComposePreviewService.previewIsolated()`. */
+    const val PREVIEW_ISOLATE = "previewIsolate"
+
     // Keys the backend special-cases (routed to a non-generic-store effect).
     const val CONFLICT_POLICY = "conflictPolicy"
     const val ANALYTICS = "analytics"
@@ -195,6 +201,11 @@ object BuiltInSettingsPages {
                 SANDBOX_PROCESS, "Block process & reflection",
                 "Stop previewed code from exec'ing processes, calling System.exit, loading native libraries, or invoking members reflectively.",
                 default = true, group = "Preview sandbox",
+            ),
+            SettingControl.Toggle(
+                PREVIEW_ISOLATE, "Render in a separate process (experimental)",
+                "Render the @Preview in the :preview OS process instead of the IDE, so a runaway recomposition or crash can't freeze the IDE. Experimental: falls back to the in-process renderer for @PreviewParameter / locale previews and on any remote failure.",
+                default = false, group = "Preview process",
             ),
         )
     }

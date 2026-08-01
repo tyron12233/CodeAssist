@@ -115,6 +115,12 @@ internal class ComposePreviewService(private val ctx: EngineContext) {
         if (blocked(BuiltInSettingsPages.SANDBOX_PROCESS)) add("processControl")
     }
 
+    /** Whether the `@Preview` should render in the `:preview` OS process (the isolation toggle, default OFF).
+     *  The Android host reads this to choose the remote streaming path over the in-process renderer. */
+    fun previewIsolated(): Boolean =
+        ctx.projectPref("settings.${BuiltInSettingsPages.PREVIEW}.${BuiltInSettingsPages.PREVIEW_ISOLATE}")
+            ?.toBooleanStrictOrNull() ?: false
+
     fun composePreviewReady(file: Path): Boolean {
         val module = ctx.moduleForEditableFile(file) ?: return true
         val analyzer = ctx.analyzerFor(module, KotlinLanguageBackend.LANGUAGE_ID) as? KotlinSourceAnalyzer

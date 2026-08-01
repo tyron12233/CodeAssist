@@ -2261,6 +2261,9 @@ class IdeServices private constructor(
      *  the launchers build a `PreviewSandboxPolicy` from them). */
     fun composePreviewSandbox(): Set<String> = composePreview.sandboxCategories()
 
+    /** Whether the `@Preview` should render in the `:preview` OS process (the isolation toggle, default OFF). */
+    fun composePreviewIsolated(): Boolean = composePreview.previewIsolated()
+
     /** Why [functionName] in [file] (buffer [text]) isn't interpretable yet: each lowering diagnostic as
      *  `"reason: \"offending source\""`. Empty when it's fully interpretable (or not found). The preview panel
      *  shows these so an un-renderable preview explains the unsupported construct instead of a bare message. */

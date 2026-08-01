@@ -180,7 +180,15 @@ class ComposePreviewRemoteClient(context: Context) {
         }
     }
 
-    private companion object {
-        const val BIND_TIMEOUT_MS = 10_000L
+    companion object {
+        private const val BIND_TIMEOUT_MS = 10_000L
+
+        @Volatile private var instance: ComposePreviewRemoteClient? = null
+
+        /** The process-wide client (one Binder connection to `:preview` shared by every open preview). */
+        fun get(context: Context): ComposePreviewRemoteClient =
+            instance ?: synchronized(this) {
+                instance ?: ComposePreviewRemoteClient(context.applicationContext).also { instance = it }
+            }
     }
 }

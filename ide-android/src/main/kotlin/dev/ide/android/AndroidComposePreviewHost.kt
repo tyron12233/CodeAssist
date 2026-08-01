@@ -1,5 +1,9 @@
 package dev.ide.android
 
+import android.graphics.Bitmap
+import android.os.Handler
+import android.os.Looper
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -23,7 +27,10 @@ import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalConfiguration
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.dp
 import dev.ide.interp.PreviewResourceResolver
@@ -31,6 +38,7 @@ import dev.ide.interp.PreviewSandboxPolicy
 import dev.ide.interp.SandboxCategory
 import dev.ide.interp.SandboxFinding
 import androidx.compose.ui.unit.sp
+import dev.ide.android.preview.ComposePreviewRemoteClient
 import dev.ide.core.IdeServicesBackend
 import dev.ide.core.LoweredComposePreview
 import dev.ide.core.PreviewOutcome
@@ -53,6 +61,13 @@ import kotlinx.coroutines.withContext
  *  index; the cap only bites the degenerate case where readiness never arrives (e.g. an offline scratch). */
 private const val PREVIEW_READY_POLL_MS = 600L
 private const val PREVIEW_READY_MAX_ATTEMPTS = 300
+
+/** Off-screen render canvas for an isolated preview when `@Preview` declares no size (px = dp × density, clamped). */
+private const val DEFAULT_PREVIEW_WIDTH_DP = 411
+private const val DEFAULT_PREVIEW_HEIGHT_DP = 731
+private const val MAX_PREVIEW_PX = 2400
+/** Fall back to the in-process renderer if the `:preview` session streams no frame within this long of opening. */
+private const val REMOTE_FIRST_FRAME_TIMEOUT_MS = 6_000L
 
 /**
  * The on-device Compose preview host (the editor's live-pixel renderer). Lowers the open file's `@Preview`
@@ -228,13 +243,36 @@ class AndroidComposePreviewHost(private val backend: IdeServicesBackend) : Compo
                 locale?.let { setLocale(java.util.Locale.forLanguageTag(it.replace("-r", "-"))) }
             }
         }
+        // Preview process isolation (docs/compose-preview-isolation.md): when the toggle is on, render the
+        // @Preview in the :preview OS process and draw the streamed frame, so a runaway recomposition or crash
+        // pegs only :preview, not the IDE. Experimental — @PreviewParameter / locale previews stay in-process
+        // (the remote path doesn't cover them yet), and ANY remote failure (bind/open/render error, or no frame
+        // within the deadline) flips `useRemote` off so the in-process renderer takes over with no visible break.
+        val context = LocalContext.current
+        val remoteClient = remember { ComposePreviewRemoteClient.get(context) }
+        val remoteJars by produceState(emptyArray<String>(), path) {
+            value = runCatching { backend.composePreviewLibs(path)?.jars?.map { it.toString() }?.toTypedArray() }.getOrNull() ?: emptyArray()
+        }
+        val remoteEligible by produceState(false, path, preview.variantId) {
+            value = runCatching { backend.composePreviewIsolated() }.getOrDefault(false) &&
+                !preview.hasParameter && preview.config.locale == null
+        }
+        var useRemote by remember(path, preview.variantId, remoteEligible) { mutableStateOf(remoteEligible) }
         CompositionLocalProvider(LocalConfiguration provides cfg) {
             Box(modifier, contentAlignment = Alignment.Center) {
                 when (val s = state) {
                     is PreviewState.Loading -> CircularProgressIndicator(Modifier.size(28.dp))
                     // Wait for the resource load to settle before the first render, so `stringResource`/`R.*`
                     // have their resolver (else the first pass fails "no resolver" and that error latches).
-                    is PreviewState.Ready -> if (!resourcesReady) CircularProgressIndicator(Modifier.size(28.dp)) else {
+                    is PreviewState.Ready -> if (!resourcesReady) CircularProgressIndicator(Modifier.size(28.dp)) else if (useRemote) {
+                        val widthPx = ((preview.config.widthDp ?: DEFAULT_PREVIEW_WIDTH_DP) * density).toInt().coerceIn(1, MAX_PREVIEW_PX)
+                        val heightPx = ((preview.config.heightDp ?: DEFAULT_PREVIEW_HEIGHT_DP) * density).toInt().coerceIn(1, MAX_PREVIEW_PX)
+                        RemoteComposePreview(
+                            client = remoteClient, lowered = s.lowered, jars = remoteJars,
+                            widthPx = widthPx, heightPx = heightPx, density = density, night = night,
+                            onUnavailable = { useRemote = false }, modifier = Modifier.fillMaxWidth(),
+                        )
+                    } else {
                         // Key the capture on the error's identity, not the instance: the interpreter throws a
                         // fresh Throwable each pass, so keying on it would relaunch + rewrite state every
                         // recomposition → a render loop. Same message/type ⇒ same key ⇒ captured once.
@@ -361,6 +399,72 @@ class AndroidComposePreviewHost(private val backend: IdeServicesBackend) : Compo
         object Loading : PreviewState
         data class Ready(val lowered: LoweredComposePreview) : PreviewState
         data class NotInterpretable(val reasons: List<String>) : PreviewState
+    }
+}
+
+/**
+ * Draw a preview rendered OUT-OF-PROCESS: open a [ComposePreviewRemoteClient] session for [lowered], stream its
+ * frames, and draw the latest as a bitmap scaled to the pane width. A live edit ([lowered] change) is pushed to
+ * the running session ([ComposePreviewRemoteClient.Session.update], so remembered state survives). Any failure —
+ * the session won't open, the render errors, or no frame arrives within [REMOTE_FIRST_FRAME_TIMEOUT_MS] — calls
+ * [onUnavailable] so the host falls back to the in-process renderer with no visible break. The `:preview` bind
+ * can block, so the session is opened on a background thread; Binder-callback state writes are posted to main.
+ */
+@Composable
+private fun RemoteComposePreview(
+    client: ComposePreviewRemoteClient,
+    lowered: LoweredComposePreview,
+    jars: Array<String>,
+    widthPx: Int,
+    heightPx: Int,
+    density: Float,
+    night: Boolean,
+    onUnavailable: () -> Unit,
+    modifier: Modifier,
+) {
+    val main = remember { Handler(Looper.getMainLooper()) }
+    var frame by remember(client, widthPx, heightPx, night) { mutableStateOf<Bitmap?>(null) }
+    var session by remember(client, widthPx, heightPx, night) { mutableStateOf<ComposePreviewRemoteClient.Session?>(null) }
+    val fallback by rememberUpdatedState(onUnavailable)
+    val openLowered by rememberUpdatedState(lowered)
+
+    // Open the session off the main thread (the :preview bind can block) and stream frames in; re-open only on a
+    // surface change (size / night / classpath), NOT on a program edit — that goes through update().
+    DisposableEffect(client, widthPx, heightPx, density, night, jars.joinToString("\n")) {
+        var opened: ComposePreviewRemoteClient.Session? = null
+        var disposed = false
+        val sink = object : ComposePreviewRemoteClient.FrameSink {
+            override fun onFrame(bitmap: Bitmap, seq: Long) { main.post { frame = bitmap } }
+            override fun onError(message: String) { main.post { fallback() } }
+        }
+        Thread {
+            val s = client.openSession(openLowered, widthPx, heightPx, density, night, sink, jars)
+            main.post { if (disposed) s?.close() else { opened = s; session = s; if (s == null) fallback() } }
+        }.apply { isDaemon = true; name = "compose-preview-open"; start() }
+        onDispose { disposed = true; opened?.close(); opened = null }
+    }
+    // Live edit: push the re-lowered program to the running session (off main — update makes a Binder call).
+    LaunchedEffect(session, lowered) {
+        val s = session ?: return@LaunchedEffect
+        withContext(Dispatchers.IO) { s.update(lowered) }
+    }
+    // First-frame watchdog: no frame within the deadline → fall back in-process.
+    LaunchedEffect(session) {
+        if (session != null) { delay(REMOTE_FIRST_FRAME_TIMEOUT_MS); if (frame == null) fallback() }
+    }
+
+    val bmp = frame
+    Box(modifier, contentAlignment = Alignment.Center) {
+        if (bmp != null) {
+            Image(
+                bitmap = bmp.asImageBitmap(),
+                contentDescription = null,
+                contentScale = ContentScale.FillWidth,
+                modifier = Modifier.fillMaxWidth(),
+            )
+        } else {
+            CircularProgressIndicator(Modifier.size(28.dp))
+        }
     }
 }
 
