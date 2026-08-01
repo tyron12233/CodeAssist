@@ -157,13 +157,22 @@ real Recomposer, the threading splits: **B′.1 initial composition** (the compo
 `remember`-once + node emission) first; **B′.2 recomposition** (an interpreted snapshot/Recomposer, and routing
 interp-core's state reads to interpreted `MutableState`) later.
 
-- **Bootstrapping proven** (`InterpretedComposerThreadingSpike`): host code obtains the interpreted composer out
-  of an interpreted composition — an interpreted `setContent` hands its `currentComposer` to a host callback and
-  the received value is a `VmObject` (the project-runtime composer), not a host `Composer`. This is the seam the
-  future VM-backed `ComposableAbi`/`ComposeRuntime` receive the composer through.
-- Next: drive that `VmObject` composer's group ops from host through the VM (`invokeInstance(composer,
-  "startReplaceableGroup", …)` + `callComposable` for a library composable), then wire interp-core's tree-walker
-  so a trivial user `@Composable` (a `remember` + a `Text`) composes through it, matching real.
+Both novel risks of the threading are retired at the spike level (`InterpretedComposerThreadingSpike`):
+
+- **Bootstrapping** — host code obtains the interpreted composer out of an interpreted composition: an
+  interpreted `setContent` hands its `currentComposer` to a host callback and the received value is a `VmObject`
+  (the project-runtime composer), not a host `Composer`. This is the seam the future VM-backed
+  `ComposableAbi`/`ComposeRuntime` receive the composer through.
+- **VM-driven group protocol** — host code drives the interpreted composer's caller-side group ops *through the
+  VM* (`invokeInstance(composer, "startReplaceGroup"/"endReplaceGroup", …)`) instead of host reflection on
+  `composer.javaClass`, and `composeInitial` completes cleanly (a desync would throw a Start/end imbalance). This
+  is the core of the VM-backed driver: the ~12 `ComposableAbi` ops become `invokeInstance` calls when the composer
+  is VM-owned.
+
+So the remaining threading work is now known-mechanism engineering, not open risk: (a) give
+`ComposableAbi`/`ComposeRuntime` the VM backend for the composer ops + VM-aware composer-detection in
+`ComposeDispatcher`; (b) wire interp-core's tree-walker so a trivial user `@Composable` (a `remember` + a `Text`)
+composes through it, matching real; (c) B′.2 (interpreted snapshot/recomposition).
 
 This preserves live-edit — the reason for keeping the source interpreter rather than compiling the user code.
 
