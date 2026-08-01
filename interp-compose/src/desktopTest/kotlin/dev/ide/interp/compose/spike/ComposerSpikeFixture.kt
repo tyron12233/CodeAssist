@@ -3,6 +3,7 @@ package dev.ide.interp.compose.spike
 import androidx.compose.runtime.AbstractApplier
 import androidx.compose.runtime.BroadcastFrameClock
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.ComposeNode
 import androidx.compose.runtime.Composition
 import androidx.compose.runtime.Recomposer
 import androidx.compose.runtime.getValue
@@ -78,6 +79,65 @@ object ComposerSpikeFixture {
         }
         composition.dispose()
         return out.toString()
+    }
+
+    /** A minimal emit node + tree applier. Per the [NodeApplierProbe]: Compose calls BOTH insert methods per node,
+     *  so exactly one adds; `composeInitial` applies synchronously (no frame needed for the initial tree). */
+    class TreeNode(val name: String) {
+        val children = ArrayList<TreeNode>()
+    }
+
+    private class TreeApplier(root: TreeNode) : AbstractApplier<TreeNode>(root) {
+        override fun insertTopDown(index: Int, instance: TreeNode) {
+            current.children.add(index, instance)
+        }
+        override fun insertBottomUp(index: Int, instance: TreeNode) {}
+        override fun remove(index: Int, count: Int) {
+            repeat(count) { current.children.removeAt(index) }
+        }
+        override fun move(from: Int, to: Int, count: Int) {}
+        override fun onClear() {
+            current.children.clear()
+        }
+    }
+
+    /**
+     * Emit an actual node tree (two `ComposeNode`s into a collecting Applier) and read it back — the machinery that
+     * materializes the render tree. Returns the emitted children in order ("a,b"). The node-building counterpart to
+     * the slot/remember/recomposition proofs: it shows the interpreted composer drives emit + `Applier.insertTopDown`
+     * into a real node tree. Uses the Recomposer loop (so composeInitial applies) and reads on the dispatcher thread
+     * right after setContent, the known-good pattern from [NodeApplierProbe].
+     */
+    @JvmStatic
+    fun emitsNodeTree(): String {
+        val root = TreeNode("root")
+        val executor = Executors.newSingleThreadExecutor { Thread(it, "spike-emit") }
+        val dispatcher = executor.asCoroutineDispatcher()
+        try {
+            return runBlocking {
+                withTimeout(30_000) {
+                    val clock = BroadcastFrameClock()
+                    val recomposer = Recomposer(coroutineContext + dispatcher + clock)
+                    val runJob = launch(dispatcher + clock) { recomposer.runRecomposeAndApplyChanges() }
+                    recomposer.currentState.first { it == Recomposer.State.Idle }
+                    val result = withContext(dispatcher) {
+                        val composition = Composition(TreeApplier(root), recomposer)
+                        composition.setContent {
+                            ComposeNode<TreeNode, TreeApplier>(factory = { TreeNode("a") }, update = {})
+                            ComposeNode<TreeNode, TreeApplier>(factory = { TreeNode("b") }, update = {})
+                        }
+                        val r = root.children.joinToString(",") { it.name }
+                        composition.dispose()
+                        r
+                    }
+                    recomposer.cancel()
+                    runJob.cancel()
+                    result
+                }
+            }
+        } finally {
+            executor.shutdownNow()
+        }
     }
 
     /** A leaf `@Composable` (its own restart group) that records one remembered value tagged by [label]. */

@@ -36,6 +36,13 @@ class InterpretedComposerSpike {
         assertEquals(expected, interpreted, "interpreted composer keeps distinct slots across sequential + keyed groups")
     }
 
+    @Test fun interpretsNodeEmissionThroughApplier() {
+        val expected = ComposerSpikeFixture.emitsNodeTree() // run for real
+        assertEquals("a,b", expected, "sanity: real composer emits both nodes into the applier in order")
+        val interpreted = newVm().invokeStatic(OWNER, "emitsNodeTree", "()Ljava/lang/String;", emptyList())
+        assertEquals(expected, interpreted, "interpreted composer drives the emit/Applier apply cycle into a node tree")
+    }
+
     @Test fun interpretsNestedComposableCalls() {
         val expected = ComposerSpikeFixture.nestedComposables() // run for real
         assertEquals("out;in:a;in:b;", expected, "sanity: real composer threads the nested composables in order")
