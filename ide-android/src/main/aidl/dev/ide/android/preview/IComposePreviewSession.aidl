@@ -3,21 +3,35 @@
 // and hands the self-contained program to ComposePreviewSessionService in the ":preview" OS process, which
 // interprets + renders it off-screen (VirtualDisplay + Presentation + ComposeView) against the IDE's bundled
 // Compose (the material3-flip). A runaway recomposition or crash there pegs/kills only :preview; the IDE links a
-// DeathRecipient and falls back to the in-process host. Phase 1b is a blocking single-frame request/response
-// (bulk over the shared filesystem, control over Binder); streaming frames + input arrive in Phases 2-3.
+// DeathRecipient and falls back to the in-process host.
+//
+// A persistent SESSION: open() stands up a live off-screen composition that STREAMS frames back over the
+// callback (each frame's pixels written to the session frame dir, so bulk travels over the shared FS and only
+// control travels over Binder -- the :build/XML convention). update() pushes a re-lowered program for live edit
+// (state in the remote slot table survives). Input forwarding + the hang watchdog are later phases.
 package dev.ide.android.preview;
+
+import dev.ide.android.preview.IComposePreviewCallback;
 
 interface IComposePreviewSession {
     // The :preview process id, so the IDE can confirm rendering runs in a DIFFERENT process.
     int pid();
 
-    // Render one frame of the lowered preview at [blobFile] (a ComposePreviewWireCodec blob on the shared FS).
-    // [classpath] = the module compile-classpath jars/dirs the bytecode VM interprets for library composables the
-    // bundled Compose lacks (empty → bundled-only). [resRoots] = the project resource roots for R.* resolution
-    // (empty → no project resources). Writes the raw ARGB_8888 pixels (widthPx*heightPx*4 bytes) to [outFile].
-    // Blocking. Returns "ok\t<w>\t<h>" (pixels at [outFile]) or "err\t<message>" (→ the caller falls back
-    // in-process).
-    String renderOnce(
-        String blobFile, in String[] classpath, in String[] resRoots, String packageName,
-        int minApi, int widthPx, int heightPx, float density, boolean night, String outFile);
+    // Open a persistent session rendering the lowered preview at [blobFile] (a ComposePreviewWireCodec blob on
+    // the shared FS). [classpath] = the module compile-classpath jars/dirs the bytecode VM interprets for library
+    // composables the bundled Compose lacks (empty -> bundled-only). [resRoots] = the project resource roots
+    // (empty -> no project resources). Frames stream via [cb].onFrame, pixels written under [frameDir]. Returns a
+    // sessionId (>= 0) or -1 on failure (cb.onError carries the reason).
+    int open(
+        String blobFile, in String[] classpath, in String[] resRoots, String packageName, int minApi,
+        int widthPx, int heightPx, float density, boolean night, String frameDir, IComposePreviewCallback cb);
+
+    // Live edit: push a re-lowered program into the running session; it re-renders (remembered state survives).
+    void update(int sessionId, String blobFile);
+
+    // Re-target the off-screen surface (size / density / night). May recreate the surface.
+    void resize(int sessionId, int widthPx, int heightPx, float density, boolean night);
+
+    // Tear down the session (dismiss the Presentation, release the display + VM executor).
+    void close(int sessionId);
 }

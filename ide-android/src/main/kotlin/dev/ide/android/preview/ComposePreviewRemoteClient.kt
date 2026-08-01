@@ -12,15 +12,19 @@ import dev.ide.core.preview.ComposePreviewWireCodec
 import dev.ide.platform.log.Log
 import java.io.File
 import java.nio.ByteBuffer
+import java.util.concurrent.CountDownLatch
+import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicLong
+import java.util.concurrent.atomic.AtomicReference
 
 /**
- * IDE-process client for [ComposePreviewSessionService]. Binds the `:preview` daemon and forwards a blocking
- * single-frame [renderOnce] to it (`docs/compose-preview-isolation.md`, Phase 1b): it serializes the lowered
- * preview with [ComposePreviewWireCodec] into the shared app cache, hands `:preview` the blob + classpath + res
- * roots, and maps the returned raw ARGB pixels back into a [Bitmap]. Links an [IBinder.DeathRecipient] so a
- * crash/OOM in `:preview` nulls the daemon (the caller falls back to the in-process host) instead of taking down
- * the IDE. `BIND_AUTO_CREATE` restarts the service for the next render.
+ * IDE-process client for [ComposePreviewSessionService]. Binds the `:preview` daemon and opens streaming preview
+ * [Session]s (`docs/compose-preview-isolation.md`, Phase 2): it serializes the lowered preview with
+ * [ComposePreviewWireCodec] into the shared app cache, hands `:preview` the blob + classpath + res roots, and
+ * receives frames over an [IComposePreviewCallback] — each frame's raw ARGB pixels read from the session frame
+ * dir and mapped into a [Bitmap] for the caller's [FrameSink]. [Session.update] pushes a re-lowered program (live
+ * edit). Links an [IBinder.DeathRecipient] so a crash/OOM in `:preview` nulls the daemon (the caller falls back
+ * to the in-process host) instead of taking down the IDE. `BIND_AUTO_CREATE` restarts the service for the next open.
  */
 class ComposePreviewRemoteClient(context: Context) {
     private val appContext = context.applicationContext
@@ -30,6 +34,12 @@ class ComposePreviewRemoteClient(context: Context) {
 
     @Volatile private var daemon: IComposePreviewSession? = null
     @Volatile private var bindRequested = false
+
+    /** Receives decoded frames (and errors) for a [Session], on a Binder thread — post to the UI thread. */
+    interface FrameSink {
+        fun onFrame(bitmap: Bitmap, seq: Long)
+        fun onError(message: String)
+    }
 
     /** A rendered frame + the `:preview` process id it was rendered in (so callers can confirm isolation). */
     class RemoteFrame(val bitmap: Bitmap, val remotePid: Int)
@@ -60,7 +70,7 @@ class ComposePreviewRemoteClient(context: Context) {
         }.onFailure { bindRequested = false }
     }
 
-    /** Eagerly start + bind `:preview` (forks the process) so the first render doesn't pay the bind latency. */
+    /** Eagerly start + bind `:preview` (forks the process) so the first open doesn't pay the bind latency. */
     fun warmUp() = ensureBound()
 
     private fun awaitDaemon(timeoutMs: Long): IComposePreviewSession? {
@@ -77,10 +87,44 @@ class ComposePreviewRemoteClient(context: Context) {
     }
 
     /**
-     * Render one frame of [lowered] in `:preview`. Returns the frame (+ the remote pid), or null if `:preview`
-     * couldn't be reached or reported an error (→ the caller renders in-process). [classpath] carries the module
-     * jars for library composables the bundled Compose lacks (empty → bundled-only).
+     * Open a streaming session rendering [lowered] in `:preview`; frames arrive on [sink]. Returns the handle, or
+     * null if `:preview` couldn't be reached or the open failed (→ the caller renders in-process). [classpath]
+     * carries the module jars for library composables the bundled Compose lacks (empty → bundled-only).
      */
+    fun openSession(
+        lowered: LoweredComposePreview,
+        widthPx: Int,
+        heightPx: Int,
+        density: Float,
+        night: Boolean,
+        sink: FrameSink,
+        classpath: Array<String> = emptyArray(),
+        resRoots: Array<String> = emptyArray(),
+        packageName: String = "",
+        minApi: Int = 26,
+    ): Session? {
+        val d = awaitDaemon(BIND_TIMEOUT_MS) ?: return null
+        val local = seq.incrementAndGet()
+        val dir = File(appContext.cacheDir, "compose-preview/session-$local").apply { mkdirs() }
+        val callback = object : IComposePreviewCallback.Stub() {
+            override fun onFrame(frameFile: String?, widthPx: Int, heightPx: Int, s: Long) {
+                val bmp = runCatching { readFrame(File(frameFile!!), widthPx, heightPx) }.getOrNull() ?: return
+                runCatching { File(frameFile!!).delete() }
+                sink.onFrame(bmp, s)
+            }
+            override fun onError(message: String?) { sink.onError(message ?: "unknown error") }
+        }
+        val blob = File(dir, "req-open.blob")
+        return runCatching {
+            blob.writeBytes(ComposePreviewWireCodec.encode(lowered))
+            val id = d.open(blob.path, classpath, resRoots, packageName, minApi, widthPx, heightPx, density, night, dir.path, callback)
+            if (id < 0) { dir.deleteRecursively(); null }
+            else Session(d, id, runCatching { d.pid() }.getOrDefault(-1), dir)
+        }.getOrElse { log.warn("compose openSession threw", it); dir.deleteRecursively(); null }
+    }
+
+    /** Convenience: open a session, block up to [timeoutMs] for its first frame, close, and return it (+ the
+     *  remote pid). Used by the isolation spikes; the live UI opens a persistent [Session] instead. */
     fun renderOnce(
         lowered: LoweredComposePreview,
         widthPx: Int,
@@ -88,33 +132,51 @@ class ComposePreviewRemoteClient(context: Context) {
         density: Float,
         night: Boolean,
         classpath: Array<String> = emptyArray(),
-        resRoots: Array<String> = emptyArray(),
-        packageName: String = "",
-        minApi: Int = 26,
+        timeoutMs: Long = 8_000,
     ): RemoteFrame? {
-        val d = awaitDaemon(BIND_TIMEOUT_MS) ?: return null
-        val n = seq.incrementAndGet()
-        val dir = File(appContext.cacheDir, "compose-preview").apply { mkdirs() }
-        val blob = File(dir, "req-$n.blob")
-        val out = File(dir, "frame-$n.px")
+        val latch = CountDownLatch(1)
+        val first = AtomicReference<Bitmap?>(null)
+        val sink = object : FrameSink {
+            override fun onFrame(bitmap: Bitmap, seq: Long) { if (first.compareAndSet(null, bitmap)) latch.countDown() }
+            override fun onError(message: String) { latch.countDown() }
+        }
+        val session = openSession(lowered, widthPx, heightPx, density, night, sink, classpath) ?: return null
         return try {
-            blob.writeBytes(ComposePreviewWireCodec.encode(lowered))
-            val result = runCatching {
-                d.renderOnce(blob.path, classpath, resRoots, packageName, minApi, widthPx, heightPx, density, night, out.path)
-            }.getOrElse { log.warn("compose :preview renderOnce threw", it); return null }
-            if (result == null || !result.startsWith("ok\t")) {
-                log.warn("compose :preview render failed: $result")
-                return null
-            }
-            val parts = result.removePrefix("ok\t").split("\t")
-            val w = parts[0].toInt()
-            val h = parts[1].toInt()
-            val ints = IntArray(w * h)
-            ByteBuffer.wrap(out.readBytes()).asIntBuffer().get(ints)
-            RemoteFrame(Bitmap.createBitmap(ints, w, h, Bitmap.Config.ARGB_8888), runCatching { d.pid() }.getOrDefault(-1))
+            latch.await(timeoutMs, TimeUnit.MILLISECONDS)
+            first.get()?.let { RemoteFrame(it, session.remotePid) }
         } finally {
-            blob.delete()
-            out.delete()
+            session.close()
+        }
+    }
+
+    private fun readFrame(file: File, w: Int, h: Int): Bitmap {
+        val ints = IntArray(w * h)
+        ByteBuffer.wrap(file.readBytes()).asIntBuffer().get(ints)
+        return Bitmap.createBitmap(ints, w, h, Bitmap.Config.ARGB_8888)
+    }
+
+    /** A live remote preview session: push edits via [update], re-target via [resize], tear down via [close]. */
+    inner class Session(
+        private val daemon: IComposePreviewSession,
+        val id: Int,
+        val remotePid: Int,
+        private val frameDir: File,
+    ) {
+        fun update(lowered: LoweredComposePreview) {
+            runCatching {
+                val blob = File(frameDir, "req-update.blob")
+                blob.writeBytes(ComposePreviewWireCodec.encode(lowered))
+                daemon.update(id, blob.path)
+            }.onFailure { log.warn("compose session $id update failed", it) }
+        }
+
+        fun resize(widthPx: Int, heightPx: Int, density: Float, night: Boolean) {
+            runCatching { daemon.resize(id, widthPx, heightPx, density, night) }
+        }
+
+        fun close() {
+            runCatching { daemon.close(id) }
+            runCatching { frameDir.deleteRecursively() }
         }
     }
 

@@ -36,9 +36,12 @@ import java.util.concurrent.atomic.AtomicReference
  * to render a Compose `@Preview` out of the IDE's own composition (de-risked by `ComposePreviewIsolationSpike`
  * and `ComposePreviewOffscreenRenderSpike`; see `docs/compose-preview-isolation.md`).
  *
- * Usable from a non-window (Service) [context]. The content is set on the main thread (its Choreographer drives
- * recomposition), so callers on a Binder thread block on [renderFirstFrame] while frames render on main. One
- * surface per live preview; [close] releases the display, reader, and frame thread.
+ * The surface is **persistent + streaming**: [start] sets the content once and keeps the composition alive, and
+ * every frame the composition draws (its first frame, an animation tick, or a recomposition after a
+ * [runOnMain] state write) is delivered to [onFrame]. A static preview draws one frame then idles (Compose only
+ * redraws on invalidation), so an idle preview streams nothing. Usable from a non-window (Service) [context];
+ * content is created on the main thread (its Choreographer drives recomposition). One surface per live session;
+ * [close] releases the display, reader, and frame thread.
  */
 class OffscreenComposeSurface(
     private val context: Context,
@@ -49,6 +52,9 @@ class OffscreenComposeSurface(
 
     /** A captured off-screen frame as ARGB_8888 pixels (row-major, [width] × [height]). */
     class Frame(val pixels: IntArray, val width: Int, val height: Int)
+
+    /** Invoked (on the frame thread) for every frame the composition draws. Set before [start]. */
+    @Volatile var onFrame: ((Frame) -> Unit)? = null
 
     private val frameThread = HandlerThread("ca-preview-frames").apply { start() }
     private val frameHandler = Handler(frameThread.looper)
@@ -66,17 +72,17 @@ class OffscreenComposeSurface(
 
     init {
         imageReader.setOnImageAvailableListener({ reader ->
-            reader.acquireLatestImage()?.use { latestPixels.set(readPixels(it)); frames.incrementAndGet() }
+            reader.acquireLatestImage()?.use { img ->
+                val frame = Frame(readPixels(img), img.width, img.height)
+                latestPixels.set(frame.pixels)
+                frames.incrementAndGet()
+                runCatching { onFrame?.invoke(frame) }
+            }
         }, frameHandler)
     }
 
-    /**
-     * Compose [content] off-screen and block up to [timeoutMs] for its first frame. Returns that frame's pixels,
-     * or null if none was produced in time. The `ComposeView` is created (and thus recomposes) on the main
-     * thread; safe to call from a Binder/background thread.
-     */
-    fun renderFirstFrame(timeoutMs: Long = 6_000, content: @Composable () -> Unit): Frame? {
-        val before = frames.get()
+    /** Set the streaming [content] (on the main thread) and keep the composition alive; frames flow to [onFrame]. */
+    fun start(content: @Composable () -> Unit) {
         runOnMain {
             owner.resume()
             val p = Presentation(context, virtualDisplay.display)
@@ -90,24 +96,36 @@ class OffscreenComposeSurface(
             p.show()
             presentation = p
         }
+    }
+
+    /**
+     * Compose [content] and block up to [timeoutMs] for its first frame. Convenience for one-shot renders (the
+     * client's `renderOnce`); returns that frame's pixels, or null if none was produced in time.
+     */
+    fun renderFirstFrame(timeoutMs: Long = 6_000, content: @Composable () -> Unit): Frame? {
+        val before = frames.get()
+        start(content)
         val end = SystemClock.uptimeMillis() + timeoutMs
         while (frames.get() <= before && SystemClock.uptimeMillis() < end) SystemClock.sleep(16)
         val px = latestPixels.get() ?: return null
         return Frame(px, width, height)
     }
 
-    override fun close() {
-        runOnMain { runCatching { presentation?.dismiss() } }
-        virtualDisplay.release()
-        imageReader.close()
-        frameThread.quitSafely()
-    }
-
-    private fun runOnMain(block: () -> Unit) {
+    /** Run [block] on the main thread (where the composition lives), blocking the caller. Use for state writes
+     *  that drive a live-edit recomposition. */
+    fun runOnMain(block: () -> Unit) {
         if (Looper.myLooper() == Looper.getMainLooper()) { block(); return }
         val latch = CountDownLatch(1)
         mainHandler.post { try { block() } finally { latch.countDown() } }
         latch.await(6, TimeUnit.SECONDS)
+    }
+
+    override fun close() {
+        onFrame = null
+        runOnMain { runCatching { presentation?.dismiss() } }
+        virtualDisplay.release()
+        imageReader.close()
+        frameThread.quitSafely()
     }
 
     /** Read the RGBA_8888 [img] into an ARGB IntArray, honoring the plane's row/pixel strides. */
