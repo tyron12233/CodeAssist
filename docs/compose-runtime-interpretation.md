@@ -153,6 +153,13 @@ construction's `android.graphics.Paint` is native (no Skiko bundle needed), and 
 project's own interpreted version the material3-flip version ceiling doesn't apply — the whole stack that touches
 the composer is one interpreted world, on the real target.
 
+One device-fixture caveat surfaced (not a ceiling): the phase-B fixture is compiled against Compose *desktop*, so
+`createFontFamilyResolver()` — which text-bearing composables (`BasicText`/`Text`/`Button`) need — binds to the
+desktop `FontFamilyResolver_skikoKt`, absent on Android (`ClassNotFoundException` on ART). The `Column`/`Box` path
+(no text) is unaffected. Text/material3 on ART therefore needs the Android font resolver
+(`createFontFamilyResolver(context)`) provided into `LocalFontFamilyResolver` — a device-fixture concern; in the
+productized preview the Owner/Context supplies it, so this is a test-harness artifact, not an interpreter limit.
+
 ### Phase B′ — thread the source interpreter to the interpreted composer
 
 The two-interpreter threading (see "The architecture" above): a **source-interpreted** `@Composable` body drives
