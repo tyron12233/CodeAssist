@@ -68,6 +68,20 @@ Implication for user code: for the too-new-project path, interpret the user's **
 (live-edit without recompile) stays the fast path for close-version projects on the bridged composer; the
 interpreted-runtime path recompiles on edit. Both remain; the host picks by version distance.
 
+Two consequences worth stating plainly, since they change what the integration is NOT:
+
+- **`ComposableAbi` / `ComposeDispatcher` are BYPASSED on the interpreted-runtime path, not refactored.** They are
+  the reflective bridge that threads a *host* composer into *tree-walker* composables (the close-version path). The
+  phase-A/B spikes never touch them — a compiled composable interpreted on one VM calls other composables as ordinary
+  bytecode method invocations (`owner.method(composer, $changed)`), and the composer flows as a VM value. So there is
+  no "make `ComposableAbi` accept a `VmObject` composer" work item; that reflective path simply stays for the
+  bridged-composer/tree-walker case.
+- **The driver invokes the user `@Preview` via the VM, NOT host reflection.** In the real too-new case the user's
+  classes live only in the project jars — they are not loadable from the IDE runtime — so `Class.forName(userClass)`
+  cannot find them and host `java.lang.reflect` is a dead end (verified by a spike). The VM-native mechanism already
+  exists: `VmLibraryExecutor.callComposable(ownerFqn, method, args, composer, …)` resolves + invokes an interpreted
+  composable by name from the VM's own byte source and threads the composer as an argument. The driver uses that.
+
 ## Remaining phases
 
 ### Phase B — the full UI stack composes to a node tree (interpreted)
