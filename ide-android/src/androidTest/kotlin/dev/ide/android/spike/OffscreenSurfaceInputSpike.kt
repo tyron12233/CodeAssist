@@ -56,7 +56,7 @@ class OffscreenSurfaceInputSpike {
             surface.dispatchTouch(MotionEvent.ACTION_UP, w / 2f, h / 2f, 0)
 
             waitUntil("clicked + blue frame") { clicked.get() && isColor(captured.get(), red = false) }
-            val c = captured.get()?.pixels?.get((h / 2) * w + (w / 2)) ?: 0
+            val c = captured.get()?.argb(w / 2, h / 2) ?: 0
             log("OFFSCREEN-INPUT: clicked=${clicked.get()}, center=ARGB(${(c ushr 24) and 0xFF},${(c ushr 16) and 0xFF},${(c ushr 8) and 0xFF},${c and 0xFF})")
 
             assertTrue("the forwarded tap did not reach the clickable", clicked.get())
@@ -68,7 +68,8 @@ class OffscreenSurfaceInputSpike {
 
     /** Centre pixel is red (else blue) — the two states of the test content. */
     private fun isColor(f: OffscreenComposeSurface.Frame?, red: Boolean): Boolean {
-        val c = f?.pixels?.getOrNull(f.width / 2 + (f.height / 2) * f.width) ?: return false
+        if (f == null) return false
+        val c = f.argb(f.width / 2, f.height / 2)
         val r = (c ushr 16) and 0xFF
         val b = c and 0xFF
         return if (red) r > 150 && b < 100 else b > 150 && r < 100

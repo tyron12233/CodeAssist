@@ -237,9 +237,14 @@ mirroring how `RemoteRealViewRuntime` falls back to `AndroidRealViewRuntime`.
   deadline) flips back to the in-process renderer. **Resources handed off:** the IDE passes the module's res-dir
   paths + R namespace (`composePreviewResourceRoots`); `:preview` rebuilds the `ResourceRepository`
   (`ResourceModel.parse`) + `AndroidPreviewResources` itself, so `stringResource(R.string.x)`/`colorResource`/…
-  resolve remotely (`ComposePreviewResourceHandoffSpike`). **Not yet:** HardwareBuffer zero-copy transport
-  (file-per-frame for now); content-size measurement (fixed off-screen canvas → whitespace for wrap-content
-  previews); live res-file edits (`:preview` re-parses from disk, so an unsaved res edit isn't seen until save).
+  resolve remotely (`ComposePreviewResourceHandoffSpike`). **Perf (2026-08-02):** `update`/`resize`/`close` are
+  `oneway` (a synchronous `update` had stalled the IDE ~1s on the busy render thread — `Binder … took 1032ms`),
+  and the frame readback is a BULK RGBA copy transported as raw bytes (`Bitmap.copyPixelsFromBuffer`), replacing
+  the per-pixel ARGB loop that held a ~20ms/frame JNI-critical lock. `OffscreenSurfaceThroughputSpike`: an
+  animating 822×1462 surface sustains **54 fps** with **zero** JNI-critical-lock warnings. **Not yet:**
+  HardwareBuffer zero-copy transport (bytes-over-shared-FS for now — the remaining GPU-readback ceiling);
+  content-size measurement (fixed off-screen canvas → whitespace for wrap-content previews); live res-file edits
+  (`:preview` re-parses from disk, so an unsaved res edit isn't seen until save).
 - **Phase 3 — input. ✅ DONE (green on ART / API 26, 2026-08-02).** `IComposePreviewSession.dispatchInput` (oneway
   MotionEvent action/x/y/pointer/time). The host captures pointer events on the drawn frame via
   `Modifier.pointerInteropFilter` (in `RemoteComposePreview`, where the frame is drawn — not `PreviewSurface`,

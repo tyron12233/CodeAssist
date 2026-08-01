@@ -51,8 +51,24 @@ class OffscreenComposeSurface(
     private val densityDpi: Int,
 ) : AutoCloseable {
 
-    /** A captured off-screen frame as ARGB_8888 pixels (row-major, [width] × [height]). */
-    class Frame(val pixels: IntArray, val width: Int, val height: Int)
+    /**
+     * A captured off-screen frame as the raw RGBA_8888 bytes the `ImageReader` produced (row-major, tightly
+     * packed, [width] × [height] × 4). Kept as bytes end-to-end: the producer bulk-copies the plane (no per-pixel
+     * work — the old per-pixel ARGB conversion held a ~20ms/frame JNI-critical lock), the transport writes the
+     * bytes as-is, and the consumer maps them straight into an ARGB_8888 `Bitmap` via `copyPixelsFromBuffer`
+     * (Android's ARGB_8888 in-memory layout IS RGBA, so no conversion there either).
+     */
+    class Frame(val bytes: ByteArray, val width: Int, val height: Int) {
+        /** The ARGB int of pixel ([x],[y]) — decoded from the raw RGBA bytes. For assertions/tests. */
+        fun argb(x: Int, y: Int): Int {
+            val i = (y * width + x) * 4
+            val r = bytes[i].toInt() and 0xFF
+            val g = bytes[i + 1].toInt() and 0xFF
+            val b = bytes[i + 2].toInt() and 0xFF
+            val a = bytes[i + 3].toInt() and 0xFF
+            return (a shl 24) or (r shl 16) or (g shl 8) or b
+        }
+    }
 
     /** Invoked (on the frame thread) for every frame the composition draws. Set before [start]. */
     @Volatile var onFrame: ((Frame) -> Unit)? = null
@@ -61,7 +77,7 @@ class OffscreenComposeSurface(
     private val frameHandler = Handler(frameThread.looper)
     private val mainHandler = Handler(Looper.getMainLooper())
     private val imageReader = ImageReader.newInstance(width, height, PixelFormat.RGBA_8888, 3)
-    private val latestPixels = AtomicReference<IntArray?>(null)
+    private val latestBytes = AtomicReference<ByteArray?>(null)
     private val frames = AtomicInteger(0)
     private val owner = OffscreenOwner()
     private val virtualDisplay = context.getSystemService(DisplayManager::class.java).createVirtualDisplay(
@@ -74,19 +90,18 @@ class OffscreenComposeSurface(
 
     init {
         imageReader.setOnImageAvailableListener({ reader ->
+            // acquireLatestImage drops any queued older frames, so a slow consumer coalesces to the newest frame
+            // instead of falling behind — the preview shows "live", not a lagging backlog.
             reader.acquireLatestImage()?.use { img ->
-                val pixels = readPixels(img)
-                // Drop the pre-content frames: a freshly-shown Presentation delivers its window buffer BEFORE the
-                // composition has drawn — a fully-transparent frame (every pixel 0). Streaming that as the first
-                // frame is the "black flash" on open. A drawn Compose UI always has some opaque pixel (a
-                // background, text, a widget), so "any pixel != 0" reliably distinguishes content from the blank
-                // window; the scan short-circuits on the first content pixel.
-                if (pixels.any { it != 0 }) {
-                    val frame = Frame(pixels, img.width, img.height)
-                    latestPixels.set(pixels)
-                    frames.incrementAndGet()
-                    runCatching { onFrame?.invoke(frame) }
-                }
+                // Drop pre-content frames cheaply: a freshly-shown Presentation delivers its window buffer BEFORE
+                // the composition draws — a fully-transparent frame (every pixel 0), which would be the "black
+                // flash" on open. A drawn Compose UI always has some opaque pixel, so SAMPLING a grid (not scanning
+                // all ~1.2M pixels) reliably tells content from the blank window.
+                if (!hasContent(img)) return@use
+                val frame = Frame(readFrameBytes(img), img.width, img.height)
+                latestBytes.set(frame.bytes)
+                frames.incrementAndGet()
+                runCatching { onFrame?.invoke(frame) }
             }
         }, frameHandler)
     }
@@ -117,8 +132,8 @@ class OffscreenComposeSurface(
         start(content)
         val end = SystemClock.uptimeMillis() + timeoutMs
         while (frames.get() <= before && SystemClock.uptimeMillis() < end) SystemClock.sleep(16)
-        val px = latestPixels.get() ?: return null
-        return Frame(px, width, height)
+        val bytes = latestBytes.get() ?: return null
+        return Frame(bytes, width, height)
     }
 
     /**
@@ -159,25 +174,61 @@ class OffscreenComposeSurface(
         frameThread.quitSafely()
     }
 
-    /** Read the RGBA_8888 [img] into an ARGB IntArray, honoring the plane's row/pixel strides. */
-    private fun readPixels(img: Image): IntArray {
+    /** Post [block] to the main thread WITHOUT blocking the caller (FIFO order). For fire-and-forget work like
+     *  a live-edit program-state write, where blocking a Binder thread on the (possibly-busy) render thread is
+     *  what made `update` a 1s stall. */
+    fun postToMain(block: () -> Unit) {
+        mainHandler.post(block)
+    }
+
+    /**
+     * Copy the RGBA_8888 [img] into a tightly-packed byte array in ONE bulk transfer per row (the common case is a
+     * single whole-buffer copy). No per-pixel work: the old ARGB-int conversion loop held a JNI-critical lock ~20ms
+     * per frame, blowing the 16ms budget. RGBA_8888 always has a 4-byte pixel stride, so only row padding
+     * (rowStride > width*4) needs a per-row copy; an unpadded buffer is a single `get`.
+     */
+    private fun readFrameBytes(img: Image): ByteArray {
+        val plane = img.planes[0]
+        val buf = plane.buffer
+        val w = img.width
+        val h = img.height
+        val rowStride = plane.rowStride
+        val out = ByteArray(w * h * 4)
+        val base = buf.position()
+        if (rowStride == w * 4) {
+            buf.position(base)
+            buf.get(out, 0, out.size)
+        } else {
+            var o = 0
+            for (y in 0 until h) {
+                buf.position(base + y * rowStride)
+                buf.get(out, o, w * 4)
+                o += w * 4
+            }
+        }
+        return out
+    }
+
+    /** Cheap "did the composition draw anything" test: sample an 8×8 grid of pixels for any non-transparent one,
+     *  instead of scanning all ~1.2M. A fully-transparent frame is the pre-content Presentation window (skipped). */
+    private fun hasContent(img: Image): Boolean {
         val plane = img.planes[0]
         val buf = plane.buffer
         val rowStride = plane.rowStride
         val pixelStride = plane.pixelStride
-        val out = IntArray(img.width * img.height)
-        for (y in 0 until img.height) {
-            val rowStart = y * rowStride
-            for (x in 0 until img.width) {
-                val i = rowStart + x * pixelStride
-                val r = buf.get(i).toInt() and 0xFF
-                val g = buf.get(i + 1).toInt() and 0xFF
-                val b = buf.get(i + 2).toInt() and 0xFF
-                val a = buf.get(i + 3).toInt() and 0xFF
-                out[y * img.width + x] = (a shl 24) or (r shl 16) or (g shl 8) or b
+        val base = buf.position()
+        val steps = 8
+        for (iy in 0 until steps) {
+            val y = if (steps == 1) 0 else iy * (img.height - 1) / (steps - 1)
+            for (ix in 0 until steps) {
+                val x = if (steps == 1) 0 else ix * (img.width - 1) / (steps - 1)
+                val i = base + y * rowStride + x * pixelStride
+                if (buf.get(i).toInt() != 0 || buf.get(i + 1).toInt() != 0 ||
+                    buf.get(i + 2).toInt() != 0 || buf.get(i + 3).toInt() != 0
+                ) return true
             }
         }
-        return out
+        return false
     }
 
     /** A minimal RESUMED owner so `ComposeView` finds its ViewTree lifecycle / savedstate / viewmodel owners. */

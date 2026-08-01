@@ -48,17 +48,15 @@ class OffscreenSurfaceColorSpike {
             val end = SystemClock.uptimeMillis() + 8_000
             while (captured.get() == null && SystemClock.uptimeMillis() < end) SystemClock.sleep(20)
 
-            val px = captured.get()?.pixels
-            if (px == null) { log("OFFSCREEN-COLOR: NO FRAME captured"); assertTrue("no frame captured off-screen", false); return }
+            val frame = captured.get()
+            if (frame == null) { log("OFFSCREEN-COLOR: NO FRAME captured"); assertTrue("no frame captured off-screen", false); return }
 
-            val c = px[(h / 2) * w + (w / 2)]
+            val c = frame.argb(w / 2, h / 2)
             val a = (c ushr 24) and 0xFF
             val r = (c ushr 16) and 0xFF
             val g = (c ushr 8) and 0xFF
             val b = c and 0xFF
-            // Corner + a sample count of red vs black, to see if it's uniform.
-            val reds = px.count { ((it ushr 16) and 0xFF) > 150 && ((it ushr 8) and 0xFF) < 100 && (it and 0xFF) < 100 }
-            log("OFFSCREEN-COLOR: center=ARGB($a,$r,$g,$b), redPixels=$reds/${px.size}, frames=${frameCount.get()}")
+            log("OFFSCREEN-COLOR: center=ARGB($a,$r,$g,$b), frames=${frameCount.get()}")
 
             assertTrue("center pixel is NOT red (ARGB $a,$r,$g,$b) — the off-screen surface captured black, not the content", r > 150 && g < 100 && b < 100)
         } finally {

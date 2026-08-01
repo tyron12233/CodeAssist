@@ -152,9 +152,11 @@ class ComposePreviewRemoteClient(context: Context) {
     }
 
     private fun readFrame(file: File, w: Int, h: Int): Bitmap {
-        val ints = IntArray(w * h)
-        ByteBuffer.wrap(file.readBytes()).asIntBuffer().get(ints)
-        return Bitmap.createBitmap(ints, w, h, Bitmap.Config.ARGB_8888)
+        // The file holds raw RGBA_8888 bytes — map them straight into the bitmap. ARGB_8888's in-memory layout IS
+        // RGBA, so copyPixelsFromBuffer is a single native copy (no per-pixel int decode like the old asIntBuffer).
+        val bmp = Bitmap.createBitmap(w, h, Bitmap.Config.ARGB_8888)
+        bmp.copyPixelsFromBuffer(ByteBuffer.wrap(file.readBytes()))
+        return bmp
     }
 
     /** A live remote preview session: push edits via [update], re-target via [resize], tear down via [close]. */

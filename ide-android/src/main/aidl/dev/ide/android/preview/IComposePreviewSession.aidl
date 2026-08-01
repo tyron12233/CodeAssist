@@ -27,10 +27,12 @@ interface IComposePreviewSession {
         int widthPx, int heightPx, float density, boolean night, String frameDir, IComposePreviewCallback cb);
 
     // Live edit: push a re-lowered program into the running session; it re-renders (remembered state survives).
-    void update(int sessionId, String blobFile);
+    // oneway — the IDE must never block on it: the service hops to its (possibly-busy) render thread to apply the
+    // program, so a synchronous call stalls the IDE for as long as that thread is saturated (seen: 1s frames).
+    oneway void update(int sessionId, String blobFile);
 
-    // Re-target the off-screen surface (size / density / night). May recreate the surface.
-    void resize(int sessionId, int widthPx, int heightPx, float density, boolean night);
+    // Re-target the off-screen surface (size / density / night). May recreate the surface. oneway (fire-and-forget).
+    oneway void resize(int sessionId, int widthPx, int heightPx, float density, boolean night);
 
     // Forward a pointer event into the off-screen composition (input forwarding). [action] is a MotionEvent
     // action (ACTION_DOWN/MOVE/UP/CANCEL); [x]/[y] are in the off-screen canvas' pixel space (the IDE maps the
@@ -38,6 +40,6 @@ interface IComposePreviewSession {
     // MotionEvent and dispatches it into the Presentation decor view, so clicks/scroll/drag reach real nodes.
     oneway void dispatchInput(int sessionId, int action, float x, float y, int pointerId, long eventTimeMs);
 
-    // Tear down the session (dismiss the Presentation, release the display + VM executor).
-    void close(int sessionId);
+    // Tear down the session (dismiss the Presentation, release the display + VM executor). oneway.
+    oneway void close(int sessionId);
 }

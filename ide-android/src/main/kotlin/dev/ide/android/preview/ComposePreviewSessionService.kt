@@ -22,7 +22,6 @@ import dev.ide.interp.compose.ComposePreviewRenderer
 import dev.ide.interp.compose.VmLibraryExecutor
 import dev.ide.platform.log.Log
 import java.io.File
-import java.nio.ByteBuffer
 import java.nio.file.Paths
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.atomic.AtomicInteger
@@ -185,7 +184,9 @@ class ComposePreviewSessionService : Service() {
         }
 
         fun update(lowered: LoweredComposePreview) {
-            surface.runOnMain { programState.value = lowered }
+            // Non-blocking: post the state write, don't wait for the render thread. update() is a oneway AIDL call,
+            // but even so, blocking this binder thread on a saturated main thread pins a binder-pool slot.
+            surface.postToMain { programState.value = lowered }
         }
 
         fun dispatchTouch(action: Int, x: Float, y: Float, pointerId: Int) {
@@ -210,9 +211,8 @@ class ComposePreviewSessionService : Service() {
             val s = seq.incrementAndGet()
             val f = File(frameDir, "frame-$s.px")
             runCatching {
-                val bb = ByteBuffer.allocate(frame.pixels.size * 4)
-                bb.asIntBuffer().put(frame.pixels)
-                f.outputStream().use { it.write(bb.array()) }
+                // The frame is already the raw RGBA bytes — write them straight out (no ByteBuffer/int conversion).
+                f.outputStream().use { it.write(frame.bytes) }
                 cb.onFrame(f.path, frame.width, frame.height, s)
             }.onFailure { log.warn("compose session $id frame push failed", it) }
         }
