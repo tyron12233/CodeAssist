@@ -225,10 +225,12 @@ Both novel risks of the threading are retired at the spike level (`InterpretedCo
   config flip, not a code change.)
 
 **Verified on device (ART)** (`VmSourceComposableArtSpike`, `ide-android` androidTest): the whole threading runs
-on the real target. interp-core tree-walks a source `Preview() { ProbeBox() }`; `VmComposeHost.previewDriver`
-threads the interpreted composer (from the project's own too-new runtime, interpreted from `vmstack`) and drives
-it through `VmComposerOps`; `ProbeBox`'s `Box` emits a real `LayoutNode` (`(())`) in ~1.5s. Two interpreters,
-one interpreted composer, on ART — no host reflection on the composer.
+on the real target — initial composition AND recomposition. interp-core tree-walks a source
+`Preview() { ProbeBox() }`; `VmComposeHost.previewDriver` threads the interpreted composer (from the project's
+own too-new runtime, interpreted from `vmstack`) and drives it through `VmComposerOps`; `ProbeBox`'s `Box` emits
+a real `LayoutNode` (`(())`) in ~0.8s. A second test reads an interpreted `MutableState.value` from a source
+body and an interpreted write recomposes it exactly twice (initial + one) in ~0.35s. Two interpreters, one
+interpreted composer, on ART — no host reflection on the composer.
 
 So the two-interpreter threading is complete end-to-end for both initial composition and recomposition. The
 remaining phases are the render bridge and productization: **phase C** (the interpreted `LayoutNode` tree

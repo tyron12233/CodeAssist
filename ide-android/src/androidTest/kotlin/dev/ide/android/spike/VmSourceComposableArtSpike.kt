@@ -4,15 +4,23 @@ import android.util.Log
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import dev.ide.android.DexPeerFactory
+import dev.ide.interp.Interpreter
+import dev.ide.interp.compose.ComposeDispatcher
+import dev.ide.interp.compose.ComposeRuntime
 import dev.ide.interp.compose.VmComposeHost
 import dev.ide.interp.compose.VmLibraryExecutor
 import dev.ide.jvm.ClassBytesSource
+import dev.ide.lang.kotlin.interp.Binding
 import dev.ide.lang.kotlin.interp.CallSiteKey
 import dev.ide.lang.kotlin.interp.DispatchKind
 import dev.ide.lang.kotlin.interp.RNode
+import dev.ide.lang.kotlin.interp.RParam
 import dev.ide.lang.kotlin.interp.ResolvedCallable
 import dev.ide.lang.kotlin.interp.ResolvedFunction
+import dev.ide.lang.kotlin.interp.SlotId
 import dev.ide.lang.kotlin.interp.SourceSpan
+import java.util.concurrent.atomic.AtomicInteger
+import java.util.function.BiConsumer
 import java.util.zip.ZipInputStream
 import org.junit.Assert.assertEquals
 import org.junit.Test
@@ -116,6 +124,64 @@ class VmSourceComposableArtSpike {
             }
             log("VM-SRC-ART: source Preview{ ProbeBox() } -> $tree in ${(System.nanoTime() - t0) / 1_000_000}ms (two interpreters, one interpreted composer, on ART)")
             assertEquals("(())", tree)
+        }
+    }
+
+    /**
+     * B′.2 recomposition on ART: a source-interpreted body reads an INTERPRETED `MutableState.value`; a write to
+     * it recomposes the body exactly once (initial + one recomposition = two runs). The read subscribes the scope
+     * (interp-core routes the `VmObject` state to the executor → the interpreted `getValue`, registering with the
+     * interpreted snapshot), the interpreted write invalidates it, and the interpreted Recomposer fires the
+     * `VmComposerOps`-registered `updateScope` callback to re-run the source body — all on the real device.
+     */
+    @Test
+    fun sourceInterpretedBodyRecomposesOnArt() {
+        val exec = executor()
+        exec.use {
+            val dispatcher = ComposeDispatcher(libraryExecutor = exec)
+            val runtime = ComposeRuntime(dispatcher)
+            val interpreter = Interpreter(emptyMap(), dispatcher, runtime, libraryFallback = exec)
+
+            // fun Preview(state) { state.value }
+            val stateSlot = SlotId(1)
+            val entry = ResolvedFunction(
+                "Preview", listOf(RParam(stateSlot, "state", null)),
+                RNode.Block(
+                    listOf(
+                        RNode.PropertyGet(
+                            RNode.Name(Binding.Param(stateSlot, "state"), span),
+                            Binding.Property("value", "androidx.compose.runtime.MutableState", backingField = false), span,
+                        ),
+                    ),
+                    false, span,
+                ),
+                emptyList(),
+            )
+
+            val runs = AtomicInteger(0)
+            val driver = BiConsumer<Any?, Any?> { composer, state ->
+                dispatcher.composer = composer
+                runtime.invokeComposable(entry.name.hashCode(), restartable = false, force = false, args = emptyList()) {
+                    runs.incrementAndGet()
+                    interpreter.call(entry, listOf(state))
+                }
+            }
+            val t0 = System.nanoTime()
+            try {
+                exec.invokeStatic(FIXTURE, "driveRecomposition", listOf(driver, runs), 0)
+            } catch (t: Throwable) {
+                var c: Throwable? = t
+                var depth = 0
+                while (c != null && depth < 12) {
+                    log("cause[$depth]: ${c::class.java.name}: ${c.message?.take(220)}")
+                    c.stackTrace.take(8).forEach { log("    at $it") }
+                    if (c.cause === c) break
+                    c = c.cause; depth++
+                }
+                throw t
+            }
+            log("VM-SRC-ART: recomposition runs=${runs.get()} in ${(System.nanoTime() - t0) / 1_000_000}ms (interpreted state write recomposes the source body on ART)")
+            assertEquals(2, runs.get())
         }
     }
 }
