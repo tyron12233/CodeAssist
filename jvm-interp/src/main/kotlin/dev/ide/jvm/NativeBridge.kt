@@ -64,6 +64,11 @@ class ReflectiveBridge(
     private fun loadClass(internal: String): Class<*> =
         classCache.getOrPut(internal) { Class.forName(internal.replace('/', '.'), false, loader) }
 
+    /** Whether [internal] is loadable on the host at all — false for a project-only type (e.g. a newer Compose
+     *  class the bundled runtime lacks) that is interpreted, never bridged. */
+    private fun classLoadable(internal: String): Boolean =
+        classCache.containsKey(internal) || runCatching { loadClass(internal) }.isSuccess
+
     /** Parameter [Class]es for a method descriptor, cached (the parse and class loads otherwise repeat per call). */
     private fun paramClasses(descriptor: String): Array<Class<*>> =
         paramClassCache.getOrPut(descriptor) { Descriptors.paramTypes(descriptor).map { classFor(it) }.toTypedArray() }
@@ -126,7 +131,15 @@ class ReflectiveBridge(
      *  passed through an Object-typed parameter (stored in a container, an AtomicReference) is proxied as its
      *  OWN functional interface from the lambda's call site, since Object names no interface to implement. */
     private fun marshalIn(value: Any?, descriptor: String): Any? = when {
-        value is VmLambda -> proxyFor(value, if (descriptor == "Ljava/lang/Object;") "L${value.interfaceType};" else descriptor)
+        value is VmLambda -> {
+            val target = if (descriptor == "Ljava/lang/Object;") "L${value.interfaceType};" else descriptor
+            // A host-absent interface (a project Compose type the bundled runtime lacks, e.g. foundation.style.Style):
+            // no host code can INVOKE the SAM — it holds no reference to the interface — so it can only store the
+            // value and hand it back to interpreted code. Pass the interpreted lambda through opaquely rather than
+            // fail building a Proxy of a class that isn't on the host. (A VmObject already passes through, below.)
+            if (target.startsWith("L") && !classLoadable(target.substring(1, target.length - 1))) value
+            else proxyFor(value, target)
+        }
         descriptor == "Z" -> (value as Int) != 0
         descriptor == "B" -> (value as Int).toByte()
         descriptor == "C" -> (value as Int).toChar()

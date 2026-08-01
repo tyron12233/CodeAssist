@@ -45,6 +45,16 @@ open class AsmPeerFactory(
     private val reflectionClasses = ConcurrentHashMap<String, Class<*>>()
     private val reflectionNames = ConcurrentHashMap<Class<*>, String>()
     private val counter = AtomicInteger()
+    private val defaultProbeCache = ConcurrentHashMap<String, Boolean>()
+
+    /** JDK-16 `InvocationHandler.invokeDefault(proxy, method, args)` — present on the desktop JVM, ABSENT on ART.
+     *  A [Proxy] peer relies on it to run an inherited (non-overridden) default interface method; when it is not
+     *  available, such a peer must be a GENERATED subclass instead (which inherits the default natively). */
+    private val invokeDefaultAvailable: Boolean = runCatching {
+        InvocationHandler::class.java.getMethod(
+            "invokeDefault", Any::class.java, java.lang.reflect.Method::class.java, Array<Any>::class.java,
+        )
+    }.isSuccess
 
     override fun createPeer(
         vmObject: Any,
@@ -62,7 +72,18 @@ open class AsmPeerFactory(
     /** A peer is Proxy-realizable when its interpreted class only implements real interfaces (its nearest real
      *  superclass is `Object`). A concrete-class extension (`View`, `Thread`) still needs a generated subclass. */
     private fun isProxyable(spec: PeerSpec): Boolean =
-        spec.superClass == Any::class.java && spec.interfaces.isNotEmpty()
+        spec.superClass == Any::class.java && spec.interfaces.isNotEmpty() &&
+            (invokeDefaultAvailable || !inheritsDefaultMethod(spec))
+
+    /** Whether [spec]'s interfaces contribute a default method the interpreted class does NOT override — the case a
+     *  [Proxy] peer can only serve via [InvocationHandler.invokeDefault]. When that API is missing (ART), such a
+     *  spec is realized as a generated subclass, which inherits the default natively. Cached per class. */
+    private fun inheritsDefaultMethod(spec: PeerSpec): Boolean = defaultProbeCache.getOrPut(spec.className) {
+        val overridden = spec.methods.mapTo(HashSet()) { it.name + it.descriptor }
+        spec.interfaces.any { iface ->
+            iface.methods.any { m -> m.isDefault && (m.name + Type.getMethodDescriptor(m)) !in overridden }
+        }
+    }
 
     /**
      * Realize an interface-only peer as a [Proxy] of the real interfaces + [VmPeer]. The handler routes: an

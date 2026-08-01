@@ -36,12 +36,17 @@ class ReifiedInlineExecutor(
      *  ([dev.ide.interp.compose.VmLibraryExecutor]) injects the authoritative resolver so the whole VM library
      *  path resolves mangled names the one way. */
     private val nameMatcher: JvmNameMatcher = JvmNameMatcher { m, k -> shapeNameMatches(m.name, k) },
+    /** Classes this executor should interpret IN ADDITION to Kotlin facades — the host's own interpret policy
+     *  (internal name form). A reified-inline body may `new` a non-facade class (e.g. a project Compose type)
+     *  that the host interprets in its main [Vm]; without this, that class bridges here (resolve → null →
+     *  bridgeConstruct → ClassNotFound) even though the main VM interprets it. Defaults to none (standalone). */
+    private val alsoInterpret: (String) -> Boolean = { false },
 ) {
     private val classpath = ClassBytesSource.fromClasspath(loader)
 
     private val vm = Vm(
         source = { name -> extraSource?.bytesFor(name) ?: classpath.bytesFor(name) },
-        policy = { name -> isKotlinFacade(name) },
+        policy = { name -> isKotlinFacade(name) || alsoInterpret(name) },
         peerFactory = peerFactory,
     )
 

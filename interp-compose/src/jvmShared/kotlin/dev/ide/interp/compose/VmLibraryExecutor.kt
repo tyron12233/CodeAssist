@@ -138,7 +138,15 @@ class VmLibraryExecutor(
      *  call-site type argument — the general reification mechanism. Reads bytes from the project jars first, then
      *  the host classpath (a standard-library reified inline like `filterIsInstance` on desktop). Lazy: only
      *  built when a reified inline is actually hit. */
-    private val reifiedExecutor by lazy { ReifiedInlineExecutor(extraSource = jarSource, loader = hostLoader, peerFactory = peerFactory, nameMatcher = kotlinNames) }
+    private val reifiedExecutor by lazy {
+        ReifiedInlineExecutor(
+            extraSource = jarSource, loader = hostLoader, peerFactory = peerFactory, nameMatcher = kotlinNames,
+            // Interpret the SAME project classes the main vm does, so a class `new`ed inside a reified-inline body
+            // (e.g. TextField's rememberSaveable constructing a project foundation.style.Style) is interpreted here
+            // too, not bridged to the host's older Compose (which lacks it). Mirrors the main vm's policy (line ~119).
+            alsoInterpret = { internalName -> shouldInterpret(internalName.replace('/', '.')) },
+        )
+    }
 
     override fun hasClass(fqn: String): Boolean = vm.hasInterpretedClass(fqn)
 
