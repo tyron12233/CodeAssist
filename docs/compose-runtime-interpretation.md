@@ -55,34 +55,47 @@ passes a `VmLambda` through opaquely when its target interface is absent on the 
 an interface peer that inherits a default method as a generated subclass on ART (which lacks JDK-16
 `InvocationHandler.invokeDefault`).
 
-## The architectural consequence: one interpreted world
+## The architecture: thread the source interpreter into the interpreted runtime
 
-`ComposableAbi.call` invokes a composable by **reflection**, passing the composer as an argument, and the
-composer is a real host object. An interpreted composer is a `VmObject`, which the reflective host-composable
-path cannot accept. Therefore the interpreted-runtime preview cannot mix a bridged reflective path with an
-interpreted composer: **the whole stack that touches the composer — runtime, ui, foundation, material3, and the
-previewed user code — must be interpreted together on one VM**, with the composer flowing as a VM value and all
-composer calls staying inside the VM. This is exactly the model the phase-A spikes validate (a single VM
-interpreting the runtime + the composable, composer never crossing the bridge).
+The too-new path keeps the existing preview shape — the user's `@Preview` stays **source**-interpreted by
+interp-core, so live-edit-without-recompile is preserved — and changes only *where the composer comes from*:
+instead of the bridged **host** composer, it threads an **interpreted** composer (a `VmObject`) produced by the
+**project's own** runtime running on the bytecode VM. The two interpreters are threaded — the source interpreter
+drives the user body, the bytecode VM runs the runtime/ui/foundation/material3 and the library composables the
+body calls — and both share the one interpreted composer as a VM value.
 
-Implication for user code: for the too-new-project path, interpret the user's **compiled** `@Preview` bytecode
-(available from the build) rather than tree-walking its source through interp-core. The tree-walker path
-(live-edit without recompile) stays the fast path for close-version projects on the bridged composer; the
-interpreted-runtime path recompiles on edit. Both remain; the host picks by version distance.
+This is viable because the composer already flows as an opaque `Any` across the existing bridge:
 
-Two consequences worth stating plainly, since they change what the integration is NOT:
+- **Library composables the user body calls already thread the composer as `Any`.** When the VM holds a library
+  composable's bytes, `ComposeDispatcher.invokeComposable` routes it through
+  `VmLibraryExecutor.callComposable(owner, method, args, composer, …)`, which passes the composer straight through
+  — so it carries a `VmObject` composer unchanged. (The reflective `ComposableAbi.call` path, by contrast, passes
+  the composer to a *real host* composable and *cannot* accept a `VmObject`. That is exactly why the
+  interpreted-runtime path routes every library composable through `callComposable`, never the reflective path —
+  the earlier "ComposableAbi can't take a VmObject" finding stands, and it's what forces the `callComposable`
+  route, not a reason to compile the user code.)
 
-- **`ComposableAbi` / `ComposeDispatcher` are BYPASSED on the interpreted-runtime path, not refactored.** They are
-  the reflective bridge that threads a *host* composer into *tree-walker* composables (the close-version path). The
-  phase-A/B spikes never touch them — a compiled composable interpreted on one VM calls other composables as ordinary
-  bytecode method invocations (`owner.method(composer, $changed)`), and the composer flows as a VM value. So there is
-  no "make `ComposableAbi` accept a `VmObject` composer" work item; that reflective path simply stays for the
-  bridged-composer/tree-walker case.
-- **The driver invokes the user `@Preview` via the VM, NOT host reflection.** In the real too-new case the user's
-  classes live only in the project jars — they are not loadable from the IDE runtime — so `Class.forName(userClass)`
-  cannot find them and host `java.lang.reflect` is a dead end (verified by a spike). The VM-native mechanism already
-  exists: `VmLibraryExecutor.callComposable(ownerFqn, method, args, composer, …)` resolves + invokes an interpreted
-  composable by name from the VM's own byte source and threads the composer as an argument. The driver uses that.
+- **The group/slot protocol the interpreter emits is the one piece that must gain a VM backend.** Both
+  `ComposeDispatcher.invokeComposable` (the caller-side group per library call) and `ComposeRuntime.invokeComposable`
+  (the user body's restart group + the `$changed` skip fast path) drive the composer through `ComposableAbi`, whose
+  ~12 composer ops (`startGroup`/`endGroup`/`startRestartGroup`/`endRestartGroup`/`argsChanged`/`isSkipping`/
+  `skipToGroupEnd`/`updateScope`/`currentMarker`/`endToMarker`) today reflect on the composer's host class
+  (`composer.javaClass.methods.first{…}.invoke(…)`). A `VmObject` composer's `javaClass` is the VM wrapper, not
+  `ComposerImpl`, so **this driver is the piece that must gain a VM-dispatched backend** — invoke each op through the
+  VM (`invokeInstance(composer, "startRestartGroup", …)`) when the composer is VM-owned. `ComposeDispatcher`'s
+  composer-detection on lambda args (`COMPOSER.isInstance(...)`) must likewise recognize a VM-owned composer.
+
+So the integration is: (1) stand up an interpreted `Composition`/`Recomposer`/`Applier` on the project runtime
+(phases A/B prove this composes correctly, composer as a `VmObject`); (2) give `ComposableAbi`/`ComposeRuntime` a
+VM backend for the composer ops (and make composer-detection VM-aware); (3) at the user-content point, hand that
+`VmObject` composer to `ComposeDispatcher` and run the source-interpreted `@Preview` exactly as today. The
+bridged-composer tree-walker stays the fast path for close-version projects; the host picks by version distance.
+
+What the phase-A/B spikes establish for this plan: the project-version runtime/ui/foundation/material3 genuinely
+interpret and compose real node trees with the composer as a `VmObject` — the substrate both the user body and the
+library composables thread. What they do **not** yet exercise is the two-interpreter threading itself — a
+source-interpreted body driving that `VmObject` composer through a VM-backed `ComposableAbi` — which is the next
+spike.
 
 ## Remaining phases
 
@@ -132,14 +145,31 @@ The interpreted `ui.node` LayoutNodes measure/layout/draw; the draw calls must r
 the draw commands, bridge the actual pixel drawing. Produces the bitmap the preview panel displays (the preview
 already streams a bitmap out-of-process; see `compose-preview-isolation`).
 
+### Phase B′ — thread the source interpreter to the interpreted composer
+
+The two-interpreter threading (see "The architecture" above): a **source-interpreted** `@Composable` body drives
+an **interpreted** (`VmObject`) composer, calling bytecode-interpreted library composables that share it. The work
+is a VM-dispatched backend for `ComposableAbi`/`ComposeRuntime`'s composer ops (today host reflection on
+`composer.javaClass`) plus VM-aware composer-detection in `ComposeDispatcher`. First spike: interp-core tree-walks
+a trivial user `@Composable` (a `remember` + a `Text`) against a composer produced by the interpreted runtime, and
+the emitted node tree / `remember`-once behavior matches. This preserves live-edit — the reason for keeping the
+source interpreter rather than compiling the user code.
+
+### Phase C — rendering: interpreted node tree → pixels
+
+The interpreted `ui.node` LayoutNodes measure/layout/draw; the draw calls must reach a real
+`android.graphics.Canvas` (the bridged floor) to produce a bitmap. This is the render boundary: interpret up to
+the draw commands, bridge the actual pixel drawing. Produces the bitmap the preview panel displays (the preview
+already streams a bitmap out-of-process; see `compose-preview-isolation`).
+
 ### Phase D — wire into the preview path
 
-A host-callable `VmComposeHost` (interp-compose) sets up an interpreted `Composition`/`Recomposer`/`Applier`
-from the project runtime and invokes the user's `@Preview`, replacing the bridged-composer path when the
-project's Compose version is far enough from the bundled one that the flip can't align. Recompile-on-edit
-(the interpreted-runtime path does not reuse the tree-walker's live-edit). The composition-driving harness ships
-as VM-interpreted code (a package the VM's policy interprets, its bytecode read from the classpath), so the host
-orchestrates it by invoking one entry point — the productized form of the phase-A/B fixtures.
+A host-callable `VmComposeHost` (interp-compose) sets up an interpreted `Composition`/`Recomposer`/`Applier` from
+the project runtime, threads its `VmObject` composer into `ComposeDispatcher`, and runs the source-interpreted
+user `@Preview` (phase B′) — replacing the bridged-composer path when the project's Compose version is far enough
+from the bundled one that the flip can't align. Live-edit is preserved (the user body is still tree-walked); only
+the runtime/library side is recompile-free interpreted bytecode. The host picks this path vs. the bridged
+tree-walker by version distance.
 
 ## Iteration
 
