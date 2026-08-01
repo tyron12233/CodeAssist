@@ -33,4 +33,14 @@ class InterpretedUiStackSpike {
         val interpreted = newVm().invokeStatic(OWNER, "composeColumnOfBoxes", "()Ljava/lang/String;", emptyList())
         assertEquals(expected, interpreted, "interpreted ui/foundation stack composes the same LayoutNode tree")
     }
+
+    @Test fun interpretsRealUiStackWithTextAndNesting() {
+        val expected = UiStackSpikeFixture.composeTextTree() // run for real
+        assertEquals(
+            "(((),((),())))", expected,
+            "sanity: real ui stack emits Column[ BasicText, Row[ BasicText, Box ] ]",
+        )
+        val interpreted = newVm().invokeStatic(OWNER, "composeTextTree", "()Ljava/lang/String;", emptyList())
+        assertEquals(expected, interpreted, "interpreted stack composes BasicText + nested Row/Box to the same tree")
+    }
 }

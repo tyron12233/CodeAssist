@@ -2,15 +2,20 @@ package dev.ide.interp.compose.spike
 
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.text.BasicText
 import androidx.compose.runtime.AbstractApplier
 import androidx.compose.runtime.BroadcastFrameClock
+import androidx.compose.runtime.Composable
 import androidx.compose.runtime.Composition
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.Recomposer
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalFontFamilyResolver
 import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.platform.LocalViewConfiguration
 import androidx.compose.ui.platform.ViewConfiguration
+import androidx.compose.ui.text.font.createFontFamilyResolver
 import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.LayoutDirection
 import kotlinx.coroutines.asCoroutineDispatcher
@@ -76,14 +81,13 @@ object UiStackSpikeFixture {
     }
 
     /**
-     * Compose `Column { Box(); Box() }` on the interpreted UI stack into a recording applier and return the
-     * emitted tree's structure. `Column` emits one LayoutNode with the two `Box` LayoutNodes as its children,
-     * so the tree is `(((),()))` — a root with one child (Column) that has two leaf children (the Boxes).
-     * Driven through the sanctioned Recomposer frame loop (so `composeInitial` applies), reading the tree on the
-     * dispatcher thread right after `setContent`, the known-good pattern from [ComposerSpikeFixture.emitsNodeTree].
+     * Drive one initial composition of [content] into a recording applier and return the emitted tree's
+     * structure. Uses the sanctioned Recomposer frame loop (so `composeInitial` applies) and reads the tree on
+     * the dispatcher thread right after `setContent`, the known-good pattern from
+     * [ComposerSpikeFixture.emitsNodeTree]. Shared by the box and text spikes; each supplies its own content
+     * (with the Owner CompositionLocals it needs) so the harness stays composable-agnostic.
      */
-    @JvmStatic
-    fun composeColumnOfBoxes(): String {
+    private fun drive(content: @Composable () -> Unit): String {
         val root = Any()
         val edges = IdentityHashMap<Any, MutableList<Any>>()
         val executor = Executors.newSingleThreadExecutor { Thread(it, "spike-uistack") }
@@ -97,18 +101,7 @@ object UiStackSpikeFixture {
                     recomposer.currentState.first { it == Recomposer.State.Idle }
                     val result = withContext(dispatcher) {
                         val composition = Composition(RecordingApplier(root, edges), recomposer)
-                        composition.setContent {
-                            CompositionLocalProvider(
-                                LocalDensity provides Density(1f),
-                                LocalLayoutDirection provides LayoutDirection.Ltr,
-                                LocalViewConfiguration provides viewConfiguration,
-                            ) {
-                                Column {
-                                    Box {}
-                                    Box {}
-                                }
-                            }
-                        }
+                        composition.setContent(content)
                         val r = serialize(root, edges)
                         composition.dispose()
                         r
@@ -120,6 +113,51 @@ object UiStackSpikeFixture {
             }
         } finally {
             executor.shutdownNow()
+        }
+    }
+
+    /**
+     * Compose `Column { Box(); Box() }` on the interpreted UI stack into a recording applier and return the
+     * emitted tree's structure. `Column` emits one LayoutNode with the two `Box` LayoutNodes as its children,
+     * so the tree is `(((),()))` — a root with one child (Column) that has two leaf children (the Boxes).
+     */
+    @JvmStatic
+    fun composeColumnOfBoxes(): String = drive {
+        CompositionLocalProvider(
+            LocalDensity provides Density(1f),
+            LocalLayoutDirection provides LayoutDirection.Ltr,
+            LocalViewConfiguration provides viewConfiguration,
+        ) {
+            Column {
+                Box {}
+                Box {}
+            }
+        }
+    }
+
+    /**
+     * Compose `Column { BasicText("a"); Row { BasicText("b"); Box() } }` on the interpreted UI stack and return
+     * the emitted tree's structure (`(((),((),())))`). Beyond the box spike this adds `Row` (a second layout) and
+     * `BasicText` — foundation's text primitive, whose compose-time path reads `LocalFontFamilyResolver` and
+     * builds a text modifier element — so it exercises a non-trivial leaf, layout nesting, and one more Owner
+     * local (a real `FontFamily.Resolver`) all interpreted. Each `BasicText`/`Box` is a leaf LayoutNode; the tree
+     * shape proves Column, Row, BasicText, and Box compose and nest correctly on the interpreted stack.
+     */
+    @JvmStatic
+    fun composeTextTree(): String = drive {
+        CompositionLocalProvider(
+            LocalDensity provides Density(1f),
+            LocalLayoutDirection provides LayoutDirection.Ltr,
+            LocalViewConfiguration provides viewConfiguration,
+            LocalFontFamilyResolver provides createFontFamilyResolver(),
+        ) {
+            Column {
+                BasicText("a")
+                Row {
+                    BasicText("b")
+                    Box {}
+                }
+            }
         }
     }
 }

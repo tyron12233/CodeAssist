@@ -1,7 +1,7 @@
 # Interpreting the Compose runtime (milestone A) — resolving the preview version ceiling
 
-Status: phase A proven and committed; phase B's first increment (a real `foundation` composable emits a real
-`LayoutNode` tree through the interpreted UI stack) proven on desktop; the rest of B–D is the remaining integration.
+Status: phase A proven and committed; phase B proven on desktop for `foundation` (Column/Row/Box/BasicText emit
+a real `LayoutNode` tree through the interpreted UI stack); widening to material3 + the rest of B–D remains.
 
 ## The problem
 
@@ -87,13 +87,17 @@ Two consequences worth stating plainly, since they change what the integration i
 
 ### Phase B — the full UI stack composes to a node tree (interpreted)
 
-**First increment proven on desktop** (`InterpretedUiStackSpike` + `UiStackSpikeFixture`): the VM interprets
-`androidx.compose.{runtime,ui,foundation}` together and composes a real `Column { Box(); Box() }`, emitting a
-real `LayoutNode` tree (`(((),()))` — a Column node with two Box leaves) that matches running the same code for
-real. `Column`/`Box` emit via `ReusableComposeNode<ComposeUiNode, Applier<Any>>`, so the harness supplies an
-`AbstractApplier<Any>` and the emitted nodes arrive as `Any` — the fixture never names the internal `LayoutNode`
-type. It records each node's parent (the applier's `current`) rather than calling the internal `insertAt`, so a
-shallow initial composition reads back structurally without the Owner-bound node linkage.
+**Proven on desktop** (`InterpretedUiStackSpike` + `UiStackSpikeFixture`): the VM interprets
+`androidx.compose.{runtime,ui,foundation}` together and composes real `foundation` composables, emitting a real
+`LayoutNode` tree that matches running the same code for real. Two spikes: `Column { Box(); Box() }` →
+`(((),()))`; and `Column { BasicText("a"); Row { BasicText("b"); Box() } }` → `(((),((),())))`, which adds a
+second layout (`Row`) and `BasicText` — foundation's text primitive, whose compose-time path reads
+`LocalFontFamilyResolver` and builds a text modifier element — so a non-trivial leaf, layout nesting, and the
+real `FontFamily.Resolver` (`createFontFamilyResolver()`) all interpret. The composables emit via
+`ReusableComposeNode<ComposeUiNode, Applier<Any>>`, so the harness supplies an `AbstractApplier<Any>` and the
+emitted nodes arrive as `Any` — the fixture never names the internal `LayoutNode` type. It records each node's
+parent (the applier's `current`) rather than calling the internal `insertAt`, so a shallow initial composition
+reads back structurally without the Owner-bound node linkage.
 
 Two boundary conditions surfaced and are handled in the harness:
 
@@ -104,14 +108,16 @@ Two boundary conditions surfaced and are handled in the harness:
   `android.graphics` on device). Desktop iteration now bundles the Skiko native runtime in `interp-compose`
   `desktopTest` (`compose.desktop.currentOs`); only the native lib loads, no display is opened.
 - **Owner-supplied CompositionLocals must be provided.** `LayoutNode.setCompositionLocalMap` eagerly reads
-  `LocalDensity` / `LocalLayoutDirection` / `LocalViewConfiguration` when a node's resolved locals apply; a real
-  Owner provides them, so the headless harness wraps the content in a `CompositionLocalProvider` supplying
-  minimal values.
+  `LocalDensity` / `LocalLayoutDirection` / `LocalViewConfiguration` when a node's resolved locals apply, and
+  `BasicText` reads `LocalFontFamilyResolver`; a real Owner provides these, so the headless harness wraps the
+  content in a `CompositionLocalProvider` supplying minimal values (`Density(1f)`, `LayoutDirection.Ltr`, a
+  4-member `ViewConfiguration`, `createFontFamilyResolver()`).
 
-Remaining in phase B: `Text` (needs `LocalFontFamilyResolver` and more Owner-provided locals — deferred toward
-the device/render path), and the deeper value-type tail the device material3-flip spike mapped (Style, Modifier,
-Alignment/Dp/Color/Arrangement) as the interpreted set widens toward material3. Three boundary-crossing VM fixes
-are already committed; the pervasive value types are the known tail.
+Remaining in phase B: material3 (`Text`/`Button`/… read theme locals — `LocalContentColor`, `LocalTextStyle`,
+`MaterialTheme` — so they need those provided or a `MaterialTheme` wrapper interpreted), and the deeper
+value-type tail the device material3-flip spike mapped (Style, Modifier, Alignment/Dp/Color/Arrangement) as the
+interpreted set widens. Three boundary-crossing VM fixes are already committed; the pervasive value types are the
+known tail.
 
 ### Phase C — rendering: interpreted node tree → pixels
 
