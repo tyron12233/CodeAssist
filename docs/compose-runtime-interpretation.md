@@ -263,10 +263,22 @@ an ARGB_8888 `Bitmap`, wraps it in a real `android.graphics.Canvas`, bridges tha
 pixels. It's the interpreted-runtime counterpart to `ComposePreviewRenderer` (which composes inline into the
 IDE's own composition — an interpreted node tree can't join it). What remains is the **interpreted render
 harness** (`dev.ide.interp.compose.VmComposeRenderHarness`, a VM-interpreted package the phase-D `VmComposeHost`
-productizes): build a minimal `Owner` (the static-preview subset of the 55 members; stub the interaction ones),
-`attach` the interpreted root, run one measure(`Constraints`)/layout pass, and draw to the bridged canvas. The
-harness, the minimal `Owner`, and the exact measure/layout/draw entry points need to be written and **verified on
-a device**.
+productizes): build a minimal `Owner`, `attach` the interpreted root, run one measure(`Constraints`)/layout pass,
+and draw to the bridged canvas.
+
+**Verified from the source (2026-08-02): a from-scratch minimal `Owner` for FULL render is impractical** — the
+measure/draw path pulls in load-bearing, owner-internal machinery that can't be stubbed: `LayoutNode.remeasure`
+runs measure *inside* `owner.snapshotObserver.observeReads(...)` (an `OwnerSnapshotObserver` over
+`SnapshotStateObserver`); draw needs `owner.sharedDrawScope` (`LayoutNodeDrawScope`, a ~32KB internal class);
+layers/graphics need `graphicsContext` + `createLayer`. Compose ships no minimal owner and its own tests use the
+full `AndroidComposeView` for this reason. Two consequences: (1) the render must be split — **measure/layout** needs
+a *smaller* owner surface (density/layoutDirection/viewConfiguration/fontFamilyResolver, `onRequestMeasure/Relayout`
+as one-shot no-ops, `measureAndLayout` delegating to the root, a pass-through `snapshotObserver`) and is the
+platform-agnostic half; **draw** (`sharedDrawScope`/`createLayer`/`android.graphics`) is the device-only,
+owner-heavy tail. (2) The owner (and the render harness) must be **compiled against the project's exact Compose
+(1.12)**, since the `Owner` interface + its mangled members are version-specific — the same Android-compiled-fixture
+prerequisite the font-resolver caveat surfaced. So the achievable order is: build the 1.12-compiled-fixture infra →
+a **measure-only** owner (proves the interpreted tree measures on ART) → the draw bridge (pixels). All device-verified.
 
 ### Phase D — wire into the preview path (orchestration core done)
 
