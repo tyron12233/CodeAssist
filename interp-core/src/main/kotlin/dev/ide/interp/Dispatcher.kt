@@ -567,7 +567,10 @@ class ReflectiveDispatcher(
     private fun invokeViaDefaultSynthetic(cls: Class<*>, name: String, realArgs: List<Any?>, composable: List<Boolean>, receiverCount: Int): Invoked? {
         val m = findDefaultSynthetic(cls, name, realArgs) ?: return null
         val params = m.parameterTypes
-        val n = params.size - 2 // realParams…, int mask, Object marker
+        // realParams…, int mask × ceil(realParams/32), Object marker. A function with >32 defaulted params carries
+        // MORE than one mask word, so this isn't simply `size - 2` (that mis-slots material3's 30-40-color schemes).
+        val n = defaultSyntheticRealParamCount(params.size)
+        val maskCount = params.size - n - 1
         val k = realArgs.size
         // The `$default` synthetic carries an ERASED signature (no `List<Color>` generic type), so value-class
         // COLLECTION element boxing must read the generic types off the REAL method instead (same class, same
@@ -578,7 +581,7 @@ class ReflectiveDispatcher(
         val ordered = realArgs.any { it === OmittedArg }
         val trailingLambda = !ordered && realArgs.lastOrNull() is InterpretedLambda
         val slots = arrayOfNulls<Any?>(params.size)
-        var mask = 0
+        val masks = IntArray(maskCount)
         val provided = BooleanArray(n)
         for (i in 0 until k) {
             val a = realArgs[i]
@@ -590,12 +593,15 @@ class ReflectiveDispatcher(
             else coerceArg(a, params[slot], realGenericParams?.getOrNull(slot))
             provided[slot] = true
         }
-        // A set mask bit i ⇒ use the default for value param i. The receiver(s) precede the value params in
-        // the JVM signature but aren't numbered in the mask, so shift by receiverCount.
-        for (i in receiverCount until n) if (!provided[i]) { slots[i] = zeroValue(params[i]); mask = mask or (1 shl (i - receiverCount)) }
+        // A set mask bit i ⇒ use the default for value param i. The receiver(s) precede the value params in the
+        // JVM signature but aren't numbered in the mask, so shift by receiverCount; bit b lives in word b/32 at
+        // b%32 (a single `1 shl b` would silently wrap for b ≥ 32 — the >32-param bug).
+        for (i in receiverCount until n) if (!provided[i]) {
+            slots[i] = zeroValue(params[i]); val b = i - receiverCount; masks[b / 32] = masks[b / 32] or (1 shl (b % 32))
+        }
         for (i in 0 until receiverCount) if (!provided[i]) slots[i] = zeroValue(params[i]) // defensive; receiver is normally supplied
-        slots[n] = mask
-        slots[n + 1] = null // the synthetic's super-call marker is always null
+        for (j in 0 until maskCount) slots[n + j] = masks[j]
+        slots[n + maskCount] = null // the synthetic's super-call marker is always null
         runCatching { m.isAccessible = true }
         return Invoked(m.invoke(null, *slots))
     }
@@ -663,11 +669,26 @@ class ReflectiveDispatcher(
     private fun isDefaultSynthetic(cls: Class<*>, jvmName: String, kotlinName: String): Boolean =
         jvmName.endsWith("\$default") && KotlinJvmNames.matches(cls, jvmName.removeSuffix("\$default"), kotlinName)
 
-    /** The synthetic is `(realParams…, int mask, Object marker)`; [realArgs] must fit the first `n` reals. */
+    /** The real value-param count of a `$default` synthetic with [pc] total params. Its shape is
+     *  `(realParams…, int mask × ceil(realParams/32), Object marker)`, so with >32 defaulted params there is more
+     *  than one mask word and the count is NOT simply `pc - 2`. Solve for the realParams that makes the mask-word
+     *  count consistent (unambiguous — `pc` maps to exactly one valid split). */
+    private fun defaultSyntheticRealParamCount(pc: Int): Int {
+        var mc = 1
+        while (mc <= 8) { // up to 256 defaulted params — far beyond anything real
+            val r = pc - mc - 1
+            if (r >= 1 && (r + 31) / 32 == mc) return r
+            mc++
+        }
+        return pc - 2
+    }
+
+    /** The synthetic is `(realParams…, int mask × ceil(n/32), Object marker)`; [realArgs] must fit the first `n`
+     *  reals. */
     private fun fitsDefaultSynthetic(m: Method, realArgs: List<Any?>): Boolean {
         val pc = m.parameterCount
         if (pc < realArgs.size + 2) return false
-        val n = pc - 2
+        val n = defaultSyntheticRealParamCount(pc)
         val params = m.parameterTypes
         if (params[n] != Int::class.javaPrimitiveType || params[pc - 1].isPrimitive) return false
         val k = realArgs.size
