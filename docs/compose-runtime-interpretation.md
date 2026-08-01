@@ -4,9 +4,12 @@ Status: phases A, B, and B′ proven on desktop. B: the interpreted UI stack com
 through material3 (Column/Row/Box/BasicText, material3 `Text`/`Button`). B′: the two-interpreter threading — a
 source-interpreted `@Composable` body drives an interpreted (project-version) composer via a VM-backed
 `ComposerOps`, end-to-end through both initial composition (emitting a real node) and recomposition (on an
-interpreted state write). Phase D's orchestration core (`VmComposeHost`) is done + verified on desktop; phase C's
-host-side renderer (`VmComposeRenderer`) is scaffolded (compiles). Remaining is device-only: the phase-C
-interpreted render harness + minimal `Owner`, the real-node applier, and wiring both into the on-device preview.
+interpreted state write). **Phase B is also verified on-device (ART):** `VmUiStackArtSpike` interprets the
+project's consistent too-new stack (runtime+ui+foundation `1.12.0-beta01`, 11,397 classes) and composes
+`Column { Box(); Box() }` to a real `LayoutNode` tree (`(((),()))`) in ~790ms — the ceiling is gone on the real
+device. Phase D's orchestration core (`VmComposeHost`) is done + verified on desktop; phase C's host-side renderer
+(`VmComposeRenderer`) is scaffolded (compiles). Remaining is device-only: the phase-C interpreted render harness +
+minimal `Owner`, the real-node applier, and wiring both into the on-device preview.
 
 ## The problem
 
@@ -141,6 +144,14 @@ foundation `BasicText`); and `Button(onClick = {}) { Text("Click") }` composes i
 mapped (Style, Modifier, Alignment/Dp/Color/Arrangement) for even-newer material3. Three boundary-crossing VM
 fixes are already committed; the pervasive value types are the known tail. **This all composes; measure/layout/
 draw is phase C.**
+
+**Proven on device (ART), not just desktop** (`VmUiStackArtSpike`, `ide-android` androidTest): the VM interprets
+the project's CONSISTENT too-new stack — `runtime`+`ui`+`foundation` at `1.12.0-beta01` (staged as real Android
+bytecode in the `vmstack` asset, 11,397 classes) — plus the phase-B fixture (staged in `vmbench`), and composes
+`Column { Box(); Box() }` to the real `LayoutNode` tree `(((),()))` in ~790ms. On device `LayoutNode`
+construction's `android.graphics.Paint` is native (no Skiko bundle needed), and because the composer is the
+project's own interpreted version the material3-flip version ceiling doesn't apply — the whole stack that touches
+the composer is one interpreted world, on the real target.
 
 ### Phase B′ — thread the source interpreter to the interpreted composer
 
