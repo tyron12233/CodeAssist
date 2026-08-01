@@ -155,6 +155,44 @@ val bundleVmSpikeMaterial3Asset = tasks.register<Copy>("bundleVmSpikeMaterial3As
     into(layout.buildDirectory.dir("vm-spike-asset/vmbench"))
 }
 
+// --- Full Compose stack, Android variants (androidTest: interpret foundation/ui, milestone A) ------
+// VmTextFieldArtSpike against material3 1.5.0-alpha24 needs foundation classes newer than the app bundles
+// (androidx.compose.foundation.style.MutableStyleState); the flip must interpret those from the project jars,
+// not bridge to the bundled Compose. Stage the transitive material3 closure as REAL Android bytecode (not
+// jvmstubs — those have no method bodies to interpret), so the VM can interpret foundation/ui/animation.
+val vmStackAar: Configuration by configurations.creating {
+    isCanBeConsumed = false
+    isCanBeResolved = true
+    isTransitive = true
+    attributes {
+        attribute(Usage.USAGE_ATTRIBUTE, objects.named(Usage::class.java, Usage.JAVA_RUNTIME))
+        attribute(Category.CATEGORY_ATTRIBUTE, objects.named(Category::class.java, Category.LIBRARY))
+        attribute(com.android.build.api.attributes.BuildTypeAttr.ATTRIBUTE, objects.named(com.android.build.api.attributes.BuildTypeAttr::class.java, "release"))
+        attribute(org.jetbrains.kotlin.gradle.plugin.KotlinPlatformType.attribute, org.jetbrains.kotlin.gradle.plugin.KotlinPlatformType.androidJvm)
+    }
+}
+dependencies { vmStackAar("androidx.compose.material3:material3-android:1.5.0-alpha24") }
+val bundleVmStackAsset = tasks.register("bundleVmStackAsset") {
+    description = "Stage the transitive Compose stack (Android variants) as androidTest assets so the VM can interpret foundation/ui."
+    val outDir = layout.buildDirectory.dir("vm-spike-asset/vmstack")
+    val artifacts = vmStackAar.incoming.artifacts
+    inputs.files(artifacts.artifactFiles)
+    outputs.dir(outDir)
+    doLast {
+        val dst = outDir.get().asFile
+        dst.mkdirs()
+        dst.listFiles()?.forEach { it.delete() }
+        artifacts.artifacts.forEach { ra ->
+            val f = ra.file
+            val id = ra.id.componentIdentifier.displayName.replace(Regex("[^A-Za-z0-9.-]"), "_")
+            when {
+                f.name.endsWith(".aar") -> copy { from(zipTree(f)) { include("classes.jar") }; into(dst); rename { "$id.jar" } }
+                f.name.endsWith(".jar") -> copy { from(f); into(dst); rename { "$id.jar" } }
+            }
+        }
+    }
+}
+
 // --- Moshi runtime jars (androidTest KSP-on-ART real-processor spike) -----------------------------
 // KspArtSpikeTest.bundledMoshiRunsOnArt runs the REAL bundled Moshi processor on ART via the production
 // KspSourceGenerator path. Moshi's runtime (com.squareup.moshi:moshi + okio) is pure JVM — plain jars, no
@@ -665,7 +703,7 @@ val fetchAndroidBuildTools = tasks.register("fetchAndroidBuildTools") {
 // Run before anything AGP does, so the freshly-fetched lib*.so are on disk when the native-lib merge runs,
 // and the staged kotlin-stdlib.jar asset is present when the asset merge runs.
 tasks.named("preBuild").configure {
-    dependsOn(fetchAndroidBuildTools, bundleKotlinStdlibAsset, bundleKotlincResourcesAsset, bundleComposeRuntimeAsset, bundleComposeFontsAsset, bundleComposeStringAsset, bundleAgentUiComposeStringAsset, bundleComposeDrawablesAsset, bundleR8DexAsset, bundleAppLogRuntimeAsset, bundleVmSpikeComposeRuntimeAsset, bundleVmSpikeMaterial3Asset, bundleMoshiLibsAsset)
+    dependsOn(fetchAndroidBuildTools, bundleKotlinStdlibAsset, bundleKotlincResourcesAsset, bundleComposeRuntimeAsset, bundleComposeFontsAsset, bundleComposeStringAsset, bundleAgentUiComposeStringAsset, bundleComposeDrawablesAsset, bundleR8DexAsset, bundleAppLogRuntimeAsset, bundleVmSpikeComposeRuntimeAsset, bundleVmSpikeMaterial3Asset, bundleVmStackAsset, bundleMoshiLibsAsset)
 }
 
 // Same Android packaging gap as the fonts above, for the i18n string resources. :ide-ui's
