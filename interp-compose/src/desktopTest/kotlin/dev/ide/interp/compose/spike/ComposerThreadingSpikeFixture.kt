@@ -6,6 +6,8 @@ import androidx.compose.runtime.Composition
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.Recomposer
 import androidx.compose.runtime.currentComposer
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.snapshots.Snapshot
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.platform.LocalViewConfiguration
@@ -13,6 +15,7 @@ import androidx.compose.ui.platform.ViewConfiguration
 import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.LayoutDirection
 import kotlinx.coroutines.asCoroutineDispatcher
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
@@ -20,6 +23,8 @@ import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeout
 import java.util.IdentityHashMap
 import java.util.concurrent.Executors
+import java.util.concurrent.atomic.AtomicInteger
+import java.util.function.BiConsumer
 import java.util.function.Consumer
 
 /**
@@ -146,6 +151,53 @@ object ComposerThreadingSpikeFixture {
                     recomposer.cancel()
                     runJob.cancel()
                     result
+                }
+            }
+        } finally {
+            executor.shutdownNow()
+        }
+    }
+
+    /**
+     * B′.2 recomposition proof: drive an INTERPRETED composition through the sanctioned Recomposer frame loop and
+     * check that a write to an INTERPRETED `MutableState` recomposes a SOURCE-interpreted body that read it. The
+     * state is created interpreted here (so a write goes through the interpreted snapshot the interpreted
+     * Recomposer observes), then handed with the composer to the host [driver], which runs the source interpreter
+     * body (reading `state.value` subscribes its scope). After the write + pumped frames the body must run twice
+     * (initial + one recomposition); [runs] is the host-side counter the driver increments, and the loop pumps
+     * until it reaches 2. Mirrors the all-interpreted [ComposerSpikeFixture.recomposesOnStateChange], but the
+     * reading body is source-interpreted and the composer/state are threaded to it.
+     */
+    @JvmStatic
+    fun driveRecomposition(driver: BiConsumer<Any?, Any?>, runs: AtomicInteger): Int {
+        val state = mutableStateOf(0)
+        val executor = Executors.newSingleThreadExecutor { Thread(it, "spike-recompose-src") }
+        val dispatcher = executor.asCoroutineDispatcher()
+        try {
+            return runBlocking {
+                withTimeout(30_000) {
+                    val clock = BroadcastFrameClock()
+                    val recomposer = Recomposer(coroutineContext + dispatcher + clock)
+                    val runJob = launch(dispatcher + clock) { recomposer.runRecomposeAndApplyChanges() }
+                    recomposer.currentState.first { it == Recomposer.State.Idle }
+                    val composition = withContext(dispatcher) {
+                        Composition(UnitApplier(), recomposer).also { c ->
+                            c.setContent { driver.accept(currentComposer, state) }
+                        }
+                    }
+                    withContext(dispatcher) {
+                        state.value = 1
+                        Snapshot.sendApplyNotifications()
+                    }
+                    var frame = 0L
+                    while (runs.get() < 2 && frame < 240) {
+                        clock.sendFrame(frame++)
+                        delay(5)
+                    }
+                    withContext(dispatcher) { composition.dispose() }
+                    recomposer.cancel()
+                    runJob.cancel()
+                    runs.get()
                 }
             }
         } finally {

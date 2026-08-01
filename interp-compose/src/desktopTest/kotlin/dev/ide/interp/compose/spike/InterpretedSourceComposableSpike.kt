@@ -15,6 +15,8 @@ import dev.ide.lang.kotlin.interp.ResolvedCallable
 import dev.ide.lang.kotlin.interp.ResolvedFunction
 import dev.ide.lang.kotlin.interp.SlotId
 import dev.ide.lang.kotlin.interp.SourceSpan
+import java.util.concurrent.atomic.AtomicInteger
+import java.util.function.BiConsumer
 import java.util.function.Consumer
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -136,6 +138,50 @@ class InterpretedSourceComposableSpike {
             assertEquals(
                 "(())", tree,
                 "the source-interpreted Preview emitted a real Box LayoutNode on the interpreted composer",
+            )
+        }
+    }
+
+    @Test fun sourceInterpretedBodyRecomposesOnInterpretedStateChange() {
+        // B′.2: a source-interpreted body reads an INTERPRETED MutableState; a write to it (through the
+        // interpreted snapshot the interpreted Recomposer observes) must recompose the body. This is the
+        // recomposition half of the threading — the read subscribes the scope (via the VM), the write invalidates
+        // it, and the interpreted Recomposer fires the updateScope callback (registered by VmComposerOps) which
+        // re-runs the source body. Two runs (initial + one recomposition) proves the loop.
+        val exec = VmLibraryExecutor(
+            source = ClassBytesSource.fromClasspath(),
+            projectPreferredPrefixes = listOf("androidx.compose.runtime.", "dev.ide.interp.compose.spike."),
+        )
+        exec.use {
+            val dispatcher = ComposeDispatcher(libraryExecutor = exec)
+            val runtime = ComposeRuntime(dispatcher)
+            val interpreter = Interpreter(emptyMap(), dispatcher, runtime, libraryFallback = exec)
+
+            // fun Preview(state) { state.value }  — the bare read subscribes the scope to the state.
+            val stateSlot = SlotId(1)
+            val readValue = RNode.PropertyGet(
+                RNode.Name(Binding.Param(stateSlot, "state"), span),
+                Binding.Property("value", "androidx.compose.runtime.MutableState", backingField = false), span,
+            )
+            val entry = ResolvedFunction(
+                "Preview", listOf(RParam(stateSlot, "state", null)),
+                RNode.Block(listOf(readValue), false, span), emptyList(),
+            )
+
+            val runs = AtomicInteger(0)
+            val driver = BiConsumer<Any?, Any?> { composer, state ->
+                requireNotNull(composer) { "composer handed to host was null" }
+                dispatcher.composer = composer
+                runtime.invokeComposable(entry.name.hashCode(), restartable = false, force = false, args = emptyList()) {
+                    runs.incrementAndGet()
+                    interpreter.call(entry, listOf(state))
+                }
+            }
+            exec.invokeStatic(FIXTURE, "driveRecomposition", listOf(driver, runs), 0)
+
+            assertEquals(
+                2, runs.get(),
+                "the source body ran twice: initial + one recomposition on the interpreted state write",
             )
         }
     }

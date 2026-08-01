@@ -1,8 +1,11 @@
 # Interpreting the Compose runtime (milestone A) — resolving the preview version ceiling
 
-Status: phase A proven and committed; phase B proven on desktop through material3 (Column/Row/Box/BasicText and
-material3 `Text`/`Button` emit real `LayoutNode` trees through the interpreted UI stack); render (phase C) + the
-preview wiring (phase D) remain.
+Status: phases A, B, and B′ proven on desktop. B: the interpreted UI stack composes real `LayoutNode` trees
+through material3 (Column/Row/Box/BasicText, material3 `Text`/`Button`). B′: the two-interpreter threading — a
+source-interpreted `@Composable` body drives an interpreted (project-version) composer via a VM-backed
+`ComposerOps`, end-to-end through both initial composition (emitting a real node) and recomposition (on an
+interpreted state write). Remaining: render → pixels (phase C, `android.graphics` on device) + preview wiring
+(phase D, `VmComposeHost` + version-distance routing).
 
 ## The problem
 
@@ -195,11 +198,22 @@ Both novel risks of the threading are retired at the spike level (`InterpretedCo
   `LayoutNode` — `(())`. This connects phase B (node tree) with phase B′ (threading): a source-interpreted body
   renders a real UI node on the interpreted (project-version) composer, through the VM-backed driver.
 
-So the initial-composition threading (B′.1) is complete end-to-end. The remaining piece is **B′.2 — interpreted
-snapshot/recomposition**: the current recomposition loop rides on real host `MutableState`/snapshot driving the
-real Recomposer, so a fully-interpreted composer needs interpreted `MutableState` and interp-core's state reads
-routed to it. Then phase C (render → pixels, `android.graphics` on device) and phase D (`VmComposeHost` +
-version-distance routing) productize it into the preview.
+- **Recomposition on interpreted state (B′.2)** (`InterpretedSourceComposableSpike.sourceInterpretedBodyRecomposes...`):
+  a source-interpreted body reads an interpreted `MutableState.value`; a write to it recomposes the body exactly
+  once (initial + one recomposition = two runs). The read subscribes the scope (interp-core's `readProperty`
+  routes a `VmObject` receiver to `VmLibraryExecutor.propertyOrNull` → the interpreted `getValue`, which registers
+  with the interpreted snapshot), the interpreted write invalidates it, and the interpreted Recomposer fires the
+  `VmComposerOps`-registered `updateScope` callback to re-run the source body. **No interp-core change was needed:**
+  its state read/write seams already route `VmObject`-owned instances to the executor, and it delegates all
+  snapshot observation to whatever runtime owns the state — so an interpreted state drives the interpreted
+  snapshot automatically. (For the productized preview, `PROJECT_PREFERRED_PREFIXES` must add
+  `androidx.compose.runtime.` so `mutableStateOf`/`remember` themselves produce interpreted state — a phase-D
+  config flip, not a code change.)
+
+So the two-interpreter threading is complete end-to-end for both initial composition and recomposition. The
+remaining phases are the render bridge and productization: **phase C** (the interpreted `LayoutNode` tree
+measures/lays-out/draws to a bitmap — the draw floor is `android.graphics`, so device), and **phase D**
+(`VmComposeHost` packages B′ and the host routes to it by version distance).
 
 This preserves live-edit — the reason for keeping the source interpreter rather than compiling the user code.
 
