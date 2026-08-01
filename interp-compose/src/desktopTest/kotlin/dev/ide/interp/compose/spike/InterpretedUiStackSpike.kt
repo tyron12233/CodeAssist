@@ -62,4 +62,11 @@ class InterpretedUiStackSpike {
         val interpreted = newVmWithMaterial3().invokeStatic(OWNER, "composeMaterialText", "()Ljava/lang/String;", emptyList())
         assertEquals(expected, interpreted, "interpreted material3 Text composes the same LayoutNode tree")
     }
+
+    @Test fun interpretsMaterial3Button() {
+        val expected = UiStackSpikeFixture.composeButton() // run for real
+        val interpreted = newVmWithMaterial3().invokeStatic(OWNER, "composeButton", "()Ljava/lang/String;", emptyList())
+        assertEquals(expected, interpreted, "interpreted material3 Button composes the same LayoutNode tree")
+        assertEquals("(((())))", expected, "sanity: real material3 Button emits the Surface->Row->Text node chain")
+    }
 }

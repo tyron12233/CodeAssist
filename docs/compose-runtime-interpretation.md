@@ -1,7 +1,8 @@
 # Interpreting the Compose runtime (milestone A) — resolving the preview version ceiling
 
-Status: phase A proven and committed; phase B proven on desktop for `foundation` (Column/Row/Box/BasicText emit
-a real `LayoutNode` tree through the interpreted UI stack); widening to material3 + the rest of B–D remains.
+Status: phase A proven and committed; phase B proven on desktop through material3 (Column/Row/Box/BasicText and
+material3 `Text`/`Button` emit real `LayoutNode` trees through the interpreted UI stack); render (phase C) + the
+preview wiring (phase D) remain.
 
 ## The problem
 
@@ -113,13 +114,16 @@ Two boundary conditions surfaced and are handled in the harness:
   content in a `CompositionLocalProvider` supplying minimal values (`Density(1f)`, `LayoutDirection.Ltr`, a
   4-member `ViewConfiguration`, `createFontFamilyResolver()`).
 
-material3 has started: `Column { Text("hello"); Text("world") }` with **material3** `Text` composes interpreted
-(policy widened to `androidx.compose.{material3,material,animation}`), emitting `(((),()))` — material3 `Text`
-resolves `LocalContentColor`/`LocalTextStyle` (defaulted, so no `MaterialTheme` wrapper needed) and delegates to
-foundation `BasicText`. Remaining in phase B: the heavier material3 components (`Button`/`Surface`/`TextField` —
-ripple `Indication`, shape/color/elevation, `SubcomposeLayout`) and the value-type tail the device material3-flip
-spike mapped (Style, Modifier, Alignment/Dp/Color/Arrangement). Three boundary-crossing VM fixes are already
-committed; the pervasive value types are the known tail.
+material3 works, including the flagship. Policy widened to `androidx.compose.{material3,material,animation}`:
+`Column { Text("hello"); Text("world") }` composes interpreted (`(((),()))` — material3 `Text` resolves
+`LocalContentColor`/`LocalTextStyle`, both defaulted so no `MaterialTheme` wrapper is needed, and delegates to
+foundation `BasicText`); and `Button(onClick = {}) { Text("Click") }` composes interpreted to `(((())))` — the
+`Surface`→`Row`→`Text` node chain, exercising the material3 component machinery (theme locals, ripple
+`Indication`, shape/color/modifier chains) all interpreted. Remaining in phase B: `TextField` (a
+`SubcomposeLayout` — the device flip spike's hard case), and the value-type tail the device material3-flip spike
+mapped (Style, Modifier, Alignment/Dp/Color/Arrangement) for even-newer material3. Three boundary-crossing VM
+fixes are already committed; the pervasive value types are the known tail. **This all composes; measure/layout/
+draw is phase C.**
 
 ### Phase C — rendering: interpreted node tree → pixels
 

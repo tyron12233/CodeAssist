@@ -4,6 +4,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.text.BasicText
+import androidx.compose.material3.Button
 import androidx.compose.material3.Text
 import androidx.compose.runtime.AbstractApplier
 import androidx.compose.runtime.BroadcastFrameClock
@@ -181,6 +182,27 @@ object UiStackSpikeFixture {
             Column {
                 Text("hello")
                 Text("world")
+            }
+        }
+    }
+
+    /**
+     * Compose a material3 `Button(onClick = {}) { Text("Click") }` on the interpreted stack and return the
+     * emitted tree. This is the flagship of the version ceiling: `Button` composes a `Surface` (a `Box` LayoutNode
+     * carrying the clickable + ripple `Indication` + shape/color modifiers) wrapping a `Row` (content padding /
+     * arrangement) wrapping the `Text` — so it exercises the material3 component machinery (theme locals, ripple,
+     * modifier chains) all interpreted, emitting the Surface→Row→Text node chain.
+     */
+    @JvmStatic
+    fun composeButton(): String = drive {
+        CompositionLocalProvider(
+            LocalDensity provides Density(1f),
+            LocalLayoutDirection provides LayoutDirection.Ltr,
+            LocalViewConfiguration provides viewConfiguration,
+            LocalFontFamilyResolver provides createFontFamilyResolver(),
+        ) {
+            Button(onClick = {}) {
+                Text("Click")
             }
         }
     }
