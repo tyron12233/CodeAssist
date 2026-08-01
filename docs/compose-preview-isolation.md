@@ -1,9 +1,10 @@
 # Compose preview process isolation
 
-Status: **Phase 0 gate GREEN + Phase 1a proven on ART** (2026-08-02) — the off-screen live-runtime gate is
-de-risked, the `ResolvedTree` wire codec is done, and a real `@Preview` renders off-screen to a bitmap on device.
-The AIDL session wiring (Phase 1b) + Phases 2–4 are the remaining build. Supersedes the in-process Compose
-`@Preview` render path described in `docs/compose-interpreter.md` for the Android launcher only.
+Status: **Phase 1 DONE on ART** (2026-08-02) — a real `@Preview` renders **out-of-process** end-to-end: the IDE
+lowers + serializes it, `:preview` interprets + renders it off-screen against the bundled Compose, and the frame
+comes back as a `Bitmap` (proven rendered in a different pid). Phases 2–4 (streaming frames, input, live-edit +
+watchdog, and rewiring the live UI onto the remote path) are the remaining build. Supersedes the in-process
+Compose `@Preview` render path described in `docs/compose-interpreter.md` for the Android launcher only.
 
 Phase 0 result (`ComposePreviewIsolationSpike`, `ide-android` androidTest, emulator-5554): a `ComposeView` inside a
 `Presentation` on an app-owned `VirtualDisplay` + `ImageReader` (from a Service-style context, minimal RESUMED
@@ -214,10 +215,14 @@ mirroring how `RemoteRealViewRuntime` falls back to `AndroidRealViewRuntime`.
     round-trips the codec **on ART**, then the real `ComposePreviewRenderer` composes it inside the Phase-0
     off-screen surface (`Presentation` on a `VirtualDisplay` + `ImageReader`) — a frame lands with non-uniform
     (drawn) pixels and no render error. The render pipeline `:preview` will host is proven, minus the AIDL plumbing.
-  - **Phase 1b — AIDL wiring (remaining).** `IComposePreviewSession.open` + `onFrame`; `RemoteComposePreviewRunner`
-    (implements `ComposePreviewRunner`) in `ide-android`; a `:preview` session host that decodes the blob, stands up
-    the off-screen runtime (Phase 1a), renders one frame, and returns it over the callback. Prove a static
-    `@Preview` renders identically to today, but out-of-process.
+  - **Phase 1b — AIDL wiring. ✅ DONE (green on ART, 2026-08-02).** `IComposePreviewSession.renderOnce` (a blocking
+    single-frame request/response — bulk over the shared FS, control over Binder — the session/streaming shape
+    arrives in Phase 2); `ComposePreviewSessionService` (`:preview`) decodes the blob, stands up
+    `OffscreenComposeSurface` (the extracted Phase-1a surface), renders one frame, and writes the ARGB pixels back;
+    `ComposePreviewRemoteClient` (IDE process) serializes, calls, maps the pixels to a `Bitmap`, with a
+    `DeathRecipient`. `ComposePreviewRemoteRenderSpike` (emulator-5554): a `Text` preview rendered `myPid → :preview
+    pid` (different process) with drawn (non-uniform) pixels. The out-of-process render pipeline is proven; the live
+    UI still runs the in-process `AndroidComposePreviewHost` (rewired onto the remote path in Phases 2-4).
 - **Phase 2 — continuous frames.** HardwareBuffer transport (+ file fallback), dirty-driven throttle,
   `resize`/night. Animations tick.
 - **Phase 3 — input.** `PreviewSurface` interactive-mode capture + coordinate mapping + `dispatchInput`;
@@ -237,8 +242,16 @@ mirroring how `RemoteRealViewRuntime` falls back to `AndroidRealViewRuntime`.
 
 - Resource handoff: rebuild `ResourceRepository` in `:preview` from res roots vs. relink a `resources.ap_` like
   the XML path (decide in Phase 1).
-- One `:preview` process shared by XML + Compose, or a second `android:process` for Compose sessions? (Shared
-  keeps one warm process; separate isolates a Compose hang from an XML render.)
+- ~~One `:preview` process shared by XML + Compose, or a second `android:process` for Compose sessions?~~
+  **Decided (2026-08-02): shared process, separate services.** Compose renders in the SAME `:preview` OS process
+  as XML (`ComposePreviewSessionService` is `android:process=":preview"`) — one warm process, one android.jar
+  provisioning, one shared dex cache. But it is a SEPARATE `Service` + AIDL interface, because the contracts (XML's
+  one-shot request/response vs Compose's persistent session with streaming/input/live-edit) and render primitives
+  (`AndroidRealViewRuntime` layoutlib-inflate vs `OffscreenComposeSurface` live `ComposeView`) are genuinely
+  different; a union interface would be half-dead to each caller. The one cost — a Compose hang pegs the shared
+  process, collateral-damaging an in-flight XML render — is recoverable (Phase-4 watchdog kills+rebinds; both
+  clients have `DeathRecipient` + in-process fallback), and splitting Compose to its own `android:process` if it
+  ever matters is a one-line manifest change with no code change.
 - Frame pacing / backpressure when the IDE draws slower than `:preview` renders (drop to latest).
 - Whether the "separate process" setting (`BuiltInSettingsPages.SEPARATE_PROCESS`) also gates Compose preview,
   or a dedicated toggle.

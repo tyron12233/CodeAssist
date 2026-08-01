@@ -127,6 +127,15 @@
                 android:process=":preview"
                 android:exported="false" />
 
+        <!-- Compose @Preview renderer, sharing the ":preview" OS process (docs/compose-preview-isolation.md):
+             it interprets + renders the lowered preview off-screen (VirtualDisplay + Presentation) against the
+             bundled Compose, so a runaway recomposition or crash pegs/kills only :preview and the IDE stays
+             responsive (the client links a DeathRecipient and falls back to the in-process host). -->
+        <service
+                android:name=".preview.ComposePreviewSessionService"
+                android:process=":preview"
+                android:exported="false" />
+
         <!-- App-log sink: the debug-only log bridge woven into a built app (a SEPARATE untrusted app) binds to
              this over Binder and pushes its logs to the IDE's Logcat console tab. A LocalSocket can't cross the
              untrusted-app boundary (SELinux denies connectto), so this is exported and resolved by the SINK
