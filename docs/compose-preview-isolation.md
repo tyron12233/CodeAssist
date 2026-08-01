@@ -241,10 +241,15 @@ mirroring how `RemoteRealViewRuntime` falls back to `AndroidRealViewRuntime`.
   `oneway` (a synchronous `update` had stalled the IDE ~1s on the busy render thread — `Binder … took 1032ms`),
   and the frame readback is a BULK RGBA copy transported as raw bytes (`Bitmap.copyPixelsFromBuffer`), replacing
   the per-pixel ARGB loop that held a ~20ms/frame JNI-critical lock. `OffscreenSurfaceThroughputSpike`: an
-  animating 822×1462 surface sustains **54 fps** with **zero** JNI-critical-lock warnings. **Not yet:**
-  HardwareBuffer zero-copy transport (bytes-over-shared-FS for now — the remaining GPU-readback ceiling);
-  content-size measurement (fixed off-screen canvas → whitespace for wrap-content previews); live res-file edits
-  (`:preview` re-parses from disk, so an unsaved res edit isn't seen until save).
+  animating 822×1462 surface sustains **54 fps** with **zero** JNI-critical-lock warnings. **Zero-copy (API 29+):**
+  the GPU `HardwareBuffer` the off-screen surface rendered into is streamed straight over `onFrameBuffer` and
+  wrapped with `Bitmap.wrapHardwareBuffer` in the IDE — no pixel readback, no filesystem, GPU memory shared across
+  the process boundary (the Binder transaction dups the dmabuf fd). Gated by a GPU `ImageReader`
+  (`USAGE_GPU_SAMPLED_IMAGE` + a `CPU_READ_RARELY` peek for the one-time blank check); on API 26-28 or a device
+  with no GPU reader it falls back to the bulk-copy bytes path. `OffscreenSurfaceHardwareSpike` (API 37): a wrapped
+  buffer carries the real content (red centre); streaming/resource/render spikes pass cross-process with the
+  hardware bitmaps. **Not yet:** content-size measurement (fixed off-screen canvas → whitespace for wrap-content
+  previews); live res-file edits (`:preview` re-parses from disk, so an unsaved res edit isn't seen until save).
 - **Phase 3 — input. ✅ DONE (green on ART / API 26, 2026-08-02).** `IComposePreviewSession.dispatchInput` (oneway
   MotionEvent action/x/y/pointer/time). The host captures pointer events on the drawn frame via
   `Modifier.pointerInteropFilter` (in `RemoteComposePreview`, where the frame is drawn — not `PreviewSurface`,

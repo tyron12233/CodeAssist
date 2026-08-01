@@ -68,8 +68,11 @@ class ComposePreviewRemoteRenderSpike {
         frame!!
         assertNotEquals("the frame was NOT rendered in a separate process — isolation failed", myPid, frame.remotePid)
 
-        val px = IntArray(frame.bitmap.width * frame.bitmap.height)
-        frame.bitmap.getPixels(px, 0, frame.bitmap.width, 0, 0, frame.bitmap.width, frame.bitmap.height)
+        // Zero-copy frames arrive as HARDWARE bitmaps (getPixels throws) — copy to software first.
+        val bmp = if (frame.bitmap.config == android.graphics.Bitmap.Config.HARDWARE)
+            frame.bitmap.copy(android.graphics.Bitmap.Config.ARGB_8888, false) else frame.bitmap
+        val px = IntArray(bmp.width * bmp.height)
+        bmp.getPixels(px, 0, bmp.width, 0, 0, bmp.width, bmp.height)
         val drew = px.any { it != px[0] }
         log("REMOTE: non-uniform=$drew (the preview drew content out-of-process)")
         assertTrue("the out-of-process frame is blank (uniform) — the preview didn't draw", drew)

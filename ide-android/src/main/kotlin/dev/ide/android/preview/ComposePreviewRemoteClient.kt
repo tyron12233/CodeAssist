@@ -5,6 +5,9 @@ import android.content.Context
 import android.content.Intent
 import android.content.ServiceConnection
 import android.graphics.Bitmap
+import android.graphics.ColorSpace
+import android.hardware.HardwareBuffer
+import android.os.Build
 import android.os.IBinder
 import android.os.Process
 import dev.ide.core.LoweredComposePreview
@@ -111,6 +114,16 @@ class ComposePreviewRemoteClient(context: Context) {
                 val bmp = runCatching { readFrame(File(frameFile!!), widthPx, heightPx) }.getOrNull() ?: return
                 runCatching { File(frameFile!!).delete() }
                 sink.onFrame(bmp, s)
+            }
+            override fun onFrameBuffer(buffer: HardwareBuffer?, widthPx: Int, heightPx: Int, s: Long) {
+                if (buffer == null) return
+                // Wrap the shared GPU buffer directly — no pixel copy. Our HardwareBuffer handle can be closed once
+                // the (hardware) bitmap holds its reference. Only reached on API 29+ (:preview gates the fast path).
+                val bmp = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                    runCatching { Bitmap.wrapHardwareBuffer(buffer, ColorSpace.get(ColorSpace.Named.SRGB)) }.getOrNull()
+                } else null
+                runCatching { buffer.close() }
+                if (bmp != null) sink.onFrame(bmp, s)
             }
             override fun onError(message: String?) { sink.onError(message ?: "unknown error") }
         }

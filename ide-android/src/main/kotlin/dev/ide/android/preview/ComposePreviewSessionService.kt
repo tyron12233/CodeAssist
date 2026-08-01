@@ -3,6 +3,7 @@ package dev.ide.android.preview
 import android.app.Service
 import android.content.Intent
 import android.content.res.Configuration
+import android.hardware.HardwareBuffer
 import android.os.IBinder
 import android.os.Process
 import androidx.compose.runtime.Composable
@@ -160,7 +161,12 @@ class ComposePreviewSessionService : Service() {
             val forceNight = night
             // Rebuild the project resource resolver per surface (night is baked in); mirrors the in-process host.
             val resources = buildResources(resDirs, namespace, density, forceNight)
-            surface.onFrame = { frame -> pushFrame(frame) }
+            // Zero-copy when the platform supports it (API 29+): stream the GPU HardwareBuffer; else the raw bytes.
+            if (surface.hardwareAccelerated) {
+                surface.onHardwareFrame = { hb, w, h -> pushHardwareFrame(hb, w, h) }
+            } else {
+                surface.onFrame = { frame -> pushFrame(frame) }
+            }
             surface.start {
                 val program by programState
                 val p = program
@@ -215,6 +221,14 @@ class ComposePreviewSessionService : Service() {
                 f.outputStream().use { it.write(frame.bytes) }
                 cb.onFrame(f.path, frame.width, frame.height, s)
             }.onFailure { log.warn("compose session $id frame push failed", it) }
+        }
+
+        /** Zero-copy: hand the GPU HardwareBuffer straight to the IDE over the oneway callback (which dups the
+         *  dmabuf fd during the transaction), so no pixels are read back or written to disk. */
+        private fun pushHardwareFrame(hb: HardwareBuffer, w: Int, h: Int) {
+            val s = seq.incrementAndGet()
+            runCatching { cb.onFrameBuffer(hb, w, h, s) }
+                .onFailure { log.warn("compose session $id hardware frame push failed", it) }
         }
 
         private fun reportError(t: Throwable) {

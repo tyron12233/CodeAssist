@@ -98,7 +98,11 @@ class ComposePreviewStreamingSpike {
         }
     }
 
-    private fun pixels(b: Bitmap): IntArray = IntArray(b.width * b.height).also { b.getPixels(it, 0, b.width, 0, 0, b.width, b.height) }
+    // Zero-copy frames arrive as HARDWARE bitmaps (getPixels throws on those) — copy to software first.
+    private fun pixels(b: Bitmap): IntArray {
+        val sw = if (b.config == Bitmap.Config.HARDWARE) b.copy(Bitmap.Config.ARGB_8888, false) else b
+        return IntArray(sw.width * sw.height).also { sw.getPixels(it, 0, sw.width, 0, 0, sw.width, sw.height) }
+    }
 
     private fun waitUntil(what: String, deadlineMs: Long = 8_000, cond: () -> Boolean) {
         val end = SystemClock.uptimeMillis() + deadlineMs

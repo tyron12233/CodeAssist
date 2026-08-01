@@ -3,9 +3,11 @@ package dev.ide.android.preview
 import android.app.Presentation
 import android.content.Context
 import android.graphics.PixelFormat
+import android.hardware.HardwareBuffer
 import android.hardware.display.DisplayManager
 import android.media.Image
 import android.media.ImageReader
+import android.os.Build
 import android.os.Handler
 import android.os.HandlerThread
 import android.os.Looper
@@ -70,14 +72,41 @@ class OffscreenComposeSurface(
         }
     }
 
-    /** Invoked (on the frame thread) for every frame the composition draws. Set before [start]. */
+    /** Invoked (on the frame thread) with the CPU bytes for every frame — the API 26-28 fallback path. Set before
+     *  [start]. Ignored when [onHardwareFrame] is set. */
     @Volatile var onFrame: ((Frame) -> Unit)? = null
+
+    /** Invoked (on the frame thread) with the frame's shared [HardwareBuffer] — the zero-copy path (only when
+     *  [hardwareAccelerated]). The buffer is valid only for the duration of the call (closed right after), so a
+     *  consumer must wrap/dup it synchronously (a oneway Binder send dups the fd before returning). Set before
+     *  [start]; takes precedence over [onFrame]. */
+    @Volatile var onHardwareFrame: ((HardwareBuffer, Int, Int) -> Unit)? = null
 
     private val frameThread = HandlerThread("ca-preview-frames").apply { start() }
     private val frameHandler = Handler(frameThread.looper)
     private val mainHandler = Handler(Looper.getMainLooper())
-    private val imageReader = ImageReader.newInstance(width, height, PixelFormat.RGBA_8888, 3)
+
+    // GPU-backed ImageReader when the platform supports zero-copy (API 29+ for the usage overload +
+    // Bitmap.wrapHardwareBuffer); else a plain CPU reader. USAGE_CPU_READ_RARELY keeps the plane sampleable for the
+    // pre-content blank check. Creation can fail on quirky GPUs/emulators — fall back to the CPU reader.
+    private var hwMode = false
+    private val imageReader: ImageReader = run {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            runCatching {
+                ImageReader.newInstance(
+                    width, height, PixelFormat.RGBA_8888, 3,
+                    HardwareBuffer.USAGE_GPU_SAMPLED_IMAGE or HardwareBuffer.USAGE_CPU_READ_RARELY,
+                )
+            }.getOrNull()?.let { hwMode = true; return@run it }
+        }
+        ImageReader.newInstance(width, height, PixelFormat.RGBA_8888, 3)
+    }
+
+    /** Whether the surface can deliver zero-copy [HardwareBuffer] frames (API 29+ and the GPU reader was created). */
+    val hardwareAccelerated: Boolean get() = hwMode
+
     private val latestBytes = AtomicReference<ByteArray?>(null)
+    @Volatile private var contentSeen = false
     private val frames = AtomicInteger(0)
     private val owner = OffscreenOwner()
     private val virtualDisplay = context.getSystemService(DisplayManager::class.java).createVirtualDisplay(
@@ -93,15 +122,28 @@ class OffscreenComposeSurface(
             // acquireLatestImage drops any queued older frames, so a slow consumer coalesces to the newest frame
             // instead of falling behind — the preview shows "live", not a lagging backlog.
             reader.acquireLatestImage()?.use { img ->
-                // Drop pre-content frames cheaply: a freshly-shown Presentation delivers its window buffer BEFORE
-                // the composition draws — a fully-transparent frame (every pixel 0), which would be the "black
-                // flash" on open. A drawn Compose UI always has some opaque pixel, so SAMPLING a grid (not scanning
-                // all ~1.2M pixels) reliably tells content from the blank window.
-                if (!hasContent(img)) return@use
-                val frame = Frame(readFrameBytes(img), img.width, img.height)
-                latestBytes.set(frame.bytes)
-                frames.incrementAndGet()
-                runCatching { onFrame?.invoke(frame) }
+                // Drop pre-content frames: a freshly-shown Presentation delivers its window buffer BEFORE the
+                // composition draws — a fully-transparent frame (the "black flash" on open). Once content has been
+                // seen, stop sampling (latch) so the zero-copy path never touches the pixels again.
+                if (!contentSeen) {
+                    if (!hasContent(img)) return@use
+                    contentSeen = true
+                }
+                val hwCb = onHardwareFrame
+                if (hwMode && hwCb != null && Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+                    val hb = img.hardwareBuffer ?: return@use
+                    frames.incrementAndGet()
+                    try {
+                        hwCb(hb, img.width, img.height)
+                    } finally {
+                        hb.close()
+                    }
+                } else {
+                    val frame = Frame(readFrameBytes(img), img.width, img.height)
+                    latestBytes.set(frame.bytes)
+                    frames.incrementAndGet()
+                    runCatching { onFrame?.invoke(frame) }
+                }
             }
         }, frameHandler)
     }
@@ -168,6 +210,7 @@ class OffscreenComposeSurface(
 
     override fun close() {
         onFrame = null
+        onHardwareFrame = null
         runOnMain { runCatching { presentation?.dismiss() } }
         virtualDisplay.release()
         imageReader.close()

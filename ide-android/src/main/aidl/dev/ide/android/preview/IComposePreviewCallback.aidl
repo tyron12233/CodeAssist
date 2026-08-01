@@ -4,10 +4,18 @@
 // shared FS, control over Binder; the IDE reads + deletes it and draws the latest seq.
 package dev.ide.android.preview;
 
+import android.hardware.HardwareBuffer;
+
 oneway interface IComposePreviewCallback {
-    // A new frame is ready at [frameFile] (raw ARGB_8888, [widthPx] x [heightPx]); [seq] is monotonic so the IDE
-    // can drop stale frames if it draws slower than :preview renders.
+    // A new frame is ready at [frameFile] (raw RGBA_8888, [widthPx] x [heightPx]); [seq] is monotonic so the IDE
+    // can drop stale frames if it draws slower than :preview renders. The API 26-28 fallback path (no zero-copy).
     void onFrame(String frameFile, int widthPx, int heightPx, long seq);
+
+    // ZERO-COPY fast path (API 29+): the frame IS the shared [buffer] (a HardwareBuffer, the GPU memory the
+    // off-screen surface rendered into). The IDE wraps it with Bitmap.wrapHardwareBuffer and draws it directly —
+    // no pixel copy, no filesystem, GPU memory shared across the process boundary. The Binder transaction dups the
+    // dmabuf fd, so the IDE gets its own reference; :preview closes its handle right after this call.
+    void onFrameBuffer(in HardwareBuffer buffer, int widthPx, int heightPx, long seq);
 
     // A fatal render error for the session (the IDE surfaces an error view / falls back in-process).
     void onError(String message);

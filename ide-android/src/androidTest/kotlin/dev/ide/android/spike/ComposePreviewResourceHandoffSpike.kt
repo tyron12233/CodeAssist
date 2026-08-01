@@ -95,5 +95,9 @@ class ComposePreviewResourceHandoffSpike {
         assertNull("the no-resources render unexpectedly produced a frame (R.string.greeting should be unresolvable without the handoff)", without)
     }
 
-    private fun pixels(b: Bitmap) = IntArray(b.width * b.height).also { b.getPixels(it, 0, b.width, 0, 0, b.width, b.height) }
+    // Zero-copy frames arrive as HARDWARE bitmaps (getPixels throws on those) — copy to software first.
+    private fun pixels(b: Bitmap): IntArray {
+        val sw = if (b.config == Bitmap.Config.HARDWARE) b.copy(Bitmap.Config.ARGB_8888, false) else b
+        return IntArray(sw.width * sw.height).also { sw.getPixels(it, 0, sw.width, 0, 0, sw.width, sw.height) }
+    }
 }
