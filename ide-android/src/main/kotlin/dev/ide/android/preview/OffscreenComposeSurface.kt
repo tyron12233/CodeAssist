@@ -73,10 +73,18 @@ class OffscreenComposeSurface(
     init {
         imageReader.setOnImageAvailableListener({ reader ->
             reader.acquireLatestImage()?.use { img ->
-                val frame = Frame(readPixels(img), img.width, img.height)
-                latestPixels.set(frame.pixels)
-                frames.incrementAndGet()
-                runCatching { onFrame?.invoke(frame) }
+                val pixels = readPixels(img)
+                // Drop the pre-content frames: a freshly-shown Presentation delivers its window buffer BEFORE the
+                // composition has drawn — a fully-transparent frame (every pixel 0). Streaming that as the first
+                // frame is the "black flash" on open. A drawn Compose UI always has some opaque pixel (a
+                // background, text, a widget), so "any pixel != 0" reliably distinguishes content from the blank
+                // window; the scan short-circuits on the first content pixel.
+                if (pixels.any { it != 0 }) {
+                    val frame = Frame(pixels, img.width, img.height)
+                    latestPixels.set(pixels)
+                    frames.incrementAndGet()
+                    runCatching { onFrame?.invoke(frame) }
+                }
             }
         }, frameHandler)
     }
