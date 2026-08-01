@@ -4,10 +4,12 @@ Status: phases A, B, and B′ proven on desktop. B: the interpreted UI stack com
 through material3 (Column/Row/Box/BasicText, material3 `Text`/`Button`). B′: the two-interpreter threading — a
 source-interpreted `@Composable` body drives an interpreted (project-version) composer via a VM-backed
 `ComposerOps`, end-to-end through both initial composition (emitting a real node) and recomposition (on an
-interpreted state write). **Phase B is also verified on-device (ART):** `VmUiStackArtSpike` interprets the
-project's consistent too-new stack (runtime+ui+foundation `1.12.0-beta01`, 11,397 classes) and composes
-`Column { Box(); Box() }` to a real `LayoutNode` tree (`(((),()))`) in ~790ms — the ceiling is gone on the real
-device. Phase D's orchestration core (`VmComposeHost`) is done + verified on desktop; phase C's host-side renderer
+interpreted state write). **Phases B and B′ are also verified on-device (ART):** `VmUiStackArtSpike` interprets
+the project's consistent too-new stack (runtime+ui+foundation `1.12.0-beta01`, 11,397 classes) and composes
+`Column { Box(); Box() }` to a real `LayoutNode` tree (`(((),()))`) in ~790ms; `VmSourceComposableArtSpike` runs
+the full two-interpreter threading — a source-interpreted `Preview() { ProbeBox() }` driving the interpreted
+composer via `VmComposeHost.previewDriver` + `VmComposerOps`, emitting a real `Box` node (`(())`) in ~1.5s. The
+ceiling is gone on the real device, end-to-end. Phase D's orchestration core (`VmComposeHost`) is done + verified on desktop; phase C's host-side renderer
 (`VmComposeRenderer`) is scaffolded (compiles). Remaining is device-only: the phase-C interpreted render harness +
 minimal `Owner`, the real-node applier, and wiring both into the on-device preview.
 
@@ -221,6 +223,12 @@ Both novel risks of the threading are retired at the spike level (`InterpretedCo
   snapshot automatically. (For the productized preview, `PROJECT_PREFERRED_PREFIXES` must add
   `androidx.compose.runtime.` so `mutableStateOf`/`remember` themselves produce interpreted state — a phase-D
   config flip, not a code change.)
+
+**Verified on device (ART)** (`VmSourceComposableArtSpike`, `ide-android` androidTest): the whole threading runs
+on the real target. interp-core tree-walks a source `Preview() { ProbeBox() }`; `VmComposeHost.previewDriver`
+threads the interpreted composer (from the project's own too-new runtime, interpreted from `vmstack`) and drives
+it through `VmComposerOps`; `ProbeBox`'s `Box` emits a real `LayoutNode` (`(())`) in ~1.5s. Two interpreters,
+one interpreted composer, on ART — no host reflection on the composer.
 
 So the two-interpreter threading is complete end-to-end for both initial composition and recomposition. The
 remaining phases are the render bridge and productization: **phase C** (the interpreted `LayoutNode` tree
