@@ -195,6 +195,12 @@ class KotlinSourceAnalyzer(ctx: CompilationContext) : SourceAnalyzer, Disposable
      *  uses it to tell a still-warming classpath from a genuinely unsupported construct. */
     fun classpathReady(): Boolean = runCatching { service.classpathReady() }.getOrDefault(true)
 
+    /** Whether the classpath index is still BUILDING. The Compose preview gates on this rather than
+     *  [classpathReady] so a finished-but-partial index (a skipped/undecoded jar never flips `ready`) doesn't
+     *  wedge it at "Preparing" forever — resolution still answers from the open segments. See
+     *  [dev.ide.lang.kotlin.symbols.KotlinSymbolService.classpathIndexBuilding]. */
+    fun classpathIndexBuilding(): Boolean = runCatching { service.classpathIndexBuilding() }.getOrDefault(false)
+
     /** Whether the Compose runtime is actually on this module's classpath: a top-level `mutableStateOf` from
      *  `androidx.compose.runtime` resolves. Lets the preview distinguish "the `androidx.compose.*` AARs are
      *  still attaching" (the Learn scratch's one-time first-run download; show Preparing and retry) from a

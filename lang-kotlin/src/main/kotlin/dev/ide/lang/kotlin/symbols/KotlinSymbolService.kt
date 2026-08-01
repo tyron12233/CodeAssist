@@ -269,6 +269,15 @@ class KotlinSymbolService(
      */
     fun classpathReady(): Boolean = index?.status?.ready ?: true
 
+    /**
+     * Whether the classpath index is STILL BUILDING (vs. done — whether it finished complete or partial). A
+     * finished-but-partial index (a jar was skipped or a segment isn't built) never flips [classpathReady] to
+     * true, but resolution still answers progressively from the open segments, so a consumer that only needs
+     * "the build is no longer running" (the Compose preview, which must stop waiting once indexing settles rather
+     * than wedge forever on a partial index) gates on this instead. No index wired ⇒ nothing is building.
+     */
+    fun classpathIndexBuilding(): Boolean = index?.status?.building == true
+
     /** Whether [fqn] is a compiled class on this module's CLASSPATH (library/SDK type). The gate for offering a
      *  decompiled "go to declaration/type" when no project source declares it. Cheap: one classpath lookup. */
     fun isClasspathType(fqn: String): Boolean = reader.classBytes(fqn) != null

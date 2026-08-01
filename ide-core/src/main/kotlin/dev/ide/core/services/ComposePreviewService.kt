@@ -81,11 +81,12 @@ internal class ComposePreviewService(private val ctx: EngineContext) {
         if (analyzer.hasSyntaxErrors(vf)) return PreviewRunResult(
             false, "the file has syntax errors — fix them to preview"
         )
-        // Dumb mode: until the classpath callable index is ready, lowering can't tell a genuinely-unresolved
-        // call from a not-yet-indexed one, so every stdlib/library call lowers to `candidates=0`. Report
-        // "preparing" (the editor's diagnostics/completion honor the same gate) instead of a wall of false
-        // "unresolved call" errors that wrongly blame the user's code.
-        if (!analyzer.classpathReady()) return PreviewRunResult(false, INDEXING_MESSAGE)
+        // Dumb mode: while the classpath callable index is still BUILDING, lowering can't tell a genuinely-
+        // unresolved call from a not-yet-indexed one, so every stdlib/library call lowers to `candidates=0`.
+        // Report "preparing" instead of a wall of false "unresolved call" errors. Gate on "still building", NOT
+        // classpathReady() — a finished-but-partial index (a skipped/undecoded jar) never flips `ready`, and
+        // waiting for it wedges the preview at "Preparing" forever; resolution still answers from the open segments.
+        if (analyzer.classpathIndexBuilding()) return PreviewRunResult(false, INDEXING_MESSAGE)
         val model = previewModelFor(module, vf, analyzer)
         val program = model?.program ?: emptyMap()
         val entry = previewEntry(program, functionName, 0)
@@ -125,7 +126,10 @@ internal class ComposePreviewService(private val ctx: EngineContext) {
         val module = ctx.moduleForEditableFile(file) ?: return true
         val analyzer = ctx.analyzerFor(module, KotlinLanguageBackend.LANGUAGE_ID) as? KotlinSourceAnalyzer
             ?: return true
-        if (!analyzer.classpathReady()) return false
+        // Ready once the index is no longer BUILDING — not classpathReady(). A finished-but-partial index (a
+        // skipped/undecoded jar) never flips `ready`, so gating on it leaves the preview stuck at "Preparing
+        // libraries" forever after indexing finishes; the host polls this, so "still building" is the right wait.
+        if (analyzer.classpathIndexBuilding()) return false
         val isScratch = ctx.store.rootPath.toString().replace('\\', '/').contains("/.scratch/")
         return !isScratch || analyzer.composeRuntimeAttached()
     }
@@ -141,8 +145,9 @@ internal class ComposePreviewService(private val ctx: EngineContext) {
         val vf = ctx.store.vfs.fileFor(file)
         ctx.refreshParse(analyzer, file, text)
         if (analyzer.hasSyntaxErrors(vf)) return listOf("the file has syntax errors — fix them to preview")
-        // Dumb mode (see [runComposePreview]): don't report the not-yet-indexed calls as unresolved.
-        if (!analyzer.classpathReady()) return listOf(INDEXING_MESSAGE)
+        // Dumb mode (see [runComposePreview]): while the index is still BUILDING, don't report not-yet-indexed
+        // calls as unresolved. A finished-but-partial index proceeds (else diagnostics stay "preparing" forever).
+        if (analyzer.classpathIndexBuilding()) return listOf(INDEXING_MESSAGE)
         val model = previewModelFor(module, vf, analyzer)
         val program = model?.program ?: emptyMap()
         val entry = previewEntry(program, functionName, arity)
@@ -180,10 +185,11 @@ internal class ComposePreviewService(private val ctx: EngineContext) {
         // A file with syntax errors mis-shapes declarations when parsed error-tolerantly — interpreting it builds
         // a garbage program that crashes the real Compose runtime in a phase nothing can catch. Don't render it.
         if (analyzer.hasSyntaxErrors(vf)) return null
-        // Dumb mode (see [runComposePreview]): a not-yet-ready callable index lowers valid calls to `candidates=0`,
-        // so the entry/reachable classes look incomplete. Don't render a half-resolved tree; the host polls
-        // [composePreviewReady] and re-lowers once indexing finishes.
-        if (!analyzer.classpathReady()) return null
+        // Dumb mode (see [runComposePreview]): a STILL-BUILDING callable index lowers valid calls to `candidates=0`,
+        // so the entry/reachable classes look incomplete. Don't render a half-resolved tree while it builds; the
+        // host polls [composePreviewReady] and re-lowers once indexing finishes. A finished-but-partial index
+        // (never flips `ready`) proceeds — resolution answers from the open segments, so it must not block here.
+        if (analyzer.classpathIndexBuilding()) return null
         val model = previewModelFor(module, vf, analyzer) ?: return null
         val program = model.program
         val entry = previewEntry(program, functionName, arity)?.takeIf { it.isComplete } ?: return null
