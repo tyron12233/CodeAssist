@@ -36,6 +36,13 @@ class InterpretedComposerSpike {
         assertEquals(expected, interpreted, "interpreted composer keeps distinct slots across sequential + keyed groups")
     }
 
+    @Test fun interpretsNestedComposableCalls() {
+        val expected = ComposerSpikeFixture.nestedComposables() // run for real
+        assertEquals("out;in:a;in:b;", expected, "sanity: real composer threads the nested composables in order")
+        val interpreted = newVm().invokeStatic(OWNER, "nestedComposables", "()Ljava/lang/String;", emptyList())
+        assertEquals(expected, interpreted, "interpreted composer threads composable-to-composable restart groups")
+    }
+
     @Test fun interpretsRecompositionOnStateChange() {
         val expected = ComposerSpikeFixture.recomposesOnStateChange() // run for real
         assertEquals(2, expected, "sanity: real composer recomposes the state-reading scope once (2 body runs)")

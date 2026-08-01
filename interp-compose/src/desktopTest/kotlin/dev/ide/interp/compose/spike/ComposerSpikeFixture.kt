@@ -2,6 +2,7 @@ package dev.ide.interp.compose.spike
 
 import androidx.compose.runtime.AbstractApplier
 import androidx.compose.runtime.BroadcastFrameClock
+import androidx.compose.runtime.Composable
 import androidx.compose.runtime.Composition
 import androidx.compose.runtime.Recomposer
 import androidx.compose.runtime.getValue
@@ -75,6 +76,39 @@ object ComposerSpikeFixture {
             }
             out.append('|').append(remember { "end" })
         }
+        composition.dispose()
+        return out.toString()
+    }
+
+    /** A leaf `@Composable` (its own restart group) that records one remembered value tagged by [label]. */
+    @Composable
+    private fun Inner(label: String, out: StringBuilder) {
+        out.append(remember { "in:$label;" })
+    }
+
+    /** A `@Composable` that remembers a value then calls two nested composables — the compiler emits a restart
+     *  group + `$changed`/skipping around each call, so this exercises composable-to-composable threading. */
+    @Composable
+    private fun Outer(out: StringBuilder) {
+        out.append(remember { "out;" })
+        Inner("a", out)
+        Inner("b", out)
+    }
+
+    /**
+     * Compose a nest of `@Composable`s (Outer calling two Inner leaves), each a compiler-generated restart group
+     * with its own `remember`, and return the values in composition order ("out;in:a;in:b;"). This is the backbone
+     * of real UI — composables calling composables — so it exercises the interpreted composer's restart-group +
+     * `$changed`/skipping prologue/epilogue between interpreted composables, the machinery that version-skewed
+     * against the bridged composer. Correct order + no repeats proves nested composition threads through the
+     * interpreted composer.
+     */
+    @JvmStatic
+    fun nestedComposables(): String {
+        val recomposer = Recomposer(EmptyCoroutineContext)
+        val composition = Composition(UnitApplier(), recomposer)
+        val out = StringBuilder()
+        composition.setContent { Outer(out) }
         composition.dispose()
         return out.toString()
     }
