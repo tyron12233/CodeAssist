@@ -40,6 +40,12 @@ interface IComposePreviewSession {
     // MotionEvent and dispatches it into the Presentation decor view, so clicks/scroll/drag reach real nodes.
     oneway void dispatchInput(int sessionId, int action, float x, float y, int pointerId, long eventTimeMs);
 
+    // Forward a key event: [action] a KeyEvent action (ACTION_DOWN/UP), [keyCode] a KeyEvent.KEYCODE_*,
+    // [metaState] the shift/ctrl/alt modifiers. :preview rebuilds a KeyEvent and dispatches it into the decor
+    // view, so hardware-keyboard keys, focus/nav keys (Tab/arrows/Enter), and onKeyEvent handlers fire. Soft-
+    // keyboard TEXT entry (commitText) is a separate IME bridge, not this. oneway.
+    oneway void dispatchKey(int sessionId, int action, int keyCode, int metaState, long eventTimeMs);
+
     // Tear down the session (dismiss the Presentation, release the display + VM executor). oneway.
     oneway void close(int sessionId);
 }

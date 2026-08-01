@@ -197,6 +197,13 @@ class ComposePreviewRemoteClient(context: Context) {
             runCatching { daemon.dispatchInput(id, action, x, y, pointerId, eventTimeMs) }
         }
 
+        /** Forward a key event ([action] a KeyEvent action; [keyCode] a KeyEvent.KEYCODE_*; [metaState] modifiers)
+         *  into the remote composition. oneway. Hardware-keyboard / nav keys only — soft-keyboard text is the IME
+         *  bridge. */
+        fun dispatchKey(action: Int, keyCode: Int, metaState: Int, eventTimeMs: Long) {
+            runCatching { daemon.dispatchKey(id, action, keyCode, metaState, eventTimeMs) }
+        }
+
         fun close() {
             runCatching { daemon.close(id) }
             runCatching { frameDir.deleteRecursively() }

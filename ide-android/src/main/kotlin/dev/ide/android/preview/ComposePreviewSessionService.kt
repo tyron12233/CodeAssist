@@ -93,6 +93,10 @@ class ComposePreviewSessionService : Service() {
             sessions[sessionId]?.dispatchTouch(action, x, y, pointerId)
         }
 
+        override fun dispatchKey(sessionId: Int, action: Int, keyCode: Int, metaState: Int, eventTimeMs: Long) {
+            sessions[sessionId]?.dispatchKey(action, keyCode, metaState)
+        }
+
         override fun close(sessionId: Int) {
             sessions.remove(sessionId)?.let { runCatching { it.close() } }
         }
@@ -197,6 +201,10 @@ class ComposePreviewSessionService : Service() {
 
         fun dispatchTouch(action: Int, x: Float, y: Float, pointerId: Int) {
             surface.dispatchTouch(action, x, y, pointerId)
+        }
+
+        fun dispatchKey(action: Int, keyCode: Int, metaState: Int) {
+            surface.dispatchKey(action, keyCode, metaState)
         }
 
         fun resize(newWidth: Int, newHeight: Int, newDensity: Float, newNight: Boolean) {

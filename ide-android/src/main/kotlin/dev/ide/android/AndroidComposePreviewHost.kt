@@ -3,7 +3,10 @@ package dev.ide.android
 import android.graphics.Bitmap
 import android.os.Handler
 import android.os.Looper
+import android.view.KeyEvent as AndroidKeyEvent
+import android.view.MotionEvent as AndroidMotionEvent
 import androidx.compose.foundation.Image
+import androidx.compose.foundation.focusable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -20,6 +23,7 @@ import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
@@ -28,7 +32,10 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.input.pointer.pointerInteropFilter
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.layout.onSizeChanged
@@ -440,14 +447,17 @@ private fun RemoteComposePreview(
 ) {
     val main = remember { Handler(Looper.getMainLooper()) }
     var frame by remember(client, widthPx, heightPx, night) { mutableStateOf<Bitmap?>(null) }
-    var session by remember(client, widthPx, heightPx, night) { mutableStateOf<ComposePreviewRemoteClient.Session?>(null) }
+    // Hold the Session in a plain box, NOT a mutableStateOf<Session> — a Compose-tracked field of our own type
+    // makes the compiler emit a `Session.$stable` read, which crashes (NoSuchFieldError) if that class wasn't
+    // instrumented. An Int epoch (bumped when the session opens/closes) drives the effects instead.
+    val sessionBox = remember(client, widthPx, heightPx, night) { arrayOfNulls<ComposePreviewRemoteClient.Session>(1) }
+    var sessionEpoch by remember(client, widthPx, heightPx, night) { mutableIntStateOf(0) }
     val fallback by rememberUpdatedState(onUnavailable)
     val openLowered by rememberUpdatedState(lowered)
 
     // Open the session off the main thread (the :preview bind can block) and stream frames in; re-open only on a
     // surface change (size / night / classpath), NOT on a program edit — that goes through update().
     DisposableEffect(client, widthPx, heightPx, density, night, jars.joinToString("\n"), resRoots.joinToString("\n"), namespace) {
-        var opened: ComposePreviewRemoteClient.Session? = null
         var disposed = false
         val sink = object : ComposePreviewRemoteClient.FrameSink {
             override fun onFrame(bitmap: Bitmap, seq: Long) { main.post { frame = bitmap } }
@@ -455,18 +465,21 @@ private fun RemoteComposePreview(
         }
         Thread {
             val s = client.openSession(openLowered, widthPx, heightPx, density, night, sink, jars, resRoots, namespace)
-            main.post { if (disposed) s?.close() else { opened = s; session = s; if (s == null) fallback() } }
+            main.post {
+                if (disposed) { s?.close() }
+                else { sessionBox[0] = s; sessionEpoch++; if (s == null) fallback() }
+            }
         }.apply { isDaemon = true; name = "compose-preview-open"; start() }
-        onDispose { disposed = true; opened?.close(); opened = null }
+        onDispose { disposed = true; sessionBox[0]?.close(); sessionBox[0] = null }
     }
     // Live edit: push the re-lowered program to the running session (off main — update makes a Binder call).
-    LaunchedEffect(session, lowered) {
-        val s = session ?: return@LaunchedEffect
+    LaunchedEffect(sessionEpoch, lowered) {
+        val s = sessionBox[0] ?: return@LaunchedEffect
         withContext(Dispatchers.IO) { s.update(lowered) }
     }
     // First-frame watchdog: no frame within the deadline → fall back in-process.
-    LaunchedEffect(session) {
-        if (session != null) { delay(REMOTE_FIRST_FRAME_TIMEOUT_MS); if (frame == null) fallback() }
+    LaunchedEffect(sessionEpoch) {
+        if (sessionBox[0] != null) { delay(REMOTE_FIRST_FRAME_TIMEOUT_MS); if (frame == null) fallback() }
     }
 
     val bmp = frame
@@ -477,6 +490,7 @@ private fun RemoteComposePreview(
             // canvas' pixels (canvasPx = displayPx * bitmapWidth / displayedWidth). Single-pointer (tap/scroll/
             // drag); multi-touch is a follow-up.
             var displayWidth by remember { mutableStateOf(0) }
+            val focusRequester = remember { FocusRequester() }
             Image(
                 bitmap = bmp.asImageBitmap(),
                 contentDescription = null,
@@ -484,9 +498,24 @@ private fun RemoteComposePreview(
                 modifier = Modifier
                     .fillMaxWidth()
                     .onSizeChanged { displayWidth = it.width }
+                    .focusRequester(focusRequester)
+                    .focusable()
+                    // Forward key events (hardware keyboard, nav/shortcut keys, onKeyEvent handlers) to the focused
+                    // preview. Don't swallow BACK, so the user can still navigate out. Soft-keyboard TEXT entry
+                    // (commitText) is a separate IME bridge — see docs.
+                    .onPreviewKeyEvent { ev ->
+                        val s = sessionBox[0]
+                        val ke = ev.nativeKeyEvent
+                        if (s != null && ke.keyCode != AndroidKeyEvent.KEYCODE_BACK) {
+                            s.dispatchKey(ke.action, ke.keyCode, ke.metaState, ke.eventTime)
+                            true
+                        } else false
+                    }
                     .pointerInteropFilter { ev ->
-                        val s = session
+                        val s = sessionBox[0]
                         if (s != null && displayWidth > 0) {
+                            // Tap focuses the preview so keyboard/nav keys route to it (tap elsewhere to leave).
+                            if (ev.actionMasked == AndroidMotionEvent.ACTION_DOWN) runCatching { focusRequester.requestFocus() }
                             val scale = bmp.width.toFloat() / displayWidth
                             s.dispatchInput(ev.actionMasked, ev.x * scale, ev.y * scale, ev.getPointerId(0), ev.eventTime)
                         }

@@ -12,6 +12,7 @@ import android.os.Handler
 import android.os.HandlerThread
 import android.os.Looper
 import android.os.SystemClock
+import android.view.KeyEvent
 import android.view.MotionEvent
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.platform.ComposeView
@@ -196,6 +197,16 @@ class OffscreenComposeSurface(
             } finally {
                 ev.recycle()
             }
+        }
+    }
+
+    /** Forward a key event: rebuild a [KeyEvent] and dispatch it to the Presentation's decor view (posted to main,
+     *  non-blocking). Reaches hardware-keyboard handling + `onKeyEvent`/focus/nav keys in the composition. */
+    fun dispatchKey(action: Int, keyCode: Int, metaState: Int) {
+        mainHandler.post {
+            val now = SystemClock.uptimeMillis()
+            val ev = KeyEvent(now, now, action, keyCode, 0, metaState)
+            presentation?.window?.decorView?.dispatchKeyEvent(ev)
         }
     }
 

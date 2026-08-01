@@ -259,7 +259,15 @@ mirroring how `RemoteRealViewRuntime` falls back to `AndroidRealViewRuntime`.
   from ACTION_DOWN) and dispatches it into the Presentation decor view — the same path a real touch takes, so
   `clickable`/`scrollable`/gestures fire. `OffscreenSurfaceInputSpike` (API 26): a forwarded tap flips a
   `clickable` Box red→blue off-screen (click ran + a blue frame streamed). **Single-pointer** (tap/scroll/drag);
-  multi-touch/pinch is a follow-up.
+  multi-touch/pinch is a follow-up. **Keyboard (key events):** `IComposePreviewSession.dispatchKey` forwards
+  KeyEvents (`OffscreenComposeSurface.dispatchKey` → decor `dispatchKeyEvent`); the host captures them via
+  `Modifier.onPreviewKeyEvent` on the tap-focused preview (BACK not swallowed). Reaches hardware-keyboard keys,
+  nav/shortcut keys, and `onKeyEvent` handlers (`OffscreenSurfaceKeySpike`: a forwarded A flips a focused Box).
+  **Soft-keyboard TEXT into a `TextField` is NOT this** — it needs a cross-process IME bridge (intercept the
+  preview's `PlatformTextInputService`, signal the IDE to raise its keyboard, forward the edit commands back); the
+  remaining keyboard follow-up. NOTE: `RemoteComposePreview` holds the `Session` in a plain box + Int epoch, not a
+  `mutableStateOf<Session>` — a Compose-tracked field of our own type emits a `Session.$stable` read that crashed
+  (`NoSuchFieldError`).
 - **Phase 4 — resilience + parity.** Hang watchdog (`heartbeat` → kill+rebind, the real freeze win) +
   `DeathRecipient` fallback; verify the storm/loop guards now only affect `:preview`; migrate the sandbox
   (`PreviewSandboxPolicy`) + problem/finding reporting over `onProblems`; close the remaining Phase-2 parity gaps
