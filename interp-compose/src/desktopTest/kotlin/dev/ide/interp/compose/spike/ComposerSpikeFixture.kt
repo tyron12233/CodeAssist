@@ -1,10 +1,23 @@
 package dev.ide.interp.compose.spike
 
 import androidx.compose.runtime.AbstractApplier
+import androidx.compose.runtime.BroadcastFrameClock
 import androidx.compose.runtime.Composition
 import androidx.compose.runtime.Recomposer
+import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import androidx.compose.runtime.snapshots.Snapshot
+import kotlinx.coroutines.asCoroutineDispatcher
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeout
+import java.util.concurrent.Executors
 import kotlin.coroutines.EmptyCoroutineContext
 
 /**
@@ -64,5 +77,57 @@ object ComposerSpikeFixture {
         }
         composition.dispose()
         return out.toString()
+    }
+
+    /**
+     * Phase 2: drive a REAL recomposition on the interpreted composer via the sanctioned Recomposer frame loop
+     * (a bare `setContent` composes but never applies; a manual `recompose()`+`applyChanges()` throws). The content
+     * reads a `MutableState` (subscribing its scope) and counts its runs; after a state write + pumped frames the
+     * body must run exactly TWICE (initial + one recomposition). Returns the run count — 2 proves the interpreted
+     * composer handles snapshot-driven invalidation, the Recomposer's suspend loop, and re-apply, not just an
+     * initial pass. Mirrors the proven [dev.ide.interp.compose.RecompositionSkipTest] harness.
+     */
+    @JvmStatic
+    fun recomposesOnStateChange(): Int {
+        val state = mutableIntStateOf(0)
+        var bodyRuns = 0
+        val executor = Executors.newSingleThreadExecutor { Thread(it, "spike-recompose") }
+        val dispatcher = executor.asCoroutineDispatcher()
+        try {
+            return runBlocking {
+                withTimeout(30_000) {
+                    val clock = BroadcastFrameClock()
+                    val recomposer = Recomposer(coroutineContext + dispatcher + clock)
+                    val runJob = launch(dispatcher + clock) { recomposer.runRecomposeAndApplyChanges() }
+                    recomposer.currentState.first { it == Recomposer.State.Idle } // loop up + apply observer registered
+
+                    val composition = withContext(dispatcher) {
+                        Composition(UnitApplier(), recomposer).also { c ->
+                            c.setContent {
+                                state.intValue // subscribe this scope to the state
+                                bodyRuns++
+                            }
+                        }
+                    }
+                    withContext(dispatcher) { check(bodyRuns == 1) { "composes once initially, was $bodyRuns" } }
+
+                    withContext(dispatcher) {
+                        state.intValue = 1
+                        Snapshot.sendApplyNotifications()
+                    }
+                    var frame = 0L
+                    while (bodyRuns < 2 && frame < 240) {
+                        clock.sendFrame(frame++)
+                        delay(5)
+                    }
+                    withContext(dispatcher) { composition.dispose() }
+                    recomposer.cancel()
+                    runJob.cancel()
+                    bodyRuns
+                }
+            }
+        } finally {
+            executor.shutdownNow()
+        }
     }
 }

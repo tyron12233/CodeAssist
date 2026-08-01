@@ -35,4 +35,11 @@ class InterpretedComposerSpike {
         assertEquals("start|a|b|k0|k1|k2|end", expected, "sanity: real composer lays out the slots/groups in order")
         assertEquals(expected, interpreted, "interpreted composer keeps distinct slots across sequential + keyed groups")
     }
+
+    @Test fun interpretsRecompositionOnStateChange() {
+        val expected = ComposerSpikeFixture.recomposesOnStateChange() // run for real
+        assertEquals(2, expected, "sanity: real composer recomposes the state-reading scope once (2 body runs)")
+        val interpreted = newVm().invokeStatic(OWNER, "recomposesOnStateChange", "()I", emptyList())
+        assertEquals(expected, interpreted, "interpreted composer drives Recomposer-loop recomposition on a state write")
+    }
 }
