@@ -54,6 +54,12 @@ class VmLibraryExecutor(
     /** Test seam: the namespaces interpreted from the project jars even when host-loadable (see
      *  [PROJECT_PREFERRED_PREFIXES], the production default). */
     private val projectPreferredPrefixes: List<String> = PROJECT_PREFERRED_PREFIXES,
+    /** Namespaces that stay BRIDGED even under a [projectPreferredPrefixes] match, when host-loadable: the
+     *  Android platform CompositionLocals (`ui.platform.LocalContext`/`LocalConfiguration`/…) must be the SAME
+     *  instances the host provides around the preview, or an interpreted read finds them "not present" (the
+     *  provided value is keyed by the bundled local instance, not the interpreted copy). A new (non-host-loadable)
+     *  class in these namespaces still interprets — there is nothing to bridge to. */
+    private val projectExcludedPrefixes: List<String> = PROJECT_EXCLUDED_PREFIXES,
 ) : LibraryExecutor, AutoCloseable {
 
     /** When set (the preview dispatcher wires it to its partial-render channel), a failure inside an
@@ -86,7 +92,8 @@ class VmLibraryExecutor(
      *  bytes to actually be present in the jars, so a project that ships no Material3 of its own keeps
      *  bridging to the bundled build unchanged. */
     private fun shouldInterpret(binaryName: String): Boolean =
-        projectPreferredPrefixes.any { binaryName.startsWith(it) } || !isHostLoadable(binaryName)
+        (projectPreferredPrefixes.any { binaryName.startsWith(it) } && projectExcludedPrefixes.none { binaryName.startsWith(it) }) ||
+            !isHostLoadable(binaryName)
 
     /** Class bytes for the project's library jars (a downloaded Maven jar / AAR), keyed by internal name. Shared
      *  by the main VM and the reified-inline executor (a library reified inline lives in one of these jars). */
@@ -515,6 +522,10 @@ class VmLibraryExecutor(
          *  bridged; widen this list (foundation/ui) only if their value types also need to be the project's copy.
          *  See [[jvm-interp-bytecode-vm]]. */
         val PROJECT_PREFERRED_PREFIXES = listOf("androidx.compose.material3.")
+
+        /** Kept BRIDGED even under a preferred-prefix match (when host-loadable): the Android platform
+         *  CompositionLocals live here and must be the host-provided instances (see [projectExcludedPrefixes]). */
+        val PROJECT_EXCLUDED_PREFIXES = listOf("androidx.compose.ui.platform.")
     }
 
     private fun primClass(d: Char): Class<*> = when (d) {

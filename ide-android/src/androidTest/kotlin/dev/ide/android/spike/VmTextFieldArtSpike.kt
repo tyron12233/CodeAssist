@@ -39,14 +39,19 @@ class VmTextFieldArtSpike {
 
     private val instrumentation get() = InstrumentationRegistry.getInstrumentation()
 
-    private fun material3Bytes(): Map<String, ByteArray> {
+    /** The full transitive Compose stack (material3 + foundation + ui + runtime, the project's newer versions),
+     *  staged as real Android bytecode under `vmstack/` — so the VM can INTERPRET foundation/ui, not just material3. */
+    private fun stackBytes(): Map<String, ByteArray> {
         val out = HashMap<String, ByteArray>()
-        instrumentation.context.assets.open("vmbench/material3-android.jar").use { raw ->
-            ZipInputStream(raw).use { zip ->
-                while (true) {
-                    val e = zip.nextEntry ?: break
-                    if (e.name.endsWith(".class")) out[e.name.removeSuffix(".class")] = zip.readBytes()
-                    zip.closeEntry()
+        val assets = instrumentation.context.assets
+        for (name in assets.list("vmstack").orEmpty()) {
+            assets.open("vmstack/$name").use { raw ->
+                ZipInputStream(raw).use { zip ->
+                    while (true) {
+                        val e = zip.nextEntry ?: break
+                        if (e.name.endsWith(".class")) out.putIfAbsent(e.name.removeSuffix(".class"), zip.readBytes())
+                        zip.closeEntry()
+                    }
                 }
             }
         }
@@ -57,12 +62,23 @@ class VmTextFieldArtSpike {
 
     /** Compose `<owner>.<fn>(value:String, onValueChange)` interpreted from staged material3; return the failure. */
     private fun composeTextish(ownerFqn: String, fn: String): Throwable? {
-        val bytes = material3Bytes()
+        val bytes = stackBytes()
+        log("staged stack classes: ${bytes.size}")
         val executor = VmLibraryExecutor(
             source = ClassBytesSource { name -> bytes[name] },
-            projectPreferredPrefixes = listOf("androidx.compose.material3."),
+            // Milestone A step: interpret the project's newer Compose UI stack (material3 + foundation + ui +
+            // animation) from the staged jars, so classes the bundled Compose lacks (foundation.style.*) exist.
+            // Runtime stays bridged (the Composer interface is stable across versions).
+            projectPreferredPrefixes = listOf(
+                "androidx.compose.material3.",
+                "androidx.compose.foundation.",
+                "androidx.compose.ui.",
+                "androidx.compose.animation.",
+            ),
             peerFactory = DexPeerFactory(),
         )
+        log("foundation.style classes in bytes: ${bytes.keys.count { it.startsWith("androidx/compose/foundation/style/") }}")
+        log("has Style bytes: ${bytes.containsKey("androidx/compose/foundation/style/Style")} ; hasClass(Style)=${executor.hasClass("androidx.compose.foundation.style.Style")}")
         val d = ComposeDispatcher(libraryExecutor = executor)
         // Surface the underlying interpreter failure (a project-Compose class the bundled runtime lacks, e.g.
         // androidx.compose.foundation.style.MutableStyleState for a too-new material3) instead of only the
