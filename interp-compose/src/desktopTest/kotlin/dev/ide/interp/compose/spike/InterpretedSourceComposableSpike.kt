@@ -3,6 +3,7 @@ package dev.ide.interp.compose.spike
 import dev.ide.interp.Interpreter
 import dev.ide.interp.compose.ComposeDispatcher
 import dev.ide.interp.compose.ComposeRuntime
+import dev.ide.interp.compose.VmComposeHost
 import dev.ide.interp.compose.VmLibraryExecutor
 import dev.ide.jvm.ClassBytesSource
 import dev.ide.lang.kotlin.interp.Binding
@@ -182,6 +183,48 @@ class InterpretedSourceComposableSpike {
             assertEquals(
                 2, runs.get(),
                 "the source body ran twice: initial + one recomposition on the interpreted state write",
+            )
+        }
+    }
+
+    @Test fun vmComposeHostOrchestratesASourcePreviewToAnInterpretedTree() {
+        // Phase-D orchestration: VmComposeHost.previewDriver wires ComposeDispatcher + ComposeRuntime + the
+        // interp-core Interpreter and returns the composer callback — the productized form of the wiring the
+        // earlier tests assembled by hand. Driving it through the interpreted setup harness composes the source
+        // @Preview on the interpreted runtime and yields the same real node tree.
+        val exec = VmLibraryExecutor(
+            source = ClassBytesSource.fromClasspath(),
+            projectPreferredPrefixes = listOf(
+                "androidx.compose.runtime.", "androidx.compose.ui.", "androidx.compose.foundation.",
+                "dev.ide.interp.compose.spike.",
+            ),
+            projectExcludedPrefixes = emptyList(),
+        )
+        exec.use {
+            val host = VmComposeHost(exec)
+            // fun Preview() { ProbeBox() }
+            val entry = ResolvedFunction(
+                "Preview", emptyList(),
+                RNode.Block(
+                    listOf(
+                        RNode.Call(
+                            ResolvedCallable.Library(
+                                "ProbeBox", PROBES, "ProbeBox", emptyList(),
+                                isStatic = true, isConstructor = false, isInline = false, isComposable = true,
+                            ),
+                            DispatchKind.TOP_LEVEL, receiver = null, args = emptyList(),
+                            callSiteKey = CallSiteKey(3), source = span,
+                        ),
+                    ),
+                    false, span,
+                ),
+                emptyList(),
+            )
+            val driver = host.previewDriver(entry, emptyMap())
+            val tree = exec.invokeStatic(FIXTURE, "composeSourceDrivenTree", listOf(driver), 0)
+            assertEquals(
+                "(())", tree,
+                "VmComposeHost orchestrated the source @Preview into a real interpreted node tree",
             )
         }
     }

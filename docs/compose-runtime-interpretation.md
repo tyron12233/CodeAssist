@@ -4,8 +4,9 @@ Status: phases A, B, and B′ proven on desktop. B: the interpreted UI stack com
 through material3 (Column/Row/Box/BasicText, material3 `Text`/`Button`). B′: the two-interpreter threading — a
 source-interpreted `@Composable` body drives an interpreted (project-version) composer via a VM-backed
 `ComposerOps`, end-to-end through both initial composition (emitting a real node) and recomposition (on an
-interpreted state write). Remaining: render → pixels (phase C, `android.graphics` on device) + preview wiring
-(phase D, `VmComposeHost` + version-distance routing).
+interpreted state write). Phase D's orchestration core (`VmComposeHost`) is done + verified on desktop; phase C's
+host-side renderer (`VmComposeRenderer`) is scaffolded (compiles). Remaining is device-only: the phase-C
+interpreted render harness + minimal `Owner`, the real-node applier, and wiring both into the on-device preview.
 
 ## The problem
 
@@ -239,14 +240,27 @@ productizes): build a minimal `Owner` (the static-preview subset of the 55 membe
 harness, the minimal `Owner`, and the exact measure/layout/draw entry points need to be written and **verified on
 a device**.
 
-### Phase D — wire into the preview path
+### Phase D — wire into the preview path (orchestration core done)
 
-A host-callable `VmComposeHost` (interp-compose) sets up an interpreted `Composition`/`Recomposer`/`Applier` from
-the project runtime, threads its `VmObject` composer into `ComposeDispatcher`, and runs the source-interpreted
-user `@Preview` (phase B′) — replacing the bridged-composer path when the project's Compose version is far enough
-from the bundled one that the flip can't align. Live-edit is preserved (the user body is still tree-walked); only
-the runtime/library side is recompile-free interpreted bytecode. The host picks this path vs. the bridged
-tree-walker by version distance.
+A host-callable `VmComposeHost` (interp-compose jvmShared) sets up an interpreted
+`Composition`/`Recomposer`/`Applier` from the project runtime, threads its `VmObject` composer into
+`ComposeDispatcher`, and runs the source-interpreted user `@Preview` (phase B′) — replacing the bridged-composer
+path when the project's Compose version is far enough from the bundled one that the flip can't align. Live-edit is
+preserved (the user body is still tree-walked); only the runtime/library side is recompile-free interpreted
+bytecode. The host picks this path vs. the bridged tree-walker by version distance.
+
+- **Orchestration core done + verified** (`VmComposeHost`, `InterpretedSourceComposableSpike.vmComposeHost...`):
+  `previewDriver(entry, program, classes, args)` wires `ComposeDispatcher` + `ComposeRuntime` + the interp-core
+  `Interpreter` and returns the composer callback that threads the interpreted composer and interprets the user
+  body under a restart group — the productized form of the wiring the phase-B′ tests assembled by hand. Driven
+  through the interpreted setup harness it composes the source `@Preview` on the interpreted runtime to the same
+  real node tree (`(())`). Plus `shouldInterpretRuntime(projectVersion, bundledVersion)` — the version-distance
+  routing decision (major gap, or > N minor versions apart → interpret the runtime).
+- **Remaining (device):** the interpreted **setup harness** productized into main (stands up the project runtime's
+  `Composition`/`Recomposer` + a **real-node** applier — which needs the internal `DefaultUiApplier`/
+  `LayoutNode.insertAt`, so only the VM can build it, unlike the desktop tests' recording applier), the phase-C
+  render harness + minimal `Owner`, and wiring `VmComposeHost` + `VmComposeRenderer` into `AndroidComposePreviewHost`
+  behind the version-distance route. All device-verified.
 
 ## Iteration
 
