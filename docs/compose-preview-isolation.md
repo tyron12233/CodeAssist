@@ -1,8 +1,9 @@
 # Compose preview process isolation
 
-Status: **Phase 0 spike GREEN on ART** (2026-08-02) — the off-screen live-runtime gate is de-risked; the phased
-pipeline (1–4) below is the remaining build. Supersedes the in-process Compose `@Preview` render path described in
-`docs/compose-interpreter.md` for the Android launcher only.
+Status: **Phase 0 gate GREEN + Phase 1a proven on ART** (2026-08-02) — the off-screen live-runtime gate is
+de-risked, the `ResolvedTree` wire codec is done, and a real `@Preview` renders off-screen to a bitmap on device.
+The AIDL session wiring (Phase 1b) + Phases 2–4 are the remaining build. Supersedes the in-process Compose
+`@Preview` render path described in `docs/compose-interpreter.md` for the Android launcher only.
 
 Phase 0 result (`ComposePreviewIsolationSpike`, `ide-android` androidTest, emulator-5554): a `ComposeView` inside a
 `Presentation` on an app-owned `VirtualDisplay` + `ImageReader` (from a Service-style context, minimal RESUMED
@@ -205,10 +206,18 @@ mirroring how `RemoteRealViewRuntime` falls back to `AndroidRealViewRuntime`.
   `ComposePreviewIsolationSpike`: VirtualDisplay + Presentation + ImageReader; a `ComposeView` recomposes
   off-screen, a frame is read back, and an injected `dispatchTouchEvent` reaches a `clickable` (whose state write
   drives a new frame). The gate is green — the initiative is unblocked.
-- **Phase 1 — pipeline, single frame, no input.** `ResolvedTree` wire codec; `IComposePreviewSession.open` +
-  `onFrame`; `RemoteComposePreviewRunner` (implements `ComposePreviewRunner`) in `ide-android`;
-  `PreviewRenderService` (or a sibling in `:preview`) hosts the session and renders one frame. Prove a static
-  `@Preview` renders identically to today, but out-of-process.
+- **Phase 1 — pipeline, single frame, no input.**
+  - **Phase 1a — codec + off-screen render. ✅ DONE (green on ART, 2026-08-02).** `ComposePreviewWireCodec`
+    (`ide-core`, `ComposePreviewWireCodecTest` headless: the full `LoweredComposePreview` — 24 `RNode` variants,
+    8 `Binding`s, both callables, `ResolvedClass`, `KotlinType`, every `Const` type — round-trips byte-for-byte).
+    `ComposePreviewOffscreenRenderSpike` (`ide-android` androidTest, emulator-5554): a `Text("Hello")` preview
+    round-trips the codec **on ART**, then the real `ComposePreviewRenderer` composes it inside the Phase-0
+    off-screen surface (`Presentation` on a `VirtualDisplay` + `ImageReader`) — a frame lands with non-uniform
+    (drawn) pixels and no render error. The render pipeline `:preview` will host is proven, minus the AIDL plumbing.
+  - **Phase 1b — AIDL wiring (remaining).** `IComposePreviewSession.open` + `onFrame`; `RemoteComposePreviewRunner`
+    (implements `ComposePreviewRunner`) in `ide-android`; a `:preview` session host that decodes the blob, stands up
+    the off-screen runtime (Phase 1a), renders one frame, and returns it over the callback. Prove a static
+    `@Preview` renders identically to today, but out-of-process.
 - **Phase 2 — continuous frames.** HardwareBuffer transport (+ file fallback), dirty-driven throttle,
   `resize`/night. Animations tick.
 - **Phase 3 — input.** `PreviewSurface` interactive-mode capture + coordinate mapping + `dispatchInput`;
