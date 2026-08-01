@@ -141,13 +141,6 @@ mapped (Style, Modifier, Alignment/Dp/Color/Arrangement) for even-newer material
 fixes are already committed; the pervasive value types are the known tail. **This all composes; measure/layout/
 draw is phase C.**
 
-### Phase C — rendering: interpreted node tree → pixels
-
-The interpreted `ui.node` LayoutNodes measure/layout/draw; the draw calls must reach a real
-`android.graphics.Canvas` (the bridged floor) to produce a bitmap. This is the render boundary: interpret up to
-the draw commands, bridge the actual pixel drawing. Produces the bitmap the preview panel displays (the preview
-already streams a bitmap out-of-process; see `compose-preview-isolation`).
-
 ### Phase B′ — thread the source interpreter to the interpreted composer
 
 The two-interpreter threading (see "The architecture" above): a **source-interpreted** `@Composable` body drives
@@ -217,12 +210,34 @@ measures/lays-out/draws to a bitmap — the draw floor is `android.graphics`, so
 
 This preserves live-edit — the reason for keeping the source interpreter rather than compiling the user code.
 
-### Phase C — rendering: interpreted node tree → pixels
+### Phase C — rendering: interpreted node tree → pixels (device; scaffold started)
 
 The interpreted `ui.node` LayoutNodes measure/layout/draw; the draw calls must reach a real
 `android.graphics.Canvas` (the bridged floor) to produce a bitmap. This is the render boundary: interpret up to
 the draw commands, bridge the actual pixel drawing. Produces the bitmap the preview panel displays (the preview
-already streams a bitmap out-of-process; see `compose-preview-isolation`).
+already streams a bitmap out-of-process; see `compose-preview-isolation`). Unlike A/B/B′, phase C is **device-only**
+— there is no `android.graphics` off-device, so it cannot be verified on the desktop loop.
+
+**The `Owner` blocker.** Measuring/drawing a `LayoutNode` in Compose is driven by an `Owner` — a
+**55-abstract-member** interface (`getRoot`/`getDensity`/`getLayoutDirection`/`getSharedDrawScope`/
+`getGraphicsContext`/`snapshotObserver`/`getFontFamilyResolver`/`onRequestMeasure`/`measureAndLayout`/
+`createLayer`/… + ~40 interaction members a static one-shot render doesn't need). Because the nodes are
+interpreted `VmObject`s, a **host `Owner` cannot drive them** (it would call node methods on VM objects), and the
+real platform `Owner` (`AndroidComposeView`) extends `android.view.ViewGroup`. So the `Owner` + the
+measure/layout/draw passes must run **interpreted**, inside the VM, over the interpreted root; only the final
+`Canvas` pixel ops bridge out. (The rejected alternative — bridge `ui.node`/`Owner` to the host and emit *real*
+host `LayoutNode`s — reintroduces the ui-layer version skew milestone A avoids for the composer.)
+
+**Scaffold (started, UNVERIFIED):** `VmComposeRenderer` (`ide-android`, compiles) is the host side — it allocates
+an ARGB_8888 `Bitmap`, wraps it in a real `android.graphics.Canvas`, bridges that into an
+`androidx.compose.ui.graphics.Canvas`, and hands that canvas INTO the VM so interpreted draw commands reach real
+pixels. It's the interpreted-runtime counterpart to `ComposePreviewRenderer` (which composes inline into the
+IDE's own composition — an interpreted node tree can't join it). What remains is the **interpreted render
+harness** (`dev.ide.interp.compose.VmComposeRenderHarness`, a VM-interpreted package the phase-D `VmComposeHost`
+productizes): build a minimal `Owner` (the static-preview subset of the 55 members; stub the interaction ones),
+`attach` the interpreted root, run one measure(`Constraints`)/layout pass, and draw to the bridged canvas. The
+harness, the minimal `Owner`, and the exact measure/layout/draw entry points need to be written and **verified on
+a device**.
 
 ### Phase D — wire into the preview path
 
