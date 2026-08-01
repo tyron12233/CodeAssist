@@ -150,10 +150,22 @@ already streams a bitmap out-of-process; see `compose-preview-isolation`).
 The two-interpreter threading (see "The architecture" above): a **source-interpreted** `@Composable` body drives
 an **interpreted** (`VmObject`) composer, calling bytecode-interpreted library composables that share it. The work
 is a VM-dispatched backend for `ComposableAbi`/`ComposeRuntime`'s composer ops (today host reflection on
-`composer.javaClass`) plus VM-aware composer-detection in `ComposeDispatcher`. First spike: interp-core tree-walks
-a trivial user `@Composable` (a `remember` + a `Text`) against a composer produced by the interpreted runtime, and
-the emitted node tree / `remember`-once behavior matches. This preserves live-edit — the reason for keeping the
-source interpreter rather than compiling the user code.
+`composer.javaClass`) plus VM-aware composer-detection in `ComposeDispatcher`.
+
+Because the current recomposition loop rides on *real* host `MutableState` + the real snapshot system driving the
+real Recomposer, the threading splits: **B′.1 initial composition** (the composer ops for one `composeInitial` —
+`remember`-once + node emission) first; **B′.2 recomposition** (an interpreted snapshot/Recomposer, and routing
+interp-core's state reads to interpreted `MutableState`) later.
+
+- **Bootstrapping proven** (`InterpretedComposerThreadingSpike`): host code obtains the interpreted composer out
+  of an interpreted composition — an interpreted `setContent` hands its `currentComposer` to a host callback and
+  the received value is a `VmObject` (the project-runtime composer), not a host `Composer`. This is the seam the
+  future VM-backed `ComposableAbi`/`ComposeRuntime` receive the composer through.
+- Next: drive that `VmObject` composer's group ops from host through the VM (`invokeInstance(composer,
+  "startReplaceableGroup", …)` + `callComposable` for a library composable), then wire interp-core's tree-walker
+  so a trivial user `@Composable` (a `remember` + a `Text`) composes through it, matching real.
+
+This preserves live-edit — the reason for keeping the source interpreter rather than compiling the user code.
 
 ### Phase C — rendering: interpreted node tree → pixels
 
