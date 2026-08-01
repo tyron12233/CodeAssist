@@ -10,6 +10,7 @@ import android.os.Handler
 import android.os.HandlerThread
 import android.os.Looper
 import android.os.SystemClock
+import android.view.MotionEvent
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.platform.ComposeView
 import androidx.lifecycle.Lifecycle
@@ -69,6 +70,7 @@ class OffscreenComposeSurface(
     )
 
     @Volatile private var presentation: Presentation? = null
+    @Volatile private var gestureDownTime = 0L
 
     init {
         imageReader.setOnImageAvailableListener({ reader ->
@@ -117,6 +119,27 @@ class OffscreenComposeSurface(
         while (frames.get() <= before && SystemClock.uptimeMillis() < end) SystemClock.sleep(16)
         val px = latestPixels.get() ?: return null
         return Frame(px, width, height)
+    }
+
+    /**
+     * Forward a pointer event into the composition: rebuild a [MotionEvent] and dispatch it to the Presentation's
+     * decor view (the same path a real touch on that display takes), so `clickable`/`scrollable`/gestures fire.
+     * Posted to the main thread WITHOUT blocking (a MOVE stream must not stall the caller) and in order (Handler
+     * FIFO). [x]/[y] are in this surface's pixel space. Times use the local uptime clock; the gesture's downTime is
+     * tracked from its ACTION_DOWN so MOVE/UP belong to the same gesture.
+     */
+    fun dispatchTouch(action: Int, x: Float, y: Float, pointerId: Int) {
+        mainHandler.post {
+            val now = SystemClock.uptimeMillis()
+            if (action == MotionEvent.ACTION_DOWN) gestureDownTime = now
+            val downTime = if (gestureDownTime == 0L) now else gestureDownTime
+            val ev = MotionEvent.obtain(downTime, now, action, x, y, 0)
+            try {
+                presentation?.window?.decorView?.dispatchTouchEvent(ev)
+            } finally {
+                ev.recycle()
+            }
+        }
     }
 
     /** Run [block] on the main thread (where the composition lives), blocking the caller. Use for state writes

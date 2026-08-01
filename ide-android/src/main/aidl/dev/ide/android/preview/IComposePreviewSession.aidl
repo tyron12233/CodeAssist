@@ -32,6 +32,12 @@ interface IComposePreviewSession {
     // Re-target the off-screen surface (size / density / night). May recreate the surface.
     void resize(int sessionId, int widthPx, int heightPx, float density, boolean night);
 
+    // Forward a pointer event into the off-screen composition (input forwarding). [action] is a MotionEvent
+    // action (ACTION_DOWN/MOVE/UP/CANCEL); [x]/[y] are in the off-screen canvas' pixel space (the IDE maps the
+    // tap from the displayed frame). oneway so a stream of MOVE events never blocks the IDE; :preview rebuilds a
+    // MotionEvent and dispatches it into the Presentation decor view, so clicks/scroll/drag reach real nodes.
+    oneway void dispatchInput(int sessionId, int action, float x, float y, int pointerId, long eventTimeMs);
+
     // Tear down the session (dismiss the Presentation, release the display + VM executor).
     void close(int sessionId);
 }

@@ -176,6 +176,12 @@ class ComposePreviewRemoteClient(context: Context) {
             runCatching { daemon.resize(id, widthPx, heightPx, density, night) }
         }
 
+        /** Forward a pointer event ([action] a MotionEvent action; [x]/[y] in the off-screen canvas' pixel space)
+         *  into the remote composition. oneway — returns immediately, so a MOVE stream never blocks the UI. */
+        fun dispatchInput(action: Int, x: Float, y: Float, pointerId: Int, eventTimeMs: Long) {
+            runCatching { daemon.dispatchInput(id, action, x, y, pointerId, eventTimeMs) }
+        }
+
         fun close() {
             runCatching { daemon.close(id) }
             runCatching { frameDir.deleteRecursively() }

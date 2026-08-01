@@ -1,11 +1,11 @@
 # Compose preview process isolation
 
-Status: **Phase 2 DONE + live UI rewired** (2026-08-02) — a real `@Preview` streams **out-of-process**: a
-persistent `:preview` session renders it off-screen against the bundled Compose and streams frames back, a live
-edit re-renders remotely, and the editor's preview pane draws the streamed frames (behind an experimental,
-default-off toggle, with in-process fallback). Input forwarding (Phase 3) and the live-edit hang watchdog
-(Phase 4) are the remaining build. Supersedes the in-process Compose `@Preview` render path described in
-`docs/compose-interpreter.md` for the Android launcher only.
+Status: **Phase 3 DONE — interactive out-of-process preview** (2026-08-02) — a real `@Preview` streams from a
+persistent `:preview` session (off-screen render against the bundled Compose), a live edit re-renders remotely,
+the editor pane draws the streamed frames, AND forwarded touches reach real nodes (clicks/scroll/drag) — behind
+an experimental, default-off toggle with in-process fallback. Only the hang watchdog + parity polish (Phase 4)
+remain. Supersedes the in-process Compose `@Preview` render path described in `docs/compose-interpreter.md` for
+the Android launcher only.
 
 Phase 0 result (`ComposePreviewIsolationSpike`, `ide-android` androidTest, emulator-5554): a `ComposeView` inside a
 `Presentation` on an app-owned `VirtualDisplay` + `ImageReader` (from a Service-style context, minimal RESUMED
@@ -240,8 +240,16 @@ mirroring how `RemoteRealViewRuntime` falls back to `AndroidRealViewRuntime`.
   resolve remotely (`ComposePreviewResourceHandoffSpike`). **Not yet:** HardwareBuffer zero-copy transport
   (file-per-frame for now); content-size measurement (fixed off-screen canvas → whitespace for wrap-content
   previews); live res-file edits (`:preview` re-parses from disk, so an unsaved res edit isn't seen until save).
-- **Phase 3 — input.** `PreviewSurface` interactive-mode capture + coordinate mapping + `dispatchInput`;
-  `:preview` MotionEvent reconstruction + dispatch. Clicks/scroll/gestures reach real nodes.
+- **Phase 3 — input. ✅ DONE (green on ART / API 26, 2026-08-02).** `IComposePreviewSession.dispatchInput` (oneway
+  MotionEvent action/x/y/pointer/time). The host captures pointer events on the drawn frame via
+  `Modifier.pointerInteropFilter` (in `RemoteComposePreview`, where the frame is drawn — not `PreviewSurface`,
+  since the remote frame lives in the preview pane) and maps the tap from displayed px back to the off-screen
+  canvas px (`canvasPx = displayPx × bitmapWidth / displayedWidth`, uniform under `ContentScale.FillWidth`).
+  `OffscreenComposeSurface.dispatchTouch` rebuilds a `MotionEvent` (local-uptime times, gesture downTime tracked
+  from ACTION_DOWN) and dispatches it into the Presentation decor view — the same path a real touch takes, so
+  `clickable`/`scrollable`/gestures fire. `OffscreenSurfaceInputSpike` (API 26): a forwarded tap flips a
+  `clickable` Box red→blue off-screen (click ran + a blue frame streamed). **Single-pointer** (tap/scroll/drag);
+  multi-touch/pinch is a follow-up.
 - **Phase 4 — resilience + parity.** Hang watchdog (`heartbeat` → kill+rebind, the real freeze win) +
   `DeathRecipient` fallback; verify the storm/loop guards now only affect `:preview`; migrate the sandbox
   (`PreviewSandboxPolicy`) + problem/finding reporting over `onProblems`; close the remaining Phase-2 parity gaps

@@ -26,9 +26,12 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
+import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.input.pointer.pointerInteropFilter
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
@@ -420,6 +423,7 @@ class AndroidComposePreviewHost(private val backend: IdeServicesBackend) : Compo
  * [onUnavailable] so the host falls back to the in-process renderer with no visible break. The `:preview` bind
  * can block, so the session is opened on a background thread; Binder-callback state writes are posted to main.
  */
+@OptIn(ExperimentalComposeUiApi::class)
 @Composable
 private fun RemoteComposePreview(
     client: ComposePreviewRemoteClient,
@@ -468,11 +472,26 @@ private fun RemoteComposePreview(
     val bmp = frame
     Box(modifier, contentAlignment = Alignment.Center) {
         if (bmp != null) {
+            // The frame is drawn scaled to the pane width (ContentScale.FillWidth = uniform scale). Forward each
+            // pointer event to the remote session, mapping the tap from displayed pixels back to the off-screen
+            // canvas' pixels (canvasPx = displayPx * bitmapWidth / displayedWidth). Single-pointer (tap/scroll/
+            // drag); multi-touch is a follow-up.
+            var displayWidth by remember { mutableStateOf(0) }
             Image(
                 bitmap = bmp.asImageBitmap(),
                 contentDescription = null,
                 contentScale = ContentScale.FillWidth,
-                modifier = Modifier.fillMaxWidth(),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .onSizeChanged { displayWidth = it.width }
+                    .pointerInteropFilter { ev ->
+                        val s = session
+                        if (s != null && displayWidth > 0) {
+                            val scale = bmp.width.toFloat() / displayWidth
+                            s.dispatchInput(ev.actionMasked, ev.x * scale, ev.y * scale, ev.getPointerId(0), ev.eventTime)
+                        }
+                        true
+                    },
             )
         } else {
             CircularProgressIndicator(Modifier.size(28.dp))

@@ -89,6 +89,10 @@ class ComposePreviewSessionService : Service() {
             sessions[sessionId]?.resize(widthPx, heightPx, density, night)
         }
 
+        override fun dispatchInput(sessionId: Int, action: Int, x: Float, y: Float, pointerId: Int, eventTimeMs: Long) {
+            sessions[sessionId]?.dispatchTouch(action, x, y, pointerId)
+        }
+
         override fun close(sessionId: Int) {
             sessions.remove(sessionId)?.let { runCatching { it.close() } }
         }
@@ -182,6 +186,10 @@ class ComposePreviewSessionService : Service() {
 
         fun update(lowered: LoweredComposePreview) {
             surface.runOnMain { programState.value = lowered }
+        }
+
+        fun dispatchTouch(action: Int, x: Float, y: Float, pointerId: Int) {
+            surface.dispatchTouch(action, x, y, pointerId)
         }
 
         fun resize(newWidth: Int, newHeight: Int, newDensity: Float, newNight: Boolean) {
