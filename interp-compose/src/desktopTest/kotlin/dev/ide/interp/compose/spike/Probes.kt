@@ -1,6 +1,8 @@
 package dev.ide.interp.compose.spike
 
+import androidx.compose.foundation.layout.Box
 import androidx.compose.runtime.Composable
+import androidx.compose.ui.Modifier
 import java.util.function.Consumer
 
 /**
@@ -12,4 +14,16 @@ import java.util.function.Consumer
 @Composable
 fun ProbeComposable(label: String, sink: Consumer<String>) {
     sink.accept(label)
+}
+
+/**
+ * A no-arg `@Composable` that emits a real foundation `Box` node. Wrapping the `Box(Modifier) {}` call (with its
+ * modifier + content lambda) inside this interpreted wrapper keeps the source-interpreted caller's RNode trivial
+ * (a plain no-arg call) while still emitting a real `LayoutNode` — so the end-to-end node-emission spike doesn't
+ * need to hand-build a composable-lambda RNode. Composing it needs the Owner locals `Box` reads (provided by the
+ * fixture's composition).
+ */
+@Composable
+fun ProbeBox() {
+    Box(Modifier) {}
 }

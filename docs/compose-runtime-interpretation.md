@@ -189,10 +189,17 @@ Both novel risks of the threading are retired at the spike level (`InterpretedCo
   of `ComposePreviewRenderer`'s wiring with the composer swapped for an interpreted one — the two interpreters
   thread through a single interpreted composer, composition balances.
 
-So the remaining threading work: (c) node emission end-to-end (the source body composing a real `Box`/`Text` into
-an interpreted applier — phase B proved the node tree; this routes it through the source-interpreter path, which
-needs the RNode composable-lambda arg + Owner locals); and (d) B′.2 (interpreted snapshot/recomposition — the
-current loop rides on real host `MutableState`).
+- **Node emission end-to-end** (`InterpretedSourceComposableSpike.sourceInterpretedBodyEmitsARealNodeOnThe...`):
+  the source-interpreted `Preview` body composes a real foundation `Box` (via a no-arg interpreted wrapper, so the
+  source RNode stays a plain call) into an interpreted applier with the Owner locals provided, emitting a real
+  `LayoutNode` — `(())`. This connects phase B (node tree) with phase B′ (threading): a source-interpreted body
+  renders a real UI node on the interpreted (project-version) composer, through the VM-backed driver.
+
+So the initial-composition threading (B′.1) is complete end-to-end. The remaining piece is **B′.2 — interpreted
+snapshot/recomposition**: the current recomposition loop rides on real host `MutableState`/snapshot driving the
+real Recomposer, so a fully-interpreted composer needs interpreted `MutableState` and interp-core's state reads
+routed to it. Then phase C (render → pixels, `android.graphics` on device) and phase D (`VmComposeHost` +
+version-distance routing) productize it into the preview.
 
 This preserves live-edit — the reason for keeping the source interpreter rather than compiling the user code.
 

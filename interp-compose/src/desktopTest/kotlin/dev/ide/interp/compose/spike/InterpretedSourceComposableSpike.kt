@@ -92,4 +92,51 @@ class InterpretedSourceComposableSpike {
             )
         }
     }
+
+    @Test fun sourceInterpretedBodyEmitsARealNodeOnTheInterpretedComposer() {
+        // The undeniable form: the source-interpreted body composes a REAL foundation `Box` (via a no-arg
+        // interpreted wrapper), emitting a real LayoutNode into the interpreted composition — connecting phase B
+        // (node emission) with phase B′ (threading). ui/foundation are interpreted too; the emitted tree comes
+        // back through the source-interpreter path on the interpreted composer.
+        val exec = VmLibraryExecutor(
+            source = ClassBytesSource.fromClasspath(),
+            projectPreferredPrefixes = listOf(
+                "androidx.compose.runtime.", "androidx.compose.ui.", "androidx.compose.foundation.",
+                "dev.ide.interp.compose.spike.",
+            ),
+            projectExcludedPrefixes = emptyList(),
+        )
+        exec.use {
+            val dispatcher = ComposeDispatcher(libraryExecutor = exec)
+            val runtime = ComposeRuntime(dispatcher)
+            val interpreter = Interpreter(emptyMap(), dispatcher, runtime, libraryFallback = exec)
+
+            // The lowered form of: fun Preview() { ProbeBox() }
+            val probeBoxCall = RNode.Call(
+                ResolvedCallable.Library(
+                    "ProbeBox", PROBES, "ProbeBox", emptyList(),
+                    isStatic = true, isConstructor = false, isInline = false, isComposable = true,
+                ),
+                DispatchKind.TOP_LEVEL, receiver = null, args = emptyList(),
+                callSiteKey = CallSiteKey(3), source = span,
+            )
+            val entry = ResolvedFunction(
+                "Preview", emptyList(), RNode.Block(listOf(probeBoxCall), false, span), emptyList(),
+            )
+
+            val driver = Consumer<Any?> { composer ->
+                requireNotNull(composer) { "composer handed to host was null" }
+                dispatcher.composer = composer
+                runtime.invokeComposable(entry.name.hashCode(), restartable = false, force = false, args = emptyList()) {
+                    interpreter.call(entry, emptyList())
+                }
+            }
+            val tree = exec.invokeStatic(FIXTURE, "composeSourceDrivenTree", listOf(driver), 0)
+
+            assertEquals(
+                "(())", tree,
+                "the source-interpreted Preview emitted a real Box LayoutNode on the interpreted composer",
+            )
+        }
+    }
 }
