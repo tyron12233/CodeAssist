@@ -152,6 +152,12 @@ class VmLibraryExecutor(
 
     override fun ownsInstance(value: Any?): Boolean = isVmPeer(value)
 
+    /** Whether [value] is a VM-owned interpreted `androidx.compose.runtime.Composer` — the interpreted composer the
+     *  source-composable path threads (as opposed to a bridged host `Composer`, or any other VM object). Lets the
+     *  dispatcher pick the VM-backed [ComposerOps] and detect the composer among a content lambda's callback args. */
+    fun ownsComposer(value: Any?): Boolean =
+        value != null && isVmPeer(value) && vm.isInterpretedInstanceOf(value, COMPOSER_BINARY)
+
     /** Release the open library-jar handles. Idempotent; the executor is unusable afterward, so callers close it
      *  only when discarding it (the preview host does this on file switch / when it leaves composition). */
     override fun close() {
@@ -510,6 +516,7 @@ class VmLibraryExecutor(
 
     private companion object {
         const val COMPOSER_DESC = "Landroidx/compose/runtime/Composer;"
+        const val COMPOSER_BINARY = "androidx.compose.runtime.Composer"
         const val BITS_PER_DEFAULT_INT = 31
 
         /** Namespaces the VM interprets from the PROJECT's library jars even when the host can load them —

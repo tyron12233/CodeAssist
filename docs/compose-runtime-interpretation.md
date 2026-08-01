@@ -169,10 +169,19 @@ Both novel risks of the threading are retired at the spike level (`InterpretedCo
   is the core of the VM-backed driver: the ~12 `ComposableAbi` ops become `invokeInstance` calls when the composer
   is VM-owned.
 
-So the remaining threading work is now known-mechanism engineering, not open risk: (a) give
-`ComposableAbi`/`ComposeRuntime` the VM backend for the composer ops + VM-aware composer-detection in
-`ComposeDispatcher`; (b) wire interp-core's tree-walker so a trivial user `@Composable` (a `remember` + a `Text`)
-composes through it, matching real; (c) B′.2 (interpreted snapshot/recomposition).
+- **VM backend productized** (`ComposerOps`): the ~12 composer ops are now behind a `ComposerOps` interface with
+  two impls — `ReflectiveComposerOps` (delegates to the existing `ComposableAbi`, so the bridged-composer path is
+  byte-for-byte unchanged) and `VmComposerOps` (drives a `VmObject` composer via `invokeInstance`/`propertyOrNull`,
+  version-tolerant group naming). `ComposeDispatcher.opsFor(composer)` picks per composer (VM-backed iff
+  `VmLibraryExecutor.ownsComposer(composer)`), and `ComposeRuntime` + `ComposeDispatcher` (incl. the inline-render
+  helpers) route every group op through it; `ComposeDispatcher`'s content-lambda composer-detection is VM-aware
+  too. Verified: `VmComposerOps` drives a full restart cycle (replace group + restart group + `$changed` skip +
+  scope registration) on an interpreted composer and `composeInitial` balances; the existing 126 reflective-path
+  tests are unchanged.
+
+So the remaining threading work: (b) wire interp-core's tree-walker so a trivial user `@Composable` (a `remember`
++ a `Text`) composes through the VM-backed driver end-to-end, matching real; (c) B′.2 (interpreted
+snapshot/recomposition — the current loop rides on real host `MutableState`).
 
 This preserves live-edit — the reason for keeping the source interpreter rather than compiling the user code.
 

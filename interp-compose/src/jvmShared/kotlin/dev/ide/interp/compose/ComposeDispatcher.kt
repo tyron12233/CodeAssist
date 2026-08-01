@@ -78,6 +78,23 @@ class ComposeDispatcher(
         executor.lambdaErrorSink = { t -> contentLambdaError = contentLambdaError ?: t }
     }
 
+    /** The VM-backed composer-op driver (milestone A), when a bytecode executor is present. */
+    private val vmOps: VmComposerOps? = vmComposables?.let { VmComposerOps(it) }
+
+    /**
+     * Pick the group/slot protocol driver by the composer's nature: [VmComposerOps] for an INTERPRETED (`VmObject`)
+     * composer produced by the project's own runtime (the interpreted-runtime path — the too-new version ceiling),
+     * host reflection ([ReflectiveComposerOps]) for a real host composer (the bridged-composer path). A real host
+     * composer is never VM-owned, so the existing path is unchanged.
+     */
+    internal fun opsFor(composer: Any): ComposerOps =
+        if (vmComposables?.ownsComposer(composer) == true) vmOps!! else ReflectiveComposerOps
+
+    /** Whether [value] is a composer this dispatcher threads — a real host `Composer` OR an interpreted one (the
+     *  VM-owned composer). Used to find the composer among a `@Composable` content lambda's callback args. */
+    private fun isComposer(value: Any?): Boolean =
+        value != null && (COMPOSER.isInstance(value) || vmComposables?.ownsComposer(value) == true)
+
     /** The live composer for the current composition pass; null outside a composition. */
     @Volatile
     var composer: Any? = null
@@ -306,8 +323,9 @@ class ComposeDispatcher(
         // (the IDE's own UI around the preview) isn't corrupted, which otherwise surfaces on the host's next
         // `endNode` as "Cannot end node insertion, there are no pending operations". On the normal path we close
         // exactly the group we opened.
-        val marker = ComposableAbi.currentMarker(composer)
-        ComposableAbi.startGroup(composer, call.callSiteKey.value)
+        val ops = opsFor(composer)
+        val marker = ops.currentMarker(composer)
+        ops.startGroup(composer, call.callSiteKey.value)
         var completed = false
         try {
             // Bind named arguments back to their declared positions before the ABI binds them to JVM slots
@@ -362,8 +380,8 @@ class ComposeDispatcher(
         } finally {
             // Normal completion: close exactly the call-site group. Failure: unwind to the pre-call marker so
             // a composable that died with a node/group still open can't corrupt the surrounding composition.
-            if (completed) ComposableAbi.endGroup(composer)
-            else runCatching { ComposableAbi.endToMarker(composer, marker) }
+            if (completed) ops.endGroup(composer)
+            else runCatching { ops.endToMarker(composer, marker) }
         }
     }
 
@@ -417,8 +435,8 @@ class ComposeDispatcher(
                     null
                 } else {
                     val a = callArgs?.toList() ?: emptyList()
-                    val composerArg = a.firstOrNull { COMPOSER.isInstance(it) }
-                    val real = a.takeWhile { !COMPOSER.isInstance(it) } // receiver/value params, before the composer
+                    val composerArg = a.firstOrNull { isComposer(it) }
+                    val real = a.takeWhile { !isComposer(it) } // receiver/value params, before the composer
                     val prev = composer
                     if (composerArg != null) composer = composerArg
                     // Whether composable calls are legal inside THIS lambda is decided by the actual invocation:
@@ -488,8 +506,9 @@ class ComposeDispatcher(
             if (a is InterpretedLambda && callee.paramTypes.getOrNull(i)?.isComposable == true) a else null
         }
         if (slots.isEmpty()) return NOT_WINDOWED
-        val marker = ComposableAbi.currentMarker(composer)
-        ComposableAbi.startGroup(composer, call.callSiteKey.value)
+        val ops = opsFor(composer)
+        val marker = ops.currentMarker(composer)
+        ops.startGroup(composer, call.callSiteKey.value)
         var completed = false
         try {
             // The slots (title/text/buttons) are a FIXED set, so composing them sequentially under the call-site
@@ -499,7 +518,7 @@ class ComposeDispatcher(
             completed = true
             return Unit
         } finally {
-            if (completed) ComposableAbi.endGroup(composer) else runCatching { ComposableAbi.endToMarker(composer, marker) }
+            if (completed) ops.endGroup(composer) else runCatching { ops.endToMarker(composer, marker) }
         }
     }
 
@@ -539,16 +558,17 @@ class ComposeDispatcher(
             runCatching { Class.forName(fqn, false, loader ?: javaClass.classLoader).getField("INSTANCE").get(null) }.getOrNull()
                 ?: libraryExecutor?.takeIf { it.hasClass(fqn) }?.objectInstance(fqn)
         }
-        val marker = ComposableAbi.currentMarker(composer)
-        ComposableAbi.startGroup(composer, call.callSiteKey.value)
+        val ops = opsFor(composer)
+        val marker = ops.currentMarker(composer)
+        ops.startGroup(composer, call.callSiteKey.value)
         var completed = false
         try {
             content.invoke(listOfNotNull(receiver))
             completed = true
             return Unit
         } finally {
-            if (completed) ComposableAbi.endGroup(composer)
-            else runCatching { ComposableAbi.endToMarker(composer, marker) }
+            if (completed) ops.endGroup(composer)
+            else runCatching { ops.endToMarker(composer, marker) }
         }
     }
 
@@ -640,15 +660,16 @@ class ComposeDispatcher(
         try { builder.invoke(listOf(collector)) } finally { navCollector = prev }
         if (collector.destinations.isEmpty()) return Unit
         val content = matchDestination(start, collector) ?: collector.destinations.values.first()
-        val marker = ComposableAbi.currentMarker(composer)
-        ComposableAbi.startGroup(composer, call.callSiteKey.value)
+        val ops = opsFor(composer)
+        val marker = ops.currentMarker(composer)
+        ops.startGroup(composer, call.callSiteKey.value)
         var completed = false
         try {
             content.invoke(List(content.paramCount) { null })
             completed = true
             return Unit
         } finally {
-            if (completed) ComposableAbi.endGroup(composer) else runCatching { ComposableAbi.endToMarker(composer, marker) }
+            if (completed) ops.endGroup(composer) else runCatching { ops.endToMarker(composer, marker) }
         }
     }
 

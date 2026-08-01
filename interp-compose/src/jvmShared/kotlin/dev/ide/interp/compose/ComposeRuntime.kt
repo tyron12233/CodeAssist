@@ -19,11 +19,16 @@ class ComposeRuntime(private val dispatcher: ComposeDispatcher) : ComposableInvo
 
     override fun invokeComposable(callSiteKey: Int, restartable: Boolean, force: Boolean, args: List<Any?>, body: () -> Any?): Any? {
         val outer = dispatcher.composer ?: return body() // no composition in progress → just run it
+        // The composer-op driver for this composer — host reflection for a bridged host composer, the VM-backed
+        // driver for an interpreted (VmObject) composer produced by the project runtime (milestone A). `group`
+        // (from startRestartGroup) and `scope` (from endRestartGroup) share the composer's nature, so one pick
+        // serves the whole restart cycle.
+        val ops = dispatcher.opsFor(outer)
         // Capture the composer position before opening the restart group, so a body that throws mid-composition
         // (a library composable that failed with a node still open) can be unwound to here rather than leaving a
         // dangling node that crashes the enclosing composition — see [ComposableAbi.endToMarker].
-        val marker = ComposableAbi.currentMarker(outer)
-        val group = ComposableAbi.startRestartGroup(outer, callSiteKey)
+        val marker = ops.currentMarker(outer)
+        val group = ops.startRestartGroup(outer, callSiteKey)
         dispatcher.composer = group
         val result: Any?
         val scope: Any?
@@ -33,25 +38,25 @@ class ComposeRuntime(private val dispatcher: ComposeDispatcher) : ComposableInvo
             // runtime says this group may skip (i.e. it wasn't invalidated by its own state read). The arg
             // recording must happen every pass to keep slot positions stable, so it runs before the skip test.
             // [force] (the callee's body was live-edited) defeats the skip so the new body actually runs.
-            val argsChanged = force || if (restartable) ComposableAbi.argsChanged(group, args) else true
-            result = if (restartable && !argsChanged && ComposableAbi.isSkipping(group)) {
+            val argsChanged = force || if (restartable) ops.argsChanged(group, args) else true
+            result = if (restartable && !argsChanged && ops.isSkipping(group)) {
                 InterpProfile.count("composablesSkip")
                 if (InterpTrace.enabled) InterpTrace.log("compose key=$callSiteKey SKIP (restartable=$restartable argsChanged=$argsChanged skipping=true)")
-                ComposableAbi.skipToGroupEnd(group)
+                ops.skipToGroupEnd(group)
                 Unit // a skipped Unit composable contributes no value; its nodes are reused from last time
             } else {
                 InterpProfile.count("composablesRun")
                 if (InterpTrace.enabled) InterpTrace.log("compose key=$callSiteKey RUN  (restartable=$restartable argsChanged=$argsChanged force=$force)")
                 body()
             }
-            scope = ComposableAbi.endRestartGroup(group)
+            scope = ops.endRestartGroup(group)
         } catch (t: Throwable) {
             // The body failed mid-composition (e.g. an interpreter error, or a library composable that threw
             // with a node still open). Unwind to the pre-restart-group marker so any dangling group/node is
             // closed and the slot table isn't left corrupt, then rethrow for the caller (the preview renderer)
             // to surface as an error view rather than aborting — and, critically, so the IDE's own composition
             // around the preview doesn't crash on its next `endNode`.
-            runCatching { ComposableAbi.endToMarker(outer, marker) }
+            runCatching { ops.endToMarker(outer, marker) }
             throw t
         } finally {
             dispatcher.composer = outer
@@ -64,7 +69,7 @@ class ComposeRuntime(private val dispatcher: ComposeDispatcher) : ComposableInvo
         // argument-less composable (`Counter`, restartable + argsChanged=false + skipping=true) wrongly skips
         // its OWN state-driven recomposition and shows the stale value. Child-skip (an unchanged child of a
         // recomposing parent) is unaffected: that decision is made at the call site, not on this restart path.
-        ComposableAbi.updateScope(scope) { recomposeComposer ->
+        ops.updateScope(scope) { recomposeComposer ->
             // Recomposition-storm breaker: a composable that writes a state it also reads invalidates ITSELF every
             // pass, so the real Recomposer re-runs it back-to-back with no frame boundary — an ANR the interpreter's
             // loop guard never sees (it isn't an interpreted loop). Bound recompositions per scope per rolling

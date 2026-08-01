@@ -1,5 +1,6 @@
 package dev.ide.interp.compose.spike
 
+import dev.ide.interp.compose.VmComposerOps
 import dev.ide.interp.compose.VmLibraryExecutor
 import dev.ide.jvm.ClassBytesSource
 import dev.ide.jvm.InterpretPolicy
@@ -65,6 +66,40 @@ class InterpretedComposerThreadingSpike {
             val result = exec.invokeStatic(OWNER_FQN, "handComposerToHost", listOf(sink), 0)
             assertTrue(drove, "the host callback ran and drove the composer group ops via the VM")
             assertEquals("handed", result, "the interpreted composition completed cleanly — the VM-driven group balanced")
+        }
+    }
+
+    @Test fun vmComposerOpsDrivesAFullRestartCycleOnTheInterpretedComposer() {
+        // The productized VM-backed ComposableAbi: VmComposerOps drives the full protocol the interpreter emits —
+        // a caller-side replace group (per library call) and a restart group (per source-composable body, with the
+        // $changed skip fast path and scope registration) — on an interpreted composer, all through the VM. If any
+        // op desyncs the slot table, composeInitial throws a Start/end imbalance and the fixture never returns
+        // "handed". This is the same driver ComposeRuntime/ComposeDispatcher now select via opsFor.
+        val exec = VmLibraryExecutor(
+            source = ClassBytesSource.fromClasspath(),
+            projectPreferredPrefixes = listOf("androidx.compose.runtime.", "dev.ide.interp.compose.spike."),
+        )
+        exec.use {
+            val ops = VmComposerOps(exec)
+            val log = mutableListOf<String>()
+            val sink = Consumer<Any?> { composer ->
+                requireNotNull(composer) { "composer handed to host was null" }
+                assertTrue(exec.ownsComposer(composer), "the handed composer is a VM-owned interpreted Composer")
+                // A caller-side replace group (where a library composable call would sit).
+                val marker = ops.currentMarker(composer)
+                ops.startGroup(composer, 0xA1)
+                ops.endGroup(composer)
+                // A restart group (a source-composable body): open, run the $changed skip fast path, close, register.
+                val group = ops.startRestartGroup(composer, 0xB2)
+                val changed = ops.argsChanged(group, listOf("x"))
+                val skipping = ops.isSkipping(group)
+                val scope = ops.endRestartGroup(group)
+                ops.updateScope(scope) { /* recomposition is phase B′.2 */ }
+                log.add("marker=$marker;changed=$changed;skipping=$skipping")
+            }
+            val result = exec.invokeStatic(OWNER_FQN, "handComposerToHost", listOf(sink), 0)
+            assertEquals("handed", result, "composition balanced after a full VM-driven restart cycle")
+            assertEquals(1, log.size, "the full op cycle ran exactly once")
         }
     }
 }
