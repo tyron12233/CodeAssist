@@ -1816,19 +1816,31 @@ class KotlinTreeResolver(
                 else -> RNode.Assign(lhs, lower(right), span(e))
             }
         }
-        // Augmented assignment (`count += 1`, `total -= n`) → read-modify-write `a = a.op(b)`: an Assign for a
-        // local/param, a PropertySet for a property (a member, a `by`-delegated `MutableState`, `count.value`) so
-        // the write drives recomposition. Mirrors the `++`/`--` path in [incDecNode]. (Kotlin's `plusAssign`
-        // in-place form is not modeled; the read-modify-write covers numbers/strings, the common state case.)
+        // Augmented assignment (`count += 1`, `list += item`, `total -= n`).
         AUGMENTED[token]?.let { op ->
             val read = lower(left)
             if (read is RNode.Unsupported) return read
             val rhs = lower(right)
             if (rhs is RNode.Unsupported) return rhs
-            val combined = RNode.Call(synthOperator(op), DispatchKind.OPERATOR, read, listOf(RArg(rhs)), csk(e.textRange.startOffset), span(e))
+            val key = csk(e.textRange.startOffset)
+            val leftType = runCatching { resolver.inferType(left) }.getOrNull()
+            // In-place assign operator (`plusAssign`/`minusAssign`/…): Kotlin PREFERS it when the receiver defines
+            // one — a MutableList/Set/Map/Collection does (`MutableCollection.plusAssign`, a stdlib EXTENSION), and
+            // it's the ONLY legal form for a `val` collection (a read-modify-write can't reassign a `val`). Dispatch
+            // it directly (the interpreter mutates the real collection in place); falls through to the
+            // read-modify-write when no `*Assign` applies (numbers/strings/state — `count += 1`, `text += "!"`).
+            ASSIGN_OP[token]?.let { assignOp -> operatorCall(assignOp, leftType, read, rhs, key, span(e))?.let { return it } }
+            // Read-modify-write `a = a.op(b)` — an Assign for a local/param, a PropertySet for a property (a member,
+            // a `by`-delegated `MutableState`, `count.value`) so the write drives recomposition. The `op` is a
+            // resolved `plus`/`minus`/… (a `var list: List += x` uses the stdlib `Collection.plus` EXTENSION; a
+            // numeric/user member uses its own), or the intrinsic synthetic OPERATOR for an unknown/String left type
+            // (mirrors the arithmetic path). Mirrors the `++`/`--` path in [incDecNode].
+            val combined = if (leftType == null || (op == "plus" && leftType.qualifiedName == "kotlin.String")) null
+            else operatorCall(op, leftType, read, rhs, key, span(e))
+            val rmw = combined ?: RNode.Call(synthOperator(op), DispatchKind.OPERATOR, read, listOf(RArg(rhs)), key, span(e))
             return when (read) {
-                is RNode.Name -> RNode.Assign(read, combined, span(e))
-                is RNode.PropertyGet -> RNode.PropertySet(read.receiver, read.binding, combined, span(e))
+                is RNode.Name -> RNode.Assign(read, rmw, span(e))
+                is RNode.PropertyGet -> RNode.PropertySet(read.receiver, read.binding, rmw, span(e))
                 else -> unsupported("augmented-assignment target", e)
             }
         }
@@ -1853,9 +1865,30 @@ class KotlinTreeResolver(
             val ifNode = RNode.If(cond, tmpRef(), lower(right), span)
             return RNode.Block(listOf(RNode.LocalVar(tmpSlot, "\$elvis", mutable = false, lower(left), span), ifNode), isExpression = true, span)
         }
-        // `a in c` / `a !in c` → `c.contains(a)` (reflective on the runtime receiver / source-member dispatch).
+        // `a in c` / `a !in c` → `c.contains(a)`. A `k in map` uses `containsKey` (Kotlin's `Map.contains` is an
+        // @InlineOnly extension → `containsKey`, and `java.util.Map` has no `contains`); a user `operator fun
+        // contains` EXTENSION dispatches as an extension; everything else is the receiver's `contains` member
+        // (List/Set/String/range), invoked reflectively by the runtime value.
         if (token == KtTokens.IN_KEYWORD || token == KtTokens.NOT_IN) {
-            val contains = RNode.Call(synthMember("contains"), DispatchKind.MEMBER, lower(right), listOf(RArg(lower(left))), key, span(e))
+            val lowRight = lower(right)
+            val lowLeft = lower(left)
+            val recvType = runCatching { resolver.inferType(right) }.getOrNull()
+            val contains: RNode = run {
+                // A `contains` MEMBER (List/Set/String/range) is the common case — the reflective synthetic-member
+                // default handles it. Only when the receiver has NO such member do the map/extension forms apply.
+                if (recvType != null) {
+                    val fqn = recvType.qualifiedName; val ta = recvType.typeArguments
+                    val hasContainsMember = service.membersNamed(fqn, ta, "contains").any { it.kind == SymbolKind.METHOD && !it.isExtension && it.paramTypes.size == 1 }
+                    if (!hasContainsMember) {
+                        if (service.membersNamed(fqn, ta, "containsKey").any { it.kind == SymbolKind.METHOD && !it.isExtension && it.paramTypes.size == 1 })
+                            return@run RNode.Call(synthMember("containsKey"), DispatchKind.MEMBER, lowRight, listOf(RArg(lowLeft)), key, span(e))
+                        service.extensionsFor(fqn, ta, "contains")
+                            .firstOrNull { it.name == "contains" && it.kind == SymbolKind.METHOD && it.paramTypes.size == 1 && extensionInScope(it) }
+                            ?.let { return@run RNode.Call(toCallable(it), DispatchKind.EXTENSION, lowRight, listOf(RArg(lowLeft)), key, span(e)) }
+                    }
+                }
+                RNode.Call(synthMember("contains"), DispatchKind.MEMBER, lowRight, listOf(RArg(lowLeft)), key, span(e))
+            }
             return if (token == KtTokens.NOT_IN) negate(contains, span(e)) else contains
         }
         // `a..b` → a range. The integral/char element types have a modeled range CONSTRUCTED directly (their
@@ -1963,12 +1996,17 @@ class KotlinTreeResolver(
         val recvType = runCatching { resolver.inferType(arrayExpr) }.getOrNull()
             ?: return unsupported("indexed access on an unknown type", e)
         val indices = e.indexExpressions
-        val get = service.membersOf(recvType.qualifiedName, recvType.typeArguments, null)
-            .filterIsInstance<KotlinSymbol>()
-            .firstOrNull { it.name == "get" && it.kind == SymbolKind.METHOD && it.paramTypes.size == indices.size }
-            ?: return unsupported("no `get` operator (arity ${indices.size}) on ${recvType.qualifiedName}", e)
         val args = indices.map { RArg(lower(it)) }
-        return RNode.Call(toCallable(get), DispatchKind.MEMBER, receiver, args, csk(e.textRange.startOffset), span(e))
+        val key = csk(e.textRange.startOffset)
+        // A MEMBER `get` (List/Map/array) — a plain member invoked reflectively on the runtime receiver.
+        service.membersNamed(recvType.qualifiedName, recvType.typeArguments, "get")
+            .firstOrNull { it.kind == SymbolKind.METHOD && !it.isExtension && it.paramTypes.size == indices.size }
+            ?.let { return RNode.Call(toCallable(it), DispatchKind.MEMBER, receiver, args, key, span(e)) }
+        // An in-scope `operator fun get` EXTENSION (a user `Grid[i]`) — a static facade call, receiver first.
+        service.extensionsFor(recvType.qualifiedName, recvType.typeArguments, "get")
+            .firstOrNull { it.name == "get" && it.kind == SymbolKind.METHOD && it.paramTypes.size == indices.size && extensionInScope(it) }
+            ?.let { return RNode.Call(toCallable(it), DispatchKind.EXTENSION, receiver, args, key, span(e)) }
+        return unsupported("no `get` operator (arity ${indices.size}) on ${recvType.qualifiedName}", e)
     }
 
     /**
@@ -1984,12 +2022,22 @@ class KotlinTreeResolver(
         val recvType = runCatching { resolver.inferType(arrayExpr) }.getOrNull()
             ?: return unsupported("indexed assignment on an unknown type", e)
         val indices = lhs.indexExpressions
-        val set = service.membersOf(recvType.qualifiedName, recvType.typeArguments, null)
-            .filterIsInstance<KotlinSymbol>()
-            .firstOrNull { it.name == "set" && it.kind == SymbolKind.METHOD && it.paramTypes.size == indices.size + 1 }
-            ?: return unsupported("no `set` operator (arity ${indices.size + 1}) on ${recvType.qualifiedName}", e)
         val args = indices.map { RArg(lower(it)) } + RArg(lower(valueExpr))
-        return RNode.Call(toCallable(set), DispatchKind.MEMBER, receiver, args, csk(e.textRange.startOffset), span(e))
+        val key = csk(e.textRange.startOffset)
+        // A MEMBER `set` (List.set, array set) — invoked reflectively on the runtime receiver.
+        service.membersNamed(recvType.qualifiedName, recvType.typeArguments, "set")
+            .firstOrNull { it.kind == SymbolKind.METHOD && !it.isExtension && it.paramTypes.size == indices.size + 1 }
+            ?.let { return RNode.Call(toCallable(it), DispatchKind.MEMBER, receiver, args, key, span(e)) }
+        // `map[k] = v` → `put(k, v)`: `MutableMap.set` is an @InlineOnly extension (no JVM method) that inlines to
+        // `put`, so route a single-index set to the real `put` member.
+        if (indices.size == 1 && service.membersNamed(recvType.qualifiedName, recvType.typeArguments, "put")
+                .any { it.kind == SymbolKind.METHOD && !it.isExtension && it.paramTypes.size == 2 }
+        ) return RNode.Call(synthMember("put"), DispatchKind.MEMBER, receiver, args, key, span(e))
+        // An in-scope `operator fun set` EXTENSION (a user grid `cells[i] = v`).
+        service.extensionsFor(recvType.qualifiedName, recvType.typeArguments, "set")
+            .firstOrNull { it.name == "set" && it.kind == SymbolKind.METHOD && it.paramTypes.size == indices.size + 1 && extensionInScope(it) }
+            ?.let { return RNode.Call(toCallable(it), DispatchKind.EXTENSION, receiver, args, key, span(e)) }
+        return unsupported("no `set` operator (arity ${indices.size + 1}) on ${recvType.qualifiedName}", e)
     }
 
     /**
@@ -2039,6 +2087,22 @@ class KotlinTreeResolver(
         displayName = name, ownerFqn = null, methodName = name, paramTypes = emptyList(),
         isStatic = false, isConstructor = false, isInline = false,
     )
+
+    /** Resolve `receiver.<convention>(arg)` as a single-parameter operator on [receiverType]: a MEMBER (member-first,
+     *  OPERATOR dispatch) or an in-scope stdlib/user EXTENSION (`Collection.plus`, `MutableCollection.plusAssign`).
+     *  Null when neither resolves — the caller falls back (a synthetic numeric/string OPERATOR, or an honest gap).
+     *  Shared by the arithmetic and augmented-assignment lowering. The interpreter re-resolves the concrete overload
+     *  from the runtime argument, so picking any single-parameter candidate suffices. */
+    private fun operatorCall(convention: String, receiverType: KotlinType?, receiver: RNode, arg: RNode, key: CallSiteKey, span: SourceSpan): RNode.Call? {
+        val fqn = receiverType?.qualifiedName ?: return null
+        service.membersNamed(fqn, receiverType.typeArguments, convention)
+            .firstOrNull { it.kind == SymbolKind.METHOD && !it.isExtension && it.paramTypes.size == 1 }
+            ?.let { return RNode.Call(toCallable(it), DispatchKind.OPERATOR, receiver, listOf(RArg(arg)), key, span) }
+        service.extensionsFor(fqn, receiverType.typeArguments, convention)
+            .firstOrNull { it.name == convention && it.kind == SymbolKind.METHOD && it.paramTypes.size == 1 && extensionInScope(it) }
+            ?.let { return RNode.Call(toCallable(it), DispatchKind.EXTENSION, receiver, listOf(RArg(arg)), key, span) }
+        return null
+    }
 
     /** A synthetic MEMBER callee invoked reflectively on its runtime receiver by name (`contains`, `componentN`)
      *  — or routed to the interpreter's source-member dispatch when the receiver is a [SourceObject]. */
@@ -2616,6 +2680,13 @@ class KotlinTreeResolver(
     private val AUGMENTED = mapOf(
         KtTokens.PLUSEQ to "plus", KtTokens.MINUSEQ to "minus", KtTokens.MULTEQ to "times",
         KtTokens.DIVEQ to "div", KtTokens.PERCEQ to "rem",
+    )
+    /** Augmented-assignment tokens → the IN-PLACE assign operator Kotlin prefers when the receiver defines one (a
+     *  MutableList/Set/Map/Collection does — `MutableCollection.plusAssign`). Tried before the [AUGMENTED]
+     *  read-modify-write, and the only legal form for a `val` collection. */
+    private val ASSIGN_OP = mapOf(
+        KtTokens.PLUSEQ to "plusAssign", KtTokens.MINUSEQ to "minusAssign", KtTokens.MULTEQ to "timesAssign",
+        KtTokens.DIVEQ to "divAssign", KtTokens.PERCEQ to "remAssign",
     )
     private val COMPARISON = mapOf(
         KtTokens.LT to "lt", KtTokens.GT to "gt", KtTokens.LTEQ to "le", KtTokens.GTEQ to "ge",

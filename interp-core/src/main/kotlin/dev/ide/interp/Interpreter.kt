@@ -1109,6 +1109,46 @@ class Interpreter(
         }
     }
 
+    /** In-place `plusAssign`/`minusAssign` on a mutable collection/map — the @InlineOnly `+=`/`-=` operators inline
+     *  to add/remove/put, so they're applied here by the runtime shape of [value]: a Collection/Iterable/Array/
+     *  Sequence adds/removes ALL its elements (a map key set for `-=`), anything else is a single element (a `Pair`
+     *  or a whole `Map` for a map's `+=`, a key for its `-=`). */
+    @Suppress("UNCHECKED_CAST")
+    private fun collectionAssignOp(op: String, recv: Any?, value: Any?) {
+        val plus = op == "plusAssign"
+        when (recv) {
+            is MutableMap<*, *> -> {
+                val m = recv as MutableMap<Any?, Any?>
+                if (plus) when (value) {
+                    is Map<*, *> -> m.putAll(value as Map<Any?, Any?>)
+                    is Pair<*, *> -> m[value.first] = value.second
+                    is Iterable<*> -> value.forEach { (it as? Pair<*, *>)?.let { p -> m[p.first] = p.second } }
+                    is Array<*> -> value.forEach { (it as? Pair<*, *>)?.let { p -> m[p.first] = p.second } }
+                    is Sequence<*> -> value.forEach { (it as? Pair<*, *>)?.let { p -> m[p.first] = p.second } }
+                    else -> throw InterpreterException("`+=` on a Map needs a Pair/Map, got ${value?.javaClass?.name}")
+                } else when (value) { // minusAssign removes by key(s)
+                    is Iterable<*> -> value.forEach { m.remove(it) }
+                    is Array<*> -> value.forEach { m.remove(it) }
+                    is Sequence<*> -> value.forEach { m.remove(it) }
+                    else -> m.remove(value)
+                }
+            }
+            is MutableCollection<*> -> {
+                val c = recv as MutableCollection<Any?>
+                val elements: Collection<Any?>? = when (value) {
+                    is Collection<*> -> value
+                    is Iterable<*> -> value.toList()
+                    is Array<*> -> value.toList()
+                    is Sequence<*> -> value.toList()
+                    else -> null
+                }
+                if (plus) { if (elements != null) c.addAll(elements) else c.add(value) }
+                else { if (elements != null) c.removeAll(elements.toSet()) else c.remove(value) }
+            }
+            else -> throw InterpreterException("`${if (plus) "+=" else "-="}` on a non-mutable collection ${recv?.javaClass?.name}")
+        }
+    }
+
     /**
      * Execute a known `@InlineOnly` stdlib intrinsic ([STDLIB_FACADE] callees), or return null if [call] isn't
      * one. Covers the scope functions — both the `it`-lambda forms (`let`/`also`/`takeIf`/`takeUnless`) and the
@@ -1148,6 +1188,16 @@ class Interpreter(
                 val budget = LoopBudget()
                 var i = 0
                 forEachElement(receiver()) { element -> action.invoke(listOf(i++, element)); guardLoop(budget) }
+                Handled(Unit)
+            }
+            // `mutableCollection += x` / `-= x`, `mutableMap += (k to v)` / `-= key` — the @InlineOnly
+            // plusAssign/minusAssign operators (no JVM method; they inline to add/remove/put). Mutate the receiver
+            // IN PLACE by the runtime argument's shape (a single element vs a Collection/Iterable/Array/Sequence of
+            // them; a Pair/Map for a map's `+=`, a key/keys for its `-=`), mirroring the stdlib inline bodies. The
+            // common cases are exact; a container whose element type is itself a collection can't be distinguished
+            // at runtime and folds into the addAll/putAll branch (the same limitation as reflective re-resolution).
+            (name == "plusAssign" || name == "minusAssign") && call.dispatch == DispatchKind.EXTENSION && args.size == 1 -> {
+                collectionAssignOp(name, receiver(), eval(args[0].value, env))
                 Handled(Unit)
             }
             // `iterable.filterIsInstance<R>()` — a reified inline extension. Its JVM method exists but its body is
@@ -2539,6 +2589,7 @@ class Interpreter(
          *  coroutine [SuspendBridge]). */
         val INLINE_INTRINSIC_FACADES = setOf(
             "kotlin.StandardKt", "kotlin.text.StringsKt", "kotlin.collections.CollectionsKt",
+            "kotlin.collections.MapsKt", // MutableMap `+=`/`-=` (plusAssign/minusAssign) are @InlineOnly here
             "kotlinx.coroutines.DelayKt",
             // The precondition family (`require`/`check`/`error`/`requireNotNull`/`checkNotNull`) — @InlineOnly
             // (they carry contracts), so no JVM method exists to reflect. `TODO` lives on `StandardKt` above.
