@@ -17,6 +17,8 @@
     <string name="chat_add_key">Add API key</string>
     <string name="chat_show">Show</string>
     <string name="chat_hide">Hide</string>
+    <string name="chat_ca_cert">CA certificate (optional)</string>
+    <string name="chat_ca_cert_hint">Paste a CA certificate (PEM) only if the endpoint uses a private or regional CA not trusted by the system (e.g. GigaChat). It is trusted in addition to system CAs; the chain is still verified.</string>
     <string name="chat_gateway_hint">OpenAI-compatible: OpenRouter, LiteLLM, or a self-hosted endpoint.</string>
     <string name="chat_done">Done</string>
     <string name="chat_placeholder">Ask about your code, or describe a change</string>

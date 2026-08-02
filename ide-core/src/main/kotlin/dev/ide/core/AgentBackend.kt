@@ -102,6 +102,9 @@ internal class AgentBackend(private val ctx: BackendContext) : AgentService {
         val apiKey: String?,
         val model: String,
         val baseUrl: String?,
+        /** An optional additional CA certificate (PEM) to trust for a custom endpoint behind a private/regional
+         *  CA (e.g. GigaChat's Russian Trusted Root CA). Only the custom [GATEWAY] endpoint uses it. */
+        val caCertificatePem: String? = null,
     )
 
     private fun resolveConfig(): ResolvedConfig {
@@ -113,6 +116,7 @@ internal class AgentBackend(private val ctx: BackendContext) : AgentService {
                 apiKey = pref("gatewayKey"),
                 model = pref("gatewayModel").orEmpty(),
                 baseUrl = pref("gatewayBaseUrl"),
+                caCertificatePem = pref("gatewayCaCert"),
             )
         }
         val provider = registry.provider(selected)
@@ -159,6 +163,7 @@ internal class AgentBackend(private val ctx: BackendContext) : AgentService {
             mode = modePref().toUi(),
             gatewayBaseUrl = pref("gatewayBaseUrl").orEmpty(),
             gatewayModel = pref("gatewayModel").orEmpty(),
+            gatewayCaCert = pref("gatewayCaCert").orEmpty(),
         )
     }
 
@@ -183,9 +188,10 @@ internal class AgentBackend(private val ctx: BackendContext) : AgentService {
         resetLoop()
     }
 
-    override fun setGateway(baseUrl: String, model: String) {
+    override fun setGateway(baseUrl: String, model: String, caCert: String) {
         ctx.manager?.setPreference("settings.$AI_PAGE.gatewayBaseUrl", baseUrl)
         ctx.manager?.setPreference("settings.$AI_PAGE.gatewayModel", model)
+        ctx.manager?.setPreference("settings.$AI_PAGE.gatewayCaCert", caCert)
         resetLoop()
     }
 
@@ -227,7 +233,7 @@ internal class AgentBackend(private val ctx: BackendContext) : AgentService {
             return
         }
         scope.launch {
-            val fetched = runCatching { provider.listModels(ProviderConfig(key, cfg.baseUrl)) }
+            val fetched = runCatching { provider.listModels(ProviderConfig(key, cfg.baseUrl, cfg.caCertificatePem)) }
                 .getOrDefault(provider.models)
             _models.value = fetched.map { UiAgentModel(it.id, it.displayName) }
         }
@@ -308,9 +314,9 @@ internal class AgentBackend(private val ctx: BackendContext) : AgentService {
         val maxTokens = prefInt("maxTokens") ?: DEFAULT_MAX_TOKENS
         val thinkingBudget = prefInt("thinkingBudget")
         val signature =
-            "${cfg.selectedId}|$model|${cfg.baseUrl}|${cfg.apiKey.hashCode()}|$maxIterations|$maxTokens|$thinkingBudget"
+            "${cfg.selectedId}|$model|${cfg.baseUrl}|${cfg.apiKey.hashCode()}|${cfg.caCertificatePem.hashCode()}|$maxIterations|$maxTokens|$thinkingBudget"
         if (loop == null || loopSignature != signature) {
-            val client = provider.client(ProviderConfig(cfg.apiKey, cfg.baseUrl))
+            val client = provider.client(ProviderConfig(cfg.apiKey, cfg.baseUrl, cfg.caCertificatePem))
             loop = AgentLoop(
                 client, model, tools, gate, ::systemPrompt,
                 maxTokens = maxTokens,

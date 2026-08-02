@@ -50,6 +50,8 @@ import dev.ide.agent.ui.generated.resources.chat_antigravity_waiting
 import dev.ide.agent.ui.generated.resources.chat_antigravity_warning
 import dev.ide.agent.ui.generated.resources.chat_api_key
 import dev.ide.agent.ui.generated.resources.chat_base_url
+import dev.ide.agent.ui.generated.resources.chat_ca_cert
+import dev.ide.agent.ui.generated.resources.chat_ca_cert_hint
 import dev.ide.agent.ui.generated.resources.chat_cancel
 import dev.ide.agent.ui.generated.resources.chat_close
 import dev.ide.agent.ui.generated.resources.chat_connected
@@ -105,10 +107,11 @@ internal fun AgentProvidersSheet(backend: IdeBackend, onClose: () -> Unit) {
                         selected = provider.id == cfg.selectedProvider,
                         gatewayBaseUrl = cfg.gatewayBaseUrl,
                         gatewayModel = cfg.gatewayModel,
+                        gatewayCaCert = cfg.gatewayCaCert,
                         backend = backend,
                         onSelect = { backend.agent.selectProvider(provider.id); cfg = backend.agent.config() },
                         onSetKey = { backend.agent.setProviderKey(provider.id, it) },
-                        onSetGateway = { url, model -> backend.agent.setGateway(url, model) },
+                        onSetGateway = { url, model, ca -> backend.agent.setGateway(url, model, ca) },
                     )
                 }
             }
@@ -123,15 +126,17 @@ private fun ProviderCard(
     selected: Boolean,
     gatewayBaseUrl: String,
     gatewayModel: String,
+    gatewayCaCert: String,
     backend: IdeBackend,
     onSelect: () -> Unit,
     onSetKey: (String) -> Unit,
-    onSetGateway: (String, String) -> Unit,
+    onSetGateway: (String, String, String) -> Unit,
 ) {
     val isGateway = provider.id == "gateway"
     var key by remember(provider.id) { mutableStateOf(provider.apiKey) }
     var baseUrl by remember(provider.id) { mutableStateOf(gatewayBaseUrl) }
     var model by remember(provider.id) { mutableStateOf(gatewayModel) }
+    var caCert by remember(provider.id) { mutableStateOf(gatewayCaCert) }
     val hasKey = key.isNotBlank() && (!isGateway || baseUrl.isNotBlank())
     val shape = RoundedCornerShape(Ca.radius.md)
     Column(
@@ -168,8 +173,10 @@ private fun ProviderCard(
             }
             SecretField(key, stringResource(Res.string.chat_api_key)) { key = it; onSetKey(it) }
             if (isGateway) {
-                PlainField(baseUrl, stringResource(Res.string.chat_base_url)) { baseUrl = it; onSetGateway(it, model) }
-                PlainField(model, stringResource(Res.string.chat_model)) { model = it; onSetGateway(baseUrl, it) }
+                PlainField(baseUrl, stringResource(Res.string.chat_base_url)) { baseUrl = it; onSetGateway(it, model, caCert) }
+                PlainField(model, stringResource(Res.string.chat_model)) { model = it; onSetGateway(baseUrl, it, caCert) }
+                PlainField(caCert, stringResource(Res.string.chat_ca_cert)) { caCert = it; onSetGateway(baseUrl, model, it) }
+                Text(stringResource(Res.string.chat_ca_cert_hint), color = Ca.colors.textTertiary, style = Ca.type.caption2)
                 Text(stringResource(Res.string.chat_gateway_hint), color = Ca.colors.textTertiary, style = Ca.type.caption2)
             }
         }

@@ -975,8 +975,9 @@ interface AgentService {
     /** Store the API key for [providerId] (a built-in id or "gateway"). Blank clears it. */
     fun setProviderKey(providerId: String, key: String)
 
-    /** Configure the custom OpenAI-compatible gateway (base URL + model name). */
-    fun setGateway(baseUrl: String, model: String)
+    /** Configure the custom OpenAI-compatible gateway (base URL + model name, and an optional extra CA
+     *  certificate PEM to trust for an endpoint behind a private/regional CA — blank = system trust only). */
+    fun setGateway(baseUrl: String, model: String, caCert: String)
 
     /** Live status of the experimental Antigravity "Sign in with Google" (OAuth PKCE) flow. */
     val antigravitySignIn: StateFlow<UiAntigravitySignIn>
@@ -1019,7 +1020,7 @@ interface AgentService {
         override fun setModel(model: String) {}
         override fun selectProvider(id: String) {}
         override fun setProviderKey(providerId: String, key: String) {}
-        override fun setGateway(baseUrl: String, model: String) {}
+        override fun setGateway(baseUrl: String, model: String, caCert: String) {}
         override fun send(text: String) {}
         override fun retry() {}
         override fun stop() {}

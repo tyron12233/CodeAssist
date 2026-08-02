@@ -701,6 +701,9 @@ data class UiAgentConfig(
     /** For the "Custom gateway" (OpenAI-compatible) entry: its base URL and model name. */
     val gatewayBaseUrl: String = "",
     val gatewayModel: String = "",
+    /** An optional extra CA certificate (PEM) to trust for the gateway endpoint — for a custom host behind a
+     *  private/regional CA not in the system trust store (e.g. GigaChat's Russian Trusted Root CA). */
+    val gatewayCaCert: String = "",
 )
 
 /** A pending write-permission prompt (ASK_EACH mode). */

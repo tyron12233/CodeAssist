@@ -77,10 +77,10 @@ private class AntigravityFake(
     }
 
     /** Returns the response whose key the request URL contains (e.g. "loadCodeAssist"). */
-    override suspend fun post(url: String, headers: Map<String, String>, jsonBody: String): String =
+    override suspend fun post(url: String, headers: Map<String, String>, jsonBody: String, caCertificatePem: String?): String =
         postResponses.firstOrNull { url.contains(it.first) }?.second ?: "{}"
 
-    override suspend fun postForm(url: String, headers: Map<String, String>, form: Map<String, String>): String {
+    override suspend fun postForm(url: String, headers: Map<String, String>, form: Map<String, String>, caCertificatePem: String?): String {
         lastForm = form
         return formResponse
     }
@@ -247,7 +247,7 @@ class AgentTest {
         var sentForm: Map<String, String>? = null
         val transport = object : LlmTransport {
             override fun sse(request: SseRequest): Flow<String> = emptyFlow()
-            override suspend fun postForm(url: String, headers: Map<String, String>, form: Map<String, String>): String {
+            override suspend fun postForm(url: String, headers: Map<String, String>, form: Map<String, String>, caCertificatePem: String?): String {
                 sentForm = form
                 return """{"access_token":"at","refresh_token":"1//rt","expires_in":3600}"""
             }

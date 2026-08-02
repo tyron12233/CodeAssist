@@ -39,7 +39,7 @@ class GeminiProvider(private val transport: LlmTransport) : LlmProvider {
 
     override suspend fun listModels(config: ProviderConfig): List<LlmModelInfo> = runCatching {
         val base = config.baseUrl?.trimEnd('/') ?: DEFAULT_BASE
-        val body = transport.get("$base/v1beta/models?pageSize=1000", mapOf("x-goog-api-key" to config.apiKey))
+        val body = transport.get("$base/v1beta/models?pageSize=1000", mapOf("x-goog-api-key" to config.apiKey), config.caCertificatePem)
         val listed = AgentJson.parseToJsonElement(body).asObj()?.get("models").asArr() ?: return@runCatching models
         listed.mapNotNull { it.asObj() }
             .filter { m -> m["supportedGenerationMethods"].asArr()?.any { it.asStr() == "generateContent" } == true }
@@ -62,6 +62,7 @@ class GeminiProvider(private val transport: LlmTransport) : LlmProvider {
             url = "$base/v1beta/models/${request.model}:streamGenerateContent?alt=sse",
             headers = jsonHeaders(config),
             jsonBody = buildBody(request, cachedContent),
+            caCertificatePem = config.caCertificatePem,
         )
         val decoder = GeminiStreamDecoder()
         transport.sse(sse).collect { data -> decoder.decode(data).forEach { emit(it) } }
@@ -82,7 +83,7 @@ class GeminiProvider(private val transport: LlmTransport) : LlmProvider {
             if (request.tools.isNotEmpty()) put("tools", GeminiWire.toolDeclarations(request.tools))
             put("ttl", "${GeminiContextCache.TTL_SECONDS}s")
         }.toString()
-        val response = transport.post("$base/v1beta/cachedContents", jsonHeaders(config), body)
+        val response = transport.post("$base/v1beta/cachedContents", jsonHeaders(config), body, config.caCertificatePem)
         return AgentJson.parseToJsonElement(response).asObj()?.get("name").asStr()
     }
 

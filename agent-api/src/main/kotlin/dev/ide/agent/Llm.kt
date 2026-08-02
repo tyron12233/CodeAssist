@@ -89,8 +89,14 @@ fun interface LlmClient {
 /** Metadata for a model a provider offers. */
 data class LlmModelInfo(val id: String, val displayName: String, val supportsThinking: Boolean = false)
 
-/** The per-provider configuration the user supplies (bring-your-own-key). */
-data class ProviderConfig(val apiKey: String, val baseUrl: String? = null)
+/**
+ * The per-provider configuration the user supplies (bring-your-own-key). [caCertificatePem] is an optional
+ * additional CA certificate (PEM, one or more `-----BEGIN CERTIFICATE-----` blocks) to trust for this provider's
+ * endpoint — for a custom `baseUrl` whose server uses a private or regional CA not in the system trust store
+ * (e.g. GigaChat's "Russian Trusted Root CA"). It is trusted IN ADDITION to the system CAs; the certificate
+ * chain is still fully validated, so this is not an insecure "trust all" bypass.
+ */
+data class ProviderConfig(val apiKey: String, val baseUrl: String? = null, val caCertificatePem: String? = null)
 
 /** A named LLM provider. Implement this and register it to add a provider. */
 interface LlmProvider {

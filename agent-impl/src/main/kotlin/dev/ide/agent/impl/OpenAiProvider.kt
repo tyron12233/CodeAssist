@@ -47,13 +47,14 @@ class OpenAiProvider(private val transport: LlmTransport) : LlmProvider {
                 "content-type" to "application/json",
             ),
             jsonBody = buildBody(request, official),
+            caCertificatePem = config.caCertificatePem,
         )
         stream(sse)
     }
 
     override suspend fun listModels(config: ProviderConfig): List<LlmModelInfo> = runCatching {
         val base = config.baseUrl?.trimEnd('/') ?: DEFAULT_BASE
-        val body = transport.get("$base/v1/models", mapOf("Authorization" to "Bearer ${config.apiKey}"))
+        val body = transport.get("$base/v1/models", mapOf("Authorization" to "Bearer ${config.apiKey}"), config.caCertificatePem)
         val data = AgentJson.parseToJsonElement(body).asObj()?.get("data").asArr() ?: return@runCatching models
         data.mapNotNull { it.asObj()?.get("id").asStr() }
             .filter { it.startsWith("gpt") || it.startsWith("o1") || it.startsWith("o3") || it.startsWith("o4") || it.startsWith("chatgpt") }

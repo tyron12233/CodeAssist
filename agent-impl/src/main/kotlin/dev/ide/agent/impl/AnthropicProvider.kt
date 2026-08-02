@@ -51,6 +51,7 @@ class AnthropicProvider(private val transport: LlmTransport) : LlmProvider {
                 }
             },
             jsonBody = buildBody(request),
+            caCertificatePem = config.caCertificatePem,
         )
         stream(sse)
     }
@@ -60,6 +61,7 @@ class AnthropicProvider(private val transport: LlmTransport) : LlmProvider {
         val body = transport.get(
             "$base/v1/models?limit=1000",
             mapOf("x-api-key" to config.apiKey, "anthropic-version" to ANTHROPIC_VERSION),
+            config.caCertificatePem,
         )
         val data = AgentJson.parseToJsonElement(body).asObj()?.get("data").asArr() ?: return@runCatching models
         data.mapNotNull { it.asObj() }
