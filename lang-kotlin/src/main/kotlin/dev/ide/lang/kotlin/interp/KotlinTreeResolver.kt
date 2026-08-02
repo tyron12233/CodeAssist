@@ -2349,6 +2349,15 @@ class KotlinTreeResolver(
         // unknown for every candidate — Java bytecode / old cache), so a rejection is never guessed.
         val typed = byArity.filter { c -> argsBindable(c, valueArgs, exact = false) }
             .let { t -> t.filter { requiredParamsSatisfied(it, valueArgs) }.ifEmpty { t } }
+            // Kotlin resolves members and extensions in separate scopes: an APPLICABLE member shadows a same-named
+            // extension, which is never chosen while a member fits. `list.addAll/removeAll/retainAll(other)` on a
+            // MutableList is the canonical case — the `MutableCollection` member takes `Collection<E>` while the
+            // `CollectionsKt` extension takes `Iterable<T>`, and a List argument binds to BOTH, so the type/size/
+            // concreteness rungs below can't separate them and the call ties out to "unresolved/ambiguous". Prefer
+            // the member here, mirroring the editor resolver's `receiverSpecificity` (a non-extension outranks any
+            // extension). Only narrows a mixed set; an extension-only applicable set (the member's args don't bind,
+            // e.g. `list.map { }`) is left untouched by `ifEmpty`, and an all-member set is unchanged.
+            .let { t -> t.filter { !it.isExtension }.ifEmpty { t } }
         typed.singleOrNull()?.let { return it }
         // `typed` empties when no candidate's args bind — but for a BINARY (library) member overload set this is
         // usually the Java/Kotlin type-name divide, not a real no-match: a Java parameter is a JVM FQN
@@ -2360,6 +2369,19 @@ class KotlinTreeResolver(
         // EXACTLY match the (known) argument types (so `f(String)` wins over `f(Any)` for a String argument).
         val exact = typed.filter { c -> argsBindable(c, valueArgs, exact = true) }
         exact.singleOrNull()?.let { return it }
+        // Kotlin's most-specific-overload rule by SUBTYPING — the `exact` rung above only catches an EXACT param
+        // match, but specificity also orders overloads whose params are subtype-related: `show(Collection)` beats
+        // `show(Iterable)` for a `List` argument (both bind, neither is exactly `List`). Among the FIXED-arity
+        // applicable candidates keep the unique maximal one — the candidate no other is strictly more specific than
+        // (each of its parameters is the other's type or a subtype). Mirrors the editor resolver's
+        // `paramMoreSpecific` (`KotlinCallResolution.kt`), which uses the same subtype relation. Restricted to
+        // non-vararg candidates so the fixed-arity-beats-vararg rung below still owns the vararg tie; a
+        // type-parameter parameter makes the pair non-comparable (paramMoreSpecific returns false), so a generic
+        // `listOf(T)`/`listOf(vararg T)` set isn't touched. Backs off (no return) unless it narrows to exactly one,
+        // so the size/concreteness rungs still run and a genuine incomparable tie is never guessed.
+        val fixedTyped = typed.filter { it.varargParamIndex < 0 }
+        fixedTyped.filter { a -> fixedTyped.none { b -> b !== a && resolver.paramMoreSpecific(b, a) } }
+            .singleOrNull()?.let { return it }
         // Kotlin specificity: a FIXED-arity overload whose parameter count EXACTLY matches the supplied args is
         // more specific than a vararg overload that merely absorbs them with zero varargs. `remember { }` is
         // `remember(calculation)`, NOT `remember(vararg keys, calculation)` — the latter would leave `keys`
