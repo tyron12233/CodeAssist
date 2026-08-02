@@ -31,6 +31,11 @@ interface IComposePreviewSession {
     // program, so a synchronous call stalls the IDE for as long as that thread is saturated (seen: 1s frames).
     oneway void update(int sessionId, String blobFile);
 
+    // Live edit, but with the ComposePreviewWireCodec blob carried INLINE over Binder instead of via a shared file
+    // — saves two FS syscalls + a re-read per keystroke. The IDE uses this when the encoded program fits under its
+    // inline threshold (well within the async transaction buffer) and falls back to update(blobFile) otherwise.
+    oneway void updateBytes(int sessionId, in byte[] blob);
+
     // Re-target the off-screen surface (size / density / night). May recreate the surface. oneway (fire-and-forget).
     oneway void resize(int sessionId, int widthPx, int heightPx, float density, boolean night);
 

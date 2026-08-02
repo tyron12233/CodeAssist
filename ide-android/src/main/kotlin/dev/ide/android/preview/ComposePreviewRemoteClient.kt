@@ -181,9 +181,17 @@ class ComposePreviewRemoteClient(context: Context) {
     ) {
         fun update(lowered: LoweredComposePreview) {
             runCatching {
-                val blob = File(frameDir, "req-update.blob")
-                blob.writeBytes(ComposePreviewWireCodec.encode(lowered))
-                daemon.update(id, blob.path)
+                val encoded = ComposePreviewWireCodec.encode(lowered)
+                // Carry the blob inline over Binder when it fits under the async transaction buffer (the common
+                // case — a lowered preview is a few KB), saving a file write here + a re-read in `:preview` on every
+                // keystroke. A larger program falls back to the shared file so it can't blow the transaction limit.
+                if (encoded.size <= INLINE_UPDATE_MAX_BYTES) {
+                    daemon.updateBytes(id, encoded)
+                } else {
+                    val blob = File(frameDir, "req-update.blob")
+                    blob.writeBytes(encoded)
+                    daemon.update(id, blob.path)
+                }
             }.onFailure { log.warn("compose session $id update failed", it) }
         }
 
@@ -212,6 +220,10 @@ class ComposePreviewRemoteClient(context: Context) {
 
     companion object {
         private const val BIND_TIMEOUT_MS = 10_000L
+
+        /** Live-edit blobs at or below this go inline over the oneway Binder call; larger ones use the shared file.
+         *  256 KB sits well under the ~1 MB Binder transaction limit (and the async buffer half of it). */
+        private const val INLINE_UPDATE_MAX_BYTES = 256 * 1024
 
         @Volatile private var instance: ComposePreviewRemoteClient? = null
 
