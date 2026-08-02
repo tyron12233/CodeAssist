@@ -75,6 +75,19 @@ class VmTextFieldArtSpike {
                 "androidx.compose.ui.",
                 "androidx.compose.animation.",
             ),
+            // BRIDGE the runtime plumbing the (bridged) host composer/applier operates on: ui.platform (host
+            // CompositionLocals) AND ui.node (LayoutNode/UiApplier — the host applier materializes REAL LayoutNodes,
+            // so an interpreted node would be a $Proxy the host can't cast). Interpret the UI *logic*, bridge the
+            // *plumbing*. The node classes exist in the bundled Compose, so they bridge to real host objects.
+            projectExcludedPrefixes = listOf(
+                "androidx.compose.ui.platform.",
+                "androidx.compose.ui.node.",
+                // The pervasive Modifier INTERFACE + combinators cross the bridge constantly and are version-stable;
+                // bridge them so a Modifier is always the host's real interface. Implementations (foundation's
+                // PaddingElement etc.) stay interpreted as peers OF that real interface. Interface bridged, impls interpreted.
+                "androidx.compose.ui.Modifier",
+                "androidx.compose.ui.CombinedModifier",
+            ),
             peerFactory = DexPeerFactory(),
         )
         log("foundation.style classes in bytes: ${bytes.keys.count { it.startsWith("androidx/compose/foundation/style/") }}")
@@ -85,7 +98,10 @@ class VmTextFieldArtSpike {
         // downstream Compose "Start/end imbalance". See the material3-flip version-ceiling analysis.
         executor.lambdaErrorSink = { t ->
             val root = generateSequence(t as Throwable?) { it.cause?.takeIf { c -> c !== it } }.last()
-            log("interpreter failure behind the preview crash: ${root::class.java.name}: ${root.message}")
+            log("interpreter failure behind the preview crash: ${root::class.java.name}: ${root.message?.take(120)}")
+            // Dump the reflective site: WHO loads the interpreted-only class (e.g. foundation.style.Style) via the
+            // host loader. Frames mentioning dev.ide.jvm/interp reveal the bridge boundary (peer vs bridgeCall vs cast).
+            root.stackTrace.take(22).forEach { f -> log("    ROOT at $f") }
         }
         val span = SourceSpan(0, 0)
         val callee = ResolvedCallable.Library(
