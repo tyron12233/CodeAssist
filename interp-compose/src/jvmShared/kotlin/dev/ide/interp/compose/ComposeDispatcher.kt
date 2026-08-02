@@ -429,44 +429,60 @@ class ComposeDispatcher(
                 // freeze the interpreter's per-pass guards never see. On a storm, stop re-running the body and
                 // signal the renderer to drop the interpreted subtree (disposing the offending composable's
                 // effects, which stops the state writes driving the loop). Returns null (Unit content).
-                "invoke" -> if (contentLambdaStorm(lambda)) {
-                    contentLambdaError = contentLambdaError ?: InterpreterException(RUNAWAY_MESSAGE)
-                    notifyRunaway()
-                    null
-                } else {
+                "invoke" -> {
                     val a = callArgs?.toList() ?: emptyList()
-                    val composerArg = a.firstOrNull { isComposer(it) }
-                    val real = a.takeWhile { !isComposer(it) } // receiver/value params, before the composer
-                    val prev = composer
-                    if (composerArg != null) composer = composerArg
-                    // Whether composable calls are legal inside THIS lambda is decided by the actual invocation:
-                    // Compose passes a composer to a `@Composable` lambda (a `Column {}`/`items {}` content slot →
-                    // composables allowed) but NOT to a non-composable one (a `LazyListScope.() -> Unit` list
-                    // builder → a stray composable there is suppressed, so it can't compose against the stale
-                    // composer and hang). Runtime-derived, so it's robust to how ComposableAbi bound the args.
-                    val prevSuppressed = composablesSuppressed.get()
-                    composablesSuppressed.set(composerArg == null)
-                    try {
-                        lambda.invoke(real)
-                    } catch (ce: kotlin.coroutines.cancellation.CancellationException) {
-                        throw ce // recomposition cancellation is control flow — never swallow it
-                    } catch (e: Throwable) {
-                        // A malformed/half-typed buffer can make an interpreted composable throw mid-composition
-                        // (a wrong-typed arg, an unresolved call, an ABI mismatch, or a StackOverflow/OutOfMemory
-                        // from runaway user code). This lambda runs during Compose's measure/subcompose pass
-                        // (LazyColumn items, Scaffold content), OUTSIDE the preview renderer's try/catch — so
-                        // letting anything propagate kills the host thread and takes down the whole IDE (the
-                        // Compose preview runs in-process, with no process isolation). Contain ALL throwables incl.
-                        // Error: the lambda returns normally (emitting whatever composed before the failure), the
-                        // enclosing library composable balances its own groups, and the preview degrades to a
-                        // partial render surfaced through [contentLambdaError] instead of crashing. The recursion
-                        // and per-pass guards (interp-core Interpreter) trip before most StackOverflow/hang cases
-                        // reach here; this is the backstop for anything they don't.
-                        contentLambdaError = contentLambdaError ?: e
-                        Unit
-                    } finally {
-                        composer = prev
-                        composablesSuppressed.set(prevSuppressed)
+                    // A SUSPEND block that reached the composable proxy: a `LaunchedEffect { }` / `produceState { }`
+                    // body is a @Composable whose lambda parameter is itself `suspend`, so [invokeComposable] proxies
+                    // it HERE along with the real content lambdas. The runtime invokes such a block with a trailing
+                    // Continuation (never a Composer) — route it through the coroutine bridge exactly like
+                    // [guardedLambdaProxy]/the default proxy, so `delay`/`withFrameNanos` suspend on a background
+                    // thread under a managed [dev.ide.interp.SuspendContext] instead of running synchronously on the
+                    // composition thread and throwing "delay outside an interpreted coroutine". A genuine composable
+                    // content lambda is invoked with a Composer, never a Continuation, so it never takes this branch.
+                    if (a.lastOrNull() is kotlin.coroutines.Continuation<*>) suspendBridge.runSuspending(lambda, a)
+                    else if (contentLambdaStorm(lambda)) {
+                        // Runaway-recomposition breaker (library-composable path): a library composable that keeps
+                        // invalidating itself re-invokes this content lambda every pass with no frame boundary — an
+                        // IDE freeze the interpreter's per-pass guards never see. On a storm, stop re-running the
+                        // body and signal the renderer to drop the interpreted subtree (disposing the offending
+                        // composable's effects, which stops the state writes driving the loop). Returns null (Unit).
+                        contentLambdaError = contentLambdaError ?: InterpreterException(RUNAWAY_MESSAGE)
+                        notifyRunaway()
+                        null
+                    } else {
+                        val composerArg = a.firstOrNull { isComposer(it) }
+                        val real = a.takeWhile { !isComposer(it) } // receiver/value params, before the composer
+                        val prev = composer
+                        if (composerArg != null) composer = composerArg
+                        // Whether composable calls are legal inside THIS lambda is decided by the actual invocation:
+                        // Compose passes a composer to a `@Composable` lambda (a `Column {}`/`items {}` content slot →
+                        // composables allowed) but NOT to a non-composable one (a `LazyListScope.() -> Unit` list
+                        // builder → a stray composable there is suppressed, so it can't compose against the stale
+                        // composer and hang). Runtime-derived, so it's robust to how ComposableAbi bound the args.
+                        val prevSuppressed = composablesSuppressed.get()
+                        composablesSuppressed.set(composerArg == null)
+                        try {
+                            lambda.invoke(real)
+                        } catch (ce: kotlin.coroutines.cancellation.CancellationException) {
+                            throw ce // recomposition cancellation is control flow — never swallow it
+                        } catch (e: Throwable) {
+                            // A malformed/half-typed buffer can make an interpreted composable throw mid-composition
+                            // (a wrong-typed arg, an unresolved call, an ABI mismatch, or a StackOverflow/OutOfMemory
+                            // from runaway user code). This lambda runs during Compose's measure/subcompose pass
+                            // (LazyColumn items, Scaffold content), OUTSIDE the preview renderer's try/catch — so
+                            // letting anything propagate kills the host thread and takes down the whole IDE (the
+                            // Compose preview runs in-process, with no process isolation). Contain ALL throwables incl.
+                            // Error: the lambda returns normally (emitting whatever composed before the failure), the
+                            // enclosing library composable balances its own groups, and the preview degrades to a
+                            // partial render surfaced through [contentLambdaError] instead of crashing. The recursion
+                            // and per-pass guards (interp-core Interpreter) trip before most StackOverflow/hang cases
+                            // reach here; this is the backstop for anything they don't.
+                            contentLambdaError = contentLambdaError ?: e
+                            Unit
+                        } finally {
+                            composer = prev
+                            composablesSuppressed.set(prevSuppressed)
+                        }
                     }
                 }
                 "toString" -> "InterpretedComposableLambda"
