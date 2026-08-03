@@ -98,16 +98,19 @@ fun SettingsHubScreen(
                 HubDest(CaIcons.layers, stringResource(Res.string.settings_storage), stringResource(Res.string.settings_storage_subtitle), onOpenStorage),
             )
             Card(
-                Modifier.widthIn(max = 640.dp).fillMaxWidth().padding(horizontal = 16.dp).padding(bottom = 24.dp),
-                shape = MaterialTheme.shapes.extraLarge,
+                Modifier.widthIn(max = 640.dp).fillMaxWidth().padding(horizontal = 16.dp).padding(top = 8.dp, bottom = 24.dp),
+                shape = MaterialTheme.shapes.large,
                 colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainer),
             ) {
-                rows.forEachIndexed { i, dest ->
-                    if (i > 0) HorizontalDivider(
-                        Modifier.padding(start = 72.dp),
-                        color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f),
-                    )
-                    HubRow(dest)
+                // Inner vertical padding so the first/last rows don't hug the card's rounded corners.
+                Column(Modifier.padding(vertical = 8.dp)) {
+                    rows.forEachIndexed { i, dest ->
+                        if (i > 0) HorizontalDivider(
+                            Modifier.padding(start = 72.dp),
+                            color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f),
+                        )
+                        HubRow(dest)
+                    }
                 }
             }
         }

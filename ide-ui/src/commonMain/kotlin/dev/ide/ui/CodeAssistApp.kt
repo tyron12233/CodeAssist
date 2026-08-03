@@ -321,15 +321,16 @@ fun CodeAssistApp(
         dev.ide.ui.backend.UiAccent.Orange -> CaAccent.Orange
         else -> CaAccent.Violet
     }
-    // A Custom accent seeds the whole expressive theme from the user's chosen color (overrides presets +
-    // wallpaper dynamic color); any preset leaves it null so dynamic/preset applies.
+    // A Custom accent seeds the whole expressive theme from the user's chosen color; a "Dynamic" accent
+    // follows the wallpaper; any preset applies its fixed palette (overriding wallpaper dynamic color).
     val seedColor = if (settings.accent == dev.ide.ui.backend.UiAccent.Custom) {
         androidx.compose.ui.graphics.Color(settings.customAccentColor)
     } else null
+    val useDynamic = settings.accent == dev.ide.ui.backend.UiAccent.Dynamic
     val resolvedCodeFont = if (settings.codeFont == "monospace") FontFamily.Monospace else codeFont
     // Apply settings to the active project's live editor state whenever they change (or the project swaps).
     LaunchedEffect(state, settings) { state.applySettings(settings) }
-    CodeAssistTheme(dark = dark, accent = accent, seedColor = seedColor, uiFont = uiFont, codeFont = resolvedCodeFont) {
+    CodeAssistTheme(dark = dark, accent = accent, seedColor = seedColor, useDynamic = useDynamic, uiFont = uiFont, codeFont = resolvedCodeFont) {
         // Route the system back gesture through in-app navigation instead of letting it close the app (#997).
         // Registered above the editor's own overlay handler, so an open sheet/dialog is closed first (the
         // deeper handler wins); this one only fires for screen-level back: pop a sub-screen to the editor, the

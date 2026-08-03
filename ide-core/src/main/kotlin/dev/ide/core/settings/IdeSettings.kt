@@ -79,6 +79,7 @@ data class IdeSettings(
         const val THEME_LIGHT = "light"
         const val THEME_DARK = "dark"
         const val THEME_SYSTEM = "system"
+        const val ACCENT_DYNAMIC = "dynamic"
         const val ACCENT_VIOLET = "violet"
         const val ACCENT_TEAL = "teal"
         const val ACCENT_ORANGE = "orange"

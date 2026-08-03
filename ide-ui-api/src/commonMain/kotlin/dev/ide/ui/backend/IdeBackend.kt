@@ -1586,8 +1586,12 @@ data class UiSettings(
     }
 }
 
-/** The theme accent swaps the design system ships. [Custom] uses [UiSettings.customAccentColor] as the seed. */
-enum class UiAccent { Violet, Teal, Orange, Custom }
+/**
+ * The theme accent the design system ships. [Custom] uses [UiSettings.customAccentColor] as the seed;
+ * [Dynamic] follows the device wallpaper (Material You, Android 12+; falls back to Violet elsewhere). A
+ * preset / Custom always overrides wallpaper dynamic color.
+ */
+enum class UiAccent { Dynamic, Violet, Teal, Orange, Custom }
 
 /**
  * A per-language code style profile the Code Style screen edits. Values are plain strings/ints/bools (preset,

@@ -129,6 +129,7 @@ object BuiltInSettingsPages {
                 "accent", "Accent", "The interface highlight color the whole expressive theme is generated from",
                 default = d.accent,
                 options = listOf(
+                    SettingControl.Choice.Option(IdeSettings.ACCENT_DYNAMIC, "Dynamic"),
                     SettingControl.Choice.Option(IdeSettings.ACCENT_VIOLET, "Violet"),
                     SettingControl.Choice.Option(IdeSettings.ACCENT_TEAL, "Teal"),
                     SettingControl.Choice.Option(IdeSettings.ACCENT_ORANGE, "Orange (Legacy)"),
