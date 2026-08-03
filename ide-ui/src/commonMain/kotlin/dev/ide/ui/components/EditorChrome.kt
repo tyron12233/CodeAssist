@@ -45,6 +45,7 @@ import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
 import androidx.compose.material3.LinearProgressIndicator
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -134,7 +135,7 @@ import org.jetbrains.compose.resources.pluralStringResource
 import org.jetbrains.compose.resources.stringResource
 
 /**
- * Top bar (glass-regular), pared back to the essentials: sidebar toggle · project name · index status ·
+ * Top bar (a solid Material `surfaceContainer` toolbar), pared back to the essentials: sidebar toggle · project name · index status ·
  * save · command palette · console · Run. The project tile lives in the side rail; theme toggle and
  * re-index moved to the command palette (and rail Settings) — they were redundant here.
  *
@@ -193,12 +194,13 @@ fun EditorTopBar(
     compact: Boolean = false,
 ) {
     val dim = MaterialTheme.colorScheme.outline.copy(alpha = 0.35f)
-    GlassSurface(
-        modifier = Modifier.fillMaxWidth().height(52.dp),
-        material = GlassMaterial.Regular
+    Surface(
+        modifier = Modifier.fillMaxWidth(),
+        color = MaterialTheme.colorScheme.surfaceContainer,
+        tonalElevation = 2.dp,
     ) {
         Row(
-            Modifier.fillMaxWidth().fillMaxHeight().padding(horizontal = 12.dp),
+            Modifier.fillMaxWidth().height(52.dp).padding(horizontal = 12.dp),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(if (compact) 6.dp else 10.dp),
         ) {
@@ -984,13 +986,8 @@ private fun EditorTab(
             Modifier
                 .fillMaxHeight()
                 .background(
-                    color = if (active) accent.copy(alpha = 0.1f) else Ide.colors.editorBg,
-                    shape = RoundedCornerShape(Ca.radius.sm)
-                )
-                .border(
-                    width = if (active) 1.dp else 0.dp,
-                    color = if (active) accent.copy(alpha = 0.75f) else Color.Transparent,
-                    shape = RoundedCornerShape(Ca.radius.sm)
+                    color = if (active) MaterialTheme.colorScheme.secondaryContainer else Color.Transparent,
+                    shape = RoundedCornerShape(Ca.radius.md)
                 )
                 .combinedClickable(onClick = onSelect, onLongClick = { menuOpen = true })
                 .secondaryClickable { menuOpen = true }
@@ -1002,7 +999,7 @@ private fun EditorTab(
             Spacer(Modifier.width(8.dp))
             Text(
                 file.name,
-                color = if (active) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.onSurfaceVariant,
+                color = if (active) MaterialTheme.colorScheme.onSecondaryContainer else MaterialTheme.colorScheme.onSurfaceVariant,
                 style = MaterialTheme.typography.bodyMedium,
                 fontWeight = if (active) FontWeight.SemiBold else FontWeight.Normal,
             )
