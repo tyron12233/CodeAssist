@@ -42,25 +42,30 @@ class ComposePreviewRenderer(
     /** The project's library [ClassLoader] (device preview) — see [ComposeDispatcher.loader]. Null on desktop
      *  (library composables resolve against the IDE's bundled Compose-for-Desktop). */
     private val loader: ClassLoader? = null,
+
     /** When true (the editor default), a single unsupported/failed construct is SKIPPED so the rest of the
      *  preview still renders. Pass false to make the first failure THROW to [Render]'s boundary → [onError] →
      *  a visible error instead of a silently-empty preview (used by Learn lessons, whose snippets we author
      *  and want to fail loudly if a construct doesn't dispatch). */
     private val tolerateGaps: Boolean = true,
+
     /** Resolves the previewed project's resources (`R.string.x`, `stringResource(…)`, …). Null (desktop/lessons)
      *  leaves resource access degrading as before. */
     private val resources: PreviewResourceResolver? = null,
+
     /** The preview sandbox (see [dev.ide.interp.InterpreterHooks]): mediates the interpreter's escapes into
-     *  real code — file/network/Android-system/process calls per the project's settings. Null = unrestricted.
+     *  real code, file/network/Android-system/process calls per the project's settings. Null = unrestricted.
      *  The host owns the instance (a [dev.ide.interp.PreviewSandboxPolicy]) so it can read the findings. */
     private val hooks: InterpreterHooks? = null,
+
     /** Executes library classes only the project's jars carry — the bytecode VM ([VmLibraryExecutor]) — so
      *  dependency code runs interpreted instead of through a DexClassLoader. Null → such classes keep the
      *  honest "cannot load" boundary. */
     private val libraryExecutor: LibraryExecutor? = null,
 ) {
 
-    private val dispatcher = ComposeDispatcher(loader = loader, resources = resources, libraryExecutor = libraryExecutor)
+    private val dispatcher =
+        ComposeDispatcher(loader = loader, resources = resources, libraryExecutor = libraryExecutor)
     private val runtime = ComposeRuntime(dispatcher)
     private val log = Logger.getLogger("ComposePreviewRenderer")
 
@@ -88,7 +93,17 @@ class ComposePreviewRenderer(
         classes: List<ResolvedClass>,
         binding: PreviewParameterBinding,
     ): List<Any?> = runCatching {
-        Interpreter(program, dispatcher, runtime, classLoader = loader, classes = classes, tolerateGaps = tolerateGaps, resources = resources, hooks = hooks, libraryFallback = libraryExecutor)
+        Interpreter(
+            program,
+            dispatcher,
+            runtime,
+            classLoader = loader,
+            classes = classes,
+            tolerateGaps = tolerateGaps,
+            resources = resources,
+            hooks = hooks,
+            libraryFallback = libraryExecutor
+        )
             .previewParameterValues(binding.providerClass, binding.providerFqn, binding.limit)
     }.getOrElse {
         log.warning("Compose preview @PreviewParameter resolution failed: ${it::class.simpleName}: ${it.message}")
@@ -121,7 +136,18 @@ class ComposePreviewRenderer(
         val interpreter = remember(program, classes) {
             // tolerateGaps: a single unsupported construct skips rather than blanking the whole preview (the
             // editor default); a lesson passes false so a gap surfaces as a visible error instead of a blank.
-            Interpreter(program, dispatcher, runtime, classLoader = loader, classes = classes, tolerateGaps = tolerateGaps, dirtyCallees = dirtyCallees, resources = resources, hooks = hooks, libraryFallback = libraryExecutor)
+            Interpreter(
+                program,
+                dispatcher,
+                runtime,
+                classLoader = loader,
+                classes = classes,
+                tolerateGaps = tolerateGaps,
+                dirtyCallees = dirtyCallees,
+                resources = resources,
+                hooks = hooks,
+                libraryFallback = libraryExecutor
+            )
         }
         // Phase label for the profiler: the very first composition, an edit that dirtied some functions
         // (live-edit re-render), or a plain re-render. State-driven recompositions of a single child scope are
@@ -167,7 +193,12 @@ class ComposePreviewRenderer(
                 // state IT read changed, in which case it must run. Skipping is a win for the CHILD composables it
                 // invokes (each routed through the interpreter's restartable=returnsUnit path), not the root itself.
                 InterpProfile.trace("interp.render", phase) {
-                    runtime.invokeComposable(entry.name.hashCode(), restartable = false, force = false, args = emptyList()) {
+                    runtime.invokeComposable(
+                        entry.name.hashCode(),
+                        restartable = false,
+                        force = false,
+                        args = emptyList()
+                    ) {
                         interpreter.call(entry, args)
                     }
                 }
@@ -201,6 +232,7 @@ class ComposePreviewRenderer(
  *  and stack — not the opaque reflection wrapper. */
 private fun unwrapInvocationTarget(thrown: Throwable): Throwable {
     var cur = thrown
-    while (cur is java.lang.reflect.InvocationTargetException) cur = cur.targetException ?: cur.cause ?: return cur
+    while (cur is java.lang.reflect.InvocationTargetException) cur =
+        cur.targetException ?: cur.cause ?: return cur
     return cur
 }

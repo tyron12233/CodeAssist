@@ -3,6 +3,7 @@ package dev.ide.interp
 import dev.ide.lang.kotlin.interp.Binding
 import dev.ide.lang.kotlin.interp.CallSiteKey
 import dev.ide.lang.kotlin.interp.ClassFlavor
+import dev.ide.lang.kotlin.interp.children
 import dev.ide.lang.kotlin.interp.DispatchKind
 import dev.ide.lang.kotlin.interp.RArg
 import dev.ide.lang.kotlin.interp.RNode
@@ -117,6 +118,7 @@ class Interpreter(
                     val a = if (idx in args.indices) args[idx] else OmittedArg
                     env.define(p.slot, if (a !== OmittedArg) a else defaultValue(p, env))
                 }
+
                 else -> {
                     val supplied = i < args.size && args[i] !== OmittedArg
                     env.define(p.slot, if (supplied) args[i] else defaultValue(p, env))
@@ -140,7 +142,7 @@ class Interpreter(
             eval(default, env)
         } catch (ce: kotlin.coroutines.cancellation.CancellationException) {
             throw ce // recomposition cancellation is control flow — never swallow it
-        } catch (e: Exception) {
+        } catch (_: Exception) {
             zeroForType(p.type?.qualifiedName)
         }
     }
@@ -216,7 +218,12 @@ class Interpreter(
 
     /** Run [fn]'s body with [args] bound to its parameters and, when [receiver] is not [NO_RECEIVER], the
      *  receiver value bound to its [ResolvedFunction.receiverSlot] (an extension receiver / member `this`). */
-    private fun invokeFunction(fn: ResolvedFunction, receiver: Any?, args: List<Any?>, reifiedTypes: Map<String, RTypeArg> = emptyMap()): Any? {
+    private fun invokeFunction(
+        fn: ResolvedFunction,
+        receiver: Any?,
+        args: List<Any?>,
+        reifiedTypes: Map<String, RTypeArg> = emptyMap()
+    ): Any? {
         // A function with unsupported nodes is refused outright — UNLESS gap tolerance is on (the preview path),
         // where it runs and skips the gaps (see [tolerateGaps]).
         if (!tolerateGaps && !fn.isComplete) {
@@ -236,7 +243,8 @@ class Interpreter(
         // single loop; this additionally bounds a broad/deep call tree, many sequential loops, or heavy library
         // work that no single loop guard sees — so the composition thread can't freeze past an ANR. Disarmed on
         // the managed bridge thread (a legitimate long-running cooperative timer lives there).
-        if (f.depth == 1) f.deadlineNanos = if (SuspendContext.isActive) 0L else System.nanoTime() + MAX_RENDER_NANOS
+        if (f.depth == 1) f.deadlineNanos =
+            if (SuspendContext.isActive) 0L else System.nanoTime() + MAX_RENDER_NANOS
         else checkDeadline(f)
         val env = Env()
         env.defineReified(reifiedTypes)
@@ -246,7 +254,7 @@ class Interpreter(
             eval(fn.body, env)
         } catch (r: ReturnSignal) {
             r.value
-        } catch (so: StackOverflowError) {
+        } catch (_: StackOverflowError) {
             // Backstop below the depth guard: on a smaller stack the real overflow fires before MAX_CALL_DEPTH.
             // Convert it to a bounded InterpreterException so the preview shows an error instead of an Error
             // propagating (and, on an untracked thread, crashing the app). A pre-allocated instance is thrown so
@@ -271,18 +279,25 @@ class Interpreter(
      * provider's `values` (a `Sequence`/`Iterable`/array) and returns up to [limit] elements. Empty when the
      * provider can't be built or has no readable `values` — the caller then renders the preview without args.
      */
-    fun previewParameterValues(sourceClass: ResolvedClass?, providerFqn: String?, limit: Int): List<Any?> {
+    fun previewParameterValues(
+        sourceClass: ResolvedClass?,
+        providerFqn: String?,
+        limit: Int
+    ): List<Any?> {
         val provider: Any = when {
             sourceClass != null -> instantiate(sourceClass, emptyList())
             providerFqn != null -> {
                 val cls = loadInitialized(providerFqn) ?: return emptyList()
                 runCatching {
-                    cls.getDeclaredConstructor().also { c -> runCatching { c.isAccessible = true } }.newInstance()
+                    cls.getDeclaredConstructor().also { c -> runCatching { c.isAccessible = true } }
+                        .newInstance()
                 }.getOrNull() ?: return emptyList()
             }
+
             else -> return emptyList()
         }
-        val values = runCatching { readProperty(provider, "values") }.getOrNull() ?: return emptyList()
+        val values =
+            runCatching { readProperty(provider, "values") }.getOrNull() ?: return emptyList()
         val all: List<Any?> = when (values) {
             is Sequence<*> -> values.toList()
             is Iterable<*> -> values.toList()
@@ -306,17 +321,22 @@ class Interpreter(
                     // A recoverable cannot-load boundary hit while evaluating a statement (e.g. a Compose icon
                     // whose per-icon facade isn't loadable) skips just that statement — one missing icon leaves
                     // the rest of the UI rendering, instead of the whole preview failing.
-                    try { eval(st, env) } catch (b: InterpreterBoundaryException) { Unit }
+                    try {
+                        eval(st, env)
+                    } catch (b: InterpreterBoundaryException) {
+                        Unit
+                    }
                 } else {
                     eval(st, env)
                 }
             }
             last
         }
+
         is RNode.LocalVar -> {
             env.define(node.slot, node.initializer?.let { eval(it, env) })
-            Unit
         }
+
         is RNode.Assign -> {
             val target = node.target
             val binding = (target as? RNode.Name)?.binding
@@ -324,7 +344,13 @@ class Interpreter(
             when {
                 // A local `by`-delegate write: `delegate.setValue(null, property, value)`.
                 binding is Binding.DelegatedConvention ->
-                    delegateSetValue(env.read(binding.slot), binding.propertyName, thisRef = null, value = eval(node.value, env))
+                    delegateSetValue(
+                        env.read(binding.slot),
+                        binding.propertyName,
+                        thisRef = null,
+                        value = eval(node.value, env)
+                    )
+
                 binding is Binding.Local || binding is Binding.Param ->
                     env.assign(slotOf(binding), eval(node.value, env))
                 // A top-level `var` backing-field WRITE (`_more_vert = …`): its READ lowered to the synthetic
@@ -335,8 +361,8 @@ class Interpreter(
                 topLevelKey != null -> topLevelPropertyState[topLevelKey] = eval(node.value, env)
                 else -> throw InterpreterException("unsupported assignment target: ${target::class.simpleName}")
             }
-            Unit
         }
+
         is RNode.If -> {
             // Note: an `else` branch that legitimately evaluates to `null` must stay null — distinguish
             // "no else" (→ Unit) from "else yielded null" rather than coalescing both.
@@ -344,6 +370,7 @@ class Interpreter(
             if (eval(node.condition, env) == true) eval(node.then, env)
             else if (otherwise != null) eval(otherwise, env) else Unit
         }
+
         is RNode.Return -> throw ReturnSignal(node.value?.let { eval(it, env) })
         is RNode.While -> {
             // Each iteration runs the body in a fresh child scope, so a local (or lambda capturing one)
@@ -352,17 +379,29 @@ class Interpreter(
             val budget = LoopBudget()
             try {
                 if (node.doWhile) {
-                    do { runLoopBody(node.body, Env(env), node.label); guardLoop(budget) } while (eval(node.condition, env) == true)
+                    do {
+                        runLoopBody(node.body, Env(env), node.label); guardLoop(budget)
+                    } while (eval(node.condition, env) == true)
                 } else {
-                    while (eval(node.condition, env) == true) { runLoopBody(node.body, Env(env), node.label); guardLoop(budget) }
+                    while (eval(node.condition, env) == true) {
+                        runLoopBody(node.body, Env(env), node.label); guardLoop(budget)
+                    }
                 }
             } catch (b: BreakSignal) { /* break exits the loop */
-            } catch (b: LabeledBreakSignal) { if (!handledHere(b, node.label)) throw b }
+            } catch (b: LabeledBreakSignal) {
+                if (!handledHere(b, node.label)) throw b
+            }
             Unit
         }
+
         is RNode.ForEach -> {
-            val iterable = eval(node.iterable, env) ?: throw InterpreterException("cannot iterate null")
-            val iterator = invoke0(iterable, "iterator") ?: throw InterpreterException("no iterator() on ${iterable.javaClass.name}")
+            val iterable =
+                eval(node.iterable, env) ?: throw InterpreterException("cannot iterate null")
+            // Kotlin's `Map.iterator()` is `entries.iterator()` (a Map isn't itself Iterable), so `for (e in map)`
+            // / `for ((k, v) in map)` iterate the entry set; each element is a `Map.Entry`.
+            val iterationSource = if (iterable is Map<*, *>) iterable.entries else iterable
+            val iterator = invoke0(iterationSource, "iterator")
+                ?: throw InterpreterException("no iterator() on ${iterable.javaClass.name}")
             val budget = LoopBudget()
             try {
                 while (invoke0(iterator, "hasNext") == true) {
@@ -374,14 +413,27 @@ class Interpreter(
                     guardLoop(budget)
                 }
             } catch (b: BreakSignal) { /* break exits the loop */
-            } catch (b: LabeledBreakSignal) { if (!handledHere(b, node.label)) throw b }
+            } catch (b: LabeledBreakSignal) {
+                if (!handledHere(b, node.label)) throw b
+            }
             Unit
         }
-        is RNode.Break -> throw (node.label?.let { LabeledBreakSignal(it) } ?: BreakSignal)
-        is RNode.Continue -> throw (node.label?.let { LabeledContinueSignal(it) } ?: ContinueSignal)
+
+        is RNode.Break -> throw (node.label?.let { LabeledBreakSignal(it) } ?: BreakSignal())
+        is RNode.Continue -> throw (node.label?.let { LabeledContinueSignal(it) } ?: ContinueSignal())
         is RNode.Call -> evalCall(node, env)
-        is RNode.Lambda -> { InterpProfile.count("closures"); Closure(node, env) }
-        is RNode.StringConcat -> buildString { node.parts.forEach { append(eval(it, env)?.toString() ?: "null") } }
+        is RNode.Lambda -> {
+            InterpProfile.count("closures"); Closure(node, env)
+        }
+
+        is RNode.StringConcat -> buildString {
+            node.parts.forEach {
+                append(
+                    eval(it, env)?.toString() ?: "null"
+                )
+            }
+        }
+
         is RNode.PropertyGet -> {
             val binding = node.binding
             val receiverNode = node.receiver
@@ -403,7 +455,7 @@ class Interpreter(
                 val rType = owner?.substringAfterLast('.')
                 throw InterpreterException(
                     "can't resolve resource `R.$rType.${binding.name}` — the preview has no project resource " +
-                        "resolver (the module's resources didn't load), so `stringResource`/`colorResource`/… can't resolve"
+                            "resolver (the module's resources didn't load), so `stringResource`/`colorResource`/… can't resolve"
                 )
             }
             sourceQualifierMember(receiverNode, binding.name)?.let { return it.value }
@@ -420,19 +472,26 @@ class Interpreter(
                         ?: throw InterpreterException("top-level property read `${binding.name}` not supported (no owner)")
                     readTopLevelProperty(owner, binding.name)
                 }
+
                 else -> {
                     val receiver = eval(receiverNode, env)
                         ?: throw InterpreterException("cannot read property `${binding.name}` on a null receiver")
                     // The receiver evaluated to a CLASS
                     if (receiver is Class<*>) readStaticMember(receiver, binding.name)
                     else {
-                        val extOwner = (binding as? Binding.Property)?.takeIf { it.isExtension }?.ownerFqn
-                        if (extOwner != null) readExtensionProperty(receiver, extOwner, binding.name)
+                        val extOwner =
+                            (binding as? Binding.Property)?.takeIf { it.isExtension }?.ownerFqn
+                        if (extOwner != null) readExtensionProperty(
+                            receiver,
+                            extOwner,
+                            binding.name
+                        )
                         else readProperty(receiver, binding.name)
                     }
                 }
             }
         }
+
         is RNode.PropertySet -> {
             // `receiver.name = value` — the write path for a `by`-delegated local (`MutableState.value = …`),
             // which goes through the real `setValue()` so the snapshot system invalidates the recompose scope.
@@ -447,12 +506,20 @@ class Interpreter(
             // READ in [RNode.PropertyGet]; otherwise `writeProperty`'s member-setter lookup fails with the opaque
             // "no writable property `role` on …SemanticsConfiguration".
             val extOwner = (node.binding as? Binding.Property)?.takeIf { it.isExtension }?.ownerFqn
-            if (extOwner != null) writeExtensionProperty(receiver, extOwner, node.binding.name, value, node.source)
+            if (extOwner != null) writeExtensionProperty(
+                receiver,
+                extOwner,
+                node.binding.name,
+                value,
+                node.source
+            )
             else writeProperty(receiver, node.binding.name, value)
             Unit
         }
+
         is RNode.NotNull -> eval(node.value, env)
             ?: throw NullPointerException("null value passed to `!!`")
+
         is RNode.TypeCheck -> {
             // `x is T` for a reified T: substitute the concrete type bound in this frame (the erased `T` never
             // matches). An unbound reified param falls back to the literal `typeFqn`.
@@ -460,6 +527,7 @@ class Interpreter(
             val matches = isInstanceOf(eval(node.value, env), typeFqn)
             if (node.negated) !matches else matches
         }
+
         is RNode.Cast -> {
             val v = eval(node.value, env)
             val typeFqn = node.reifiedParam?.let { env.reifiedType(it)?.fqn } ?: node.typeFqn
@@ -471,29 +539,40 @@ class Interpreter(
                 castMatches(v, typeFqn) == false ->
                     if (node.safe) null
                     else throw ClassCastException("${v.javaClass.name} cannot be cast to $typeFqn")
+
                 else -> v
             }
         }
+
         is RNode.ClassLiteral -> {
             val recvNode = node.receiver
             // `T::class` for a reified T: load the concrete type bound in this frame (its own candidates), the
             // same class-token stand-in strategy [typeCandidates] uses for a project-source type.
             val reifiedCandidates = node.reifiedParam?.let { env.reifiedType(it)?.loadCandidates }
             val cls: Class<*> = if (recvNode != null) {
-                (eval(recvNode, env) ?: throw InterpreterException("cannot take `::class` of a null value")).javaClass
+                (eval(recvNode, env)
+                    ?: throw InterpreterException("cannot take `::class` of a null value")).javaClass
             } else {
                 // Try the resolved type then its supertypes; a project-source type isn't on the preview
                 // classpath, so a reflectable supertype stands in (the value is only ever a class token).
-                (reifiedCandidates ?: node.typeCandidates).firstNotNullOfOrNull { loadClassAcross(it, initialize = false, preferred = classLoader) }
+                (reifiedCandidates ?: node.typeCandidates).firstNotNullOfOrNull {
+                    loadClassAcross(
+                        it,
+                        initialize = false,
+                        preferred = classLoader
+                    )
+                }
                     ?: if (tolerateGaps) Any::class.java
                     else throw InterpreterException("cannot resolve class literal `${(reifiedCandidates ?: node.typeCandidates).firstOrNull() ?: node.reifiedParam ?: "?"}::class` (not on the preview classpath)")
             }
             if (node.asJava) cls else cls.kotlin
         }
+
         is RNode.Throw -> {
             val v = eval(node.value, env)
             if (v is Throwable) throw v else throw KotlinThrow(v)
         }
+
         is RNode.Try -> {
             try {
                 try {
@@ -503,7 +582,14 @@ class Interpreter(
                     // swallow a `return`/`break`/`continue` (they extend RuntimeException). The `finally` still runs.
                     if (t is ReturnSignal || t is LoopSignal) throw t
                     val thrown = (t as? KotlinThrow)?.value ?: t
-                    val handler = node.catches.firstOrNull { c -> c.typeFqn.let { it == null || isInstanceOf(thrown, it) } }
+                    val handler = node.catches.firstOrNull { c ->
+                        c.typeFqn.let {
+                            it == null || isInstanceOf(
+                                thrown,
+                                it
+                            )
+                        }
+                    }
                         ?: throw t
                     val henv = Env(env)
                     henv.define(handler.slot, thrown)
@@ -513,6 +599,7 @@ class Interpreter(
                 node.finallyBlock?.let { eval(it, env) }
             }
         }
+
         is RNode.Unsupported -> throw InterpreterException("unsupported construct: ${node.reason} (`${node.text}`)")
         // A bare `this` the resolver couldn't bind to a slot (no class member / extension / receiver lambda in
         // scope). The resolver now lowers that case to Unsupported, so this is a defensive fallback for the
@@ -570,7 +657,7 @@ class Interpreter(
                 reifiedInlineFallback(call, receiver, args)?.let { return it.value }
                 throw InterpreterException(
                     "`${call.callee.displayName}` is a library function with a reified type parameter — it can " +
-                        "only be inlined at compile time, so the interpreter can't call it directly",
+                            "only be inlined at compile time, so the interpreter can't call it directly",
                 )
             }
             throw cause
@@ -582,7 +669,11 @@ class Interpreter(
      *  internal name of its resolved concrete argument; unresolved ones are skipped — the marker only reads the
      *  reified names) and the full JVM argument list (an extension receiver is prepended). Null when there is no
      *  executor, the callee shape is unsupported, or no type argument resolved. */
-    private fun reifiedInlineFallback(call: RNode.Call, receiver: Any?, args: List<Any?>): LibraryValue? {
+    private fun reifiedInlineFallback(
+        call: RNode.Call,
+        receiver: Any?,
+        args: List<Any?>
+    ): LibraryValue? {
         val callee = call.callee as? ResolvedCallable.Library ?: return null
         val typeFqn = call.typeArguments.firstOrNull()?.fqn
         // `enumValues<T>()` / `enumValueOf<T>(name)` — computed directly from the concrete enum type (a source
@@ -599,7 +690,9 @@ class Interpreter(
             val ta = call.typeArguments.getOrNull(i) ?: return@forEachIndexed
             // A project-SOURCE type argument isn't compiled, so hand the VM its nearest reflectable supertype
             // (loadCandidates) rather than the unloadable source fqn.
-            (ta.loadCandidates.firstOrNull() ?: ta.fqn)?.let { types[name] = (KOTLIN_TYPE_TO_JVM[it] ?: it).replace('.', '/') }
+            (ta.loadCandidates.firstOrNull() ?: ta.fqn)?.let {
+                types[name] = (KOTLIN_TYPE_TO_JVM[it] ?: it).replace('.', '/')
+            }
         }
         if (types.isEmpty()) return null
         val jvmArgs = when (call.dispatch) {
@@ -613,18 +706,27 @@ class Interpreter(
     /** `enumValues<T>()` → all entries of enum [typeFqn] (as a List, the interpreter's array model);
      *  `enumValueOf<T>(name)` → the matching entry. Handles a source enum (its lowered entries) and a library
      *  enum (reflective). Null when [typeFqn] isn't a known enum. */
-    private fun enumReifiedIntrinsic(name: String, typeFqn: String, args: List<Any?>): LibraryValue? {
+    private fun enumReifiedIntrinsic(
+        name: String,
+        typeFqn: String,
+        args: List<Any?>
+    ): LibraryValue? {
         sourceClass(typeFqn)?.takeIf { it.flavor == ClassFlavor.ENUM }?.let { sc ->
             return when (name) {
                 "enumValues" -> LibraryValue(sc.enumEntries.map { enumEntryInstance(sc, it) })
                 else -> {
                     val n = args.firstOrNull() as? String
-                    LibraryValue(sc.enumEntries.firstOrNull { it.name == n }?.let { enumEntryInstance(sc, it) }
+                    LibraryValue(sc.enumEntries.firstOrNull { it.name == n }
+                        ?.let { enumEntryInstance(sc, it) }
                         ?: throw InterpreterException("no enum constant $typeFqn.$n"))
                 }
             }
         }
-        val cls = loadClassAcross(typeFqn, initialize = true, preferred = classLoader)?.takeIf { it.isEnum } ?: return null
+        val cls = loadClassAcross(
+            typeFqn,
+            initialize = true,
+            preferred = classLoader
+        )?.takeIf { it.isEnum } ?: return null
         val constants = cls.enumConstants?.toList() ?: return null
         return when (name) {
             "enumValues" -> LibraryValue(constants)
@@ -639,7 +741,8 @@ class Interpreter(
     /** Peel nested [java.lang.reflect.InvocationTargetException] wrappers to the innermost real cause. */
     private fun unwrapInvocationTarget(thrown: Throwable): Throwable {
         var cur = thrown
-        while (cur is java.lang.reflect.InvocationTargetException) cur = cur.targetException ?: cur.cause ?: return cur
+        while (cur is java.lang.reflect.InvocationTargetException) cur =
+            cur.targetException ?: cur.cause ?: return cur
         return cur
     }
 
@@ -669,15 +772,21 @@ class Interpreter(
         // active only inside such a block, so this can't hijack an unrelated `yield`.
         activeGenerator.get()?.let { gen ->
             if (call.args.size == 1) when (callee.displayName) {
-                "yield" -> { gen.emit(eval(call.args[0].value, env)); return Unit }
-                "yieldAll" -> { forEachElement(eval(call.args[0].value, env)) { gen.emit(it) }; return Unit }
+                "yield" -> {
+                    gen.emit(eval(call.args[0].value, env)); return Unit
+                }
+
+                "yieldAll" -> {
+                    forEachElement(eval(call.args[0].value, env)) { gen.emit(it) }; return Unit
+                }
             }
         }
         // Operators are computed intrinsically: arithmetic/comparison on numbers and structural equality have
         // no JVM method to invoke (a synthetic callee). Arithmetic on a non-number falls through to dispatch.
         if (call.dispatch == DispatchKind.OPERATOR) {
             val op = callee.displayName
-            val left = eval(call.receiver ?: throw InterpreterException("operator without receiver"), env)
+            val left =
+                eval(call.receiver ?: throw InterpreterException("operator without receiver"), env)
             // A project-source class with `operator fun plus`/`minus`/`compareTo`/… dispatches to that member
             // (also drives `a += b`, which desugars through the arithmetic operator). Routed here so the RHS is
             // evaluated once, by `dispatchSourceMember`. `eq`/`ne` fall through to structural equality below
@@ -685,10 +794,14 @@ class Interpreter(
             if (left is SourceObject) {
                 when {
                     op in COMPARISON -> {
-                        val cmp = (dispatchSourceMember(left, "compareTo", call, env) as? Number)?.toInt()
-                            ?: throw InterpreterException("`compareTo` on ${left.cls.fqn} did not return an Int")
-                        return when (op) { "lt" -> cmp < 0; "gt" -> cmp > 0; "le" -> cmp <= 0; else -> cmp >= 0 }
+                        val cmp =
+                            (dispatchSourceMember(left, "compareTo", call, env) as? Number)?.toInt()
+                                ?: throw InterpreterException("`compareTo` on ${left.cls.fqn} did not return an Int")
+                        return when (op) {
+                            "lt" -> cmp < 0; "gt" -> cmp > 0; "le" -> cmp <= 0; else -> cmp >= 0
+                        }
                     }
+
                     op in ARITHMETIC -> return dispatchSourceMember(left, op, call, env)
                 }
             }
@@ -700,7 +813,12 @@ class Interpreter(
                 op == "refne" -> return left !== right // `!==`
                 op in COMPARISON -> return compare(op, left, right)
                 op == "plus" && left is String -> return left + right?.toString() // String.plus(Any?)
-                op in ARITHMETIC && left is Number && right is Number -> return arithmetic(op, left, right)
+                op in ARITHMETIC && left is Number && right is Number -> return arithmetic(
+                    op,
+                    left,
+                    right
+                )
+
                 op in ARITHMETIC -> {} // a real operator method on a user/library type → fall through to dispatch
             }
         }
@@ -714,7 +832,11 @@ class Interpreter(
         if (callee is ResolvedCallable.Library && callee.ownerFqn?.endsWith("SequencesKt") == true &&
             callee.displayName == "sequence" && call.args.size == 1
         ) {
-            (eval(call.args[0].value, env) as? InterpretedLambda)?.let { return interpretedSequence(it) }
+            (eval(call.args[0].value, env) as? InterpretedLambda)?.let {
+                return interpretedSequence(
+                    it
+                )
+            }
         }
         // `enumValues<T>()` / `enumValueOf<T>(name)` — reified inlines whose owner is the bare `kotlin` package
         // (not a reflectable facade), so intercept before dispatch and compute from the concrete enum type.
@@ -722,7 +844,10 @@ class Interpreter(
             (callee.displayName == "enumValues" || callee.displayName == "enumValueOf")
         ) {
             call.typeArguments.firstOrNull()?.let { resolveTypeArg(it, env) }?.fqn?.let { fqn ->
-                enumReifiedIntrinsic(callee.displayName, fqn, call.args.map { eval(it.value, env) })?.let { return it.value }
+                enumReifiedIntrinsic(
+                    callee.displayName,
+                    fqn,
+                    call.args.map { eval(it.value, env) })?.let { return it.value }
             }
         }
         // Coroutine builders. `runBlocking { }` runs its block to a result on the calling thread (a suspend
@@ -732,13 +857,24 @@ class Interpreter(
         // and `launch`/`async` only inside a scope so a preview's SuspendBridge-driven `launch` is untouched.
         if (callee is ResolvedCallable.Library && callee.ownerFqn?.contains("coroutines") == true && call.args.isNotEmpty()) {
             when (callee.displayName) {
-                "runBlocking" -> (eval(call.args.last().value, env) as? InterpretedLambda)?.let { block ->
+                "runBlocking" -> (eval(
+                    call.args.last().value,
+                    env
+                ) as? InterpretedLambda)?.let { block ->
                     return SuspendContext.runManaged { withCoroutineScope { runCoroutineBlock(block) } }
                 }
-                "launch" -> if (coroutineDepth.get() > 0) (eval(call.args.last().value, env) as? InterpretedLambda)?.let { block ->
+
+                "launch" -> if (coroutineDepth.get() > 0) (eval(
+                    call.args.last().value,
+                    env
+                ) as? InterpretedLambda)?.let { block ->
                     runCoroutineBlock(block); return CoroutineJob()
                 }
-                "async" -> if (coroutineDepth.get() > 0) (eval(call.args.last().value, env) as? InterpretedLambda)?.let { block ->
+
+                "async" -> if (coroutineDepth.get() > 0) (eval(
+                    call.args.last().value,
+                    env
+                ) as? InterpretedLambda)?.let { block ->
                     return CoroutineDeferred(runCoroutineBlock(block))
                 }
             }
@@ -752,7 +888,11 @@ class Interpreter(
             // A source class with `operator fun invoke(...)` — dispatch to that member (RHS evaluated once there).
             if (target is SourceObject) return dispatchSourceMember(target, "invoke", call, env)
             val argv = call.args.map { eval(it.value, env) }
-            return if (target is InterpretedLambda) target.invoke(argv) else checkedDispatch(call, target, argv)
+            return if (target is InterpretedLambda) target.invoke(argv) else checkedDispatch(
+                call,
+                target,
+                argv
+            )
         }
         // A source constructor materializes a [SourceObject] (the type isn't compiled at preview/run time).
         if (callee is ResolvedCallable.Source && call.dispatch == DispatchKind.CONSTRUCTOR) {
@@ -767,11 +907,19 @@ class Interpreter(
                 if (n !in requiredPrimary..cls.primaryParams.size) {
                     cls.secondaryCtors.firstOrNull { it.params.size == n }?.let { secondary ->
                         val obj = newSourceObject(cls)
-                        constructViaSecondary(cls, obj, secondary, reorderNamedArgs(secondary.params.map { it.name }, call.args, argv))
+                        constructViaSecondary(
+                            cls,
+                            obj,
+                            secondary,
+                            reorderNamedArgs(secondary.params.map { it.name }, call.args, argv)
+                        )
                         return obj
                     }
                 }
-                return instantiate(cls, reorderNamedArgs(cls.primaryParams.map { it.name }, call.args, argv))
+                return instantiate(
+                    cls,
+                    reorderNamedArgs(cls.primaryParams.map { it.name }, call.args, argv)
+                )
             }
         }
         // A source enum's static members addressed through the type: `Color.values()` / `Color.valueOf("RED")`
@@ -795,9 +943,16 @@ class Interpreter(
                 val key = "${callee.displayName}/0"
                 val current = topLevelPropertyState.getOrDefault(key, NO_VALUE)
                 if (current !== NO_VALUE) return current
-                return invokeFunction(target, NO_RECEIVER, emptyList()).also { topLevelPropertyState[key] = it }
+                return invokeFunction(
+                    target,
+                    NO_RECEIVER,
+                    emptyList()
+                ).also { topLevelPropertyState[key] = it }
             }
-            val argv = reorderNamedArgs(target.params.map { it.name }, call.args, call.args.map { eval(it.value, env) })
+            val argv = reorderNamedArgs(
+                target.params.map { it.name },
+                call.args,
+                call.args.map { eval(it.value, env) })
             val reified = reifiedBindingsFor(call, env)
             val invoke = { invokeFunction(target, NO_RECEIVER, argv, reified) }
             return if (callee.isComposable && composableInvoker != null) {
@@ -805,7 +960,13 @@ class Interpreter(
                 val key = "${callee.displayName}/${target.params.size}"
                 val force = key in dirtyCallees
                 if (InterpTrace.enabled) InterpTrace.log("dispatch @Composable $key key=${call.callSiteKey.value} force=$force")
-                composableInvoker.invokeComposable(call.callSiteKey.value, target.returnsUnit, force, argv, invoke)
+                composableInvoker.invokeComposable(
+                    call.callSiteKey.value,
+                    target.returnsUnit,
+                    force,
+                    argv,
+                    invoke
+                )
             } else {
                 invoke()
             }
@@ -819,7 +980,10 @@ class Interpreter(
             val target = sourceFunctionFor(callee, call.args.size)
                 ?: throw InterpreterException("no source extension `${callee.displayName}/${call.args.size}`")
             val recv = call.receiver?.let { eval(it, env) }
-            val argv = reorderNamedArgs(target.params.map { it.name }, call.args, call.args.map { eval(it.value, env) })
+            val argv = reorderNamedArgs(
+                target.params.map { it.name },
+                call.args,
+                call.args.map { eval(it.value, env) })
             return invokeFunction(target, recv, argv, reifiedBindingsFor(call, env))
         }
         // A handful of stdlib functions are `@kotlin.internal.InlineOnly` — they have NO callable JVM method
@@ -828,7 +992,11 @@ class Interpreter(
         // a composable call inside the lambda (e.g. `repeat(n) { Text(...) }`) — exactly what the inlined form
         // would do — so the composables compose into the enclosing group rather than blowing up the dispatcher.
         if (callee is ResolvedCallable.Library &&
-            (callee.ownerFqn in INLINE_INTRINSIC_FACADES || callee.ownerFqn?.let { it.startsWith("kotlinx.coroutines") || it.startsWith("androidx.compose.runtime") } == true)
+            (callee.ownerFqn in INLINE_INTRINSIC_FACADES || callee.ownerFqn?.let {
+                it.startsWith("kotlinx.coroutines") || it.startsWith(
+                    "androidx.compose.runtime"
+                )
+            } == true)
         ) {
             evalInlineIntrinsic(call, env)?.let { return it.value }
         }
@@ -844,7 +1012,11 @@ class Interpreter(
         // `Modifier.weight(1f)`): it's an INSTANCE method on the scope whose first parameter is the extension
         // receiver, so invoke it on the scope with the extension receiver prepended to the args.
         if (call.dispatch == DispatchKind.MEMBER_EXTENSION) {
-            val scope = eval(call.dispatchReceiver ?: throw InterpreterException("member extension `${callee.displayName}` has no scope receiver"), env)
+            val scope = eval(
+                call.dispatchReceiver
+                    ?: throw InterpreterException("member extension `${callee.displayName}` has no scope receiver"),
+                env
+            )
                 ?: throw InterpreterException("member extension `${callee.displayName}` scope receiver is null")
             val extReceiver = call.receiver?.let { eval(it, env) }
             // Pass the scope as the dispatch receiver and the extension receiver as the head of the args; the
@@ -857,22 +1029,34 @@ class Interpreter(
         if (call.dispatch == DispatchKind.SUPER) {
             val receiver = call.receiver?.let { eval(it, env) }
             if (receiver is SourceObject) {
-                val lexical = (callee as? ResolvedCallable.Source)?.declId?.substringBeforeLast('/')?.substringBeforeLast('.')
+                val lexical = (callee as? ResolvedCallable.Source)?.declId?.substringBeforeLast('/')
+                    ?.substringBeforeLast('.')
                 val m = lexical?.let {
                     // By declared arity first (an omitted-defaults super call), then the exact call arity.
                     (declaredArity(callee)?.let { a -> superMethod(it, "${callee.displayName}/$a") }
                         ?: superMethod(it, "${callee.displayName}/${call.args.size}"))
                 }
                 if (m != null) {
-                    val argv = reorderNamedArgs(m.params.map { it.name }, call.args, call.args.map { eval(it.value, env) })
+                    val argv = reorderNamedArgs(
+                        m.params.map { it.name },
+                        call.args,
+                        call.args.map { eval(it.value, env) })
                     return callMethod(m, receiver, argv)
                 }
                 // The universal `Any`/`Object` supers have a meaningful default even without a real super
                 // instance — an `override fun toString()` calling `super.toString()` expects a String, not Unit.
                 when (callee.displayName) {
-                    "toString" -> if (call.args.isEmpty()) return "${receiver.cls.simpleName}@${Integer.toHexString(System.identityHashCode(receiver))}"
+                    "toString" -> if (call.args.isEmpty()) return "${receiver.cls.simpleName}@${
+                        Integer.toHexString(
+                            System.identityHashCode(receiver)
+                        )
+                    }"
+
                     "hashCode" -> if (call.args.isEmpty()) return System.identityHashCode(receiver)
-                    "equals" -> if (call.args.size == 1) return receiver === eval(call.args[0].value, env)
+                    "equals" -> if (call.args.size == 1) return receiver === eval(
+                        call.args[0].value,
+                        env
+                    )
                 }
                 // Any other binary/library superclass method (`Activity.onCreate`): there is no source body and a
                 // SourceObject isn't a real subclass instance to reflect a `super` call into, so it is a no-op —
@@ -911,6 +1095,13 @@ class Interpreter(
             }
         }
         val args = call.args.map { eval(it.value, env) }
+        // `val (a, b) = list` / `for ((k, v) in map)` — `componentN()` on a List/Map.Entry is @InlineOnly (no
+        // real method to reflect: a List reads `get(n-1)`, a Map.Entry reads `key`/`value`). A Pair/Triple/data
+        // class has a real `componentN`, so this only claims the call for a List/Map.Entry receiver; everything
+        // else falls through to reflection.
+        if (call.dispatch == DispatchKind.MEMBER && args.isEmpty()) {
+            componentIntrinsic(callee.displayName, receiver)?.let { return it.value }
+        }
         // A library `suspend` function (`delay`, a Ktor/Room/… suspend API, any project suspend fun already
         // handled above). Invoked GENERICALLY through the continuation bridge — the real method takes a trailing
         // `Continuation`; we append a blocking one and park the fiber until it resumes. No per-function code: any
@@ -934,10 +1125,23 @@ class Interpreter(
      *  function. Runs on a coroutine fiber, so blocking the thread is the fiber's own suspension. */
     private fun dispatchSuspend(call: RNode.Call, receiver: Any?, args: List<Any?>): Any? {
         SuspendContext.markSuspended() // a real suspension point → the enclosing loop counts as cooperative
+        // Tail-suspend handoff ([Closure.invokeSuspendTail]): the caller armed its OWN coroutine continuation, so
+        // the real suspend fn (a `pointerInput` block's `detectDragGestures`) becomes the caller's coroutine —
+        // its raw result (COROUTINE_SUSPENDED) propagates up unchanged, the caller (the pointer node) suspends on
+        // it, and Compose drives it directly. Consumed once (only this trailing call uses it).
+        tailContinuation.get()?.let { tail ->
+            tailContinuation.set(null)
+            return checkedDispatch(call, receiver, args + tail)
+        }
         return callSuspendBlocking { cont ->
             checkedDispatch(call, receiver, args + cont)
         }.let { if (it === Unit || it == kotlin.coroutines.intrinsics.COROUTINE_SUSPENDED) Unit else it }
     }
+
+    /** The caller's coroutine continuation armed by [Closure.invokeSuspendTail] for the ONE trailing suspend call
+     *  of a tail-suspendable block; [dispatchSuspend] hands off to it instead of blocking a fiber. Thread-local:
+     *  the handoff runs on the caller's own thread (the pointer node's coroutine). */
+    private val tailContinuation = ThreadLocal<kotlin.coroutines.Continuation<Any?>?>()
 
     /** Run [invoke] (a real suspend-function call given the continuation), parking the current fiber thread if it
      *  suspends. Pure `kotlin.coroutines`: a fresh [kotlin.coroutines.Continuation] resumes a latch, and its
@@ -945,9 +1149,10 @@ class Interpreter(
     private fun callSuspendBlocking(invoke: (kotlin.coroutines.Continuation<Any?>) -> Any?): Any? {
         val latch = java.util.concurrent.CountDownLatch(1)
         val outcome = java.util.concurrent.atomic.AtomicReference<Result<Any?>>()
-        val cont = kotlin.coroutines.Continuation<Any?>(kotlin.coroutines.EmptyCoroutineContext) { r ->
-            outcome.set(r); latch.countDown()
-        }
+        val cont =
+            kotlin.coroutines.Continuation<Any?>(kotlin.coroutines.EmptyCoroutineContext) { r ->
+                outcome.set(r); latch.countDown()
+            }
         val immediate = invoke(cont)
         if (immediate !== kotlin.coroutines.intrinsics.COROUTINE_SUSPENDED) return immediate
         latch.await() // the fiber's suspension: block this thread until the real coroutine resumes it
@@ -964,9 +1169,11 @@ class Interpreter(
             "values" -> Handled(cls.enumEntries.map { enumEntryInstance(cls, it) })
             "valueOf" -> {
                 val name = eval(call.args.first().value, env) as? String
-                Handled(cls.enumEntries.firstOrNull { it.name == name }?.let { enumEntryInstance(cls, it) }
+                Handled(cls.enumEntries.firstOrNull { it.name == name }
+                    ?.let { enumEntryInstance(cls, it) }
                     ?: throw InterpreterException("no enum constant ${cls.fqn}.$name"))
             }
+
             else -> null
         }
     }
@@ -979,18 +1186,22 @@ class Interpreter(
      * whose facade genuinely declares no matching method) before rewriting, so an unrelated dispatch error on a
      * normal `inline` function — which DOES emit a method — is left untouched. Runs only on the failure path.
      */
-    private fun refineInlineOnlyError(call: RNode.Call, original: InterpreterException): InterpreterException {
+    private fun refineInlineOnlyError(
+        call: RNode.Call,
+        original: InterpreterException
+    ): InterpreterException {
         val callee = call.callee
         if (callee !is ResolvedCallable.Library || !callee.isInline) return original
         if (call.dispatch != DispatchKind.TOP_LEVEL && call.dispatch != DispatchKind.EXTENSION) return original
         val owner = callee.ownerFqn ?: return original
-        val cls = loadClassAcross(owner, initialize = false, preferred = classLoader) ?: return original
+        val cls =
+            loadClassAcross(owner, initialize = false, preferred = classLoader) ?: return original
         val hasMethod = cls.methods.any { KotlinJvmNames.matches(cls, it.name, callee.displayName) }
         if (hasMethod) return original // a real inline method exists → the failure is something else
         return InterpreterException(
             "`${callee.displayName}` is an inline-only function (no JVM method on `$owner`) the interpreter " +
-                "doesn't model yet — only the stdlib scope functions (repeat/let/also/run/takeIf/takeUnless) and " +
-                "the empty/blank predicates (isNotBlank/isNotEmpty/isNullOrBlank/isNullOrEmpty) are built in",
+                    "doesn't model yet — only the stdlib scope functions (repeat/let/also/run/takeIf/takeUnless) and " +
+                    "the empty/blank predicates (isNotBlank/isNotEmpty/isNullOrBlank/isNullOrEmpty) are built in",
         )
     }
 
@@ -1051,12 +1262,14 @@ class Interpreter(
             // xs.toTypedArray() / xs.toIntArray() / … → the elements as a List (arrays are Lists here anyway).
             name in TO_ARRAY_FUNCTIONS && call.dispatch == DispatchKind.EXTENSION ->
                 Handled(toElementList(call.receiver?.let { eval(it, env) }))
+
             else -> null
         }
     }
 
     /** The int value of an argument (an array size), 0 when it isn't a number or is negative. */
-    private fun intArg(arg: RArg, env: Env): Int = ((eval(arg.value, env) as? Number)?.toInt() ?: 0).coerceAtLeast(0)
+    private fun intArg(arg: RArg, env: Env): Int =
+        ((eval(arg.value, env) as? Number)?.toInt() ?: 0).coerceAtLeast(0)
 
     /** The zero element a size-only primitive-array constructor fills with (`IntArray(3)` → three `0`s). */
     private fun primitiveArrayZero(ctor: String): Any = when (ctor) {
@@ -1122,9 +1335,24 @@ class Interpreter(
                 if (plus) when (value) {
                     is Map<*, *> -> m.putAll(value as Map<Any?, Any?>)
                     is Pair<*, *> -> m[value.first] = value.second
-                    is Iterable<*> -> value.forEach { (it as? Pair<*, *>)?.let { p -> m[p.first] = p.second } }
-                    is Array<*> -> value.forEach { (it as? Pair<*, *>)?.let { p -> m[p.first] = p.second } }
-                    is Sequence<*> -> value.forEach { (it as? Pair<*, *>)?.let { p -> m[p.first] = p.second } }
+                    is Iterable<*> -> value.forEach {
+                        (it as? Pair<*, *>)?.let { p ->
+                            m[p.first] = p.second
+                        }
+                    }
+
+                    is Array<*> -> value.forEach {
+                        (it as? Pair<*, *>)?.let { p ->
+                            m[p.first] = p.second
+                        }
+                    }
+
+                    is Sequence<*> -> value.forEach {
+                        (it as? Pair<*, *>)?.let { p ->
+                            m[p.first] = p.second
+                        }
+                    }
+
                     else -> throw InterpreterException("`+=` on a Map needs a Pair/Map, got ${value?.javaClass?.name}")
                 } else when (value) { // minusAssign removes by key(s)
                     is Iterable<*> -> value.forEach { m.remove(it) }
@@ -1133,6 +1361,7 @@ class Interpreter(
                     else -> m.remove(value)
                 }
             }
+
             is MutableCollection<*> -> {
                 val c = recv as MutableCollection<Any?>
                 val elements: Collection<Any?>? = when (value) {
@@ -1142,9 +1371,13 @@ class Interpreter(
                     is Sequence<*> -> value.toList()
                     else -> null
                 }
-                if (plus) { if (elements != null) c.addAll(elements) else c.add(value) }
-                else { if (elements != null) c.removeAll(elements.toSet()) else c.remove(value) }
+                if (plus) {
+                    if (elements != null) c.addAll(elements) else c.add(value)
+                } else {
+                    if (elements != null) c.removeAll(elements.toSet()) else c.remove(value)
+                }
             }
+
             else -> throw InterpreterException("`${if (plus) "+=" else "-="}` on a non-mutable collection ${recv?.javaClass?.name}")
         }
     }
@@ -1159,8 +1392,11 @@ class Interpreter(
         val name = call.callee.displayName
         val args = call.args
         fun lambda(node: RNode): InterpretedLambda =
-            eval(node, env) as? InterpretedLambda ?: throw InterpreterException("`$name` expects a lambda argument")
-        fun receiver(): Any? = eval(call.receiver ?: throw InterpreterException("`$name` has no receiver"), env)
+            eval(node, env) as? InterpretedLambda
+                ?: throw InterpreterException("`$name` expects a lambda argument")
+
+        fun receiver(): Any? =
+            eval(call.receiver ?: throw InterpreterException("`$name` has no receiver"), env)
         return when {
             // repeat(times) { index -> … }
             name == "repeat" && call.dispatch == DispatchKind.TOP_LEVEL && args.size == 2 -> {
@@ -1168,7 +1404,9 @@ class Interpreter(
                     ?: throw InterpreterException("`repeat` requires an Int count")
                 val action = lambda(args[1].value)
                 val budget = LoopBudget()
-                for (i in 0 until times) { action.invoke(listOf(i)); guardLoop(budget) }
+                for (i in 0 until times) {
+                    action.invoke(listOf(i)); guardLoop(budget)
+                }
                 Handled(Unit)
             }
             // `iterable.forEach { element -> … }` / `forEachIndexed { i, element -> … }` — inline HOFs, run HERE
@@ -1180,14 +1418,26 @@ class Interpreter(
             name == "forEach" && call.dispatch == DispatchKind.EXTENSION && args.size == 1 -> {
                 val action = lambda(args[0].value)
                 val budget = LoopBudget()
-                forEachElement(receiver()) { element -> action.invoke(listOf(element)); guardLoop(budget) }
+                forEachElement(receiver()) { element ->
+                    action.invoke(listOf(element)); guardLoop(
+                    budget
+                )
+                }
                 Handled(Unit)
             }
+
             name == "forEachIndexed" && call.dispatch == DispatchKind.EXTENSION && args.size == 1 -> {
                 val action = lambda(args[0].value)
                 val budget = LoopBudget()
                 var i = 0
-                forEachElement(receiver()) { element -> action.invoke(listOf(i++, element)); guardLoop(budget) }
+                forEachElement(receiver()) { element ->
+                    action.invoke(
+                        listOf(
+                            i++,
+                            element
+                        )
+                    ); guardLoop(budget)
+                }
                 Handled(Unit)
             }
             // `mutableCollection += x` / `-= x`, `mutableMap += (k to v)` / `-= key` — the @InlineOnly
@@ -1286,6 +1536,7 @@ class Interpreter(
                 val recv = receiver()
                 Handled(if (lambda(args[0].value).invoke(listOf(recv)) == true) recv else null)
             }
+
             name == "takeUnless" && call.dispatch == DispatchKind.EXTENSION && args.size == 1 -> {
                 val recv = receiver()
                 Handled(if (lambda(args[0].value).invoke(listOf(recv)) == true) null else recv)
@@ -1314,6 +1565,7 @@ class Interpreter(
                 val sel = lambda(args[0].value)
                 Handled(numericSum(elems.map { sel.invoke(listOf(it)) }))
             }
+
             name == "sum" && call.dispatch == DispatchKind.EXTENSION && args.isEmpty() ->
                 (receiver() as? Iterable<*>)?.let { Handled(numericSum(it.toList())) }
             // `xs.maxOf/minOf { selector }` — the max/min of the selected Comparable values.
@@ -1321,17 +1573,29 @@ class Interpreter(
                 val elems = (receiver() as? Iterable<*>)?.toList() ?: return null
                 if (elems.isEmpty()) throw InterpreterException("`$name` on an empty collection")
                 val sel = lambda(args[0].value)
-                Handled(reduceByComparison(elems.map { sel.invoke(listOf(it)) }, wantMax = name == "maxOf"))
+                Handled(
+                    reduceByComparison(
+                        elems.map { sel.invoke(listOf(it)) },
+                        wantMax = name == "maxOf"
+                    )
+                )
             }
             // `list.getOrElse(index) { default }` — the element, or the lambda's result (given the index) when out of bounds.
             name == "getOrElse" && call.dispatch == DispatchKind.EXTENSION && args.size == 2 -> {
                 val list = receiver() as? List<*> ?: return null
                 val idx = (eval(args[0].value, env) as? Number)?.toInt() ?: return null
-                Handled(if (idx in list.indices) list[idx] else lambda(args[1].value).invoke(listOf(idx)))
+                Handled(
+                    if (idx in list.indices) list[idx] else lambda(args[1].value).invoke(
+                        listOf(
+                            idx
+                        )
+                    )
+                )
             }
             // `s.uppercase()` / `s.lowercase()` — @InlineOnly one-liners over the receiver CharSequence.
             (name == "uppercase" || name == "lowercase") && call.dispatch == DispatchKind.EXTENSION && args.isEmpty() ->
-                (receiver() as? CharSequence)?.toString()?.let { Handled(if (name == "uppercase") it.uppercase() else it.lowercase()) }
+                (receiver() as? CharSequence)?.toString()
+                    ?.let { Handled(if (name == "uppercase") it.uppercase() else it.lowercase()) }
             // `s.split(delimiter)` — the common single-String/Char delimiter form (the vararg + defaulted
             // ignoreCase/limit make the reflective overload hard to bind).
             name == "split" && call.dispatch == DispatchKind.EXTENSION && args.size == 1 -> {
@@ -1349,10 +1613,12 @@ class Interpreter(
                 val list = ArrayList<Any?>()
                 lambda(args.last().value).invoke(listOf(list)); Handled(list)
             }
+
             name == "buildString" && call.dispatch == DispatchKind.TOP_LEVEL && args.isNotEmpty() -> {
                 val sb = StringBuilder()
                 lambda(args.last().value).invoke(listOf(sb)); Handled(sb.toString())
             }
+
             name == "buildMap" && call.dispatch == DispatchKind.TOP_LEVEL && args.isNotEmpty() -> {
                 val map = LinkedHashMap<Any?, Any?>()
                 lambda(args.last().value).invoke(listOf(map)); Handled(map)
@@ -1368,13 +1634,28 @@ class Interpreter(
             // reflect. Route to the real formatter here.
             name == "format" -> {
                 val recv = runCatching { call.receiver?.let { eval(it, env) } }.getOrNull()
-                val argv = args.flatMap { val v = eval(it.value, env); if (v is Array<*>) v.toList() else listOf(v) }
+                val argv = args.flatMap {
+                    val v = eval(it.value, env); if (v is Array<*>) v.toList() else listOf(v)
+                }
                 when {
-                    recv is CharSequence -> doStringFormat(recv.toString(), argv)               // "fmt".format([locale,] args)
+                    recv is CharSequence -> doStringFormat(
+                        recv.toString(),
+                        argv
+                    )               // "fmt".format([locale,] args)
                     argv.isEmpty() -> null
                     argv[0] is java.util.Locale && argv.size >= 2 ->                              // String.format(locale, fmt, args)
-                        Handled(String.format(argv[0] as java.util.Locale, argv[1]?.toString() ?: "null", *argv.drop(2).toTypedArray()))
-                    else -> doStringFormat(argv[0]?.toString() ?: "null", argv.drop(1))          // String.format(fmt, args)
+                        Handled(
+                            String.format(
+                                argv[0] as java.util.Locale,
+                                argv[1]?.toString() ?: "null",
+                                *argv.drop(2).toTypedArray()
+                            )
+                        )
+
+                    else -> doStringFormat(
+                        argv[0]?.toString() ?: "null",
+                        argv.drop(1)
+                    )          // String.format(fmt, args)
                 }
             }
             // The precondition family — @InlineOnly (they carry contracts). A failed check throws the real
@@ -1382,23 +1663,54 @@ class Interpreter(
             // the opaque "inline-only function not modeled").
             name == "error" && call.dispatch == DispatchKind.TOP_LEVEL && args.size == 1 ->
                 throw IllegalStateException((eval(args[0].value, env) ?: "null").toString())
+
             name == "TODO" && call.dispatch == DispatchKind.TOP_LEVEL ->
-                throw NotImplementedError("An operation is not implemented" +
-                    (if (args.isNotEmpty()) ": ${eval(args[0].value, env)}" else "."))
+                throw NotImplementedError(
+                    "An operation is not implemented" +
+                            (if (args.isNotEmpty()) ": ${eval(args[0].value, env)}" else ".")
+                )
+
             name == "require" && call.dispatch == DispatchKind.TOP_LEVEL && args.isNotEmpty() -> {
-                if (eval(args[0].value, env) != true) throw IllegalArgumentException(lazyMessage(args, env, "Failed requirement."))
+                if (eval(args[0].value, env) != true) throw IllegalArgumentException(
+                    lazyMessage(
+                        args,
+                        env,
+                        "Failed requirement."
+                    )
+                )
                 Handled(Unit)
             }
+
             name == "check" && call.dispatch == DispatchKind.TOP_LEVEL && args.isNotEmpty() -> {
-                if (eval(args[0].value, env) != true) throw IllegalStateException(lazyMessage(args, env, "Check failed."))
+                if (eval(args[0].value, env) != true) throw IllegalStateException(
+                    lazyMessage(
+                        args,
+                        env,
+                        "Check failed."
+                    )
+                )
                 Handled(Unit)
             }
+
             name == "requireNotNull" && call.dispatch == DispatchKind.TOP_LEVEL && args.isNotEmpty() -> {
-                val v = eval(args[0].value, env) ?: throw IllegalArgumentException(lazyMessage(args, env, "Required value was null."))
+                val v = eval(args[0].value, env) ?: throw IllegalArgumentException(
+                    lazyMessage(
+                        args,
+                        env,
+                        "Required value was null."
+                    )
+                )
                 Handled(v)
             }
+
             name == "checkNotNull" && call.dispatch == DispatchKind.TOP_LEVEL && args.isNotEmpty() -> {
-                val v = eval(args[0].value, env) ?: throw IllegalStateException(lazyMessage(args, env, "Required value was null."))
+                val v = eval(args[0].value, env) ?: throw IllegalStateException(
+                    lazyMessage(
+                        args,
+                        env,
+                        "Required value was null."
+                    )
+                )
                 Handled(v)
             }
             // `kotlin.math.*` — @InlineOnly delegations to java.lang.Math (no JVM method to reflect).
@@ -1420,7 +1732,8 @@ class Interpreter(
             (name == "min" || name == "max") && call.dispatch == DispatchKind.TOP_LEVEL && args.size == 2 -> {
                 val a = eval(args[0].value, env) as? Number ?: return null
                 val b = eval(args[1].value, env) as? Number ?: return null
-                val pickA = if (name == "max") a.toDouble() >= b.toDouble() else a.toDouble() <= b.toDouble()
+                val pickA =
+                    if (name == "max") a.toDouble() >= b.toDouble() else a.toDouble() <= b.toDouble()
                 Handled(if (pickA) a else b)
             }
             // `hypot(x, y)` / `atan2(y, x)` — two-argument functions.
@@ -1444,7 +1757,13 @@ class Interpreter(
             name == "elementAtOrElse" && call.dispatch == DispatchKind.EXTENSION && args.size == 2 -> {
                 val list = (receiver() as? List<*>) ?: return null
                 val idx = (eval(args[0].value, env) as? Number)?.toInt() ?: return null
-                Handled(if (idx in list.indices) list[idx] else lambda(args[1].value).invoke(listOf(idx)))
+                Handled(
+                    if (idx in list.indices) list[idx] else lambda(args[1].value).invoke(
+                        listOf(
+                            idx
+                        )
+                    )
+                )
             }
             // `xs.firstNotNullOf { transform }` / `firstNotNullOfOrNull { }` — the first non-null transform result;
             // @InlineOnly. `firstNotNullOf` throws when none is found, the `OrNull` variant yields null.
@@ -1454,12 +1773,18 @@ class Interpreter(
                 var found: Any? = null
                 var done = false
                 forEachElement(receiver()) { element ->
-                    if (!done) { val v = transform.invoke(listOf(element)); guardLoop(budget); if (v != null) { found = v; done = true } }
+                    if (!done) {
+                        val v =
+                            transform.invoke(listOf(element)); guardLoop(budget); if (v != null) {
+                            found = v; done = true
+                        }
+                    }
                 }
                 if (found == null && name == "firstNotNullOf")
                     throw NoSuchElementException("No element of the collection was transformed to a non-null value.")
                 Handled(found)
             }
+
             else -> null
         }
     }
@@ -1492,6 +1817,7 @@ class Interpreter(
             is Map<*, *> -> Handled(recv.isEmpty())
             else -> null
         }
+
         "isNotBlank" -> (recv as? CharSequence)?.let { Handled(it.isNotBlank()) }
         "isNotEmpty" -> when (recv) {
             is CharSequence -> Handled(recv.isNotEmpty())
@@ -1499,6 +1825,7 @@ class Interpreter(
             is Map<*, *> -> Handled(recv.isNotEmpty())
             else -> null
         }
+
         else -> null
     }
 
@@ -1530,7 +1857,12 @@ class Interpreter(
     private fun readBinding(binding: Binding, env: Env): Any? = when (binding) {
         is Binding.Local, is Binding.Param -> env.read(slotOf(binding))
         // A local `by`-delegate read: `delegate.getValue(null, property)` (a local delegate's `thisRef` is null).
-        is Binding.DelegatedConvention -> delegateGetValue(env.read(binding.slot), binding.propertyName, thisRef = null)
+        is Binding.DelegatedConvention -> delegateGetValue(
+            env.read(binding.slot),
+            binding.propertyName,
+            thisRef = null
+        )
+
         is Binding.ObjectRef -> {
             // A source `object`/`companion` referenced by name is its (lazily-built) singleton; a class name
             // used as a value denotes its companion (`Maths.square()`); everything else (a library
@@ -1538,10 +1870,14 @@ class Interpreter(
             val sc = sourceClass(binding.fqn)
             when {
                 sc == null -> objectInstance(binding.fqn)
-                sc.flavor == ClassFlavor.OBJECT || sc.flavor == ClassFlavor.COMPANION -> objectSingleton(sc)
+                sc.flavor == ClassFlavor.OBJECT || sc.flavor == ClassFlavor.COMPANION -> objectSingleton(
+                    sc
+                )
+
                 else -> companionOf(sc)?.let { objectSingleton(it) } ?: objectInstance(binding.fqn)
             }
         }
+
         is Binding.Receiver -> throw InterpreterException("`this` (${binding.type?.qualifiedName ?: "receiver"}) has no value bound in this frame")
         else -> throw InterpreterException("cannot read binding: ${binding::class.simpleName}")
     }
@@ -1558,10 +1894,15 @@ class Interpreter(
         libraryFallback?.takeIf { it.hasClass(fqn) }?.let { return it.objectInstance(fqn) }
         val cls = loadInitialized(fqn)
             ?: throw InterpreterException("cannot load `$fqn` (a project-source object isn't available to the interpreter)")
-        runCatching { cls.getField("INSTANCE") }.getOrNull()?.let { return it.get(null) } // a Kotlin `object`
+        runCatching { cls.getField("INSTANCE") }.getOrNull()
+            ?.let { return it.get(null) } // a Kotlin `object`
         // A type's companion — `Companion` by default, but a NAMED companion (`kotlin.random.Random.Default`)
         // uses its own name, so find it by pattern rather than by the literal name `Companion`.
-        companionField(cls)?.let { f -> return runCatching { f.isAccessible = true; f.get(null) }.getOrNull() }
+        companionField(cls)?.let { f ->
+            return runCatching {
+                f.isAccessible = true; f.get(null)
+            }.getOrNull()
+        }
         throw InterpreterException("`$fqn` has no object/companion instance")
     }
 
@@ -1573,7 +1914,7 @@ class Interpreter(
     private fun companionField(cls: Class<*>): java.lang.reflect.Field? =
         cls.declaredFields.firstOrNull {
             java.lang.reflect.Modifier.isStatic(it.modifiers) &&
-                it.type.enclosingClass == cls && it.type.simpleName == it.name
+                    it.type.enclosingClass == cls && it.type.simpleName == it.name
         }
 
     // --- source types (classes / data classes / objects / companions / enums) ---
@@ -1592,7 +1933,11 @@ class Interpreter(
     /** The companion object of [cls], if it declares one (so `Maths.square()` resolves through `Maths`). */
     private fun companionOf(cls: ResolvedClass): ResolvedClass? =
         classesByFqn["${cls.fqn}.Companion"]
-            ?: classesByFqn.values.firstOrNull { it.flavor == ClassFlavor.COMPANION && it.fqn.substringBeforeLast('.') == cls.fqn }
+            ?: classesByFqn.values.firstOrNull {
+                it.flavor == ClassFlavor.COMPANION && it.fqn.substringBeforeLast(
+                    '.'
+                ) == cls.fqn
+            }
 
     /** Build an instance of [cls] (its `cls` is the most-derived type, for virtual dispatch + `is` checks). */
     private fun instantiate(cls: ResolvedClass, orderedValues: List<Any?>): SourceObject {
@@ -1631,7 +1976,11 @@ class Interpreter(
         cls.superCall?.let { sc ->
             sourceClass(sc.fqn)?.let { superCls ->
                 val superArgs = sc.args.map { eval(it.value, env) }
-                construct(superCls, obj, reorderNamedArgs(superCls.primaryParams.map { it.name }, sc.args, superArgs))
+                construct(
+                    superCls,
+                    obj,
+                    reorderNamedArgs(superCls.primaryParams.map { it.name }, sc.args, superArgs)
+                )
             }
         }
         cls.initSteps.forEach { eval(it, env) }
@@ -1644,7 +1993,12 @@ class Interpreter(
      *  to its superclass) runs the primary path once (superclass + property initializers + init blocks). Each
      *  constructor's own body runs after its delegation, so a `this → this → primary` chain runs the initializers
      *  once (at the primary) and every body in order, matching Kotlin. */
-    private fun constructViaSecondary(cls: ResolvedClass, obj: SourceObject, ctor: SecondaryCtor, argv: List<Any?>) {
+    private fun constructViaSecondary(
+        cls: ResolvedClass,
+        obj: SourceObject,
+        ctor: SecondaryCtor,
+        argv: List<Any?>
+    ) {
         val env = Env()
         env.define(cls.receiverSlot, obj)
         bindParams(env, ctor.params, argv)
@@ -1657,9 +2011,26 @@ class Interpreter(
             val targetSecondary = if (n !in requiredPrimary..cls.primaryParams.size)
                 cls.secondaryCtors.firstOrNull { it !== ctor && it.params.size == n } else null
             if (targetSecondary != null) {
-                constructViaSecondary(cls, obj, targetSecondary, reorderNamedArgs(targetSecondary.params.map { it.name }, ctor.delegationArgs, delegArgv))
+                constructViaSecondary(
+                    cls,
+                    obj,
+                    targetSecondary,
+                    reorderNamedArgs(
+                        targetSecondary.params.map { it.name },
+                        ctor.delegationArgs,
+                        delegArgv
+                    )
+                )
             } else {
-                construct(cls, obj, reorderNamedArgs(cls.primaryParams.map { it.name }, ctor.delegationArgs, delegArgv))
+                construct(
+                    cls,
+                    obj,
+                    reorderNamedArgs(
+                        cls.primaryParams.map { it.name },
+                        ctor.delegationArgs,
+                        delegArgv
+                    )
+                )
             }
         } else {
             construct(cls, obj, emptyList())
@@ -1669,10 +2040,20 @@ class Interpreter(
 
     /** A member function declared on [cls] or inherited from a source supertype (the runtime instance's own
      *  class is searched first, so an override wins — virtual dispatch). */
-    private fun findSourceMethod(cls: ResolvedClass, key: String, seen: MutableSet<String> = HashSet()): ResolvedFunction? {
+    private fun findSourceMethod(
+        cls: ResolvedClass,
+        key: String,
+        seen: MutableSet<String> = HashSet()
+    ): ResolvedFunction? {
         if (!seen.add(cls.fqn)) return null
         cls.methods[key]?.let { return it }
-        for (sup in cls.supertypes) sourceClass(sup)?.let { findSourceMethod(it, key, seen)?.let { m -> return m } }
+        for (sup in cls.supertypes) sourceClass(sup)?.let {
+            findSourceMethod(
+                it,
+                key,
+                seen
+            )?.let { m -> return m }
+        }
         return null
     }
 
@@ -1681,8 +2062,15 @@ class Interpreter(
      *  no source supertype declares it (a binary superclass method — the caller no-ops the super call). */
     private fun superMethod(lexicalFqn: String, key: String): ResolvedFunction? {
         val cls = sourceClass(lexicalFqn) ?: return null
-        val seen = HashSet<String>().apply { add(cls.fqn) } // exclude the lexical class so its override is skipped
-        for (sup in cls.supertypes) sourceClass(sup)?.let { findSourceMethod(it, key, seen)?.let { m -> return m } }
+        val seen =
+            HashSet<String>().apply { add(cls.fqn) } // exclude the lexical class so its override is skipped
+        for (sup in cls.supertypes) sourceClass(sup)?.let {
+            findSourceMethod(
+                it,
+                key,
+                seen
+            )?.let { m -> return m }
+        }
         return null
     }
 
@@ -1692,7 +2080,10 @@ class Interpreter(
 
     /** The singleton for an enum entry — constructed once with the entry's constructor arguments and tagged
      *  with its `name`/`ordinal`. */
-    private fun enumEntryInstance(cls: ResolvedClass, entry: dev.ide.lang.kotlin.interp.REnumEntry): SourceObject =
+    private fun enumEntryInstance(
+        cls: ResolvedClass,
+        entry: dev.ide.lang.kotlin.interp.REnumEntry
+    ): SourceObject =
         singletons.getOrPut("${cls.fqn}#${entry.name}") {
             instantiate(cls, entry.args.map { eval(it.value, Env()) }).also {
                 it.enumName = entry.name
@@ -1706,21 +2097,34 @@ class Interpreter(
         val ref = (receiverNode as? RNode.Name)?.binding as? Binding.ObjectRef ?: return null
         val cls = sourceClass(ref.fqn) ?: return null
         if (cls.flavor == ClassFlavor.ENUM) {
-            if (name == "entries") return Handled(cls.enumEntries.map { enumEntryInstance(cls, it) })
-            return cls.enumEntries.firstOrNull { it.name == name }?.let { Handled(enumEntryInstance(cls, it)) }
+            if (name == "entries") return Handled(cls.enumEntries.map {
+                enumEntryInstance(
+                    cls,
+                    it
+                )
+            })
+            return cls.enumEntries.firstOrNull { it.name == name }
+                ?.let { Handled(enumEntryInstance(cls, it)) }
         }
         // A NESTED source `object` reached through its enclosing type — `State.Loading` where `State` is a sealed
         // interface (no companion). The warm path lowers `State.Loading` straight to one ObjectRef; while the
         // index is still cold it arrives here as a member read, so resolve the nested object's singleton.
-        sourceClass("${cls.fqn}.$name")?.takeIf { it.flavor == ClassFlavor.OBJECT }?.let { return Handled(objectSingleton(it)) }
-        val holder = if (cls.flavor == ClassFlavor.OBJECT || cls.flavor == ClassFlavor.COMPANION) cls
+        sourceClass("${cls.fqn}.$name")?.takeIf { it.flavor == ClassFlavor.OBJECT }
+            ?.let { return Handled(objectSingleton(it)) }
+        val holder =
+            if (cls.flavor == ClassFlavor.OBJECT || cls.flavor == ClassFlavor.COMPANION) cls
             else companionOf(cls) ?: return null
         return Handled(readSourceProperty(objectSingleton(holder), name))
     }
 
     /** Interpret a member function body with [receiver] bound to its receiver slot. [reified] threads a reified
      *  inline member's type arguments so `x is T` / `T::class` in its body resolve to the call-site type. */
-    private fun callMethod(fn: ResolvedFunction, receiver: SourceObject, args: List<Any?>, reified: Map<String, RTypeArg> = emptyMap()): Any? {
+    private fun callMethod(
+        fn: ResolvedFunction,
+        receiver: SourceObject,
+        args: List<Any?>,
+        reified: Map<String, RTypeArg> = emptyMap()
+    ): Any? {
         val env = Env()
         env.defineReified(reified)
         fn.receiverSlot?.let { env.define(it, receiver) }
@@ -1732,7 +2136,12 @@ class Interpreter(
         }
     }
 
-    private fun dispatchSourceMember(receiver: SourceObject, name: String, call: RNode.Call, env: Env): Any? {
+    private fun dispatchSourceMember(
+        receiver: SourceObject,
+        name: String,
+        call: RNode.Call,
+        env: Env
+    ): Any? {
         val arity = call.args.size
         // Prefer the resolver's declared arity so an omitted-defaults member call (`obj.f()` for `fun f(x = 0)`)
         // finds the full declaration; the exact call arity is the fallback. Named args are reordered and omitted
@@ -1740,7 +2149,10 @@ class Interpreter(
         val m = declaredArity(call.callee)?.let { findSourceMethod(receiver.cls, "$name/$it") }
             ?: findSourceMethod(receiver.cls, "$name/$arity")
         if (m != null) {
-            val argv = reorderNamedArgs(m.params.map { it.name }, call.args, call.args.map { eval(it.value, env) })
+            val argv = reorderNamedArgs(
+                m.params.map { it.name },
+                call.args,
+                call.args.map { eval(it.value, env) })
             return callMethod(m, receiver, argv, reifiedBindingsFor(call, env))
         }
         synthesizedMember(receiver, name, call, env)?.let { return it.value }
@@ -1752,16 +2164,35 @@ class Interpreter(
     /** Dispatch [name] on an interface-delegate (`class C : I by field`) when the class itself doesn't declare
      *  it: a source delegate interprets the member, a library delegate reflects it. Null when no delegate has
      *  the member (the caller then reports the honest "no member"). Arguments are evaluated once here. */
-    private fun delegatedMemberDispatch(receiver: SourceObject, name: String, call: RNode.Call, env: Env): Handled? {
+    private fun delegatedMemberDispatch(
+        receiver: SourceObject,
+        name: String,
+        call: RNode.Call,
+        env: Env
+    ): Handled? {
         if (receiver.cls.interfaceDelegates.isEmpty()) return null
         val arity = call.args.size
         val argv = call.args.map { eval(it.value, env) }
         for (d in receiver.cls.interfaceDelegates) {
             val delegate = receiver.fields[d.fieldName] ?: continue
             if (delegate is SourceObject) {
-                findSourceMethod(delegate.cls, "$name/$arity")?.let { return Handled(callMethod(it, delegate, argv)) }
+                findSourceMethod(delegate.cls, "$name/$arity")?.let {
+                    return Handled(
+                        callMethod(
+                            it,
+                            delegate,
+                            argv
+                        )
+                    )
+                }
             } else {
-                runCatching { checkedDispatch(call.copy(dispatch = DispatchKind.MEMBER), delegate, argv) }
+                runCatching {
+                    checkedDispatch(
+                        call.copy(dispatch = DispatchKind.MEMBER),
+                        delegate,
+                        argv
+                    )
+                }
                     .onSuccess { return Handled(it) }
             }
         }
@@ -1770,7 +2201,12 @@ class Interpreter(
 
     /** The compiler-synthesized members of a data class (`copy`/`componentN`/`equals`/`hashCode`/`toString`),
      *  which the source index never records — computed here from the class's component properties. */
-    private fun synthesizedMember(receiver: SourceObject, name: String, call: RNode.Call, env: Env): Handled? {
+    private fun synthesizedMember(
+        receiver: SourceObject,
+        name: String,
+        call: RNode.Call,
+        env: Env
+    ): Handled? {
         val arity = call.args.size
         return when {
             name == "copy" -> Handled(copySource(receiver, call, env))
@@ -1783,6 +2219,28 @@ class Interpreter(
                     ?: throw InterpreterException("no `$name` (only ${receiver.cls.componentNames.size} components) on ${receiver.cls.fqn}")
                 Handled(receiver.fields[comp])
             }
+        }
+    }
+
+    /** `componentN()` on a collection element the Kotlin→Java mapping leaves without a real accessor method: a
+     *  `List.componentN()` reads `get(n-1)`, a `Map.Entry.component1()/2()` reads `key`/`value` (all
+     *  @InlineOnly, so no method reflects). Null (fall through to reflection) for anything with a real
+     *  `componentN` — a `Pair`/`Triple`, a data class, or a source object handled upstream. */
+    private fun componentIntrinsic(name: String, receiver: Any?): Handled? {
+        val n = COMPONENT.matchEntire(name)?.groupValues?.get(1)?.toIntOrNull() ?: return null
+        return when (receiver) {
+            is Map.Entry<*, *> -> when (n) {
+                1 -> Handled(receiver.key)
+                2 -> Handled(receiver.value)
+                else -> throw InterpreterException("no `component$n` on a Map.Entry (only key/value)")
+            }
+
+            is List<*> -> {
+                if (n < 1 || n > receiver.size) throw InterpreterException("no `component$n` on a List of size ${receiver.size}")
+                Handled(receiver[n - 1])
+            }
+
+            else -> null
         }
     }
 
@@ -1816,7 +2274,13 @@ class Interpreter(
         if (name == "ordinal" && receiver.enumOrdinal >= 0) return receiver.enumOrdinal
         // A computed property (`val isOver get() = …`) has no backing field — it is lowered as a zero-arg getter
         // method keyed `name/0`; invoke it on the receiver.
-        findSourceMethod(receiver.cls, "$name/0")?.let { return callMethod(it, receiver, emptyList()) }
+        findSourceMethod(receiver.cls, "$name/0")?.let {
+            return callMethod(
+                it,
+                receiver,
+                emptyList()
+            )
+        }
         // A property the class inherits via `: I by delegate` (not overridden): read it from the delegate object.
         for (d in receiver.cls.interfaceDelegates) {
             val delegate = receiver.fields[d.fieldName] ?: continue
@@ -1832,21 +2296,44 @@ class Interpreter(
     /** Read a `by`-delegate's value: `delegate.getValue(thisRef, property)`. [thisRef] is null for a local
      *  delegate and the enclosing instance for a member delegate (Kotlin's own convention). */
     private fun delegateGetValue(delegate: Any?, propertyName: String, thisRef: Any?): Any? =
-        callDelegateOp(requireDelegate(delegate, propertyName), "getValue", thisRef, InterpretedKProperty(propertyName), NO_DELEGATE_VALUE)
+        callDelegateOp(
+            requireDelegate(delegate, propertyName),
+            "getValue",
+            thisRef,
+            InterpretedKProperty(propertyName),
+            NO_DELEGATE_VALUE
+        )
 
     /** Write a `by`-delegate's value: `delegate.setValue(thisRef, property, value)`. */
     private fun delegateSetValue(delegate: Any?, propertyName: String, thisRef: Any?, value: Any?) {
-        callDelegateOp(requireDelegate(delegate, propertyName), "setValue", thisRef, InterpretedKProperty(propertyName), value)
+        callDelegateOp(
+            requireDelegate(delegate, propertyName),
+            "setValue",
+            thisRef,
+            InterpretedKProperty(propertyName),
+            value
+        )
     }
 
     private fun requireDelegate(delegate: Any?, propertyName: String): Any =
-        delegate ?: throw InterpreterException("property delegate for `$propertyName` is not initialized")
+        delegate
+            ?: throw InterpreterException("property delegate for `$propertyName` is not initialized")
 
     /** Invoke a delegate's `getValue`/`setValue` operator. A source delegate interprets the member directly; a
      *  library delegate reflects it (best-effort — see [reflectDelegateOp]). [value] === [NO_DELEGATE_VALUE]
      *  selects `getValue` (no value argument); any other value selects `setValue`. */
-    private fun callDelegateOp(delegate: Any, op: String, thisRef: Any?, property: Any?, value: Any?): Any? {
-        val args = if (value === NO_DELEGATE_VALUE) listOf(thisRef, property) else listOf(thisRef, property, value)
+    private fun callDelegateOp(
+        delegate: Any,
+        op: String,
+        thisRef: Any?,
+        property: Any?,
+        value: Any?
+    ): Any? {
+        val args = if (value === NO_DELEGATE_VALUE) listOf(thisRef, property) else listOf(
+            thisRef,
+            property,
+            value
+        )
         if (delegate is SourceObject) {
             val m = findSourceMethod(delegate.cls, "$op/${args.size}")
                 ?: throw InterpreterException("property delegate ${delegate.cls.fqn} has no `operator fun $op`")
@@ -1865,14 +2352,20 @@ class Interpreter(
             ?: throw InterpreterException("no `$op` on delegate ${delegate.javaClass.name}")
         runCatching { m.isAccessible = true }
         fun invokeWith(a: List<Any?>): Any? =
-            try { m.invoke(delegate, *a.toTypedArray()) }
-            catch (e: java.lang.reflect.InvocationTargetException) { throw unwrapInvocationTarget(e) }
+            try {
+                m.invoke(delegate, *a.toTypedArray())
+            } catch (e: java.lang.reflect.InvocationTargetException) {
+                throw unwrapInvocationTarget(e)
+            }
         return try {
             invokeWith(args)
         } catch (e: IllegalArgumentException) {
             val nulled = args.toMutableList().also { if (it.size >= 2) it[1] = null }
-            try { invokeWith(nulled) }
-            catch (e2: Throwable) { throw InterpreterException("library property delegate `${delegate.javaClass.name}.$op` is not supported in preview") }
+            try {
+                invokeWith(nulled)
+            } catch (e2: Throwable) {
+                throw InterpreterException("library property delegate `${delegate.javaClass.name}.$op` is not supported in preview")
+            }
         }
     }
 
@@ -1883,9 +2376,17 @@ class Interpreter(
         if (value == null) return false
         if (value is SourceObject) return sourceTypeMatches(value.cls, typeFqn)
         val candidates = listOfNotNull(
-            KOTLIN_TYPE_TO_JVM[typeFqn], typeFqn, if ('.' !in typeFqn) "java.lang.$typeFqn" else null,
+            KOTLIN_TYPE_TO_JVM[typeFqn],
+            typeFqn,
+            if ('.' !in typeFqn) "java.lang.$typeFqn" else null,
         )
-        return candidates.any { loadClassAcross(it, initialize = false, preferred = classLoader)?.isInstance(value) == true }
+        return candidates.any {
+            loadClassAcross(
+                it,
+                initialize = false,
+                preferred = classLoader
+            )?.isInstance(value) == true
+        }
     }
 
     /** Tri-state cast check: `true` = [value] is a [typeFqn]; `false` = confirmed NOT (the type loaded and
@@ -1895,7 +2396,9 @@ class Interpreter(
     private fun castMatches(value: Any, typeFqn: String): Boolean? {
         if (value is SourceObject) return sourceTypeMatches(value.cls, typeFqn)
         val candidates = listOfNotNull(
-            KOTLIN_TYPE_TO_JVM[typeFqn], typeFqn, if ('.' !in typeFqn) "java.lang.$typeFqn" else null,
+            KOTLIN_TYPE_TO_JVM[typeFqn],
+            typeFqn,
+            if ('.' !in typeFqn) "java.lang.$typeFqn" else null,
         )
         var anyLoaded = false
         for (c in candidates) {
@@ -1911,7 +2414,8 @@ class Interpreter(
         if (cls.fqn == typeFqn || cls.simpleName == simple) return true
         return cls.supertypes.any { sup ->
             sup == typeFqn || sup.substringAfterLast('.') == simple ||
-                (sourceClass(sup)?.takeIf { it.fqn != cls.fqn }?.let { sourceTypeMatches(it, typeFqn) } == true)
+                    (sourceClass(sup)?.takeIf { it.fqn != cls.fqn }
+                        ?.let { sourceTypeMatches(it, typeFqn) } == true)
         }
     }
 
@@ -1929,7 +2433,8 @@ class Interpreter(
         // Kotlin type as an object.
         primitiveCompanionHolder(ref.fqn)?.let { return it }
         val cls = loadInitialized(ref.fqn) ?: return null
-        val hasSingleton = runCatching { cls.getField("INSTANCE") }.getOrNull() != null || companionField(cls) != null
+        val hasSingleton =
+            runCatching { cls.getField("INSTANCE") }.getOrNull() != null || companionField(cls) != null
         return if (hasSingleton) null else cls
     }
 
@@ -1975,9 +2480,14 @@ class Interpreter(
         runCatching { cls.getField(name) }.getOrNull()
             ?.takeIf { java.lang.reflect.Modifier.isStatic(it.modifiers) }
             ?.let { runCatching { it.isAccessible = true }; return it.get(null) }
-        val getter = "get" + name.replaceFirstChar { if (it.isLowerCase()) it.titlecase() else it.toString() }
+        val getter =
+            "get" + name.replaceFirstChar { if (it.isLowerCase()) it.titlecase() else it.toString() }
         cls.methods.firstOrNull {
-            java.lang.reflect.Modifier.isStatic(it.modifiers) && it.parameterCount == 0 && KotlinJvmNames.matches(cls, it.name, getter)
+            java.lang.reflect.Modifier.isStatic(it.modifiers) && it.parameterCount == 0 && KotlinJvmNames.matches(
+                cls,
+                it.name,
+                getter
+            )
         }?.let { runCatching { it.isAccessible = true }; return it.invoke(null) }
         // A companion-object CLASS receiver (`PathFillType.Companion`, `StrokeCap.Companion`, …): its members are
         // INSTANCE getters on the companion SINGLETON, not statics — and a value-class-typed companion val
@@ -1987,7 +2497,11 @@ class Interpreter(
         // `ImageVector.Builder.path(...)` call — the icon's vector then builds empty and the Icon renders blank.
         companionSingletonOf(cls)?.let { singleton ->
             singleton.javaClass.methods.firstOrNull {
-                it.parameterCount == 0 && KotlinJvmNames.matches(singleton.javaClass, it.name, getter)
+                it.parameterCount == 0 && KotlinJvmNames.matches(
+                    singleton.javaClass,
+                    it.name,
+                    getter
+                )
             }?.let { runCatching { it.isAccessible = true }; return it.invoke(singleton) }
         }
         // Not a static field/getter — but `name` may be a NESTED CLASS reached through its enclosing type
@@ -2027,11 +2541,30 @@ class Interpreter(
         if (libraryFallback?.ownsInstance(receiver) == true) {
             libraryFallback.propertyOrNull(receiver, name)?.let { return it.value }
         }
-        val getter = "get" + name.replaceFirstChar { if (it.isLowerCase()) it.titlecase() else it.toString() }
+        val getter =
+            "get" + name.replaceFirstChar { if (it.isLowerCase()) it.titlecase() else it.toString() }
         (noArgMethod(receiver, getter) ?: noArgMethod(receiver, name))?.let {
             val v = it.invoke(receiver)
-            if (InterpTrace.isComposeState(receiver, name)) InterpTrace.log("read  $name = $v on ${InterpTrace.id(receiver)}")
+            if (InterpTrace.isComposeState(
+                    receiver,
+                    name
+                )
+            ) InterpTrace.log("read  $name = $v on ${InterpTrace.id(receiver)}")
             return v
+        }
+        // Kotlin's collection properties read through Java accessor methods. Most share their name
+        // (`size`→`size()`, `values`→`values()`, `length`→`length()`, resolved by the same-name lookup above),
+        // but the Kotlin→Java mapping renames `Map.keys`→`keySet()` and `Map.entries`→`entrySet()`, which the
+        // `get`-prefixed and same-name lookups both miss.
+        if (receiver is Map<*, *>) {
+            val javaAccessor = when (name) {
+                "keys" -> "keySet"; "entries" -> "entrySet"; else -> null
+            }
+            if (javaAccessor != null) noArgMethod(receiver, javaAccessor)?.let {
+                return it.invoke(
+                    receiver
+                )
+            }
         }
         // No plain (no-arg) getter — the name may be a nested `object` accessed through its enclosing
         // object/class (`Icons.AutoMirrored`, `Icons.AutoMirrored.Filled`): a nested object compiles to
@@ -2059,7 +2592,12 @@ class Interpreter(
             }
             // A member `by`-delegate on the general convention: `delegate.setValue(this, property, value)`.
             receiver.cls.conventionDelegatedProperties[name]?.let { delegateField ->
-                delegateSetValue(receiver.fields[delegateField], name, thisRef = receiver, value = value); return
+                delegateSetValue(
+                    receiver.fields[delegateField],
+                    name,
+                    thisRef = receiver,
+                    value = value
+                ); return
             }
             receiver.fields[name] = value; return
         }
@@ -2070,18 +2608,34 @@ class Interpreter(
                 HookDecision.Proceed -> {}
             }
         }
-        if (libraryFallback?.ownsInstance(receiver) == true && libraryFallback.writeProperty(receiver, name, value)) return
-        val setter = "set" + name.replaceFirstChar { if (it.isLowerCase()) it.titlecase() else it.toString() }
+        if (libraryFallback?.ownsInstance(receiver) == true && libraryFallback.writeProperty(
+                receiver,
+                name,
+                value
+            )
+        ) return
+        val setter =
+            "set" + name.replaceFirstChar { if (it.isLowerCase()) it.titlecase() else it.toString() }
         val m = (oneArgMethod(receiver, setter) ?: oneArgMethod(receiver, name))
             ?: throw InterpreterException("no writable property `$name` on ${receiver.javaClass.name}")
-        if (InterpTrace.isComposeState(receiver, name)) InterpTrace.log("write $name <- $value on ${InterpTrace.id(receiver)}")
+        if (InterpTrace.isComposeState(
+                receiver,
+                name
+            )
+        ) InterpTrace.log("write $name <- $value on ${InterpTrace.id(receiver)}")
         m.invoke(receiver, value)
     }
 
     /** A one-arg method matching [name] (mangling-aware), preferring a public-declaring type. */
     private fun oneArgMethod(receiver: Any, name: String): java.lang.reflect.Method? =
         publicMethod(receiver.javaClass, name, 1)
-            ?: receiver.javaClass.methods.firstOrNull { KotlinJvmNames.matches(receiver.javaClass, it.name, name) && it.parameterCount == 1 }
+            ?: receiver.javaClass.methods.firstOrNull {
+                KotlinJvmNames.matches(
+                    receiver.javaClass,
+                    it.name,
+                    name
+                ) && it.parameterCount == 1
+            }
                 ?.also { runCatching { it.isAccessible = true } }
 
     /** Read a top-level property (`LocalTextStyle`, `kotlin.math.PI`): it compiles to a STATIC getter on its
@@ -2090,15 +2644,21 @@ class Interpreter(
      *  property mangles its getter). */
     private fun readTopLevelProperty(ownerFqn: String, name: String): Any? {
         hookPropertyRead(ownerFqn, name, null)?.let { return it.value }
-        val getterName = "get" + name.replaceFirstChar { if (it.isLowerCase()) it.titlecase() else it.toString() }
+        val getterName =
+            "get" + name.replaceFirstChar { if (it.isLowerCase()) it.titlecase() else it.toString() }
         // A facade the executor interprets (project-jar bytes it prefers over a bundled build, or one the host
         // can't load at all) serves the getter there.
-        libraryFallback?.takeIf { it.hasClass(ownerFqn) }?.let { return it.invokeStatic(ownerFqn, getterName, emptyList()) }
+        libraryFallback?.takeIf { it.hasClass(ownerFqn) }
+            ?.let { return it.invokeStatic(ownerFqn, getterName, emptyList()) }
         val cls = loadInitialized(ownerFqn)
             ?: throw InterpreterBoundaryException("cannot load facade `$ownerFqn` for top-level property `$name`")
         val getter = getterName
         val m = cls.methods.firstOrNull {
-            java.lang.reflect.Modifier.isStatic(it.modifiers) && it.parameterCount == 0 && KotlinJvmNames.matches(cls, it.name, getter)
+            java.lang.reflect.Modifier.isStatic(it.modifiers) && it.parameterCount == 0 && KotlinJvmNames.matches(
+                cls,
+                it.name,
+                getter
+            )
         } ?: throw InterpreterException("no top-level property getter `$name` on `$ownerFqn`")
         runCatching { m.isAccessible = true }
         return m.invoke(null)
@@ -2115,19 +2675,32 @@ class Interpreter(
         // getter needs a headless-unavailable `Dispatchers.Main` scope). The Compose dispatcher supplies one;
         // the plain reflective dispatcher returns null, so ordinary extension-property reads are unchanged.
         if (receiver is SourceObject) {
-            dispatcher.readExtensionPropertyOverride(receiver, ownerFqn, name)?.let { return it.value }
+            dispatcher.readExtensionPropertyOverride(receiver, ownerFqn, name)
+                ?.let { return it.value }
         }
-        val getterName = "get" + name.replaceFirstChar { if (it.isLowerCase()) it.titlecase() else it.toString() }
+        val getterName =
+            "get" + name.replaceFirstChar { if (it.isLowerCase()) it.titlecase() else it.toString() }
         // A facade the executor interprets (project-jar bytes it prefers over a bundled build, or one the host
         // can't load at all) serves the extension getter there, receiver as the leading argument.
-        libraryFallback?.takeIf { it.hasClass(ownerFqn) }?.let { return it.invokeStatic(ownerFqn, getterName, listOf(receiver), leadingReceivers = 1) }
+        libraryFallback?.takeIf { it.hasClass(ownerFqn) }?.let {
+            return it.invokeStatic(
+                ownerFqn,
+                getterName,
+                listOf(receiver),
+                leadingReceivers = 1
+            )
+        }
         val cls = loadClassAcross(ownerFqn, initialize = false, preferred = classLoader)
-            // A missing library facade (e.g. a Compose icon's per-icon `…Kt`) is a recoverable boundary:
-            // partial rendering skips the one statement rather than failing the whole preview.
+        // A missing library facade (e.g. a Compose icon's per-icon `…Kt`) is a recoverable boundary:
+        // partial rendering skips the one statement rather than failing the whole preview.
             ?: throw InterpreterBoundaryException("cannot load facade `$ownerFqn` for extension property `$name`")
         val getter = getterName
         val m = cls.methods.firstOrNull {
-            java.lang.reflect.Modifier.isStatic(it.modifiers) && it.parameterCount == 1 && KotlinJvmNames.matches(cls, it.name, getter)
+            java.lang.reflect.Modifier.isStatic(it.modifiers) && it.parameterCount == 1 && KotlinJvmNames.matches(
+                cls,
+                it.name,
+                getter
+            )
         } ?: throw InterpreterException("no extension-property getter `$name` on `$ownerFqn`")
         runCatching { m.isAccessible = true }
         return m.invoke(null, receiver)
@@ -2141,13 +2714,27 @@ class Interpreter(
      *  value-class argument coercion both apply — exactly as for [readExtensionProperty]'s getter and for a
      *  normal `Modifier.background(Color.Red)`. The synthetic callee carries no parameter names, so
      *  [reorderNamedArgs] passes the value through untouched. */
-    private fun writeExtensionProperty(receiver: Any, ownerFqn: String, name: String, value: Any?, source: SourceSpan) {
-        val setterName = "set" + name.replaceFirstChar { if (it.isLowerCase()) it.titlecase() else it.toString() }
+    private fun writeExtensionProperty(
+        receiver: Any,
+        ownerFqn: String,
+        name: String,
+        value: Any?,
+        source: SourceSpan
+    ) {
+        val setterName =
+            "set" + name.replaceFirstChar { if (it.isLowerCase()) it.titlecase() else it.toString() }
         val setter = ResolvedCallable.Library(
             displayName = setterName, ownerFqn = ownerFqn, methodName = setterName,
             paramTypes = listOf(null), isStatic = true, isConstructor = false, isInline = false,
         )
-        val call = RNode.Call(setter, DispatchKind.EXTENSION, receiver = null, args = emptyList(), callSiteKey = CallSiteKey(0), source = source)
+        val call = RNode.Call(
+            setter,
+            DispatchKind.EXTENSION,
+            receiver = null,
+            args = emptyList(),
+            callSiteKey = CallSiteKey(0),
+            source = source
+        )
         checkedDispatch(call, receiver, listOf(value))
     }
 
@@ -2158,14 +2745,22 @@ class Interpreter(
      *  every iteration of a loop (e.g. a `while (!x.done) { … }` guard) — this was the hot path in the ANR trace.
      *  A holder boxes the nullable result so "no such method" is cached too. */
     private class NoArgMethodHolder(val method: java.lang.reflect.Method?)
-    private val noArgMethodCache = java.util.concurrent.ConcurrentHashMap<Class<*>, java.util.concurrent.ConcurrentHashMap<String, NoArgMethodHolder>>()
+
+    private val noArgMethodCache =
+        java.util.concurrent.ConcurrentHashMap<Class<*>, java.util.concurrent.ConcurrentHashMap<String, NoArgMethodHolder>>()
 
     private fun noArgMethod(receiver: Any, name: String): java.lang.reflect.Method? {
         val cls = receiver.javaClass
         val perClass = noArgMethodCache.getOrPut(cls) { java.util.concurrent.ConcurrentHashMap() }
         perClass[name]?.let { return it.method }
         val m = publicMethod(cls, name, 0)
-            ?: cls.methods.firstOrNull { KotlinJvmNames.matches(cls, it.name, name) && it.parameterCount == 0 }
+            ?: cls.methods.firstOrNull {
+                KotlinJvmNames.matches(
+                    cls,
+                    it.name,
+                    name
+                ) && it.parameterCount == 0
+            }
                 ?.also { runCatching { it.isAccessible = true } }
         perClass[name] = NoArgMethodHolder(m)
         return m
@@ -2195,9 +2790,16 @@ class Interpreter(
         // `hasNext()`/`next()` when it too is a source type) — interpret it instead of reflecting bytecode that
         // doesn't exist. Drives `for (x in sourceObj)`.
         if (receiver is SourceObject) {
-            findSourceMethod(receiver.cls, "$name/0")?.let { return callMethod(it, receiver, emptyList()) }
+            findSourceMethod(receiver.cls, "$name/0")?.let {
+                return callMethod(
+                    it,
+                    receiver,
+                    emptyList()
+                )
+            }
         }
-        val m = noArgMethod(receiver, name) ?: throw InterpreterException("no `$name()` on ${receiver.javaClass.name}")
+        val m = noArgMethod(receiver, name)
+            ?: throw InterpreterException("no `$name()` on ${receiver.javaClass.name}")
         return m.invoke(receiver)
     }
 
@@ -2271,7 +2873,8 @@ class Interpreter(
      * writes to one update the scope that owns it. A non-local `return` propagates out as a [ReturnSignal],
      * matching inline-lambda semantics.
      */
-    private inner class Closure(private val node: RNode.Lambda, private val env: Env) : InterpretedLambda {
+    private inner class Closure(private val node: RNode.Lambda, private val env: Env) :
+        InterpretedLambda {
         override val paramCount: Int get() = node.params.size
         override fun invoke(args: List<Any?>): Any? {
             val callEnv = Env(env)
@@ -2279,11 +2882,56 @@ class Interpreter(
             // A local function's `return` is LOCAL — it returns from this closure, not the enclosing function. A
             // plain lambda's bare `return` is non-local (it must propagate to the enclosing function's frame).
             return if (node.isLocalFunction) {
-                try { eval(node.body, callEnv) } catch (r: ReturnSignal) { r.value }
+                try {
+                    eval(node.body, callEnv)
+                } catch (r: ReturnSignal) {
+                    r.value
+                }
             } else {
                 eval(node.body, callEnv)
             }
         }
+
+        override fun invokeSuspendTail(args: List<Any?>, continuation: kotlin.coroutines.Continuation<Any?>): Any? {
+            val body = node.body as? RNode.Block ?: return InterpretedLambda.NOT_TAIL_SUSPENDABLE
+            val tail = tailSuspendCall(body) ?: return InterpretedLambda.NOT_TAIL_SUSPENDABLE
+            val callEnv = Env(env)
+            node.params.forEachIndexed { i, p -> callEnv.define(p.slot, args.getOrNull(i)) }
+            // The prefix is verified suspend-free, so it runs synchronously on the caller's thread (the pointer
+            // node's coroutine) without blocking it.
+            for (i in 0 until body.statements.size - 1) eval(body.statements[i], callEnv)
+            // The trailing suspend call hands off to the caller's continuation (armed for [dispatchSuspend]); mark
+            // suspend-active so the call routes there. Its raw COROUTINE_SUSPENDED result propagates up.
+            return SuspendContext.runManaged {
+                tailContinuation.set(continuation)
+                try {
+                    eval(tail, callEnv)
+                } finally {
+                    tailContinuation.set(null)
+                }
+            }
+        }
+    }
+
+    /** The trailing suspend Library call of a `{ <sync statements…>, <suspend call> }` block, or null when the
+     *  body isn't that shape — no trailing suspend call, or a suspend call in the PREFIX (which running the block
+     *  inline on the caller's thread would BLOCK). Enables [Closure.invokeSuspendTail]. */
+    private fun tailSuspendCall(body: RNode.Block): RNode.Call? {
+        val last = body.statements.lastOrNull() as? RNode.Call ?: return null
+        if (!isSuspendLibraryCall(last)) return null
+        if (body.statements.dropLast(1).any { hasSyncSuspendCall(it) }) return null
+        return last
+    }
+
+    private fun isSuspendLibraryCall(call: RNode.Call): Boolean =
+        call.callee.let { it is ResolvedCallable.Library && it.isSuspend }
+
+    /** Whether [node]'s own synchronous execution makes a suspend call — NOT descending into nested lambdas
+     *  (those are separate closures invoked elsewhere, e.g. a gesture detector's `onDrag` callback). */
+    private fun hasSyncSuspendCall(node: RNode): Boolean {
+        if (node is RNode.Lambda) return false
+        if (node is RNode.Call && isSuspendLibraryCall(node)) return true
+        return node.children().any { hasSyncSuspendCall(it) }
     }
 
     // --- sequence builder (`sequence { yield(…) }`) -------------------------------------------------------
@@ -2294,14 +2942,16 @@ class Interpreter(
     /** Build the lazy `Sequence` a `sequence { … }` block denotes. Each `iterator()` runs the block on a fresh
      *  producer thread that hands ONE element across per consumer pull — so an infinite generator terminates
      *  under `take(n)`/`first()` (the producer parks after the last element pulled; it is a daemon thread). */
-    private fun interpretedSequence(block: InterpretedLambda): Sequence<Any?> = Sequence { SeqGenerator(block) }
+    private fun interpretedSequence(block: InterpretedLambda): Sequence<Any?> =
+        Sequence { SeqGenerator(block) }
 
     private inner class SeqGenerator(private val block: InterpretedLambda) : Iterator<Any?> {
         private val demand = java.util.concurrent.SynchronousQueue<Any>()
         private val supply = java.util.concurrent.SynchronousQueue<Any>()
         private var started = false
         private var finished = false
-        private var ready: Boolean? = null // null = not fetched; true = a value is buffered; false = exhausted
+        private var ready: Boolean? =
+            null // null = not fetched; true = a value is buffered; false = exhausted
         private var value: Any? = null
 
         private fun startIfNeeded() {
@@ -2312,7 +2962,11 @@ class Interpreter(
                     demand.take() // wait for the first pull before running any of the block
                     val prev = activeGenerator.get()
                     activeGenerator.set(this)
-                    try { block.invoke(listOf(SEQ_SCOPE)) } finally { activeGenerator.set(prev) }
+                    try {
+                        block.invoke(listOf(SEQ_SCOPE))
+                    } finally {
+                        activeGenerator.set(prev)
+                    }
                     supply.put(SEQ_DONE)
                 } catch (t: Throwable) {
                     runCatching { supply.put(SeqFail(t)) }
@@ -2331,13 +2985,24 @@ class Interpreter(
             startIfNeeded()
             demand.put(SEQ_UNIT)
             when (val s = supply.take()) {
-                is SeqVal -> { value = s.v; ready = true }
-                is SeqFail -> { finished = true; ready = false; throw s.t }
-                else -> { finished = true; ready = false } // SEQ_DONE
+                is SeqVal -> {
+                    value = s.v; ready = true
+                }
+
+                is SeqFail -> {
+                    finished = true; ready = false; throw s.t
+                }
+
+                else -> {
+                    finished = true; ready = false
+                } // SEQ_DONE
             }
         }
 
-        override fun hasNext(): Boolean { fetch(); return ready == true }
+        override fun hasNext(): Boolean {
+            fetch(); return ready == true
+        }
+
         override fun next(): Any? {
             fetch()
             if (ready != true) throw NoSuchElementException()
@@ -2350,6 +3015,7 @@ class Interpreter(
      *  intercepted by name so nothing is dispatched on it. */
     private val SEQ_SCOPE = Any()
     private val SEQ_UNIT = Any()
+
     private object SEQ_DONE
     private class SeqVal(val v: Any?)
     private class SeqFail(val t: Throwable)
@@ -2361,12 +3027,17 @@ class Interpreter(
      *  the SuspendBridge on its coroutine thread) is left to that path. */
     private val coroutineDepth = ThreadLocal.withInitial { 0 }
     private val COROUTINE_SCOPE = Any()
+
     private class CoroutineJob
     private class CoroutineDeferred(val value: Any?)
 
     private fun <T> withCoroutineScope(body: () -> T): T {
         coroutineDepth.set(coroutineDepth.get() + 1)
-        try { return body() } finally { coroutineDepth.set(coroutineDepth.get() - 1) }
+        try {
+            return body()
+        } finally {
+            coroutineDepth.set(coroutineDepth.get() - 1)
+        }
     }
 
     /** Run a coroutine builder's block (a `CoroutineScope.() -> T` receiver lambda), binding the scope marker so
@@ -2389,7 +3060,10 @@ class Interpreter(
      * the previous `HashMap` allocated a node table plus a node per entry for every scope, every recomposition.
      */
     private class Env(private val parent: Env? = null) {
-        init { InterpProfile.count("env") }
+        init {
+            InterpProfile.count("env")
+        }
+
         private var keys: IntArray? = null
         private var values: Array<Any?>? = null
         private var size = 0
@@ -2400,7 +3074,9 @@ class Interpreter(
          *  non-generic. */
         private var reified: Map<String, RTypeArg>? = null
 
-        fun defineReified(m: Map<String, RTypeArg>) { if (m.isNotEmpty()) reified = m }
+        fun defineReified(m: Map<String, RTypeArg>) {
+            if (m.isNotEmpty()) reified = m
+        }
 
         /** The concrete type bound to reified type parameter [name] in this frame or an enclosing one, or null. */
         fun reifiedType(name: String): RTypeArg? {
@@ -2426,11 +3102,16 @@ class Interpreter(
         fun define(slot: SlotId, value: Any?) {
             val key = slot.value
             val i = indexOf(key)
-            if (i >= 0) { values!![i] = value; return } // redefine in this scope (shadow/overwrite)
+            if (i >= 0) {
+                values!![i] = value; return
+            } // redefine in this scope (shadow/overwrite)
             var ks = keys
             var vs = values
-            if (ks == null) { ks = IntArray(INITIAL); vs = arrayOfNulls(INITIAL); keys = ks; values = vs }
-            else if (size == ks.size) { ks = ks.copyOf(size * 2); vs = vs!!.copyOf(size * 2); keys = ks; values = vs }
+            if (ks == null) {
+                ks = IntArray(INITIAL); vs = arrayOfNulls(INITIAL); keys = ks; values = vs
+            } else if (size == ks.size) {
+                ks = ks.copyOf(size * 2); vs = vs!!.copyOf(size * 2); keys = ks; values = vs
+            }
             ks[size] = key
             vs!![size] = value
             size++
@@ -2441,10 +3122,15 @@ class Interpreter(
             var e: Env? = this
             while (e != null) {
                 val i = e.indexOf(key)
-                if (i >= 0) { e.values!![i] = value; return }
+                if (i >= 0) {
+                    e.values!![i] = value; return
+                }
                 e = e.parent
             }
-            define(slot, value) // not previously declared (shouldn't happen post-resolution) → bind here
+            define(
+                slot,
+                value
+            ) // not previously declared (shouldn't happen post-resolution) → bind here
         }
 
         /** Index of [key] in this scope's own slots, or -1. Linear scan — scopes are tiny. */
@@ -2466,9 +3152,18 @@ class Interpreter(
      *  loop), caught by the enclosing [RNode.While]/[RNode.ForEach]. The unlabeled jumps reuse the singletons;
      *  a labeled jump (`break@outer`) carries its target [label] so an inner loop rethrows it to the loop it
      *  names. Both cases are stackless (no fill-in of the trace). */
-    private sealed class LoopSignal : RuntimeException(null, null, false, false) { abstract val label: String? }
-    private object BreakSignal : LoopSignal() { override val label: String? get() = null }
-    private object ContinueSignal : LoopSignal() { override val label: String? get() = null }
+    private sealed class LoopSignal : RuntimeException(null, null, false, false) {
+        abstract val label: String?
+    }
+
+    private class BreakSignal : LoopSignal() {
+        override val label: String? get() = null
+    }
+
+    private class ContinueSignal : LoopSignal() {
+        override val label: String? get() = null
+    }
+
     private class LabeledBreakSignal(override val label: String) : LoopSignal()
     private class LabeledContinueSignal(override val label: String) : LoopSignal()
 
@@ -2483,7 +3178,9 @@ class Interpreter(
         try {
             eval(body, bodyEnv)
         } catch (c: ContinueSignal) { /* continue → fall through to the next iteration */
-        } catch (c: LabeledContinueSignal) { if (!handledHere(c, loopLabel)) throw c }
+        } catch (c: LabeledContinueSignal) {
+            if (!handledHere(c, loopLabel)) throw c
+        }
     }
 
     /** Per-loop budget for the runaway guard. Reset whenever the loop cooperates (suspends via `delay`), so only
@@ -2542,22 +3239,27 @@ class Interpreter(
         /** Runaway-loop guard bounds (see [guardLoop]). Generous enough that a real preview's loops never trip
          *  them, tight enough that a runaway loop can't hang the app past an ANR. */
         const val MAX_LOOP_ITERATIONS = 1_000_000
-        const val MAX_LOOP_NANOS = 3_000_000_000L // 3s wall-clock — well under Android's 5s input-dispatch ANR
-        const val FRAME_MILLIS = 16L // simulated ~60fps cadence for `withFrameNanos`/`withFrameMillis`
+        const val MAX_LOOP_NANOS =
+            3_000_000_000L // 3s wall-clock — well under Android's 5s input-dispatch ANR
+        const val FRAME_MILLIS =
+            16L // simulated ~60fps cadence for `withFrameNanos`/`withFrameMillis`
 
         /** Recursion + whole-pass bounds (see [call]). [MAX_CALL_DEPTH] gives a clean early abort on a large-stack
          *  thread; the StackOverflowError catch in [call] is the backstop for smaller stacks. */
         const val MAX_CALL_DEPTH = 500
-        const val MAX_RENDER_NANOS = 4_000_000_000L // 4s per render pass — under the 5s input-dispatch ANR
+        const val MAX_RENDER_NANOS =
+            4_000_000_000L // 4s per render pass — under the 5s input-dispatch ANR
 
         /** Pre-allocated (no allocation once the stack is exhausted) for the StackOverflowError backstop in [call].
          *  Reused across threads/renders — safe, since it is thrown, not mutated. */
-        val RECURSION_ABORT = InterpreterException("call stack overflowed (unbounded recursion) — aborting to avoid crashing the preview")
+        val RECURSION_ABORT =
+            InterpreterException("call stack overflowed (unbounded recursion) — aborting to avoid crashing the preview")
 
         val ARITHMETIC = setOf("plus", "minus", "times", "div", "rem")
         val COMPARISON = setOf("lt", "le", "gt", "ge")
         val BITWISE = setOf("and", "or", "xor", "shl", "shr", "ushr")
         val COMPONENT = Regex("component(\\d+)")
+
         /** Common Kotlin type names → their JVM classes, for `is`/`catch` checks against reflectable values. */
         val KOTLIN_TYPE_TO_JVM = mapOf(
             "kotlin.String" to "java.lang.String",
@@ -2582,6 +3284,7 @@ class Interpreter(
             "kotlin.collections.Map" to "java.util.Map",
             "kotlin.collections.Set" to "java.util.Set",
         )
+
         /** The facades that declare the functions the interpreter models as intrinsics: the `@InlineOnly` scope
          *  functions (`repeat`/`let`/`run`/…) on `StandardKt`, the empty/blank predicates on the string
          *  (`StringsKt`) and collection (`CollectionsKt`) facades, and the coroutines `delay` on `DelayKt` (a
@@ -2597,8 +3300,10 @@ class Interpreter(
             // `kotlin.math.*` (sqrt/abs/pow/roundToInt/…) — @InlineOnly delegations to java.lang.Math.
             "kotlin.math.MathKt",
         )
+
         /** The `@InlineOnly` empty/blank predicates, dispatched by name in [evalEmptyBlankPredicate]. */
-        val EMPTY_BLANK_PREDICATES = setOf("isNotBlank", "isNotEmpty", "isNullOrBlank", "isNullOrEmpty")
+        val EMPTY_BLANK_PREDICATES =
+            setOf("isNotBlank", "isNotEmpty", "isNullOrBlank", "isNullOrEmpty")
 
         /** `kotlin.math` single-argument functions modeled over [java.lang.Math] (all compute in `Double`).
          *  `round` is ties-to-even ([Math.rint], matching `kotlin.math.round`); `Double.roundToInt/Long` (ties
@@ -2664,7 +3369,8 @@ class SourceObject(val cls: ResolvedClass, val fields: MutableMap<String, Any?> 
      *  the reflective dispatcher can wrap this object in a JVM interface [java.lang.reflect.Proxy] when it's
      *  passed to library code that expects the interface it implements (`object : Comparator` handed to
      *  `sortedWith`, `object : NestedScrollConnection` to `Modifier.nestedScroll`). Null until construction sets it. */
-    @JvmField var proxyInvoker: ((String, List<Any?>) -> Any?)? = null
+    @JvmField
+    var proxyInvoker: ((String, List<Any?>) -> Any?)? = null
 
     override fun equals(other: Any?): Boolean {
         if (this === other) return true

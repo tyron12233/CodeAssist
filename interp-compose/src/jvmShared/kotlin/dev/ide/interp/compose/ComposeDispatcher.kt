@@ -244,7 +244,7 @@ class ComposeDispatcher(
             when (method.name) {
                 "invoke" -> {
                     val a = callArgs?.toList() ?: emptyList()
-                    if (a.lastOrNull() is kotlin.coroutines.Continuation<*>) suspendBridge.runSuspending(lambda, a)
+                    if (a.lastOrNull() is kotlin.coroutines.Continuation<*>) runSuspendLambda(lambda, a)
                     else {
                         // Inside a non-composable lambda, a stray `@Composable` call is illegal — suppress it
                         // (see [composablesSuppressed]) so it can't compose into the stale composer and hang.
@@ -266,6 +266,30 @@ class ComposeDispatcher(
                 else -> null
             }
         }
+
+    /** Run an interpreted SUSPEND lambda the real runtime invoked with a trailing `Continuation`. A `pointerInput
+     *  { }` block MUST run as the pointer node's OWN coroutine — Compose delivers pointer events only to a gesture
+     *  detector running inside the node's coroutine, not a detached one on the bridge fiber. So when the block is
+     *  a pointer block AND its body is tail-suspendable (`{ <sync…>, detectXGestures(…) }`), hand it off via
+     *  [InterpretedLambda.invokeSuspendTail] — the detector becomes THIS caller's coroutine, and cancellation
+     *  flows from the node natively. Everything else (LaunchedEffect, a non-tail-shaped pointer block) runs on the
+     *  fiber as before. A failed tail attempt falls back to the fiber (re-running a trivial suspend-free prefix). */
+    @Suppress("UNCHECKED_CAST")
+    private fun runSuspendLambda(lambda: InterpretedLambda, invokeArgs: List<Any?>): Any? {
+        val blockArgs = invokeArgs.dropLast(1)
+        if (isPointerInputBlock(blockArgs)) {
+            val cont = invokeArgs.last() as kotlin.coroutines.Continuation<Any?>
+            val tail = runCatching { lambda.invokeSuspendTail(blockArgs, cont) }
+                .getOrDefault(InterpretedLambda.NOT_TAIL_SUSPENDABLE)
+            if (tail !== InterpretedLambda.NOT_TAIL_SUSPENDABLE) return tail
+        }
+        return suspendBridge.runSuspending(lambda, invokeArgs)
+    }
+
+    /** Whether an interpreted suspend lambda's receiver (its first bound arg) is a `PointerInputScope` — i.e. this
+     *  is a `Modifier.pointerInput { }` block. Reflective so it needs no hard compose-ui dependency edge. */
+    private fun isPointerInputBlock(blockArgs: List<Any?>): Boolean =
+        blockArgs.firstOrNull()?.let { POINTER_INPUT_SCOPE?.isInstance(it) == true } ?: false
 
     /** The degraded result of a guarded lambda that failed: the zero value of the SAM's return type, so a
      *  primitive-returning caller doesn't die unboxing null on top of the recorded failure. */
@@ -743,6 +767,11 @@ class ComposeDispatcher(
 
     private companion object {
         val COMPOSER: Class<*> = Class.forName("androidx.compose.runtime.Composer")
+
+        /** `PointerInputScope` — the receiver of a `Modifier.pointerInput { }` block; loaded reflectively so it
+         *  needs no hard compose-ui dependency edge. Null (feature off) if somehow absent at runtime. */
+        val POINTER_INPUT_SCOPE: Class<*>? =
+            runCatching { Class.forName("androidx.compose.ui.input.pointer.PointerInputScope") }.getOrNull()
 
         // Runaway-recomposition bounds for [contentLambdaStorm] — same thresholds as [ComposeRuntime]'s
         // source-path storm breaker: past 1000 re-invocations of ONE content lambda within 1s is a

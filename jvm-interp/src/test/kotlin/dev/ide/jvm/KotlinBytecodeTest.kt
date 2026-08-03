@@ -5,6 +5,7 @@ import dev.ide.jvm.kfixtures.copyX
 import dev.ide.jvm.kfixtures.dpAdd
 import dev.ide.jvm.kfixtures.dpScaled
 import dev.ide.jvm.kfixtures.elvis
+import dev.ide.jvm.kfixtures.filterLetters
 import dev.ide.jvm.kfixtures.greetFull
 import dev.ide.jvm.kfixtures.greetWithDefault
 import dev.ide.jvm.kfixtures.higherOrder
@@ -48,6 +49,19 @@ class KotlinBytecodeTest {
         assertEquals(9.toShort(), invoked("shortViaBridge"))
         assertEquals("java.lang.Integer", typeOf("intViaBridge"), "int lambda (control)")
         assertEquals(42, invoked("intViaBridge"))
+    }
+
+    /**
+     * The ARGUMENT-side counterpart of [primitiveReturningLambdaBoxesToItsOwnWrapperAcrossTheBridge]. A
+     * `(Char) -> Boolean` predicate compiles to a specialized impl `(C)Z` behind the erased
+     * `Function1.invoke(Object)` SAM; when interpreted code boxes a char (bridged `Character.valueOf`) and
+     * invokes it, the real `Character` must be unboxed back to the impl's `char` local. Regression for
+     * `ClassCastException: java.lang.Character cannot be cast to java.lang.Integer` from `seedLocal`
+     * (reported via `"abc1".filter { it in 'a'..'z' }`).
+     */
+    @Test fun specializedPrimitiveArgLambdaAcceptsRealWrapper() {
+        assertEquals(filterLetters("abc1"), call("filterLetters", "(Ljava/lang/String;)Ljava/lang/String;", "abc1"))
+        assertEquals("abc", call("filterLetters", "(Ljava/lang/String;)Ljava/lang/String;", "abc1"))
     }
 
     @Test fun inlineValueClass() {

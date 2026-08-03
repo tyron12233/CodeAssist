@@ -15,6 +15,7 @@ class VmMethodView internal constructor(
     private val node: MethodNode,
 ) {
     val name: String get() = node.name
+
     /** Internal name (slashes) of the class that DECLARES this method — for a host that resolves the Kotlin
      *  calling convention (JVM name mangling) from the declaring class's `@kotlin.Metadata`. */
     val ownerInternalName: String get() = declaring.name
@@ -28,7 +29,8 @@ class VmMethodView internal constructor(
     /** Invoke with real-convention [args] ([receiver] null for a static method or constructor; a peer receiver
      *  resolves to its interpreted instance). A constructor view allocates and returns the new instance as
      *  platform code sees it (its peer). */
-    fun invoke(receiver: Any?, args: List<Any?>): Any? = vm.invokeView(declaring, node, receiver, args, paramDescriptors, returnDescriptor)
+    fun invoke(receiver: Any?, args: List<Any?>): Any? =
+        vm.invokeView(declaring, node, receiver, args, paramDescriptors, returnDescriptor)
 
     override fun toString(): String = "${declaring.name}.${node.name}${node.desc}"
 }
@@ -57,7 +59,13 @@ fun Vm.interpretedMethods(fqn: String): List<VmMethodView> {
     var c: VmClass? = start
     while (c != null) {
         val cur = c
-        cur.methods.forEach { if (it.name != "<init>" && it.name != "<clinit>") out.add(VmMethodView(this, cur, it)) }
+        cur.methods.forEach {
+            if (it.name != "<init>" && it.name != "<clinit>") out.add(
+                VmMethodView(
+                    this, cur, it
+                )
+            )
+        }
         ifaceQueue.addAll(cur.interfaces)
         c = cur.superName?.let { resolve(it) }
     }
@@ -66,7 +74,9 @@ fun Vm.interpretedMethods(fqn: String): List<VmMethodView> {
         if (!seenIfaces.add(n)) continue
         val ic = resolve(n) ?: continue
         ic.methods.forEach {
-            if (it.name != "<clinit>" && it.access and Opcodes.ACC_ABSTRACT == 0) out.add(VmMethodView(this, ic, it))
+            if (it.name != "<clinit>" && it.access and Opcodes.ACC_ABSTRACT == 0) out.add(
+                VmMethodView(this, ic, it)
+            )
         }
         ifaceQueue.addAll(ic.interfaces)
     }
@@ -96,11 +106,14 @@ fun Vm.interpretedStaticFields(fqn: String): Map<String, String> =
 /** Read a static field of interpreted class [fqn] (running its initializer first), in real conventions. */
 @Suppress("UNCHECKED_CAST")
 fun Vm.interpretedStaticValue(fqn: String, field: String): Any? {
-    val cls = resolve(internalOf(fqn)) ?: throw VmUnsupportedException("$fqn is not an interpreted class")
+    val cls =
+        resolve(internalOf(fqn)) ?: throw VmUnsupportedException("$fqn is not an interpreted class")
     ensureInitialized(cls)
-    val desc = cls.staticFieldDescs[field] ?: throw VmUnsupportedException("no static field $field on $fqn")
+    val desc = cls.staticFieldDescs[field]
+        ?: throw VmUnsupportedException("no static field $field on $fqn")
     val slot = cls.statics[field]
-    val value = if (field in cls.volatileStaticFields) (slot as java.util.concurrent.atomic.AtomicReference<Any?>).get() else slot
+    val value =
+        if (field in cls.volatileStaticFields) (slot as java.util.concurrent.atomic.AtomicReference<Any?>).get() else slot
     return Marshalling.vmToReal(toReal(value), desc)
 }
 

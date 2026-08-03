@@ -4,14 +4,14 @@ import dev.ide.lang.kotlin.interp.RNode
 
 /**
  * The host's veto/rewrite seam over every point where interpreted code escapes into the real system. The
- * interpreter itself only walks the lowered tree; the moments it reaches OUT — a library call through the
+ * interpreter itself only walks the lowered tree; the moments it reaches OUT, a library call through the
  * [Dispatcher], a reflective property read/write, materializing a singleton (which runs a class's static
- * initializer) — are exactly the moments a host may want to mediate (the Compose preview's sandbox: file
+ * initializer), are exactly the moments a host may want to mediate (the Compose preview's sandbox: file
  * access, network, Android system calls). Each hook runs BEFORE the underlying operation and decides it.
  *
  * This sees the boundary between interpreted code and the FIRST library call only: what an allowed library
  * call does internally is invisible (like the console run sandbox, which mediates the program's calls at the
- * bytecode VM's bridge). A curated call-boundary policy, not a hardened sandbox — same caveat as the run
+ * bytecode VM's bridge). A curated call-boundary policy, not a hardened sandbox, same caveat as the run
  * sandbox's `Guards`.
  *
  * All hooks default to [HookDecision.Proceed]; a null hooks reference on the [Interpreter] costs nothing on
@@ -32,7 +32,7 @@ interface InterpreterHooks {
     fun beforePropertyRead(ownerFqn: String?, name: String, receiver: Any?): HookDecision = HookDecision.Proceed
 
     /** Before a reflective property write (`receiver.name = value` on a non-source receiver). A [HookDecision.
-     *  Replace] skips the write (its value is ignored — there is nothing to substitute). */
+     *  Replace] skips to write (its value is ignored, there is nothing to substitute). */
     fun beforePropertyWrite(name: String, receiver: Any?): HookDecision = HookDecision.Proceed
 
     /** Before the interpreter loads [fqn] WITH static initialization (materializing an `object`/`Companion`/
@@ -47,7 +47,7 @@ sealed class HookDecision {
     /** Perform the operation normally. */
     object Proceed : HookDecision()
 
-    /** Skip the operation and use [value] as its result — the stub path that keeps a gap-tolerant preview
+    /** Skip the operation and use [value] as its result, the stub path that keeps a gap-tolerant preview
      *  rendering (the policy records a finding; the operation never happens). */
     class Replace(val value: Any?) : HookDecision()
 

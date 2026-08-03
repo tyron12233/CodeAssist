@@ -134,10 +134,8 @@ class OffscreenComposeSurface(
                 if (hwMode && hwCb != null && Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
                     val hb = img.hardwareBuffer ?: return@use
                     frames.incrementAndGet()
-                    try {
+                    hb.use { hb ->
                         hwCb(hb, img.width, img.height)
-                    } finally {
-                        hb.close()
                     }
                 } else {
                     val frame = Frame(readFrameBytes(img), img.width, img.height)

@@ -69,3 +69,16 @@ fun byteViaBridge(): Any? = java.util.Optional.empty<Byte>().orElseGet { 7.toByt
 fun charViaBridge(): Any? = java.util.Optional.empty<Char>().orElseGet { 'Q' }
 fun shortViaBridge(): Any? = java.util.Optional.empty<Short>().orElseGet { 9.toShort() }
 fun intViaBridge(): Any? = java.util.Optional.empty<Int>().orElseGet { 42 }
+
+/** Applies a `(Char) -> Boolean` predicate to each character of [s] from INTERPRETED code. Deliberately NOT
+ *  `inline`, so `predicate` is a genuine `Function1`: `predicate(c)` boxes the char (bridged `Character.valueOf`)
+ *  and passes it through the erased `Function1.invoke(Object)`, so the specialized impl `(C)Z` receives a real
+ *  `Character` at its `char` parameter (an `inline` receiver would splice the body and never box). */
+private fun charFilter(s: String, predicate: (Char) -> Boolean): String = buildString {
+    for (c in s) if (predicate(c)) append(c)
+}
+
+/** Reproduces the argument-side counterpart of [boolViaBridge]: a specialized primitive-arg lambda invoked
+ *  with a real wrapper. Regression for `ClassCastException: java.lang.Character cannot be cast to
+ *  java.lang.Integer` when seeding the impl's `char` local. */
+fun filterLetters(s: String): String = charFilter(s) { it in 'a'..'z' }

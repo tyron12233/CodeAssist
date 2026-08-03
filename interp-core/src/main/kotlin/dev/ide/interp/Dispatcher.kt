@@ -203,6 +203,23 @@ class ExtensionPropertyValue(val value: Any?)
 interface InterpretedLambda {
     val paramCount: Int
     fun invoke(args: List<Any?>): Any?
+
+    /**
+     * Run a suspend lambda whose body is `{ <synchronous statements…>, <trailing suspend call> }` as a REAL
+     * coroutine of [continuation] (the caller's own): the prefix runs synchronously on THIS thread, then the
+     * trailing suspend call is invoked with [continuation] and its raw result returned — so the real suspend
+     * function (e.g. `detectDragGestures`) becomes the CALLER'S coroutine instead of a detached one blocked on a
+     * background fiber. This is what lets an interpreted `pointerInput { }` block be the pointer node's own
+     * coroutine, so Compose actually delivers pointer events to it. Returns [NOT_TAIL_SUSPENDABLE] when the body
+     * isn't that shape (a prefix suspend call — which running inline would BLOCK — or no trailing suspend call),
+     * so the caller falls back to the fiber path. Default: not supported.
+     */
+    fun invokeSuspendTail(args: List<Any?>, continuation: kotlin.coroutines.Continuation<Any?>): Any? = NOT_TAIL_SUSPENDABLE
+
+    companion object {
+        /** Sentinel from [invokeSuspendTail] meaning "this body can't be run as a tail-suspend coroutine". */
+        val NOT_TAIL_SUSPENDABLE: Any = Any()
+    }
 }
 
 /**
@@ -567,24 +584,33 @@ class ReflectiveDispatcher(
     private fun invokeViaDefaultSynthetic(cls: Class<*>, name: String, realArgs: List<Any?>, composable: List<Boolean>, receiverCount: Int): Invoked? {
         val m = findDefaultSynthetic(cls, name, realArgs) ?: return null
         val params = m.parameterTypes
+        // A SUSPEND function's `$default` synthetic inserts its `Continuation` BETWEEN the real value params and
+        // the mask+marker: `realParams…, Continuation, int mask×k, Object marker` (the low-level gesture detectors
+        // `detectDragGestures`/`detectTapGestures`/… are suspend functions with defaulted callbacks). The
+        // continuation's INDEX is exactly the real-value-param count; [dispatchSuspend] appended it as the last
+        // supplied arg. A plain function's synthetic is `realParams…, int mask×k, Object marker` (no continuation).
+        val contSlot = params.indexOfFirst { CONTINUATION_CLASS.isAssignableFrom(it) }
+        val suspend = contSlot >= 0
         // realParams…, int mask × ceil(realParams/32), Object marker. A function with >32 defaulted params carries
         // MORE than one mask word, so this isn't simply `size - 2` (that mis-slots material3's 30-40-color schemes).
-        val n = defaultSyntheticRealParamCount(params.size)
-        val maskCount = params.size - n - 1
-        val k = realArgs.size
+        val n = if (suspend) contSlot else defaultSyntheticRealParamCount(params.size)
+        val maskBase = if (suspend) contSlot + 1 else n // masks follow the continuation (suspend) or the reals
+        val maskCount = params.size - maskBase - 1 // …then a single trailing marker
+        val valueArgs = if (suspend) realArgs.dropLast(1) else realArgs
+        val k = valueArgs.size
         // The `$default` synthetic carries an ERASED signature (no `List<Color>` generic type), so value-class
         // COLLECTION element boxing must read the generic types off the REAL method instead (same class, same
         // first-n erased param types). Null when there's no matching real method (then only scalar boxing runs).
         val realGenericParams = realMethodGenericParams(cls, m, n)
         // After named-arg reordering the args are ALREADY in declaration order (with [OmittedArg] holes), so
         // the trailing-lambda remap must be off and an omitted slot is simply left to its default.
-        val ordered = realArgs.any { it === OmittedArg }
-        val trailingLambda = !ordered && realArgs.lastOrNull() is InterpretedLambda
+        val ordered = valueArgs.any { it === OmittedArg }
+        val trailingLambda = !ordered && valueArgs.lastOrNull() is InterpretedLambda
         val slots = arrayOfNulls<Any?>(params.size)
         val masks = IntArray(maskCount)
         val provided = BooleanArray(n)
         for (i in 0 until k) {
-            val a = realArgs[i]
+            val a = valueArgs[i]
             if (a === OmittedArg) continue
             val slot = if (trailingLambda && i == k - 1) n - 1 else i
             if (slot !in 0 until n) continue
@@ -600,8 +626,9 @@ class ReflectiveDispatcher(
             slots[i] = zeroValue(params[i]); val b = i - receiverCount; masks[b / 32] = masks[b / 32] or (1 shl (b % 32))
         }
         for (i in 0 until receiverCount) if (!provided[i]) slots[i] = zeroValue(params[i]) // defensive; receiver is normally supplied
-        for (j in 0 until maskCount) slots[n + j] = masks[j]
-        slots[n + maskCount] = null // the synthetic's super-call marker is always null
+        if (suspend) slots[contSlot] = realArgs.last() // the suspend continuation, between the reals and the mask
+        for (j in 0 until maskCount) slots[maskBase + j] = masks[j]
+        slots[maskBase + maskCount] = null // the synthetic's super-call marker is always null
         runCatching { m.isAccessible = true }
         return Invoked(m.invoke(null, *slots))
     }
@@ -683,19 +710,30 @@ class ReflectiveDispatcher(
         return pc - 2
     }
 
-    /** The synthetic is `(realParams…, int mask × ceil(n/32), Object marker)`; [realArgs] must fit the first `n`
-     *  reals. */
+    /** The synthetic is `(realParams…, int mask × ceil(n/32), Object marker)` — or, for a SUSPEND function,
+     *  `(realParams…, Continuation, int mask×k, Object marker)` with the continuation between the reals and the
+     *  mask ([realArgs] carries it as their last element, appended by [dispatchSuspend]); [realArgs] must fit
+     *  the first `n` reals. */
     private fun fitsDefaultSynthetic(m: Method, realArgs: List<Any?>): Boolean {
-        val pc = m.parameterCount
-        if (pc < realArgs.size + 2) return false
-        val n = defaultSyntheticRealParamCount(pc)
         val params = m.parameterTypes
-        if (params[n] != Int::class.javaPrimitiveType || params[pc - 1].isPrimitive) return false
-        val k = realArgs.size
-        val ordered = realArgs.any { it === OmittedArg }
-        val trailingLambda = !ordered && realArgs.lastOrNull() is InterpretedLambda
+        val contSlot = params.indexOfFirst { CONTINUATION_CLASS.isAssignableFrom(it) }
+        val suspend = contSlot >= 0
+        val valueArgs = if (suspend) realArgs.dropLast(1) else realArgs // exclude the appended continuation
+        val n: Int
+        val maskSlot: Int // index of the first mask int (after the reals, or after the continuation for suspend)
+        if (suspend) {
+            n = contSlot; maskSlot = contSlot + 1
+            if (params.size < maskSlot + 2) return false // need at least one mask int + the marker
+        } else {
+            if (params.size < valueArgs.size + 2) return false
+            n = defaultSyntheticRealParamCount(params.size); maskSlot = n
+        }
+        if (params[maskSlot] != Int::class.javaPrimitiveType || params[params.size - 1].isPrimitive) return false
+        val k = valueArgs.size
+        val ordered = valueArgs.any { it === OmittedArg }
+        val trailingLambda = !ordered && valueArgs.lastOrNull() is InterpretedLambda
         for (i in 0 until k) {
-            val a = realArgs[i]
+            val a = valueArgs[i]
             if (a === OmittedArg) continue // an omitted slot fits any param (the synthetic supplies its default)
             val slot = if (trailingLambda && i == k - 1) n - 1 else i
             if (slot !in 0 until n) return false
@@ -1360,6 +1398,11 @@ class ReflectiveDispatcher(
         /** The trailing marker parameter of every Kotlin default-args synthetic constructor — distinguishes it
          *  from the real constructor (which shares the leading parameters) when scanning `declaredConstructors`. */
         const val DEFAULT_CONSTRUCTOR_MARKER = "kotlin.jvm.internal.DefaultConstructorMarker"
+
+        /** The trailing parameter of a SUSPEND function (and of its default-args synthetic, AFTER the
+         *  mask+marker) — how the gesture detectors (`detectDragGestures`/…) are told apart from a plain
+         *  defaulted function whose synthetic ends at the marker. */
+        val CONTINUATION_CLASS: Class<*> = kotlin.coroutines.Continuation::class.java
 
         /** The `Flow.collect { }` terminal operators the coroutine bridge drives (inline extensions with no JVM
          *  method); routed to [SuspendBridge.collectFlow] when the receiver is a `Flow`. */

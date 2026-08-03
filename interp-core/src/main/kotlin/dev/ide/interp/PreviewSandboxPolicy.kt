@@ -47,7 +47,10 @@ class PreviewSandboxPolicy(
     companion object {
         /** Build from stored settings ids (unknown ids ignored, so a stale pref can't crash the preview). */
         fun fromIds(ids: Collection<String>, stubOnDeny: Boolean = true) =
-            PreviewSandboxPolicy(ids.mapNotNullTo(HashSet()) { SandboxCategory.fromId(it) }, stubOnDeny)
+            PreviewSandboxPolicy(
+                ids.mapNotNullTo(HashSet()) { SandboxCategory.fromId(it) },
+                stubOnDeny
+            )
 
         /** Findings kept per policy — enough for a problem chip; a runaway loop can't grow it unbounded. */
         private const val MAX_FINDINGS = 32
@@ -56,8 +59,12 @@ class PreviewSandboxPolicy(
         /** Owners whose EVERY member/constructor is filesystem I/O. `Files`/`FilesKt` statics included —
          *  `FilesKt__…` covers the multifile facade parts the resolver may record as the owner. */
         private val FILE_OWNERS = setOf(
-            "java.io.FileInputStream", "java.io.FileOutputStream", "java.io.FileReader", "java.io.FileWriter",
-            "java.io.RandomAccessFile", "java.nio.file.Files",
+            "java.io.FileInputStream",
+            "java.io.FileOutputStream",
+            "java.io.FileReader",
+            "java.io.FileWriter",
+            "java.io.RandomAccessFile",
+            "java.nio.file.Files",
         )
         private val FILE_OWNER_PREFIXES = listOf("kotlin.io.FilesKt")
 
@@ -67,26 +74,43 @@ class PreviewSandboxPolicy(
             "name", "path", "parent", "parentfile", "absolutepath", "absolutefile", "isabsolute",
             "tostring", "topath", "touri", "tourl", "compareto", "equals", "hashcode", "separator",
         )
+
         /** Pure path helpers on the `FilesKt` facade (extension properties/functions) that must stay usable
          *  even with file I/O restricted — `file.extension`, `resolve`, `relativeTo` do no disk work. */
         private val FILE_FACADE_PURE = setOf(
-            "extension", "namewithoutextension", "invariantseparatorspath", "resolve", "resolvesibling",
-            "normalize", "torelativestring", "relativeto", "relativetoornull", "relativetoorself",
-            "startswith", "endswith",
+            "extension",
+            "namewithoutextension",
+            "invariantseparatorspath",
+            "resolve",
+            "resolvesibling",
+            "normalize",
+            "torelativestring",
+            "relativeto",
+            "relativetoornull",
+            "relativetoorself",
+            "startswith",
+            "endswith",
         )
 
         // -- NETWORK ------------------------------------------------------------------------------------
         private val NET_OWNERS = setOf(
-            "java.net.Socket", "java.net.ServerSocket", "java.net.DatagramSocket", "java.net.MulticastSocket",
-            "java.net.URLConnection", "java.net.URLClassLoader",
-            "java.nio.channels.SocketChannel", "java.nio.channels.ServerSocketChannel",
+            "java.net.Socket",
+            "java.net.ServerSocket",
+            "java.net.DatagramSocket",
+            "java.net.MulticastSocket",
+            "java.net.URLConnection",
+            "java.net.URLClassLoader",
+            "java.nio.channels.SocketChannel",
+            "java.nio.channels.ServerSocketChannel",
             "java.nio.channels.DatagramChannel",
         )
-        private val NET_OWNER_PREFIXES = listOf("java.net.http.", "javax.net.", "okhttp3.", "io.ktor.client.", "retrofit2.")
+        private val NET_OWNER_PREFIXES =
+            listOf("java.net.http.", "javax.net.", "okhttp3.", "io.ktor.client.", "retrofit2.")
 
         /** `URL`/`URI` construction and accessors are pure parsing; only the members that actually open a
          *  connection (plus the `kotlin.io` read extensions on a URL receiver) are network. */
-        private val URL_NET_MEMBERS = setOf("openconnection", "openstream", "content", "readtext", "readbytes")
+        private val URL_NET_MEMBERS =
+            setOf("openconnection", "openstream", "content", "readtext", "readbytes")
         private val INET_NET_MEMBERS = setOf("byname", "allbyname", "localhost")
 
         // -- ANDROID_SYSTEM -----------------------------------------------------------------------------
@@ -94,23 +118,51 @@ class PreviewSandboxPolicy(
          *  The preview legitimately needs a Context for resources/density/theme, so this is member-level —
          *  `context.resources` stays usable while `context.startActivity(...)` is blocked. */
         private val CONTEXT_DENIED_MEMBERS = setOf(
-            "startactivity", "startactivities", "startservice", "startforegroundservice", "stopservice",
-            "bindservice", "unbindservice", "sendbroadcast", "sendorderedbroadcast", "sendstickybroadcast",
-            "registerreceiver", "unregisterreceiver", "systemservice", "contentresolver", "sharedpreferences",
-            "openfileinput", "openfileoutput", "deletefile", "openorcreatedatabase", "deletedatabase",
-            "databaselist", "filelist", "setwallpaper", "startinstrumentation",
+            "startactivity",
+            "startactivities",
+            "startservice",
+            "startforegroundservice",
+            "stopservice",
+            "bindservice",
+            "unbindservice",
+            "sendbroadcast",
+            "sendorderedbroadcast",
+            "sendstickybroadcast",
+            "registerreceiver",
+            "unregisterreceiver",
+            "systemservice",
+            "contentresolver",
+            "sharedpreferences",
+            "openfileinput",
+            "openfileoutput",
+            "deletefile",
+            "openorcreatedatabase",
+            "deletedatabase",
+            "databaselist",
+            "filelist",
+            "setwallpaper",
+            "startinstrumentation",
         )
+
         /** Owners any use of which is a system side effect (the getSystemService products are belt-and-braces:
          *  normally unreachable once `getSystemService` itself is blocked). */
         private val ANDROID_OWNER_PREFIXES = listOf(
-            "android.content.ContentResolver", "android.content.SharedPreferences", "android.widget.Toast",
-            "android.app.NotificationManager", "android.os.Vibrator", "android.content.ClipboardManager",
-            "android.database.sqlite.", "android.hardware.", "android.telephony.", "android.location.",
+            "android.content.ContentResolver",
+            "android.content.SharedPreferences",
+            "android.widget.Toast",
+            "android.app.NotificationManager",
+            "android.os.Vibrator",
+            "android.content.ClipboardManager",
+            "android.database.sqlite.",
+            "android.hardware.",
+            "android.telephony.",
+            "android.location.",
             "android.media.",
         )
 
         // -- PROCESS_CONTROL ----------------------------------------------------------------------------
-        private val RUNTIME_DENIED_MEMBERS = setOf("exec", "exit", "halt", "load", "loadlibrary", "addshutdownhook")
+        private val RUNTIME_DENIED_MEMBERS =
+            setOf("exec", "exit", "halt", "load", "loadlibrary", "addshutdownhook")
         private val SYSTEM_DENIED_MEMBERS = setOf(
             "exit", "load", "loadlibrary", "setproperty", "clearproperty", "setsecuritymanager",
             "setout", "seterr", "setin", "getenv",
@@ -118,7 +170,10 @@ class PreviewSandboxPolicy(
         private val CLASS_DENIED_MEMBERS = setOf("forname", "newinstance")
         private val CLASSLOADER_DENIED_MEMBERS = setOf("loadclass", "defineclass")
         private val PROCESS_OWNER_PREFIXES = listOf(
-            "java.lang.ProcessBuilder", "java.lang.reflect.", "kotlin.reflect.full.", "kotlin.reflect.jvm.",
+            "java.lang.ProcessBuilder",
+            "java.lang.reflect.",
+            "kotlin.reflect.full.",
+            "kotlin.reflect.jvm.",
             "dalvik.system.",
         )
     }
@@ -139,7 +194,8 @@ class PreviewSandboxPolicy(
     override fun beforeCall(call: RNode.Call, receiver: Any?, args: List<Any?>): HookDecision {
         val ownerFqn = (call.callee as? ResolvedCallable.Library)?.ownerFqn
         // A constructor's "member" is the type itself (`FileInputStream(...)`); classify it as owner + <init>.
-        val member = if (call.dispatch == DispatchKind.CONSTRUCTOR) "<init>" else call.callee.displayName
+        val member =
+            if (call.dispatch == DispatchKind.CONSTRUCTOR) "<init>" else call.callee.displayName
         return decide(receiver, ownerFqn, member)
     }
 
@@ -175,7 +231,10 @@ class PreviewSandboxPolicy(
 
     private fun record(cat: SandboxCategory, detail: String) {
         synchronized(findings) {
-            if (findings.size < MAX_FINDINGS) findings.putIfAbsent(detail, SandboxFinding(cat, detail))
+            if (findings.size < MAX_FINDINGS) findings.putIfAbsent(
+                detail,
+                SandboxFinding(cat, detail)
+            )
         }
     }
 
@@ -196,10 +255,18 @@ class PreviewSandboxPolicy(
      *  receiver's RUNTIME hierarchy is checked first (it is ground truth for member/extension dispatch —
      *  `file.readText()`'s owner is the `FilesKt` facade but its receiver is the `File`); the static owner
      *  covers top-level/constructor/static calls with no receiver. */
-    private fun classify(recvClass: Class<*>?, ownerFqn: String?, member: String): SandboxCategory? {
+    private fun classify(
+        recvClass: Class<*>?,
+        ownerFqn: String?,
+        member: String
+    ): SandboxCategory? {
         val (plain, stripped) = memberForms(member)
         if (recvClass != null) {
-            for (name in hierarchyNames(recvClass)) classifyOwner(name, plain, stripped)?.let { return it }
+            for (name in hierarchyNames(recvClass)) classifyOwner(
+                name,
+                plain,
+                stripped
+            )?.let { return it }
         }
         return ownerFqn?.let { classifyOwner(it, plain, stripped) }
     }
@@ -231,7 +298,10 @@ class PreviewSandboxPolicy(
         if (owner in FILE_OWNERS) return SandboxCategory.FILE_IO
         if (FILE_OWNER_PREFIXES.any { owner.startsWith(it) })
             return if (inTable(FILE_FACADE_PURE) || plain == "<clinit>") null else SandboxCategory.FILE_IO
-        if (owner == "java.io.File" && plain != "<clinit>" && plain != "<init>" && !inTable(FILE_PURE_MEMBERS))
+        if (owner == "java.io.File" && plain != "<clinit>" && plain != "<init>" && !inTable(
+                FILE_PURE_MEMBERS
+            )
+        )
             return SandboxCategory.FILE_IO
 
         // NETWORK

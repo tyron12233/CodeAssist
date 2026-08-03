@@ -316,10 +316,14 @@ internal class Interpreter(private val vm: Vm) {
     }
 
     /** Store a boxed argument into a typed local slot, by the parameter's declared kind (the runtime type of a
-     *  boxed Integer passed for an Object parameter must not decide the slot kind). */
+     *  boxed Integer passed for an Object parameter must not decide the slot kind). A boolean/byte/char/short
+     *  argument can arrive as its REAL wrapper (e.g. a `Character` a bridged `Character.valueOf` produced,
+     *  forwarded through an erased `Object` SAM parameter to a specialized primitive impl `(C)Z` — the
+     *  `LambdaMetafactory` adapter's unbox that the VM boundary skips) rather than the interpreter's
+     *  computational [Int]; [Marshalling.realPrimToVm] normalizes either form to the computational int. */
     private fun seedLocal(frame: Frame, slot: Int, desc: String, v: Any?) {
         when (desc[0]) {
-            'I', 'Z', 'B', 'C', 'S' -> frame.lPrim[slot] = (v as Int).toLong()
+            'I', 'Z', 'B', 'C', 'S' -> frame.lPrim[slot] = (Marshalling.realPrimToVm(v) as Int).toLong()
             'J' -> frame.lPrim[slot] = v as Long
             'F' -> frame.lPrim[slot] = (v as Float).toRawBits().toLong()
             'D' -> frame.lPrim[slot] = (v as Double).toRawBits()

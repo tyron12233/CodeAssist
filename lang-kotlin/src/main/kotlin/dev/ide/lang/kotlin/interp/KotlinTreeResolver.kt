@@ -1809,8 +1809,7 @@ class KotlinTreeResolver(
             if (left is KtArrayAccessExpression) return indexedSetNode(left, right, e)
             // The LHS is a local/param (`i = …` → Assign) or a property (`count.value = …`, a `MutableState`, or a
             // `by`-delegated local — both already lowered to a PropertyGet → write through its setter via PropertySet).
-            val lhs = lower(left)
-            return when (lhs) {
+            return when (val lhs = lower(left)) {
                 is RNode.Unsupported -> lhs
                 is RNode.PropertyGet -> RNode.PropertySet(lhs.receiver, lhs.binding, lower(right), span(e))
                 else -> RNode.Assign(lhs, lower(right), span(e))
@@ -2132,15 +2131,38 @@ class KotlinTreeResolver(
     }
 
     private fun forNode(e: KtForExpression, label: String? = null): RNode {
-        val lp = e.loopParameter ?: return unsupported("for without a loop variable (destructuring?)", e)
+        val lp = e.loopParameter ?: return unsupported("for without a loop variable", e)
         val iterable = e.loopRange?.let { lower(it) } ?: return unsupported("for without an iterable", e)
         if (iterable is RNode.Unsupported) return iterable
-        val name = lp.name ?: "_"
         scopes.addLast(HashMap())
         val slot = newSlot()
-        bind(name, Binding.Local(slot, name, mutable = false))
-        val body = e.body?.let { lower(it) } ?: emptyBlock(e)
+        val destructuring = lp.destructuringDeclaration
+        val name = if (destructuring != null) "\$destr" else (lp.name ?: "_")
+        // A destructuring loop variable (`for ((k, v) in map)`): the element binds to the loop slot, then a
+        // local per entry reading `element.componentN()` is prepended to the body so `k`/`v` are in scope
+        // (mirroring [destructuringNode] and the lambda-parameter destructuring). Without this the entries never
+        // bind and every use resolves as an unknown name. A `Map` element is a `Map.Entry` (`component1/2` →
+        // key/value); a `List` element's `componentN` is `get(n-1)` — both @InlineOnly, modeled by the interpreter.
+        val prelude = ArrayList<RNode>()
+        if (destructuring != null) {
+            destructuring.entries.forEachIndexed { i, entry ->
+                val entryName = entry.name ?: "_"
+                val entrySlot = newSlot()
+                val tmpRef = RNode.Name(Binding.Local(slot, name, mutable = false), span(entry))
+                val comp = RNode.Call(synthMember("component${i + 1}"), DispatchKind.MEMBER, tmpRef, emptyList(), csk(span(entry).start), span(entry))
+                bind(entryName, Binding.Local(entrySlot, entryName, mutable = false))
+                prelude += RNode.LocalVar(entrySlot, entryName, mutable = false, comp, span(entry))
+            }
+        } else {
+            bind(name, Binding.Local(slot, name, mutable = false))
+        }
+        val lowered = e.body?.let { lower(it) } ?: emptyBlock(e)
         scopes.removeLast()
+        val body = when {
+            prelude.isEmpty() -> lowered
+            lowered is RNode.Block -> RNode.Block(prelude + lowered.statements, lowered.isExpression, lowered.source)
+            else -> RNode.Block(prelude + lowered, isExpression = false, span(e))
+        }
         // The iterator/hasNext/next conventions are reflected on the runtime value by the interpreter.
         return RNode.ForEach(RParam(slot, name, service.typeFromText(lp.typeReference?.text, resolver.fileContext)), iterable, null, null, null, body, span(e), label)
     }

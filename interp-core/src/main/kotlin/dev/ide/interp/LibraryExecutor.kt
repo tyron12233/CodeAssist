@@ -24,11 +24,21 @@ interface LibraryExecutor {
     /** Invoke static [name] on [ownerFqn] (top-level/extension facades: any receiver is already the leading
      *  argument, and [leadingReceivers] counts those — they are not numbered in a Kotlin `$default` mask).
      *  Throws [InterpreterException] when nothing fits. */
-    fun invokeStatic(ownerFqn: String, name: String, args: List<Any?>, leadingReceivers: Int = 0): Any?
+    fun invokeStatic(
+        ownerFqn: String,
+        name: String,
+        args: List<Any?>,
+        leadingReceivers: Int = 0
+    ): Any?
 
     /** Invoke instance method [name] on [receiver] (an instance this executor owns). [leadingReceivers] counts
      *  extra receivers at the head of [args] (a member extension's extension receiver). */
-    fun invokeInstance(receiver: Any, name: String, args: List<Any?>, leadingReceivers: Int = 0): Any?
+    fun invokeInstance(
+        receiver: Any,
+        name: String,
+        args: List<Any?>,
+        leadingReceivers: Int = 0
+    ): Any?
 
     /** Construct an [ownerFqn] instance. */
     fun construct(ownerFqn: String, args: List<Any?>): Any?
@@ -56,5 +66,10 @@ interface LibraryExecutor {
      * type), so the caller keeps its honest boundary. The default declines, so an executor without a bytecode VM
      * behind it is unaffected.
      */
-    fun invokeReifiedInline(ownerFqn: String, name: String, reifiedTypes: Map<String, String>, args: List<Any?>): LibraryValue? = null
+    fun invokeReifiedInline(
+        ownerFqn: String,
+        name: String,
+        reifiedTypes: Map<String, String>,
+        args: List<Any?>
+    ): LibraryValue? = null
 }
