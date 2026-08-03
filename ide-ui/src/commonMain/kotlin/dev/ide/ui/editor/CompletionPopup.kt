@@ -1,5 +1,7 @@
 package dev.ide.ui.editor
 
+import dev.ide.ui.theme.Ide
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -115,14 +117,14 @@ private fun CompletionListPanel(
     Column(
         Modifier
             .width(width)
-            .background(Ca.colors.glassThick, RoundedCornerShape(Ca.radius.md))
-            .border(1.dp, Ca.colors.separator, RoundedCornerShape(Ca.radius.md)),
+            .background(Ide.colors.glassThick, RoundedCornerShape(Ca.radius.md))
+            .border(1.dp, MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(Ca.radius.md)),
     ) {
         if (items.isEmpty()) {
             Text(
                 stringResource(Res.string.completion_no_suggestions),
-                style = Ca.type.codeSmall,
-                color = Ca.colors.textTertiary,
+                style = Ide.type.codeSmall,
+                color = MaterialTheme.colorScheme.outline,
                 modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp),
             )
         } else {
@@ -147,8 +149,8 @@ private fun DocPanel(item: UiCompletionItem, doc: String, maxHeight: Dp, modifie
     Column(
         modifier
             .heightIn(max = maxHeight)
-            .background(Ca.colors.glassThick, RoundedCornerShape(Ca.radius.md))
-            .border(1.dp, Ca.colors.separator, RoundedCornerShape(Ca.radius.md)),
+            .background(Ide.colors.glassThick, RoundedCornerShape(Ca.radius.md))
+            .border(1.dp, MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(Ca.radius.md)),
     ) {
         // Fixed header: optional Back + the signature, so they stay put while the doc body scrolls.
         Row(
@@ -157,12 +159,12 @@ private fun DocPanel(item: UiCompletionItem, doc: String, maxHeight: Dp, modifie
             horizontalArrangement = Arrangement.spacedBy(6.dp),
         ) {
             if (onBack != null) {
-                Icon(CaIcons.chevronLeft, stringResource(Res.string.completion_back_to_suggestions), Modifier.size(18.dp).clickable(onClick = onBack), tint = Ca.colors.textSecondary)
+                Icon(CaIcons.chevronLeft, stringResource(Res.string.completion_back_to_suggestions), Modifier.size(18.dp).clickable(onClick = onBack), tint = MaterialTheme.colorScheme.onSurfaceVariant)
             }
             Text(
                 item.label + (item.detail?.let { "  $it" } ?: ""),
-                style = Ca.type.codeSmall,
-                color = Ca.colors.accent,
+                style = Ide.type.codeSmall,
+                color = MaterialTheme.colorScheme.primary,
                 maxLines = 2,
                 overflow = TextOverflow.Ellipsis,
                 modifier = Modifier.weight(1f),
@@ -170,8 +172,8 @@ private fun DocPanel(item: UiCompletionItem, doc: String, maxHeight: Dp, modifie
         }
         Text(
             doc,
-            style = Ca.type.footnote,
-            color = Ca.colors.textSecondary,
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
             modifier = Modifier.verticalScroll(rememberScrollState()).padding(horizontal = 12.dp).padding(bottom = 10.dp),
         )
     }
@@ -188,14 +190,14 @@ private fun CompletionRow(
     onInfo: (() -> Unit)? = null,
 ) {
     // Row text styles: a notch smaller than the editor's code style, with tight line height so the two stacked
-    // lines stay compact. Kept local so the editor's own Ca.type.code is untouched.
-    val labelStyle = Ca.type.code.copy(fontSize = 12.sp, lineHeight = 15.sp)
-    val detailStyle = Ca.type.codeSmall.copy(fontSize = 11.sp, lineHeight = 13.sp)
+    // lines stay compact. Kept local so the editor's own Ide.type.code is untouched.
+    val labelStyle = Ide.type.code.copy(fontSize = 12.sp, lineHeight = 15.sp)
+    val detailStyle = Ide.type.codeSmall.copy(fontSize = 11.sp, lineHeight = 13.sp)
     Row(
         Modifier
             .fillMaxWidth()
             .heightIn(min = 40.dp)
-            .background(if (selected) Ca.colors.accentSoft else androidx.compose.ui.graphics.Color.Transparent)
+            .background(if (selected) MaterialTheme.colorScheme.primaryContainer else androidx.compose.ui.graphics.Color.Transparent)
             .clickable(onClick = onPick)
             .padding(horizontal = 12.dp, vertical = 4.dp),
         verticalAlignment = Alignment.CenterVertically,
@@ -210,7 +212,7 @@ private fun CompletionRow(
             Text(
                 highlightMatch(item.label, prefix),
                 style = labelStyle,
-                color = Ca.colors.textPrimary,
+                color = MaterialTheme.colorScheme.onSurface,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
             )
@@ -226,7 +228,7 @@ private fun CompletionRow(
                     Text(
                         item.container ?: "",
                         style = detailStyle,
-                        color = Ca.colors.textTertiary,
+                        color = MaterialTheme.colorScheme.outline,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis,
                         modifier = Modifier.weight(1f),
@@ -235,7 +237,7 @@ private fun CompletionRow(
                         Text(
                             item.detail!!,
                             style = detailStyle,
-                            color = Ca.colors.textTertiary,
+                            color = MaterialTheme.colorScheme.outline,
                             maxLines = 1,
                             overflow = TextOverflow.Ellipsis,
                             textAlign = TextAlign.End,
@@ -248,7 +250,7 @@ private fun CompletionRow(
         // accepting the item.
         if (onInfo != null) {
             Spacer(Modifier.width(4.dp))
-            Icon(CaIcons.info, stringResource(Res.string.completion_show_documentation), Modifier.size(18.dp).clickable(onClick = onInfo), tint = Ca.colors.textSecondary)
+            Icon(CaIcons.info, stringResource(Res.string.completion_show_documentation), Modifier.size(18.dp).clickable(onClick = onInfo), tint = MaterialTheme.colorScheme.onSurfaceVariant)
         }
     }
 }
@@ -264,7 +266,7 @@ private fun highlightMatch(label: String, prefix: String): AnnotatedString = bui
     append(label)
     if (prefix.isEmpty()) return@buildAnnotatedString
     val pos = matchPositions(label, prefix) ?: return@buildAnnotatedString
-    val style = SpanStyle(color = Ca.colors.accent, fontWeight = FontWeight.Bold)
+    val style = SpanStyle(color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.Bold)
     var k = 0
     while (k < pos.size) {
         val runStart = pos[k]

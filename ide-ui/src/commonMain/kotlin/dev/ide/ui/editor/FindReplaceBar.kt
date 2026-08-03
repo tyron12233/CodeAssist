@@ -1,5 +1,7 @@
 package dev.ide.ui.editor
 
+import dev.ide.ui.theme.Ide
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -85,8 +87,8 @@ fun FindReplaceBar(
     Column(
         modifier
             .fillMaxWidth()
-            .background(Ca.colors.glassThick, shape)
-            .border(1.dp, Ca.colors.separator, shape)
+            .background(Ide.colors.glassThick, shape)
+            .border(1.dp, MaterialTheme.colorScheme.outlineVariant, shape)
             .padding(horizontal = 8.dp, vertical = 8.dp),
         verticalArrangement = Arrangement.spacedBy(8.dp),
     ) {
@@ -113,8 +115,8 @@ fun FindReplaceBar(
             }
             Text(
                 countText,
-                color = if (matchCount == 0 && query.isNotEmpty()) Ca.colors.error else Ca.colors.textTertiary,
-                style = Ca.type.caption2,
+                color = if (matchCount == 0 && query.isNotEmpty()) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.outline,
+                style = MaterialTheme.typography.labelSmall,
                 modifier = Modifier.widthIn(min = 34.dp),
             )
             OptionChip(stringResource(Res.string.find_case_sensitive), options.caseSensitive) { onOptionsChange(options.copy(caseSensitive = !options.caseSensitive)) }
@@ -154,17 +156,17 @@ private fun FieldBox(
     Box(
         Modifier
             .fillMaxWidth()
-            .background(Ca.colors.surface2, RoundedCornerShape(Ca.radius.control))
-            .border(1.dp, if (error) Ca.colors.error else Ca.colors.hairline, RoundedCornerShape(Ca.radius.control))
+            .background(MaterialTheme.colorScheme.surfaceContainerHigh, RoundedCornerShape(Ca.radius.control))
+            .border(1.dp, if (error) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(Ca.radius.control))
             .padding(horizontal = 10.dp, vertical = 7.dp),
     ) {
-        if (value.isEmpty()) Text(placeholder, color = Ca.colors.textTertiary, style = Ca.type.code)
+        if (value.isEmpty()) Text(placeholder, color = MaterialTheme.colorScheme.outline, style = Ide.type.code)
         BasicTextField(
             value = field,
             onValueChange = { field = it; onChange(it.text) },
             singleLine = true,
-            textStyle = Ca.type.code.copy(color = Ca.colors.textPrimary),
-            cursorBrush = SolidColor(Ca.colors.accent),
+            textStyle = Ide.type.code.copy(color = MaterialTheme.colorScheme.onSurface),
+            cursorBrush = SolidColor(MaterialTheme.colorScheme.primary),
             modifier = Modifier
                 .fillMaxWidth()
                 .then(if (focusRequester != null) Modifier.focusRequester(focusRequester) else Modifier)
@@ -185,11 +187,11 @@ private fun OptionChip(label: String, active: Boolean, onClick: () -> Unit) {
     Box(
         Modifier
             .size(30.dp)
-            .background(if (active) Ca.colors.accentSoft else Color.Transparent, RoundedCornerShape(Ca.radius.sm))
+            .background(if (active) MaterialTheme.colorScheme.primaryContainer else Color.Transparent, RoundedCornerShape(Ca.radius.sm))
             .clickable(onClick = onClick),
         contentAlignment = Alignment.Center,
     ) {
-        Text(label, color = if (active) Ca.colors.accent else Ca.colors.textSecondary, style = Ca.type.caption2, fontWeight = FontWeight.SemiBold)
+        Text(label, color = if (active) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.SemiBold)
     }
 }
 
@@ -197,11 +199,11 @@ private fun OptionChip(label: String, active: Boolean, onClick: () -> Unit) {
 private fun PillButton(label: String, enabled: Boolean, onClick: () -> Unit) {
     Box(
         Modifier
-            .background(if (enabled) Ca.colors.surface2 else Color.Transparent, RoundedCornerShape(Ca.radius.sm))
-            .border(1.dp, Ca.colors.hairline, RoundedCornerShape(Ca.radius.sm))
+            .background(if (enabled) MaterialTheme.colorScheme.surfaceContainerHigh else Color.Transparent, RoundedCornerShape(Ca.radius.sm))
+            .border(1.dp, MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(Ca.radius.sm))
             .clickable(enabled = enabled, onClick = onClick)
             .padding(horizontal = 12.dp, vertical = 7.dp),
     ) {
-        Text(label, color = if (enabled) Ca.colors.textPrimary else Ca.colors.textTertiary, style = Ca.type.caption, fontWeight = FontWeight.Medium)
+        Text(label, color = if (enabled) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.outline, style = MaterialTheme.typography.bodySmall, fontWeight = FontWeight.Medium)
     }
 }

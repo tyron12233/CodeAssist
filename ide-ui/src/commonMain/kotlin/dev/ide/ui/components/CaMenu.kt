@@ -1,5 +1,7 @@
 package dev.ide.ui.components
 
+import dev.ide.ui.theme.Ide
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.hoverable
 import androidx.compose.foundation.interaction.MutableInteractionSource
@@ -48,10 +50,10 @@ fun CaDropdownMenu(
         modifier = modifier,
         offset = offset,
         shape = RoundedCornerShape(Ca.radius.md),
-        containerColor = Ca.colors.surface2,
+        containerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
         tonalElevation = 0.dp,
         shadowElevation = 14.dp,
-        border = BorderStroke(1.dp, Ca.colors.glassEdge),
+        border = BorderStroke(1.dp, Ide.colors.glassEdge),
         content = content,
     )
 }
@@ -83,18 +85,18 @@ fun CaSubmenuItem(
     // handler below is the open path there. We never auto-close on hover-out, so the pointer can travel from
     // the row into the (separate) flyout popup without it collapsing — it closes via dismiss or a sibling.
     LaunchedEffect(hovered) { if (hovered) onExpandedChange(true) }
-    val labelColor = if (danger) Ca.colors.error else Ca.colors.textPrimary
-    val iconTint = if (danger) Ca.colors.error else Ca.colors.textSecondary
+    val labelColor = if (danger) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurface
+    val iconTint = if (danger) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant
     Box {
         DropdownMenuItem(
-            text = { Text(label, color = labelColor, style = Ca.type.footnote) },
+            text = { Text(label, color = labelColor, style = MaterialTheme.typography.bodyMedium) },
             leadingIcon = icon?.let { { Icon(it, null, Modifier.size(15.dp), tint = iconTint) } },
             trailingIcon = {
                 Icon(
                     CaIcons.caretRight,
                     null,
                     Modifier.size(15.dp),
-                    tint = Ca.colors.textTertiary
+                    tint = MaterialTheme.colorScheme.outline
                 )
             },
             onClick = { onExpandedChange(!expanded) },

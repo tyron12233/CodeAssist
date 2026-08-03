@@ -1,5 +1,7 @@
 package dev.ide.ui.screens
 
+import dev.ide.ui.theme.Ide
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
@@ -131,7 +133,7 @@ fun ProjectPickerScreen(
 ) {
     var pendingDelete by remember { mutableStateOf<ProjectInfo?>(null) }
     val compatibilityCount = projects.count { it.compatibility }
-    BoxWithConstraints(Modifier.fillMaxSize().background(Ca.colors.bg), contentAlignment = Alignment.TopCenter) {
+    BoxWithConstraints(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background), contentAlignment = Alignment.TopCenter) {
         // Small phones squeeze the header (title + "Beta" badge + Back-up button) — tighten the margins and
         // collapse Back-up to an icon so nothing clips or wraps awkwardly.
         val narrow = maxWidth < 380.dp
@@ -146,8 +148,8 @@ fun ProjectPickerScreen(
                     Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         Text(
                             stringResource(Res.string.projects),
-                            color = Ca.colors.textPrimary,
-                            style = Ca.type.large,
+                            color = MaterialTheme.colorScheme.onSurface,
+                            style = MaterialTheme.typography.headlineLarge,
                             maxLines = 1,
                             overflow = TextOverflow.Ellipsis,
                             modifier = Modifier.weight(1f, fill = false),
@@ -156,8 +158,8 @@ fun ProjectPickerScreen(
                     }
                     Text(
                         stringResource(Res.string.open_a_project),
-                        color = Ca.colors.textSecondary,
-                        style = Ca.type.subhead,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        style = MaterialTheme.typography.bodyLarge,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis,
                     )
@@ -194,7 +196,7 @@ fun ProjectPickerScreen(
                 verticalArrangement = Arrangement.spacedBy(10.dp),
             ) {
                 if (projects.isEmpty()) {
-                    Text(stringResource(Res.string.no_project_yet), color = Ca.colors.textTertiary, style = Ca.type.footnote)
+                    Text(stringResource(Res.string.no_project_yet), color = MaterialTheme.colorScheme.outline, style = MaterialTheme.typography.bodyMedium)
                 } else {
                     SectionLabel(stringResource(Res.string.your_projects), count = projects.size)
                 }
@@ -240,16 +242,16 @@ private fun DeleteProjectDialog(project: ProjectInfo?, onCancel: () -> Unit, onC
             Modifier
                 .widthIn(max = 380.dp)
                 .padding(horizontal = 24.dp)
-                .background(Ca.colors.surface, RoundedCornerShape(Ca.radius.lg))
-                .border(1.dp, Ca.colors.separator, RoundedCornerShape(Ca.radius.lg))
+                .background(MaterialTheme.colorScheme.surface, RoundedCornerShape(Ca.radius.lg))
+                .border(1.dp, MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(Ca.radius.lg))
                 .padding(20.dp),
             verticalArrangement = Arrangement.spacedBy(8.dp),
         ) {
-            Text(stringResource(Res.string.delete_project), color = Ca.colors.textPrimary, style = Ca.type.headline, fontWeight = FontWeight.SemiBold)
+            Text(stringResource(Res.string.delete_project), color = MaterialTheme.colorScheme.onSurface, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
             Text(
                 stringResource(Res.string.delete_project_content, project?.name.orEmpty()),
-                color = Ca.colors.textSecondary,
-                style = Ca.type.footnote,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                style = MaterialTheme.typography.bodyMedium,
             )
             Spacer(Modifier.size(8.dp))
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
@@ -266,13 +268,13 @@ private fun SecondaryAction(text: String, modifier: Modifier = Modifier, onClick
     Box(
         modifier
             .pressScale(interaction)
-            .background(Ca.colors.surface2, RoundedCornerShape(Ca.radius.control))
-            .border(1.dp, Ca.colors.hairline, RoundedCornerShape(Ca.radius.control))
+            .background(MaterialTheme.colorScheme.surfaceContainerHigh, RoundedCornerShape(Ca.radius.control))
+            .border(1.dp, MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(Ca.radius.control))
             .clickable(interaction, indication = null, onClick = onClick)
             .padding(vertical = 10.dp),
         contentAlignment = Alignment.Center,
     ) {
-        Text(text, color = Ca.colors.textSecondary, style = Ca.type.subhead, fontWeight = FontWeight.SemiBold)
+        Text(text, color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.SemiBold)
     }
 }
 
@@ -282,12 +284,12 @@ private fun DestructiveAction(text: String, modifier: Modifier = Modifier, onCli
     Box(
         modifier
             .pressScale(interaction)
-            .background(Ca.colors.error, RoundedCornerShape(Ca.radius.control))
+            .background(MaterialTheme.colorScheme.error, RoundedCornerShape(Ca.radius.control))
             .clickable(interaction, indication = null, onClick = onClick)
             .padding(vertical = 10.dp),
         contentAlignment = Alignment.Center,
     ) {
-        Text(text, color = Ca.colors.textOnAccent, style = Ca.type.subhead, fontWeight = FontWeight.SemiBold)
+        Text(text, color = MaterialTheme.colorScheme.onPrimary, style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.SemiBold)
     }
 }
 
@@ -297,14 +299,14 @@ private fun BackupButton(onClick: () -> Unit, compact: Boolean = false) {
     Row(
         Modifier
             .pressScale(interaction)
-            .background(Ca.colors.surface2, RoundedCornerShape(Ca.radius.pill))
+            .background(MaterialTheme.colorScheme.surfaceContainerHigh, RoundedCornerShape(Ca.radius.pill))
             .clickable(interaction, indication = null, onClick = onClick)
             .padding(horizontal = if (compact) 10.dp else 14.dp, vertical = 8.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(6.dp),
     ) {
-        Icon(CaIcons.box, stringResource(Res.string.backup), Modifier.size(16.dp), tint = Ca.colors.textSecondary)
-        if (!compact) Text(stringResource(Res.string.backup), color = Ca.colors.textSecondary, style = Ca.type.footnote, fontWeight = FontWeight.Medium)
+        Icon(CaIcons.box, stringResource(Res.string.backup), Modifier.size(16.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
+        if (!compact) Text(stringResource(Res.string.backup), color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Medium)
     }
 }
 
@@ -315,24 +317,24 @@ private fun NewProjectCard(onClick: () -> Unit) {
         Modifier
             .fillMaxWidth()
             .pressScale(interaction)
-            .background(Ca.colors.accentSoft, RoundedCornerShape(Ca.radius.lg))
-            .border(1.dp, Ca.colors.accent.copy(alpha = 0.35f), RoundedCornerShape(Ca.radius.lg))
+            .background(MaterialTheme.colorScheme.primaryContainer, RoundedCornerShape(Ca.radius.lg))
+            .border(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.35f), RoundedCornerShape(Ca.radius.lg))
             .clickable(interaction, indication = null, onClick = onClick)
             .padding(14.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(14.dp),
     ) {
         Box(
-            Modifier.size(52.dp).background(Ca.colors.accent, RoundedCornerShape(Ca.radius.md)),
+            Modifier.size(52.dp).background(MaterialTheme.colorScheme.primary, RoundedCornerShape(Ca.radius.md)),
             contentAlignment = Alignment.Center,
         ) {
-            Icon(CaIcons.plus, null, Modifier.size(24.dp), tint = Ca.colors.textOnAccent)
+            Icon(CaIcons.plus, null, Modifier.size(24.dp), tint = MaterialTheme.colorScheme.onPrimary)
         }
         Column(Modifier.weight(1f)) {
-            Text(stringResource(Res.string.new_project), color = Ca.colors.textPrimary, style = Ca.type.headline)
-            Text(stringResource(Res.string.new_project_content), color = Ca.colors.textSecondary, style = Ca.type.footnote)
+            Text(stringResource(Res.string.new_project), color = MaterialTheme.colorScheme.onSurface, style = MaterialTheme.typography.titleMedium)
+            Text(stringResource(Res.string.new_project_content), color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodyMedium)
         }
-        Icon(CaIcons.chevronRight, null, Modifier.size(20.dp), tint = Ca.colors.accent)
+        Icon(CaIcons.chevronRight, null, Modifier.size(20.dp), tint = MaterialTheme.colorScheme.primary)
     }
 }
 
@@ -346,17 +348,17 @@ private fun SectionLabel(text: String, count: Int? = null) {
     ) {
         Text(
             text.uppercase(),
-            color = Ca.colors.textTertiary,
-            style = Ca.type.caption2,
+            color = MaterialTheme.colorScheme.outline,
+            style = MaterialTheme.typography.labelSmall,
             fontWeight = FontWeight.SemiBold,
         )
         if (count != null) {
             Box(
                 Modifier
-                    .background(Ca.colors.surface2, RoundedCornerShape(Ca.radius.pill))
+                    .background(MaterialTheme.colorScheme.surfaceContainerHigh, RoundedCornerShape(Ca.radius.pill))
                     .padding(horizontal = 7.dp, vertical = 1.dp),
             ) {
-                Text(count.toString(), color = Ca.colors.textTertiary, style = Ca.type.caption2, fontWeight = FontWeight.SemiBold)
+                Text(count.toString(), color = MaterialTheme.colorScheme.outline, style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.SemiBold)
             }
         }
     }
@@ -388,8 +390,8 @@ private fun DiscordCard(onClick: () -> Unit) {
             Icon(CaIcons.discord, null, Modifier.size(22.dp), tint = Color.White)
         }
         Column(Modifier.weight(1f)) {
-            Text(stringResource(Res.string.join_the_community), color = Ca.colors.textPrimary, style = Ca.type.headline)
-            Text(stringResource(Res.string.join_the_community_content), color = Ca.colors.textSecondary, style = Ca.type.footnote)
+            Text(stringResource(Res.string.join_the_community), color = MaterialTheme.colorScheme.onSurface, style = MaterialTheme.typography.titleMedium)
+            Text(stringResource(Res.string.join_the_community_content), color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodyMedium)
         }
         Icon(CaIcons.chevronRight, null, Modifier.size(20.dp), tint = DiscordBlurple)
     }
@@ -422,8 +424,8 @@ private fun SupportCard(onSponsor: (() -> Unit)?, onStar: (() -> Unit)?) {
                 Icon(CaIcons.heart, null, Modifier.size(22.dp), tint = Color.White)
             }
             Column(Modifier.weight(1f)) {
-                Text(stringResource(Res.string.support_title), color = Ca.colors.textPrimary, style = Ca.type.headline)
-                Text(stringResource(Res.string.support_content), color = Ca.colors.textSecondary, style = Ca.type.footnote)
+                Text(stringResource(Res.string.support_title), color = MaterialTheme.colorScheme.onSurface, style = MaterialTheme.typography.titleMedium)
+                Text(stringResource(Res.string.support_content), color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodyMedium)
             }
         }
 
@@ -445,13 +447,13 @@ private fun SupportCard(onSponsor: (() -> Unit)?, onStar: (() -> Unit)?) {
 private fun SupportChip(text: String) {
     Row(
         Modifier
-            .background(Ca.colors.surface2, RoundedCornerShape(Ca.radius.pill))
+            .background(MaterialTheme.colorScheme.surfaceContainerHigh, RoundedCornerShape(Ca.radius.pill))
             .padding(horizontal = 10.dp, vertical = 4.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(5.dp),
     ) {
         Icon(CaIcons.check, null, Modifier.size(13.dp), tint = SponsorPink)
-        Text(text, color = Ca.colors.textSecondary, style = Ca.type.caption, fontWeight = FontWeight.Medium)
+        Text(text, color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodySmall, fontWeight = FontWeight.Medium)
     }
 }
 
@@ -462,7 +464,7 @@ private fun SupportButton(text: String, icon: ImageVector, modifier: Modifier = 
     val shape = RoundedCornerShape(Ca.radius.control)
     val surface =
         if (filled) Modifier.background(SponsorPink, shape)
-        else Modifier.background(Ca.colors.surface2, shape).border(1.dp, Ca.colors.hairline, shape)
+        else Modifier.background(MaterialTheme.colorScheme.surfaceContainerHigh, shape).border(1.dp, MaterialTheme.colorScheme.outlineVariant, shape)
     Row(
         modifier
             .pressScale(interaction)
@@ -472,12 +474,12 @@ private fun SupportButton(text: String, icon: ImageVector, modifier: Modifier = 
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.Center,
     ) {
-        Icon(icon, null, Modifier.size(16.dp), tint = if (filled) Color.White else Ca.colors.textSecondary)
+        Icon(icon, null, Modifier.size(16.dp), tint = if (filled) Color.White else MaterialTheme.colorScheme.onSurfaceVariant)
         Spacer(Modifier.size(6.dp))
         Text(
             text,
-            color = if (filled) Color.White else Ca.colors.textPrimary,
-            style = Ca.type.subhead,
+            color = if (filled) Color.White else MaterialTheme.colorScheme.onSurface,
+            style = MaterialTheme.typography.bodyLarge,
             fontWeight = FontWeight.SemiBold,
             maxLines = 1,
             overflow = TextOverflow.Ellipsis,
@@ -502,8 +504,8 @@ private fun ProjectCard(
             .entranceSlideUp(delayMillis)
             .fillMaxWidth()
             .pressScale(interaction)
-            .background(Ca.colors.surface, RoundedCornerShape(Ca.radius.lg))
-            .border(1.dp, Ca.colors.separator, RoundedCornerShape(Ca.radius.lg))
+            .background(MaterialTheme.colorScheme.surface, RoundedCornerShape(Ca.radius.lg))
+            .border(1.dp, MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(Ca.radius.lg))
             .clickable(interaction, indication = null, onClick = onOpen)
             .padding(14.dp),
         verticalAlignment = Alignment.CenterVertically,
@@ -511,12 +513,12 @@ private fun ProjectCard(
     ) {
         ProjectAvatar(project, size = 54.dp, radius = Ca.radius.md, loadIcon = loadIcon)
         Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-            Text(project.name, color = Ca.colors.textPrimary, style = Ca.type.headline, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            Text(project.name, color = MaterialTheme.colorScheme.onSurface, style = MaterialTheme.typography.titleMedium, maxLines = 1, overflow = TextOverflow.Ellipsis)
             // The last-opened time is the primary secondary fact — its own line so it never gets crowded out.
             if (opened != null) {
                 Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(5.dp)) {
-                    Icon(CaIcons.clock, null, Modifier.size(12.dp), tint = Ca.colors.textTertiary)
-                    Text(opened, color = Ca.colors.textTertiary, style = Ca.type.caption, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                    Icon(CaIcons.clock, null, Modifier.size(12.dp), tint = MaterialTheme.colorScheme.outline)
+                    Text(opened, color = MaterialTheme.colorScheme.outline, style = MaterialTheme.typography.bodySmall, maxLines = 1, overflow = TextOverflow.Ellipsis)
                 }
             }
             // Type/status tags first (left), then the module count (tags omitted when there's nothing to say).
@@ -530,15 +532,15 @@ private fun ProjectCard(
                 if (project.compatibility) CompatibilityChip()
                 Text(
                     pluralStringResource(Res.plurals.modules, project.moduleCount, project.moduleCount),
-                    color = Ca.colors.textTertiary,
-                    style = Ca.type.caption,
+                    color = MaterialTheme.colorScheme.outline,
+                    style = MaterialTheme.typography.bodySmall,
                     fontWeight = FontWeight.Medium,
                     maxLines = 1,
                 )
             }
             // The full path only earns its space on desktop (on mobile it's always the same storage dir).
             if (!isMobilePlatform) {
-                Text(project.rootPath, color = Ca.colors.textTertiary.copy(alpha = 0.7f), style = Ca.type.caption2, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                Text(project.rootPath, color = MaterialTheme.colorScheme.outline.copy(alpha = 0.7f), style = MaterialTheme.typography.labelSmall, maxLines = 1, overflow = TextOverflow.Ellipsis)
             }
         }
         if (onExport != null) {
@@ -550,7 +552,7 @@ private fun ProjectCard(
                     .clickable(exportInteraction, indication = null, onClick = onExport),
                 contentAlignment = Alignment.Center,
             ) {
-                Icon(CaIcons.share, stringResource(Res.string.export_share), Modifier.size(17.dp), tint = Ca.colors.textTertiary)
+                Icon(CaIcons.share, stringResource(Res.string.export_share), Modifier.size(17.dp), tint = MaterialTheme.colorScheme.outline)
             }
         }
         if (onDelete != null) {
@@ -562,10 +564,10 @@ private fun ProjectCard(
                     .clickable(deleteInteraction, indication = null, onClick = onDelete),
                 contentAlignment = Alignment.Center,
             ) {
-                Icon(CaIcons.close, stringResource(Res.string.picker_delete_project), Modifier.size(18.dp), tint = Ca.colors.textTertiary)
+                Icon(CaIcons.close, stringResource(Res.string.picker_delete_project), Modifier.size(18.dp), tint = MaterialTheme.colorScheme.outline)
             }
         }
-        Icon(CaIcons.chevronRight, null, Modifier.size(20.dp), tint = Ca.colors.textTertiary)
+        Icon(CaIcons.chevronRight, null, Modifier.size(20.dp), tint = MaterialTheme.colorScheme.outline)
     }
 }
 
@@ -586,7 +588,7 @@ internal fun AndroidTag() {
         Text(
             stringResource(Res.string.project_kind_android),
             color = AndroidGreen.darken(0.85f),
-            style = Ca.type.caption2,
+            style = MaterialTheme.typography.labelSmall,
             fontWeight = FontWeight.SemiBold,
             maxLines = 1,
             softWrap = false,
@@ -676,13 +678,13 @@ internal fun projectColor(name: String): Color =
 private fun CompatibilityChip() {
     Row(
         Modifier
-            .background(Ca.colors.warning.copy(alpha = 0.16f), RoundedCornerShape(Ca.radius.pill))
+            .background(Ide.colors.warning.copy(alpha = 0.16f), RoundedCornerShape(Ca.radius.pill))
             .padding(horizontal = 8.dp, vertical = 2.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(4.dp),
     ) {
-        Icon(CaIcons.warning, null, Modifier.size(12.dp), tint = Ca.colors.warning)
-        Text(stringResource(Res.string.compatibility), color = Ca.colors.warning, style = Ca.type.caption2, fontWeight = FontWeight.SemiBold, maxLines = 1, softWrap = false)
+        Icon(CaIcons.warning, null, Modifier.size(12.dp), tint = Ide.colors.warning)
+        Text(stringResource(Res.string.compatibility), color = Ide.colors.warning, style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.SemiBold, maxLines = 1, softWrap = false)
     }
 }
 
@@ -697,23 +699,23 @@ private fun LegacyRecoveryBanner(count: Int, onDismiss: () -> Unit) {
     Row(
         Modifier
             .fillMaxWidth()
-            .background(Ca.colors.warning.copy(alpha = 0.10f), shape)
-            .border(1.dp, Ca.colors.warning.copy(alpha = 0.35f), shape)
+            .background(Ide.colors.warning.copy(alpha = 0.10f), shape)
+            .border(1.dp, Ide.colors.warning.copy(alpha = 0.35f), shape)
             .padding(14.dp),
         horizontalArrangement = Arrangement.spacedBy(12.dp),
     ) {
-        Icon(CaIcons.warning, null, Modifier.size(20.dp), tint = Ca.colors.warning)
+        Icon(CaIcons.warning, null, Modifier.size(20.dp), tint = Ide.colors.warning)
         Column(Modifier.weight(1f)) {
             Text(
                 pluralStringResource(Res.plurals.recovered_projects, count, count),
-                color = Ca.colors.textPrimary,
-                style = Ca.type.subhead,
+                color = MaterialTheme.colorScheme.onSurface,
+                style = MaterialTheme.typography.bodyLarge,
                 fontWeight = FontWeight.SemiBold,
             )
             Text(
                 stringResource(Res.string.recovered_projects_content),
-                color = Ca.colors.textSecondary,
-                style = Ca.type.caption2,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                style = MaterialTheme.typography.labelSmall,
             )
         }
         val interaction = remember { MutableInteractionSource() }
@@ -721,7 +723,7 @@ private fun LegacyRecoveryBanner(count: Int, onDismiss: () -> Unit) {
             Modifier.size(28.dp).pressScale(interaction).clickable(interaction, indication = null, onClick = onDismiss),
             contentAlignment = Alignment.Center,
         ) {
-            Icon(CaIcons.close, stringResource(Res.string.dismiss), Modifier.size(16.dp), tint = Ca.colors.textTertiary)
+            Icon(CaIcons.close, stringResource(Res.string.dismiss), Modifier.size(16.dp), tint = MaterialTheme.colorScheme.outline)
         }
     }
 }

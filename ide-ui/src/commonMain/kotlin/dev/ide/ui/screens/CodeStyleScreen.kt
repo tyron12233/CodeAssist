@@ -1,5 +1,7 @@
 package dev.ide.ui.screens
 
+import dev.ide.ui.theme.Ide
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.foundation.background
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
@@ -162,14 +164,14 @@ fun CodeStyleScreen(backend: IdeBackend, hasProject: Boolean, onBack: () -> Unit
     val javaOnly = language == LANG_JAVA
     val custom = style.preset == PRESET_CUSTOM
 
-    Column(Modifier.fillMaxSize().background(Ca.colors.bg)) {
+    Column(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)) {
         Row(
             Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 8.dp),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(8.dp),
         ) {
             IconButtonCa(CaIcons.chevronLeft, stringResource(Res.string.back), onBack, boxSize = iconBox)
-            Text(stringResource(Res.string.codestyle_title), style = Ca.type.title3, fontWeight = FontWeight.SemiBold, color = Ca.colors.textPrimary, modifier = Modifier.weight(1f))
+            Text(stringResource(Res.string.codestyle_title), style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.onSurface, modifier = Modifier.weight(1f))
         }
 
         Column(
@@ -198,7 +200,7 @@ fun CodeStyleScreen(backend: IdeBackend, hasProject: Boolean, onBack: () -> Unit
             if (!javaOnly) {
                 Text(
                     stringResource(Res.string.codestyle_kotlin_note),
-                    color = Ca.colors.textTertiary, style = Ca.type.caption2,
+                    color = MaterialTheme.colorScheme.outline, style = MaterialTheme.typography.labelSmall,
                     modifier = Modifier.padding(horizontal = 4.dp),
                 )
             }
@@ -287,24 +289,24 @@ private fun PreviewCard(preview: String, language: String, hasProject: Boolean) 
     SettingsCard(stringResource(Res.string.codestyle_preview)) {
         Column(
             Modifier.fillMaxWidth().heightIn(max = 320.dp)
-                .background(Ca.colors.editorBg, RoundedCornerShape(Ca.radius.control))
+                .background(Ide.colors.editorBg, RoundedCornerShape(Ca.radius.control))
                 .verticalScroll(rememberScrollState()).padding(12.dp),
         ) {
             if (!hasProject) {
                 Text(
                     stringResource(Res.string.codestyle_preview_no_project),
-                    color = Ca.colors.textTertiary,
-                    style = Ca.type.codeSmall,
+                    color = MaterialTheme.colorScheme.outline,
+                    style = Ide.type.codeSmall,
                 )
             } else if (preview.isEmpty()) {
-                Text("…", color = Ca.colors.textTertiary, style = Ca.type.codeSmall)
+                Text("…", color = MaterialTheme.colorScheme.outline, style = Ide.type.codeSmall)
             } else {
                 val codeLang = if (language == LANG_KOTLIN) CodeLanguage.Kotlin else CodeLanguage.Java
-                val syntax = Ca.colors.syntax
+                val syntax = Ide.colors.syntax
                 val highlighted = remember(preview, codeLang, syntax) { highlight(preview, codeLang, syntax) }
                 Text(
                     highlighted,
-                    style = Ca.type.codeSmall,
+                    style = Ide.type.codeSmall,
                     modifier = Modifier.horizontalScroll(rememberScrollState()),
                 )
             }

@@ -1,5 +1,6 @@
 package dev.ide.ui.components
 
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
@@ -41,7 +42,6 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.Velocity
 import androidx.compose.ui.unit.dp
-import dev.ide.ui.theme.Ca
 import dev.ide.ui.theme.Motion
 import kotlinx.coroutines.launch
 import kotlin.math.abs
@@ -264,7 +264,7 @@ fun PushDrawer(
                             .width(drawerWidth)
                             .fillMaxHeight()
                             .offset(x = -drawerWidth)
-                            .background(Ca.colors.bg),
+                            .background(MaterialTheme.colorScheme.background),
                     ) {
                         drawerContent()
                     }

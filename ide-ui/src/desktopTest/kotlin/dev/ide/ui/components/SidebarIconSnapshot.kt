@@ -1,5 +1,6 @@
 package dev.ide.ui.components
 
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Row
@@ -11,7 +12,6 @@ import androidx.compose.ui.ImageComposeScene
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.dp
-import dev.ide.ui.theme.Ca
 import dev.ide.ui.theme.CodeAssistTheme
 import org.jetbrains.skia.EncodedImageFormat
 import java.io.File
@@ -26,7 +26,7 @@ class SidebarIconSnapshot {
         val scene = ImageComposeScene(width = 520, height = 120, density = Density(2f)) {
             CodeAssistTheme(dark = true) {
                 Row(
-                    Modifier.fillMaxSize().background(Ca.colors.bg).padding(horizontal = 12.dp),
+                    Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background).padding(horizontal = 12.dp),
                     horizontalArrangement = Arrangement.SpaceEvenly,
                     verticalAlignment = Alignment.CenterVertically,
                 ) {

@@ -1,5 +1,6 @@
 package dev.ide.ui.screens
 
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -51,7 +52,7 @@ fun PluginsScreen(backend: IdeBackend, onBack: () -> Unit) {
     var plugins by remember { mutableStateOf(backend.settings.pluginCatalog()) }
     var changed by remember { mutableStateOf(false) }
 
-    Box(Modifier.fillMaxSize().background(Ca.colors.bg)) {
+    Box(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)) {
         Column(Modifier.fillMaxSize()) {
             GlassSurface(Modifier.fillMaxWidth(), GlassMaterial.Regular) {
                 Row(
@@ -60,14 +61,14 @@ fun PluginsScreen(backend: IdeBackend, onBack: () -> Unit) {
                     horizontalArrangement = Arrangement.spacedBy(8.dp),
                 ) {
                     IconButtonCa(CaIcons.chevronLeft, stringResource(Res.string.back), onBack)
-                    Icon(CaIcons.box, null, Modifier.size(20.dp), tint = Ca.colors.accent)
+                    Icon(CaIcons.box, null, Modifier.size(20.dp), tint = MaterialTheme.colorScheme.primary)
                     Text(
-                        stringResource(Res.string.settings_plugins), color = Ca.colors.textPrimary,
-                        style = Ca.type.headline, fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f),
+                        stringResource(Res.string.settings_plugins), color = MaterialTheme.colorScheme.onSurface,
+                        style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f),
                     )
                 }
             }
-            Box(Modifier.fillMaxWidth().height(1.dp).background(Ca.colors.separator))
+            Box(Modifier.fillMaxWidth().height(1.dp).background(MaterialTheme.colorScheme.outlineVariant))
             Column(
                 Modifier.widthIn(max = 640.dp).fillMaxWidth()
                     .verticalScroll(rememberScrollState())
@@ -91,12 +92,12 @@ fun PluginsScreen(backend: IdeBackend, onBack: () -> Unit) {
 private fun RestartHint() {
     Row(
         Modifier.fillMaxWidth()
-            .background(Ca.colors.accentSoft, RoundedCornerShape(Ca.radius.md))
+            .background(MaterialTheme.colorScheme.primaryContainer, RoundedCornerShape(Ca.radius.md))
             .padding(horizontal = 14.dp, vertical = 12.dp),
         verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp),
     ) {
-        Icon(CaIcons.info, null, Modifier.size(18.dp), tint = Ca.colors.accent)
-        Text(stringResource(Res.string.plugins_restart_hint), color = Ca.colors.textPrimary, style = Ca.type.footnote)
+        Icon(CaIcons.info, null, Modifier.size(18.dp), tint = MaterialTheme.colorScheme.primary)
+        Text(stringResource(Res.string.plugins_restart_hint), color = MaterialTheme.colorScheme.onSurface, style = MaterialTheme.typography.bodyMedium)
     }
 }
 
@@ -104,21 +105,21 @@ private fun RestartHint() {
 private fun PluginRow(p: UiPluginInfo, onToggle: (Boolean) -> Unit) {
     Row(
         Modifier.fillMaxWidth()
-            .background(Ca.colors.surface, RoundedCornerShape(Ca.radius.lg))
+            .background(MaterialTheme.colorScheme.surface, RoundedCornerShape(Ca.radius.lg))
             .padding(horizontal = 16.dp, vertical = 14.dp),
         verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp),
     ) {
         Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
-            Text(p.name, color = Ca.colors.textPrimary, style = Ca.type.body, fontWeight = FontWeight.SemiBold)
+            Text(p.name, color = MaterialTheme.colorScheme.onSurface, style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.SemiBold)
             if (p.description.isNotBlank()) {
-                Text(p.description, color = Ca.colors.textSecondary, style = Ca.type.footnote)
+                Text(p.description, color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodyMedium)
             }
             val meta = buildList {
                 if (p.version.isNotBlank()) add("v${p.version}")
                 if (p.dependsOn.isNotEmpty()) add(stringResource(Res.string.plugins_requires, p.dependsOn.joinToString(", ")))
             }
             if (meta.isNotEmpty()) {
-                Text(meta.joinToString("  ·  "), color = Ca.colors.textTertiary, style = Ca.type.caption)
+                Text(meta.joinToString("  ·  "), color = MaterialTheme.colorScheme.outline, style = MaterialTheme.typography.bodySmall)
             }
         }
         if (p.essential) RequiredPill() else CaSwitch(p.enabled, onToggle)
@@ -129,9 +130,9 @@ private fun PluginRow(p: UiPluginInfo, onToggle: (Boolean) -> Unit) {
 private fun RequiredPill() {
     Text(
         stringResource(Res.string.plugins_required),
-        color = Ca.colors.textSecondary, style = Ca.type.caption, fontWeight = FontWeight.SemiBold,
+        color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodySmall, fontWeight = FontWeight.SemiBold,
         modifier = Modifier
-            .background(Ca.colors.surface3, RoundedCornerShape(Ca.radius.pill))
+            .background(MaterialTheme.colorScheme.surfaceContainerHighest, RoundedCornerShape(Ca.radius.pill))
             .padding(horizontal = 10.dp, vertical = 4.dp),
     )
 }

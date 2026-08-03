@@ -1,5 +1,7 @@
 package dev.ide.ui.components
 
+import dev.ide.ui.theme.Ide
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.animateFloatAsState
@@ -232,30 +234,30 @@ private fun Header(
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(8.dp)
     ) {
-        Icon(CaIcons.terminal, null, Modifier.size(18.dp), tint = Ca.colors.textSecondary)
+        Icon(CaIcons.terminal, null, Modifier.size(18.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
         Text(
             stringResource(Res.string.buildc_build),
-            color = Ca.colors.textPrimary,
-            style = Ca.type.subhead,
+            color = MaterialTheme.colorScheme.onSurface,
+            style = MaterialTheme.typography.bodyLarge,
             fontWeight = FontWeight.SemiBold
         )
         if (state.moduleName.isNotEmpty()) {
             Text(
                 state.moduleName,
-                color = Ca.colors.textTertiary,
-                style = Ca.type.footnote,
+                color = MaterialTheme.colorScheme.outline,
+                style = MaterialTheme.typography.bodyMedium,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis
             )
         }
         Spacer(Modifier.weight(1f))
-        if (errors > 0) MiniCount(CaIcons.error, errors, Ca.colors.error)
-        if (warnings > 0) MiniCount(CaIcons.warning, warnings, Ca.colors.warning)
+        if (errors > 0) MiniCount(CaIcons.error, errors, MaterialTheme.colorScheme.error)
+        if (warnings > 0) MiniCount(CaIcons.warning, warnings, Ide.colors.warning)
         if (state.elapsedMs > 0 && !running) {
             Text(
                 "${state.elapsedMs / 1000.0}s",
-                color = Ca.colors.textTertiary,
-                style = Ca.type.codeSmall,
+                color = MaterialTheme.colorScheme.outline,
+                style = Ide.type.codeSmall,
                 maxLines = 1,
                 softWrap = false
             )
@@ -269,7 +271,7 @@ private fun Header(
             onStop,
             boxSize = 28,
             iconSize = 16,
-            tint = Ca.colors.error
+            tint = MaterialTheme.colorScheme.error
         )
         else IconButtonCa(
             CaIcons.play,
@@ -277,7 +279,7 @@ private fun Header(
             onRun,
             boxSize = 28,
             iconSize = 16,
-            tint = Ca.colors.run
+            tint = Ide.colors.run
         )
         IconButtonCa(CaIcons.chevronDown, stringResource(Res.string.buildc_collapse), onCollapse, boxSize = 28, iconSize = 16)
     }
@@ -293,17 +295,17 @@ private fun MiniCount(icon: ImageVector, count: Int, color: Color) {
         horizontalArrangement = Arrangement.spacedBy(3.dp),
     ) {
         Icon(icon, null, Modifier.size(12.dp), tint = color)
-        Text("$count", color = color, style = Ca.type.caption, fontWeight = FontWeight.Bold)
+        Text("$count", color = color, style = MaterialTheme.typography.bodySmall, fontWeight = FontWeight.Bold)
     }
 }
 
 @Composable
 private fun StatusPill(status: RunStatus) {
     val (text, color) = when (status) {
-        RunStatus.Idle -> stringResource(Res.string.buildc_status_idle) to Ca.colors.textSecondary
-        RunStatus.Running -> stringResource(Res.string.buildc_status_running) to Ca.colors.accent
-        RunStatus.Succeeded -> stringResource(Res.string.buildc_status_succeeded) to Ca.colors.run
-        RunStatus.Failed -> stringResource(Res.string.buildc_status_failed) to Ca.colors.error
+        RunStatus.Idle -> stringResource(Res.string.buildc_status_idle) to MaterialTheme.colorScheme.onSurfaceVariant
+        RunStatus.Running -> stringResource(Res.string.buildc_status_running) to MaterialTheme.colorScheme.primary
+        RunStatus.Succeeded -> stringResource(Res.string.buildc_status_succeeded) to Ide.colors.run
+        RunStatus.Failed -> stringResource(Res.string.buildc_status_failed) to MaterialTheme.colorScheme.error
     }
     Chip(text, fill = color.copy(alpha = 0.16f), textColor = color)
 }
@@ -368,7 +370,7 @@ private fun CopyButton(tab: BuildTab, provide: () -> String) {
         },
         boxSize = 28,
         iconSize = 16,
-        tint = if (copied) Ca.colors.run else Ca.colors.textSecondary,
+        tint = if (copied) Ide.colors.run else MaterialTheme.colorScheme.onSurfaceVariant,
     )
 }
 
@@ -467,16 +469,16 @@ private fun RunningStrip(steps: List<BuildStepUi>) {
         ) {
             Text(
                 current?.let(::shortTask) ?: stringResource(Res.string.buildc_working),
-                color = Ca.colors.textSecondary, style = Ca.type.caption,
+                color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodySmall,
                 maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f),
             )
-            Text("$done/$total", color = Ca.colors.textTertiary, style = Ca.type.caption)
+            Text("$done/$total", color = MaterialTheme.colorScheme.outline, style = MaterialTheme.typography.bodySmall)
         }
         LinearProgressIndicator(
             progress = { progress },
             modifier = Modifier.fillMaxWidth().height(3.dp),
-            color = Ca.colors.accent,
-            trackColor = Ca.colors.surface2,
+            color = MaterialTheme.colorScheme.primary,
+            trackColor = MaterialTheme.colorScheme.surfaceContainerHigh,
         )
     }
 }
@@ -510,28 +512,28 @@ private fun ConsoleTabs(
                 stringResource(Res.string.buildc_tab_problems),
                 builtInActive && tab == BuildTab.Problems,
                 badge = (errors + warnings).takeIf { it > 0 }?.toString(),
-                badgeColor = if (errors > 0) Ca.colors.error else Ca.colors.warning
+                badgeColor = if (errors > 0) MaterialTheme.colorScheme.error else Ide.colors.warning
             ) { onSelect(BuildTab.Problems) }
             TabItem(stringResource(Res.string.buildc_tab_log), builtInActive && tab == BuildTab.Log) { onSelect(BuildTab.Log) }
             TabItem(
                 stringResource(Res.string.buildc_tab_steps),
                 builtInActive && tab == BuildTab.Steps,
                 badge = stepsTotal.takeIf { it > 0 }?.let { "$stepsDone/$it" },
-                badgeColor = Ca.colors.textTertiary
+                badgeColor = MaterialTheme.colorScheme.outline
             ) { onSelect(BuildTab.Steps) }
             // A green dot when a debug app is connected, else the line count once any logs have arrived.
             TabItem(
                 stringResource(Res.string.buildc_tab_logcat),
                 builtInActive && tab == BuildTab.Logcat,
                 badge = if (appLog.connected) "●" else appLog.lines.size.takeIf { it > 0 }?.toString(),
-                badgeColor = if (appLog.connected) Ca.colors.success else Ca.colors.textTertiary,
+                badgeColor = if (appLog.connected) Ide.colors.success else MaterialTheme.colorScheme.outline,
             ) { onSelect(BuildTab.Logcat) }
             // Plugin-contributed BOTTOM tool windows.
             pluginTabs.forEach { tw ->
                 TabItem(tw.title, activePluginTab == tw.id) { onSelectPlugin(tw.id) }
             }
         }
-        Box(Modifier.fillMaxWidth().height(1.dp).background(Ca.colors.separator))
+        Box(Modifier.fillMaxWidth().height(1.dp).background(MaterialTheme.colorScheme.outlineVariant))
     }
 }
 
@@ -540,7 +542,7 @@ private fun TabItem(
     label: String,
     selected: Boolean,
     badge: String? = null,
-    badgeColor: Color = Ca.colors.accent,
+    badgeColor: Color = MaterialTheme.colorScheme.primary,
     onClick: () -> Unit
 ) {
     val interactionSource = remember { MutableInteractionSource() }
@@ -558,8 +560,8 @@ private fun TabItem(
         ) {
             Text(
                 label,
-                color = if (selected) Ca.colors.textPrimary else Ca.colors.textTertiary,
-                style = Ca.type.footnote,
+                color = if (selected) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.outline,
+                style = MaterialTheme.typography.bodyMedium,
                 fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Medium,
             )
             badge?.let {
@@ -572,7 +574,7 @@ private fun TabItem(
                     Text(
                         it,
                         color = badgeColor,
-                        style = Ca.type.caption2,
+                        style = MaterialTheme.typography.labelSmall,
                         fontWeight = FontWeight.Bold
                     )
                 }
@@ -581,7 +583,7 @@ private fun TabItem(
         Spacer(Modifier.height(5.dp))
         Box(
             Modifier.fillMaxWidth().height(2.dp).background(
-                if (selected) Ca.colors.accent else Color.Transparent,
+                if (selected) MaterialTheme.colorScheme.primary else Color.Transparent,
                 RoundedCornerShape(Ca.radius.pill)
             )
         )
@@ -663,14 +665,14 @@ private fun ProblemFileHeader(file: String, count: Int) {
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(6.dp),
     ) {
-        Icon(CaIcons.file, null, Modifier.size(13.dp), tint = Ca.colors.textTertiary)
+        Icon(CaIcons.file, null, Modifier.size(13.dp), tint = MaterialTheme.colorScheme.outline)
         Text(
             file.substringAfterLast('/').substringAfterLast('\\'),
-            color = Ca.colors.textSecondary,
-            style = Ca.type.caption,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            style = MaterialTheme.typography.bodySmall,
             fontWeight = FontWeight.Medium
         )
-        Text("$count", color = Ca.colors.textTertiary, style = Ca.type.caption)
+        Text("$count", color = MaterialTheme.colorScheme.outline, style = MaterialTheme.typography.bodySmall)
     }
 }
 
@@ -695,27 +697,27 @@ private fun ProblemRow(
             )
             Text(
                 d.message,
-                color = Ca.colors.textSecondary,
-                style = Ca.type.footnote,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                style = MaterialTheme.typography.bodyMedium,
                 modifier = Modifier.weight(1f)
             )
             if (d.line > 0) Text(
                 ":${d.line}",
-                color = Ca.colors.textTertiary,
-                style = Ca.type.codeSmall
+                color = MaterialTheme.colorScheme.outline,
+                style = Ide.type.codeSmall
             )
             Text(
                 d.source.ifEmpty { d.kind },
-                color = Ca.colors.textTertiary,
-                style = Ca.type.caption
+                color = MaterialTheme.colorScheme.outline,
+                style = MaterialTheme.typography.bodySmall
             )
         }
         // The captured source snippet / caret context (the compiler's offending line), if any.
         d.detail?.takeIf { it.isNotBlank() }?.let { snippet ->
             Text(
                 snippet.trimEnd(),
-                color = Ca.colors.textTertiary,
-                style = Ca.type.codeSmall,
+                color = MaterialTheme.colorScheme.outline,
+                style = Ide.type.codeSmall,
                 maxLines = 4,
                 overflow = TextOverflow.Ellipsis,
                 modifier = Modifier.padding(start = 22.dp, top = 2.dp),
@@ -733,9 +735,9 @@ private fun severityIcon(s: UiSeverity) = when (s) {
 
 @Composable
 private fun severityColor(s: UiSeverity): Color = when (s) {
-    UiSeverity.Error -> Ca.colors.error
-    UiSeverity.Warning -> Ca.colors.warning
-    else -> Ca.colors.accent
+    UiSeverity.Error -> MaterialTheme.colorScheme.error
+    UiSeverity.Warning -> Ide.colors.warning
+    else -> MaterialTheme.colorScheme.primary
 }
 
 // ---------------------------------------------------------------------------
@@ -769,7 +771,7 @@ private fun LogTab(log: List<BuildLogLine>, running: Boolean) {
             IconButtonCa(
                 CaIcons.layers, if (grouped) stringResource(Res.string.buildc_ungroup) else stringResource(Res.string.buildc_group_by_task),
                 onClick = { grouped = !grouped }, boxSize = 30, iconSize = 16,
-                tint = if (grouped) Ca.colors.accent else Ca.colors.textSecondary,
+                tint = if (grouped) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
             )
         }
         Row(
@@ -780,14 +782,14 @@ private fun LogTab(log: List<BuildLogLine>, running: Boolean) {
         }
         Box(
             Modifier.weight(1f).fillMaxWidth()
-                .background(Ca.colors.consoleBg, RoundedCornerShape(Ca.radius.md))
-                .border(1.dp, Ca.colors.separator, RoundedCornerShape(Ca.radius.md))
+                .background(Ide.colors.consoleBg, RoundedCornerShape(Ca.radius.md))
+                .border(1.dp, MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(Ca.radius.md))
                 .padding(10.dp),
         ) {
             if (filtered.isEmpty()) {
                 Text(
                     if (log.isEmpty()) stringResource(Res.string.buildc_empty_log) else stringResource(Res.string.buildc_no_log_match),
-                    color = Ca.colors.textTertiary, style = Ca.type.codeSmall,
+                    color = MaterialTheme.colorScheme.outline, style = Ide.type.codeSmall,
                 )
             } else if (grouped) {
                 val collapsedKey =
@@ -902,18 +904,18 @@ private fun LogGroupHeader(task: String, count: Int, expanded: Boolean, onToggle
             if (expanded) CaIcons.caretDown else CaIcons.caretRight,
             null,
             Modifier.size(12.dp),
-            tint = Ca.colors.textTertiary
+            tint = MaterialTheme.colorScheme.outline
         )
         Text(
             task.ifEmpty { stringResource(Res.string.buildc_general) },
-            color = Ca.colors.textSecondary,
-            style = Ca.type.codeSmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            style = Ide.type.codeSmall,
             fontWeight = FontWeight.Medium,
             maxLines = 1,
             overflow = TextOverflow.Ellipsis,
             modifier = Modifier.weight(1f),
         )
-        Text("$count", color = Ca.colors.textTertiary, style = Ca.type.caption2)
+        Text("$count", color = MaterialTheme.colorScheme.outline, style = MaterialTheme.typography.labelSmall)
     }
 }
 
@@ -939,21 +941,21 @@ private fun LogLineRow(
             ) {
                 if (showTask && !line.task.isNullOrEmpty()) Text(
                     shortTask(line.task!!),
-                    color = Ca.colors.accent.copy(alpha = 0.85f),
-                    style = Ca.type.caption2,
+                    color = MaterialTheme.colorScheme.primary.copy(alpha = 0.85f),
+                    style = MaterialTheme.typography.labelSmall,
                     maxLines = 1,
                 )
                 Text(
                     line.message,
                     color = logColor(line.level, line.message),
-                    style = Ca.type.codeSmall,
+                    style = Ide.type.codeSmall,
                     modifier = Modifier.weight(1f),
                 )
             }
             if (line.timeLabel.isNotEmpty()) Text(
                 line.timeLabel,
-                color = Ca.colors.textTertiary,
-                style = Ca.type.caption2,
+                color = MaterialTheme.colorScheme.outline,
+                style = MaterialTheme.typography.labelSmall,
                 maxLines = 1,
                 modifier = Modifier.align(Alignment.TopStart)
                     .graphicsLayer { translationX = reveal() - slotPx },
@@ -968,21 +970,21 @@ private fun LogLineRow(
     ) {
         if (showTime && line.timeLabel.isNotEmpty()) Text(
             line.timeLabel,
-            color = Ca.colors.textTertiary,
-            style = Ca.type.caption2
+            color = MaterialTheme.colorScheme.outline,
+            style = MaterialTheme.typography.labelSmall
         )
         if (showTask && !line.task.isNullOrEmpty()) {
             Text(
                 shortTask(line.task!!),
-                color = Ca.colors.accent.copy(alpha = 0.85f),
-                style = Ca.type.caption2,
+                color = MaterialTheme.colorScheme.primary.copy(alpha = 0.85f),
+                style = MaterialTheme.typography.labelSmall,
                 maxLines = 1
             )
         }
         Text(
             line.message,
             color = logColor(line.level, line.message),
-            style = Ca.type.codeSmall,
+            style = Ide.type.codeSmall,
             modifier = Modifier.weight(1f)
         )
     }
@@ -990,10 +992,10 @@ private fun LogLineRow(
 
 @Composable
 private fun logColor(level: UiLogLevel, message: String): Color = when (level) {
-    UiLogLevel.Error -> Ca.colors.error
-    UiLogLevel.Warn -> Ca.colors.warning
-    UiLogLevel.Debug -> Ca.colors.textTertiary
-    UiLogLevel.Info -> if (message.startsWith("> ")) Ca.colors.accent else Ca.colors.textSecondary
+    UiLogLevel.Error -> MaterialTheme.colorScheme.error
+    UiLogLevel.Warn -> Ide.colors.warning
+    UiLogLevel.Debug -> MaterialTheme.colorScheme.outline
+    UiLogLevel.Info -> if (message.startsWith("> ")) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
 }
 
 /** ":app:compileJava" → "compileJava" — the leaf step name, for compact line/strip labels. */
@@ -1024,7 +1026,7 @@ private fun LogcatTab(appLog: AppLogUi, onClear: () -> Unit) {
             SearchField(query, { query = it }, Modifier.weight(1f))
             IconButtonCa(
                 CaIcons.close, stringResource(Res.string.clear), onClick = onClear,
-                boxSize = 30, iconSize = 16, tint = Ca.colors.textSecondary,
+                boxSize = 30, iconSize = 16, tint = MaterialTheme.colorScheme.onSurfaceVariant,
             )
         }
         Row(
@@ -1035,15 +1037,15 @@ private fun LogcatTab(appLog: AppLogUi, onClear: () -> Unit) {
         }
         Box(
             Modifier.weight(1f).fillMaxWidth()
-                .background(Ca.colors.consoleBg, RoundedCornerShape(Ca.radius.md))
-                .border(1.dp, Ca.colors.separator, RoundedCornerShape(Ca.radius.md))
+                .background(Ide.colors.consoleBg, RoundedCornerShape(Ca.radius.md))
+                .border(1.dp, MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(Ca.radius.md))
                 .padding(10.dp),
         ) {
             if (filtered.isEmpty()) {
                 Text(
                     if (appLog.lines.isEmpty()) stringResource(Res.string.buildc_logcat_empty)
                     else stringResource(Res.string.buildc_no_log_match),
-                    color = Ca.colors.textTertiary, style = Ca.type.codeSmall,
+                    color = MaterialTheme.colorScheme.outline, style = Ide.type.codeSmall,
                 )
             } else {
                 LogcatList(filtered, appLog.connected)
@@ -1055,7 +1057,7 @@ private fun LogcatTab(appLog: AppLogUi, onClear: () -> Unit) {
 /** A colored dot + a short status: connected (green, package name) / waiting / idle. */
 @Composable
 private fun LogcatStatus(appLog: AppLogUi) {
-    val color = if (appLog.connected) Ca.colors.success else Ca.colors.textTertiary
+    val color = if (appLog.connected) Ide.colors.success else MaterialTheme.colorScheme.outline
     val text = when {
         appLog.connected -> appLog.packageName ?: stringResource(Res.string.buildc_logcat_connected)
         appLog.packageName != null -> stringResource(Res.string.buildc_logcat_waiting)
@@ -1063,7 +1065,7 @@ private fun LogcatStatus(appLog: AppLogUi) {
     }
     Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(5.dp)) {
         Box(Modifier.size(8.dp).background(color, CircleShape))
-        Text(text, color = Ca.colors.textSecondary, style = Ca.type.caption, maxLines = 1)
+        Text(text, color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodySmall, maxLines = 1)
     }
 }
 
@@ -1096,16 +1098,16 @@ private fun LogcatRow(line: AppLogLineUi) {
         horizontalArrangement = Arrangement.spacedBy(8.dp),
     ) {
         if (line.timeLabel.isNotEmpty()) Text(
-            line.timeLabel, color = Ca.colors.textTertiary, style = Ca.type.caption2, softWrap = false, maxLines = 1,
+            line.timeLabel, color = MaterialTheme.colorScheme.outline, style = MaterialTheme.typography.labelSmall, softWrap = false, maxLines = 1,
         )
         if (line.pid > 0) Text(
-            "${line.pid}-${line.tid}", color = Ca.colors.textTertiary, style = Ca.type.caption2, softWrap = false, maxLines = 1,
+            "${line.pid}-${line.tid}", color = MaterialTheme.colorScheme.outline, style = MaterialTheme.typography.labelSmall, softWrap = false, maxLines = 1,
         )
         LevelChip(line.level)
         if (line.tag.isNotEmpty()) Text(
-            line.tag, color = Ca.colors.textSecondary, style = Ca.type.codeSmall, softWrap = false, maxLines = 1,
+            line.tag, color = MaterialTheme.colorScheme.onSurfaceVariant, style = Ide.type.codeSmall, softWrap = false, maxLines = 1,
         )
-        Text(line.message, color = logcatColor(line.level), style = Ca.type.codeSmall, softWrap = false, maxLines = 1)
+        Text(line.message, color = logcatColor(line.level), style = Ide.type.codeSmall, softWrap = false, maxLines = 1)
     }
 }
 
@@ -1117,17 +1119,17 @@ private fun LevelChip(level: UiLogLevel) {
         Modifier.size(16.dp).background(c.copy(alpha = 0.18f), RoundedCornerShape(3.dp)),
         contentAlignment = Alignment.Center,
     ) {
-        Text(logLevelLetter(level).toString(), color = c, style = Ca.type.caption2, fontWeight = FontWeight.Bold)
+        Text(logLevelLetter(level).toString(), color = c, style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold)
     }
 }
 
 /** Android-Studio-faithful message tint per level: error red, warn amber, info default, debug/verbose muted. */
 @Composable
 private fun logcatColor(level: UiLogLevel): Color = when (level) {
-    UiLogLevel.Error -> Ca.colors.error
-    UiLogLevel.Warn -> Ca.colors.warning
-    UiLogLevel.Info -> Ca.colors.textPrimary
-    UiLogLevel.Debug -> Ca.colors.textSecondary
+    UiLogLevel.Error -> MaterialTheme.colorScheme.error
+    UiLogLevel.Warn -> Ide.colors.warning
+    UiLogLevel.Info -> MaterialTheme.colorScheme.onSurface
+    UiLogLevel.Debug -> MaterialTheme.colorScheme.onSurfaceVariant
 }
 
 private fun logLevelLetter(level: UiLogLevel): Char = when (level) {
@@ -1162,7 +1164,7 @@ private fun StepRow(step: BuildStepUi) {
     val tint = if (running) runningPulseAlpha() else 0f
     Row(
         Modifier.fillMaxWidth()
-            .background(Ca.colors.accent.copy(alpha = tint), RoundedCornerShape(Ca.radius.sm))
+            .background(MaterialTheme.colorScheme.primary.copy(alpha = tint), RoundedCornerShape(Ca.radius.sm))
             .padding(horizontal = 6.dp, vertical = 3.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(10.dp),
@@ -1171,17 +1173,17 @@ private fun StepRow(step: BuildStepUi) {
         Text(
             step.name,
             color = when {
-                running -> Ca.colors.textPrimary
-                step.status == StepStatus.Pending -> Ca.colors.textSecondary.copy(alpha = 0.55f)
-                else -> Ca.colors.textSecondary
+                running -> MaterialTheme.colorScheme.onSurface
+                step.status == StepStatus.Pending -> MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.55f)
+                else -> MaterialTheme.colorScheme.onSurfaceVariant
             },
-            style = Ca.type.footnote,
+            style = MaterialTheme.typography.bodyMedium,
             fontWeight = FontWeight.Medium.takeIf { running },
         )
         // The "why it didn't run" tag, Gradle-style: UP-TO-DATE / NO-SOURCE / SKIPPED, dimmed at the right.
         statusTag(step.status)?.let { tag ->
             Spacer(Modifier.weight(1f))
-            Text(stringResource(tag), color = Ca.colors.textTertiary, style = Ca.type.caption)
+            Text(stringResource(tag), color = MaterialTheme.colorScheme.outline, style = MaterialTheme.typography.bodySmall)
         }
     }
 }
@@ -1215,29 +1217,29 @@ private fun StatusIcon(status: StepStatus) {
         StepStatus.Pending ->
             Box(
                 Modifier.size(15.dp)
-                    .border(1.5.dp, Ca.colors.separatorStrong, RoundedCornerShape(Ca.radius.pill))
+                    .border(1.5.dp, MaterialTheme.colorScheme.outline, RoundedCornerShape(Ca.radius.pill))
             )
 
         StepStatus.Running ->
             CircularProgressIndicator(
                 Modifier.size(14.dp),
-                color = Ca.colors.accent,
+                color = MaterialTheme.colorScheme.primary,
                 strokeWidth = 2.dp
             )
 
-        StepStatus.Done -> Icon(CaIcons.check, null, Modifier.size(15.dp), tint = Ca.colors.run)
+        StepStatus.Done -> Icon(CaIcons.check, null, Modifier.size(15.dp), tint = Ide.colors.run)
         // up-to-date = real (cached) result, a muted check; no-source/skipped = no work, a faint dot.
         StepStatus.UpToDate -> Icon(
             CaIcons.check,
             null,
             Modifier.size(15.dp),
-            tint = Ca.colors.textTertiary
+            tint = MaterialTheme.colorScheme.outline
         )
 
         StepStatus.NoSource, StepStatus.Skipped ->
-            Icon(CaIcons.dot, null, Modifier.size(15.dp), tint = Ca.colors.textTertiary)
+            Icon(CaIcons.dot, null, Modifier.size(15.dp), tint = MaterialTheme.colorScheme.outline)
 
-        StepStatus.Failed -> Icon(CaIcons.error, null, Modifier.size(15.dp), tint = Ca.colors.error)
+        StepStatus.Failed -> Icon(CaIcons.error, null, Modifier.size(15.dp), tint = MaterialTheme.colorScheme.error)
     }
 }
 
@@ -1253,14 +1255,14 @@ private fun StatusIcon(status: StepStatus) {
 private fun FirstBuildBanner(text: String) {
     Row(
         Modifier.fillMaxWidth()
-            .background(Ca.colors.accent.copy(alpha = 0.12f), RoundedCornerShape(Ca.radius.md))
-            .border(1.dp, Ca.colors.accent.copy(alpha = 0.35f), RoundedCornerShape(Ca.radius.md))
+            .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.12f), RoundedCornerShape(Ca.radius.md))
+            .border(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.35f), RoundedCornerShape(Ca.radius.md))
             .padding(horizontal = 12.dp, vertical = 10.dp),
         verticalAlignment = Alignment.Top,
         horizontalArrangement = Arrangement.spacedBy(8.dp),
     ) {
-        Icon(CaIcons.info, null, Modifier.size(16.dp), tint = Ca.colors.accent)
-        Text(text, color = Ca.colors.textSecondary, style = Ca.type.footnote)
+        Icon(CaIcons.info, null, Modifier.size(16.dp), tint = MaterialTheme.colorScheme.primary)
+        Text(text, color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodyMedium)
     }
 }
 
@@ -1271,18 +1273,18 @@ private fun IndexingSection(status: IndexUiStatus) {
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(8.dp)
         ) {
-            Icon(CaIcons.layers, null, Modifier.size(15.dp), tint = Ca.colors.accent)
+            Icon(CaIcons.layers, null, Modifier.size(15.dp), tint = MaterialTheme.colorScheme.primary)
             Text(
                 status.message.ifEmpty { stringResource(Res.string.buildc_indexing) },
-                color = Ca.colors.textSecondary,
-                style = Ca.type.footnote
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                style = MaterialTheme.typography.bodyMedium
             )
             if (status.fraction in 0.0..1.0) {
                 Spacer(Modifier.weight(1f))
                 Text(
                     "${(status.fraction * 100).toInt()}%",
-                    color = Ca.colors.textTertiary,
-                    style = Ca.type.caption
+                    color = MaterialTheme.colorScheme.outline,
+                    style = MaterialTheme.typography.bodySmall
                 )
             }
         }
@@ -1290,14 +1292,14 @@ private fun IndexingSection(status: IndexUiStatus) {
             LinearProgressIndicator(
                 progress = { status.fraction.toFloat() },
                 modifier = Modifier.fillMaxWidth().height(3.dp),
-                color = Ca.colors.accent,
-                trackColor = Ca.colors.surface2
+                color = MaterialTheme.colorScheme.primary,
+                trackColor = MaterialTheme.colorScheme.surfaceContainerHigh
             )
         } else {
             LinearProgressIndicator(
                 modifier = Modifier.fillMaxWidth().height(3.dp),
-                color = Ca.colors.accent,
-                trackColor = Ca.colors.surface2
+                color = MaterialTheme.colorScheme.primary,
+                trackColor = MaterialTheme.colorScheme.surfaceContainerHigh
             )
         }
     }
@@ -1306,7 +1308,7 @@ private fun IndexingSection(status: IndexUiStatus) {
 @Composable
 private fun EmptyState(text: String, modifier: Modifier = Modifier) {
     Box(modifier, contentAlignment = Alignment.Center) {
-        Text(text, color = Ca.colors.textTertiary, style = Ca.type.footnote)
+        Text(text, color = MaterialTheme.colorScheme.outline, style = MaterialTheme.typography.bodyMedium)
     }
 }
 
@@ -1317,12 +1319,12 @@ private fun ConsoleChip(label: String, selected: Boolean, onClick: () -> Unit) {
     Box(
         Modifier
             .background(
-                if (selected) Ca.colors.accent else Ca.colors.surface2,
+                if (selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surfaceContainerHigh,
                 RoundedCornerShape(Ca.radius.pill)
             )
             .border(
                 1.dp,
-                if (selected) Color.Transparent else Ca.colors.hairline,
+                if (selected) Color.Transparent else MaterialTheme.colorScheme.outlineVariant,
                 RoundedCornerShape(Ca.radius.pill)
             )
             .clickable(interactionSource, indication = null, onClick = onClick)
@@ -1330,8 +1332,8 @@ private fun ConsoleChip(label: String, selected: Boolean, onClick: () -> Unit) {
     ) {
         Text(
             label,
-            color = if (selected) Ca.colors.textOnAccent else Ca.colors.textSecondary,
-            style = Ca.type.caption,
+            color = if (selected) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurfaceVariant,
+            style = MaterialTheme.typography.bodySmall,
             fontWeight = FontWeight.Medium,
         )
     }
@@ -1346,25 +1348,25 @@ private fun SearchField(
 ) {
     val interactionSource = remember { MutableInteractionSource() }
     Row(
-        modifier.background(Ca.colors.surface2, RoundedCornerShape(Ca.radius.control))
-            .border(1.dp, Ca.colors.hairline, RoundedCornerShape(Ca.radius.control))
+        modifier.background(MaterialTheme.colorScheme.surfaceContainerHigh, RoundedCornerShape(Ca.radius.control))
+            .border(1.dp, MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(Ca.radius.control))
             .padding(horizontal = 10.dp, vertical = 7.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(8.dp),
     ) {
-        Icon(CaIcons.search, null, Modifier.size(14.dp), tint = Ca.colors.accent)
+        Icon(CaIcons.search, null, Modifier.size(14.dp), tint = MaterialTheme.colorScheme.primary)
         Box(Modifier.weight(1f)) {
             if (value.isEmpty()) Text(
                 stringResource(Res.string.buildc_filter_log),
-                color = Ca.colors.textTertiary,
-                style = Ca.type.footnote
+                color = MaterialTheme.colorScheme.outline,
+                style = MaterialTheme.typography.bodyMedium
             )
             BasicTextField(
                 value = value,
                 onValueChange = onValueChange,
                 singleLine = true,
-                textStyle = Ca.type.footnote.copy(color = Ca.colors.textPrimary),
-                cursorBrush = SolidColor(Ca.colors.accent),
+                textStyle = MaterialTheme.typography.bodyMedium.copy(color = MaterialTheme.colorScheme.onSurface),
+                cursorBrush = SolidColor(MaterialTheme.colorScheme.primary),
                 modifier = Modifier.fillMaxWidth(),
             )
         }
@@ -1374,7 +1376,7 @@ private fun SearchField(
                 stringResource(Res.string.clear),
                 Modifier.size(14.dp)
                     .clickable(interactionSource, indication = null) { onValueChange("") },
-                tint = Ca.colors.textTertiary
+                tint = MaterialTheme.colorScheme.outline
             )
         }
     }

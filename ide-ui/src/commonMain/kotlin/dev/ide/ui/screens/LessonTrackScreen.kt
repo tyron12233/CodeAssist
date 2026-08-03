@@ -1,5 +1,6 @@
 package dev.ide.ui.screens
 
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -65,7 +66,7 @@ fun LessonTrackScreen(
     }
     val progress = remember(backend, epoch) { runCatching { backend.learn.progress() }.getOrNull() }
 
-    Box(modifier.fillMaxSize().background(Ca.colors.bg), contentAlignment = Alignment.TopCenter) {
+    Box(modifier.fillMaxSize().background(MaterialTheme.colorScheme.background), contentAlignment = Alignment.TopCenter) {
         Column(Modifier.widthIn(max = 640.dp).fillMaxSize()) {
             Row(
                 Modifier.fillMaxWidth().padding(start = 8.dp, end = 16.dp, top = 16.dp, bottom = 4.dp),
@@ -75,7 +76,7 @@ fun LessonTrackScreen(
                 IconButtonCa(CaIcons.chevronLeft, stringResource(Res.string.back), onBack)
                 Text(
                     track?.title.orEmpty(),
-                    color = Ca.colors.textPrimary, style = Ca.type.title3,
+                    color = MaterialTheme.colorScheme.onSurface, style = MaterialTheme.typography.titleLarge,
                     maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f),
                 )
             }
@@ -94,7 +95,7 @@ fun LessonTrackScreen(
                     LessonRow(
                         index = i + 1,
                         lesson = lesson,
-                        accent = t.accentColor?.let { Color(it) } ?: Ca.colors.accent,
+                        accent = t.accentColor?.let { Color(it) } ?: MaterialTheme.colorScheme.primary,
                         done = completed(progress, lesson),
                         delayMillis = i * 40,
                         onClick = { onOpenLesson(lesson.id) },
@@ -113,14 +114,14 @@ private fun completed(progress: dev.ide.ui.backend.UiLearnProgress?, lesson: UiL
 
 @Composable
 private fun TrackHero(track: UiLearnTrack, completedLessons: Int) {
-    val accent = track.accentColor?.let { Color(it) } ?: Ca.colors.accent
+    val accent = track.accentColor?.let { Color(it) } ?: MaterialTheme.colorScheme.primary
     Column(Modifier.padding(top = 8.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-        Text(track.subtitle, color = Ca.colors.textSecondary, style = Ca.type.subhead)
+        Text(track.subtitle, color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodyLarge)
         val total = track.lessons.size
         val fraction = if (total == 0) 0f else completedLessons.toFloat() / total
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-            ProgressBar(fraction, track = Ca.colors.surface3, fill = accent, modifier = Modifier.weight(1f))
-            Text(stringResource(Res.string.learn_lessons_progress, completedLessons, total), color = Ca.colors.textTertiary, style = Ca.type.caption)
+            ProgressBar(fraction, track = MaterialTheme.colorScheme.surfaceContainerHighest, fill = accent, modifier = Modifier.weight(1f))
+            Text(stringResource(Res.string.learn_lessons_progress, completedLessons, total), color = MaterialTheme.colorScheme.outline, style = MaterialTheme.typography.bodySmall)
         }
     }
 }
@@ -134,8 +135,8 @@ private fun LessonRow(index: Int, lesson: UiLessonSummary, accent: Color, done: 
             .entranceSlideUp(delayMillis)
             .fillMaxWidth()
             .pressScale(interaction)
-            .background(Ca.colors.surface, shape)
-            .border(1.dp, Ca.colors.separator, shape)
+            .background(MaterialTheme.colorScheme.surface, shape)
+            .border(1.dp, MaterialTheme.colorScheme.outlineVariant, shape)
             .clickable(interaction, indication = null, onClick = onClick)
             .padding(14.dp),
         verticalAlignment = Alignment.CenterVertically,
@@ -144,24 +145,24 @@ private fun LessonRow(index: Int, lesson: UiLessonSummary, accent: Color, done: 
         // Step marker: a completion check once done, else the lesson's number.
         Box(
             Modifier.size(34.dp).clip(RoundedCornerShape(Ca.radius.pill))
-                .background(if (done) accent else Ca.colors.surface2),
+                .background(if (done) accent else MaterialTheme.colorScheme.surfaceContainerHigh),
             contentAlignment = Alignment.Center,
         ) {
             if (done) Icon(CaIcons.check, null, Modifier.size(18.dp), tint = Color.White)
-            else Text(index.toString(), color = Ca.colors.textSecondary, style = Ca.type.footnote, fontWeight = FontWeight.SemiBold)
+            else Text(index.toString(), color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold)
         }
         Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
-            Text(lesson.title, color = Ca.colors.textPrimary, style = Ca.type.headline, maxLines = 1, overflow = TextOverflow.Ellipsis)
-            Text(lesson.summary, color = Ca.colors.textSecondary, style = Ca.type.footnote, maxLines = 2, overflow = TextOverflow.Ellipsis)
+            Text(lesson.title, color = MaterialTheme.colorScheme.onSurface, style = MaterialTheme.typography.titleMedium, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            Text(lesson.summary, color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodyMedium, maxLines = 2, overflow = TextOverflow.Ellipsis)
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                Icon(CaIcons.dot, null, Modifier.size(4.dp), tint = Ca.colors.textTertiary)
-                Text(stringResource(Res.string.learn_minutes, lesson.estMinutes), color = Ca.colors.textTertiary, style = Ca.type.caption2)
+                Icon(CaIcons.dot, null, Modifier.size(4.dp), tint = MaterialTheme.colorScheme.outline)
+                Text(stringResource(Res.string.learn_minutes, lesson.estMinutes), color = MaterialTheme.colorScheme.outline, style = MaterialTheme.typography.labelSmall)
                 if (done) {
-                    Icon(CaIcons.dot, null, Modifier.size(4.dp), tint = Ca.colors.textTertiary)
-                    Text(stringResource(Res.string.learn_completed), color = accent, style = Ca.type.caption2, fontWeight = FontWeight.Medium)
+                    Icon(CaIcons.dot, null, Modifier.size(4.dp), tint = MaterialTheme.colorScheme.outline)
+                    Text(stringResource(Res.string.learn_completed), color = accent, style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Medium)
                 }
             }
         }
-        Icon(CaIcons.chevronRight, null, Modifier.size(20.dp), tint = Ca.colors.textTertiary)
+        Icon(CaIcons.chevronRight, null, Modifier.size(20.dp), tint = MaterialTheme.colorScheme.outline)
     }
 }

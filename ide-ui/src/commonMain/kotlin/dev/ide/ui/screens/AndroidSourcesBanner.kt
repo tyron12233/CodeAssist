@@ -1,5 +1,6 @@
 package dev.ide.ui.screens
 
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Row
@@ -45,19 +46,19 @@ internal fun AndroidSourcesBanner(state: IdeUiState) {
     if (!show) return
     Row(
         Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 4.dp)
-            .background(Ca.colors.accent.copy(alpha = 0.08f), androidx.compose.foundation.shape.RoundedCornerShape(Ca.radius.sm))
+            .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.08f), androidx.compose.foundation.shape.RoundedCornerShape(Ca.radius.sm))
             .padding(horizontal = 10.dp, vertical = 6.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Text(
             status ?: stringResource(Res.string.sources_not_installed, info?.platform.toString()),
-            color = Ca.colors.textSecondary, style = Ca.type.footnote, modifier = Modifier.weight(1f),
+            color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f),
         )
         if (status == null) {
             Text(
                 if (busy) stringResource(Res.string.sources_downloading) else stringResource(Res.string.sources_download),
-                color = if (busy) Ca.colors.textTertiary else Ca.colors.accent,
-                style = Ca.type.footnote,
+                color = if (busy) MaterialTheme.colorScheme.outline else MaterialTheme.colorScheme.primary,
+                style = MaterialTheme.typography.bodyMedium,
                 modifier = Modifier.then(
                     if (busy) Modifier else Modifier.clickable {
                         busy = true

@@ -1,5 +1,7 @@
 package dev.ide.ui.components
 
+import dev.ide.ui.theme.Ide
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.expandHorizontally
@@ -190,7 +192,7 @@ fun EditorTopBar(
     onPluginAction: (String) -> Unit = {},
     compact: Boolean = false,
 ) {
-    val dim = Ca.colors.textTertiary.copy(alpha = 0.35f)
+    val dim = MaterialTheme.colorScheme.outline.copy(alpha = 0.35f)
     GlassSurface(
         modifier = Modifier.fillMaxWidth().height(52.dp),
         material = GlassMaterial.Regular
@@ -204,8 +206,8 @@ fun EditorTopBar(
             // The name takes the flexible middle and truncates — the right-hand cluster keeps its size.
             Text(
                 projectName,
-                color = Ca.colors.textPrimary,
-                style = Ca.type.subhead,
+                color = MaterialTheme.colorScheme.onSurface,
+                style = MaterialTheme.typography.bodyLarge,
                 fontWeight = FontWeight.SemiBold,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
@@ -297,8 +299,8 @@ fun EditorTopBar(
 @Composable
 fun SidebarToggleButton(fraction: () -> Float, onClick: () -> Unit, modifier: Modifier = Modifier) {
     val interaction = remember { MutableInteractionSource() }
-    val outline = Ca.colors.textSecondary
-    val accent = Ca.colors.accent
+    val outline = MaterialTheme.colorScheme.onSurfaceVariant
+    val accent = MaterialTheme.colorScheme.primary
     val toggleNavLabel = stringResource(Res.string.edchrome_toggle_navigator)
     Box(
         modifier
@@ -423,21 +425,21 @@ private fun OverflowItem(
     onClick: () -> Unit,
 ) {
     val textColor = when {
-        !enabled -> Ca.colors.textTertiary.copy(alpha = 0.4f)
-        active -> Ca.colors.accent
-        else -> Ca.colors.textPrimary
+        !enabled -> MaterialTheme.colorScheme.outline.copy(alpha = 0.4f)
+        active -> MaterialTheme.colorScheme.primary
+        else -> MaterialTheme.colorScheme.onSurface
     }
     val tint = when {
-        !enabled -> Ca.colors.textTertiary.copy(alpha = 0.4f)
-        active -> Ca.colors.accent
-        else -> Ca.colors.textSecondary
+        !enabled -> MaterialTheme.colorScheme.outline.copy(alpha = 0.4f)
+        active -> MaterialTheme.colorScheme.primary
+        else -> MaterialTheme.colorScheme.onSurfaceVariant
     }
     DropdownMenuItem(
         text = {
             Text(
                 label,
                 color = textColor,
-                style = Ca.type.footnote,
+                style = MaterialTheme.typography.bodyMedium,
                 fontWeight = FontWeight.Medium
             )
         },
@@ -467,11 +469,11 @@ fun DepsProgressBar(state: DepsResolveState, onRetry: () -> Unit) {
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
-                Icon(CaIcons.pkg, null, Modifier.size(14.dp), tint = Ca.colors.accent)
+                Icon(CaIcons.pkg, null, Modifier.size(14.dp), tint = MaterialTheme.colorScheme.primary)
                 Text(
                     state.message.ifBlank { stringResource(Res.string.edchrome_resolving_dependencies) },
-                    color = Ca.colors.textSecondary,
-                    style = Ca.type.footnote,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    style = MaterialTheme.typography.bodyMedium,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
                     modifier = Modifier.weight(1f).padding(bottom = 4.dp),
@@ -489,14 +491,14 @@ fun DepsProgressBar(state: DepsResolveState, onRetry: () -> Unit) {
                 LinearProgressIndicator(
                     progress = { state.fraction.toFloat() },
                     modifier = Modifier.fillMaxWidth().height(3.dp),
-                    color = Ca.colors.accent,
-                    trackColor = Ca.colors.surface2,
+                    color = MaterialTheme.colorScheme.primary,
+                    trackColor = MaterialTheme.colorScheme.surfaceContainerHigh,
                 )
             } else {
                 LinearProgressIndicator(
                     Modifier.fillMaxWidth().height(3.dp),
-                    color = Ca.colors.accent,
-                    trackColor = Ca.colors.surface2
+                    color = MaterialTheme.colorScheme.primary,
+                    trackColor = MaterialTheme.colorScheme.surfaceContainerHigh
                 )
             }
             AnimatedVisibility(expanded && state.log.isNotEmpty()) {
@@ -511,8 +513,8 @@ fun DepsProgressBar(state: DepsResolveState, onRetry: () -> Unit) {
                     for (line in state.log) {
                         Text(
                             line,
-                            color = Ca.colors.textTertiary,
-                            style = Ca.type.codeSmall,
+                            color = MaterialTheme.colorScheme.outline,
+                            style = Ide.type.codeSmall,
                             maxLines = 1,
                             overflow = TextOverflow.Ellipsis,
                             modifier = Modifier.fillMaxWidth(),
@@ -536,43 +538,43 @@ private fun UnresolvedDepsBanner(state: DepsResolveState, onRetry: () -> Unit) {
     GlassSurface(modifier = Modifier.fillMaxWidth(), material = GlassMaterial.Regular) {
         Column(
             Modifier.fillMaxWidth()
-                .background(Ca.colors.error.copy(alpha = 0.08f))
+                .background(MaterialTheme.colorScheme.error.copy(alpha = 0.08f))
                 .padding(horizontal = 12.dp, vertical = 8.dp),
         ) {
             Row(
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
-                Icon(CaIcons.error, null, Modifier.size(16.dp), tint = Ca.colors.error)
+                Icon(CaIcons.error, null, Modifier.size(16.dp), tint = MaterialTheme.colorScheme.error)
                 Column(Modifier.weight(1f)) {
                     Text(
                         pluralStringResource(Res.plurals.edchrome_unresolved_dependencies, n, n),
-                        color = Ca.colors.error,
-                        style = Ca.type.footnote,
+                        color = MaterialTheme.colorScheme.error,
+                        style = MaterialTheme.typography.bodyMedium,
                         fontWeight = FontWeight.SemiBold,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis,
                     )
                     Text(
-                        state.unresolved.first().reason, color = Ca.colors.textSecondary,
-                        style = Ca.type.caption2, maxLines = 1, overflow = TextOverflow.Ellipsis,
+                        state.unresolved.first().reason, color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        style = MaterialTheme.typography.labelSmall, maxLines = 1, overflow = TextOverflow.Ellipsis,
                     )
                 }
                 // Retry: re-resolve the declared set (cache-first; recovers once the network is back).
                 Row(
                     Modifier.background(
-                        Ca.colors.error.copy(alpha = 0.16f),
+                        MaterialTheme.colorScheme.error.copy(alpha = 0.16f),
                         RoundedCornerShape(Ca.radius.pill)
                     )
                         .clickable(onClick = onRetry).padding(horizontal = 10.dp, vertical = 5.dp),
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(4.dp),
                 ) {
-                    Icon(CaIcons.refresh, stringResource(Res.string.retry), Modifier.size(13.dp), tint = Ca.colors.error)
+                    Icon(CaIcons.refresh, stringResource(Res.string.retry), Modifier.size(13.dp), tint = MaterialTheme.colorScheme.error)
                     Text(
                         stringResource(Res.string.retry),
-                        color = Ca.colors.error,
-                        style = Ca.type.caption,
+                        color = MaterialTheme.colorScheme.error,
+                        style = MaterialTheme.typography.bodySmall,
                         fontWeight = FontWeight.SemiBold
                     )
                 }
@@ -592,15 +594,15 @@ private fun UnresolvedDepsBanner(state: DepsResolveState, onRetry: () -> Unit) {
                         Column(Modifier.fillMaxWidth()) {
                             Text(
                                 u.coordinate,
-                                color = Ca.colors.textPrimary,
-                                style = Ca.type.codeSmall,
+                                color = MaterialTheme.colorScheme.onSurface,
+                                style = Ide.type.codeSmall,
                                 maxLines = 1,
                                 overflow = TextOverflow.Ellipsis,
                             )
                             Text(
                                 "${u.reason}  ·  ${u.module}",
-                                color = Ca.colors.textTertiary,
-                                style = Ca.type.caption2,
+                                color = MaterialTheme.colorScheme.outline,
+                                style = MaterialTheme.typography.labelSmall,
                                 maxLines = 2,
                                 overflow = TextOverflow.Ellipsis,
                             )
@@ -631,7 +633,7 @@ private fun RunControl(
         // (below) so the menu's focusable popup can't auto-focus it and pop the keyboard on open.
         val openMenu = { keyboard?.hide(); query = ""; items = tasks(); open = true }
         if (compact) {
-            IconButtonCa(CaIcons.play, stringResource(Res.string.run), onClick = openMenu, tint = Ca.colors.accent)
+            IconButtonCa(CaIcons.play, stringResource(Res.string.run), onClick = openMenu, tint = MaterialTheme.colorScheme.primary)
         } else {
             Row(
                 Modifier.height(34.dp)
@@ -642,11 +644,11 @@ private fun RunControl(
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(6.dp),
             ) {
-                Icon(CaIcons.play, stringResource(Res.string.run), Modifier.size(16.dp), tint = Ca.colors.accent)
+                Icon(CaIcons.play, stringResource(Res.string.run), Modifier.size(16.dp), tint = MaterialTheme.colorScheme.primary)
                 Text(
                     stringResource(Res.string.run),
-                    color = Ca.colors.accent,
-                    style = Ca.type.subhead,
+                    color = MaterialTheme.colorScheme.primary,
+                    style = MaterialTheme.typography.bodyLarge,
                     fontWeight = FontWeight.SemiBold
                 )
             }
@@ -664,21 +666,21 @@ private fun RunControl(
                 LaunchedEffect(searchTapped) { if (searchTapped) runCatching { searchFocus.requestFocus() } }
                 Box(
                     Modifier.padding(horizontal = 10.dp, vertical = 6.dp).width(240.dp)
-                        .background(Ca.colors.surface, RoundedCornerShape(Ca.radius.sm))
+                        .background(MaterialTheme.colorScheme.surface, RoundedCornerShape(Ca.radius.sm))
                         .clickable { searchTapped = true }
                         .padding(horizontal = 10.dp, vertical = 8.dp),
                 ) {
                     if (query.isEmpty()) Text(
                         stringResource(Res.string.edchrome_search_tasks),
-                        color = Ca.colors.textTertiary,
-                        style = Ca.type.footnote
+                        color = MaterialTheme.colorScheme.outline,
+                        style = MaterialTheme.typography.bodyMedium
                     )
                     BasicTextField(
                         value = query,
                         onValueChange = { query = it },
                         singleLine = true,
-                        textStyle = Ca.type.footnote.copy(color = Ca.colors.textPrimary),
-                        cursorBrush = SolidColor(Ca.colors.accent),
+                        textStyle = MaterialTheme.typography.bodyMedium.copy(color = MaterialTheme.colorScheme.onSurface),
+                        cursorBrush = SolidColor(MaterialTheme.colorScheme.primary),
                         modifier = Modifier.fillMaxWidth()
                             .focusRequester(searchFocus)
                             .focusProperties { canFocus = searchTapped },
@@ -696,8 +698,8 @@ private fun RunControl(
                     text = {
                         Text(
                             stringResource(Res.string.edchrome_nothing_to_run),
-                            color = Ca.colors.textTertiary,
-                            style = Ca.type.footnote
+                            color = MaterialTheme.colorScheme.outline,
+                            style = MaterialTheme.typography.bodyMedium
                         )
                     },
                     onClick = {}, enabled = false,
@@ -708,8 +710,8 @@ private fun RunControl(
                     text = {
                         Text(
                             stringResource(Res.string.edchrome_no_matching_tasks),
-                            color = Ca.colors.textTertiary,
-                            style = Ca.type.footnote
+                            color = MaterialTheme.colorScheme.outline,
+                            style = MaterialTheme.typography.bodyMedium
                         )
                     },
                     onClick = {}, enabled = false,
@@ -723,14 +725,14 @@ private fun RunControl(
                                 Column {
                                     Text(
                                         task.label,
-                                        color = Ca.colors.textPrimary,
-                                        style = Ca.type.footnote,
+                                        color = MaterialTheme.colorScheme.onSurface,
+                                        style = MaterialTheme.typography.bodyMedium,
                                         fontWeight = FontWeight.Medium
                                     )
                                     Text(
                                         task.group,
-                                        color = Ca.colors.textTertiary,
-                                        style = Ca.type.caption2
+                                        color = MaterialTheme.colorScheme.outline,
+                                        style = MaterialTheme.typography.labelSmall
                                     )
                                 }
                             },
@@ -739,7 +741,7 @@ private fun RunControl(
                                     CaIcons.play,
                                     null,
                                     Modifier.size(14.dp),
-                                    tint = Ca.colors.accent
+                                    tint = MaterialTheme.colorScheme.primary
                                 )
                             },
                             onClick = { open = false; onPickTask(task) },
@@ -782,15 +784,15 @@ private fun VariantChip(
                 CaIcons.layers,
                 stringResource(Res.string.edchrome_build_variant),
                 Modifier.size(15.dp),
-                tint = Ca.colors.textSecondary
+                tint = MaterialTheme.colorScheme.onSurfaceVariant
             )
             if (!compact) Text(
                 label,
-                color = Ca.colors.textSecondary,
-                style = Ca.type.footnote,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                style = MaterialTheme.typography.bodyMedium,
                 fontWeight = FontWeight.Medium
             )
-            Icon(CaIcons.caretDown, null, Modifier.size(12.dp), tint = Ca.colors.textTertiary)
+            Icon(CaIcons.caretDown, null, Modifier.size(12.dp), tint = MaterialTheme.colorScheme.outline)
         }
         CaDropdownMenu(expanded = open, onDismissRequest = { open = false }) {
             if (items.isEmpty()) {
@@ -798,8 +800,8 @@ private fun VariantChip(
                     text = {
                         Text(
                             stringResource(Res.string.edchrome_no_variants),
-                            color = Ca.colors.textTertiary,
-                            style = Ca.type.footnote
+                            color = MaterialTheme.colorScheme.outline,
+                            style = MaterialTheme.typography.bodyMedium
                         )
                     },
                     onClick = {}, enabled = false,
@@ -810,8 +812,8 @@ private fun VariantChip(
                     text = {
                         Text(
                             v,
-                            color = Ca.colors.textPrimary,
-                            style = Ca.type.footnote,
+                            color = MaterialTheme.colorScheme.onSurface,
+                            style = MaterialTheme.typography.bodyMedium,
                             fontWeight = if (v == label) FontWeight.SemiBold else FontWeight.Normal
                         )
                     },
@@ -820,7 +822,7 @@ private fun VariantChip(
                             CaIcons.check,
                             null,
                             Modifier.size(14.dp),
-                            tint = Ca.colors.accent
+                            tint = MaterialTheme.colorScheme.primary
                         ) else Box(Modifier.size(14.dp))
                     },
                     onClick = { open = false; onPick(v) },
@@ -840,7 +842,7 @@ private fun CompatModeChip(compact: Boolean, onClick: () -> Unit) {
     val shape = RoundedCornerShape(Ca.radius.pill)
     Row(
         Modifier.clip(shape).clickable(onClick = onClick)
-            .background(Ca.colors.warning.copy(alpha = 0.16f), shape)
+            .background(Ide.colors.warning.copy(alpha = 0.16f), shape)
             .padding(horizontal = if (compact) 6.dp else 9.dp, vertical = 4.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(4.dp),
@@ -849,12 +851,12 @@ private fun CompatModeChip(compact: Boolean, onClick: () -> Unit) {
             CaIcons.warning,
             stringResource(Res.string.edchrome_gradle_compatibility_mode),
             Modifier.size(13.dp),
-            tint = Ca.colors.warning
+            tint = Ide.colors.warning
         )
         if (!compact) Text(
             stringResource(Res.string.edchrome_gradle_compat),
-            color = Ca.colors.warning,
-            style = Ca.type.caption,
+            color = Ide.colors.warning,
+            style = MaterialTheme.typography.bodySmall,
             fontWeight = FontWeight.SemiBold
         )
     }
@@ -877,33 +879,33 @@ fun IndexStatusChip(
         .then(if (onClick != null) Modifier.clickable(onClick = onClick) else Modifier)
     if (status.building) {
         Row(
-            base.background(Ca.colors.accentSoft, shape)
+            base.background(MaterialTheme.colorScheme.primaryContainer, shape)
                 .padding(horizontal = 10.dp, vertical = 5.dp),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(6.dp),
         ) {
             CircularProgressIndicator(
                 Modifier.size(13.dp),
-                color = Ca.colors.accent,
+                color = MaterialTheme.colorScheme.primary,
                 strokeWidth = 2.dp
             )
             val label =
                 if (status.fraction in 0.0..1.0) stringResource(Res.string.edchrome_indexing_percent, (status.fraction * 100).toInt()) else stringResource(Res.string.edchrome_indexing)
             Text(
                 label,
-                color = Ca.colors.accent,
-                style = Ca.type.caption,
+                color = MaterialTheme.colorScheme.primary,
+                style = MaterialTheme.typography.bodySmall,
                 fontWeight = FontWeight.Medium
             )
         }
     } else {
         Row(
-            base.background(Ca.colors.surface2, shape).padding(horizontal = 10.dp, vertical = 5.dp),
+            base.background(MaterialTheme.colorScheme.surfaceContainerHigh, shape).padding(horizontal = 10.dp, vertical = 5.dp),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(6.dp),
         ) {
-            Icon(CaIcons.check, null, Modifier.size(12.dp), tint = Ca.colors.success)
-            Text(stringResource(Res.string.edchrome_indexed), color = Ca.colors.textTertiary, style = Ca.type.caption)
+            Icon(CaIcons.check, null, Modifier.size(12.dp), tint = Ide.colors.success)
+            Text(stringResource(Res.string.edchrome_indexed), color = MaterialTheme.colorScheme.outline, style = MaterialTheme.typography.bodySmall)
         }
     }
 }
@@ -931,7 +933,7 @@ fun TabsStrip(
             .fillMaxWidth()
             .height(40.dp)
             .padding(vertical = 4.dp)
-            .background(Ca.colors.editorBg),
+            .background(Ide.colors.editorBg),
         contentPadding = PaddingValues(horizontal = 8.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
@@ -955,7 +957,7 @@ fun TabsStrip(
         }
     }
     // a hairline under the tabs
-    Box(Modifier.fillMaxWidth().height(1.dp).background(Ca.colors.separator))
+    Box(Modifier.fillMaxWidth().height(1.dp).background(MaterialTheme.colorScheme.outlineVariant))
 }
 
 /** One tab. The row selects on click; right-click (desktop) or long-press (touch) opens the close menu. */
@@ -975,14 +977,14 @@ private fun EditorTab(
     onCloseAll: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    val accent = Ca.colors.accent
+    val accent = MaterialTheme.colorScheme.primary
     var menuOpen by remember { mutableStateOf(false) }
     Box(modifier) {
         Row(
             Modifier
                 .fillMaxHeight()
                 .background(
-                    color = if (active) accent.copy(alpha = 0.1f) else Ca.colors.editorBg,
+                    color = if (active) accent.copy(alpha = 0.1f) else Ide.colors.editorBg,
                     shape = RoundedCornerShape(Ca.radius.sm)
                 )
                 .border(
@@ -1000,8 +1002,8 @@ private fun EditorTab(
             Spacer(Modifier.width(8.dp))
             Text(
                 file.name,
-                color = if (active) Ca.colors.textPrimary else Ca.colors.textSecondary,
-                style = Ca.type.footnote,
+                color = if (active) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.onSurfaceVariant,
+                style = MaterialTheme.typography.bodyMedium,
                 fontWeight = if (active) FontWeight.SemiBold else FontWeight.Normal,
             )
             // The unsaved-changes dot fades + scales while its slot (the dot *and* its leading gap, so the
@@ -1013,7 +1015,7 @@ private fun EditorTab(
             ) {
                 Box(
                     Modifier.padding(start = 8.dp).size(7.dp)
-                        .background(Ca.colors.gitModified, RoundedCornerShape(Ca.radius.pill))
+                        .background(Ide.colors.gitModified, RoundedCornerShape(Ca.radius.pill))
                 )
             }
             Box(
@@ -1024,7 +1026,7 @@ private fun EditorTab(
                     CaIcons.close,
                     stringResource(Res.string.close),
                     Modifier.size(12.dp),
-                    tint = Ca.colors.textTertiary
+                    tint = MaterialTheme.colorScheme.outline
                 )
             }
         }
@@ -1067,29 +1069,29 @@ fun NoOpenFilesView(modifier: Modifier = Modifier) {
     val drawerSwipe = rememberScrollableState { 0f }
     Box(
         modifier
-            .background(Ca.colors.editorBg)
+            .background(Ide.colors.editorBg)
             .scrollable(drawerSwipe, Orientation.Horizontal, reverseDirection = true),
         contentAlignment = Alignment.Center,
     ) {
         Column(horizontalAlignment = Alignment.CenterHorizontally) {
             Box(
-                Modifier.size(64.dp).background(Ca.colors.surface2, RoundedCornerShape(Ca.radius.md)),
+                Modifier.size(64.dp).background(MaterialTheme.colorScheme.surfaceContainerHigh, RoundedCornerShape(Ca.radius.md)),
                 contentAlignment = Alignment.Center,
             ) {
-                Icon(CaIcons.docText, null, Modifier.size(30.dp), tint = Ca.colors.textTertiary)
+                Icon(CaIcons.docText, null, Modifier.size(30.dp), tint = MaterialTheme.colorScheme.outline)
             }
             Spacer(Modifier.height(16.dp))
             Text(
                 stringResource(Res.string.edview_no_file_open_title),
-                color = Ca.colors.textSecondary,
-                style = Ca.type.subhead,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                style = MaterialTheme.typography.bodyLarge,
                 fontWeight = FontWeight.SemiBold,
             )
             Spacer(Modifier.height(6.dp))
             Text(
                 stringResource(Res.string.edview_no_file_open_hint),
-                color = Ca.colors.textTertiary,
-                style = Ca.type.footnote,
+                color = MaterialTheme.colorScheme.outline,
+                style = MaterialTheme.typography.bodyMedium,
             )
         }
     }
@@ -1120,7 +1122,7 @@ fun Breadcrumb(segments: List<String>) {
         Modifier
             .fillMaxWidth()
             .height(32.dp)
-            .background(Ca.colors.editorBg)
+            .background(Ide.colors.editorBg)
             .horizontalScroll(rememberScrollState())
             .padding(horizontal = 14.dp),
         verticalAlignment = Alignment.CenterVertically,
@@ -1138,15 +1140,15 @@ fun Breadcrumb(segments: List<String>) {
                     val last = index == segs.lastIndex
                     Text(
                         seg,
-                        color = if (last) Ca.colors.textPrimary else Ca.colors.textSecondary,
-                        style = Ca.type.caption,
+                        color = if (last) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.onSurfaceVariant,
+                        style = MaterialTheme.typography.bodySmall,
                         fontWeight = if (last) FontWeight.SemiBold else FontWeight.Normal,
                     )
                     if (!last) Icon(
                         CaIcons.chevronRight,
                         null,
                         Modifier.size(13.dp),
-                        tint = Ca.colors.textTertiary
+                        tint = MaterialTheme.colorScheme.outline
                     )
                 }
             }

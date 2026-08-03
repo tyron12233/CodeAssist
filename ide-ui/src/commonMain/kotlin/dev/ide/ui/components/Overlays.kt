@@ -1,5 +1,7 @@
 package dev.ide.ui.components
 
+import dev.ide.ui.theme.Ide
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
@@ -121,8 +123,8 @@ fun BottomSheet(
                         .fillMaxWidth()
                         .fillMaxHeight(fraction.value)
                         .shadow(24.dp, shape, clip = false)
-                        .background(Ca.colors.glassThick, shape)
-                        .border(1.dp, Ca.colors.glassEdgeTop, shape)
+                        .background(Ide.colors.glassThick, shape)
+                        .border(1.dp, Ide.colors.glassEdgeTop, shape)
                         // A tap on the sheet body shouldn't dismiss it; only a tap on the scrim above does.
                         // Kept outside the content inset below so the full glass surface (incl. the strip
                         // behind the nav bar) swallows taps, not just the inset content area.
@@ -233,7 +235,7 @@ private fun BoxScope.Scrim(onDismiss: () -> Unit) {
     Box(
         Modifier
             .fillMaxSize()
-            .background(Ca.colors.scrim)
+            .background(Ide.colors.scrim)
             .clickable(remember { MutableInteractionSource() }, indication = null, onClick = onDismiss),
     )
 }
@@ -249,7 +251,7 @@ private fun DragHandle(modifier: Modifier = Modifier) {
             Modifier
                 .width(38.dp)
                 .height(5.dp)
-                .background(Ca.colors.textTertiary.copy(alpha = 0.5f), RoundedCornerShape(Ca.radius.pill)),
+                .background(MaterialTheme.colorScheme.outline.copy(alpha = 0.5f), RoundedCornerShape(Ca.radius.pill)),
         )
     }
 }

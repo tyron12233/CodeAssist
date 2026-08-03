@@ -1,5 +1,7 @@
 package dev.ide.ui.screens
 
+import dev.ide.ui.theme.Ide
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.Crossfade
 import androidx.compose.animation.animateColorAsState
@@ -285,12 +287,12 @@ fun DependenciesPane(
     }
 
     val resolving = loading || resolveState.resolving
-    BoxWithConstraints(modifier.fillMaxSize().background(Ca.colors.bg)) {
+    BoxWithConstraints(modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)) {
         val expanded = maxWidth >= DEPS_EXPANDED_BREAKPOINT
         Column(Modifier.fillMaxSize()) {
             DepPaneToolbar(tab, { tab = it }, resolvedView, { resolvedView = it }, { addOpen = true }, { reposOpen = true },
                 { coroutine.launch { backend.deps.retryDependencyResolution(); reloadKey++ } }, resolving, resolveState.message, compact = !expanded)
-            Box(Modifier.fillMaxWidth().height(1.dp).background(Ca.colors.separator))
+            Box(Modifier.fillMaxWidth().height(1.dp).background(MaterialTheme.colorScheme.outlineVariant))
             DepBody(deps, loading, tab, resolvedView, resolveState, codeFont, Modifier.weight(1f).fillMaxWidth(), { pendingRemove = it }, { pendingEdit = it }, onExcludeTransitive, onRemoveExclusion)
         }
 
@@ -364,8 +366,8 @@ fun DependenciesPane(
 private fun OverlayCard(maxWidth: androidx.compose.ui.unit.Dp, content: @Composable () -> Unit) {
     Column(
         Modifier.padding(horizontal = 12.dp).widthIn(max = maxWidth).fillMaxWidth()
-            .background(Ca.colors.glassThick, RoundedCornerShape(Ca.radius.xl))
-            .border(1.dp, Ca.colors.glassEdge, RoundedCornerShape(Ca.radius.xl)),
+            .background(Ide.colors.glassThick, RoundedCornerShape(Ca.radius.xl))
+            .border(1.dp, Ide.colors.glassEdge, RoundedCornerShape(Ca.radius.xl)),
     ) { content() }
 }
 
@@ -391,8 +393,8 @@ private fun DepPaneToolbar(
         TabToggle(tab, onTab, compact = compact)
         if (tab == DepTab.Resolved) ViewToggle(resolvedView, onView, compact = true)
         if (resolving) {
-            CircularProgressIndicator(Modifier.size(16.dp), color = Ca.colors.accent, strokeWidth = 2.dp)
-            if (!compact) Text(resolveMessage.ifBlank { stringResource(Res.string.dep_resolving) }, color = Ca.colors.accent, style = Ca.type.caption2,
+            CircularProgressIndicator(Modifier.size(16.dp), color = MaterialTheme.colorScheme.primary, strokeWidth = 2.dp)
+            if (!compact) Text(resolveMessage.ifBlank { stringResource(Res.string.dep_resolving) }, color = MaterialTheme.colorScheme.primary, style = MaterialTheme.typography.labelSmall,
                 maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f, fill = false))
         }
         Spacer(Modifier.weight(1f))
@@ -420,9 +422,9 @@ private fun RepositoriesContent(backend: IdeBackend, codeFont: FontFamily, modif
     }
 
     Column(modifier) {
-        Text(stringResource(Res.string.dep_repositories), color = Ca.colors.textPrimary, style = Ca.type.title3, fontWeight = FontWeight.SemiBold)
+        Text(stringResource(Res.string.dep_repositories), color = MaterialTheme.colorScheme.onSurface, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.SemiBold)
         Spacer(Modifier.height(4.dp))
-        Text(stringResource(Res.string.dep_repositories_subtitle), color = Ca.colors.textTertiary, style = Ca.type.caption)
+        Text(stringResource(Res.string.dep_repositories_subtitle), color = MaterialTheme.colorScheme.outline, style = MaterialTheme.typography.bodySmall)
         Spacer(Modifier.height(12.dp))
         LazyColumn(Modifier.fillMaxWidth().heightIn(max = 240.dp)) {
             items(repos, key = { it.url }) { r -> RepoRow(r) { if (backend.deps.removeRepository(r.url)) repos = backend.deps.repositories() } }
@@ -437,7 +439,7 @@ private fun RepositoriesContent(backend: IdeBackend, codeFont: FontFamily, modif
         }
         error?.let {
             Spacer(Modifier.height(8.dp))
-            Text(it, color = Ca.colors.error, style = Ca.type.caption2)
+            Text(it, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.labelSmall)
         }
     }
 }
@@ -448,28 +450,28 @@ private fun RepoRow(repo: dev.ide.ui.backend.UiRepository, onRemove: () -> Unit)
         Modifier.fillMaxWidth().height(48.dp), verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(8.dp),
     ) {
-        LetterBox(if (repo.builtin) "•" else "+", if (repo.builtin) Ca.colors.textTertiary else Ca.colors.accent)
+        LetterBox(if (repo.builtin) "•" else "+", if (repo.builtin) MaterialTheme.colorScheme.outline else MaterialTheme.colorScheme.primary)
         Column(Modifier.weight(1f)) {
-            Text(repo.name, color = Ca.colors.textPrimary, style = Ca.type.footnote, fontWeight = FontWeight.Medium, maxLines = 1, overflow = TextOverflow.Ellipsis)
-            Text(repo.url, color = Ca.colors.textTertiary, style = Ca.type.caption2, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            Text(repo.name, color = MaterialTheme.colorScheme.onSurface, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Medium, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            Text(repo.url, color = MaterialTheme.colorScheme.outline, style = MaterialTheme.typography.labelSmall, maxLines = 1, overflow = TextOverflow.Ellipsis)
         }
-        if (!repo.builtin) IconButtonCa(CaIcons.close, stringResource(Res.string.dep_remove_repo, repo.name), onClick = onRemove, boxSize = 28, iconSize = 16, tint = Ca.colors.textTertiary)
-        else Text(stringResource(Res.string.dep_built_in), color = Ca.colors.textTertiary, style = Ca.type.caption2)
+        if (!repo.builtin) IconButtonCa(CaIcons.close, stringResource(Res.string.dep_remove_repo, repo.name), onClick = onRemove, boxSize = 28, iconSize = 16, tint = MaterialTheme.colorScheme.outline)
+        else Text(stringResource(Res.string.dep_built_in), color = MaterialTheme.colorScheme.outline, style = MaterialTheme.typography.labelSmall)
     }
 }
 
 @Composable
 private fun RepoField(hint: String, value: String, codeFont: FontFamily, onChange: (String) -> Unit) {
     Row(
-        Modifier.fillMaxWidth().background(Ca.colors.surface2, RoundedCornerShape(Ca.radius.control))
-            .border(1.dp, Ca.colors.hairline, RoundedCornerShape(Ca.radius.control)).padding(horizontal = 12.dp, vertical = 11.dp),
+        Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.surfaceContainerHigh, RoundedCornerShape(Ca.radius.control))
+            .border(1.dp, MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(Ca.radius.control)).padding(horizontal = 12.dp, vertical = 11.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Box(Modifier.weight(1f)) {
-            if (value.isEmpty()) Text(hint, color = Ca.colors.textTertiary, style = Ca.type.subhead, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            if (value.isEmpty()) Text(hint, color = MaterialTheme.colorScheme.outline, style = MaterialTheme.typography.bodyLarge, maxLines = 1, overflow = TextOverflow.Ellipsis)
             BasicTextField(value, onChange, singleLine = true,
-                textStyle = Ca.type.subhead.copy(color = Ca.colors.textPrimary, fontFamily = codeFont),
-                cursorBrush = SolidColor(Ca.colors.accent), modifier = Modifier.fillMaxWidth())
+                textStyle = MaterialTheme.typography.bodyLarge.copy(color = MaterialTheme.colorScheme.onSurface, fontFamily = codeFont),
+                cursorBrush = SolidColor(MaterialTheme.colorScheme.primary), modifier = Modifier.fillMaxWidth())
         }
     }
 }
@@ -506,17 +508,17 @@ private fun ResolvingPanel(state: DepsResolveState) {
     Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
         Column(
             Modifier.widthIn(max = 360.dp).fillMaxWidth().padding(24.dp)
-                .background(Ca.colors.surface, RoundedCornerShape(Ca.radius.lg))
-                .border(1.dp, Ca.colors.separator, RoundedCornerShape(Ca.radius.lg))
+                .background(MaterialTheme.colorScheme.surface, RoundedCornerShape(Ca.radius.lg))
+                .border(1.dp, MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(Ca.radius.lg))
                 .padding(24.dp)
                 .entranceSlideUp(),
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
-            CircularProgressIndicator(Modifier.size(30.dp), color = Ca.colors.accent, strokeWidth = 3.dp)
-            Text(stringResource(Res.string.dep_resolving_dependencies), color = Ca.colors.textPrimary, style = Ca.type.subhead, fontWeight = FontWeight.SemiBold)
-            Text(state.message.ifBlank { stringResource(Res.string.dep_downloading_artifacts) }, color = Ca.colors.textSecondary,
-                style = Ca.type.caption, maxLines = 2, overflow = TextOverflow.Ellipsis)
+            CircularProgressIndicator(Modifier.size(30.dp), color = MaterialTheme.colorScheme.primary, strokeWidth = 3.dp)
+            Text(stringResource(Res.string.dep_resolving_dependencies), color = MaterialTheme.colorScheme.onSurface, style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.SemiBold)
+            Text(state.message.ifBlank { stringResource(Res.string.dep_downloading_artifacts) }, color = MaterialTheme.colorScheme.onSurfaceVariant,
+                style = MaterialTheme.typography.bodySmall, maxLines = 2, overflow = TextOverflow.Ellipsis)
             ResolveBar(state.fraction)
         }
     }
@@ -527,9 +529,9 @@ private fun ResolvingPanel(state: DepsResolveState) {
 private fun ResolveBar(fraction: Double) {
     if (fraction in 0.0..1.0) {
         LinearProgressIndicator(progress = { fraction.toFloat() }, modifier = Modifier.fillMaxWidth().height(4.dp),
-            color = Ca.colors.accent, trackColor = Ca.colors.surface2)
+            color = MaterialTheme.colorScheme.primary, trackColor = MaterialTheme.colorScheme.surfaceContainerHigh)
     } else {
-        LinearProgressIndicator(Modifier.fillMaxWidth().height(4.dp), color = Ca.colors.accent, trackColor = Ca.colors.surface2)
+        LinearProgressIndicator(Modifier.fillMaxWidth().height(4.dp), color = MaterialTheme.colorScheme.primary, trackColor = MaterialTheme.colorScheme.surfaceContainerHigh)
     }
 }
 
@@ -550,15 +552,15 @@ private fun DepContent(deps: UiModuleDeps, tab: DepTab, resolvedView: DepView, c
             ConflictSummaryBanner(deps.conflicts, realConflicts.keys, codeFont, Modifier.animateItem())
         }
         if (deps.cycles.isNotEmpty()) item("cycles") {
-            BannerCard(CaIcons.refresh, Ca.colors.error, pluralStringResource(Res.plurals.dep_cycles, deps.cycles.size, deps.cycles.size), Modifier.animateItem()) {
-                deps.cycles.forEach { cycle -> Text(cycle.joinToString(" → ") { it.substringBeforeLast(':') }, color = Ca.colors.textSecondary, style = Ca.type.caption.copy(fontFamily = codeFont)) }
+            BannerCard(CaIcons.refresh, MaterialTheme.colorScheme.error, pluralStringResource(Res.plurals.dep_cycles, deps.cycles.size, deps.cycles.size), Modifier.animateItem()) {
+                deps.cycles.forEach { cycle -> Text(cycle.joinToString(" → ") { it.substringBeforeLast(':') }, color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodySmall.copy(fontFamily = codeFont)) }
             }
         }
         if (deps.unresolved.isNotEmpty()) item("unresolved") {
-            BannerCard(CaIcons.error, Ca.colors.error, stringResource(Res.string.dep_unresolved_count, deps.unresolved.size), Modifier.animateItem()) {
+            BannerCard(CaIcons.error, MaterialTheme.colorScheme.error, stringResource(Res.string.dep_unresolved_count, deps.unresolved.size), Modifier.animateItem()) {
                 deps.unresolved.forEach { coord ->
-                    Text(coord, color = Ca.colors.textSecondary, style = Ca.type.caption.copy(fontFamily = codeFont))
-                    reasons[coord]?.let { Text(it, color = Ca.colors.textTertiary, style = Ca.type.caption2) }
+                    Text(coord, color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodySmall.copy(fontFamily = codeFont))
+                    reasons[coord]?.let { Text(it, color = MaterialTheme.colorScheme.outline, style = MaterialTheme.typography.labelSmall) }
                 }
             }
         }
@@ -651,10 +653,10 @@ private fun GraphRow(node: UiDependencyNode, nodesByCoord: Map<String, UiDepende
         }
         if (node.children.isNotEmpty()) {
             Row(Modifier.padding(start = 30.dp, top = 3.dp).horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
-                Icon(CaIcons.arrowRight, null, Modifier.size(14.dp), tint = Ca.colors.textTertiary)
+                Icon(CaIcons.arrowRight, null, Modifier.size(14.dp), tint = MaterialTheme.colorScheme.outline)
                 node.children.forEach { c ->
                     val child = nodesByCoord[c]
-                    Chip(child?.let { "${it.name}:${it.version}" } ?: c.substringBeforeLast(':'), fill = Ca.colors.surface2, textColor = Ca.colors.textSecondary)
+                    Chip(child?.let { "${it.name}:${it.version}" } ?: c.substringBeforeLast(':'), fill = MaterialTheme.colorScheme.surfaceContainerHigh, textColor = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
             }
         }
@@ -681,16 +683,16 @@ private fun DependencyRow(
             .padding(start = (16 + depth * 18).dp, end = 10.dp),
         verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp),
     ) {
-        if (expandable) Icon(if (expanded) CaIcons.caretDown else CaIcons.caretRight, null, Modifier.size(14.dp), tint = Ca.colors.textTertiary)
+        if (expandable) Icon(if (expanded) CaIcons.caretDown else CaIcons.caretRight, null, Modifier.size(14.dp), tint = MaterialTheme.colorScheme.outline)
         else Spacer(Modifier.width(14.dp))
         DepBadge(node)
         Column(Modifier.weight(1f)) {
             DepPrimary(node, codeFont, dimmed = unresolved)
             when {
-                unresolved -> Text(stringResource(Res.string.dep_not_resolved), color = Ca.colors.error, style = Ca.type.caption2, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                unresolved -> Text(stringResource(Res.string.dep_not_resolved), color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.labelSmall, maxLines = 1, overflow = TextOverflow.Ellipsis)
                 !node.compatible && node.incompatibleReason != null ->
-                    Text(node.incompatibleReason!!, color = Ca.colors.error, style = Ca.type.caption2, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                cycle -> Text(stringResource(Res.string.dep_cycle_shown_above), color = Ca.colors.warning, style = Ca.type.caption2)
+                    Text(node.incompatibleReason!!, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.labelSmall, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                cycle -> Text(stringResource(Res.string.dep_cycle_shown_above), color = Ide.colors.warning, style = MaterialTheme.typography.labelSmall)
                 else -> DepSubtitle(node)
             }
         }
@@ -698,12 +700,12 @@ private fun DependencyRow(
         node.scope?.takeIf { it != "platform" }?.let { ScopeBadge(it) }
         // No "excludes N" summary chip here — excluded entries show as their own rows (with an "excluded"
         // pill) when the dependency is expanded.
-        if (unresolved) WithTooltip(stringResource(Res.string.dep_couldnt_resolve_tooltip)) { Icon(CaIcons.error, stringResource(Res.string.dep_unresolved), Modifier.size(16.dp), tint = Ca.colors.error) }
+        if (unresolved) WithTooltip(stringResource(Res.string.dep_couldnt_resolve_tooltip)) { Icon(CaIcons.error, stringResource(Res.string.dep_unresolved), Modifier.size(16.dp), tint = MaterialTheme.colorScheme.error) }
         conflict?.let { ConflictBadge(it) }
-        if (!node.compatible) Icon(CaIcons.warning, stringResource(Res.string.dep_incompatible), Modifier.size(16.dp), tint = Ca.colors.error)
-        if (onEdit != null) IconButtonCa(CaIcons.gear, stringResource(Res.string.dep_edit_named, node.name), onClick = onEdit, boxSize = 28, iconSize = 16, tint = if (node.exclusions.isNotEmpty()) Ca.colors.accent else Ca.colors.textTertiary)
+        if (!node.compatible) Icon(CaIcons.warning, stringResource(Res.string.dep_incompatible), Modifier.size(16.dp), tint = MaterialTheme.colorScheme.error)
+        if (onEdit != null) IconButtonCa(CaIcons.gear, stringResource(Res.string.dep_edit_named, node.name), onClick = onEdit, boxSize = 28, iconSize = 16, tint = if (node.exclusions.isNotEmpty()) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outline)
         if (onExclude != null) RowActionMenu(stringResource(Res.string.dep_more_actions, node.name), stringResource(Res.string.dep_exclude_named, node.name), CaIcons.close, onExclude)
-        if (onRemove != null) IconButtonCa(CaIcons.close, stringResource(Res.string.dep_remove_named, node.name), onClick = onRemove, boxSize = 28, iconSize = 16, tint = Ca.colors.textTertiary)
+        if (onRemove != null) IconButtonCa(CaIcons.close, stringResource(Res.string.dep_remove_named, node.name), onClick = onRemove, boxSize = 28, iconSize = 16, tint = MaterialTheme.colorScheme.outline)
     }
 }
 
@@ -718,7 +720,7 @@ private fun TransitiveRow(node: UiDependencyNode, codeFont: FontFamily, depth: I
             DepPrimary(node, codeFont, dimmed = true)
             DepSubtitle(node)
         }
-        Text(stringResource(Res.string.dep_transitive), color = Ca.colors.textTertiary, style = Ca.type.caption2)
+        Text(stringResource(Res.string.dep_transitive), color = MaterialTheme.colorScheme.outline, style = MaterialTheme.typography.labelSmall)
         if (onExclude != null) RowActionMenu(stringResource(Res.string.dep_more_actions, node.name), stringResource(Res.string.dep_exclude_named, node.name), CaIcons.close) { onExclude(node) }
     }
 }
@@ -733,10 +735,10 @@ private fun ExcludedRow(exclusion: String, codeFont: FontFamily, onRemoveExclusi
         Modifier.fillMaxWidth().height(38.dp).padding(start = (16 + 18 + 14).dp, end = 10.dp),
         verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp),
     ) {
-        Icon(CaIcons.close, null, Modifier.size(13.dp), tint = Ca.colors.textTertiary)
-        Text(exclusion, color = Ca.colors.textTertiary, style = Ca.type.subhead.copy(fontFamily = codeFont),
+        Icon(CaIcons.close, null, Modifier.size(13.dp), tint = MaterialTheme.colorScheme.outline)
+        Text(exclusion, color = MaterialTheme.colorScheme.outline, style = MaterialTheme.typography.bodyLarge.copy(fontFamily = codeFont),
             maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
-        Chip(stringResource(Res.string.dep_excluded), fill = Ca.colors.surface2, textColor = Ca.colors.textSecondary)
+        Chip(stringResource(Res.string.dep_excluded), fill = MaterialTheme.colorScheme.surfaceContainerHigh, textColor = MaterialTheme.colorScheme.onSurfaceVariant)
         RowActionMenu(stringResource(Res.string.dep_options_excluded, exclusion), stringResource(Res.string.dep_remove_exclusion), CaIcons.plus, onRemoveExclusion)
     }
 }
@@ -746,11 +748,11 @@ private fun ExcludedRow(exclusion: String, codeFont: FontFamily, onRemoveExclusi
 private fun RowActionMenu(contentDesc: String, itemLabel: String, itemIcon: ImageVector, onClick: () -> Unit) {
     var open by remember { mutableStateOf(false) }
     Box {
-        IconButtonCa(CaIcons.ellipsis, contentDesc, onClick = { open = true }, boxSize = 28, iconSize = 16, tint = Ca.colors.textTertiary)
+        IconButtonCa(CaIcons.ellipsis, contentDesc, onClick = { open = true }, boxSize = 28, iconSize = 16, tint = MaterialTheme.colorScheme.outline)
         CaDropdownMenu(expanded = open, onDismissRequest = { open = false }) {
             DropdownMenuItem(
-                text = { Text(itemLabel, color = Ca.colors.textPrimary, style = Ca.type.subhead) },
-                leadingIcon = { Icon(itemIcon, null, Modifier.size(16.dp), tint = Ca.colors.textSecondary) },
+                text = { Text(itemLabel, color = MaterialTheme.colorScheme.onSurface, style = MaterialTheme.typography.bodyLarge) },
+                leadingIcon = { Icon(itemIcon, null, Modifier.size(16.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant) },
                 onClick = { open = false; onClick() },
             )
         }
@@ -836,7 +838,7 @@ private fun AddDependencyContent(
     }
 
     Column(modifier) {
-        Text(stringResource(Res.string.dep_add_dependency), color = Ca.colors.textPrimary, style = Ca.type.title3, fontWeight = FontWeight.SemiBold, modifier = Modifier.padding(bottom = 12.dp))
+        Text(stringResource(Res.string.dep_add_dependency), color = MaterialTheme.colorScheme.onSurface, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.SemiBold, modifier = Modifier.padding(bottom = 12.dp))
 
         // Library / Platform (BOM) / Module / Local toggle — scrolls horizontally so chips never squish.
         Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(bottom = 12.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -845,25 +847,25 @@ private fun AddDependencyContent(
 
         // search field — library/platform only (Module picks project modules; Local picks files)
         if (mode != AddMode.Module && mode != AddMode.Local) Row(
-            Modifier.fillMaxWidth().background(Ca.colors.surface2, RoundedCornerShape(Ca.radius.control))
-                .border(1.dp, Ca.colors.hairline, RoundedCornerShape(Ca.radius.control)).padding(horizontal = 12.dp, vertical = 11.dp),
+            Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.surfaceContainerHigh, RoundedCornerShape(Ca.radius.control))
+                .border(1.dp, MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(Ca.radius.control)).padding(horizontal = 12.dp, vertical = 11.dp),
             verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp),
         ) {
-            Icon(CaIcons.search, null, Modifier.size(18.dp), tint = Ca.colors.accent)
+            Icon(CaIcons.search, null, Modifier.size(18.dp), tint = MaterialTheme.colorScheme.primary)
             Box(Modifier.weight(1f)) {
                 val hint = if (mode == AddMode.Platform) stringResource(Res.string.dep_search_bom_hint)
                     else stringResource(Res.string.dep_search_library_hint)
-                if (query.isEmpty()) Text(hint, color = Ca.colors.textTertiary, style = Ca.type.subhead, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                if (query.isEmpty()) Text(hint, color = MaterialTheme.colorScheme.outline, style = MaterialTheme.typography.bodyLarge, maxLines = 1, overflow = TextOverflow.Ellipsis)
                 BasicTextField(query, { query = it; error = null }, singleLine = true, enabled = !busy,
-                    textStyle = Ca.type.subhead.copy(color = Ca.colors.textPrimary, fontFamily = codeFont),
-                    cursorBrush = SolidColor(Ca.colors.accent), modifier = Modifier.fillMaxWidth())
+                    textStyle = MaterialTheme.typography.bodyLarge.copy(color = MaterialTheme.colorScheme.onSurface, fontFamily = codeFont),
+                    cursorBrush = SolidColor(MaterialTheme.colorScheme.primary), modifier = Modifier.fillMaxWidth())
             }
-            if (searching) CircularProgressIndicator(Modifier.size(14.dp), color = Ca.colors.textTertiary, strokeWidth = 2.dp)
+            if (searching) CircularProgressIndicator(Modifier.size(14.dp), color = MaterialTheme.colorScheme.outline, strokeWidth = 2.dp)
         }
 
         // scope selector — libraries + module deps (a platform carries no scope)
         if (mode != AddMode.Platform) Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(vertical = 10.dp), horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
-            Text(stringResource(Res.string.dep_scope), color = Ca.colors.textTertiary, style = Ca.type.caption, modifier = Modifier.padding(end = 4.dp))
+            Text(stringResource(Res.string.dep_scope), color = MaterialTheme.colorScheme.outline, style = MaterialTheme.typography.bodySmall, modifier = Modifier.padding(end = 4.dp))
             scopeOptions.forEach { s -> ScopeChip(s, s == scope) { if (!busy) scope = s } }
         } else Spacer(Modifier.height(10.dp))
 
@@ -874,7 +876,7 @@ private fun AddDependencyContent(
             Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(bottom = 10.dp),
             horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically,
         ) {
-            Text(stringResource(Res.string.dep_variant), color = Ca.colors.textTertiary, style = Ca.type.caption, modifier = Modifier.padding(end = 4.dp))
+            Text(stringResource(Res.string.dep_variant), color = MaterialTheme.colorScheme.outline, style = MaterialTheme.typography.bodySmall, modifier = Modifier.padding(end = 4.dp))
             ScopeChip(stringResource(Res.string.dep_all_variants), variant == null) { if (!busy) variant = null }
             variants.forEach { v -> ScopeChip(v, v == variant) { if (!busy) variant = v } }
         }
@@ -889,7 +891,7 @@ private fun AddDependencyContent(
             Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(bottom = 10.dp),
             horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically,
         ) {
-            Text(stringResource(Res.string.dep_suggested), color = Ca.colors.textTertiary, style = Ca.type.caption, modifier = Modifier.padding(end = 4.dp))
+            Text(stringResource(Res.string.dep_suggested), color = MaterialTheme.colorScheme.outline, style = MaterialTheme.typography.bodySmall, modifier = Modifier.padding(end = 4.dp))
             val quickAdd: (String, suspend () -> UiAddResult) -> Unit = { label, action ->
                 if (!busy) {
                     busy = true; error = null; adding = label
@@ -906,10 +908,10 @@ private fun AddDependencyContent(
         }
 
         error?.let { msg ->
-            Row(Modifier.fillMaxWidth().padding(bottom = 8.dp).background(Ca.colors.error.copy(alpha = 0.10f), RoundedCornerShape(Ca.radius.sm)).padding(10.dp),
+            Row(Modifier.fillMaxWidth().padding(bottom = 8.dp).background(MaterialTheme.colorScheme.error.copy(alpha = 0.10f), RoundedCornerShape(Ca.radius.sm)).padding(10.dp),
                 verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                Icon(CaIcons.warning, null, Modifier.size(15.dp), tint = Ca.colors.error)
-                Text(msg, color = Ca.colors.error, style = Ca.type.caption)
+                Icon(CaIcons.warning, null, Modifier.size(15.dp), tint = MaterialTheme.colorScheme.error)
+                Text(msg, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
             }
         }
 
@@ -922,9 +924,9 @@ private fun AddDependencyContent(
             if (isBusy) {
                 Column(Modifier.fillMaxWidth().heightIn(min = 160.dp), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(12.dp)) {
                     Spacer(Modifier.height(20.dp))
-                    CircularProgressIndicator(Modifier.size(28.dp), color = Ca.colors.accent, strokeWidth = 3.dp)
-                    Text(stringResource(Res.string.dep_adding, adding?.let(::shortCoord) ?: ""), color = Ca.colors.textPrimary, style = Ca.type.subhead, fontWeight = FontWeight.SemiBold)
-                    Text(resolveState.message.ifBlank { stringResource(Res.string.dep_resolving_transitive) }, color = Ca.colors.textSecondary, style = Ca.type.caption, maxLines = 2, overflow = TextOverflow.Ellipsis)
+                    CircularProgressIndicator(Modifier.size(28.dp), color = MaterialTheme.colorScheme.primary, strokeWidth = 3.dp)
+                    Text(stringResource(Res.string.dep_adding, adding?.let(::shortCoord) ?: ""), color = MaterialTheme.colorScheme.onSurface, style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.SemiBold)
+                    Text(resolveState.message.ifBlank { stringResource(Res.string.dep_resolving_transitive) }, color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodySmall, maxLines = 2, overflow = TextOverflow.Ellipsis)
                     ResolveBar(resolveState.fraction)
                 }
             } else if (mode == AddMode.Module) {
@@ -968,8 +970,8 @@ private fun ModuleTargetRow(name: String, modifier: Modifier, onAdd: () -> Unit)
         modifier.fillMaxWidth().height(48.dp).clickable(remember { MutableInteractionSource() }, null, onClick = onAdd).padding(vertical = 4.dp),
         verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp),
     ) {
-        LetterBox("M", Ca.colors.accent)
-        Text(":$name", color = Ca.colors.textPrimary, style = Ca.type.footnote, fontWeight = FontWeight.Medium, modifier = Modifier.weight(1f), maxLines = 1, overflow = TextOverflow.Ellipsis)
+        LetterBox("M", MaterialTheme.colorScheme.primary)
+        Text(":$name", color = MaterialTheme.colorScheme.onSurface, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Medium, modifier = Modifier.weight(1f), maxLines = 1, overflow = TextOverflow.Ellipsis)
         IconButtonCa(CaIcons.plus, stringResource(Res.string.dep_add_named, name), onClick = onAdd, active = true, boxSize = 32, iconSize = 18)
     }
 }
@@ -983,14 +985,14 @@ private fun DirectAddRow(coordinate: String, mode: AddMode, codeFont: FontFamily
     val secondIsVersion = parts.getOrNull(1)?.firstOrNull()?.isDigit() == true
     val versionless = parts.size == 2 && !secondIsVersion
     val inferGroup = parts.size == 2 && secondIsVersion
-    val color = if (mode == AddMode.Platform) Ca.colors.info else Ca.colors.accent
+    val color = if (mode == AddMode.Platform) Ide.colors.info else MaterialTheme.colorScheme.primary
     Row(
         modifier.fillMaxWidth().height(52.dp).clickable(remember { MutableInteractionSource() }, null, onClick = onAdd).padding(vertical = 4.dp),
         verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp),
     ) {
         LetterBox(if (mode == AddMode.Platform) "B" else "+", color)
         Column(Modifier.weight(1f)) {
-            Text(coordinate, color = Ca.colors.textPrimary, style = Ca.type.footnote.copy(fontFamily = codeFont), maxLines = 1, overflow = TextOverflow.Ellipsis)
+            Text(coordinate, color = MaterialTheme.colorScheme.onSurface, style = MaterialTheme.typography.bodyMedium.copy(fontFamily = codeFont), maxLines = 1, overflow = TextOverflow.Ellipsis)
             Text(
                 when {
                     mode == AddMode.Platform -> stringResource(Res.string.dep_import_as_platform)
@@ -998,7 +1000,7 @@ private fun DirectAddRow(coordinate: String, mode: AddMode, codeFont: FontFamily
                     inferGroup -> stringResource(Res.string.dep_add_infer_group)
                     else -> stringResource(Res.string.dep_add_exact)
                 },
-                color = Ca.colors.textTertiary, style = Ca.type.caption2,
+                color = MaterialTheme.colorScheme.outline, style = MaterialTheme.typography.labelSmall,
             )
         }
         IconButtonCa(CaIcons.plus, stringResource(Res.string.dep_add_named, coordinate), onClick = onAdd, active = true, boxSize = 32, iconSize = 18)
@@ -1022,21 +1024,21 @@ private fun LocalLibraryBody(
         if (canPick) item("pick") {
             Row(
                 Modifier.fillMaxWidth().padding(vertical = 6.dp)
-                    .background(Ca.colors.accentSoft, RoundedCornerShape(Ca.radius.md))
+                    .background(MaterialTheme.colorScheme.primaryContainer, RoundedCornerShape(Ca.radius.md))
                     .clickable(remember { MutableInteractionSource() }, null, onClick = onPick)
                     .padding(horizontal = 14.dp, vertical = 12.dp),
                 verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp),
             ) {
-                Icon(CaIcons.plus, null, Modifier.size(18.dp), tint = Ca.colors.accent)
+                Icon(CaIcons.plus, null, Modifier.size(18.dp), tint = MaterialTheme.colorScheme.primary)
                 Column(Modifier.weight(1f)) {
-                    Text(stringResource(Res.string.dep_choose_local_file), color = Ca.colors.accent, style = Ca.type.footnote, fontWeight = FontWeight.SemiBold)
-                    Text(stringResource(Res.string.dep_copied_into_libs), color = Ca.colors.textTertiary, style = Ca.type.caption2)
+                    Text(stringResource(Res.string.dep_choose_local_file), color = MaterialTheme.colorScheme.primary, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold)
+                    Text(stringResource(Res.string.dep_copied_into_libs), color = MaterialTheme.colorScheme.outline, style = MaterialTheme.typography.labelSmall)
                 }
             }
         }
         if (candidates.isNotEmpty()) {
             item("from-project") {
-                Text(stringResource(Res.string.dep_already_in_project), color = Ca.colors.textTertiary, style = Ca.type.caption,
+                Text(stringResource(Res.string.dep_already_in_project), color = MaterialTheme.colorScheme.outline, style = MaterialTheme.typography.bodySmall,
                     fontWeight = FontWeight.Medium, modifier = Modifier.padding(top = 10.dp, bottom = 4.dp))
             }
             items(candidates, key = { "local:$it" }) { path ->
@@ -1058,10 +1060,10 @@ private fun LocalCandidateRow(path: String, codeFont: FontFamily, modifier: Modi
         modifier.fillMaxWidth().height(52.dp).clickable(remember { MutableInteractionSource() }, null, onClick = onAttach).padding(vertical = 4.dp),
         verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp),
     ) {
-        LetterBox(if (isAar) "A" else "J", if (isAar) Ca.colors.run else Ca.colors.warning)
+        LetterBox(if (isAar) "A" else "J", if (isAar) Ide.colors.run else Ide.colors.warning)
         Column(Modifier.weight(1f)) {
-            Text(fileName, color = Ca.colors.textPrimary, style = Ca.type.footnote, fontWeight = FontWeight.Medium, maxLines = 1, overflow = TextOverflow.Ellipsis)
-            Text(path, color = Ca.colors.textTertiary, style = Ca.type.caption2.copy(fontFamily = codeFont), maxLines = 1, overflow = TextOverflow.Ellipsis)
+            Text(fileName, color = MaterialTheme.colorScheme.onSurface, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Medium, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            Text(path, color = MaterialTheme.colorScheme.outline, style = MaterialTheme.typography.labelSmall.copy(fontFamily = codeFont), maxLines = 1, overflow = TextOverflow.Ellipsis)
         }
         IconButtonCa(CaIcons.plus, stringResource(Res.string.dep_attach_named, fileName), onClick = onAttach, active = true, boxSize = 32, iconSize = 18)
     }
@@ -1069,12 +1071,12 @@ private fun LocalCandidateRow(path: String, codeFont: FontFamily, modifier: Modi
 
 @Composable
 private fun ModeChip(label: String, selected: Boolean, onClick: () -> Unit) {
-    val bg by animateColorAsState(if (selected) Ca.colors.accentSoft else Ca.colors.surface2, tween(Motion.FAST), label = "modeBg")
+    val bg by animateColorAsState(if (selected) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surfaceContainerHigh, tween(Motion.FAST), label = "modeBg")
     Box(
         Modifier.background(bg, RoundedCornerShape(Ca.radius.pill)).clickable(remember { MutableInteractionSource() }, null, onClick = onClick)
             .padding(horizontal = 14.dp, vertical = 7.dp),
     ) {
-        Text(label, color = if (selected) Ca.colors.accent else Ca.colors.textSecondary, style = Ca.type.caption, fontWeight = FontWeight.SemiBold)
+        Text(label, color = if (selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodySmall, fontWeight = FontWeight.SemiBold)
     }
 }
 
@@ -1085,16 +1087,16 @@ private fun AddResultRow(hit: UiArtifactHit, codeFont: FontFamily, modifier: Mod
         modifier.fillMaxWidth().height(52.dp).padding(vertical = 4.dp),
         verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp),
     ) {
-        LetterBox(if (isAar) "A" else "J", if (hit.compatible) (if (isAar) Ca.colors.run else Ca.colors.warning) else Ca.colors.error)
+        LetterBox(if (isAar) "A" else "J", if (hit.compatible) (if (isAar) Ide.colors.run else Ide.colors.warning) else MaterialTheme.colorScheme.error)
         Column(Modifier.weight(1f)) {
-            Text(hit.coordinate, color = if (hit.compatible) Ca.colors.textPrimary else Ca.colors.textTertiary,
-                style = Ca.type.footnote.copy(fontFamily = codeFont), maxLines = 1, overflow = TextOverflow.Ellipsis)
+            Text(hit.coordinate, color = if (hit.compatible) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.outline,
+                style = MaterialTheme.typography.bodyMedium.copy(fontFamily = codeFont), maxLines = 1, overflow = TextOverflow.Ellipsis)
             if (!hit.compatible && hit.incompatibleReason != null)
-                Text(hit.incompatibleReason!!, color = Ca.colors.error, style = Ca.type.caption2, maxLines = 1, overflow = TextOverflow.Ellipsis)
-            else Text(hit.packaging, color = Ca.colors.textTertiary, style = Ca.type.caption2)
+                Text(hit.incompatibleReason!!, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.labelSmall, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            else Text(hit.packaging, color = MaterialTheme.colorScheme.outline, style = MaterialTheme.typography.labelSmall)
         }
         if (hit.compatible) IconButtonCa(CaIcons.plus, stringResource(Res.string.dep_add_named, hit.coordinate), onClick = onAdd, active = true, boxSize = 32, iconSize = 18)
-        else Icon(CaIcons.warning, stringResource(Res.string.dep_incompatible), Modifier.size(18.dp), tint = Ca.colors.error)
+        else Icon(CaIcons.warning, stringResource(Res.string.dep_incompatible), Modifier.size(18.dp), tint = MaterialTheme.colorScheme.error)
     }
 }
 
@@ -1108,13 +1110,13 @@ private fun ConfirmRemoveDialog(coordinate: String?, moduleName: String?, onDism
     DropdownOverlay(visible = coordinate != null, onDismiss = onDismiss, topPadding = 140.dp) {
         Column(
             Modifier.padding(horizontal = 12.dp).widthIn(max = 460.dp).fillMaxWidth()
-                .background(Ca.colors.glassThick, RoundedCornerShape(Ca.radius.xl))
-                .border(1.dp, Ca.colors.glassEdge, RoundedCornerShape(Ca.radius.xl)).padding(20.dp),
+                .background(Ide.colors.glassThick, RoundedCornerShape(Ca.radius.xl))
+                .border(1.dp, Ide.colors.glassEdge, RoundedCornerShape(Ca.radius.xl)).padding(20.dp),
         ) {
-            Text(stringResource(Res.string.dep_remove_dependency), color = Ca.colors.textPrimary, style = Ca.type.subhead, fontWeight = FontWeight.SemiBold)
+            Text(stringResource(Res.string.dep_remove_dependency), color = MaterialTheme.colorScheme.onSurface, style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.SemiBold)
             Spacer(Modifier.height(8.dp))
             Text(stringResource(Res.string.dep_remove_confirm, shown?.let(::shortCoord) ?: "", moduleName ?: ""),
-                color = Ca.colors.textSecondary, style = Ca.type.footnote)
+                color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodyMedium)
             Spacer(Modifier.height(16.dp))
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                 Spacer(Modifier.weight(1f))
@@ -1172,14 +1174,14 @@ private fun EditDependencySheet(
             val maxCardHeight = maxHeight
             Column(
                 Modifier.padding(horizontal = if (expanded) 12.dp else 0.dp).widthIn(max = 540.dp).fillMaxWidth()
-                    .then(if (expanded) Modifier.background(Ca.colors.glassThick, RoundedCornerShape(Ca.radius.xl)).border(1.dp, Ca.colors.glassEdge, RoundedCornerShape(Ca.radius.xl)) else Modifier)
+                    .then(if (expanded) Modifier.background(Ide.colors.glassThick, RoundedCornerShape(Ca.radius.xl)).border(1.dp, Ide.colors.glassEdge, RoundedCornerShape(Ca.radius.xl)) else Modifier)
                     .heightIn(max = maxCardHeight)
                     .padding(if (expanded) 20.dp else 4.dp),
             ) {
                 // Fixed header.
-                Text(stringResource(Res.string.dep_edit_dependency), color = Ca.colors.textPrimary, style = Ca.type.subhead, fontWeight = FontWeight.SemiBold)
+                Text(stringResource(Res.string.dep_edit_dependency), color = MaterialTheme.colorScheme.onSurface, style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.SemiBold)
                 Spacer(Modifier.height(4.dp))
-                Text(shortCoord(node.coordinate), color = Ca.colors.textSecondary, style = Ca.type.caption.copy(fontFamily = codeFont))
+                Text(shortCoord(node.coordinate), color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodySmall.copy(fontFamily = codeFont))
 
                 // Scrollable body — takes the space left between the header and the pinned buttons.
                 Column(Modifier.weight(1f, fill = false).verticalScroll(rememberScrollState())) {
@@ -1187,7 +1189,7 @@ private fun EditDependencySheet(
                     SheetSection(stringResource(Res.string.dep_section_version))
                     Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         Box(Modifier.weight(1f)) { SheetField(versionText, stringResource(Res.string.dep_version_hint), codeFont, leading = CaIcons.pkg) { versionText = it } }
-                        if (loadingVersions) CircularProgressIndicator(Modifier.size(16.dp), color = Ca.colors.textTertiary, strokeWidth = 2.dp)
+                        if (loadingVersions) CircularProgressIndicator(Modifier.size(16.dp), color = MaterialTheme.colorScheme.outline, strokeWidth = 2.dp)
                         else if (updateAvailable && newest != null) UpdateHintChip(newest) { versionText = newest }
                     }
                     VersionList(versions, selected = versionText, loading = loadingVersions, codeFont = codeFont) { versionText = it }
@@ -1195,7 +1197,7 @@ private fun EditDependencySheet(
                     // ---- downloaded (cached) versions ----
                     if (showDownloaded) {
                         SheetSection(stringResource(Res.string.dep_section_downloaded))
-                        Text(stringResource(Res.string.dep_downloaded_help), color = Ca.colors.textTertiary, style = Ca.type.caption2)
+                        Text(stringResource(Res.string.dep_downloaded_help), color = MaterialTheme.colorScheme.outline, style = MaterialTheme.typography.labelSmall)
                         DownloadedList(cached, activeVersion = node.version, codeFont = codeFont) { v ->
                             coroutine.launch { backend.deps.deleteCachedVersion(node.group, node.name, v); cachedReload++ }
                         }
@@ -1210,7 +1212,7 @@ private fun EditDependencySheet(
                     // ---- exclusions ----
                     SheetSection(stringResource(Res.string.dep_section_exclusions))
                     Text(stringResource(Res.string.dep_exclusions_help),
-                        color = Ca.colors.textTertiary, style = Ca.type.caption2)
+                        color = MaterialTheme.colorScheme.outline, style = MaterialTheme.typography.labelSmall)
                     Spacer(Modifier.height(8.dp))
                     SheetField(exclText, stringResource(Res.string.dep_exclusions_hint), codeFont, leading = CaIcons.close, singleLine = false) { exclText = it }
                 }
@@ -1235,7 +1237,7 @@ private fun EditDependencySheet(
 @Composable
 private fun SheetSection(label: String) {
     Spacer(Modifier.height(14.dp))
-    Text(label.uppercase(), color = Ca.colors.textTertiary, style = Ca.type.caption2, fontWeight = FontWeight.SemiBold)
+    Text(label.uppercase(), color = MaterialTheme.colorScheme.outline, style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.SemiBold)
     Spacer(Modifier.height(6.dp))
 }
 
@@ -1243,16 +1245,16 @@ private fun SheetSection(label: String) {
 @Composable
 private fun SheetField(value: String, hint: String, codeFont: FontFamily, leading: ImageVector, singleLine: Boolean = true, onChange: (String) -> Unit) {
     Row(
-        Modifier.fillMaxWidth().background(Ca.colors.surface2, RoundedCornerShape(Ca.radius.control))
-            .border(1.dp, Ca.colors.hairline, RoundedCornerShape(Ca.radius.control)).padding(horizontal = 12.dp, vertical = 11.dp),
+        Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.surfaceContainerHigh, RoundedCornerShape(Ca.radius.control))
+            .border(1.dp, MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(Ca.radius.control)).padding(horizontal = 12.dp, vertical = 11.dp),
         verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp),
     ) {
-        Icon(leading, null, Modifier.size(16.dp), tint = Ca.colors.textTertiary)
+        Icon(leading, null, Modifier.size(16.dp), tint = MaterialTheme.colorScheme.outline)
         Box(Modifier.weight(1f)) {
-            if (value.isEmpty()) Text(hint, color = Ca.colors.textTertiary, style = Ca.type.caption, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            if (value.isEmpty()) Text(hint, color = MaterialTheme.colorScheme.outline, style = MaterialTheme.typography.bodySmall, maxLines = 1, overflow = TextOverflow.Ellipsis)
             BasicTextField(value, onChange, singleLine = singleLine,
-                textStyle = Ca.type.caption.copy(color = Ca.colors.textPrimary, fontFamily = codeFont),
-                cursorBrush = SolidColor(Ca.colors.accent), modifier = Modifier.fillMaxWidth())
+                textStyle = MaterialTheme.typography.bodySmall.copy(color = MaterialTheme.colorScheme.onSurface, fontFamily = codeFont),
+                cursorBrush = SolidColor(MaterialTheme.colorScheme.primary), modifier = Modifier.fillMaxWidth())
         }
     }
 }
@@ -1261,13 +1263,13 @@ private fun SheetField(value: String, hint: String, codeFont: FontFamily, leadin
 @Composable
 private fun UpdateHintChip(newest: String, onClick: () -> Unit) {
     Row(
-        Modifier.background(Ca.colors.accentSoft, RoundedCornerShape(Ca.radius.pill))
+        Modifier.background(MaterialTheme.colorScheme.primaryContainer, RoundedCornerShape(Ca.radius.pill))
             .clickable(remember { MutableInteractionSource() }, null, onClick = onClick)
             .padding(horizontal = 10.dp, vertical = 6.dp),
         verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp),
     ) {
-        Icon(CaIcons.chevronUp, null, Modifier.size(13.dp), tint = Ca.colors.accent)
-        Text(newest, color = Ca.colors.accent, style = Ca.type.caption2, fontWeight = FontWeight.SemiBold, maxLines = 1)
+        Icon(CaIcons.chevronUp, null, Modifier.size(13.dp), tint = MaterialTheme.colorScheme.primary)
+        Text(newest, color = MaterialTheme.colorScheme.primary, style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.SemiBold, maxLines = 1)
     }
 }
 
@@ -1276,25 +1278,25 @@ private fun UpdateHintChip(newest: String, onClick: () -> Unit) {
 private fun VersionList(versions: List<String>, selected: String, loading: Boolean, codeFont: FontFamily, onSelect: (String) -> Unit) {
     Spacer(Modifier.height(8.dp))
     when {
-        loading -> Text(stringResource(Res.string.dep_loading_versions), color = Ca.colors.textTertiary, style = Ca.type.caption2, modifier = Modifier.padding(vertical = 6.dp))
-        versions.isEmpty() -> Text(stringResource(Res.string.dep_versions_load_failed), color = Ca.colors.textTertiary, style = Ca.type.caption2, modifier = Modifier.padding(vertical = 6.dp))
+        loading -> Text(stringResource(Res.string.dep_loading_versions), color = MaterialTheme.colorScheme.outline, style = MaterialTheme.typography.labelSmall, modifier = Modifier.padding(vertical = 6.dp))
+        versions.isEmpty() -> Text(stringResource(Res.string.dep_versions_load_failed), color = MaterialTheme.colorScheme.outline, style = MaterialTheme.typography.labelSmall, modifier = Modifier.padding(vertical = 6.dp))
         else -> Column(
             Modifier.fillMaxWidth().heightIn(max = 188.dp).verticalScroll(rememberScrollState())
-                .background(Ca.colors.surface2, RoundedCornerShape(Ca.radius.control))
-                .border(1.dp, Ca.colors.hairline, RoundedCornerShape(Ca.radius.control)),
+                .background(MaterialTheme.colorScheme.surfaceContainerHigh, RoundedCornerShape(Ca.radius.control))
+                .border(1.dp, MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(Ca.radius.control)),
         ) {
             versions.forEach { v ->
                 val isSel = v == selected
                 Row(
                     Modifier.fillMaxWidth().height(34.dp).clickable(remember(v) { MutableInteractionSource() }, null) { onSelect(v) }
-                        .background(if (isSel) Ca.colors.accentSoft else Color.Transparent)
+                        .background(if (isSel) MaterialTheme.colorScheme.primaryContainer else Color.Transparent)
                         .padding(horizontal = 12.dp),
                     verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp),
                 ) {
-                    Text(v, color = if (isSel) Ca.colors.accent else Ca.colors.textPrimary,
-                        style = Ca.type.caption.copy(fontFamily = codeFont), fontWeight = if (isSel) FontWeight.SemiBold else FontWeight.Normal,
+                    Text(v, color = if (isSel) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface,
+                        style = MaterialTheme.typography.bodySmall.copy(fontFamily = codeFont), fontWeight = if (isSel) FontWeight.SemiBold else FontWeight.Normal,
                         modifier = Modifier.weight(1f), maxLines = 1, overflow = TextOverflow.Ellipsis)
-                    if (isSel) Icon(CaIcons.check, stringResource(Res.string.dep_selected), Modifier.size(15.dp), tint = Ca.colors.accent)
+                    if (isSel) Icon(CaIcons.check, stringResource(Res.string.dep_selected), Modifier.size(15.dp), tint = MaterialTheme.colorScheme.primary)
                 }
             }
         }
@@ -1310,28 +1312,28 @@ private fun VersionList(versions: List<String>, selected: String, loading: Boole
 private fun DownloadedList(cached: List<UiCachedVersion>, activeVersion: String, codeFont: FontFamily, onDelete: (String) -> Unit) {
     Spacer(Modifier.height(8.dp))
     if (cached.isEmpty()) {
-        Text(stringResource(Res.string.dep_downloaded_empty), color = Ca.colors.textTertiary, style = Ca.type.caption2, modifier = Modifier.padding(vertical = 6.dp))
+        Text(stringResource(Res.string.dep_downloaded_empty), color = MaterialTheme.colorScheme.outline, style = MaterialTheme.typography.labelSmall, modifier = Modifier.padding(vertical = 6.dp))
         return
     }
     Column(
         Modifier.fillMaxWidth().heightIn(max = 176.dp).verticalScroll(rememberScrollState())
-            .background(Ca.colors.surface2, RoundedCornerShape(Ca.radius.control))
-            .border(1.dp, Ca.colors.hairline, RoundedCornerShape(Ca.radius.control)),
+            .background(MaterialTheme.colorScheme.surfaceContainerHigh, RoundedCornerShape(Ca.radius.control))
+            .border(1.dp, MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(Ca.radius.control)),
     ) {
         cached.forEach { cv ->
             val active = cv.version == activeVersion
             Row(
                 Modifier.fillMaxWidth().height(38.dp)
-                    .background(if (active) Ca.colors.accentSoft else Color.Transparent)
+                    .background(if (active) MaterialTheme.colorScheme.primaryContainer else Color.Transparent)
                     .padding(start = 12.dp, end = 4.dp),
                 verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp),
             ) {
-                Text(cv.version, color = if (active) Ca.colors.accent else Ca.colors.textPrimary,
-                    style = Ca.type.caption.copy(fontFamily = codeFont), fontWeight = if (active) FontWeight.SemiBold else FontWeight.Normal,
+                Text(cv.version, color = if (active) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface,
+                    style = MaterialTheme.typography.bodySmall.copy(fontFamily = codeFont), fontWeight = if (active) FontWeight.SemiBold else FontWeight.Normal,
                     maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
-                Text(formatBytes(cv.bytes), color = Ca.colors.textTertiary, style = Ca.type.caption2, maxLines = 1)
-                if (active) Text(stringResource(Res.string.dep_in_use), color = Ca.colors.accent, style = Ca.type.caption2, fontWeight = FontWeight.SemiBold, modifier = Modifier.padding(horizontal = 6.dp))
-                else IconButtonCa(CaIcons.close, stringResource(Res.string.dep_delete_version_named, cv.version), onClick = { onDelete(cv.version) }, boxSize = 28, iconSize = 15, tint = Ca.colors.textTertiary)
+                Text(formatBytes(cv.bytes), color = MaterialTheme.colorScheme.outline, style = MaterialTheme.typography.labelSmall, maxLines = 1)
+                if (active) Text(stringResource(Res.string.dep_in_use), color = MaterialTheme.colorScheme.primary, style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.SemiBold, modifier = Modifier.padding(horizontal = 6.dp))
+                else IconButtonCa(CaIcons.close, stringResource(Res.string.dep_delete_version_named, cv.version), onClick = { onDelete(cv.version) }, boxSize = 28, iconSize = 15, tint = MaterialTheme.colorScheme.outline)
             }
         }
     }
@@ -1355,14 +1357,14 @@ private fun round1(v: Double): String {
 
 @Composable
 private fun DialogButton(label: String, destructive: Boolean, onClick: () -> Unit) {
-    val fill = if (destructive) Ca.colors.error else Ca.colors.surface3
-    val fg = if (destructive) Ca.colors.textOnAccent else Ca.colors.textSecondary
+    val fill = if (destructive) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.surfaceContainerHighest
+    val fg = if (destructive) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurfaceVariant
     val interaction = remember { MutableInteractionSource() }
     Box(
         Modifier.background(fill, RoundedCornerShape(Ca.radius.control)).clickable(interaction, null, onClick = onClick)
             .padding(horizontal = 18.dp, vertical = 9.dp),
     ) {
-        Text(label, color = fg, style = Ca.type.footnote, fontWeight = FontWeight.SemiBold)
+        Text(label, color = fg, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold)
     }
 }
 
@@ -1376,12 +1378,12 @@ private fun ToastHost(toast: ToastMsg?, modifier: Modifier) {
         ) {
             val t = toast
             Row(
-                Modifier.background(Ca.colors.glassThick, RoundedCornerShape(Ca.radius.pill))
-                    .border(1.dp, Ca.colors.glassEdge, RoundedCornerShape(Ca.radius.pill)).padding(horizontal = 16.dp, vertical = 11.dp),
+                Modifier.background(Ide.colors.glassThick, RoundedCornerShape(Ca.radius.pill))
+                    .border(1.dp, Ide.colors.glassEdge, RoundedCornerShape(Ca.radius.pill)).padding(horizontal = 16.dp, vertical = 11.dp),
                 verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp),
             ) {
-                Icon(if (t?.error == true) CaIcons.warning else CaIcons.check, null, Modifier.size(16.dp), tint = if (t?.error == true) Ca.colors.error else Ca.colors.run)
-                Text(t?.text ?: "", color = Ca.colors.textPrimary, style = Ca.type.footnote, fontWeight = FontWeight.Medium)
+                Icon(if (t?.error == true) CaIcons.warning else CaIcons.check, null, Modifier.size(16.dp), tint = if (t?.error == true) MaterialTheme.colorScheme.error else Ide.colors.run)
+                Text(t?.text ?: "", color = MaterialTheme.colorScheme.onSurface, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Medium)
             }
         }
     }
@@ -1391,58 +1393,58 @@ private fun ToastHost(toast: ToastMsg?, modifier: Modifier) {
 
 @Composable
 private fun ViewToggle(view: DepView, onSelect: (DepView) -> Unit, compact: Boolean = false) {
-    Row(Modifier.background(Ca.colors.surface2, RoundedCornerShape(Ca.radius.sm)).padding(2.dp), horizontalArrangement = Arrangement.spacedBy(2.dp)) {
+    Row(Modifier.background(MaterialTheme.colorScheme.surfaceContainerHigh, RoundedCornerShape(Ca.radius.sm)).padding(2.dp), horizontalArrangement = Arrangement.spacedBy(2.dp)) {
         DepView.entries.forEach { v -> SegItem(v.icon, v.label(), v == view, compact) { onSelect(v) } }
     }
 }
 
 @Composable
 private fun TabToggle(tab: DepTab, onSelect: (DepTab) -> Unit, compact: Boolean = false) {
-    Row(Modifier.background(Ca.colors.surface2, RoundedCornerShape(Ca.radius.sm)).padding(2.dp), horizontalArrangement = Arrangement.spacedBy(2.dp)) {
+    Row(Modifier.background(MaterialTheme.colorScheme.surfaceContainerHigh, RoundedCornerShape(Ca.radius.sm)).padding(2.dp), horizontalArrangement = Arrangement.spacedBy(2.dp)) {
         DepTab.entries.forEach { t -> SegItem(t.icon, t.label(), t == tab, compact) { onSelect(t) } }
     }
 }
 
 @Composable
 private fun SegItem(icon: ImageVector, label: String, active: Boolean, compact: Boolean, onClick: () -> Unit) {
-    val bg by animateColorAsState(if (active) Ca.colors.accentSoft else Color.Transparent, tween(Motion.FAST), label = "segBg")
+    val bg by animateColorAsState(if (active) MaterialTheme.colorScheme.primaryContainer else Color.Transparent, tween(Motion.FAST), label = "segBg")
     Row(
         Modifier.background(bg, RoundedCornerShape(Ca.radius.xs)).clickable(remember { MutableInteractionSource() }, null, onClick = onClick)
             .padding(horizontal = 8.dp, vertical = 5.dp),
         horizontalArrangement = Arrangement.spacedBy(5.dp), verticalAlignment = Alignment.CenterVertically,
     ) {
-        Icon(icon, label, Modifier.size(14.dp), tint = if (active) Ca.colors.accent else Ca.colors.textSecondary)
-        if (!compact) Text(label, color = if (active) Ca.colors.accent else Ca.colors.textSecondary, style = Ca.type.caption, fontWeight = FontWeight.Medium)
+        Icon(icon, label, Modifier.size(14.dp), tint = if (active) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant)
+        if (!compact) Text(label, color = if (active) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodySmall, fontWeight = FontWeight.Medium)
     }
 }
 
 @Composable
 private fun ScopeChip(label: String, selected: Boolean, onClick: () -> Unit) {
-    val bg by animateColorAsState(if (selected) Ca.colors.accent else Ca.colors.surface2, tween(Motion.FAST), label = "scopeBg")
+    val bg by animateColorAsState(if (selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surfaceContainerHigh, tween(Motion.FAST), label = "scopeBg")
     Box(
         Modifier.background(bg, RoundedCornerShape(Ca.radius.pill)).clickable(remember { MutableInteractionSource() }, null, onClick = onClick)
             .padding(horizontal = 12.dp, vertical = 6.dp),
     ) {
-        Text(label, color = if (selected) Ca.colors.textOnAccent else Ca.colors.textSecondary, style = Ca.type.caption, fontWeight = FontWeight.Medium)
+        Text(label, color = if (selected) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodySmall, fontWeight = FontWeight.Medium)
     }
 }
 
 @Composable
 private fun DepBadge(node: UiDependencyNode, small: Boolean = false) {
     val (letter, color) = when (node.kind) {
-        UiDepKind.Jar -> "J" to Ca.colors.warning
-        UiDepKind.Aar -> "A" to Ca.colors.run
-        UiDepKind.Module -> "M" to Ca.colors.accent
-        UiDepKind.Sdk -> "S" to Ca.colors.info
-        UiDepKind.Platform -> "B" to Ca.colors.info   // a BOM (bill of materials) — version source, no artifact
+        UiDepKind.Jar -> "J" to Ide.colors.warning
+        UiDepKind.Aar -> "A" to Ide.colors.run
+        UiDepKind.Module -> "M" to MaterialTheme.colorScheme.primary
+        UiDepKind.Sdk -> "S" to Ide.colors.info
+        UiDepKind.Platform -> "B" to Ide.colors.info   // a BOM (bill of materials) — version source, no artifact
     }
-    LetterBox(letter, if (node.compatible) color else Ca.colors.error, size = if (small) 16 else 20)
+    LetterBox(letter, if (node.compatible) color else MaterialTheme.colorScheme.error, size = if (small) 16 else 20)
 }
 
 @Composable
 private fun LetterBox(letter: String, color: Color, size: Int = 20) {
     Box(Modifier.size(size.dp).background(color.copy(alpha = 0.18f), RoundedCornerShape(Ca.radius.xs)), contentAlignment = Alignment.Center) {
-        Text(letter, color = color, style = Ca.type.caption2, fontWeight = FontWeight.Bold)
+        Text(letter, color = color, style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold)
     }
 }
 
@@ -1469,16 +1471,16 @@ private fun scopeStyle(scope: String): ScopeStyle = when (scope.lowercase().repl
 private fun ScopeBadge(scope: String) {
     val style = scopeStyle(scope)
     val color = when (style) {
-        ScopeStyle.API -> Ca.colors.run                 // exported (api) — like a module's compile surface
-        ScopeStyle.IMPLEMENTATION -> Ca.colors.accent
-        ScopeStyle.COMPILE_ONLY -> Ca.colors.info
-        ScopeStyle.RUNTIME_ONLY -> Ca.colors.warning
-        ScopeStyle.TEST -> Ca.colors.textTertiary
-        ScopeStyle.OTHER -> Ca.colors.textTertiary
+        ScopeStyle.API -> Ide.colors.run                 // exported (api) — like a module's compile surface
+        ScopeStyle.IMPLEMENTATION -> MaterialTheme.colorScheme.primary
+        ScopeStyle.COMPILE_ONLY -> Ide.colors.info
+        ScopeStyle.RUNTIME_ONLY -> Ide.colors.warning
+        ScopeStyle.TEST -> MaterialTheme.colorScheme.outline
+        ScopeStyle.OTHER -> MaterialTheme.colorScheme.outline
     }
     WithTooltip(style.full.ifEmpty { scope }) {
         Box(Modifier.size(18.dp).background(color.copy(alpha = 0.18f), RoundedCornerShape(Ca.radius.pill)), contentAlignment = Alignment.Center) {
-            Text(style.letter, color = color, style = Ca.type.caption2, fontWeight = FontWeight.Bold)
+            Text(style.letter, color = color, style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold)
         }
     }
 }
@@ -1488,10 +1490,10 @@ private fun ScopeBadge(scope: String) {
 private fun VariantBadge(variant: String) {
     WithTooltip(stringResource(Res.string.dep_variant_only_tooltip, variant)) {
         Box(
-            Modifier.background(Ca.colors.textTertiary.copy(alpha = 0.14f), RoundedCornerShape(Ca.radius.pill))
+            Modifier.background(MaterialTheme.colorScheme.outline.copy(alpha = 0.14f), RoundedCornerShape(Ca.radius.pill))
                 .padding(horizontal = 6.dp, vertical = 2.dp),
         ) {
-            Text(variant, color = Ca.colors.textSecondary, style = Ca.type.caption2, fontWeight = FontWeight.Medium, maxLines = 1)
+            Text(variant, color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Medium, maxLines = 1)
         }
     }
 }
@@ -1500,7 +1502,7 @@ private fun VariantBadge(variant: String) {
 @Composable
 private fun ConflictBadge(conflict: UiVersionConflict) {
     WithTooltip(stringResource(Res.string.dep_version_conflict_tooltip, conflict.requested.joinToString(" vs "), conflict.chosen)) {
-        Icon(CaIcons.warning, stringResource(Res.string.dep_version_conflict), Modifier.size(16.dp), tint = Ca.colors.warning)
+        Icon(CaIcons.warning, stringResource(Res.string.dep_version_conflict), Modifier.size(16.dp), tint = Ide.colors.warning)
     }
 }
 
@@ -1520,7 +1522,7 @@ private fun majorOf(v: String): Int? =
 private fun WithTooltip(text: String, content: @Composable () -> Unit) {
     TooltipBox(
         positionProvider = TooltipDefaults.rememberPlainTooltipPositionProvider(),
-        tooltip = { PlainTooltip { Text(text, style = Ca.type.caption2) } },
+        tooltip = { PlainTooltip { Text(text, style = MaterialTheme.typography.labelSmall) } },
         state = rememberTooltipState(),
     ) { content() }
 }
@@ -1535,7 +1537,7 @@ private fun ConflictSummaryBanner(conflicts: List<UiVersionConflict>, realArtifa
     val real = conflicts.filter { it.artifact in realArtifacts }
     val benign = conflicts.filterNot { it.artifact in realArtifacts }
     var open by remember(conflicts) { mutableStateOf(real.isNotEmpty()) }
-    val color = if (real.isNotEmpty()) Ca.colors.warning else Ca.colors.textTertiary
+    val color = if (real.isNotEmpty()) Ide.colors.warning else MaterialTheme.colorScheme.outline
     val title = if (real.isNotEmpty()) pluralStringResource(Res.plurals.dep_conflicts_to_review, real.size, real.size)
         else pluralStringResource(Res.plurals.dep_versions_auto_resolved, benign.size, benign.size)
     Column(
@@ -1548,9 +1550,9 @@ private fun ConflictSummaryBanner(conflicts: List<UiVersionConflict>, realArtifa
             verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp),
         ) {
             Icon(if (real.isNotEmpty()) CaIcons.warning else CaIcons.info, null, Modifier.size(16.dp), tint = color)
-            Text(title, color = color, style = Ca.type.footnote, fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f))
-            if (real.isNotEmpty() && benign.isNotEmpty()) Text(stringResource(Res.string.dep_extra_auto_resolved, benign.size), color = Ca.colors.textTertiary, style = Ca.type.caption2)
-            Icon(if (open) CaIcons.chevronUp else CaIcons.chevronDown, null, Modifier.size(16.dp), tint = Ca.colors.textTertiary)
+            Text(title, color = color, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f))
+            if (real.isNotEmpty() && benign.isNotEmpty()) Text(stringResource(Res.string.dep_extra_auto_resolved, benign.size), color = MaterialTheme.colorScheme.outline, style = MaterialTheme.typography.labelSmall)
+            Icon(if (open) CaIcons.chevronUp else CaIcons.chevronDown, null, Modifier.size(16.dp), tint = MaterialTheme.colorScheme.outline)
         }
         AnimatedVisibility(open, enter = expandVertically(tween(Motion.FAST)) + fadeIn(), exit = shrinkVertically(tween(Motion.FAST)) + fadeOut()) {
             Column(Modifier.padding(start = 12.dp, end = 12.dp, bottom = 12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -1564,11 +1566,11 @@ private fun ConflictSummaryBanner(conflicts: List<UiVersionConflict>, realArtifa
 @Composable
 private fun ConflictLine(c: UiVersionConflict, codeFont: FontFamily, highlight: Boolean) {
     Row(verticalAlignment = Alignment.Top, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-        if (highlight) Icon(CaIcons.warning, null, Modifier.size(12.dp).padding(top = 2.dp), tint = Ca.colors.warning)
+        if (highlight) Icon(CaIcons.warning, null, Modifier.size(12.dp).padding(top = 2.dp), tint = Ide.colors.warning)
         Column {
-            Text(c.artifact, color = Ca.colors.textSecondary, style = Ca.type.caption.copy(fontFamily = codeFont), maxLines = 1, overflow = TextOverflow.Ellipsis)
-            Text("${c.requested.joinToString(", ")} → ${c.chosen}", color = if (highlight) Ca.colors.warning else Ca.colors.textTertiary,
-                style = Ca.type.caption2.copy(fontFamily = codeFont), maxLines = 2, overflow = TextOverflow.Ellipsis)
+            Text(c.artifact, color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodySmall.copy(fontFamily = codeFont), maxLines = 1, overflow = TextOverflow.Ellipsis)
+            Text("${c.requested.joinToString(", ")} → ${c.chosen}", color = if (highlight) Ide.colors.warning else MaterialTheme.colorScheme.outline,
+                style = MaterialTheme.typography.labelSmall.copy(fontFamily = codeFont), maxLines = 2, overflow = TextOverflow.Ellipsis)
         }
     }
 }
@@ -1582,7 +1584,7 @@ private fun BannerCard(icon: ImageVector, color: Color, title: String, modifier:
     ) {
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             Icon(icon, null, Modifier.size(16.dp), tint = color)
-            Text(title, color = color, style = Ca.type.footnote, fontWeight = FontWeight.SemiBold)
+            Text(title, color = color, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold)
         }
         Spacer(Modifier.height(4.dp))
         content()
@@ -1592,14 +1594,14 @@ private fun BannerCard(icon: ImageVector, color: Color, title: String, modifier:
 @Composable
 private fun Empty(text: String) {
     Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-        Text(text, color = Ca.colors.textTertiary, style = Ca.type.subhead)
+        Text(text, color = MaterialTheme.colorScheme.outline, style = MaterialTheme.typography.bodyLarge)
     }
 }
 
 @Composable
 private fun EmptyRow(text: String) {
     Box(Modifier.fillMaxWidth().padding(24.dp), contentAlignment = Alignment.Center) {
-        Text(text, color = Ca.colors.textTertiary, style = Ca.type.footnote)
+        Text(text, color = MaterialTheme.colorScheme.outline, style = MaterialTheme.typography.bodyMedium)
     }
 }
 
@@ -1614,8 +1616,8 @@ private fun DepPrimary(node: UiDependencyNode, codeFont: FontFamily, dimmed: Boo
     Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
         Text(
             primaryName(node),
-            color = if (!node.compatible) Ca.colors.error else if (dimmed) Ca.colors.textSecondary else Ca.colors.textPrimary,
-            style = Ca.type.footnote.copy(fontFamily = codeFont),
+            color = if (!node.compatible) MaterialTheme.colorScheme.error else if (dimmed) MaterialTheme.colorScheme.onSurfaceVariant else MaterialTheme.colorScheme.onSurface,
+            style = MaterialTheme.typography.bodyMedium.copy(fontFamily = codeFont),
             fontWeight = if (node.declared) FontWeight.SemiBold else FontWeight.Normal,
             maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f, fill = false),
         )
@@ -1625,7 +1627,7 @@ private fun DepPrimary(node: UiDependencyNode, codeFont: FontFamily, dimmed: Boo
 
 @Composable
 private fun DepSubtitle(node: UiDependencyNode) {
-    depSubtitle(node)?.let { Text(it, color = Ca.colors.textTertiary, style = Ca.type.caption2, maxLines = 1, overflow = TextOverflow.Ellipsis) }
+    depSubtitle(node)?.let { Text(it, color = MaterialTheme.colorScheme.outline, style = MaterialTheme.typography.labelSmall, maxLines = 1, overflow = TextOverflow.Ellipsis) }
 }
 
 /** The dimmed subtitle text: a localized kind descriptor, the Maven group, or null. */
@@ -1641,8 +1643,8 @@ private fun depSubtitle(node: UiDependencyNode): String? = when {
 /** A small, dimmed monospace tag for a dependency's version, kept visually separate from its name. */
 @Composable
 private fun VersionTag(version: String, codeFont: FontFamily) {
-    Box(Modifier.background(Ca.colors.surface2, RoundedCornerShape(Ca.radius.xs)).padding(horizontal = 6.dp, vertical = 1.dp)) {
-        Text(version, color = Ca.colors.textSecondary, style = Ca.type.caption2.copy(fontFamily = codeFont),
+    Box(Modifier.background(MaterialTheme.colorScheme.surfaceContainerHigh, RoundedCornerShape(Ca.radius.xs)).padding(horizontal = 6.dp, vertical = 1.dp)) {
+        Text(version, color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.labelSmall.copy(fontFamily = codeFont),
             maxLines = 1, softWrap = false, overflow = TextOverflow.Ellipsis)
     }
 }

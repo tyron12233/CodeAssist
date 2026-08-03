@@ -1,5 +1,6 @@
 package dev.ide.ui.components
 
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.tween
@@ -60,12 +61,12 @@ import org.jetbrains.compose.resources.stringResource
 @Composable
 fun SettingsCard(title: String?, modifier: Modifier = Modifier, content: @Composable () -> Unit) {
     Column(
-        modifier.fillMaxWidth().background(Ca.colors.surface, RoundedCornerShape(Ca.radius.lg))
-            .border(1.dp, Ca.colors.separator, RoundedCornerShape(Ca.radius.lg)).padding(16.dp),
+        modifier.fillMaxWidth().background(MaterialTheme.colorScheme.surface, RoundedCornerShape(Ca.radius.lg))
+            .border(1.dp, MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(Ca.radius.lg)).padding(16.dp),
         verticalArrangement = Arrangement.spacedBy(14.dp),
     ) {
         if (title != null) {
-            Text(title.uppercase(), color = Ca.colors.textTertiary, style = Ca.type.caption2, fontWeight = FontWeight.SemiBold)
+            Text(title.uppercase(), color = MaterialTheme.colorScheme.outline, style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.SemiBold)
         }
         content()
     }
@@ -75,9 +76,9 @@ fun SettingsCard(title: String?, modifier: Modifier = Modifier, content: @Compos
 @Composable
 private fun RowScopeLabel(title: String, description: String?, modifier: Modifier = Modifier) {
     Column(modifier, verticalArrangement = Arrangement.spacedBy(2.dp)) {
-        Text(title, color = Ca.colors.textPrimary, style = Ca.type.footnote, fontWeight = FontWeight.Medium)
+        Text(title, color = MaterialTheme.colorScheme.onSurface, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Medium)
         if (description != null) {
-            Text(description, color = Ca.colors.textTertiary, style = Ca.type.caption2)
+            Text(description, color = MaterialTheme.colorScheme.outline, style = MaterialTheme.typography.labelSmall)
         }
     }
 }
@@ -94,13 +95,13 @@ fun SettingsToggleRow(title: String, description: String?, value: Boolean, onTog
 /** An iOS-style accent switch. */
 @Composable
 fun CaSwitch(on: Boolean, onToggle: (Boolean) -> Unit) {
-    val bg by animateColorAsState(if (on) Ca.colors.accent else Ca.colors.surface3, tween(Motion.FAST), label = "switchBg")
+    val bg by animateColorAsState(if (on) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surfaceContainerHighest, tween(Motion.FAST), label = "switchBg")
     Box(
         Modifier.size(width = 44.dp, height = 26.dp).background(bg, RoundedCornerShape(Ca.radius.pill))
             .clickable(remember { MutableInteractionSource() }, null) { onToggle(!on) }.padding(3.dp),
         contentAlignment = if (on) Alignment.CenterEnd else Alignment.CenterStart,
     ) {
-        Box(Modifier.size(20.dp).background(Ca.colors.textOnAccent, RoundedCornerShape(Ca.radius.pill)))
+        Box(Modifier.size(20.dp).background(MaterialTheme.colorScheme.onPrimary, RoundedCornerShape(Ca.radius.pill)))
     }
 }
 
@@ -123,12 +124,12 @@ fun SettingsChoiceRow(
 
 @Composable
 private fun SettingsChip(label: String, selected: Boolean, onClick: () -> Unit) {
-    val bg by animateColorAsState(if (selected) Ca.colors.accent else Ca.colors.surface2, tween(Motion.FAST), label = "chipBg")
+    val bg by animateColorAsState(if (selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surfaceContainerHigh, tween(Motion.FAST), label = "chipBg")
     Box(
         Modifier.background(bg, RoundedCornerShape(Ca.radius.pill)).clickable(remember { MutableInteractionSource() }, null, onClick = onClick)
             .padding(horizontal = 14.dp, vertical = 7.dp),
     ) {
-        Text(label, color = if (selected) Ca.colors.textOnAccent else Ca.colors.textSecondary, style = Ca.type.caption, fontWeight = FontWeight.Medium)
+        Text(label, color = if (selected) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodySmall, fontWeight = FontWeight.Medium)
     }
 }
 
@@ -148,7 +149,7 @@ fun SettingsSliderRow(
     Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(4.dp)) {
         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
             RowScopeLabel(title, description, Modifier.weight(1f))
-            Chip("$value${unit?.let { " $it" } ?: ""}", fill = Ca.colors.accentSoft, textColor = Ca.colors.accent)
+            Chip("$value${unit?.let { " $it" } ?: ""}", fill = MaterialTheme.colorScheme.primaryContainer, textColor = MaterialTheme.colorScheme.primary)
         }
         Slider(
             value = value.toFloat(),
@@ -159,11 +160,11 @@ fun SettingsSliderRow(
             valueRange = min.toFloat()..max.toFloat(),
             steps = steps,
             colors = SliderDefaults.colors(
-                thumbColor = Ca.colors.accent,
-                activeTrackColor = Ca.colors.accent,
-                inactiveTrackColor = Ca.colors.surface3,
-                activeTickColor = Ca.colors.accent.copy(alpha = 0f),
-                inactiveTickColor = Ca.colors.surface3.copy(alpha = 0f),
+                thumbColor = MaterialTheme.colorScheme.primary,
+                activeTrackColor = MaterialTheme.colorScheme.primary,
+                inactiveTrackColor = MaterialTheme.colorScheme.surfaceContainerHighest,
+                activeTickColor = MaterialTheme.colorScheme.primary.copy(alpha = 0f),
+                inactiveTickColor = MaterialTheme.colorScheme.surfaceContainerHighest.copy(alpha = 0f),
             ),
         )
     }
@@ -182,14 +183,14 @@ fun SettingsTextRow(
     Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(6.dp)) {
         RowScopeLabel(title, description)
         Box(
-            Modifier.fillMaxWidth().background(Ca.colors.surface2, RoundedCornerShape(Ca.radius.control))
-                .border(1.dp, Ca.colors.hairline, RoundedCornerShape(Ca.radius.control)).padding(horizontal = 12.dp, vertical = 10.dp),
+            Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.surfaceContainerHigh, RoundedCornerShape(Ca.radius.control))
+                .border(1.dp, MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(Ca.radius.control)).padding(horizontal = 12.dp, vertical = 10.dp),
         ) {
-            if (value.isEmpty() && placeholder.isNotEmpty()) Text(placeholder, color = Ca.colors.textTertiary, style = Ca.type.footnote)
+            if (value.isEmpty() && placeholder.isNotEmpty()) Text(placeholder, color = MaterialTheme.colorScheme.outline, style = MaterialTheme.typography.bodyMedium)
             BasicTextField(
                 value, onChange, singleLine = true,
-                textStyle = Ca.type.footnote.copy(color = Ca.colors.textPrimary, fontFamily = codeFont),
-                cursorBrush = SolidColor(Ca.colors.accent), modifier = Modifier.fillMaxWidth(),
+                textStyle = MaterialTheme.typography.bodyMedium.copy(color = MaterialTheme.colorScheme.onSurface, fontFamily = codeFont),
+                cursorBrush = SolidColor(MaterialTheme.colorScheme.primary), modifier = Modifier.fillMaxWidth(),
             )
         }
     }
@@ -200,13 +201,13 @@ fun SettingsTextRow(
 fun SettingsActionRow(title: String, description: String?, buttonLabel: String, destructive: Boolean, onClick: () -> Unit) {
     Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
         RowScopeLabel(title, description, Modifier.weight(1f))
-        val fill = if (destructive) Ca.colors.error.copy(alpha = 0.16f) else Ca.colors.accentSoft
-        val fg = if (destructive) Ca.colors.error else Ca.colors.accent
+        val fill = if (destructive) MaterialTheme.colorScheme.error.copy(alpha = 0.16f) else MaterialTheme.colorScheme.primaryContainer
+        val fg = if (destructive) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary
         Box(
             Modifier.background(fill, RoundedCornerShape(Ca.radius.control)).clickable(remember { MutableInteractionSource() }, null, onClick = onClick)
                 .padding(horizontal = 14.dp, vertical = 8.dp),
         ) {
-            Text(buttonLabel, color = fg, style = Ca.type.caption, fontWeight = FontWeight.SemiBold)
+            Text(buttonLabel, color = fg, style = MaterialTheme.typography.bodySmall, fontWeight = FontWeight.SemiBold)
         }
     }
 }
@@ -214,7 +215,7 @@ fun SettingsActionRow(title: String, description: String?, buttonLabel: String, 
 /** A thin divider between rows in a card. */
 @Composable
 fun SettingsDivider() {
-    Box(Modifier.fillMaxWidth().height(1.dp).background(Ca.colors.separator))
+    Box(Modifier.fillMaxWidth().height(1.dp).background(MaterialTheme.colorScheme.outlineVariant))
 }
 
 /** A collapsible "Advanced" group inside a card (closed by default). */
@@ -226,8 +227,8 @@ fun AdvancedGroup(content: @Composable () -> Unit) {
             Modifier.fillMaxWidth().clickable(remember { MutableInteractionSource() }, null) { open = !open },
             verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp),
         ) {
-            Icon(if (open) CaIcons.caretDown else CaIcons.caretRight, null, Modifier.size(14.dp), tint = Ca.colors.textTertiary)
-            Text(stringResource(Res.string.settings_advanced), color = Ca.colors.textTertiary, style = Ca.type.caption2, fontWeight = FontWeight.SemiBold)
+            Icon(if (open) CaIcons.caretDown else CaIcons.caretRight, null, Modifier.size(14.dp), tint = MaterialTheme.colorScheme.outline)
+            Text(stringResource(Res.string.settings_advanced), color = MaterialTheme.colorScheme.outline, style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.SemiBold)
         }
         AnimatedVisibility(open, enter = expandVertically(tween(Motion.FAST)) + fadeIn(), exit = shrinkVertically(tween(Motion.FAST)) + fadeOut()) {
             Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(14.dp)) { content() }
@@ -238,15 +239,15 @@ fun AdvancedGroup(content: @Composable () -> Unit) {
 /** A sidebar / drill-in list item naming a settings category. */
 @Composable
 fun SettingsCategoryItem(title: String, icon: ImageVector, selected: Boolean, showChevron: Boolean, onClick: () -> Unit) {
-    val bg by animateColorAsState(if (selected) Ca.colors.accentSoft else Color.Transparent, tween(Motion.FAST), label = "catBg")
+    val bg by animateColorAsState(if (selected) MaterialTheme.colorScheme.primaryContainer else Color.Transparent, tween(Motion.FAST), label = "catBg")
     Row(
         Modifier.fillMaxWidth().background(bg, RoundedCornerShape(Ca.radius.control))
             .clickable(remember { MutableInteractionSource() }, null, onClick = onClick).padding(horizontal = 12.dp, vertical = 11.dp),
         verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp),
     ) {
-        Icon(icon, null, Modifier.size(18.dp), tint = if (selected) Ca.colors.accent else Ca.colors.textSecondary)
-        Text(title, color = if (selected) Ca.colors.accent else Ca.colors.textPrimary, style = Ca.type.footnote,
+        Icon(icon, null, Modifier.size(18.dp), tint = if (selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant)
+        Text(title, color = if (selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface, style = MaterialTheme.typography.bodyMedium,
             fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Medium, modifier = Modifier.weight(1f))
-        if (showChevron) Icon(CaIcons.chevronRight, null, Modifier.size(16.dp), tint = Ca.colors.textTertiary)
+        if (showChevron) Icon(CaIcons.chevronRight, null, Modifier.size(16.dp), tint = MaterialTheme.colorScheme.outline)
     }
 }

@@ -1,5 +1,7 @@
 package dev.ide.ui.editor.preview
 
+import dev.ide.ui.theme.Ide
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.horizontalScroll
@@ -50,15 +52,15 @@ fun isMarkdownPreviewable(path: String): Boolean {
 fun MarkdownPreviewPane(path: String, text: String, modifier: Modifier = Modifier) {
     val blocks = remember(text) { parseMarkdown(text) }
     val styles = MdStyles(
-        base = SpanStyle(color = Ca.colors.textPrimary),
+        base = SpanStyle(color = MaterialTheme.colorScheme.onSurface),
         code = SpanStyle(
-            fontFamily = Ca.type.codeFamily,
-            background = Ca.colors.surface2,
-            color = Ca.colors.textPrimary,
+            fontFamily = Ide.type.codeFamily,
+            background = MaterialTheme.colorScheme.surfaceContainerHigh,
+            color = MaterialTheme.colorScheme.onSurface,
         ),
-        link = SpanStyle(color = Ca.colors.accent, textDecoration = TextDecoration.Underline),
+        link = SpanStyle(color = MaterialTheme.colorScheme.primary, textDecoration = TextDecoration.Underline),
     )
-    Box(modifier.background(Ca.colors.editorBg)) {
+    Box(modifier.background(Ide.colors.editorBg)) {
         Column(
             Modifier.fillMaxSize()
                 .verticalScroll(rememberScrollState())
@@ -81,15 +83,15 @@ private fun MarkdownBlock(block: MdBlock, styles: MdStyles) {
         is MdBlock.Heading -> HeadingBlock(block, styles)
         is MdBlock.Paragraph -> Text(
             buildInline(block.text, styles),
-            style = Ca.type.body,
-            color = Ca.colors.textPrimary,
+            style = MaterialTheme.typography.bodyLarge,
+            color = MaterialTheme.colorScheme.onSurface,
         )
 
         is MdBlock.Code -> CodeBlock(block.code)
         is MdBlock.Items -> ListBlock(block.items, styles)
         is MdBlock.Quote -> QuoteBlock(block.blocks, styles)
         MdBlock.Divider -> Box(
-            Modifier.fillMaxWidth().height(1.dp).background(Ca.colors.separator),
+            Modifier.fillMaxWidth().height(1.dp).background(MaterialTheme.colorScheme.outlineVariant),
         )
     }
 }
@@ -97,22 +99,22 @@ private fun MarkdownBlock(block: MdBlock, styles: MdStyles) {
 @Composable
 private fun HeadingBlock(heading: MdBlock.Heading, styles: MdStyles) {
     val style = when (heading.level) {
-        1 -> Ca.type.title1
-        2 -> Ca.type.title2
-        3 -> Ca.type.title3
-        4 -> Ca.type.headline
-        5 -> Ca.type.subhead.copy(fontWeight = FontWeight.SemiBold)
-        else -> Ca.type.footnote.copy(fontWeight = FontWeight.SemiBold)
+        1 -> MaterialTheme.typography.headlineMedium
+        2 -> MaterialTheme.typography.headlineSmall
+        3 -> MaterialTheme.typography.titleLarge
+        4 -> MaterialTheme.typography.titleMedium
+        5 -> MaterialTheme.typography.bodyLarge.copy(fontWeight = FontWeight.SemiBold)
+        else -> MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.SemiBold)
     }
     Column(verticalArrangement = Arrangement.spacedBy(Ca.spacing.s2)) {
         Text(
             buildInline(heading.text, styles),
             style = style,
-            color = Ca.colors.textPrimary,
+            color = MaterialTheme.colorScheme.onSurface,
         )
         // A rule under the top two levels, matching common Markdown rendering.
         if (heading.level <= 2) {
-            Box(Modifier.fillMaxWidth().height(1.dp).background(Ca.colors.separator))
+            Box(Modifier.fillMaxWidth().height(1.dp).background(MaterialTheme.colorScheme.outlineVariant))
         }
     }
 }
@@ -122,13 +124,13 @@ private fun CodeBlock(code: String) {
     Box(
         Modifier.fillMaxWidth()
             .clip(RoundedCornerShape(Ca.radius.sm))
-            .background(Ca.colors.surface)
-            .border(1.dp, Ca.colors.separator, RoundedCornerShape(Ca.radius.sm)),
+            .background(MaterialTheme.colorScheme.surface)
+            .border(1.dp, MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(Ca.radius.sm)),
     ) {
         Text(
             code,
-            style = Ca.type.codeSmall,
-            color = Ca.colors.textPrimary,
+            style = Ide.type.codeSmall,
+            color = MaterialTheme.colorScheme.onSurface,
             modifier = Modifier.horizontalScroll(rememberScrollState())
                 .padding(horizontal = Ca.spacing.s3, vertical = Ca.spacing.s2),
         )
@@ -142,14 +144,14 @@ private fun ListBlock(items: List<MdListItem>, styles: MdStyles) {
             Row(Modifier.padding(start = (item.level * 16).dp)) {
                 Text(
                     if (item.ordered) "${item.ordinal}." else "•",
-                    style = Ca.type.body,
-                    color = Ca.colors.textSecondary,
+                    style = MaterialTheme.typography.bodyLarge,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
                     modifier = Modifier.width(if (item.ordered) 24.dp else 16.dp),
                 )
                 Text(
                     buildInline(item.text, styles),
-                    style = Ca.type.body,
-                    color = Ca.colors.textPrimary,
+                    style = MaterialTheme.typography.bodyLarge,
+                    color = MaterialTheme.colorScheme.onSurface,
                 )
             }
         }
@@ -159,7 +161,7 @@ private fun ListBlock(items: List<MdListItem>, styles: MdStyles) {
 @Composable
 private fun QuoteBlock(blocks: List<MdBlock>, styles: MdStyles) {
     Row(Modifier.height(IntrinsicSize.Min)) {
-        Box(Modifier.fillMaxHeight().width(3.dp).background(Ca.colors.textTertiary))
+        Box(Modifier.fillMaxHeight().width(3.dp).background(MaterialTheme.colorScheme.outline))
         Column(
             Modifier.padding(start = Ca.spacing.s3),
             verticalArrangement = Arrangement.spacedBy(Ca.spacing.s2),
@@ -168,8 +170,8 @@ private fun QuoteBlock(blocks: List<MdBlock>, styles: MdStyles) {
                 when (block) {
                     is MdBlock.Paragraph -> Text(
                         buildInline(block.text, styles),
-                        style = Ca.type.body,
-                        color = Ca.colors.textSecondary,
+                        style = MaterialTheme.typography.bodyLarge,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
 
                     else -> MarkdownBlock(block, styles)

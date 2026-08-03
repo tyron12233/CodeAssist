@@ -1,5 +1,7 @@
 package dev.ide.ui.screens
 
+import dev.ide.ui.theme.Ide
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.animation.Crossfade
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.animateDpAsState
@@ -138,7 +140,7 @@ fun ImportPreviewScreen(
     }
 
     Column(
-        Modifier.fillMaxSize().background(Ca.colors.bg).padding(20.dp),
+        Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background).padding(20.dp),
         verticalArrangement = Arrangement.spacedBy(16.dp),
     ) {
         SharingHeader(stringResource(Res.string.import_project), onBack = onCancel)
@@ -150,11 +152,11 @@ fun ImportPreviewScreen(
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(14.dp)) {
                 PackageIcon(preview.name, preview.icon, size = 60.dp)
                 Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
-                    Text(preview.name, color = Ca.colors.textPrimary, style = Ca.type.title2, maxLines = 2, overflow = TextOverflow.Ellipsis)
+                    Text(preview.name, color = MaterialTheme.colorScheme.onSurface, style = MaterialTheme.typography.headlineSmall, maxLines = 2, overflow = TextOverflow.Ellipsis)
                     if (preview.author.isNotBlank()) {
-                        Text(stringResource(Res.string.import_by, preview.author), color = Ca.colors.textSecondary, style = Ca.type.footnote, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                        Text(stringResource(Res.string.import_by, preview.author), color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodyMedium, maxLines = 1, overflow = TextOverflow.Ellipsis)
                     }
-                    Text(stringResource(Res.string.import_created_with, preview.createdBy), color = Ca.colors.textTertiary, style = Ca.type.caption, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                    Text(stringResource(Res.string.import_created_with, preview.createdBy), color = MaterialTheme.colorScheme.outline, style = MaterialTheme.typography.bodySmall, maxLines = 1, overflow = TextOverflow.Ellipsis)
                 }
             }
 
@@ -162,13 +164,13 @@ fun ImportPreviewScreen(
                 Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     if (preview.isAndroid) AndroidTag()
                     preview.packageName?.let {
-                        Text(it, color = Ca.colors.textTertiary, style = Ca.type.caption, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                        Text(it, color = MaterialTheme.colorScheme.outline, style = MaterialTheme.typography.bodySmall, maxLines = 1, overflow = TextOverflow.Ellipsis)
                     }
                 }
             }
 
             if (preview.description.isNotBlank()) {
-                Text(preview.description, color = Ca.colors.textSecondary, style = Ca.type.subhead)
+                Text(preview.description, color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodyLarge)
             }
 
             if (preview.screenshots.isNotEmpty()) ScreenshotGallery(preview.screenshots)
@@ -186,15 +188,15 @@ fun ImportPreviewScreen(
                 FieldCaption(stringResource(Res.string.import_section_contents))
                 Column(
                     Modifier.fillMaxWidth()
-                        .background(Ca.colors.surface, RoundedCornerShape(Ca.radius.md))
-                        .border(1.dp, Ca.colors.separator, RoundedCornerShape(Ca.radius.md))
+                        .background(MaterialTheme.colorScheme.surface, RoundedCornerShape(Ca.radius.md))
+                        .border(1.dp, MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(Ca.radius.md))
                         .padding(vertical = 6.dp),
                 ) {
                     preview.files.take(PEEK_ROWS).forEach { entry ->
                         Text(
                             entry.path,
-                            color = Ca.colors.textSecondary,
-                            style = Ca.type.caption,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            style = MaterialTheme.typography.bodySmall,
                             maxLines = 1,
                             overflow = TextOverflow.Ellipsis,
                             modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 2.dp),
@@ -204,8 +206,8 @@ fun ImportPreviewScreen(
                     if (hidden > 0) {
                         Text(
                             stringResource(Res.string.import_more, hidden),
-                            color = Ca.colors.textTertiary,
-                            style = Ca.type.caption,
+                            color = MaterialTheme.colorScheme.outline,
+                            style = MaterialTheme.typography.bodySmall,
                             fontWeight = FontWeight.SemiBold,
                             modifier = Modifier.padding(horizontal = 12.dp, vertical = 4.dp),
                         )
@@ -261,7 +263,7 @@ private fun ScreenshotGallery(screenshots: List<ByteArray>) {
                     contentDescription = null,
                     modifier = Modifier.height(200.dp)
                         .clip(RoundedCornerShape(Ca.radius.md))
-                        .border(1.dp, Ca.colors.separator, RoundedCornerShape(Ca.radius.md)),
+                        .border(1.dp, MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(Ca.radius.md)),
                     contentScale = ContentScale.Fit,
                 )
             }
@@ -273,13 +275,13 @@ private fun ScreenshotGallery(screenshots: List<ByteArray>) {
 private fun StatChip(icon: ImageVector, text: String, accent: Boolean = false) {
     Row(
         Modifier
-            .background(if (accent) Ca.colors.accentSoft else Ca.colors.surface2, RoundedCornerShape(Ca.radius.pill))
+            .background(if (accent) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surfaceContainerHigh, RoundedCornerShape(Ca.radius.pill))
             .padding(horizontal = 10.dp, vertical = 6.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(6.dp),
     ) {
-        Icon(icon, null, Modifier.size(14.dp), tint = if (accent) Ca.colors.accent else Ca.colors.textTertiary)
-        Text(text, color = if (accent) Ca.colors.accent else Ca.colors.textSecondary, style = Ca.type.caption, fontWeight = FontWeight.Medium)
+        Icon(icon, null, Modifier.size(14.dp), tint = if (accent) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outline)
+        Text(text, color = if (accent) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodySmall, fontWeight = FontWeight.Medium)
     }
 }
 
@@ -328,7 +330,7 @@ fun ExportProjectScreen(
     }
 
     Column(
-        Modifier.fillMaxSize().background(Ca.colors.bg).padding(20.dp),
+        Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background).padding(20.dp),
         verticalArrangement = Arrangement.spacedBy(16.dp),
     ) {
         SharingHeader(stringResource(Res.string.export_title), onBack = onDone)
@@ -365,22 +367,22 @@ private fun ColumnScope.ExportConfigure(
     ) {
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
             ProjectTile(project.name, size = 48.dp, radius = Ca.radius.md, color = projectColor(project.name))
-            Text(project.name, color = Ca.colors.textPrimary, style = Ca.type.headline, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            Text(project.name, color = MaterialTheme.colorScheme.onSurface, style = MaterialTheme.typography.titleMedium, maxLines = 1, overflow = TextOverflow.Ellipsis)
         }
-        Text(stringResource(Res.string.export_intro), color = Ca.colors.textSecondary, style = Ca.type.subhead)
+        Text(stringResource(Res.string.export_intro), color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodyLarge)
         SharingField(stringResource(Res.string.export_author_label), author, stringResource(Res.string.export_author_hint), onAuthor)
         SharingField(stringResource(Res.string.export_description_label), description, stringResource(Res.string.export_description_hint), onDescription)
         Row(
             Modifier.fillMaxWidth()
-                .background(Ca.colors.surface2, RoundedCornerShape(Ca.radius.control))
+                .background(MaterialTheme.colorScheme.surfaceContainerHigh, RoundedCornerShape(Ca.radius.control))
                 .clickable { onBundleDeps(!bundleDeps) }
                 .padding(12.dp),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(12.dp),
         ) {
             Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
-                Text(stringResource(Res.string.export_bundle_deps), color = Ca.colors.textPrimary, style = Ca.type.subhead)
-                Text(stringResource(Res.string.export_bundle_deps_desc), color = Ca.colors.textTertiary, style = Ca.type.caption)
+                Text(stringResource(Res.string.export_bundle_deps), color = MaterialTheme.colorScheme.onSurface, style = MaterialTheme.typography.bodyLarge)
+                Text(stringResource(Res.string.export_bundle_deps_desc), color = MaterialTheme.colorScheme.outline, style = MaterialTheme.typography.bodySmall)
             }
             AnimatedToggle(bundleDeps)
         }
@@ -409,14 +411,14 @@ private fun ColumnScope.ExportSuccess(
     ) {
         Spacer(Modifier.size(8.dp))
         Box(
-            Modifier.size(64.dp).background(Ca.colors.accentSoft, RoundedCornerShape(Ca.radius.pill)),
+            Modifier.size(64.dp).background(MaterialTheme.colorScheme.primaryContainer, RoundedCornerShape(Ca.radius.pill)),
             contentAlignment = Alignment.Center,
         ) {
-            Icon(CaIcons.check, null, Modifier.size(32.dp), tint = Ca.colors.accent)
+            Icon(CaIcons.check, null, Modifier.size(32.dp), tint = MaterialTheme.colorScheme.primary)
         }
-        Text(stringResource(Res.string.export_success_title), color = Ca.colors.textPrimary, style = Ca.type.title2)
-        Text(stringResource(Res.string.export_success_subtitle), color = Ca.colors.textSecondary, style = Ca.type.footnote)
-        Text(fileName, color = Ca.colors.textTertiary, style = Ca.type.caption, maxLines = 2, overflow = TextOverflow.Ellipsis)
+        Text(stringResource(Res.string.export_success_title), color = MaterialTheme.colorScheme.onSurface, style = MaterialTheme.typography.headlineSmall)
+        Text(stringResource(Res.string.export_success_subtitle), color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodyMedium)
+        Text(fileName, color = MaterialTheme.colorScheme.outline, style = MaterialTheme.typography.bodySmall, maxLines = 2, overflow = TextOverflow.Ellipsis)
         Spacer(Modifier.size(8.dp))
         Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(10.dp)) {
             if (onReveal != null) ExportActionRow(CaIcons.folder, stringResource(Res.string.export_locate), Modifier.entranceSlideUp(0)) { onReveal(path) }
@@ -441,23 +443,23 @@ private fun ExportActionRow(icon: ImageVector, label: String, modifier: Modifier
     Row(
         modifier.fillMaxWidth()
             .pressScale(interaction)
-            .background(Ca.colors.surface, RoundedCornerShape(Ca.radius.md))
-            .border(1.dp, Ca.colors.separator, RoundedCornerShape(Ca.radius.md))
+            .background(MaterialTheme.colorScheme.surface, RoundedCornerShape(Ca.radius.md))
+            .border(1.dp, MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(Ca.radius.md))
             .clickable(interaction, indication = null, onClick = onClick)
             .padding(14.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(12.dp),
     ) {
-        Icon(icon, null, Modifier.size(20.dp), tint = Ca.colors.accent)
-        Text(label, color = Ca.colors.textPrimary, style = Ca.type.subhead, modifier = Modifier.weight(1f))
-        Icon(CaIcons.chevronRight, null, Modifier.size(18.dp), tint = Ca.colors.textTertiary)
+        Icon(icon, null, Modifier.size(20.dp), tint = MaterialTheme.colorScheme.primary)
+        Text(label, color = MaterialTheme.colorScheme.onSurface, style = MaterialTheme.typography.bodyLarge, modifier = Modifier.weight(1f))
+        Icon(CaIcons.chevronRight, null, Modifier.size(18.dp), tint = MaterialTheme.colorScheme.outline)
     }
 }
 
 /** An animated on/off switch (track color + knob position) for the export options. */
 @Composable
 private fun AnimatedToggle(on: Boolean) {
-    val track by animateColorAsState(if (on) Ca.colors.accent else Ca.colors.surface3, label = "toggle-track")
+    val track by animateColorAsState(if (on) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surfaceContainerHighest, label = "toggle-track")
     val knob by animateDpAsState(if (on) 18.dp else 0.dp, label = "toggle-knob")
     Box(
         Modifier.size(width = 44.dp, height = 26.dp)
@@ -477,8 +479,8 @@ private fun ColumnScope.BusyView(text: String) {
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
         Spacer(Modifier.weight(1f))
-        CircularProgressIndicator(color = Ca.colors.accent)
-        Text(text, color = Ca.colors.textSecondary, style = Ca.type.subhead)
+        CircularProgressIndicator(color = MaterialTheme.colorScheme.primary)
+        Text(text, color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodyLarge)
         Spacer(Modifier.weight(1f))
     }
 }
@@ -494,16 +496,16 @@ fun ImportErrorDialog(message: String?, onDismiss: () -> Unit) {
             Modifier
                 .widthIn(max = 380.dp)
                 .padding(horizontal = 24.dp)
-                .background(Ca.colors.surface, RoundedCornerShape(Ca.radius.lg))
-                .border(1.dp, Ca.colors.separator, RoundedCornerShape(Ca.radius.lg))
+                .background(MaterialTheme.colorScheme.surface, RoundedCornerShape(Ca.radius.lg))
+                .border(1.dp, MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(Ca.radius.lg))
                 .padding(20.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                Icon(CaIcons.warning, null, Modifier.size(22.dp), tint = Ca.colors.warning)
-                Text(stringResource(Res.string.import_unrecognized_title), color = Ca.colors.textPrimary, style = Ca.type.headline, fontWeight = FontWeight.SemiBold)
+                Icon(CaIcons.warning, null, Modifier.size(22.dp), tint = Ide.colors.warning)
+                Text(stringResource(Res.string.import_unrecognized_title), color = MaterialTheme.colorScheme.onSurface, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
             }
-            message?.let { Text(it, color = Ca.colors.textSecondary, style = Ca.type.subhead) }
+            message?.let { Text(it, color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodyLarge) }
             PrimaryButton(text = stringResource(Res.string.got_it), onClick = onDismiss, modifier = Modifier.fillMaxWidth())
         }
     }
@@ -519,13 +521,13 @@ private fun SharingHeader(title: String, onBack: () -> Unit) {
             Modifier
                 .size(36.dp)
                 .pressScale(interaction)
-                .background(Ca.colors.surface2, RoundedCornerShape(Ca.radius.sm))
+                .background(MaterialTheme.colorScheme.surfaceContainerHigh, RoundedCornerShape(Ca.radius.sm))
                 .clickable(interaction, indication = null, onClick = onBack),
             contentAlignment = Alignment.Center,
         ) {
-            Icon(CaIcons.chevronLeft, stringResource(Res.string.back), Modifier.size(20.dp), tint = Ca.colors.textSecondary)
+            Icon(CaIcons.chevronLeft, stringResource(Res.string.back), Modifier.size(20.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
         }
-        Text(title, color = Ca.colors.textPrimary, style = Ca.type.title2, maxLines = 1, overflow = TextOverflow.Ellipsis)
+        Text(title, color = MaterialTheme.colorScheme.onSurface, style = MaterialTheme.typography.headlineSmall, maxLines = 1, overflow = TextOverflow.Ellipsis)
     }
 }
 
@@ -536,12 +538,12 @@ private fun SharingSecondaryButton(text: String, modifier: Modifier = Modifier, 
         modifier
             .height(38.dp)
             .pressScale(interaction)
-            .background(Ca.colors.surface2, RoundedCornerShape(Ca.radius.control))
-            .border(1.dp, Ca.colors.hairline, RoundedCornerShape(Ca.radius.control))
+            .background(MaterialTheme.colorScheme.surfaceContainerHigh, RoundedCornerShape(Ca.radius.control))
+            .border(1.dp, MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(Ca.radius.control))
             .clickable(interaction, indication = null, onClick = onClick),
         contentAlignment = Alignment.Center,
     ) {
-        Text(text, color = Ca.colors.textSecondary, style = Ca.type.subhead, fontWeight = FontWeight.SemiBold)
+        Text(text, color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.SemiBold)
     }
 }
 
@@ -553,18 +555,18 @@ private fun SharingField(label: String, value: String, placeholder: String, onCh
             Modifier
                 .fillMaxWidth()
                 .height(44.dp)
-                .background(Ca.colors.surface2, RoundedCornerShape(Ca.radius.control))
-                .border(1.dp, Ca.colors.hairline, RoundedCornerShape(Ca.radius.control))
+                .background(MaterialTheme.colorScheme.surfaceContainerHigh, RoundedCornerShape(Ca.radius.control))
+                .border(1.dp, MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(Ca.radius.control))
                 .padding(horizontal = 12.dp),
             contentAlignment = Alignment.CenterStart,
         ) {
-            if (value.isEmpty()) Text(placeholder, color = Ca.colors.textTertiary, style = Ca.type.footnote)
+            if (value.isEmpty()) Text(placeholder, color = MaterialTheme.colorScheme.outline, style = MaterialTheme.typography.bodyMedium)
             BasicTextField(
                 value = value,
                 onValueChange = onChange,
                 singleLine = true,
-                textStyle = Ca.type.footnote.copy(color = Ca.colors.textPrimary),
-                cursorBrush = SolidColor(Ca.colors.accent),
+                textStyle = MaterialTheme.typography.bodyMedium.copy(color = MaterialTheme.colorScheme.onSurface),
+                cursorBrush = SolidColor(MaterialTheme.colorScheme.primary),
                 modifier = Modifier.fillMaxWidth(),
             )
         }
@@ -573,7 +575,7 @@ private fun SharingField(label: String, value: String, placeholder: String, onCh
 
 @Composable
 private fun FieldCaption(text: String) {
-    Text(text, color = Ca.colors.textTertiary, style = Ca.type.caption2, fontWeight = FontWeight.SemiBold)
+    Text(text, color = MaterialTheme.colorScheme.outline, style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.SemiBold)
 }
 
 /** An inline warning/error banner. */
@@ -581,13 +583,13 @@ private fun FieldCaption(text: String) {
 private fun Notice(text: String) {
     Row(
         Modifier.fillMaxWidth()
-            .background(Ca.colors.warning.copy(alpha = 0.12f), RoundedCornerShape(Ca.radius.md))
+            .background(Ide.colors.warning.copy(alpha = 0.12f), RoundedCornerShape(Ca.radius.md))
             .padding(12.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(8.dp),
     ) {
-        Icon(CaIcons.warning, null, Modifier.size(16.dp), tint = Ca.colors.warning)
-        Text(text, color = Ca.colors.textSecondary, style = Ca.type.footnote)
+        Icon(CaIcons.warning, null, Modifier.size(16.dp), tint = Ide.colors.warning)
+        Text(text, color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodyMedium)
     }
 }
 

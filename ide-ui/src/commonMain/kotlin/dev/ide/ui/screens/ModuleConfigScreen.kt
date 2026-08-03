@@ -1,5 +1,7 @@
 package dev.ide.ui.screens
 
+import dev.ide.ui.theme.Ide
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.Crossfade
 import androidx.compose.animation.animateContentSize
@@ -223,8 +225,8 @@ private fun ModulesHeader(title: String, icon: ImageVector, onBack: () -> Unit, 
             verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp),
         ) {
             IconButtonCa(CaIcons.chevronLeft, stringResource(Res.string.back), onBack)
-            Icon(icon, null, Modifier.size(20.dp), tint = Ca.colors.accent)
-            Text(title, color = Ca.colors.textPrimary, style = Ca.type.headline, fontWeight = FontWeight.SemiBold,
+            Icon(icon, null, Modifier.size(20.dp), tint = MaterialTheme.colorScheme.primary)
+            Text(title, color = MaterialTheme.colorScheme.onSurface, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold,
                 modifier = Modifier.weight(1f), maxLines = 1, overflow = TextOverflow.Ellipsis)
             action?.invoke()
         }
@@ -244,15 +246,15 @@ private fun ModulesList(backend: IdeBackend, codeFont: FontFamily, onOpen: (Stri
     val removedTemplate = stringResource(Res.string.modcfg_removed, ARG_TOKEN)
     LaunchedEffect(toast) { if (toast != null) { delay(2600); toast = null } }
 
-    Box(Modifier.fillMaxSize().background(Ca.colors.bg)) {
+    Box(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)) {
         Column(Modifier.fillMaxSize()) {
             ModulesHeader(stringResource(Res.string.modcfg_title_modules), CaIcons.layers, onBack) {
                 IconButtonCa(CaIcons.plus, stringResource(Res.string.modcfg_new_module_action), onClick = { newOpen = true }, active = true)
             }
-            Box(Modifier.fillMaxWidth().height(1.dp).background(Ca.colors.separator))
+            Box(Modifier.fillMaxWidth().height(1.dp).background(MaterialTheme.colorScheme.outlineVariant))
             if (modules.isEmpty()) {
                 Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                    Text(stringResource(Res.string.modcfg_no_modules), color = Ca.colors.textTertiary, style = Ca.type.subhead)
+                    Text(stringResource(Res.string.modcfg_no_modules), color = MaterialTheme.colorScheme.outline, style = MaterialTheme.typography.bodyLarge)
                 }
             } else {
                 LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -293,19 +295,19 @@ private fun ModulesList(backend: IdeBackend, codeFont: FontFamily, onOpen: (Stri
 @Composable
 private fun ModuleListItem(module: UiModuleRef, onOpen: () -> Unit, onRemove: () -> Unit) {
     Row(
-        Modifier.fillMaxWidth().background(Ca.colors.surface, RoundedCornerShape(Ca.radius.lg))
-            .border(1.dp, Ca.colors.separator, RoundedCornerShape(Ca.radius.lg))
+        Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.surface, RoundedCornerShape(Ca.radius.lg))
+            .border(1.dp, MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(Ca.radius.lg))
             .clickable(remember { MutableInteractionSource() }, null, onClick = onOpen)
             .padding(horizontal = 14.dp, vertical = 12.dp),
         verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp),
     ) {
-        Icon(CaIcons.layers, null, Modifier.size(20.dp), tint = Ca.colors.accent)
+        Icon(CaIcons.layers, null, Modifier.size(20.dp), tint = MaterialTheme.colorScheme.primary)
         Column(Modifier.weight(1f)) {
-            Text(module.name, color = Ca.colors.textPrimary, style = Ca.type.subhead, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis)
-            Text(module.typeDisplay, color = Ca.colors.textTertiary, style = Ca.type.caption2, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            Text(module.name, color = MaterialTheme.colorScheme.onSurface, style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            Text(module.typeDisplay, color = MaterialTheme.colorScheme.outline, style = MaterialTheme.typography.labelSmall, maxLines = 1, overflow = TextOverflow.Ellipsis)
         }
-        IconButtonCa(CaIcons.close, stringResource(Res.string.modcfg_remove_named, module.name), onClick = onRemove, boxSize = 30, iconSize = 16, tint = Ca.colors.textTertiary)
-        Icon(CaIcons.chevronRight, null, Modifier.size(16.dp), tint = Ca.colors.textTertiary)
+        IconButtonCa(CaIcons.close, stringResource(Res.string.modcfg_remove_named, module.name), onClick = onRemove, boxSize = 30, iconSize = 16, tint = MaterialTheme.colorScheme.outline)
+        Icon(CaIcons.chevronRight, null, Modifier.size(16.dp), tint = MaterialTheme.colorScheme.outline)
     }
 }
 
@@ -314,11 +316,11 @@ private fun ModuleListItem(module: UiModuleRef, onOpen: () -> Unit, onRemove: ()
 @Composable
 private fun ModuleDetail(backend: IdeBackend, moduleName: String, initialTab: ModulesTab, codeFont: FontFamily, fileActions: FileActions, onOpenKeystoreManager: () -> Unit, onBack: () -> Unit) {
     var tab by remember(moduleName) { mutableStateOf(initialTab) }
-    Box(Modifier.fillMaxSize().background(Ca.colors.bg)) {
+    Box(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)) {
         Column(Modifier.fillMaxSize()) {
             ModulesHeader(moduleName, CaIcons.gear, onBack)
             ModuleTabRow(tab) { tab = it }
-            Box(Modifier.fillMaxWidth().height(1.dp).background(Ca.colors.separator))
+            Box(Modifier.fillMaxWidth().height(1.dp).background(MaterialTheme.colorScheme.outlineVariant))
             when (tab) {
                 ModulesTab.Settings -> ModuleSettingsTab(backend, moduleName, codeFont, Modifier.weight(1f).fillMaxWidth())
                 ModulesTab.BuildFeatures -> BuildFeaturesPane(backend, moduleName, Modifier.weight(1f).fillMaxWidth())
@@ -337,12 +339,12 @@ private fun ModuleTabRow(tab: ModulesTab, onSelect: (ModulesTab) -> Unit) {
     Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(horizontal = 12.dp, vertical = 8.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
         ModulesTab.entries.forEach { t ->
             val sel = t == tab
-            val bg by animateColorAsState(if (sel) Ca.colors.accentSoft else Ca.colors.surface2, tween(Motion.FAST), label = "tabBg")
+            val bg by animateColorAsState(if (sel) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surfaceContainerHigh, tween(Motion.FAST), label = "tabBg")
             Box(
                 Modifier.background(bg, RoundedCornerShape(Ca.radius.pill)).clickable(remember { MutableInteractionSource() }, null) { onSelect(t) }
                     .padding(horizontal = 16.dp, vertical = 7.dp),
             ) {
-                Text(stringResource(t.label), color = if (sel) Ca.colors.accent else Ca.colors.textSecondary, style = Ca.type.footnote, fontWeight = FontWeight.SemiBold)
+                Text(stringResource(t.label), color = if (sel) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold)
             }
         }
     }
@@ -369,11 +371,11 @@ private fun BuildFeaturesPane(backend: IdeBackend, moduleName: String, modifier:
     Box(modifier) {
         val f = features
         when {
-            loading -> Box(Modifier.fillMaxSize(), Alignment.Center) { CircularProgressIndicator(color = Ca.colors.accent) }
+            loading -> Box(Modifier.fillMaxSize(), Alignment.Center) { CircularProgressIndicator(color = MaterialTheme.colorScheme.primary) }
             f == null -> Box(Modifier.fillMaxSize().padding(32.dp), Alignment.Center) {
                 Text(
                     stringResource(Res.string.modcfg_build_features_android_only),
-                    color = Ca.colors.textTertiary, style = Ca.type.subhead,
+                    color = MaterialTheme.colorScheme.outline, style = MaterialTheme.typography.bodyLarge,
                 )
             }
             else -> LazyColumn(
@@ -384,7 +386,7 @@ private fun BuildFeaturesPane(backend: IdeBackend, moduleName: String, modifier:
                 item("intro") {
                     Text(
                         stringResource(Res.string.modcfg_build_features_intro),
-                        color = Ca.colors.textSecondary, style = Ca.type.footnote,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodyMedium,
                     )
                 }
                 items(f.features, key = { it.id }) { feature ->
@@ -413,20 +415,20 @@ private fun BuildFeaturesPane(backend: IdeBackend, moduleName: String, modifier:
 @Composable
 private fun BuildFeatureRow(feature: UiBuildFeature, working: Boolean, switchEnabled: Boolean, onToggle: (Boolean) -> Unit) {
     Column(
-        Modifier.fillMaxWidth().background(Ca.colors.surface, RoundedCornerShape(Ca.radius.lg))
-            .border(1.dp, Ca.colors.separator, RoundedCornerShape(Ca.radius.lg)).padding(16.dp),
+        Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.surface, RoundedCornerShape(Ca.radius.lg))
+            .border(1.dp, MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(Ca.radius.lg)).padding(16.dp),
         verticalArrangement = Arrangement.spacedBy(6.dp),
     ) {
         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
             Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
-                Text(feature.title, color = Ca.colors.textPrimary, style = Ca.type.subhead, fontWeight = FontWeight.SemiBold)
-                Text(feature.description, color = Ca.colors.textSecondary, style = Ca.type.footnote)
+                Text(feature.title, color = MaterialTheme.colorScheme.onSurface, style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.SemiBold)
+                Text(feature.description, color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodyMedium)
             }
-            if (working) CircularProgressIndicator(Modifier.size(22.dp), color = Ca.colors.accent, strokeWidth = 2.dp)
+            if (working) CircularProgressIndicator(Modifier.size(22.dp), color = MaterialTheme.colorScheme.primary, strokeWidth = 2.dp)
             else CaSwitch(feature.enabled) { if (switchEnabled) onToggle(it) }
         }
         feature.note?.let {
-            Text(it, color = Ca.colors.textTertiary, style = Ca.type.caption2)
+            Text(it, color = MaterialTheme.colorScheme.outline, style = MaterialTheme.typography.labelSmall)
         }
     }
 }
@@ -452,11 +454,11 @@ private fun CompilerPluginsPane(backend: IdeBackend, moduleName: String, modifie
     Box(modifier) {
         val p = plugins
         when {
-            loading -> Box(Modifier.fillMaxSize(), Alignment.Center) { CircularProgressIndicator(color = Ca.colors.accent) }
+            loading -> Box(Modifier.fillMaxSize(), Alignment.Center) { CircularProgressIndicator(color = MaterialTheme.colorScheme.primary) }
             p == null -> Box(Modifier.fillMaxSize().padding(32.dp), Alignment.Center) {
                 Text(
                     stringResource(Res.string.modcfg_compiler_plugins_android_only),
-                    color = Ca.colors.textTertiary, style = Ca.type.subhead,
+                    color = MaterialTheme.colorScheme.outline, style = MaterialTheme.typography.bodyLarge,
                 )
             }
             else -> LazyColumn(
@@ -467,7 +469,7 @@ private fun CompilerPluginsPane(backend: IdeBackend, moduleName: String, modifie
                 item("intro") {
                     Text(
                         stringResource(Res.string.modcfg_compiler_plugins_intro),
-                        color = Ca.colors.textSecondary, style = Ca.type.footnote,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodyMedium,
                     )
                 }
                 items(p.plugins, key = { it.id }) { plugin ->
@@ -496,16 +498,16 @@ private fun CompilerPluginsPane(backend: IdeBackend, moduleName: String, modifie
 @Composable
 private fun CompilerPluginRow(plugin: UiCompilerPlugin, working: Boolean, switchEnabled: Boolean, onToggle: (Boolean) -> Unit) {
     Column(
-        Modifier.fillMaxWidth().background(Ca.colors.surface, RoundedCornerShape(Ca.radius.lg))
-            .border(1.dp, Ca.colors.separator, RoundedCornerShape(Ca.radius.lg)).padding(16.dp),
+        Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.surface, RoundedCornerShape(Ca.radius.lg))
+            .border(1.dp, MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(Ca.radius.lg)).padding(16.dp),
         verticalArrangement = Arrangement.spacedBy(6.dp),
     ) {
         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
             Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
-                Text(plugin.title, color = Ca.colors.textPrimary, style = Ca.type.subhead, fontWeight = FontWeight.SemiBold)
-                Text(plugin.description, color = Ca.colors.textSecondary, style = Ca.type.footnote)
+                Text(plugin.title, color = MaterialTheme.colorScheme.onSurface, style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.SemiBold)
+                Text(plugin.description, color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodyMedium)
             }
-            if (working) CircularProgressIndicator(Modifier.size(22.dp), color = Ca.colors.accent, strokeWidth = 2.dp)
+            if (working) CircularProgressIndicator(Modifier.size(22.dp), color = MaterialTheme.colorScheme.primary, strokeWidth = 2.dp)
             else CaSwitch(plugin.enabled) { if (switchEnabled) onToggle(it) }
         }
         // "Active on the classpath" badge — the real build behavior, which can differ from the toggle when the
@@ -513,11 +515,11 @@ private fun CompilerPluginRow(plugin: UiCompilerPlugin, working: Boolean, switch
         if (plugin.applied) {
             Text(
                 "● " + stringResource(Res.string.modcfg_compiler_plugin_applied),
-                color = Ca.colors.accent, style = Ca.type.caption2,
+                color = MaterialTheme.colorScheme.primary, style = MaterialTheme.typography.labelSmall,
             )
         }
         plugin.note?.let {
-            Text(it, color = Ca.colors.textTertiary, style = Ca.type.caption2)
+            Text(it, color = MaterialTheme.colorScheme.outline, style = MaterialTheme.typography.labelSmall)
         }
     }
 }
@@ -558,13 +560,13 @@ private fun PackagingPane(backend: IdeBackend, moduleName: String, codeFont: Fon
     Box(modifier) {
         val o = options
         when {
-            loading -> Box(Modifier.fillMaxSize(), Alignment.Center) { CircularProgressIndicator(color = Ca.colors.accent) }
+            loading -> Box(Modifier.fillMaxSize(), Alignment.Center) { CircularProgressIndicator(color = MaterialTheme.colorScheme.primary) }
             o == null -> Box(Modifier.fillMaxSize().padding(32.dp), Alignment.Center) {
-                Text(stringResource(Res.string.modcfg_packaging_android_only), color = Ca.colors.textTertiary, style = Ca.type.subhead)
+                Text(stringResource(Res.string.modcfg_packaging_android_only), color = MaterialTheme.colorScheme.outline, style = MaterialTheme.typography.bodyLarge)
             }
             else -> Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                Text(stringResource(Res.string.modcfg_packaging_intro), color = Ca.colors.textSecondary, style = Ca.type.footnote)
-                Text(stringResource(Res.string.modcfg_packaging_glob_hint), color = Ca.colors.textTertiary, style = Ca.type.caption2)
+                Text(stringResource(Res.string.modcfg_packaging_intro), color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodyMedium)
+                Text(stringResource(Res.string.modcfg_packaging_glob_hint), color = MaterialTheme.colorScheme.outline, style = MaterialTheme.typography.labelSmall)
 
                 SectionCard(stringResource(Res.string.modcfg_packaging_resources)) {
                     PackagingRuleList(stringResource(Res.string.modcfg_packaging_excludes), stringResource(Res.string.modcfg_packaging_excludes_desc), resExcludes, codeFont)
@@ -575,13 +577,13 @@ private fun PackagingPane(backend: IdeBackend, moduleName: String, codeFont: Fon
                 }
 
                 SectionCard(stringResource(Res.string.modcfg_packaging_jni)) {
-                    Text(stringResource(Res.string.modcfg_packaging_jni_note), color = Ca.colors.textTertiary, style = Ca.type.caption2)
+                    Text(stringResource(Res.string.modcfg_packaging_jni_note), color = MaterialTheme.colorScheme.outline, style = MaterialTheme.typography.labelSmall)
                     PackagingRuleList(stringResource(Res.string.modcfg_packaging_excludes), stringResource(Res.string.modcfg_packaging_excludes_desc), jniExcludes, codeFont)
                     PackagingRuleList(stringResource(Res.string.modcfg_packaging_pick_first), stringResource(Res.string.modcfg_packaging_pick_first_desc), jniPickFirsts, codeFont)
                 }
 
                 Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.End) {
-                    if (saving) CircularProgressIndicator(Modifier.size(20.dp).padding(end = 4.dp), color = Ca.colors.accent, strokeWidth = 2.dp)
+                    if (saving) CircularProgressIndicator(Modifier.size(20.dp).padding(end = 4.dp), color = MaterialTheme.colorScheme.primary, strokeWidth = 2.dp)
                     PrimaryButton(stringResource(Res.string.modcfg_save), icon = CaIcons.check, onClick = {
                         if (!saving) {
                             saving = true
@@ -608,8 +610,8 @@ private fun PackagingPane(backend: IdeBackend, moduleName: String, codeFont: Fon
 @Composable
 private fun PackagingRuleList(label: String, description: String, values: SnapshotStateList<String>, codeFont: FontFamily) {
     Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(5.dp)) {
-        Text(label, color = Ca.colors.textPrimary, style = Ca.type.footnote, fontWeight = FontWeight.SemiBold)
-        Text(description, color = Ca.colors.textTertiary, style = Ca.type.caption2)
+        Text(label, color = MaterialTheme.colorScheme.onSurface, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold)
+        Text(description, color = MaterialTheme.colorScheme.outline, style = MaterialTheme.typography.labelSmall)
         StringListEditor(values, codeFont)
     }
 }
@@ -623,11 +625,11 @@ private fun DefaultsDisclosure(label: String, patterns: List<String>, codeFont: 
             Modifier.fillMaxWidth().clickable(remember { MutableInteractionSource() }, null) { open = !open },
             verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp),
         ) {
-            Icon(if (open) CaIcons.chevronDown else CaIcons.chevronRight, null, Modifier.size(14.dp), tint = Ca.colors.textTertiary)
-            Text("$label (${patterns.size})", color = Ca.colors.textTertiary, style = Ca.type.caption2, fontWeight = FontWeight.Medium)
+            Icon(if (open) CaIcons.chevronDown else CaIcons.chevronRight, null, Modifier.size(14.dp), tint = MaterialTheme.colorScheme.outline)
+            Text("$label (${patterns.size})", color = MaterialTheme.colorScheme.outline, style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Medium)
         }
         if (open) patterns.forEach { p ->
-            Text(p, color = Ca.colors.textTertiary, style = Ca.type.caption2.copy(fontFamily = codeFont), modifier = Modifier.padding(start = 20.dp))
+            Text(p, color = MaterialTheme.colorScheme.outline, style = MaterialTheme.typography.labelSmall.copy(fontFamily = codeFont), modifier = Modifier.padding(start = 20.dp))
         }
     }
 }
@@ -653,9 +655,9 @@ private fun SigningPane(backend: IdeBackend, moduleName: String, onOpenKeystoreM
     Box(modifier) {
         val d = data
         when {
-            loading -> Box(Modifier.fillMaxSize(), Alignment.Center) { CircularProgressIndicator(color = Ca.colors.accent) }
+            loading -> Box(Modifier.fillMaxSize(), Alignment.Center) { CircularProgressIndicator(color = MaterialTheme.colorScheme.primary) }
             d == null -> Box(Modifier.fillMaxSize().padding(32.dp), Alignment.Center) {
-                Text(stringResource(Res.string.modcfg_signing_android_only), color = Ca.colors.textTertiary, style = Ca.type.subhead)
+                Text(stringResource(Res.string.modcfg_signing_android_only), color = MaterialTheme.colorScheme.outline, style = MaterialTheme.typography.bodyLarge)
             }
             else -> LazyColumn(
                 Modifier.fillMaxSize(),
@@ -666,16 +668,16 @@ private fun SigningPane(backend: IdeBackend, moduleName: String, onOpenKeystoreM
                     Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                         Text(
                             stringResource(Res.string.modcfg_signing_intro),
-                            color = Ca.colors.textSecondary, style = Ca.type.footnote,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodyMedium,
                         )
                         Row(
-                            Modifier.background(Ca.colors.accentSoft, RoundedCornerShape(Ca.radius.control))
+                            Modifier.background(MaterialTheme.colorScheme.primaryContainer, RoundedCornerShape(Ca.radius.control))
                                 .clickable(remember { MutableInteractionSource() }, null, onClick = onOpenKeystoreManager)
                                 .padding(horizontal = 14.dp, vertical = 8.dp),
                             verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp),
                         ) {
-                            Icon(CaIcons.key, null, Modifier.size(15.dp), tint = Ca.colors.accent)
-                            Text(stringResource(Res.string.modcfg_manage_keystores), style = Ca.type.footnote, fontWeight = FontWeight.SemiBold, color = Ca.colors.accent)
+                            Icon(CaIcons.key, null, Modifier.size(15.dp), tint = MaterialTheme.colorScheme.primary)
+                            Text(stringResource(Res.string.modcfg_manage_keystores), style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.primary)
                         }
                     }
                 }
@@ -694,7 +696,7 @@ private fun SigningPane(backend: IdeBackend, moduleName: String, onOpenKeystoreM
                 }
                 if (d.keystores.isEmpty()) item("empty") {
                     Text(stringResource(Res.string.modcfg_keystores_empty),
-                        color = Ca.colors.textTertiary, style = Ca.type.caption2)
+                        color = MaterialTheme.colorScheme.outline, style = MaterialTheme.typography.labelSmall)
                 }
             }
         }
@@ -705,11 +707,11 @@ private fun SigningPane(backend: IdeBackend, moduleName: String, onOpenKeystoreM
 @Composable
 private fun BuildTypeSigningRow(assignment: UiSigningAssignment, keystores: List<UiKeystore>, busy: Boolean, onAssign: (String?) -> Unit) {
     Column(
-        Modifier.fillMaxWidth().background(Ca.colors.surface, RoundedCornerShape(Ca.radius.lg))
-            .border(1.dp, Ca.colors.separator, RoundedCornerShape(Ca.radius.lg)).padding(16.dp),
+        Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.surface, RoundedCornerShape(Ca.radius.lg))
+            .border(1.dp, MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(Ca.radius.lg)).padding(16.dp),
         verticalArrangement = Arrangement.spacedBy(10.dp),
     ) {
-        Text(assignment.buildType, style = Ca.type.subhead, fontWeight = FontWeight.SemiBold, color = Ca.colors.textPrimary)
+        Text(assignment.buildType, style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.onSurface)
         // The choices: the default debug keystore (null) plus every registered keystore.
         Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             SigningPill(stringResource(Res.string.modcfg_debug_default), selected = assignment.keystoreId == null, enabled = !busy) { onAssign(null) }
@@ -722,8 +724,8 @@ private fun BuildTypeSigningRow(assignment: UiSigningAssignment, keystores: List
 
 @Composable
 private fun SigningPill(label: String, selected: Boolean, enabled: Boolean, onClick: () -> Unit) {
-    val bg by animateColorAsState(if (selected) Ca.colors.accent else Ca.colors.surface3, tween(Motion.FAST), label = "pillBg")
-    val fg = if (selected) Ca.colors.textOnAccent else Ca.colors.textSecondary
+    val bg by animateColorAsState(if (selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surfaceContainerHighest, tween(Motion.FAST), label = "pillBg")
+    val fg = if (selected) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurfaceVariant
     Row(
         Modifier.background(bg, RoundedCornerShape(Ca.radius.pill))
             .clickable(remember { MutableInteractionSource() }, null, enabled = enabled) { onClick() }
@@ -731,7 +733,7 @@ private fun SigningPill(label: String, selected: Boolean, enabled: Boolean, onCl
         verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(5.dp),
     ) {
         if (selected) Icon(CaIcons.check, null, Modifier.size(13.dp), tint = fg)
-        Text(label, style = Ca.type.footnote, fontWeight = FontWeight.SemiBold, color = fg)
+        Text(label, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold, color = fg)
     }
 }
 
@@ -802,13 +804,13 @@ private fun ConfirmModuleRemove(moduleName: String?, onDismiss: () -> Unit, onCo
     DropdownOverlay(visible = moduleName != null, onDismiss = onDismiss, topPadding = 160.dp) {
         Column(
             Modifier.padding(horizontal = 12.dp).widthIn(max = 440.dp).fillMaxWidth()
-                .background(Ca.colors.glassThick, RoundedCornerShape(Ca.radius.xl))
-                .border(1.dp, Ca.colors.glassEdge, RoundedCornerShape(Ca.radius.xl)).padding(20.dp),
+                .background(Ide.colors.glassThick, RoundedCornerShape(Ca.radius.xl))
+                .border(1.dp, Ide.colors.glassEdge, RoundedCornerShape(Ca.radius.xl)).padding(20.dp),
         ) {
-            Text(stringResource(Res.string.modcfg_remove_module), color = Ca.colors.textPrimary, style = Ca.type.subhead, fontWeight = FontWeight.SemiBold)
+            Text(stringResource(Res.string.modcfg_remove_module), color = MaterialTheme.colorScheme.onSurface, style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.SemiBold)
             Spacer(Modifier.height(8.dp))
             Text(stringResource(Res.string.modcfg_remove_module_content, shown ?: ""),
-                color = Ca.colors.textSecondary, style = Ca.type.footnote)
+                color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodyMedium)
             Spacer(Modifier.height(16.dp))
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                 Spacer(Modifier.weight(1f))
@@ -821,12 +823,12 @@ private fun ConfirmModuleRemove(moduleName: String?, onDismiss: () -> Unit, onCo
 
 @Composable
 private fun DialogTextButton(label: String, destructive: Boolean, onClick: () -> Unit) {
-    val fill = if (destructive) Ca.colors.error else Ca.colors.surface3
-    val fg = if (destructive) Ca.colors.textOnAccent else Ca.colors.textSecondary
+    val fill = if (destructive) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.surfaceContainerHighest
+    val fg = if (destructive) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurfaceVariant
     Box(
         Modifier.background(fill, RoundedCornerShape(Ca.radius.control)).clickable(remember { MutableInteractionSource() }, null, onClick = onClick)
             .padding(horizontal = 18.dp, vertical = 9.dp),
-    ) { Text(label, color = fg, style = Ca.type.footnote, fontWeight = FontWeight.SemiBold) }
+    ) { Text(label, color = fg, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold) }
 }
 
 @Composable
@@ -841,11 +843,11 @@ private fun NewModuleDialog(
         val types = remember { backend.modules.availableModuleTypes() }
         Column(
             Modifier.padding(horizontal = 12.dp).widthIn(max = 560.dp).fillMaxWidth()
-                .background(Ca.colors.glassThick, RoundedCornerShape(Ca.radius.xl))
-                .border(1.dp, Ca.colors.glassEdge, RoundedCornerShape(Ca.radius.xl)).padding(20.dp),
+                .background(Ide.colors.glassThick, RoundedCornerShape(Ca.radius.xl))
+                .border(1.dp, Ide.colors.glassEdge, RoundedCornerShape(Ca.radius.xl)).padding(20.dp),
         ) {
             if (types.isEmpty()) {
-                Text(stringResource(Res.string.modcfg_no_module_types), color = Ca.colors.textTertiary, style = Ca.type.subhead)
+                Text(stringResource(Res.string.modcfg_no_module_types), color = MaterialTheme.colorScheme.outline, style = MaterialTheme.typography.bodyLarge)
             } else {
                 var name by remember { mutableStateOf("") }
                 var typeIdx by remember { mutableStateOf(0) }
@@ -854,17 +856,17 @@ private fun NewModuleDialog(
                 // Facet forms are rebuilt when the chosen type changes (each type has its own default facets).
                 val forms = remember(type.id) { type.defaultFacets.map { it.toForm() } }
 
-                Text(stringResource(Res.string.modcfg_new_module), color = Ca.colors.textPrimary, style = Ca.type.title3, fontWeight = FontWeight.SemiBold)
+                Text(stringResource(Res.string.modcfg_new_module), color = MaterialTheme.colorScheme.onSurface, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.SemiBold)
                 Spacer(Modifier.height(12.dp))
                 LazyColumn(Modifier.fillMaxWidth().heightIn(max = 440.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
                     item("name") {
                         LabeledField(stringResource(Res.string.modcfg_name)) {
-                            Box(Modifier.fillMaxWidth().background(Ca.colors.surface2, RoundedCornerShape(Ca.radius.control))
-                                .border(1.dp, Ca.colors.hairline, RoundedCornerShape(Ca.radius.control)).padding(horizontal = 12.dp, vertical = 10.dp)) {
-                                if (name.isEmpty()) Text(stringResource(Res.string.modcfg_module_name_placeholder), color = Ca.colors.textTertiary, style = Ca.type.footnote)
+                            Box(Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.surfaceContainerHigh, RoundedCornerShape(Ca.radius.control))
+                                .border(1.dp, MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(Ca.radius.control)).padding(horizontal = 12.dp, vertical = 10.dp)) {
+                                if (name.isEmpty()) Text(stringResource(Res.string.modcfg_module_name_placeholder), color = MaterialTheme.colorScheme.outline, style = MaterialTheme.typography.bodyMedium)
                                 BasicTextField(name, { name = it }, singleLine = true,
-                                    textStyle = Ca.type.footnote.copy(color = Ca.colors.textPrimary, fontFamily = codeFont),
-                                    cursorBrush = SolidColor(Ca.colors.accent), modifier = Modifier.fillMaxWidth())
+                                    textStyle = MaterialTheme.typography.bodyMedium.copy(color = MaterialTheme.colorScheme.onSurface, fontFamily = codeFont),
+                                    cursorBrush = SolidColor(MaterialTheme.colorScheme.primary), modifier = Modifier.fillMaxWidth())
                             }
                         }
                     }
@@ -915,10 +917,10 @@ private fun ConfigBody(
     Crossfade(targetState = loading, animationSpec = tween(Motion.BASE), label = "cfgBody", modifier = modifier) { isLoading ->
         when {
             isLoading -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                CircularProgressIndicator(Modifier.size(28.dp), color = Ca.colors.accent, strokeWidth = 3.dp)
+                CircularProgressIndicator(Modifier.size(28.dp), color = MaterialTheme.colorScheme.primary, strokeWidth = 3.dp)
             }
             config == null -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                Text(stringResource(Res.string.modcfg_couldnt_load_config), color = Ca.colors.textTertiary, style = Ca.type.subhead)
+                Text(stringResource(Res.string.modcfg_couldnt_load_config), color = MaterialTheme.colorScheme.outline, style = MaterialTheme.typography.bodyLarge)
             }
             else -> ConfigForm(config, codeFont, projectRoot, missingProguard, onAddSourceRoot, onRemoveSourceRoot, onCreateProguard, onSave)
         }
@@ -948,13 +950,13 @@ private fun ConfigForm(
         // ---- General ----
         item("general") {
             SectionCard(stringResource(Res.string.modcfg_section_general)) {
-                MetaRow(stringResource(Res.string.modcfg_type)) { Chip(config.typeDisplay, fill = Ca.colors.accentSoft, textColor = Ca.colors.accent) }
+                MetaRow(stringResource(Res.string.modcfg_type)) { Chip(config.typeDisplay, fill = MaterialTheme.colorScheme.primaryContainer, textColor = MaterialTheme.colorScheme.primary) }
                 MetaRow(stringResource(Res.string.modcfg_output)) {
-                    Text(shortenPath(config.outputDir, projectRoot), color = Ca.colors.textTertiary,
-                        style = Ca.type.caption.copy(fontFamily = codeFont), maxLines = 1, overflow = TextOverflow.Ellipsis)
+                    Text(shortenPath(config.outputDir, projectRoot), color = MaterialTheme.colorScheme.outline,
+                        style = MaterialTheme.typography.bodySmall.copy(fontFamily = codeFont), maxLines = 1, overflow = TextOverflow.Ellipsis)
                 }
                 Spacer(Modifier.height(2.dp))
-                Text(stringResource(Res.string.modcfg_java_version), color = Ca.colors.textSecondary, style = Ca.type.caption, fontWeight = FontWeight.Medium)
+                Text(stringResource(Res.string.modcfg_java_version), color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodySmall, fontWeight = FontWeight.Medium)
                 Row(Modifier.fillMaxWidth().padding(top = 2.dp).horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                     config.languageLevels.forEach { lvl -> LevelChip(prettyLevel(lvl), lvl == level) { level = lvl } }
                 }
@@ -963,7 +965,7 @@ private fun ConfigForm(
                 // is kept off android.jar, or a module is targeted at a specific installed platform.
                 if (config.availableSdks.size > 1) {
                     Spacer(Modifier.height(6.dp))
-                    Text(stringResource(Res.string.modcfg_platform_sdk), color = Ca.colors.textSecondary, style = Ca.type.caption, fontWeight = FontWeight.Medium)
+                    Text(stringResource(Res.string.modcfg_platform_sdk), color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodySmall, fontWeight = FontWeight.Medium)
                     Row(Modifier.fillMaxWidth().padding(top = 2.dp).horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                         LevelChip(stringResource(Res.string.modcfg_platform_sdk_auto, config.resolvedSdk), sdk == "") { sdk = "" }
                         config.availableSdks.forEach { opt -> LevelChip(opt.label, sdk == opt.name) { sdk = opt.name } }
@@ -983,7 +985,7 @@ private fun ConfigForm(
                 IconButtonCa(CaIcons.plus, stringResource(Res.string.modcfg_add_source_root), onClick = onAddSourceRoot, boxSize = 26, iconSize = 16, active = true)
             }) {
                 if (config.sourceSets.isEmpty()) {
-                    Text(stringResource(Res.string.modcfg_no_source_sets), color = Ca.colors.textTertiary, style = Ca.type.caption2)
+                    Text(stringResource(Res.string.modcfg_no_source_sets), color = MaterialTheme.colorScheme.outline, style = MaterialTheme.typography.labelSmall)
                 }
                 config.sourceSets.forEach { ss -> SourceSetRow(ss, codeFont, projectRoot) { root -> onRemoveSourceRoot(ss.name, root) } }
             }
@@ -1022,18 +1024,18 @@ private fun RunConfigCard(rc: UiRunConfig, mainClass: MutableState<String>, code
     SectionCard(stringResource(Res.string.modcfg_run)) {
         Text(
             stringResource(Res.string.modcfg_run_config_hint),
-            color = Ca.colors.textSecondary, style = Ca.type.caption,
+            color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodySmall,
         )
         Box(
-            Modifier.fillMaxWidth().background(Ca.colors.surface2, RoundedCornerShape(Ca.radius.control))
-                .border(1.dp, Ca.colors.hairline, RoundedCornerShape(Ca.radius.control))
+            Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.surfaceContainerHigh, RoundedCornerShape(Ca.radius.control))
+                .border(1.dp, MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(Ca.radius.control))
                 .padding(horizontal = 12.dp, vertical = 10.dp),
         ) {
             if (mainClass.value.isEmpty()) {
                 Text(
                     rc.autoDetected?.let { stringResource(Res.string.modcfg_auto_detected, it) } ?: stringResource(Res.string.modcfg_run_main_class_placeholder),
-                    color = Ca.colors.textTertiary,
-                    style = Ca.type.footnote.copy(fontFamily = codeFont),
+                    color = MaterialTheme.colorScheme.outline,
+                    style = MaterialTheme.typography.bodyMedium.copy(fontFamily = codeFont),
                     maxLines = 1, overflow = TextOverflow.Ellipsis,
                 )
             }
@@ -1041,8 +1043,8 @@ private fun RunConfigCard(rc: UiRunConfig, mainClass: MutableState<String>, code
                 value = mainClass.value,
                 onValueChange = { mainClass.value = it },
                 singleLine = true,
-                textStyle = Ca.type.footnote.copy(color = Ca.colors.textPrimary, fontFamily = codeFont),
-                cursorBrush = SolidColor(Ca.colors.accent),
+                textStyle = MaterialTheme.typography.bodyMedium.copy(color = MaterialTheme.colorScheme.onSurface, fontFamily = codeFont),
+                cursorBrush = SolidColor(MaterialTheme.colorScheme.primary),
                 modifier = Modifier.fillMaxWidth(),
             )
         }
@@ -1072,28 +1074,28 @@ private fun MissingProguardCard(
     onCreate: (entry: String) -> Unit,
 ) {
     Column(
-        Modifier.fillMaxWidth().background(Ca.colors.surface, RoundedCornerShape(Ca.radius.lg))
-            .border(1.dp, Ca.colors.warning.copy(alpha = 0.5f), RoundedCornerShape(Ca.radius.lg)).padding(16.dp),
+        Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.surface, RoundedCornerShape(Ca.radius.lg))
+            .border(1.dp, Ide.colors.warning.copy(alpha = 0.5f), RoundedCornerShape(Ca.radius.lg)).padding(16.dp),
         verticalArrangement = Arrangement.spacedBy(10.dp),
     ) {
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            Icon(CaIcons.warning, null, Modifier.size(18.dp), tint = Ca.colors.warning)
-            Text(stringResource(Res.string.modcfg_missing_keep_rule_files), color = Ca.colors.textPrimary, style = Ca.type.subhead, fontWeight = FontWeight.SemiBold)
+            Icon(CaIcons.warning, null, Modifier.size(18.dp), tint = Ide.colors.warning)
+            Text(stringResource(Res.string.modcfg_missing_keep_rule_files), color = MaterialTheme.colorScheme.onSurface, style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.SemiBold)
         }
         Text(
             stringResource(Res.string.modcfg_missing_keep_rule_files_content),
-            color = Ca.colors.textSecondary, style = Ca.type.caption,
+            color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodySmall,
         )
         missing.forEach { mf ->
             Row(
-                Modifier.fillMaxWidth().background(Ca.colors.surface2, RoundedCornerShape(Ca.radius.md)).padding(10.dp),
+                Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.surfaceContainerHigh, RoundedCornerShape(Ca.radius.md)).padding(10.dp),
                 verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp),
             ) {
                 Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
-                    Text(mf.entry, color = Ca.colors.textPrimary,
-                        style = Ca.type.footnote.copy(fontFamily = codeFont), maxLines = 1, overflow = TextOverflow.Ellipsis)
+                    Text(mf.entry, color = MaterialTheme.colorScheme.onSurface,
+                        style = MaterialTheme.typography.bodyMedium.copy(fontFamily = codeFont), maxLines = 1, overflow = TextOverflow.Ellipsis)
                     Text(if (mf.consumer) stringResource(Res.string.modcfg_consumer_suffix, mf.buildType) else mf.buildType,
-                        color = Ca.colors.textTertiary, style = Ca.type.caption2)
+                        color = MaterialTheme.colorScheme.outline, style = MaterialTheme.typography.labelSmall)
                 }
                 CreateRuleButton { onCreate(mf.entry) }
             }
@@ -1104,25 +1106,25 @@ private fun MissingProguardCard(
 @Composable
 private fun CreateRuleButton(onClick: () -> Unit) {
     Row(
-        Modifier.background(Ca.colors.accentSoft, RoundedCornerShape(Ca.radius.control))
+        Modifier.background(MaterialTheme.colorScheme.primaryContainer, RoundedCornerShape(Ca.radius.control))
             .clickable(remember { MutableInteractionSource() }, null, onClick = onClick)
             .padding(horizontal = 12.dp, vertical = 7.dp),
         verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(5.dp),
     ) {
-        Icon(CaIcons.plus, null, Modifier.size(14.dp), tint = Ca.colors.accent)
-        Text(stringResource(Res.string.create), color = Ca.colors.accent, style = Ca.type.caption, fontWeight = FontWeight.SemiBold)
+        Icon(CaIcons.plus, null, Modifier.size(14.dp), tint = MaterialTheme.colorScheme.primary)
+        Text(stringResource(Res.string.create), color = MaterialTheme.colorScheme.primary, style = MaterialTheme.typography.bodySmall, fontWeight = FontWeight.SemiBold)
     }
 }
 
 @Composable
 private fun SectionCard(title: String, action: (@Composable () -> Unit)? = null, content: @Composable () -> Unit) {
     Column(
-        Modifier.fillMaxWidth().background(Ca.colors.surface, RoundedCornerShape(Ca.radius.lg))
-            .border(1.dp, Ca.colors.separator, RoundedCornerShape(Ca.radius.lg)).padding(16.dp),
+        Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.surface, RoundedCornerShape(Ca.radius.lg))
+            .border(1.dp, MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(Ca.radius.lg)).padding(16.dp),
         verticalArrangement = Arrangement.spacedBy(10.dp),
     ) {
         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-            Text(title.uppercase(), color = Ca.colors.textTertiary, style = Ca.type.caption2, fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f))
+            Text(title.uppercase(), color = MaterialTheme.colorScheme.outline, style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f))
             action?.invoke()
         }
         content()
@@ -1133,7 +1135,7 @@ private fun SectionCard(title: String, action: (@Composable () -> Unit)? = null,
 @Composable
 private fun MetaRow(label: String, value: @Composable () -> Unit) {
     Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-        Text(label, color = Ca.colors.textSecondary, style = Ca.type.caption, modifier = Modifier.width(60.dp))
+        Text(label, color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodySmall, modifier = Modifier.width(60.dp))
         Box(Modifier.weight(1f)) { value() }
     }
 }
@@ -1141,17 +1143,17 @@ private fun MetaRow(label: String, value: @Composable () -> Unit) {
 @Composable
 private fun SourceSetRow(ss: UiSourceSetInfo, codeFont: FontFamily, projectRoot: String, onRemoveRoot: (rootPath: String) -> Unit) {
     Column(
-        Modifier.fillMaxWidth().background(Ca.colors.surface2, RoundedCornerShape(Ca.radius.md)).padding(10.dp),
+        Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.surfaceContainerHigh, RoundedCornerShape(Ca.radius.md)).padding(10.dp),
         verticalArrangement = Arrangement.spacedBy(3.dp),
     ) {
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            Text(ss.name, color = Ca.colors.textPrimary, style = Ca.type.footnote, fontWeight = FontWeight.SemiBold)
-            Chip(ss.scope.lowercase(), fill = Ca.colors.accentSoft, textColor = Ca.colors.accent)
+            Text(ss.name, color = MaterialTheme.colorScheme.onSurface, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold)
+            Chip(ss.scope.lowercase(), fill = MaterialTheme.colorScheme.primaryContainer, textColor = MaterialTheme.colorScheme.primary)
         }
-        if (ss.roots.isEmpty()) Text(stringResource(Res.string.modcfg_no_roots), color = Ca.colors.textTertiary, style = Ca.type.caption2)
+        if (ss.roots.isEmpty()) Text(stringResource(Res.string.modcfg_no_roots), color = MaterialTheme.colorScheme.outline, style = MaterialTheme.typography.labelSmall)
         ss.roots.forEach { r ->
             Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                Text(shortenPath(r, projectRoot), color = Ca.colors.textTertiary, style = Ca.type.caption2.copy(fontFamily = codeFont),
+                Text(shortenPath(r, projectRoot), color = MaterialTheme.colorScheme.outline, style = MaterialTheme.typography.labelSmall.copy(fontFamily = codeFont),
                     maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
                 IconButtonCa(CaIcons.close, stringResource(Res.string.modcfg_remove_named, shortenPath(r, projectRoot)), onClick = { onRemoveRoot(r) }, boxSize = 22, iconSize = 12)
             }
@@ -1177,16 +1179,16 @@ private fun shortenPath(full: String, projectRoot: String): String {
 private fun FacetPanel(form: FacetForm, codeFont: FontFamily) {
     var open by remember(form) { mutableStateOf(true) }
     Column(
-        Modifier.fillMaxWidth().background(Ca.colors.surface, RoundedCornerShape(Ca.radius.lg))
-            .border(1.dp, Ca.colors.separator, RoundedCornerShape(Ca.radius.lg)),
+        Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.surface, RoundedCornerShape(Ca.radius.lg))
+            .border(1.dp, MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(Ca.radius.lg)),
     ) {
         Row(
             Modifier.fillMaxWidth().clickable(remember { MutableInteractionSource() }, null) { open = !open }.padding(16.dp),
             verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp),
         ) {
-            Icon(CaIcons.box, null, Modifier.size(18.dp), tint = Ca.colors.accent)
-            Text(form.title, color = Ca.colors.textPrimary, style = Ca.type.subhead, fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f))
-            Icon(if (open) CaIcons.caretDown else CaIcons.caretRight, null, Modifier.size(16.dp), tint = Ca.colors.textTertiary)
+            Icon(CaIcons.box, null, Modifier.size(18.dp), tint = MaterialTheme.colorScheme.primary)
+            Text(form.title, color = MaterialTheme.colorScheme.onSurface, style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f))
+            Icon(if (open) CaIcons.caretDown else CaIcons.caretRight, null, Modifier.size(16.dp), tint = MaterialTheme.colorScheme.outline)
         }
         AnimatedVisibility(open, enter = expandVertically(tween(Motion.FAST)) + fadeIn(), exit = shrinkVertically(tween(Motion.FAST)) + fadeOut()) {
             Column(Modifier.fillMaxWidth().padding(start = 16.dp, end = 16.dp, bottom = 16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
@@ -1206,7 +1208,7 @@ private fun FieldEditor(field: FieldState, codeFont: FontFamily) {
             BoxedTextField(field.value, codeFont, numeric = true)
         }
         is FieldState.BoolF -> Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-            Text(field.label, color = Ca.colors.textPrimary, style = Ca.type.footnote, modifier = Modifier.weight(1f))
+            Text(field.label, color = MaterialTheme.colorScheme.onSurface, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f))
             ToggleSwitch(field.value.value) { field.value.value = it }
         }
         is FieldState.ListF -> LabeledField(field.label) { StringListEditor(field.values, codeFont) }
@@ -1217,7 +1219,7 @@ private fun FieldEditor(field: FieldState, codeFont: FontFamily) {
 @Composable
 private fun LabeledField(label: String, content: @Composable () -> Unit) {
     Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(5.dp)) {
-        Text(label, color = Ca.colors.textSecondary, style = Ca.type.caption, fontWeight = FontWeight.Medium)
+        Text(label, color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodySmall, fontWeight = FontWeight.Medium)
         content()
     }
 }
@@ -1225,16 +1227,16 @@ private fun LabeledField(label: String, content: @Composable () -> Unit) {
 @Composable
 private fun BoxedTextField(state: MutableState<String>, codeFont: FontFamily, numeric: Boolean = false) {
     Box(
-        Modifier.fillMaxWidth().background(Ca.colors.surface2, RoundedCornerShape(Ca.radius.control))
-            .border(1.dp, Ca.colors.hairline, RoundedCornerShape(Ca.radius.control)).padding(horizontal = 12.dp, vertical = 10.dp),
+        Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.surfaceContainerHigh, RoundedCornerShape(Ca.radius.control))
+            .border(1.dp, MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(Ca.radius.control)).padding(horizontal = 12.dp, vertical = 10.dp),
     ) {
         BasicTextField(
             value = state.value,
             onValueChange = { state.value = if (numeric) it.filter { c -> c.isDigit() } else it },
             singleLine = true,
             keyboardOptions = if (numeric) KeyboardOptions(keyboardType = KeyboardType.Number) else KeyboardOptions.Default,
-            textStyle = Ca.type.footnote.copy(color = Ca.colors.textPrimary, fontFamily = codeFont),
-            cursorBrush = SolidColor(Ca.colors.accent),
+            textStyle = MaterialTheme.typography.bodyMedium.copy(color = MaterialTheme.colorScheme.onSurface, fontFamily = codeFont),
+            cursorBrush = SolidColor(MaterialTheme.colorScheme.primary),
             modifier = Modifier.fillMaxWidth(),
         )
     }
@@ -1242,14 +1244,14 @@ private fun BoxedTextField(state: MutableState<String>, codeFont: FontFamily, nu
 
 @Composable
 private fun ToggleSwitch(on: Boolean, onToggle: (Boolean) -> Unit) {
-    val bg by animateColorAsState(if (on) Ca.colors.accent else Ca.colors.surface3, tween(Motion.FAST), label = "switchBg")
+    val bg by animateColorAsState(if (on) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surfaceContainerHighest, tween(Motion.FAST), label = "switchBg")
     val align = if (on) Alignment.CenterEnd else Alignment.CenterStart
     Box(
         Modifier.size(width = 44.dp, height = 26.dp).background(bg, RoundedCornerShape(Ca.radius.pill))
             .clickable(remember { MutableInteractionSource() }, null) { onToggle(!on) }.padding(3.dp),
         contentAlignment = align,
     ) {
-        Box(Modifier.size(20.dp).background(Ca.colors.textOnAccent, RoundedCornerShape(Ca.radius.pill)))
+        Box(Modifier.size(20.dp).background(MaterialTheme.colorScheme.onPrimary, RoundedCornerShape(Ca.radius.pill)))
     }
 }
 
@@ -1259,23 +1261,23 @@ private fun StringListEditor(values: SnapshotStateList<String>, codeFont: FontFa
     Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(6.dp)) {
         values.forEachIndexed { i, v ->
             Row(
-                Modifier.fillMaxWidth().background(Ca.colors.surface2, RoundedCornerShape(Ca.radius.sm)).padding(horizontal = 10.dp, vertical = 7.dp),
+                Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.surfaceContainerHigh, RoundedCornerShape(Ca.radius.sm)).padding(horizontal = 10.dp, vertical = 7.dp),
                 verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp),
             ) {
-                Text(v, color = Ca.colors.textPrimary, style = Ca.type.caption.copy(fontFamily = codeFont), modifier = Modifier.weight(1f),
+                Text(v, color = MaterialTheme.colorScheme.onSurface, style = MaterialTheme.typography.bodySmall.copy(fontFamily = codeFont), modifier = Modifier.weight(1f),
                     maxLines = 1, overflow = TextOverflow.Ellipsis)
-                IconButtonCa(CaIcons.close, stringResource(Res.string.remove), { values.removeAt(i) }, boxSize = 24, iconSize = 14, tint = Ca.colors.textTertiary)
+                IconButtonCa(CaIcons.close, stringResource(Res.string.remove), { values.removeAt(i) }, boxSize = 24, iconSize = 14, tint = MaterialTheme.colorScheme.outline)
             }
         }
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             Box(
-                Modifier.weight(1f).background(Ca.colors.surface2, RoundedCornerShape(Ca.radius.sm))
-                    .border(1.dp, Ca.colors.hairline, RoundedCornerShape(Ca.radius.sm)).padding(horizontal = 10.dp, vertical = 7.dp),
+                Modifier.weight(1f).background(MaterialTheme.colorScheme.surfaceContainerHigh, RoundedCornerShape(Ca.radius.sm))
+                    .border(1.dp, MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(Ca.radius.sm)).padding(horizontal = 10.dp, vertical = 7.dp),
             ) {
-                if (draft.isEmpty()) Text(stringResource(Res.string.modcfg_add_placeholder), color = Ca.colors.textTertiary, style = Ca.type.caption)
+                if (draft.isEmpty()) Text(stringResource(Res.string.modcfg_add_placeholder), color = MaterialTheme.colorScheme.outline, style = MaterialTheme.typography.bodySmall)
                 BasicTextField(draft, { draft = it }, singleLine = true,
-                    textStyle = Ca.type.caption.copy(color = Ca.colors.textPrimary, fontFamily = codeFont),
-                    cursorBrush = SolidColor(Ca.colors.accent), modifier = Modifier.fillMaxWidth())
+                    textStyle = MaterialTheme.typography.bodySmall.copy(color = MaterialTheme.colorScheme.onSurface, fontFamily = codeFont),
+                    cursorBrush = SolidColor(MaterialTheme.colorScheme.primary), modifier = Modifier.fillMaxWidth())
             }
             IconButtonCa(CaIcons.plus, stringResource(Res.string.add), { if (draft.isNotBlank()) { values.add(draft.trim()); draft = "" } }, boxSize = 30, iconSize = 16, active = true)
         }
@@ -1290,20 +1292,20 @@ private fun TableListEditor(field: FieldState.TableF, codeFont: FontFamily) {
     val singular = field.label.lowercase().removeSuffix("s")
 
     Column(Modifier.fillMaxWidth().animateContentSize(tween(Motion.BASE, easing = Motion.spring)), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        Text(field.label, color = Ca.colors.textSecondary, style = Ca.type.caption, fontWeight = FontWeight.Medium)
-        if (field.rows.isEmpty()) Text(stringResource(Res.string.modcfg_no_rows_yet, "${singular}s"), color = Ca.colors.textTertiary, style = Ca.type.caption2)
+        Text(field.label, color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodySmall, fontWeight = FontWeight.Medium)
+        if (field.rows.isEmpty()) Text(stringResource(Res.string.modcfg_no_rows_yet, "${singular}s"), color = MaterialTheme.colorScheme.outline, style = MaterialTheme.typography.labelSmall)
         field.rows.forEachIndexed { i, row ->
             val isNew = i == justAdded
-            val borderColor by animateColorAsState(if (isNew) Ca.colors.accent else Ca.colors.hairline, tween(Motion.SLOW), label = "newRowBorder")
+            val borderColor by animateColorAsState(if (isNew) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outlineVariant, tween(Motion.SLOW), label = "newRowBorder")
             Column(
-                Modifier.fillMaxWidth().background(Ca.colors.surface2, RoundedCornerShape(Ca.radius.md))
+                Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.surfaceContainerHigh, RoundedCornerShape(Ca.radius.md))
                     .border(if (isNew) 1.5.dp else 1.dp, borderColor, RoundedCornerShape(Ca.radius.md)).padding(12.dp),
                 verticalArrangement = Arrangement.spacedBy(10.dp),
             ) {
                 Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                    Text(rowTitle(row, i), color = Ca.colors.textPrimary, style = Ca.type.footnote, fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f))
-                    if (isNew) Chip(stringResource(Res.string.modcfg_new_badge), fill = Ca.colors.accentSoft, textColor = Ca.colors.accent)
-                    IconButtonCa(CaIcons.close, stringResource(Res.string.remove), { val at = i; field.rows.removeAt(at); if (justAdded == at) justAdded = -1 }, boxSize = 24, iconSize = 14, tint = Ca.colors.textTertiary)
+                    Text(rowTitle(row, i), color = MaterialTheme.colorScheme.onSurface, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f))
+                    if (isNew) Chip(stringResource(Res.string.modcfg_new_badge), fill = MaterialTheme.colorScheme.primaryContainer, textColor = MaterialTheme.colorScheme.primary)
+                    IconButtonCa(CaIcons.close, stringResource(Res.string.remove), { val at = i; field.rows.removeAt(at); if (justAdded == at) justAdded = -1 }, boxSize = 24, iconSize = 14, tint = MaterialTheme.colorScheme.outline)
                 }
                 row.forEach { FieldEditor(it, codeFont) }
             }
@@ -1316,25 +1318,25 @@ private fun TableListEditor(field: FieldState.TableF, codeFont: FontFamily) {
 @Composable
 private fun AddRowButton(label: String, onClick: () -> Unit) {
     Row(
-        Modifier.fillMaxWidth().background(Ca.colors.accentSoft, RoundedCornerShape(Ca.radius.md))
+        Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.primaryContainer, RoundedCornerShape(Ca.radius.md))
             .clickable(remember { MutableInteractionSource() }, null, onClick = onClick)
             .padding(vertical = 10.dp),
         horizontalArrangement = Arrangement.Center, verticalAlignment = Alignment.CenterVertically,
     ) {
-        Icon(CaIcons.plus, null, Modifier.size(16.dp), tint = Ca.colors.accent)
+        Icon(CaIcons.plus, null, Modifier.size(16.dp), tint = MaterialTheme.colorScheme.primary)
         Spacer(Modifier.width(6.dp))
-        Text(label, color = Ca.colors.accent, style = Ca.type.footnote, fontWeight = FontWeight.SemiBold)
+        Text(label, color = MaterialTheme.colorScheme.primary, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold)
     }
 }
 
 @Composable
 private fun LevelChip(label: String, selected: Boolean, onClick: () -> Unit) {
-    val bg by animateColorAsState(if (selected) Ca.colors.accent else Ca.colors.surface2, tween(Motion.FAST), label = "levelBg")
+    val bg by animateColorAsState(if (selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surfaceContainerHigh, tween(Motion.FAST), label = "levelBg")
     Box(
         Modifier.background(bg, RoundedCornerShape(Ca.radius.pill)).clickable(remember { MutableInteractionSource() }, null, onClick = onClick)
             .padding(horizontal = 14.dp, vertical = 7.dp),
     ) {
-        Text(label, color = if (selected) Ca.colors.textOnAccent else Ca.colors.textSecondary, style = Ca.type.caption, fontWeight = FontWeight.Medium)
+        Text(label, color = if (selected) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodySmall, fontWeight = FontWeight.Medium)
     }
 }
 
@@ -1348,12 +1350,12 @@ private fun ConfigToastHost(toast: ConfigToast?, modifier: Modifier) {
         ) {
             val t = toast
             Row(
-                Modifier.background(Ca.colors.glassThick, RoundedCornerShape(Ca.radius.pill))
-                    .border(1.dp, Ca.colors.glassEdge, RoundedCornerShape(Ca.radius.pill)).padding(horizontal = 16.dp, vertical = 11.dp),
+                Modifier.background(Ide.colors.glassThick, RoundedCornerShape(Ca.radius.pill))
+                    .border(1.dp, Ide.colors.glassEdge, RoundedCornerShape(Ca.radius.pill)).padding(horizontal = 16.dp, vertical = 11.dp),
                 verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp),
             ) {
-                Icon(if (t?.error == true) CaIcons.warning else CaIcons.check, null, Modifier.size(16.dp), tint = if (t?.error == true) Ca.colors.error else Ca.colors.run)
-                Text(t?.text ?: "", color = Ca.colors.textPrimary, style = Ca.type.footnote, fontWeight = FontWeight.Medium)
+                Icon(if (t?.error == true) CaIcons.warning else CaIcons.check, null, Modifier.size(16.dp), tint = if (t?.error == true) MaterialTheme.colorScheme.error else Ide.colors.run)
+                Text(t?.text ?: "", color = MaterialTheme.colorScheme.onSurface, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Medium)
             }
         }
     }

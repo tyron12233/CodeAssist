@@ -1,5 +1,7 @@
 package dev.ide.ui.editor.preview
 
+import dev.ide.ui.theme.Ide
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -105,7 +107,7 @@ actual fun LessonLayoutPreview(
             val editorShape = RoundedCornerShape(Ca.radius.md)
             Box(
                 Modifier.fillMaxWidth().height(180.dp).clip(editorShape)
-                    .background(Ca.colors.editorBg).border(1.dp, Ca.colors.hairline, editorShape),
+                    .background(Ide.colors.editorBg).border(1.dp, MaterialTheme.colorScheme.outlineVariant, editorShape),
             ) {
                 CodeEditor(
                     path = "preview.xml",
@@ -121,7 +123,7 @@ actual fun LessonLayoutPreview(
 
         val cap = caption.ifBlank { if (interactive) "Edit the XML above and watch it update" else "" }
         if (cap.isNotBlank()) {
-            Text(cap, color = Ca.colors.textTertiary, style = Ca.type.caption, fontWeight = FontWeight.Medium)
+            Text(cap, color = MaterialTheme.colorScheme.outline, style = MaterialTheme.typography.bodySmall, fontWeight = FontWeight.Medium)
         }
     }
 }
@@ -158,7 +160,7 @@ private fun DeviceFrame(
         Box(
             Modifier.width(frameWdp.dp).height(frameHdp.dp)
                 .shadow(12.dp, shape).clip(shape)
-                .background(Color.White).border(1.dp, Ca.colors.separator, shape).clipToBounds(),
+                .background(Color.White).border(1.dp, MaterialTheme.colorScheme.outlineVariant, shape).clipToBounds(),
         ) {
             val hostDensity = LocalDensity.current.density
             // Device px → frame px: the frame is `frameWdp` dp = `frameWdp*hostDensity` px wide; map the
@@ -178,10 +180,10 @@ private fun PlaceholderCard(frameWdp: Float) {
     val shape = RoundedCornerShape(Ca.radius.lg)
     Box(
         Modifier.width(frameWdp.dp).height((frameWdp * 1.2f).dp)
-            .clip(shape).background(Ca.colors.surface2).border(1.dp, Ca.colors.separator, shape),
+            .clip(shape).background(MaterialTheme.colorScheme.surfaceContainerHigh).border(1.dp, MaterialTheme.colorScheme.outlineVariant, shape),
         contentAlignment = Alignment.Center,
     ) {
-        Text("Rendering preview…", color = Ca.colors.textTertiary, style = Ca.type.caption)
+        Text("Rendering preview…", color = MaterialTheme.colorScheme.outline, style = MaterialTheme.typography.bodySmall)
     }
 }
 

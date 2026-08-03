@@ -1,5 +1,6 @@
 package dev.ide.ui.components
 
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.Spring
@@ -134,7 +135,7 @@ fun ActivityRail(
                     Modifier.align(Alignment.TopCenter)
                         .offset { IntOffset(0, indicatorY.roundToInt()) }
                         .size(RailIconBox)
-                        .background(Ca.colors.accentSoft, RoundedCornerShape(Ca.radius.sm)),
+                        .background(MaterialTheme.colorScheme.primaryContainer, RoundedCornerShape(Ca.radius.sm)),
                 )
             }
             Column(
@@ -179,12 +180,12 @@ private fun RailIcon(
                 active = false, // the sliding indicator provides the selected background
                 iconSize = 22,
                 boxSize = 46,
-                tint = if (active) Ca.colors.accent else Ca.colors.textSecondary,
+                tint = if (active) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
             )
         }
         Text(
             panel.title,
-            color = if (active) Ca.colors.accent else Ca.colors.textTertiary,
+            color = if (active) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outline,
             fontSize = 10.5f.sp,
             fontWeight = if (active) FontWeight.SemiBold else FontWeight.Normal,
             maxLines = 1,
@@ -253,7 +254,7 @@ fun SidebarPane(
 /** A 1px full-height separator between the pane and the editor. */
 @Composable
 fun SidebarDivider() {
-    Box(Modifier.width(1.dp).fillMaxHeight().background(Ca.colors.separator))
+    Box(Modifier.width(1.dp).fillMaxHeight().background(MaterialTheme.colorScheme.outlineVariant))
 }
 
 /** A non-panel rail action (icon + label), styled like a [RailIcon] but without the sliding indicator — used
@@ -267,7 +268,7 @@ fun RailActionItem(icon: ImageVector, label: String, onClick: () -> Unit) {
         IconButtonCa(icon, label, onClick, iconSize = 22, boxSize = 46)
         Text(
             label,
-            color = Ca.colors.textTertiary,
+            color = MaterialTheme.colorScheme.outline,
             fontSize = 10.5f.sp,
             fontWeight = FontWeight.Normal,
             maxLines = 1,
@@ -295,7 +296,7 @@ fun SegmentedPanelSwitcher(
         modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 10.dp)
             .height(40.dp)
             .clip(RoundedCornerShape(Ca.radius.md))
-            .background(Ca.colors.surface2),
+            .background(MaterialTheme.colorScheme.surfaceContainerHigh),
     ) {
         val segW = maxWidth / panels.size
         val indicatorX by animateDpAsState(
@@ -306,12 +307,12 @@ fun SegmentedPanelSwitcher(
         // The sliding selected segment.
         Box(
             Modifier.offset(x = indicatorX).width(segW).fillMaxHeight().padding(3.dp)
-                .background(Ca.colors.accentSoft, RoundedCornerShape(Ca.radius.sm)),
+                .background(MaterialTheme.colorScheme.primaryContainer, RoundedCornerShape(Ca.radius.sm)),
         )
         Row(Modifier.fillMaxSize()) {
             panels.forEach { panel ->
                 val active = panel.id == selectedId
-                val tint = if (active) Ca.colors.accent else Ca.colors.textSecondary
+                val tint = if (active) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
                 Row(
                     Modifier.width(segW).fillMaxHeight().clickable { onSelect(panel.id) },
                     horizontalArrangement = Arrangement.Center,
@@ -323,7 +324,7 @@ fun SegmentedPanelSwitcher(
                         Text(
                             panel.title,
                             color = tint,
-                            style = Ca.type.footnote,
+                            style = MaterialTheme.typography.bodyMedium,
                             fontWeight = if (active) FontWeight.SemiBold else FontWeight.Normal,
                             maxLines = 1,
                             overflow = TextOverflow.Ellipsis,

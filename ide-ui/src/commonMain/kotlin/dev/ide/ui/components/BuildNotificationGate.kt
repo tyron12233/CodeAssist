@@ -1,5 +1,7 @@
 package dev.ide.ui.components
 
+import dev.ide.ui.theme.Ide
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -76,7 +78,7 @@ fun BuildNotificationGate(state: IdeUiState) {
     when (phase) {
         Phase.Rationale -> GateDialog(
             icon = CaIcons.hammer,
-            iconTint = Ca.colors.accent,
+            iconTint = MaterialTheme.colorScheme.primary,
             title = stringResource(Res.string.build_notif_title),
             message = stringResource(Res.string.build_notif_message),
             confirmLabel = stringResource(Res.string.allow),
@@ -91,7 +93,7 @@ fun BuildNotificationGate(state: IdeUiState) {
         )
         Phase.InProcessNotice -> GateDialog(
             icon = CaIcons.info,
-            iconTint = Ca.colors.textSecondary,
+            iconTint = MaterialTheme.colorScheme.onSurfaceVariant,
             title = stringResource(Res.string.build_notif_inprocess_title),
             message = stringResource(Res.string.build_notif_inprocess_message),
             confirmLabel = stringResource(Res.string.got_it),
@@ -123,21 +125,21 @@ private fun GateDialog(
                 .widthIn(max = 420.dp)
                 .fillMaxWidth()
                 .padding(horizontal = 16.dp)
-                .background(Ca.colors.glassThick, RoundedCornerShape(Ca.radius.xl))
-                .border(1.dp, Ca.colors.glassEdge, RoundedCornerShape(Ca.radius.xl))
+                .background(Ide.colors.glassThick, RoundedCornerShape(Ca.radius.xl))
+                .border(1.dp, Ide.colors.glassEdge, RoundedCornerShape(Ca.radius.xl))
                 .padding(20.dp),
         ) {
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 Icon(icon, contentDescription = null, Modifier.size(18.dp), tint = iconTint)
-                Text(title, color = Ca.colors.textPrimary, style = Ca.type.subhead, fontWeight = FontWeight.SemiBold)
+                Text(title, color = MaterialTheme.colorScheme.onSurface, style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.SemiBold)
             }
             Spacer(Modifier.height(8.dp))
-            Text(message, color = Ca.colors.textSecondary, style = Ca.type.footnote)
+            Text(message, color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodyMedium)
             Spacer(Modifier.height(16.dp))
-            GateButton(confirmLabel, fill = Ca.colors.accent, fg = Ca.colors.textOnAccent, onClick = onConfirm)
+            GateButton(confirmLabel, fill = MaterialTheme.colorScheme.primary, fg = MaterialTheme.colorScheme.onPrimary, onClick = onConfirm)
             if (dismissLabel != null) {
                 Spacer(Modifier.height(8.dp))
-                GateButton(dismissLabel, fill = Ca.colors.surface3, fg = Ca.colors.textPrimary, onClick = onDismiss)
+                GateButton(dismissLabel, fill = MaterialTheme.colorScheme.surfaceContainerHighest, fg = MaterialTheme.colorScheme.onSurface, onClick = onDismiss)
             }
         }
     }
@@ -148,7 +150,7 @@ private fun GateButton(label: String, fill: Color, fg: Color, onClick: () -> Uni
     Text(
         label,
         color = fg,
-        style = Ca.type.footnote,
+        style = MaterialTheme.typography.bodyMedium,
         fontWeight = FontWeight.SemiBold,
         modifier = Modifier
             .fillMaxWidth()

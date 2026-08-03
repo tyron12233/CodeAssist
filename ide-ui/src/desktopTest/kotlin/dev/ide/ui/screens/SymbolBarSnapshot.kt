@@ -1,5 +1,6 @@
 package dev.ide.ui.screens
 
+import dev.ide.ui.theme.Ide
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
@@ -9,7 +10,6 @@ import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.ImageComposeScene
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.Density
-import dev.ide.ui.theme.Ca
 import dev.ide.ui.theme.CodeAssistTheme
 import org.jetbrains.skia.EncodedImageFormat
 import java.io.File
@@ -22,7 +22,7 @@ class SymbolBarSnapshot {
     @Test
     fun renderSymbolBar() {
         snapshot("symbol-bar.png", 760, 96) {
-            Box(Modifier.fillMaxSize().background(Ca.colors.editorBg)) {
+            Box(Modifier.fillMaxSize().background(Ide.colors.editorBg)) {
                 EditorSymbolBar(onTab = {}, onSymbol = {}, modifier = Modifier.fillMaxWidth())
             }
         }

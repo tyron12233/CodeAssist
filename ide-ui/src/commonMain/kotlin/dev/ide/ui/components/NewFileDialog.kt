@@ -2,6 +2,8 @@
 
 package dev.ide.ui.components
 
+import dev.ide.ui.theme.Ide
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -167,14 +169,14 @@ private fun NewEntryPanel(
             .widthIn(max = 520.dp)
             .fillMaxWidth()
             .padding(horizontal = 12.dp)
-            .background(Ca.colors.glassThick, RoundedCornerShape(Ca.radius.xl))
-            .border(1.dp, Ca.colors.glassEdge, RoundedCornerShape(Ca.radius.xl))
+            .background(Ide.colors.glassThick, RoundedCornerShape(Ca.radius.xl))
+            .border(1.dp, Ide.colors.glassEdge, RoundedCornerShape(Ca.radius.xl))
             .padding(20.dp),
     ) {
-        Text(stringResource(if (isFolder) Res.string.newfile_new_folder else Res.string.newfile_title), color = Ca.colors.textPrimary, style = Ca.type.subhead, fontWeight = FontWeight.SemiBold)
+        Text(stringResource(if (isFolder) Res.string.newfile_new_folder else Res.string.newfile_title), color = MaterialTheme.colorScheme.onSurface, style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.SemiBold)
         Spacer(Modifier.height(4.dp))
         val selPkg = req.packages.firstOrNull { it.dirPath == targetDir }?.packageName
-        Text(stringResource(Res.string.newfile_in, selPkg ?: req.dirLabel), color = Ca.colors.textTertiary, style = Ca.type.caption2)
+        Text(stringResource(Res.string.newfile_in, selPkg ?: req.dirLabel), color = MaterialTheme.colorScheme.outline, style = MaterialTheme.typography.labelSmall)
         Spacer12()
 
         PackageChips(req.packages, targetDir, onSelect = { targetDir = it })
@@ -191,8 +193,8 @@ private fun NewEntryPanel(
         Spacer8()
         Text(
             stringResource(if (isFolder) Res.string.newfile_help_folder else Res.string.newfile_help_file),
-            color = Ca.colors.textTertiary,
-            style = Ca.type.caption2,
+            color = MaterialTheme.colorScheme.outline,
+            style = MaterialTheme.typography.labelSmall,
         )
         Spacer12()
 
@@ -304,17 +306,17 @@ private fun NewSourcePanel(
             .widthIn(max = 520.dp)
             .fillMaxWidth()
             .padding(horizontal = 12.dp)
-            .background(Ca.colors.glassThick, RoundedCornerShape(Ca.radius.xl))
-            .border(1.dp, Ca.colors.glassEdge, RoundedCornerShape(Ca.radius.xl))
+            .background(Ide.colors.glassThick, RoundedCornerShape(Ca.radius.xl))
+            .border(1.dp, Ide.colors.glassEdge, RoundedCornerShape(Ca.radius.xl))
             .padding(20.dp),
     ) {
         Text(
             stringResource(if (req.lang == NewSourceLang.Java) Res.string.newfile_new_java_class else Res.string.newfile_new_kotlin_file),
-            color = Ca.colors.textPrimary, style = Ca.type.subhead, fontWeight = FontWeight.SemiBold,
+            color = MaterialTheme.colorScheme.onSurface, style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.SemiBold,
         )
         Spacer(Modifier.height(4.dp))
         val selPkg = req.packages.firstOrNull { it.dirPath == targetDir }?.packageName
-        Text(stringResource(Res.string.newfile_in, selPkg ?: req.dirLabel), color = Ca.colors.textTertiary, style = Ca.type.caption2)
+        Text(stringResource(Res.string.newfile_in, selPkg ?: req.dirLabel), color = MaterialTheme.colorScheme.outline, style = MaterialTheme.typography.labelSmall)
         Spacer12()
 
         PackageChips(req.packages, targetDir, onSelect = { targetDir = it })
@@ -445,13 +447,13 @@ private fun NewXmlPanel(
             .widthIn(max = 520.dp)
             .fillMaxWidth()
             .padding(horizontal = 12.dp)
-            .background(Ca.colors.glassThick, RoundedCornerShape(Ca.radius.xl))
-            .border(1.dp, Ca.colors.glassEdge, RoundedCornerShape(Ca.radius.xl))
+            .background(Ide.colors.glassThick, RoundedCornerShape(Ca.radius.xl))
+            .border(1.dp, Ide.colors.glassEdge, RoundedCornerShape(Ca.radius.xl))
             .padding(20.dp),
     ) {
         val title = if (mode == XmlMode.Directory) stringResource(Res.string.newfile_new_resource_directory)
             else stringResource(Res.string.newfile_new_resource_title, stringResource(kind.label).lowercase())
-        Text(title, color = Ca.colors.textPrimary, style = Ca.type.subhead, fontWeight = FontWeight.SemiBold)
+        Text(title, color = MaterialTheme.colorScheme.onSurface, style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.SemiBold)
         Spacer8()
 
         // File vs Directory.
@@ -624,13 +626,13 @@ private fun AddSourceRootPanel(
             .widthIn(max = 520.dp)
             .fillMaxWidth()
             .padding(horizontal = 12.dp)
-            .background(Ca.colors.glassThick, RoundedCornerShape(Ca.radius.xl))
-            .border(1.dp, Ca.colors.glassEdge, RoundedCornerShape(Ca.radius.xl))
+            .background(Ide.colors.glassThick, RoundedCornerShape(Ca.radius.xl))
+            .border(1.dp, Ide.colors.glassEdge, RoundedCornerShape(Ca.radius.xl))
             .padding(20.dp),
     ) {
-        Text(stringResource(Res.string.newfile_add_source_root), color = Ca.colors.textPrimary, style = Ca.type.subhead, fontWeight = FontWeight.SemiBold)
+        Text(stringResource(Res.string.newfile_add_source_root), color = MaterialTheme.colorScheme.onSurface, style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.SemiBold)
         Spacer(Modifier.height(4.dp))
-        Text(stringResource(Res.string.newfile_to, req.moduleName), color = Ca.colors.textTertiary, style = Ca.type.caption2)
+        Text(stringResource(Res.string.newfile_to, req.moduleName), color = MaterialTheme.colorScheme.outline, style = MaterialTheme.typography.labelSmall)
         Spacer12()
 
         // Source-set selector: existing sets + a "New set…" toggle that reveals a name field.
@@ -681,8 +683,8 @@ private fun AddSourceRootPanel(
         Spacer8()
         Text(
             stringResource(Res.string.newfile_created_at, "src/$effectiveSet/${if (isCustom) dirName.ifEmpty { "…" } else preset.dirName}"),
-            color = Ca.colors.textTertiary,
-            style = Ca.type.caption2,
+            color = MaterialTheme.colorScheme.outline,
+            style = MaterialTheme.typography.labelSmall,
         )
         Spacer12()
 
@@ -696,7 +698,7 @@ private fun AddSourceRootPanel(
 
 @Composable
 internal fun FieldLabel(text: String) {
-    Text(text, color = Ca.colors.textTertiary, style = Ca.type.caption2, fontWeight = FontWeight.SemiBold)
+    Text(text, color = MaterialTheme.colorScheme.outline, style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.SemiBold)
     Spacer(Modifier.height(4.dp))
 }
 
@@ -713,18 +715,18 @@ internal fun DialogField(
         Modifier
             .fillMaxWidth()
             .height(40.dp)
-            .background(Ca.colors.surface2, RoundedCornerShape(Ca.radius.control))
-            .border(1.dp, Ca.colors.hairline, RoundedCornerShape(Ca.radius.control))
+            .background(MaterialTheme.colorScheme.surfaceContainerHigh, RoundedCornerShape(Ca.radius.control))
+            .border(1.dp, MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(Ca.radius.control))
             .padding(horizontal = 12.dp),
         contentAlignment = Alignment.CenterStart,
     ) {
-        if (value.isEmpty()) Text(placeholder, color = Ca.colors.textTertiary, style = Ca.type.footnote)
+        if (value.isEmpty()) Text(placeholder, color = MaterialTheme.colorScheme.outline, style = MaterialTheme.typography.bodyMedium)
         BasicTextField(
             value = value,
             onValueChange = onValueChange,
             singleLine = true,
-            textStyle = Ca.type.footnote.copy(color = Ca.colors.textPrimary),
-            cursorBrush = SolidColor(Ca.colors.accent),
+            textStyle = MaterialTheme.typography.bodyMedium.copy(color = MaterialTheme.colorScheme.onSurface),
+            cursorBrush = SolidColor(MaterialTheme.colorScheme.primary),
             modifier = Modifier
                 .fillMaxWidth()
                 .let { if (focusRequester != null) it.focusRequester(focusRequester) else it }
@@ -742,33 +744,33 @@ internal fun DialogField(
 
 @Composable
 private fun SelectChip(label: String, selected: Boolean, onClick: () -> Unit) {
-    val fill = if (selected) Ca.colors.accentSoft else Ca.colors.surface3
-    val fg = if (selected) Ca.colors.accent else Ca.colors.textSecondary
+    val fill = if (selected) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surfaceContainerHighest
+    val fg = if (selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
     Box(
         Modifier
             .background(fill, RoundedCornerShape(Ca.radius.pill))
             .clickable(onClick = onClick)
             .padding(horizontal = 12.dp, vertical = 6.dp),
     ) {
-        Text(label, color = fg, style = Ca.type.footnote, fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Normal)
+        Text(label, color = fg, style = MaterialTheme.typography.bodyMedium, fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Normal)
     }
 }
 
 @Composable
 internal fun DialogButton(label: String, primary: Boolean, enabled: Boolean, onClick: () -> Unit) {
     val fill = when {
-        primary && enabled -> Ca.colors.accent
-        primary -> Ca.colors.accent.copy(alpha = 0.4f)
-        else -> Ca.colors.surface3
+        primary && enabled -> MaterialTheme.colorScheme.primary
+        primary -> MaterialTheme.colorScheme.primary.copy(alpha = 0.4f)
+        else -> MaterialTheme.colorScheme.surfaceContainerHighest
     }
-    val fg = if (primary) Ca.colors.textOnAccent else Ca.colors.textSecondary
+    val fg = if (primary) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurfaceVariant
     Box(
         Modifier
             .background(fill, RoundedCornerShape(Ca.radius.control))
             .let { if (enabled) it.clickable(onClick = onClick) else it }
             .padding(horizontal = 18.dp, vertical = 9.dp),
     ) {
-        Text(label, color = fg, style = Ca.type.footnote, fontWeight = FontWeight.SemiBold)
+        Text(label, color = fg, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold)
     }
 }
 

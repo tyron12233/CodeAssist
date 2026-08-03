@@ -1,5 +1,7 @@
 package dev.ide.ui.components
 
+import dev.ide.ui.theme.Ide
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -61,33 +63,33 @@ fun RunConflictDialog(state: IdeUiState) {
                     .widthIn(max = 420.dp)
                     .fillMaxWidth()
                     .padding(horizontal = 16.dp)
-                    .background(Ca.colors.glassThick, RoundedCornerShape(Ca.radius.xl))
-                    .border(1.dp, Ca.colors.glassEdge, RoundedCornerShape(Ca.radius.xl))
+                    .background(Ide.colors.glassThick, RoundedCornerShape(Ca.radius.xl))
+                    .border(1.dp, Ide.colors.glassEdge, RoundedCornerShape(Ca.radius.xl))
                     .padding(20.dp),
             ) {
                 Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Icon(CaIcons.warning, contentDescription = null, Modifier.size(18.dp), tint = Ca.colors.warning)
+                    Icon(CaIcons.warning, contentDescription = null, Modifier.size(18.dp), tint = Ide.colors.warning)
                     Text(
                         stringResource(Res.string.run_conflict_title),
-                        color = Ca.colors.textPrimary,
-                        style = Ca.type.subhead,
+                        color = MaterialTheme.colorScheme.onSurface,
+                        style = MaterialTheme.typography.bodyLarge,
                         fontWeight = FontWeight.SemiBold,
                     )
                 }
                 Spacer(Modifier.height(8.dp))
                 Text(
                     stringResource(Res.string.run_conflict_message),
-                    color = Ca.colors.textSecondary,
-                    style = Ca.type.footnote,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    style = MaterialTheme.typography.bodyMedium,
                 )
                 Spacer(Modifier.height(14.dp))
                 DontAskRow(checked = dontAsk, onToggle = { dontAsk = !dontAsk })
                 Spacer(Modifier.height(14.dp))
-                ConflictButton(stringResource(Res.string.run_conflict_stop_and_run), fill = Ca.colors.accent, fg = Ca.colors.textOnAccent) {
+                ConflictButton(stringResource(Res.string.run_conflict_stop_and_run), fill = MaterialTheme.colorScheme.primary, fg = MaterialTheme.colorScheme.onPrimary) {
                     state.confirmStopAndRun(dontAsk)
                 }
                 Spacer(Modifier.height(8.dp))
-                ConflictButton(stringResource(Res.string.cancel), fill = Ca.colors.surface3, fg = Ca.colors.textPrimary) {
+                ConflictButton(stringResource(Res.string.cancel), fill = MaterialTheme.colorScheme.surfaceContainerHighest, fg = MaterialTheme.colorScheme.onSurface) {
                     state.dismissRunConflict()
                 }
             }
@@ -106,22 +108,22 @@ private fun DontAskRow(checked: Boolean, onToggle: () -> Unit) {
             Modifier
                 .size(20.dp)
                 .background(
-                    if (checked) Ca.colors.accent else Color.Transparent,
+                    if (checked) MaterialTheme.colorScheme.primary else Color.Transparent,
                     RoundedCornerShape(Ca.radius.xs),
                 )
                 .border(
                     1.dp,
-                    if (checked) Ca.colors.accent else Ca.colors.glassEdge,
+                    if (checked) MaterialTheme.colorScheme.primary else Ide.colors.glassEdge,
                     RoundedCornerShape(Ca.radius.xs),
                 ),
             contentAlignment = Alignment.Center,
         ) {
-            if (checked) Icon(CaIcons.check, contentDescription = null, Modifier.size(14.dp), tint = Ca.colors.textOnAccent)
+            if (checked) Icon(CaIcons.check, contentDescription = null, Modifier.size(14.dp), tint = MaterialTheme.colorScheme.onPrimary)
         }
         Text(
             stringResource(Res.string.run_conflict_dont_ask),
-            color = Ca.colors.textSecondary,
-            style = Ca.type.footnote,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            style = MaterialTheme.typography.bodyMedium,
         )
     }
 }
@@ -131,7 +133,7 @@ private fun ConflictButton(label: String, fill: Color, fg: Color, onClick: () ->
     Text(
         label,
         color = fg,
-        style = Ca.type.footnote,
+        style = MaterialTheme.typography.bodyMedium,
         fontWeight = FontWeight.SemiBold,
         modifier = Modifier
             .fillMaxWidth()

@@ -1,5 +1,6 @@
 package dev.ide.ui.screens
 
+import dev.ide.ui.theme.Ide
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
@@ -25,7 +26,6 @@ import dev.ide.ui.ext.UiPluginHost
 import dev.ide.ui.ext.UiActionHost
 import dev.ide.ui.ext.UiActionRegistry
 import dev.ide.ui.ext.UiDestinations
-import dev.ide.ui.theme.Ca
 import dev.ide.ui.theme.CodeAssistTheme
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -90,7 +90,7 @@ class MoreMenuActionTest {
         val backend = FakeBackend()
         val host = RecordingHost(backend)
         snapshot("more-menu.png", 520, 560) {
-            Box(Modifier.fillMaxSize().background(Ca.colors.glassThick)) {
+            Box(Modifier.fillMaxSize().background(Ide.colors.glassThick)) {
                 MoreSheetContent(backend = backend, host = host, modifier = Modifier.fillMaxWidth())
             }
         }

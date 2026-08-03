@@ -1,5 +1,6 @@
 package dev.ide.ui.editor.preview
 
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.padding
@@ -18,7 +19,6 @@ import dev.ide.ui.generated.resources.error
 import dev.ide.ui.generated.resources.preview_render_error
 import dev.ide.ui.generated.resources.preview_render_failed
 import dev.ide.ui.icons.CaIcons
-import dev.ide.ui.theme.Ca
 import org.jetbrains.compose.resources.stringResource
 
 /**
@@ -40,12 +40,12 @@ fun PreviewRenderError(error: Throwable, modifier: Modifier = Modifier) {
             CaIcons.error,
             contentDescription = stringResource(Res.string.preview_render_error),
             modifier = Modifier.size(20.dp),
-            tint = Ca.colors.error,
+            tint = MaterialTheme.colorScheme.error,
         )
         Text(
             stringResource(Res.string.preview_render_failed),
-            color = Ca.colors.error,
-            style = Ca.type.body,
+            color = MaterialTheme.colorScheme.error,
+            style = MaterialTheme.typography.bodyLarge,
             fontWeight = FontWeight.SemiBold,
             textAlign = TextAlign.Center,
         )
@@ -58,8 +58,8 @@ fun PreviewRenderError(error: Throwable, modifier: Modifier = Modifier) {
         SelectionContainer {
             Text(
                 detail,
-                color = Ca.colors.textSecondary,
-                style = Ca.type.caption,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                style = MaterialTheme.typography.bodySmall,
                 textAlign = TextAlign.Center,
             )
         }

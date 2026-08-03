@@ -1,5 +1,7 @@
 package dev.ide.ui.editor.preview
 
+import dev.ide.ui.theme.Ide
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.animateContentSize
 import androidx.compose.animation.core.animateFloatAsState
@@ -148,7 +150,7 @@ internal fun BoxScope.LayoutAttributeSheet(
                     Modifier.fillMaxWidth().height(26.dp).draggable(drag, Orientation.Vertical),
                     contentAlignment = Alignment.Center,
                 ) {
-                    Box(Modifier.width(40.dp).height(5.dp).clip(RoundedCornerShape(50)).background(Ca.colors.separator))
+                    Box(Modifier.width(40.dp).height(5.dp).clip(RoundedCornerShape(50)).background(MaterialTheme.colorScheme.outlineVariant))
                 }
             },
         )
@@ -185,8 +187,8 @@ private fun SheetPanel(
         modifier
             .shadow(20.dp, shape)
             .clip(shape)
-            .background(Ca.colors.surface)
-            .border(1.dp, Ca.colors.separator, shape)
+            .background(MaterialTheme.colorScheme.surface)
+            .border(1.dp, MaterialTheme.colorScheme.outlineVariant, shape)
             .imePadding(),
     ) {
         handle?.invoke()
@@ -212,23 +214,23 @@ private fun Header(element: UiLayoutElement, node: PreviewViewNode, onClose: () 
     ) {
         // Accent badge with the view's initial — a compact, recognizable leading glyph.
         Box(
-            Modifier.size(34.dp).clip(RoundedCornerShape(Ca.radius.control)).background(Ca.colors.accent.copy(alpha = 0.15f)),
+            Modifier.size(34.dp).clip(RoundedCornerShape(Ca.radius.control)).background(MaterialTheme.colorScheme.primary.copy(alpha = 0.15f)),
             contentAlignment = Alignment.Center,
         ) {
-            Text(title.take(1).uppercase(), color = Ca.colors.accent, style = Ca.type.subhead, fontWeight = FontWeight.Bold)
+            Text(title.take(1).uppercase(), color = MaterialTheme.colorScheme.primary, style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.Bold)
         }
         Column(Modifier.weight(1f)) {
-            Text(title, color = Ca.colors.textPrimary, style = Ca.type.headline, maxLines = 1)
+            Text(title, color = MaterialTheme.colorScheme.onSurface, style = MaterialTheme.typography.titleMedium, maxLines = 1)
             Text(
                 element.id?.let { "@id/$it" } ?: element.tag,
-                color = Ca.colors.textTertiary, style = Ca.type.caption2, maxLines = 1,
+                color = MaterialTheme.colorScheme.outline, style = MaterialTheme.typography.labelSmall, maxLines = 1,
             )
         }
         Box(
-            Modifier.size(30.dp).clip(RoundedCornerShape(50)).background(Ca.colors.surface2).clickable { onClose() },
+            Modifier.size(30.dp).clip(RoundedCornerShape(50)).background(MaterialTheme.colorScheme.surfaceContainerHigh).clickable { onClose() },
             contentAlignment = Alignment.Center,
         ) {
-            Icon(CaIcons.close, "Close", Modifier.size(15.dp), tint = Ca.colors.textSecondary)
+            Icon(CaIcons.close, "Close", Modifier.size(15.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
         }
     }
 }
@@ -253,7 +255,7 @@ private fun AttributesSection(
     SectionLabel("Attributes", element.setAttributes.size + drafts.size)
     Column(Modifier.animateContentSize(), verticalArrangement = Arrangement.spacedBy(Ca.spacing.s2)) {
         if (element.setAttributes.isEmpty() && drafts.isEmpty() && !adding) {
-            Text("No attributes set", color = Ca.colors.textTertiary, style = Ca.type.caption, modifier = Modifier.padding(vertical = Ca.spacing.s1))
+            Text("No attributes set", color = MaterialTheme.colorScheme.outline, style = MaterialTheme.typography.bodySmall, modifier = Modifier.padding(vertical = Ca.spacing.s1))
         }
         for (attr in element.setAttributes) {
             AttributeCard(attr, busy, onSet = { commit(attr.name, it) }, onRemove = { remove(attr.name) }, complete = complete)
@@ -278,14 +280,14 @@ private fun AttributesSection(
         if (!adding && addable.isNotEmpty()) {
             Row(
                 Modifier.fillMaxWidth().clip(RoundedCornerShape(Ca.radius.md))
-                    .background(Ca.colors.accent.copy(alpha = 0.12f))
+                    .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.12f))
                     .clickable(enabled = !busy) { adding = true }
                     .padding(vertical = Ca.spacing.s3, horizontal = Ca.spacing.s3),
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(Ca.spacing.s2),
             ) {
-                Icon(CaIcons.plus, null, Modifier.size(17.dp), tint = Ca.colors.accent)
-                Text("Add attribute", color = Ca.colors.accent, style = Ca.type.footnote, fontWeight = FontWeight.SemiBold)
+                Icon(CaIcons.plus, null, Modifier.size(17.dp), tint = MaterialTheme.colorScheme.primary)
+                Text("Add attribute", color = MaterialTheme.colorScheme.primary, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold)
             }
         }
     }
@@ -298,10 +300,10 @@ private fun RenderedSection(node: PreviewViewNode) {
     SectionLabel("Rendered", null)
     Column(verticalArrangement = Arrangement.spacedBy(Ca.spacing.s1)) {
         for ((group, props) in groups) {
-            Text(group.uppercase(), color = Ca.colors.textTertiary, style = Ca.type.caption2, fontWeight = FontWeight.SemiBold, modifier = Modifier.padding(top = Ca.spacing.s1))
+            Text(group.uppercase(), color = MaterialTheme.colorScheme.outline, style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.SemiBold, modifier = Modifier.padding(top = Ca.spacing.s1))
             for (p in props) Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(Ca.spacing.s2)) {
-                Text(p.name, color = Ca.colors.textTertiary, style = Ca.type.caption, modifier = Modifier.width(104.dp), maxLines = 1)
-                Text(p.value, color = Ca.colors.textPrimary, style = Ca.type.caption, modifier = Modifier.weight(1f))
+                Text(p.name, color = MaterialTheme.colorScheme.outline, style = MaterialTheme.typography.bodySmall, modifier = Modifier.width(104.dp), maxLines = 1)
+                Text(p.value, color = MaterialTheme.colorScheme.onSurface, style = MaterialTheme.typography.bodySmall, modifier = Modifier.weight(1f))
             }
         }
     }
@@ -310,10 +312,10 @@ private fun RenderedSection(node: PreviewViewNode) {
 @Composable
 private fun SectionLabel(text: String, count: Int?) {
     Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(Ca.spacing.s1)) {
-        Text(text.uppercase(), color = Ca.colors.textSecondary, style = Ca.type.caption2, fontWeight = FontWeight.SemiBold)
+        Text(text.uppercase(), color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.SemiBold)
         if (count != null && count > 0) Text(
-            count.toString(), color = Ca.colors.textTertiary, style = Ca.type.caption2,
-            modifier = Modifier.clip(RoundedCornerShape(50)).background(Ca.colors.surface2).padding(horizontal = 6.dp, vertical = 1.dp),
+            count.toString(), color = MaterialTheme.colorScheme.outline, style = MaterialTheme.typography.labelSmall,
+            modifier = Modifier.clip(RoundedCornerShape(50)).background(MaterialTheme.colorScheme.surfaceContainerHigh).padding(horizontal = 6.dp, vertical = 1.dp),
         )
     }
 }
@@ -328,16 +330,16 @@ private fun AttributeCard(
     complete: suspend (String, String, Int) -> UiCompletionResult,
 ) {
     Column(
-        Modifier.fillMaxWidth().clip(RoundedCornerShape(Ca.radius.md)).background(Ca.colors.surface2).padding(Ca.spacing.s3),
+        Modifier.fillMaxWidth().clip(RoundedCornerShape(Ca.radius.md)).background(MaterialTheme.colorScheme.surfaceContainerHigh).padding(Ca.spacing.s3),
         verticalArrangement = Arrangement.spacedBy(Ca.spacing.s2),
     ) {
         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-            Text(attr.name, color = Ca.colors.textSecondary, style = Ca.type.footnote, fontWeight = FontWeight.Medium, modifier = Modifier.weight(1f), maxLines = 1)
+            Text(attr.name, color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Medium, modifier = Modifier.weight(1f), maxLines = 1)
             Box(
                 Modifier.size(26.dp).clip(RoundedCornerShape(50)).clickable(enabled = !busy) { onRemove() },
                 contentAlignment = Alignment.Center,
             ) {
-                Icon(CaIcons.close, "Remove", Modifier.size(13.dp), tint = Ca.colors.textTertiary)
+                Icon(CaIcons.close, "Remove", Modifier.size(13.dp), tint = MaterialTheme.colorScheme.outline)
             }
         }
         ValueControl(attr, busy, onSet, complete)
@@ -358,9 +360,9 @@ private fun ValueControl(
             val on = value == "true"
             Switch(
                 checked = on, enabled = !busy, onCheckedChange = { onSet(if (it) "true" else "false") },
-                colors = SwitchDefaults.colors(checkedTrackColor = Ca.colors.accent, checkedThumbColor = Color.White),
+                colors = SwitchDefaults.colors(checkedTrackColor = MaterialTheme.colorScheme.primary, checkedThumbColor = Color.White),
             )
-            Text(if (on) "true" else "false", color = Ca.colors.textPrimary, style = Ca.type.footnote)
+            Text(if (on) "true" else "false", color = MaterialTheme.colorScheme.onSurface, style = MaterialTheme.typography.bodyMedium)
         }
 
         UiAttrKind.ENUM -> FlowRow(horizontalArrangement = Arrangement.spacedBy(Ca.spacing.s1), verticalArrangement = Arrangement.spacedBy(Ca.spacing.s1)) {
@@ -387,8 +389,8 @@ private fun ValueControl(
         UiAttrKind.COLOR -> Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(Ca.spacing.s2)) {
             Box(
                 Modifier.size(24.dp).clip(RoundedCornerShape(Ca.radius.sm))
-                    .background(parseHexColor(value) ?: Ca.colors.surface3)
-                    .border(1.dp, Ca.colors.separator, RoundedCornerShape(Ca.radius.sm)),
+                    .background(parseHexColor(value) ?: MaterialTheme.colorScheme.surfaceContainerHighest)
+                    .border(1.dp, MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(Ca.radius.sm)),
             )
             Box(Modifier.weight(1f)) { CompletionTextField(attr.name, value, busy, onCommit = onSet, complete = complete, placeholder = "#RRGGBB / @color/…") }
         }
@@ -400,9 +402,9 @@ private fun ValueControl(
 /** A selectable chip (enum single-select / flag toggle), with an animated selection colour. */
 @Composable
 private fun SelectChip(label: String, selected: Boolean, enabled: Boolean, onClick: () -> Unit) {
-    val bg by animateColorAsState(if (selected) Ca.colors.accent else Ca.colors.surface, tween(150), label = "chipBg")
-    val fg by animateColorAsState(if (selected) Color.White else Ca.colors.textPrimary, tween(150), label = "chipFg")
-    val border by animateColorAsState(if (selected) Ca.colors.accent else Ca.colors.separator, tween(150), label = "chipBorder")
+    val bg by animateColorAsState(if (selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surface, tween(150), label = "chipBg")
+    val fg by animateColorAsState(if (selected) Color.White else MaterialTheme.colorScheme.onSurface, tween(150), label = "chipFg")
+    val border by animateColorAsState(if (selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outlineVariant, tween(150), label = "chipBorder")
     Box(
         Modifier.heightIn(min = 34.dp).clip(RoundedCornerShape(50)).background(bg)
             .border(1.dp, border, RoundedCornerShape(50))
@@ -410,7 +412,7 @@ private fun SelectChip(label: String, selected: Boolean, enabled: Boolean, onCli
             .padding(horizontal = Ca.spacing.s3, vertical = 7.dp),
         contentAlignment = Alignment.Center,
     ) {
-        Text(label, color = fg, style = Ca.type.footnote, fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Normal)
+        Text(label, color = fg, style = MaterialTheme.typography.bodyMedium, fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Normal)
     }
 }
 
@@ -457,10 +459,10 @@ private fun CompletionTextField(
     }
 
     Column(verticalArrangement = Arrangement.spacedBy(Ca.spacing.s1)) {
-        val borderColor by animateColorAsState(if (focused) Ca.colors.accent else Ca.colors.separator, tween(150), label = "fieldBorder")
+        val borderColor by animateColorAsState(if (focused) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outlineVariant, tween(150), label = "fieldBorder")
         Box(
             Modifier.fillMaxWidth().clip(RoundedCornerShape(Ca.radius.sm))
-                .background(Ca.colors.surface)
+                .background(MaterialTheme.colorScheme.surface)
                 .border(1.dp, borderColor, RoundedCornerShape(Ca.radius.sm))
                 .padding(horizontal = Ca.spacing.s3, vertical = 10.dp),
         ) {
@@ -469,8 +471,8 @@ private fun CompletionTextField(
                 onValueChange = { if (!busy) field = it },
                 singleLine = true,
                 enabled = !busy,
-                textStyle = Ca.type.code.copy(color = Ca.colors.textPrimary),
-                cursorBrush = SolidColor(Ca.colors.accent),
+                textStyle = Ide.type.code.copy(color = MaterialTheme.colorScheme.onSurface),
+                cursorBrush = SolidColor(MaterialTheme.colorScheme.primary),
                 keyboardActions = KeyboardActions(onDone = { if (field.text != initial) onCommit(field.text); items = emptyList() }),
                 keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
                 modifier = Modifier.fillMaxWidth().onFocusChangedCommit { gained ->
@@ -485,7 +487,7 @@ private fun CompletionTextField(
                 },
                 decorationBox = { inner ->
                     if (field.text.isEmpty() && placeholder.isNotEmpty()) {
-                        Text(placeholder, color = Ca.colors.textTertiary, style = Ca.type.code)
+                        Text(placeholder, color = MaterialTheme.colorScheme.outline, style = Ide.type.code)
                     }
                     inner()
                 },
@@ -514,28 +516,28 @@ private fun AddAttributeList(addable: List<UiLayoutAttribute>, onPick: (UiLayout
         if (query.isBlank()) addable else addable.filter { nameMatches(it.name, query) }
     }
     Column(
-        Modifier.fillMaxWidth().clip(RoundedCornerShape(Ca.radius.md)).background(Ca.colors.surface2)
-            .border(1.dp, Ca.colors.separator, RoundedCornerShape(Ca.radius.md)).padding(Ca.spacing.s3),
+        Modifier.fillMaxWidth().clip(RoundedCornerShape(Ca.radius.md)).background(MaterialTheme.colorScheme.surfaceContainerHigh)
+            .border(1.dp, MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(Ca.radius.md)).padding(Ca.spacing.s3),
         verticalArrangement = Arrangement.spacedBy(Ca.spacing.s2),
     ) {
         Row(verticalAlignment = Alignment.CenterVertically) {
-            Text("Add attribute", color = Ca.colors.textSecondary, style = Ca.type.footnote, fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f))
+            Text("Add attribute", color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f))
             Box(
                 Modifier.size(26.dp).clip(RoundedCornerShape(50)).clickable { onDismiss() },
                 contentAlignment = Alignment.Center,
-            ) { Icon(CaIcons.close, "Close", Modifier.size(13.dp), tint = Ca.colors.textTertiary) }
+            ) { Icon(CaIcons.close, "Close", Modifier.size(13.dp), tint = MaterialTheme.colorScheme.outline) }
         }
         Box(
-            Modifier.fillMaxWidth().clip(RoundedCornerShape(Ca.radius.sm)).background(Ca.colors.surface)
-                .border(1.dp, Ca.colors.separator, RoundedCornerShape(Ca.radius.sm)).padding(horizontal = Ca.spacing.s3, vertical = 10.dp),
+            Modifier.fillMaxWidth().clip(RoundedCornerShape(Ca.radius.sm)).background(MaterialTheme.colorScheme.surface)
+                .border(1.dp, MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(Ca.radius.sm)).padding(horizontal = Ca.spacing.s3, vertical = 10.dp),
         ) {
             BasicTextField(
                 value = query, onValueChange = { query = it }, singleLine = true,
-                textStyle = Ca.type.code.copy(color = Ca.colors.textPrimary),
-                cursorBrush = SolidColor(Ca.colors.accent),
+                textStyle = Ide.type.code.copy(color = MaterialTheme.colorScheme.onSurface),
+                cursorBrush = SolidColor(MaterialTheme.colorScheme.primary),
                 modifier = Modifier.fillMaxWidth(),
                 decorationBox = { inner ->
-                    if (query.isEmpty()) Text("Search attributes", color = Ca.colors.textTertiary, style = Ca.type.code)
+                    if (query.isEmpty()) Text("Search attributes", color = MaterialTheme.colorScheme.outline, style = Ide.type.code)
                     inner()
                 },
             )
@@ -545,9 +547,9 @@ private fun AddAttributeList(addable: List<UiLayoutAttribute>, onPick: (UiLayout
                 Modifier.fillMaxWidth().clip(RoundedCornerShape(Ca.radius.sm)).clickable { onPick(a) }.padding(vertical = 9.dp, horizontal = Ca.spacing.s2),
                 verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(Ca.spacing.s2),
             ) {
-                Text(a.name, color = Ca.colors.textPrimary, style = Ca.type.footnote, modifier = Modifier.weight(1f), maxLines = 1)
+                Text(a.name, color = MaterialTheme.colorScheme.onSurface, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f), maxLines = 1)
                 valueHint(a)?.let {
-                    Text(it, color = Ca.colors.textTertiary, style = Ca.type.caption2, modifier = Modifier.clip(RoundedCornerShape(50)).background(Ca.colors.surface).padding(horizontal = 6.dp, vertical = 1.dp))
+                    Text(it, color = MaterialTheme.colorScheme.outline, style = MaterialTheme.typography.labelSmall, modifier = Modifier.clip(RoundedCornerShape(50)).background(MaterialTheme.colorScheme.surface).padding(horizontal = 6.dp, vertical = 1.dp))
                 }
             }
         }
@@ -555,7 +557,7 @@ private fun AddAttributeList(addable: List<UiLayoutAttribute>, onPick: (UiLayout
 }
 
 @Composable
-private fun HairLine() = Box(Modifier.fillMaxWidth().height(1.dp).background(Ca.colors.separator))
+private fun HairLine() = Box(Modifier.fillMaxWidth().height(1.dp).background(MaterialTheme.colorScheme.outlineVariant))
 
 private fun valueHint(a: UiLayoutAttribute): String? = when (a.kind) {
     UiAttrKind.BOOLEAN -> "boolean"

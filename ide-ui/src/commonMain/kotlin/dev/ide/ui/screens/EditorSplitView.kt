@@ -1,5 +1,6 @@
 package dev.ide.ui.screens
 
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.foundation.background
 import androidx.compose.foundation.gestures.draggable
 import androidx.compose.foundation.layout.Box
@@ -23,7 +24,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.dp
-import dev.ide.ui.theme.Ca
 
 /**
  * The Split layout: the code editor and its live preview together, with a draggable divider to rebalance.
@@ -78,12 +78,12 @@ private fun SplitHandle(stacked: Boolean, onDrag: (Float) -> Unit) {
     )
     val grip = androidx.compose.foundation.shape.RoundedCornerShape(2.dp)
     if (stacked) {
-        Box(Modifier.fillMaxWidth().height(12.dp).then(drag).background(Ca.colors.surface2), contentAlignment = Alignment.Center) {
-            Box(Modifier.width(34.dp).height(3.dp).clip(grip).background(Ca.colors.separatorStrong))
+        Box(Modifier.fillMaxWidth().height(12.dp).then(drag).background(MaterialTheme.colorScheme.surfaceContainerHigh), contentAlignment = Alignment.Center) {
+            Box(Modifier.width(34.dp).height(3.dp).clip(grip).background(MaterialTheme.colorScheme.outline))
         }
     } else {
-        Box(Modifier.fillMaxHeight().width(12.dp).then(drag).background(Ca.colors.surface2), contentAlignment = Alignment.Center) {
-            Box(Modifier.height(34.dp).width(3.dp).clip(grip).background(Ca.colors.separatorStrong))
+        Box(Modifier.fillMaxHeight().width(12.dp).then(drag).background(MaterialTheme.colorScheme.surfaceContainerHigh), contentAlignment = Alignment.Center) {
+            Box(Modifier.height(34.dp).width(3.dp).clip(grip).background(MaterialTheme.colorScheme.outline))
         }
     }
 }

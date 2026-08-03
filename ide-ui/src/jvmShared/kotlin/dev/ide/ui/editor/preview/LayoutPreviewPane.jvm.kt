@@ -1,5 +1,7 @@
 package dev.ide.ui.editor.preview
 
+import dev.ide.ui.theme.Ide
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -87,14 +89,14 @@ private fun PreviewStatusChip(stage: String, modifier: Modifier = Modifier) {
     Row(
         modifier
             .clip(RoundedCornerShape(50))
-            .background(Ca.colors.surface.copy(alpha = 0.92f))
-            .border(1.dp, Ca.colors.separator, RoundedCornerShape(50))
+            .background(MaterialTheme.colorScheme.surface.copy(alpha = 0.92f))
+            .border(1.dp, MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(50))
             .padding(horizontal = Ca.spacing.s3, vertical = Ca.spacing.s2),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(Ca.spacing.s2),
     ) {
-        CircularProgressIndicator(Modifier.size(13.dp), color = Ca.colors.accent, strokeWidth = 2.dp)
-        Text(stage, style = Ca.type.footnote, color = Ca.colors.textSecondary)
+        CircularProgressIndicator(Modifier.size(13.dp), color = MaterialTheme.colorScheme.primary, strokeWidth = 2.dp)
+        Text(stage, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
     }
 }
 
@@ -153,10 +155,10 @@ actual fun LayoutPreviewPane(path: String, text: String, backend: IdeBackend, se
 
     val r = result
     if (lpBackend == null || r == null) {
-        Box(modifier.fillMaxSize().background(Ca.colors.editorBg)) {
+        Box(modifier.fillMaxSize().background(Ide.colors.editorBg)) {
             Text(
                 if (lpBackend == null) "Layout preview isn't available for this project" else "No layout preview for this file",
-                color = Ca.colors.textTertiary, style = Ca.type.footnote,
+                color = MaterialTheme.colorScheme.outline, style = MaterialTheme.typography.bodyMedium,
                 modifier = Modifier.align(Alignment.Center),
             )
             // First render (no prior result yet): still show the pipeline status chip.
@@ -172,9 +174,9 @@ actual fun LayoutPreviewPane(path: String, text: String, backend: IdeBackend, se
     val realImage = remember(r.renderedNativeImage, r.renderedImage) {
         r.renderedNativeImage?.let { nativeImageToBitmap(it) } ?: r.renderedImage?.let { decodeImageBytes(it) }
     }
-    val accent = Ca.colors.accent
-    val surfaceColor = Ca.colors.surface
-    val separatorColor = Ca.colors.separator
+    val accent = MaterialTheme.colorScheme.primary
+    val surfaceColor = MaterialTheme.colorScheme.surface
+    val separatorColor = MaterialTheme.colorScheme.outlineVariant
 
     // Re-resolve the real-view selection against the freshly-rendered tree (a new object every render, e.g.
     // after an attribute edit) by its stable [SelKey], so the attribute editor stays open on the same view.
@@ -196,7 +198,7 @@ actual fun LayoutPreviewPane(path: String, text: String, backend: IdeBackend, se
         modifier = Modifier.fillMaxSize(),
         state = state,
         cardColor = if (blueprint) BlueprintGround else Color.White,
-        cardBorderColor = if (blueprint) BlueprintLine.copy(alpha = 0.4f) else Ca.colors.separator,
+        cardBorderColor = if (blueprint) BlueprintLine.copy(alpha = 0.4f) else MaterialTheme.colorScheme.outlineVariant,
         blueprint = blueprint,
         // Deselect on a background tap — but NOT while the editable sheet is open, so a tap that reaches the
         // surface (e.g. leaking past the sheet) can't dismiss it. Close it with its own button, or tap another
@@ -208,19 +210,19 @@ actual fun LayoutPreviewPane(path: String, text: String, backend: IdeBackend, se
         topBarExtras = {
             Divider()
             PillButton({ treeOpen = !treeOpen }) {
-                Icon(CaIcons.panelRight, "Component tree", Modifier.size(16.dp), tint = if (treeOpen) accent else Ca.colors.textSecondary)
+                Icon(CaIcons.panelRight, "Component tree", Modifier.size(16.dp), tint = if (treeOpen) accent else MaterialTheme.colorScheme.onSurfaceVariant)
             }
             PillButton({ blueprint = !blueprint }) {
-                Icon(CaIcons.box, "Blueprint", Modifier.size(16.dp), tint = if (blueprint) accent else Ca.colors.textSecondary)
+                Icon(CaIcons.box, "Blueprint", Modifier.size(16.dp), tint = if (blueprint) accent else MaterialTheme.colorScheme.onSurfaceVariant)
             }
             PillButton({ realViews = !realViews }) {
-                Icon(CaIcons.androidLogo, "Real views (beta)", Modifier.size(16.dp), tint = if (realViews) accent else Ca.colors.textSecondary)
+                Icon(CaIcons.androidLogo, "Real views (beta)", Modifier.size(16.dp), tint = if (realViews) accent else MaterialTheme.colorScheme.onSurfaceVariant)
             }
         },
         bottomBarExtras = {
             Divider()
             PillButton({ showChrome = !showChrome }) {
-                Icon(CaIcons.eye, "Toggle system UI", Modifier.size(16.dp), tint = if (showChrome) accent else Ca.colors.textTertiary)
+                Icon(CaIcons.eye, "Toggle system UI", Modifier.size(16.dp), tint = if (showChrome) accent else MaterialTheme.colorScheme.outline)
             }
         },
         overlays = {
@@ -379,8 +381,8 @@ private fun ComponentTreePanel(
             .border(1.dp, separatorColor, RoundedCornerShape(Ca.radius.md)),
     ) {
         Row(Modifier.fillMaxWidth().padding(start = Ca.spacing.s3, end = Ca.spacing.s1, top = Ca.spacing.s1, bottom = Ca.spacing.s1), verticalAlignment = Alignment.CenterVertically) {
-            Text("Component tree", color = Ca.colors.textTertiary, style = Ca.type.caption, fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f))
-            PillButton(onClose) { Icon(CaIcons.close, "Close", Modifier.size(14.dp), tint = Ca.colors.textTertiary) }
+            Text("Component tree", color = MaterialTheme.colorScheme.outline, style = MaterialTheme.typography.bodySmall, fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f))
+            PillButton(onClose) { Icon(CaIcons.close, "Close", Modifier.size(14.dp), tint = MaterialTheme.colorScheme.outline) }
         }
         Box(Modifier.fillMaxWidth().height(1.dp).background(separatorColor))
         Column(Modifier.heightIn(max = 320.dp).verticalScroll(rememberScrollState()).padding(vertical = Ca.spacing.s1)) {
@@ -397,16 +399,16 @@ private fun ComponentTreePanel(
                     Icon(
                         if (node.children.isNotEmpty()) CaIcons.layers else CaIcons.dot,
                         null, Modifier.size(14.dp),
-                        tint = if (on) accent else Ca.colors.textSecondary,
+                        tint = if (on) accent else MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                     Text(
                         node.tag.substringAfterLast('.').ifEmpty { "View" },
-                        color = if (on) accent else Ca.colors.textPrimary,
-                        style = Ca.type.caption, fontWeight = if (on) FontWeight.SemiBold else FontWeight.Normal,
+                        color = if (on) accent else MaterialTheme.colorScheme.onSurface,
+                        style = MaterialTheme.typography.bodySmall, fontWeight = if (on) FontWeight.SemiBold else FontWeight.Normal,
                         maxLines = 1,
                     )
                     node.props.id?.let {
-                        Text("@$it", color = Ca.colors.textTertiary, style = Ca.type.caption2, maxLines = 1)
+                        Text("@$it", color = MaterialTheme.colorScheme.outline, style = MaterialTheme.typography.labelSmall, maxLines = 1)
                     }
                 }
             }
@@ -480,18 +482,18 @@ private fun InspectorPanel(node: RenderNode, density: Float, modifier: Modifier,
     Column(
         modifier.widthIn(min = 200.dp, max = 280.dp)
             .shadow(10.dp, RoundedCornerShape(Ca.radius.md))
-            .clip(RoundedCornerShape(Ca.radius.md)).background(Ca.colors.surface)
-            .border(1.dp, Ca.colors.separator, RoundedCornerShape(Ca.radius.md)),
+            .clip(RoundedCornerShape(Ca.radius.md)).background(MaterialTheme.colorScheme.surface)
+            .border(1.dp, MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(Ca.radius.md)),
     ) {
         Row(Modifier.fillMaxWidth().padding(start = Ca.spacing.s3, end = Ca.spacing.s1, top = Ca.spacing.s1, bottom = Ca.spacing.s1), verticalAlignment = Alignment.CenterVertically) {
-            Text(node.tag.substringAfterLast('.'), color = Ca.colors.textPrimary, style = Ca.type.subhead, fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f))
-            PillButton(onClose) { Icon(CaIcons.close, "Close", Modifier.size(14.dp), tint = Ca.colors.textTertiary) }
+            Text(node.tag.substringAfterLast('.'), color = MaterialTheme.colorScheme.onSurface, style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f))
+            PillButton(onClose) { Icon(CaIcons.close, "Close", Modifier.size(14.dp), tint = MaterialTheme.colorScheme.outline) }
         }
-        Box(Modifier.fillMaxWidth().height(1.dp).background(Ca.colors.separator))
+        Box(Modifier.fillMaxWidth().height(1.dp).background(MaterialTheme.colorScheme.outlineVariant))
         Column(Modifier.verticalScroll(rememberScrollState()).padding(Ca.spacing.s3), verticalArrangement = Arrangement.spacedBy(Ca.spacing.s2)) {
             for ((label, value) in rows) Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(Ca.spacing.s2)) {
-                Text(label, color = Ca.colors.textTertiary, style = Ca.type.caption, modifier = Modifier.width(72.dp))
-                Text(value, color = Ca.colors.textPrimary, style = Ca.type.caption)
+                Text(label, color = MaterialTheme.colorScheme.outline, style = MaterialTheme.typography.bodySmall, modifier = Modifier.width(72.dp))
+                Text(value, color = MaterialTheme.colorScheme.onSurface, style = MaterialTheme.typography.bodySmall)
             }
         }
     }
@@ -522,8 +524,8 @@ private fun RealViewTreePanel(
             .border(1.dp, separatorColor, RoundedCornerShape(Ca.radius.md)),
     ) {
         Row(Modifier.fillMaxWidth().padding(start = Ca.spacing.s3, end = Ca.spacing.s1, top = Ca.spacing.s1, bottom = Ca.spacing.s1), verticalAlignment = Alignment.CenterVertically) {
-            Text("View hierarchy", color = Ca.colors.textTertiary, style = Ca.type.caption, fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f))
-            PillButton(onClose) { Icon(CaIcons.close, "Close", Modifier.size(14.dp), tint = Ca.colors.textTertiary) }
+            Text("View hierarchy", color = MaterialTheme.colorScheme.outline, style = MaterialTheme.typography.bodySmall, fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f))
+            PillButton(onClose) { Icon(CaIcons.close, "Close", Modifier.size(14.dp), tint = MaterialTheme.colorScheme.outline) }
         }
         Box(Modifier.fillMaxWidth().height(1.dp).background(separatorColor))
         Column(Modifier.heightIn(max = 340.dp).verticalScroll(rememberScrollState()).padding(vertical = Ca.spacing.s1)) {
@@ -540,16 +542,16 @@ private fun RealViewTreePanel(
                     Icon(
                         if (node.children.isNotEmpty()) CaIcons.layers else CaIcons.dot,
                         null, Modifier.size(14.dp),
-                        tint = if (on) accent else Ca.colors.textSecondary,
+                        tint = if (on) accent else MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                     Text(
                         node.simpleName.ifEmpty { "View" },
-                        color = if (on) accent else Ca.colors.textPrimary,
-                        style = Ca.type.caption, fontWeight = if (on) FontWeight.SemiBold else FontWeight.Normal,
+                        color = if (on) accent else MaterialTheme.colorScheme.onSurface,
+                        style = MaterialTheme.typography.bodySmall, fontWeight = if (on) FontWeight.SemiBold else FontWeight.Normal,
                         maxLines = 1,
                     )
                     node.id?.let {
-                        Text("@id/$it", color = Ca.colors.textTertiary, style = Ca.type.caption2, maxLines = 1)
+                        Text("@id/$it", color = MaterialTheme.colorScheme.outline, style = MaterialTheme.typography.labelSmall, maxLines = 1)
                     }
                 }
             }
@@ -579,21 +581,21 @@ private fun RealViewInspectorPanel(node: PreviewViewNode, modifier: Modifier, on
     Column(
         modifier.widthIn(min = 220.dp, max = 300.dp)
             .shadow(10.dp, RoundedCornerShape(Ca.radius.md))
-            .clip(RoundedCornerShape(Ca.radius.md)).background(Ca.colors.surface)
-            .border(1.dp, Ca.colors.separator, RoundedCornerShape(Ca.radius.md)),
+            .clip(RoundedCornerShape(Ca.radius.md)).background(MaterialTheme.colorScheme.surface)
+            .border(1.dp, MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(Ca.radius.md)),
     ) {
         Row(Modifier.fillMaxWidth().padding(start = Ca.spacing.s3, end = Ca.spacing.s1, top = Ca.spacing.s1, bottom = Ca.spacing.s1), verticalAlignment = Alignment.CenterVertically) {
             Column(Modifier.weight(1f)) {
-                Text(node.simpleName.ifEmpty { "View" }, color = Ca.colors.textPrimary, style = Ca.type.subhead, fontWeight = FontWeight.SemiBold, maxLines = 1)
-                Text(node.className, color = Ca.colors.textTertiary, style = Ca.type.caption2, maxLines = 1)
+                Text(node.simpleName.ifEmpty { "View" }, color = MaterialTheme.colorScheme.onSurface, style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.SemiBold, maxLines = 1)
+                Text(node.className, color = MaterialTheme.colorScheme.outline, style = MaterialTheme.typography.labelSmall, maxLines = 1)
             }
-            PillButton(onClose) { Icon(CaIcons.close, "Close", Modifier.size(14.dp), tint = Ca.colors.textTertiary) }
+            PillButton(onClose) { Icon(CaIcons.close, "Close", Modifier.size(14.dp), tint = MaterialTheme.colorScheme.outline) }
         }
-        Box(Modifier.fillMaxWidth().height(1.dp).background(Ca.colors.separator))
+        Box(Modifier.fillMaxWidth().height(1.dp).background(MaterialTheme.colorScheme.outlineVariant))
         Column(Modifier.heightIn(max = 420.dp).verticalScroll(rememberScrollState()).padding(Ca.spacing.s3), verticalArrangement = Arrangement.spacedBy(Ca.spacing.s2)) {
             node.id?.let { InspectorAttrRow("id", "@id/$it") }
             for ((group, props) in groups) {
-                Text(group.uppercase(), color = Ca.colors.textTertiary, style = Ca.type.caption2, fontWeight = FontWeight.SemiBold, modifier = Modifier.padding(top = Ca.spacing.s1))
+                Text(group.uppercase(), color = MaterialTheme.colorScheme.outline, style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.SemiBold, modifier = Modifier.padding(top = Ca.spacing.s1))
                 for (p in props) InspectorAttrRow(p.name, p.value)
             }
         }
@@ -604,8 +606,8 @@ private fun RealViewInspectorPanel(node: PreviewViewNode, modifier: Modifier, on
 @Composable
 private fun InspectorAttrRow(name: String, value: String) {
     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(Ca.spacing.s2)) {
-        Text(name, color = Ca.colors.textTertiary, style = Ca.type.caption, modifier = Modifier.width(96.dp), maxLines = 1)
-        Text(value, color = Ca.colors.textPrimary, style = Ca.type.caption, modifier = Modifier.weight(1f))
+        Text(name, color = MaterialTheme.colorScheme.outline, style = MaterialTheme.typography.bodySmall, modifier = Modifier.width(96.dp), maxLines = 1)
+        Text(value, color = MaterialTheme.colorScheme.onSurface, style = MaterialTheme.typography.bodySmall, modifier = Modifier.weight(1f))
     }
 }
 
@@ -646,45 +648,45 @@ private fun BuildRequiredPanel(undexedCount: Int, running: Boolean, onPrepare: (
         modifier.widthIn(max = 380.dp)
             .shadow(16.dp, RoundedCornerShape(Ca.radius.lg))
             .clip(RoundedCornerShape(Ca.radius.lg))
-            .background(Ca.colors.surface)
-            .border(1.dp, Ca.colors.separator, RoundedCornerShape(Ca.radius.lg))
+            .background(MaterialTheme.colorScheme.surface)
+            .border(1.dp, MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(Ca.radius.lg))
             .padding(Ca.spacing.s4),
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.spacedBy(Ca.spacing.s3),
     ) {
         Box(
-            Modifier.size(48.dp).clip(RoundedCornerShape(Ca.radius.md)).background(Ca.colors.accent.copy(alpha = 0.14f)),
+            Modifier.size(48.dp).clip(RoundedCornerShape(Ca.radius.md)).background(MaterialTheme.colorScheme.primary.copy(alpha = 0.14f)),
             contentAlignment = Alignment.Center,
-        ) { Icon(CaIcons.hammer, null, Modifier.size(24.dp), tint = Ca.colors.accent) }
+        ) { Icon(CaIcons.hammer, null, Modifier.size(24.dp), tint = MaterialTheme.colorScheme.primary) }
 
-        Text("Prepare the preview", style = Ca.type.headline, color = Ca.colors.textPrimary)
+        Text("Prepare the preview", style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.onSurface)
         Text(
             buildString {
                 append("The real-view preview renders with your project's real libraries, which have to be prepared (dexed) once. ")
                 append("It's a one-time step per library set. After it, editing and previewing are fast. ")
                 if (undexedCount > 0) append("$undexedCount ${if (undexedCount == 1) "library needs" else "libraries need"} preparing.")
             },
-            style = Ca.type.footnote, color = Ca.colors.textSecondary, textAlign = TextAlign.Center,
+            style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant, textAlign = TextAlign.Center,
         )
 
         Row(
             Modifier.clip(RoundedCornerShape(Ca.radius.md))
-                .background(if (running) Ca.colors.surface2 else Ca.colors.accent)
+                .background(if (running) MaterialTheme.colorScheme.surfaceContainerHigh else MaterialTheme.colorScheme.primary)
                 .clickable(enabled = !running) { onPrepare() }
                 .padding(horizontal = Ca.spacing.s4, vertical = Ca.spacing.s3),
             verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(Ca.spacing.s2),
         ) {
             if (running) {
-                CircularProgressIndicator(Modifier.size(15.dp), color = Ca.colors.accent, strokeWidth = 2.dp)
-                Text("Preparing libraries…", color = Ca.colors.textSecondary, style = Ca.type.footnote, fontWeight = FontWeight.SemiBold)
+                CircularProgressIndicator(Modifier.size(15.dp), color = MaterialTheme.colorScheme.primary, strokeWidth = 2.dp)
+                Text("Preparing libraries…", color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold)
             } else {
                 Icon(CaIcons.hammer, null, Modifier.size(16.dp), tint = Color.White)
-                Text("Prepare libraries", color = Color.White, style = Ca.type.footnote, fontWeight = FontWeight.SemiBold)
+                Text("Prepare libraries", color = Color.White, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold)
             }
         }
         Text(
             "Runs a build up to dexing. It doesn't package an APK.",
-            style = Ca.type.caption2, color = Ca.colors.textTertiary, textAlign = TextAlign.Center,
+            style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.outline, textAlign = TextAlign.Center,
         )
     }
 }

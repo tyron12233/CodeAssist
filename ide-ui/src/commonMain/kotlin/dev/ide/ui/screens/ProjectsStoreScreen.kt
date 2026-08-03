@@ -1,5 +1,7 @@
 package dev.ide.ui.screens
 
+import dev.ide.ui.theme.Ide
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -105,7 +107,7 @@ fun ProjectsStoreScreen(
             icon = CaIcons.grid,
             title = stringResource(Res.string.store_unavailable),
             description = stringResource(Res.string.store_unavailable_content),
-            modifier = modifier.fillMaxSize().background(Ca.colors.bg),
+            modifier = modifier.fillMaxSize().background(MaterialTheme.colorScheme.background),
         )
         return
     }
@@ -125,7 +127,7 @@ fun ProjectsStoreScreen(
         results = runCatching { backend.store.search(query, category) }.getOrDefault(emptyList())
     }
 
-    Box(modifier.fillMaxSize().background(Ca.colors.bg), contentAlignment = Alignment.TopCenter) {
+    Box(modifier.fillMaxSize().background(MaterialTheme.colorScheme.background), contentAlignment = Alignment.TopCenter) {
         LazyColumn(
             Modifier.widthIn(max = 820.dp).fillMaxSize(),
             contentPadding = PaddingValues(bottom = 28.dp),
@@ -172,10 +174,10 @@ private fun StoreHeader(onOpenHub: (() -> Unit)?) {
         horizontalArrangement = Arrangement.spacedBy(8.dp),
     ) {
         Column(Modifier.weight(1f)) {
-            Text(stringResource(Res.string.store_title), color = Ca.colors.textPrimary, style = Ca.type.large, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            Text(stringResource(Res.string.store_title), color = MaterialTheme.colorScheme.onSurface, style = MaterialTheme.typography.headlineLarge, maxLines = 1, overflow = TextOverflow.Ellipsis)
             Text(
                 stringResource(Res.string.store_subtitle),
-                color = Ca.colors.textSecondary, style = Ca.type.subhead,
+                color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodyLarge,
                 maxLines = 1, overflow = TextOverflow.Ellipsis,
             )
         }
@@ -189,21 +191,21 @@ private fun SearchField(value: String, onChange: (String) -> Unit, modifier: Mod
         modifier
             .fillMaxWidth()
             .height(46.dp)
-            .background(Ca.colors.surface2, RoundedCornerShape(Ca.radius.control))
-            .border(1.dp, Ca.colors.hairline, RoundedCornerShape(Ca.radius.control))
+            .background(MaterialTheme.colorScheme.surfaceContainerHigh, RoundedCornerShape(Ca.radius.control))
+            .border(1.dp, MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(Ca.radius.control))
             .padding(horizontal = 12.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(8.dp),
     ) {
-        Icon(CaIcons.search, null, Modifier.size(18.dp), tint = Ca.colors.textTertiary)
+        Icon(CaIcons.search, null, Modifier.size(18.dp), tint = MaterialTheme.colorScheme.outline)
         Box(Modifier.weight(1f), contentAlignment = Alignment.CenterStart) {
-            if (value.isEmpty()) Text(stringResource(Res.string.store_search_hint), color = Ca.colors.textTertiary, style = Ca.type.subhead)
+            if (value.isEmpty()) Text(stringResource(Res.string.store_search_hint), color = MaterialTheme.colorScheme.outline, style = MaterialTheme.typography.bodyLarge)
             BasicTextField(
                 value = value,
                 onValueChange = onChange,
                 singleLine = true,
-                textStyle = Ca.type.subhead.copy(color = Ca.colors.textPrimary),
-                cursorBrush = SolidColor(Ca.colors.accent),
+                textStyle = MaterialTheme.typography.bodyLarge.copy(color = MaterialTheme.colorScheme.onSurface),
+                cursorBrush = SolidColor(MaterialTheme.colorScheme.primary),
                 modifier = Modifier.fillMaxWidth(),
             )
         }
@@ -213,7 +215,7 @@ private fun SearchField(value: String, onChange: (String) -> Unit, modifier: Mod
                 Modifier.size(22.dp).clickable(interaction, indication = null) { onChange("") },
                 contentAlignment = Alignment.Center,
             ) {
-                Icon(CaIcons.close, stringResource(Res.string.clear), Modifier.size(15.dp), tint = Ca.colors.textTertiary)
+                Icon(CaIcons.close, stringResource(Res.string.clear), Modifier.size(15.dp), tint = MaterialTheme.colorScheme.outline)
             }
         }
     }
@@ -227,7 +229,7 @@ private fun CategoryStrip(categories: List<String>, selected: String?, onSelect:
         Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(horizontal = HPAD, vertical = 6.dp),
         horizontalArrangement = Arrangement.spacedBy(10.dp),
     ) {
-        CategoryTile(stringResource(Res.string.store_all), Ca.colors.accent, CaIcons.grid, selected == null) { onSelect(null) }
+        CategoryTile(stringResource(Res.string.store_all), MaterialTheme.colorScheme.primary, CaIcons.grid, selected == null) { onSelect(null) }
         categories.forEach { c ->
             CategoryTile(c, categoryColor(c), categoryIcon(c), selected == c) { onSelect(if (selected == c) null else c) }
         }
@@ -252,7 +254,7 @@ private fun CategoryTile(label: String, color: Color, icon: ImageVector, active:
     ) {
         Icon(icon, null, Modifier.size(22.dp), tint = Color.White)
         Spacer(Modifier.weight(1f))
-        Text(label, color = Color.White, style = Ca.type.footnote, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis)
+        Text(label, color = Color.White, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis)
     }
 }
 
@@ -278,7 +280,7 @@ private fun FeaturedCarousel(items: List<UiStoreItem>, onClick: (UiStoreItem) ->
                             Modifier
                                 .size(if (on) 8.dp else 6.dp)
                                 .background(
-                                    if (on) Ca.colors.accent else Ca.colors.textTertiary.copy(alpha = 0.4f),
+                                    if (on) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outline.copy(alpha = 0.4f),
                                     RoundedCornerShape(Ca.radius.pill),
                                 ),
                         )
@@ -313,11 +315,11 @@ private fun FeaturedCard(item: UiStoreItem, onClick: () -> Unit) {
         ) {
             PillChip(kindLabel(item).uppercase())
             Spacer(Modifier.weight(1f))
-            Text(item.title, color = Color.White, style = Ca.type.title2, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            Text(item.title, color = Color.White, style = MaterialTheme.typography.headlineSmall, maxLines = 1, overflow = TextOverflow.Ellipsis)
             Text(
                 item.summary,
                 color = Color.White.copy(alpha = 0.9f),
-                style = Ca.type.footnote,
+                style = MaterialTheme.typography.bodyMedium,
                 maxLines = 2,
                 overflow = TextOverflow.Ellipsis,
                 modifier = Modifier.fillMaxWidth(0.82f),
@@ -336,7 +338,7 @@ private fun PillChip(text: String) {
     Box(
         Modifier.background(Color.White.copy(alpha = 0.22f), RoundedCornerShape(Ca.radius.pill)).padding(horizontal = 10.dp, vertical = 4.dp),
     ) {
-        Text(text, color = Color.White, style = Ca.type.caption2, fontWeight = FontWeight.SemiBold, maxLines = 1)
+        Text(text, color = Color.White, style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.SemiBold, maxLines = 1)
     }
 }
 
@@ -400,7 +402,7 @@ private fun androidx.compose.foundation.lazy.LazyListScope.resultsGrid(
             Box(Modifier.fillMaxWidth().padding(HPAD), contentAlignment = Alignment.TopCenter) {
                 Text(
                     stringResource(Res.string.store_no_matches),
-                    color = Ca.colors.textTertiary, style = Ca.type.subhead,
+                    color = MaterialTheme.colorScheme.outline, style = MaterialTheme.typography.bodyLarge,
                     modifier = Modifier.padding(top = 24.dp),
                 )
             }
@@ -418,10 +420,10 @@ private fun SectionHeader(section: UiStoreSection) {
         verticalArrangement = Arrangement.spacedBy(2.dp),
     ) {
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            Text(section.title, color = Ca.colors.textPrimary, style = Ca.type.title3, modifier = Modifier.weight(1f, fill = false))
-            if (section.items.isNotEmpty()) Chip(section.items.size.toString(), fill = Ca.colors.surface2, textColor = Ca.colors.textTertiary)
+            Text(section.title, color = MaterialTheme.colorScheme.onSurface, style = MaterialTheme.typography.titleLarge, modifier = Modifier.weight(1f, fill = false))
+            if (section.items.isNotEmpty()) Chip(section.items.size.toString(), fill = MaterialTheme.colorScheme.surfaceContainerHigh, textColor = MaterialTheme.colorScheme.outline)
         }
-        section.subtitle?.let { Text(it, color = Ca.colors.textTertiary, style = Ca.type.footnote) }
+        section.subtitle?.let { Text(it, color = MaterialTheme.colorScheme.outline, style = MaterialTheme.typography.bodyMedium) }
     }
 }
 
@@ -438,8 +440,8 @@ private fun TemplateCard(item: UiStoreItem, onClick: () -> Unit) {
             .width(230.dp)
             .pressScale(interaction)
             .clip(shape)
-            .background(Ca.colors.surface)
-            .border(1.dp, Ca.colors.separator, shape)
+            .background(MaterialTheme.colorScheme.surface)
+            .border(1.dp, MaterialTheme.colorScheme.outlineVariant, shape)
             .clickable(interaction, indication = null, onClick = onClick),
     ) {
         Box(
@@ -451,10 +453,10 @@ private fun TemplateCard(item: UiStoreItem, onClick: () -> Unit) {
             Box(Modifier.align(Alignment.TopStart).padding(12.dp)) { PillChip(kindLabel(item).uppercase()) }
         }
         Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(5.dp)) {
-            Text(item.title, color = Ca.colors.textPrimary, style = Ca.type.headline, maxLines = 1, overflow = TextOverflow.Ellipsis)
-            Text(item.summary, color = Ca.colors.textSecondary, style = Ca.type.footnote, maxLines = 2, overflow = TextOverflow.Ellipsis, modifier = Modifier.height(36.dp))
+            Text(item.title, color = MaterialTheme.colorScheme.onSurface, style = MaterialTheme.typography.titleMedium, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            Text(item.summary, color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodyMedium, maxLines = 2, overflow = TextOverflow.Ellipsis, modifier = Modifier.height(36.dp))
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                Chip(item.category, fill = Ca.colors.surface2, textColor = Ca.colors.textSecondary)
+                Chip(item.category, fill = MaterialTheme.colorScheme.surfaceContainerHigh, textColor = MaterialTheme.colorScheme.onSurfaceVariant)
                 if (item.installs >= 0) InstallStat(item.installs)
             }
         }
@@ -474,8 +476,8 @@ private fun ItemTile(item: UiStoreItem, modifier: Modifier = Modifier, onClick: 
             .entranceSlideUp()
             .pressScale(interaction)
             .clip(shape)
-            .background(Ca.colors.surface)
-            .border(1.dp, Ca.colors.separator, shape)
+            .background(MaterialTheme.colorScheme.surface)
+            .border(1.dp, MaterialTheme.colorScheme.outlineVariant, shape)
             .clickable(interaction, indication = null, onClick = onClick),
     ) {
         if (showPreview) SamplePreview(item.previewKey!!, Modifier.fillMaxWidth().aspectRatio(16f / 10f))
@@ -484,14 +486,14 @@ private fun ItemTile(item: UiStoreItem, modifier: Modifier = Modifier, onClick: 
                 StoreGlyph(item.iconId, tile = 44.dp, glyph = 24.dp, fill = accent.copy(alpha = 0.16f), tint = accent)
             }
             Column(verticalArrangement = Arrangement.spacedBy(3.dp)) {
-                Text(item.title, color = Ca.colors.textPrimary, style = Ca.type.headline, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                Text(item.summary, color = Ca.colors.textSecondary, style = Ca.type.footnote, maxLines = 2, overflow = TextOverflow.Ellipsis, modifier = Modifier.height(36.dp))
+                Text(item.title, color = MaterialTheme.colorScheme.onSurface, style = MaterialTheme.typography.titleMedium, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                Text(item.summary, color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodyMedium, maxLines = 2, overflow = TextOverflow.Ellipsis, modifier = Modifier.height(36.dp))
             }
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                if (!item.available) Chip(stringResource(Res.string.store_soon), fill = Ca.colors.warning.copy(alpha = 0.16f), textColor = Ca.colors.warning)
-                else Chip(item.category, fill = Ca.colors.surface2, textColor = Ca.colors.textSecondary)
+                if (!item.available) Chip(stringResource(Res.string.store_soon), fill = Ide.colors.warning.copy(alpha = 0.16f), textColor = Ide.colors.warning)
+                else Chip(item.category, fill = MaterialTheme.colorScheme.surfaceContainerHigh, textColor = MaterialTheme.colorScheme.onSurfaceVariant)
                 if (item.installs >= 0) InstallStat(item.installs)
-                item.author?.let { Text(stringResource(Res.string.store_by_author, it), color = Ca.colors.textTertiary, style = Ca.type.caption2, maxLines = 1, overflow = TextOverflow.Ellipsis) }
+                item.author?.let { Text(stringResource(Res.string.store_by_author, it), color = MaterialTheme.colorScheme.outline, style = MaterialTheme.typography.labelSmall, maxLines = 1, overflow = TextOverflow.Ellipsis) }
             }
         }
     }
@@ -500,8 +502,8 @@ private fun ItemTile(item: UiStoreItem, modifier: Modifier = Modifier, onClick: 
 @Composable
 private fun InstallStat(installs: Int) {
     Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(3.dp)) {
-        Icon(CaIcons.download, null, Modifier.size(12.dp), tint = Ca.colors.textTertiary)
-        Text(compactCount(installs), color = Ca.colors.textTertiary, style = Ca.type.caption2)
+        Icon(CaIcons.download, null, Modifier.size(12.dp), tint = MaterialTheme.colorScheme.outline)
+        Text(compactCount(installs), color = MaterialTheme.colorScheme.outline, style = MaterialTheme.typography.labelSmall)
     }
 }
 
@@ -526,8 +528,8 @@ private fun CommunityBanner(modifier: Modifier = Modifier) {
             Icon(CaIcons.discord, null, Modifier.size(24.dp), tint = Color.White)
         }
         Column(Modifier.weight(1f)) {
-            Text(stringResource(Res.string.store_coming_soon), color = Ca.colors.textPrimary, style = Ca.type.headline)
-            Text(stringResource(Res.string.store_community_content), color = Ca.colors.textSecondary, style = Ca.type.footnote)
+            Text(stringResource(Res.string.store_coming_soon), color = MaterialTheme.colorScheme.onSurface, style = MaterialTheme.typography.titleMedium)
+            Text(stringResource(Res.string.store_community_content), color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodyMedium)
         }
     }
 }
@@ -540,14 +542,14 @@ private fun StoreGlyph(
     iconId: String,
     tile: androidx.compose.ui.unit.Dp,
     glyph: androidx.compose.ui.unit.Dp,
-    fill: Color = Ca.colors.surface2,
+    fill: Color = MaterialTheme.colorScheme.surfaceContainerHigh,
     tint: Color? = null,
 ) {
     Box(Modifier.size(tile).clip(RoundedCornerShape(Ca.radius.md)).background(fill), contentAlignment = Alignment.Center) {
         when (val ic = TreeIcons.resolve(iconId)) {
             is TreeIcon.Glyph -> Icon(ic.image, null, Modifier.size(glyph), tint = tint ?: resolveTint(ic.tint))
             is TreeIcon.Folder -> Icon(ic.closed, null, Modifier.size(glyph), tint = tint ?: resolveTint(ic.tint))
-            is TreeIcon.Badge -> Text(ic.text, color = tint ?: ic.color, style = Ca.type.title3, fontWeight = FontWeight.Bold)
+            is TreeIcon.Badge -> Text(ic.text, color = tint ?: ic.color, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
         }
     }
 }

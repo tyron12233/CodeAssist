@@ -1,5 +1,7 @@
 package dev.ide.ui.components
 
+import dev.ide.ui.theme.Ide
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -68,8 +70,8 @@ fun MigrationNotice(visible: Boolean, onBackup: suspend () -> Unit, onDismiss: (
                 onDismiss = onDismiss,
                 modifier = Modifier
                     .width(460.dp)
-                    .background(Ca.colors.glassThick, shape)
-                    .border(1.dp, Ca.colors.glassEdge, shape)
+                    .background(Ide.colors.glassThick, shape)
+                    .border(1.dp, Ide.colors.glassEdge, shape)
                     .padding(28.dp),
             )
         }
@@ -82,23 +84,23 @@ private fun NoticeBody(onBackup: suspend () -> Unit, onDismiss: () -> Unit, modi
     var busy by remember { mutableStateOf(false) }
     Column(modifier, horizontalAlignment = Alignment.CenterHorizontally) {
         Box(
-            Modifier.size(72.dp).background(Ca.colors.warning.copy(alpha = 0.15f), CircleShape),
+            Modifier.size(72.dp).background(Ide.colors.warning.copy(alpha = 0.15f), CircleShape),
             contentAlignment = Alignment.Center,
         ) {
-            Icon(CaIcons.box, null, Modifier.size(34.dp), tint = Ca.colors.warning)
+            Icon(CaIcons.box, null, Modifier.size(34.dp), tint = Ide.colors.warning)
         }
         Spacer(Modifier.height(20.dp))
         Text(
             stringResource(Res.string.a_new_build_system),
-            color = Ca.colors.textPrimary,
-            style = Ca.type.title2,
+            color = MaterialTheme.colorScheme.onSurface,
+            style = MaterialTheme.typography.headlineSmall,
             textAlign = TextAlign.Center
         )
         Spacer(Modifier.height(12.dp))
         Text(
             stringResource(Res.string.a_new_build_system_content),
-            color = Ca.colors.textSecondary,
-            style = Ca.type.subhead,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            style = MaterialTheme.typography.bodyLarge,
             textAlign = TextAlign.Center,
         )
         Spacer(Modifier.height(24.dp))
@@ -114,8 +116,8 @@ private fun NoticeBody(onBackup: suspend () -> Unit, onDismiss: () -> Unit, modi
         Spacer(Modifier.height(8.dp))
         Text(
             stringResource(Res.string.got_it),
-            color = Ca.colors.textSecondary,
-            style = Ca.type.subhead,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            style = MaterialTheme.typography.bodyLarge,
             modifier = Modifier
                 .clickable(
                     remember { MutableInteractionSource() },

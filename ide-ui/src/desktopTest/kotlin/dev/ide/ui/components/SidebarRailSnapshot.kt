@@ -1,5 +1,7 @@
 package dev.ide.ui.components
 
+import dev.ide.ui.theme.Ide
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -18,7 +20,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.dp
 import dev.ide.ui.icons.CaIcons
-import dev.ide.ui.theme.Ca
 import dev.ide.ui.theme.CodeAssistTheme
 import org.jetbrains.skia.EncodedImageFormat
 import java.io.File
@@ -32,11 +33,11 @@ import kotlin.test.Test
 class SidebarRailSnapshot {
 
     private fun panels(): List<SidebarPanel> = listOf(
-        SidebarPanel("files", "Files", CaIcons.docText, 10) { PaneStub("Files", Ca.colors.accent) },
-        SidebarPanel("search", "Search", CaIcons.search, 20) { PaneStub("Search", Ca.colors.info) },
-        SidebarPanel("structure", "Structure", CaIcons.code, 30) { PaneStub("Structure", Ca.colors.warning) },
-        SidebarPanel("source", "Source", CaIcons.gitBranch, 40) { PaneStub("Source", Ca.colors.success) },
-        SidebarPanel("ai", "AI", CaIcons.sparkle, 1000) { PaneStub("AI", Ca.colors.accent) },
+        SidebarPanel("files", "Files", CaIcons.docText, 10) { PaneStub("Files", MaterialTheme.colorScheme.primary) },
+        SidebarPanel("search", "Search", CaIcons.search, 20) { PaneStub("Search", Ide.colors.info) },
+        SidebarPanel("structure", "Structure", CaIcons.code, 30) { PaneStub("Structure", Ide.colors.warning) },
+        SidebarPanel("source", "Source", CaIcons.gitBranch, 40) { PaneStub("Source", Ide.colors.success) },
+        SidebarPanel("ai", "AI", CaIcons.sparkle, 1000) { PaneStub("AI", MaterialTheme.colorScheme.primary) },
     )
 
     @OptIn(ExperimentalComposeUiApi::class)
@@ -45,7 +46,7 @@ class SidebarRailSnapshot {
         val panels = panels()
         // Left rail (Search selected) + its docked pane, as the ExpandedLayout composes them.
         snapshot("sidebar-rail-search.png", 460, 520) {
-            Box(Modifier.fillMaxSize().background(Ca.colors.editorBg)) {
+            Box(Modifier.fillMaxSize().background(Ide.colors.editorBg)) {
                 Row(Modifier.fillMaxSize()) {
                     ActivityRail(
                         panels = panels,
@@ -58,13 +59,13 @@ class SidebarRailSnapshot {
                         },
                     )
                     SidebarPane(panels, "search", RailSide.Left, paneWidth = 260.dp)
-                    Box(Modifier.fillMaxHeight().width(120.dp).background(Ca.colors.editorBg))
+                    Box(Modifier.fillMaxHeight().width(120.dp).background(Ide.colors.editorBg))
                 }
             }
         }
         // Same rail with Structure selected — the indicator sits on a different icon.
         snapshot("sidebar-rail-structure.png", 200, 520) {
-            Box(Modifier.fillMaxSize().background(Ca.colors.editorBg)) {
+            Box(Modifier.fillMaxSize().background(Ide.colors.editorBg)) {
                 ActivityRail(
                     panels = panels,
                     selectedId = "structure",
@@ -79,7 +80,7 @@ class SidebarRailSnapshot {
         }
         // The mobile in-drawer segmented switcher.
         snapshot("sidebar-segmented.png", 380, 80) {
-            Box(Modifier.fillMaxSize().background(Ca.colors.surface)) {
+            Box(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.surface)) {
                 SegmentedPanelSwitcher(panels = panels.take(3), selectedId = "search", onSelect = {})
             }
         }

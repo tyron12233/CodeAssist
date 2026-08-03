@@ -1,5 +1,7 @@
 package dev.ide.ui.components
 
+import dev.ide.ui.theme.Ide
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.size
@@ -31,7 +33,7 @@ fun ProjectTile(
     radius: Dp = Ca.radius.md,
     color: Color? = null,
 ) {
-    val accent = color ?: Ca.colors.accent
+    val accent = color ?: MaterialTheme.colorScheme.primary
     Box(
         modifier
             .size(size)
@@ -41,7 +43,7 @@ fun ProjectTile(
         Text(
             initial.take(1).uppercase(),
             color = Color.White,
-            fontFamily = Ca.type.uiFamily,
+            fontFamily = Ide.type.uiFamily,
             fontWeight = FontWeight.Bold,
             fontSize = (size.value * 0.42f).sp,
         )

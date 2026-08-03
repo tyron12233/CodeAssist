@@ -1,5 +1,7 @@
 package dev.ide.ui.components
 
+import dev.ide.ui.theme.Ide
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.size
@@ -14,7 +16,6 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import dev.ide.ui.backend.UiCompletionKind
-import dev.ide.ui.theme.Ca
 
 private data class KindMeta(val ch: String, val color: Color)
 
@@ -25,8 +26,8 @@ private fun metaFor(kind: UiCompletionKind): KindMeta = when (kind) {
     UiCompletionKind.Interface -> KindMeta("I", Color(0xFF57B6C2))
     UiCompletionKind.Enum -> KindMeta("E", Color(0xFFD9A066))
     UiCompletionKind.AnnotationType -> KindMeta("@", Color(0xFFE6C178))
-    UiCompletionKind.Method -> KindMeta("M", Ca.colors.accent)
-    UiCompletionKind.Constructor -> KindMeta("M", Ca.colors.accent)
+    UiCompletionKind.Method -> KindMeta("M", MaterialTheme.colorScheme.primary)
+    UiCompletionKind.Constructor -> KindMeta("M", MaterialTheme.colorScheme.primary)
     UiCompletionKind.Field -> KindMeta("F", Color(0xFF61AFEF))
     UiCompletionKind.EnumConstant -> KindMeta("#", Color(0xFFD9A066))
     UiCompletionKind.Variable -> KindMeta("v", Color(0xFF5CCFE6))
@@ -49,7 +50,7 @@ fun KindBadge(kind: UiCompletionKind, size: Int = 20) {
         Text(
             m.ch,
             color = m.color,
-            fontFamily = Ca.type.codeFamily,
+            fontFamily = Ide.type.codeFamily,
             fontWeight = FontWeight.SemiBold,
             fontSize = (if (m.ch.length > 1) size * 0.42 else size * 0.56).sp,
             textAlign = TextAlign.Center,
@@ -67,7 +68,7 @@ fun LetterBadge(text: String, color: Color, size: Int = 17) {
         Text(
             text,
             color = color,
-            fontFamily = Ca.type.codeFamily,
+            fontFamily = Ide.type.codeFamily,
             fontWeight = FontWeight.SemiBold,
             fontSize = (if (text.length > 1) size * 0.42 else size * 0.55).sp,
         )

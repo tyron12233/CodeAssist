@@ -1,5 +1,6 @@
 package dev.ide.ui.screens
 
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
@@ -91,7 +92,7 @@ fun LearnScreen(
     val resume = remember(backend, epoch) { runCatching { backend.learn.resume() }.getOrNull() }
     var selectedCat by remember { mutableStateOf<String?>(null) }
 
-    Box(modifier.fillMaxSize().background(Ca.colors.bg), contentAlignment = Alignment.TopCenter) {
+    Box(modifier.fillMaxSize().background(MaterialTheme.colorScheme.background), contentAlignment = Alignment.TopCenter) {
         Column(
             Modifier.widthIn(max = 640.dp).fillMaxSize()
                 .verticalScroll(rememberScrollState())
@@ -99,8 +100,8 @@ fun LearnScreen(
             verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
             Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
-                Text(stringResource(Res.string.learn_title), color = Ca.colors.textPrimary, style = Ca.type.large, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                Text(stringResource(Res.string.learn_subtitle), color = Ca.colors.textSecondary, style = Ca.type.subhead)
+                Text(stringResource(Res.string.learn_title), color = MaterialTheme.colorScheme.onSurface, style = MaterialTheme.typography.headlineLarge, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                Text(stringResource(Res.string.learn_subtitle), color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodyLarge)
             }
 
             if (resume != null) {
@@ -142,7 +143,7 @@ fun LearnScreen(
 
             if (onOpenDocs != null || onJoinDiscord != null) {
                 Spacer(Modifier.height(8.dp))
-                Text(stringResource(Res.string.learn_more_resources), color = Ca.colors.textPrimary, style = Ca.type.title3)
+                Text(stringResource(Res.string.learn_more_resources), color = MaterialTheme.colorScheme.onSurface, style = MaterialTheme.typography.titleLarge)
                 if (onOpenDocs != null) {
                     LinkCard(CaIcons.docText, stringResource(Res.string.learn_documentation), stringResource(Res.string.learn_documentation_content), onClick = onOpenDocs)
                 }
@@ -165,7 +166,7 @@ private fun accentOf(catalog: UiLearnCatalog, trackId: String): Color? =
 @Composable
 private fun ResumeBanner(resume: UiResumePoint, accent: Color?, onClick: () -> Unit) {
     val interaction = remember { MutableInteractionSource() }
-    val base = accent ?: Ca.colors.accent
+    val base = accent ?: MaterialTheme.colorScheme.primary
     val shape = RoundedCornerShape(Ca.radius.xl)
     Column(
         Modifier
@@ -177,10 +178,10 @@ private fun ResumeBanner(resume: UiResumePoint, accent: Color?, onClick: () -> U
             .padding(18.dp),
         verticalArrangement = Arrangement.spacedBy(10.dp),
     ) {
-        Text(stringResource(Res.string.learn_continue_learning).uppercase(), color = Color.White.copy(alpha = 0.85f), style = Ca.type.caption2, fontWeight = FontWeight.SemiBold)
+        Text(stringResource(Res.string.learn_continue_learning).uppercase(), color = Color.White.copy(alpha = 0.85f), style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.SemiBold)
         Column(verticalArrangement = Arrangement.spacedBy(1.dp)) {
-            Text(resume.lessonTitle, color = Color.White, style = Ca.type.title3, maxLines = 1, overflow = TextOverflow.Ellipsis)
-            Text(resume.trackTitle, color = Color.White.copy(alpha = 0.88f), style = Ca.type.footnote)
+            Text(resume.lessonTitle, color = Color.White, style = MaterialTheme.typography.titleLarge, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            Text(resume.trackTitle, color = Color.White.copy(alpha = 0.88f), style = MaterialTheme.typography.bodyMedium)
         }
         ProgressBar(resume.fractionComplete, track = Color.White.copy(alpha = 0.25f), fill = Color.White)
         Row(
@@ -189,7 +190,7 @@ private fun ResumeBanner(resume: UiResumePoint, accent: Color?, onClick: () -> U
             horizontalArrangement = Arrangement.spacedBy(6.dp),
         ) {
             Icon(CaIcons.play, null, Modifier.size(15.dp), tint = base.darken(0.2f))
-            Text(stringResource(Res.string.learn_resume), color = base.darken(0.2f), style = Ca.type.footnote, fontWeight = FontWeight.SemiBold)
+            Text(stringResource(Res.string.learn_resume), color = base.darken(0.2f), style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold)
         }
     }
 }
@@ -199,7 +200,7 @@ private fun ResumeBanner(resume: UiResumePoint, accent: Color?, onClick: () -> U
 @Composable
 private fun TrackCard(track: UiLearnTrack, lessonsDone: Int, delayMillis: Int, onClick: () -> Unit) {
     val interaction = remember { MutableInteractionSource() }
-    val accent = track.accentColor?.let { Color(it) } ?: Ca.colors.accent
+    val accent = track.accentColor?.let { Color(it) } ?: MaterialTheme.colorScheme.primary
     val shape = RoundedCornerShape(Ca.radius.lg)
     val total = track.lessons.size
     val fraction = if (total == 0) 0f else lessonsDone.toFloat() / total
@@ -208,8 +209,8 @@ private fun TrackCard(track: UiLearnTrack, lessonsDone: Int, delayMillis: Int, o
             .entranceSlideUp(delayMillis)
             .fillMaxWidth()
             .pressScale(interaction)
-            .background(Ca.colors.surface, shape)
-            .border(1.dp, Ca.colors.separator, shape)
+            .background(MaterialTheme.colorScheme.surface, shape)
+            .border(1.dp, MaterialTheme.colorScheme.outlineVariant, shape)
             .clickable(interaction, indication = null, onClick = onClick)
             .padding(14.dp),
         verticalAlignment = Alignment.CenterVertically,
@@ -222,18 +223,18 @@ private fun TrackCard(track: UiLearnTrack, lessonsDone: Int, delayMillis: Int, o
             Icon(learnCategoryIcon(track.category), null, Modifier.size(24.dp), tint = accent)
         }
         Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(5.dp)) {
-            Text(track.title, color = Ca.colors.textPrimary, style = Ca.type.headline, maxLines = 1, overflow = TextOverflow.Ellipsis)
-            Text(track.subtitle, color = Ca.colors.textSecondary, style = Ca.type.footnote, maxLines = 2, overflow = TextOverflow.Ellipsis)
+            Text(track.title, color = MaterialTheme.colorScheme.onSurface, style = MaterialTheme.typography.titleMedium, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            Text(track.subtitle, color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodyMedium, maxLines = 2, overflow = TextOverflow.Ellipsis)
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                ProgressBar(fraction, track = Ca.colors.surface3, fill = accent, modifier = Modifier.weight(1f))
+                ProgressBar(fraction, track = MaterialTheme.colorScheme.surfaceContainerHighest, fill = accent, modifier = Modifier.weight(1f))
                 Text(
                     if (total > 0) stringResource(Res.string.learn_lessons_progress, lessonsDone, total)
                     else pluralStringResource(Res.plurals.learn_lesson_count, total, total),
-                    color = Ca.colors.textTertiary, style = Ca.type.caption2,
+                    color = MaterialTheme.colorScheme.outline, style = MaterialTheme.typography.labelSmall,
                 )
             }
         }
-        Icon(CaIcons.chevronRight, null, Modifier.size(20.dp), tint = Ca.colors.textTertiary)
+        Icon(CaIcons.chevronRight, null, Modifier.size(20.dp), tint = MaterialTheme.colorScheme.outline)
     }
 }
 
@@ -271,7 +272,7 @@ private fun LearnCategoryStrip(categories: List<String>, selected: String?, onSe
         horizontalArrangement = Arrangement.spacedBy(8.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        LearnCategoryChip(stringResource(Res.string.learn_all), Ca.colors.accent, CaIcons.grid, selected == null) { onSelect(null) }
+        LearnCategoryChip(stringResource(Res.string.learn_all), MaterialTheme.colorScheme.primary, CaIcons.grid, selected == null) { onSelect(null) }
         categories.forEach { c ->
             LearnCategoryChip(c, learnCategoryColor(c), learnCategoryIcon(c), selected == c) {
                 onSelect(if (selected == c) null else c)
@@ -288,8 +289,8 @@ private fun LearnCategoryChip(label: String, color: Color, icon: ImageVector, ac
         Modifier
             .pressScale(interaction)
             .clip(shape)
-            .background(if (active) color else Ca.colors.surface2)
-            .border(1.dp, if (active) Color.Transparent else Ca.colors.hairline, shape)
+            .background(if (active) color else MaterialTheme.colorScheme.surfaceContainerHigh)
+            .border(1.dp, if (active) Color.Transparent else MaterialTheme.colorScheme.outlineVariant, shape)
             .clickable(interaction, indication = null, onClick = onClick)
             .padding(horizontal = 13.dp, vertical = 8.dp),
         verticalAlignment = Alignment.CenterVertically,
@@ -298,8 +299,8 @@ private fun LearnCategoryChip(label: String, color: Color, icon: ImageVector, ac
         Icon(icon, null, Modifier.size(15.dp), tint = if (active) Color.White else color)
         Text(
             label,
-            color = if (active) Color.White else Ca.colors.textSecondary,
-            style = Ca.type.footnote,
+            color = if (active) Color.White else MaterialTheme.colorScheme.onSurfaceVariant,
+            style = MaterialTheme.typography.bodyMedium,
             fontWeight = if (active) FontWeight.SemiBold else FontWeight.Medium,
             maxLines = 1,
         )
@@ -314,7 +315,7 @@ private fun CategorySubheader(category: String) {
         horizontalArrangement = Arrangement.spacedBy(8.dp),
     ) {
         Box(Modifier.size(10.dp).clip(RoundedCornerShape(Ca.radius.pill)).background(learnCategoryColor(category)))
-        Text(category, color = Ca.colors.textPrimary, style = Ca.type.title3)
+        Text(category, color = MaterialTheme.colorScheme.onSurface, style = MaterialTheme.typography.titleLarge)
     }
 }
 
@@ -324,13 +325,13 @@ private fun CategorySubheader(category: String) {
 private fun LinkCard(icon: ImageVector, title: String, subtitle: String, onClick: () -> Unit, accent: Color? = null) {
     val interaction = remember { MutableInteractionSource() }
     val shape = RoundedCornerShape(Ca.radius.lg)
-    val tint = accent ?: Ca.colors.accent
+    val tint = accent ?: MaterialTheme.colorScheme.primary
     Row(
         Modifier
             .fillMaxWidth()
             .pressScale(interaction)
-            .background(Ca.colors.surface, shape)
-            .border(1.dp, Ca.colors.separator, shape)
+            .background(MaterialTheme.colorScheme.surface, shape)
+            .border(1.dp, MaterialTheme.colorScheme.outlineVariant, shape)
             .clickable(interaction, indication = null, onClick = onClick)
             .padding(14.dp),
         verticalAlignment = Alignment.CenterVertically,
@@ -343,10 +344,10 @@ private fun LinkCard(icon: ImageVector, title: String, subtitle: String, onClick
             Icon(icon, null, Modifier.size(22.dp), tint = tint)
         }
         Column(Modifier.weight(1f)) {
-            Text(title, color = Ca.colors.textPrimary, style = Ca.type.headline)
-            Text(subtitle, color = Ca.colors.textSecondary, style = Ca.type.footnote)
+            Text(title, color = MaterialTheme.colorScheme.onSurface, style = MaterialTheme.typography.titleMedium)
+            Text(subtitle, color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodyMedium)
         }
-        Icon(CaIcons.chevronRight, null, Modifier.size(20.dp), tint = Ca.colors.textTertiary)
+        Icon(CaIcons.chevronRight, null, Modifier.size(20.dp), tint = MaterialTheme.colorScheme.outline)
     }
 }
 

@@ -1,5 +1,7 @@
 package dev.ide.ui.components
 
+import dev.ide.ui.theme.Ide
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -74,8 +76,8 @@ fun AnalyticsConsentSheet(
                 onLearnMore = onLearnMore,
                 modifier = Modifier
                     .width(460.dp)
-                    .background(Ca.colors.glassThick, shape)
-                    .border(1.dp, Ca.colors.glassEdge, shape)
+                    .background(Ide.colors.glassThick, shape)
+                    .border(1.dp, Ide.colors.glassEdge, shape)
                     .padding(28.dp),
             )
         }
@@ -91,31 +93,31 @@ private fun ConsentBody(
 ) {
     Column(modifier, horizontalAlignment = Alignment.CenterHorizontally) {
         Box(
-            Modifier.size(72.dp).background(Ca.colors.accent.copy(alpha = 0.15f), CircleShape),
+            Modifier.size(72.dp).background(MaterialTheme.colorScheme.primary.copy(alpha = 0.15f), CircleShape),
             contentAlignment = Alignment.Center,
         ) {
-            Icon(CaIcons.info, null, Modifier.size(34.dp), tint = Ca.colors.accent)
+            Icon(CaIcons.info, null, Modifier.size(34.dp), tint = MaterialTheme.colorScheme.primary)
         }
         Spacer(Modifier.height(20.dp))
         Text(
             stringResource(Res.string.help_improve_codeassist),
-            color = Ca.colors.textPrimary,
-            style = Ca.type.title2,
+            color = MaterialTheme.colorScheme.onSurface,
+            style = MaterialTheme.typography.headlineSmall,
             textAlign = TextAlign.Center
         )
         Spacer(Modifier.height(12.dp))
         Text(
             stringResource(Res.string.help_improve_codeassist_content),
-            color = Ca.colors.textSecondary,
-            style = Ca.type.subhead,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            style = MaterialTheme.typography.bodyLarge,
             textAlign = TextAlign.Center,
         )
         if (onLearnMore != null) {
             Spacer(Modifier.height(10.dp))
             Text(
                 stringResource(Res.string.learn_more),
-                color = Ca.colors.accent,
-                style = Ca.type.subhead,
+                color = MaterialTheme.colorScheme.primary,
+                style = MaterialTheme.typography.bodyLarge,
                 modifier = Modifier
                     .clickable(
                         remember { MutableInteractionSource() },
@@ -134,8 +136,8 @@ private fun ConsentBody(
         Spacer(Modifier.height(8.dp))
         Text(
             stringResource(Res.string.no_thanks),
-            color = Ca.colors.textSecondary,
-            style = Ca.type.subhead,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            style = MaterialTheme.typography.bodyLarge,
             modifier = Modifier
                 .clickable(
                     remember { MutableInteractionSource() },
@@ -165,19 +167,19 @@ fun AnalyticsToggleRow(
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(12.dp),
     ) {
-        Icon(CaIcons.info, null, Modifier.size(18.dp), tint = Ca.colors.textSecondary)
+        Icon(CaIcons.info, null, Modifier.size(18.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
         Column(Modifier.weight(1f)) {
             Text(
                 stringResource(Res.string.performance_analytics),
-                color = Ca.colors.textPrimary,
-                style = Ca.type.subhead
+                color = MaterialTheme.colorScheme.onSurface,
+                style = MaterialTheme.typography.bodyLarge
             )
             Text(
                 if (enabled) stringResource(Res.string.sharing_performance_data) else stringResource(
                     Res.string.not_sharing_performance_data
                 ),
-                color = Ca.colors.textSecondary,
-                style = Ca.type.caption,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                style = MaterialTheme.typography.bodySmall,
             )
         }
         ConsentToggle(enabled, onChange)
@@ -191,7 +193,7 @@ private fun ConsentToggle(on: Boolean, onToggle: (Boolean) -> Unit) {
         Modifier
             .size(width = 44.dp, height = 26.dp)
             .background(
-                if (on) Ca.colors.accent else Ca.colors.surface3,
+                if (on) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surfaceContainerHighest,
                 RoundedCornerShape(Ca.radius.pill)
             )
             .clickable(remember { MutableInteractionSource() }, indication = null) { onToggle(!on) }
@@ -200,7 +202,7 @@ private fun ConsentToggle(on: Boolean, onToggle: (Boolean) -> Unit) {
     ) {
         Box(
             Modifier.size(20.dp)
-                .background(Ca.colors.textOnAccent, RoundedCornerShape(Ca.radius.pill))
+                .background(MaterialTheme.colorScheme.onPrimary, RoundedCornerShape(Ca.radius.pill))
         )
     }
 }

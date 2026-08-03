@@ -1,5 +1,6 @@
 package dev.ide.ui.screens
 
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.rememberScrollState
@@ -137,7 +138,7 @@ internal fun MoreSheetContent(
     // Scrollable so every row (incl. "Close project") is reachable when the sheet is short — e.g. the soft
     // keyboard is up and the sheet has been lifted above it (issue #994).
     Column(modifier.verticalScroll(rememberScrollState()).padding(horizontal = 12.dp, vertical = 4.dp)) {
-        Text(stringResource(Res.string.more), color = Ca.colors.textPrimary, style = Ca.type.headline, fontWeight = FontWeight.SemiBold,
+        Text(stringResource(Res.string.more), color = MaterialTheme.colorScheme.onSurface, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold,
             modifier = Modifier.padding(start = 6.dp, top = 4.dp, bottom = 10.dp))
         actions.forEach { a ->
             MoreRow(actionIcon(a.iconId), a.text, a.description ?: "") { a.perform(host) }
@@ -147,7 +148,7 @@ internal fun MoreSheetContent(
         // a deliberate one-time choice the user can revisit, not a permanent fixture of the project picker.
         if (backend.diagnostics.analyticsAvailable()) {
             var on by remember { mutableStateOf(backend.diagnostics.analyticsConsent() == true) }
-            Box(Modifier.fillMaxWidth().padding(vertical = 8.dp).height(1.dp).background(Ca.colors.separator))
+            Box(Modifier.fillMaxWidth().padding(vertical = 8.dp).height(1.dp).background(MaterialTheme.colorScheme.outlineVariant))
             Box(Modifier.padding(horizontal = 6.dp)) {
                 AnalyticsToggleRow(enabled = on, onChange = { on = it; backend.diagnostics.setAnalyticsConsent(it) })
             }
@@ -163,13 +164,13 @@ private fun MoreRow(icon: androidx.compose.ui.graphics.vector.ImageVector, title
         verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp),
     ) {
         Box(
-            Modifier.size(38.dp).background(Ca.colors.accentSoft, androidx.compose.foundation.shape.RoundedCornerShape(Ca.radius.sm)),
+            Modifier.size(38.dp).background(MaterialTheme.colorScheme.primaryContainer, androidx.compose.foundation.shape.RoundedCornerShape(Ca.radius.sm)),
             contentAlignment = Alignment.Center,
-        ) { androidx.compose.material3.Icon(icon, null, Modifier.size(19.dp), tint = Ca.colors.accent) }
+        ) { androidx.compose.material3.Icon(icon, null, Modifier.size(19.dp), tint = MaterialTheme.colorScheme.primary) }
         Column(Modifier.weight(1f)) {
-            Text(title, color = Ca.colors.textPrimary, style = Ca.type.subhead, fontWeight = FontWeight.SemiBold)
-            Text(subtitle, color = Ca.colors.textTertiary, style = Ca.type.caption2)
+            Text(title, color = MaterialTheme.colorScheme.onSurface, style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.SemiBold)
+            Text(subtitle, color = MaterialTheme.colorScheme.outline, style = MaterialTheme.typography.labelSmall)
         }
-        androidx.compose.material3.Icon(CaIcons.chevronRight, null, Modifier.size(16.dp), tint = Ca.colors.textTertiary)
+        androidx.compose.material3.Icon(CaIcons.chevronRight, null, Modifier.size(16.dp), tint = MaterialTheme.colorScheme.outline)
     }
 }

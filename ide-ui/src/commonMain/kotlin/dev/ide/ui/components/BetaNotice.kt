@@ -1,5 +1,7 @@
 package dev.ide.ui.components
 
+import dev.ide.ui.theme.Ide
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -65,8 +67,8 @@ fun BetaBanner(onSubmit: (() -> Unit)?, modifier: Modifier = Modifier) {
     Column(
         modifier
             .fillMaxWidth()
-            .background(Ca.colors.warning.copy(alpha = 0.12f), shape)
-            .border(1.dp, Ca.colors.warning.copy(alpha = 0.35f), shape)
+            .background(Ide.colors.warning.copy(alpha = 0.12f), shape)
+            .border(1.dp, Ide.colors.warning.copy(alpha = 0.35f), shape)
             .padding(14.dp),
         verticalArrangement = Arrangement.spacedBy(10.dp),
     ) {
@@ -74,17 +76,17 @@ fun BetaBanner(onSubmit: (() -> Unit)?, modifier: Modifier = Modifier) {
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(10.dp)
         ) {
-            Icon(CaIcons.info, null, Modifier.size(18.dp), tint = Ca.colors.warning)
+            Icon(CaIcons.info, null, Modifier.size(18.dp), tint = Ide.colors.warning)
             Text(
                 stringResource(Res.string.beta_notice, BetaInfo.LABEL),
-                color = Ca.colors.textPrimary,
-                style = Ca.type.headline
+                color = MaterialTheme.colorScheme.onSurface,
+                style = MaterialTheme.typography.titleMedium
             )
         }
         Text(
             stringResource(Res.string.beta_notice_content),
-            color = Ca.colors.textSecondary,
-            style = Ca.type.footnote,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            style = MaterialTheme.typography.bodyMedium,
         )
         if (onSubmit != null) {
             Spacer(Modifier.height(0.dp))
@@ -100,17 +102,17 @@ private fun SubmitSuggestionsButton(onClick: () -> Unit) {
     Row(
         Modifier
             .pressScale(interaction)
-            .background(Ca.colors.warning.copy(alpha = 0.18f), RoundedCornerShape(Ca.radius.pill))
+            .background(Ide.colors.warning.copy(alpha = 0.18f), RoundedCornerShape(Ca.radius.pill))
             .clickable(interaction, indication = null, onClick = onClick)
             .padding(horizontal = 14.dp, vertical = 8.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(6.dp),
     ) {
-        Icon(CaIcons.lightbulb, null, Modifier.size(16.dp), tint = Ca.colors.warning)
+        Icon(CaIcons.lightbulb, null, Modifier.size(16.dp), tint = Ide.colors.warning)
         Text(
             stringResource(Res.string.submit_suggestion),
-            color = Ca.colors.textPrimary,
-            style = Ca.type.footnote,
+            color = MaterialTheme.colorScheme.onSurface,
+            style = MaterialTheme.typography.bodyMedium,
             fontWeight = FontWeight.SemiBold
         )
     }
@@ -121,15 +123,15 @@ private fun SubmitSuggestionsButton(onClick: () -> Unit) {
 fun BetaBadge(modifier: Modifier = Modifier) {
     Box(
         modifier
-            .background(Ca.colors.warning.copy(alpha = 0.18f), RoundedCornerShape(Ca.radius.pill))
-            .border(1.dp, Ca.colors.warning.copy(alpha = 0.4f), RoundedCornerShape(Ca.radius.pill))
+            .background(Ide.colors.warning.copy(alpha = 0.18f), RoundedCornerShape(Ca.radius.pill))
+            .border(1.dp, Ide.colors.warning.copy(alpha = 0.4f), RoundedCornerShape(Ca.radius.pill))
             .padding(horizontal = 8.dp, vertical = 2.dp),
         contentAlignment = Alignment.Center,
     ) {
         Text(
             BetaInfo.LABEL.uppercase(),
-            color = Ca.colors.warning,
-            style = Ca.type.caption2,
+            color = Ide.colors.warning,
+            style = MaterialTheme.typography.labelSmall,
             fontWeight = FontWeight.Bold
         )
     }

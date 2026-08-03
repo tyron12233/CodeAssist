@@ -1,5 +1,7 @@
 package dev.ide.ui.screens
 
+import dev.ide.ui.theme.Ide
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -70,7 +72,7 @@ internal fun BreadcrumbBar(
             isMarkdownPreviewable(active.path) || hasPreview
     Row(
         Modifier.fillMaxWidth()
-            .background(Ca.colors.editorBg)
+            .background(Ide.colors.editorBg)
             .padding(start = 8.dp, end = 4.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(6.dp),
@@ -98,7 +100,7 @@ private fun ViewModeToggle(
     Row(
         Modifier.height(EditorToolbarHeight)
             .background(
-                Ca.colors.editorBg,
+                Ide.colors.editorBg,
                 androidx.compose.foundation.shape.RoundedCornerShape(Ca.radius.sm)
             )
             .padding(horizontal = 2.dp),
@@ -140,7 +142,7 @@ private fun SegmentItem(icon: ImageVector, label: String, active: Boolean, onCli
     Box(
         Modifier.clip(androidx.compose.foundation.shape.RoundedCornerShape(Ca.radius.xs))
             .background(
-                if (active) Ca.colors.accentSoft else androidx.compose.ui.graphics.Color.Transparent,
+                if (active) MaterialTheme.colorScheme.primaryContainer else androidx.compose.ui.graphics.Color.Transparent,
                 androidx.compose.foundation.shape.RoundedCornerShape(Ca.radius.xs)
             )
             .clickable(
@@ -155,7 +157,7 @@ private fun SegmentItem(icon: ImageVector, label: String, active: Boolean, onCli
             icon,
             label,
             Modifier.size(15.dp),
-            tint = if (active) Ca.colors.accent else Ca.colors.textSecondary
+            tint = if (active) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
         )
     }
 }

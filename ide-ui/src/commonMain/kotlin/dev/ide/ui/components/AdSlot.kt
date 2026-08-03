@@ -1,5 +1,6 @@
 package dev.ide.ui.components
 
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -59,8 +60,8 @@ fun NativeAdCard(
     Column(
         modifier
             .fillMaxWidth()
-            .background(Ca.colors.surface, shape)
-            .border(1.dp, Ca.colors.separator, shape)
+            .background(MaterialTheme.colorScheme.surface, shape)
+            .border(1.dp, MaterialTheme.colorScheme.outlineVariant, shape)
             .padding(12.dp),
         verticalArrangement = Arrangement.spacedBy(8.dp),
     ) {
@@ -74,11 +75,11 @@ fun NativeAdCard(
 private fun AdBadge() {
     Text(
         stringResource(Res.string.ad_label),
-        color = Ca.colors.textTertiary,
-        style = Ca.type.caption2,
+        color = MaterialTheme.colorScheme.outline,
+        style = MaterialTheme.typography.labelSmall,
         fontWeight = FontWeight.SemiBold,
         modifier = Modifier
-            .background(Ca.colors.surface2, RoundedCornerShape(Ca.radius.sm))
+            .background(MaterialTheme.colorScheme.surfaceContainerHigh, RoundedCornerShape(Ca.radius.sm))
             .padding(horizontal = 6.dp, vertical = 2.dp),
     )
 }
@@ -99,15 +100,15 @@ fun HouseAd(modifier: Modifier = Modifier, onClick: () -> Unit = {}) {
         horizontalArrangement = Arrangement.spacedBy(12.dp),
     ) {
         Box(
-            Modifier.size(40.dp).background(Ca.colors.accent.copy(alpha = 0.16f), RoundedCornerShape(Ca.radius.md)),
+            Modifier.size(40.dp).background(MaterialTheme.colorScheme.primary.copy(alpha = 0.16f), RoundedCornerShape(Ca.radius.md)),
             contentAlignment = Alignment.Center,
         ) {
-            Icon(CaIcons.heart, null, Modifier.size(22.dp), tint = Ca.colors.accent)
+            Icon(CaIcons.heart, null, Modifier.size(22.dp), tint = MaterialTheme.colorScheme.primary)
         }
         Column(Modifier.weight(1f)) {
-            Text(stringResource(Res.string.house_ad_support_title), color = Ca.colors.textPrimary, style = Ca.type.headline)
-            Text(stringResource(Res.string.house_ad_support_content), color = Ca.colors.textSecondary, style = Ca.type.footnote)
+            Text(stringResource(Res.string.house_ad_support_title), color = MaterialTheme.colorScheme.onSurface, style = MaterialTheme.typography.titleMedium)
+            Text(stringResource(Res.string.house_ad_support_content), color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodyMedium)
         }
-        Icon(CaIcons.chevronRight, null, Modifier.size(20.dp), tint = Ca.colors.textTertiary)
+        Icon(CaIcons.chevronRight, null, Modifier.size(20.dp), tint = MaterialTheme.colorScheme.outline)
     }
 }

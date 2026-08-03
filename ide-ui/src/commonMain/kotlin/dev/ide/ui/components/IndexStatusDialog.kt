@@ -1,5 +1,7 @@
 package dev.ide.ui.components
 
+import dev.ide.ui.theme.Ide
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -78,8 +80,8 @@ fun IndexStatusDialog(
                 .widthIn(max = 460.dp)
                 .fillMaxWidth()
                 .padding(horizontal = 16.dp)
-                .background(Ca.colors.glassThick, RoundedCornerShape(Ca.radius.xl))
-                .border(1.dp, Ca.colors.glassEdge, RoundedCornerShape(Ca.radius.xl))
+                .background(Ide.colors.glassThick, RoundedCornerShape(Ca.radius.xl))
+                .border(1.dp, Ide.colors.glassEdge, RoundedCornerShape(Ca.radius.xl))
                 .padding(20.dp),
         ) {
             Header(status, onDismiss)
@@ -106,13 +108,13 @@ private fun Header(status: IndexUiStatus, onDismiss: () -> Unit) {
     ) {
         Icon(
             CaIcons.layers, null, Modifier.size(18.dp),
-            tint = if (status.building) Ca.colors.accent else Ca.colors.success,
+            tint = if (status.building) MaterialTheme.colorScheme.primary else Ide.colors.success,
         )
         Column(Modifier.weight(1f)) {
             Text(
                 stringResource(if (status.building) Res.string.index_title_building else Res.string.index_title_idle),
-                color = Ca.colors.textPrimary,
-                style = Ca.type.subhead,
+                color = MaterialTheme.colorScheme.onSurface,
+                style = MaterialTheme.typography.bodyLarge,
                 fontWeight = FontWeight.SemiBold,
             )
             val sub = when {
@@ -120,10 +122,10 @@ private fun Header(status: IndexUiStatus, onDismiss: () -> Unit) {
                 status.building -> stringResource(Res.string.index_working)
                 else -> stringResource(Res.string.index_up_to_date)
             }
-            Text(sub, color = Ca.colors.textTertiary, style = Ca.type.caption)
+            Text(sub, color = MaterialTheme.colorScheme.outline, style = MaterialTheme.typography.bodySmall)
         }
         Icon(
-            CaIcons.close, stringResource(Res.string.close), tint = Ca.colors.textTertiary,
+            CaIcons.close, stringResource(Res.string.close), tint = MaterialTheme.colorScheme.outline,
             modifier = Modifier
                 .clip(RoundedCornerShape(Ca.radius.sm))
                 .clickable(onClick = onDismiss)
@@ -140,12 +142,12 @@ private fun BuildingBody(status: IndexUiStatus) {
         LinearProgressIndicator(
             progress = { status.fraction.toFloat() },
             modifier = Modifier.fillMaxWidth().height(4.dp).clip(barShape),
-            color = Ca.colors.accent, trackColor = Ca.colors.surface2,
+            color = MaterialTheme.colorScheme.primary, trackColor = MaterialTheme.colorScheme.surfaceContainerHigh,
         )
     } else {
         LinearProgressIndicator(
             modifier = Modifier.fillMaxWidth().height(4.dp).clip(barShape),
-            color = Ca.colors.accent, trackColor = Ca.colors.surface2,
+            color = MaterialTheme.colorScheme.primary, trackColor = MaterialTheme.colorScheme.surfaceContainerHigh,
         )
     }
     if (status.total > 0) {
@@ -153,7 +155,7 @@ private fun BuildingBody(status: IndexUiStatus) {
         val count = if (status.phase == "Project source")
             stringResource(Res.string.index_count_files, status.processed, status.total)
         else stringResource(Res.string.index_count_artifacts, status.processed, status.total)
-        Text(count, color = Ca.colors.textTertiary, style = Ca.type.caption)
+        Text(count, color = MaterialTheme.colorScheme.outline, style = MaterialTheme.typography.bodySmall)
     }
     if (status.items.isNotEmpty()) {
         Spacer(Modifier.height(14.dp))
@@ -163,8 +165,8 @@ private fun BuildingBody(status: IndexUiStatus) {
             )
         Text(
             header,
-            color = Ca.colors.textTertiary,
-            style = Ca.type.caption2,
+            color = MaterialTheme.colorScheme.outline,
+            style = MaterialTheme.typography.labelSmall,
             fontWeight = FontWeight.SemiBold
         )
         Spacer(Modifier.height(6.dp))
@@ -185,10 +187,10 @@ private fun IdleBody() {
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(8.dp)
     ) {
-        Icon(CaIcons.check, null, Modifier.size(15.dp), tint = Ca.colors.success)
+        Icon(CaIcons.check, null, Modifier.size(15.dp), tint = Ide.colors.success)
         Text(
             stringResource(Res.string.index_idle_body),
-            color = Ca.colors.textSecondary, style = Ca.type.footnote,
+            color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodyMedium,
         )
     }
 }
@@ -205,12 +207,12 @@ private fun WorkItemRow(item: IndexWorkItem) {
                 CaIcons.check,
                 null,
                 Modifier.size(14.dp),
-                tint = Ca.colors.success
+                tint = Ide.colors.success
             )
 
             IndexWorkState.ACTIVE -> CircularProgressIndicator(
                 Modifier.size(12.dp),
-                color = Ca.colors.accent,
+                color = MaterialTheme.colorScheme.primary,
                 strokeWidth = 2.dp
             )
 
@@ -218,13 +220,13 @@ private fun WorkItemRow(item: IndexWorkItem) {
                 CaIcons.dot,
                 null,
                 Modifier.size(14.dp),
-                tint = Ca.colors.textTertiary.copy(alpha = 0.5f)
+                tint = MaterialTheme.colorScheme.outline.copy(alpha = 0.5f)
             )
         }
         Text(
             item.label,
-            color = if (item.state == IndexWorkState.PENDING) Ca.colors.textTertiary else Ca.colors.textSecondary,
-            style = Ca.type.caption, maxLines = 1, overflow = TextOverflow.Ellipsis,
+            color = if (item.state == IndexWorkState.PENDING) MaterialTheme.colorScheme.outline else MaterialTheme.colorScheme.onSurfaceVariant,
+            style = MaterialTheme.typography.bodySmall, maxLines = 1, overflow = TextOverflow.Ellipsis,
             modifier = Modifier.weight(1f),
         )
     }
@@ -237,12 +239,12 @@ private fun IndexerBreakdown(breakdown: List<IndexerUiStat>, stats: IndexUiBuild
     stats?.let { s ->
         Text(
             stringResource(Res.string.index_build_cache, s.artifacts, s.artifactsReused),
-            color = Ca.colors.textTertiary, style = Ca.type.caption,
+            color = MaterialTheme.colorScheme.outline, style = MaterialTheme.typography.bodySmall,
         )
         if (s.libMs > 0 || s.sourceMs > 0) {
             Text(
                 stringResource(Res.string.index_build_phases, s.libMs.toInt(), s.sourceMs.toInt()),
-                color = Ca.colors.textTertiary, style = Ca.type.caption,
+                color = MaterialTheme.colorScheme.outline, style = MaterialTheme.typography.bodySmall,
             )
         }
     }
@@ -250,7 +252,7 @@ private fun IndexerBreakdown(breakdown: List<IndexerUiStat>, stats: IndexUiBuild
         if (stats != null) Spacer(Modifier.height(12.dp))
         Text(
             stringResource(Res.string.index_indexers),
-            color = Ca.colors.textTertiary, style = Ca.type.caption2, fontWeight = FontWeight.SemiBold,
+            color = MaterialTheme.colorScheme.outline, style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.SemiBold,
         )
         Spacer(Modifier.height(6.dp))
         val maxMs = breakdown.maxOf { it.indexMs }.coerceAtLeast(1L)
@@ -262,7 +264,7 @@ private fun IndexerBreakdown(breakdown: List<IndexerUiStat>, stats: IndexUiBuild
             Spacer(Modifier.height(6.dp))
             Text(
                 stringResource(Res.string.index_more, breakdown.size - shown.size),
-                color = Ca.colors.textTertiary, style = Ca.type.caption2,
+                color = MaterialTheme.colorScheme.outline, style = MaterialTheme.typography.labelSmall,
             )
         }
     }
@@ -274,9 +276,9 @@ private fun IndexerRow(stat: IndexerUiStat, maxMs: Long) {
     val shape = RoundedCornerShape(Ca.radius.sm)
     val fraction = (stat.indexMs.toFloat() / maxMs.toFloat()).coerceIn(0.04f, 1f)
     Box(
-        Modifier.fillMaxWidth().height(22.dp).clip(shape).background(Ca.colors.surface2),
+        Modifier.fillMaxWidth().height(22.dp).clip(shape).background(MaterialTheme.colorScheme.surfaceContainerHigh),
     ) {
-        Box(Modifier.fillMaxWidth(fraction).fillMaxHeight().clip(shape).background(Ca.colors.accentSoft))
+        Box(Modifier.fillMaxWidth(fraction).fillMaxHeight().clip(shape).background(MaterialTheme.colorScheme.primaryContainer))
         Row(
             Modifier.fillMaxSize().padding(horizontal = 8.dp),
             verticalAlignment = Alignment.CenterVertically,
@@ -284,12 +286,12 @@ private fun IndexerRow(stat: IndexerUiStat, maxMs: Long) {
         ) {
             Text(
                 stat.id,
-                color = Ca.colors.textSecondary, style = Ca.type.caption,
+                color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodySmall,
                 maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f),
             )
             Text(
                 stringResource(Res.string.index_ms, stat.indexMs.toInt()),
-                color = Ca.colors.textPrimary, style = Ca.type.caption2, fontWeight = FontWeight.Medium,
+                color = MaterialTheme.colorScheme.onSurface, style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Medium,
             )
         }
     }
@@ -301,17 +303,17 @@ private fun ReindexButton(onClick: () -> Unit) {
         Modifier
             .fillMaxWidth()
             .clip(RoundedCornerShape(Ca.radius.control))
-            .background(Ca.colors.accentSoft)
+            .background(MaterialTheme.colorScheme.primaryContainer)
             .clickable(onClick = onClick)
             .padding(vertical = 11.dp),
         horizontalArrangement = Arrangement.spacedBy(7.dp, Alignment.CenterHorizontally),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Icon(CaIcons.refresh, null, Modifier.size(15.dp), tint = Ca.colors.accent)
+        Icon(CaIcons.refresh, null, Modifier.size(15.dp), tint = MaterialTheme.colorScheme.primary)
         Text(
             stringResource(Res.string.index_reindex),
-            color = Ca.colors.accent,
-            style = Ca.type.footnote,
+            color = MaterialTheme.colorScheme.primary,
+            style = MaterialTheme.typography.bodyMedium,
             fontWeight = FontWeight.SemiBold,
             textAlign = TextAlign.Center,
         )

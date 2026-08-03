@@ -1,5 +1,6 @@
 package dev.ide.ui.screens
 
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -60,11 +61,11 @@ private fun BottomNavItem(
                 Box(
                     Modifier.align(Alignment.TopEnd)
                         .height(15.dp).width(15.dp)
-                        .background(Ca.colors.error, androidx.compose.foundation.shape.RoundedCornerShape(Ca.radius.pill)),
+                        .background(MaterialTheme.colorScheme.error, androidx.compose.foundation.shape.RoundedCornerShape(Ca.radius.pill)),
                     contentAlignment = Alignment.Center,
-                ) { Text("$badge", color = Ca.colors.textOnAccent, fontSize = 9.sp, fontWeight = FontWeight.Bold) }
+                ) { Text("$badge", color = MaterialTheme.colorScheme.onPrimary, fontSize = 9.sp, fontWeight = FontWeight.Bold) }
             }
         }
-        Text(label, color = if (active) Ca.colors.accent else Ca.colors.textTertiary, fontSize = 10.5f.sp)
+        Text(label, color = if (active) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outline, fontSize = 10.5f.sp)
     }
 }

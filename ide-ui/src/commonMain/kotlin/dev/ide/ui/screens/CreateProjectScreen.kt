@@ -2,6 +2,7 @@
 
 package dev.ide.ui.screens
 
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -86,7 +87,7 @@ fun CreateProjectScreen(
     var selected by remember(initialTemplateId) {
         mutableStateOf(initialTemplateId?.let { id -> templates.firstOrNull { it.id == id } })
     }
-    Box(Modifier.fillMaxSize().background(Ca.colors.bg), contentAlignment = Alignment.TopCenter) {
+    Box(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background), contentAlignment = Alignment.TopCenter) {
         Column(
             Modifier.widthIn(max = 640.dp).fillMaxSize().padding(horizontal = 24.dp, vertical = 32.dp),
         ) {
@@ -117,12 +118,12 @@ private fun ColumnScope.Gallery(templates: List<UiProjectTemplate>, onBack: () -
     Spacer(Modifier.height(20.dp))
     Column(Modifier.weight(1f).verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(20.dp)) {
         if (templates.isEmpty()) {
-            Text(stringResource(Res.string.no_templates_available), color = Ca.colors.textSecondary, style = Ca.type.subhead)
+            Text(stringResource(Res.string.no_templates_available), color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodyLarge)
         }
         var index = 0
         templates.groupBy { it.category }.forEach { (category, group) ->
             Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                Text(category.uppercase(), color = Ca.colors.textTertiary, style = Ca.type.caption2, fontWeight = FontWeight.SemiBold)
+                Text(category.uppercase(), color = MaterialTheme.colorScheme.outline, style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.SemiBold)
                 group.forEach { t ->
                     TemplateCard(t, delayMillis = (index++) * 50, onClick = { onPick(t) })
                 }
@@ -139,8 +140,8 @@ private fun TemplateCard(template: UiProjectTemplate, delayMillis: Int, onClick:
             .entranceSlideUp(delayMillis)
             .fillMaxWidth()
             .pressScale(interaction)
-            .background(Ca.colors.surface, RoundedCornerShape(Ca.radius.lg))
-            .border(1.dp, Ca.colors.separator, RoundedCornerShape(Ca.radius.lg))
+            .background(MaterialTheme.colorScheme.surface, RoundedCornerShape(Ca.radius.lg))
+            .border(1.dp, MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(Ca.radius.lg))
             .clickable(interaction, indication = null, onClick = onClick)
             .padding(16.dp),
         verticalAlignment = Alignment.CenterVertically,
@@ -148,10 +149,10 @@ private fun TemplateCard(template: UiProjectTemplate, delayMillis: Int, onClick:
     ) {
         TemplateGlyph(template.iconId)
         Column(Modifier.weight(1f)) {
-            Text(template.displayName, color = Ca.colors.textPrimary, style = Ca.type.headline)
-            Text(template.description, color = Ca.colors.textSecondary, style = Ca.type.footnote)
+            Text(template.displayName, color = MaterialTheme.colorScheme.onSurface, style = MaterialTheme.typography.titleMedium)
+            Text(template.description, color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodyMedium)
         }
-        Icon(CaIcons.chevronRight, null, Modifier.size(20.dp), tint = Ca.colors.textTertiary)
+        Icon(CaIcons.chevronRight, null, Modifier.size(20.dp), tint = MaterialTheme.colorScheme.outline)
     }
 }
 
@@ -209,7 +210,7 @@ private fun ColumnScope.Configure(
         template.parameters.forEach { p ->
             ParamControl(p, value = paramValues[p.key] ?: defaultValue(p), onChange = { paramValues[p.key] = it })
         }
-        error?.let { Text(it, color = Ca.colors.error, style = Ca.type.footnote) }
+        error?.let { Text(it, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodyMedium) }
     }
     Spacer(Modifier.height(16.dp))
     PrimaryButton(
@@ -241,15 +242,15 @@ private fun ParamControl(param: UiTemplateParam, value: String, onChange: (Strin
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.SpaceBetween,
         ) {
-            Text(param.label, color = Ca.colors.textPrimary, style = Ca.type.subhead)
+            Text(param.label, color = MaterialTheme.colorScheme.onSurface, style = MaterialTheme.typography.bodyLarge)
             val on = value.toBooleanStrictOrNull() ?: false
             Box(
                 Modifier
-                    .background(if (on) Ca.colors.accentSoft else Ca.colors.surface3, RoundedCornerShape(Ca.radius.pill))
+                    .background(if (on) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surfaceContainerHighest, RoundedCornerShape(Ca.radius.pill))
                     .clickable { onChange((!on).toString()) }
                     .padding(horizontal = 14.dp, vertical = 6.dp),
             ) {
-                Text(if (on) stringResource(Res.string.toggle_on) else stringResource(Res.string.toggle_off), color = if (on) Ca.colors.accent else Ca.colors.textSecondary, style = Ca.type.footnote, fontWeight = FontWeight.SemiBold)
+                Text(if (on) stringResource(Res.string.toggle_on) else stringResource(Res.string.toggle_off), color = if (on) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold)
             }
         }
     }
@@ -265,15 +266,15 @@ private fun Header(title: String, subtitle: String, onBack: () -> Unit) {
             Modifier
                 .size(36.dp)
                 .pressScale(interaction)
-                .background(Ca.colors.surface2, RoundedCornerShape(Ca.radius.sm))
+                .background(MaterialTheme.colorScheme.surfaceContainerHigh, RoundedCornerShape(Ca.radius.sm))
                 .clickable(interaction, indication = null, onClick = onBack),
             contentAlignment = Alignment.Center,
         ) {
-            Icon(CaIcons.chevronLeft, stringResource(Res.string.back), Modifier.size(20.dp), tint = Ca.colors.textSecondary)
+            Icon(CaIcons.chevronLeft, stringResource(Res.string.back), Modifier.size(20.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
         }
         Column {
-            Text(title, color = Ca.colors.textPrimary, style = Ca.type.title2, maxLines = 1, overflow = TextOverflow.Ellipsis)
-            Text(subtitle, color = Ca.colors.textSecondary, style = Ca.type.footnote, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            Text(title, color = MaterialTheme.colorScheme.onSurface, style = MaterialTheme.typography.headlineSmall, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            Text(subtitle, color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodyMedium, maxLines = 1, overflow = TextOverflow.Ellipsis)
         }
     }
 }
@@ -286,18 +287,18 @@ private fun FormField(label: String, value: String, placeholder: String, onChang
             Modifier
                 .fillMaxWidth()
                 .height(44.dp)
-                .background(Ca.colors.surface2, RoundedCornerShape(Ca.radius.control))
-                .border(1.dp, Ca.colors.hairline, RoundedCornerShape(Ca.radius.control))
+                .background(MaterialTheme.colorScheme.surfaceContainerHigh, RoundedCornerShape(Ca.radius.control))
+                .border(1.dp, MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(Ca.radius.control))
                 .padding(horizontal = 12.dp),
             contentAlignment = Alignment.CenterStart,
         ) {
-            if (value.isEmpty()) Text(placeholder, color = Ca.colors.textTertiary, style = Ca.type.footnote)
+            if (value.isEmpty()) Text(placeholder, color = MaterialTheme.colorScheme.outline, style = MaterialTheme.typography.bodyMedium)
             BasicTextField(
                 value = value,
                 onValueChange = onChange,
                 singleLine = true,
-                textStyle = Ca.type.footnote.copy(color = Ca.colors.textPrimary),
-                cursorBrush = SolidColor(Ca.colors.accent),
+                textStyle = MaterialTheme.typography.bodyMedium.copy(color = MaterialTheme.colorScheme.onSurface),
+                cursorBrush = SolidColor(MaterialTheme.colorScheme.primary),
                 modifier = Modifier.fillMaxWidth(),
             )
         }
@@ -306,31 +307,31 @@ private fun FormField(label: String, value: String, placeholder: String, onChang
 
 @Composable
 private fun FieldLabel(text: String) {
-    Text(text, color = Ca.colors.textTertiary, style = Ca.type.caption2, fontWeight = FontWeight.SemiBold)
+    Text(text, color = MaterialTheme.colorScheme.outline, style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.SemiBold)
 }
 
 @Composable
 private fun Chip(label: String, selected: Boolean, onClick: () -> Unit) {
-    val fill = if (selected) Ca.colors.accentSoft else Ca.colors.surface3
-    val fg = if (selected) Ca.colors.accent else Ca.colors.textSecondary
+    val fill = if (selected) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surfaceContainerHighest
+    val fg = if (selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
     Box(
         Modifier
             .background(fill, RoundedCornerShape(Ca.radius.pill))
             .clickable(onClick = onClick)
             .padding(horizontal = 12.dp, vertical = 6.dp),
     ) {
-        Text(label, color = fg, style = Ca.type.footnote, fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Normal)
+        Text(label, color = fg, style = MaterialTheme.typography.bodyMedium, fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Normal)
     }
 }
 
 /** Render a template's icon id through the shared [TreeIcons] registry (same icons as the file tree). */
 @Composable
 private fun TemplateGlyph(iconId: String) {
-    Box(Modifier.size(44.dp).background(Ca.colors.surface2, RoundedCornerShape(Ca.radius.md)), contentAlignment = Alignment.Center) {
+    Box(Modifier.size(44.dp).background(MaterialTheme.colorScheme.surfaceContainerHigh, RoundedCornerShape(Ca.radius.md)), contentAlignment = Alignment.Center) {
         when (val ic = TreeIcons.resolve(iconId)) {
             is TreeIcon.Glyph -> Icon(ic.image, null, Modifier.size(24.dp), tint = resolveTint(ic.tint))
             is TreeIcon.Folder -> Icon(ic.closed, null, Modifier.size(24.dp), tint = resolveTint(ic.tint))
-            is TreeIcon.Badge -> Text(ic.text, color = ic.color, style = Ca.type.headline, fontWeight = FontWeight.Bold)
+            is TreeIcon.Badge -> Text(ic.text, color = ic.color, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
         }
     }
 }

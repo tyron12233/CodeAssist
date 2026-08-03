@@ -1,5 +1,7 @@
 package dev.ide.ui.screens
 
+import dev.ide.ui.theme.Ide
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.horizontalScroll
@@ -51,7 +53,7 @@ fun LessonBlocks(
         blocks.forEach { block ->
             when (block) {
                 is UiContentBlock.Text ->
-                    Text(inlineMarkup(block.md), color = Ca.colors.textSecondary, style = Ca.type.subhead)
+                    Text(inlineMarkup(block.md), color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodyLarge)
                 is UiContentBlock.Code -> CodeSample(block.code, block.language)
                 is UiContentBlock.Callout -> Callout(block.kind, block.text)
                 is UiContentBlock.LayoutPreview ->
@@ -88,17 +90,17 @@ fun LessonBlocks(
 @Composable
 fun CodeSample(code: String, language: String = "kotlin", modifier: Modifier = Modifier) {
     val shape = RoundedCornerShape(Ca.radius.md)
-    val highlighted = highlight(code, codeLanguageOf(language), Ca.colors.syntax)
+    val highlighted = highlight(code, codeLanguageOf(language), Ide.colors.syntax)
     Box(
         modifier
             .fillMaxWidth()
             .clip(shape)
-            .background(Ca.colors.editorBg)
-            .border(1.dp, Ca.colors.hairline, shape)
+            .background(Ide.colors.editorBg)
+            .border(1.dp, MaterialTheme.colorScheme.outlineVariant, shape)
             .horizontalScroll(rememberScrollState())
             .padding(horizontal = 14.dp, vertical = 12.dp),
     ) {
-        Text(highlighted, style = Ca.type.code)
+        Text(highlighted, style = Ide.type.code)
     }
 }
 
@@ -113,9 +115,9 @@ fun codeLanguageOf(language: String): CodeLanguage = when {
 @Composable
 private fun Callout(kind: String, text: String) {
     val (icon, tint) = when (kind) {
-        "warn" -> CaIcons.warning to Ca.colors.warning
-        "note" -> CaIcons.info to Ca.colors.info
-        else -> CaIcons.lightbulb to Ca.colors.accent
+        "warn" -> CaIcons.warning to Ide.colors.warning
+        "note" -> CaIcons.info to Ide.colors.info
+        else -> CaIcons.lightbulb to MaterialTheme.colorScheme.primary
     }
     val shape = RoundedCornerShape(Ca.radius.md)
     Row(
@@ -129,16 +131,16 @@ private fun Callout(kind: String, text: String) {
         verticalAlignment = Alignment.Top,
     ) {
         Icon(icon, null, Modifier.size(18.dp), tint = tint)
-        Text(inlineMarkup(text), color = Ca.colors.textSecondary, style = Ca.type.footnote)
+        Text(inlineMarkup(text), color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodyMedium)
     }
 }
 
 /** Parse the tiny lesson markup — `**bold**` and `` `code` `` — into an [AnnotatedString]. */
 @Composable
 fun inlineMarkup(md: String): AnnotatedString {
-    val codeFamily = Ca.type.codeFamily
-    val codeBg = Ca.colors.surface2
-    val codeColor = Ca.colors.textPrimary
+    val codeFamily = Ide.type.codeFamily
+    val codeBg = MaterialTheme.colorScheme.surfaceContainerHigh
+    val codeColor = MaterialTheme.colorScheme.onSurface
     return remember(md, codeFamily, codeBg, codeColor) {
         buildAnnotatedString {
             var i = 0

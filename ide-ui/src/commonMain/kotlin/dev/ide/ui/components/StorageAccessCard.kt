@@ -1,5 +1,6 @@
 package dev.ide.ui.components
 
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -56,24 +57,24 @@ fun StorageAccessCard(path: String?, onOpenInFiles: (() -> Unit)?, modifier: Mod
     Column(
         modifier
             .fillMaxWidth()
-            .background(Ca.colors.surface, shape)
-            .border(1.dp, Ca.colors.separator, shape)
+            .background(MaterialTheme.colorScheme.surface, shape)
+            .border(1.dp, MaterialTheme.colorScheme.outlineVariant, shape)
             .padding(14.dp),
         verticalArrangement = Arrangement.spacedBy(10.dp),
     ) {
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
             Box(
-                Modifier.size(34.dp).background(Ca.colors.accentSoft, RoundedCornerShape(Ca.radius.sm)),
+                Modifier.size(34.dp).background(MaterialTheme.colorScheme.primaryContainer, RoundedCornerShape(Ca.radius.sm)),
                 contentAlignment = Alignment.Center,
             ) {
-                Icon(CaIcons.folder, null, Modifier.size(18.dp), tint = Ca.colors.accent)
+                Icon(CaIcons.folder, null, Modifier.size(18.dp), tint = MaterialTheme.colorScheme.primary)
             }
             Column(Modifier.weight(1f)) {
-                Text(stringResource(Res.string.your_codeassist_files), color = Ca.colors.textPrimary, style = Ca.type.subhead, fontWeight = FontWeight.SemiBold)
+                Text(stringResource(Res.string.your_codeassist_files), color = MaterialTheme.colorScheme.onSurface, style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.SemiBold)
                 Text(
                     stringResource(Res.string.your_codeassist_files_content),
-                    color = Ca.colors.textTertiary,
-                    style = Ca.type.caption2,
+                    color = MaterialTheme.colorScheme.outline,
+                    style = MaterialTheme.typography.labelSmall,
                 )
             }
         }
@@ -82,7 +83,7 @@ fun StorageAccessCard(path: String?, onOpenInFiles: (() -> Unit)?, modifier: Mod
         Row(
             Modifier
                 .fillMaxWidth()
-                .background(Ca.colors.surface2, RoundedCornerShape(Ca.radius.sm))
+                .background(MaterialTheme.colorScheme.surfaceContainerHigh, RoundedCornerShape(Ca.radius.sm))
                 .clickable(interaction, indication = null) {
                     clipboard.setText(AnnotatedString(path)); copied = true
                 }
@@ -92,14 +93,14 @@ fun StorageAccessCard(path: String?, onOpenInFiles: (() -> Unit)?, modifier: Mod
         ) {
             Text(
                 path,
-                color = Ca.colors.textSecondary,
-                style = Ca.type.caption,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                style = MaterialTheme.typography.bodySmall,
                 fontFamily = FontFamily.Monospace,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
                 modifier = Modifier.weight(1f),
             )
-            Icon(if (copied) CaIcons.check else CaIcons.copy, stringResource(Res.string.storage_copy_path), Modifier.size(15.dp), tint = Ca.colors.textTertiary)
+            Icon(if (copied) CaIcons.check else CaIcons.copy, stringResource(Res.string.storage_copy_path), Modifier.size(15.dp), tint = MaterialTheme.colorScheme.outline)
         }
         if (onOpenInFiles != null) {
             val openInteraction = remember { MutableInteractionSource() }
@@ -107,15 +108,15 @@ fun StorageAccessCard(path: String?, onOpenInFiles: (() -> Unit)?, modifier: Mod
                 Modifier
                     .fillMaxWidth()
                     .pressScale(openInteraction)
-                    .background(Ca.colors.accentSoft, RoundedCornerShape(Ca.radius.pill))
+                    .background(MaterialTheme.colorScheme.primaryContainer, RoundedCornerShape(Ca.radius.pill))
                     .clickable(openInteraction, indication = null, onClick = onOpenInFiles)
                     .padding(vertical = 9.dp),
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.Center,
             ) {
-                Icon(CaIcons.share, null, Modifier.size(16.dp), tint = Ca.colors.accent)
+                Icon(CaIcons.share, null, Modifier.size(16.dp), tint = MaterialTheme.colorScheme.primary)
                 Box(Modifier.size(6.dp))
-                Text(stringResource(Res.string.open_in_the_file_manager), color = Ca.colors.accent, style = Ca.type.footnote, fontWeight = FontWeight.SemiBold)
+                Text(stringResource(Res.string.open_in_the_file_manager), color = MaterialTheme.colorScheme.primary, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold)
             }
         }
     }

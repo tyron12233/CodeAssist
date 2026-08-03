@@ -1,5 +1,7 @@
 package dev.ide.ui.components
 
+import dev.ide.ui.theme.Ide
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -133,7 +135,7 @@ private fun DeletePanel(node: TreeNode, onDismiss: () -> Unit, onConfirm: () -> 
     DialogCard(stringResource(if (isDir) Res.string.fileop_delete_dir_title else Res.string.fileop_delete_file_title, node.name)) {
         Text(
             stringResource(if (isDir) Res.string.fileop_delete_dir_body else Res.string.fileop_delete_file_body),
-            color = Ca.colors.textSecondary, style = Ca.type.footnote,
+            color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodyMedium,
         )
         Spacer12()
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
@@ -213,15 +215,15 @@ private fun DirectoryBrowserPanel(
         ) {
             val crumbs = crumbsFor(rootPath, cur)
             crumbs.forEachIndexed { i, c ->
-                if (i > 0) Icon(CaIcons.chevronRight, null, Modifier.size(14.dp), tint = Ca.colors.textTertiary)
+                if (i > 0) Icon(CaIcons.chevronRight, null, Modifier.size(14.dp), tint = MaterialTheme.colorScheme.outline)
                 val isLast = i == crumbs.lastIndex
                 Box(
                     Modifier
-                        .background(if (isLast) Ca.colors.accentSoft else Ca.colors.surface2, RoundedCornerShape(Ca.radius.pill))
+                        .background(if (isLast) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surfaceContainerHigh, RoundedCornerShape(Ca.radius.pill))
                         .clickable(enabled = !isLast) { cur = c.path }
                         .padding(horizontal = 10.dp, vertical = 5.dp),
                 ) {
-                    Text(c.label, color = if (isLast) Ca.colors.accent else Ca.colors.textSecondary, style = Ca.type.caption,
+                    Text(c.label, color = if (isLast) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodySmall,
                         fontWeight = if (isLast) FontWeight.SemiBold else FontWeight.Normal)
                 }
             }
@@ -229,7 +231,7 @@ private fun DirectoryBrowserPanel(
         Spacer12()
         // The current folder's contents.
         if (entries.isEmpty()) {
-            Text(stringResource(Res.string.fileop_empty_folder), color = Ca.colors.textSecondary, style = Ca.type.footnote)
+            Text(stringResource(Res.string.fileop_empty_folder), color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodyMedium)
         } else {
             Column(
                 Modifier.fillMaxWidth().heightIn(max = 320.dp).verticalScroll(rememberScrollState()),
@@ -240,17 +242,17 @@ private fun DirectoryBrowserPanel(
                     val dimmed = !e.isDirectory || intoSelf
                     Row(
                         Modifier.fillMaxWidth()
-                            .background(Ca.colors.surface2, RoundedCornerShape(Ca.radius.control))
+                            .background(MaterialTheme.colorScheme.surfaceContainerHigh, RoundedCornerShape(Ca.radius.control))
                             .clickable(enabled = e.isDirectory && !intoSelf) { cur = e.path }
                             .padding(horizontal = 12.dp, vertical = 9.dp),
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
                         EntryIcon(e.iconId)
                         Spacer(Modifier.size(10.dp))
-                        Text(e.name, color = if (dimmed) Ca.colors.textTertiary else Ca.colors.textPrimary,
-                            style = Ca.type.footnote, modifier = Modifier.weight(1f))
+                        Text(e.name, color = if (dimmed) MaterialTheme.colorScheme.outline else MaterialTheme.colorScheme.onSurface,
+                            style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f))
                         if (e.isDirectory && !intoSelf)
-                            Icon(CaIcons.chevronRight, null, Modifier.size(16.dp), tint = Ca.colors.textTertiary)
+                            Icon(CaIcons.chevronRight, null, Modifier.size(16.dp), tint = MaterialTheme.colorScheme.outline)
                     }
                 }
             }
@@ -274,11 +276,11 @@ private fun EntryIcon(iconId: String) {
 private fun DialogCard(title: String, content: @Composable () -> Unit) {
     Column(
         Modifier.widthIn(max = 520.dp).fillMaxWidth().padding(horizontal = 12.dp)
-            .background(Ca.colors.glassThick, RoundedCornerShape(Ca.radius.xl))
-            .border(1.dp, Ca.colors.glassEdge, RoundedCornerShape(Ca.radius.xl))
+            .background(Ide.colors.glassThick, RoundedCornerShape(Ca.radius.xl))
+            .border(1.dp, Ide.colors.glassEdge, RoundedCornerShape(Ca.radius.xl))
             .padding(20.dp),
     ) {
-        Text(title, color = Ca.colors.textPrimary, style = Ca.type.subhead, fontWeight = FontWeight.SemiBold)
+        Text(title, color = MaterialTheme.colorScheme.onSurface, style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.SemiBold)
         Spacer12()
         content()
     }
@@ -296,9 +298,9 @@ private fun ButtonRow(onCancel: () -> Unit, confirmLabel: String, enabled: Boole
 @Composable
 private fun DangerButton(label: String, onClick: () -> Unit) {
     Box(
-        Modifier.background(Ca.colors.error, RoundedCornerShape(Ca.radius.control))
+        Modifier.background(MaterialTheme.colorScheme.error, RoundedCornerShape(Ca.radius.control))
             .clickable(onClick = onClick).padding(horizontal = 18.dp, vertical = 9.dp),
     ) {
-        Text(label, color = Ca.colors.textOnAccent, style = Ca.type.footnote, fontWeight = FontWeight.SemiBold)
+        Text(label, color = MaterialTheme.colorScheme.onPrimary, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold)
     }
 }

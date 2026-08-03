@@ -1,5 +1,7 @@
 package dev.ide.ui.editor
 
+import dev.ide.ui.theme.Ide
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -104,8 +106,8 @@ fun SignatureHelpPopup(help: UiSignatureHelp, mobile: Boolean = false) {
         Modifier
             .widthIn(min = 80.dp, max = maxW)
             .heightIn(max = maxH)
-            .background(Ca.colors.glassThick, RoundedCornerShape(Ca.radius.md))
-            .border(1.dp, Ca.colors.separator, RoundedCornerShape(Ca.radius.md))
+            .background(Ide.colors.glassThick, RoundedCornerShape(Ca.radius.md))
+            .border(1.dp, MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(Ca.radius.md))
             .then(gestures)
             .padding(horizontal = 12.dp, vertical = 7.dp)
             .verticalScroll(scroll),
@@ -134,8 +136,8 @@ private fun DesktopSignatures(help: UiSignatureHelp) {
             if (help.signatures.size > 1) {
                 Text(
                     text = if (index == help.activeSignature) "▸ " else "   ",
-                    style = Ca.type.codeSmall,
-                    color = Ca.colors.accent,
+                    style = Ide.type.codeSmall,
+                    color = MaterialTheme.colorScheme.primary,
                 )
             }
             SignatureLine(
@@ -149,8 +151,8 @@ private fun DesktopSignatures(help: UiSignatureHelp) {
     if (help.signatures.size > shown.size) {
         Text(
             stringResource(Res.string.sig_more, help.signatures.size - shown.size),
-            style = Ca.type.codeSmall,
-            color = Ca.colors.textSecondary,
+            style = Ide.type.codeSmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
             modifier = Modifier.padding(top = 2.dp),
         )
     }
@@ -190,8 +192,8 @@ private fun SignaturePeek(help: UiSignatureHelp, shownIndex: Int, onStep: (Int) 
     )
     val doc = sig.documentation?.trim()?.takeIf { it.isNotEmpty() }
     if (doc != null) {
-        Box(Modifier.fillMaxWidth().padding(vertical = 6.dp).height(1.dp).background(Ca.colors.separator))
-        Text(doc, style = Ca.type.footnote, color = Ca.colors.textSecondary)
+        Box(Modifier.fillMaxWidth().padding(vertical = 6.dp).height(1.dp).background(MaterialTheme.colorScheme.outlineVariant))
+        Text(doc, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
     }
     PeekHint(stringResource(Res.string.sig_peek_collapse), onActivate = onCollapse)
 }
@@ -203,19 +205,19 @@ private fun StepperRow(help: UiSignatureHelp, shownIndex: Int, onStep: (Int) -> 
     Row(verticalAlignment = Alignment.Top, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
         Text(
             text = "‹",
-            style = Ca.type.codeSmall,
-            color = if (shownIndex > 0) Ca.colors.accent else Ca.colors.textTertiary,
+            style = Ide.type.codeSmall,
+            color = if (shownIndex > 0) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outline,
             modifier = Modifier.clickable(enabled = shownIndex > 0) { onStep(shownIndex - 1) }.padding(horizontal = 2.dp),
         )
         Text(
             text = "${shownIndex + 1}/${help.signatures.size}",
-            style = Ca.type.codeSmall,
-            color = Ca.colors.textSecondary,
+            style = Ide.type.codeSmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
         Text(
             text = "›",
-            style = Ca.type.codeSmall,
-            color = if (shownIndex < last) Ca.colors.accent else Ca.colors.textTertiary,
+            style = Ide.type.codeSmall,
+            color = if (shownIndex < last) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outline,
             modifier = Modifier.clickable(enabled = shownIndex < last) { onStep(shownIndex + 1) }.padding(horizontal = 2.dp),
         )
     }
@@ -228,8 +230,8 @@ private fun StepperRow(help: UiSignatureHelp, shownIndex: Int, onStep: (Int) -> 
 private fun PeekHint(text: String, onActivate: () -> Unit) {
     Text(
         text = text,
-        style = Ca.type.caption2,
-        color = Ca.colors.textTertiary,
+        style = MaterialTheme.typography.labelSmall,
+        color = MaterialTheme.colorScheme.outline,
         modifier = Modifier
             .padding(top = 4.dp)
             .combinedClickable(onClick = onActivate, onLongClick = onActivate),
@@ -238,9 +240,9 @@ private fun PeekHint(text: String, onActivate: () -> Unit) {
 
 @Composable
 private fun SignatureLine(sig: UiSignature, activeParameter: Int, active: Boolean, windowed: Boolean = false) {
-    val base = if (active) Ca.colors.textPrimary else Ca.colors.textSecondary
-    val text = signatureAnnotated(sig, activeParameter, active, Ca.colors.accent, Ca.colors.textTertiary, windowed)
-    Text(text = text, style = Ca.type.codeSmall, color = base)
+    val base = if (active) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.onSurfaceVariant
+    val text = signatureAnnotated(sig, activeParameter, active, MaterialTheme.colorScheme.primary, MaterialTheme.colorScheme.outline, windowed)
+    Text(text = text, style = Ide.type.codeSmall, color = base)
 }
 
 /**

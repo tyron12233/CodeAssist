@@ -1,5 +1,7 @@
 package dev.ide.ui.editor.blocks
 
+import dev.ide.ui.theme.Ide
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.padding
@@ -43,7 +45,6 @@ import dev.ide.ui.editor.CompletionSession
 import dev.ide.ui.editor.Ctx
 import dev.ide.ui.editor.coversCaret
 import dev.ide.ui.editor.isIdentifierChar
-import dev.ide.ui.theme.Ca
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -166,7 +167,7 @@ internal fun InlineInput(
         BasicTextField(
             value = tfv, onValueChange = ::handleChange,
             modifier = Modifier.widthIn(min = 40.dp).clip(RoundedCornerShape(BlockMetrics.socketRadius))
-                .background(Ca.colors.block.socket, RoundedCornerShape(BlockMetrics.socketRadius))
+                .background(Ide.colors.block.socket, RoundedCornerShape(BlockMetrics.socketRadius))
                 .padding(horizontal = 8.dp, vertical = 3.dp)
                 .onGloballyPositioned { fieldHeight = it.size.height }
                 .focusRequester(focus).onFocusChanged {
@@ -191,8 +192,8 @@ internal fun InlineInput(
                     }
                     false
                 },
-            singleLine = true, textStyle = Ca.type.code.copy(color = Ca.colors.block.socketText),
-            cursorBrush = SolidColor(Ca.colors.accent),
+            singleLine = true, textStyle = Ide.type.code.copy(color = Ide.colors.block.socketText),
+            cursorBrush = SolidColor(MaterialTheme.colorScheme.primary),
             keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done), keyboardActions = KeyboardActions(onDone = { commit() }),
         )
         // Simple anchoring: the popup hangs just under the inline field (no caret/window math — the

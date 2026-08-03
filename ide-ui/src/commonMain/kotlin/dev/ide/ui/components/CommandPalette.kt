@@ -1,5 +1,7 @@
 package dev.ide.ui.components
 
+import dev.ide.ui.theme.Ide
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -171,25 +173,25 @@ fun CommandPalette(
             .padding(horizontal = 12.dp)
             .widthIn(max = 600.dp)
             .fillMaxWidth()
-            .background(Ca.colors.glassThick, RoundedCornerShape(Ca.radius.xl))
-            .border(1.dp, Ca.colors.glassEdge, RoundedCornerShape(Ca.radius.xl)),
+            .background(Ide.colors.glassThick, RoundedCornerShape(Ca.radius.xl))
+            .border(1.dp, Ide.colors.glassEdge, RoundedCornerShape(Ca.radius.xl)),
     ) {
         Row(
             Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 14.dp),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(10.dp),
         ) {
-            Icon(CaIcons.command, null, Modifier.size(20.dp), tint = Ca.colors.accent)
+            Icon(CaIcons.command, null, Modifier.size(20.dp), tint = MaterialTheme.colorScheme.primary)
             Box(Modifier.weight(1f)) {
                 if (query.isEmpty()) {
-                    Text(stringResource(Res.string.palette_hint), color = Ca.colors.textTertiary, style = Ca.type.body)
+                    Text(stringResource(Res.string.palette_hint), color = MaterialTheme.colorScheme.outline, style = MaterialTheme.typography.bodyLarge)
                 }
                 BasicTextField(
                     value = query,
                     onValueChange = { query = it },
                     singleLine = true,
-                    textStyle = Ca.type.body.copy(color = Ca.colors.textPrimary),
-                    cursorBrush = SolidColor(Ca.colors.accent),
+                    textStyle = MaterialTheme.typography.bodyLarge.copy(color = MaterialTheme.colorScheme.onSurface),
+                    cursorBrush = SolidColor(MaterialTheme.colorScheme.primary),
                     modifier = Modifier.fillMaxWidth().focusRequester(focus).onPreviewKeyEvent { ev ->
                         if (ev.type != KeyEventType.KeyDown) return@onPreviewKeyEvent false
                         when (ev.key) {
@@ -207,18 +209,18 @@ fun CommandPalette(
                     },
                 )
             }
-            Chip("esc", fill = Ca.colors.surface3, textColor = Ca.colors.textSecondary)
+            Chip("esc", fill = MaterialTheme.colorScheme.surfaceContainerHighest, textColor = MaterialTheme.colorScheme.onSurfaceVariant)
         }
         // The scope tabs: a narrowing lens over the result sections (IntelliJ's All/Classes/Files/… tabs).
         FilterTabs(filter) { filter = it }
-        Box(Modifier.fillMaxWidth().height(1.dp).background(Ca.colors.separator))
+        Box(Modifier.fillMaxWidth().height(1.dp).background(MaterialTheme.colorScheme.outlineVariant))
 
         if (entries.isEmpty()) {
             Box(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 22.dp)) {
                 Text(
                     if (q.isEmpty() && filter != PaletteFilter.All) stringResource(Res.string.palette_type_to_search, stringResource(filter.labelRes).lowercase())
                     else stringResource(Res.string.palette_no_matches),
-                    color = Ca.colors.textTertiary, style = Ca.type.subhead,
+                    color = MaterialTheme.colorScheme.outline, style = MaterialTheme.typography.bodyLarge,
                 )
             }
         } else {
@@ -242,14 +244,14 @@ private fun FilterTabs(active: PaletteFilter, onSelect: (PaletteFilter) -> Unit)
             Box(
                 Modifier
                     .clip(RoundedCornerShape(Ca.radius.pill))
-                    .background(if (selected) Ca.colors.accentSoft else Ca.colors.surface3)
+                    .background(if (selected) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surfaceContainerHighest)
                     .clickable { onSelect(f) }
                     .padding(horizontal = 12.dp, vertical = 5.dp),
             ) {
                 Text(
                     stringResource(f.labelRes),
-                    color = if (selected) Ca.colors.accent else Ca.colors.textSecondary,
-                    style = Ca.type.caption,
+                    color = if (selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
+                    style = MaterialTheme.typography.bodySmall,
                     fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Medium,
                 )
             }
@@ -280,15 +282,15 @@ private fun PaletteRow(entry: PaletteEntry, onClose: () -> Unit) {
         horizontalArrangement = Arrangement.spacedBy(12.dp),
     ) {
         Box(Modifier.width(64.dp), contentAlignment = Alignment.CenterStart) {
-            Text(sectionLabel(entry.section).uppercase(), color = Ca.colors.textTertiary, fontSize = 10.sp, fontWeight = FontWeight.SemiBold)
+            Text(sectionLabel(entry.section).uppercase(), color = MaterialTheme.colorScheme.outline, fontSize = 10.sp, fontWeight = FontWeight.SemiBold)
         }
         Text(
-            entry.label, color = Ca.colors.textPrimary, style = Ca.type.subhead,
+            entry.label, color = MaterialTheme.colorScheme.onSurface, style = MaterialTheme.typography.bodyLarge,
             maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f),
         )
         if (entry.sub != null) {
             Spacer(Modifier.width(8.dp))
-            Text(entry.sub, color = Ca.colors.textTertiary, style = Ca.type.caption, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            Text(entry.sub, color = MaterialTheme.colorScheme.outline, style = MaterialTheme.typography.bodySmall, maxLines = 1, overflow = TextOverflow.Ellipsis)
         }
     }
 }

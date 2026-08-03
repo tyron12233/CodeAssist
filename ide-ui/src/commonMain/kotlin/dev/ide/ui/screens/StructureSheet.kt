@@ -1,5 +1,7 @@
 package dev.ide.ui.screens
 
+import dev.ide.ui.theme.Ide
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -57,8 +59,8 @@ internal fun StructureOutline(state: IdeUiState, onNavigated: () -> Unit = {}, m
     Column(modifier.fillMaxSize()) {
         Text(
             stringResource(Res.string.structure_title),
-            color = Ca.colors.textSecondary,
-            style = Ca.type.caption,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            style = MaterialTheme.typography.bodySmall,
             fontWeight = FontWeight.SemiBold,
             modifier = Modifier.padding(start = 16.dp, top = 12.dp, bottom = 8.dp),
         )
@@ -66,8 +68,8 @@ internal fun StructureOutline(state: IdeUiState, onNavigated: () -> Unit = {}, m
             Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                 Text(
                     stringResource(Res.string.structure_no_file),
-                    color = Ca.colors.textTertiary,
-                    style = Ca.type.body,
+                    color = MaterialTheme.colorScheme.outline,
+                    style = MaterialTheme.typography.bodyLarge,
                     modifier = Modifier.padding(16.dp),
                 )
             }
@@ -87,16 +89,16 @@ internal fun StructureOutline(state: IdeUiState, onNavigated: () -> Unit = {}, m
         // Filter field — a structure panel that also narrows by name (handy in a big file).
         Box(
             Modifier.fillMaxWidth().padding(horizontal = 12.dp)
-                .background(Ca.colors.surface2, RoundedCornerShape(Ca.radius.control))
+                .background(MaterialTheme.colorScheme.surfaceContainerHigh, RoundedCornerShape(Ca.radius.control))
                 .padding(horizontal = 12.dp, vertical = 9.dp),
         ) {
-            if (filter.isEmpty()) Text(stringResource(Res.string.structure_filter), color = Ca.colors.textTertiary, style = Ca.type.body)
+            if (filter.isEmpty()) Text(stringResource(Res.string.structure_filter), color = MaterialTheme.colorScheme.outline, style = MaterialTheme.typography.bodyLarge)
             BasicTextField(
                 value = filter,
                 onValueChange = { filter = it },
                 singleLine = true,
-                textStyle = Ca.type.body.copy(color = Ca.colors.textPrimary),
-                cursorBrush = SolidColor(Ca.colors.accent),
+                textStyle = MaterialTheme.typography.bodyLarge.copy(color = MaterialTheme.colorScheme.onSurface),
+                cursorBrush = SolidColor(MaterialTheme.colorScheme.primary),
                 modifier = Modifier.fillMaxWidth(),
             )
         }
@@ -104,8 +106,8 @@ internal fun StructureOutline(state: IdeUiState, onNavigated: () -> Unit = {}, m
         if (shown.isEmpty()) {
             Text(
                 if (symbols.isEmpty()) stringResource(Res.string.structure_no_symbols) else stringResource(Res.string.structure_no_matches),
-                color = Ca.colors.textTertiary,
-                style = Ca.type.body,
+                color = MaterialTheme.colorScheme.outline,
+                style = MaterialTheme.typography.bodyLarge,
                 modifier = Modifier.padding(16.dp),
             )
         } else {
@@ -132,9 +134,9 @@ private fun StructureRow(sym: UiFileSymbol, onClick: () -> Unit) {
         horizontalArrangement = Arrangement.spacedBy(8.dp),
     ) {
         KindBadge(sym.kind)
-        Text(sym.name, color = Ca.colors.textPrimary, style = Ca.type.body, fontWeight = FontWeight.Medium)
+        Text(sym.name, color = MaterialTheme.colorScheme.onSurface, style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.Medium)
         if (!sym.detail.isNullOrEmpty()) {
-            Text(sym.detail!!, color = Ca.colors.textTertiary, style = Ca.type.caption, maxLines = 1)
+            Text(sym.detail!!, color = MaterialTheme.colorScheme.outline, style = MaterialTheme.typography.bodySmall, maxLines = 1)
         }
     }
 }
@@ -143,21 +145,21 @@ private fun StructureRow(sym: UiFileSymbol, onClick: () -> Unit) {
 @Composable
 private fun KindBadge(kind: String) {
     val (letter, color) = when (kind) {
-        "class", "record" -> "C" to Ca.colors.warning
-        "interface" -> "I" to Ca.colors.info
-        "enum" -> "E" to Ca.colors.warning
-        "annotation_type" -> "@" to Ca.colors.info
-        "method" -> "m" to Ca.colors.accent
-        "constructor" -> "c" to Ca.colors.accent
-        "field" -> "f" to Ca.colors.info
-        "enum_constant" -> "e" to Ca.colors.success
-        else -> "•" to Ca.colors.textTertiary
+        "class", "record" -> "C" to Ide.colors.warning
+        "interface" -> "I" to Ide.colors.info
+        "enum" -> "E" to Ide.colors.warning
+        "annotation_type" -> "@" to Ide.colors.info
+        "method" -> "m" to MaterialTheme.colorScheme.primary
+        "constructor" -> "c" to MaterialTheme.colorScheme.primary
+        "field" -> "f" to Ide.colors.info
+        "enum_constant" -> "e" to Ide.colors.success
+        else -> "•" to MaterialTheme.colorScheme.outline
     }
     Box(
         Modifier.width(18.dp).size(18.dp)
             .background(color.copy(alpha = 0.16f), RoundedCornerShape(Ca.radius.xs)),
         contentAlignment = Alignment.Center,
     ) {
-        Text(letter, color = color, style = Ca.type.codeSmall, fontWeight = FontWeight.Bold)
+        Text(letter, color = color, style = Ide.type.codeSmall, fontWeight = FontWeight.Bold)
     }
 }

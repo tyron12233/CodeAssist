@@ -1,5 +1,7 @@
 package dev.ide.ui.screens
 
+import dev.ide.ui.theme.Ide
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -108,26 +110,26 @@ fun KeystoreManagerScreen(
         loading = false
     }
 
-    Column(Modifier.fillMaxSize().background(Ca.colors.bg)) {
+    Column(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)) {
         Row(
             Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 8.dp),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(8.dp),
         ) {
             IconButtonCa(CaIcons.chevronLeft, stringResource(Res.string.back), onBack, boxSize = 38)
-            Text(stringResource(Res.string.keystore_manager_title), style = Ca.type.title3, fontWeight = FontWeight.SemiBold, color = Ca.colors.textPrimary, modifier = Modifier.weight(1f))
+            Text(stringResource(Res.string.keystore_manager_title), style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.onSurface, modifier = Modifier.weight(1f))
         }
         status?.let {
-            Text(it, style = Ca.type.footnote, color = if (statusError) Ca.colors.error else Ca.colors.accent, modifier = Modifier.padding(horizontal = 16.dp, vertical = 2.dp))
+            Text(it, style = MaterialTheme.typography.bodyMedium, color = if (statusError) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary, modifier = Modifier.padding(horizontal = 16.dp, vertical = 2.dp))
         }
 
         Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
             KsCard {
-                Text(stringResource(Res.string.keystore_section_title), style = Ca.type.subhead, fontWeight = FontWeight.SemiBold, color = Ca.colors.textPrimary)
+                Text(stringResource(Res.string.keystore_section_title), style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.onSurface)
                 Spacer(Modifier.height(4.dp))
                 Text(
                     stringResource(Res.string.keystore_section_description),
-                    style = Ca.type.footnote, color = Ca.colors.textSecondary,
+                    style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
                 Spacer(Modifier.height(12.dp))
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -141,22 +143,22 @@ fun KeystoreManagerScreen(
                 if (onManageSigning != null) {
                     Spacer(Modifier.height(10.dp))
                     Row(
-                        Modifier.background(Ca.colors.accentSoft, RoundedCornerShape(Ca.radius.control))
+                        Modifier.background(MaterialTheme.colorScheme.primaryContainer, RoundedCornerShape(Ca.radius.control))
                             .clickable(remember { MutableInteractionSource() }, null, onClick = onManageSigning)
                             .padding(horizontal = 14.dp, vertical = 9.dp),
                         verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp),
                     ) {
-                        Icon(CaIcons.layers, null, Modifier.size(15.dp), tint = Ca.colors.accent)
-                        Text(stringResource(Res.string.keystore_assign_to_build), style = Ca.type.footnote, fontWeight = FontWeight.SemiBold, color = Ca.colors.accent)
+                        Icon(CaIcons.layers, null, Modifier.size(15.dp), tint = MaterialTheme.colorScheme.primary)
+                        Text(stringResource(Res.string.keystore_assign_to_build), style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.primary)
                     }
                 }
             }
 
             when {
-                loading -> Box(Modifier.fillMaxWidth().padding(24.dp), Alignment.Center) { CircularProgressIndicator(color = Ca.colors.accent) }
+                loading -> Box(Modifier.fillMaxWidth().padding(24.dp), Alignment.Center) { CircularProgressIndicator(color = MaterialTheme.colorScheme.primary) }
                 keystores.isEmpty() -> Text(
                     stringResource(Res.string.keystore_empty),
-                    style = Ca.type.footnote, color = Ca.colors.textTertiary, modifier = Modifier.padding(4.dp),
+                    style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.outline, modifier = Modifier.padding(4.dp),
                 )
                 else -> keystores.forEach { ks ->
                     val deletedMsg = stringResource(Res.string.keystore_deleted, ks.name)
@@ -194,7 +196,7 @@ fun KeystoreCreateScreen(backend: IdeBackend, onBack: () -> Unit, onDone: () -> 
         KsField(stringResource(Res.string.keystore_organization), org) { org = it }
         KsField(stringResource(Res.string.keystore_country), country) { country = it }
         KsField(stringResource(Res.string.keystore_validity), validity, number = true) { validity = it.filter(Char::isDigit) }
-        error?.let { Spacer(Modifier.height(6.dp)); Text(it, style = Ca.type.footnote, color = Ca.colors.error) }
+        error?.let { Spacer(Modifier.height(6.dp)); Text(it, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.error) }
         Spacer(Modifier.height(14.dp))
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
             KsButton(stringResource(Res.string.keystore_create_button), CaIcons.check, accent = true, enabled = !busy) {
@@ -212,7 +214,7 @@ fun KeystoreCreateScreen(backend: IdeBackend, onBack: () -> Unit, onDone: () -> 
                 }
             }
             KsButton(stringResource(Res.string.cancel), null, accent = false, enabled = !busy, onClick = onBack)
-            if (busy) CircularProgressIndicator(Modifier.size(22.dp), color = Ca.colors.accent, strokeWidth = 2.dp)
+            if (busy) CircularProgressIndicator(Modifier.size(22.dp), color = MaterialTheme.colorScheme.primary, strokeWidth = 2.dp)
         }
     }
 }
@@ -230,13 +232,13 @@ fun KeystoreImportScreen(backend: IdeBackend, path: String, onBack: () -> Unit, 
     var error by remember(path) { mutableStateOf<String?>(null) }
 
     FormScaffold(stringResource(Res.string.keystore_import_title), onBack) {
-        Text(path, style = Ca.type.caption2, color = Ca.colors.textTertiary, maxLines = 1, overflow = TextOverflow.Ellipsis)
+        Text(path, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.outline, maxLines = 1, overflow = TextOverflow.Ellipsis)
         Spacer(Modifier.height(8.dp))
         KsField(stringResource(Res.string.keystore_name), name) { name = it }
         KsField(stringResource(Res.string.keystore_import_password), password, password = true) { password = it }
         KsField(stringResource(Res.string.keystore_import_alias), alias) { alias = it }
         KsField(stringResource(Res.string.keystore_import_key_password), keyPass, password = true) { keyPass = it }
-        error?.let { Spacer(Modifier.height(6.dp)); Text(it, style = Ca.type.footnote, color = Ca.colors.error) }
+        error?.let { Spacer(Modifier.height(6.dp)); Text(it, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.error) }
         Spacer(Modifier.height(14.dp))
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
             KsButton(stringResource(Res.string.`import`), CaIcons.check, accent = true, enabled = !busy) {
@@ -248,7 +250,7 @@ fun KeystoreImportScreen(backend: IdeBackend, path: String, onBack: () -> Unit, 
                 }
             }
             KsButton(stringResource(Res.string.cancel), null, accent = false, enabled = !busy, onClick = onBack)
-            if (busy) CircularProgressIndicator(Modifier.size(22.dp), color = Ca.colors.accent, strokeWidth = 2.dp)
+            if (busy) CircularProgressIndicator(Modifier.size(22.dp), color = MaterialTheme.colorScheme.primary, strokeWidth = 2.dp)
         }
     }
 }
@@ -257,27 +259,27 @@ fun KeystoreImportScreen(backend: IdeBackend, path: String, onBack: () -> Unit, 
 private fun KeystoreCard(ks: UiKeystore, onDelete: () -> Unit) {
     KsCard {
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-            Icon(CaIcons.key, null, Modifier.size(20.dp), tint = Ca.colors.accent)
+            Icon(CaIcons.key, null, Modifier.size(20.dp), tint = MaterialTheme.colorScheme.primary)
             Column(Modifier.weight(1f)) {
-                Text(ks.name, style = Ca.type.subhead, fontWeight = FontWeight.SemiBold, color = Ca.colors.textPrimary, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                Text(stringResource(Res.string.keystore_row_subtitle, ks.fileName, ks.keyAlias), style = Ca.type.caption2, color = Ca.colors.textTertiary, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                Text(ks.name, style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.onSurface, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                Text(stringResource(Res.string.keystore_row_subtitle, ks.fileName, ks.keyAlias), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.outline, maxLines = 1, overflow = TextOverflow.Ellipsis)
             }
-            IconButtonCa(CaIcons.close, stringResource(Res.string.delete), onDelete, boxSize = 30, iconSize = 15, tint = Ca.colors.textTertiary)
+            IconButtonCa(CaIcons.close, stringResource(Res.string.delete), onDelete, boxSize = 30, iconSize = 15, tint = MaterialTheme.colorScheme.outline)
         }
         val subject = ks.certSubject
         if (subject != null) {
             Spacer(Modifier.height(6.dp))
-            Text(subject, style = Ca.type.caption2, color = Ca.colors.textSecondary, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            Text(subject, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.Ellipsis)
             val shaLabel = ks.sha256?.let { stringResource(Res.string.keystore_sha256, it.replace(":", "").take(16) + "…") }
             val expiresLabel = ks.validUntilEpochMs?.let { stringResource(Res.string.keystore_expires, approxYear(it).toString()) }
             val parts = buildList {
                 shaLabel?.let { add(it) }
                 expiresLabel?.let { add(it) }
             }
-            if (parts.isNotEmpty()) Text(parts.joinToString("   "), style = Ca.type.caption2, color = Ca.colors.textTertiary)
+            if (parts.isNotEmpty()) Text(parts.joinToString("   "), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.outline)
         } else {
             Spacer(Modifier.height(6.dp))
-            Text(stringResource(Res.string.keystore_cert_unreadable), style = Ca.type.caption2, color = Ca.colors.warning)
+            Text(stringResource(Res.string.keystore_cert_unreadable), style = MaterialTheme.typography.labelSmall, color = Ide.colors.warning)
         }
     }
 }
@@ -287,13 +289,13 @@ private fun KeystoreCard(ks: UiKeystore, onDelete: () -> Unit) {
 /** A full screen with a back/title header and a scrolling form body in a card. */
 @Composable
 private fun FormScaffold(title: String, onBack: () -> Unit, body: @Composable ColumnScope.() -> Unit) {
-    Column(Modifier.fillMaxSize().background(Ca.colors.bg)) {
+    Column(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)) {
         Row(
             Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 8.dp),
             verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp),
         ) {
             IconButtonCa(CaIcons.chevronLeft, stringResource(Res.string.back), onBack, boxSize = 38)
-            Text(title, style = Ca.type.title3, fontWeight = FontWeight.SemiBold, color = Ca.colors.textPrimary, modifier = Modifier.weight(1f))
+            Text(title, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.onSurface, modifier = Modifier.weight(1f))
         }
         Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp)) {
             KsCard(content = body)
@@ -304,8 +306,8 @@ private fun FormScaffold(title: String, onBack: () -> Unit, body: @Composable Co
 @Composable
 private fun KsCard(content: @Composable ColumnScope.() -> Unit) {
     Column(
-        Modifier.fillMaxWidth().background(Ca.colors.surface, RoundedCornerShape(Ca.radius.lg))
-            .border(1.dp, Ca.colors.separator, RoundedCornerShape(Ca.radius.lg)).padding(16.dp),
+        Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.surface, RoundedCornerShape(Ca.radius.lg))
+            .border(1.dp, MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(Ca.radius.lg)).padding(16.dp),
         content = content,
     )
 }
@@ -313,10 +315,10 @@ private fun KsCard(content: @Composable ColumnScope.() -> Unit) {
 @Composable
 private fun KsField(label: String, value: String, password: Boolean = false, number: Boolean = false, onChange: (String) -> Unit) {
     Column(Modifier.fillMaxWidth().padding(vertical = 5.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-        Text(label, style = Ca.type.caption2, color = Ca.colors.textSecondary)
+        Text(label, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
         Box(
-            Modifier.fillMaxWidth().background(Ca.colors.surface2, RoundedCornerShape(Ca.radius.control))
-                .border(1.dp, Ca.colors.hairline, RoundedCornerShape(Ca.radius.control)).padding(horizontal = 12.dp, vertical = 10.dp),
+            Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.surfaceContainerHigh, RoundedCornerShape(Ca.radius.control))
+                .border(1.dp, MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(Ca.radius.control)).padding(horizontal = 12.dp, vertical = 10.dp),
         ) {
             BasicTextField(
                 value = value,
@@ -324,8 +326,8 @@ private fun KsField(label: String, value: String, password: Boolean = false, num
                 singleLine = true,
                 visualTransformation = if (password) PasswordVisualTransformation() else VisualTransformation.None,
                 keyboardOptions = KeyboardOptions(keyboardType = if (number) KeyboardType.Number else if (password) KeyboardType.Password else KeyboardType.Text),
-                textStyle = Ca.type.footnote.copy(color = Ca.colors.textPrimary),
-                cursorBrush = SolidColor(Ca.colors.accent),
+                textStyle = MaterialTheme.typography.bodyMedium.copy(color = MaterialTheme.colorScheme.onSurface),
+                cursorBrush = SolidColor(MaterialTheme.colorScheme.primary),
                 modifier = Modifier.fillMaxWidth(),
             )
         }
@@ -334,8 +336,8 @@ private fun KsField(label: String, value: String, password: Boolean = false, num
 
 @Composable
 private fun KsButton(label: String, icon: ImageVector?, accent: Boolean, enabled: Boolean = true, onClick: () -> Unit) {
-    val bg = if (accent) Ca.colors.accent else Ca.colors.surface3
-    val fg = if (accent) Ca.colors.textOnAccent else Ca.colors.textPrimary
+    val bg = if (accent) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surfaceContainerHighest
+    val fg = if (accent) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurface
     Row(
         Modifier.background(bg.copy(alpha = if (enabled) 1f else 0.4f), RoundedCornerShape(Ca.radius.control))
             .clickable(remember { MutableInteractionSource() }, null, enabled = enabled) { onClick() }
@@ -344,7 +346,7 @@ private fun KsButton(label: String, icon: ImageVector?, accent: Boolean, enabled
         horizontalArrangement = Arrangement.spacedBy(6.dp),
     ) {
         icon?.let { Icon(it, null, Modifier.size(15.dp), tint = fg) }
-        Text(label, style = Ca.type.footnote, fontWeight = FontWeight.SemiBold, color = fg)
+        Text(label, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold, color = fg)
     }
 }
 

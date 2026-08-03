@@ -1,5 +1,6 @@
 package dev.ide.ui.screens
 
+import dev.ide.ui.theme.Ide
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
@@ -43,7 +44,6 @@ import dev.ide.ui.editor.preview.isPreviewable
 import dev.ide.ui.ext.ToolWindowAnchor
 import dev.ide.ui.ext.ToolWindowRegistry
 import dev.ide.ui.ext.UiPluginHost
-import dev.ide.ui.theme.Ca
 import dev.ide.ui.theme.Motion
 import kotlinx.coroutines.launch
 
@@ -112,7 +112,7 @@ internal fun EditorCenter(
     UiPluginHost.ensureLoaded()
     val rightPrimary = ToolWindowRegistry.forAnchor(ToolWindowAnchor.RIGHT).firstOrNull()
     Box(modifier) {
-        Column(Modifier.fillMaxSize().background(Ca.colors.editorBg)) {
+        Column(Modifier.fillMaxSize().background(Ide.colors.editorBg)) {
             EditorTopBar(
                 projectName = project.name,
                 indexStatus = indexStatus,

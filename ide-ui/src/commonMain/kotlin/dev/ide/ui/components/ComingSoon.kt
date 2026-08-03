@@ -1,5 +1,6 @@
 package dev.ide.ui.components
 
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -44,21 +45,21 @@ fun ComingSoon(
             verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
             Box(
-                Modifier.size(64.dp).background(Ca.colors.accentSoft, RoundedCornerShape(Ca.radius.lg)),
+                Modifier.size(64.dp).background(MaterialTheme.colorScheme.primaryContainer, RoundedCornerShape(Ca.radius.lg)),
                 contentAlignment = Alignment.Center,
             ) {
-                Icon(icon, null, Modifier.size(30.dp), tint = Ca.colors.accent)
+                Icon(icon, null, Modifier.size(30.dp), tint = MaterialTheme.colorScheme.primary)
             }
             Text(
-                title, color = Ca.colors.textPrimary, style = Ca.type.title3,
+                title, color = MaterialTheme.colorScheme.onSurface, style = MaterialTheme.typography.titleLarge,
                 fontWeight = FontWeight.SemiBold, textAlign = TextAlign.Center,
             )
             Text(
-                description, color = Ca.colors.textSecondary, style = Ca.type.footnote,
+                description, color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodyMedium,
                 textAlign = TextAlign.Center,
             )
             if (footnote != null) {
-                Chip(footnote, fill = Ca.colors.surface2, textColor = Ca.colors.textTertiary)
+                Chip(footnote, fill = MaterialTheme.colorScheme.surfaceContainerHigh, textColor = MaterialTheme.colorScheme.outline)
             }
         }
     }

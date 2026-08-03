@@ -1,5 +1,7 @@
 package dev.ide.ui.editor
 
+import dev.ide.ui.theme.Ide
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -82,13 +84,13 @@ fun FloatingLightbulb(onClick: () -> Unit, modifier: Modifier = Modifier) {
     Box(
         modifier
             .clip(RoundedCornerShape(Ca.radius.sm))
-            .background(Ca.colors.surface2)
-            .border(1.dp, Ca.colors.separator, RoundedCornerShape(Ca.radius.sm))
+            .background(MaterialTheme.colorScheme.surfaceContainerHigh)
+            .border(1.dp, MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(Ca.radius.sm))
             .clickable(onClick = onClick)
             .padding(horizontal = 7.dp, vertical = 5.dp),
         contentAlignment = Alignment.Center,
     ) {
-        Icon(CaIcons.lightbulb, contentDescription = stringResource(Res.string.codeaction_show_context_actions), tint = Ca.colors.warning, modifier = Modifier.size(16.dp))
+        Icon(CaIcons.lightbulb, contentDescription = stringResource(Res.string.codeaction_show_context_actions), tint = Ide.colors.warning, modifier = Modifier.size(16.dp))
     }
 }
 
@@ -105,7 +107,7 @@ fun PreviewGutterIcon(onClick: () -> Unit, modifier: Modifier = Modifier) {
             .clickable(onClick = onClick),
         contentAlignment = Alignment.Center,
     ) {
-        Icon(CaIcons.image, contentDescription = stringResource(Res.string.codeaction_preview_composable), tint = Ca.colors.accent, modifier = Modifier.size(15.dp))
+        Icon(CaIcons.image, contentDescription = stringResource(Res.string.codeaction_preview_composable), tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(15.dp))
     }
 }
 
@@ -120,8 +122,8 @@ fun CodeActionsMenu(
     Column(
         Modifier
             .width(width)
-            .background(Ca.colors.glassThick, RoundedCornerShape(Ca.radius.md))
-            .border(1.dp, Ca.colors.separator, RoundedCornerShape(Ca.radius.md)),
+            .background(Ide.colors.glassThick, RoundedCornerShape(Ca.radius.md))
+            .border(1.dp, MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(Ca.radius.md)),
     ) {
         val compactions = remember(actions) { importCompactions(actions) }
         LazyColumn(modifier = Modifier.heightIn(max = maxListHeight)) {
@@ -149,7 +151,7 @@ private fun ActionRow(action: UiAction, compact: CompactImport?, selected: Boole
             Modifier
                 .fillMaxWidth()
                 .height(height)
-                .background(if (selected) Ca.colors.accentSoft else Color.Transparent)
+                .background(if (selected) MaterialTheme.colorScheme.primaryContainer else Color.Transparent)
                 .then(clickMod)
                 .padding(horizontal = 12.dp),
             verticalAlignment = Alignment.CenterVertically,
@@ -159,24 +161,24 @@ private fun ActionRow(action: UiAction, compact: CompactImport?, selected: Boole
             Icon(
                 if (isFix) CaIcons.gear else CaIcons.lightbulb,
                 contentDescription = null,
-                tint = if (isFix) Ca.colors.accent else Ca.colors.warning,
+                tint = if (isFix) MaterialTheme.colorScheme.primary else Ide.colors.warning,
                 modifier = Modifier.size(15.dp),
             )
             if (compact != null) {
                 Text(
                     buildAnnotatedString {
-                        withStyle(SpanStyle(color = Ca.colors.textSecondary)) { append(compact.dimPrefix) }
-                        withStyle(SpanStyle(color = Ca.colors.textPrimary, fontWeight = FontWeight.Medium)) { append(compact.name) }
+                        withStyle(SpanStyle(color = MaterialTheme.colorScheme.onSurfaceVariant)) { append(compact.dimPrefix) }
+                        withStyle(SpanStyle(color = MaterialTheme.colorScheme.onSurface, fontWeight = FontWeight.Medium)) { append(compact.name) }
                     },
-                    style = Ca.type.code,
+                    style = Ide.type.code,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
                 )
             } else {
                 Text(
                     action.title,
-                    style = Ca.type.code,
-                    color = Ca.colors.textPrimary,
+                    style = Ide.type.code,
+                    color = MaterialTheme.colorScheme.onSurface,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
                 )
@@ -189,7 +191,7 @@ private fun ActionRow(action: UiAction, compact: CompactImport?, selected: Boole
         // popup (enableUserInput = false) and we drive it via show(), so the two gestures never fight.
         TooltipBox(
             positionProvider = TooltipDefaults.rememberPlainTooltipPositionProvider(),
-            tooltip = { PlainTooltip { Text(compact.fqn, style = Ca.type.caption2) } },
+            tooltip = { PlainTooltip { Text(compact.fqn, style = MaterialTheme.typography.labelSmall) } },
             state = tooltipState,
             enableUserInput = false,
         ) {
@@ -277,10 +279,10 @@ fun DiagnosticSheet(
     onDismiss: () -> Unit,
 ) {
     val color = when (severity) {
-        UiSeverity.Error -> Ca.colors.error
-        UiSeverity.Warning -> if (unused) Ca.colors.textTertiary else Ca.colors.warning
-        UiSeverity.Info -> Ca.colors.info
-        UiSeverity.Hint -> Ca.colors.textTertiary
+        UiSeverity.Error -> MaterialTheme.colorScheme.error
+        UiSeverity.Warning -> if (unused) MaterialTheme.colorScheme.outline else Ide.colors.warning
+        UiSeverity.Info -> Ide.colors.info
+        UiSeverity.Hint -> MaterialTheme.colorScheme.outline
     }
     val icon = when (severity) {
         UiSeverity.Error -> CaIcons.error
@@ -298,40 +300,40 @@ fun DiagnosticSheet(
     Box(
         Modifier
             .fillMaxSize()
-            .background(Ca.colors.scrim)
+            .background(Ide.colors.scrim)
             .pointerInput(Unit) { detectTapGestures { onDismiss() } },
         contentAlignment = Alignment.BottomCenter,
     ) {
         Column(
             Modifier
                 .fillMaxWidth()
-                .background(Ca.colors.glassThick, sheetShape)
-                .border(1.dp, Ca.colors.separator, sheetShape)
+                .background(Ide.colors.glassThick, sheetShape)
+                .border(1.dp, MaterialTheme.colorScheme.outlineVariant, sheetShape)
                 .pointerInput(Unit) { detectTapGestures { } } // swallow taps so the panel itself doesn't dismiss
                 .padding(horizontal = 16.dp, vertical = 14.dp),
         ) {
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 Icon(icon, null, Modifier.size(18.dp), tint = color)
-                Text(label, color = color, style = Ca.type.caption, fontWeight = FontWeight.SemiBold, modifier = Modifier.width(0.dp).weight(1f))
+                Text(label, color = color, style = MaterialTheme.typography.bodySmall, fontWeight = FontWeight.SemiBold, modifier = Modifier.width(0.dp).weight(1f))
                 Box(
                     Modifier.size(30.dp).clip(CircleShape).clickable(onClick = onDismiss),
                     contentAlignment = Alignment.Center,
-                ) { Icon(CaIcons.close, stringResource(Res.string.codeaction_dismiss), Modifier.size(16.dp), tint = Ca.colors.textSecondary) }
+                ) { Icon(CaIcons.close, stringResource(Res.string.codeaction_dismiss), Modifier.size(16.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant) }
             }
             Spacer(Modifier.height(10.dp))
             SelectionContainer {
                 Text(
                     message,
-                    color = Ca.colors.textPrimary,
-                    style = Ca.type.code,
+                    color = MaterialTheme.colorScheme.onSurface,
+                    style = Ide.type.code,
                     modifier = Modifier.fillMaxWidth().heightIn(max = 180.dp).verticalScroll(rememberScrollState()),
                 )
             }
             if (actions.isNotEmpty()) {
                 Spacer(Modifier.height(12.dp))
-                Box(Modifier.fillMaxWidth().height(1.dp).background(Ca.colors.separator))
+                Box(Modifier.fillMaxWidth().height(1.dp).background(MaterialTheme.colorScheme.outlineVariant))
                 Spacer(Modifier.height(6.dp))
-                Text(stringResource(Res.string.codeaction_quick_fixes), color = Ca.colors.textTertiary, style = Ca.type.caption2, fontWeight = FontWeight.SemiBold, modifier = Modifier.padding(horizontal = 12.dp, vertical = 4.dp))
+                Text(stringResource(Res.string.codeaction_quick_fixes), color = MaterialTheme.colorScheme.outline, style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.SemiBold, modifier = Modifier.padding(horizontal = 12.dp, vertical = 4.dp))
                 val compactions = remember(actions) { importCompactions(actions) }
                 actions.forEachIndexed { i, a -> ActionRow(a, compactions[i], selected = false, onPick = { onPick(i) }, height = 48.dp) }
             }

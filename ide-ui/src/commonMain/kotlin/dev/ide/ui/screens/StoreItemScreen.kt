@@ -2,6 +2,7 @@
 
 package dev.ide.ui.screens
 
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.horizontalScroll
@@ -84,12 +85,12 @@ fun StoreItemScreen(
     modifier: Modifier = Modifier,
 ) {
     if (item == null) { onBack(); return }
-    val accent = item.accentColor?.let { Color(it) } ?: Ca.colors.accent
+    val accent = item.accentColor?.let { Color(it) } ?: MaterialTheme.colorScheme.primary
     val scope = rememberCoroutineScope()
     var busy by remember(item.id) { mutableStateOf(false) }
     var message by remember(item.id) { mutableStateOf<String?>(null) }
 
-    Box(modifier.fillMaxSize().background(Ca.colors.bg), contentAlignment = Alignment.TopCenter) {
+    Box(modifier.fillMaxSize().background(MaterialTheme.colorScheme.background), contentAlignment = Alignment.TopCenter) {
         Column(Modifier.widthIn(max = 720.dp).fillMaxSize()) {
             Column(Modifier.weight(1f).fillMaxWidth().verticalScroll(rememberScrollState())) {
                 Hero(item, accent, onBack)
@@ -118,7 +119,7 @@ fun StoreItemScreen(
 
                     // About
                     Section(stringResource(Res.string.store_item_about)) {
-                        Text(item.description, color = Ca.colors.textSecondary, style = Ca.type.subhead)
+                        Text(item.description, color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodyLarge)
                     }
 
                     // What you get
@@ -133,15 +134,15 @@ fun StoreItemScreen(
                     // Tags
                     if (item.tags.isNotEmpty()) {
                         FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                            item.tags.forEach { Chip(it, fill = Ca.colors.surface2, textColor = Ca.colors.textSecondary) }
+                            item.tags.forEach { Chip(it, fill = MaterialTheme.colorScheme.surfaceContainerHigh, textColor = MaterialTheme.colorScheme.onSurfaceVariant) }
                         }
                     }
 
                     // Specs
                     Section(stringResource(Res.string.store_item_details)) {
                         Column(
-                            Modifier.fillMaxWidth().clip(RoundedCornerShape(Ca.radius.lg)).background(Ca.colors.surface)
-                                .border(1.dp, Ca.colors.separator, RoundedCornerShape(Ca.radius.lg)),
+                            Modifier.fillMaxWidth().clip(RoundedCornerShape(Ca.radius.lg)).background(MaterialTheme.colorScheme.surface)
+                                .border(1.dp, MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(Ca.radius.lg)),
                         ) {
                             SpecRow(stringResource(Res.string.store_item_type), kindLabel(item), first = true)
                             item.language?.let { SpecRow(stringResource(Res.string.store_item_language), it) }
@@ -155,10 +156,10 @@ fun StoreItemScreen(
 
             // Pinned CTA bar.
             Column(
-                Modifier.fillMaxWidth().background(Ca.colors.bg).padding(horizontal = 20.dp, vertical = 12.dp),
+                Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.background).padding(horizontal = 20.dp, vertical = 12.dp),
                 verticalArrangement = Arrangement.spacedBy(6.dp),
             ) {
-                message?.let { Text(it, color = Ca.colors.textTertiary, style = Ca.type.footnote) }
+                message?.let { Text(it, color = MaterialTheme.colorScheme.outline, style = MaterialTheme.typography.bodyMedium) }
                 when {
                     item.templateId != null -> PrimaryButton(
                         if (item.kind == UiStoreItemKind.Template) stringResource(Res.string.store_use_template) else stringResource(Res.string.store_create),
@@ -204,20 +205,20 @@ private fun Hero(item: UiStoreItem, accent: Color, onBack: () -> Unit) {
             verticalArrangement = Arrangement.spacedBy(8.dp),
         ) {
             Box(Modifier.background(Color.White.copy(alpha = 0.22f), RoundedCornerShape(Ca.radius.pill)).padding(horizontal = 10.dp, vertical = 4.dp)) {
-                Text(kindLabel(item).uppercase(), color = Color.White, style = Ca.type.caption2, fontWeight = FontWeight.SemiBold)
+                Text(kindLabel(item).uppercase(), color = Color.White, style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.SemiBold)
             }
-            Text(item.title, color = Color.White, style = Ca.type.title1, maxLines = 2, overflow = TextOverflow.Ellipsis)
+            Text(item.title, color = Color.White, style = MaterialTheme.typography.headlineMedium, maxLines = 2, overflow = TextOverflow.Ellipsis)
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                Text(item.category, color = Color.White.copy(alpha = 0.9f), style = Ca.type.footnote, fontWeight = FontWeight.Medium)
+                Text(item.category, color = Color.White.copy(alpha = 0.9f), style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Medium)
                 item.author?.let {
-                    Text("·", color = Color.White.copy(alpha = 0.7f), style = Ca.type.footnote)
-                    Text(stringResource(Res.string.store_by_author, it), color = Color.White.copy(alpha = 0.9f), style = Ca.type.footnote)
+                    Text("·", color = Color.White.copy(alpha = 0.7f), style = MaterialTheme.typography.bodyMedium)
+                    Text(stringResource(Res.string.store_by_author, it), color = Color.White.copy(alpha = 0.9f), style = MaterialTheme.typography.bodyMedium)
                 }
                 if (item.installs >= 0) {
-                    Text("·", color = Color.White.copy(alpha = 0.7f), style = Ca.type.footnote)
+                    Text("·", color = Color.White.copy(alpha = 0.7f), style = MaterialTheme.typography.bodyMedium)
                     Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(3.dp)) {
                         Icon(CaIcons.download, null, Modifier.size(12.dp), tint = Color.White.copy(alpha = 0.9f))
-                        Text(compactCount(item.installs), color = Color.White.copy(alpha = 0.9f), style = Ca.type.caption2)
+                        Text(compactCount(item.installs), color = Color.White.copy(alpha = 0.9f), style = MaterialTheme.typography.labelSmall)
                     }
                 }
             }
@@ -228,7 +229,7 @@ private fun Hero(item: UiStoreItem, accent: Color, onBack: () -> Unit) {
 @Composable
 private fun Section(title: String, content: @Composable () -> Unit) {
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        Text(title, color = Ca.colors.textPrimary, style = Ca.type.title3)
+        Text(title, color = MaterialTheme.colorScheme.onSurface, style = MaterialTheme.typography.titleLarge)
         content()
     }
 }
@@ -239,29 +240,29 @@ private fun HighlightRow(text: String, accent: Color) {
         Box(Modifier.size(20.dp).clip(RoundedCornerShape(Ca.radius.pill)).background(accent.copy(alpha = 0.16f)), contentAlignment = Alignment.Center) {
             Icon(CaIcons.check, null, Modifier.size(13.dp), tint = accent)
         }
-        Text(text, color = Ca.colors.textSecondary, style = Ca.type.subhead)
+        Text(text, color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodyLarge)
     }
 }
 
 @Composable
 private fun SpecRow(label: String, value: String, first: Boolean = false) {
-    if (!first) Box(Modifier.fillMaxWidth().height(1.dp).background(Ca.colors.separator))
+    if (!first) Box(Modifier.fillMaxWidth().height(1.dp).background(MaterialTheme.colorScheme.outlineVariant))
     Row(
         Modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = 12.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Text(label, color = Ca.colors.textTertiary, style = Ca.type.subhead, modifier = Modifier.weight(1f))
-        Text(value, color = Ca.colors.textPrimary, style = Ca.type.subhead, fontWeight = FontWeight.Medium)
+        Text(label, color = MaterialTheme.colorScheme.outline, style = MaterialTheme.typography.bodyLarge, modifier = Modifier.weight(1f))
+        Text(value, color = MaterialTheme.colorScheme.onSurface, style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.Medium)
     }
 }
 
 @Composable
 private fun DisabledBar(text: String) {
     Box(
-        Modifier.fillMaxWidth().height(44.dp).clip(RoundedCornerShape(Ca.radius.control)).background(Ca.colors.surface3),
+        Modifier.fillMaxWidth().height(44.dp).clip(RoundedCornerShape(Ca.radius.control)).background(MaterialTheme.colorScheme.surfaceContainerHighest),
         contentAlignment = Alignment.Center,
     ) {
-        Text(text, color = Ca.colors.textTertiary, style = Ca.type.subhead, fontWeight = FontWeight.SemiBold)
+        Text(text, color = MaterialTheme.colorScheme.outline, style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.SemiBold)
     }
 }
 
@@ -272,14 +273,14 @@ private fun StoreGlyph(
     iconId: String,
     tile: androidx.compose.ui.unit.Dp,
     glyph: androidx.compose.ui.unit.Dp,
-    fill: Color = Ca.colors.surface2,
+    fill: Color = MaterialTheme.colorScheme.surfaceContainerHigh,
     tint: Color? = null,
 ) {
     Box(Modifier.size(tile).clip(RoundedCornerShape(Ca.radius.lg)).background(fill), contentAlignment = Alignment.Center) {
         when (val ic = TreeIcons.resolve(iconId)) {
             is TreeIcon.Glyph -> Icon(ic.image, null, Modifier.size(glyph), tint = tint ?: resolveTint(ic.tint))
             is TreeIcon.Folder -> Icon(ic.closed, null, Modifier.size(glyph), tint = tint ?: resolveTint(ic.tint))
-            is TreeIcon.Badge -> Text(ic.text, color = tint ?: ic.color, style = Ca.type.title2, fontWeight = FontWeight.Bold)
+            is TreeIcon.Badge -> Text(ic.text, color = tint ?: ic.color, style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
         }
     }
 }

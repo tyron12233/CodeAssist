@@ -1,5 +1,7 @@
 package dev.ide.ui.components
 
+import dev.ide.ui.theme.Ide
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
@@ -29,7 +31,6 @@ import dev.ide.ui.ext.ToolWindowContribution
 import dev.ide.ui.ext.ToolWindowRegistry
 import dev.ide.ui.ext.UiActionHost
 import dev.ide.ui.ext.UiActionRegistry
-import dev.ide.ui.theme.Ca
 import dev.ide.ui.theme.CodeAssistTheme
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -97,12 +98,12 @@ class ExtRegistryTest {
     fun renderConsoleWithPluginTab() {
         val reg = ToolWindowRegistry.register(
             ToolWindowContribution("test.logcat", "Logcat", "terminal", ToolWindowAnchor.BOTTOM) { ctx ->
-                Text("Logcat for ${ctx.activeFilePath ?: "no file"}", color = Ca.colors.textPrimary)
+                Text("Logcat for ${ctx.activeFilePath ?: "no file"}", color = MaterialTheme.colorScheme.onSurface)
             }
         )
         try {
             snapshot("console-toolwindow.png", 760, 360) {
-                Box(Modifier.fillMaxSize().background(Ca.colors.editorBg)) {
+                Box(Modifier.fillMaxSize().background(Ide.colors.editorBg)) {
                     BuildConsole(
                         buildState = BuildState(),
                         indexStatus = IndexUiStatus(),

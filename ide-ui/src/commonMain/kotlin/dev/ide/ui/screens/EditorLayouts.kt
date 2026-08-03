@@ -1,5 +1,6 @@
 package dev.ide.ui.screens
 
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
@@ -74,7 +75,6 @@ import dev.ide.ui.generated.resources.search
 import dev.ide.ui.generated.resources.structure_title
 import dev.ide.ui.icons.CaIcons
 import dev.ide.ui.platform.isMobilePlatform
-import dev.ide.ui.theme.Ca
 import dev.ide.ui.theme.Motion
 import kotlinx.coroutines.launch
 import org.jetbrains.compose.resources.stringResource
@@ -261,7 +261,7 @@ internal fun ExpandedLayout(
                 onSelect = { state.toggleLeftPanel(it) },
                 header = {
                     ProjectTile(project.name, size = 42.dp)
-                    Box(Modifier.padding(vertical = 2.dp).width(32.dp).height(1.dp).background(Ca.colors.separator))
+                    Box(Modifier.padding(vertical = 2.dp).width(32.dp).height(1.dp).background(MaterialTheme.colorScheme.outlineVariant))
                 },
                 footer = {
                     RailActionItem(CaIcons.ellipsis, moreLabel) { state.moreOpen = true }

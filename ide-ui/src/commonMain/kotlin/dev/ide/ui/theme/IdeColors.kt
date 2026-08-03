@@ -45,8 +45,16 @@ class IdeColors(
 
 val LocalIdeColors = staticCompositionLocalOf<IdeColors> { error("CodeAssistTheme not applied") }
 
-/** Accessor for the IDE-domain colors: `Ide.colors`. Complements Material's `MaterialTheme.colorScheme`. */
+/**
+ * Accessor for the IDE-domain design tokens, complementing Material's `MaterialTheme.colorScheme` /
+ * `MaterialTheme.typography`: `Ide.colors` for the editor/syntax/glass palette, `Ide.type` for the
+ * monospace code text styles (which have no Material type role).
+ */
 object Ide {
     val colors: IdeColors
         @Composable @ReadOnlyComposable get() = LocalIdeColors.current
+
+    /** Code (monospace) text styles + the resolved UI/code font families. */
+    val type: CaTypography
+        @Composable @ReadOnlyComposable get() = LocalCaType.current
 }

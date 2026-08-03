@@ -1,5 +1,6 @@
 package dev.ide.ui.screens
 
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
@@ -63,7 +64,7 @@ fun SettingsHubScreen(
     onOpenPlugins: () -> Unit,
     onOpenStorage: () -> Unit,
 ) {
-    Box(Modifier.fillMaxSize().background(Ca.colors.bg)) {
+    Box(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)) {
         Column(Modifier.fillMaxSize()) {
             GlassSurface(Modifier.fillMaxWidth(), GlassMaterial.Regular) {
                 Row(
@@ -71,11 +72,11 @@ fun SettingsHubScreen(
                     verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp),
                 ) {
                     IconButtonCa(CaIcons.chevronLeft, stringResource(Res.string.back), onBack)
-                    Icon(CaIcons.gear, null, Modifier.size(20.dp), tint = Ca.colors.accent)
-                    Text(stringResource(Res.string.settings_hub_title), color = Ca.colors.textPrimary, style = Ca.type.headline, fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f))
+                    Icon(CaIcons.gear, null, Modifier.size(20.dp), tint = MaterialTheme.colorScheme.primary)
+                    Text(stringResource(Res.string.settings_hub_title), color = MaterialTheme.colorScheme.onSurface, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f))
                 }
             }
-            Box(Modifier.fillMaxWidth().height(1.dp).background(Ca.colors.separator))
+            Box(Modifier.fillMaxWidth().height(1.dp).background(MaterialTheme.colorScheme.outlineVariant))
             Column(
                 Modifier.widthIn(max = 640.dp).fillMaxWidth()
                     .verticalScroll(rememberScrollState())
@@ -97,16 +98,16 @@ fun SettingsHubScreen(
 private fun HubRow(icon: ImageVector, title: String, subtitle: String, onClick: () -> Unit) {
     Row(
         Modifier.fillMaxWidth()
-            .background(Ca.colors.surface, RoundedCornerShape(Ca.radius.lg))
+            .background(MaterialTheme.colorScheme.surface, RoundedCornerShape(Ca.radius.lg))
             .clickable(remember { MutableInteractionSource() }, null, onClick = onClick)
             .padding(horizontal = 16.dp, vertical = 14.dp),
         verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(14.dp),
     ) {
-        Icon(icon, null, Modifier.size(22.dp), tint = Ca.colors.accent)
+        Icon(icon, null, Modifier.size(22.dp), tint = MaterialTheme.colorScheme.primary)
         Column(Modifier.weight(1f)) {
-            Text(title, color = Ca.colors.textPrimary, style = Ca.type.body, fontWeight = FontWeight.SemiBold)
-            Text(subtitle, color = Ca.colors.textSecondary, style = Ca.type.footnote)
+            Text(title, color = MaterialTheme.colorScheme.onSurface, style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.SemiBold)
+            Text(subtitle, color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodyMedium)
         }
-        Icon(CaIcons.chevronRight, null, Modifier.size(18.dp), tint = Ca.colors.textTertiary)
+        Icon(CaIcons.chevronRight, null, Modifier.size(18.dp), tint = MaterialTheme.colorScheme.outline)
     }
 }

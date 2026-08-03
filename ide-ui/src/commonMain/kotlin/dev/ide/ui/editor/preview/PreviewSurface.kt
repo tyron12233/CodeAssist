@@ -1,5 +1,7 @@
 package dev.ide.ui.editor.preview
 
+import dev.ide.ui.theme.Ide
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.EnterTransition
 import androidx.compose.animation.ExitTransition
@@ -189,10 +191,10 @@ fun PreviewSurface(
     val hdp = if (state.landscape) device.wdp else device.hdp
     val widthPx = (wdp * device.density).toInt()
     val heightPx = (hdp * device.density).toInt()
-    val dotColor = Ca.colors.separator
+    val dotColor = MaterialTheme.colorScheme.outlineVariant
     val tapHandler = rememberUpdatedState(onSurfaceTap)
 
-    BoxWithConstraints(modifier.fillMaxSize().background(Ca.colors.editorBg).clipToBounds()) {
+    BoxWithConstraints(modifier.fillMaxSize().background(Ide.colors.editorBg).clipToBounds()) {
         // Below this width the chrome bars can't show full labels without squishing, so they collapse to
         // icon / dimension-only form and the view-specific extras follow suit (see [topBarExtras]).
         val compact = maxWidth < 480.dp
@@ -294,21 +296,21 @@ fun PreviewSurface(
                 PillButton({ if (deviceOverride == null) state.deviceIndex = (state.deviceIndex + 1) % PREVIEW_DEVICES.size }) {
                     Text(
                         if (compact) "$wdp×$hdp" else "${deviceLabel(device.label)} · $wdp×$hdp",
-                        color = if (deviceOverride != null) Ca.colors.accent else Ca.colors.textSecondary,
-                        style = Ca.type.caption, maxLines = 1,
+                        color = if (deviceOverride != null) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
+                        style = MaterialTheme.typography.bodySmall, maxLines = 1,
                         modifier = Modifier.padding(horizontal = if (compact) Ca.spacing.s1 else Ca.spacing.s2),
                     )
                 }
                 Divider()
                 PillButton({ state.landscape = !state.landscape }) {
-                    Icon(CaIcons.refresh, stringResource(Res.string.preview_rotate), Modifier.size(15.dp), tint = if (state.landscape) Ca.colors.accent else Ca.colors.textSecondary)
+                    Icon(CaIcons.refresh, stringResource(Res.string.preview_rotate), Modifier.size(15.dp), tint = if (state.landscape) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant)
                 }
                 Divider()
                 PillButton({ state.night = !state.night }) {
                     if (compact) {
-                        Icon(CaIcons.moon, stringResource(Res.string.preview_night_mode), Modifier.size(15.dp), tint = if (state.night) Ca.colors.accent else Ca.colors.textTertiary)
+                        Icon(CaIcons.moon, stringResource(Res.string.preview_night_mode), Modifier.size(15.dp), tint = if (state.night) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outline)
                     } else {
-                        Text(stringResource(Res.string.preview_night), color = if (state.night) Ca.colors.accent else Ca.colors.textTertiary, style = Ca.type.caption, modifier = Modifier.padding(horizontal = Ca.spacing.s1))
+                        Text(stringResource(Res.string.preview_night), color = if (state.night) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outline, style = MaterialTheme.typography.bodySmall, modifier = Modifier.padding(horizontal = Ca.spacing.s1))
                     }
                 }
                 topBarExtras(compact)
@@ -333,10 +335,10 @@ fun PreviewSurface(
         ) {
             GlassBar(Modifier) {
                 PillButton({ val b = if (state.userScale <= 0f) fit else state.userScale; state.userScale = (b / 1.25f).coerceIn(0.2f, 5f) }) { MinusGlyph() }
-                Text("${(scale * 100f).roundToInt()}%", color = Ca.colors.textSecondary, style = Ca.type.caption, modifier = Modifier.width(44.dp), textAlign = TextAlign.Center)
-                PillButton({ val b = if (state.userScale <= 0f) fit else state.userScale; state.userScale = (b * 1.25f).coerceIn(0.2f, 5f) }) { Icon(CaIcons.plus, stringResource(Res.string.preview_zoom_in), Modifier.size(16.dp), tint = Ca.colors.textPrimary) }
+                Text("${(scale * 100f).roundToInt()}%", color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodySmall, modifier = Modifier.width(44.dp), textAlign = TextAlign.Center)
+                PillButton({ val b = if (state.userScale <= 0f) fit else state.userScale; state.userScale = (b * 1.25f).coerceIn(0.2f, 5f) }) { Icon(CaIcons.plus, stringResource(Res.string.preview_zoom_in), Modifier.size(16.dp), tint = MaterialTheme.colorScheme.onSurface) }
                 Divider()
-                PillButton({ state.userScale = 0f; state.offset = Offset.Zero }) { Icon(CaIcons.refresh, stringResource(Res.string.preview_fit), Modifier.size(15.dp), tint = Ca.colors.textSecondary) }
+                PillButton({ state.userScale = 0f; state.offset = Offset.Zero }) { Icon(CaIcons.refresh, stringResource(Res.string.preview_fit), Modifier.size(15.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant) }
                 Divider()
                 // Lock the view: stop the surface eating drags so the user can interact with the previewed content.
                 PillButton({ state.locked = !state.locked }) {
@@ -344,7 +346,7 @@ fun PreviewSurface(
                         if (state.locked) CaIcons.lock else CaIcons.lockOpen,
                         if (state.locked) stringResource(Res.string.preview_unlock) else stringResource(Res.string.preview_lock),
                         Modifier.size(15.dp),
-                        tint = if (state.locked) Ca.colors.accent else Ca.colors.textSecondary,
+                        tint = if (state.locked) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                 }
                 bottomBarExtras(compact)
@@ -382,13 +384,13 @@ fun PreviewProblemChip(issues: List<PreviewIssue>, modifier: Modifier) {
     if (issues.isEmpty()) return
     var open by remember { mutableStateOf(false) }
     val hasError = issues.any { it.level == PreviewIssueLevel.ERROR }
-    val tint = if (hasError) Ca.colors.error else Ca.colors.warning
+    val tint = if (hasError) MaterialTheme.colorScheme.error else Ide.colors.warning
     Column(modifier, horizontalAlignment = Alignment.Start) {
         GlassBar(Modifier) {
             PillButton({ open = !open }) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Icon(if (hasError) CaIcons.error else CaIcons.warning, stringResource(Res.string.preview_problems), Modifier.size(15.dp), tint = tint)
-                    Text(" ${issues.size}", color = tint, style = Ca.type.caption)
+                    Text(" ${issues.size}", color = tint, style = MaterialTheme.typography.bodySmall)
                 }
             }
         }
@@ -400,17 +402,17 @@ fun PreviewProblemChip(issues: List<PreviewIssue>, modifier: Modifier) {
             }
             Column(
                 Modifier.padding(top = Ca.spacing.s2).widthIn(max = 360.dp).heightIn(max = 320.dp)
-                    .clip(RoundedCornerShape(Ca.radius.md)).background(Ca.colors.surface)
-                    .border(1.dp, Ca.colors.separator, RoundedCornerShape(Ca.radius.md))
+                    .clip(RoundedCornerShape(Ca.radius.md)).background(MaterialTheme.colorScheme.surface)
+                    .border(1.dp, MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(Ca.radius.md))
                     .verticalScroll(rememberScrollState()).padding(Ca.spacing.s3),
                 verticalArrangement = Arrangement.spacedBy(Ca.spacing.s2),
             ) {
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
-                    Text(pluralStringResource(Res.plurals.preview_problems_count, issues.size, issues.size), color = Ca.colors.textSecondary, style = Ca.type.caption)
+                    Text(pluralStringResource(Res.plurals.preview_problems_count, issues.size, issues.size), color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodySmall)
                     PillButton({ clipboard.setText(AnnotatedString(copyText)) }) {
                         Row(verticalAlignment = Alignment.CenterVertically) {
-                            Icon(CaIcons.copy, stringResource(Res.string.preview_copy_problems), Modifier.size(13.dp), tint = Ca.colors.textSecondary)
-                            Text(" " + stringResource(Res.string.copy), color = Ca.colors.textSecondary, style = Ca.type.caption)
+                            Icon(CaIcons.copy, stringResource(Res.string.preview_copy_problems), Modifier.size(13.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
+                            Text(" " + stringResource(Res.string.copy), color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodySmall)
                         }
                     }
                 }
@@ -419,9 +421,9 @@ fun PreviewProblemChip(issues: List<PreviewIssue>, modifier: Modifier) {
                     Column(verticalArrangement = Arrangement.spacedBy(Ca.spacing.s2)) {
                         for (p in issues) Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
                             if (p.title.isNotEmpty()) {
-                                Text(p.title, color = if (p.level == PreviewIssueLevel.ERROR) Ca.colors.error else Ca.colors.textPrimary, style = Ca.type.caption, fontWeight = FontWeight.SemiBold)
+                                Text(p.title, color = if (p.level == PreviewIssueLevel.ERROR) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurface, style = MaterialTheme.typography.bodySmall, fontWeight = FontWeight.SemiBold)
                             }
-                            Text(p.message, color = Ca.colors.textSecondary, style = Ca.type.caption2)
+                            Text(p.message, color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.labelSmall)
                         }
                     }
                 }
@@ -453,7 +455,7 @@ private fun DrawScope.drawDotGrid(color: Color, step: Float, radius: Float) {
 internal fun GlassBar(modifier: Modifier, content: @Composable RowScope.() -> Unit) {
     Row(
         modifier.shadow(8.dp, RoundedCornerShape(Ca.radius.pill)).clip(RoundedCornerShape(Ca.radius.pill))
-            .background(Ca.colors.glassReg).border(1.dp, Ca.colors.glassEdge, RoundedCornerShape(Ca.radius.pill))
+            .background(Ide.colors.glassReg).border(1.dp, Ide.colors.glassEdge, RoundedCornerShape(Ca.radius.pill))
             .padding(horizontal = Ca.spacing.s2, vertical = Ca.spacing.s1),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(Ca.spacing.s1),
@@ -487,7 +489,7 @@ private val handleExit: ExitTransition = fadeOut(tween(CHROME_ANIM_MS)) + scaleO
 @Composable
 private fun CollapseToggle(icon: ImageVector, onClick: () -> Unit) {
     PillButton(onClick) {
-        Icon(icon, stringResource(Res.string.preview_collapse_toolbar), Modifier.size(14.dp), tint = Ca.colors.textTertiary)
+        Icon(icon, stringResource(Res.string.preview_collapse_toolbar), Modifier.size(14.dp), tint = MaterialTheme.colorScheme.outline)
     }
 }
 
@@ -496,17 +498,17 @@ private fun CollapseToggle(icon: ImageVector, onClick: () -> Unit) {
 private fun ExpandHandle(modifier: Modifier, icon: ImageVector, onClick: () -> Unit) {
     GlassBar(modifier) {
         PillButton(onClick) {
-            Icon(icon, stringResource(Res.string.preview_expand_toolbar), Modifier.size(15.dp), tint = Ca.colors.textSecondary)
+            Icon(icon, stringResource(Res.string.preview_expand_toolbar), Modifier.size(15.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
         }
     }
 }
 
 @Composable
 internal fun MinusGlyph() {
-    Box(Modifier.width(12.dp).height(2.dp).clip(RoundedCornerShape(1.dp)).background(Ca.colors.textPrimary))
+    Box(Modifier.width(12.dp).height(2.dp).clip(RoundedCornerShape(1.dp)).background(MaterialTheme.colorScheme.onSurface))
 }
 
 @Composable
 internal fun Divider() {
-    Box(Modifier.width(1.dp).height(18.dp).background(Ca.colors.separator))
+    Box(Modifier.width(1.dp).height(18.dp).background(MaterialTheme.colorScheme.outlineVariant))
 }

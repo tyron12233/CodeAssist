@@ -1,5 +1,7 @@
 package dev.ide.ui.screens
 
+import dev.ide.ui.theme.Ide
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -113,16 +115,16 @@ fun LogsScreen(
         }
     }
 
-    Column(modifier.fillMaxSize().background(Ca.colors.bg)) {
+    Column(modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)) {
         // Header: title + actions
         Row(
             Modifier.fillMaxWidth().padding(start = 14.dp, end = 8.dp, top = 12.dp, bottom = 4.dp),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(4.dp),
         ) {
-            Icon(CaIcons.terminal, null, Modifier.size(18.dp), tint = Ca.colors.textSecondary)
-            Text(stringResource(Res.string.logs_title), color = Ca.colors.textPrimary, style = Ca.type.headline, fontWeight = FontWeight.SemiBold)
-            Text("${shown.size}", color = Ca.colors.textTertiary, style = Ca.type.footnote, modifier = Modifier.padding(start = 4.dp))
+            Icon(CaIcons.terminal, null, Modifier.size(18.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
+            Text(stringResource(Res.string.logs_title), color = MaterialTheme.colorScheme.onSurface, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
+            Text("${shown.size}", color = MaterialTheme.colorScheme.outline, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.padding(start = 4.dp))
             Box(Modifier.weight(1f))
             HeaderAction(if (paused) CaIcons.play else CaIcons.stop, if (paused) stringResource(Res.string.logs_resume) else stringResource(Res.string.logs_pause), paused) { paused = !paused }
             HeaderAction(CaIcons.refresh, stringResource(Res.string.refresh)) { all = backend.diagnostics.recentLogs() }
@@ -139,21 +141,21 @@ fun LogsScreen(
         // Search field
         Row(
             Modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = 8.dp)
-                .background(Ca.colors.surface2, RoundedCornerShape(Ca.radius.control))
-                .border(1.dp, Ca.colors.hairline, RoundedCornerShape(Ca.radius.control))
+                .background(MaterialTheme.colorScheme.surfaceContainerHigh, RoundedCornerShape(Ca.radius.control))
+                .border(1.dp, MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(Ca.radius.control))
                 .padding(horizontal = 12.dp, vertical = 9.dp),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(10.dp),
         ) {
-            Icon(CaIcons.search, null, Modifier.size(16.dp), tint = Ca.colors.accent)
+            Icon(CaIcons.search, null, Modifier.size(16.dp), tint = MaterialTheme.colorScheme.primary)
             Box(Modifier.weight(1f)) {
-                if (query.isEmpty()) Text(stringResource(Res.string.logs_filter_hint), color = Ca.colors.textTertiary, style = Ca.type.subhead)
+                if (query.isEmpty()) Text(stringResource(Res.string.logs_filter_hint), color = MaterialTheme.colorScheme.outline, style = MaterialTheme.typography.bodyLarge)
                 BasicTextField(
                     value = query,
                     onValueChange = { query = it },
                     singleLine = true,
-                    textStyle = Ca.type.subhead.copy(color = Ca.colors.textPrimary),
-                    cursorBrush = SolidColor(Ca.colors.accent),
+                    textStyle = MaterialTheme.typography.bodyLarge.copy(color = MaterialTheme.colorScheme.onSurface),
+                    cursorBrush = SolidColor(MaterialTheme.colorScheme.primary),
                     modifier = Modifier.fillMaxWidth(),
                 )
             }
@@ -175,15 +177,15 @@ fun LogsScreen(
             }
         }
 
-        Box(Modifier.fillMaxWidth().height(1.dp).background(Ca.colors.separator))
+        Box(Modifier.fillMaxWidth().height(1.dp).background(MaterialTheme.colorScheme.outlineVariant))
 
         // Records
         if (shown.isEmpty()) {
             Box(Modifier.weight(1f).fillMaxWidth(), contentAlignment = Alignment.Center) {
                 Text(
                     if (all.isEmpty()) stringResource(Res.string.logs_empty) else stringResource(Res.string.logs_no_match),
-                    color = Ca.colors.textTertiary,
-                    style = Ca.type.footnote,
+                    color = MaterialTheme.colorScheme.outline,
+                    style = MaterialTheme.typography.bodyMedium,
                 )
             }
         } else {
@@ -217,16 +219,16 @@ private fun LogRow(entry: UiLogEntry, reveal: (() -> Float)?, slotPx: Float) {
         ) {
             Row(verticalAlignment = Alignment.Top, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 // Desktop shows the timestamp inline; on mobile it's the peek overlay below instead.
-                if (reveal == null) Text(entry.timeLabel, color = Ca.colors.textTertiary, style = Ca.type.codeSmall)
+                if (reveal == null) Text(entry.timeLabel, color = MaterialTheme.colorScheme.outline, style = Ide.type.codeSmall)
                 LevelBadge(entry.level, color)
                 Column(Modifier.weight(1f)) {
-                    Text(entry.message, color = Ca.colors.textPrimary, style = Ca.type.codeSmall)
+                    Text(entry.message, color = MaterialTheme.colorScheme.onSurface, style = Ide.type.codeSmall)
                     Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
                         entry.source?.let { SourceBadge(it) }
                         Text(
                             entry.tag,
-                            color = Ca.colors.textTertiary,
-                            style = Ca.type.caption2,
+                            color = MaterialTheme.colorScheme.outline,
+                            style = MaterialTheme.typography.labelSmall,
                             maxLines = 1,
                             overflow = TextOverflow.Ellipsis,
                         )
@@ -237,17 +239,17 @@ private fun LogRow(entry: UiLogEntry, reveal: (() -> Float)?, slotPx: Float) {
                         if (expanded) CaIcons.chevronDown else CaIcons.chevronRight,
                         null,
                         Modifier.size(14.dp).padding(top = 2.dp),
-                        tint = Ca.colors.textTertiary,
+                        tint = MaterialTheme.colorScheme.outline,
                     )
                 }
             }
             if (expanded && entry.stackTrace != null) {
                 Text(
                     entry.stackTrace!!,
-                    color = Ca.colors.textSecondary,
-                    style = Ca.type.codeSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    style = Ide.type.codeSmall,
                     modifier = Modifier.fillMaxWidth().padding(top = 6.dp, start = 4.dp)
-                        .background(Ca.colors.surface2, RoundedCornerShape(Ca.radius.sm)).padding(8.dp),
+                        .background(MaterialTheme.colorScheme.surfaceContainerHigh, RoundedCornerShape(Ca.radius.sm)).padding(8.dp),
                 )
             }
         }
@@ -256,8 +258,8 @@ private fun LogRow(entry: UiLogEntry, reveal: (() -> Float)?, slotPx: Float) {
         if (reveal != null && entry.timeLabel.isNotEmpty()) {
             Text(
                 entry.timeLabel,
-                color = Ca.colors.textTertiary,
-                style = Ca.type.codeSmall,
+                color = MaterialTheme.colorScheme.outline,
+                style = Ide.type.codeSmall,
                 maxLines = 1,
                 modifier = Modifier.align(Alignment.TopStart)
                     .padding(top = 7.dp, start = 6.dp)
@@ -271,9 +273,9 @@ private fun LogRow(entry: UiLogEntry, reveal: (() -> Float)?, slotPx: Float) {
 @Composable
 private fun SourceBadge(source: String) {
     Box(
-        Modifier.background(Ca.colors.accentSoft, RoundedCornerShape(Ca.radius.sm)).padding(horizontal = 5.dp, vertical = 1.dp),
+        Modifier.background(MaterialTheme.colorScheme.primaryContainer, RoundedCornerShape(Ca.radius.sm)).padding(horizontal = 5.dp, vertical = 1.dp),
     ) {
-        Text(source, color = Ca.colors.accent, style = Ca.type.caption2, fontWeight = FontWeight.Medium, maxLines = 1)
+        Text(source, color = MaterialTheme.colorScheme.primary, style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Medium, maxLines = 1)
     }
 }
 
@@ -282,7 +284,7 @@ private fun LevelBadge(level: String, color: Color) {
     Box(
         Modifier.background(color.copy(alpha = 0.16f), RoundedCornerShape(Ca.radius.sm)).padding(horizontal = 5.dp, vertical = 1.dp),
     ) {
-        Text(level, color = color, style = Ca.type.caption2, fontWeight = FontWeight.Bold)
+        Text(level, color = color, style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold)
     }
 }
 
@@ -291,11 +293,11 @@ private fun HeaderAction(icon: androidx.compose.ui.graphics.vector.ImageVector, 
     val interaction = remember { MutableInteractionSource() }
     Box(
         Modifier.size(32.dp)
-            .background(if (active) Ca.colors.accentSoft else Color.Transparent, RoundedCornerShape(Ca.radius.sm))
+            .background(if (active) MaterialTheme.colorScheme.primaryContainer else Color.Transparent, RoundedCornerShape(Ca.radius.sm))
             .clickable(interaction, indication = null, onClick = onClick),
         contentAlignment = Alignment.Center,
     ) {
-        Icon(icon, label, Modifier.size(17.dp), tint = if (active) Ca.colors.accent else Ca.colors.textSecondary)
+        Icon(icon, label, Modifier.size(17.dp), tint = if (active) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant)
     }
 }
 
@@ -303,15 +305,15 @@ private fun HeaderAction(icon: androidx.compose.ui.graphics.vector.ImageVector, 
 private fun FilterChip(label: String, selected: Boolean, onClick: () -> Unit) {
     Box(
         Modifier
-            .background(if (selected) Ca.colors.accent else Ca.colors.surface2, RoundedCornerShape(Ca.radius.pill))
-            .border(1.dp, if (selected) Color.Transparent else Ca.colors.hairline, RoundedCornerShape(Ca.radius.pill))
+            .background(if (selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surfaceContainerHigh, RoundedCornerShape(Ca.radius.pill))
+            .border(1.dp, if (selected) Color.Transparent else MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(Ca.radius.pill))
             .clickable(MutableInteractionSource(), indication = null, onClick = onClick)
             .padding(horizontal = 12.dp, vertical = 5.dp),
     ) {
         Text(
             label,
-            color = if (selected) Ca.colors.textOnAccent else Ca.colors.textSecondary,
-            style = Ca.type.caption,
+            color = if (selected) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurfaceVariant,
+            style = MaterialTheme.typography.bodySmall,
             fontWeight = FontWeight.Medium,
         )
     }
@@ -319,10 +321,10 @@ private fun FilterChip(label: String, selected: Boolean, onClick: () -> Unit) {
 
 @Composable
 private fun levelColor(level: String): Color = when (level) {
-    "ERROR" -> Ca.colors.error
-    "WARN" -> Ca.colors.warning
-    "INFO" -> Ca.colors.info
-    else -> Ca.colors.textTertiary
+    "ERROR" -> MaterialTheme.colorScheme.error
+    "WARN" -> Ide.colors.warning
+    "INFO" -> Ide.colors.info
+    else -> MaterialTheme.colorScheme.outline
 }
 
 private fun renderForCopy(e: UiLogEntry): String = buildString {

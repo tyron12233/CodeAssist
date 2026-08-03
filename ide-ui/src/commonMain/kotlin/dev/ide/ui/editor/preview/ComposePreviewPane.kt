@@ -1,5 +1,7 @@
 package dev.ide.ui.editor.preview
 
+import dev.ide.ui.theme.Ide
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -159,7 +161,7 @@ fun ComposePreviewPane(
         wrapContent = wrap,
         split = split,
         cardColor = cardBg,
-        cardBorderColor = Ca.colors.separatorStrong,
+        cardBorderColor = MaterialTheme.colorScheme.outline,
         overlays = {
             PreviewProblemChip(problems, Modifier.align(Alignment.TopStart).padding(Ca.spacing.s3))
         },
@@ -177,8 +179,8 @@ fun ComposePreviewPane(
                 } else {
                     Text(
                         current.label,
-                        color = Ca.colors.textSecondary,
-                        style = Ca.type.caption,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        style = MaterialTheme.typography.bodySmall,
                         fontWeight = FontWeight.Medium,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis,
@@ -201,12 +203,12 @@ fun ComposePreviewPane(
                         // Engine catching up to a fresh buffer (compiling/interpreting): a spinner, not a dot.
                         loading -> {
                             CircularProgressIndicator(
-                                Modifier.size(9.dp), color = Ca.colors.warning, strokeWidth = 1.5.dp
+                                Modifier.size(9.dp), color = Ide.colors.warning, strokeWidth = 1.5.dp
                             )
                             if (!compact) Text(
                                 stringResource(Res.string.loading),
-                                color = Ca.colors.warning,
-                                style = Ca.type.caption,
+                                color = Ide.colors.warning,
+                                style = MaterialTheme.typography.bodySmall,
                                 fontWeight = FontWeight.SemiBold
                             )
                         }
@@ -214,12 +216,12 @@ fun ComposePreviewPane(
                         live -> {
                             Box(
                                 Modifier.size(if (compact) 7.dp else 6.dp)
-                                    .background(Ca.colors.run, RoundedCornerShape(Ca.radius.pill))
+                                    .background(Ide.colors.run, RoundedCornerShape(Ca.radius.pill))
                             )
                             if (!compact) Text(
                                 stringResource(Res.string.preview_live),
-                                color = Ca.colors.run,
-                                style = Ca.type.caption,
+                                color = Ide.colors.run,
+                                style = MaterialTheme.typography.bodySmall,
                                 fontWeight = FontWeight.SemiBold
                             )
                         }
@@ -227,13 +229,13 @@ fun ComposePreviewPane(
                         else -> {
                             Box(
                                 Modifier.size(if (compact) 7.dp else 6.dp).background(
-                                    Ca.colors.textTertiary, RoundedCornerShape(Ca.radius.pill)
+                                    MaterialTheme.colorScheme.outline, RoundedCornerShape(Ca.radius.pill)
                                 )
                             )
                             if (!compact) Text(
                                 stringResource(Res.string.preview_paused),
-                                color = Ca.colors.textTertiary,
-                                style = Ca.type.caption,
+                                color = MaterialTheme.colorScheme.outline,
+                                style = MaterialTheme.typography.bodySmall,
                                 fontWeight = FontWeight.SemiBold
                             )
                         }
@@ -251,7 +253,7 @@ fun ComposePreviewPane(
                         if (live) CaIcons.stop else CaIcons.play,
                         if (live) stringResource(Res.string.preview_stop_live) else stringResource(Res.string.preview_resume_live),
                         Modifier.size(15.dp),
-                        tint = if (live) Ca.colors.textSecondary else Ca.colors.run,
+                        tint = if (live) MaterialTheme.colorScheme.onSurfaceVariant else Ide.colors.run,
                     )
                 }
             }
@@ -262,7 +264,7 @@ fun ComposePreviewPane(
                     CaIcons.refresh,
                     stringResource(Res.string.preview_rebuild),
                     Modifier.size(15.dp),
-                    tint = Ca.colors.textSecondary
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant
                 )
             }
         },
@@ -284,12 +286,12 @@ fun ComposePreviewPane(
                     ) {
                         CircularProgressIndicator(
                             modifier = Modifier.size(28.dp),
-                            color = if (state.night) Color(0xFFA0A1AA) else Ca.colors.textTertiary,
+                            color = if (state.night) Color(0xFFA0A1AA) else MaterialTheme.colorScheme.outline,
                         )
                         Text(
                             stringResource(Res.string.preview_preparing),
-                            color = if (state.night) Color(0xFFA0A1AA) else Ca.colors.textTertiary,
-                            style = Ca.type.caption,
+                            color = if (state.night) Color(0xFFA0A1AA) else MaterialTheme.colorScheme.outline,
+                            style = MaterialTheme.typography.bodySmall,
                             textAlign = TextAlign.Center,
                         )
                     }
@@ -327,8 +329,8 @@ fun ComposePreviewPane(
                     LaunchedEffect(Unit) { problems = emptyList(); busy = false }
                     Text(
                         if (current == null) stringResource(Res.string.preview_no_preview_found) else stringResource(Res.string.preview_renders_on_device),
-                        color = if (state.night) Color(0xFFA0A1AA) else Ca.colors.textTertiary,
-                        style = Ca.type.caption,
+                        color = if (state.night) Color(0xFFA0A1AA) else MaterialTheme.colorScheme.outline,
+                        style = MaterialTheme.typography.bodySmall,
                         textAlign = TextAlign.Center,
                         modifier = Modifier.padding(20.dp),
                     )
@@ -353,8 +355,8 @@ private fun RowScope.VariantSelector(
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Text(
                     current.label,
-                    color = Ca.colors.textSecondary,
-                    style = Ca.type.caption,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    style = MaterialTheme.typography.bodySmall,
                     fontWeight = FontWeight.Medium,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
@@ -365,7 +367,7 @@ private fun RowScope.VariantSelector(
                     CaIcons.chevronDown,
                     stringResource(Res.string.preview_choose_preview),
                     Modifier.size(13.dp).padding(start = 2.dp),
-                    tint = Ca.colors.textTertiary
+                    tint = MaterialTheme.colorScheme.outline
                 )
             }
         }
@@ -377,8 +379,8 @@ private fun RowScope.VariantSelector(
                     text = {
                         Text(
                             if (p.group != null) "${p.group} · ${p.label}" else p.label,
-                            style = Ca.type.caption,
-                            color = if (p.variantId == current.variantId) Ca.colors.accent else Ca.colors.textPrimary,
+                            style = MaterialTheme.typography.bodySmall,
+                            color = if (p.variantId == current.variantId) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface,
                             fontWeight = if (p.variantId == current.variantId) FontWeight.SemiBold else FontWeight.Normal,
                         )
                     },
@@ -401,7 +403,7 @@ private fun SystemUiChrome(dark: Boolean, modifier: Modifier, content: @Composab
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.SpaceBetween,
         ) {
-            Text("12:00", color = fg, style = Ca.type.caption)
+            Text("12:00", color = fg, style = MaterialTheme.typography.bodySmall)
             Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
                 repeat(3) { Box(Modifier.size(8.dp).background(fg, RoundedCornerShape(2.dp))) }
             }

@@ -2,6 +2,8 @@
 
 package dev.ide.ui.screens
 
+import dev.ide.ui.theme.Ide
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
@@ -113,26 +115,26 @@ fun SdkManagerScreen(backend: IdeBackend, onBack: () -> Unit) {
     val activeIds = progress.downloads.filter { it.status != "DONE" && it.status != "FAILED" }.map { it.id }.toSet()
     val iconBox = if (isMobilePlatform) 42 else 34
 
-    Column(Modifier.fillMaxSize().background(Ca.colors.bg)) {
+    Column(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)) {
         Row(
             Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 8.dp),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(8.dp),
         ) {
             IconButtonCa(CaIcons.chevronLeft, stringResource(Res.string.back), onBack, boxSize = iconBox)
-            Text(stringResource(Res.string.sdk_manager_title), style = Ca.type.title3, fontWeight = FontWeight.SemiBold, color = Ca.colors.textPrimary, modifier = Modifier.weight(1f))
+            Text(stringResource(Res.string.sdk_manager_title), style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.onSurface, modifier = Modifier.weight(1f))
             IconButtonCa(CaIcons.refresh, stringResource(Res.string.refresh), { scope.launch { reload() } }, boxSize = iconBox)
         }
-        status?.let { Text(it, style = Ca.type.footnote, color = if (statusIsError) Ca.colors.error else Ca.colors.accent, modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp)) }
+        status?.let { Text(it, style = MaterialTheme.typography.bodyMedium, color = if (statusIsError) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary, modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp)) }
 
         Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp), verticalArrangement = Arrangement.spacedBy(18.dp)) {
             // Purpose: these downloads power editor docs, not building.
             Card {
-                Text(stringResource(Res.string.sdk_sources_documentation), style = Ca.type.subhead, fontWeight = FontWeight.SemiBold, color = Ca.colors.textPrimary)
+                Text(stringResource(Res.string.sdk_sources_documentation), style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.onSurface)
                 Spacer(Modifier.height(4.dp))
                 Text(
                     stringResource(Res.string.sdk_sources_documentation_desc),
-                    style = Ca.type.footnote, color = Ca.colors.textSecondary,
+                    style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             }
 
@@ -156,15 +158,15 @@ fun SdkManagerScreen(backend: IdeBackend, onBack: () -> Unit) {
             // JDK sources
             SectionHeader(stringResource(Res.string.sdk_jdk))
             Card {
-                Text(stringResource(Res.string.sdk_jdk_version, jdk?.version ?: "?"), style = Ca.type.subhead, color = Ca.colors.textPrimary)
+                Text(stringResource(Res.string.sdk_jdk_version, jdk?.version ?: "?"), style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.onSurface)
                 jdk?.home?.takeIf { it.isNotEmpty() }?.let {
-                    Text(it, style = Ca.type.footnote, color = Ca.colors.textTertiary, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.fillMaxWidth())
+                    Text(it, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.outline, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.fillMaxWidth())
                 }
                 Spacer(Modifier.height(8.dp))
                 if (jdk?.srcZip != null) {
-                    StatusTag(CaIcons.check, stringResource(Res.string.sdk_jdk_sources_available), Ca.colors.run)
+                    StatusTag(CaIcons.check, stringResource(Res.string.sdk_jdk_sources_available), Ide.colors.run)
                 } else {
-                    Text(stringResource(Res.string.sdk_jdk_no_sources), style = Ca.type.footnote, color = Ca.colors.textSecondary)
+                    Text(stringResource(Res.string.sdk_jdk_no_sources), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     Spacer(Modifier.height(10.dp))
                     // FlowRow so the buttons wrap onto another line on a narrow phone instead of clipping.
                     FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -184,11 +186,11 @@ fun SdkManagerScreen(backend: IdeBackend, onBack: () -> Unit) {
             SectionHeader(stringResource(Res.string.sdk_android_sources))
             if (loading && packages.isEmpty()) {
                 Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    CircularProgressIndicator(Modifier.size(16.dp), strokeWidth = 2.dp, color = Ca.colors.accent)
-                    Text(stringResource(Res.string.sdk_loading_packages), style = Ca.type.footnote, color = Ca.colors.textSecondary)
+                    CircularProgressIndicator(Modifier.size(16.dp), strokeWidth = 2.dp, color = MaterialTheme.colorScheme.primary)
+                    Text(stringResource(Res.string.sdk_loading_packages), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
             } else if (packages.isEmpty()) {
-                Text(stringResource(Res.string.sdk_no_packages), style = Ca.type.footnote, color = Ca.colors.textTertiary)
+                Text(stringResource(Res.string.sdk_no_packages), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.outline)
             } else {
                 Card {
                     val sorted = packages.sortedByDescending { it.path }
@@ -208,9 +210,9 @@ fun SdkManagerScreen(backend: IdeBackend, onBack: () -> Unit) {
 private fun SectionHeader(text: String, small: Boolean = false) {
     Text(
         text,
-        style = if (small) Ca.type.footnote else Ca.type.subhead,
+        style = if (small) MaterialTheme.typography.bodyMedium else MaterialTheme.typography.bodyLarge,
         fontWeight = FontWeight.SemiBold,
-        color = if (small) Ca.colors.textSecondary else Ca.colors.textPrimary,
+        color = if (small) MaterialTheme.colorScheme.onSurfaceVariant else MaterialTheme.colorScheme.onSurface,
     )
 }
 
@@ -218,14 +220,14 @@ private fun SectionHeader(text: String, small: Boolean = false) {
 private fun Card(content: @Composable () -> Unit) {
     Column(
         Modifier.fillMaxWidth()
-            .background(Ca.colors.surface2, RoundedCornerShape(Ca.radius.md))
+            .background(MaterialTheme.colorScheme.surfaceContainerHigh, RoundedCornerShape(Ca.radius.md))
             .padding(14.dp),
     ) { content() }
 }
 
 @Composable
 private fun RowDivider() {
-    Box(Modifier.fillMaxWidth().height(1.dp).background(Ca.colors.separator))
+    Box(Modifier.fillMaxWidth().height(1.dp).background(MaterialTheme.colorScheme.outlineVariant))
 }
 
 @Composable
@@ -234,7 +236,7 @@ private fun DownloadRow(d: UiSdkDownload, onCancel: () -> Unit) {
     Column(Modifier.fillMaxWidth()) {
         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
             Column(Modifier.weight(1f)) {
-                Text(d.label, style = Ca.type.body, color = Ca.colors.textPrimary, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                Text(d.label, style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.onSurface, maxLines = 1, overflow = TextOverflow.Ellipsis)
                 val sub = when (d.status) {
                     "DONE" -> stringResource(Res.string.sdk_installed)
                     "FAILED" -> d.detail.ifEmpty { stringResource(Res.string.sdk_download_failed) }
@@ -244,8 +246,8 @@ private fun DownloadRow(d: UiSdkDownload, onCancel: () -> Unit) {
                     else -> d.status
                 }
                 Text(
-                    sub, style = Ca.type.caption, maxLines = 1, overflow = TextOverflow.Ellipsis,
-                    color = when (d.status) { "DONE" -> Ca.colors.run; "FAILED" -> Ca.colors.error; else -> Ca.colors.textTertiary },
+                    sub, style = MaterialTheme.typography.bodySmall, maxLines = 1, overflow = TextOverflow.Ellipsis,
+                    color = when (d.status) { "DONE" -> Ide.colors.run; "FAILED" -> MaterialTheme.colorScheme.error; else -> MaterialTheme.colorScheme.outline },
                 )
             }
             Spacer(Modifier.width(10.dp))
@@ -267,25 +269,25 @@ private fun PackageRow(p: UiSdkPackage, downloading: Boolean, onInstall: () -> U
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Box(
-            Modifier.size(38.dp).background(Ca.colors.accentSoft, RoundedCornerShape(Ca.radius.sm)),
+            Modifier.size(38.dp).background(MaterialTheme.colorScheme.primaryContainer, RoundedCornerShape(Ca.radius.sm)),
             contentAlignment = Alignment.Center,
-        ) { Icon(CaIcons.androidLogo, null, Modifier.size(20.dp), tint = Ca.colors.accent) }
+        ) { Icon(CaIcons.androidLogo, null, Modifier.size(20.dp), tint = MaterialTheme.colorScheme.primary) }
         Spacer(Modifier.width(12.dp))
         Column(Modifier.weight(1f)) {
-            Text(p.displayName, style = Ca.type.body, color = Ca.colors.textPrimary, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            Text(p.displayName, style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.onSurface, maxLines = 1, overflow = TextOverflow.Ellipsis)
             Spacer(Modifier.height(2.dp))
             Text(
                 p.path + sizeLabel(p.sizeBytes),
-                style = Ca.type.caption, color = Ca.colors.textTertiary, maxLines = 1, overflow = TextOverflow.Ellipsis,
+                style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.outline, maxLines = 1, overflow = TextOverflow.Ellipsis,
             )
         }
         Spacer(Modifier.width(10.dp))
         when {
             downloading -> Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                CircularProgressIndicator(Modifier.size(18.dp), strokeWidth = 2.dp, color = Ca.colors.accent)
+                CircularProgressIndicator(Modifier.size(18.dp), strokeWidth = 2.dp, color = MaterialTheme.colorScheme.primary)
                 IconButtonCa(CaIcons.stop, stringResource(Res.string.cancel), onCancel, boxSize = if (isMobilePlatform) 40 else 32, iconSize = 18)
             }
-            p.installed -> StatusTag(CaIcons.check, stringResource(Res.string.sdk_installed), Ca.colors.run)
+            p.installed -> StatusTag(CaIcons.check, stringResource(Res.string.sdk_installed), Ide.colors.run)
             p.incomplete -> PillButton(stringResource(Res.string.sdk_resume), CaIcons.refresh, accent = true, enabled = p.installable, onClick = onInstall)
             else -> PillButton(stringResource(Res.string.install), CaIcons.download, accent = true, enabled = p.installable, onClick = onInstall)
         }
@@ -297,7 +299,7 @@ private fun PackageRow(p: UiSdkPackage, downloading: Boolean, onInstall: () -> U
 private fun StatusTag(icon: ImageVector, label: String, color: androidx.compose.ui.graphics.Color) {
     Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(5.dp)) {
         Icon(icon, null, Modifier.size(16.dp), tint = color)
-        Text(label, style = Ca.type.footnote, fontWeight = FontWeight.Medium, color = color)
+        Text(label, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Medium, color = color)
     }
 }
 
@@ -309,8 +311,8 @@ private fun StatusTag(icon: ImageVector, label: String, color: androidx.compose.
 private fun PillButton(label: String, icon: ImageVector?, accent: Boolean, enabled: Boolean = true, onClick: () -> Unit) {
     val interaction = remember { MutableInteractionSource() }
     val h = if (isMobilePlatform) 44.dp else 36.dp
-    val bg = if (accent && enabled) Ca.colors.accent else Ca.colors.surface3
-    val fg = when { !enabled -> Ca.colors.textTertiary; accent -> Ca.colors.textOnAccent; else -> Ca.colors.textPrimary }
+    val bg = if (accent && enabled) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surfaceContainerHighest
+    val fg = when { !enabled -> MaterialTheme.colorScheme.outline; accent -> MaterialTheme.colorScheme.onPrimary; else -> MaterialTheme.colorScheme.onSurface }
     Row(
         Modifier.height(h)
             .then(if (enabled) Modifier.pressScale(interaction) else Modifier)
@@ -321,7 +323,7 @@ private fun PillButton(label: String, icon: ImageVector?, accent: Boolean, enabl
         horizontalArrangement = Arrangement.spacedBy(6.dp),
     ) {
         if (icon != null) Icon(icon, null, Modifier.size(16.dp), tint = fg)
-        Text(label, style = Ca.type.footnote, fontWeight = FontWeight.SemiBold, color = fg)
+        Text(label, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold, color = fg)
     }
 }
 

@@ -1,5 +1,7 @@
 package dev.ide.ui.components
 
+import dev.ide.ui.theme.Ide
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -74,35 +76,35 @@ private fun ErrorCard(err: UiError, onDismiss: () -> Unit) {
             .widthIn(max = 520.dp)
             .fillMaxWidth()
             .padding(horizontal = 16.dp)
-            .background(Ca.colors.glassThick, shape)
-            .border(1.dp, Ca.colors.glassEdge, shape)
+            .background(Ide.colors.glassThick, shape)
+            .border(1.dp, Ide.colors.glassEdge, shape)
             .padding(20.dp),
     ) {
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
             Box(
-                Modifier.size(40.dp).background(Ca.colors.error.copy(alpha = 0.15f), CircleShape),
+                Modifier.size(40.dp).background(MaterialTheme.colorScheme.error.copy(alpha = 0.15f), CircleShape),
                 contentAlignment = Alignment.Center,
-            ) { Icon(CaIcons.error, null, Modifier.size(22.dp), tint = Ca.colors.error) }
+            ) { Icon(CaIcons.error, null, Modifier.size(22.dp), tint = MaterialTheme.colorScheme.error) }
             Column(Modifier.weight(1f)) {
-                Text(err.title, color = Ca.colors.textPrimary, style = Ca.type.subhead, fontWeight = FontWeight.SemiBold)
+                Text(err.title, color = MaterialTheme.colorScheme.onSurface, style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.SemiBold)
                 if (err.timeLabel.isNotEmpty()) {
-                    Text(err.timeLabel, color = Ca.colors.textTertiary, style = Ca.type.caption2)
+                    Text(err.timeLabel, color = MaterialTheme.colorScheme.outline, style = MaterialTheme.typography.labelSmall)
                 }
             }
         }
         Spacer(Modifier.height(12.dp))
         Text(
             err.message.ifBlank { stringResource(Res.string.errdlg_unexpected) },
-            color = Ca.colors.textSecondary,
-            style = Ca.type.subhead,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            style = MaterialTheme.typography.bodyLarge,
         )
 
         if (err.detail.isNotBlank()) {
             Spacer(Modifier.height(12.dp))
             Text(
                 stringResource(if (expanded) Res.string.errdlg_hide_details else Res.string.errdlg_show_details),
-                color = Ca.colors.accent,
-                style = Ca.type.caption,
+                color = MaterialTheme.colorScheme.primary,
+                style = MaterialTheme.typography.bodySmall,
                 modifier = Modifier
                     .clickable(remember { MutableInteractionSource() }, indication = null) { expanded = !expanded }
                     .padding(vertical = 4.dp),
@@ -114,16 +116,16 @@ private fun ErrorCard(err: UiError, onDismiss: () -> Unit) {
                         Modifier
                             .fillMaxWidth()
                             .heightIn(max = 240.dp)
-                            .background(Ca.colors.surface2, RoundedCornerShape(Ca.radius.md))
-                            .border(1.dp, Ca.colors.hairline, RoundedCornerShape(Ca.radius.md))
+                            .background(MaterialTheme.colorScheme.surfaceContainerHigh, RoundedCornerShape(Ca.radius.md))
+                            .border(1.dp, MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(Ca.radius.md))
                             .verticalScroll(rememberScrollState())
                             .padding(10.dp),
                     ) {
                         Box(Modifier.horizontalScroll(rememberScrollState())) {
                             Text(
                                 err.detail,
-                                color = Ca.colors.textSecondary,
-                                style = Ca.type.caption2.copy(fontFamily = FontFamily.Monospace),
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                style = MaterialTheme.typography.labelSmall.copy(fontFamily = FontFamily.Monospace),
                             )
                         }
                     }

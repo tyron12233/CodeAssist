@@ -1,5 +1,6 @@
 package dev.ide.ui.screens
 
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
@@ -10,7 +11,6 @@ import androidx.compose.ui.unit.Density
 import dev.ide.ui.StubBackend
 import dev.ide.ui.backend.IdeBackend
 import dev.ide.ui.backend.UiPluginInfo
-import dev.ide.ui.theme.Ca
 import dev.ide.ui.theme.CodeAssistTheme
 import org.jetbrains.skia.EncodedImageFormat
 import java.io.File
@@ -44,7 +44,7 @@ class PluginsScreenSnapshot {
     private fun snapshot(name: String, w: Int, h: Int, backend: IdeBackend) {
         val scene = ImageComposeScene(width = w, height = h, density = Density(2f)) {
             CodeAssistTheme(dark = true) {
-                Box(Modifier.fillMaxSize().background(Ca.colors.bg)) { PluginsScreen(backend, onBack = {}) }
+                Box(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)) { PluginsScreen(backend, onBack = {}) }
             }
         }
         try {

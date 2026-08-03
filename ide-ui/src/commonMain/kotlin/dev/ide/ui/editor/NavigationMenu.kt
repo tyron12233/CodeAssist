@@ -1,5 +1,7 @@
 package dev.ide.ui.editor
 
+import dev.ide.ui.theme.Ide
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -79,8 +81,8 @@ fun NavMenu(
 ) {
     Column(
         Modifier.width(width)
-            .background(Ca.colors.glassThick, RoundedCornerShape(Ca.radius.md))
-            .border(1.dp, Ca.colors.separator, RoundedCornerShape(Ca.radius.md)),
+            .background(Ide.colors.glassThick, RoundedCornerShape(Ca.radius.md))
+            .border(1.dp, MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(Ca.radius.md)),
     ) {
         when (state) {
             is NavMenuState.Menu -> {
@@ -118,7 +120,7 @@ fun NavMenu(
 @Composable
 private fun SectionHeader(text: String) {
     Text(
-        text.uppercase(), color = Ca.colors.textTertiary, style = Ca.type.caption2, fontWeight = FontWeight.SemiBold,
+        text.uppercase(), color = MaterialTheme.colorScheme.outline, style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.SemiBold,
         modifier = Modifier.padding(start = 12.dp, end = 12.dp, top = 8.dp, bottom = 2.dp),
     )
 }
@@ -126,7 +128,7 @@ private fun SectionHeader(text: String) {
 @Composable
 private fun NothingFound() {
     Text(
-        stringResource(Res.string.nav_none), color = Ca.colors.textTertiary, style = Ca.type.footnote,
+        stringResource(Res.string.nav_none), color = MaterialTheme.colorScheme.outline, style = MaterialTheme.typography.bodyMedium,
         modifier = Modifier.padding(horizontal = 14.dp, vertical = 12.dp),
     )
 }
@@ -137,14 +139,14 @@ private fun MenuRow(icon: ImageVector, label: String, onClick: () -> Unit) {
     val pressed by interaction.collectIsPressedAsState()
     Row(
         Modifier.fillMaxWidth().height(40.dp)
-            .background(if (pressed) Ca.colors.accentSoft else Color.Transparent)
+            .background(if (pressed) MaterialTheme.colorScheme.primaryContainer else Color.Transparent)
             .clickable(interaction, indication = null, onClick = onClick)
             .padding(horizontal = 12.dp),
         verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp),
     ) {
-        Icon(icon, null, Modifier.size(16.dp), tint = if (pressed) Ca.colors.accent else Ca.colors.textSecondary)
+        Icon(icon, null, Modifier.size(16.dp), tint = if (pressed) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant)
         Text(
-            label, color = Ca.colors.textPrimary, style = Ca.type.code,
+            label, color = MaterialTheme.colorScheme.onSurface, style = Ide.type.code,
             maxLines = 1, overflow = TextOverflow.Ellipsis,
         )
     }

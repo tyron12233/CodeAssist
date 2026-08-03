@@ -1,5 +1,7 @@
 package dev.ide.ui.screens
 
+import dev.ide.ui.theme.Ide
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -153,18 +155,18 @@ fun StorageScreen(backend: IdeBackend, onBack: () -> Unit) {
         }
     }
 
-    Box(Modifier.fillMaxSize().background(Ca.colors.bg)) {
+    Box(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)) {
         Column(Modifier.fillMaxSize()) {
             StorageHeader(onBack)
-            Box(Modifier.fillMaxWidth().height(1.dp).background(Ca.colors.separator))
+            Box(Modifier.fillMaxWidth().height(1.dp).background(MaterialTheme.colorScheme.outlineVariant))
 
             val r = report
             when {
                 loading && r == null -> Box(Modifier.fillMaxSize(), Alignment.Center) {
-                    CircularProgressIndicator(color = Ca.colors.accent, trackColor = Ca.colors.surface2)
+                    CircularProgressIndicator(color = MaterialTheme.colorScheme.primary, trackColor = MaterialTheme.colorScheme.surfaceContainerHigh)
                 }
                 r == null -> Box(Modifier.fillMaxSize(), Alignment.Center) {
-                    Text(stringResource(Res.string.storage_unavailable), color = Ca.colors.textTertiary, style = Ca.type.subhead)
+                    Text(stringResource(Res.string.storage_unavailable), color = MaterialTheme.colorScheme.outline, style = MaterialTheme.typography.bodyLarge)
                 }
                 else -> StorageContent(
                     report = r,
@@ -223,7 +225,7 @@ private fun StorageContent(
         item("bar") { UsageBar(shown) }
         item("legend") {
             Column(
-                Modifier.fillMaxWidth().background(Ca.colors.surface, RoundedCornerShape(Ca.radius.lg)).padding(4.dp),
+                Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.surface, RoundedCornerShape(Ca.radius.lg)).padding(4.dp),
                 verticalArrangement = Arrangement.spacedBy(2.dp),
             ) {
                 shown.forEach { c ->
@@ -242,7 +244,7 @@ private fun StorageContent(
             item("projectsHeader") {
                 Text(
                     stringResource(Res.string.storage_projects_header),
-                    color = Ca.colors.textSecondary, style = Ca.type.footnote, fontWeight = FontWeight.SemiBold,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold,
                     modifier = Modifier.padding(start = 4.dp, top = 4.dp),
                 )
             }
@@ -256,13 +258,13 @@ private fun StorageContent(
 @Composable
 private fun TotalCard(report: UiStorageReport) {
     Column(
-        Modifier.fillMaxWidth().background(Ca.colors.surface, RoundedCornerShape(Ca.radius.lg)).padding(18.dp),
+        Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.surface, RoundedCornerShape(Ca.radius.lg)).padding(18.dp),
         verticalArrangement = Arrangement.spacedBy(4.dp),
     ) {
-        Text(stringResource(Res.string.storage_total_used), color = Ca.colors.textTertiary, style = Ca.type.caption, fontWeight = FontWeight.Medium)
-        Text(formatBytes(report.totalBytes), color = Ca.colors.textPrimary, style = Ca.type.title1, fontWeight = FontWeight.Bold)
+        Text(stringResource(Res.string.storage_total_used), color = MaterialTheme.colorScheme.outline, style = MaterialTheme.typography.bodySmall, fontWeight = FontWeight.Medium)
+        Text(formatBytes(report.totalBytes), color = MaterialTheme.colorScheme.onSurface, style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold)
         Text(
-            report.storageRootPath, color = Ca.colors.textTertiary, style = Ca.type.caption2,
+            report.storageRootPath, color = MaterialTheme.colorScheme.outline, style = MaterialTheme.typography.labelSmall,
             fontFamily = FontFamily.Monospace, maxLines = 1, overflow = TextOverflow.Ellipsis,
         )
     }
@@ -272,7 +274,7 @@ private fun TotalCard(report: UiStorageReport) {
 @Composable
 private fun UsageBar(categories: List<UiStorageCategory>) {
     val shape = RoundedCornerShape(Ca.radius.pill)
-    Box(Modifier.fillMaxWidth().height(16.dp).clip(shape).background(Ca.colors.surface3)) {
+    Box(Modifier.fillMaxWidth().height(16.dp).clip(shape).background(MaterialTheme.colorScheme.surfaceContainerHighest)) {
         if (categories.isNotEmpty()) {
             Row(Modifier.fillMaxSize()) {
                 categories.forEach { c ->
@@ -291,10 +293,10 @@ private fun CategoryRow(c: UiStorageCategory, busy: Boolean, onClear: (UiStorage
     ) {
         Box(Modifier.size(11.dp).clip(CircleShape).background(storageColor(c.colorId)))
         Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(1.dp)) {
-            Text(categoryTitle(c.id), color = Ca.colors.textPrimary, style = Ca.type.subhead, fontWeight = FontWeight.Medium)
-            Text(categoryDescription(c.id), color = Ca.colors.textTertiary, style = Ca.type.caption2, maxLines = 2, overflow = TextOverflow.Ellipsis)
+            Text(categoryTitle(c.id), color = MaterialTheme.colorScheme.onSurface, style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.Medium)
+            Text(categoryDescription(c.id), color = MaterialTheme.colorScheme.outline, style = MaterialTheme.typography.labelSmall, maxLines = 2, overflow = TextOverflow.Ellipsis)
         }
-        Text(formatBytes(c.bytes), color = Ca.colors.textSecondary, style = Ca.type.footnote, fontWeight = FontWeight.Medium)
+        Text(formatBytes(c.bytes), color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Medium)
         if (c.clearable) {
             ClearPill(stringResource(Res.string.storage_clear), destructive = c.destructive, enabled = !busy) { onClear(c) }
         }
@@ -304,17 +306,17 @@ private fun CategoryRow(c: UiStorageCategory, busy: Boolean, onClear: (UiStorage
 @Composable
 private fun ProjectRow(p: UiStorageProject, isOpen: Boolean, busy: Boolean, onDelete: () -> Unit) {
     Row(
-        Modifier.fillMaxWidth().background(Ca.colors.surface, RoundedCornerShape(Ca.radius.md)).padding(horizontal = 14.dp, vertical = 12.dp),
+        Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.surface, RoundedCornerShape(Ca.radius.md)).padding(horizontal = 14.dp, vertical = 12.dp),
         verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp),
     ) {
-        Icon(if (p.isAndroid) CaIcons.pkg else CaIcons.folder, null, Modifier.size(20.dp), tint = Ca.colors.accent)
+        Icon(if (p.isAndroid) CaIcons.pkg else CaIcons.folder, null, Modifier.size(20.dp), tint = MaterialTheme.colorScheme.primary)
         Column(Modifier.weight(1f)) {
-            Text(p.name, color = Ca.colors.textPrimary, style = Ca.type.subhead, fontWeight = FontWeight.Medium, maxLines = 1, overflow = TextOverflow.Ellipsis)
-            Text(formatBytes(p.bytes), color = Ca.colors.textTertiary, style = Ca.type.caption2)
+            Text(p.name, color = MaterialTheme.colorScheme.onSurface, style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.Medium, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            Text(formatBytes(p.bytes), color = MaterialTheme.colorScheme.outline, style = MaterialTheme.typography.labelSmall)
         }
         if (isOpen) {
-            Box(Modifier.background(Ca.colors.accentSoft, RoundedCornerShape(Ca.radius.pill)).padding(horizontal = 10.dp, vertical = 4.dp)) {
-                Text(stringResource(Res.string.storage_open_badge), color = Ca.colors.accent, style = Ca.type.caption2, fontWeight = FontWeight.SemiBold)
+            Box(Modifier.background(MaterialTheme.colorScheme.primaryContainer, RoundedCornerShape(Ca.radius.pill)).padding(horizontal = 10.dp, vertical = 4.dp)) {
+                Text(stringResource(Res.string.storage_open_badge), color = MaterialTheme.colorScheme.primary, style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.SemiBold)
             }
         } else {
             ClearPill(stringResource(Res.string.delete), destructive = true, enabled = !busy, onClick = onDelete)
@@ -327,8 +329,8 @@ private fun ProjectRow(p: UiStorageProject, isOpen: Boolean, busy: Boolean, onDe
 @Composable
 private fun ClearPill(text: String, destructive: Boolean, enabled: Boolean, onClick: () -> Unit) {
     val interaction = remember { MutableInteractionSource() }
-    val fg = if (destructive) Ca.colors.error else Ca.colors.accent
-    val bg = if (destructive) Ca.colors.error.copy(alpha = 0.12f) else Ca.colors.accentSoft
+    val fg = if (destructive) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary
+    val bg = if (destructive) MaterialTheme.colorScheme.error.copy(alpha = 0.12f) else MaterialTheme.colorScheme.primaryContainer
     Box(
         Modifier
             .pressScale(interaction)
@@ -337,7 +339,7 @@ private fun ClearPill(text: String, destructive: Boolean, enabled: Boolean, onCl
             .padding(horizontal = 14.dp, vertical = 7.dp),
         contentAlignment = Alignment.Center,
     ) {
-        Text(text, color = if (enabled) fg else Ca.colors.textTertiary, style = Ca.type.caption, fontWeight = FontWeight.SemiBold)
+        Text(text, color = if (enabled) fg else MaterialTheme.colorScheme.outline, style = MaterialTheme.typography.bodySmall, fontWeight = FontWeight.SemiBold)
     }
 }
 
@@ -347,13 +349,13 @@ private fun WideButton(text: String, enabled: Boolean, onClick: () -> Unit) {
     Box(
         Modifier.fillMaxWidth()
             .pressScale(interaction)
-            .background(Ca.colors.surface2, RoundedCornerShape(Ca.radius.control))
-            .border(1.dp, Ca.colors.hairline, RoundedCornerShape(Ca.radius.control))
+            .background(MaterialTheme.colorScheme.surfaceContainerHigh, RoundedCornerShape(Ca.radius.control))
+            .border(1.dp, MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(Ca.radius.control))
             .clickable(interaction, indication = null, enabled = enabled, onClick = onClick)
             .padding(vertical = 12.dp),
         contentAlignment = Alignment.Center,
     ) {
-        Text(text, color = if (enabled) Ca.colors.textPrimary else Ca.colors.textTertiary, style = Ca.type.subhead, fontWeight = FontWeight.SemiBold)
+        Text(text, color = if (enabled) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.outline, style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.SemiBold)
     }
 }
 
@@ -365,8 +367,8 @@ private fun StorageHeader(onBack: () -> Unit) {
             verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp),
         ) {
             IconButtonCa(CaIcons.chevronLeft, stringResource(Res.string.back), onBack)
-            Icon(CaIcons.layers, null, Modifier.size(20.dp), tint = Ca.colors.accent)
-            Text(stringResource(Res.string.settings_storage), color = Ca.colors.textPrimary, style = Ca.type.headline, fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f))
+            Icon(CaIcons.layers, null, Modifier.size(20.dp), tint = MaterialTheme.colorScheme.primary)
+            Text(stringResource(Res.string.settings_storage), color = MaterialTheme.colorScheme.onSurface, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f))
         }
     }
 }
@@ -383,13 +385,13 @@ private fun ConfirmDialog(
     CenteredDialog(visible = visible, onDismiss = onCancel) {
         Column(
             Modifier.widthIn(max = 380.dp).padding(horizontal = 24.dp)
-                .background(Ca.colors.surface, RoundedCornerShape(Ca.radius.lg))
-                .border(1.dp, Ca.colors.separator, RoundedCornerShape(Ca.radius.lg))
+                .background(MaterialTheme.colorScheme.surface, RoundedCornerShape(Ca.radius.lg))
+                .border(1.dp, MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(Ca.radius.lg))
                 .padding(20.dp),
             verticalArrangement = Arrangement.spacedBy(8.dp),
         ) {
-            Text(title, color = Ca.colors.textPrimary, style = Ca.type.headline, fontWeight = FontWeight.SemiBold)
-            Text(body, color = Ca.colors.textSecondary, style = Ca.type.footnote)
+            Text(title, color = MaterialTheme.colorScheme.onSurface, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
+            Text(body, color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodyMedium)
             Spacer(Modifier.size(8.dp))
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                 DialogButton(stringResource(Res.string.cancel), Modifier.weight(1f), destructive = false, onClick = onCancel)
@@ -406,14 +408,14 @@ private fun DialogButton(text: String, modifier: Modifier, destructive: Boolean,
         modifier
             .pressScale(interaction)
             .then(
-                if (destructive) Modifier.background(Ca.colors.error, RoundedCornerShape(Ca.radius.control))
-                else Modifier.background(Ca.colors.surface2, RoundedCornerShape(Ca.radius.control)).border(1.dp, Ca.colors.hairline, RoundedCornerShape(Ca.radius.control)),
+                if (destructive) Modifier.background(MaterialTheme.colorScheme.error, RoundedCornerShape(Ca.radius.control))
+                else Modifier.background(MaterialTheme.colorScheme.surfaceContainerHigh, RoundedCornerShape(Ca.radius.control)).border(1.dp, MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(Ca.radius.control)),
             )
             .clickable(interaction, indication = null, onClick = onClick)
             .padding(vertical = 10.dp),
         contentAlignment = Alignment.Center,
     ) {
-        Text(text, color = if (destructive) Ca.colors.textOnAccent else Ca.colors.textSecondary, style = Ca.type.subhead, fontWeight = FontWeight.SemiBold)
+        Text(text, color = if (destructive) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.SemiBold)
     }
 }
 
@@ -423,11 +425,11 @@ private fun StorageToast(toast: String?, modifier: Modifier, onDone: () -> Unit)
     LaunchedEffect(toast) { kotlinx.coroutines.delay(2200); onDone() }
     Box(modifier.fillMaxWidth().padding(bottom = 28.dp), contentAlignment = Alignment.Center) {
         Row(
-            Modifier.background(Ca.colors.glassThick, RoundedCornerShape(Ca.radius.pill)).padding(horizontal = 16.dp, vertical = 11.dp),
+            Modifier.background(Ide.colors.glassThick, RoundedCornerShape(Ca.radius.pill)).padding(horizontal = 16.dp, vertical = 11.dp),
             verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp),
         ) {
-            Icon(CaIcons.check, null, Modifier.size(16.dp), tint = Ca.colors.run)
-            Text(toast, color = Ca.colors.textPrimary, style = Ca.type.footnote, fontWeight = FontWeight.Medium)
+            Icon(CaIcons.check, null, Modifier.size(16.dp), tint = Ide.colors.run)
+            Text(toast, color = MaterialTheme.colorScheme.onSurface, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Medium)
         }
     }
 }
@@ -436,14 +438,14 @@ private fun StorageToast(toast: String?, modifier: Modifier, onDone: () -> Unit)
 
 @Composable
 private fun storageColor(colorId: String): Color = when (colorId) {
-    "accent" -> Ca.colors.accent
-    "accentStrong" -> Ca.colors.accentStrong
-    "info" -> Ca.colors.info
-    "run" -> Ca.colors.run
-    "success" -> Ca.colors.success
-    "warning" -> Ca.colors.warning
-    "gitModified" -> Ca.colors.gitModified
-    else -> Ca.colors.textTertiary
+    "accent" -> MaterialTheme.colorScheme.primary
+    "accentStrong" -> MaterialTheme.colorScheme.primary
+    "info" -> Ide.colors.info
+    "run" -> Ide.colors.run
+    "success" -> Ide.colors.success
+    "warning" -> Ide.colors.warning
+    "gitModified" -> Ide.colors.gitModified
+    else -> MaterialTheme.colorScheme.outline
 }
 
 @Composable

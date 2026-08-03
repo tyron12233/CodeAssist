@@ -1,5 +1,6 @@
 package dev.ide.ui.editor
 
+import dev.ide.ui.theme.Ide
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
@@ -13,7 +14,6 @@ import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.dp
 import dev.ide.ui.editor.core.EditorSession
-import dev.ide.ui.theme.Ca
 import dev.ide.ui.theme.CodeAssistTheme
 import org.jetbrains.skia.EncodedImageFormat
 import java.io.File
@@ -41,17 +41,17 @@ class WordWrapSnapshot {
     @Test
     fun renderWrapOnVsOff() {
         snapshot("wrap-off.png", 760, 520) {
-            Box(Modifier.width(360.dp).fillMaxSize().background(Ca.colors.editorBg)) {
+            Box(Modifier.width(360.dp).fillMaxSize().background(Ide.colors.editorBg)) {
                 CodeEditor("Sample.kt", remember { session() }, PreviewBackend, Modifier.fillMaxSize(), wordWrap = false)
             }
         }
         snapshot("wrap-on.png", 760, 520) {
-            Box(Modifier.width(360.dp).fillMaxSize().background(Ca.colors.editorBg)) {
+            Box(Modifier.width(360.dp).fillMaxSize().background(Ide.colors.editorBg)) {
                 CodeEditor("Sample.kt", remember { session() }, PreviewBackend, Modifier.fillMaxSize(), wordWrap = true, wrapIndent = false)
             }
         }
         snapshot("wrap-indent.png", 760, 520) {
-            Box(Modifier.width(360.dp).fillMaxSize().background(Ca.colors.editorBg)) {
+            Box(Modifier.width(360.dp).fillMaxSize().background(Ide.colors.editorBg)) {
                 CodeEditor("Sample.kt", remember { session() }, PreviewBackend, Modifier.fillMaxSize(), wordWrap = true, wrapIndent = true)
             }
         }

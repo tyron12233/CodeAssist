@@ -1,5 +1,7 @@
 package dev.ide.ui.screens
 
+import dev.ide.ui.theme.Ide
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
@@ -106,35 +108,35 @@ fun SearchScreen(
         searching = false
     }
 
-    Column(modifier.fillMaxSize().background(Ca.colors.bg)) {
+    Column(modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)) {
         // Title + search field
         Column(Modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = 12.dp)) {
-            Text(stringResource(Res.string.search), color = Ca.colors.textPrimary, style = Ca.type.headline, fontWeight = FontWeight.SemiBold)
+            Text(stringResource(Res.string.search), color = MaterialTheme.colorScheme.onSurface, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
             Row(
                 Modifier.fillMaxWidth().padding(top = 10.dp)
-                    .background(Ca.colors.surface2, RoundedCornerShape(Ca.radius.control))
-                    .border(1.dp, Ca.colors.hairline, RoundedCornerShape(Ca.radius.control))
+                    .background(MaterialTheme.colorScheme.surfaceContainerHigh, RoundedCornerShape(Ca.radius.control))
+                    .border(1.dp, MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(Ca.radius.control))
                     .padding(horizontal = 12.dp, vertical = 10.dp),
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(10.dp),
             ) {
-                Icon(CaIcons.search, null, Modifier.size(18.dp), tint = Ca.colors.accent)
+                Icon(CaIcons.search, null, Modifier.size(18.dp), tint = MaterialTheme.colorScheme.primary)
                 Box(Modifier.weight(1f)) {
                     if (query.isEmpty()) {
                         val hint = if (tab == SearchTab.Text) stringResource(Res.string.search_find_in_files_hint)
                             else stringResource(Res.string.search_hint, stringResource(tab.labelRes).lowercase())
-                        Text(hint, color = Ca.colors.textTertiary, style = Ca.type.subhead)
+                        Text(hint, color = MaterialTheme.colorScheme.outline, style = MaterialTheme.typography.bodyLarge)
                     }
                     BasicTextField(
                         value = query,
                         onValueChange = { query = it },
                         singleLine = true,
-                        textStyle = Ca.type.subhead.copy(color = Ca.colors.textPrimary),
-                        cursorBrush = SolidColor(Ca.colors.accent),
+                        textStyle = MaterialTheme.typography.bodyLarge.copy(color = MaterialTheme.colorScheme.onSurface),
+                        cursorBrush = SolidColor(MaterialTheme.colorScheme.primary),
                         modifier = Modifier.fillMaxWidth(),
                     )
                 }
-                if (searching) CircularProgressIndicator(Modifier.size(14.dp), color = Ca.colors.textTertiary, strokeWidth = 2.dp)
+                if (searching) CircularProgressIndicator(Modifier.size(14.dp), color = MaterialTheme.colorScheme.outline, strokeWidth = 2.dp)
             }
         }
 
@@ -158,7 +160,7 @@ fun SearchScreen(
             }
         }
 
-        Box(Modifier.fillMaxWidth().height(1.dp).background(Ca.colors.separator).padding(top = 8.dp))
+        Box(Modifier.fillMaxWidth().height(1.dp).background(MaterialTheme.colorScheme.outlineVariant).padding(top = 8.dp))
 
         // Results
         Box(Modifier.weight(1f).fillMaxWidth()) {
@@ -198,12 +200,12 @@ private fun SymbolList(
             ) {
                 KindBadge(hit.kind)
                 Column(Modifier.weight(1f)) {
-                    Text(hit.name, color = Ca.colors.textPrimary, style = Ca.type.footnote.copy(fontFamily = codeFont),
+                    Text(hit.name, color = MaterialTheme.colorScheme.onSurface, style = MaterialTheme.typography.bodyMedium.copy(fontFamily = codeFont),
                         fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                    if (hit.detail.isNotBlank()) Text(hit.detail, color = Ca.colors.textTertiary, style = Ca.type.caption2,
+                    if (hit.detail.isNotBlank()) Text(hit.detail, color = MaterialTheme.colorScheme.outline, style = MaterialTheme.typography.labelSmall,
                         maxLines = 1, overflow = TextOverflow.Ellipsis)
                 }
-                if (canNav) Icon(CaIcons.arrowRight, null, Modifier.size(14.dp), tint = Ca.colors.textTertiary)
+                if (canNav) Icon(CaIcons.arrowRight, null, Modifier.size(14.dp), tint = MaterialTheme.colorScheme.outline)
             }
         }
     }
@@ -212,7 +214,7 @@ private fun SymbolList(
 @Composable
 private fun TextMatchList(matches: List<UiTextMatch>, codeFont: FontFamily, onOpenAt: (String, Int) -> Unit, searching: Boolean) {
     if (matches.isEmpty()) { if (!searching) Hint(stringResource(Res.string.search_no_text_matches)); return }
-    val accent = Ca.colors.accent
+    val accent = MaterialTheme.colorScheme.primary
     val grouped = remember(matches) { matches.groupBy { it.filePath } }
     LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(vertical = 6.dp)) {
         grouped.forEach { (path, hits) ->
@@ -221,10 +223,10 @@ private fun TextMatchList(matches: List<UiTextMatch>, codeFont: FontFamily, onOp
                     Modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = 6.dp),
                     verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp),
                 ) {
-                    Icon(CaIcons.docText, null, Modifier.size(15.dp), tint = Ca.colors.textSecondary)
-                    Text(hits.first().fileName, color = Ca.colors.textSecondary, style = Ca.type.caption,
+                    Icon(CaIcons.docText, null, Modifier.size(15.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Text(hits.first().fileName, color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodySmall,
                         fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
-                    Chip("${hits.size}", fill = Ca.colors.surface2, textColor = Ca.colors.textTertiary)
+                    Chip("${hits.size}", fill = MaterialTheme.colorScheme.surfaceContainerHigh, textColor = MaterialTheme.colorScheme.outline)
                 }
             }
             items(hits, key = { "${path}:${it.line}:${it.matchStart}" }) { m ->
@@ -233,10 +235,10 @@ private fun TextMatchList(matches: List<UiTextMatch>, codeFont: FontFamily, onOp
                         .padding(start = 22.dp, end = 14.dp, top = 4.dp, bottom = 4.dp),
                     verticalAlignment = Alignment.Top, horizontalArrangement = Arrangement.spacedBy(8.dp),
                 ) {
-                    Text("${m.line}", color = Ca.colors.textTertiary, style = Ca.type.caption2.copy(fontFamily = codeFont),
+                    Text("${m.line}", color = MaterialTheme.colorScheme.outline, style = MaterialTheme.typography.labelSmall.copy(fontFamily = codeFont),
                         modifier = Modifier.width(34.dp))
-                    Text(highlight(m, accent), style = Ca.type.caption.copy(fontFamily = codeFont),
-                        color = Ca.colors.textSecondary, maxLines = 2, overflow = TextOverflow.Ellipsis)
+                    Text(highlight(m, accent), style = MaterialTheme.typography.bodySmall.copy(fontFamily = codeFont),
+                        color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 2, overflow = TextOverflow.Ellipsis)
                 }
             }
         }
@@ -260,29 +262,29 @@ private fun highlight(m: UiTextMatch, accent: Color) = buildAnnotatedString {
 
 @Composable
 private fun TabPill(tab: SearchTab, active: Boolean, onClick: () -> Unit) {
-    val bg by animateColorAsState(if (active) Ca.colors.accentSoft else Ca.colors.surface2, tween(Motion.FAST), label = "tabBg")
+    val bg by animateColorAsState(if (active) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surfaceContainerHigh, tween(Motion.FAST), label = "tabBg")
     Row(
         Modifier.background(bg, RoundedCornerShape(Ca.radius.pill))
             .clickable(remember { MutableInteractionSource() }, null, onClick = onClick)
             .padding(horizontal = 12.dp, vertical = 7.dp),
         verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp),
     ) {
-        Icon(tab.icon, null, Modifier.size(14.dp), tint = if (active) Ca.colors.accent else Ca.colors.textSecondary)
-        Text(stringResource(tab.labelRes), color = if (active) Ca.colors.accent else Ca.colors.textSecondary, style = Ca.type.caption,
+        Icon(tab.icon, null, Modifier.size(14.dp), tint = if (active) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant)
+        Text(stringResource(tab.labelRes), color = if (active) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodySmall,
             fontWeight = if (active) FontWeight.SemiBold else FontWeight.Medium)
     }
 }
 
 @Composable
 private fun OptionToggle(label: String, description: String, on: Boolean, onToggle: (Boolean) -> Unit) {
-    val bg by animateColorAsState(if (on) Ca.colors.accent else Ca.colors.surface2, tween(Motion.FAST), label = "optBg")
+    val bg by animateColorAsState(if (on) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surfaceContainerHigh, tween(Motion.FAST), label = "optBg")
     Box(
         Modifier.size(width = 38.dp, height = 28.dp).background(bg, RoundedCornerShape(Ca.radius.sm))
             .clickable(remember { MutableInteractionSource() }, null) { onToggle(!on) },
         contentAlignment = Alignment.Center,
     ) {
-        Text(label, color = if (on) Ca.colors.textOnAccent else Ca.colors.textSecondary,
-            style = Ca.type.caption2, fontWeight = FontWeight.Bold)
+        Text(label, color = if (on) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurfaceVariant,
+            style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold)
     }
 }
 
@@ -290,19 +292,19 @@ private fun OptionToggle(label: String, description: String, on: Boolean, onTogg
 private fun KindBadge(kind: String) {
     val letter = kind.firstOrNull()?.uppercase() ?: "?"
     val color = when (kind.lowercase()) {
-        "class", "interface", "enum", "record", "annotation" -> Ca.colors.accent
-        "method", "constructor" -> Ca.colors.run
-        "field", "enumconstant" -> Ca.colors.warning
-        else -> Ca.colors.info
+        "class", "interface", "enum", "record", "annotation" -> MaterialTheme.colorScheme.primary
+        "method", "constructor" -> Ide.colors.run
+        "field", "enumconstant" -> Ide.colors.warning
+        else -> Ide.colors.info
     }
     Box(Modifier.size(20.dp).background(color.copy(alpha = 0.18f), RoundedCornerShape(Ca.radius.xs)), contentAlignment = Alignment.Center) {
-        Text(letter, color = color, style = Ca.type.caption2, fontWeight = FontWeight.Bold)
+        Text(letter, color = color, style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold)
     }
 }
 
 @Composable
 private fun Hint(text: String) {
     Box(Modifier.fillMaxSize().padding(24.dp), contentAlignment = Alignment.Center) {
-        Text(text, color = Ca.colors.textTertiary, style = Ca.type.footnote)
+        Text(text, color = MaterialTheme.colorScheme.outline, style = MaterialTheme.typography.bodyMedium)
     }
 }

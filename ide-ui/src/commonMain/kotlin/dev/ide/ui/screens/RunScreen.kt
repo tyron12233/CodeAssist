@@ -1,5 +1,7 @@
 package dev.ide.ui.screens
 
+import dev.ide.ui.theme.Ide
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -97,7 +99,7 @@ fun RunScreen(
     val console by backend.build.runConsole.collectAsState()
     val build by backend.build.buildState.collectAsState()
     val rc = console
-    Column(Modifier.fillMaxSize().background(Ca.colors.bg)) {
+    Column(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)) {
         RunTopBar(
             console = rc,
             buildFailed = build.status == RunStatus.Failed,
@@ -107,7 +109,7 @@ fun RunScreen(
         )
         if (rc == null) {
             Box(Modifier.fillMaxSize(), Alignment.Center) {
-                Text(stringResource(Res.string.run_no_active_run), color = Ca.colors.textTertiary, style = Ca.type.footnote)
+                Text(stringResource(Res.string.run_no_active_run), color = MaterialTheme.colorScheme.outline, style = MaterialTheme.typography.bodyMedium)
             }
             return@Column
         }
@@ -136,16 +138,16 @@ private fun RunTopBar(console: RunConsoleUi?, buildFailed: Boolean, onBack: () -
         horizontalArrangement = Arrangement.spacedBy(8.dp),
     ) {
         IconButtonCa(CaIcons.chevronLeft, stringResource(Res.string.run_back), onBack, boxSize = iconBox)
-        Icon(CaIcons.terminal, null, Modifier.size(18.dp), tint = Ca.colors.textSecondary)
+        Icon(CaIcons.terminal, null, Modifier.size(18.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
         val runLabel = stringResource(Res.string.run)
         Column(Modifier.weight(1f)) {
             Text(
                 console?.moduleName?.ifEmpty { runLabel } ?: runLabel,
-                style = Ca.type.subhead, fontWeight = FontWeight.SemiBold, color = Ca.colors.textPrimary,
+                style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.onSurface,
                 maxLines = 1, overflow = TextOverflow.Ellipsis,
             )
             console?.mainClass?.takeIf { it.isNotEmpty() }?.let {
-                Text(it, style = Ca.type.caption, color = Ca.colors.textTertiary, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.outline, maxLines = 1, overflow = TextOverflow.Ellipsis)
             }
         }
         if (console != null) RunStatusPill(console, buildFailed)
@@ -153,23 +155,23 @@ private fun RunTopBar(console: RunConsoleUi?, buildFailed: Boolean, onBack: () -
             IconButtonCa(
                 CaIcons.copy, stringResource(Res.string.copy),
                 onClick = { clipboard.setText(AnnotatedString(console.transcript.joinToString("") { it.text })) },
-                boxSize = iconBox, iconSize = 16, tint = Ca.colors.textSecondary,
+                boxSize = iconBox, iconSize = 16, tint = MaterialTheme.colorScheme.onSurfaceVariant,
             )
         }
-        if (running) IconButtonCa(CaIcons.stop, stringResource(Res.string.stop), onStop, boxSize = iconBox, iconSize = 16, tint = Ca.colors.error)
-        else IconButtonCa(CaIcons.play, stringResource(Res.string.run_run_again), onRerun, boxSize = iconBox, iconSize = 16, tint = Ca.colors.run)
+        if (running) IconButtonCa(CaIcons.stop, stringResource(Res.string.stop), onStop, boxSize = iconBox, iconSize = 16, tint = MaterialTheme.colorScheme.error)
+        else IconButtonCa(CaIcons.play, stringResource(Res.string.run_run_again), onRerun, boxSize = iconBox, iconSize = 16, tint = Ide.colors.run)
     }
 }
 
 @Composable
 private fun RunStatusPill(console: RunConsoleUi, buildFailed: Boolean) {
     val (text, color) = when (console.phase) {
-        RunPhase.Building -> stringResource(Res.string.run_building) to Ca.colors.accent
-        RunPhase.Running -> stringResource(Res.string.run_running) to Ca.colors.run
+        RunPhase.Building -> stringResource(Res.string.run_building) to MaterialTheme.colorScheme.primary
+        RunPhase.Running -> stringResource(Res.string.run_running) to Ide.colors.run
         RunPhase.Finished -> when (val c = console.exitCode) {
-            0 -> stringResource(Res.string.run_exit_code, 0) to Ca.colors.run
-            null -> if (buildFailed) stringResource(Res.string.run_failed) to Ca.colors.error else stringResource(Res.string.run_stopped) to Ca.colors.textSecondary
-            else -> stringResource(Res.string.run_exit_code, c) to Ca.colors.error
+            0 -> stringResource(Res.string.run_exit_code, 0) to Ide.colors.run
+            null -> if (buildFailed) stringResource(Res.string.run_failed) to MaterialTheme.colorScheme.error else stringResource(Res.string.run_stopped) to MaterialTheme.colorScheme.onSurfaceVariant
+            else -> stringResource(Res.string.run_exit_code, c) to MaterialTheme.colorScheme.error
         }
     }
     Chip(text, fill = color.copy(alpha = 0.16f), textColor = color)
@@ -188,11 +190,11 @@ private fun BuildPhaseStrip(console: RunConsoleUi, build: BuildState, onOpen: (B
     Column(Modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = 4.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
         if (building) {
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                CircularProgressIndicator(Modifier.size(14.dp), color = Ca.colors.accent, strokeWidth = 2.dp)
+                CircularProgressIndicator(Modifier.size(14.dp), color = MaterialTheme.colorScheme.primary, strokeWidth = 2.dp)
                 val done = build.steps.count { it.status.name == "Done" || it.status.name == "UpToDate" }
                 Text(
                     stringResource(Res.string.run_building_module, console.moduleName) + if (build.steps.isNotEmpty()) "  $done/${build.steps.size}" else "",
-                    color = Ca.colors.textSecondary, style = Ca.type.footnote,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodyMedium,
                 )
             }
         }
@@ -217,10 +219,10 @@ private fun ProblemRow(d: BuildDiagnosticUi, onOpen: (BuildDiagnosticUi) -> Unit
         verticalAlignment = Alignment.Top,
         horizontalArrangement = Arrangement.spacedBy(8.dp),
     ) {
-        val color = if (d.severity == UiSeverity.Error) Ca.colors.error else if (d.severity == UiSeverity.Warning) Ca.colors.warning else Ca.colors.accent
+        val color = if (d.severity == UiSeverity.Error) MaterialTheme.colorScheme.error else if (d.severity == UiSeverity.Warning) Ide.colors.warning else MaterialTheme.colorScheme.primary
         Icon(if (d.severity == UiSeverity.Error) CaIcons.error else if (d.severity == UiSeverity.Warning) CaIcons.warning else CaIcons.info, null, Modifier.size(14.dp).padding(top = 1.dp), tint = color)
-        Text(d.message, color = Ca.colors.textSecondary, style = Ca.type.footnote, modifier = Modifier.weight(1f))
-        if (d.file != null) Text(d.file!!.substringAfterLast('/').substringAfterLast('\\') + (if (d.line > 0) ":${d.line}" else ""), color = Ca.colors.textTertiary, style = Ca.type.codeSmall)
+        Text(d.message, color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f))
+        if (d.file != null) Text(d.file!!.substringAfterLast('/').substringAfterLast('\\') + (if (d.line > 0) ":${d.line}" else ""), color = MaterialTheme.colorScheme.outline, style = Ide.type.codeSmall)
     }
 }
 
@@ -233,9 +235,9 @@ private fun Transcript(console: RunConsoleUi, modifier: Modifier) {
     // Theme-aware transcript colors so they read on BOTH the dark and the light [consoleBg]. (OUTPUT used to be
     // a hardcoded near-white — invisible on the light-theme console.) Keyed into the remember so the transcript
     // re-styles on a theme switch.
-    val outputColor = Ca.colors.textPrimary
-    val inputColor = Ca.colors.accent
-    val systemColor = Ca.colors.textTertiary
+    val outputColor = MaterialTheme.colorScheme.onSurface
+    val inputColor = MaterialTheme.colorScheme.primary
+    val systemColor = MaterialTheme.colorScheme.outline
     val text = remember(total, console.transcript.size, outputColor, inputColor, systemColor) {
         buildAnnotatedString {
             for (chunk in console.transcript) {
@@ -250,18 +252,18 @@ private fun Transcript(console: RunConsoleUi, modifier: Modifier) {
     }
     Box(
         modifier.fillMaxWidth()
-            .background(Ca.colors.consoleBg, RoundedCornerShape(Ca.radius.md))
-            .border(1.dp, Ca.colors.separator, RoundedCornerShape(Ca.radius.md))
+            .background(Ide.colors.consoleBg, RoundedCornerShape(Ca.radius.md))
+            .border(1.dp, MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(Ca.radius.md))
             .verticalScroll(scroll)
             .padding(12.dp),
     ) {
         if (console.transcript.isEmpty()) {
             Text(
                 if (console.phase == RunPhase.Building) stringResource(Res.string.run_building) else stringResource(Res.string.run_no_output),
-                color = Ca.colors.textTertiary, style = Ca.type.codeSmall,
+                color = MaterialTheme.colorScheme.outline, style = Ide.type.codeSmall,
             )
         } else {
-            SelectionContainer { Text(text, style = Ca.type.codeSmall) }
+            SelectionContainer { Text(text, style = Ide.type.codeSmall) }
         }
     }
 }
@@ -278,20 +280,20 @@ fun RunningIndicator(backend: IdeBackend, onClick: () -> Unit, modifier: Modifie
     if (console == null || console.phase == RunPhase.Finished) return
     Row(
         modifier
-            .background(Ca.colors.glassThick, RoundedCornerShape(Ca.radius.pill))
-            .border(1.dp, Ca.colors.separator, RoundedCornerShape(Ca.radius.pill))
+            .background(Ide.colors.glassThick, RoundedCornerShape(Ca.radius.pill))
+            .border(1.dp, MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(Ca.radius.pill))
             .clickable(onClick = onClick)
             .padding(horizontal = 12.dp, vertical = 8.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(8.dp),
     ) {
-        CircularProgressIndicator(Modifier.size(14.dp), color = Ca.colors.accent, strokeWidth = 2.dp)
+        CircularProgressIndicator(Modifier.size(14.dp), color = MaterialTheme.colorScheme.primary, strokeWidth = 2.dp)
         Text(
             if (console.phase == RunPhase.Building) stringResource(Res.string.run_building_module, console.moduleName)
             else stringResource(Res.string.run_running_module, console.moduleName),
-            color = Ca.colors.textPrimary, style = Ca.type.footnote, fontWeight = FontWeight.Medium,
+            color = MaterialTheme.colorScheme.onSurface, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Medium,
         )
-        Icon(CaIcons.chevronRight, null, Modifier.size(14.dp), tint = Ca.colors.textTertiary)
+        Icon(CaIcons.chevronRight, null, Modifier.size(14.dp), tint = MaterialTheme.colorScheme.outline)
     }
 }
 
@@ -308,17 +310,17 @@ private fun InputBar(onSend: (String) -> Unit, onEof: () -> Unit, modifier: Modi
     Row(modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
         Box(
             Modifier.weight(1f)
-                .background(Ca.colors.surface2, RoundedCornerShape(Ca.radius.control))
-                .border(1.dp, Ca.colors.hairline, RoundedCornerShape(Ca.radius.control))
+                .background(MaterialTheme.colorScheme.surfaceContainerHigh, RoundedCornerShape(Ca.radius.control))
+                .border(1.dp, MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(Ca.radius.control))
                 .padding(horizontal = 10.dp, vertical = 9.dp),
         ) {
-            if (field.text.isEmpty()) Text(stringResource(Res.string.run_type_input), color = Ca.colors.textTertiary, style = Ca.type.code)
+            if (field.text.isEmpty()) Text(stringResource(Res.string.run_type_input), color = MaterialTheme.colorScheme.outline, style = Ide.type.code)
             BasicTextField(
                 value = field,
                 onValueChange = { field = it },
                 singleLine = true,
-                textStyle = Ca.type.code.copy(color = Ca.colors.textPrimary),
-                cursorBrush = SolidColor(Ca.colors.accent),
+                textStyle = Ide.type.code.copy(color = MaterialTheme.colorScheme.onSurface),
+                cursorBrush = SolidColor(MaterialTheme.colorScheme.primary),
                 modifier = Modifier.fillMaxWidth().focusRequester(focus).onPreviewKeyEvent { ev ->
                     if (ev.type == KeyEventType.KeyDown && (ev.key == Key.Enter || ev.key == Key.NumPadEnter)) {
                         submit(); true
@@ -326,7 +328,7 @@ private fun InputBar(onSend: (String) -> Unit, onEof: () -> Unit, modifier: Modi
                 },
             )
         }
-        IconButtonCa(CaIcons.arrowRight, stringResource(Res.string.run_send), { submit() }, boxSize = 38, iconSize = 18, tint = Ca.colors.accent)
-        IconButtonCa(CaIcons.close, stringResource(Res.string.run_end_input_eof), onEof, boxSize = 38, iconSize = 16, tint = Ca.colors.textTertiary)
+        IconButtonCa(CaIcons.arrowRight, stringResource(Res.string.run_send), { submit() }, boxSize = 38, iconSize = 18, tint = MaterialTheme.colorScheme.primary)
+        IconButtonCa(CaIcons.close, stringResource(Res.string.run_end_input_eof), onEof, boxSize = 38, iconSize = 16, tint = MaterialTheme.colorScheme.outline)
     }
 }

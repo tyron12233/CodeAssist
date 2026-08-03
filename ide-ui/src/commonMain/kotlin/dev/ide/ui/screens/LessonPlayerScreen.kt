@@ -1,5 +1,7 @@
 package dev.ide.ui.screens
 
+import dev.ide.ui.theme.Ide
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.animateColorAsState
@@ -128,7 +130,7 @@ fun LessonPlayerScreen(
     // Record the learner's place for the Resume banner as they move through the lesson.
     LaunchedEffect(step?.id) { val id = lessonId; if (id != null && step != null) backend.learn.recordVisit(id, stepIndex) }
 
-    Box(modifier.fillMaxSize().background(Ca.colors.bg), contentAlignment = Alignment.TopCenter) {
+    Box(modifier.fillMaxSize().background(MaterialTheme.colorScheme.background), contentAlignment = Alignment.TopCenter) {
         Column(Modifier.widthIn(max = 720.dp).fillMaxSize()) {
             // Top bar: close + progress + step counter.
             Column(Modifier.fillMaxWidth().padding(start = 8.dp, end = 16.dp, top = 12.dp, bottom = 8.dp)) {
@@ -136,20 +138,20 @@ fun LessonPlayerScreen(
                     IconButtonCa(CaIcons.close, stringResource(Res.string.close), onExit)
                     Text(
                         lesson?.title.orEmpty(),
-                        color = Ca.colors.textPrimary, style = Ca.type.headline,
+                        color = MaterialTheme.colorScheme.onSurface, style = MaterialTheme.typography.titleMedium,
                         maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f),
                     )
                     if (steps.isNotEmpty()) {
                         Text(
                             stringResource(Res.string.learn_step_progress, stepIndex + 1, steps.size),
-                            color = Ca.colors.textTertiary, style = Ca.type.caption,
+                            color = MaterialTheme.colorScheme.outline, style = MaterialTheme.typography.bodySmall,
                         )
                     }
                 }
                 Spacer(Modifier.height(8.dp))
                 ProgressBar(
                     if (steps.isEmpty()) 0f else (stepIndex + 1).toFloat() / steps.size,
-                    track = Ca.colors.surface3, fill = Ca.colors.accent,
+                    track = MaterialTheme.colorScheme.surfaceContainerHighest, fill = MaterialTheme.colorScheme.primary,
                 )
             }
 
@@ -211,7 +213,7 @@ private fun ConceptStep(step: UiLessonStep.Concept, backend: IdeBackend, host: d
         Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(horizontal = 20.dp, vertical = 8.dp),
         verticalArrangement = Arrangement.spacedBy(14.dp),
     ) {
-        Text(step.title, color = Ca.colors.textPrimary, style = Ca.type.title3)
+        Text(step.title, color = MaterialTheme.colorScheme.onSurface, style = MaterialTheme.typography.titleLarge)
         LessonBlocks(step.blocks, backend = backend, host = host)
         Spacer(Modifier.height(24.dp))
     }
@@ -275,7 +277,7 @@ private fun InteractiveStep(
         Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(horizontal = 20.dp, vertical = 8.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
-        Text(step.title, color = Ca.colors.textPrimary, style = Ca.type.title3)
+        Text(step.title, color = MaterialTheme.colorScheme.onSurface, style = MaterialTheme.typography.titleLarge)
         if (step.blocks.isNotEmpty()) LessonBlocks(step.blocks, backend = backend, host = host)
 
         if (!ready) {
@@ -294,7 +296,7 @@ private fun InteractiveStep(
         val editorShape = RoundedCornerShape(Ca.radius.md)
         Box(
             Modifier.fillMaxWidth().height(260.dp).clip(editorShape)
-                .background(Ca.colors.editorBg).border(1.dp, Ca.colors.hairline, editorShape),
+                .background(Ide.colors.editorBg).border(1.dp, MaterialTheme.colorScheme.outlineVariant, editorShape),
         ) {
             CodeEditor(
                 path = fileName,
@@ -346,7 +348,7 @@ private fun InteractiveStep(
         // Revealed solution.
         if (showSolution) {
             Column(Modifier.entranceSlideUp(), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                Text(stringResource(Res.string.learn_solution), color = Ca.colors.textPrimary, style = Ca.type.headline)
+                Text(stringResource(Res.string.learn_solution), color = MaterialTheme.colorScheme.onSurface, style = MaterialTheme.typography.titleMedium)
                 CodeSample(step.solution, step.language)
                 TextAction(stringResource(Res.string.learn_copy_to_editor), CaIcons.copy) {
                     session = EditorSession(step.solution, lang)
@@ -361,9 +363,9 @@ private fun InteractiveStep(
 @Composable
 private fun ResultPanel(result: UiExerciseResult, modifier: Modifier = Modifier) {
     val (icon, tint) = when {
-        result.passed -> CaIcons.check to Ca.colors.success
-        !result.compiled -> CaIcons.error to Ca.colors.error
-        else -> CaIcons.warning to Ca.colors.warning
+        result.passed -> CaIcons.check to Ide.colors.success
+        !result.compiled -> CaIcons.error to MaterialTheme.colorScheme.error
+        else -> CaIcons.warning to Ide.colors.warning
     }
     val shape = RoundedCornerShape(Ca.radius.md)
     Column(
@@ -372,19 +374,19 @@ private fun ResultPanel(result: UiExerciseResult, modifier: Modifier = Modifier)
     ) {
         Row(verticalAlignment = Alignment.Top, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             Icon(icon, null, Modifier.size(18.dp), tint = tint)
-            Text(result.message, color = Ca.colors.textPrimary, style = Ca.type.subhead)
+            Text(result.message, color = MaterialTheme.colorScheme.onSurface, style = MaterialTheme.typography.bodyLarge)
         }
         if (result.output.isNotBlank()) {
-            Text(stringResource(Res.string.learn_output), color = Ca.colors.textTertiary, style = Ca.type.caption2, fontWeight = FontWeight.SemiBold)
+            Text(stringResource(Res.string.learn_output), color = MaterialTheme.colorScheme.outline, style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.SemiBold)
             Box(
-                Modifier.fillMaxWidth().clip(RoundedCornerShape(Ca.radius.sm)).background(Ca.colors.consoleBg)
+                Modifier.fillMaxWidth().clip(RoundedCornerShape(Ca.radius.sm)).background(Ide.colors.consoleBg)
                     .horizontalScroll(rememberScrollState()).padding(10.dp),
             ) {
-                Text(result.output.trimEnd(), color = Ca.colors.textPrimary, style = Ca.type.codeSmall)
+                Text(result.output.trimEnd(), color = MaterialTheme.colorScheme.onSurface, style = Ide.type.codeSmall)
             }
         }
         result.diagnostics.forEach { d ->
-            Text(d, color = Ca.colors.error, style = Ca.type.codeSmall)
+            Text(d, color = MaterialTheme.colorScheme.error, style = Ide.type.codeSmall)
         }
     }
 }
@@ -393,14 +395,14 @@ private fun ResultPanel(result: UiExerciseResult, modifier: Modifier = Modifier)
 private fun HintCard(number: Int, hint: String, modifier: Modifier = Modifier) {
     val shape = RoundedCornerShape(Ca.radius.md)
     Row(
-        modifier.fillMaxWidth().clip(shape).background(Ca.colors.accentSoft).border(1.dp, Ca.colors.accent.copy(alpha = 0.25f), shape).padding(12.dp),
+        modifier.fillMaxWidth().clip(shape).background(MaterialTheme.colorScheme.primaryContainer).border(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.25f), shape).padding(12.dp),
         horizontalArrangement = Arrangement.spacedBy(10.dp),
         verticalAlignment = Alignment.Top,
     ) {
-        Icon(CaIcons.lightbulb, null, Modifier.size(18.dp), tint = Ca.colors.accent)
+        Icon(CaIcons.lightbulb, null, Modifier.size(18.dp), tint = MaterialTheme.colorScheme.primary)
         Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
-            Text(stringResource(Res.string.learn_hint_n, number), color = Ca.colors.accent, style = Ca.type.caption2, fontWeight = FontWeight.SemiBold)
-            Text(inlineMarkup(hint), color = Ca.colors.textSecondary, style = Ca.type.footnote)
+            Text(stringResource(Res.string.learn_hint_n, number), color = MaterialTheme.colorScheme.primary, style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.SemiBold)
+            Text(inlineMarkup(hint), color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodyMedium)
         }
     }
 }
@@ -417,8 +419,8 @@ private fun QuizStep(step: UiLessonStep.Quiz, onAnswered: (correct: Boolean) -> 
         Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(horizontal = 20.dp, vertical = 8.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
-        Text(step.title, color = Ca.colors.textPrimary, style = Ca.type.title3)
-        Text(step.prompt, color = Ca.colors.textSecondary, style = Ca.type.subhead)
+        Text(step.title, color = MaterialTheme.colorScheme.onSurface, style = MaterialTheme.typography.titleLarge)
+        Text(step.prompt, color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodyLarge)
         Spacer(Modifier.height(2.dp))
         step.options.forEachIndexed { i, opt ->
             OptionRow(
@@ -432,10 +434,10 @@ private fun QuizStep(step: UiLessonStep.Quiz, onAnswered: (correct: Boolean) -> 
         if (submitted) {
             Text(
                 if (correct) stringResource(Res.string.learn_quiz_correct) else stringResource(Res.string.learn_quiz_incorrect),
-                color = if (correct) Ca.colors.success else Ca.colors.warning, style = Ca.type.subhead, fontWeight = FontWeight.SemiBold,
+                color = if (correct) Ide.colors.success else Ide.colors.warning, style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.SemiBold,
             )
             if (step.explanation.isNotBlank()) {
-                Text(inlineMarkup(step.explanation), color = Ca.colors.textSecondary, style = Ca.type.footnote)
+                Text(inlineMarkup(step.explanation), color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodyMedium)
             }
         }
         if (!(submitted && correct)) {
@@ -460,19 +462,19 @@ private fun OptionRow(
     val interaction = remember { MutableInteractionSource() }
     val border by animateColorAsState(
         when {
-            revealCorrect -> Ca.colors.success
-            revealWrong -> Ca.colors.error
-            selected -> Ca.colors.accent
-            else -> Ca.colors.separator
+            revealCorrect -> Ide.colors.success
+            revealWrong -> MaterialTheme.colorScheme.error
+            selected -> MaterialTheme.colorScheme.primary
+            else -> MaterialTheme.colorScheme.outlineVariant
         },
         tween(Motion.FAST), label = "opt-border",
     )
     val fill by animateColorAsState(
         when {
-            revealCorrect -> Ca.colors.success.copy(alpha = 0.10f)
-            revealWrong -> Ca.colors.error.copy(alpha = 0.10f)
-            selected -> Ca.colors.accentSoft
-            else -> Ca.colors.surface
+            revealCorrect -> Ide.colors.success.copy(alpha = 0.10f)
+            revealWrong -> MaterialTheme.colorScheme.error.copy(alpha = 0.10f)
+            selected -> MaterialTheme.colorScheme.primaryContainer
+            else -> MaterialTheme.colorScheme.surface
         },
         tween(Motion.FAST), label = "opt-fill",
     )
@@ -485,16 +487,16 @@ private fun OptionRow(
         horizontalArrangement = Arrangement.spacedBy(10.dp),
     ) {
         val markTint = when {
-            revealCorrect -> Ca.colors.success
-            revealWrong -> Ca.colors.error
-            selected -> Ca.colors.accent
-            else -> Ca.colors.textTertiary
+            revealCorrect -> Ide.colors.success
+            revealWrong -> MaterialTheme.colorScheme.error
+            selected -> MaterialTheme.colorScheme.primary
+            else -> MaterialTheme.colorScheme.outline
         }
         Icon(
             if (revealWrong) CaIcons.close else if (revealCorrect || selected) CaIcons.check else CaIcons.dot,
             null, Modifier.size(if (revealWrong || revealCorrect || selected) 18.dp else 8.dp), tint = markTint,
         )
-        Text(label, color = Ca.colors.textPrimary, style = Ca.type.subhead, modifier = Modifier.weight(1f))
+        Text(label, color = MaterialTheme.colorScheme.onSurface, style = MaterialTheme.typography.bodyLarge, modifier = Modifier.weight(1f))
     }
 }
 
@@ -514,17 +516,17 @@ private fun PlayerButton(
     // an exercise passes).
     val bg by animateColorAsState(
         when {
-            !primary -> Ca.colors.surface2
-            enabled -> Ca.colors.accent
-            else -> Ca.colors.surface3
+            !primary -> MaterialTheme.colorScheme.surfaceContainerHigh
+            enabled -> MaterialTheme.colorScheme.primary
+            else -> MaterialTheme.colorScheme.surfaceContainerHighest
         },
         tween(Motion.BASE), label = "btn-bg",
     )
     val fg by animateColorAsState(
         when {
-            !primary -> Ca.colors.textPrimary
+            !primary -> MaterialTheme.colorScheme.onSurface
             enabled -> Color.White
-            else -> Ca.colors.textTertiary
+            else -> MaterialTheme.colorScheme.outline
         },
         tween(Motion.BASE), label = "btn-fg",
     )
@@ -541,7 +543,7 @@ private fun PlayerButton(
         horizontalArrangement = Arrangement.spacedBy(6.dp),
     ) {
         icon?.let { Icon(it, null, Modifier.size(16.dp), tint = fg) }
-        Text(text, color = fg, style = Ca.type.subhead, fontWeight = FontWeight.SemiBold)
+        Text(text, color = fg, style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.SemiBold)
     }
 }
 
@@ -570,16 +572,16 @@ private class LessonEditorBackend(private val real: IdeBackend, private val lang
 private fun PreparingCard() {
     val shape = RoundedCornerShape(Ca.radius.lg)
     Column(
-        Modifier.fillMaxWidth().clip(shape).background(Ca.colors.surface).border(1.dp, Ca.colors.separator, shape)
+        Modifier.fillMaxWidth().clip(shape).background(MaterialTheme.colorScheme.surface).border(1.dp, MaterialTheme.colorScheme.outlineVariant, shape)
             .padding(vertical = 32.dp, horizontal = 20.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
-        CircularProgressIndicator(color = Ca.colors.accent, strokeWidth = 3.dp, modifier = Modifier.size(28.dp))
-        Text(stringResource(Res.string.learn_preparing), color = Ca.colors.textPrimary, style = Ca.type.subhead, fontWeight = FontWeight.SemiBold)
+        CircularProgressIndicator(color = MaterialTheme.colorScheme.primary, strokeWidth = 3.dp, modifier = Modifier.size(28.dp))
+        Text(stringResource(Res.string.learn_preparing), color = MaterialTheme.colorScheme.onSurface, style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.SemiBold)
         Text(
             stringResource(Res.string.learn_preparing_sub),
-            color = Ca.colors.textTertiary, style = Ca.type.footnote,
+            color = MaterialTheme.colorScheme.outline, style = MaterialTheme.typography.bodyMedium,
             textAlign = androidx.compose.ui.text.style.TextAlign.Center,
         )
     }
@@ -590,12 +592,12 @@ private fun PreparingCard() {
 private fun IndexingChip() {
     val shape = RoundedCornerShape(Ca.radius.pill)
     Row(
-        Modifier.clip(shape).background(Ca.colors.accentSoft).padding(horizontal = 12.dp, vertical = 6.dp),
+        Modifier.clip(shape).background(MaterialTheme.colorScheme.primaryContainer).padding(horizontal = 12.dp, vertical = 6.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(8.dp),
     ) {
-        CircularProgressIndicator(color = Ca.colors.accent, strokeWidth = 2.dp, modifier = Modifier.size(13.dp))
-        Text(stringResource(Res.string.learn_indexing), color = Ca.colors.accent, style = Ca.type.caption2, fontWeight = FontWeight.Medium)
+        CircularProgressIndicator(color = MaterialTheme.colorScheme.primary, strokeWidth = 2.dp, modifier = Modifier.size(13.dp))
+        Text(stringResource(Res.string.learn_indexing), color = MaterialTheme.colorScheme.primary, style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Medium)
     }
 }
 
@@ -608,7 +610,7 @@ private fun TextAction(text: String, icon: ImageVector, onClick: () -> Unit) {
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(5.dp),
     ) {
-        Icon(icon, null, Modifier.size(15.dp), tint = Ca.colors.accent)
-        Text(text, color = Ca.colors.accent, style = Ca.type.footnote, fontWeight = FontWeight.Medium)
+        Icon(icon, null, Modifier.size(15.dp), tint = MaterialTheme.colorScheme.primary)
+        Text(text, color = MaterialTheme.colorScheme.primary, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Medium)
     }
 }

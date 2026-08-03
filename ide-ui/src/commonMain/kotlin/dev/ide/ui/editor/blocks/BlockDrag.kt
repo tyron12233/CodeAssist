@@ -1,5 +1,6 @@
 package dev.ide.ui.editor.blocks
 
+import dev.ide.ui.theme.Ide
 import androidx.compose.foundation.background
 import androidx.compose.foundation.gestures.detectDragGesturesAfterLongPress
 import androidx.compose.foundation.layout.padding
@@ -21,7 +22,6 @@ import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.boundsInRoot
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.unit.dp
-import dev.ide.ui.theme.Ca
 
 /**
  * The drag-and-drop engine for the block canvas (the Sketchware interaction). A long-press on a block (or
@@ -123,8 +123,8 @@ fun DragGhost(state: DragState) {
     val fill = blockColor(cat)
     Text(
         payload.label,
-        color = Ca.colors.block.text,
-        style = Ca.type.code,
+        color = Ide.colors.block.text,
+        style = Ide.type.code,
         modifier = Modifier
             .graphicsLayer {
                 // [pointer] is in root coordinates; this ghost is placed at the canvas root's top-left, so

@@ -1,5 +1,6 @@
 package dev.ide.ui.screens
 
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
@@ -25,7 +26,6 @@ import dev.ide.ui.backend.TreeViewMode
 import dev.ide.ui.backend.UiCompletionResult
 import dev.ide.ui.backend.UiDiagnostic
 import dev.ide.ui.backend.UiSeverity
-import dev.ide.ui.theme.Ca
 import dev.ide.ui.theme.CodeAssistTheme
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -95,7 +95,7 @@ class RunScreenSnapshot {
     private fun snapshot(name: String, w: Int, h: Int, backend: IdeBackend, dark: Boolean = true) {
         val scene = ImageComposeScene(width = w, height = h, density = Density(2f)) {
             CodeAssistTheme(dark = dark) {
-                Box(Modifier.fillMaxSize().background(Ca.colors.bg)) { RunScreen(backend, onBack = {}) }
+                Box(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)) { RunScreen(backend, onBack = {}) }
             }
         }
         try {

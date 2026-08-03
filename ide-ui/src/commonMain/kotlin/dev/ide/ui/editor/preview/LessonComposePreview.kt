@@ -1,5 +1,6 @@
 package dev.ide.ui.editor.preview
 
+import dev.ide.ui.theme.Ide
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
@@ -141,7 +142,7 @@ fun LessonComposePreview(
             val editorShape = RoundedCornerShape(Ca.radius.md)
             Box(
                 Modifier.fillMaxWidth().height(200.dp).clip(editorShape)
-                    .background(Ca.colors.editorBg).border(1.dp, Ca.colors.hairline, editorShape),
+                    .background(Ide.colors.editorBg).border(1.dp, MaterialTheme.colorScheme.outlineVariant, editorShape),
             ) {
                 CodeEditor(
                     path = "Preview.kt",
@@ -158,7 +159,7 @@ fun LessonComposePreview(
         Box(
             Modifier.fillMaxWidth().heightIn(min = 120.dp, max = 520.dp)
                 .shadow(10.dp, shape).clip(shape)
-                .background(Color.White).border(1.dp, Ca.colors.separator, shape).clipToBounds(),
+                .background(Color.White).border(1.dp, MaterialTheme.colorScheme.outlineVariant, shape).clipToBounds(),
             contentAlignment = Alignment.Center,
         ) {
             if (!ready) {
@@ -184,7 +185,7 @@ fun LessonComposePreview(
 
         val cap = caption.ifBlank { if (interactive) stringResource(Res.string.learn_compose_edit_hint) else "" }
         if (cap.isNotBlank()) {
-            Text(cap, color = Ca.colors.textTertiary, style = Ca.type.caption, fontWeight = FontWeight.Medium)
+            Text(cap, color = MaterialTheme.colorScheme.outline, style = MaterialTheme.typography.bodySmall, fontWeight = FontWeight.Medium)
         }
     }
 }
@@ -198,14 +199,14 @@ private fun PreparingRow(indexing: Boolean) {
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.spacedBy(8.dp),
     ) {
-        CircularProgressIndicator(color = Ca.colors.accent, strokeWidth = 3.dp, modifier = Modifier.size(26.dp))
+        CircularProgressIndicator(color = MaterialTheme.colorScheme.primary, strokeWidth = 3.dp, modifier = Modifier.size(26.dp))
         Text(
             stringResource(Res.string.learn_compose_preparing),
-            color = Ca.colors.textSecondary, style = Ca.type.footnote, fontWeight = FontWeight.Medium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Medium,
         )
         Text(
             stringResource(if (indexing) Res.string.learn_compose_indexing else Res.string.learn_compose_downloading),
-            color = Ca.colors.textTertiary, style = Ca.type.caption2,
+            color = MaterialTheme.colorScheme.outline, style = MaterialTheme.typography.labelSmall,
             textAlign = androidx.compose.ui.text.style.TextAlign.Center,
         )
     }

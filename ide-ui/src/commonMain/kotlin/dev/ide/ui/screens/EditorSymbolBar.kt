@@ -1,5 +1,7 @@
 package dev.ide.ui.screens
 
+import dev.ide.ui.theme.Ide
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.foundation.background
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.gestures.detectTapGestures
@@ -31,7 +33,6 @@ import dev.ide.ui.generated.resources.symbolbar_move_line_down
 import dev.ide.ui.generated.resources.symbolbar_move_line_up
 import dev.ide.ui.generated.resources.symbolbar_next_problem
 import dev.ide.ui.icons.CaIcons
-import dev.ide.ui.theme.Ca
 import org.jetbrains.compose.resources.stringResource
 
 /**
@@ -55,19 +56,19 @@ internal fun EditorSymbolBar(
     showDiagnosticJump: Boolean = false,
     onNextDiagnostic: () -> Unit = {},
 ) {
-    val separator = Ca.colors.separator // captured for the draw lambda (can't read the theme inside drawBehind)
+    val separator = MaterialTheme.colorScheme.outlineVariant // captured for the draw lambda (can't read the theme inside drawBehind)
     Row(
         modifier
             .fillMaxWidth()
             .height(38.dp)
-            .background(Ca.colors.surface2)
+            .background(MaterialTheme.colorScheme.surfaceContainerHigh)
             .drawBehind { // hairline separating the bar from the editor above
                 drawLine(separator, Offset(0f, 0f), Offset(size.width, 0f), strokeWidth = 1f)
             },
         verticalAlignment = Alignment.CenterVertically,
     ) {
         SymbolKey(stringResource(Res.string.symbolbar_tab), onClick = onTab, modifier = Modifier.width(48.dp), accent = true)
-        Box(Modifier.width(1.dp).fillMaxHeight().background(Ca.colors.separator))
+        Box(Modifier.width(1.dp).fillMaxHeight().background(MaterialTheme.colorScheme.outlineVariant))
         // Fixed line-action group: comment toggle, move line up/down, duplicate — the editor ops that are
         // otherwise keyboard-only, surfaced for touch.
         SymbolKey("//", onClick = onComment)
@@ -76,7 +77,7 @@ internal fun EditorSymbolBar(
         IconKey(CaIcons.copy, stringResource(Res.string.symbolbar_duplicate_line), onClick = onDuplicateLine)
         // Jump to the next diagnostic — shown only while the file has any (otherwise it's noise).
         if (showDiagnosticJump) IconKey(CaIcons.warning, stringResource(Res.string.symbolbar_next_problem), onClick = onNextDiagnostic)
-        Box(Modifier.width(1.dp).fillMaxHeight().background(Ca.colors.separator))
+        Box(Modifier.width(1.dp).fillMaxHeight().background(MaterialTheme.colorScheme.outlineVariant))
         Row(
             Modifier.weight(1f).horizontalScroll(rememberScrollState()),
             verticalAlignment = Alignment.CenterVertically,
@@ -105,8 +106,8 @@ private fun SymbolKey(label: String, onClick: () -> Unit, modifier: Modifier = M
     ) {
         Text(
             label,
-            style = Ca.type.codeSmall,
-            color = if (accent) Ca.colors.accent else Ca.colors.textPrimary,
+            style = Ide.type.codeSmall,
+            color = if (accent) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface,
             fontWeight = FontWeight.Medium,
         )
     }
@@ -123,6 +124,6 @@ private fun IconKey(icon: ImageVector, label: String, onClick: () -> Unit) {
             .padding(horizontal = 6.dp),
         contentAlignment = Alignment.Center,
     ) {
-        Icon(icon, label, Modifier.size(18.dp), tint = Ca.colors.textPrimary)
+        Icon(icon, label, Modifier.size(18.dp), tint = MaterialTheme.colorScheme.onSurface)
     }
 }

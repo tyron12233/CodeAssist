@@ -1,5 +1,7 @@
 package dev.ide.ui.components
 
+import dev.ide.ui.theme.Ide
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -16,7 +18,6 @@ import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.dp
 import dev.ide.ui.backend.NodeKind
 import dev.ide.ui.backend.TreeNode
-import dev.ide.ui.theme.Ca
 import dev.ide.ui.theme.CodeAssistTheme
 import org.jetbrains.skia.EncodedImageFormat
 import java.io.File
@@ -71,12 +72,12 @@ class PushDrawerSnapshot {
                 )
             },
         ) {
-            Column(Modifier.fillMaxSize().background(Ca.colors.editorBg)) {
-                Box(Modifier.fillMaxWidth().height(52.dp).background(Ca.colors.glassReg))
+            Column(Modifier.fillMaxSize().background(Ide.colors.editorBg)) {
+                Box(Modifier.fillMaxWidth().height(52.dp).background(Ide.colors.glassReg))
                 Text(
                     "fun main() {\n    println(\"hello\")\n}",
-                    color = Ca.colors.textSecondary,
-                    style = Ca.type.code,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    style = Ide.type.code,
                     modifier = Modifier.padding(16.dp),
                 )
             }

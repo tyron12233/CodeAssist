@@ -1,5 +1,7 @@
 package dev.ide.ui.components
 
+import dev.ide.ui.theme.Ide
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -18,7 +20,6 @@ import dev.ide.ui.RailDestination
 import dev.ide.ui.backend.BuildState
 import dev.ide.ui.backend.RunStatus
 import dev.ide.ui.screens.BottomNav
-import dev.ide.ui.theme.Ca
 import dev.ide.ui.theme.CodeAssistTheme
 import org.jetbrains.skia.EncodedImageFormat
 import java.io.File
@@ -30,11 +31,11 @@ class BuildDockSnapshot {
 
     @Composable
     private fun DockScreen(open: Boolean, build: BuildState) {
-        Box(Modifier.fillMaxSize().background(Ca.colors.editorBg)) {
+        Box(Modifier.fillMaxSize().background(Ide.colors.editorBg)) {
             Text(
                 "fun main() { }",
-                color = Ca.colors.textSecondary,
-                style = Ca.type.code,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                style = Ide.type.code,
                 modifier = Modifier.padding(16.dp),
             )
             BuildDock(
@@ -45,9 +46,9 @@ class BuildDockSnapshot {
                 bar = { BottomNav(selected = RailDestination.Search, onSelect = {}) },
             ) {
                 Column(Modifier.fillMaxWidth().weight(1f).padding(14.dp)) {
-                    Text("Build: app", color = Ca.colors.textPrimary, style = Ca.type.headline)
-                    Text("> Task :app:compileJava", color = Ca.colors.textTertiary, style = Ca.type.codeSmall)
-                    Text("> Task :app:dexBuilder", color = Ca.colors.textTertiary, style = Ca.type.codeSmall)
+                    Text("Build: app", color = MaterialTheme.colorScheme.onSurface, style = MaterialTheme.typography.titleMedium)
+                    Text("> Task :app:compileJava", color = MaterialTheme.colorScheme.outline, style = Ide.type.codeSmall)
+                    Text("> Task :app:dexBuilder", color = MaterialTheme.colorScheme.outline, style = Ide.type.codeSmall)
                 }
             }
         }

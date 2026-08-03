@@ -1,5 +1,7 @@
 package dev.ide.ui.screens
 
+import dev.ide.ui.theme.Ide
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.animation.Crossfade
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
@@ -182,13 +184,13 @@ fun SettingsScreen(
         }
     }
 
-    Box(Modifier.fillMaxSize().background(Ca.colors.bg)) {
+    Box(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)) {
         Column(Modifier.fillMaxSize()) {
             SettingsHeader(onBack, title)
-            Box(Modifier.fillMaxWidth().height(1.dp).background(Ca.colors.separator))
+            Box(Modifier.fillMaxWidth().height(1.dp).background(MaterialTheme.colorScheme.outlineVariant))
             if (pages.isEmpty()) {
                 Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                    Text(stringResource(Res.string.settings_no_settings_available), color = Ca.colors.textTertiary, style = Ca.type.subhead)
+                    Text(stringResource(Res.string.settings_no_settings_available), color = MaterialTheme.colorScheme.outline, style = MaterialTheme.typography.bodyLarge)
                 }
             } else {
                 BoxWithConstraints(Modifier.fillMaxSize()) {
@@ -221,7 +223,7 @@ private fun WideLayout(
     Row(Modifier.fillMaxSize()) {
         // Sidebar
         Column(
-            Modifier.width(248.dp).fillMaxHeight().background(Ca.colors.surface.copy(alpha = 0.4f))
+            Modifier.width(248.dp).fillMaxHeight().background(MaterialTheme.colorScheme.surface.copy(alpha = 0.4f))
                 .verticalScroll(rememberScrollState()).padding(12.dp),
             verticalArrangement = Arrangement.spacedBy(4.dp),
         ) {
@@ -229,7 +231,7 @@ private fun WideLayout(
                 SettingsCategoryItem(localizedPageTitle(page), iconFor(page.iconId), page.id == selectedId, showChevron = false) { selectedId = page.id }
             }
         }
-        Box(Modifier.width(1.dp).fillMaxHeight().background(Ca.colors.separator))
+        Box(Modifier.width(1.dp).fillMaxHeight().background(MaterialTheme.colorScheme.outlineVariant))
         // Content
         Crossfade(targetState = selected.id, animationSpec = tween(Motion.FAST), label = "settingsPane", modifier = Modifier.weight(1f).fillMaxHeight()) { id ->
             val page = pages.firstOrNull { it.id == id } ?: return@Crossfade
@@ -260,7 +262,7 @@ private fun NarrowLayout(
         Column(Modifier.fillMaxSize()) {
             Row(Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 8.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 IconButtonCa(CaIcons.chevronLeft, stringResource(Res.string.settings_all_settings), { openId = null })
-                Text(localizedPageTitle(open), color = Ca.colors.textPrimary, style = Ca.type.headline, fontWeight = FontWeight.SemiBold)
+                Text(localizedPageTitle(open), color = MaterialTheme.colorScheme.onSurface, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
             }
             PageContent(backend, open, values, codeFont, onSet, onAction, onStructuralChange, Modifier.weight(1f))
         }
@@ -365,8 +367,8 @@ private fun InspectionRow(insp: UiInspection, onChange: (Boolean, UiSeverity) ->
     Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(6.dp)) {
         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
             Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
-                Text(insp.displayName, color = Ca.colors.textPrimary, style = Ca.type.footnote, fontWeight = FontWeight.Medium, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                Text(insp.tier, color = Ca.colors.textTertiary, style = Ca.type.caption2)
+                Text(insp.displayName, color = MaterialTheme.colorScheme.onSurface, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Medium, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                Text(insp.tier, color = MaterialTheme.colorScheme.outline, style = MaterialTheme.typography.labelSmall)
             }
             CaSwitch(insp.enabled) { onChange(it, insp.severity) }
         }
@@ -383,10 +385,10 @@ private fun InspectionRow(insp: UiInspection, onChange: (Boolean, UiSeverity) ->
 @Composable
 private fun SeverityChip(severity: UiSeverity, selected: Boolean, onClick: () -> Unit) {
     val color = when (severity) {
-        UiSeverity.Error -> Ca.colors.error
-        UiSeverity.Warning -> Ca.colors.warning
-        UiSeverity.Info -> Ca.colors.info
-        UiSeverity.Hint -> Ca.colors.textTertiary
+        UiSeverity.Error -> MaterialTheme.colorScheme.error
+        UiSeverity.Warning -> Ide.colors.warning
+        UiSeverity.Info -> Ide.colors.info
+        UiSeverity.Hint -> MaterialTheme.colorScheme.outline
     }
     val label = when (severity) {
         UiSeverity.Error -> stringResource(Res.string.set_sev_error)
@@ -395,11 +397,11 @@ private fun SeverityChip(severity: UiSeverity, selected: Boolean, onClick: () ->
         UiSeverity.Hint -> stringResource(Res.string.set_sev_hint)
     }
     Box(
-        Modifier.background(if (selected) color.copy(alpha = 0.20f) else Ca.colors.surface2, RoundedCornerShape(Ca.radius.pill))
+        Modifier.background(if (selected) color.copy(alpha = 0.20f) else MaterialTheme.colorScheme.surfaceContainerHigh, RoundedCornerShape(Ca.radius.pill))
             .clickable(remember { MutableInteractionSource() }, null, onClick = onClick)
             .padding(horizontal = 11.dp, vertical = 5.dp),
     ) {
-        Text(label, color = if (selected) color else Ca.colors.textTertiary, style = Ca.type.caption2, fontWeight = FontWeight.Medium)
+        Text(label, color = if (selected) color else MaterialTheme.colorScheme.outline, style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Medium)
     }
 }
 
@@ -413,8 +415,8 @@ private fun SettingsHeader(onBack: () -> Unit, title: String) {
             verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp),
         ) {
             IconButtonCa(CaIcons.chevronLeft, stringResource(Res.string.back), onBack)
-            Icon(CaIcons.gear, null, Modifier.size(20.dp), tint = Ca.colors.accent)
-            Text(title, color = Ca.colors.textPrimary, style = Ca.type.headline, fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f))
+            Icon(CaIcons.gear, null, Modifier.size(20.dp), tint = MaterialTheme.colorScheme.primary)
+            Text(title, color = MaterialTheme.colorScheme.onSurface, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f))
         }
     }
 }
@@ -424,12 +426,12 @@ private fun ToastBar(toast: String?, modifier: Modifier) {
     if (toast == null) return
     Box(modifier.fillMaxWidth().padding(bottom = 28.dp), contentAlignment = Alignment.Center) {
         Row(
-            Modifier.background(Ca.colors.glassThick, RoundedCornerShape(Ca.radius.pill))
+            Modifier.background(Ide.colors.glassThick, RoundedCornerShape(Ca.radius.pill))
                 .padding(horizontal = 16.dp, vertical = 11.dp),
             verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp),
         ) {
-            Icon(CaIcons.check, null, Modifier.size(16.dp), tint = Ca.colors.run)
-            Text(toast, color = Ca.colors.textPrimary, style = Ca.type.footnote, fontWeight = FontWeight.Medium)
+            Icon(CaIcons.check, null, Modifier.size(16.dp), tint = Ide.colors.run)
+            Text(toast, color = MaterialTheme.colorScheme.onSurface, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Medium)
         }
     }
 }

@@ -1,5 +1,7 @@
 package dev.ide.ui.editor.preview
 
+import dev.ide.ui.theme.Ide
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
@@ -80,7 +82,7 @@ fun ResourcePreviewPane(
     backend: IdeBackend,
     modifier: Modifier = Modifier
 ) {
-    Box(modifier.background(Ca.colors.editorBg)) {
+    Box(modifier.background(Ide.colors.editorBg)) {
         when (previewKindOf(path)) {
             PreviewKind.DRAWABLE -> DrawablePreview(path, text, backend)
             PreviewKind.COLOR -> ColorPreview(path, text, backend)
@@ -110,7 +112,7 @@ private fun DrawablePreview(path: String, text: String, backend: IdeBackend) {
         ) {
             Box(
                 Modifier.size(220.dp).clip(RoundedCornerShape(Ca.radius.md))
-                    .border(1.dp, Ca.colors.separator, RoundedCornerShape(Ca.radius.md)),
+                    .border(1.dp, MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(Ca.radius.md)),
             ) {
                 Canvas(Modifier.fillMaxSize()) {
                     drawCheckerboard()
@@ -153,7 +155,7 @@ private fun ColorPreview(path: String, text: String, backend: IdeBackend) {
             ) {
                 Box(
                     Modifier.size(44.dp).clip(RoundedCornerShape(Ca.radius.sm))
-                        .border(1.dp, Ca.colors.separator, RoundedCornerShape(Ca.radius.sm)),
+                        .border(1.dp, MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(Ca.radius.sm)),
                 ) {
                     Canvas(Modifier.fillMaxSize()) {
                         drawCheckerboard()
@@ -163,13 +165,13 @@ private fun ColorPreview(path: String, text: String, backend: IdeBackend) {
                 Column {
                     androidx.compose.material3.Text(
                         c.name,
-                        color = Ca.colors.textPrimary,
-                        style = Ca.type.subhead,
+                        color = MaterialTheme.colorScheme.onSurface,
+                        style = MaterialTheme.typography.bodyLarge,
                         fontWeight = FontWeight.Medium
                     )
                     androidx.compose.material3.Text(
                         c.rawValue.ifEmpty { "—" } + if (c.argb == null) "  " + stringResource(Res.string.respreview_unresolved) else "",
-                        color = Ca.colors.textSecondary, style = Ca.type.caption,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodySmall,
                     )
                 }
             }
@@ -200,7 +202,7 @@ private fun BitmapPreview(path: String, backend: IdeBackend) {
                 Modifier.fillMaxWidth()
                     .aspectRatio((img.width.toFloat() / img.height).coerceIn(0.2f, 5f))
                     .clip(RoundedCornerShape(Ca.radius.md))
-                    .border(1.dp, Ca.colors.separator, RoundedCornerShape(Ca.radius.md)),
+                    .border(1.dp, MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(Ca.radius.md)),
             ) {
                 Canvas(Modifier.fillMaxSize()) { drawCheckerboard() }
                 Image(
@@ -222,5 +224,5 @@ private fun EmptyPreview(message: String) {
 
 @Composable
 private fun Caption(text: String) {
-    androidx.compose.material3.Text(text, color = Ca.colors.textTertiary, style = Ca.type.footnote)
+    androidx.compose.material3.Text(text, color = MaterialTheme.colorScheme.outline, style = MaterialTheme.typography.bodyMedium)
 }

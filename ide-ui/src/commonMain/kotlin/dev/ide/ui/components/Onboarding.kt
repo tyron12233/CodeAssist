@@ -1,5 +1,7 @@
 package dev.ide.ui.components
 
+import dev.ide.ui.theme.Ide
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
@@ -195,8 +197,8 @@ fun OnboardingSheet(visible: Boolean, onGetStarted: () -> Unit, onFinish: () -> 
                 Modifier
                     .width(400.dp)
                     .clip(shape)
-                    .background(Ca.colors.glassThick)
-                    .border(1.dp, Ca.colors.glassEdgeTop, shape)
+                    .background(Ide.colors.glassThick)
+                    .border(1.dp, Ide.colors.glassEdgeTop, shape)
                     .padding(top = 16.dp),
             ) {
                 MarqueeBody(
@@ -267,7 +269,7 @@ private fun MarqueeBody(
 private fun SegmentedProgress(count: Int, current: Int, onJump: (Int) -> Unit, modifier: Modifier = Modifier) {
     Row(modifier, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
         repeat(count) { i ->
-            val color by animateColorAsState(if (i <= current) Ca.colors.accent else Ca.colors.surface3, tween(Motion.BASE), label = "seg$i")
+            val color by animateColorAsState(if (i <= current) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surfaceContainerHighest, tween(Motion.BASE), label = "seg$i")
             Box(
                 Modifier
                     .weight(1f)
@@ -297,7 +299,7 @@ private fun Hero(kicker: String, icon: ImageVector, active: Boolean, content: @C
         // Bottom fade blends the opaque mock into the glass sheet surface.
         Box(
             Modifier.align(Alignment.BottomCenter).fillMaxWidth().height(56.dp)
-                .background(Brush.verticalGradient(listOf(Color.Transparent, Ca.colors.glassThick))),
+                .background(Brush.verticalGradient(listOf(Color.Transparent, Ide.colors.glassThick))),
         )
         KickerChip(kicker, icon, Modifier.align(Alignment.TopStart).padding(start = 20.dp, top = 12.dp))
     }
@@ -309,14 +311,14 @@ private fun KickerChip(text: String, icon: ImageVector, modifier: Modifier) {
         modifier
             .height(26.dp)
             .clip(RoundedCornerShape(Ca.radius.pill))
-            .background(Ca.colors.glassThick)
-            .border(1.dp, Ca.colors.glassEdge, RoundedCornerShape(Ca.radius.pill))
+            .background(Ide.colors.glassThick)
+            .border(1.dp, Ide.colors.glassEdge, RoundedCornerShape(Ca.radius.pill))
             .padding(start = 9.dp, end = 11.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(6.dp),
     ) {
-        Icon(icon, null, Modifier.size(14.dp), tint = Ca.colors.accent)
-        Text(text, color = Ca.colors.accent, fontFamily = Ca.type.uiFamily, fontSize = 11.5f.sp, fontWeight = FontWeight.SemiBold, maxLines = 1)
+        Icon(icon, null, Modifier.size(14.dp), tint = MaterialTheme.colorScheme.primary)
+        Text(text, color = MaterialTheme.colorScheme.primary, fontFamily = Ide.type.uiFamily, fontSize = 11.5f.sp, fontWeight = FontWeight.SemiBold, maxLines = 1)
     }
 }
 
@@ -330,23 +332,23 @@ private fun StepCopy(title: String, body: String, active: Boolean) {
     ) {
         Text(
             title,
-            color = Ca.colors.textPrimary,
-            fontFamily = Ca.type.uiFamily,
+            color = MaterialTheme.colorScheme.onSurface,
+            fontFamily = Ide.type.uiFamily,
             fontSize = 29.sp,
             lineHeight = 31.sp,
             fontWeight = FontWeight.Bold,
             letterSpacing = (-0.5).sp,
-            style = Ca.type.title1.copy(lineBreak = LineBreak.Heading),
+            style = MaterialTheme.typography.headlineMedium.copy(lineBreak = LineBreak.Heading),
         )
         Spacer(Modifier.height(12.dp))
         Text(
             body,
-            color = Ca.colors.textSecondary,
-            fontFamily = Ca.type.uiFamily,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            fontFamily = Ide.type.uiFamily,
             fontSize = 15.5f.sp,
             lineHeight = 23.sp,
             fontWeight = FontWeight.Normal,
-            style = Ca.type.body.copy(lineBreak = LineBreak.Paragraph),
+            style = MaterialTheme.typography.bodyLarge.copy(lineBreak = LineBreak.Paragraph),
         )
     }
 }
@@ -373,7 +375,7 @@ private fun ColumnScope.Footer(
                 .clickable(remember { MutableInteractionSource() }, indication = null, onClick = onSkip),
             contentAlignment = Alignment.Center,
         ) {
-            Text(skipLabel, color = Ca.colors.textTertiary, fontFamily = Ca.type.uiFamily, fontSize = 13.5f.sp, fontWeight = FontWeight.Medium)
+            Text(skipLabel, color = MaterialTheme.colorScheme.outline, fontFamily = Ide.type.uiFamily, fontSize = 13.5f.sp, fontWeight = FontWeight.Medium)
         }
     }
 }
@@ -388,12 +390,12 @@ private fun PrimaryCta(label: String, showArrow: Boolean, onClick: () -> Unit) {
             .pressScale(interaction)
             .height(52.dp)
             .clip(RoundedCornerShape(Ca.radius.control))
-            .background(Ca.colors.accent)
+            .background(MaterialTheme.colorScheme.primary)
             .clickable(interaction, indication = null, onClick = onClick),
         horizontalArrangement = Arrangement.spacedBy(7.dp, Alignment.CenterHorizontally),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Text(label, color = Ca.colors.textOnAccent, fontFamily = Ca.type.uiFamily, fontSize = 16.5f.sp, fontWeight = FontWeight.SemiBold)
-        if (showArrow) Icon(CaIcons.arrowRight, null, Modifier.size(19.dp), tint = Ca.colors.textOnAccent)
+        Text(label, color = MaterialTheme.colorScheme.onPrimary, fontFamily = Ide.type.uiFamily, fontSize = 16.5f.sp, fontWeight = FontWeight.SemiBold)
+        if (showArrow) Icon(CaIcons.arrowRight, null, Modifier.size(19.dp), tint = MaterialTheme.colorScheme.onPrimary)
     }
 }

@@ -1,5 +1,7 @@
 package dev.ide.ui.editor
 
+import dev.ide.ui.theme.Ide
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -195,7 +197,7 @@ fun BlockEditor(
         Ctx(path, backend, scope, projectedText, editing, selected?.blockId, drag, { editing = it }, { selected = it }, applyEdit, { paletteOpen = true }, { focusStack = focusStack + it })
     }
 
-    Box(modifier.background(Ca.colors.editorBg).canvasOrigin(drag)) {
+    Box(modifier.background(Ide.colors.editorBg).canvasOrigin(drag)) {
         Column(Modifier.fillMaxSize()) {
             val current = tree
             when {
@@ -251,13 +253,13 @@ internal fun PuzzleCanvas(file: UiBlockNode, ctx: Ctx) {
 @Composable
 private fun FileHeader(name: String, pkg: String?, imports: Int) {
     Row(
-        Modifier.clip(RoundedCornerShape(Ca.radius.pill)).background(Ca.colors.surface, RoundedCornerShape(Ca.radius.pill)).padding(horizontal = 12.dp, vertical = 6.dp),
+        Modifier.clip(RoundedCornerShape(Ca.radius.pill)).background(MaterialTheme.colorScheme.surface, RoundedCornerShape(Ca.radius.pill)).padding(horizontal = 12.dp, vertical = 6.dp),
         verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(7.dp),
     ) {
-        Icon(CaIcons.box, null, Modifier.size(15.dp), tint = Ca.colors.syntax.type)
-        Text(name, color = Ca.colors.textPrimary, style = Ca.type.code, fontWeight = FontWeight.SemiBold)
-        if (pkg != null) Text(pkg, color = Ca.colors.textTertiary, style = Ca.type.codeSmall)
-        if (imports > 0) Text(pluralStringResource(Res.plurals.block_import_count, imports, imports), color = Ca.colors.textTertiary, fontSize = 10.5.sp)
+        Icon(CaIcons.box, null, Modifier.size(15.dp), tint = Ide.colors.syntax.type)
+        Text(name, color = MaterialTheme.colorScheme.onSurface, style = Ide.type.code, fontWeight = FontWeight.SemiBold)
+        if (pkg != null) Text(pkg, color = MaterialTheme.colorScheme.outline, style = Ide.type.codeSmall)
+        if (imports > 0) Text(pluralStringResource(Res.plurals.block_import_count, imports, imports), color = MaterialTheme.colorScheme.outline, fontSize = 10.5.sp)
     }
 }
 
@@ -269,8 +271,8 @@ private fun FieldBlock(node: UiBlockNode, ctx: Ctx) {
         Modifier.clip(RoundedCornerShape(BlockMetrics.corner)).blockShadow(BlockMetrics.corner).background(color, RoundedCornerShape(BlockMetrics.corner)).padding(horizontal = 12.dp, vertical = 6.dp),
         verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp),
     ) {
-        Icon(CaIcons.docText, null, Modifier.size(14.dp), tint = Ca.colors.block.text.copy(alpha = 0.85f))
-        Text(sliceSource(ctx.source, node.start, node.end).trimEnd(';'), color = Ca.colors.block.text, style = Ca.type.codeSmall)
+        Icon(CaIcons.docText, null, Modifier.size(14.dp), tint = Ide.colors.block.text.copy(alpha = 0.85f))
+        Text(sliceSource(ctx.source, node.start, node.end).trimEnd(';'), color = Ide.colors.block.text, style = Ide.type.codeSmall)
     }
 }
 
@@ -290,11 +292,11 @@ private fun MethodHat(node: UiBlockNode, ctx: Ctx) {
                 .padding(start = 13.dp, end = 16.dp, top = 8.dp, bottom = 8.dp + if (expanded) BlockMetrics.connDepth else 0.dp),
             verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp),
         ) {
-            Icon(if (expanded) CaIcons.caretDown else CaIcons.caretRight, stringResource(Res.string.block_fold), Modifier.size(13.dp), tint = Ca.colors.block.text.copy(alpha = 0.8f))
-            Text(signatureOf(node, ctx.source), color = Ca.colors.block.text, style = Ca.type.code, fontWeight = FontWeight.SemiBold)
+            Icon(if (expanded) CaIcons.caretDown else CaIcons.caretRight, stringResource(Res.string.block_fold), Modifier.size(13.dp), tint = Ide.colors.block.text.copy(alpha = 0.8f))
+            Text(signatureOf(node, ctx.source), color = Ide.colors.block.text, style = Ide.type.code, fontWeight = FontWeight.SemiBold)
             body?.let {
                 if (!expanded) Text(pluralStringResource(Res.plurals.block_block_count, it.children.size, it.children.size),
-                    color = Ca.colors.block.text.copy(alpha = 0.78f), fontSize = 10.5.sp)
+                    color = Ide.colors.block.text.copy(alpha = 0.78f), fontSize = 10.5.sp)
             }
         }
         if (expanded && body != null) Stack(body, ctx)
@@ -478,7 +480,7 @@ private fun isCallStatement(node: UiBlockNode): Boolean =
 /** A bold keyword label drawn directly on the block. */
 @Composable
 private fun Keyword(text: String, onPill: Boolean) {
-    Text(text, color = if (onPill) Ca.colors.block.text else Ca.colors.textPrimary, style = Ca.type.code, fontWeight = FontWeight.Bold)
+    Text(text, color = if (onPill) Ide.colors.block.text else MaterialTheme.colorScheme.onSurface, style = Ide.type.code, fontWeight = FontWeight.Bold)
 }
 
 /** An editable token on the block (a name) — bold white text, tap to rename (with inline completion).
@@ -493,11 +495,11 @@ private fun Token(blockId: String, field: UiBlockPart.Field, onPill: Boolean, ct
         return
     }
     val qualifier = field.role == "qualifier"
-    val base = if (onPill) Ca.colors.block.text else Ca.colors.textPrimary
+    val base = if (onPill) Ide.colors.block.text else MaterialTheme.colorScheme.onSurface
     Text(
         field.text.ifEmpty { "•" },
         color = if (qualifier) base.copy(alpha = 0.66f) else base,
-        style = Ca.type.code,
+        style = Ide.type.code,
         fontWeight = if (qualifier) FontWeight.Normal else FontWeight.SemiBold,
         modifier = Modifier.clickable(remember(blockId + field.role) { MutableInteractionSource() }, null) { ctx.startEdit(EditTarget(blockId, field.role, null, field.text)) },
     )
@@ -510,7 +512,7 @@ private fun Chrome(text: String, onPill: Boolean, strip: Set<String>, node: UiBl
     if (node.kind == "EnhancedForStatement" && shown == ":") shown = "in"
     if (shown.isEmpty()) return
     if (shown == "in") { Keyword("in", onPill); return }
-    Text(shown, color = (if (onPill) Ca.colors.block.text else Ca.colors.syntax.punctuation).copy(alpha = 0.7f), style = Ca.type.code)
+    Text(shown, color = (if (onPill) Ide.colors.block.text else Ide.colors.syntax.punctuation).copy(alpha = 0.7f), style = Ide.type.code)
 }
 
 /** A value input: the typed socket (hexagon = boolean, pill = number, …). Empty → a recessed hole
@@ -533,15 +535,15 @@ private fun Socket(ownerId: String, slotIndex: Int, slot: UiBlockPart.Slot, ctx:
         val shape = rememberValueShape(vShape)
         Box(
             Modifier.heightIn(min = 22.dp).widthIn(min = 40.dp).clip(shape)
-                .background(Ca.colors.block.hole, shape)
-                .then(if (vShape == ValueShape.Type) Modifier.border(1.dp, Ca.colors.block.socket.copy(alpha = 0.5f), shape) else Modifier)
+                .background(Ide.colors.block.hole, shape)
+                .then(if (vShape == ValueShape.Type) Modifier.border(1.dp, Ide.colors.block.socket.copy(alpha = 0.5f), shape) else Modifier)
                 .clickable(remember { MutableInteractionSource() }, null, onClick = onTap)
                 .padding(horizontal = 12.dp + valueShapePadding(vShape)),
             contentAlignment = Alignment.CenterStart,
         ) {
             // the hole hints the kind it expects ("boolean", "number", …); unknown falls back to the category
             val hint = if (slot.valueKind != "unknown") slot.valueKind else slot.category.lowercase()
-            Text(hint, color = Ca.colors.block.text.copy(alpha = 0.6f), fontStyle = FontStyle.Italic, fontSize = 11.sp)
+            Text(hint, color = Ide.colors.block.text.copy(alpha = 0.6f), fontStyle = FontStyle.Italic, fontSize = 11.sp)
         }
         return
     }
@@ -563,7 +565,7 @@ private fun Value(node: UiBlockNode, ctx: Ctx, depth: Int = 0) {
     if (depth >= VALUE_DEPTH_CAP && node.parts.any { it is UiBlockPart.Slot }) { CollapsedChip(node, ctx); return }
     val onlyField = node.parts.singleOrNull() as? UiBlockPart.Field
     if (onlyField != null && onlyField.editable) {
-        if (onlyField.role == "name") Pill(BlockCat.Data, vShape, depth) { Text(onlyField.text, color = Ca.colors.block.text, style = Ca.type.code) }
+        if (onlyField.role == "name") Pill(BlockCat.Data, vShape, depth) { Text(onlyField.text, color = Ide.colors.block.text, style = Ide.type.code) }
         else White(onlyField.text, vShape)
         return
     }
@@ -601,8 +603,8 @@ private fun ValuePart(node: UiBlockNode, part: UiBlockPart, ctx: Ctx, depth: Int
             val name = node.kind == "method_call" && NAME_ROLE.matches(part.role)
             Text(
                 part.text,
-                color = if (qualifier) Ca.colors.block.text.copy(alpha = 0.66f) else Ca.colors.block.text,
-                style = Ca.type.code,
+                color = if (qualifier) Ide.colors.block.text.copy(alpha = 0.66f) else Ide.colors.block.text,
+                style = Ide.type.code,
                 fontWeight = if (qualifier) FontWeight.Normal else if (name) FontWeight.SemiBold else FontWeight.Medium,
             )
         } else {
@@ -610,8 +612,8 @@ private fun ValuePart(node: UiBlockNode, part: UiBlockPart, ctx: Ctx, depth: Int
             when {
                 // B1: a declaration's `=` reads as the word "to" (`set x to 1`).
                 s == "=" && (node.label == "var" || node.kind == "local_var" || node.kind == "field_decl") ->
-                    Text(stringResource(Res.string.block_keyword_to), color = Ca.colors.block.text, style = Ca.type.code, fontWeight = FontWeight.SemiBold)
-                s.isNotEmpty() -> Text(s, color = Ca.colors.block.text.copy(alpha = 0.7f), style = Ca.type.code)
+                    Text(stringResource(Res.string.block_keyword_to), color = Ide.colors.block.text, style = Ide.type.code, fontWeight = FontWeight.SemiBold)
+                s.isNotEmpty() -> Text(s, color = Ide.colors.block.text.copy(alpha = 0.7f), style = Ide.type.code)
             }
         }
         is UiBlockPart.Slot -> if (!part.multiple) {
@@ -668,16 +670,16 @@ private fun ChainLink(node: UiBlockNode, parts: List<UiBlockPart>, nameIdx: Int,
     val name = parts[nameIdx] as UiBlockPart.Field
     val argSlots = parts.subList(nameIdx + 1, end).filterIsInstance<UiBlockPart.Slot>().filter { !it.multiple }
     val isCall = argSlots.isNotEmpty() || (nameIdx + 1 until end).any { val p = parts[it]; p is UiBlockPart.Field && !p.editable && '(' in p.text }
-    val punct = Ca.colors.block.text.copy(alpha = 0.6f)
-    if (leadingDot) Text(".", color = punct, style = Ca.type.code)
+    val punct = Ide.colors.block.text.copy(alpha = 0.6f)
+    if (leadingDot) Text(".", color = punct, style = Ide.type.code)
     Token(node.id, name, onPill = true, ctx = ctx)
     if (isCall) {
-        Text("(", color = punct, style = Ca.type.code)
+        Text("(", color = punct, style = Ide.type.code)
         argSlots.forEachIndexed { i, slot ->
-            if (i > 0) Text(",", color = punct, style = Ca.type.code)
+            if (i > 0) Text(",", color = punct, style = Ide.type.code)
             Socket(node.id, slotIndexInNode(node, slot), slot, ctx, depth)
         }
-        Text(")", color = punct, style = Ca.type.code)
+        Text(")", color = punct, style = Ide.type.code)
     }
 }
 
@@ -701,7 +703,7 @@ private fun OpStack(node: UiBlockNode, ctx: Ctx, depth: Int) {
         operands.forEachIndexed { i, slot ->
             Row(horizontalArrangement = Arrangement.spacedBy(4.dp), verticalAlignment = Alignment.CenterVertically) {
                 Box(Modifier.width(22.dp), contentAlignment = Alignment.CenterEnd) {
-                    if (i > 0) Text(op, color = Ca.colors.block.text, style = Ca.type.code, fontWeight = FontWeight.SemiBold)
+                    if (i > 0) Text(op, color = Ide.colors.block.text, style = Ide.type.code, fontWeight = FontWeight.SemiBold)
                 }
                 Socket(node.id, slotIndexInNode(node, slot), slot, ctx, depth)
             }
@@ -736,7 +738,7 @@ private fun chainDividerIndices(node: UiBlockNode): Set<Int> {
 /** The 1×16dp segment divider between flattened chain links. */
 @Composable
 private fun ChainDivider() {
-    Box(Modifier.width(1.dp).height(16.dp).background(Ca.colors.block.text.copy(alpha = 0.25f)))
+    Box(Modifier.width(1.dp).height(16.dp).background(Ide.colors.block.text.copy(alpha = 0.25f)))
 }
 
 @Composable
@@ -758,12 +760,12 @@ private fun White(text: String, shape: ValueShape = ValueShape.Unknown) {
     val s = rememberValueShape(shape)
     val long = shape == ValueShape.Text && text.length > 28 // a long string literal: ellipsize, tap to edit
     Box(
-        Modifier.heightIn(min = 22.dp).clip(s).background(Ca.colors.block.socket, s)
-            .then(if (shape == ValueShape.Type) Modifier.border(1.dp, Ca.colors.block.socketText.copy(alpha = 0.3f), s) else Modifier) // the type tag's outline
+        Modifier.heightIn(min = 22.dp).clip(s).background(Ide.colors.block.socket, s)
+            .then(if (shape == ValueShape.Type) Modifier.border(1.dp, Ide.colors.block.socketText.copy(alpha = 0.3f), s) else Modifier) // the type tag's outline
             .then(if (long) Modifier.widthIn(max = 220.dp) else Modifier)
             .padding(horizontal = 8.dp + valueShapePadding(shape), vertical = 2.dp),
         contentAlignment = Alignment.Center,
-    ) { Text(text.ifEmpty { " " }, color = literalColor(shape), style = Ca.type.code, maxLines = 1, overflow = if (long) TextOverflow.Ellipsis else TextOverflow.Clip) }
+    ) { Text(text.ifEmpty { " " }, color = literalColor(shape), style = Ide.type.code, maxLines = 1, overflow = if (long) TextOverflow.Ellipsis else TextOverflow.Clip) }
 }
 
 // Literal syntax colors for the value sockets. The socket is white in BOTH themes (see BlockColors), so
@@ -778,7 +780,7 @@ private fun literalColor(shape: ValueShape): Color = when (shape) {
     ValueShape.Text -> LITERAL_STRING
     ValueShape.Number -> LITERAL_NUMBER
     ValueShape.Boolean -> LITERAL_KEYWORD
-    else -> Ca.colors.block.socketText
+    else -> Ide.colors.block.socketText
 }
 
 /** Darken a nested reporter's fill slightly per [depth] so layers read without stacking drop shadows. */
@@ -814,8 +816,8 @@ private fun CollapsedChip(node: UiBlockNode, ctx: Ctx) {
             .padding(horizontal = 8.dp, vertical = 2.dp),
         verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp),
     ) {
-        Text(summaryOf(node, ctx.source), color = Ca.colors.block.text, style = Ca.type.code, maxLines = 1)
-        Icon(CaIcons.braces, stringResource(Res.string.expand), Modifier.size(13.dp), tint = Ca.colors.block.text.copy(alpha = 0.7f))
+        Text(summaryOf(node, ctx.source), color = Ide.colors.block.text, style = Ide.type.code, maxLines = 1)
+        Icon(CaIcons.braces, stringResource(Res.string.expand), Modifier.size(13.dp), tint = Ide.colors.block.text.copy(alpha = 0.7f))
     }
 }
 
@@ -829,26 +831,26 @@ internal fun FocusSheet(node: UiBlockNode, ctx: Ctx, canBack: Boolean, onBack: (
     val color = blockColor(catForValue(node))
     val shape = rememberBlockShape(notchTop = false, bumpBottom = false)
     Box(
-        Modifier.fillMaxSize().background(Ca.colors.glassThick)
+        Modifier.fillMaxSize().background(Ide.colors.glassThick)
             .clickable(remember { MutableInteractionSource() }, null, onClick = onClose),
         contentAlignment = Alignment.Center,
     ) {
         Column(
-            Modifier.padding(20.dp).widthIn(max = 540.dp).clip(RoundedCornerShape(Ca.radius.sheet)).background(Ca.colors.surface)
+            Modifier.padding(20.dp).widthIn(max = 540.dp).clip(RoundedCornerShape(Ca.radius.sheet)).background(MaterialTheme.colorScheme.surface)
                 .clickable(remember { MutableInteractionSource() }, null) {} // swallow taps so the scrim's close doesn't fire
                 .padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                if (canBack) Icon(CaIcons.chevronLeft, stringResource(Res.string.back), Modifier.size(20.dp).clickable(remember { MutableInteractionSource() }, null, onClick = onBack), tint = Ca.colors.textSecondary)
-                Icon(CaIcons.braces, null, Modifier.size(16.dp), tint = Ca.colors.accent)
-                Text(stringResource(Res.string.block_edit_expression), color = Ca.colors.textPrimary, style = Ca.type.headline, modifier = Modifier.weight(1f))
-                Icon(CaIcons.close, stringResource(Res.string.close), Modifier.size(18.dp).clickable(remember { MutableInteractionSource() }, null, onClick = onClose), tint = Ca.colors.textTertiary)
+                if (canBack) Icon(CaIcons.chevronLeft, stringResource(Res.string.back), Modifier.size(20.dp).clickable(remember { MutableInteractionSource() }, null, onClick = onBack), tint = MaterialTheme.colorScheme.onSurfaceVariant)
+                Icon(CaIcons.braces, null, Modifier.size(16.dp), tint = MaterialTheme.colorScheme.primary)
+                Text(stringResource(Res.string.block_edit_expression), color = MaterialTheme.colorScheme.onSurface, style = MaterialTheme.typography.titleMedium, modifier = Modifier.weight(1f))
+                Icon(CaIcons.close, stringResource(Res.string.close), Modifier.size(18.dp).clickable(remember { MutableInteractionSource() }, null, onClick = onClose), tint = MaterialTheme.colorScheme.outline)
             }
             Box(
                 Modifier.fillMaxWidth().clip(shape).background(color, shape).padding(horizontal = 14.dp, vertical = 10.dp),
             ) { BlockInline(node, ctx, onPill = true, skipBody = false) }
-            Text(stringResource(Res.string.block_focus_hint), color = Ca.colors.textTertiary, style = Ca.type.caption)
+            Text(stringResource(Res.string.block_focus_hint), color = MaterialTheme.colorScheme.outline, style = MaterialTheme.typography.bodySmall)
         }
     }
 }
@@ -859,13 +861,13 @@ private fun Ghost(gap: DropDescriptor.StatementGap, empty: Boolean, ctx: Ctx) {
     val hot = ctx.drag.hovered == gap
     Row(
         Modifier.padding(vertical = 12.dp, horizontal = 8.dp).dropZone(ctx.drag, gap).insertionLine(hot)
-            .clip(RoundedCornerShape(BlockMetrics.corner)).dashed(if (hot) Ca.colors.accent else Ca.colors.separatorStrong)
+            .clip(RoundedCornerShape(BlockMetrics.corner)).dashed(if (hot) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outline)
             .clickable(remember(gap) { MutableInteractionSource() }, null) { ctx.openPalette() }
             .padding(horizontal = 10.dp, vertical = 6.dp),
         verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp),
     ) {
-        Icon(CaIcons.plus, null, Modifier.size(12.dp), tint = Ca.colors.textTertiary)
-        if (empty) Text(stringResource(Res.string.block_add_block), color = Ca.colors.textTertiary, fontStyle = FontStyle.Italic, fontSize = 11.sp)
+        Icon(CaIcons.plus, null, Modifier.size(12.dp), tint = MaterialTheme.colorScheme.outline)
+        if (empty) Text(stringResource(Res.string.block_add_block), color = MaterialTheme.colorScheme.outline, fontStyle = FontStyle.Italic, fontSize = 11.sp)
     }
 }
 
@@ -876,32 +878,32 @@ private fun Ghost(gap: DropDescriptor.StatementGap, empty: Boolean, ctx: Ctx) {
 @Composable
 private fun BlockBar(drag: DragState, onAddBlock: () -> Unit) {
     Row(
-        Modifier.fillMaxWidth().height(48.dp).background(Ca.colors.surface).padding(horizontal = 12.dp),
+        Modifier.fillMaxWidth().height(48.dp).background(MaterialTheme.colorScheme.surface).padding(horizontal = 12.dp),
         verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp),
     ) {
         if (drag.payload is DragPayload.MoveBlock) {
             Row(
-                Modifier.clip(RoundedCornerShape(Ca.radius.control)).background(if (drag.hovered == DropDescriptor.Trash) Ca.colors.error else Ca.colors.surface2, RoundedCornerShape(Ca.radius.control))
+                Modifier.clip(RoundedCornerShape(Ca.radius.control)).background(if (drag.hovered == DropDescriptor.Trash) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.surfaceContainerHigh, RoundedCornerShape(Ca.radius.control))
                     .dropZone(drag, DropDescriptor.Trash).padding(horizontal = 14.dp, vertical = 8.dp),
                 verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp),
             ) {
                 val on = drag.hovered == DropDescriptor.Trash
-                Icon(CaIcons.close, stringResource(Res.string.block_trash), Modifier.size(16.dp), tint = if (on) Ca.colors.textOnAccent else Ca.colors.textSecondary)
-                Text(stringResource(Res.string.block_drop_to_delete), color = if (on) Ca.colors.textOnAccent else Ca.colors.textSecondary, style = Ca.type.footnote, fontWeight = FontWeight.SemiBold)
+                Icon(CaIcons.close, stringResource(Res.string.block_trash), Modifier.size(16.dp), tint = if (on) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurfaceVariant)
+                Text(stringResource(Res.string.block_drop_to_delete), color = if (on) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold)
             }
         } else {
             Row(
-                Modifier.clip(RoundedCornerShape(Ca.radius.control)).background(Ca.colors.accentSoft, RoundedCornerShape(Ca.radius.control))
+                Modifier.clip(RoundedCornerShape(Ca.radius.control)).background(MaterialTheme.colorScheme.primaryContainer, RoundedCornerShape(Ca.radius.control))
                     .clickable(remember { MutableInteractionSource() }, null, onClick = onAddBlock).padding(horizontal = 14.dp, vertical = 8.dp),
                 verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp),
             ) {
-                Icon(CaIcons.plus, null, Modifier.size(16.dp), tint = Ca.colors.accent)
-                Text(stringResource(Res.string.block_button), color = Ca.colors.accent, style = Ca.type.footnote, fontWeight = FontWeight.SemiBold)
+                Icon(CaIcons.plus, null, Modifier.size(16.dp), tint = MaterialTheme.colorScheme.primary)
+                Text(stringResource(Res.string.block_button), color = MaterialTheme.colorScheme.primary, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold)
             }
         }
         Box(Modifier.weight(1f))
-        Box(Modifier.size(6.dp).clip(RoundedCornerShape(Ca.radius.pill)).background(Ca.colors.run))
-        Text(stringResource(Res.string.block_live_projection), color = Ca.colors.textTertiary, fontSize = 11.sp, fontWeight = FontWeight.Medium)
+        Box(Modifier.size(6.dp).clip(RoundedCornerShape(Ca.radius.pill)).background(Ide.colors.run))
+        Text(stringResource(Res.string.block_live_projection), color = MaterialTheme.colorScheme.outline, fontSize = 11.sp, fontWeight = FontWeight.Medium)
     }
 }
 
@@ -939,14 +941,14 @@ private fun Palette(ctx: Ctx, onClose: () -> Unit) {
     }
     Box(Modifier.fillMaxSize(), contentAlignment = Alignment.BottomCenter) {
         Column(
-            Modifier.fillMaxWidth().clip(RoundedCornerShape(topStart = Ca.radius.sheet, topEnd = Ca.radius.sheet)).background(Ca.colors.surface).padding(16.dp).padding(bottom = 52.dp),
+            Modifier.fillMaxWidth().clip(RoundedCornerShape(topStart = Ca.radius.sheet, topEnd = Ca.radius.sheet)).background(MaterialTheme.colorScheme.surface).padding(16.dp).padding(bottom = 52.dp),
             verticalArrangement = Arrangement.spacedBy(10.dp),
         ) {
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                Icon(CaIcons.layers, null, Modifier.size(18.dp), tint = Ca.colors.accent)
-                Text(stringResource(Res.string.block_add_a_block), color = Ca.colors.textPrimary, style = Ca.type.headline, modifier = Modifier.weight(1f))
-                Text(stringResource(Res.string.block_statement_slot), color = Ca.colors.textTertiary, style = Ca.type.caption)
-                Icon(CaIcons.close, stringResource(Res.string.close), Modifier.size(18.dp).clickable(remember { MutableInteractionSource() }, null, onClick = onClose), tint = Ca.colors.textTertiary)
+                Icon(CaIcons.layers, null, Modifier.size(18.dp), tint = MaterialTheme.colorScheme.primary)
+                Text(stringResource(Res.string.block_add_a_block), color = MaterialTheme.colorScheme.onSurface, style = MaterialTheme.typography.titleMedium, modifier = Modifier.weight(1f))
+                Text(stringResource(Res.string.block_statement_slot), color = MaterialTheme.colorScheme.outline, style = MaterialTheme.typography.bodySmall)
+                Icon(CaIcons.close, stringResource(Res.string.close), Modifier.size(18.dp).clickable(remember { MutableInteractionSource() }, null, onClick = onClose), tint = MaterialTheme.colorScheme.outline)
             }
             PaletteSearch(query) { query = it }
             val statics = if (query.isBlank()) PALETTE else PALETTE.filter { it.label.contains(query.trim(), ignoreCase = true) }
@@ -955,9 +957,9 @@ private fun Palette(ctx: Ctx, onClose: () -> Unit) {
                 hits.forEach { (hit, fromMembers) -> PaletteBlock(hit.name, hit.detail, BlockCat.Call, templateFor(hit, fromMembers), ctx) }
             }
             when {
-                searching -> Text(stringResource(Res.string.block_searching_index), color = Ca.colors.textTertiary, style = Ca.type.caption)
-                query.isNotBlank() && hits.isEmpty() && statics.isEmpty() -> Text(stringResource(Res.string.block_no_matches), color = Ca.colors.textTertiary, style = Ca.type.caption)
-                query.isNotBlank() && hits.isEmpty() -> Text(stringResource(Res.string.block_no_index_matches), color = Ca.colors.textTertiary, style = Ca.type.caption)
+                searching -> Text(stringResource(Res.string.block_searching_index), color = MaterialTheme.colorScheme.outline, style = MaterialTheme.typography.bodySmall)
+                query.isNotBlank() && hits.isEmpty() && statics.isEmpty() -> Text(stringResource(Res.string.block_no_matches), color = MaterialTheme.colorScheme.outline, style = MaterialTheme.typography.bodySmall)
+                query.isNotBlank() && hits.isEmpty() -> Text(stringResource(Res.string.block_no_index_matches), color = MaterialTheme.colorScheme.outline, style = MaterialTheme.typography.bodySmall)
             }
         }
     }
@@ -967,20 +969,20 @@ private fun Palette(ctx: Ctx, onClose: () -> Unit) {
 @Composable
 private fun PaletteSearch(query: String, onQuery: (String) -> Unit) {
     Row(
-        Modifier.fillMaxWidth().clip(RoundedCornerShape(Ca.radius.control)).background(Ca.colors.surface2, RoundedCornerShape(Ca.radius.control)).padding(horizontal = 10.dp, vertical = 7.dp),
+        Modifier.fillMaxWidth().clip(RoundedCornerShape(Ca.radius.control)).background(MaterialTheme.colorScheme.surfaceContainerHigh, RoundedCornerShape(Ca.radius.control)).padding(horizontal = 10.dp, vertical = 7.dp),
         verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(7.dp),
     ) {
-        Icon(CaIcons.search, null, Modifier.size(14.dp), tint = Ca.colors.textTertiary)
+        Icon(CaIcons.search, null, Modifier.size(14.dp), tint = MaterialTheme.colorScheme.outline)
         Box(Modifier.weight(1f)) {
-            if (query.isEmpty()) Text(stringResource(Res.string.block_search_placeholder), color = Ca.colors.textTertiary, style = Ca.type.codeSmall)
+            if (query.isEmpty()) Text(stringResource(Res.string.block_search_placeholder), color = MaterialTheme.colorScheme.outline, style = Ide.type.codeSmall)
             BasicTextField(
                 query, onQuery, singleLine = true,
-                textStyle = Ca.type.codeSmall.copy(color = Ca.colors.textPrimary),
-                cursorBrush = SolidColor(Ca.colors.accent),
+                textStyle = Ide.type.codeSmall.copy(color = MaterialTheme.colorScheme.onSurface),
+                cursorBrush = SolidColor(MaterialTheme.colorScheme.primary),
                 modifier = Modifier.fillMaxWidth(),
             )
         }
-        if (query.isNotEmpty()) Icon(CaIcons.close, stringResource(Res.string.clear), Modifier.size(13.dp).clickable(remember { MutableInteractionSource() }, null) { onQuery("") }, tint = Ca.colors.textTertiary)
+        if (query.isNotEmpty()) Icon(CaIcons.close, stringResource(Res.string.clear), Modifier.size(13.dp).clickable(remember { MutableInteractionSource() }, null) { onQuery("") }, tint = MaterialTheme.colorScheme.outline)
     }
 }
 
@@ -997,8 +999,8 @@ private fun PaletteBlock(label: String, ghost: String, cat: BlockCat, text: Stri
             .padding(start = 13.dp, end = 13.dp, top = 8.dp, bottom = 8.dp + BlockMetrics.connDepth),
         verticalArrangement = Arrangement.spacedBy(1.dp),
     ) {
-        Text(label, color = Ca.colors.block.text, style = Ca.type.subhead, fontWeight = FontWeight.SemiBold)
-        Text(ghost, color = Ca.colors.block.text.copy(alpha = 0.75f), style = Ca.type.codeSmall)
+        Text(label, color = Ide.colors.block.text, style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.SemiBold)
+        Text(ghost, color = Ide.colors.block.text.copy(alpha = 0.75f), style = Ide.type.codeSmall)
     }
 }
 
@@ -1015,33 +1017,33 @@ private fun templateFor(hit: SymbolHit, fromMembers: Boolean): String {
 @Composable
 private fun ActionBar(selection: Selection, ctx: Ctx, modifier: Modifier) {
     Row(
-        modifier.clip(RoundedCornerShape(Ca.radius.lg)).background(Ca.colors.glassThick, RoundedCornerShape(Ca.radius.lg)).padding(horizontal = 6.dp, vertical = 5.dp),
+        modifier.clip(RoundedCornerShape(Ca.radius.lg)).background(Ide.colors.glassThick, RoundedCornerShape(Ca.radius.lg)).padding(horizontal = 6.dp, vertical = 5.dp),
         horizontalArrangement = Arrangement.spacedBy(2.dp), verticalAlignment = Alignment.CenterVertically,
     ) {
         if (selection.insertCtx != null) {
             ActionItem(CaIcons.layers, stringResource(Res.string.block_wrap_if)) { ctx.apply(UiBlockEdit.WrapInIf(selection.blockId)) }
             ActionItem(CaIcons.plus, stringResource(Res.string.block_duplicate)) { val ic = selection.insertCtx; ctx.apply(UiBlockEdit.InsertTemplate(ic.ownerId, ic.slotIndex, ic.index + 1, selection.sourceText)) }
-            Box(Modifier.width(1.dp).height(24.dp).background(Ca.colors.separator))
+            Box(Modifier.width(1.dp).height(24.dp).background(MaterialTheme.colorScheme.outlineVariant))
         }
-        ActionItem(CaIcons.close, stringResource(Res.string.delete), tint = Ca.colors.error) { ctx.apply(UiBlockEdit.DeleteBlock(selection.blockId)) }
+        ActionItem(CaIcons.close, stringResource(Res.string.delete), tint = MaterialTheme.colorScheme.error) { ctx.apply(UiBlockEdit.DeleteBlock(selection.blockId)) }
     }
 }
 
 @Composable
-private fun ActionItem(icon: ImageVector, label: String, tint: Color = Ca.colors.textPrimary, onClick: () -> Unit) {
+private fun ActionItem(icon: ImageVector, label: String, tint: Color = MaterialTheme.colorScheme.onSurface, onClick: () -> Unit) {
     Column(
         Modifier.widthIn(min = 46.dp).clip(RoundedCornerShape(Ca.radius.sm)).clickable(remember { MutableInteractionSource() }, null, onClick = onClick).padding(horizontal = 8.dp, vertical = 5.dp),
         horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(1.dp),
     ) {
         Icon(icon, label, Modifier.size(18.dp), tint = tint)
-        Text(label, color = Ca.colors.textTertiary, fontSize = 9.5.sp, fontWeight = FontWeight.SemiBold)
+        Text(label, color = MaterialTheme.colorScheme.outline, fontSize = 9.5.sp, fontWeight = FontWeight.SemiBold)
     }
 }
 
 @Composable
 private fun Hint(text: String) {
     Box(Modifier.fillMaxWidth().padding(40.dp), contentAlignment = Alignment.Center) {
-        Text(text, color = Ca.colors.textSecondary, style = Ca.type.subhead)
+        Text(text, color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodyLarge)
     }
 }
 
@@ -1142,7 +1144,7 @@ private fun InterlockColumn(modifier: Modifier = Modifier, content: @Composable 
 
 /** A 2px accent line along the top edge, shown when a drag hovers this gap. */
 private fun Modifier.insertionLine(show: Boolean): Modifier = composed {
-    val accent = Ca.colors.accent
+    val accent = MaterialTheme.colorScheme.primary
     if (!show) this else this.drawBehind { drawRect(accent, size = Size(size.width, 2.dp.toPx())) }
 }
 
@@ -1558,7 +1560,7 @@ private fun SamplePreview(dark: Boolean, sample: () -> Pair<UiBlockNode, String>
         val drag = remember { DragState() }
         val scope = rememberCoroutineScope()
         val ctx = remember { Ctx("/preview/Sample.java", PreviewBackend, scope, src, null, null, drag, {}, {}, { _, _ -> }, {}) }
-        Box(Modifier.width(380.dp).heightIn(min = 560.dp).background(Ca.colors.editorBg).padding(14.dp)) {
+        Box(Modifier.width(380.dp).heightIn(min = 560.dp).background(Ide.colors.editorBg).padding(14.dp)) {
             PuzzleCanvas(file, ctx)
         }
     }
@@ -1587,7 +1589,7 @@ private fun PreviewBlockPalette() {
         val drag = remember { DragState() }
         val scope = rememberCoroutineScope()
         val ctx = remember { Ctx("/preview/Sample.java", PreviewBackend, scope, "", null, null, drag, {}, {}, { _, _ -> }, {}) }
-        Box(Modifier.width(380.dp).height(440.dp).background(Ca.colors.bg)) {
+        Box(Modifier.width(380.dp).height(440.dp).background(MaterialTheme.colorScheme.background)) {
             Palette(ctx) {}
         }
     }

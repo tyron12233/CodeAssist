@@ -1,5 +1,6 @@
 package dev.ide.ui.editor.blocks
 
+import dev.ide.ui.theme.Ide
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -26,13 +27,12 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.material3.Text
 import androidx.compose.ui.unit.Dp
-import dev.ide.ui.theme.Ca
 import dev.ide.ui.theme.CodeAssistTheme
 
 /**
  * The Sketchware/Blockly puzzle geometry and palette. Solid category-colored blocks interlock by a top
  * notch and a bottom bump; C-blocks wrap their body behind a left arm; values are white recessed sockets
- * or solid reporter pills. Colors come from the theme (`Ca.colors.block`) so they track light/dark.
+ * or solid reporter pills. Colors come from the theme (`Ide.colors.block`) so they track light/dark.
  */
 object BlockMetrics {
     val corner = 8.dp        // rounded block corners
@@ -104,7 +104,7 @@ fun rememberValueShape(shape: ValueShape): Shape {
 
 @Composable
 @ReadOnlyComposable
-fun blockColor(cat: BlockCat): Color = with(Ca.colors.block) {
+fun blockColor(cat: BlockCat): Color = with(Ide.colors.block) {
     when (cat) {
         BlockCat.Control -> control
         BlockCat.Data -> data
@@ -272,7 +272,7 @@ private fun ShapeSwatch(label: String, cat: BlockCat, notchTop: Boolean, bumpBot
             .background(color, shape)
             .padding(horizontal = 16.dp, vertical = 8.dp),
     ) {
-        Text(label, color = Ca.colors.block.text, fontSize = 12.sp, fontWeight = FontWeight.Medium, fontFamily = Ca.type.codeFamily)
+        Text(label, color = Ide.colors.block.text, fontSize = 12.sp, fontWeight = FontWeight.Medium, fontFamily = Ide.type.codeFamily)
     }
 }
 
@@ -292,7 +292,7 @@ private fun CBlockSwatch(label: String) {
     )
     Column(Modifier.width(220.dp).background(color, shape)) {   // no clip: the child sits in the carved mouth
         Box(Modifier.height(headerH).padding(start = 16.dp, top = 8.dp)) {
-            Text(label, color = Ca.colors.block.text, fontSize = 12.sp, fontWeight = FontWeight.Medium, fontFamily = Ca.type.codeFamily)
+            Text(label, color = Ide.colors.block.text, fontSize = 12.sp, fontWeight = FontWeight.Medium, fontFamily = Ide.type.codeFamily)
         }
         // The child sits in the mouth, pulled up by connDepth so its top notch meets the header's inner notch.
         Box(Modifier.offset(y = -BlockMetrics.connDepth).padding(start = BlockMetrics.arm)) {
@@ -313,7 +313,7 @@ private fun ShapesSample(dark: Boolean) {
         // An interlocking stack: hat on top (no notch), statements bump-into-notch, last block flat,
         // then a C-block whose header notch shows that other blocks nest inside its mouth.
         Column(
-            modifier = Modifier.background(Ca.colors.editorBg).padding(16.dp)) {
+            modifier = Modifier.background(Ide.colors.editorBg).padding(16.dp)) {
             ShapeSwatch("void onCreate()", BlockCat.Method, notchTop = false, bumpBottom = true, topRadius = hatPx)
             ShapeSwatch("count = count + 1", BlockCat.Data, notchTop = true, bumpBottom = true)
             ShapeSwatch("render()", BlockCat.Call, notchTop = true, bumpBottom = true)

@@ -1,5 +1,7 @@
 package dev.ide.ui.screens
 
+import dev.ide.ui.theme.Ide
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -70,29 +72,29 @@ internal fun GradleCompatBanner(
         GlassSurface(modifier = Modifier.fillMaxWidth(), material = GlassMaterial.Regular) {
             Column(
                 Modifier.fillMaxWidth()
-                    .background(Ca.colors.warning.copy(alpha = 0.10f))
+                    .background(Ide.colors.warning.copy(alpha = 0.10f))
                     .padding(horizontal = 12.dp, vertical = 8.dp),
             ) {
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(8.dp),
                 ) {
-                    Icon(CaIcons.warning, null, Modifier.size(16.dp), tint = Ca.colors.warning)
+                    Icon(CaIcons.warning, null, Modifier.size(16.dp), tint = Ide.colors.warning)
                     Column(Modifier.weight(1f)) {
                         Text(
                             stringResource(Res.string.gradle_mode_title),
-                            color = Ca.colors.warning, style = Ca.type.footnote, fontWeight = FontWeight.SemiBold,
+                            color = Ide.colors.warning, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold,
                             maxLines = 1, overflow = TextOverflow.Ellipsis,
                         )
                         Text(
                             result ?: info.summary,
-                            color = Ca.colors.textSecondary, style = Ca.type.caption2,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.labelSmall,
                             maxLines = 3, overflow = TextOverflow.Ellipsis,
                         )
                     }
                     // Re-sync: re-read the Gradle scripts into the model, then re-resolve deps + re-index.
                     Row(
-                        Modifier.background(Ca.colors.warning.copy(alpha = 0.18f), RoundedCornerShape(Ca.radius.pill))
+                        Modifier.background(Ide.colors.warning.copy(alpha = 0.18f), RoundedCornerShape(Ca.radius.pill))
                             .clickable(enabled = !syncing) {
                                 syncing = true
                                 result = syncingLabel
@@ -107,9 +109,9 @@ internal fun GradleCompatBanner(
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.spacedBy(4.dp),
                     ) {
-                        if (syncing) CircularProgressIndicator(Modifier.size(13.dp), color = Ca.colors.warning, strokeWidth = 2.dp)
-                        else Icon(CaIcons.refresh, stringResource(Res.string.gradle_resync), Modifier.size(13.dp), tint = Ca.colors.warning)
-                        if (!compact) Text(stringResource(Res.string.gradle_resync), color = Ca.colors.warning, style = Ca.type.caption, fontWeight = FontWeight.SemiBold)
+                        if (syncing) CircularProgressIndicator(Modifier.size(13.dp), color = Ide.colors.warning, strokeWidth = 2.dp)
+                        else Icon(CaIcons.refresh, stringResource(Res.string.gradle_resync), Modifier.size(13.dp), tint = Ide.colors.warning)
+                        if (!compact) Text(stringResource(Res.string.gradle_resync), color = Ide.colors.warning, style = MaterialTheme.typography.bodySmall, fontWeight = FontWeight.SemiBold)
                     }
                     if (info.notes.isNotEmpty()) {
                         IconButtonCa(
@@ -129,7 +131,7 @@ internal fun GradleCompatBanner(
                         for (note in info.notes) {
                             Text(
                                 "•  $note",
-                                color = Ca.colors.textTertiary, style = Ca.type.caption2,
+                                color = MaterialTheme.colorScheme.outline, style = MaterialTheme.typography.labelSmall,
                                 maxLines = 2, overflow = TextOverflow.Ellipsis,
                             )
                         }

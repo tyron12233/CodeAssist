@@ -1,5 +1,7 @@
 package dev.ide.ui.components
 
+import dev.ide.ui.theme.Ide
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -73,18 +75,18 @@ private fun PermissionCard(req: UiPermissionRequest, answer: (UiPermissionDecisi
             .widthIn(max = 420.dp)
             .fillMaxWidth()
             .padding(horizontal = 16.dp)
-            .background(Ca.colors.glassThick, RoundedCornerShape(Ca.radius.xl))
-            .border(1.dp, Ca.colors.glassEdge, RoundedCornerShape(Ca.radius.xl))
+            .background(Ide.colors.glassThick, RoundedCornerShape(Ca.radius.xl))
+            .border(1.dp, Ide.colors.glassEdge, RoundedCornerShape(Ca.radius.xl))
             .padding(20.dp),
     ) {
-        Text(stringResource(title), color = Ca.colors.textPrimary, style = Ca.type.subhead, fontWeight = FontWeight.SemiBold)
+        Text(stringResource(title), color = MaterialTheme.colorScheme.onSurface, style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.SemiBold)
         Spacer(Modifier.height(6.dp))
         Text(
             stringResource(Res.string.perm_wants_to, stringResource(verb)),
-            color = Ca.colors.textSecondary, style = Ca.type.footnote,
+            color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodyMedium,
         )
         Spacer(Modifier.height(2.dp))
-        Text(req.detail, color = Ca.colors.textPrimary, style = Ca.type.footnote, fontWeight = FontWeight.Medium)
+        Text(req.detail, color = MaterialTheme.colorScheme.onSurface, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Medium)
         Spacer(Modifier.height(16.dp))
 
         PermButton(stringResource(Res.string.perm_allow_once), PermKind.Neutral) { answer(UiPermissionDecision.ALLOW_ONCE) }
@@ -102,19 +104,19 @@ private enum class PermKind { Neutral, Accent, Danger }
 @Composable
 private fun PermButton(label: String, kind: PermKind, onClick: () -> Unit) {
     val fill = when (kind) {
-        PermKind.Accent -> Ca.colors.accent
-        PermKind.Danger -> Ca.colors.error.copy(alpha = 0.16f)
-        PermKind.Neutral -> Ca.colors.surface3
+        PermKind.Accent -> MaterialTheme.colorScheme.primary
+        PermKind.Danger -> MaterialTheme.colorScheme.error.copy(alpha = 0.16f)
+        PermKind.Neutral -> MaterialTheme.colorScheme.surfaceContainerHighest
     }
     val fg = when (kind) {
-        PermKind.Accent -> Ca.colors.textOnAccent
-        PermKind.Danger -> Ca.colors.error
-        PermKind.Neutral -> Ca.colors.textPrimary
+        PermKind.Accent -> MaterialTheme.colorScheme.onPrimary
+        PermKind.Danger -> MaterialTheme.colorScheme.error
+        PermKind.Neutral -> MaterialTheme.colorScheme.onSurface
     }
     Text(
         label,
         color = fg,
-        style = Ca.type.footnote,
+        style = MaterialTheme.typography.bodyMedium,
         fontWeight = FontWeight.SemiBold,
         modifier = Modifier
             .fillMaxWidth()

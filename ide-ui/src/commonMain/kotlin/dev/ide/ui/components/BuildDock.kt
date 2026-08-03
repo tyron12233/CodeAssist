@@ -1,5 +1,7 @@
 package dev.ide.ui.components
 
+import dev.ide.ui.theme.Ide
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.Animatable
@@ -214,12 +216,12 @@ fun BuildDock(
         val p = ((height.value - barPx) / (halfPx - barPx)).coerceIn(0f, 1f)
         val corner = lerp(0.dp, Ca.radius.sheet, p)
         val shape = RoundedCornerShape(topStart = corner, topEnd = corner)
-        val edge = Ca.colors.glassEdgeTop
+        val edge = Ide.colors.glassEdgeTop
         Box(
             Modifier
                 .fillMaxWidth()
                 .height(with(density) { height.value.toDp() })
-                .background(Ca.colors.glassThick, shape)
+                .background(Ide.colors.glassThick, shape)
                 .drawBehind { drawLine(edge, Offset(0f, 0f), Offset(size.width, 0f), strokeWidth = 1f) }
                 // A tap on the dock body must not fall through to the editor behind it.
                 .pointerInput(Unit) { detectTapGestures { } }
@@ -248,8 +250,8 @@ fun BuildDock(
                     // The persistent drag affordance: a small grab notch on the bar's top edge, warming
                     // to the accent while a build runs (the moment swiping up is most worth knowing).
                     val notch by animateColorAsState(
-                        if (buildState.status == RunStatus.Running) Ca.colors.accent.copy(alpha = 0.75f)
-                        else Ca.colors.textTertiary.copy(alpha = 0.4f),
+                        if (buildState.status == RunStatus.Running) MaterialTheme.colorScheme.primary.copy(alpha = 0.75f)
+                        else MaterialTheme.colorScheme.outline.copy(alpha = 0.4f),
                         tween(Motion.BASE, easing = Motion.soft),
                         label = "dockNotch",
                     )
@@ -264,7 +266,7 @@ fun BuildDock(
                     if (buildState.status == RunStatus.Running) {
                         LinearProgressIndicator(
                             Modifier.fillMaxWidth().height(2.dp).align(Alignment.TopCenter),
-                            color = Ca.colors.accent,
+                            color = MaterialTheme.colorScheme.primary,
                             trackColor = androidx.compose.ui.graphics.Color.Transparent,
                         )
                     }
@@ -287,7 +289,7 @@ fun BuildDock(
                                 .width(38.dp)
                                 .height(5.dp)
                                 .background(
-                                    Ca.colors.textTertiary.copy(alpha = 0.5f),
+                                    MaterialTheme.colorScheme.outline.copy(alpha = 0.5f),
                                     RoundedCornerShape(Ca.radius.pill),
                                 ),
                         )
@@ -318,9 +320,9 @@ private fun BuildStatusChip(status: RunStatus, onClick: () -> Unit) {
                 .pressScale(interaction)
                 .background(
                     when (status) {
-                        RunStatus.Failed -> Ca.colors.error.copy(alpha = 0.16f)
-                        RunStatus.Succeeded -> Ca.colors.success.copy(alpha = 0.16f)
-                        else -> Ca.colors.accentSoft
+                        RunStatus.Failed -> MaterialTheme.colorScheme.error.copy(alpha = 0.16f)
+                        RunStatus.Succeeded -> Ide.colors.success.copy(alpha = 0.16f)
+                        else -> MaterialTheme.colorScheme.primaryContainer
                     },
                     RoundedCornerShape(Ca.radius.pill),
                 )
@@ -329,11 +331,11 @@ private fun BuildStatusChip(status: RunStatus, onClick: () -> Unit) {
         ) {
             when (status) {
                 RunStatus.Running ->
-                    CircularProgressIndicator(Modifier.size(15.dp), color = Ca.colors.accent, strokeWidth = 2.dp)
+                    CircularProgressIndicator(Modifier.size(15.dp), color = MaterialTheme.colorScheme.primary, strokeWidth = 2.dp)
                 RunStatus.Succeeded ->
-                    Icon(CaIcons.check, stringResource(Res.string.buildc_build_succeeded), Modifier.size(15.dp), tint = Ca.colors.success)
+                    Icon(CaIcons.check, stringResource(Res.string.buildc_build_succeeded), Modifier.size(15.dp), tint = Ide.colors.success)
                 RunStatus.Failed ->
-                    Icon(CaIcons.close, stringResource(Res.string.buildc_build_failed), Modifier.size(15.dp), tint = Ca.colors.error)
+                    Icon(CaIcons.close, stringResource(Res.string.buildc_build_failed), Modifier.size(15.dp), tint = MaterialTheme.colorScheme.error)
                 RunStatus.Idle -> {}
             }
         }

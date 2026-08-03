@@ -1,5 +1,7 @@
 package dev.ide.ui.components
 
+import dev.ide.ui.theme.Ide
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
@@ -199,16 +201,16 @@ fun FileNavigator(
             Column(Modifier.weight(1f)) {
                 Text(
                     root.name,
-                    color = Ca.colors.textPrimary,
-                    style = Ca.type.subhead,
+                    color = MaterialTheme.colorScheme.onSurface,
+                    style = MaterialTheme.typography.bodyLarge,
                     fontWeight = FontWeight.SemiBold,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis
                 )
                 Text(
                     pluralStringResource(Res.plurals.modules, moduleCount, moduleCount),
-                    color = Ca.colors.textTertiary,
-                    style = Ca.type.caption2
+                    color = MaterialTheme.colorScheme.outline,
+                    style = MaterialTheme.typography.labelSmall
                 )
             }
             if (onOpenInFiles != null) IconButtonCa(
@@ -238,7 +240,7 @@ fun FileNavigator(
         }
         // The scope selector (Project ⇄ All files) — a dropdown button, like IntelliJ's view chooser.
         ScopeDropdown(mode, onModeChange, Modifier.padding(start = 12.dp, bottom = 8.dp))
-        Box(Modifier.fillMaxWidth().height(1.dp).background(Ca.colors.separator))
+        Box(Modifier.fillMaxWidth().height(1.dp).background(MaterialTheme.colorScheme.outlineVariant))
         // The tree is virtualized: only the currently-visible (expanded-into) rows are flattened and handed to
         // a LazyColumn, so a project with thousands of files composes just what's on screen instead of the whole
         // tree at once. Flattening reacts to `expanded`/`sort` via derivedStateOf; each row animates in/out and
@@ -387,7 +389,7 @@ private fun ScopeDropdown(
     Box(modifier) {
         Row(
             Modifier
-                .background(Ca.colors.surface2, RoundedCornerShape(Ca.radius.control))
+                .background(MaterialTheme.colorScheme.surfaceContainerHigh, RoundedCornerShape(Ca.radius.control))
                 .clickable(interaction, indication = null) { open = true }
                 .padding(start = 10.dp, end = 6.dp, top = 6.dp, bottom = 6.dp),
             verticalAlignment = Alignment.CenterVertically,
@@ -395,15 +397,15 @@ private fun ScopeDropdown(
         ) {
             Text(
                 mode.label(),
-                color = Ca.colors.textSecondary,
-                style = Ca.type.footnote,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                style = MaterialTheme.typography.bodyMedium,
                 fontWeight = FontWeight.Medium
             )
             Icon(
                 CaIcons.chevronDown,
                 stringResource(Res.string.filetree_change_view),
                 Modifier.size(15.dp),
-                tint = Ca.colors.textTertiary
+                tint = MaterialTheme.colorScheme.outline
             )
         }
         CaDropdownMenu(expanded = open, onDismissRequest = { open = false }) {
@@ -442,7 +444,7 @@ private fun HeaderOverflowMenu(
             FileActionItem(CaIcons.chevronUp, stringResource(Res.string.filetree_collapse_all)) { open = false; onCollapseAll() }
             Box(
                 Modifier.fillMaxWidth().height(1.dp).padding(vertical = 4.dp)
-                    .background(Ca.colors.separator)
+                    .background(MaterialTheme.colorScheme.outlineVariant)
             )
             MenuSectionLabel(stringResource(Res.string.filetree_sort_by))
             CheckableMenuItem(stringResource(Res.string.filetree_sort_name), checked = sort == TreeSort.Name) {
@@ -464,8 +466,8 @@ private fun HeaderOverflowMenu(
 private fun MenuSectionLabel(text: String) {
     Text(
         text,
-        color = Ca.colors.textTertiary,
-        style = Ca.type.caption2,
+        color = MaterialTheme.colorScheme.outline,
+        style = MaterialTheme.typography.labelSmall,
         fontWeight = FontWeight.SemiBold,
         modifier = Modifier.padding(start = 12.dp, end = 12.dp, top = 4.dp, bottom = 2.dp),
     )
@@ -475,13 +477,13 @@ private fun MenuSectionLabel(text: String) {
 @Composable
 private fun CheckableMenuItem(label: String, checked: Boolean, onClick: () -> Unit) {
     DropdownMenuItem(
-        text = { Text(label, color = Ca.colors.textPrimary, style = Ca.type.footnote) },
+        text = { Text(label, color = MaterialTheme.colorScheme.onSurface, style = MaterialTheme.typography.bodyMedium) },
         trailingIcon = {
             if (checked) Icon(
                 CaIcons.check,
                 null,
                 Modifier.size(15.dp),
-                tint = Ca.colors.accent
+                tint = MaterialTheme.colorScheme.primary
             )
         },
         onClick = onClick,
@@ -567,7 +569,7 @@ private fun TreeRowContent(
                 .height(rowHeight)
                 .padding(horizontal = 6.dp, vertical = 1.dp)
                 .clip(RoundedCornerShape(Ca.radius.sm))
-                .background(if (isActive) Ca.colors.accentSoft else Color.Transparent)
+                .background(if (isActive) MaterialTheme.colorScheme.primaryContainer else Color.Transparent)
                 .hoverable(interaction)
                 .combinedClickable(
                     onClick = {
@@ -594,7 +596,7 @@ private fun TreeRowContent(
                     CaIcons.caretRight,
                     null,
                     Modifier.size(14.dp).rotate(caretAngle),
-                    tint = Ca.colors.textTertiary,
+                    tint = MaterialTheme.colorScheme.outline,
                 )
                 Spacer(Modifier.width(4.dp))
             } else {
@@ -623,12 +625,12 @@ private fun TreeRowContent(
                 Text(
                     node.name,
                     color = when {
-                        isActive -> Ca.colors.accent
+                        isActive -> MaterialTheme.colorScheme.primary
                         // Derived build output, IntelliJ-style: dimmed so it reads as generated, not source.
-                        node.styleHint == "excluded" -> Ca.colors.textTertiary
-                        else -> Ca.colors.textPrimary
+                        node.styleHint == "excluded" -> MaterialTheme.colorScheme.outline
+                        else -> MaterialTheme.colorScheme.onSurface
                     },
-                    style = Ca.type.footnote,
+                    style = MaterialTheme.typography.bodyMedium,
                     fontWeight = if (isActive) FontWeight.SemiBold else FontWeight.Normal,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
@@ -802,13 +804,13 @@ private fun FileActionItem(
     danger: Boolean = false,
     onClick: () -> Unit,
 ) {
-    val tint = if (danger) Ca.colors.error else Ca.colors.textSecondary
+    val tint = if (danger) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant
     DropdownMenuItem(
         text = {
             Text(
                 label,
-                color = if (danger) Ca.colors.error else Ca.colors.textPrimary,
-                style = Ca.type.footnote
+                color = if (danger) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurface,
+                style = MaterialTheme.typography.bodyMedium
             )
         },
         leadingIcon = { Icon(icon, null, Modifier.size(15.dp), tint = tint) },
@@ -821,7 +823,7 @@ private fun FileActionItem(
 private fun MenuDivider() {
     Box(
         Modifier.fillMaxWidth().height(1.dp).padding(vertical = 4.dp)
-            .background(Ca.colors.separator)
+            .background(MaterialTheme.colorScheme.outlineVariant)
     )
 }
 
@@ -923,14 +925,14 @@ private fun SegmentedPathLabel(
     val lastIndex = segments.lastIndex
     Row(modifier, verticalAlignment = Alignment.CenterVertically) {
         segments.forEachIndexed { i, seg ->
-            if (i > 0) Text(separator, color = Ca.colors.textTertiary, style = Ca.type.footnote)
+            if (i > 0) Text(separator, color = MaterialTheme.colorScheme.outline, style = MaterialTheme.typography.bodyMedium)
             // packageName carries the cumulative level (`com.example` / `app/src`); show just this leaf.
             val leaf = seg.packageName.substringAfterLast('.').substringAfterLast('/')
             if (i == lastIndex) {
                 Text(
                     leaf,
-                    color = Ca.colors.textPrimary,
-                    style = Ca.type.footnote,
+                    color = MaterialTheme.colorScheme.onSurface,
+                    style = MaterialTheme.typography.bodyMedium,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis
                 )
@@ -939,8 +941,8 @@ private fun SegmentedPathLabel(
                 Box {
                     Text(
                         leaf,
-                        color = Ca.colors.textSecondary,
-                        style = Ca.type.footnote,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        style = MaterialTheme.typography.bodyMedium,
                         maxLines = 1,
                         modifier = Modifier
                             .clip(RoundedCornerShape(Ca.radius.xs))
@@ -1011,8 +1013,8 @@ private fun NodeIcon(node: TreeNode, open: Boolean) {
 
 @Composable
 private fun gitColor(status: GitStatus): Color = when (status) {
-    GitStatus.Added -> Ca.colors.gitAdded
-    GitStatus.Modified -> Ca.colors.gitModified
-    GitStatus.Deleted -> Ca.colors.gitDeleted
-    GitStatus.Untracked -> Ca.colors.gitUntracked
+    GitStatus.Added -> Ide.colors.gitAdded
+    GitStatus.Modified -> Ide.colors.gitModified
+    GitStatus.Deleted -> Ide.colors.gitDeleted
+    GitStatus.Untracked -> Ide.colors.gitUntracked
 }

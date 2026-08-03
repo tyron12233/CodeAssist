@@ -1,5 +1,6 @@
 package dev.ide.ui.editor
 
+import dev.ide.ui.theme.Ide
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
@@ -15,7 +16,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.dp
 import dev.ide.ui.editor.blocks.DragState
-import dev.ide.ui.theme.Ca
 import dev.ide.ui.theme.CodeAssistTheme
 import org.jetbrains.skia.EncodedImageFormat
 import java.io.File
@@ -30,7 +30,7 @@ class BlockRenderSnapshot {
         val (file, src) = typedSampleFile()
         snapshot("blocks-typed.png", 820, 1500) {
             val ctx = previewCtx(src)
-            Box(Modifier.width(400.dp).heightIn(min = 740.dp).background(Ca.colors.editorBg).padding(14.dp)) {
+            Box(Modifier.width(400.dp).heightIn(min = 740.dp).background(Ide.colors.editorBg).padding(14.dp)) {
                 PuzzleCanvas(file, ctx)
             }
         }
@@ -43,7 +43,7 @@ class BlockRenderSnapshot {
         val (deepFile, deepSrc) = deepSampleFile()
         snapshot("blocks-deep.png", 1500, 760) {
             val ctx = previewCtx(deepSrc)
-            Box(Modifier.width(720.dp).heightIn(min = 360.dp).background(Ca.colors.editorBg).padding(14.dp)) {
+            Box(Modifier.width(720.dp).heightIn(min = 360.dp).background(Ide.colors.editorBg).padding(14.dp)) {
                 PuzzleCanvas(deepFile, ctx)
             }
         }
@@ -51,7 +51,7 @@ class BlockRenderSnapshot {
         val (focusNode, focusSrc) = deepFocusExpr()
         snapshot("blocks-focus.png", 1100, 900) {
             val ctx = previewCtx(focusSrc)
-            Box(Modifier.fillMaxSize().background(Ca.colors.editorBg)) {
+            Box(Modifier.fillMaxSize().background(Ide.colors.editorBg)) {
                 FocusSheet(focusNode, ctx, canBack = false, onBack = {}, onClose = {})
             }
         }
@@ -64,7 +64,7 @@ class BlockRenderSnapshot {
         val (file, src) = opSampleFile()
         snapshot("blocks-ops.png", 900, 900) {
             val ctx = previewCtx(src)
-            Box(Modifier.width(440.dp).heightIn(min = 420.dp).background(Ca.colors.editorBg).padding(14.dp)) {
+            Box(Modifier.width(440.dp).heightIn(min = 420.dp).background(Ide.colors.editorBg).padding(14.dp)) {
                 PuzzleCanvas(file, ctx)
             }
         }

@@ -1,5 +1,7 @@
 package dev.ide.ui.editor
 
+import dev.ide.ui.theme.Ide
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
@@ -113,15 +115,15 @@ internal fun RenamePopup(
     LaunchedEffect(Unit) { focus.requestFocus() }
     Column(
         modifier.padding(top = 48.dp).width(320.dp)
-            .background(Ca.colors.glassThick, RoundedCornerShape(Ca.radius.lg))
-            .border(1.dp, Ca.colors.glassEdge, RoundedCornerShape(Ca.radius.lg))
+            .background(Ide.colors.glassThick, RoundedCornerShape(Ca.radius.lg))
+            .border(1.dp, Ide.colors.glassEdge, RoundedCornerShape(Ca.radius.lg))
             .padding(16.dp),
     ) {
-        Text(stringResource(Res.string.edoverlay_rename_kind, state.kind), color = Ca.colors.textSecondary, style = Ca.type.caption, fontWeight = FontWeight.SemiBold)
+        Text(stringResource(Res.string.edoverlay_rename_kind, state.kind), color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodySmall, fontWeight = FontWeight.SemiBold)
         Spacer(Modifier.size(8.dp))
         Box(
-            Modifier.fillMaxWidth().background(Ca.colors.surface2, RoundedCornerShape(Ca.radius.control))
-                .border(1.dp, if (error != null) Ca.colors.error else Ca.colors.hairline, RoundedCornerShape(Ca.radius.control))
+            Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.surfaceContainerHigh, RoundedCornerShape(Ca.radius.control))
+                .border(1.dp, if (error != null) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(Ca.radius.control))
                 .padding(horizontal = 12.dp, vertical = 10.dp),
         ) {
             BasicTextField(
@@ -129,8 +131,8 @@ internal fun RenamePopup(
                 onValueChange = { field = it; onChange(it.text) },
                 singleLine = true,
                 enabled = !busy,
-                textStyle = Ca.type.body.copy(color = Ca.colors.textPrimary, fontFamily = Ca.type.codeFamily),
-                cursorBrush = SolidColor(Ca.colors.accent),
+                textStyle = MaterialTheme.typography.bodyLarge.copy(color = MaterialTheme.colorScheme.onSurface, fontFamily = Ide.type.codeFamily),
+                cursorBrush = SolidColor(MaterialTheme.colorScheme.primary),
                 modifier = Modifier.fillMaxWidth().focusRequester(focus).onPreviewKeyEvent { ev ->
                     if (ev.type != KeyEventType.KeyDown) return@onPreviewKeyEvent false
                     when (ev.key) {
@@ -143,11 +145,11 @@ internal fun RenamePopup(
         }
         if (error != null) {
             Spacer(Modifier.size(6.dp))
-            Text(error, color = Ca.colors.error, style = Ca.type.caption2)
+            Text(error, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.labelSmall)
         }
         Spacer(Modifier.size(6.dp))
         Text(if (busy) stringResource(Res.string.edoverlay_renaming) else stringResource(Res.string.edoverlay_rename_hint, state.oldName),
-            color = Ca.colors.textTertiary, style = Ca.type.caption2)
+            color = MaterialTheme.colorScheme.outline, style = MaterialTheme.typography.labelSmall)
     }
 }
 
@@ -173,23 +175,23 @@ internal fun GoToLinePopup(
     }
     Column(
         modifier.padding(top = 48.dp).width(320.dp)
-            .background(Ca.colors.glassThick, RoundedCornerShape(Ca.radius.lg))
-            .border(1.dp, Ca.colors.glassEdge, RoundedCornerShape(Ca.radius.lg))
+            .background(Ide.colors.glassThick, RoundedCornerShape(Ca.radius.lg))
+            .border(1.dp, Ide.colors.glassEdge, RoundedCornerShape(Ca.radius.lg))
             .padding(16.dp),
     ) {
-        Text(stringResource(Res.string.edoverlay_go_to_line), color = Ca.colors.textSecondary, style = Ca.type.caption, fontWeight = FontWeight.SemiBold)
+        Text(stringResource(Res.string.edoverlay_go_to_line), color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodySmall, fontWeight = FontWeight.SemiBold)
         Spacer(Modifier.size(8.dp))
         Box(
-            Modifier.fillMaxWidth().background(Ca.colors.surface2, RoundedCornerShape(Ca.radius.control))
-                .border(1.dp, Ca.colors.hairline, RoundedCornerShape(Ca.radius.control))
+            Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.surfaceContainerHigh, RoundedCornerShape(Ca.radius.control))
+                .border(1.dp, MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(Ca.radius.control))
                 .padding(horizontal = 12.dp, vertical = 10.dp),
         ) {
             BasicTextField(
                 value = field,
                 onValueChange = { v -> field = v.copy(text = v.text.filter { it.isDigit() || it == ':' }) },
                 singleLine = true,
-                textStyle = Ca.type.body.copy(color = Ca.colors.textPrimary, fontFamily = Ca.type.codeFamily),
-                cursorBrush = SolidColor(Ca.colors.accent),
+                textStyle = MaterialTheme.typography.bodyLarge.copy(color = MaterialTheme.colorScheme.onSurface, fontFamily = Ide.type.codeFamily),
+                cursorBrush = SolidColor(MaterialTheme.colorScheme.primary),
                 modifier = Modifier.fillMaxWidth().focusRequester(focus).onPreviewKeyEvent { ev ->
                     if (ev.type != KeyEventType.KeyDown) return@onPreviewKeyEvent false
                     when (ev.key) {
@@ -201,7 +203,7 @@ internal fun GoToLinePopup(
             )
         }
         Spacer(Modifier.size(6.dp))
-        Text(stringResource(Res.string.edoverlay_go_to_line_hint, lineCount), color = Ca.colors.textTertiary, style = Ca.type.caption2)
+        Text(stringResource(Res.string.edoverlay_go_to_line_hint, lineCount), color = MaterialTheme.colorScheme.outline, style = MaterialTheme.typography.labelSmall)
     }
 }
 
@@ -212,42 +214,42 @@ internal fun GoToLinePopup(
  */
 @Composable
 internal fun QuickDocPopup(doc: UiQuickDoc, modifier: Modifier = Modifier) {
-    val codeStyle = SpanStyle(fontFamily = Ca.type.codeFamily, color = Ca.colors.accent)
+    val codeStyle = SpanStyle(fontFamily = Ide.type.codeFamily, color = MaterialTheme.colorScheme.primary)
     val content = remember(doc, codeStyle) { doc.doc?.takeIf { it.isNotBlank() }?.let { parseQuickDoc(it, codeStyle) } }
     Column(
         modifier.padding(top = 56.dp).widthIn(max = 440.dp).heightIn(max = 360.dp)
-            .background(Ca.colors.glassThick, RoundedCornerShape(Ca.radius.lg))
-            .border(1.dp, Ca.colors.glassEdge, RoundedCornerShape(Ca.radius.lg))
+            .background(Ide.colors.glassThick, RoundedCornerShape(Ca.radius.lg))
+            .border(1.dp, Ide.colors.glassEdge, RoundedCornerShape(Ca.radius.lg))
             .padding(14.dp),
     ) {
         Text(
             doc.signature,
-            style = Ca.type.body.copy(fontFamily = Ca.type.codeFamily),
-            color = Ca.colors.textPrimary,
+            style = MaterialTheme.typography.bodyLarge.copy(fontFamily = Ide.type.codeFamily),
+            color = MaterialTheme.colorScheme.onSurface,
             fontWeight = FontWeight.Medium,
         )
         doc.container?.takeIf { it.isNotEmpty() }?.let {
             Spacer(Modifier.size(2.dp))
-            Text(it, style = Ca.type.caption2, color = Ca.colors.textTertiary, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            Text(it, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.outline, maxLines = 1, overflow = TextOverflow.Ellipsis)
         }
         Spacer(Modifier.size(10.dp))
-        Box(Modifier.fillMaxWidth().height(1.dp).background(Ca.colors.hairline))
+        Box(Modifier.fillMaxWidth().height(1.dp).background(MaterialTheme.colorScheme.outlineVariant))
         Spacer(Modifier.size(10.dp))
         Column(Modifier.verticalScroll(rememberScrollState())) {
             if (content == null) {
-                Text(stringResource(Res.string.edoverlay_no_documentation), style = Ca.type.body, color = Ca.colors.textTertiary)
+                Text(stringResource(Res.string.edoverlay_no_documentation), style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.outline)
             } else {
                 if (content.description.isNotEmpty()) {
-                    Text(content.description, style = Ca.type.body, color = Ca.colors.textSecondary)
+                    Text(content.description, style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
                 for (sec in content.sections) {
                     Spacer(Modifier.size(10.dp))
                     if (sec.title.isNotEmpty()) {
-                        Text(docSectionLabel(sec.title), style = Ca.type.caption, color = Ca.colors.textSecondary, fontWeight = FontWeight.SemiBold)
+                        Text(docSectionLabel(sec.title), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, fontWeight = FontWeight.SemiBold)
                         Spacer(Modifier.size(3.dp))
                     }
                     for (item in sec.items) {
-                        Text(item, style = Ca.type.caption, color = Ca.colors.textSecondary, modifier = Modifier.padding(bottom = 2.dp))
+                        Text(item, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(bottom = 2.dp))
                     }
                 }
             }
@@ -271,10 +273,10 @@ private fun docSectionLabel(title: String): String = when (title) {
 @Composable
 internal fun DiagnosticChip(severity: UiSeverity, unused: Boolean, message: String, onClick: () -> Unit, modifier: Modifier) {
     val color = when (severity) {
-        UiSeverity.Error -> Ca.colors.error
-        UiSeverity.Warning -> if (unused) Ca.colors.textTertiary else Ca.colors.warning
-        UiSeverity.Info -> Ca.colors.info
-        UiSeverity.Hint -> Ca.colors.textTertiary
+        UiSeverity.Error -> MaterialTheme.colorScheme.error
+        UiSeverity.Warning -> if (unused) MaterialTheme.colorScheme.outline else Ide.colors.warning
+        UiSeverity.Info -> Ide.colors.info
+        UiSeverity.Hint -> MaterialTheme.colorScheme.outline
     }
     val icon = when (severity) {
         UiSeverity.Error -> CaIcons.error
@@ -325,8 +327,8 @@ internal fun SelectionToolbar(
         Modifier
             .entrancePop()
             .shadow(12.dp, shape, clip = false)
-            .background(Ca.colors.glassThick, shape)
-            .border(1.dp, Ca.colors.glassEdge, shape)
+            .background(Ide.colors.glassThick, shape)
+            .border(1.dp, Ide.colors.glassEdge, shape)
             .padding(horizontal = 4.dp, vertical = 3.dp),
         horizontalArrangement = Arrangement.spacedBy(1.dp),
         verticalAlignment = Alignment.CenterVertically,
@@ -341,11 +343,11 @@ internal fun SelectionToolbar(
         if (onMenu != null || onDocs != null) ToolbarDivider()
         // Quick documentation for the symbol under the caret (the touch path for Ctrl-Q).
         if (onDocs != null) {
-            ToolbarIconItem(CaIcons.info, stringResource(Res.string.edoverlay_quick_documentation), i++, Ca.colors.textSecondary, onDocs)
+            ToolbarIconItem(CaIcons.info, stringResource(Res.string.edoverlay_quick_documentation), i++, MaterialTheme.colorScheme.onSurfaceVariant, onDocs)
         }
         // The unified editor context menu — Go to / Quick fixes / Intentions (the long-press actions menu).
         if (onMenu != null) {
-            ToolbarIconItem(CaIcons.ellipsis, stringResource(Res.string.ctxmenu_actions), i++, Ca.colors.textSecondary, onMenu)
+            ToolbarIconItem(CaIcons.ellipsis, stringResource(Res.string.ctxmenu_actions), i++, MaterialTheme.colorScheme.onSurfaceVariant, onMenu)
         }
     }
 }
@@ -359,15 +361,15 @@ private fun ToolbarTextItem(label: String, index: Int, onClick: () -> Unit) {
             .toolbarItemEntrance(index)
             .pressScale(interaction)
             .clip(RoundedCornerShape(Ca.radius.xs))
-            .background(if (pressed) Ca.colors.accentSoft else Color.Transparent)
+            .background(if (pressed) MaterialTheme.colorScheme.primaryContainer else Color.Transparent)
             .clickable(interaction, indication = null, onClick = onClick)
             .padding(horizontal = 11.dp, vertical = 7.dp),
         contentAlignment = Alignment.Center,
     ) {
         Text(
             label,
-            color = if (pressed) Ca.colors.accent else Ca.colors.textPrimary,
-            style = Ca.type.caption,
+            color = if (pressed) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface,
+            style = MaterialTheme.typography.bodySmall,
             fontWeight = FontWeight.Medium,
             maxLines = 1,
         )
@@ -383,19 +385,19 @@ private fun ToolbarIconItem(icon: ImageVector, description: String, index: Int, 
             .toolbarItemEntrance(index)
             .pressScale(interaction)
             .clip(RoundedCornerShape(Ca.radius.xs))
-            .background(if (pressed) Ca.colors.accentSoft else Color.Transparent)
+            .background(if (pressed) MaterialTheme.colorScheme.primaryContainer else Color.Transparent)
             .clickable(interaction, indication = null, onClick = onClick)
             .padding(horizontal = 9.dp, vertical = 6.dp),
         contentAlignment = Alignment.Center,
     ) {
-        Icon(icon, description, Modifier.size(16.dp), tint = if (pressed) Ca.colors.accent else tint)
+        Icon(icon, description, Modifier.size(16.dp), tint = if (pressed) MaterialTheme.colorScheme.primary else tint)
     }
 }
 
 /** A thin vertical rule separating the clipboard actions from the utility (docs / quick-fix) icons. */
 @Composable
 private fun ToolbarDivider() {
-    Box(Modifier.padding(horizontal = 3.dp).width(1.dp).height(18.dp).background(Ca.colors.separator))
+    Box(Modifier.padding(horizontal = 3.dp).width(1.dp).height(18.dp).background(MaterialTheme.colorScheme.outlineVariant))
 }
 
 /** Per-item cascade: fade + a slight rise, delayed by [index] steps, so the items flow in left-to-right. */

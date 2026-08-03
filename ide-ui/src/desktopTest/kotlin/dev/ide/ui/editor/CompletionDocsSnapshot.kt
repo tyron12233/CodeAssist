@@ -1,5 +1,6 @@
 package dev.ide.ui.editor
 
+import dev.ide.ui.theme.Ide
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
@@ -12,7 +13,6 @@ import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.dp
 import dev.ide.ui.backend.UiCompletionItem
 import dev.ide.ui.backend.UiCompletionKind
-import dev.ide.ui.theme.Ca
 import dev.ide.ui.theme.CodeAssistTheme
 import org.jetbrains.skia.EncodedImageFormat
 import java.io.File
@@ -37,13 +37,13 @@ class CompletionDocsSnapshot {
         // Scene dims are PIXELS; at density 2 a 440dp list + 320dp doc ≈ 1532px, a 300dp popup ≈ 600px.
         // Wide: list + doc panel beside (current behavior).
         snapshot("completion-wide.png", 1600, 360) {
-            Box(Modifier.fillMaxSize().background(Ca.colors.editorBg).padding(8.dp)) {
+            Box(Modifier.fillMaxSize().background(Ide.colors.editorBg).padding(8.dp)) {
                 CompletionList(items, selectedIndex = 0, prefix = "app", width = 440.dp, onPick = {}, onHover = {}, docsBeside = true)
             }
         }
         // Narrow: just the list at phone width; the selected row shows the ⓘ (tap → docs, can't snapshot the tap).
         snapshot("completion-narrow.png", 720, 420) {
-            Box(Modifier.fillMaxSize().background(Ca.colors.editorBg).padding(8.dp)) {
+            Box(Modifier.fillMaxSize().background(Ide.colors.editorBg).padding(8.dp)) {
                 CompletionList(items, selectedIndex = 0, prefix = "app", width = 300.dp, onPick = {}, onHover = {}, docsBeside = false)
             }
         }

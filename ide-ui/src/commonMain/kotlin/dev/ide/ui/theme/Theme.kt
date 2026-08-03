@@ -23,9 +23,11 @@ import dev.ide.ui.platform.dynamicColorSchemeOrNull
  * scale — so native M3 components render correctly. IDE-domain colors with no Material role (editor
  * surfaces, syntax, blocks, git, glass) are provided separately through [Ide].
  *
- * The legacy [Ca] token accessor remains as a migration bridge: its generic fields are re-pointed at the M3
- * [ColorScheme] so screens not yet ported keep compiling and pick up the expressive look. Call sites move to
- * `MaterialTheme.colorScheme` / `Ide.colors`, after which the bridge is removed.
+ * App UI (screens, components, shell) reads Material roles directly (`MaterialTheme.colorScheme` /
+ * `MaterialTheme.typography`) plus [Ide] for the IDE-domain tokens. The [Ca] accessor is retained as the
+ * **editor rendering subsystem's palette** (`CodeEditor` / the render state consume a whole
+ * [CodeAssistColors] / [CaTypography]); its generic fields are M3-derived from the active [ColorScheme] via
+ * [bridgedTo], so the editor tracks the expressive theme while its code-specific tones stay bespoke.
  */
 
 enum class CaAccent { Violet, Teal, Orange }

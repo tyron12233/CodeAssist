@@ -1,5 +1,6 @@
 package dev.ide.ui.screens
 
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Row
@@ -33,16 +34,16 @@ internal fun ReadOnlyBanner(state: IdeUiState, active: OpenFile) {
     else stringResource(Res.string.library_readonly_decompiled)
     Row(
         Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 4.dp)
-            .background(Ca.colors.textTertiary.copy(alpha = 0.10f), RoundedCornerShape(Ca.radius.sm))
+            .background(MaterialTheme.colorScheme.outline.copy(alpha = 0.10f), RoundedCornerShape(Ca.radius.sm))
             .padding(horizontal = 10.dp, vertical = 6.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Text(label, color = Ca.colors.textSecondary, style = Ca.type.footnote, modifier = Modifier.weight(1f))
+        Text(label, color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f))
         if (kind != "decompiled_java") {
             Text(
                 stringResource(Res.string.library_decompile_java),
-                color = Ca.colors.accent,
-                style = Ca.type.footnote,
+                color = MaterialTheme.colorScheme.primary,
+                style = MaterialTheme.typography.bodyMedium,
                 modifier = Modifier.clickable { state.openLibrary(active.path, forceJava = true) },
             )
         }
