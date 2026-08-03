@@ -9,7 +9,9 @@ import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.defaultMinSize
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
@@ -17,7 +19,10 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.clickable
+import androidx.compose.material3.Button
+import androidx.compose.material3.FilledIconButton
 import androidx.compose.material3.Icon
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -29,15 +34,13 @@ import kotlinx.coroutines.delay
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.drawBehind
-import androidx.compose.ui.draw.scale
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import dev.ide.ui.theme.Ca
+import dev.ide.ui.theme.Ide
 import dev.ide.ui.theme.Motion
 
 /** The three liquid-glass materials (translucent fill plus saturation/blur; here a token-based fill). */
@@ -45,9 +48,9 @@ enum class GlassMaterial { Thin, Regular, Thick }
 
 @Composable
 fun glassFill(material: GlassMaterial): Color = when (material) {
-    GlassMaterial.Thin -> Ca.colors.glassThin
-    GlassMaterial.Regular -> Ca.colors.glassReg
-    GlassMaterial.Thick -> Ca.colors.glassThick
+    GlassMaterial.Thin -> Ide.colors.glassThin
+    GlassMaterial.Regular -> Ide.colors.glassReg
+    GlassMaterial.Thick -> Ide.colors.glassThick
 }
 
 /**
@@ -63,7 +66,7 @@ fun GlassSurface(
     content: @Composable () -> Unit,
 ) {
     val fill = glassFill(material)
-    val edgeTop = Ca.colors.glassEdgeTop
+    val edgeTop = Ide.colors.glassEdgeTop
     Box(
         modifier
             .background(fill, shape)
@@ -75,9 +78,8 @@ fun GlassSurface(
 }
 
 /**
- * Scale-to-0.96 press feedback driven by an interaction source. Uses a bouncy spring (the
- * design's liquid-overshoot `ease-spring`) so releasing a press settles back past 1.0 for the
- * "liquid" button feel.
+ * Scale-to-0.96 press feedback driven by an interaction source. Uses a bouncy spring (the expressive
+ * spring feel) so releasing a press settles back past 1.0 for a lively button response.
  */
 @Composable
 fun Modifier.pressScale(interaction: MutableInteractionSource): Modifier {
@@ -94,9 +96,8 @@ fun Modifier.pressScale(interaction: MutableInteractionSource): Modifier {
 }
 
 /**
- * One-shot slide-up entrance (the `ca-fade-up` keyframe — transform-only: `translateY(9px) → 0`,
- * `base`/`quiet`). Content is fully opaque throughout so it stays visible if motion is disabled.
- * Pass [delayMillis] to stagger a list (the design's `animationDelay: i * 60ms`).
+ * One-shot slide-up entrance (transform-only: `translateY(9px) → 0`). Content is fully opaque throughout so
+ * it stays visible if motion is disabled. Pass [delayMillis] to stagger a list.
  */
 @Composable
 fun Modifier.entranceSlideUp(delayMillis: Int = 0): Modifier {
@@ -114,8 +115,8 @@ fun Modifier.entranceSlideUp(delayMillis: Int = 0): Modifier {
 }
 
 /**
- * One-shot pop entrance (the `ca-pop` keyframe — `scale(0.96) translateY(5px) → none`,
- * `base`/`spring`). Used for popovers like the completion list.
+ * One-shot pop entrance (`scale(0.96) translateY(5px) → none`, expressive spring). Used for popovers like
+ * the completion list.
  */
 @Composable
 fun Modifier.entrancePop(): Modifier {
@@ -137,7 +138,11 @@ fun Modifier.entrancePop(): Modifier {
     }
 }
 
-/** Square icon button (≥44dp tap target); accent-soft fill + accent tint when [active]. */
+/**
+ * Square icon button (a compact toolbar control, denser than M3's 48dp default so it fits the top bar).
+ * Reads Material roles: an [active] control gets a `secondaryContainer` fill + `onSecondaryContainer` tint;
+ * inactive is transparent with an `onSurfaceVariant` glyph.
+ */
 @Composable
 fun IconButtonCa(
     icon: ImageVector,
@@ -149,15 +154,16 @@ fun IconButtonCa(
     boxSize: Int = 34,
     tint: Color? = null,
 ) {
+    val scheme = MaterialTheme.colorScheme
     val interaction = remember { MutableInteractionSource() }
-    val resolvedTint = tint ?: if (active) Ca.colors.accent else Ca.colors.textSecondary
+    val resolvedTint = tint ?: if (active) scheme.onSecondaryContainer else scheme.onSurfaceVariant
     Box(
         modifier
             .size(boxSize.dp)
             .pressScale(interaction)
             .background(
-                if (active) Ca.colors.accentSoft else Color.Transparent,
-                RoundedCornerShape(Ca.radius.sm),
+                if (active) scheme.secondaryContainer else Color.Transparent,
+                MaterialTheme.shapes.small,
             )
             .clickable(interaction, indication = null, onClick = onClick),
         contentAlignment = Alignment.Center,
@@ -167,9 +173,9 @@ fun IconButtonCa(
 }
 
 /**
- * Accent-filled primary button (e.g. Run), 38dp tall, with an optional leading icon. When [iconOnly]
- * (and [icon] is set) it collapses to a fixed-width square — the label is dropped but kept as the
- * accessibility description — so it can't be squeezed below its content on a narrow bar.
+ * Filled primary button (e.g. Run), a native M3 [Button] on the expressive shape scale, 38dp tall with an
+ * optional leading icon. When [iconOnly] (and [icon] is set) it collapses to a fixed-width square
+ * [FilledIconButton] — the label is dropped but kept as the accessibility description.
  */
 @Composable
 fun PrimaryButton(
@@ -179,39 +185,46 @@ fun PrimaryButton(
     icon: ImageVector? = null,
     iconOnly: Boolean = false,
 ) {
-    val interaction = remember { MutableInteractionSource() }
     val collapsed = iconOnly && icon != null
-    Row(
-        modifier
-            .height(38.dp)
-            .then(if (collapsed) Modifier.width(44.dp) else Modifier)
-            .pressScale(interaction)
-            .background(Ca.colors.accent, RoundedCornerShape(Ca.radius.control))
-            .clickable(interaction, indication = null, onClick = onClick)
-            .padding(horizontal = if (collapsed) 0.dp else 16.dp),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = if (collapsed) Arrangement.Center else Arrangement.spacedBy(6.dp),
-    ) {
-        if (icon != null) Icon(icon, if (collapsed) text else null, Modifier.size(16.dp), tint = Ca.colors.textOnAccent)
-        if (!collapsed) Text(text, color = Ca.colors.textOnAccent, style = Ca.type.subhead, fontWeight = FontWeight.SemiBold)
+    if (collapsed) {
+        FilledIconButton(
+            onClick = onClick,
+            modifier = modifier.size(width = 44.dp, height = 38.dp),
+            shape = MaterialTheme.shapes.small,
+        ) {
+            Icon(icon!!, text, Modifier.size(18.dp))
+        }
+    } else {
+        Button(
+            onClick = onClick,
+            modifier = modifier.height(38.dp),
+            shape = MaterialTheme.shapes.small,
+            contentPadding = PaddingValues(horizontal = 16.dp),
+        ) {
+            if (icon != null) {
+                Icon(icon, null, Modifier.size(18.dp))
+                Spacer(Modifier.width(8.dp))
+            }
+            Text(text, style = MaterialTheme.typography.labelLarge)
+        }
     }
 }
 
-/** A soft pill/chip with a translucent fill (used for status, hints, meta). */
+/** A soft pill/chip with a tonal fill (used for status, hints, meta). Denser than an M3 AssistChip. */
 @Composable
 fun Chip(
     text: String,
     modifier: Modifier = Modifier,
-    fill: Color = Ca.colors.surface2,
-    textColor: Color = Ca.colors.textSecondary,
+    fill: Color = MaterialTheme.colorScheme.surfaceContainerHigh,
+    textColor: Color = MaterialTheme.colorScheme.onSurfaceVariant,
 ) {
     Box(
         modifier
             .defaultMinSize(minHeight = 22.dp)
-            .background(fill, RoundedCornerShape(Ca.radius.pill))
+            .background(fill, RoundedCornerShape(999.dp))
             .padding(horizontal = 9.dp, vertical = 3.dp),
         contentAlignment = Alignment.Center,
     ) {
-        Text(text, color = textColor, style = Ca.type.caption2, fontWeight = FontWeight.Medium)
+        Text(text, color = textColor, style = MaterialTheme.typography.labelSmall)
     }
 }

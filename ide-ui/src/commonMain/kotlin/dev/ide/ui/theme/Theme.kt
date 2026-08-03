@@ -1,5 +1,7 @@
 package dev.ide.ui.theme
 
+import androidx.compose.material3.ColorScheme
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.Immutable
@@ -12,11 +14,18 @@ import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import dev.ide.ui.platform.dynamicColorSchemeOrNull
 
 /**
- * The CodeAssist design system. Theming axes: light/dark and a
- * violet/teal accent swap. Everything below the theme reads tokens through the [Ca] accessor (colors,
- * type, spacing, radius, motion) rather than Material defaults — the look is fully bespoke.
+ * The CodeAssist design system, now built on **Material 3 Expressive**. [CodeAssistTheme] installs a real
+ * [MaterialTheme] — an expressive tonal [ColorScheme] (Material You dynamic color on Android 12+, else a
+ * fixed palette seeded from the chosen accent), the expressive type scale, and the rounder expressive shape
+ * scale — so native M3 components render correctly. IDE-domain colors with no Material role (editor
+ * surfaces, syntax, blocks, git, glass) are provided separately through [Ide].
+ *
+ * The legacy [Ca] token accessor remains as a migration bridge: its generic fields are re-pointed at the M3
+ * [ColorScheme] so screens not yet ported keep compiling and pick up the expressive look. Call sites move to
+ * `MaterialTheme.colorScheme` / `Ide.colors`, after which the bridge is removed.
  */
 
 enum class CaAccent { Violet, Teal, Orange }
@@ -305,6 +314,43 @@ object Ca {
     val radius get() = Radius
 }
 
+/**
+ * Bridge the bespoke [CodeAssistColors] onto the active M3 [ColorScheme]: the generic chrome fields
+ * (surfaces, text, accent, separators, error) are re-pointed at Material roles so every screen still on the
+ * `Ca` token accessor reskins to the expressive scheme automatically, while the IDE-domain fields
+ * (editor/console surfaces, gutter, git, glass, syntax, blocks) keep their tuned bespoke values. Migration
+ * scaffold — call sites move to `MaterialTheme.colorScheme` / `Ide.colors` and this is deleted last.
+ */
+private fun CodeAssistColors.bridgedTo(scheme: ColorScheme): CodeAssistColors = copy(
+    bg = scheme.background,
+    surface = scheme.surface,
+    surface2 = scheme.surfaceContainerHigh,
+    surface3 = scheme.surfaceContainerHighest,
+    textPrimary = scheme.onSurface,
+    textSecondary = scheme.onSurfaceVariant,
+    textTertiary = scheme.outline,
+    textOnAccent = scheme.onPrimary,
+    separator = scheme.outlineVariant,
+    separatorStrong = scheme.outline,
+    accent = scheme.primary,
+    accentStrong = scheme.primary,
+    accentSoft = scheme.primaryContainer,
+    selection = scheme.primary.copy(alpha = if (isDark) 0.34f else 0.24f),
+    error = scheme.error,
+)
+
+/** Project the IDE-domain fields (unchanged by the bridge) into the [Ide] provider. */
+private fun CodeAssistColors.toIdeColors(): IdeColors = IdeColors(
+    isDark = isDark,
+    editorBg = editorBg, consoleBg = consoleBg,
+    gutterText = gutterText, currentLine = currentLine, selection = selection,
+    success = success, run = run, warning = warning, info = info,
+    gitAdded = gitAdded, gitModified = gitModified, gitDeleted = gitDeleted, gitUntracked = gitUntracked,
+    glassThin = glassThin, glassReg = glassReg, glassThick = glassThick,
+    glassEdge = glassEdge, glassEdgeTop = glassEdgeTop, scrim = scrim,
+    syntax = syntax, block = block,
+)
+
 @Composable
 fun CodeAssistTheme(
     dark: Boolean = true,
@@ -313,11 +359,24 @@ fun CodeAssistTheme(
     codeFont: FontFamily = FontFamily.Monospace,
     content: @Composable () -> Unit,
 ) {
-    val colors = remember(dark, accent) { caColors(dark, accent) }
-    val type = remember(uiFont, codeFont) { CaTypography(uiFont, codeFont) }
-    CompositionLocalProvider(
-        LocalCaColors provides colors,
-        LocalCaType provides type,
-        content = content,
-    )
+    // Material You dynamic color where the platform ships it (Android 12+); the fixed expressive palette
+    // seeded from the accent otherwise (desktop, older Android).
+    val dynamic = dynamicColorSchemeOrNull(dark)
+    val fallback = remember(dark, accent) { expressiveColorScheme(accent, dark) }
+    val scheme = dynamic ?: fallback
+
+    val base = remember(dark, accent) { caColors(dark, accent) }
+    val bridged = remember(base, scheme) { base.bridgedTo(scheme) }
+    val ide = remember(bridged) { bridged.toIdeColors() }
+    val caType = remember(uiFont, codeFont) { CaTypography(uiFont, codeFont) }
+    val typography = remember(uiFont) { expressiveTypography(uiFont) }
+
+    MaterialTheme(colorScheme = scheme, typography = typography, shapes = ExpressiveShapes) {
+        CompositionLocalProvider(
+            LocalCaColors provides bridged,
+            LocalCaType provides caType,
+            LocalIdeColors provides ide,
+            content = content,
+        )
+    }
 }

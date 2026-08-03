@@ -1,6 +1,5 @@
 package dev.ide.ui
 
-import androidx.compose.foundation.background
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.WindowInsets
@@ -19,6 +18,8 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Surface
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontFamily
 import dev.ide.ui.ads.AdController
@@ -58,7 +59,6 @@ import dev.ide.ui.screens.StorageScreen
 import dev.ide.ui.screens.SettingsHubScreen
 import dev.ide.ui.screens.SettingsScreen
 import dev.ide.ui.screens.SettingsView
-import dev.ide.ui.theme.Ca
 import dev.ide.ui.theme.CaAccent
 import dev.ide.ui.theme.CodeAssistTheme
 import dev.ide.ui.theme.rememberJetBrainsMono
@@ -372,10 +372,10 @@ fun CodeAssistApp(
                 else -> {}
             }
         }
-        // The brand background fills the whole window edge-to-edge (behind the system bars); content is
+        // The M3 background fills the whole window edge-to-edge (behind the system bars); content is
         // then inset by `safeDrawing`. On desktop these insets are empty, so this is a no-op there.
         CompositionLocalProvider(LocalAds provides adController) {
-        Box(Modifier.fillMaxSize().background(Ca.colors.bg)) {
+        Surface(Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
             Box(Modifier.fillMaxSize().windowInsetsPadding(WindowInsets.safeDrawing)) {
                 ScreenHost(screen, Modifier.fillMaxSize()) { s ->
                     when (s) {
