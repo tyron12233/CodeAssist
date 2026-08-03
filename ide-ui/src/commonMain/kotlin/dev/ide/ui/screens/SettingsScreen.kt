@@ -50,6 +50,7 @@ import dev.ide.ui.backend.UiInspection
 import dev.ide.ui.backend.UiSettingControl
 import dev.ide.ui.backend.UiSettingsPage
 import dev.ide.ui.backend.UiSeverity
+import dev.ide.ui.components.ExpressiveScaffold
 import dev.ide.ui.components.AdvancedGroup
 import dev.ide.ui.components.CaSwitch
 import dev.ide.ui.components.GlassMaterial
@@ -185,10 +186,8 @@ fun SettingsScreen(
         }
     }
 
-    Box(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)) {
-        Column(Modifier.fillMaxSize()) {
-            SettingsHeader(onBack, title)
-            Box(Modifier.fillMaxWidth().height(1.dp).background(MaterialTheme.colorScheme.outlineVariant))
+    ExpressiveScaffold(title = title, onBack = onBack) { innerPadding ->
+        Box(Modifier.fillMaxSize().padding(innerPadding)) {
             if (pages.isEmpty()) {
                 Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                     Text(stringResource(Res.string.settings_no_settings_available), color = MaterialTheme.colorScheme.outline, style = MaterialTheme.typography.bodyLarge)
@@ -202,8 +201,8 @@ fun SettingsScreen(
                     }
                 }
             }
+            ToastBar(toast, Modifier.align(Alignment.BottomCenter))
         }
-        ToastBar(toast, Modifier.align(Alignment.BottomCenter))
     }
 }
 
