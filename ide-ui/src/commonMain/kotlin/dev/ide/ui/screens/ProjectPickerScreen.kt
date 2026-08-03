@@ -10,7 +10,6 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
@@ -24,8 +23,14 @@ import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.ExtendedFloatingActionButton
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.LargeTopAppBar
+import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
+import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -39,6 +44,7 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -49,10 +55,8 @@ import dev.ide.ui.backend.UiDrawable
 import dev.ide.ui.backend.UiProjectIcon
 import dev.ide.ui.editor.preview.decodeImageBytes
 import dev.ide.ui.editor.preview.drawUiDrawable
-import dev.ide.ui.components.BetaBadge
 import dev.ide.ui.components.BetaBanner
 import dev.ide.ui.components.CenteredDialog
-import dev.ide.ui.components.IconButtonCa
 import dev.ide.ui.components.darken
 import dev.ide.ui.components.ProjectTile
 import dev.ide.ui.components.StorageAccessCard
@@ -76,9 +80,7 @@ import dev.ide.ui.generated.resources.join_the_community
 import dev.ide.ui.generated.resources.join_the_community_content
 import dev.ide.ui.generated.resources.modules
 import dev.ide.ui.generated.resources.new_project
-import dev.ide.ui.generated.resources.new_project_content
 import dev.ide.ui.generated.resources.no_project_yet
-import dev.ide.ui.generated.resources.open_a_project
 import dev.ide.ui.generated.resources.project_kind_android
 import dev.ide.ui.generated.resources.project_opened_days
 import dev.ide.ui.generated.resources.project_opened_hours
@@ -105,14 +107,15 @@ import kotlinx.coroutines.withContext
 import org.jetbrains.compose.resources.pluralStringResource
 import org.jetbrains.compose.resources.stringResource
 
-/** The "Projects" picker: large title, a New-Project action, and a card per known project. */
+/** The "Projects" picker: a collapsing large title, a New-Project FAB, and a card per known project. */
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ProjectPickerScreen(
     projects: List<ProjectInfo>,
     onOpen: (ProjectInfo) -> Unit,
     onNewProject: () -> Unit,
     onDeleteProject: ((ProjectInfo) -> Unit)? = null,
-    /** Import a shared `.caproj` package (shows the header Import button). Null hides it. */
+    /** Import a shared `.caproj` package (shows the top-bar Import action). Null hides it. */
     onImportProject: (() -> Unit)? = null,
     /** Export a project as a shareable `.caproj` (shows a per-card Share action). Null hides it. */
     onExportProject: ((ProjectInfo) -> Unit)? = null,
@@ -133,105 +136,89 @@ fun ProjectPickerScreen(
 ) {
     var pendingDelete by remember { mutableStateOf<ProjectInfo?>(null) }
     val compatibilityCount = projects.count { it.compatibility }
-    BoxWithConstraints(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background), contentAlignment = Alignment.TopCenter) {
-        // Small phones squeeze the header (title + "Beta" badge + Back-up button) — tighten the margins and
-        // collapse Back-up to an icon so nothing clips or wraps awkwardly.
-        val narrow = maxWidth < 380.dp
-        Column(
-            Modifier.widthIn(max = 640.dp).fillMaxSize()
-                .verticalScroll(rememberScrollState())
-                .padding(horizontal = if (narrow) 16.dp else 24.dp, vertical = if (narrow) 28.dp else 48.dp),
-            verticalArrangement = Arrangement.spacedBy(10.dp),
-        ) {
-            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                Column(Modifier.weight(1f)) {
-                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        Text(
-                            stringResource(Res.string.projects),
-                            color = MaterialTheme.colorScheme.onSurface,
-                            style = MaterialTheme.typography.headlineLarge,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis,
-                            modifier = Modifier.weight(1f, fill = false),
-                        )
-                        BetaBadge()
+    val scroll = TopAppBarDefaults.exitUntilCollapsedScrollBehavior()
+    Scaffold(
+        modifier = Modifier.fillMaxSize().nestedScroll(scroll.nestedScrollConnection),
+        containerColor = MaterialTheme.colorScheme.background,
+        topBar = {
+            LargeTopAppBar(
+                title = { Text(stringResource(Res.string.projects)) },
+                actions = {
+                    if (onImportProject != null) IconButton(onClick = onImportProject) {
+                        Icon(CaIcons.download, stringResource(Res.string.import_project))
                     }
-                    Text(
-                        stringResource(Res.string.open_a_project),
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        style = MaterialTheme.typography.bodyLarge,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                    )
-                }
-                if (onImportProject != null) {
-                    IconButtonCa(CaIcons.download, stringResource(Res.string.import_project), onImportProject)
-                }
-                if (onBackup != null) BackupButton(onBackup, compact = narrow)
-                if (onOpenHub != null) {
-                    IconButtonCa(CaIcons.gear, stringResource(Res.string.settings_hub_title), onOpenHub)
-                }
-            }
-            Spacer(Modifier.size(12.dp))
-
-            // The support card sits at the very top: CodeAssist is free, ad-free and open source, so the
-            // only "monetisation" is an optional sponsor/star. Shown whenever the host can open links.
-            if (onSponsor != null || onStarOnGitHub != null) {
-                SupportCard(onSponsor = onSponsor, onStar = onStarOnGitHub)
-            }
-
-            // Then the screen stays action-focused: the important first-run recovery notice, the primary
-            // "New project" action, the community link, and the project list. The informational/utility cards
-            // (Beta notice, storage location) sink to the bottom so the picker no longer feels crowded.
-            if (showLegacyRecovery && compatibilityCount > 0) {
-                LegacyRecoveryBanner(count = compatibilityCount, onDismiss = onDismissLegacyRecovery)
-            }
-
-            if (onJoinDiscord != null) DiscordCard(onJoinDiscord)
-
-            NewProjectCard(onNewProject)
-
+                    if (onBackup != null) IconButton(onClick = onBackup) {
+                        Icon(CaIcons.box, stringResource(Res.string.backup))
+                    }
+                    if (onOpenHub != null) IconButton(onClick = onOpenHub) {
+                        Icon(CaIcons.gear, stringResource(Res.string.settings_hub_title))
+                    }
+                },
+                scrollBehavior = scroll,
+            )
+        },
+        floatingActionButton = {
+            ExtendedFloatingActionButton(
+                onClick = onNewProject,
+                icon = { Icon(CaIcons.plus, null) },
+                text = { Text(stringResource(Res.string.new_project)) },
+            )
+        },
+    ) { padding ->
+        Column(
+            Modifier.fillMaxSize().padding(padding).verticalScroll(rememberScrollState()),
+            horizontalAlignment = Alignment.CenterHorizontally,
+        ) {
             Column(
-                Modifier.fillMaxWidth(),
-                verticalArrangement = Arrangement.spacedBy(10.dp),
+                Modifier.widthIn(max = 640.dp).fillMaxWidth()
+                    .padding(horizontal = 16.dp).padding(top = 4.dp, bottom = 96.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp),
             ) {
+                // The support card sits at the top: CodeAssist is free, ad-free and open source, so the only
+                // "monetisation" is an optional sponsor/star. Shown whenever the host can open links.
+                if (onSponsor != null || onStarOnGitHub != null) {
+                    SupportCard(onSponsor = onSponsor, onStar = onStarOnGitHub)
+                }
+                if (showLegacyRecovery && compatibilityCount > 0) {
+                    LegacyRecoveryBanner(count = compatibilityCount, onDismiss = onDismissLegacyRecovery)
+                }
+                if (onJoinDiscord != null) DiscordCard(onJoinDiscord)
+
                 if (projects.isEmpty()) {
                     Text(stringResource(Res.string.no_project_yet), color = MaterialTheme.colorScheme.outline, style = MaterialTheme.typography.bodyMedium)
                 } else {
                     SectionLabel(stringResource(Res.string.your_projects), count = projects.size)
+                    // A single "now" so every card's relative "opened …" label is consistent across the list.
+                    val now = remember(projects) { nowMillis() }
+                    projects.forEachIndexed { i, project ->
+                        ProjectCard(
+                            project,
+                            delayMillis = i * 50,
+                            now = now,
+                            onOpen = { onOpen(project) },
+                            onDelete = if (onDeleteProject != null) ({ pendingDelete = project }) else null,
+                            onExport = if (onExportProject != null) ({ onExportProject(project) }) else null,
+                            loadIcon = loadIcon,
+                        )
+                    }
                 }
-                // A single "now" so every card's relative "opened …" label is consistent across the list.
-                val now = remember(projects) { nowMillis() }
-                projects.forEachIndexed { i, project ->
-                    ProjectCard(
-                        project,
-                        delayMillis = i * 50,
-                        now = now,
-                        onOpen = { onOpen(project) },
-                        onDelete = if (onDeleteProject != null) ({ pendingDelete = project }) else null,
-                        onExport = if (onExportProject != null) ({ onExportProject(project) }) else null,
-                        loadIcon = loadIcon,
-                    )
-                }
+
+                // A native ad below the project list — an idle "between tasks" spot, never over the actions.
+                // Renders nothing unless ads are active (host available, enabled, not a supporter).
+                AdSlot(AdPlacement.PROJECTS)
+                BetaBanner(onSubmit = onSubmitSuggestions)
+                StorageAccessCard(path = storagePath, onOpenInFiles = onOpenInFiles)
             }
-
-            // A native ad below the project list — an idle "between tasks" spot, never over the actions above.
-            // Renders nothing unless ads are active (host available, enabled, not a supporter).
-            AdSlot(AdPlacement.PROJECTS)
-
-            Spacer(Modifier.size(4.dp))
-            BetaBanner(onSubmit = onSubmitSuggestions)
-            StorageAccessCard(path = storagePath, onOpenInFiles = onOpenInFiles)
         }
-        DeleteProjectDialog(
-            project = pendingDelete,
-            onCancel = { pendingDelete = null },
-            onConfirm = {
-                pendingDelete?.let { onDeleteProject?.invoke(it) }
-                pendingDelete = null
-            },
-        )
     }
+    DeleteProjectDialog(
+        project = pendingDelete,
+        onCancel = { pendingDelete = null },
+        onConfirm = {
+            pendingDelete?.let { onDeleteProject?.invoke(it) }
+            pendingDelete = null
+        },
+    )
 }
 
 /** Confirmation before permanently deleting a project from disk. */
@@ -290,51 +277,6 @@ private fun DestructiveAction(text: String, modifier: Modifier = Modifier, onCli
         contentAlignment = Alignment.Center,
     ) {
         Text(text, color = MaterialTheme.colorScheme.onPrimary, style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.SemiBold)
-    }
-}
-
-@Composable
-private fun BackupButton(onClick: () -> Unit, compact: Boolean = false) {
-    val interaction = remember { MutableInteractionSource() }
-    Row(
-        Modifier
-            .pressScale(interaction)
-            .background(MaterialTheme.colorScheme.surfaceContainerHigh, RoundedCornerShape(Ca.radius.pill))
-            .clickable(interaction, indication = null, onClick = onClick)
-            .padding(horizontal = if (compact) 10.dp else 14.dp, vertical = 8.dp),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(6.dp),
-    ) {
-        Icon(CaIcons.box, stringResource(Res.string.backup), Modifier.size(16.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
-        if (!compact) Text(stringResource(Res.string.backup), color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Medium)
-    }
-}
-
-@Composable
-private fun NewProjectCard(onClick: () -> Unit) {
-    val interaction = remember { MutableInteractionSource() }
-    Row(
-        Modifier
-            .fillMaxWidth()
-            .pressScale(interaction)
-            .background(MaterialTheme.colorScheme.primaryContainer, RoundedCornerShape(Ca.radius.lg))
-            .border(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.35f), RoundedCornerShape(Ca.radius.lg))
-            .clickable(interaction, indication = null, onClick = onClick)
-            .padding(14.dp),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(14.dp),
-    ) {
-        Box(
-            Modifier.size(52.dp).background(MaterialTheme.colorScheme.primary, RoundedCornerShape(Ca.radius.md)),
-            contentAlignment = Alignment.Center,
-        ) {
-            Icon(CaIcons.plus, null, Modifier.size(24.dp), tint = MaterialTheme.colorScheme.onPrimary)
-        }
-        Column(Modifier.weight(1f)) {
-            Text(stringResource(Res.string.new_project), color = MaterialTheme.colorScheme.onSurface, style = MaterialTheme.typography.titleMedium)
-            Text(stringResource(Res.string.new_project_content), color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodyMedium)
-        }
-        Icon(CaIcons.chevronRight, null, Modifier.size(20.dp), tint = MaterialTheme.colorScheme.primary)
     }
 }
 
