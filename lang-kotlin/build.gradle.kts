@@ -51,6 +51,10 @@ dependencies {
     // @Serializable class against it (with the bundled plugin) and asserts the generated serializer. Self-gates
     // (assumeTrue) when the jar isn't resolvable, so CI without it just skips.
     testImplementation(libs.kotlinx.serialization.json)
+    // Real kotlin-parcelize runtime (the `@Parcelize` annotation) on the test classpath: KotlinParcelizeBuildTest
+    // compiles a `@Parcelize class : Parcelable` against it (with the bundled plugin) and asserts the generated
+    // Parcelable impl. Self-gates when it (or android.jar) isn't resolvable, so a stripped CI classpath skips.
+    testImplementation("org.jetbrains.kotlin:kotlin-parcelize-runtime:2.4.0")
 }
 
 // Bundle the kotlin-stdlib JAR — the SAME version the editor/compiler target (`libs.versions.toml` `kotlin`)

@@ -48,4 +48,4 @@ val KOTLIN_SYNTHETIC_MEMBER_EP = ExtensionPoint<KotlinSyntheticMemberProvider>("
 
 /** The built-in providers, used unless a host contributes to [KOTLIN_SYNTHETIC_MEMBER_EP] (direct/test wiring). */
 val BUILTIN_KOTLIN_SYNTHETIC_MEMBER_PROVIDERS: List<KotlinSyntheticMemberProvider> =
-    listOf(SerializationSyntheticMembers)
+    listOf(SerializationSyntheticMembers, ParcelizeSyntheticMembers)

@@ -186,6 +186,49 @@ class KotlinInheritanceDiagnosticsTest {
         assertTrue(inserted.contains("TODO("), "stub body is a TODO; got '$inserted'")
     }
 
+    // --- @Parcelize: the kotlin-parcelize compiler plugin supplies Parcelable's members ---
+
+    @Test
+    fun parcelizeClassIsNotFlaggedForParcelableMembers() {
+        // The plugin generates writeToParcel()/describeContents() (+ CREATOR) at build time; the parse-only
+        // editor can't see them, so a @Parcelize class must NOT be flagged for them (the reported bug).
+        val diags = codes("AssetSource.kt", "package demo\n@Parcelize class AssetSource(val paths: List<String>) : Parcelable")
+        assertFalse("kt.abstractNotImplemented" in diags, "a @Parcelize class must not be flagged for Parcelable members; got $diags")
+    }
+
+    @Test
+    fun withoutParcelizeTheSameClassIsStillFlagged() {
+        // Negative control: no @Parcelize → the Parcelable abstracts are genuinely unimplemented.
+        val d = diagnose("Plain.kt", "package demo\nclass Plain : Parcelable")
+        val err = d.firstOrNull { it.code == "kt.abstractNotImplemented" }
+        assertNotNull(err, "without @Parcelize the Parcelable members are unimplemented; got $d")
+        assertTrue(
+            err.message.contains("writeToParcel") && err.message.contains("describeContents"),
+            "the control names both Parcelable members; got '${err.message}'",
+        )
+    }
+
+    @Test
+    fun parcelizeStillFlagsUnrelatedMissingMembers() {
+        // Only Parcelable's members are excused; an unrelated abstract (Named.name) is still required.
+        val d = diagnose("Half.kt", "package demo\n@Parcelize class Half(val paths: List<String>) : Parcelable, Named")
+        val err = d.firstOrNull { it.code == "kt.abstractNotImplemented" }
+        assertNotNull(err, "an unrelated abstract member must still be flagged; got $d")
+        assertTrue(err.message.contains("name"), "names the genuinely-missing member; got '${err.message}'")
+        assertFalse(err.message.contains("writeToParcel"), "must not name the plugin-supplied member; got '${err.message}'")
+    }
+
+    @Test
+    fun parcelizeClassOffersNoImplementFixForParcelableMembers() {
+        val code = "package demo\n@Parcelize class NoFix(val paths: List<String>) : Parcelable"
+        val doc = SnippetDoc(code, DiskFile(srcDir.resolve("NoFix.kt")))
+        val fix = runBlocking {
+            analyzer.incrementalParser.parseFull(doc)
+            analyzer.implementMembersFix(doc.file, code.indexOf("NoFix"))
+        }
+        assertTrue(fix == null || fix.edits.isEmpty(), "no members to implement for a @Parcelize class; got $fix")
+    }
+
     companion object {
         val srcDir: Path = tempProject(
             mapOf(
@@ -199,6 +242,9 @@ class KotlinInheritanceDiagnosticsTest {
                     fun Producer(): Producer = object : Producer {}
                     fun interface Action { fun run() }
                     fun doRun() {}
+                    class Parcel
+                    interface Parcelable { fun writeToParcel(dest: Parcel, flags: Int); fun describeContents(): Int }
+                    annotation class Parcelize
                 """.trimIndent(),
             ),
         )
