@@ -97,6 +97,10 @@ internal class SettingsBackend(private val ctx: BackendContext) : SettingsServic
         val fullKey = settingKey(pageId, key)
         if (page.scope == SettingsScope.PROJECT) ctx.servicesOrNull?.setProjectPref(fullKey, value)
         else ctx.manager?.setPreference(fullKey, value)
+        // Picking a custom accent color implies the Custom accent is active (so it takes effect immediately).
+        if (pageId == BuiltInSettingsPages.APPEARANCE && key == "accentColor") {
+            ctx.manager?.setPreference(settingKey(pageId, "accent"), IdeSettings.ACCENT_CUSTOM)
+        }
         applyAfterChange(page, key)
     }
 
@@ -363,6 +367,7 @@ internal class SettingsBackend(private val ctx: BackendContext) : SettingsServic
             )
             is SettingControl.Text -> UiSettingControl.Text(c.key, c.title, c.description, raw ?: c.default, c.placeholder, c.advanced, c.group)
             is SettingControl.Action -> UiSettingControl.Action(c.key, c.title, c.description, c.buttonLabel, c.destructive, c.advanced, c.group)
+            is SettingControl.Color -> UiSettingControl.Color(c.key, c.title, c.description, raw?.trim()?.toLongOrNull() ?: c.default, c.advanced, c.group)
         }
     }
 
@@ -371,8 +376,10 @@ internal class SettingsBackend(private val ctx: BackendContext) : SettingsServic
         accent = when (accent) {
             IdeSettings.ACCENT_TEAL -> UiAccent.Teal
             IdeSettings.ACCENT_ORANGE -> UiAccent.Orange
+            IdeSettings.ACCENT_CUSTOM -> UiAccent.Custom
             else -> UiAccent.Violet
         },
+        customAccentColor = accentColor,
         editorFontScale = editorFontScale,
         codeFont = codeFont,
         fontLigatures = fontLigatures,

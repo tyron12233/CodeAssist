@@ -1544,6 +1544,8 @@ data class UiSettings(
     /** "light" | "dark" | "system". */
     val themeMode: String = "dark",
     val accent: UiAccent = UiAccent.Violet,
+    /** The seed color for [UiAccent.Custom], as an `0xAARRGGBB` ARGB long. Ignored unless accent is Custom. */
+    val customAccentColor: Long = 0xFF8B5CF6L,
     val editorFontScale: Float = 1f,
     /** "jetbrains" (bundled JetBrains Mono) | "monospace" (system monospace). */
     val codeFont: String = "jetbrains",
@@ -1584,8 +1586,8 @@ data class UiSettings(
     }
 }
 
-/** The theme accent swaps the design system ships. */
-enum class UiAccent { Violet, Teal, Orange }
+/** The theme accent swaps the design system ships. [Custom] uses [UiSettings.customAccentColor] as the seed. */
+enum class UiAccent { Violet, Teal, Orange, Custom }
 
 /**
  * A per-language code style profile the Code Style screen edits. Values are plain strings/ints/bools (preset,
@@ -1692,6 +1694,12 @@ sealed interface UiSettingControl {
         override val key: String, override val title: String, override val description: String? = null,
         val buttonLabel: String = "Run", val destructive: Boolean = false,
         override val advanced: Boolean = false, override val group: String? = null,
+    ) : UiSettingControl
+
+    /** A color value (`0xAARRGGBB` ARGB long) edited via a color picker. */
+    data class Color(
+        override val key: String, override val title: String, override val description: String? = null,
+        val value: Long = 0xFF000000L, override val advanced: Boolean = false, override val group: String? = null,
     ) : UiSettingControl
 }
 

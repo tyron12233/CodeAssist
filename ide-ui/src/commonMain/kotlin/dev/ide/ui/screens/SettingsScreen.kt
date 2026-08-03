@@ -59,6 +59,7 @@ import dev.ide.ui.components.SettingsActionRow
 import dev.ide.ui.components.SettingsCard
 import dev.ide.ui.components.SettingsCategoryItem
 import dev.ide.ui.components.SettingsChoiceRow
+import dev.ide.ui.components.SettingsColorRow
 import dev.ide.ui.components.SettingsSliderRow
 import dev.ide.ui.components.SettingsTextRow
 import dev.ide.ui.components.SettingsToggleRow
@@ -338,6 +339,9 @@ private fun ControlRow(
             onSet(pageId, c.key, it)
         }
         is UiSettingControl.Action -> SettingsActionRow(title, description, localizedActionButton(pageId, c), c.destructive) { onAction(pageId, c) }
+        is UiSettingControl.Color -> SettingsColorRow(title, description, stored?.toLongOrNull() ?: c.value) {
+            onSet(pageId, c.key, it.toString()); onStructuralChange()
+        }
     }
 }
 
@@ -445,6 +449,7 @@ private fun encodeValue(c: UiSettingControl): String? = when (c) {
     is UiSettingControl.Choice -> c.value
     is UiSettingControl.Text -> c.value
     is UiSettingControl.Action -> null
+    is UiSettingControl.Color -> c.value.toString()
 }
 
 /** Map a page's icon id (resolved generically, so plugin icons work too) to a glyph; gear is the fallback. */

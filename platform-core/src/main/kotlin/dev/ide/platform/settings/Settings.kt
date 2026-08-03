@@ -118,6 +118,16 @@ sealed interface SettingControl {
         override val advanced: Boolean = false,
         override val group: String? = null,
     ) : SettingControl
+
+    /** A color picked from a swatch/picker; the stored value is a `0xAARRGGBB` ARGB long (as a string). */
+    data class Color(
+        override val key: String,
+        override val title: String,
+        override val description: String? = null,
+        val default: Long = 0xFF000000L,
+        override val advanced: Boolean = false,
+        override val group: String? = null,
+    ) : SettingControl
 }
 
 /** Read-only view of a page's stored values, with typed accessors that fall back to a default. */

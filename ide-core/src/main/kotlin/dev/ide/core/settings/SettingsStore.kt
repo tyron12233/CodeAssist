@@ -25,7 +25,8 @@ class SettingsStore(
         val d = IdeSettings()
         return IdeSettings(
             themeMode = oneOf("appearance.themeMode", d.themeMode, IdeSettings.THEME_LIGHT, IdeSettings.THEME_DARK, IdeSettings.THEME_SYSTEM),
-            accent = oneOf("appearance.accent", d.accent, IdeSettings.ACCENT_VIOLET, IdeSettings.ACCENT_TEAL, IdeSettings.ACCENT_ORANGE),
+            accent = oneOf("appearance.accent", d.accent, IdeSettings.ACCENT_VIOLET, IdeSettings.ACCENT_TEAL, IdeSettings.ACCENT_ORANGE, IdeSettings.ACCENT_CUSTOM),
+            accentColor = get(key("appearance.accentColor"))?.trim()?.toLongOrNull() ?: d.accentColor,
             // Stored as an integer percent (100 = 1.0×) so the generic IntSlider and this typed view agree.
             editorFontScale = (int("editor.fontScale", (d.editorFontScale * 100).toInt()) / 100f).coerceIn(MIN_FONT_SCALE, MAX_FONT_SCALE),
             codeFont = oneOf("editor.codeFont", d.codeFont, IdeSettings.CODE_FONT_JETBRAINS, IdeSettings.CODE_FONT_MONOSPACE),
@@ -125,6 +126,7 @@ class SettingsStore(
     fun save(s: IdeSettings) {
         put("appearance.themeMode", s.themeMode)
         put("appearance.accent", s.accent)
+        put("appearance.accentColor", s.accentColor.toString())
         put("editor.fontScale", (s.editorFontScale * 100).toInt().toString())
         put("editor.codeFont", s.codeFont)
         put("editor.fontLigatures", s.fontLigatures.toString())

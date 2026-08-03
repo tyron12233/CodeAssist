@@ -357,15 +357,19 @@ private fun CodeAssistColors.toIdeColors(): IdeColors = IdeColors(
 fun CodeAssistTheme(
     dark: Boolean = true,
     accent: CaAccent = CaAccent.Violet,
+    /** A user-chosen custom seed color. When set it overrides both the preset [accent] palette and
+     *  wallpaper dynamic color — the whole expressive scheme is generated from this seed. */
+    seedColor: Color? = null,
     uiFont: FontFamily = FontFamily.SansSerif,
     codeFont: FontFamily = FontFamily.Monospace,
     content: @Composable () -> Unit,
 ) {
-    // Material You dynamic color where the platform ships it (Android 12+); the fixed expressive palette
-    // seeded from the accent otherwise (desktop, older Android).
+    // Precedence: an explicit custom seed wins; else Material You dynamic color where the platform ships it
+    // (Android 12+); else the fixed expressive palette seeded from the chosen accent.
     val dynamic = dynamicColorSchemeOrNull(dark)
+    val fromSeed = remember(seedColor, dark) { seedColor?.let { expressiveColorSchemeFromSeed(it, dark) } }
     val fallback = remember(dark, accent) { expressiveColorScheme(accent, dark) }
-    val scheme = dynamic ?: fallback
+    val scheme = fromSeed ?: dynamic ?: fallback
 
     val base = remember(dark, accent) { caColors(dark, accent) }
     val bridged = remember(base, scheme) { base.bridgedTo(scheme) }

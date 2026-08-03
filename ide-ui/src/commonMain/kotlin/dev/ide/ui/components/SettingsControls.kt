@@ -23,10 +23,14 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
+import androidx.compose.material3.Button
 import androidx.compose.material3.Icon
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Slider
 import androidx.compose.material3.SliderDefaults
 import androidx.compose.material3.Text
@@ -44,10 +48,17 @@ import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import dev.ide.ui.generated.resources.Res
+import dev.ide.ui.generated.resources.cancel
+import dev.ide.ui.generated.resources.color_hue
+import dev.ide.ui.generated.resources.color_lightness
+import dev.ide.ui.generated.resources.color_picker_title
+import dev.ide.ui.generated.resources.color_saturation
+import dev.ide.ui.generated.resources.save
 import dev.ide.ui.generated.resources.settings_advanced
 import dev.ide.ui.icons.CaIcons
 import dev.ide.ui.theme.Ca
 import dev.ide.ui.theme.Motion
+import kotlin.math.abs
 import kotlin.math.roundToInt
 import org.jetbrains.compose.resources.stringResource
 
@@ -250,4 +261,128 @@ fun SettingsCategoryItem(title: String, icon: ImageVector, selected: Boolean, sh
             fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Medium, modifier = Modifier.weight(1f))
         if (showChevron) Icon(CaIcons.chevronRight, null, Modifier.size(16.dp), tint = MaterialTheme.colorScheme.outline)
     }
+}
+
+// ---- Color setting + picker -----------------------------------------------------------------------
+
+/** A color setting: label/description on the left, a swatch on the right that opens the picker. */
+@Composable
+fun SettingsColorRow(title: String, description: String?, value: Long, onChange: (Long) -> Unit) {
+    var open by remember { mutableStateOf(false) }
+    Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+        RowScopeLabel(title, description, Modifier.weight(1f))
+        Box(
+            Modifier.size(36.dp)
+                .background(Color(value), RoundedCornerShape(Ca.radius.control))
+                .border(1.dp, MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(Ca.radius.control))
+                .clickable(remember { MutableInteractionSource() }, null) { open = true },
+        )
+    }
+    ColorPickerDialog(open, value, onDismiss = { open = false }) { onChange(it); open = false }
+}
+
+/** Quick-pick swatches offered above the fine HSL sliders. */
+private val PICKER_PRESETS = listOf(
+    0xFF8B5CF6L, 0xFF6750A4L, 0xFF1C9BBDL, 0xFF00A8A0L, 0xFF3DDC84L, 0xFF2E7D32L,
+    0xFFF9A825L, 0xFFC16A1CL, 0xFFE0533DL, 0xFFD81B60L, 0xFF7F52FFL, 0xFF3A6FE0L,
+)
+
+@Composable
+internal fun ColorPickerDialog(visible: Boolean, initial: Long, onDismiss: () -> Unit, onPick: (Long) -> Unit) {
+    CenteredDialog(visible, onDismiss) {
+        val start = remember(initial) { colorToHsl(Color(initial)) }
+        var h by remember(initial) { mutableStateOf(start[0]) }
+        var s by remember(initial) { mutableStateOf(start[1]) }
+        var l by remember(initial) { mutableStateOf(start[2]) }
+        val current = hslToColor(h, s, l)
+        Column(
+            Modifier.widthIn(max = 360.dp).padding(horizontal = 24.dp)
+                .background(MaterialTheme.colorScheme.surface, RoundedCornerShape(Ca.radius.xl))
+                .border(1.dp, MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(Ca.radius.xl))
+                .padding(20.dp),
+            verticalArrangement = Arrangement.spacedBy(14.dp),
+        ) {
+            Text(stringResource(Res.string.color_picker_title), color = MaterialTheme.colorScheme.onSurface, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                Box(Modifier.size(56.dp).background(current, RoundedCornerShape(Ca.radius.control)).border(1.dp, MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(Ca.radius.control)))
+                Text(hexOf(current), color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodyMedium)
+            }
+            Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                PICKER_PRESETS.forEach { p ->
+                    val pc = Color(p)
+                    Box(
+                        Modifier.size(30.dp).background(pc, CircleShape)
+                            .border(1.dp, MaterialTheme.colorScheme.outlineVariant, CircleShape)
+                            .clickable(remember { MutableInteractionSource() }, null) {
+                                val t = colorToHsl(pc); h = t[0]; s = t[1]; l = t[2]
+                            },
+                    )
+                }
+            }
+            PickerSlider(stringResource(Res.string.color_hue), h, 0f, 360f) { h = it }
+            PickerSlider(stringResource(Res.string.color_saturation), s, 0f, 1f) { s = it }
+            PickerSlider(stringResource(Res.string.color_lightness), l, 0f, 1f) { l = it }
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                OutlinedButton(onClick = onDismiss, modifier = Modifier.weight(1f)) { Text(stringResource(Res.string.cancel)) }
+                Button(onClick = { onPick(argbLong(current)) }, modifier = Modifier.weight(1f)) { Text(stringResource(Res.string.save)) }
+            }
+        }
+    }
+}
+
+@Composable
+private fun PickerSlider(label: String, value: Float, min: Float, max: Float, onChange: (Float) -> Unit) {
+    Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+        Text(label, color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.labelMedium)
+        Slider(
+            value = value, onValueChange = onChange, valueRange = min..max,
+            colors = SliderDefaults.colors(
+                thumbColor = MaterialTheme.colorScheme.primary,
+                activeTrackColor = MaterialTheme.colorScheme.primary,
+                inactiveTrackColor = MaterialTheme.colorScheme.surfaceContainerHighest,
+            ),
+        )
+    }
+}
+
+// HSL helpers (h in 0..360, s/l in 0..1). Return a float triple as a 3-element array for simple state.
+private fun colorToHsl(c: Color): FloatArray {
+    val r = c.red; val g = c.green; val b = c.blue
+    val max = maxOf(r, g, b); val min = minOf(r, g, b)
+    val l = (max + min) / 2f
+    val d = max - min
+    if (d < 1e-5f) return floatArrayOf(0f, 0f, l)
+    val s = d / (1f - abs(2f * l - 1f))
+    val h = when (max) {
+        r -> 60f * (((g - b) / d) % 6f)
+        g -> 60f * ((b - r) / d + 2f)
+        else -> 60f * ((r - g) / d + 4f)
+    }
+    return floatArrayOf((h + 360f) % 360f, s, l)
+}
+
+private fun hslToColor(h: Float, s: Float, l: Float): Color {
+    val c = (1f - abs(2f * l - 1f)) * s
+    val hp = (((h % 360f) + 360f) % 360f) / 60f
+    val x = c * (1f - abs(hp % 2f - 1f))
+    val (r1, g1, b1) = when {
+        hp < 1f -> Triple(c, x, 0f); hp < 2f -> Triple(x, c, 0f); hp < 3f -> Triple(0f, c, x)
+        hp < 4f -> Triple(0f, x, c); hp < 5f -> Triple(x, 0f, c); else -> Triple(c, 0f, x)
+    }
+    val m = l - c / 2f
+    return Color((r1 + m).coerceIn(0f, 1f), (g1 + m).coerceIn(0f, 1f), (b1 + m).coerceIn(0f, 1f))
+}
+
+private fun argbLong(c: Color): Long {
+    val r = (c.red * 255f).roundToInt().toLong()
+    val g = (c.green * 255f).roundToInt().toLong()
+    val b = (c.blue * 255f).roundToInt().toLong()
+    return 0xFF000000L or (r shl 16) or (g shl 8) or b
+}
+
+private fun hexOf(c: Color): String {
+    val digits = "0123456789ABCDEF"
+    fun h2(v: Int) = "${digits[(v shr 4) and 0xF]}${digits[v and 0xF]}"
+    val r = (c.red * 255f).roundToInt(); val g = (c.green * 255f).roundToInt(); val b = (c.blue * 255f).roundToInt()
+    return "#${h2(r)}${h2(g)}${h2(b)}"
 }

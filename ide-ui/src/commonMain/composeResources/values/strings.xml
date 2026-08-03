@@ -133,6 +133,10 @@ We never collect your code, file or project names, which features you use, or an
     <string name="delete_project">Delete project?</string>
     <string name="delete_project_content">“%1$s” and all of its files will be permanently deleted. This can't be undone.</string>
     <string name="cancel">Cancel</string>
+    <string name="color_picker_title">Custom color</string>
+    <string name="color_hue">Hue</string>
+    <string name="color_saturation">Saturation</string>
+    <string name="color_lightness">Lightness</string>
     <string name="delete">Delete</string>
     <string name="project_name">Project name</string>
     <string name="package_name">Package name</string>

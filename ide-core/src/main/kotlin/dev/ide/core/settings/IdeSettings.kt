@@ -17,8 +17,10 @@ data class IdeSettings(
     // ---- appearance ----
     /** [THEME_LIGHT], [THEME_DARK], or [THEME_SYSTEM] (follow the OS). */
     val themeMode: String = THEME_DARK,
-    /** [ACCENT_VIOLET], [ACCENT_TEAL], or [ACCENT_ORANGE] (the accent swaps the theme ships). */
+    /** [ACCENT_VIOLET], [ACCENT_TEAL], [ACCENT_ORANGE], or [ACCENT_CUSTOM] (the accent swaps the theme ships). */
     val accent: String = ACCENT_VIOLET,
+    /** Seed for [ACCENT_CUSTOM] — an `0xAARRGGBB` ARGB long. Ignored unless [accent] is custom. */
+    val accentColor: Long = 0xFF8B5CF6L,
 
     // ---- editor ----
     /** Code-font zoom, 1.0 = the theme's default size (also driven live by pinch / Ctrl-+ / Ctrl--). */
@@ -80,6 +82,7 @@ data class IdeSettings(
         const val ACCENT_VIOLET = "violet"
         const val ACCENT_TEAL = "teal"
         const val ACCENT_ORANGE = "orange"
+        const val ACCENT_CUSTOM = "custom"
         const val CODE_FONT_JETBRAINS = "jetbrains"
         const val CODE_FONT_MONOSPACE = "monospace"
 
