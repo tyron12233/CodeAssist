@@ -114,14 +114,20 @@ class KspSourceGenerator(
                 onFailure = { e ->
                     // KSP is invoked reflectively, so a crash arrives wrapped in InvocationTargetException whose
                     // own message is null ("crashed for app: null"). Unwrap to the real cause and report its type
-                    // + message (the type alone is informative when the message is null, e.g. a bare NPE) plus a
-                    // short stack, so the actual failure is visible instead of a useless null.
+                    // + message (the type alone is informative when the message is null, e.g. a bare NPE).
                     val root = unwrapReflection(e)
                     val detail = root.message?.takeIf { it.isNotBlank() } ?: "(${root.javaClass.name}; no message)"
                     val m = "ksp: crashed for ${request.moduleName}: $detail"
                     log(m)
-                    val trace = root.stackTrace.take(10).joinToString("\n") { "    at $it" }
-                    log("ksp: cause ${root.javaClass.name}: ${root.message}\n$trace")
+                    // Dump the FULL cause chain, ONE line per log() call. Two reasons this is not
+                    // `log(root.stackTrace…joinToString("\n"))`: (1) the build console renders a newline-carrying
+                    // log() call as a single line, so an embedded multi-line trace never shows; (2) some AA
+                    // errors are thrown on a leaf exception that carries NO stack trace of its own — the useful
+                    // frames live on an intermediate cause. `traceLines(e)` walks the whole chain (ITE → … →
+                    // root), emitting each "Caused by" header and every frame separately, so the throw site
+                    // survives both. Capped to keep the console readable.
+                    val chain = kspCrashTraceLines(e, MAX_TRACE_LINES)
+                    chain.forEach { log("ksp:   $it") }
                     // A bundled processor that needs a native library (Room's SQLite query verifier via
                     // sqlite-jdbc) can't load it on ART — there's no `.so` for Android/aarch64 — so the run dies
                     // with an opaque "No native library found". Say so plainly: it's a device limitation, not a
@@ -130,7 +136,7 @@ class KspSourceGenerator(
                         "ksp: a bundled processor needs a native library not available on this device; its code generation isn't supported on-device yet"
                     else null
                     hint?.let(log)
-                    SourceGenResult(false, messages + m + "ksp: cause ${root.javaClass.name}: ${root.message}" + listOfNotNull(hint))
+                    SourceGenResult(false, messages + m + chain.map { "ksp:   $it" } + listOfNotNull(hint))
                 },
             )
     }
@@ -223,5 +229,42 @@ class KspSourceGenerator(
     private companion object {
         const val DEFAULT_LANGUAGE_VERSION = "2.4"
         const val DEFAULT_JVM_TARGET = "17"
+        /** Cap on emitted crash-trace lines (chain headers + frames), to keep the build console readable. */
+        const val MAX_TRACE_LINES = 60
     }
+}
+
+/**
+ * Render [e] and its full cause chain to individual lines — a "Caused by" header per level, then each stack
+ * frame as its own line — capped at [max] lines overall and [perLevel] frames per level. Three reasons for this
+ * shape:
+ *  - **One line per entry**: the build console shows only the first line of a newline-carrying `log()` call, so
+ *    an embedded multi-line trace never surfaces; each frame must be its own line.
+ *  - **Full chain**: some Analysis-API errors are thrown on a leaf exception that carries NO stack trace of its
+ *    own — the useful frames then live on an intermediate cause, so we must walk the whole chain, not just the
+ *    leaf (what the old diagnostic did).
+ *  - **Per-level frame cap**: the outermost wrapper (a reflective `InvocationTargetException`) has a long,
+ *    useless reflection/build trace that would otherwise exhaust [max] before reaching the real cause.
+ * Cycle-guarded by identity; never exceeds [max] lines.
+ */
+internal fun kspCrashTraceLines(e: Throwable, max: Int, perLevel: Int = 20): List<String> {
+    val out = ArrayList<String>()
+    val seen = java.util.Collections.newSetFromMap(java.util.IdentityHashMap<Throwable, Boolean>())
+    var t: Throwable? = e
+    var first = true
+    while (t != null && seen.add(t) && out.size < max) {
+        out += (if (first) "" else "Caused by: ") + "${t.javaClass.name}: ${t.message}"
+        first = false
+        val frames = t.stackTrace
+        if (frames.isEmpty()) {
+            if (out.size < max) out += "    <no stack trace on this exception>"
+        } else {
+            for ((i, f) in frames.withIndex()) {
+                if (out.size >= max || i >= perLevel) break
+                out += "    at $f"
+            }
+        }
+        t = t.cause
+    }
+    return out
 }
