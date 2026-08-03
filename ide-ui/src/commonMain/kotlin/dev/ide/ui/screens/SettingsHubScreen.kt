@@ -107,7 +107,7 @@ fun SettingsHubScreen(
                         Modifier.padding(start = 72.dp),
                         color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f),
                     )
-                    HubRow(dest, tonalIndex = i)
+                    HubRow(dest)
                 }
             }
         }
@@ -117,21 +117,16 @@ fun SettingsHubScreen(
 private class HubDest(val icon: ImageVector, val title: String, val subtitle: String, val onClick: () -> Unit)
 
 @Composable
-private fun HubRow(dest: HubDest, tonalIndex: Int) {
+private fun HubRow(dest: HubDest) {
     val scheme = MaterialTheme.colorScheme
-    // Cycle the three container tones for the expressive colorful-icon look.
-    val (container, onContainer) = when (tonalIndex % 3) {
-        0 -> scheme.primaryContainer to scheme.onPrimaryContainer
-        1 -> scheme.secondaryContainer to scheme.onSecondaryContainer
-        else -> scheme.tertiaryContainer to scheme.onTertiaryContainer
-    }
     ListItem(
         modifier = Modifier.clickable(onClick = dest.onClick),
         colors = ListItemDefaults.colors(containerColor = Color.Transparent),
         leadingContent = {
-            Surface(shape = CircleShape, color = container, modifier = Modifier.size(44.dp)) {
+            // One consistent accent tone for every destination (no per-row color).
+            Surface(shape = CircleShape, color = scheme.primaryContainer, modifier = Modifier.size(44.dp)) {
                 Box(contentAlignment = Alignment.Center) {
-                    Icon(dest.icon, null, Modifier.size(22.dp), tint = onContainer)
+                    Icon(dest.icon, null, Modifier.size(22.dp), tint = scheme.onPrimaryContainer)
                 }
             }
         },

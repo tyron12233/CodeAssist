@@ -24,7 +24,6 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.ExtendedFloatingActionButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.LargeTopAppBar
@@ -80,6 +79,7 @@ import dev.ide.ui.generated.resources.join_the_community
 import dev.ide.ui.generated.resources.join_the_community_content
 import dev.ide.ui.generated.resources.modules
 import dev.ide.ui.generated.resources.new_project
+import dev.ide.ui.generated.resources.new_project_content
 import dev.ide.ui.generated.resources.no_project_yet
 import dev.ide.ui.generated.resources.project_kind_android
 import dev.ide.ui.generated.resources.project_opened_days
@@ -157,13 +157,6 @@ fun ProjectPickerScreen(
                 scrollBehavior = scroll,
             )
         },
-        floatingActionButton = {
-            ExtendedFloatingActionButton(
-                onClick = onNewProject,
-                icon = { Icon(CaIcons.plus, null) },
-                text = { Text(stringResource(Res.string.new_project)) },
-            )
-        },
     ) { padding ->
         Column(
             Modifier.fillMaxSize().padding(padding).verticalScroll(rememberScrollState()),
@@ -171,11 +164,14 @@ fun ProjectPickerScreen(
         ) {
             Column(
                 Modifier.widthIn(max = 640.dp).fillMaxWidth()
-                    .padding(horizontal = 16.dp).padding(top = 4.dp, bottom = 96.dp),
+                    .padding(horizontal = 16.dp).padding(top = 4.dp, bottom = 24.dp),
                 verticalArrangement = Arrangement.spacedBy(12.dp),
             ) {
-                // The support card sits at the top: CodeAssist is free, ad-free and open source, so the only
-                // "monetisation" is an optional sponsor/star. Shown whenever the host can open links.
+                // The primary action leads: a prominent New-Project card (no floating button).
+                NewProjectCard(onNewProject)
+
+                // The support card: CodeAssist is free, ad-free and open source, so the only "monetisation"
+                // is an optional sponsor/star. Shown whenever the host can open links.
                 if (onSponsor != null || onStarOnGitHub != null) {
                     SupportCard(onSponsor = onSponsor, onStar = onStarOnGitHub)
                 }
@@ -277,6 +273,34 @@ private fun DestructiveAction(text: String, modifier: Modifier = Modifier, onCli
         contentAlignment = Alignment.Center,
     ) {
         Text(text, color = MaterialTheme.colorScheme.onPrimary, style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.SemiBold)
+    }
+}
+
+/** The prominent primary action: a filled accent card opening the New-Project flow. */
+@Composable
+private fun NewProjectCard(onClick: () -> Unit) {
+    val interaction = remember { MutableInteractionSource() }
+    Row(
+        Modifier
+            .fillMaxWidth()
+            .pressScale(interaction)
+            .background(MaterialTheme.colorScheme.primaryContainer, RoundedCornerShape(Ca.radius.lg))
+            .clickable(interaction, indication = null, onClick = onClick)
+            .padding(16.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(14.dp),
+    ) {
+        Box(
+            Modifier.size(52.dp).background(MaterialTheme.colorScheme.primary, RoundedCornerShape(Ca.radius.md)),
+            contentAlignment = Alignment.Center,
+        ) {
+            Icon(CaIcons.plus, null, Modifier.size(24.dp), tint = MaterialTheme.colorScheme.onPrimary)
+        }
+        Column(Modifier.weight(1f)) {
+            Text(stringResource(Res.string.new_project), color = MaterialTheme.colorScheme.onPrimaryContainer, style = MaterialTheme.typography.titleMedium)
+            Text(stringResource(Res.string.new_project_content), color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.8f), style = MaterialTheme.typography.bodyMedium)
+        }
+        Icon(CaIcons.chevronRight, null, Modifier.size(20.dp), tint = MaterialTheme.colorScheme.onPrimaryContainer)
     }
 }
 
