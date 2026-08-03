@@ -25,8 +25,10 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.Text
+import dev.ide.ui.components.ExpressiveScaffold
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -113,21 +115,17 @@ fun SdkManagerScreen(backend: IdeBackend, onBack: () -> Unit) {
     LaunchedEffect(finishedCount) { if (finishedCount > 0) reload() }
 
     val activeIds = progress.downloads.filter { it.status != "DONE" && it.status != "FAILED" }.map { it.id }.toSet()
-    val iconBox = if (isMobilePlatform) 42 else 34
-
-    Column(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)) {
-        Row(
-            Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 8.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
-        ) {
-            IconButtonCa(CaIcons.chevronLeft, stringResource(Res.string.back), onBack, boxSize = iconBox)
-            Text(stringResource(Res.string.sdk_manager_title), style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.onSurface, modifier = Modifier.weight(1f))
-            IconButtonCa(CaIcons.refresh, stringResource(Res.string.refresh), { scope.launch { reload() } }, boxSize = iconBox)
-        }
-        status?.let { Text(it, style = MaterialTheme.typography.bodyMedium, color = if (statusIsError) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary, modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp)) }
-
-        Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp), verticalArrangement = Arrangement.spacedBy(18.dp)) {
+    ExpressiveScaffold(
+        title = stringResource(Res.string.sdk_manager_title),
+        onBack = onBack,
+        actions = {
+            IconButton(onClick = { scope.launch { reload() } }) {
+                Icon(CaIcons.refresh, stringResource(Res.string.refresh))
+            }
+        },
+    ) { innerPadding ->
+        Column(Modifier.fillMaxSize().padding(innerPadding).verticalScroll(rememberScrollState()).padding(16.dp), verticalArrangement = Arrangement.spacedBy(18.dp)) {
+            status?.let { Text(it, style = MaterialTheme.typography.bodyMedium, color = if (statusIsError) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary) }
             // Purpose: these downloads power editor docs, not building.
             Card {
                 Text(stringResource(Res.string.sdk_sources_documentation), style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.onSurface)

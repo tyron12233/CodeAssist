@@ -30,6 +30,7 @@ import dev.ide.ui.backend.IdeBackend
 import dev.ide.ui.backend.UiPluginInfo
 import dev.ide.ui.components.CaSwitch
 import dev.ide.ui.components.GlassMaterial
+import dev.ide.ui.components.ExpressiveScaffold
 import dev.ide.ui.components.GlassSurface
 import dev.ide.ui.components.IconButtonCa
 import dev.ide.ui.generated.resources.Res
@@ -52,30 +53,14 @@ fun PluginsScreen(backend: IdeBackend, onBack: () -> Unit) {
     var plugins by remember { mutableStateOf(backend.settings.pluginCatalog()) }
     var changed by remember { mutableStateOf(false) }
 
-    Box(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)) {
-        Column(Modifier.fillMaxSize()) {
-            GlassSurface(Modifier.fillMaxWidth(), GlassMaterial.Regular) {
-                Row(
-                    Modifier.fillMaxWidth().height(56.dp).padding(horizontal = 10.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                ) {
-                    IconButtonCa(CaIcons.chevronLeft, stringResource(Res.string.back), onBack)
-                    Icon(CaIcons.box, null, Modifier.size(20.dp), tint = MaterialTheme.colorScheme.primary)
-                    Text(
-                        stringResource(Res.string.settings_plugins), color = MaterialTheme.colorScheme.onSurface,
-                        style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f),
-                    )
-                }
-            }
-            Box(Modifier.fillMaxWidth().height(1.dp).background(MaterialTheme.colorScheme.outlineVariant))
-            Column(
-                Modifier.widthIn(max = 640.dp).fillMaxWidth()
-                    .verticalScroll(rememberScrollState())
-                    .padding(horizontal = 16.dp, vertical = 16.dp),
-                verticalArrangement = Arrangement.spacedBy(10.dp),
-            ) {
-                if (changed) RestartHint()
+    ExpressiveScaffold(title = stringResource(Res.string.settings_plugins), onBack = onBack) { innerPadding ->
+        Column(
+            Modifier.widthIn(max = 640.dp).fillMaxWidth().padding(innerPadding)
+                .verticalScroll(rememberScrollState())
+                .padding(horizontal = 16.dp, vertical = 16.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp),
+        ) {
+            if (changed) RestartHint()
                 for (p in plugins) {
                     PluginRow(p) { enabled ->
                         backend.settings.setPluginEnabled(p.id, enabled)
@@ -83,7 +68,6 @@ fun PluginsScreen(backend: IdeBackend, onBack: () -> Unit) {
                         changed = true
                     }
                 }
-            }
         }
     }
 }

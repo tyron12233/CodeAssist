@@ -46,6 +46,7 @@ import dev.ide.ui.backend.UiStorageCategory
 import dev.ide.ui.backend.UiStorageProject
 import dev.ide.ui.backend.UiStorageReport
 import dev.ide.ui.components.CenteredDialog
+import dev.ide.ui.components.ExpressiveScaffold
 import dev.ide.ui.components.GlassMaterial
 import dev.ide.ui.components.GlassSurface
 import dev.ide.ui.components.IconButtonCa
@@ -155,11 +156,8 @@ fun StorageScreen(backend: IdeBackend, onBack: () -> Unit) {
         }
     }
 
-    Box(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)) {
-        Column(Modifier.fillMaxSize()) {
-            StorageHeader(onBack)
-            Box(Modifier.fillMaxWidth().height(1.dp).background(MaterialTheme.colorScheme.outlineVariant))
-
+    ExpressiveScaffold(title = stringResource(Res.string.settings_storage), onBack = onBack) { innerPadding ->
+        Box(Modifier.fillMaxSize().padding(innerPadding)) {
             val r = report
             when {
                 loading && r == null -> Box(Modifier.fillMaxSize(), Alignment.Center) {
@@ -177,9 +175,8 @@ fun StorageScreen(backend: IdeBackend, onBack: () -> Unit) {
                     onRequestDeleteProject = { pendingProject = it },
                 )
             }
+            StorageToast(toast, Modifier.align(Alignment.BottomCenter)) { toast = null }
         }
-
-        StorageToast(toast, Modifier.align(Alignment.BottomCenter)) { toast = null }
     }
 
     // ---- confirmations ----
@@ -359,19 +356,6 @@ private fun WideButton(text: String, enabled: Boolean, onClick: () -> Unit) {
     }
 }
 
-@Composable
-private fun StorageHeader(onBack: () -> Unit) {
-    GlassSurface(Modifier.fillMaxWidth(), GlassMaterial.Regular) {
-        Row(
-            Modifier.fillMaxWidth().height(56.dp).padding(horizontal = 10.dp),
-            verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp),
-        ) {
-            IconButtonCa(CaIcons.chevronLeft, stringResource(Res.string.back), onBack)
-            Icon(CaIcons.layers, null, Modifier.size(20.dp), tint = MaterialTheme.colorScheme.primary)
-            Text(stringResource(Res.string.settings_storage), color = MaterialTheme.colorScheme.onSurface, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f))
-        }
-    }
-}
 
 @Composable
 private fun ConfirmDialog(
