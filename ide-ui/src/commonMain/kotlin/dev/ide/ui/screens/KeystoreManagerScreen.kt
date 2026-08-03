@@ -46,6 +46,7 @@ import dev.ide.ui.backend.FileActions
 import dev.ide.ui.backend.IdeBackend
 import dev.ide.ui.backend.UiKeystore
 import dev.ide.ui.backend.UiKeystoreSpec
+import dev.ide.ui.components.ExpressiveScaffold
 import dev.ide.ui.components.IconButtonCa
 import dev.ide.ui.generated.resources.Res
 import dev.ide.ui.generated.resources.back
@@ -110,20 +111,11 @@ fun KeystoreManagerScreen(
         loading = false
     }
 
-    Column(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)) {
-        Row(
-            Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 8.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
-        ) {
-            IconButtonCa(CaIcons.chevronLeft, stringResource(Res.string.back), onBack, boxSize = 38)
-            Text(stringResource(Res.string.keystore_manager_title), style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.onSurface, modifier = Modifier.weight(1f))
-        }
-        status?.let {
-            Text(it, style = MaterialTheme.typography.bodyMedium, color = if (statusError) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary, modifier = Modifier.padding(horizontal = 16.dp, vertical = 2.dp))
-        }
-
-        Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
+    ExpressiveScaffold(title = stringResource(Res.string.keystore_manager_title), onBack = onBack) { innerPadding ->
+        Column(Modifier.fillMaxSize().padding(innerPadding).verticalScroll(rememberScrollState()).padding(16.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
+            status?.let {
+                Text(it, style = MaterialTheme.typography.bodyMedium, color = if (statusError) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary)
+            }
             KsCard {
                 Text(stringResource(Res.string.keystore_section_title), style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.onSurface)
                 Spacer(Modifier.height(4.dp))
@@ -289,15 +281,8 @@ private fun KeystoreCard(ks: UiKeystore, onDelete: () -> Unit) {
 /** A full screen with a back/title header and a scrolling form body in a card. */
 @Composable
 private fun FormScaffold(title: String, onBack: () -> Unit, body: @Composable ColumnScope.() -> Unit) {
-    Column(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)) {
-        Row(
-            Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 8.dp),
-            verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp),
-        ) {
-            IconButtonCa(CaIcons.chevronLeft, stringResource(Res.string.back), onBack, boxSize = 38)
-            Text(title, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.onSurface, modifier = Modifier.weight(1f))
-        }
-        Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp)) {
+    ExpressiveScaffold(title = title, onBack = onBack) { innerPadding ->
+        Column(Modifier.fillMaxSize().padding(innerPadding).verticalScroll(rememberScrollState()).padding(16.dp)) {
             KsCard(content = body)
         }
     }
