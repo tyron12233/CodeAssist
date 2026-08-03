@@ -35,6 +35,7 @@ import androidx.compose.ui.unit.dp
 import dev.ide.ui.backend.IdeBackend
 import dev.ide.ui.backend.UiLearnTrack
 import dev.ide.ui.backend.UiLessonSummary
+import dev.ide.ui.components.ExpressiveScaffold
 import dev.ide.ui.components.IconButtonCa
 import dev.ide.ui.components.entranceSlideUp
 import dev.ide.ui.components.pressScale
@@ -66,27 +67,12 @@ fun LessonTrackScreen(
     }
     val progress = remember(backend, epoch) { runCatching { backend.learn.progress() }.getOrNull() }
 
-    Box(modifier.fillMaxSize().background(MaterialTheme.colorScheme.background), contentAlignment = Alignment.TopCenter) {
-        Column(Modifier.widthIn(max = 640.dp).fillMaxSize()) {
-            Row(
-                Modifier.fillMaxWidth().padding(start = 8.dp, end = 16.dp, top = 16.dp, bottom = 4.dp),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(6.dp),
-            ) {
-                IconButtonCa(CaIcons.chevronLeft, stringResource(Res.string.back), onBack)
-                Text(
-                    track?.title.orEmpty(),
-                    color = MaterialTheme.colorScheme.onSurface, style = MaterialTheme.typography.titleLarge,
-                    maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f),
-                )
-            }
-
-            val t = track
-            if (t == null) return@Column
-            val completedLessons = t.lessons.count { completed(progress, it) }
-
+    ExpressiveScaffold(title = track?.title.orEmpty(), onBack = onBack) { innerPadding ->
+        val t = track ?: return@ExpressiveScaffold
+        val completedLessons = t.lessons.count { completed(progress, it) }
+        Box(Modifier.fillMaxSize().padding(innerPadding), contentAlignment = Alignment.TopCenter) {
             Column(
-                Modifier.fillMaxWidth().weight(1f).verticalScroll(rememberScrollState()).padding(horizontal = 20.dp),
+                Modifier.widthIn(max = 640.dp).fillMaxWidth().verticalScroll(rememberScrollState()).padding(horizontal = 20.dp),
                 verticalArrangement = Arrangement.spacedBy(10.dp),
             ) {
                 TrackHero(t, completedLessons)
