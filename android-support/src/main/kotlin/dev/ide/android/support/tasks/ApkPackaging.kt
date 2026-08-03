@@ -94,7 +94,9 @@ internal object ApkPackaging {
             // 5) Java resources (already merged + filtered by MergeJavaResourcesTask): entries copied to the
             //    APK root. aapt2's output was written first, so it always wins a collision (dedup below).
             for (jar in javaResJars.filter { Files.isRegularFile(it) }) {
-                ZipFile(jar.toFile()).use { zf ->
+                // A merged-java-res.jar with no entries is the 22-byte empty archive, which ART's ZipFile
+                // rejects on read; skip an empty/unreadable jar (it packages nothing) instead of crashing.
+                openZipOrNull(jar)?.use { zf ->
                     val entries = zf.entries().toList().filter { !it.isDirectory }.sortedBy { it.name }
                     for (e in entries) {
                         if (!written.add(e.name)) continue

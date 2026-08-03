@@ -69,7 +69,9 @@ internal object BundlePackaging {
 
             // 5) merged Java resources → the bundle's `root/` (bundletool relocates these to the APK root).
             for (jar in javaResJars.filter { Files.isRegularFile(it) }) {
-                ZipFile(jar.toFile()).use { zf ->
+                // An empty merged-java-res.jar (22-byte archive) is unreadable by ART's ZipFile — skip an
+                // empty/unreadable jar (it packages nothing) rather than aborting the bundle build.
+                openZipOrNull(jar)?.use { zf ->
                     for (e in zf.entries().toList().filter { !it.isDirectory }.sortedBy { it.name }) {
                         val name = "root/${e.name}"
                         if (!written.add(name)) continue

@@ -14,6 +14,15 @@ import java.util.zip.ZipFile
 import java.util.zip.ZipOutputStream
 
 /**
+ * Open [jar] as a [ZipFile], or return null when it can't be read. A `merged-java-res.jar` with no entries
+ * is written as the canonical 22-byte empty archive, which ART's `ZipFile` REJECTS on read (`ZipException:
+ * No entries`) even though the desktop JVM opens it fine; a corrupt dependency jar likewise shouldn't abort
+ * packaging. An unreadable/empty jar contributes nothing, so callers `?.use { }` it and skip on null. This
+ * only changes device behaviour (desktop opens the empty archive with zero entries — the same net result).
+ */
+internal fun openZipOrNull(jar: Path): ZipFile? = runCatching { ZipFile(jar.toFile()) }.getOrNull()
+
+/**
  * AGP-faithful merge rules for the packaging step: when the same archive path is contributed by more than
  * one input (the module's own files, a sub-module, an AAR, an external jar) the packager either drops it
  * ([Action.EXCLUDE]), keeps the first provider ([Action.PICK_FIRST]), concatenates every provider
@@ -111,7 +120,7 @@ internal object JavaResMerger {
             }
         }
         for (jar in jars.filter { Files.isRegularFile(it) }) {
-            ZipFile(jar.toFile()).use { zf ->
+            openZipOrNull(jar)?.use { zf ->
                 zf.entries().asSequence()
                     .filter { !it.isDirectory && !it.name.endsWith(".class") }
                     .sortedBy { it.name }
@@ -217,7 +226,7 @@ internal object NativeLibsMerger {
         }
         // From jars we extract only the `.so` under `lib/` (AGP's native-lib extraction), not arbitrary content.
         for (jar in jars.filter { Files.isRegularFile(it) }) {
-            ZipFile(jar.toFile()).use { zf ->
+            openZipOrNull(jar)?.use { zf ->
                 zf.entries().asSequence()
                     .filter { !it.isDirectory && it.name.startsWith("lib/") && it.name.endsWith(".so") }
                     .sortedBy { it.name }
