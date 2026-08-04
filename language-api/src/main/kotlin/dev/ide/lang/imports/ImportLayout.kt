@@ -143,15 +143,24 @@ object ImportLayout {
         // No imports at all: place the block after the package (one blank line) or at the region start. Skip
         // any blank line(s) already following the package so the import lands after them (and the existing
         // blank serves as the separator); add one blank line only when the package is immediately followed by
-        // code.
+        // code. A brand-new import section is ALSO separated from the code below it by one blank line, so the
+        // import block never butts straight against the first declaration.
+        val at: Int
+        val prefix: String
         if (packageLineEnd != null) {
             var i = packageLineEnd
             var sawBlank = false
             while (i < text.length && text[i] == '\n') { i++; sawBlank = true }
-            val prefix = if (config.blankLineAfterPackage && !sawBlank) "\n" else ""
-            return InsertPlan(i, "$prefix$line\n")
+            at = i
+            prefix = if (config.blankLineAfterPackage && !sawBlank) "\n" else ""
+        } else {
+            at = importRegionStart
+            prefix = ""
         }
-        return InsertPlan(importRegionStart, "$line\n")
+        // Gap to the code that follows: one blank line, unless the insertion point is end-of-file or already
+        // sits on a blank line (something else already separates the imports from the code).
+        val suffix = if (at < text.length && text[at] != '\n') "\n" else ""
+        return InsertPlan(at, "$prefix$line\n$suffix")
     }
 
     /** Two entries share a block when they are the same static-ness (or the static split is off). */

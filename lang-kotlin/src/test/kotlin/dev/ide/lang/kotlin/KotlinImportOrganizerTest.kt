@@ -34,7 +34,8 @@ class KotlinImportOrganizerTest {
 
     @Test fun firstImportLandsBlankLineAfterPackage() {
         val src = "package p\n\nclass X\n"
-        assertEquals("package p\n\nimport a.A\nclass X\n", planned(src, "a.A"))
+        // A fresh import section is blank-line separated from the code below it as well as the package above.
+        assertEquals("package p\n\nimport a.A\n\nclass X\n", planned(src, "a.A"))
     }
 
     @Test fun alreadyImportedIsNoOp() {

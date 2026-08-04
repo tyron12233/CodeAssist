@@ -36,7 +36,8 @@ class JdtImportLayoutTest {
 
     @Test fun firstImportBlankLineAfterPackage() {
         val src = "package app;\n\nclass X {}\n"
-        assertEquals("package app;\n\nimport a.A;\nclass X {}\n", planned(src, "a.A"))
+        // A fresh import section is blank-line separated from the code below it as well as the package above.
+        assertEquals("package app;\n\nimport a.A;\n\nclass X {}\n", planned(src, "a.A"))
     }
 
     @Test fun alreadyImportedIsNoOp() {

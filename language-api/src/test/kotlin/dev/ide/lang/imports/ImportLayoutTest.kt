@@ -148,14 +148,23 @@ class ImportLayoutTest {
         val src = "package p;\nclass C {}\n"
         val text: CharSequence = src
         val plan = ImportLayout.planInsert(reg("a.A"), emptyList(), ImportLayoutConfig.JAVA, text, packageLineEnd = 11) { java(it) }
-        assertEquals("package p;\n\nimport a.A;\nclass C {}\n", apply(text, plan))
+        // A fresh import section is blank-line separated from BOTH the package above and the code below.
+        assertEquals("package p;\n\nimport a.A;\n\nclass C {}\n", apply(text, plan))
     }
 
     @Test fun firstImportDoesNotDoubleExistingBlankLine() {
         val src = "package p;\n\nclass C {}\n"
         val text: CharSequence = src
         val plan = ImportLayout.planInsert(reg("a.A"), emptyList(), ImportLayoutConfig.JAVA, text, packageLineEnd = 11) { java(it) }
-        assertEquals("package p;\n\nimport a.A;\nclass C {}\n", apply(text, plan))
+        // The pre-existing blank stays the package/import separator (not doubled); a new blank splits import↔code.
+        assertEquals("package p;\n\nimport a.A;\n\nclass C {}\n", apply(text, plan))
+    }
+
+    @Test fun firstImportGetsBlankLineBeforeCodeWithNoPackage() {
+        val src = "class C {}\n"
+        val text: CharSequence = src
+        val plan = ImportLayout.planInsert(reg("a.A"), emptyList(), ImportLayoutConfig.JAVA, text, packageLineEnd = null) { java(it) }
+        assertEquals("import a.A;\n\nclass C {}\n", apply(text, plan))
     }
 
     @Test fun staticImportStartsItsOwnBlockAfterRegular() {
