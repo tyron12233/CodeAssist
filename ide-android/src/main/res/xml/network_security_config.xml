@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Android 9+ (API 28+) blocks cleartext (HTTP) traffic by default. That default is right for us:
+     Maven dependency resolution and the cloud AI providers all speak HTTPS. But a BYO "local AI"
+     endpoint (an on-device or self-hosted OpenAI-compatible / Ollama-style server the user points the
+     agent at) is typically plain HTTP on a loopback address, so a default build fails it with
+     "CLEARTEXT communication to LOCALHOST is not permitted by network security policy".
+
+     Scope the exception to loopback + the emulator's host alias ONLY — everything else (the public
+     internet) stays HTTPS-only, which keeps the app Play-policy-clean (no app-wide usesCleartextTraffic).
+     A local model reached over a LAN IP (e.g. 192.168.x.x) would need its address added here too. -->
+<network-security-config>
+    <base-config cleartextTrafficPermitted="false" />
+    <domain-config cleartextTrafficPermitted="true">
+        <domain includeSubdomains="true">localhost</domain>
+        <domain includeSubdomains="false">127.0.0.1</domain>
+        <domain includeSubdomains="false">::1</domain>
+        <!-- 10.0.2.2 is the Android emulator's alias for the host machine's loopback, so a model
+             served on the dev machine is reachable when testing on the emulator. -->
+        <domain includeSubdomains="false">10.0.2.2</domain>
+    </domain-config>
+</network-security-config>
