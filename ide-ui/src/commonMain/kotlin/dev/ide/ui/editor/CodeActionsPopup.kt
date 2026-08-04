@@ -1,6 +1,9 @@
 package dev.ide.ui.editor
 
 import dev.ide.ui.theme.Ide
+import androidx.compose.animation.core.Spring
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.spring
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
@@ -35,12 +38,18 @@ import androidx.compose.material3.TooltipBox
 import androidx.compose.material3.TooltipDefaults
 import androidx.compose.material3.rememberTooltipState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.TransformOrigin
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.buildAnnotatedString
@@ -81,8 +90,26 @@ import org.jetbrains.compose.resources.stringResource
  */
 @Composable
 fun FloatingLightbulb(onClick: () -> Unit, modifier: Modifier = Modifier) {
+    // Pop the bulb in when it first appears: a bouncy spring scale from small (rising toward the caret) plus a
+    // quick fade, so a fresh quick-fix draws the eye instead of blinking into place. Mirrors the house popover
+    // entrance ([Modifier.entrancePop]) but pronounced enough to read on a small chip. Runs once per appearance
+    // (the layer only mounts this while a fix is available), so it never re-pops on a keystroke that keeps it up.
+    var appeared by remember { mutableStateOf(false) }
+    LaunchedEffect(Unit) { appeared = true }
+    val pop by animateFloatAsState(
+        targetValue = if (appeared) 1f else 0f,
+        animationSpec = spring(dampingRatio = Spring.DampingRatioMediumBouncy, stiffness = Spring.StiffnessMediumLow),
+        label = "lightbulbPop",
+    )
     Box(
         modifier
+            .graphicsLayer {
+                val s = 0.5f + 0.5f * pop
+                scaleX = s
+                scaleY = s
+                alpha = pop.coerceIn(0f, 1f)
+                transformOrigin = TransformOrigin(0.5f, 1f)
+            }
             .clip(RoundedCornerShape(Ca.radius.sm))
             .background(MaterialTheme.colorScheme.surfaceContainerHigh)
             .border(1.dp, MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(Ca.radius.sm))
