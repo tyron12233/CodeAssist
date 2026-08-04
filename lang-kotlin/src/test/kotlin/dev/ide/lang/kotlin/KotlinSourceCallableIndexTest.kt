@@ -99,6 +99,26 @@ class KotlinSourceCallableIndexTest {
         assertTrue("ext.shout" in candidates, "receiver-blind name: key yields the import; got $candidates")
     }
 
+    @Test
+    fun importCandidatesSkipPrivateTopLevelCallables() {
+        // A `private` top-level is file-scoped and can never be imported from another file, while a public
+        // sibling of the same shape can. The "Import ..." quick-fix must offer the latter and drop the former.
+        val dir = tempProject(
+            mapOf("Callables.kt" to "package demo\nprivate fun hidden() {}\nfun shown() {}\n"),
+        )
+        val service = dev.ide.lang.kotlin.symbols.KotlinSymbolService(
+            listOf(DiskFile(dir)), listOf(stdlibJarPath()), null,
+        )
+        assertTrue(
+            "demo.hidden" !in service.importCandidates("hidden"),
+            "a private top-level must not be an import candidate; got ${service.importCandidates("hidden")}",
+        )
+        assertTrue(
+            "demo.shown" in service.importCandidates("shown"),
+            "a public top-level is still offered; got ${service.importCandidates("shown")}",
+        )
+    }
+
     companion object {
         val srcDir: Path = tempProject(mapOf("Seed.kt" to "package demo\n"))
 

@@ -2037,6 +2037,11 @@ class KotlinSymbolService(
         if (name.isEmpty()) return emptyList()
         val out = LinkedHashSet<String>()
         topLevelByName(name).forEach { s ->
+            // A `private` top-level is file-scoped: it can't be imported (or qualified) from another file, so
+            // never offer it as an import candidate. [topLevelByName] deliberately keeps private for same-file
+            // resolution and defers the visibility rule to its use sites (completion, the unresolved check);
+            // this is one of them. `internal` stays: same-module-visible, hence importable.
+            if (Modifier.PRIVATE in s.modifiers) return@forEach
             val pkg =
                 s.packageName ?: s.declaringClassFqn?.substringBeforeLast('.', "")?.ifEmpty { null }
             if (pkg != null) out += "$pkg.$name"
@@ -2059,7 +2064,8 @@ class KotlinSymbolService(
         // (`import …MainActivity.Companion.TAG`) — companion members are accessible statically, so a bare
         // unresolved `TAG` can offer its companion import (mirrors an `object` member's static import).
         model().classByFqn.values.forEach { rc ->
-            if (rc.isCompanion && rc.members.any { it.name == name }) out += "${rc.fqn}.$name"
+            if (rc.isCompanion && rc.members.any { it.name == name && it.visibility != "private" })
+                out += "${rc.fqn}.$name"
         }
         return out.sorted()
     }
