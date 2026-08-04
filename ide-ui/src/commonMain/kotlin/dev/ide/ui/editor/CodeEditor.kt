@@ -467,6 +467,9 @@ private fun CodeEditorContent(
         editorSession.onLinesShifted = { from, delta -> renderState.renderCache.shiftKeys(from, delta) }
         // Active template session re-anchors its tab stops on each edit (typing inside a placeholder).
         editorSession.onSnippetEdit = { span -> snippet?.onEdit(span) }
+        // Soft-keyboard Tab (the touch symbol bar) accepts the highlighted completion when the popup is up,
+        // mirroring the hardware-Tab path (onPreviewKey); the caller falls back to indent when this returns false.
+        editorSession.acceptCompletionIfShowing = { if (showPopup) { accept(); true } else false }
     }
 
     // completion triggering — fires only when the buffer's *text* actually advances (textRevision bumps on text

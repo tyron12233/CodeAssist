@@ -157,6 +157,13 @@ class EditorSession(
     var onSnippetEdit: ((EditSpan) -> Unit)? = null
     /** Render-cache hook: lines at/after `fromOldLine` (pre-edit indices) shifted by `delta`. */
     var onLinesShifted: ((fromOldLine: Int, delta: Int) -> Unit)? = null
+    /**
+     * Smart-Tab hook the editor surface registers: if the completion popup is showing, accept the highlighted
+     * item and return true; otherwise return false. Lets a soft-keyboard Tab (the touch symbol bar, which has
+     * no physical key event) commit a completion exactly as a hardware Tab does, falling back to [indent] when
+     * nothing is open. Null when no editor is mounted on this session.
+     */
+    var acceptCompletionIfShowing: (() -> Boolean)? = null
     /** Set by the platform text-input node while an IME session is active. */
     var imeListener: ImeListener? = null
 

@@ -42,7 +42,9 @@ import dev.ide.ui.backend.RunStatus
 import dev.ide.ui.backend.TreeNode
 import dev.ide.ui.backend.UiActionContext
 import dev.ide.ui.backend.UiActionPlaces
+import dev.ide.ui.backend.AdPlacement
 import dev.ide.ui.components.ActivityRail
+import dev.ide.ui.components.AdSlot
 import dev.ide.ui.components.BuildConsole
 import dev.ide.ui.components.BuildDock
 import dev.ide.ui.components.ComingSoon
@@ -378,6 +380,9 @@ internal fun CompactLayout(
                             val panel = leftPanels.firstOrNull { it.id == id }
                             Box(Modifier.fillMaxSize()) { panel?.content?.invoke() }
                         }
+                        // A native ad pinned to the foot of the left drawer, below the tool content (mirrors the
+                        // desktop SidebarPane footer). Self-collapses when ads are inactive.
+                        AdSlot(AdPlacement.SIDEBAR, Modifier.padding(horizontal = 10.dp, vertical = 10.dp))
                     }
                 }
             },
@@ -392,7 +397,12 @@ internal fun CompactLayout(
                     // the dock's collapsed bar takes the slot instead.
                     if (keyboardOpen && state.active != null) {
                         EditorSymbolBar(
-                            onTab = { state.active?.session?.indent() },
+                            // Tab commits the highlighted completion when the popup is up (like a hardware Tab),
+                            // else indents — the symbol bar has no physical key event to route through onPreviewKey.
+                            onTab = {
+                                val s = state.active?.session
+                                if (s != null && s.acceptCompletionIfShowing?.invoke() != true) s.indent()
+                            },
                             onSymbol = { sym -> state.active?.session?.commitText(sym) },
                             onComment = { state.active?.session?.toggleComment() },
                             onMoveLineUp = { state.active?.session?.moveLines(-1) },
