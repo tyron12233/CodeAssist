@@ -135,7 +135,7 @@ fun NewEntryDialog(
 ) {
     var shown by remember { mutableStateOf<NewEntryRequest?>(null) }
     if (request != null) shown = request
-    DropdownOverlay(visible = request != null, onDismiss = onDismiss, topPadding = 110.dp) {
+    DropdownOverlay(visible = request != null, onDismiss = onDismiss, topPadding = 110.dp, scrollableContent = true) {
         shown?.let { NewEntryPanel(it, onDismiss, onCreate) }
     }
 }
@@ -272,7 +272,7 @@ fun NewSourceFileDialog(
 ) {
     var shown by remember { mutableStateOf<NewSourceRequest?>(null) }
     if (request != null) shown = request
-    DropdownOverlay(visible = request != null, onDismiss = onDismiss, topPadding = 110.dp) {
+    DropdownOverlay(visible = request != null, onDismiss = onDismiss, topPadding = 110.dp, scrollableContent = true) {
         shown?.let { NewSourcePanel(it, onDismiss, onCreate) }
     }
 }
@@ -399,7 +399,7 @@ fun NewXmlFileDialog(
 ) {
     var shown by remember { mutableStateOf<NewXmlTarget?>(null) }
     if (target != null) shown = target
-    DropdownOverlay(visible = visible, onDismiss = onDismiss, topPadding = 110.dp) {
+    DropdownOverlay(visible = visible, onDismiss = onDismiss, topPadding = 110.dp, scrollableContent = true) {
         shown?.let { NewXmlPanel(it, onDismiss, onCreate, onCreateDir) }
     }
 }
@@ -588,7 +588,7 @@ fun AddSourceRootDialog(
 ) {
     var shown by remember { mutableStateOf<AddSourceRootRequest?>(null) }
     if (request != null) shown = request
-    DropdownOverlay(visible = request != null, onDismiss = onDismiss, topPadding = 110.dp) {
+    DropdownOverlay(visible = request != null, onDismiss = onDismiss, topPadding = 110.dp, scrollableContent = true) {
         shown?.let { AddSourceRootPanel(it, onDismiss, onAdd) }
     }
 }

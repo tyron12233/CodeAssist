@@ -201,6 +201,7 @@ We never collect your code, file or project names, which features you use, or an
     <string name="tab_close_to_the_right">Close to the Right</string>
     <string name="tab_close_to_the_left">Close to the Left</string>
     <string name="tab_close_all">Close All</string>
+    <string name="tab_open_files">Open files</string>
 
     <!-- filetree (FileNavigator) — reuses existing `modules` plural -->
     <string name="filetree_open_in_file_manager">Open in file manager</string>

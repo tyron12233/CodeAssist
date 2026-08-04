@@ -14,6 +14,8 @@ import androidx.compose.animation.slideOutVertically
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.border
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.gestures.Orientation
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.gestures.draggable
@@ -29,7 +31,9 @@ import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.ime
+import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.union
@@ -158,15 +162,30 @@ fun BottomSheet(
  * A glass popover that **drops from the top** — the command-palette transition (panels.jsx):
  * scrim fades, the body slides down from a small negative offset and scales from 0.97 about its top
  * edge (transform-only). Anchored top-center under [topPadding].
+ *
+ * **Keyboard-safe.** The body is height-capped to the space actually available (the app root consumes
+ * the IME inset, so an open soft keyboard already shrinks this box; `imePadding()` is a belt-and-braces
+ * no-op there but keeps it correct if ever hosted outside that box), and the top gap is clamped so the
+ * dialog never gets pushed off-screen. When the space runs short the body is capped rather than letting a
+ * `Column` cram its fields — pass [scrollableContent] = true for a plain (non-list) panel so the whole
+ * card scrolls instead; content that already hosts its own scroll region (a `LazyColumn`) should leave it
+ * false and simply scroll within the cap.
  */
 @Composable
 fun DropdownOverlay(
     visible: Boolean,
     onDismiss: () -> Unit,
     topPadding: androidx.compose.ui.unit.Dp = 60.dp,
+    scrollableContent: Boolean = false,
     content: @Composable () -> Unit,
 ) {
-    Box(Modifier.fillMaxSize()) {
+    BoxWithConstraints(Modifier.fillMaxSize().imePadding()) {
+        // maxHeight already reflects the keyboard; clamp the top gap so a tall dialog stays on-screen with
+        // the keyboard up, and cap the body to what's left (minus a 12dp breathing gap above the bottom).
+        val available = maxHeight
+        val effectiveTop = topPadding.coerceAtMost(available * 0.18f)
+        val bodyMax = (available - effectiveTop - 12.dp).coerceAtLeast(160.dp)
+        val scroll = rememberScrollState()
         AnimatedVisibility(
             visible = visible,
             enter = fadeIn(tween(Motion.BASE, easing = Motion.soft)),
@@ -176,13 +195,18 @@ fun DropdownOverlay(
         }
         AnimatedVisibility(
             visible = visible,
-            modifier = Modifier.align(Alignment.TopCenter).padding(top = topPadding),
+            modifier = Modifier.align(Alignment.TopCenter).padding(top = effectiveTop),
             enter = slideInVertically(tween(Motion.BASE, easing = Motion.quiet)) { -it / 6 } +
                 scaleIn(tween(Motion.BASE, easing = Motion.quiet), initialScale = 0.97f, transformOrigin = TopOrigin),
             exit = slideOutVertically(tween(Motion.FAST, easing = Motion.soft)) { -it / 6 } +
                 scaleOut(tween(Motion.FAST, easing = Motion.soft), targetScale = 0.97f, transformOrigin = TopOrigin),
         ) {
-            Box(Modifier.swallowTaps()) { content() }
+            Box(
+                Modifier
+                    .heightIn(max = bodyMax)
+                    .then(if (scrollableContent) Modifier.verticalScroll(scroll) else Modifier)
+                    .swallowTaps(),
+            ) { content() }
         }
     }
 }
@@ -208,7 +232,9 @@ fun CenteredDialog(
     onDismiss: () -> Unit,
     content: @Composable () -> Unit,
 ) {
-    Box(Modifier.fillMaxSize()) {
+    // `imePadding()` keeps a centered dialog above the soft keyboard (recenters into the space left over)
+    // — a no-op inside the app root's consumed IME inset, load-bearing for dialogs overlaid outside it.
+    Box(Modifier.fillMaxSize().imePadding()) {
         AnimatedVisibility(
             visible = visible,
             enter = fadeIn(tween(Motion.BASE, easing = Motion.soft)),

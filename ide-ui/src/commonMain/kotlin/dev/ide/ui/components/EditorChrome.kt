@@ -37,6 +37,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
@@ -52,6 +53,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -121,6 +123,7 @@ import dev.ide.ui.generated.resources.tab_close_all
 import dev.ide.ui.generated.resources.tab_close_others
 import dev.ide.ui.generated.resources.tab_close_to_the_left
 import dev.ide.ui.generated.resources.tab_close_to_the_right
+import dev.ide.ui.generated.resources.tab_open_files
 import dev.ide.ui.generated.resources.undo
 import dev.ide.ui.icons.CaIcons
 import dev.ide.ui.icons.TreeIcon
@@ -133,6 +136,7 @@ import dev.ide.ui.theme.Ca
 import dev.ide.ui.theme.CodeAssistTheme
 import org.jetbrains.compose.resources.pluralStringResource
 import org.jetbrains.compose.resources.stringResource
+import kotlinx.coroutines.launch
 
 /**
  * Top bar (a solid Material `surfaceContainer` toolbar), pared back to the essentials: sidebar toggle · project name · index status ·
@@ -916,6 +920,10 @@ fun IndexStatusChip(
  * Tabs strip (solid editor-bg): active tab gets an accent tint + border, a modified dot, a close icon. Each
  * tab opens a close-operations context menu on right-click (desktop) / long-press (touch). Rendered in a
  * [LazyRow] so a session with many open files only composes the tabs that are actually on screen.
+ *
+ * When the tabs overflow the strip a pinned down-chevron appears at the trailing edge (IntelliJ-style): it
+ * opens a dropdown listing every open file so any of them — including those scrolled off-screen — can be
+ * jumped to; picking one also scrolls its tab into view.
  */
 @Composable
 fun TabsStrip(
@@ -930,36 +938,108 @@ fun TabsStrip(
 ) {
     if (openFiles.isEmpty()) return
 
-    LazyRow(
+    val listState = rememberLazyListState()
+    val scope = rememberCoroutineScope()
+    // The chevron only earns its place when the tabs actually spill past the strip's width.
+    val overflowing = listState.canScrollForward || listState.canScrollBackward
+
+    Row(
         Modifier
             .fillMaxWidth()
             .height(40.dp)
             .padding(vertical = 4.dp)
             .background(Ide.colors.editorBg),
-        contentPadding = PaddingValues(horizontal = 8.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        itemsIndexed(openFiles, key = { _, f -> f.path }) { index, file ->
-            EditorTab(
-                // Fade a newly-opened tab in, fade a closed one out, and slide the rest into place — so
-                // opening/closing tabs animates instead of snapping (LazyRow item animation, keyed by path).
-                modifier = Modifier.animateItem(),
-                file = file,
-                active = index == activeIndex,
-                canCloseOthers = openFiles.size > 1,
-                canCloseRight = index < openFiles.lastIndex,
-                canCloseLeft = index > 0,
-                onSelect = { onSelect(index) },
-                onClose = { onClose(file) },
-                onCloseOthers = { onCloseOthers(file) },
-                onCloseToRight = { onCloseToRight(file) },
-                onCloseToLeft = { onCloseToLeft(file) },
-                onCloseAll = onCloseAll,
-            )
+        LazyRow(
+            Modifier.weight(1f).fillMaxHeight(),
+            state = listState,
+            contentPadding = PaddingValues(horizontal = 8.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            itemsIndexed(openFiles, key = { _, f -> f.path }) { index, file ->
+                EditorTab(
+                    // Fade a newly-opened tab in, fade a closed one out, and slide the rest into place — so
+                    // opening/closing tabs animates instead of snapping (LazyRow item animation, keyed by path).
+                    modifier = Modifier.animateItem(),
+                    file = file,
+                    active = index == activeIndex,
+                    canCloseOthers = openFiles.size > 1,
+                    canCloseRight = index < openFiles.lastIndex,
+                    canCloseLeft = index > 0,
+                    onSelect = { onSelect(index) },
+                    onClose = { onClose(file) },
+                    onCloseOthers = { onCloseOthers(file) },
+                    onCloseToRight = { onCloseToRight(file) },
+                    onCloseToLeft = { onCloseToLeft(file) },
+                    onCloseAll = onCloseAll,
+                )
+            }
+        }
+        if (overflowing) {
+            // A hairline separates the pinned chevron from the scrolling tabs.
+            Box(Modifier.fillMaxHeight(0.55f).width(1.dp).background(MaterialTheme.colorScheme.outlineVariant))
+            TabsOverflowMenu(openFiles, activeIndex) { index ->
+                onSelect(index)
+                scope.launch { runCatching { listState.animateScrollToItem(index) } }
+            }
         }
     }
     // a hairline under the tabs
     Box(Modifier.fillMaxWidth().height(1.dp).background(MaterialTheme.colorScheme.outlineVariant))
+}
+
+/**
+ * The trailing overflow affordance: a down-chevron that drops a menu of every open file (file-type icon +
+ * name, the active one accented, a dot for unsaved changes). [onSelect] jumps to the picked file by index.
+ */
+@Composable
+private fun TabsOverflowMenu(openFiles: List<OpenFile>, activeIndex: Int, onSelect: (Int) -> Unit) {
+    var open by remember { mutableStateOf(false) }
+    Box(Modifier.padding(horizontal = 4.dp)) {
+        IconButtonCa(
+            CaIcons.chevronDown,
+            stringResource(Res.string.tab_open_files),
+            onClick = { open = true },
+            active = open,
+            boxSize = 28,
+            iconSize = 18,
+        )
+        CaDropdownMenu(expanded = open, onDismissRequest = { open = false }) {
+            openFiles.forEachIndexed { index, file ->
+                OpenFileMenuItem(file, active = index == activeIndex) {
+                    open = false
+                    onSelect(index)
+                }
+            }
+        }
+    }
+}
+
+/** One row of the open-files overflow menu: leading file-type glyph, name (accented + bold when active), and
+ *  a trailing unsaved-changes dot — mirroring how the tab itself reads. */
+@Composable
+private fun OpenFileMenuItem(file: OpenFile, active: Boolean, onClick: () -> Unit) {
+    DropdownMenuItem(
+        text = {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(
+                    file.name,
+                    color = if (active) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface,
+                    style = MaterialTheme.typography.bodyMedium,
+                    fontWeight = if (active) FontWeight.SemiBold else FontWeight.Medium,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+                if (file.modified) {
+                    Spacer(Modifier.width(10.dp))
+                    Box(Modifier.size(7.dp).background(Ide.colors.gitModified, RoundedCornerShape(Ca.radius.pill)))
+                }
+            }
+        },
+        leadingIcon = { TabFileIcon(file.name) },
+        onClick = onClick,
+    )
 }
 
 /** One tab. The row selects on click; right-click (desktop) or long-press (touch) opens the close menu. */

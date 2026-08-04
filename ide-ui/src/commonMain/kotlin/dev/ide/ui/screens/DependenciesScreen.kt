@@ -318,7 +318,7 @@ fun DependenciesPane(
                 AddDependencyContent(backend, moduleName, codeFont, fileActions, onResult, Modifier.fillMaxWidth().weight(1f).padding(horizontal = 16.dp, vertical = 4.dp), fillHeight = true)
             }
             BottomSheet(visible = reposOpen, onDismiss = { reposOpen = false }, heightFraction = 0.7f) {
-                RepositoriesContent(backend, codeFont, Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 4.dp))
+                RepositoriesContent(backend, codeFont, Modifier.fillMaxWidth().weight(1f).padding(horizontal = 16.dp, vertical = 4.dp), fillHeight = true)
             }
         }
 
@@ -409,7 +409,7 @@ private fun DepPaneToolbar(
 // ---- repositories manager -----------------------------------------------------------------------
 
 @Composable
-private fun RepositoriesContent(backend: IdeBackend, codeFont: FontFamily, modifier: Modifier = Modifier) {
+private fun RepositoriesContent(backend: IdeBackend, codeFont: FontFamily, modifier: Modifier = Modifier, fillHeight: Boolean = false) {
     var repos by remember { mutableStateOf(backend.deps.repositories()) }
     var name by remember { mutableStateOf("") }
     var url by remember { mutableStateOf("") }
@@ -426,7 +426,10 @@ private fun RepositoriesContent(backend: IdeBackend, codeFont: FontFamily, modif
         Spacer(Modifier.height(4.dp))
         Text(stringResource(Res.string.dep_repositories_subtitle), color = MaterialTheme.colorScheme.outline, style = MaterialTheme.typography.bodySmall)
         Spacer(Modifier.height(12.dp))
-        LazyColumn(Modifier.fillMaxWidth().heightIn(max = 240.dp)) {
+        // On a phone sheet the list flexes to fill the sheet (weight) so the add-fields below stay pinned
+        // above the keyboard and never squish; on the desktop card it keeps its natural, capped height.
+        val listMod = if (fillHeight) Modifier.fillMaxWidth().weight(1f) else Modifier.fillMaxWidth().heightIn(max = 240.dp)
+        LazyColumn(listMod) {
             items(repos, key = { it.url }) { r -> RepoRow(r) { if (backend.deps.removeRepository(r.url)) repos = backend.deps.repositories() } }
         }
         Spacer(Modifier.height(12.dp))
