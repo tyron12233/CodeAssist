@@ -52,6 +52,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.graphics.vector.ImageVector
+import dev.ide.ui.backend.AdPlacement
 import dev.ide.ui.backend.EditorService
 import dev.ide.ui.backend.IdeBackend
 import dev.ide.ui.backend.UiCompletionResult
@@ -60,6 +61,7 @@ import dev.ide.ui.backend.UiExerciseResult
 import dev.ide.ui.backend.UiInlayHint
 import dev.ide.ui.backend.UiLesson
 import dev.ide.ui.backend.UiLessonStep
+import dev.ide.ui.components.AdSlot
 import dev.ide.ui.components.IconButtonCa
 import dev.ide.ui.components.entrancePop
 import dev.ide.ui.components.entranceSlideUp
@@ -179,6 +181,13 @@ fun LessonPlayerScreen(
                 }
             }
 
+            val isLast = stepIndex >= steps.size - 1
+            // The completion moment: once the final step is solved/answered, a native ad sits above the Finish
+            // button — a natural break, not mid-lesson. `canAdvance` gates it so it never covers unsolved content.
+            if (isLast && canAdvance) {
+                AdSlot(AdPlacement.LESSON_COMPLETE, Modifier.padding(horizontal = 20.dp).padding(top = 8.dp))
+            }
+
             // Bottom navigation bar: Back + Next / Finish.
             Row(
                 Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 12.dp),
@@ -189,7 +198,6 @@ fun LessonPlayerScreen(
                     PlayerButton(stringResource(Res.string.back), primary = false, icon = CaIcons.chevronLeft) { stepIndex-- }
                 }
                 Spacer(Modifier.weight(1f))
-                val isLast = stepIndex >= steps.size - 1
                 PlayerButton(
                     if (isLast) stringResource(Res.string.learn_finish) else stringResource(Res.string.learn_next),
                     primary = true,

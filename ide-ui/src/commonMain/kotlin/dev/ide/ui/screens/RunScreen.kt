@@ -50,6 +50,7 @@ import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
+import dev.ide.ui.backend.AdPlacement
 import dev.ide.ui.backend.BuildDiagnosticUi
 import dev.ide.ui.backend.BuildState
 import dev.ide.ui.backend.ConsoleChunkKind
@@ -58,6 +59,7 @@ import dev.ide.ui.backend.RunConsoleUi
 import dev.ide.ui.backend.RunPhase
 import dev.ide.ui.backend.RunStatus
 import dev.ide.ui.backend.UiSeverity
+import dev.ide.ui.components.AdSlot
 import dev.ide.ui.components.Chip
 import dev.ide.ui.components.IconButtonCa
 import dev.ide.ui.generated.resources.Res
@@ -115,14 +117,15 @@ fun RunScreen(
         }
         BuildPhaseStrip(rc, build, onOpenDiagnostic)
         Transcript(rc, Modifier.weight(1f).padding(horizontal = 14.dp))
-        if (rc.acceptsInput) {
-            InputBar(
+        when {
+            rc.acceptsInput -> InputBar(
                 onSend = { backend.build.sendRunInput(it) },
                 onEof = { backend.build.closeRunInput() },
                 modifier = Modifier.padding(horizontal = 14.dp, vertical = 12.dp),
             )
-        } else {
-            Spacer(Modifier.size(12.dp))
+            // The program has finished: idle attention, no workflow to interrupt — a native ad reads as calm here.
+            rc.phase == RunPhase.Finished -> AdSlot(AdPlacement.RUN_RESULT, Modifier.padding(horizontal = 14.dp, vertical = 12.dp))
+            else -> Spacer(Modifier.size(12.dp))
         }
     }
 }

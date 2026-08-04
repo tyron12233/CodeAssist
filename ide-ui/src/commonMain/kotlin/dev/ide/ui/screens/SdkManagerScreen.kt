@@ -43,9 +43,11 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import dev.ide.ui.backend.AdPlacement
 import dev.ide.ui.backend.IdeBackend
 import dev.ide.ui.backend.UiSdkDownload
 import dev.ide.ui.backend.UiSdkPackage
+import dev.ide.ui.components.AdSlot
 import dev.ide.ui.components.IconButtonCa
 import dev.ide.ui.components.pressScale
 import dev.ide.ui.generated.resources.Res
@@ -200,6 +202,9 @@ fun SdkManagerScreen(backend: IdeBackend, onBack: () -> Unit) {
                     }
                 }
             }
+
+            // A native ad at the foot of this browse/download surface — dead time behind the download bars.
+            AdSlot(AdPlacement.SDK_MANAGER)
         }
     }
 }

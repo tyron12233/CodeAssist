@@ -7,7 +7,27 @@ import androidx.compose.ui.Modifier
  * Where in the shared UI an ad slot appears. The host may pick a native-ad layout tuned to each placement
  * (e.g. a small footer format for [BUILD_CONSOLE] vs. a full card for the home tabs).
  */
-enum class AdPlacement { STORE, PROJECTS, LEARN, BUILD_CONSOLE }
+enum class AdPlacement {
+    STORE,
+    PROJECTS,
+    LEARN,
+    BUILD_CONSOLE,
+
+    /** The Run terminal, once a console run has finished (never while building/running). */
+    RUN_RESULT,
+
+    /** The SDK / toolchain manager — a download/browse surface with natural wait time. */
+    SDK_MANAGER,
+
+    /** A lesson's completion moment (the final step, once it's been solved/answered). */
+    LESSON_COMPLETE,
+
+    /** The Settings & Tools area (the hub and the Plugins screen) — a browse surface. */
+    SETTINGS,
+
+    /** The footer of the editor's docked LEFT sidebar pane (below the tool-window content). */
+    SIDEBAR,
+}
 
 /**
  * Platform advertising bridge the reusable UI can't express itself. Ads are a host concern (AdMob on

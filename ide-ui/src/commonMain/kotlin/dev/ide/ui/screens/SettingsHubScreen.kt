@@ -33,6 +33,8 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.unit.dp
+import dev.ide.ui.backend.AdPlacement
+import dev.ide.ui.components.AdSlot
 import dev.ide.ui.generated.resources.Res
 import dev.ide.ui.generated.resources.back
 import dev.ide.ui.generated.resources.settings_code_style
@@ -113,6 +115,11 @@ fun SettingsHubScreen(
                     }
                 }
             }
+            // A native ad under the destinations — a pure navigation/browse surface, no workflow to interrupt.
+            AdSlot(
+                AdPlacement.SETTINGS,
+                Modifier.widthIn(max = 640.dp).fillMaxWidth().padding(horizontal = 16.dp).padding(bottom = 24.dp),
+            )
         }
     }
 }

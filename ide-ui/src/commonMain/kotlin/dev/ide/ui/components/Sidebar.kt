@@ -54,6 +54,7 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import dev.ide.ui.backend.AdPlacement
 import dev.ide.ui.backend.IdeBackend
 import dev.ide.ui.ext.ToolWindowAnchor
 import dev.ide.ui.ext.ToolWindowContext
@@ -226,24 +227,32 @@ fun SidebarPane(
         Row(Modifier.fillMaxHeight()) {
             if (side == RailSide.Right) SidebarDivider()
             GlassSurface(Modifier.width(paneWidth).fillMaxHeight(), GlassMaterial.Regular) {
-                // Key on the stable id (not the panel object, which the host rebuilds every recomposition) so
-                // the switch animation fires only on a real panel change — not on every incidental recompose
-                // (e.g. while the IME inset animates), which would otherwise restart the transition per frame.
-                AnimatedContent(
-                    targetState = display?.id,
-                    transitionSpec = {
-                        val fromIdx = panels.indexOfFirst { it.id == initialState }
-                        val toIdx = panels.indexOfFirst { it.id == targetState }
-                        val dir = if (toIdx >= fromIdx) 1 else -1
-                        (fadeIn(tween(Motion.BASE)) +
-                            slideInVertically(tween(Motion.BASE, easing = Motion.quiet)) { h -> dir * h / 14 }) togetherWith
-                            (fadeOut(tween(Motion.FAST)) +
-                                slideOutVertically(tween(Motion.BASE, easing = Motion.quiet)) { h -> -dir * h / 14 })
-                    },
-                    label = "sidebarPanelSwitch",
-                ) { id ->
-                    val panel = panels.firstOrNull { it.id == id }
-                    Box(Modifier.fillMaxSize()) { panel?.content?.invoke() }
+                Column(Modifier.fillMaxSize()) {
+                    // Key on the stable id (not the panel object, which the host rebuilds every recomposition) so
+                    // the switch animation fires only on a real panel change — not on every incidental recompose
+                    // (e.g. while the IME inset animates), which would otherwise restart the transition per frame.
+                    AnimatedContent(
+                        targetState = display?.id,
+                        transitionSpec = {
+                            val fromIdx = panels.indexOfFirst { it.id == initialState }
+                            val toIdx = panels.indexOfFirst { it.id == targetState }
+                            val dir = if (toIdx >= fromIdx) 1 else -1
+                            (fadeIn(tween(Motion.BASE)) +
+                                slideInVertically(tween(Motion.BASE, easing = Motion.quiet)) { h -> dir * h / 14 }) togetherWith
+                                (fadeOut(tween(Motion.FAST)) +
+                                    slideOutVertically(tween(Motion.BASE, easing = Motion.quiet)) { h -> -dir * h / 14 })
+                        },
+                        label = "sidebarPanelSwitch",
+                        modifier = Modifier.weight(1f),
+                    ) { id ->
+                        val panel = panels.firstOrNull { it.id == id }
+                        Box(Modifier.fillMaxSize()) { panel?.content?.invoke() }
+                    }
+                    // A native ad pinned to the foot of the LEFT tool pane — below the tool content, off the
+                    // editor canvas entirely. AdSlot self-collapses when ads are inactive (desktop / ads off).
+                    if (side == RailSide.Left) {
+                        AdSlot(AdPlacement.SIDEBAR, Modifier.padding(horizontal = 10.dp, vertical = 10.dp))
+                    }
                 }
             }
             if (side == RailSide.Left) SidebarDivider()

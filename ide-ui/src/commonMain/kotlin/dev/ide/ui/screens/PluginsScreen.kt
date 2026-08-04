@@ -26,8 +26,10 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import dev.ide.ui.backend.AdPlacement
 import dev.ide.ui.backend.IdeBackend
 import dev.ide.ui.backend.UiPluginInfo
+import dev.ide.ui.components.AdSlot
 import dev.ide.ui.components.CaSwitch
 import dev.ide.ui.components.GlassMaterial
 import dev.ide.ui.components.ExpressiveScaffold
@@ -68,6 +70,7 @@ fun PluginsScreen(backend: IdeBackend, onBack: () -> Unit) {
                         changed = true
                     }
                 }
+            AdSlot(AdPlacement.SETTINGS)
         }
     }
 }
