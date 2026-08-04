@@ -166,16 +166,27 @@ internal class ComposePreviewService(private val ctx: EngineContext) {
         val classProblems = classes.filter { it.fqn in reachable && !it.isComplete }.flatMap { c ->
             (c.diagnostics + c.methods.values.flatMap { it.diagnostics }).map { "in ${c.simpleName}: ${it.reason}" }
         }
-        (entryProblems + classProblems)
+        // A reachable top-level FUNCTION the preview calls (`CounterPreview { Counter() }`, where `Counter` fails
+        // to resolve `Column` / a `by remember { mutableStateOf }` delegate) must be reported too — otherwise the
+        // entry lowers cleanly, the preview looks interpretable, and the render throws "function `Counter` has
+        // unsupported nodes" with no reason shown here. Their spans are into their own (possibly cross-file) text,
+        // so report by name + reason rather than snippeting from THIS buffer.
+        val fnProblems = dev.ide.lang.kotlin.interp.reachableSourceFunctions(entry, program, classes)
+            .filter { it !== entry && !it.isComplete }
+            .flatMap { fn -> fn.diagnostics.map { "in ${fn.name}: ${it.reason}" } }
+        (entryProblems + fnProblems + classProblems)
             .ifEmpty { listOf("`$functionName` lowered with no diagnostics — it may render; if not, the failure is in the render path") }
     } catch (t: Throwable) {
         listOf("analysis failed: ${t::class.java.simpleName}: ${t.message ?: "no message"}")
     }
 
     /** Lower the `@Preview` composable [functionName] in [file] (buffer [text]) to a renderable tree + the
-     *  file's program (for its source calls), or null when not found / not fully interpretable. */
+     *  file's program (for its source calls), or null when not found / not fully interpretable. [strict] mirrors
+     *  the renderer's `tolerateGaps = false` (the Learn lessons): it additionally refuses a program in which a
+     *  reachable top-level function didn't lower cleanly, since the interpreter would throw on it at invoke time
+     *  rather than skip it. The lenient editor path (`tolerateGaps = true`) leaves it false — a gap is skipped. */
     fun lowerComposePreview(
-        file: Path, text: String, functionName: String, arity: Int = 0
+        file: Path, text: String, functionName: String, arity: Int = 0, strict: Boolean = false,
     ): LoweredComposePreview? = dev.ide.lang.kotlin.KotlinPerf.trace("kt.lowerPreview") {
         val module = ctx.moduleForEditableFile(file) ?: return null
         val analyzer = ctx.analyzerFor(module, KotlinLanguageBackend.LANGUAGE_ID) as? KotlinSourceAnalyzer
@@ -198,6 +209,14 @@ internal class ComposePreviewService(private val ctx: EngineContext) {
         val classes = model.classes
         val reachable = dev.ide.lang.kotlin.interp.reachableSourceClasses(entry, program, classes)
         if (classes.any { it.fqn in reachable && !it.isComplete }) return null
+        // Strict (Learn-lesson) rendering runs the interpreter with `tolerateGaps = false`, which THROWS
+        // "function `X` has unsupported nodes" the moment it invokes a reachable top-level function that didn't
+        // lower cleanly (a `@Composable` helper whose `Column` / `by remember { mutableStateOf }` didn't resolve
+        // while the scratch's androidx.compose.* was still attaching). The entry itself (`CounterPreview`, which
+        // merely calls `Counter()`) lowers fine, so without this the render crashes with that cryptic error and
+        // the host's readiness/retry loop is skipped. Refuse it here → the host stays in Loading, retries until
+        // the scratch is ready, and then reports the real reason. The lenient editor path skips the gap instead.
+        if (strict && dev.ide.lang.kotlin.interp.reachableSourceFunctions(entry, program, classes).any { !it.isComplete }) return null
         val parameter = resolvePreviewParameter(analyzer, vf, functionName, arity, classes)
         LoweredComposePreview(entry, program, classes, parameter)
     }

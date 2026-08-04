@@ -438,12 +438,41 @@ fun reachableSourceClasses(
     entry: ResolvedFunction,
     program: Map<String, ResolvedFunction>,
     classes: List<ResolvedClass>,
-): Set<String> {
+): Set<String> = computeReachable(entry, program, classes).classes
+
+/**
+ * The top-level source functions in [program] that [entry] can actually reach — [entry] itself plus every
+ * source function transitively called from it (directly, or through a reached source class's members). The
+ * preview gate must require THESE to lower cleanly too, not just [entry]: a preview whose entry merely calls a
+ * broken helper (`CounterPreview { Counter() }`, where `Counter` fails to resolve `Column`/a `by` delegate)
+ * must NOT render — otherwise the interpreter throws "function `Counter` has unsupported nodes" at invoke time
+ * ([Interpreter], `tolerateGaps = false`), and lowering reports a misleading "no diagnostics". Mirrors
+ * [reachableSourceClasses]'s traversal (they share [computeReachable]); the entry is always included so a
+ * caller can gate on `reachableSourceFunctions(...).all { it.isComplete }` alone.
+ */
+fun reachableSourceFunctions(
+    entry: ResolvedFunction,
+    program: Map<String, ResolvedFunction>,
+    classes: List<ResolvedClass>,
+): Set<ResolvedFunction> = computeReachable(entry, program, classes).functions
+
+/** Reachability closure: the source classes AND top-level program functions [entry] can transitively touch. */
+private class Reachable(val classes: Set<String>, val functions: Set<ResolvedFunction>)
+
+private fun computeReachable(
+    entry: ResolvedFunction,
+    program: Map<String, ResolvedFunction>,
+    classes: List<ResolvedClass>,
+): Reachable {
     val byFqn = classes.associateBy { it.fqn }
     val bySimple = classes.groupBy { it.simpleName }.mapValues { it.value.first() }
     fun classOf(name: String): ResolvedClass? = byFqn[name] ?: bySimple[name.substringAfterLast('.')]
 
     val reached = LinkedHashSet<String>()
+    // The top-level program functions the entry reaches (the entry itself + every source callee), so a preview
+    // that calls a broken same-file/cross-file composable is refused instead of crashing the render.
+    val reachedFns = java.util.Collections.newSetFromMap(java.util.IdentityHashMap<ResolvedFunction, Boolean>())
+    reachedFns.add(entry)
     // Bodies still to scan, de-duplicated by identity (a tree's structural hash would be costly and a function
     // is only ever the same object instance within one lowering).
     val scanned = java.util.Collections.newSetFromMap(java.util.IdentityHashMap<RNode, Boolean>())
@@ -480,7 +509,7 @@ fun reachableSourceClasses(
                             // the callee's DECLARED arity (from `declId`) so a call that omits trailing defaulted
                             // arguments still follows the function's body (else its reachable classes are missed).
                             val declaredArity = callee.declId.substringAfterLast('/').toIntOrNull() ?: node.args.size
-                            program["${callee.displayName}/$declaredArity"]?.let { addBody(it.body) }
+                            program["${callee.displayName}/$declaredArity"]?.let { if (reachedFns.add(it)) addBody(it.body) }
                             if ('.' in owner) reachClass(owner.substringBeforeLast('.').removeSuffix(".Companion"))
                         }
                     }
@@ -496,7 +525,7 @@ fun reachableSourceClasses(
             }
         }
     }
-    return reached
+    return Reachable(reached, reachedFns)
 }
 
 /** Direct child nodes, for traversal. */

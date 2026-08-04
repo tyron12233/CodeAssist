@@ -268,7 +268,10 @@ internal class LearnBackend(private val ctx: BackendContext) : LearnService {
                 val path = mainPathOf(services, "kotlin-compose")
                 ensureMain(services, "kotlin-compose")
                 val preview = services.composePreviews(path, code).firstOrNull() ?: return@runCatching null
-                services.lowerComposePreview(path, code, preview.functionName, preview.arity)
+                // strict = true: the lesson host renders with tolerateGaps = false, so a program whose reachable
+                // helper (e.g. `Counter`) didn't resolve compose yet would throw "has unsupported nodes" mid-
+                // render. Refusing it here keeps the host in its retry loop until the scratch's compose attaches.
+                services.lowerComposePreview(path, code, preview.functionName, preview.arity, strict = true)
             }.getOrElse { log.warn("lowerCompose failed", it); null }
         }
     }

@@ -2319,10 +2319,12 @@ class IdeServices private constructor(
 
     /** Lower the `@Preview` composable [functionName] in [file] (buffer [text]) to a renderable tree + the
      *  file's program (for its source calls), or null when not found / not fully interpretable. The
-     *  on-device render host calls this, then composes [LoweredComposePreview] via the interpreter. */
+     *  on-device render host calls this, then composes [LoweredComposePreview] via the interpreter. [strict]
+     *  additionally refuses a program whose reachable helper functions didn't lower cleanly — pass it for a
+     *  `tolerateGaps = false` render (the Learn lessons) so the interpreter never throws mid-render. */
     fun lowerComposePreview(
-        file: Path, text: String, functionName: String, arity: Int = 0
-    ): LoweredComposePreview? = composePreview.lowerComposePreview(file, text, functionName, arity)
+        file: Path, text: String, functionName: String, arity: Int = 0, strict: Boolean = false,
+    ): LoweredComposePreview? = composePreview.lowerComposePreview(file, text, functionName, arity, strict)
 
     /**
      * The project library inputs the on-device Compose preview needs to make the user's library composables
