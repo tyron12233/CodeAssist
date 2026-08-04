@@ -32,6 +32,7 @@ import dev.ide.ui.components.TabsStrip
 import dev.ide.ui.editor.BlockEditor
 import dev.ide.ui.editor.CodeEditor
 import dev.ide.ui.editor.engine.DaemonPass
+import dev.ide.ui.editor.core.isLarge
 import dev.ide.ui.editor.engine.EditorEngineDaemon
 import dev.ide.ui.editor.folding.FoldRegion
 import dev.ide.ui.editor.preview.ComposePreviewPane
@@ -193,6 +194,7 @@ internal fun EditorCenter(
                 BreadcrumbBar(state, active, hasPreview)
                 AndroidSourcesBanner(state)
                 ReadOnlyBanner(state, active)
+                LargeFileBanner(active)
                 // The code editor and the preview, each as a Modifier-parameterized slot, so the single-pane modes
                 // and the Split layout can place the SAME surfaces without duplicating their (long) wiring.
                 // The editor is covered when an app-level overlay sits on top of it: the command palette or a
@@ -352,11 +354,16 @@ private fun EditorDaemonEffect(
         state.inlayHintsEnabled, state.semanticHighlightingEnabled, state.codeFoldingEnabled,
         state.analyzeOnTheFly, state.reparseDelayMs,
     ) {
-        // Apply the user's editor/analysis prefs (Settings) to the daemon before each run.
-        daemon.inlayEnabled = state.inlayHintsEnabled
-        daemon.semanticEnabled = state.semanticHighlightingEnabled
-        daemon.foldingEnabled = state.codeFoldingEnabled
-        daemon.analyzeEnabled = state.analyzeOnTheFly
+        // Apply the user's editor/analysis prefs (Settings) to the daemon before each run. Above the large-file
+        // threshold the four heavy passes are forced off regardless of the prefs: parsing + resolving a very
+        // large file builds an AST and symbol index many times the source size, which OOMs a low-heap device
+        // (a recurring on-device crash on budget hardware). Cheap line-based syntax highlighting is not a pass,
+        // so it keeps running; a disabled pass clears its overlay via the daemon's applyEmpty.
+        val large = active.session.doc.isLarge()
+        daemon.inlayEnabled = state.inlayHintsEnabled && !large
+        daemon.semanticEnabled = state.semanticHighlightingEnabled && !large
+        daemon.foldingEnabled = state.codeFoldingEnabled && !large
+        daemon.analyzeEnabled = state.analyzeOnTheFly && !large
         daemon.autoReparseDelayMs = state.reparseDelayMs
         daemon.restart(active.session.doc.text) // one lazy rope materialization per settled edit
     }

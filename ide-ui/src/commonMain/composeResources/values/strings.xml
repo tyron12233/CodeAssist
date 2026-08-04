@@ -363,6 +363,7 @@ We never collect your code, file or project names, which features you use, or an
     <string name="sources_download_failed">Download failed: %1$s</string>
     <string name="library_readonly_source">Library source · read-only</string>
     <string name="library_readonly_decompiled">Decompiled · read-only</string>
+    <string name="editor_large_file_notice">Large file: code intelligence is limited to keep memory in check</string>
     <string name="library_decompile_java">Decompile to Java</string>
     <string name="structure_title">Structure</string>
     <string name="structure_filter">Filter…</string>

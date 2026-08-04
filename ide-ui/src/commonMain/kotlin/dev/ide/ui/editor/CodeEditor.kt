@@ -52,6 +52,7 @@ import dev.ide.ui.backend.UiRenameResult
 import dev.ide.ui.editor.core.EditorImeHandle
 import dev.ide.ui.editor.core.EditorSession
 import dev.ide.ui.editor.core.RangeEdit
+import dev.ide.ui.editor.core.isLarge
 import dev.ide.ui.editor.core.smartEnter
 import dev.ide.ui.editor.core.textInputCodePoint
 import dev.ide.ui.editor.core.wordRangeAt
@@ -233,8 +234,12 @@ private fun CodeEditorContent(
     // A read-only buffer (a decompiled / library-source view) never mutates, so completion has nothing to
     // commit into — suppress the auto-popup so it doesn't hover over inert text.
     val readOnly = !editorSession.editable
+    // Past the large-file threshold the memory-heavy features are suppressed (the daemon passes are gated in
+    // EditorDaemonEffect; completion, the whole-file occurrence scan, and the structure fetch are gated below)
+    // so a big file doesn't exhaust the heap on a low-RAM device. Syntax highlighting and editing stay on.
+    val largeFile = editorSession.doc.isLarge()
     val completion = rememberCompletionController(path, editorSession, backend)
-    completion.autoPopupEnabled = completionAutoPopup && !readOnly
+    completion.autoPopupEnabled = completionAutoPopup && !readOnly && !largeFile
     completion.delayMs = completionDelayMs
     // Active snippet/template expansion (tab-stop stepping), or null. Reset when the file changes.
     var snippet by remember(path) { mutableStateOf<SnippetSession?>(null) }
@@ -543,7 +548,8 @@ private fun CodeEditorContent(
     }
 
     // Fetch the file's declarations (debounced) for sticky headers — kept off the keystroke path.
-    LaunchedEffect(path, editorSession.textRevision) {
+    LaunchedEffect(path, editorSession.textRevision, largeFile) {
+        if (largeFile) { geometry.editorStructure.value = emptyList(); return@LaunchedEffect }
         delay(300.milliseconds)
         geometry.editorStructure.value =
             runCatching { backend.editor.fileStructure(path, editorSession.doc.text) }.getOrDefault(emptyList())
@@ -572,7 +578,8 @@ private fun CodeEditorContent(
             }
         }
     }
-    val occurrences = remember(doc, occurrenceWord) {
+    val occurrences = remember(doc, occurrenceWord, largeFile) {
+        if (largeFile) return@remember emptyList<Match>() // a whole-file scan is too costly on a large buffer
         val w = occurrenceWord ?: return@remember emptyList<Match>()
         findMatches(doc.text, w, FindOptions(caseSensitive = true, wholeWord = true))
             .takeIf { it.size >= 2 } // only meaningful when it appears more than once

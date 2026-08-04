@@ -14,7 +14,9 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import dev.ide.ui.IdeUiState
 import dev.ide.ui.OpenFile
+import dev.ide.ui.editor.core.isLarge
 import dev.ide.ui.generated.resources.Res
+import dev.ide.ui.generated.resources.editor_large_file_notice
 import dev.ide.ui.generated.resources.library_decompile_java
 import dev.ide.ui.generated.resources.library_readonly_decompiled
 import dev.ide.ui.generated.resources.library_readonly_source
@@ -47,5 +49,29 @@ internal fun ReadOnlyBanner(state: IdeUiState, active: OpenFile) {
                 modifier = Modifier.clickable { state.openLibrary(active.path, forceJava = true) },
             )
         }
+    }
+}
+
+/**
+ * A thin banner shown over a file past the large-file threshold ([isLarge]): the editor has suppressed the
+ * memory-heavy code intelligence (analysis, semantic coloring, folds, inlays, completion, outline) so a big
+ * file stays within the heap on a low-RAM device. Syntax highlighting and editing are unaffected. Nothing for
+ * a normal-sized file.
+ */
+@Composable
+internal fun LargeFileBanner(active: OpenFile) {
+    if (!active.session.doc.isLarge()) return
+    Row(
+        Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 4.dp)
+            .background(MaterialTheme.colorScheme.outline.copy(alpha = 0.10f), RoundedCornerShape(Ca.radius.sm))
+            .padding(horizontal = 10.dp, vertical = 6.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Text(
+            stringResource(Res.string.editor_large_file_notice),
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            style = MaterialTheme.typography.bodyMedium,
+            modifier = Modifier.weight(1f),
+        )
     }
 }
