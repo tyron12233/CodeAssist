@@ -133,6 +133,34 @@ internal fun Modifier.editorInput(
             }
         }
     }
+    // Touch scroll-vs-tap disambiguation: watch how far a touch travels from its press point and flip
+    // `touchScrolled` once it passes touch-slop. The tap detector below refuses to commit a swipe as a tap —
+    // otherwise a horizontal swipe over content the scrollable didn't (or couldn't) claim in time (e.g. a line
+    // that fits, so `maxH() == 0`, or a scroll boundary) would place the caret and raise the keyboard instead of
+    // scrolling. Observation only on the Main pass — never consumes, so scroll/tap/drag are undisturbed.
+    .pointerInput(session, metrics, gutterWidthPx, wrapActive) {
+        val slop = viewConfiguration.touchSlop
+        awaitPointerEventScope {
+            while (true) {
+                val event = awaitPointerEvent(PointerEventPass.Main)
+                val change = event.changes.firstOrNull() ?: continue
+                if (change.type == PointerType.Mouse) continue
+                when (event.type) {
+                    PointerEventType.Press -> {
+                        interaction.touchDownPos = change.position
+                        interaction.touchScrolled = false
+                    }
+
+                    PointerEventType.Move ->
+                        if (!interaction.touchScrolled &&
+                            (change.position - interaction.touchDownPos).getDistance() > slop
+                        ) interaction.touchScrolled = true
+
+                    else -> {}
+                }
+            }
+        }
+    }
     // Keyed on metrics/gutterWidth too: a gesture block captures the geometry helpers once when it launches, so
     // it must re-launch when a zoom rescales the line metrics — otherwise a post-zoom tap maps through stale
     // lineHeight to the wrong line.
@@ -149,7 +177,9 @@ internal fun Modifier.editorInput(
                 val nearArm = interaction.tripleArmed && (pos - interaction.tripleArmPos).getDistance() < 60f
                 val doubleTapSecondTap =
                     nearArm && interaction.tripleArmMark?.let { (it - pressMark).isPositive() } == true
-                if (released && !longPressed && !doubleTapSecondTap) {
+                // A swipe that traveled past touch-slop is a scroll, never a tap — don't place the caret or
+                // raise the keyboard even if no scroll container happened to consume the drag.
+                if (released && !longPressed && !doubleTapSecondTap && !interaction.touchScrolled) {
                     focus.requestFocus()
                     onDismissQuickDoc() // a tap in the editor dismisses an open quick-doc popup
                     // Third quick tap near the double-tap → select the whole line.

@@ -43,6 +43,13 @@ internal class EditorInteraction(initialRevision: Int) {
     /** Whether the last input was a touch (vs. mouse/keyboard) — gates the touch selection chrome. */
     var lastInputWasTouch by mutableStateOf(false)
 
+    // Touch tap-vs-scroll disambiguation. The observer in `editorInput` records where a touch went down and
+    // flips `touchScrolled` once the finger travels past touch-slop, so the tap detector can refuse to commit a
+    // swipe as a tap (which would place the caret + raise the keyboard). Plain vars: only ever touched from the
+    // pointer coroutines on the main thread, never read in composition/draw, so they need no snapshot state.
+    var touchDownPos = Offset.Zero
+    var touchScrolled = false
+
     // The document line the mouse is hovering (desktop) — drives showing an expandable fold chevron on hover.
     // -1 when the pointer is a touch or has left the editor.
     var hoveredLine by mutableIntStateOf(-1)
