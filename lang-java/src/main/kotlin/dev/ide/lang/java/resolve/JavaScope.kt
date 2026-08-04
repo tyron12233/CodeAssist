@@ -61,8 +61,10 @@ class JavaScope(
     override fun resolve(name: String): ResolveResult {
         symbols().firstOrNull { it.name == name }?.let { return ResolveResult.Resolved(it) }
         // Fall back to a type resolvable by name (simple names resolve against the file's imports/package
-        // through the facade's project scope; qualified names resolve directly).
-        facade.findClass(name, GlobalSearchScope.allScope(project))
+        // through the facade's project scope; qualified names resolve directly). `findClass` can LAZILY parse
+        // the type's source file (a `buildTree`), so it holds the one global parse lock — that must never run
+        // concurrently with the background index build on 32-bit ART (native SIGSEGV). See [IntellijPsiHost].
+        dev.ide.psi.IntellijPsiHost.withParseLock { facade.findClass(name, GlobalSearchScope.allScope(project)) }
             ?.let { return ResolveResult.Resolved(JavaSymbol(it, declaringFile)) }
         return ResolveResult.Unresolved
     }

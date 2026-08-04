@@ -72,6 +72,11 @@ object IntellijPsiHost {
      *  runs under it, so no two PSI trees are ever built concurrently. */
     fun <T> withParseLock(block: () -> T): T = parseLock.withLock(block)
 
+    /** Whether the calling thread currently holds the parse lock. A diagnostic + test seam: it pins the
+     *  ART-safety invariant that PSI resolution (which can lazily build a tree) runs under the lock — a test
+     *  probes it from a resolution callback and fails if a resolving path forgot to take the lock. */
+    fun isParseLockHeldByCurrentThread(): Boolean = parseLock.isHeldByCurrentThread
+
     // Held for the JVM lifetime; createForProduction roots an application-level environment kept alive.
     private val disposable = Disposer.newDisposable("intellij-psi-host")
 

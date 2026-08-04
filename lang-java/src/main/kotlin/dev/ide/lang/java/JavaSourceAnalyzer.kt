@@ -42,6 +42,7 @@ import dev.ide.lang.java.resolve.JavaScope
 import dev.ide.lang.java.resolve.JavaSymbol
 import dev.ide.lang.java.resolve.JavaTypeRef
 import dev.ide.lang.java.resolve.symbolKindOf
+import dev.ide.psi.IntellijPsiHost
 import dev.ide.lang.resolve.DocFormat
 import dev.ide.lang.resolve.QuickDocInfo
 import dev.ide.lang.resolve.ResolveResult
@@ -137,12 +138,12 @@ class JavaSourceAnalyzer(private val env: JavaEnvironment) : SourceAnalyzer, Jvm
      *  [renameTargetAt] resolves the symbol under the caret; [renameReferencesIn] finds its occurrences in a
      *  file, given the target from a (possibly different) file. Both parse [text] in the resolution env. */
     fun renameTargetAt(name: String, text: CharSequence, offset: Int): dev.ide.lang.java.rename.JavaRenameTarget? =
-        dev.ide.lang.java.rename.JavaRename.targetAt(env.parse(name, text), offset)
+        IntellijPsiHost.withParseLock { dev.ide.lang.java.rename.JavaRename.targetAt(env.parse(name, text), offset) }
 
     fun renameReferencesIn(
         name: String, text: CharSequence, target: dev.ide.lang.java.rename.JavaRenameTarget,
     ): List<dev.ide.lang.dom.TextRange> =
-        dev.ide.lang.java.rename.JavaRename.referencesIn(env.parse(name, text), target)
+        IntellijPsiHost.withParseLock { dev.ide.lang.java.rename.JavaRename.referencesIn(env.parse(name, text), target) }
 
     override val importOrganizer: dev.ide.lang.imports.ImportOrganizerService = JavaImportOrganizer(env::parse)
     override val folding: FoldingService = JavaFolder(::psiFor)
@@ -185,9 +186,13 @@ class JavaSourceAnalyzer(private val env: JavaEnvironment) : SourceAnalyzer, Jvm
 
     // --- resolution ---------------------------------------------------------------------------------------
 
+    // Resolution walks scopes and, for a cross-file reference, LAZILY parses the referenced class's source file
+    // (a `buildTree`). That must hold the one global parse lock, or it can race the background index build's
+    // parse → native SIGSEGV on 32-bit ART. So every SPI method below that calls `.resolve()`/`.getType()`/
+    // `facade.*` runs under [IntellijPsiHost.withParseLock] (reentrant with `env.parse`). See [IntellijPsiHost].
     override fun resolve(node: DomNode): ResolveResult {
         val psi = (node as? JavaDomNode)?.psi ?: return ResolveResult.Unresolved
-        val target = resolveTarget(psi) ?: return ResolveResult.Unresolved
+        val target = IntellijPsiHost.withParseLock { resolveTarget(psi) } ?: return ResolveResult.Unresolved
         return ResolveResult.Resolved(JavaSymbol(target, node.owner))
     }
 
@@ -211,7 +216,9 @@ class JavaSourceAnalyzer(private val env: JavaEnvironment) : SourceAnalyzer, Jvm
         val psi = (node as? JavaDomNode)?.psi ?: return null
         val expr = psi as? PsiExpression
             ?: PsiTreeUtil.getParentOfType(psi, PsiExpression::class.java, false)
-        return expr?.type?.let { JavaTypeRef(it) }
+            ?: return null
+        // `getType()` can trigger overload/generic resolution → a lazy cross-file `buildTree`; hold the lock.
+        return IntellijPsiHost.withParseLock { expr.type }?.let { JavaTypeRef(it) }
     }
 
     override fun scopeAt(file: VirtualFile, offset: Int): Scope {
@@ -227,16 +234,19 @@ class JavaSourceAnalyzer(private val env: JavaEnvironment) : SourceAnalyzer, Jvm
         val len = tree.javaFile.textLength
         if (len == 0) return null
         val leaf = tree.javaFile.findElementAt(offset.coerceIn(0, len - 1)) ?: return null
-        // Variable initializer -> the declared type; a `return` -> the enclosing method's return type.
-        PsiTreeUtil.getParentOfType(leaf, PsiVariable::class.java, false)?.let { v ->
-            if (v.initializer != null) return JavaTypeRef(v.type)
-        }
-        PsiTreeUtil.getParentOfType(leaf, PsiReturnStatement::class.java, false)?.let {
-            PsiTreeUtil.getParentOfType(it, PsiMethod::class.java)?.returnType?.let { rt ->
-                return JavaTypeRef(rt)
+        // `v.type` / method `returnType` can resolve a type reference → a lazy cross-file `buildTree`; lock it.
+        return IntellijPsiHost.withParseLock {
+            // Variable initializer -> the declared type; a `return` -> the enclosing method's return type.
+            PsiTreeUtil.getParentOfType(leaf, PsiVariable::class.java, false)?.let { v ->
+                if (v.initializer != null) return@withParseLock JavaTypeRef(v.type)
             }
+            PsiTreeUtil.getParentOfType(leaf, PsiReturnStatement::class.java, false)?.let {
+                PsiTreeUtil.getParentOfType(it, PsiMethod::class.java)?.returnType?.let { rt ->
+                    return@withParseLock JavaTypeRef(rt)
+                }
+            }
+            null
         }
-        return null
     }
 
     // --- structure & quick-doc ----------------------------------------------------------------------------
@@ -269,24 +279,28 @@ class JavaSourceAnalyzer(private val env: JavaEnvironment) : SourceAnalyzer, Jvm
         return out
     }
 
-    override fun quickDoc(file: VirtualFile, text: CharSequence, offset: Int): QuickDocInfo? {
-        val psi = env.parse(file.name, text)
-        val len = psi.textLength
-        if (len == 0) return null
-        val leaf = psi.findElementAt(offset.coerceIn(0, len - 1)) ?: return null
-        val target = resolveTarget(leaf) ?: return null
-        val sym = JavaSymbol(target)
-        val owner = (target.parent as? PsiClass)?.qualifiedName
-            ?: PsiTreeUtil.getParentOfType(target, PsiClass::class.java)?.qualifiedName
-        return QuickDocInfo(
-            signature = signatureOf(target),
-            name = sym.name,
-            kind = sym.kind,
-            container = owner,
-            doc = sym.documentation(),
-            docFormat = DocFormat.JAVADOC,
-        )
-    }
+    override fun quickDoc(file: VirtualFile, text: CharSequence, offset: Int): QuickDocInfo? =
+        // Parse + resolve (+ read the target's doc/signature, which resolve types) all under the one parse lock:
+        // resolving the symbol under the caret can lazily `buildTree` its declaring source file. `env.parse` is
+        // reentrant under the same lock.
+        IntellijPsiHost.withParseLock {
+            val psi = env.parse(file.name, text)
+            val len = psi.textLength
+            if (len == 0) return@withParseLock null
+            val leaf = psi.findElementAt(offset.coerceIn(0, len - 1)) ?: return@withParseLock null
+            val target = resolveTarget(leaf) ?: return@withParseLock null
+            val sym = JavaSymbol(target)
+            val owner = (target.parent as? PsiClass)?.qualifiedName
+                ?: PsiTreeUtil.getParentOfType(target, PsiClass::class.java)?.qualifiedName
+            QuickDocInfo(
+                signature = signatureOf(target),
+                name = sym.name,
+                kind = sym.kind,
+                container = owner,
+                doc = sym.documentation(),
+                docFormat = DocFormat.JAVADOC,
+            )
+        }
 
     private fun signatureOf(psi: PsiElement): String = when (psi) {
         is PsiMethod -> {

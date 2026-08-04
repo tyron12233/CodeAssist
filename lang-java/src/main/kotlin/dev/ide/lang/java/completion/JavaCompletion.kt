@@ -46,6 +46,7 @@ import dev.ide.lang.completion.TextEdit
 import dev.ide.lang.dom.TextRange
 import dev.ide.lang.java.JavaImportEdits
 import dev.ide.lang.java.env.JavaEnvironment
+import dev.ide.psi.IntellijPsiHost
 import dev.ide.lang.java.resolve.JavaScope
 import dev.ide.lang.java.resolve.JavaSymbol
 import dev.ide.lang.resolve.Symbol
@@ -82,7 +83,18 @@ class JavaCompletion(
 
     override val id = "java.completion"
 
-    override suspend fun fillCompletionVariants(params: CompletionParams, result: CompletionResultSet) {
+    /**
+     * ART safety: the whole pass runs under the ONE global parse lock. It doesn't just parse the spliced
+     * buffer ([env.parse], itself locked + reentrant) — it then RESOLVES through that tree (member access →
+     * `qualifier.resolve()` → `type.resolve()`, which parses the referenced class's SOURCE file lazily, i.e.
+     * a `buildTree`). If that lazy tree-build ran unlocked it could race the background index build's parse on
+     * a 32-bit ART device → native SIGSEGV (issues #1396/#1332). Completion fires on nearly every keystroke, so
+     * this was the last high-frequency unlocked `buildTree` path. See [dev.ide.psi.IntellijPsiHost].
+     */
+    override suspend fun fillCompletionVariants(params: CompletionParams, result: CompletionResultSet): Unit =
+        IntellijPsiHost.withParseLock { fillVariants(params, result) }
+
+    private fun fillVariants(params: CompletionParams, result: CompletionResultSet) {
         val text = params.document.text
         val rr = params.replacementRange
         val markerOffset = rr.start.coerceIn(0, text.length)
