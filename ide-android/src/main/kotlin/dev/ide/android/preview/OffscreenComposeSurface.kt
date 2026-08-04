@@ -29,6 +29,7 @@ import androidx.savedstate.SavedStateRegistryOwner
 import androidx.savedstate.setViewTreeSavedStateRegistryOwner
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
+import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicInteger
 import java.util.concurrent.atomic.AtomicReference
 
@@ -86,6 +87,7 @@ class OffscreenComposeSurface(
     private val frameThread = HandlerThread("ca-preview-frames").apply { start() }
     private val frameHandler = Handler(frameThread.looper)
     private val mainHandler = Handler(Looper.getMainLooper())
+    private val closed = AtomicBoolean(false)
 
     // GPU-backed ImageReader when the platform supports zero-copy (API 29+ for the usage overload +
     // Bitmap.wrapHardwareBuffer); else a plain CPU reader. USAGE_CPU_READ_RARELY keeps the plane sampleable for the
@@ -120,6 +122,9 @@ class OffscreenComposeSurface(
 
     init {
         imageReader.setOnImageAvailableListener({ reader ->
+          // Never let a single bad frame take down the frame thread (an invalidated reader throwing
+          // IllegalStateException, a short/padded plane, …) — a dropped frame is the right degradation.
+          runCatching {
             // acquireLatestImage drops any queued older frames, so a slow consumer coalesces to the newest frame
             // instead of falling behind — the preview shows "live", not a lagging backlog.
             reader.acquireLatestImage()?.use { img ->
@@ -144,6 +149,7 @@ class OffscreenComposeSurface(
                     runCatching { onFrame?.invoke(frame) }
                 }
             }
+          }
         }, frameHandler)
     }
 
@@ -218,11 +224,20 @@ class OffscreenComposeSurface(
     }
 
     override fun close() {
+        if (!closed.compareAndSet(false, true)) return   // idempotent: evict + onDestroy may both close a session
         onFrame = null
         onHardwareFrame = null
         runOnMain { runCatching { presentation?.dismiss() } }
-        virtualDisplay.release()
-        imageReader.close()
+        // Stop the producer, then detach the listener so no new frame callback is queued.
+        runCatching { virtualDisplay.release() }
+        runCatching { imageReader.setOnImageAvailableListener(null, null) }
+        // Close the reader ON the frame thread. imageReader.close() unmaps the plane buffers; running it from any
+        // other thread (this is called on the service's binder/main threads — session evict/close, dimension
+        // change, onDestroy) can free a buffer while onImageAvailable → readFrameBytes is mid-memcpy on the frame
+        // thread — the native SIGSEGV (SetByteArrayRegion/memcpy over an unmapped page) this fixes. Handler
+        // messages are serial, so the posted close runs only AFTER any in-flight frame read finishes, and
+        // quitSafely still delivers this already-due message before the looper exits.
+        frameHandler.post { runCatching { imageReader.close() } }
         frameThread.quitSafely()
     }
 
