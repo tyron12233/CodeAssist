@@ -74,6 +74,10 @@ object ArtPatchPasses {
                                   //  ExtensibleQueryFactory/GCUtil)
         EdtHeadlessArtPass(),     // com.intellij.util.ui.EDT.isCurrentThreadEdt → java.awt.EventQueue (absent on
                                   // ART) → return false (headless); on KSP2's AA write-action path (KspArtSpikeTest)
+        CaffeineStripedBufferArtPass(), // caffeine StripedBuffer's Thread.threadLocalRandomProbe reflection (a
+                                  // non-SDK field) fails on a strict device → NoClassDefFoundError: BoundedBuffer
+                                  // from every bounded cache; first hit by KSP2's standalone AA. Reaches the
+                                  // separate caffeine jar (scope = ALL), unlike the merged-jar passes above.
     )
 
     /** True if any registered pass rewrites [classFqn]. */
