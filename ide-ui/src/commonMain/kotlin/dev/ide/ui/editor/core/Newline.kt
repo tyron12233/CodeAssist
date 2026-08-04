@@ -228,6 +228,16 @@ private open class BraceNewlineHandler(
             return RangeEdit(start, pos, nl, start + nl.length)
         }
 
+        // A completed continuation tail returns to the statement's OWN indent, not the deeper continuation
+        // indent: `suspend fun getAll(): List<Note> =` then `    dao.getAll()` → Enter after `dao.getAll()`
+        // drops back to `fun`'s indent. Mirrors IntelliJ finishing a wrapped expression (`val x = a +` / `b`
+        // → next line back at `val`).
+        if (!deeper) {
+            continuationTailAnchor(text, lineStart, pos)?.let {
+                return RangeEdit(pos, pos, "\n" + it, pos + 1 + it.length)
+            }
+        }
+
         // Continuation indent: a line that ends on a dangling operator (`+`, `=`, `.`, `&&`, …) or a chained
         // `.` indents its wrapped tail one level — but only the FIRST wrap, so a run of continued lines stays
         // at one level instead of marching right. A trailing `,` is special: inside an already-open bracket
@@ -425,6 +435,32 @@ private fun isContinuation(text: CharSequence, lineStart: Int, pos: Int): Boolea
     val prevStart = lineStartOf(text, lineStart - 1)
     val prevCode = text.subSequence(prevStart, codeEnd(text, prevStart, lineStart - 1)).toString().trim()
     return !endsWithContinuationOp(prevCode)
+}
+
+/**
+ * When the line being broken *finishes* a continuation that began earlier — a statement whose first line
+ * dangled a continuation operator (`fun f(): T =`, `val x = a +`, …) and whose later lines carried the
+ * expression down — the indent of the line that STARTED it, so the next line drops back to the statement's
+ * own indent instead of staying at the deeper continuation indent. Null when this line isn't a completed
+ * continuation tail: it continues further, leaves a bracket open, or nothing above it dangles. A trailing
+ * `,` is deliberately NOT treated as a dangle when walking up — list items are siblings with their own
+ * indent (handled by the `,` branch), so a wrapped list isn't collapsed to its opener's indent.
+ */
+private fun continuationTailAnchor(text: CharSequence, lineStart: Int, pos: Int): String? {
+    val code = text.subSequence(lineStart, codeEnd(text, lineStart, pos)).toString().trim()
+    if (code.isEmpty() || endsWithContinuationOp(code)) return null   // this line itself continues
+    if (openBracketBalance(text, lineStart, pos) > 0) return null     // …or leaves an opener unclosed
+    var curStart = lineStart
+    var anchor: String? = null
+    while (curStart > 0) {
+        val prevEnd = curStart - 1 // the '\n' ending the previous line
+        val prevStart = lineStartOf(text, prevEnd)
+        val prevCode = text.subSequence(prevStart, codeEnd(text, prevStart, prevEnd)).toString().trim()
+        if (prevCode.isEmpty() || prevCode.endsWith(",") || !endsWithContinuationOp(prevCode)) break
+        anchor = leadingIndent(text, prevStart, prevEnd)
+        curStart = prevStart
+    }
+    return anchor
 }
 
 /** High-signal "this statement continues on the next line" operators (excludes `++`/`->`, handled elsewhere). */
