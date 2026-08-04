@@ -224,27 +224,18 @@ fun EditorTopBar(
             // Accent-tinted while there are unsaved changes; saves the active tab (Cmd/Ctrl-S also works).
             IconButtonCa(CaIcons.save, stringResource(Res.string.save), onSave, active = hasUnsavedChanges)
             if (compact) {
-                // On a phone the bar can't hold every control, so Run stays inline and the rest (incl. the
-                // edit actions) collapse into a single ⋯ overflow menu — everything one tap away. The RIGHT
-                // tool windows get one button (the swipe-in overlay's switcher handles multiple).
-                if (rightToolIconId != null) {
-                    IconButtonCa(actionIcon(rightToolIconId), rightToolTitle, onToggleRightTool, active = rightToolOpen)
+                // Save · Undo · Redo · Run are the prioritized inline actions even on a phone — one tap away,
+                // never buried. Everything else (find, reformat, palette, inlay hints, console, preview, the AI
+                // panel, and the build-variant switcher) collapses into the single ⋯ overflow menu.
+                if (hasActiveFile) {
+                    IconButtonCa(CaIcons.undo, stringResource(Res.string.undo), onUndo, tint = if (canUndo) null else dim)
+                    IconButtonCa(CaIcons.redo, stringResource(Res.string.redo), onRedo, tint = if (canRedo) null else dim)
                 }
                 PluginToolbarActions(pluginActions, dim, onPluginAction)
-                if (activeVariant != null) VariantChip(
-                    activeVariant,
-                    variants,
-                    onPickVariant,
-                    compact = true
-                )
                 RunControl(runTasks, onPickTask, compact = true)
                 EditorOverflowMenu(
                     onOpenPalette = onOpenPalette,
                     hasActiveFile = hasActiveFile,
-                    canUndo = canUndo,
-                    canRedo = canRedo,
-                    onUndo = onUndo,
-                    onRedo = onRedo,
                     onFind = onFind,
                     onReformat = onReformat,
                     onOptimizeImports = onOptimizeImports,
@@ -254,6 +245,13 @@ fun EditorTopBar(
                     onToggleConsole = onToggleConsole,
                     showPreview = showPreview,
                     onPreview = onPreview,
+                    rightToolIconId = rightToolIconId,
+                    rightToolTitle = rightToolTitle,
+                    rightToolOpen = rightToolOpen,
+                    onToggleRightTool = onToggleRightTool,
+                    activeVariant = activeVariant,
+                    variants = variants,
+                    onPickVariant = onPickVariant,
                 )
             } else {
                 // Edit actions (undo/redo/find) sit just before Run — disabled-tinted with no file open.
@@ -374,17 +372,15 @@ private fun PluginToolbarActions(
 
 /**
  * The compact-bar overflow: a ⋯ button opening a dropdown of the secondary controls that don't fit inline on
- * a phone (command palette, inlay-hint toggle, build console, Compose preview). Toggled items show their
- * on-state in the accent color.
+ * a phone (find, reformat, optimize imports, command palette, the AI panel, inlay-hint toggle, build console,
+ * Compose preview, and the build-variant/flavor switcher). The primary edit actions (save · undo · redo · run)
+ * stay inline, so they aren't here. Toggled items show their on-state in the accent color; the build variant
+ * opens a flyout submenu of the module's variants.
  */
 @Composable
 private fun EditorOverflowMenu(
     onOpenPalette: () -> Unit,
     hasActiveFile: Boolean,
-    canUndo: Boolean,
-    canRedo: Boolean,
-    onUndo: () -> Unit,
-    onRedo: () -> Unit,
     onFind: () -> Unit,
     onReformat: () -> Unit,
     onOptimizeImports: () -> Unit,
@@ -394,19 +390,36 @@ private fun EditorOverflowMenu(
     onToggleConsole: () -> Unit,
     showPreview: Boolean,
     onPreview: () -> Unit,
+    /** The AI panel (a RIGHT-anchored tool window). Null icon = no such plugin, so the item is omitted. */
+    rightToolIconId: String?,
+    rightToolTitle: String,
+    rightToolOpen: Boolean,
+    onToggleRightTool: () -> Unit,
+    /** Active build variant, or null for a non-Android project (then the variant submenu is omitted). */
+    activeVariant: String?,
+    variants: () -> List<String>,
+    onPickVariant: (String) -> Unit,
 ) {
     var open by remember { mutableStateOf(false) }
+    // The variant list scans the module, so it's fetched only when its submenu opens. Both the menu and the
+    // submenu reset closed whenever the ⋯ menu is re-opened (`remember(open)`).
+    var variantsOpen by remember(open) { mutableStateOf(false) }
+    var variantItems by remember(open) { mutableStateOf(emptyList<String>()) }
     Box {
         IconButtonCa(CaIcons.ellipsis, stringResource(Res.string.edchrome_more_actions), { open = true })
         CaDropdownMenu(expanded = open, onDismissRequest = { open = false }) {
             if (hasActiveFile) {
-                OverflowItem(CaIcons.undo, stringResource(Res.string.undo), enabled = canUndo) { open = false; onUndo() }
-                OverflowItem(CaIcons.redo, stringResource(Res.string.redo), enabled = canRedo) { open = false; onRedo() }
                 OverflowItem(CaIcons.search, stringResource(Res.string.edchrome_find_replace)) { open = false; onFind() }
                 OverflowItem(CaIcons.braces, stringResource(Res.string.edchrome_reformat_code)) { open = false; onReformat() }
                 OverflowItem(CaIcons.layers, stringResource(Res.string.edchrome_optimize_imports)) { open = false; onOptimizeImports() }
             }
             OverflowItem(CaIcons.command, stringResource(Res.string.edchrome_command_palette)) { open = false; onOpenPalette() }
+            // The AI assistant panel — a toggle, its on-state accented like the other tool windows.
+            if (rightToolIconId != null) {
+                OverflowItem(actionIcon(rightToolIconId), rightToolTitle, active = rightToolOpen) {
+                    open = false; onToggleRightTool()
+                }
+            }
             OverflowItem(
                 CaIcons.eye,
                 if (inlayHintsOn) stringResource(Res.string.edchrome_hide_inlay_hints) else stringResource(Res.string.edchrome_show_inlay_hints),
@@ -418,8 +431,60 @@ private fun EditorOverflowMenu(
             if (showPreview) OverflowItem(CaIcons.image, stringResource(Res.string.edchrome_compose_preview)) {
                 open = false; onPreview()
             }
+            // The build-variant (flavor) switcher — a flyout submenu of the module's variants, shown only for an
+            // Android module (a non-null active variant). Picking one closes the whole menu.
+            if (activeVariant != null) {
+                OverflowMenuDivider()
+                CaSubmenuItem(
+                    label = "${stringResource(Res.string.edchrome_build_variant)}: $activeVariant",
+                    icon = CaIcons.layers,
+                    expanded = variantsOpen,
+                    onExpandedChange = { want -> variantsOpen = want; if (want) variantItems = variants() },
+                ) {
+                    if (variantItems.isEmpty()) {
+                        DropdownMenuItem(
+                            text = {
+                                Text(
+                                    stringResource(Res.string.edchrome_no_variants),
+                                    color = MaterialTheme.colorScheme.outline,
+                                    style = MaterialTheme.typography.bodyMedium,
+                                )
+                            },
+                            onClick = {}, enabled = false,
+                        )
+                    }
+                    variantItems.forEach { v ->
+                        DropdownMenuItem(
+                            text = {
+                                Text(
+                                    v,
+                                    color = MaterialTheme.colorScheme.onSurface,
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    fontWeight = if (v == activeVariant) FontWeight.SemiBold else FontWeight.Normal,
+                                )
+                            },
+                            leadingIcon = {
+                                if (v == activeVariant) Icon(
+                                    CaIcons.check, null, Modifier.size(14.dp),
+                                    tint = MaterialTheme.colorScheme.primary,
+                                ) else Box(Modifier.size(14.dp))
+                            },
+                            onClick = { open = false; onPickVariant(v) },
+                        )
+                    }
+                }
+            }
         }
     }
+}
+
+/** A thin separator inside the overflow dropdown, grouping the build-variant switcher off from the actions. */
+@Composable
+private fun OverflowMenuDivider() {
+    Box(
+        Modifier.fillMaxWidth().height(1.dp).padding(vertical = 4.dp)
+            .background(MaterialTheme.colorScheme.outlineVariant)
+    )
 }
 
 @Composable

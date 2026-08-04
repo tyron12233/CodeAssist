@@ -47,6 +47,57 @@ internal class AndroidFileOps(private val activity: ComponentActivity) {
         dest.absolutePath
     }.getOrNull()
 
+    /**
+     * Copy the SAF tree at [treeUri] into a fresh cache directory (skipping regenerable build outputs /
+     * gradle caches) and return that directory's real filesystem path. The engine's Gradle importer needs a
+     * [java.nio.file.Path], but SAF hands back a `content://` tree, not a file — so we materialize a local
+     * copy first. Returns null on failure, cleaning up any partial copy. Call off the main thread (it does
+     * full-tree I/O).
+     */
+    fun copyTreeToCache(treeUri: Uri): String? {
+        val rootDocId = runCatching { DocumentsContract.getTreeDocumentId(treeUri) }.getOrNull() ?: return null
+        val dest = File(activity.cacheDir, "gradle-import-${System.currentTimeMillis()}")
+        return runCatching {
+            dest.mkdirs()
+            copyDocTree(treeUri, rootDocId, dest)
+            dest.absolutePath
+        }.getOrElse { dest.deleteRecursively(); null }
+    }
+
+    /** Recursively copy the SAF document [parentDocId] (a directory) under [treeUri] into [destDir]. */
+    private fun copyDocTree(treeUri: Uri, parentDocId: String, destDir: File) {
+        val childrenUri = DocumentsContract.buildChildDocumentsUriUsingTree(treeUri, parentDocId)
+        val resolver = activity.contentResolver
+        resolver.query(
+            childrenUri,
+            arrayOf(
+                DocumentsContract.Document.COLUMN_DOCUMENT_ID,
+                DocumentsContract.Document.COLUMN_DISPLAY_NAME,
+                DocumentsContract.Document.COLUMN_MIME_TYPE,
+            ),
+            null, null, null,
+        )?.use { c ->
+            val idIdx = c.getColumnIndexOrThrow(DocumentsContract.Document.COLUMN_DOCUMENT_ID)
+            val nameIdx = c.getColumnIndexOrThrow(DocumentsContract.Document.COLUMN_DISPLAY_NAME)
+            val mimeIdx = c.getColumnIndexOrThrow(DocumentsContract.Document.COLUMN_MIME_TYPE)
+            while (c.moveToNext()) {
+                val childName = c.getString(nameIdx) ?: continue
+                // Skip regenerable build outputs / IDE metadata to keep the copy small (the engine's importer
+                // drops build/.gradle too, so leaving them out here just saves a redundant round-trip).
+                if (childName == "build" || childName == ".gradle" || childName == ".idea") continue
+                val childId = c.getString(idIdx)
+                val child = File(destDir, childName)
+                if (c.getString(mimeIdx) == DocumentsContract.Document.MIME_TYPE_DIR) {
+                    child.mkdirs()
+                    copyDocTree(treeUri, childId, child)
+                } else {
+                    val docUri = DocumentsContract.buildDocumentUriUsingTree(treeUri, childId)
+                    resolver.openInputStream(docUri)?.use { input -> child.outputStream().use { input.copyTo(it) } }
+                }
+            }
+        }
+    }
+
     /** Copy a picked content:// file into the app cache and return its real path (for keystore import). */
     fun copyUriToCache(uri: Uri): String? = runCatching {
         val name = queryDisplayName(uri) ?: "keystore-${System.currentTimeMillis()}"

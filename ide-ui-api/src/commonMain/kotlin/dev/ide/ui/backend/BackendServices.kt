@@ -898,6 +898,113 @@ interface SettingsService {
 }
 
 // ---------------------------------------------------------------------------
+// Editor customizations: the keyboard symbol bar (+ macros, recorded macros)
+// ---------------------------------------------------------------------------
+
+/** One key on the editor's keyboard symbol bar: [label] shows on the key; [insert] is committed at the caret
+ *  (a single-char insert goes through the editor's smart-insert, so brackets/quotes still auto-close). [pinned]
+ *  keeps it in the fixed left group (not the scroll); [action] (a [CustomizationActions] id) makes it invoke a
+ *  built-in editor op — Tab / comment / move-line — instead of inserting [insert]. */
+data class UiSymbolKey(
+    val label: String,
+    val insert: String,
+    val pinned: Boolean = false,
+    val action: String? = null,
+)
+
+/** A user (or built-in) live-template macro: type [abbreviation] and accept in completion to expand [template]
+ *  (`$1`/`${1:default}` tab stops, `$END$` final caret, `$FILE$`/`$DATE$`/`$USER$` variables). [languages] limits
+ *  where it fires (LanguageId values; empty = all); [builtIn] marks a shipped, editable template. */
+data class UiMacro(
+    val abbreviation: String,
+    val template: String,
+    val description: String = "",
+    val languages: List<String> = emptyList(),
+    val enabled: Boolean = true,
+    val builtIn: Boolean = false,
+    /** When set (an FQN like `java.lang.String`), the macro is type-scoped: offered only at `receiver.abbrev`
+     *  where the receiver matches this type. Null/blank = a plain statement macro. */
+    val receiverType: String? = null,
+    /** Type-scoped only: match a static reference to the type (`String.abbrev`) instead of an instance. */
+    val static: Boolean = false,
+)
+
+/** Built-in editor-action ids a symbol-bar key can carry (mirror of ide-core's `SymbolActions`), so the UI can
+ *  render/pick action keys and the layout can dispatch them without depending on ide-core. */
+object CustomizationActions {
+    const val TAB = "tab"
+    const val COMMENT = "comment"
+    const val MOVE_LINE_UP = "moveLineUp"
+    const val MOVE_LINE_DOWN = "moveLineDown"
+    const val DUPLICATE_LINE = "duplicateLine"
+    const val NEXT_PROBLEM = "nextProblem"
+    val ALL: List<String> = listOf(TAB, COMMENT, MOVE_LINE_UP, MOVE_LINE_DOWN, DUPLICATE_LINE, NEXT_PROBLEM)
+}
+
+/**
+ * User customization of the editor — the keyboard symbol bar today, live-template macros and recorded macros
+ * later. Two scopes: "global" ([CustomizationService.GLOBAL], per-user, every project) and "project"
+ * ([CustomizationService.PROJECT], checked into the open project, shareable). The symbol bar renders
+ * [symbolKeys]; the editor screen reads/writes a scope's list and can reset / import / export / suggest.
+ * Optional — a backend that wires no store inherits [Unsupported] (every method no-ops).
+ */
+interface CustomizationService {
+    /** The effective symbol-bar keys (project ▸ global ▸ shipped defaults). Empty only if the user blanked it. */
+    fun symbolKeys(): List<UiSymbolKey> = emptyList()
+
+    /** The symbols DEFINED at [scope], or null when that scope defines none (so it falls through to the next). */
+    fun scopedSymbols(scope: String): List<UiSymbolKey>? = null
+
+    /** Replace [scope]'s symbol list (an empty list = an intentionally blank bar; see [clearScopedSymbols]). */
+    fun setScopedSymbols(scope: String, symbols: List<UiSymbolKey>) {}
+
+    /** Unset [scope]'s symbols so it falls through to the next scope / the shipped defaults. */
+    fun clearScopedSymbols(scope: String) {}
+
+    /** The shipped default symbol keys — the "Reset to defaults" target. */
+    fun defaultSymbols(): List<UiSymbolKey> = emptyList()
+
+    /** True when [scope] is writable ("project" needs a project open; "global" needs a shared config dir). */
+    fun scopeAvailable(scope: String): Boolean = false
+
+    /** Export [scope]'s whole customization set as shareable JSON. */
+    fun exportScope(scope: String): String = ""
+
+    /** Replace [scope]'s set from [json]; returns false if the payload was malformed (the set is left as-is). */
+    fun importScope(scope: String, json: String): Boolean = false
+
+    /** Symbols frequently typed in [filePath]'s current text that aren't already in [existing], most-frequent
+     *  first — the "suggest from file" helper. */
+    fun suggestSymbols(filePath: String, existing: List<UiSymbolKey>): List<UiSymbolKey> = emptyList()
+
+    /** The live-template macros DEFINED at [scope] (not the built-ins; a scope's own additions/overrides). */
+    fun scopedMacros(scope: String): List<UiMacro> = emptyList()
+
+    /** The shipped built-in macros (`builtIn = true`), so the editor can list them as editable/disable-able
+     *  alongside the user's own. Editing/disabling one writes an override into a scope. */
+    fun defaultMacros(): List<UiMacro> = emptyList()
+
+    /** Replace [scope]'s macros. */
+    fun setScopedMacros(scope: String, macros: List<UiMacro>) {}
+
+    /** Expand [template] with sample values (`$FILE$`→`Example.kt`, `$DATE$`→today, …) for the editor's live
+     *  preview — placeholders render as their defaults; returns "" if the template is unparseable. */
+    fun previewMacro(template: String): String = ""
+
+    /** The macro-template variable names offered in the editor (inserted as `$NAME$`, resolved at expansion):
+     *  FILE, CLASS, EXPR, DATE, USER, UUID, … */
+    fun macroVariables(): List<String> = emptyList()
+
+    /** No-op service for a backend that wires no customization store. */
+    object Unsupported : CustomizationService
+
+    companion object {
+        const val GLOBAL = "global"
+        const val PROJECT = "project"
+    }
+}
+
+// ---------------------------------------------------------------------------
 // UI actions (toolbar / menus / command palette)
 // ---------------------------------------------------------------------------
 

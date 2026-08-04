@@ -13,6 +13,7 @@ import dev.ide.ui.backend.RunStatus
 import dev.ide.ui.backend.TreeNode
 import dev.ide.ui.backend.TreeViewMode
 import dev.ide.ui.backend.UiRenameResult
+import dev.ide.ui.backend.UiSymbolKey
 import dev.ide.ui.backend.UiSourceRootRole
 import dev.ide.ui.backend.UiNewFileTemplate
 import dev.ide.ui.backend.UiOpenTab
@@ -36,7 +37,7 @@ import kotlinx.coroutines.withContext
  * Top-level screens, ordered by depth so the transition helper can infer direction: a move to a
  * higher-ordinal screen animates "forward" (deeper), a lower one "back".
  */
-enum class Screen { Projects, CreateProject, ImportProject, ExportProject, Editor, Hub, Run, ModuleConfig, SdkManager, KeystoreManager, KeystoreCreate, KeystoreImport, Settings, CodeStyle, Plugins, Storage, LessonTrack, LessonPlayer, StoreItem }
+enum class Screen { Projects, CreateProject, ImportProject, ExportProject, Editor, Hub, Run, ModuleConfig, SdkManager, KeystoreManager, KeystoreCreate, KeystoreImport, Settings, CodeStyle, EditorSymbols, Plugins, Storage, LessonTrack, LessonPlayer, StoreItem }
 
 /**
  * The home screen's bottom-navigation destinations (the landing surface shown on [Screen.Projects]): the
@@ -359,8 +360,20 @@ class IdeUiState(
     /** Allow the soft keyboard's autocorrect / suggestions / auto-space (off = raw code input). */
     var softKeyboardSuggestions by mutableStateOf(true)
 
+    /** The keyboard symbol-bar keys, from the effective customization set (project ▸ global ▸ shipped defaults).
+     *  Seeded in [init]; re-read via [refreshSymbolKeys] after the Symbols editor saves. */
+    var symbolKeys by mutableStateOf<List<UiSymbolKey>>(emptyList())
+        private set
+
+    /** The Symbols &amp; Macros editor overlay (hosted in EditorScreen); opened from the symbol bar's gear key. */
+    var symbolEditorOpen by mutableStateOf(false)
+
+    /** Re-read the effective symbol-bar keys from the backend (after an edit, or on project change). */
+    fun refreshSymbolKeys() { symbolKeys = backend.customize.symbolKeys() }
+
     init {
         applySettings(backend.settings.settings())
+        refreshSymbolKeys()
         loadTreeExpansion()
         // Restore the last-open left panel: desktop reopens it as a docked pane; mobile starts collapsed but
         // remembers it for the next time the drawer is toggled on.

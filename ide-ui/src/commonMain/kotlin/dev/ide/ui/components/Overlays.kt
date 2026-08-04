@@ -255,6 +255,48 @@ fun CenteredDialog(
     }
 }
 
+/**
+ * A modal busy indicator — a scrim (that swallows all input so the user can't touch the UI behind it) plus a
+ * centered card with a spinner and [label]. Used for blocking, indeterminate work with no cancel point, e.g.
+ * copying + importing a Gradle project. Fades in/out with [visible].
+ */
+@Composable
+fun BusyOverlay(visible: Boolean, label: String) {
+    Box(Modifier.fillMaxSize()) {
+        AnimatedVisibility(
+            visible = visible,
+            enter = fadeIn(tween(Motion.BASE, easing = Motion.soft)),
+            exit = fadeOut(tween(Motion.BASE, easing = Motion.soft)),
+        ) {
+            // Consume every pointer event so nothing behind the overlay reacts while work is in flight.
+            Box(
+                Modifier
+                    .fillMaxSize()
+                    .background(Ide.colors.scrim)
+                    .pointerInput(Unit) { awaitPointerEventScope { while (true) awaitPointerEvent() } },
+                contentAlignment = Alignment.Center,
+            ) {
+                val shape = RoundedCornerShape(Ca.radius.lg)
+                Column(
+                    Modifier
+                        .background(MaterialTheme.colorScheme.surface, shape)
+                        .border(1.dp, MaterialTheme.colorScheme.outlineVariant, shape)
+                        .padding(horizontal = 28.dp, vertical = 24.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(16.dp),
+                ) {
+                    androidx.compose.material3.CircularProgressIndicator(color = MaterialTheme.colorScheme.primary)
+                    androidx.compose.material3.Text(
+                        label,
+                        color = MaterialTheme.colorScheme.onSurface,
+                        style = MaterialTheme.typography.bodyLarge,
+                    )
+                }
+            }
+        }
+    }
+}
+
 /** A tappable full-bleed scrim that dismisses on click (no ripple). */
 @Composable
 private fun BoxScope.Scrim(onDismiss: () -> Unit) {

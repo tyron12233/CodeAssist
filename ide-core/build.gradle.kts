@@ -44,6 +44,9 @@ dependencies {
     implementation(project(":vfs-api"))
 
     implementation(libs.kotlinx.coroutines.core)
+    // Editor customizations (symbol bar / macros) persist + import/export as JSON via the tree API (no
+    // @Serializable / compiler plugin needed).
+    implementation(libs.kotlinx.serialization.json)
 
     testImplementation(libs.kotlinx.coroutines.test)
     // Opt-in regression suites (`regressionTest`): shared benchmark/baseline harness.

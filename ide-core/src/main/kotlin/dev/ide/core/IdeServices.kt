@@ -1448,6 +1448,16 @@ class IdeServices private constructor(
 
     val workspaceRoot: Path get() = store.rootPath
 
+    /** The user's live-template macro additions/overrides/disables for [languageId] (null = every language) —
+     *  the global set overlaid by the project set, disabled entries kept (the completion contributor removes
+     *  those). The shipped built-ins are NOT included (the language backends emit those). Read from the same
+     *  files the customization backend writes ([EditorCustomizationStore.standard]); stateless + read-through. */
+    fun userMacros(languageId: String?): List<dev.ide.core.customize.MacroDef> =
+        dev.ide.core.customize.EditorCustomizationStore.standard(
+            globalDir = { sharedCachesRoot },
+            projectRoot = { workspaceRoot },
+        ).userMacros(languageId)
+
     /** The model's current revision (bumped on every model commit). A separate-process build runner passes
      *  this to the daemon so it reloads `module.toml` from disk when the model changed since it last opened
      *  — without it, a build in `:build` keeps using the config frozen at the daemon's first open. */

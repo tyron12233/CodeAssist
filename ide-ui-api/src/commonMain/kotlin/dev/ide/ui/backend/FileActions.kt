@@ -29,6 +29,18 @@ interface FileActions {
      */
     fun pickFile(extensions: List<String> = emptyList(), onPicked: (String?) -> Unit) = onPicked(null)
 
+    /** Whether this host can pick an existing directory (shows the "Import Gradle project" affordance). */
+    val canPickDirectory: Boolean get() = false
+
+    /**
+     * Launch the platform folder picker for ONE existing directory and return its absolute filesystem path
+     * via [onPicked] (null if cancelled). Desktop hands back the chosen folder directly; Android's SAF gives
+     * a `content://` tree rather than a path, so the host first copies that tree into local storage
+     * (off the main thread) and returns the copy's path — the returned path is always a real filesystem
+     * directory the engine can read. Used to import an external Gradle project. Default no-op.
+     */
+    fun pickDirectory(onPicked: (String?) -> Unit) = onPicked(null)
+
     /** Whether this host can share/export a file out (shows the Share affordance). */
     val canShare: Boolean
 

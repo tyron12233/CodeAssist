@@ -13,6 +13,7 @@ import dev.ide.core.actions.BuiltInActions
 import dev.ide.core.completion.BufferWordsContributor
 import dev.ide.core.completion.CompletionStats
 import dev.ide.core.completion.PostfixContributor
+import dev.ide.core.completion.UserLiveTemplateContributor
 import dev.ide.core.services.AndroidResourceService
 import dev.ide.core.services.BlockService
 import dev.ide.core.services.BuildService
@@ -431,6 +432,17 @@ private class CompletionBuiltinsPlugin(private val env: ApplicationEnvironment) 
             ext.register(
                 COMPLETION_CONTRIBUTOR_EP,
                 CompletionContribution(PostfixContributor(ext), order = PostfixContributor.ORDER),
+                pid,
+            )
+            // User-defined live-template macros → completion, resolved through the open project's engine (its
+            // effective set = built-ins ◂ global ◂ project). Language-agnostic registration; each macro's own
+            // language scope is enforced inside the contributor.
+            ext.register(
+                COMPLETION_CONTRIBUTOR_EP,
+                CompletionContribution(
+                    UserLiveTemplateContributor { lang -> env.activeEngine?.userMacros(lang) ?: emptyList() },
+                    order = UserLiveTemplateContributor.ORDER,
+                ),
                 pid,
             )
             KotlinPostfixTemplates.all().forEach { ext.register(POSTFIX_TEMPLATE_EP, it, pid) }

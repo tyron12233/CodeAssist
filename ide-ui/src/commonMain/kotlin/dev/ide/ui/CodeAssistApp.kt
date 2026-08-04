@@ -30,6 +30,7 @@ import dev.ide.ui.backend.IdeBackend
 import dev.ide.ui.components.BetaInfo
 import dev.ide.ui.components.OnboardingSheet
 import dev.ide.ui.generated.resources.Res
+import dev.ide.ui.generated.resources.import_gradle_failed
 import dev.ide.ui.generated.resources.import_unrecognized
 import dev.ide.ui.generated.resources.settings_title
 import dev.ide.ui.navigation.ScreenHost
@@ -52,6 +53,7 @@ import dev.ide.ui.screens.KeystoreManagerScreen
 import dev.ide.ui.screens.ModuleConfigScreen
 import dev.ide.ui.screens.ModulesTab
 import dev.ide.ui.screens.ProjectPickerScreen
+import dev.ide.ui.screens.doImportGradle
 import dev.ide.ui.screens.RunScreen
 import dev.ide.ui.screens.PluginsScreen
 import dev.ide.ui.screens.SdkManagerScreen
@@ -171,6 +173,9 @@ fun CodeAssistApp(
     // Non-null while the "unrecognized file" dialog is up (a picked/opened file wasn't a readable .caproj).
     var importError by remember { mutableStateOf<String?>(null) }
     val importUnrecognizedMsg = stringResource(Res.string.import_unrecognized)
+    val importGradleFailedMsg = stringResource(Res.string.import_gradle_failed)
+    // True while a picked Gradle folder is being copied + imported (a blocking, non-cancellable operation).
+    var importBusy by remember { mutableStateOf(false) }
     val scope = rememberCoroutineScope()
 
     // Session resume across a process kill: the project that was on screen last run (captured up-front, before
@@ -354,7 +359,7 @@ fun CodeAssistApp(
                 screen == Screen.KeystoreCreate || screen == Screen.KeystoreImport -> screen = Screen.KeystoreManager
                 // The hub's sub-screens step back to the hub; the keystore manager honours its entry origin.
                 screen == Screen.SdkManager || screen == Screen.Settings || screen == Screen.CodeStyle ||
-                    screen == Screen.Plugins || screen == Screen.Storage -> screen = Screen.Hub
+                    screen == Screen.EditorSymbols || screen == Screen.Plugins || screen == Screen.Storage -> screen = Screen.Hub
                 screen == Screen.KeystoreManager -> screen = keystoreReturn
                 // The hub returns to wherever it was opened from (picker or editor).
                 screen == Screen.Hub -> screen = hubReturn
@@ -406,6 +411,21 @@ fun CodeAssistApp(
                                                     } else {
                                                         importError = importUnrecognizedMsg
                                                     }
+                                                }
+                                            }
+                                        }) else null,
+                                        onImportGradle = if (fileActions.canPickDirectory) ({
+                                            doImportGradle(
+                                                fileActions = fileActions,
+                                                scope = scope,
+                                                onBusy = { importBusy = true },
+                                                import = { p -> backend.projects.importGradleProject(p) },
+                                            ) { result ->
+                                                importBusy = false
+                                                when {
+                                                    result == null -> {} // cancelled — stay on the picker
+                                                    result.success -> screen = Screen.Editor
+                                                    else -> importError = result.message.ifBlank { importGradleFailedMsg }
                                                 }
                                             }
                                         }) else null,
@@ -599,6 +619,11 @@ fun CodeAssistApp(
                             onBack = { screen = Screen.Hub },
                         )
 
+                        Screen.EditorSymbols -> dev.ide.ui.screens.SymbolMacroEditorScreen(
+                            state = state,
+                            onBack = { screen = Screen.Hub },
+                        )
+
                         Screen.KeystoreManager -> KeystoreManagerScreen(
                             backend = state.backend,
                             onBack = { screen = keystoreReturn },
@@ -640,6 +665,7 @@ fun CodeAssistApp(
                             onBack = { screen = hubReturn },
                             onOpenGlobalSettings = { screen = Screen.Settings },
                             onOpenCodeStyle = { screen = Screen.CodeStyle },
+                            onOpenSymbols = { screen = Screen.EditorSymbols },
                             onOpenSdkManager = { screen = Screen.SdkManager },
                             // The hub reached from the editor is a project context; from the picker it isn't.
                             onOpenKeystoreManager = { keystoreReturn = Screen.Hub; keystoreInProject = hubReturn == Screen.Editor; screen = Screen.KeystoreManager },
@@ -686,6 +712,7 @@ fun CodeAssistApp(
                 onDeclineAnalytics = { showAnalytics = false; backend.diagnostics.setAnalyticsConsent(false) },
                 importError = importError,
                 onDismissImportError = { importError = null },
+                importBusy = importBusy,
             )
         }
         }

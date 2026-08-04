@@ -25,6 +25,7 @@ import dev.ide.core.event.IdeEventTopics
 import dev.ide.core.event.ProjectEvent
 import dev.ide.core.backend.BlockBackend
 import dev.ide.core.backend.BuildBackend
+import dev.ide.core.backend.CustomizationBackend
 import dev.ide.core.backend.DependencyBackend
 import dev.ide.core.backend.DiagnosticsBackend
 import dev.ide.core.backend.EditorBackend
@@ -282,6 +283,7 @@ class IdeServicesBackend(
     override val learn: LearnService = learnBackend
     override val sdk: SdkService = SdkBackend(this)
     override val settings: SettingsService = SettingsBackend(this)
+    override val customize: dev.ide.ui.backend.CustomizationService = CustomizationBackend(this)
     override val actions: ActionService = ActionBackend(this)
     // The AI agent is a disablable, non-essential plugin ([AgentPlugin.ID]). When the user turns it off in
     // Settings > Plugins the plugin isn't loaded, so we hand the UI the no-op service — the chat panel, the

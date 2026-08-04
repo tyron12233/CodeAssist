@@ -74,6 +74,8 @@ import dev.ide.ui.generated.resources.delete
 import dev.ide.ui.generated.resources.delete_project
 import dev.ide.ui.generated.resources.delete_project_content
 import dev.ide.ui.generated.resources.export_share
+import dev.ide.ui.generated.resources.import_gradle_subtitle
+import dev.ide.ui.generated.resources.import_gradle_title
 import dev.ide.ui.generated.resources.import_project
 import dev.ide.ui.generated.resources.join_the_community
 import dev.ide.ui.generated.resources.join_the_community_content
@@ -117,6 +119,8 @@ fun ProjectPickerScreen(
     onDeleteProject: ((ProjectInfo) -> Unit)? = null,
     /** Import a shared `.caproj` package (shows the top-bar Import action). Null hides it. */
     onImportProject: (() -> Unit)? = null,
+    /** Import an external Gradle project folder (best effort). Shows a secondary card; null hides it. */
+    onImportGradle: (() -> Unit)? = null,
     /** Export a project as a shareable `.caproj` (shows a per-card Share action). Null hides it. */
     onExportProject: ((ProjectInfo) -> Unit)? = null,
     onBackup: (() -> Unit)? = null,
@@ -169,6 +173,9 @@ fun ProjectPickerScreen(
             ) {
                 // The primary action leads: a prominent New-Project card (no floating button).
                 NewProjectCard(onNewProject)
+
+                // A secondary path: import an existing Gradle project (best-effort compatibility mode).
+                if (onImportGradle != null) ImportGradleCard(onImportGradle)
 
                 // The support card: CodeAssist is free, ad-free and open source, so the only "monetisation"
                 // is an optional sponsor/star. Shown whenever the host can open links.
@@ -301,6 +308,35 @@ private fun NewProjectCard(onClick: () -> Unit) {
             Text(stringResource(Res.string.new_project_content), color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.8f), style = MaterialTheme.typography.bodyMedium)
         }
         Icon(CaIcons.chevronRight, null, Modifier.size(20.dp), tint = MaterialTheme.colorScheme.onPrimaryContainer)
+    }
+}
+
+/** A secondary, outlined card opening the host folder picker to import an existing Gradle build. */
+@Composable
+private fun ImportGradleCard(onClick: () -> Unit) {
+    val interaction = remember { MutableInteractionSource() }
+    Row(
+        Modifier
+            .fillMaxWidth()
+            .pressScale(interaction)
+            .background(MaterialTheme.colorScheme.surface, RoundedCornerShape(Ca.radius.lg))
+            .border(1.dp, MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(Ca.radius.lg))
+            .clickable(interaction, indication = null, onClick = onClick)
+            .padding(14.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(14.dp),
+    ) {
+        Box(
+            Modifier.size(44.dp).background(MaterialTheme.colorScheme.surfaceContainerHigh, RoundedCornerShape(Ca.radius.md)),
+            contentAlignment = Alignment.Center,
+        ) {
+            Icon(CaIcons.folderOpen, null, Modifier.size(22.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
+        Column(Modifier.weight(1f)) {
+            Text(stringResource(Res.string.import_gradle_title), color = MaterialTheme.colorScheme.onSurface, style = MaterialTheme.typography.titleMedium)
+            Text(stringResource(Res.string.import_gradle_subtitle), color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodyMedium)
+        }
+        Icon(CaIcons.chevronRight, null, Modifier.size(20.dp), tint = MaterialTheme.colorScheme.outline)
     }
 }
 

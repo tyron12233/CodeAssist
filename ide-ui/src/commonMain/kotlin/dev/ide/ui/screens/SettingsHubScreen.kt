@@ -39,6 +39,8 @@ import dev.ide.ui.generated.resources.Res
 import dev.ide.ui.generated.resources.back
 import dev.ide.ui.generated.resources.settings_code_style
 import dev.ide.ui.generated.resources.settings_code_style_subtitle
+import dev.ide.ui.generated.resources.settings_symbols
+import dev.ide.ui.generated.resources.settings_symbols_subtitle
 import dev.ide.ui.generated.resources.settings_hub_title
 import dev.ide.ui.generated.resources.settings_keystore_manager
 import dev.ide.ui.generated.resources.settings_keystore_manager_subtitle
@@ -65,6 +67,7 @@ fun SettingsHubScreen(
     onBack: () -> Unit,
     onOpenGlobalSettings: () -> Unit,
     onOpenCodeStyle: () -> Unit,
+    onOpenSymbols: () -> Unit,
     onOpenSdkManager: () -> Unit,
     onOpenKeystoreManager: () -> Unit,
     onOpenPlugins: () -> Unit,
@@ -94,6 +97,7 @@ fun SettingsHubScreen(
             val rows = listOf(
                 HubDest(CaIcons.gear, stringResource(Res.string.settings_settings), stringResource(Res.string.settings_settings_subtitle), onOpenGlobalSettings),
                 HubDest(CaIcons.braces, stringResource(Res.string.settings_code_style), stringResource(Res.string.settings_code_style_subtitle), onOpenCodeStyle),
+                HubDest(CaIcons.grid, stringResource(Res.string.settings_symbols), stringResource(Res.string.settings_symbols_subtitle), onOpenSymbols),
                 HubDest(CaIcons.pkg, stringResource(Res.string.settings_sdk_manager), stringResource(Res.string.settings_sdk_manager_subtitle), onOpenSdkManager),
                 HubDest(CaIcons.key, stringResource(Res.string.settings_keystore_manager), stringResource(Res.string.settings_keystore_manager_subtitle), onOpenKeystoreManager),
                 HubDest(CaIcons.box, stringResource(Res.string.settings_plugins), stringResource(Res.string.settings_plugins_subtitle), onOpenPlugins),

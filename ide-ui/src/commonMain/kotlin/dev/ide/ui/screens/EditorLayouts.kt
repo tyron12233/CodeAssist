@@ -35,6 +35,7 @@ import dev.ide.ui.IdeUiState
 import dev.ide.ui.LeftPanelId
 import dev.ide.ui.actions.dispatchAction
 import dev.ide.ui.backend.BuildState
+import dev.ide.ui.backend.CustomizationActions
 import dev.ide.ui.backend.FileActions
 import dev.ide.ui.backend.IndexUiStatus
 import dev.ide.ui.backend.PackageSegment
@@ -162,6 +163,21 @@ internal fun buildLeftPanels(
     )
     val plugins = pluginPanels(ToolWindowAnchor.LEFT, state.backend, state.active?.path)
     return (builtIns + plugins).sortedWith(compareBy({ it.order }, { it.title }))
+}
+
+/** Dispatches a symbol-bar action key ([CustomizationActions]) against the active editor session. Tab commits
+ *  the highlighted completion when the popup is up (like a hardware Tab), else indents — the bar has no physical
+ *  key event to route through `onPreviewKey`. */
+private fun dispatchSymbolAction(state: IdeUiState, action: String) {
+    val s = state.active?.session ?: return
+    when (action) {
+        CustomizationActions.TAB -> if (s.acceptCompletionIfShowing?.invoke() != true) s.indent()
+        CustomizationActions.COMMENT -> s.toggleComment()
+        CustomizationActions.MOVE_LINE_UP -> s.moveLines(-1)
+        CustomizationActions.MOVE_LINE_DOWN -> s.moveLines(1)
+        CustomizationActions.DUPLICATE_LINE -> s.duplicateSelection()
+        CustomizationActions.NEXT_PROBLEM -> s.goToDiagnostic(forward = true)
+    }
 }
 
 /** The Files panel body — the full [FileNavigator] wiring, shared by both layouts. [closeDrawer] closes the
@@ -397,19 +413,11 @@ internal fun CompactLayout(
                     // the dock's collapsed bar takes the slot instead.
                     if (keyboardOpen && state.active != null) {
                         EditorSymbolBar(
-                            // Tab commits the highlighted completion when the popup is up (like a hardware Tab),
-                            // else indents — the symbol bar has no physical key event to route through onPreviewKey.
-                            onTab = {
-                                val s = state.active?.session
-                                if (s != null && s.acceptCompletionIfShowing?.invoke() != true) s.indent()
-                            },
+                            symbols = state.symbolKeys.ifEmpty { DEFAULT_SYMBOL_KEYS },
                             onSymbol = { sym -> state.active?.session?.commitText(sym) },
-                            onComment = { state.active?.session?.toggleComment() },
-                            onMoveLineUp = { state.active?.session?.moveLines(-1) },
-                            onMoveLineDown = { state.active?.session?.moveLines(1) },
-                            onDuplicateLine = { state.active?.session?.duplicateSelection() },
+                            onAction = { id -> dispatchSymbolAction(state, id) },
                             showDiagnosticJump = state.active?.session?.diagnostics?.isNotEmpty() == true,
-                            onNextDiagnostic = { state.active?.session?.goToDiagnostic(forward = true) },
+                            // No gear here — the Symbols & Macros editor lives in Settings ▸ Symbols & Macros.
                         )
                     }
                     // Reserve the dock's collapsed-bar slot so the editor column isn't hidden behind it.

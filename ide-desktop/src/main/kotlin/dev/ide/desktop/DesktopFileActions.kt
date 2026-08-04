@@ -49,6 +49,19 @@ class DesktopFileActions(private val backend: IdeBackend) : FileActions {
         }
     }
 
+    override val canPickDirectory: Boolean = true
+
+    override fun pickDirectory(onPicked: (String?) -> Unit) {
+        SwingUtilities.invokeLater {
+            val chooser = JFileChooser().apply {
+                dialogTitle = "Choose a Gradle project folder"
+                fileSelectionMode = JFileChooser.DIRECTORIES_ONLY
+            }
+            val path = if (chooser.showOpenDialog(null) == JFileChooser.APPROVE_OPTION) chooser.selectedFile?.absolutePath else null
+            onPicked(path)
+        }
+    }
+
     override val canShare: Boolean = true
 
     override fun share(path: String) {

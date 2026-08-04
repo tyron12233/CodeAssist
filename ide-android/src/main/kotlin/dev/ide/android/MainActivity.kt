@@ -16,6 +16,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import dev.ide.core.CaprojFormat
 import dev.ide.core.IdeServicesBackend
@@ -23,6 +24,7 @@ import dev.ide.ui.CodeAssistApp
 import dev.ide.ui.backend.FileActions
 import dev.ide.ui.backend.IdeBackend
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.io.File
 
@@ -82,6 +84,21 @@ class MainActivity : ComponentActivity() {
                     pendingPick?.invoke(uri?.let { fileOps.copyUriToCache(it) })
                     pendingPick = null
                 }
+            // Directory picker (Gradle import): SAF hands back a content:// tree, so copy it into local
+            // storage off the main thread and return that path — the copy can be large, hence the coroutine.
+            val hostScope = rememberCoroutineScope()
+            var pendingPickDir by remember { mutableStateOf<((String?) -> Unit)?>(null) }
+            val pickDirLauncher =
+                rememberLauncherForActivityResult(ActivityResultContracts.OpenDocumentTree()) { uri ->
+                    val cb = pendingPickDir
+                    pendingPickDir = null
+                    if (uri == null) { cb?.invoke(null); return@rememberLauncherForActivityResult }
+                    Toast.makeText(this@MainActivity, "Copying project…", Toast.LENGTH_SHORT).show()
+                    hostScope.launch {
+                        val path = withContext(Dispatchers.IO) { fileOps.copyTreeToCache(uri) }
+                        cb?.invoke(path)
+                    }
+                }
             // "Save As" export: the user picks a destination (Files/Drive/Downloads); we copy the bytes there.
             var pendingExport by remember { mutableStateOf<String?>(null) }
             val exportLauncher =
@@ -117,6 +134,18 @@ class MainActivity : ComponentActivity() {
                             pendingPick = null
                             onPicked(null)
                             Toast.makeText(this@MainActivity, "No file manager available to pick a file", Toast.LENGTH_SHORT).show()
+                        }
+                    }
+
+                    override val canPickDirectory: Boolean = true
+                    override fun pickDirectory(onPicked: (String?) -> Unit) {
+                        pendingPickDir = onPicked
+                        try {
+                            pickDirLauncher.launch(null)
+                        } catch (e: ActivityNotFoundException) {
+                            pendingPickDir = null
+                            onPicked(null)
+                            Toast.makeText(this@MainActivity, "No file manager available to pick a folder", Toast.LENGTH_SHORT).show()
                         }
                     }
 

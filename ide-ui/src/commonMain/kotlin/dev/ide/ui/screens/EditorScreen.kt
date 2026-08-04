@@ -103,10 +103,11 @@ fun EditorScreen(
     // sheet) before the app-level handler pops the screen (#997). Desktop has no system back, so this is inert
     // there; the mobile-only panes are gated on [isMobilePlatform] since on wide layouts they're docked panes.
     PlatformBackHandler(
-        enabled = newEntry != null || newXmlTarget != null || newSource != null || fileOp != null || state.addSourceRootModule != null || state.indexDetailOpen || state.paletteOpen || state.moreOpen || state.selectedRightPanel != null || (isMobilePlatform && (state.leftOpen || state.consoleOpen)),
+        enabled = newEntry != null || newXmlTarget != null || newSource != null || fileOp != null || state.addSourceRootModule != null || state.symbolEditorOpen || state.indexDetailOpen || state.paletteOpen || state.moreOpen || state.selectedRightPanel != null || (isMobilePlatform && (state.leftOpen || state.consoleOpen)),
     ) {
         when {
             fileOp != null -> fileOp = null
+            state.symbolEditorOpen -> state.symbolEditorOpen = false
             state.addSourceRootModule != null -> state.addSourceRootModule = null
             newSource != null -> newSource = null
             newEntry != null -> newEntry = null
@@ -201,6 +202,8 @@ fun EditorScreen(
             onDelete = { node -> node.fileOpPath()?.let { state.deletePath(it) } },
             onDismiss = { fileOp = null },
         )
+        // The Symbols & Macros editor, opened from the keyboard symbol bar's gear key. Overlays both layouts.
+        SymbolMacroEditor(state)
         // The index-status detail dialog, opened by tapping the top-bar index chip.
         IndexStatusDialog(
             visible = state.indexDetailOpen,

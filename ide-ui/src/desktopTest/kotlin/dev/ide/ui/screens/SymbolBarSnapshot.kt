@@ -23,7 +23,7 @@ class SymbolBarSnapshot {
     fun renderSymbolBar() {
         snapshot("symbol-bar.png", 760, 96) {
             Box(Modifier.fillMaxSize().background(Ide.colors.editorBg)) {
-                EditorSymbolBar(onTab = {}, onSymbol = {}, modifier = Modifier.fillMaxWidth())
+                EditorSymbolBar(onSymbol = {}, onAction = {}, modifier = Modifier.fillMaxWidth())
             }
         }
     }

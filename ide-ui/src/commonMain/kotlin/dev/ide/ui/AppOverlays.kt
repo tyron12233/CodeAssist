@@ -7,6 +7,7 @@ import dev.ide.ui.backend.IdeBackend
 import dev.ide.ui.components.AnalyticsConsentSheet
 import dev.ide.ui.components.BetaInfo
 import dev.ide.ui.components.BuildNotificationGate
+import dev.ide.ui.components.BusyOverlay
 import dev.ide.ui.components.ErrorDialog
 import dev.ide.ui.components.MigrationNotice
 import dev.ide.ui.components.OnboardingSheet
@@ -14,7 +15,10 @@ import dev.ide.ui.components.PermissionDialog
 import dev.ide.ui.components.RunConflictDialog
 import dev.ide.ui.ext.OverlayContext
 import dev.ide.ui.ext.OverlayRegistry
+import dev.ide.ui.generated.resources.Res
+import dev.ide.ui.generated.resources.import_gradle_busy
 import dev.ide.ui.screens.ImportErrorDialog
+import org.jetbrains.compose.resources.stringResource
 
 /**
  * The app-wide overlays layered over the current screen, split out of [CodeAssistApp] so its body stays
@@ -42,6 +46,8 @@ internal fun AppOverlays(
     onDeclineAnalytics: () -> Unit,
     importError: String?,
     onDismissImportError: () -> Unit,
+    /** True while a picked Gradle folder is being copied + imported — shows the blocking busy overlay. */
+    importBusy: Boolean = false,
 ) {
     // Upgrade notice first (the build-system migration warning), then the feature tour — both over the picker
     // only, one at a time.
@@ -75,4 +81,6 @@ internal fun AppOverlays(
     ErrorDialog(backend)
     // "Unrecognized file" notice when a picked/opened file wasn't a readable .caproj package.
     ImportErrorDialog(importError, onDismissImportError)
+    // Blocking spinner while a Gradle folder is being copied in + imported (no cancel point).
+    BusyOverlay(visible = importBusy, label = stringResource(Res.string.import_gradle_busy))
 }
