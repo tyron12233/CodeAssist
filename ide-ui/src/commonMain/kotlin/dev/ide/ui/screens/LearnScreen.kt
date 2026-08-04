@@ -124,17 +124,32 @@ fun LearnScreen(
                     TrackCard(track, done, delayMillis = index * 40) { onOpenTrack(track.id) }
                 }
 
+                // Cap interleaved ads so a long track list can't fill up with them (the trailing slot below is
+                // separate, so the tab shows at most MAX_INTERLEAVED_ADS + 1). Counted across this composition pass.
+                var interleavedAds = 0
                 if (activeCat == null) {
-                    // All: group under per-category subheaders.
-                    categories.forEach { cat ->
+                    // All: group under per-category subheaders, with a native ad between each section (browse
+                    // time between topics). Skip the last group — the trailing slot already follows it.
+                    categories.forEachIndexed { ci, cat ->
                         val group = catalog.tracks.filter { it.category == cat }
                         if (group.isNotEmpty()) {
                             CategorySubheader(cat)
                             group.forEachIndexed { i, track -> trackCard(track, i) }
+                            if (ci < categories.lastIndex && interleavedAds < MAX_INTERLEAVED_ADS) {
+                                AdSlot(AdPlacement.LEARN); interleavedAds++
+                            }
                         }
                     }
                 } else {
-                    catalog.tracks.filter { it.category == activeCat }.forEachIndexed { i, track -> trackCard(track, i) }
+                    // Single category: interleave a native ad every few cards as the learner scrolls (not as the
+                    // very last item — the trailing slot follows).
+                    val filtered = catalog.tracks.filter { it.category == activeCat }
+                    filtered.forEachIndexed { i, track ->
+                        trackCard(track, i)
+                        if ((i + 1) % 3 == 0 && i < filtered.lastIndex && interleavedAds < MAX_INTERLEAVED_ADS) {
+                            AdSlot(AdPlacement.LEARN); interleavedAds++
+                        }
+                    }
                 }
             }
 
@@ -155,6 +170,9 @@ fun LearnScreen(
         }
     }
 }
+
+/** How many ads may be interleaved among the Learn tracks (the trailing slot below the list is separate). */
+private const val MAX_INTERLEAVED_ADS = 2
 
 private val DiscordBlurple = Color(0xFF5865F2)
 
