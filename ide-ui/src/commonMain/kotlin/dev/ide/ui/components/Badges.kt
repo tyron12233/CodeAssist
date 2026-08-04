@@ -11,11 +11,19 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.LineHeightStyle
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import dev.ide.ui.backend.UiCompletionKind
+
+/** Trims the line-height leading and vertically centers the single glyph, so a letter badge sits centered
+ *  in its square instead of low with extra padding above it. */
+private val CenteredGlyph = TextStyle(
+    lineHeightStyle = LineHeightStyle(alignment = LineHeightStyle.Alignment.Center, trim = LineHeightStyle.Trim.Both),
+)
 
 private data class KindMeta(val ch: String, val color: Color)
 
@@ -54,6 +62,9 @@ fun KindBadge(kind: UiCompletionKind, size: Int = 20) {
             fontWeight = FontWeight.SemiBold,
             fontSize = (if (m.ch.length > 1) size * 0.42 else size * 0.56).sp,
             textAlign = TextAlign.Center,
+            maxLines = 1,
+            softWrap = false,
+            style = CenteredGlyph,
         )
     }
 }
@@ -71,6 +82,10 @@ fun LetterBadge(text: String, color: Color, size: Int = 17) {
             fontFamily = Ide.type.codeFamily,
             fontWeight = FontWeight.SemiBold,
             fontSize = (if (text.length > 1) size * 0.42 else size * 0.55).sp,
+            textAlign = TextAlign.Center,
+            maxLines = 1,
+            softWrap = false,
+            style = CenteredGlyph,
         )
     }
 }
