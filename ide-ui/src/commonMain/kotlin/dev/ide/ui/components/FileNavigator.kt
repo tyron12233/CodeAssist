@@ -569,7 +569,15 @@ private fun TreeRowContent(
                 .height(rowHeight)
                 .padding(horizontal = 6.dp, vertical = 1.dp)
                 .clip(RoundedCornerShape(Ca.radius.sm))
-                .background(if (isActive) MaterialTheme.colorScheme.primaryContainer else Color.Transparent)
+                .background(
+                    when {
+                        // The selected file: the muted M3 "selected list item" tone (secondaryContainer),
+                        // consistent with the nav bar + editor tabs — not a loud full-primary fill.
+                        isActive -> MaterialTheme.colorScheme.secondaryContainer
+                        hovered -> MaterialTheme.colorScheme.onSurface.copy(alpha = 0.06f)
+                        else -> Color.Transparent
+                    }
+                )
                 .hoverable(interaction)
                 .combinedClickable(
                     onClick = {
@@ -625,7 +633,7 @@ private fun TreeRowContent(
                 Text(
                     node.name,
                     color = when {
-                        isActive -> MaterialTheme.colorScheme.primary
+                        isActive -> MaterialTheme.colorScheme.onSecondaryContainer
                         // Derived build output, IntelliJ-style: dimmed so it reads as generated, not source.
                         node.styleHint == "excluded" -> MaterialTheme.colorScheme.outline
                         else -> MaterialTheme.colorScheme.onSurface
