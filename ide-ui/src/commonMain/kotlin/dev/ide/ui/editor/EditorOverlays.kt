@@ -48,6 +48,7 @@ import androidx.compose.ui.input.key.KeyEventType
 import androidx.compose.ui.input.key.key
 import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.input.key.type
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.text.font.FontWeight
@@ -57,6 +58,7 @@ import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.IntRect
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.LayoutDirection
+import androidx.compose.ui.unit.TextUnit
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.PopupPositionProvider
@@ -269,9 +271,21 @@ private fun docSectionLabel(title: String): String = when (title) {
 }
 
 /** The inline diagnostic chip: a pill at the right of a diagnostic line — severity-tinted fill, icon,
- *  message. Colour/icon follow [severity]; an [unused] warning is muted rather than alarming. */
+ *  message. Colour/icon follow [severity]; an [unused] warning is muted rather than alarming.
+ *
+ *  Sized off the editor's (zoom-scaled) code metrics so it reads as text ON its line: the pill's text is the
+ *  code [fontSize], icon + paddings are derived from that same em, and the whole thing is vertically centred
+ *  inside a [lineHeightPx]-tall box — so it grows and stays line-aligned as the editor is pinch-zoomed. */
 @Composable
-internal fun DiagnosticChip(severity: UiSeverity, unused: Boolean, message: String, onClick: () -> Unit, modifier: Modifier) {
+internal fun DiagnosticChip(
+    severity: UiSeverity,
+    unused: Boolean,
+    message: String,
+    fontSize: TextUnit,
+    lineHeightPx: Float,
+    onClick: () -> Unit,
+    modifier: Modifier,
+) {
     val color = when (severity) {
         UiSeverity.Error -> MaterialTheme.colorScheme.error
         UiSeverity.Warning -> if (unused) MaterialTheme.colorScheme.outline else Ide.colors.warning
@@ -283,23 +297,31 @@ internal fun DiagnosticChip(severity: UiSeverity, unused: Boolean, message: Stri
         UiSeverity.Warning -> CaIcons.warning
         UiSeverity.Info, UiSeverity.Hint -> CaIcons.info
     }
-    Row(
-        modifier
-            .background(color.copy(alpha = 0.16f), RoundedCornerShape(Ca.radius.pill))
-            .clickable(onClick = onClick)
-            .padding(horizontal = 8.dp, vertical = 2.dp),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(5.dp),
-    ) {
-        Icon(icon, null, Modifier.size(13.dp), tint = color)
-        Text(
-            message,
-            color = color,
-            fontSize = 11.5f.sp,
-            fontWeight = FontWeight.SemiBold,
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis,
-        )
+    val density = LocalDensity.current
+    val lineHeightDp = with(density) { lineHeightPx.toDp() }
+    val em = with(density) { fontSize.toDp() } // the code font's em in dp — scales the icon + paddings with zoom
+    // Outer box is exactly one line tall (positioned at the row top by [modifier]'s offset); the pill sits
+    // content-sized and vertically centred within it, so its baseline tracks the code glyphs on the same row.
+    Box(modifier.height(lineHeightDp), contentAlignment = Alignment.CenterStart) {
+        Row(
+            Modifier
+                .background(color.copy(alpha = 0.16f), RoundedCornerShape(Ca.radius.pill))
+                .clickable(onClick = onClick)
+                .padding(horizontal = em * 0.5f, vertical = em * 0.12f),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(em * 0.35f),
+        ) {
+            Icon(icon, null, Modifier.size(em * 0.95f), tint = color)
+            Text(
+                message,
+                color = color,
+                fontSize = fontSize,
+                lineHeight = fontSize, // tight box so vertical centring lands on the code glyphs, not below them
+                fontWeight = FontWeight.SemiBold,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+        }
     }
 }
 

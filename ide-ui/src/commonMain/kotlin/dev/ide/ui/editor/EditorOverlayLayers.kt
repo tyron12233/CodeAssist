@@ -82,10 +82,13 @@ internal fun BoxScope.DiagnosticChipsLayer(
                 d.severity,
                 d.unused,
                 d.message,
+                fontSize = render.codeStyle.fontSize, // zoom-scaled code size, so the chip grows with the editor
+                lineHeightPx = metrics.lineHeight,
                 onClick = { onOpenSheet(d) },
                 modifier = Modifier.offset {
                     IntOffset(
-                        (gutterWidthPx + metrics.padLeft + lineWidth + 24f - hOffset.floatValue).roundToInt(),
+                        // Gap after the line end scales with the (zoomed) char width, not a fixed px count.
+                        (gutterWidthPx + metrics.padLeft + lineWidth + metrics.charWidth * 3f - hOffset.floatValue).roundToInt(),
                         (metrics.padTop + (vlayout.topRow(ln) + lastSub) * metrics.lineHeight - vOffset.floatValue).roundToInt(),
                     )
                 },
