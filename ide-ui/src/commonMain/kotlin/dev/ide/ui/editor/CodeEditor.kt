@@ -371,6 +371,11 @@ private fun CodeEditorContent(
     fun accept(picked: UiCompletionItem? = null) {
         val s = liveCompletion ?: return
         val item = picked ?: displayed.getOrNull(safeSelected) ?: return
+        // If the caret is inside a live-template field, accepting a completion fills the field and then advances
+        // to the next stop — so selecting a value for a field flows straight into the next one, the same step
+        // Enter/Tab make. Skipped when the accepted item starts its OWN template (that new session begins at its
+        // first stop instead). Captured before the edit; applied at the plain-completion return path below.
+        val activeTemplate = snippet
         val chars = editorSession.doc.chars
         val len = chars.length
         val mainStart = s.tokenStart.coerceIn(0, len)
@@ -427,6 +432,11 @@ private fun CodeEditorContent(
         val sel = if (selLen > 0) TextRange(caret, caret + selLen) else TextRange(caret)
         applyEditsKeepingViewport(edits, sel, anchorLine)
         completion.dismiss()
+        // Filled a template field with the accepted value → mirror it and step to the next stop. The accept edit
+        // already re-anchored the session via onSnippetEdit, so `next()` selects the correct following field.
+        if (activeTemplate != null && snippet === activeTemplate) {
+            if (!activeTemplate.next()) snippet = null
+        }
     }
 
     // Smart Enter (Shift+Enter): finish the current line, then open an indented new line — IntelliJ's "Complete
@@ -475,6 +485,18 @@ private fun CodeEditorContent(
         // Soft-keyboard Tab (the touch symbol bar) accepts the highlighted completion when the popup is up,
         // mirroring the hardware-Tab path (onPreviewKey); the caller falls back to indent when this returns false.
         editorSession.acceptCompletionIfShowing = { if (showPopup) { accept(); true } else false }
+        // Soft-keyboard Enter in a live template steps to the next field instead of inserting a newline — the IME
+        // path (commitText "\n" / performEditorAction) bypasses onPreviewKey, so it consults this. Mirrors the
+        // hardware-Enter template handling: accept a showing completion first (accept() then advances the
+        // template), else step to the next stop. Returns false with no active template → the IME newlines as usual.
+        editorSession.advanceTemplateOnEnter = {
+            val sn = snippet
+            if (sn == null) false
+            else {
+                if (showPopup) accept() else if (!sn.next()) snippet = null
+                true
+            }
+        }
     }
 
     // completion triggering — fires only when the buffer's *text* actually advances (textRevision bumps on text
@@ -826,12 +848,20 @@ private fun CodeEditorContent(
                 else -> false
             }
         }
-        // Active template (snippet) session steers Tab/Shift-Tab/Escape when the completion popup isn't up.
+        // Active template (snippet) session steers Tab/Shift-Tab/Enter/Escape when the completion popup isn't up.
         val sn = snippet
         if (sn != null && !showPopup) {
             when (ev.key) {
                 Key.Tab -> {
                     if (ev.isShiftPressed) sn.prev() else if (!sn.next()) snippet = null
+                    return true
+                }
+
+                // In a live template, plain Enter advances to the next field (like Tab) instead of splitting the
+                // line — so a template reads as a fill-in-the-blanks flow. Consumed here in the preview handler so
+                // `handleKey`'s newline never fires. Shift-Enter (Smart Enter) is left to fall through unchanged.
+                Key.Enter, Key.NumPadEnter -> if (!ev.isShiftPressed) {
+                    if (!sn.next()) snippet = null
                     return true
                 }
 

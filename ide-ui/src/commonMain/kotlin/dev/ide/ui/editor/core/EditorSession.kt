@@ -164,6 +164,14 @@ class EditorSession(
      * nothing is open. Null when no editor is mounted on this session.
      */
     var acceptCompletionIfShowing: (() -> Boolean)? = null
+    /**
+     * Enter hook the editor surface registers: when a live-template session is active, advance to the next
+     * template field (accepting a showing completion first) and return true; otherwise return false so the caller
+     * inserts a newline. The soft-keyboard Enter arrives via the IME (`commitText "\n"` / `performEditorAction`),
+     * which bypasses the editor's key handler, so the IME node consults this to keep template stepping working on
+     * touch. Null when no editor is mounted on this session.
+     */
+    var advanceTemplateOnEnter: (() -> Boolean)? = null
     /** Set by the platform text-input node while an IME session is active. */
     var imeListener: ImeListener? = null
 

@@ -405,6 +405,9 @@ private class EditorInputConnection(
 
     override fun commitText(text: CharSequence?, newCursorPosition: Int): Boolean {
         imeLog { "commitText \"$text\" ncp=$newCursorPosition sel=${session.selection} comp=${session.composing}" }
+        // A soft keyboard that commits a bare newline for Enter (rather than a KEYCODE_ENTER key event) still
+        // steps a live template instead of splitting the line — the key handler never sees this path.
+        if (text?.toString() == "\n" && session.advanceTemplateOnEnter?.invoke() == true) return true
         session.imeCommitText(text?.toString() ?: "", newCursorPosition)
         return true
     }
@@ -516,6 +519,7 @@ private class EditorInputConnection(
 
     override fun performEditorAction(actionCode: Int): Boolean {
         imeLog { "performEditorAction $actionCode" }
+        if (session.advanceTemplateOnEnter?.invoke() == true) return true // in a live template: step, don't newline
         session.commitText("\n") // multiline editor: any action key behaves as Enter
         return true
     }
