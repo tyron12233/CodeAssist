@@ -87,7 +87,7 @@ internal class VmObject(val vmClass: VmClass) {
      *  declared instance field across the interpreted chain is defaulted in [Vm.newInstance]) and never grows
      *  afterward — a `putfield` only replaces an existing key's value. That fixed-key-set invariant makes
      *  concurrent value replacement structurally safe on a plain [HashMap] (no resize, no re-linking) across the
-     *  real threads a multi-threaded program runs on; per-field visibility is relaxed, matching the VM's
+     *  real threads a multithreaded program runs on; per-field visibility is relaxed, matching the VM's
      *  best-effort (not hardened-JMM) stance — shared state that needs ordering uses the real
      *  `java.util.concurrent` primitives, which are bridged. */
     val fields: HashMap<String, Any?> = HashMap()
