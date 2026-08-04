@@ -15,6 +15,7 @@ import dev.ide.lang.kotlin.symbols.KotlinSymbol
 import dev.ide.lang.kotlin.symbols.KotlinSymbolService
 import dev.ide.lang.kotlin.symbols.OptInLevel
 import dev.ide.lang.kotlin.symbols.OptInMarker
+import dev.ide.lang.resolve.Modifier
 import dev.ide.lang.resolve.SymbolKind
 import com.intellij.psi.PsiElement
 import org.jetbrains.kotlin.lexer.KtModifierKeywordToken
@@ -133,9 +134,12 @@ internal class KotlinSemanticChecks(private val service: KotlinSymbolService) {
                 if (resolveReady) {
                     val unresolved = unresolvedMember(psi, resolver) ?: unresolvedBareReference(psi, resolver)
                     report(unresolved)
-                    // Only when the reference DOES resolve (to a classifier): a class used as a value must be
-                    // initialized (`GridCells.Fixed` → `GridCells.Fixed(2)`).
-                    if (unresolved == null) report(classifierUsedAsValue(psi, resolver))
+                    // Only when the reference DOES resolve: a class used as a value must be initialized
+                    // (`GridCells.Fixed` → `GridCells.Fixed(2)`), and a function name used as a value must be
+                    // invoked (`LazyColumn` → `LazyColumn()`). The two are mutually exclusive by construction.
+                    if (unresolved == null) {
+                        report(classifierUsedAsValue(psi, resolver) ?: functionUsedAsValue(psi, resolver))
+                    }
                 }
             }
         },
@@ -515,6 +519,75 @@ internal class KotlinSemanticChecks(private val service: KotlinSymbolService) {
             TextRange(r.startOffset, r.endOffset), Severity.ERROR,
             "Classifier '$name' does not have a companion object, and thus must be initialized here",
             KotlinDiagnosticCodes.CLASSIFIER_AS_VALUE,
+        )
+    }
+
+    /**
+     * A FUNCTION name used as a VALUE without being invoked: a bare `LazyColumn` / `remember` / `foo` in value
+     * position where a call was meant (`LazyColumn` must be `LazyColumn()`; a function is a value only through a
+     * `::` reference). The compiler's "Function invocation 'X(...)' expected". Conservative, the complement of
+     * [classifierUsedAsValue]: it fires only when the bare reference sits in a plain value position (not a call
+     * callee, a `::` reference, a qualified receiver/selector, a type/import/annotation, `this`/`super`), and the
+     * name resolves CONFIDENTLY and EXCLUSIVELY to a function: a same-file top-level `fun`, or an in-scope
+     * top-level function, with NO competing value binding of the same name (a local/param, an enclosing-class
+     * member, an implicit-receiver member, a local type, a same-file property/class, or a known classifier).
+     * Member functions of `this` used bare are a deliberate conservative MISS (an enclosing/implicit member of
+     * unknown kind backs the check off, so a member VALUE read is never mis-flagged).
+     */
+    private fun functionUsedAsValue(ref: KtNameReferenceExpression, resolver: KotlinResolver): Diagnostic? {
+        val name = ref.getReferencedName()
+        if (name.isEmpty()) return null
+        if (inImportOrPackage(ref) || inTypeReference(ref)) return null
+        if (ref.parent is org.jetbrains.kotlin.psi.KtInstanceExpressionWithLabel) return null // this/super
+        if (hasAncestor(ref) { it is org.jetbrains.kotlin.psi.KtAnnotationEntry }) return null
+        // Value-position guards: not a call callee (`f(...)`), a `::` reference, a qualified receiver/selector, or
+        // a named-argument label. Any OTHER position is a value read, where a bare function name is illegal.
+        val parent = ref.parent
+        if (parent is KtCallExpression && parent.calleeExpression === ref) return null
+        if (parent is KtQualifiedExpression) return null
+        if (parent is org.jetbrains.kotlin.psi.KtCallableReferenceExpression) return null
+        if (parent is org.jetbrains.kotlin.psi.KtDoubleColonExpression) return null
+        if (parent is KtValueArgumentName) return null
+
+        val off = ref.textRange.startOffset
+        // A value binding of the same name in scope makes this a legitimate read, not an un-invoked function.
+        // Implicit-receiver / enclosing-class members are of unknown kind here, so ANY match backs off (a member
+        // function used bare is a conservative miss, never a false positive on a member value).
+        if (resolver.localsAt(off).any { it.name == name }) return null
+        if (resolver.isTypeParameterInScope(name, off)) return null
+        if (resolver.localTypesInScope(off).containsKey(name)) return null
+        if (resolver.enclosingClassMembersContain(off, name)) return null
+        if (resolver.implicitReceiversAt(off).any { recv ->
+                service.membersNamedForCheck(recv.qualifiedName, recv.typeArguments, name).isNotEmpty()
+            }
+        ) return null
+        // A known classifier of this name is the [classifierUsedAsValue] case (or a valid object read), not ours.
+        if (service.resolveTypeName(name, resolver.fileContext)?.let { service.isKnownType(it) } == true) return null
+
+        // Same-file top-level declarations (the disk-based model can lag the live buffer): a same-file `fun` is
+        // the error, but a same-file property/object/class of this name is a value → back off.
+        val sameFile = ref.containingKtFile.declarations.filter {
+            it is org.jetbrains.kotlin.psi.KtNamedDeclaration && it.name == name
+        }
+        if (sameFile.any { it !is KtNamedFunction }) return null
+        val sameFileFunction = sameFile.any { it is KtNamedFunction }
+
+        // In-scope top-level callables of this name: ALL must be functions (a top-level `val` of the same name is
+        // a value read → back off). Both the function-ness AND this value-shadow test come from one query, so the
+        // two can't disagree; a not-yet-built index simply returns nothing and the check backs off.
+        val topLevels = service.topLevelByName(name)
+            .filter { Modifier.PRIVATE !in it.modifiers && resolver.topLevelInScope(it, resolver.fileContext) }
+        if (topLevels.any { it.kind != SymbolKind.METHOD }) return null
+
+        // Must actually resolve to a function in scope; otherwise it's unresolved (its own diagnostic) or a form
+        // we don't model.
+        if (!sameFileFunction && topLevels.isEmpty()) return null
+
+        val r = ref.textRange
+        return Diagnostic(
+            TextRange(r.startOffset, r.endOffset), Severity.ERROR,
+            "Function invocation '$name(...)' expected",
+            KotlinDiagnosticCodes.FUNCTION_CALL_EXPECTED,
         )
     }
 

@@ -49,6 +49,30 @@ class KotlinRealFoundationItemsTest {
     }
 
     @Test
+    fun bareLazyColumnReferenceIsFlagged() {
+        // `LazyColumn` (an imported top-level @Composable function) referenced WITHOUT a call is not a value;
+        // kotlinc reports "Function invocation 'LazyColumn(...)' expected". The editor must match.
+        assumeTrue(analyzer != null, "real compose-foundation jar not on the test classpath")
+        val a = analyzer!!
+        val src =
+            """
+            package demo
+            import androidx.compose.foundation.lazy.LazyColumn
+            import androidx.compose.runtime.Composable
+            @Composable fun c() {
+                LazyColumn
+            }
+            """.trimIndent()
+        val doc = SnippetDoc(src, DiskFile(srcDir.resolve("Bare.kt")))
+        val diags = runBlocking { a.incrementalParser.parseFull(doc); a.analyze(doc.file).diagnostics }
+        val rendered = diags.joinToString("\n") { "  ${it.code}: ${it.message}" }.ifEmpty { "  (no diagnostics)" }
+        assertTrue(
+            diags.any { it.code == "kt.functionCallExpected" && it.message.contains("LazyColumn") },
+            "a bare `LazyColumn` reference must be flagged (Function invocation expected); got:\n$rendered",
+        )
+    }
+
+    @Test
     fun itemsListArgOffersTheExtensionImport() {
         assumeTrue(analyzer != null, "real compose-foundation jar not on the test classpath")
         val a = analyzer!!

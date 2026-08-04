@@ -30,6 +30,10 @@ object KotlinDiagnosticCodes {
      *  `columns = GridCells.Fixed` / `val x = Foo` (must be `GridCells.Fixed(2)` / `Foo(...)`). The compiler's
      *  "Classifier 'X' does not have a companion object, and thus must be initialized here". */
     const val CLASSIFIER_AS_VALUE = "kt.classifierAsValue"
+    /** A FUNCTION name used as a VALUE without being invoked: a bare `LazyColumn` / `remember` in value
+     *  position (must be `LazyColumn()`; a function is only a value via a `::` reference). The compiler's
+     *  "Function invocation 'X(...)' expected". */
+    const val FUNCTION_CALL_EXPECTED = "kt.functionCallExpected"
 
     // --- declaration / modifier validity ---
     const val CONFLICTING_DECLARATION = "kt.conflictingDeclaration"
