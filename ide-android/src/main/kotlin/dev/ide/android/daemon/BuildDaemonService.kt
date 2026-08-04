@@ -13,6 +13,7 @@ import android.os.IBinder
 import android.os.Looper
 import android.os.Process
 import dev.ide.android.AndroidIde
+import dev.ide.android.AppLogSinkRegistry
 import dev.ide.core.AppLogLevel
 import dev.ide.core.IdeServices
 import dev.ide.core.ProjectManager
@@ -187,6 +188,17 @@ class BuildDaemonService : Service() {
 
         override fun clearAppLog() {
             services?.buildRunner?.clearAppLog()
+        }
+
+        // App-log relay (docs/app-log-forwarding.md): the UI-process AppLogSinkService forwards the frames the
+        // built debug app pushed here, into THIS process's channel — the one that was start()ed for the run.
+        override fun submitAppLogFrames(frames: Array<out String>?) {
+            frames ?: return
+            AppLogSinkRegistry.active?.acceptFrames(frames.toList())
+        }
+
+        override fun appLogClientGone() {
+            AppLogSinkRegistry.active?.onClientDisconnected()
         }
     }
 

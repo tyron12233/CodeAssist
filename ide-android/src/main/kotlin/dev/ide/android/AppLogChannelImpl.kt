@@ -118,10 +118,13 @@ class AppLogChannelImpl : AppLogChannel {
 }
 
 /**
- * Process-global handle to the active [AppLogChannelImpl] so the system-instantiated
- * [dev.ide.android.applog.AppLogSinkService] can route Binder submits to it. The IDE and the service run in
- * the same process, so a plain singleton suffices; it is set for the duration of a run ([AppLogChannelImpl.start])
- * and cleared on [AppLogChannelImpl.stop].
+ * Process-global handle to the active [AppLogChannelImpl] so a submit can reach the channel started for the
+ * current run. Set for the duration of a run ([AppLogChannelImpl.start]) and cleared on [AppLogChannelImpl.stop].
+ *
+ * Per-process: the value is meaningful only in the process that ran the build (isolation off → the UI process;
+ * isolation on → the `:build` daemon). The exported [dev.ide.android.applog.AppLogSinkService] always runs in
+ * the UI process, so under isolation it does NOT read this singleton directly — it relays frames to the daemon
+ * via [dev.ide.android.daemon.UiAppLogRelay], and the daemon's binder feeds ITS process's `active` here.
  */
 object AppLogSinkRegistry {
     @Volatile var active: AppLogChannelImpl? = null

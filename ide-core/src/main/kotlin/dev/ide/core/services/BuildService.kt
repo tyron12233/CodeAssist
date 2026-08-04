@@ -703,8 +703,9 @@ internal class BuildService(private val ctx: EngineContext) : Disposable {
                         )
                     )
                     val apk = AndroidBuildSystem.signedApkPath(module, variant)
-                    // Start a fresh app-log capture session for this package before launching, so the injected
-                    // bridge's LocalServerSocket is listening by the time the app boots. No-op off-device.
+                    // Start a fresh app-log capture session for this package before launching, so the channel is
+                    // registered to accept the frames the injected bridge pushes over Binder once the app boots.
+                    // No-op off-device.
                     ctx.appLogChannel?.start(pkg)
                     // On a successful build, install + launch (the OS shows its own install-confirmation).
                     launch(

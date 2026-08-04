@@ -86,9 +86,11 @@ transport constants (`SINK_ACTION`/`BINDER_DESCRIPTOR`/`TXN_SUBMIT`) live in `Ap
 
 ## Receiver + UI
 
-- **`AppLogSinkService`** (`:ide-android`) — the exported Binder service resolvable by `SINK_ACTION`. Its
-  `onTransact(TXN_SUBMIT)` reads the `String[]` and routes it to the active `AppLogChannelImpl` via the
-  process-global `AppLogSinkRegistry` (both live in the IDE process); `onUnbind` marks the stream disconnected.
+- **`AppLogSinkService`** (`:ide-android`) — the exported Binder service resolvable by `SINK_ACTION`. It has no
+  `android:process`, so it ALWAYS runs in the UI (main) process (the built app resolves + binds it there). Its
+  `onTransact(TXN_SUBMIT)` reads the `String[]` and delivers it to the `AppLogChannelImpl` that was `start()`ed
+  for the run — which is NOT always in this process (see the relay below). `onUnbind` marks the stream
+  disconnected.
 - **`AppLogChannel`** platform port (`:ide-core`), supplied by `AppLogChannelImpl`, whose `acceptFrames` decodes
   each payload with `AppLogWire.parse` and publishes a ring-buffered `StateFlow<AppLogSnapshot>` (coalesced
   ~10/s). Only frames whose HELLO package matches the last-launched app (`start(pkg)`, called just before
@@ -96,10 +98,16 @@ transport constants (`SINK_ACTION`/`BINDER_DESCRIPTOR`/`TXN_SUBMIT`) live in `Ap
   is a monotonic counter that lets a cross-process consumer compute new lines even after the ring buffer trims.
 - **UI:** a fourth `Logcat` tab in `BuildConsole` (level filter, tag/text search, connection pill, clear,
   tailing) fed by `BuildService.appLog: StateFlow<AppLogUi>`.
-- **Build-process isolation:** when the build/run runs in the `:build` daemon (the default), the sink service
-  and channel are hosted there and lines stream to the UI as `IBuildCallback.onAppLog`/`onAppLogState` deltas,
-  reassembled in `RemoteBuildRunner` (mirrors the run-console streaming). In-process (isolation off),
-  `BuildService.appLog` maps the snapshot directly.
+- **Build-process isolation + the cross-process relay:** when the build/run runs in the `:build` daemon (the
+  default), the `AppLogChannelImpl` that gets `start()`ed for the run lives in `:build`, but the sink service
+  runs in the UI process — so `AppLogSinkRegistry.active` is null where the sink executes and frames would be
+  dropped. The sink bridges the gap through **`UiAppLogRelay`** (UI process): `BuildDaemonClient` registers the
+  live daemon binder in it on connect (clears it on death/unbind), and the sink forwards each batch to the
+  daemon over the `oneway IBuildDaemon.submitAppLogFrames` / `appLogClientGone` calls; the daemon feeds its own
+  process's `AppLogSinkRegistry.active`. The daemon's channel then streams to the UI as
+  `IBuildCallback.onAppLog`/`onAppLogState` deltas, reassembled in `RemoteBuildRunner` (mirrors the run-console
+  streaming). When isolation is OFF no daemon is bound, `UiAppLogRelay.deliverFrames` returns false, and the
+  sink feeds the UI-process channel directly, whose snapshot `BuildService.appLog` maps straight through.
 
 ## Setting
 

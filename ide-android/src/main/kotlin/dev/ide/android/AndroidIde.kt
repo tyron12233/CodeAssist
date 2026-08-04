@@ -138,10 +138,10 @@ object AndroidIde {
         val programInterpreter = VmProgramInterpreter(peerFactory = DexPeerFactory())
         // Installs + launches a built APK (the android Run) via the system package installer.
         val apkInstaller = ApkInstallerImpl(context)
-        // The debug-only in-app log bridge: extract the bundled runtime jar (woven into debug builds) and host
-        // the LocalServerSocket it connects to, so a running debug app's logs stream to the IDE's Logcat tab.
-        // Best-effort — a missing/failed asset must NEVER stop the IDE from starting; null just disables
-        // app-log forwarding (the Logcat tab stays empty).
+        // The debug-only in-app log bridge: extract the bundled runtime jar (woven into debug builds); the
+        // bridge inside the built app binds the IDE's exported AppLogSinkService over Binder and pushes its
+        // logs to the IDE's Logcat tab. Best-effort — a missing/failed asset must NEVER stop the IDE from
+        // starting; null just disables app-log forwarding (the Logcat tab stays empty).
         val appLogRuntimeJar = runCatching {
             copyAsset(context, "applog-runtime.jar", File(home, "applog-runtime.jar"))
         }.getOrNull()

@@ -56,8 +56,9 @@ class RemoteBuildRunner(context: Context, private val services: IdeServices) : B
     override val buildState: StateFlow<BuildState> = _buildState.asStateFlow()
     override val runConsole: StateFlow<RunConsoleUi?> = _runConsole.asStateFlow()
     override val permissionRequest: StateFlow<UiPermissionRequest?> = _permissionRequest.asStateFlow()
-    // App-log (Logcat tab) streaming across the :build boundary is wired in Phase 4 (onAppLog deltas +
-    // reassembly here); until then this stays empty when the build daemon owns the engine.
+    // App-log (Logcat tab) across the :build boundary: the built app's frames reach the daemon's channel via
+    // UiAppLogRelay (the sink runs in the UI process), and the daemon streams them back as onAppLog/onAppLogState
+    // deltas, reassembled into _appLog here (mirrors the run-console streaming).
     override val appLog: StateFlow<dev.ide.ui.backend.AppLogUi> = _appLog.asStateFlow()
     override fun clearAppLog() {
         _appLog.update { it.copy(lines = emptyList()) } // optimistic; the daemon also emits a reset

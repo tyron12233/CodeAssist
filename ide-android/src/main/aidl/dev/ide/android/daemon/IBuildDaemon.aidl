@@ -33,4 +33,11 @@ interface IBuildDaemon {
     void closeRunInput();             // EOF the program's stdin
     void answerPermission(int id, int decision); // answer a pending sandbox prompt (UiPermissionDecision ordinal)
     void clearAppLog();               // clear the app-log (Logcat) buffer
+
+    // --- App-log relay (docs/app-log-forwarding.md). The exported AppLogSinkService the built debug app binds
+    // to always runs in the UI process, but under build-process isolation the app-log CHANNEL lives here in
+    // ":build" (the daemon owns the run). So the UI-process sink forwards each batch of wire frames here, where
+    // AppLogSinkRegistry.active is the channel started for the run. oneway — never block the sink's binder thread.
+    oneway void submitAppLogFrames(in String[] frames); // a batch of AppLogWire payloads from the built app
+    oneway void appLogClientGone();                      // the built app unbound the sink (its process went away)
 }

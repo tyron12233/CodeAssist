@@ -6,6 +6,7 @@ import android.os.Binder
 import android.os.IBinder
 import android.os.Parcel
 import dev.ide.android.AppLogSinkRegistry
+import dev.ide.android.daemon.UiAppLogRelay
 import dev.ide.core.AppLogWire
 
 /**
@@ -26,8 +27,12 @@ class AppLogSinkService : Service() {
         override fun onTransact(code: Int, data: Parcel, reply: Parcel?, flags: Int): Boolean {
             if (code == AppLogWire.TXN_SUBMIT) {
                 data.enforceInterface(AppLogWire.BINDER_DESCRIPTOR)
-                val frames = data.createStringArray()
-                if (frames != null) AppLogSinkRegistry.active?.acceptFrames(frames.filterNotNull())
+                val frames = data.createStringArray()?.filterNotNull().orEmpty()
+                // Under build-process isolation the run's channel lives in the ":build" daemon, so relay there;
+                // if no daemon is bound (isolation off) feed this (UI) process's channel directly.
+                if (frames.isNotEmpty() && !UiAppLogRelay.deliverFrames(frames)) {
+                    AppLogSinkRegistry.active?.acceptFrames(frames)
+                }
                 return true // oneway transaction — no reply
             }
             return super.onTransact(code, data, reply, flags)
@@ -37,7 +42,7 @@ class AppLogSinkService : Service() {
     override fun onBind(intent: Intent?): IBinder = binder
 
     override fun onUnbind(intent: Intent?): Boolean {
-        AppLogSinkRegistry.active?.onClientDisconnected()
+        if (!UiAppLogRelay.deliverClientGone()) AppLogSinkRegistry.active?.onClientDisconnected()
         return false
     }
 }
