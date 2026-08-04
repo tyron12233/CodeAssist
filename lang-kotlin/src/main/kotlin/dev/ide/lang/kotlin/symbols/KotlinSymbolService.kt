@@ -842,6 +842,11 @@ class KotlinSymbolService(
      * (a type must be imported), so the unresolved-TYPE diagnostic flags the missing import and completion on a
      * value of an unresolved type yields nothing. The bare name returned lets callers detect "unresolved" via
      * [isKnownType] (false for a simple name).
+     *
+     * The same rule holds a **project** SOURCE type: only a SAME-PACKAGE one resolves bare; a different-package
+     * project type needs an import just like a library type does. So an unimported same-module type in another
+     * package stays unresolved (the diagnostic flags the missing import) and completion offers no members on it —
+     * resolving it would only surface members the code can't call until the import is added.
      */
     fun resolveTypeName(name: String, ctx: FileContext?): String? {
         val simple = name.trim().removeSuffix("?").substringBefore('<').trim()
@@ -880,14 +885,20 @@ class KotlinSymbolService(
         ctx?.packageName?.takeIf { it.isNotEmpty() }?.let { pkg ->
             "$pkg.$simple".let { cand -> if (cand in model().classByFqn || typeShape(cand) != null) return cand }
         }
-        // 4. Any project SOURCE class by simple name: the editor stays lenient about a same-module type the
-        //    user hasn't imported yet (its members still resolve). Kotlin sources come from the model; Java
-        //    sources from the index (SOURCE origin only — a LIBRARY type must NOT resolve bare, so an unimported
-        //    classpath type like `ComponentActivity` stays unresolved and is flagged by the unresolved-TYPE check).
-        model().classByFqn.keys.firstOrNull { it.substringAfterLast('.') == simple }
-            ?.let { return it }
+        // 4. A SAME-PACKAGE project SOURCE class by simple name — needs no import. Kotlin sources come from the
+        //    model (step 3 also covers these when the file has a package directive); Java sources from the index
+        //    (SOURCE origin, no `.class` on disk yet). A DIFFERENT-package project type needs an import just like
+        //    a library type does, so it is NOT resolved bare here: its use stays unresolved (the unresolved-TYPE
+        //    diagnostic flags the missing import), and completion offers no members on it — matching Kotlin. A
+        //    LIBRARY type likewise never resolves bare (index SOURCE-origin only), so `ComponentActivity` (an
+        //    unimported classpath type) is always flagged.
+        val samePkg = ctx?.packageName ?: ""
+        model().classByFqn.keys.firstOrNull {
+            it.substringAfterLast('.') == simple && it.substringBeforeLast('.', "") == samePkg
+        }?.let { return it }
         index?.exactAll<ClassNameValue>(CLASS_NAMES, simple)
-            ?.firstOrNull { it.origin == IndexOrigin.SOURCE }?.let { return it.fqn }
+            ?.firstOrNull { it.origin == IndexOrigin.SOURCE && it.fqn.substringBeforeLast('.', "") == samePkg }
+            ?.let { return it.fqn }
         // 5. A top-level synthetic class by simple name (e.g. `R` → `com.example.R`); nested types (`R.layout`)
         //    are reached through their outer, never resolved bare.
         synthetic().topLevelFqns.firstOrNull { it.substringAfterLast('.') == simple }

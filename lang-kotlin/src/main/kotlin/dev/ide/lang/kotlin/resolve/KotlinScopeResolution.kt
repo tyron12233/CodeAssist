@@ -500,6 +500,8 @@ fun KotlinResolver.bareNameResolves(name: String, offset: Int): Boolean {
     // via `ktFile.declarations`), so a cross-file private reference stays unresolved — as the compiler reports.
     if (service.topLevelByName(name).any { Modifier.PRIVATE !in it.modifiers && topLevelInScope(it, fileContext) }) return true
     if (fileContext.imports.any { !it.isStar && it.simpleName == name }) return true
+    // A different-package project type isn't in scope until imported (resolveTypeName resolves a project type
+    // bare only same-package), so an unimported same-module type is flagged by the bare-reference diagnostic.
     return service.resolveTypeName(name, fileContext)?.let { service.isKnownType(it) } == true
 }
 
@@ -607,6 +609,8 @@ fun KotlinResolver.constructorTypeFqn(name: String, offset: Int): String? {
     if (name.substringAfterLast('.').firstOrNull()?.isUpperCase() != true) return null
     if ('.' !in name && localsAt(offset).any { it.name == name }) return null
     if ('.' !in name) localTypesInScope(offset)[name]?.let { return it } // a local `class Foo` in scope
+    // A different-package project type isn't a resolvable bare constructor call until imported, so `Foo()` for
+    // such a type is flagged unresolved (and arg-validation backs off) rather than silently resolving.
     return service.resolveTypeName(name, fileContext)?.takeIf { service.isKnownType(it) }
 }
 

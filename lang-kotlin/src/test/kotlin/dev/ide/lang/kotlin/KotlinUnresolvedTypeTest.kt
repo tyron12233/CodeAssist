@@ -37,6 +37,9 @@ class KotlinUnresolvedTypeTest {
             // A same-module Java SOURCE type: needs no import in the same package → must resolve.
             id.value == "java.classNames" && key == "LocalJavaType" ->
                 sequenceOf(ClassNameValue("com.example.LocalJavaType", IndexOrigin.SOURCE, "class")) as Sequence<V>
+            // A same-module Java SOURCE type in a DIFFERENT package: needs an import → must be flagged unimported.
+            id.value == "java.classNames" && key == "OtherJavaType" ->
+                sequenceOf(ClassNameValue("com.other.OtherJavaType", IndexOrigin.SOURCE, "class")) as Sequence<V>
             else -> emptySequence()
         }
 
@@ -48,8 +51,8 @@ class KotlinUnresolvedTypeTest {
         override fun observeStatus(listener: (IndexStatus) -> Unit) = Disposable { }
     }
 
-    private fun diagnose(fileName: String, code: String): List<Diagnostic> {
-        val srcDir = tempProject(emptyMap())
+    private fun diagnose(fileName: String, code: String, seed: Map<String, String> = emptyMap()): List<Diagnostic> {
+        val srcDir = tempProject(seed) // seeded .kt files land in the source model (`classByFqn`)
         val analyzer = KotlinSourceAnalyzer(fakeContext(srcDir)).apply { indexService = fakeIndex }
         val doc = SnippetDoc(code, DiskFile(srcDir.resolve(fileName)))
         return runBlocking { analyzer.incrementalParser.parseFull(doc); analyzer.analyze(doc.file).diagnostics }
@@ -112,6 +115,70 @@ class KotlinUnresolvedTypeTest {
         assertTrue(
             diags.none { it.code == "kt.unresolved" && it.message.contains("LocalJavaType") },
             "a same-module Java source type must not be flagged; got $diags",
+        )
+    }
+
+    @Test
+    fun crossPackageProjectSourceTypeIsUnresolved() {
+        // A project Kotlin SOURCE type in a DIFFERENT package, used without an import, must be flagged: Kotlin
+        // requires the import even for a same-module type (only a SAME-package type resolves bare). The bug this
+        // guards was the `NoteRepository`/`NoteDao` case where a `data`-package DAO in another package went unflagged.
+        val diags = diagnose(
+            "Use.kt",
+            "package com.example\nfun f(a: OtherPkgType) {}",
+            seed = mapOf("OtherPkgType.kt" to "package com.other\nclass OtherPkgType"),
+        )
+        assertTrue(
+            diags.any { it.code == "kt.unresolved" && it.message.contains("OtherPkgType") },
+            "an unimported different-package project type must be flagged unresolved; got $diags",
+        )
+    }
+
+    @Test
+    fun crossPackageProjectSourceConstructorCallIsUnresolved() {
+        // The same rule via the bare-reference path: `OtherPkgType()` (a different-package project type, no import).
+        val diags = diagnose(
+            "Use.kt",
+            "package com.example\nfun f() { val x = OtherPkgType() }",
+            seed = mapOf("OtherPkgType.kt" to "package com.other\nclass OtherPkgType"),
+        )
+        assertTrue(
+            diags.any { it.code == "kt.unresolved" && it.message.contains("OtherPkgType") },
+            "an unimported different-package constructor call must be flagged; got $diags",
+        )
+    }
+
+    @Test
+    fun crossPackageJavaSourceTypeIsUnresolved() {
+        // A project JAVA SOURCE type (index SOURCE origin) in a DIFFERENT package, used without an import, is flagged.
+        val diags = diagnose("Use.kt", "package com.example\nfun f(a: OtherJavaType) {}")
+        assertTrue(
+            diags.any { it.code == "kt.unresolved" && it.message.contains("OtherJavaType") },
+            "an unimported different-package Java source type must be flagged; got $diags",
+        )
+    }
+
+    @Test
+    fun samePackageProjectSourceTypeResolves() {
+        // The counterpart: a project type in the SAME package needs no import — must NOT be flagged, and an
+        // imported cross-package one must resolve too.
+        val same = diagnose(
+            "Use.kt",
+            "package com.example\nfun f(a: SamePkgType) {}",
+            seed = mapOf("SamePkgType.kt" to "package com.example\nclass SamePkgType"),
+        )
+        assertTrue(
+            same.none { it.code == "kt.unresolved" && it.message.contains("SamePkgType") },
+            "a same-package project type must not be flagged; got $same",
+        )
+        val imported = diagnose(
+            "Use.kt",
+            "package com.example\nimport com.other.OtherPkgType\nfun f(a: OtherPkgType) {}",
+            seed = mapOf("OtherPkgType.kt" to "package com.other\nclass OtherPkgType"),
+        )
+        assertTrue(
+            imported.none { it.code == "kt.unresolved" && it.message.contains("OtherPkgType") },
+            "an explicitly-imported cross-package project type must resolve; got $imported",
         )
     }
 

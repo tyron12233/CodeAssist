@@ -2922,7 +2922,9 @@ internal class KotlinSemanticChecks(private val service: KotlinSymbolService) {
         val off = userType.textRange.startOffset
         if (resolver.isTypeParameterInScope(name, off)) return null
         if (resolver.localTypesInScope(off).containsKey(name)) return null // a local `class Foo` / `object O` in scope
-        // In scope (imported / same-package / source / default / builtin / star-imported) → resolves; don't flag.
+        // In scope (imported / same-package / default / builtin / star-imported) → resolves; don't flag. A
+        // DIFFERENT-package project type needs an import too (resolveTypeName resolves a project SOURCE type bare
+        // only when same-package), so an unimported same-module type is flagged (with an "Import" quick-fix).
         val resolved = service.resolveTypeName(name, ctx)
         if (resolved != null && service.isKnownType(resolved)) return null
         val r = ref.textRange
