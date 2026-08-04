@@ -384,13 +384,26 @@ internal class DependencyService(private val ctx: EngineContext) : Disposable {
         }
     }
 
-    /** Progress for the background reconcile: shows the resolve bar ONLY once the resolver actually downloads
-     *  from the network (its messages are non-null only for real fetches — see [MavenDependencyResolver]). A
-     *  fully-cached re-walk produces no messages, so the bar never appears. */
+    /** Progress for the background reconcile: shows the resolve bar ONLY once the resolver reports real activity
+     *  (its messages are non-null only for a real walk/fetch — see [MavenDependencyResolver]); a fully-cached
+     *  re-walk that produces no message keeps the bar hidden. A message flips [DepsResolveState.resolving] on;
+     *  the byte-level [fraction] (reported with a null message during a download) then advances the bar so it's
+     *  a real determinate download bar rather than a blank spinner. A null message never shows the bar on its
+     *  own — it only moves one already surfaced by a message. */
     private fun reconcileProgress(): ProgressReporter = object : ProgressReporter {
         override fun report(fraction: Double, message: String?) {
-            if (message != null) _depsState.update {
-                it.copy(resolving = true, message = message, log = appendDepsLog(it.log, message))
+            val inRange = fraction in 0.0..1.0
+            if (message != null) {
+                _depsState.update {
+                    it.copy(
+                        resolving = true,
+                        message = message,
+                        fraction = if (inRange) fraction else it.fraction,
+                        log = appendDepsLog(it.log, message),
+                    )
+                }
+            } else if (inRange) {
+                _depsState.update { it.copy(fraction = fraction) }
             }
         }
 

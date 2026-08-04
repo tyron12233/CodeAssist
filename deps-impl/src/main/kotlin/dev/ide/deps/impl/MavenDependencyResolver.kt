@@ -360,6 +360,10 @@ class MavenDependencyResolver(
         // grafts them onto the already-resolved artifacts.
         val total = chosen.size.coerceAtLeast(1)
         val downloaded = AtomicInteger(0)
+        // Per-artifact byte fraction (0..1) of the downloads currently in flight, so the resolve bar advances
+        // smoothly WITHIN each download instead of only jumping as whole artifacts finish. Global fraction =
+        // (completed + sum of in-flight byte fractions) / total. Concurrent — many artifacts stream in parallel.
+        val inflight = ConcurrentHashMap<String, Double>()
         val outcomes = coroutineScope {
             val sem = Semaphore(downloadConcurrency)
             chosen.entries.map { (ga, ver) ->
@@ -382,8 +386,19 @@ class MavenDependencyResolver(
                         val kind = primary?.kind
                             ?: if (packaging.equals("aar", ignoreCase = true)) ArtifactKind.AAR else ArtifactKind.JAR
 
-                        val fetch = if (primary != null) fetchRel(primary.coord, primary.rel, repos)
-                            else fetchArtifact(coord, if (kind == ArtifactKind.AAR) "aar" else "jar", repos)
+                        // Byte-level progress: as this artifact streams, publish its fraction into `inflight` and
+                        // recompute the global bar. The first callback also logs the "Downloading …" line once.
+                        val key = "${ga.group}:${ga.name}"
+                        val onBytes: (Long, Long) -> Unit = { readB, totalB ->
+                            val first = inflight.put(key, if (totalB > 0) (readB.toDouble() / totalB).coerceIn(0.0, 1.0) else 0.0) == null
+                            val frac = ((downloaded.get() + inflight.values.sum()) / total).coerceIn(0.0, 0.999)
+                            progress.report(frac, if (first) "Downloading ${coord.name}…" else null)
+                        }
+                        val fetch = if (primary != null) fetchRel(primary.coord, primary.rel, repos, onBytes)
+                            else fetchArtifact(coord, if (kind == ArtifactKind.AAR) "aar" else "jar", repos, onBytes = onBytes)
+                        // Streaming for this artifact is over (success or failure) → drop it from the in-flight set
+                        // so a partial/failed download can't leave its fraction inflating the bar.
+                        inflight.remove(key)
                         // A failed fetch of ANY chosen artifact — direct OR transitive — is recorded as
                         // unresolved. Previously only direct failures were surfaced, so a flaky-network drop of
                         // a transitive (e.g. `androidx.activity:activity`, ComponentActivity's home, pulled by
@@ -403,10 +418,12 @@ class MavenDependencyResolver(
                             fetchRel(a.coord, a.rel, repos)?.let { f -> runCatching { classRootOf(a.kind, a.coord, f.path) }.getOrNull() }
                         }
                         val dependsOn = edges[ga].orEmpty().mapNotNull { c -> chosen[c]?.let { Coordinate(c.group, c.name, it) } }
-                        // Honest progress: only announce a real network download. A cache hit advances the count
-                        // silently (null message), so a fully-cached re-resolve reports no "downloading" activity.
-                        val frac = downloaded.incrementAndGet().toDouble() / total
-                        progress.report(frac, if (fetch.fromNetwork) "Downloading ${coord.name}…" else null)
+                        // Settle the bar as this artifact completes: advance the completed count. A network
+                        // download already streamed its byte-level fraction (and logged its "Downloading …" line)
+                        // via onBytes above; a cache hit fired no callbacks, so it just advances the count silently
+                        // (null message) — a fully-cached re-resolve reports no "downloading" activity at all.
+                        val frac = (downloaded.incrementAndGet().toDouble() / total).coerceIn(0.0, 1.0)
+                        progress.report(frac, null)
                         DownloadOutcome(coord, ResolvedArtifact(coord, kind, classesRoot, sourcesRoot = null, dependsOn, extraClassesRoots = extraRoots), failed = false)
                     }
                 }
@@ -854,15 +871,21 @@ class MavenDependencyResolver(
      *  already on disk — so the resolver only reports "Downloading…" for real network work (honest progress). */
     private data class ArtifactFetch(val path: Path, val fromNetwork: Boolean)
 
-    private fun fetchArtifact(coord: Coordinate, ext: String, repos: List<Repository>, classifier: String? = null): ArtifactFetch? =
-        fetchRel(coord, cache.relativePath(coord, ext, classifier), repos)
+    private fun fetchArtifact(
+        coord: Coordinate, ext: String, repos: List<Repository>, classifier: String? = null,
+        onBytes: (Long, Long) -> Unit = { _, _ -> },
+    ): ArtifactFetch? =
+        fetchRel(coord, cache.relativePath(coord, ext, classifier), repos, onBytes)
 
     /**
      * Fetch the artifact at an explicit Maven-layout [rel]ative path (cache-first, then each repo), streaming
      * socket → disk. [coord] only orders the repos ([reposFor]) — the path is taken verbatim, so a GMM
      * variant override can fetch a file whose name/coordinate differs from the requesting coordinate.
      */
-    private fun fetchRel(coord: Coordinate, rel: String, repos: List<Repository>): ArtifactFetch? {
+    private fun fetchRel(
+        coord: Coordinate, rel: String, repos: List<Repository>,
+        onBytes: (Long, Long) -> Unit = { _, _ -> },
+    ): ArtifactFetch? {
         if (cache.exists(rel)) return ArtifactFetch(cache.fileFor(rel), fromNetwork = false)
         // A recent confirmed 404 (e.g. a library with no -sources.jar) — don't re-probe the network for it.
         if (cache.isKnownMissing(rel)) return null
@@ -872,7 +895,7 @@ class MavenDependencyResolver(
             ordered.any { repo ->
                 val url = repo.url.removeSuffix("/") + "/" + rel
                 log.debug("GET jar: $url")
-                val outcome = runCatching { fetcher.fetchTo(url, tmp) }
+                val outcome = runCatching { fetcher.fetchTo(url, tmp, onBytes) }
                 // A thrown error (not a 404, which returns false) is the real "why it failed": host
                 // unreachable, TLS, timeout, a 5xx. Log it so an on-device resolution failure is diagnosable.
                 outcome.exceptionOrNull()?.let { transient = true; log.warn("download failed: $url (${it.javaClass.simpleName}: ${it.message})") }

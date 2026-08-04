@@ -24,9 +24,10 @@ fun interface ArtifactFetcher {
      * a dozen concurrent Compose-sized jars would otherwise be resident at once. The default buffers via
      * [fetch] so fixture fetchers (which only implement [fetch]) keep working; [HttpArtifactFetcher] streams.
      */
-    fun fetchTo(url: String, dest: Path): Boolean {
+    fun fetchTo(url: String, dest: Path, onProgress: (bytesRead: Long, totalBytes: Long) -> Unit = { _, _ -> }): Boolean {
         val bytes = fetch(url) ?: return false
         Files.write(dest, bytes)
+        onProgress(bytes.size.toLong(), bytes.size.toLong())
         return true
     }
 }
@@ -50,10 +51,29 @@ class HttpArtifactFetcher(
     override fun fetch(url: String): ByteArray? =
         openResolved(url)?.inputStream?.use { it.readBytes() }
 
-    override fun fetchTo(url: String, dest: Path): Boolean {
+    override fun fetchTo(url: String, dest: Path, onProgress: (bytesRead: Long, totalBytes: Long) -> Unit): Boolean {
         val conn = openResolved(url) ?: return false
-        // Pipe the socket straight to disk — never hold the whole jar in heap.
-        conn.inputStream.use { input -> Files.newOutputStream(dest).use { out -> input.copyTo(out, STREAM_BUFFER) } }
+        // Pipe the socket straight to disk — never hold the whole jar in heap — reporting bytes as they flow so
+        // the resolver can drive a real download bar. Content-Length is -1 when the server doesn't send it (a
+        // chunked response); the callback then advances against an unknown total (motion without a percentage).
+        // The callback is throttled to every [PROGRESS_STEP] bytes (plus a final call) so it never floods.
+        val total = conn.contentLengthLong
+        conn.inputStream.use { input ->
+            Files.newOutputStream(dest).use { out ->
+                val buf = ByteArray(STREAM_BUFFER)
+                var readTotal = 0L
+                var sinceReport = 0L
+                while (true) {
+                    val n = input.read(buf)
+                    if (n < 0) break
+                    out.write(buf, 0, n)
+                    readTotal += n
+                    sinceReport += n
+                    if (sinceReport >= PROGRESS_STEP) { onProgress(readTotal, total); sinceReport = 0L }
+                }
+                onProgress(readTotal, total)
+            }
+        }
         return true
     }
 
@@ -110,6 +130,7 @@ class HttpArtifactFetcher(
     private companion object {
         const val MAX_REDIRECTS = 5
         const val STREAM_BUFFER = 64 * 1024
+        const val PROGRESS_STEP = 128 * 1024   // report download progress at most once per this many bytes
         val REDIRECT_CODES = setOf(301, 302, 303, 307, 308)
     }
 }
