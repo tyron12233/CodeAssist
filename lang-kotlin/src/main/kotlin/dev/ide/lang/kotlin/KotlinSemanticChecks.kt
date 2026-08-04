@@ -1918,7 +1918,14 @@ internal class KotlinSemanticChecks(private val service: KotlinSymbolService) {
      *  lambda to the last parameter, the rest by position), type-check the positional non-vararg ones, and
      *  report the first blocking reason. Returns null when [c] can't be judged soundly (unknown defaults). */
     private fun applicability(c: KotlinSymbol, call: KtCallExpression, resolver: KotlinResolver): Applicability? {
-        if (c.paramTypes.isNotEmpty() && c.paramHasDefault.size != c.paramTypes.size) return null // unknown defaults
+        // `paramHasDefault` is sometimes incomplete for an index-decoded member (a library interface member
+        // reached via the type-shape index). That only makes the MISSING-REQUIRED verdict unreliable — the
+        // positional TYPE-mismatch check below uses only `paramTypes`, so we still run it and just skip the
+        // missing-required judgment when defaults are unknown (return Ok rather than back off from the call
+        // entirely). This is what lets `items(list) { }` bound to the in-scope `items(count: Int, …)` member
+        // report the `MutableList<String>` vs `Int` mismatch (matching the compiler) even though that member's
+        // decoded defaults are missing.
+        val defaultsKnown = c.paramTypes.isEmpty() || c.paramHasDefault.size == c.paramTypes.size
         val paramCount = maxOf(c.paramTypes.size, c.paramNames.size)
         val vararg = c.varargParamIndex
         // A trailing lambda must land on the LAST parameter (Kotlin's rule), which must therefore be a function
@@ -1965,6 +1972,7 @@ internal class KotlinSemanticChecks(private val service: KotlinSymbolService) {
             }
         }
         typeBad?.let { return it }
+        if (!defaultsKnown) return Applicability.Ok // defaults unknown → can't judge missing-required; type check passed
         val missing = c.paramTypes.indices.any {
             it !in supplied && it != vararg && c.paramHasDefault.getOrElse(it) { true } == false
         }

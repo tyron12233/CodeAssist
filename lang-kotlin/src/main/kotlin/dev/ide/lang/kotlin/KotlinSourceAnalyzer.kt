@@ -55,7 +55,9 @@ import org.jetbrains.kotlin.psi.KtElement
 import org.jetbrains.kotlin.psi.KtEnumEntry
 import org.jetbrains.kotlin.psi.KtExpression
 import org.jetbrains.kotlin.psi.KtFile
+import org.jetbrains.kotlin.psi.KtCallExpression
 import org.jetbrains.kotlin.psi.KtNameReferenceExpression
+import com.intellij.psi.util.PsiTreeUtil
 import org.jetbrains.kotlin.psi.KtNamedDeclaration
 import org.jetbrains.kotlin.psi.KtCallableDeclaration
 import org.jetbrains.kotlin.psi.KtNamedFunction
@@ -647,7 +649,13 @@ class KotlinSourceAnalyzer(ctx: CompilationContext) : SourceAnalyzer, Disposable
             diags.filter { it.code == KotlinDiagnosticCodes.UNRESOLVED && coversCaret(it) }
         val delegateOps =
             diags.filter { it.code == KotlinDiagnosticCodes.DELEGATE_OPERATOR && coversCaret(it) }
-        if (unresolved.isEmpty() && delegateOps.isEmpty()) return emptyList()
+        // A call-argument type mismatch may be fixable by importing an EXTENSION overload of the callee that
+        // fits the argument: `items(list)` binds the in-scope `LazyListScope.items(Int, …)` member and
+        // mismatches, but importing `androidx.compose.foundation.lazy.items` brings the matching `List` overload
+        // into scope (exactly what the compiler wants, and what Android Studio offers).
+        val callMismatches =
+            diags.filter { it.code == KotlinDiagnosticCodes.TYPE_MISMATCH && coversCaret(it) }
+        if (unresolved.isEmpty() && delegateOps.isEmpty() && callMismatches.isEmpty()) return emptyList()
         val existing =
             parsed.ktFile.importDirectives.mapNotNull { it.importedFqName?.asString() }.toHashSet()
         val seen = HashSet<String>()
@@ -670,6 +678,16 @@ class KotlinSourceAnalyzer(ctx: CompilationContext) : SourceAnalyzer, Disposable
             for (prop in delegatePropertiesCovering(parsed.ktFile, offset)) {
                 resolver.delegateOperatorImportCandidates(prop).forEach(::offer)
             }
+        }
+        // For a call-argument mismatch, offer the importable same-named callables of the ENCLOSING call's callee
+        // (an unimported extension overload that would fit). An ordinary non-call mismatch (`val x: Int = "s"`)
+        // has no callee name → nothing offered; a callee with no importable same-named overload → no candidates.
+        for (d in callMismatches) {
+            val el = parsed.ktFile.findElementAt(d.range.start) ?: continue
+            val call = PsiTreeUtil.getParentOfType(el, KtCallExpression::class.java) ?: continue
+            val calleeName =
+                (call.calleeExpression as? KtNameReferenceExpression)?.getReferencedName() ?: continue
+            service.importCandidates(calleeName).forEach(::offer)
         }
         return out.take(12)
     }

@@ -89,6 +89,25 @@ dependencies { bundledSerializationPlugin(libs.kotlin.serialization.compiler.plu
 val bundledParcelizePlugin: Configuration by configurations.creating { isTransitive = false }
 dependencies { bundledParcelizePlugin(libs.kotlin.parcelize.compiler.plugin.ide) }
 
+// Real androidx compose-foundation classes (LazyListScope + the `items` overloads + LazyColumn) for the
+// reproduction/regression test of the unimported-extension-overload gap (`items(list) { }` inside `LazyColumn`,
+// which the compiler rejects but the editor accepted). Extracted from the AAR, NON-transitive (only foundation's
+// own classes are decoded). The test self-gates (assumeTrue) when it isn't resolvable, so a stripped/offline CI
+// classpath just skips it.
+val composeFoundationAar: Configuration by configurations.creating {
+    isCanBeConsumed = false
+    isCanBeResolved = true
+    isTransitive = false
+}
+dependencies { composeFoundationAar("androidx.compose.foundation:foundation-android:1.7.5@aar") }
+
+val composeFoundationJar = layout.buildDirectory.file("compose-foundation/foundation-classes.jar")
+val extractComposeFoundationClasses = tasks.register<Copy>("extractComposeFoundationClasses") {
+    from(composeFoundationAar.elements.map { set -> zipTree(set.single().asFile) }) { include("classes.jar") }
+    rename { "foundation-classes.jar" }
+    into(composeFoundationJar.get().asFile.parentFile)
+}
+
 tasks.processResources {
     from(bundledStdlib) { rename { "kotlin-stdlib.jar" } }
     from(bundledComposePlugin) { rename { "kotlin-compose-compiler-plugin.jar" } }
@@ -112,4 +131,7 @@ tasks.named<org.jetbrains.kotlin.gradle.tasks.KotlinCompile>("compileTestKotlin"
 tasks.named<Test>("test") {
     maxHeapSize = "3g"
     setForkEvery(1)
+    // Point the real-foundation reproduction/regression test at the extracted classes.jar (self-gates if absent).
+    dependsOn(extractComposeFoundationClasses)
+    systemProperty("compose.foundation.classes.jar", composeFoundationJar.get().asFile.absolutePath)
 }

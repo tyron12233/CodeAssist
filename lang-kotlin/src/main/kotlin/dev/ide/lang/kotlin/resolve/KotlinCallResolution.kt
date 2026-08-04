@@ -134,7 +134,7 @@ internal fun KotlinResolver.computeCallee(call: KtCallExpression): KotlinSymbol?
                     call.textRange.startOffset,
                     name,
                     exactName = true
-                ).filter { it.name == name && it.kind == SymbolKind.METHOD }
+                ).filter { it.name == name && it.kind == SymbolKind.METHOD && (!it.isExtension || extensionInScope(it)) }
             }
     }
     // Prefer exact arity; then functions with MORE params than supplied args (defaulted params the caller
@@ -441,11 +441,15 @@ internal fun KotlinResolver.computeCallTargets(call: KtCallExpression): List<Kot
     val out = ArrayList<KotlinSymbol>()
     // The callee name is known, so push it down as the prefix (it filters to names starting with it, the
     // exact match included) — avoids scanning the whole top-level universe just to keep one name.
+    // Bare-call scope candidates: keep members and IN-SCOPE extensions only. A top-level extension that isn't
+    // imported (e.g. `androidx.compose.foundation.lazy.items` used bare inside `LazyColumn { }` without its
+    // import) is NOT a candidate for the compiler, so it must not be one here either — otherwise the call
+    // silently binds the unimported extension and the argument mismatch against the in-scope member is missed.
     out += scopeSymbolsAt(
         call.textRange.startOffset,
         name,
         exactName = true
-    ).filter { it.name == name && it.kind == SymbolKind.METHOD }
+    ).filter { it.name == name && it.kind == SymbolKind.METHOD && (!it.isExtension || extensionInScope(it)) }
     // A capitalized callee is a constructor call (`Foo(…)`): its parameters come from the type's constructors.
     if (name.firstOrNull()?.isUpperCase() == true) {
         service.resolveTypeName(name, fileContext)?.let { fqn ->
