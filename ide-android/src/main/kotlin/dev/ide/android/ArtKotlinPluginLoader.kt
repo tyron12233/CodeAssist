@@ -1,6 +1,7 @@
 package dev.ide.android
 
 import dalvik.system.DexClassLoader
+import dev.ide.android.support.tools.ArtReflectionRewrite
 import dev.ide.android.support.tools.D8InProcessDexer
 import dev.ide.lang.kotlin.compile.KotlinPluginLoader
 import java.nio.file.Files
@@ -35,11 +36,24 @@ class ArtKotlinPluginLoader(
         val cacheDir = cacheRoot.resolve(hash(jars))
         val pluginJar = cacheDir.resolve("plugin.jar")
         if (!Files.isRegularFile(pluginJar)) {
-            val dexDir = cacheDir.resolve("dex")
-            Files.createDirectories(dexDir)
-            val r = D8InProcessDexer().dex(jars, androidJar, minApi, release = false, outDir = dexDir, threads = 0, desugaredLibConfig = null)
-            check(r.success) { "failed to dex compiler-plugin classpath: ${r.log.joinToString("\n")}" }
-            packageDex(dexDir, pluginJar)
+            Files.createDirectories(cacheDir)
+            // ART lacks a few JDK-9 reflection methods (AccessibleObject.trySetAccessible) that processor bytecode
+            // calls — androidx.room's XProcessing hits it and crashes Room's KSP processor on device. Patch them
+            // out before dexing so the DexClassLoader'd code doesn't NoSuchMethodError. The rewrite is deterministic
+            // in `jars`, so the dex the `hash(jars)` cache stores stays valid; the patched jars are throwaway
+            // (only D8 reads them), so they go to a UNIQUE temp dir — two concurrent loads of the same classpath
+            // (parallel module compiles) must not write the same patched-jar path, the race packageDex also guards.
+            val artSafe = Files.createTempDirectory(cacheDir, "art-safe-")
+            try {
+                val patched = ArtReflectionRewrite.patch(jars, artSafe)
+                val dexDir = cacheDir.resolve("dex")
+                Files.createDirectories(dexDir)
+                val r = D8InProcessDexer().dex(patched, androidJar, minApi, release = false, outDir = dexDir, threads = 0, desugaredLibConfig = null)
+                check(r.success) { "failed to dex compiler-plugin classpath: ${r.log.joinToString("\n")}" }
+                packageDex(dexDir, pluginJar)
+            } finally {
+                runCatching { artSafe.toFile().deleteRecursively() }
+            }
         }
         // optimizedDirectory is deprecated but must NOT be null: on API 26 `DexClassLoader.<init>` still does
         // `new File(optimizedDirectory)`, which NPEs on null (surfaced by KspArtSpikeTest — the first thing to
