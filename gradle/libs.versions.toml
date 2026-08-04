@@ -25,7 +25,11 @@ asm = "9.7"           # org.ow2.asm — bytecode rewrite of System.exit for the 
 trove4j = "1.0.20200330"  # gnu.trove.* — IntelliJ-core dependency the Kotlin compiler needs but doesn't bundle
 desugarJdkLibs = "2.1.5"  # com.android.tools:desugar_jdk_libs — core-library desugaring (temporarily enabled)
 bouncycastle = "1.78.1"   # org.bouncycastle — in-process keystore creation (keypair + self-signed X.509) on ART (no keytool)
-playServicesAds = "23.6.0"  # com.google.android.gms:play-services-ads — AdMob native ads (Android launcher only)
+playServicesAds = "25.4.0"  # com.google.android.gms:play-services-ads — AdMob native ads + mediation (Android launcher only). 25.4.0 is the floor the current native-capable mediation adapters require.
+userMessagingPlatform = "4.0.0"        # com.google.android.ump — UMP/GDPR consent SDK; gathers consent before MobileAds.initialize (mediation prerequisite, EEA/UK)
+admobMediationMeta = "6.22.0.0"        # com.google.ads.mediation:facebook — Meta Audience Network adapter (native-capable)
+admobMediationPangle = "8.2.0.4.0"     # com.google.ads.mediation:pangle — Pangle adapter (native-capable)
+admobMediationMintegral = "17.1.71.0"  # com.google.ads.mediation:mintegral — Mintegral adapter (native-capable)
 androidStub = "4.1.1.4"     # com.google.android:android — the throwaway stub android.jar (compileOnly) :applog-runtime compiles against
 okhttp = "4.12.0"           # com.squareup.okhttp3 — HTTP + SSE transport for the agent's LLM client (:agent-impl); runs on JVM and ART
 cfr = "0.152"               # org.benf:cfr — single-jar Java decompiler for the "navigate into library class" view (:decompiler). Chosen over Fernflower/Vineflower because those NPE on ART (their plugin loader calls Class.getProtectionDomain(), null on Android); CFR is self-contained and runs on-device.
@@ -126,6 +130,14 @@ bouncycastle-prov = { module = "org.bouncycastle:bcprov-jdk18on", version.ref = 
 # AdMob native ads, Android launcher only (:ide-android). Ads are rendered through the AdHost seam; no other
 # module links this. Test ad unit IDs are used until real ones are provided.
 play-services-ads = { module = "com.google.android.gms:play-services-ads", version.ref = "playServicesAds" }
+# UMP consent SDK + AdMob mediation adapters (Android launcher only). The adapters let Meta/Pangle/Mintegral
+# BID to fill the SAME native ad slots AdMob already serves — higher eCPM through network competition, no new
+# ad placements. Only NATIVE-capable networks are wired (AppLovin removed native inventory, so it would fill
+# nothing here). Each adapter drags its network SDK in transitively and requires play-services-ads >= 25.4.0.
+user-messaging-platform = { module = "com.google.android.ump:user-messaging-platform", version.ref = "userMessagingPlatform" }
+admob-mediation-meta = { module = "com.google.ads.mediation:facebook", version.ref = "admobMediationMeta" }
+admob-mediation-pangle = { module = "com.google.ads.mediation:pangle", version.ref = "admobMediationPangle" }
+admob-mediation-mintegral = { module = "com.google.ads.mediation:mintegral", version.ref = "admobMediationMintegral" }
 # The stub android.jar (every method throws "Stub!"): compileOnly for :applog-runtime, whose tiny debug
 # log-bridge (ContentProvider + LocalSocket forwarder) is compiled against the framework APIs but never links
 # them (they resolve against the real android.jar when the runtime jar is dexed into a user's app). Ancient

@@ -33,6 +33,15 @@ class AdController(
     /** Whether to show the ad on/off control (only where an ad network exists — i.e. Android, not desktop). */
     val manageable: Boolean get() = host.available
 
+    /**
+     * Whether to surface a persistent "Manage ad consent" entry (UMP privacy options, EEA/UK). Reads the host's
+     * observable consent state, so a screen that reads this inside composition recomposes once consent resolves.
+     */
+    val privacyOptionsRequired: Boolean get() = host.privacyOptionsRequired
+
+    /** Open the host's ad consent / privacy-options form. Call only when [privacyOptionsRequired]. */
+    fun showPrivacyOptions() = host.showPrivacyOptions()
+
     /** Turn ads on/off for free and persist the choice. */
     fun updateAdsEnabled(enabled: Boolean) {
         adsEnabled = enabled

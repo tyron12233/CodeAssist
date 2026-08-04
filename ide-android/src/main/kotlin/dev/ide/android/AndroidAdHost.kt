@@ -57,8 +57,16 @@ private val webViewAvailable: Boolean by lazy {
  */
 class AndroidAdHost(
     private val openUrl: (String) -> Unit,
+    /** Reads the host's observable UMP privacy-options requirement (see [AdConsentManager]); false by default. */
+    private val privacyOptionsRequiredProvider: () -> Boolean = { false },
+    /** Opens the UMP privacy-options form (needs the foreground Activity — supplied by the caller). */
+    private val onShowPrivacyOptions: () -> Unit = {},
 ) : AdHost {
     override val available: Boolean = true
+
+    override val privacyOptionsRequired: Boolean get() = privacyOptionsRequiredProvider()
+
+    override fun showPrivacyOptions() = onShowPrivacyOptions()
 
     @Composable
     override fun NativeAd(placement: AdPlacement, modifier: Modifier) {

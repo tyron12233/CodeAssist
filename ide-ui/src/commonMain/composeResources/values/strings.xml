@@ -95,6 +95,9 @@ We never collect your code, file or project names, which features you use, or an
     <string name="support_star">Star on GitHub</string>
     <string name="support_show_ads">Show ads</string>
     <string name="support_show_ads_desc">Show ads in the app. You can turn them off at any time.</string>
+    <string name="support_ad_privacy">Manage ad consent</string>
+    <string name="support_ad_privacy_desc">Review or change your ad privacy choices.</string>
+    <string name="support_ad_privacy_button">Manage</string>
     <string name="ad_label">Ad</string>
     <string name="house_ad_support_title">Enjoying CodeAssist?</string>
     <string name="house_ad_support_content">Support the project on GitHub Sponsors.</string>

@@ -43,11 +43,16 @@ class MainActivity : ComponentActivity() {
     /** Android file/SAF/FileProvider plumbing (byte-level import / share / export / install / reveal). */
     private val fileOps by lazy { AndroidFileOps(this) }
 
+    /** UMP consent flow (gathers ad consent before AdMob init; drives the "Manage ad consent" Settings entry). */
+    private val adConsent by lazy { AdConsentManager(this) }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         enableEdgeToEdge(statusBarStyle = SystemBarStyle.dark(0xfff))
         super.onCreate(savedInstanceState)
         inbound.value = extractStream(intent)
-        initAds(this)
+        // Gather UMP consent BEFORE initializing the Ads SDK (mediation + EEA/UK requirement); only initialize
+        // once consent allows ad requests. Failure resolves too, so a consent hiccup never blocks the IDE.
+        adConsent.gather(this) { if (adConsent.canRequestAds) initAds(applicationContext) }
 
         setContent {
             var backend by remember { mutableStateOf<IdeBackend?>(null) }
@@ -140,8 +145,15 @@ class MainActivity : ComponentActivity() {
                 }
             }
 
-            // Android advertising bridge (native ads + "remove ads" flow). Phase 1 = house ads + donation link.
-            val adHost = remember { AndroidAdHost { url -> fileOps.openInBrowser(url) } }
+            // Android advertising bridge (native ads via AdMob + mediation). The consent hooks drive the
+            // Settings "Manage ad consent" entry (UMP privacy options) and reopen the form on request.
+            val adHost = remember {
+                AndroidAdHost(
+                    openUrl = { url -> fileOps.openInBrowser(url) },
+                    privacyOptionsRequiredProvider = { adConsent.privacyOptionsRequired },
+                    onShowPrivacyOptions = { adConsent.showPrivacyOptions(this@MainActivity) },
+                )
+            }
 
             // A `.caproj` package handed in via "Open with" opens the import preview (see the branch below); any
             // other inbound file is copied into the open project's first source root as before.

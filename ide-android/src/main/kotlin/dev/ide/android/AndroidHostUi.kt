@@ -30,10 +30,12 @@ import dev.ide.ui.backend.TreeNode
  */
 
 /**
- * Initialize the AdMob SDK once (idempotent, async). Ads only render if the user hasn't turned them off /
- * isn't a supporter; the app-id is declared in the manifest. Guarded: `play-services-ads` reads the WebView
- * user-agent during `initialize()`, which throws on an image with no WebView — ads are optional, so a failed
- * init must never take down the IDE.
+ * Initialize the AdMob SDK once (idempotent, async). Called AFTER the UMP consent flow resolves and only when
+ * consent allows ad requests (see [AdConsentManager] / [MainActivity]). Registering the SDK here also brings up
+ * the mediation adapters (Meta/Pangle/Mintegral) — the logged `adapterStatusMap` is how you verify each one
+ * initialized. Ads only render if the user hasn't turned them off; the app-id is declared in the manifest.
+ * Guarded: `play-services-ads` reads the WebView user-agent during `initialize()`, which throws on an image with
+ * no WebView — ads are optional, so a failed init must never take down the IDE.
  */
 internal fun initAds(context: Context) {
     runCatching {

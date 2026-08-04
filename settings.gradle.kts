@@ -38,6 +38,16 @@ dependencyResolutionManagement {
                 includeModule("org.jetbrains.kotlinx", "kotlinx-coroutines-core-jvm") // JB coroutines fork
             }
         }
+        // AdMob mediation (:ide-android only). The Google-Maven adapter artifacts (com.google.ads.mediation:*)
+        // pull each network's underlying SDK, and Pangle/Mintegral host theirs in their OWN Maven repos (not on
+        // Maven Central or Google Maven — per Google's mediation setup docs). Scoped by group so normal
+        // resolution never consults them. (Meta's SDK IS on Maven Central, so it needs no extra repo.)
+        maven("https://artifact.bytedance.com/repository/pangle") {
+            content { includeGroupByRegex("com\\.pangle\\..*") }
+        }
+        maven("https://dl-maven-android.mintegral.com/repository/mbridge_android_sdk_oversea") {
+            content { includeGroupByRegex("com\\.mbridge\\..*") }
+        }
     }
 }
 

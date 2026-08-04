@@ -78,6 +78,9 @@ import dev.ide.ui.generated.resources.set_sev_info
 import dev.ide.ui.generated.resources.set_sev_warning
 import dev.ide.ui.generated.resources.support_show_ads
 import dev.ide.ui.generated.resources.support_show_ads_desc
+import dev.ide.ui.generated.resources.support_ad_privacy
+import dev.ide.ui.generated.resources.support_ad_privacy_desc
+import dev.ide.ui.generated.resources.support_ad_privacy_button
 import dev.ide.ui.icons.CaIcons
 import dev.ide.ui.platform.rememberNotificationPermissionController
 import dev.ide.ui.theme.Ca
@@ -99,6 +102,9 @@ private const val ACTION_BUILD_NOTIFICATIONS = "buildNotifications"
  *  backend doesn't know about. [PRIVACY_PAGE_ID] mirrors `BuiltInSettingsPages.PRIVACY`. */
 private const val PRIVACY_PAGE_ID = "privacy"
 private const val SHOW_ADS_KEY = "showAds"
+/** The "Manage ad consent" action injected onto the Privacy page when the host's UMP flow requires a privacy-
+ *  options entry point (EEA/UK). Routed to [dev.ide.ui.ads.AdController.showPrivacyOptions], not the store. */
+private const val AD_PRIVACY_KEY = "adPrivacyOptions"
 
 /**
  * The Settings screen. Pages come from [IdeBackend.settingsPages] — built-in categories plus any a plugin
@@ -134,7 +140,13 @@ fun SettingsScreen(
     val ads = LocalAds.current
     val showAdsTitle = stringResource(Res.string.support_show_ads)
     val showAdsDesc = stringResource(Res.string.support_show_ads_desc)
-    val pages = remember(view, structuralRefresh, ads?.manageable, showAdsTitle, showAdsDesc) {
+    val adPrivacyTitle = stringResource(Res.string.support_ad_privacy)
+    val adPrivacyDesc = stringResource(Res.string.support_ad_privacy_desc)
+    val adPrivacyButton = stringResource(Res.string.support_ad_privacy_button)
+    // `ads?.privacyOptionsRequired` reads the host's observable consent state, so once UMP resolves and a
+    // privacy-options entry becomes required, this recomputes and the "Manage ad consent" action appears.
+    val privacyOptionsRequired = ads?.privacyOptionsRequired == true
+    val pages = remember(view, structuralRefresh, ads?.manageable, privacyOptionsRequired, showAdsTitle, showAdsDesc, adPrivacyTitle) {
         val base = backend.settings.settingsPages().filter {
             when (view) {
                 SettingsView.All -> true
@@ -144,7 +156,16 @@ fun SettingsScreen(
         if (ads?.manageable != true) base
         else base.map { page ->
             if (page.id != PRIVACY_PAGE_ID) page
-            else page.copy(controls = listOf(UiSettingControl.Toggle(SHOW_ADS_KEY, showAdsTitle, showAdsDesc, ads.adsEnabled)) + page.controls)
+            else {
+                val injected = buildList {
+                    add(UiSettingControl.Toggle(SHOW_ADS_KEY, showAdsTitle, showAdsDesc, ads.adsEnabled))
+                    // Only shown where the host's consent flow requires a privacy-options entry point (EEA/UK).
+                    if (privacyOptionsRequired) {
+                        add(UiSettingControl.Action(AD_PRIVACY_KEY, adPrivacyTitle, adPrivacyDesc, buttonLabel = adPrivacyButton))
+                    }
+                }
+                page.copy(controls = injected + page.controls)
+            }
         }
     }
     // Local mirror of each control's value (keyed "pageId.controlKey"), seeded from the descriptors. Controls
@@ -174,6 +195,8 @@ fun SettingsScreen(
     }
     val onAction: (String, UiSettingControl.Action) -> Unit = { pageId, action ->
         when (action.key) {
+            // The injected "Manage ad consent" action: reopen the host's UMP privacy-options form.
+            AD_PRIVACY_KEY -> ads?.showPrivacyOptions()
             ACTION_VIEW_LOGS -> onOpenLogs()
             ACTION_BACKUP -> scope.launch { backend.projects.backupProjects()?.let { fileActions.share(it) }; toast = backupReadyMsg }
             // Re-request the notification permission; if the OS won't re-prompt (permanently denied), route to

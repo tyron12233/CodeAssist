@@ -46,6 +46,21 @@ interface AdHost {
     val available: Boolean
 
     /**
+     * Whether the host must surface a persistent "ad privacy options" entry point. Under Google's UMP/consent
+     * flow this is true only when a privacy-options form is required (EEA/UK users who can revisit their choice);
+     * false everywhere else (desktop, non-consent regions, before consent info has loaded). The shared Settings
+     * screen reads this to decide whether to show a "Manage ad consent" action next to the Show-ads toggle.
+     * Backed by observable state on hosts that support it, so it recomposes once consent info resolves.
+     */
+    val privacyOptionsRequired: Boolean get() = false
+
+    /**
+     * Open the host's consent / privacy-options form so the user can review or change their ad-consent choice
+     * (UMP `showPrivacyOptionsForm`). Called only when [privacyOptionsRequired] is true. No-op where unsupported.
+     */
+    fun showPrivacyOptions() {}
+
+    /**
      * Render a native ad for [placement] within the caller-provided [modifier] bounds. Called only when ads
      * are active (see [dev.ide.ui.ads.AdController]); the host loads/caches the ad and paints it to match the
      * app. A host with no ad ready may render nothing — the surrounding [dev.ide.ui.components.AdSlot] then

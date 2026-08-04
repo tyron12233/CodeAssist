@@ -921,6 +921,23 @@ dependencies {
     implementation(libs.play.services.ads) {
         exclude(group = "com.google.protobuf", module = "protobuf-javalite")
     }
+    // UMP/GDPR consent (User Messaging Platform). Gathered on launch BEFORE MobileAds.initialize, so EEA/UK
+    // users see a certified consent form and personalized-ad fill isn't blocked. See AdConsentManager.
+    implementation(libs.user.messaging.platform)
+    // AdMob mediation adapters — Meta / Pangle / Mintegral bid against AdMob to fill the same NATIVE slots
+    // (higher eCPM via competition; no new placements). Only native-capable networks are wired. Each pulls its
+    // network SDK transitively; the same protobuf-lite dup-class rule as the ads SDK applies, and their SDKs may
+    // add further transitive collisions that only surface at dex time — so a full assemble must be re-verified
+    // when bumping these. Console-side mediation groups + per-network onboarding are configured in AdMob.
+    implementation(libs.admob.mediation.meta) {
+        exclude(group = "com.google.protobuf", module = "protobuf-javalite")
+    }
+    implementation(libs.admob.mediation.pangle) {
+        exclude(group = "com.google.protobuf", module = "protobuf-javalite")
+    }
+    implementation(libs.admob.mediation.mintegral) {
+        exclude(group = "com.google.protobuf", module = "protobuf-javalite")
+    }
     // FileProvider (androidx.core.content.FileProvider) — hands other apps content:// URIs to our
     // app-private project files for Share / "Open with", and grants read access on inbound intents.
     implementation(libs.androidx.core)
