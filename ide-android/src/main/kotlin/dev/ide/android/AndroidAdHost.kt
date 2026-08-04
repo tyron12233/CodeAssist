@@ -21,6 +21,7 @@ import com.google.android.gms.ads.AdListener
 import com.google.android.gms.ads.AdLoader
 import com.google.android.gms.ads.AdRequest
 import com.google.android.gms.ads.LoadAdError
+import com.google.android.gms.ads.nativead.MediaView
 import com.google.android.gms.ads.nativead.NativeAd
 import com.google.android.gms.ads.nativead.NativeAdView
 import dev.ide.platform.log.Log
@@ -122,7 +123,7 @@ class AndroidAdHost(
             val accent = Ca.colors.accent.toArgb()
             AndroidView(
                 modifier = modifier,
-                factory = ::buildNativeAdView,
+                factory = { ctx -> buildNativeAdView(ctx, mediaHeightDp(placement)) },
                 update = { view -> bindNativeAd(view, loaded, textPrimary, textSecondary, accent) },
             )
         }
@@ -137,17 +138,33 @@ private fun Context.dp(value: Int): Int =
     TypedValue.applyDimension(TypedValue.COMPLEX_UNIT_DIP, value.toFloat(), resources.displayMetrics).toInt()
 
 /**
- * A compact native-ad layout (icon · headline + body · CTA) inside a [NativeAdView]. The outer card chrome
- * (border, "Ad" pill, "Remove ads") is supplied by the shared [dev.ide.ui.components.NativeAdCard], so this is
- * only the ad assets. A production layout may also want a MediaView + advertiser/store/price for full asset
- * coverage and policy compliance.
+ * Main-media height (in dp) per placement. The card-style feed slots (Store/Projects/Learn/Settings/…) get a
+ * full 140dp media area; the compact footer slots ([AdPlacement.BUILD_CONSOLE], [AdPlacement.SIDEBAR]) get a
+ * short strip so the ad stays unobtrusive there. The MediaView is still registered everywhere — mediated
+ * creatives and the "MediaView not used" policy check both need it — only its height varies.
  */
-private fun buildNativeAdView(context: Context): NativeAdView {
-    val pad = context.dp(0)
+private fun mediaHeightDp(placement: AdPlacement): Int = when (placement) {
+    AdPlacement.BUILD_CONSOLE, AdPlacement.SIDEBAR -> 72
+    else -> 140
+}
+
+/**
+ * A native-ad layout (icon · headline + body · CTA, with the main image/video below) inside a [NativeAdView].
+ * The outer card chrome (border, "Ad" pill) is supplied by the shared [dev.ide.ui.components.NativeAdCard], so
+ * this is only the ad assets. The main creative is rendered through a [MediaView]: AdMob doesn't allow a plain
+ * ImageView for the main image/video, and mediated networks (Meta/Pangle/Mintegral) expose their creative ONLY
+ * via MediaContent — so a MediaView is required both for those ads to show at all and to satisfy the policy
+ * check ("MediaView not used for main image or video asset").
+ */
+private fun buildNativeAdView(context: Context, mediaHeightDp: Int): NativeAdView {
+    val column = LinearLayout(context).apply {
+        orientation = LinearLayout.VERTICAL
+        layoutParams = ViewGroup.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT)
+    }
     val row = LinearLayout(context).apply {
         orientation = LinearLayout.HORIZONTAL
         gravity = android.view.Gravity.CENTER_VERTICAL
-        layoutParams = ViewGroup.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT)
+        layoutParams = LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT)
     }
 
     val icon = ImageView(context).apply {
@@ -190,14 +207,27 @@ private fun buildNativeAdView(context: Context): NativeAdView {
     row.addView(textColumn)
     row.addView(cta)
 
+    // The main image / video asset, rendered through a MediaView (required — see the layout doc above). Hidden
+    // per-ad in bindNativeAd when a creative carries no media, so a text-only ad doesn't leave an empty box.
+    val media = MediaView(context).apply {
+        id = ID_MEDIA
+        layoutParams = LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, context.dp(mediaHeightDp)).apply {
+            topMargin = context.dp(10)
+        }
+        setImageScaleType(ImageView.ScaleType.CENTER_CROP)
+    }
+
+    column.addView(row)
+    column.addView(media)
+
     return NativeAdView(context).apply {
         layoutParams = ViewGroup.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT)
-        setPadding(pad, pad, pad, pad)
-        addView(row)
+        addView(column)
         iconView = icon
         headlineView = headline
         bodyView = body
         callToActionView = cta
+        mediaView = media
     }
 }
 
@@ -225,6 +255,18 @@ private fun bindNativeAd(view: NativeAdView, ad: NativeAd, textPrimary: Int, tex
         }
         visibility = if (ad.callToAction.isNullOrEmpty()) android.view.View.GONE else android.view.View.VISIBLE
     }
+    // Main media: drive the MediaView from the ad's MediaContent (handles both static image and video). Show it
+    // only when there's an actual creative, so text-only ads don't reserve an empty box. Registering the
+    // MediaView on the NativeAdView (in the factory) is what clears the "MediaView not used" policy warning.
+    view.mediaView?.let { media ->
+        val mediaContent = ad.mediaContent
+        if (mediaContent != null && (mediaContent.hasVideoContent() || mediaContent.mainImage != null)) {
+            media.mediaContent = mediaContent
+            media.visibility = android.view.View.VISIBLE
+        } else {
+            media.visibility = android.view.View.GONE
+        }
+    }
     view.setNativeAd(ad)
 }
 
@@ -232,3 +274,4 @@ private const val ID_ICON = 0x7f_00_00_01
 private const val ID_HEADLINE = 0x7f_00_00_02
 private const val ID_BODY = 0x7f_00_00_03
 private const val ID_CTA = 0x7f_00_00_04
+private const val ID_MEDIA = 0x7f_00_00_05
