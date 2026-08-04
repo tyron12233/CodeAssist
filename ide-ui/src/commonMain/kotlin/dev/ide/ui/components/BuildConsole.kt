@@ -627,15 +627,18 @@ private fun ProblemsTab(diagnostics: List<BuildDiagnosticUi>, onOpen: (BuildDiag
             // Selectable so a problem message / captured snippet can be lifted out by hand; the header's
             // Copy button grabs the whole set. Row taps still jump to file:line (tap = click, long-press /
             // drag = select).
-            SelectionContainer(Modifier.weight(1f).fillMaxWidth()) {
-                LazyColumn(
-                    Modifier.fillMaxSize(),
-                    verticalArrangement = Arrangement.spacedBy(2.dp)
-                ) {
-                    for ((file, items) in groups) {
-                        if (file.isNotEmpty()) item { ProblemFileHeader(file, items.size) }
-                        items(items) { d -> ProblemRow(d, indented = file.isNotEmpty(), onOpen) }
-                    }
+            // Selection is scoped PER ROW (each item wraps its own SelectionContainer) rather than one
+            // container around the LazyColumn: a selected row that scrolls out of view is disposed and
+            // unregistered, after which the outer SelectionManager dereferences its stale selectable id and
+            // throws NoSuchElementException in getSelectionLayout (a top on-device crash). Per-item selection
+            // ties the selectable to the item's own composition lifecycle, so there is never a stale id.
+            LazyColumn(
+                Modifier.weight(1f).fillMaxWidth(),
+                verticalArrangement = Arrangement.spacedBy(2.dp)
+            ) {
+                for ((file, items) in groups) {
+                    if (file.isNotEmpty()) item { SelectionContainer { ProblemFileHeader(file, items.size) } }
+                    items(items) { d -> SelectionContainer { ProblemRow(d, indented = file.isNotEmpty(), onOpen) } }
                 }
             }
         }
@@ -870,9 +873,12 @@ private fun LogColumn(
     reveal: (() -> Float)?,
     slotPx: Float,
 ) {
-    SelectionContainer {
-        LazyColumn(state = listState, modifier = Modifier.fillMaxSize()) {
-            itemsIndexed(items) { _, item ->
+    // Per-row SelectionContainer (not one around the LazyColumn): a selected line disposed by auto-tail
+    // scrolling would otherwise leave the outer SelectionManager with a stale selectable id -> NoSuchElement
+    // crash. Whole-log copy is the tab's Copy button.
+    LazyColumn(state = listState, modifier = Modifier.fillMaxSize()) {
+        itemsIndexed(items) { _, item ->
+            SelectionContainer {
                 when (item) {
                     is LogDisplay.Header -> LogGroupHeader(
                         item.task,
@@ -1079,10 +1085,10 @@ private fun LogcatList(lines: List<AppLogLineUi>, connected: Boolean) {
     }
     // Android-Studio Logcat behavior: soft-wrap OFF. Each entry stays on ONE line; a long line extends to the
     // right and the whole list scrolls horizontally (swipe sideways) instead of wrapping onto extra rows.
-    SelectionContainer {
-        LazyColumn(state = listState, modifier = Modifier.fillMaxSize().horizontalScroll(hScroll)) {
-            items(lines) { LogcatRow(it) }
-        }
+    // Per-row selection (see LogColumn): auto-tailing disposes selected rows, so an outer SelectionContainer
+    // would throw NoSuchElement from a stale selectable id. Whole-log copy is the tab's Copy button.
+    LazyColumn(state = listState, modifier = Modifier.fillMaxSize().horizontalScroll(hScroll)) {
+        items(lines) { SelectionContainer { LogcatRow(it) } }
     }
 }
 
@@ -1149,10 +1155,10 @@ private fun StepsTab(steps: List<BuildStepUi>) {
         EmptyState(stringResource(Res.string.buildc_no_steps), Modifier.fillMaxSize())
         return
     }
-    SelectionContainer(Modifier.fillMaxSize()) {
-        LazyColumn(Modifier.fillMaxSize(), verticalArrangement = Arrangement.spacedBy(2.dp)) {
-            items(steps) { StepRow(it) }
-        }
+    // Per-row selection (see LogColumn): keeps a scrolled-off selected step from crashing the outer
+    // SelectionManager with a stale selectable id. Whole-list copy is the tab's Copy button.
+    LazyColumn(Modifier.fillMaxSize(), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+        items(steps) { SelectionContainer { StepRow(it) } }
     }
 }
 
