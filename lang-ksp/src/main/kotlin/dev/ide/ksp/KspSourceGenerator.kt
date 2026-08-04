@@ -108,8 +108,18 @@ class KspSourceGenerator(
         return runCatching { runKsp(cl, config, providers, logger) }
             .fold(
                 onSuccess = { ok ->
-                    if (ok) SourceGenResult(true, messages)
-                    else SourceGenResult(false, messages.ifEmpty { listOf("ksp: processing failed for ${request.moduleName}") })
+                    // A logged error must FAIL generateSources even when KSP's exit code came back OK: KSP2's
+                    // `execute()` does not reliably turn a processor's `logger.error(...)` into a non-OK ExitCode,
+                    // so a run can "succeed" while a processor (Room reporting a schema/DAO/query error) actually
+                    // aborted its code generation. Continuing then compiles against incomplete generated sources
+                    // and surfaces a confusing downstream error (a missing generated class) instead of the real
+                    // cause — so hard-stop here on any reported error, with the error lines as the failure reason.
+                    if (ok && logger.errorCount > 0) {
+                        val summary = "ksp: ${logger.errorCount} error(s) reported; failing source generation for ${request.moduleName}"
+                        messages += summary
+                        log(summary)
+                    }
+                    kspOutcome(ok, logger.errorCount, messages, request.moduleName)
                 },
                 onFailure = { e ->
                     // KSP is invoked reflectively, so a crash arrives wrapped in InvocationTargetException whose
@@ -218,12 +228,18 @@ class KspSourceGenerator(
      *  but normalize here too so older runners and cache keys stay clean. */
     private fun sanitizeModuleName(name: String): String = name.replace(':', '_')
 
-    private class CollectingLogger(private val emit: (String) -> Unit) : KSPLogger {
+    /** Collects KSP diagnostics AND counts errors: a processor error/exception must fail source generation even
+     *  when KSP's exit code is OK (see the [generate] `onSuccess` branch). */
+    internal class CollectingLogger(private val emit: (String) -> Unit) : KSPLogger {
+        /** Number of `error`/`exception` diagnostics reported by the processors so far. */
+        var errorCount = 0
+            private set
+
         override fun logging(message: String, symbol: KSNode?) { /* verbose; dropped */ }
         override fun info(message: String, symbol: KSNode?) = emit("ksp: $message")
         override fun warn(message: String, symbol: KSNode?) = emit("ksp warning: $message")
-        override fun error(message: String, symbol: KSNode?) = emit("ksp error: $message")
-        override fun exception(e: Throwable) = emit("ksp exception: ${e.message}")
+        override fun error(message: String, symbol: KSNode?) { errorCount++; emit("ksp error: $message") }
+        override fun exception(e: Throwable) { errorCount++; emit("ksp exception: ${e.message}") }
     }
 
     private companion object {
@@ -233,6 +249,17 @@ class KspSourceGenerator(
         const val MAX_TRACE_LINES = 60
     }
 }
+
+/**
+ * Decide a KSP run's [SourceGenResult] from its reflective exit ([exitOk]) and the number of errors its
+ * processors logged ([errorCount]). The run SUCCEEDS only when KSP exited OK AND no error was reported —
+ * KSP2 can return OK despite a processor logging an error, and a logged error means the generated sources are
+ * incomplete, so it must fail the build. On failure the collected [messages] (which already carry the
+ * `ksp error:` lines) are the reason; an empty message list falls back to a generic note for [moduleName].
+ */
+internal fun kspOutcome(exitOk: Boolean, errorCount: Int, messages: List<String>, moduleName: String): SourceGenResult =
+    if (exitOk && errorCount == 0) SourceGenResult(true, messages)
+    else SourceGenResult(false, messages.ifEmpty { listOf("ksp: processing failed for $moduleName") })
 
 /**
  * Render [e] and its full cause chain to individual lines — a "Caused by" header per level, then each stack
