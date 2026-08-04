@@ -523,9 +523,24 @@ class KotlinSemanticHighlighter(
         // against the enclosing class's declared members colors it regardless. Runs AFTER the resolver lookup so
         // a nearer `apply`/`with` receiver member still wins.
         enclosingClassMemberProperty(name, ref)?.let { isVar ->
+            emit(ref.textRange, HighlightKind.PROPERTY, mutability(isVar)); return
+        }
+        // A bare read of a SAME-FILE TOP-LEVEL property — the Compose ImageVector backing-property pattern, where
+        // `val edit`'s getter reads/writes a `private var _edit` declared BELOW it. Top-level declarations are
+        // order-independent (unlike a local, which [localOrParamDecl] matches only before the offset), so this
+        // matches regardless of declaration order. Runs last, so a nearer local / receiver / class member wins.
+        topLevelPropertyInFile(name, ref)?.let { isVar ->
             emit(ref.textRange, HighlightKind.PROPERTY, mutability(isVar))
         }
     }
+
+    /** Whether [name] is a SAME-FILE top-level property (order-independent), returning its mutability (`var` →
+     *  true), or null if none. Pure PSI: colors a same-file top-level property read that the local / implicit-
+     *  receiver / enclosing-class lookups don't cover (e.g. a `_edit` backing property used above its own decl). */
+    private fun topLevelPropertyInFile(name: String, from: PsiElement): Boolean? =
+        (from.containingFile as? org.jetbrains.kotlin.psi.KtFile)?.declarations
+            ?.filterIsInstance<KtProperty>()
+            ?.firstOrNull { it.name == name }?.isVar
 
     /** Whether [name] is a property of an enclosing class — a member `val`/`var`, a `val`/`var` primary-
      *  constructor param, or a property of an enclosing class's COMPANION object (companion members are bare-

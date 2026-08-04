@@ -55,6 +55,23 @@ class KotlinNavigationTest {
     }
 
     @Test
+    fun declarationJumpsToForwardTopLevelBackingProperty() {
+        // Caret on a `_edit` READ inside `edit`'s getter → jump to the top-level `_edit` declared BELOW it
+        // (the Compose ImageVector backing-property pattern; top-level decls are order-independent).
+        val code = "package demo\n" +
+            "val edit: Int\n" +
+            "  get() {\n" +
+            "    if (_e|dit != null) return _edit!!\n" +
+            "    return _edit!!\n" +
+            "  }\n" +
+            "private var _edit: Int? = null\n"
+        val clean = code.replace("|", "")
+        val targets = nav("Edit.kt", code, NavKind.DECLARATION)
+        assertTrue(targets.isNotEmpty(), "the forward top-level backing property must navigate; got $targets")
+        assertEquals(clean.indexOf("_edit: Int?"), targets[0].offset, "points at the `_edit` declaration")
+    }
+
+    @Test
     fun nothingResolvesToNoTargets() {
         val code = "package demo\nfun caller() { val x = 1|2 }"
         assertTrue(nav("Use5.kt", code, NavKind.DECLARATION).isEmpty(), "a numeric literal has no declaration")

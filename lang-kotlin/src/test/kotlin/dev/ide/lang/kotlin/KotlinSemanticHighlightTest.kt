@@ -388,6 +388,28 @@ class KotlinSemanticHighlightTest {
         )
     }
 
+    @Test
+    fun forwardTopLevelBackingPropertyIsColored() {
+        // The Compose ImageVector pattern: the `val edit` getter reads/writes a top-level `_edit` declared BELOW
+        // it. Top-level declarations are order-independent, so the `_edit` reads must color as a property (they
+        // were left uncolored because classifyReference had no same-file top-level-property branch).
+        val code = "val edit: Int\n" +
+            "  get() {\n" +
+            "    if (_edit != null) return _edit!!\n" +
+            "    _edit = 5\n" +
+            "    return _edit!!\n" +
+            "  }\n" +
+            "private var _edit: Int? = null\n"
+        val toks = tokens("Edit.kt", code)
+        // 5 occurrences of `_edit`: the declaration + 4 reads. All must color as a property (before the fix only
+        // the declaration was colored — the reads were left uncolored, so go-to-def also missed them).
+        val edits = toks.filter { it.text == "_edit" && it.kind == "property" }
+        assertTrue(
+            edits.size >= 5,
+            "all `_edit` reads must color as a property; only ${edits.size}/5 were (uses uncolored)",
+        )
+    }
+
     companion object {
         val srcDir: Path = tempProject(mapOf(
             "Seed.kt" to "package demo\n",
