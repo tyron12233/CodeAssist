@@ -21,7 +21,7 @@ local.properties
 keystore/
 keystore.properties
 
-# Antigravity OAuth client — injected into :agent-impl at build time, never commit
+# Local agent secrets — never commit
 agent.properties
 
 # Internal / agent working files — not part of the public project

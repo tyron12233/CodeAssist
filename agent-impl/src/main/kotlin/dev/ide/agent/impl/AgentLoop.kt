@@ -37,6 +37,8 @@ class AgentLoop(
     private val maxIterations: Int = 24,
     /** Provider reasoning-token cap forwarded to each request; null leaves the model default. */
     private val thinkingBudget: Int? = null,
+    /** Offer the provider's native web search each request (providers without one ignore it). */
+    private val webSearch: Boolean = false,
     /** Trims re-sent tool output so a long task does not re-bill the whole transcript each step. */
     private val compactor: HistoryCompactor = HistoryCompactor(),
 ) {
@@ -74,6 +76,7 @@ class AgentLoop(
                 maxTokens = maxTokens,
                 thinking = true,
                 thinkingBudget = thinkingBudget,
+                webSearch = webSearch,
             )
             val turn = Turn()
             client.chat(request).collect { event -> turn.consume(event, sink) }

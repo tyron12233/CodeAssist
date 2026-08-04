@@ -9,7 +9,6 @@ import dev.ide.agent.SimpleToolRegistry
 import dev.ide.agent.WriteRequest
 import dev.ide.agent.impl.AgentLoop
 import dev.ide.agent.impl.AgentProviders
-import dev.ide.agent.impl.AntigravityOAuth
 import dev.ide.agent.impl.OkHttpLlmTransport
 import dev.ide.agent.impl.SystemPrompt
 import dev.ide.agent.impl.builtinTools
@@ -25,8 +24,6 @@ import dev.ide.ui.backend.UiAgentProvider
 import dev.ide.ui.backend.UiAgentRole
 import dev.ide.ui.backend.UiAgentToolCall
 import dev.ide.ui.backend.UiAgentToolStatus
-import dev.ide.ui.backend.UiAntigravitySignIn
-import dev.ide.ui.backend.UiAntigravitySignInStatus
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
@@ -40,6 +37,7 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import java.util.concurrent.atomic.AtomicInteger
 import java.util.concurrent.atomic.AtomicLong
+import kotlin.io.path.readText
 
 /**
  * [AgentService] over the agent engine (agent-impl). Owns the chat transcript state, the per-session agent
@@ -51,7 +49,6 @@ internal class AgentBackend(private val ctx: BackendContext) : AgentService {
 
     private val transport = OkHttpLlmTransport()
     private val registry = AgentProviders.registry(transport)
-    private val oauth = AntigravityOAuth(transport)
     private val workspace = IdeAgentWorkspace(ctx)
     private val tools = SimpleToolRegistry(builtinTools(workspace))
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
@@ -64,11 +61,6 @@ internal class AgentBackend(private val ctx: BackendContext) : AgentService {
 
     private val _models = MutableStateFlow<List<UiAgentModel>>(emptyList())
     override val models: StateFlow<List<UiAgentModel>> = _models.asStateFlow()
-
-    private val _antigravitySignIn = MutableStateFlow(UiAntigravitySignIn())
-    override val antigravitySignIn: StateFlow<UiAntigravitySignIn> = _antigravitySignIn.asStateFlow()
-
-    private var signInJob: Job? = null
 
     private val permIds = AtomicInteger(0)
     private val msgIds = AtomicLong(0)
@@ -89,6 +81,8 @@ internal class AgentBackend(private val ctx: BackendContext) : AgentService {
         ctx.manager?.preference("settings.$AI_PAGE.$key")?.takeIf { it.isNotBlank() }
 
     private fun prefInt(key: String): Int? = pref(key)?.toIntOrNull()
+
+    private fun prefBool(key: String, default: Boolean): Boolean = pref(key)?.toBooleanStrictOrNull() ?: default
 
     private fun modePref(): PermissionMode =
         runCatching { PermissionMode.valueOf(ctx.manager?.preference(MODE_PREF).orEmpty()) }
@@ -132,7 +126,7 @@ internal class AgentBackend(private val ctx: BackendContext) : AgentService {
     private fun keyField(providerId: String): String = when (providerId) {
         "openai" -> "openaiKey"
         "gemini" -> "geminiKey"
-        "antigravity" -> "antigravityKey"
+        "openrouter" -> "openrouterKey"
         GATEWAY -> "gatewayKey"
         else -> "anthropicKey"
     }
@@ -193,35 +187,6 @@ internal class AgentBackend(private val ctx: BackendContext) : AgentService {
         ctx.manager?.setPreference("settings.$AI_PAGE.gatewayModel", model)
         ctx.manager?.setPreference("settings.$AI_PAGE.gatewayCaCert", caCert)
         resetLoop()
-    }
-
-    override fun signInAntigravity() {
-        if (signInJob?.isActive == true) return
-        _antigravitySignIn.value = UiAntigravitySignIn(UiAntigravitySignInStatus.WAITING)
-        signInJob = scope.launch {
-            try {
-                // The OAuth flow surfaces the consent URL through the state flow; the UI opens it in a browser.
-                val token = oauth.signIn { url -> _antigravitySignIn.update { it.copy(authUrl = url) } }
-                ctx.manager?.setPreference("settings.$AI_PAGE.${keyField("antigravity")}", token)
-                ctx.manager?.setPreference("settings.$AI_PAGE.provider", "antigravity")
-                resetLoop()
-                _antigravitySignIn.value = UiAntigravitySignIn(UiAntigravitySignInStatus.SUCCESS)
-            } catch (e: CancellationException) {
-                _antigravitySignIn.value = UiAntigravitySignIn(UiAntigravitySignInStatus.IDLE)
-                throw e
-            } catch (e: Exception) {
-                _antigravitySignIn.value =
-                    UiAntigravitySignIn(UiAntigravitySignInStatus.ERROR, message = e.message ?: "Sign-in failed.")
-            }
-        }
-    }
-
-    override fun cancelAntigravitySignIn() {
-        signInJob?.cancel()
-        signInJob = null
-        if (_antigravitySignIn.value.status == UiAntigravitySignInStatus.WAITING) {
-            _antigravitySignIn.value = UiAntigravitySignIn(UiAntigravitySignInStatus.IDLE)
-        }
     }
 
     override fun refreshModels() {
@@ -313,8 +278,9 @@ internal class AgentBackend(private val ctx: BackendContext) : AgentService {
         val maxIterations = prefInt("maxIterations") ?: DEFAULT_MAX_ITERATIONS
         val maxTokens = prefInt("maxTokens") ?: DEFAULT_MAX_TOKENS
         val thinkingBudget = prefInt("thinkingBudget")
+        val webSearch = prefBool("webSearch", default = true)
         val signature =
-            "${cfg.selectedId}|$model|${cfg.baseUrl}|${cfg.apiKey.hashCode()}|${cfg.caCertificatePem.hashCode()}|$maxIterations|$maxTokens|$thinkingBudget"
+            "${cfg.selectedId}|$model|${cfg.baseUrl}|${cfg.apiKey.hashCode()}|${cfg.caCertificatePem.hashCode()}|$maxIterations|$maxTokens|$thinkingBudget|$webSearch"
         if (loop == null || loopSignature != signature) {
             val client = provider.client(ProviderConfig(cfg.apiKey, cfg.baseUrl, cfg.caCertificatePem))
             loop = AgentLoop(
@@ -322,6 +288,7 @@ internal class AgentBackend(private val ctx: BackendContext) : AgentService {
                 maxTokens = maxTokens,
                 maxIterations = maxIterations,
                 thinkingBudget = thinkingBudget,
+                webSearch = webSearch,
             )
             loopSignature = signature
         }
@@ -443,7 +410,23 @@ internal class AgentBackend(private val ctx: BackendContext) : AgentService {
             append("Project root: ").append(root).append('.')
             if (modules.isNotBlank()) append("\nOpen project modules: ").append(modules).append('.')
             append("\nFile paths are absolute or relative to the project root; a relative path always stays inside the project.")
+            // Fold in the project's own instruction files (CLAUDE.md/AGENTS.md) so the agent always honors
+            // project conventions without a tool round-trip; its own saved notes stay behind read_memory.
+            projectInstructions(engine)?.let { append("\n\nProject instructions (follow these):\n").append(it) }
         }
+    }
+
+    /** The first present project instruction file, trimmed to a bounded excerpt (kept stable so it stays
+     *  cache-friendly). Null when the project has none. */
+    private fun projectInstructions(engine: IdeServices): String? {
+        for (name in listOf("AGENTS.md", "CLAUDE.md")) {
+            val file = engine.workspaceRoot.resolve(name)
+            if (!java.nio.file.Files.isRegularFile(file)) continue
+            val body = runCatching { file.readText() }.getOrNull()?.trim() ?: continue
+            if (body.isEmpty()) continue
+            return if (body.length > MAX_INSTRUCTIONS_CHARS) body.take(MAX_INSTRUCTIONS_CHARS) + "\n… (truncated; use read_memory for the rest)" else body
+        }
+        return null
     }
 
     private fun PermissionMode.toUi(): UiAgentPermissionMode = when (this) {
@@ -462,6 +445,9 @@ internal class AgentBackend(private val ctx: BackendContext) : AgentService {
         const val AI_PAGE = "ai"
         const val MODE_PREF = "agent.permissionMode"
         const val GATEWAY = "gateway"
+
+        /** Cap on the project-instruction excerpt folded into the system prompt (keeps requests bounded). */
+        const val MAX_INSTRUCTIONS_CHARS = 6_000
 
         /** Ceiling on tool-call rounds per user turn; the "settings.ai.maxIterations" pref overrides it. */
         const val DEFAULT_MAX_ITERATIONS = 24

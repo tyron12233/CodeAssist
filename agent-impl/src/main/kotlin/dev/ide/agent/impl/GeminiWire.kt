@@ -13,28 +13,32 @@ import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.put
 
 /**
- * The Gemini `generateContent` request shape, shared by the direct [GeminiProvider] and the Antigravity
- * gateway [AntigravityProvider] — both speak the same `contents`/`parts` dialect (`user`/`model` roles, tool
- * results as `functionResponse` parts, tool calls echoing their `thoughtSignature`); the gateway just wraps
- * it in an envelope. Pure builders over the neutral [LlmMessage]/[ToolSpec] model.
+ * The Gemini `generateContent` request shape for [GeminiProvider]: the `contents`/`parts` dialect (`user`/
+ * `model` roles, tool results as `functionResponse` parts, tool calls echoing their `thoughtSignature`). Pure
+ * builders over the neutral [LlmMessage]/[ToolSpec] model.
  */
 internal object GeminiWire {
     fun systemInstruction(text: String): JsonObject = buildJsonObject {
         put("parts", buildJsonArray { add(buildJsonObject { put("text", text) }) })
     }
 
-    fun toolDeclarations(tools: List<ToolSpec>): JsonArray = buildJsonArray {
-        add(buildJsonObject {
-            put("function_declarations", buildJsonArray {
-                tools.forEach { spec ->
-                    add(buildJsonObject {
-                        put("name", spec.name)
-                        put("description", spec.description)
-                        put("parameters", stripAdditionalProperties(AgentJson.parseToJsonElement(spec.parameters)))
-                    })
-                }
+    fun toolDeclarations(tools: List<ToolSpec>, webSearch: Boolean = false): JsonArray = buildJsonArray {
+        if (tools.isNotEmpty()) {
+            add(buildJsonObject {
+                put("function_declarations", buildJsonArray {
+                    tools.forEach { spec ->
+                        add(buildJsonObject {
+                            put("name", spec.name)
+                            put("description", spec.description)
+                            put("parameters", stripAdditionalProperties(AgentJson.parseToJsonElement(spec.parameters)))
+                        })
+                    }
+                })
             })
-        })
+        }
+        // Gemini's server-side search grounding is a sibling tool entry; the model runs it itself and folds the
+        // results (and grounding metadata we ignore) into the turn, so the loop never sees a function call.
+        if (webSearch) add(buildJsonObject { put("google_search", buildJsonObject { }) })
     }
 
     fun contents(messages: List<LlmMessage>): JsonArray = buildJsonArray {

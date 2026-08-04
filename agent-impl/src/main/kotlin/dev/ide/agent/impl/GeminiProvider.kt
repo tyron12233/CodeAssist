@@ -80,7 +80,9 @@ class GeminiProvider(private val transport: LlmTransport) : LlmProvider {
         val body = buildJsonObject {
             put("model", "models/${request.model}")
             request.system?.takeIf { it.isNotBlank() }?.let { put("system_instruction", GeminiWire.systemInstruction(it)) }
-            if (request.tools.isNotEmpty()) put("tools", GeminiWire.toolDeclarations(request.tools))
+            if (request.tools.isNotEmpty() || request.webSearch) {
+                put("tools", GeminiWire.toolDeclarations(request.tools, request.webSearch))
+            }
             put("ttl", "${GeminiContextCache.TTL_SECONDS}s")
         }.toString()
         val response = transport.post("$base/v1beta/cachedContents", jsonHeaders(config), body, config.caCertificatePem)
@@ -89,7 +91,7 @@ class GeminiProvider(private val transport: LlmTransport) : LlmProvider {
 
     /** A stable key for the cacheable payload: model + system instruction + tool surface. */
     private fun cacheKey(request: LlmRequest): String = buildString {
-        append(request.model).append('|').append(request.system?.hashCode() ?: 0)
+        append(request.model).append('|').append(request.system?.hashCode() ?: 0).append('|').append(request.webSearch)
         request.tools.forEach { append('|').append(it.name).append(':').append(it.parameters.length) }
     }
 
@@ -109,8 +111,8 @@ class GeminiProvider(private val transport: LlmTransport) : LlmProvider {
             request.system?.takeIf { it.isNotBlank() }?.let { put("system_instruction", GeminiWire.systemInstruction(it)) }
         }
         put("contents", GeminiWire.contents(request.messages))
-        if (cachedContent == null && request.tools.isNotEmpty()) {
-            put("tools", GeminiWire.toolDeclarations(request.tools))
+        if (cachedContent == null && (request.tools.isNotEmpty() || request.webSearch)) {
+            put("tools", GeminiWire.toolDeclarations(request.tools, request.webSearch))
         }
         put("generationConfig", buildJsonObject {
             put("maxOutputTokens", request.maxTokens)

@@ -2,7 +2,9 @@ package dev.ide.agent.impl
 
 import dev.ide.agent.AgentTool
 import dev.ide.agent.AgentWorkspace
+import dev.ide.agent.Location
 import dev.ide.agent.RunResult
+import dev.ide.agent.TaskRunResult
 import dev.ide.agent.TextEdit
 import dev.ide.agent.ToolArgs
 import dev.ide.agent.ToolExecutionResult
@@ -202,7 +204,255 @@ fun builtinTools(ws: AgentWorkspace): List<AgentTool> = listOf(
         mutating = true,
         summary = { "run ${it.optString("module") ?: "program"}" },
     ) { args -> formatRun(ws.runProgram(args.optString("module"), args.optString("stdin").orEmpty())) },
+
+    // --- Code intelligence (uses the engine's semantic navigation, not text matching) ---
+
+    tool(
+        name = "go_to_definition",
+        description = "Resolve the symbol on a line to its declaration location(s). Give the 1-based line and the " +
+            "exact identifier text on that line. Supported for Kotlin sources and Android resource references " +
+            "(@type/name, R.type.name).",
+        parameters = toolSchema {
+            string("path", "File path.")
+            integer("line", "1-based line the symbol is on.")
+            string("symbol", "The identifier to resolve on that line (a method, class, or resource name).", required = false)
+        },
+        summary = { "go to definition of ${it.optString("symbol") ?: "symbol"}" },
+    ) { args ->
+        val locs = ws.goToDefinition(args.string("path"), resolveOffset(ws, args.string("path"), args.int("line"), args.optString("symbol")))
+        if (locs.isEmpty()) ToolExecutionResult.ok("No definition found (Kotlin sources and Android resource references are supported).")
+        else ToolExecutionResult.ok(locs.joinToString("\n") { formatLocation(it) })
+    },
+
+    tool(
+        name = "find_references",
+        description = "Find every reference to the symbol on a line, project-wide. Give the 1-based line and the " +
+            "identifier text on that line. Java (JDT) today.",
+        parameters = toolSchema {
+            string("path", "File path.")
+            integer("line", "1-based line the symbol is on.")
+            string("symbol", "The identifier to find references to.", required = false)
+        },
+        summary = { "find references to ${it.optString("symbol") ?: "symbol"}" },
+    ) { args ->
+        val refs = ws.findReferences(args.string("path"), resolveOffset(ws, args.string("path"), args.int("line"), args.optString("symbol")))
+        if (refs.isEmpty()) ToolExecutionResult.ok("No references found.")
+        else ToolExecutionResult.ok("${refs.size} reference(s):\n" + refs.joinToString("\n") { formatLocation(it) })
+    },
+
+    tool(
+        name = "project_diagnostics",
+        description = "Report compiler and analyzer diagnostics across every source file in the project. Set " +
+            "errors_only to skip warnings and infos. Use this to survey the health of the whole project.",
+        parameters = toolSchema { boolean("errors_only", "Report only errors.", required = false) },
+        summary = { "project diagnostics" },
+    ) { args ->
+        val diags = ws.projectDiagnostics(args.optBoolean("errors_only") ?: false)
+        if (diags.isEmpty()) ToolExecutionResult.ok("No diagnostics.")
+        else ToolExecutionResult.ok(diags.joinToString("\n") { "${it.path}:${it.line}:${it.column} ${it.severity}: ${it.message}" })
+    },
+
+    tool(
+        name = "rename_symbol",
+        description = "Semantically rename the symbol on a line to a new name across the whole project, updating " +
+            "every reference. Give the 1-based line, the current identifier on that line, and the new name. Java " +
+            "(JDT) today. Prefer this over edit_file for renames.",
+        parameters = toolSchema {
+            string("path", "File path.")
+            integer("line", "1-based line the symbol is on.")
+            string("symbol", "The current identifier to rename.")
+            string("new_name", "The new identifier.")
+        },
+        mutating = true,
+        summary = { "rename ${it.optString("symbol").orEmpty()} to ${it.optString("new_name").orEmpty()}" },
+    ) { args ->
+        val r = ws.renameSymbol(
+            args.string("path"),
+            resolveOffset(ws, args.string("path"), args.int("line"), args.optString("symbol")),
+            args.string("new_name"),
+        )
+        if (!r.success) ToolExecutionResult.error(r.message)
+        else ToolExecutionResult.ok("${r.message} (${r.occurrences} occurrence(s) across ${r.filesChanged} file(s)).")
+    },
+
+    tool(
+        name = "list_quick_fixes",
+        description = "List the quick fixes and intentions available on a line (add a missing import, remove an " +
+            "unused one, create a resource, and so on). Apply one with apply_quick_fix.",
+        parameters = toolSchema {
+            string("path", "File path.")
+            integer("line", "1-based line to inspect.")
+        },
+        summary = { "quick fixes on ${it.optString("path") ?: "file"}:${it.optInt("line") ?: 0}" },
+    ) { args ->
+        val fixes = ws.quickFixes(args.string("path"), args.int("line"))
+        if (fixes.isEmpty()) ToolExecutionResult.ok("No quick fixes available on that line.")
+        else ToolExecutionResult.ok(fixes.joinToString("\n") { "[${it.index}] ${it.title} (${it.kind})" })
+    },
+
+    tool(
+        name = "apply_quick_fix",
+        description = "Apply the quick fix at the given index (from list_quick_fixes) on a line, editing the file.",
+        parameters = toolSchema {
+            string("path", "File path.")
+            integer("line", "1-based line, matching the list_quick_fixes call.")
+            integer("index", "The fix index reported by list_quick_fixes.")
+        },
+        mutating = true,
+        summary = { "apply quick fix #${it.optInt("index") ?: 0}" },
+    ) { args -> ToolExecutionResult.ok(ws.applyQuickFix(args.string("path"), args.int("line"), args.int("index"))) },
+
+    tool(
+        name = "format_file",
+        description = "Reformat the whole file with the project's code style.",
+        parameters = toolSchema { string("path", "File path.") },
+        mutating = true,
+        summary = { "format ${it.optString("path") ?: "file"}" },
+    ) { args -> ToolExecutionResult.ok(ws.formatFile(args.string("path"))) },
+
+    tool(
+        name = "organize_imports",
+        description = "Sort and remove unused imports in the file.",
+        parameters = toolSchema { string("path", "File path.") },
+        mutating = true,
+        summary = { "organize imports in ${it.optString("path") ?: "file"}" },
+    ) { args -> ToolExecutionResult.ok(ws.organizeImports(args.string("path"))) },
+
+    // --- Build & dependencies ---
+
+    tool(
+        name = "list_tasks",
+        description = "List the runnable build and run tasks for the project (run a Java main, assemble an APK, and " +
+            "so on), each with the id to pass to run_task.",
+        parameters = toolSchema { },
+        summary = { "list tasks" },
+    ) { _ ->
+        val tasks = ws.listTasks()
+        if (tasks.isEmpty()) ToolExecutionResult.ok("No tasks available.")
+        else ToolExecutionResult.ok(tasks.joinToString("\n") { "${it.id}  —  ${it.label} [${it.group}]" })
+    },
+
+    tool(
+        name = "run_task",
+        description = "Run a build or run task by id (from list_tasks) and wait for it to finish, returning its " +
+            "status, a trimmed log, and any diagnostics. Use this to build or assemble; use run_program to run a " +
+            "console main and read its output.",
+        parameters = toolSchema { string("id", "Task id from list_tasks.") },
+        mutating = true,
+        summary = { "run task ${it.optString("id").orEmpty()}" },
+    ) { args -> formatTaskRun(ws.runTask(args.string("id"))) },
+
+    tool(
+        name = "search_dependency",
+        description = "Search Maven Central and Google Maven for a library, returning matching coordinates " +
+            "(group:name:version). Use a result with add_dependency.",
+        parameters = toolSchema {
+            string("query", "A name or partial coordinate, e.g. \"okhttp\" or \"androidx.compose\".")
+            string("module", "Module to judge compatibility against.", required = false)
+        },
+        summary = { "search dependency \"${it.optString("query").orEmpty()}\"" },
+    ) { args ->
+        val hits = ws.searchDependency(args.string("query"), args.optString("module"))
+        if (hits.isEmpty()) ToolExecutionResult.ok("No matching libraries found.")
+        else ToolExecutionResult.ok(hits.joinToString("\n") { h ->
+            "${h.coordinate} (${h.packaging})" + if (!h.compatible) "  [incompatible: ${h.note ?: "?"}]" else ""
+        })
+    },
+
+    // --- Memory (persists across sessions) ---
+
+    tool(
+        name = "read_memory",
+        description = "Read the agent's project memory: the project's own instruction files plus notes you have " +
+            "saved for this project across sessions. Read this early to recall conventions and prior decisions.",
+        parameters = toolSchema { },
+        summary = { "read memory" },
+    ) { _ -> ToolExecutionResult.ok(ws.readMemory().ifBlank { "(no memory saved yet)" }) },
+
+    tool(
+        name = "write_memory",
+        description = "Save durable notes about this project for future sessions (conventions, architecture, " +
+            "decisions). This replaces your saved notes, so include everything worth keeping. The project's own " +
+            "instruction files are not affected.",
+        parameters = toolSchema { string("content", "The full note text to persist (Markdown).") },
+        summary = { "update project memory" },
+    ) { args -> ToolExecutionResult.ok(ws.writeMemory(args.string("content"))) },
+
+    // --- Web ---
+
+    tool(
+        name = "web_fetch",
+        description = "Fetch a web page or raw file over HTTP(S) and return its readable text content (truncated). " +
+            "Use it to read documentation, a changelog, or a URL referenced in the code or by the user.",
+        parameters = toolSchema {
+            string("url", "The absolute http(s) URL to fetch.")
+            integer("max_chars", "Maximum characters to return (default 20000).", required = false)
+        },
+        summary = { "fetch ${it.optString("url").orEmpty()}" },
+    ) { args -> ToolExecutionResult.ok(ws.fetchUrl(args.string("url"), args.optInt("max_chars") ?: 20_000)) },
+
+    tool(
+        name = "http_request",
+        description = "Make an arbitrary HTTP(S) request, like curl: choose the method, headers, and body. " +
+            "Returns the status line, key response headers, and the response body (truncated). Use web_fetch " +
+            "for a simple GET of a page; use this when you need POST/PUT/PATCH/DELETE, custom headers, or a " +
+            "request body (e.g. calling a REST API).",
+        parameters = toolSchema {
+            string("url", "The absolute http(s) URL.")
+            string("method", "HTTP method.", required = false, enum = listOf("GET", "POST", "PUT", "PATCH", "DELETE", "HEAD"))
+            stringArray("headers", "Request headers, each as \"Name: value\".", required = false)
+            string("body", "Request body, for POST/PUT/PATCH.", required = false)
+            integer("max_chars", "Maximum response characters to return (default 20000).", required = false)
+        },
+        // Outward-facing: a POST/PUT/DELETE can change remote state, so the user approves each request.
+        mutating = true,
+        summary = { "${it.optString("method")?.ifBlank { null } ?: "GET"} ${it.optString("url").orEmpty()}" },
+    ) { args ->
+        ToolExecutionResult.ok(
+            ws.httpRequest(
+                method = args.optString("method")?.ifBlank { null } ?: "GET",
+                url = args.string("url"),
+                headers = args.stringList("headers"),
+                body = args.optString("body"),
+                maxChars = args.optInt("max_chars") ?: 20_000,
+            ),
+        )
+    },
 )
+
+/**
+ * Converts a 1-based [line] (plus the optional [symbol] on it) to a character offset in the file's current
+ * text. The symbol places the caret precisely on the identifier; without it the caret lands at the line
+ * start. Out-of-range lines clamp to the end of the file.
+ */
+private suspend fun resolveOffset(ws: AgentWorkspace, path: String, line: Int, symbol: String?): Int {
+    val text = ws.readFile(path)
+    var offset = 0
+    var current = 1
+    while (current < line && offset < text.length) {
+        val nl = text.indexOf('\n', offset)
+        if (nl < 0) return text.length
+        offset = nl + 1
+        current++
+    }
+    if (symbol.isNullOrEmpty()) return offset
+    val lineEnd = text.indexOf('\n', offset).let { if (it < 0) text.length else it }
+    val inLine = text.indexOf(symbol, offset)
+    return if (inLine in offset until lineEnd) inLine else offset
+}
+
+private fun formatLocation(loc: Location): String {
+    val where = if (loc.line > 0) "${loc.path}:${loc.line}:${loc.column}" else loc.path
+    return if (loc.label.isNotBlank()) "$where  ${loc.label}" else where
+}
+
+private fun formatTaskRun(r: TaskRunResult): ToolExecutionResult {
+    val sb = StringBuilder()
+    sb.append(if (r.success) "Task succeeded" else "Task ${r.status}").append('.')
+    if (r.diagnostics.isNotEmpty()) sb.append("\n\n--- diagnostics ---\n").append(r.diagnostics.joinToString("\n"))
+    if (r.log.isNotBlank()) sb.append("\n\n--- log ---\n").append(r.log.trimEnd())
+    return ToolExecutionResult(sb.toString(), isError = !r.success)
+}
 
 private fun formatRun(r: RunResult): ToolExecutionResult {
     if (!r.compiled) {

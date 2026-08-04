@@ -711,16 +711,6 @@ data class UiAgentPermissionRequest(val id: Int, val tool: String, val summary: 
 
 enum class UiAgentPermissionDecision { DENY, ALLOW_ONCE, ALLOW_SESSION }
 
-enum class UiAntigravitySignInStatus { IDLE, WAITING, SUCCESS, ERROR }
-
-/** Live state of the Antigravity "Sign in with Google" (OAuth PKCE loopback) flow. [authUrl] is set once,
- *  when the consent page is ready for the UI to open in a browser; [message] carries the error text on ERROR. */
-data class UiAntigravitySignIn(
-    val status: UiAntigravitySignInStatus = UiAntigravitySignInStatus.IDLE,
-    val authUrl: String? = null,
-    val message: String? = null,
-)
-
 /**
  * An unexpected error surfaced as a non-fatal dialog (IntelliJ "Internal Error" style). [title] is a short
  * heading (the exception type), [message] a one-line summary, [detail] the full stack trace text for the

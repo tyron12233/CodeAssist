@@ -57,6 +57,36 @@ internal class RefactorService(private val ctx: EngineContext) {
         }
     }
 
+    /**
+     * Every reference to the symbol under [offset] in [file]/[text], project-wide, as (file, range) pairs
+     * (Java/JDT). Reuses the rename resolution + reference walk WITHOUT applying any edit, so it is read-only.
+     * A file-local symbol reports only its own file; otherwise project `.java` files are pre-filtered by name
+     * then parsed. Empty when the position is not a resolvable symbol or Java analysis is unavailable.
+     */
+    fun findReferences(file: Path, text: String, offset: Int): List<Pair<Path, TextRange>> {
+        if (!file.toString().endsWith(".java") || ctx.analysisDisabled(file)) return emptyList()
+        val module = ctx.moduleForFile(file) ?: return emptyList()
+        val fileAbs = file.toAbsolutePath().normalize()
+        return try {
+            val target = renameHitAt(module, file, text, offset) ?: return emptyList()
+            val out = ArrayList<Pair<Path, TextRange>>()
+            if (target.fileLocal) {
+                renameRefsIn(module, file, text, target.token).forEach { out += fileAbs to it }
+            } else {
+                for (cand in ctx.projectJavaFiles()) {
+                    val candAbs = cand.toAbsolutePath().normalize()
+                    val candText = ctx.overlayText(candAbs) ?: runCatching { cand.readText() }.getOrNull() ?: continue
+                    if (!candText.contains(target.oldName)) continue // cheap pre-filter before the binding parse
+                    val m = ctx.moduleForFile(cand) ?: continue
+                    renameRefsIn(m, cand, candText, target.token).forEach { out += candAbs to it }
+                }
+            }
+            out
+        } catch (e: LinkageError) {
+            ctx.markAnalysisUnavailable(ctx.languageFor(file)); emptyList()
+        }
+    }
+
     /** The rename target under [offset] in [file]'s buffer (old name + kind), or null when not renameable. */
     fun prepareRename(file: Path, text: String, offset: Int): RenameInfo? {
         if (!file.toString().endsWith(".java") || ctx.analysisDisabled(file)) return null

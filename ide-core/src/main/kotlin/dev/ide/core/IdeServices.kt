@@ -2452,6 +2452,11 @@ class IdeServices private constructor(
     suspend fun rename(file: Path, text: String, offset: Int, newName: String): RenameOutcome =
         refactor.rename(file, text, offset, newName)
 
+    /** Every reference to the symbol under [offset] in [file]/[text], project-wide, as (file, range) pairs.
+     *  Read-only (Java/JDT); empty when the position is not a resolvable symbol. */
+    fun findReferences(file: Path, text: String, offset: Int): List<Pair<Path, dev.ide.lang.dom.TextRange>> =
+        refactor.findReferences(file, text, offset)
+
     // ---- file & package operations (delete / rename / move / copy), for files AND directories/packages ----
 
     /** Absolute-normalized form, matching how [openDocuments] is keyed. */

@@ -50,6 +50,7 @@ internal object AgentSettingsPage : SettingsPage {
                 SettingControl.Choice.Option("anthropic", "Anthropic (Claude)"),
                 SettingControl.Choice.Option("openai", "OpenAI"),
                 SettingControl.Choice.Option("gemini", "Google Gemini"),
+                SettingControl.Choice.Option("openrouter", "OpenRouter"),
                 SettingControl.Choice.Option("gateway", "Custom gateway"),
             ),
         ),
@@ -71,9 +72,22 @@ internal object AgentSettingsPage : SettingsPage {
             description = "Used when the provider is Google Gemini.",
         ),
         SettingControl.Text(
+            key = "openrouterKey",
+            title = "OpenRouter API key",
+            description = "Used when the provider is OpenRouter.",
+            placeholder = "sk-or-...",
+        ),
+        SettingControl.Text(
             key = "model",
             title = "Model",
             description = "Optional. Leave blank to use the provider's default model.",
+        ),
+        SettingControl.Toggle(
+            key = "webSearch",
+            title = "Web search",
+            description = "Let the agent search the web when the provider supports it (Anthropic and Gemini). " +
+                "The web_fetch and http_request tools work regardless.",
+            default = true,
         ),
         SettingControl.Text(
             key = "gatewayKey",

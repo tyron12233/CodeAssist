@@ -61,6 +61,10 @@ data class LlmRequest(
      *  providers that expose a reasoning budget honor it (Gemini 2.5's `thinkingConfig`); others ignore it.
      *  A lower budget trims token spend, which matters on token-metered free tiers. */
     val thinkingBudget: Int? = null,
+    /** Offer the provider's own server-side web search when it supports one (Anthropic's `web_search` tool,
+     *  Gemini's `google_search` grounding). The provider runs the search itself and folds the results into the
+     *  turn — it is not a client-executed [ToolSpec]. Providers without native search ignore the flag. */
+    val webSearch: Boolean = false,
 )
 
 /** A normalized streaming event. Providers emit these; the agent loop assembles them into a turn. */

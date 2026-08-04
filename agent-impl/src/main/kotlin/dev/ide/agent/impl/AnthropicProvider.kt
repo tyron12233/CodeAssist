@@ -100,7 +100,8 @@ class AnthropicProvider(private val transport: LlmTransport) : LlmProvider {
         if (request.thinking && modelSupportsThinking(request.model)) {
             put("thinking", buildJsonObject { put("type", "adaptive") })
         }
-        if (request.tools.isNotEmpty()) put("tools", toolBlocks(request.tools))
+        val toolsArray = toolBlocks(request.tools, request.webSearch)
+        if (toolsArray.isNotEmpty()) put("tools", toolsArray)
         put("messages", cacheLastBlock(messages(request.messages)))
     }.toString()
 
@@ -113,16 +114,31 @@ class AnthropicProvider(private val transport: LlmTransport) : LlmProvider {
         })
     }
 
-    /** Tool declarations with a cache breakpoint on the last one, so the whole tool block is cached. */
-    private fun toolBlocks(tools: List<dev.ide.agent.ToolSpec>): JsonArray = buildJsonArray {
-        tools.forEachIndexed { i, spec ->
-            add(buildJsonObject {
+    /**
+     * The tool declarations: the client tools, plus Anthropic's server-side `web_search` tool when
+     * [webSearch] is on (the API runs the search itself and folds the results into the turn — the agent loop
+     * never sees it as a client tool call, and the stream decoder simply ignores its `server_tool_use` /
+     * `web_search_tool_result` blocks). A cache breakpoint on the last entry caches the whole tool block.
+     */
+    private fun toolBlocks(tools: List<dev.ide.agent.ToolSpec>, webSearch: Boolean): JsonArray {
+        val blocks = ArrayList<JsonObject>(tools.size + 1)
+        tools.forEach { spec ->
+            blocks += buildJsonObject {
                 put("name", spec.name)
                 put("description", spec.description)
                 put("input_schema", AgentJson.parseToJsonElement(spec.parameters))
-                if (i == tools.lastIndex) put("cache_control", ephemeral())
-            })
+            }
         }
+        if (webSearch) {
+            blocks += buildJsonObject {
+                put("type", WEB_SEARCH_TOOL)
+                put("name", "web_search")
+                put("max_uses", WEB_SEARCH_MAX_USES)
+            }
+        }
+        if (blocks.isEmpty()) return JsonArray(emptyList())
+        val last = JsonObject(blocks.last() + ("cache_control" to ephemeral()))
+        return JsonArray(blocks.dropLast(1) + last)
     }
 
     /** Marks the last content block of the last message as a cache breakpoint, caching the conversation
@@ -211,6 +227,10 @@ class AnthropicProvider(private val transport: LlmTransport) : LlmProvider {
         const val DEFAULT_BASE = "https://api.anthropic.com"
         const val ANTHROPIC_VERSION = "2023-06-01"
         const val INTERLEAVED_THINKING_BETA = "interleaved-thinking-2025-05-14"
+
+        /** Anthropic's server-side web-search tool (GA; no beta header required). */
+        const val WEB_SEARCH_TOOL = "web_search_20250305"
+        const val WEB_SEARCH_MAX_USES = 5
     }
 }
 
