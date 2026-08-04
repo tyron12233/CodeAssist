@@ -1,5 +1,6 @@
 package dev.ide.android
 
+import android.content.ActivityNotFoundException
 import android.content.Intent
 import android.net.Uri
 import android.os.Bundle
@@ -90,7 +91,12 @@ class MainActivity : ComponentActivity() {
                     override fun importInto(targetDir: String, onImported: (List<String>) -> Unit) {
                         pendingTarget = targetDir
                         pendingCallback = onImported
-                        importLauncher.launch(arrayOf("text/*", "application/json", "application/xml", "*/*"))
+                        try {
+                            importLauncher.launch(arrayOf("text/*", "application/json", "application/xml", "*/*"))
+                        } catch (e: ActivityNotFoundException) {
+                            pendingTarget = null; pendingCallback = null
+                            Toast.makeText(this@MainActivity, "No file manager available to import from", Toast.LENGTH_SHORT).show()
+                        }
                     }
 
                     override val canPickFile: Boolean = true
@@ -99,7 +105,14 @@ class MainActivity : ComponentActivity() {
                         // Custom extensions (e.g. .caproj) have no registered MIME, so fall back to */* and let
                         // the caller validate the picked file; known extensions narrow the SAF picker.
                         val mimes = extensions.mapNotNull { MimeTypeMap.getSingleton().getMimeTypeFromExtension(it) }
-                        pickLauncher.launch(if (mimes.isEmpty()) arrayOf("*/*") else mimes.toTypedArray())
+                        try {
+                            pickLauncher.launch(if (mimes.isEmpty()) arrayOf("*/*") else mimes.toTypedArray())
+                        } catch (e: ActivityNotFoundException) {
+                            // Some ROMs ship no SAF/documents provider; don't crash — signal cancel + tell the user.
+                            pendingPick = null
+                            onPicked(null)
+                            Toast.makeText(this@MainActivity, "No file manager available to pick a file", Toast.LENGTH_SHORT).show()
+                        }
                     }
 
                     override val canShare: Boolean = true
@@ -108,7 +121,12 @@ class MainActivity : ComponentActivity() {
                     override val canExport: Boolean = true
                     override fun exportFile(path: String) {
                         pendingExport = path
-                        exportLauncher.launch(File(path).name)
+                        try {
+                            exportLauncher.launch(File(path).name)
+                        } catch (e: ActivityNotFoundException) {
+                            pendingExport = null
+                            Toast.makeText(this@MainActivity, "No file manager available to export to", Toast.LENGTH_SHORT).show()
+                        }
                     }
 
                     override val canOpenUrl: Boolean = true
