@@ -145,6 +145,13 @@ class KotlinSourceAnalyzer(ctx: CompilationContext) : SourceAnalyzer, Disposable
     var syntheticMemberProviders: () -> List<dev.ide.lang.kotlin.symbols.KotlinSyntheticMemberProvider> =
         { dev.ide.lang.kotlin.symbols.BUILTIN_KOTLIN_SYNTHETIC_MEMBER_PROVIDERS }
 
+    /** Injected by the host: members of a currently-OPEN same-project Java SOURCE class, parsed from its live
+     *  editor buffer (keyed/encoded like the `java.membersByOwner` index). Lets a Kotlin file see an UNSAVED
+     *  Java edit — a new method, a changed signature — before it is saved and reindexed. Null for an fqn no
+     *  open `.java` buffer declares, so the save-driven index answers instead. See [KotlinSymbolService]. */
+    @Volatile
+    var javaSourceMemberProvider: (String) -> List<dev.ide.index.MemberValue>? = { null }
+
     /** Sync the symbol model to the current live buffers before a query (see [liveOverlayProvider]). */
     private fun refreshOverlay() {
         runCatching { service.setOverlay(liveOverlayProvider()) }
@@ -185,6 +192,7 @@ class KotlinSourceAnalyzer(ctx: CompilationContext) : SourceAnalyzer, Disposable
             // [androidNamespacesVisible]) — never purely because the host's Android-ness flag was false/unset.
             excludedTypePrefixes = if (androidNamespacesVisible(isAndroidModule, classpathJars)) emptyList() else ANDROID_TYPE_PREFIXES,
             syntheticMemberProviders = { syntheticMemberProviders() },
+            javaSourceMemberProvider = { javaSourceMemberProvider(it) },
         )
     }
     private val service: KotlinSymbolService get() = serviceLazy.value

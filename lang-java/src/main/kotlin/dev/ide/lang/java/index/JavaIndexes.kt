@@ -7,6 +7,7 @@ import dev.ide.index.IndexId
 import dev.ide.index.IndexInput
 import dev.ide.index.IndexOrigin
 import dev.ide.index.InputFilter
+import dev.ide.index.JavaSourceMemberCodec
 import dev.ide.index.KeyDescriptor
 import dev.ide.index.MatchingMode
 import dev.ide.index.MemberExternalizer
@@ -184,24 +185,35 @@ object JavaMembersIndex : IndexExtension<String, MemberValue> {
 }
 
 /** membersByOwner: owner FQN -> its PUBLIC source members (so a Kotlin file can enumerate a same-project
- *  Java SOURCE class's members). `.java` source only, public-only. */
+ *  Java SOURCE class's members). `.java` source only, public-only. Each member carries its SHAPE — parameter
+ *  types + names, the `static` flag, the return type — encoded into [MemberValue.signature] via
+ *  [JavaSourceMemberCodec], so the Kotlin backend resolves a static call / instance member with real arity
+ *  and types (not just a name). */
 object JavaMembersByOwnerIndex : IndexExtension<String, MemberValue> {
     override val id = IndexId("java.membersByOwner")
-    override val version = 1
+    override val version = 2
     override val keyDescriptor: KeyDescriptor<String> = StringKeyDescriptor
     override val valueExternalizer = MemberExternalizer
     override val matching = MatchingMode.PREFIX_ONLY
     override val inputFilter =
         InputFilter { it.origin == IndexOrigin.SOURCE && it.unitName?.endsWith(".java") == true }
 
-    override fun index(input: IndexInput): Map<String, Collection<MemberValue>> {
-        val parsed = JavaSourceIndexer.sharedParsed(input)
+    override fun index(input: IndexInput): Map<String, Collection<MemberValue>> =
+        membersFor(JavaSourceIndexer.sharedParsed(input))
+
+    /** The public [parsed] members keyed by owner FQN, with each member's shape encoded into
+     *  [MemberValue.signature]. Shared with the host's LIVE open-buffer provider (ide-core) so a Kotlin file
+     *  sees an UNSAVED Java edit the same way it sees a saved (indexed) one — one producer, one decoder. */
+    fun membersFor(parsed: JavaSourceIndexer.Parsed): Map<String, Collection<MemberValue>> {
         val out = HashMap<String, MutableList<MemberValue>>()
         for (d in parsed.decls) {
             if ((d.kind != DeclKind.METHOD && d.kind != DeclKind.FIELD) || !d.public) continue
             val container = d.container ?: continue
             val owner = if (parsed.packageName.isNullOrEmpty()) container else "${parsed.packageName}.$container"
-            out.getOrPut(owner) { ArrayList() }.add(MemberValue(d.name, owner, d.kind.name.lowercase(), ""))
+            val sig = if (d.kind == DeclKind.METHOD)
+                JavaSourceMemberCodec.encodeMethod(d.static, d.paramNames, d.paramTypes, d.returnType, d.varargIndex)
+            else JavaSourceMemberCodec.encodeField(d.static, d.returnType)
+            out.getOrPut(owner) { ArrayList() }.add(MemberValue(d.name, owner, d.kind.name.lowercase(), sig))
         }
         return out
     }

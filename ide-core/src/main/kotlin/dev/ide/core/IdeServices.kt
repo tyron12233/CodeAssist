@@ -84,6 +84,7 @@ import dev.ide.index.INDEX_EP
 import dev.ide.index.IndexItemState
 import dev.ide.index.IndexScope
 import dev.ide.index.IndexService
+import dev.ide.index.MemberValue
 import dev.ide.index.impl.IndexServiceImpl
 import dev.ide.lang.AnalysisResult
 import dev.ide.lang.FILE_TYPE_EP
@@ -1398,6 +1399,36 @@ class IdeServices private constructor(
         return out
     }
 
+    // owner FQN -> its public members, parsed from the OPEN `.java` buffers, cached under a content fingerprint
+    // of those buffers so it rebuilds only when a Java buffer actually changed (String hashCodes are cached).
+    @Volatile
+    private var javaBufferMembers: Pair<Int, Map<String, List<MemberValue>>>? = null
+
+    /**
+     * Members of a currently-OPEN Java SOURCE class [fqn], parsed from its live editor buffer, so a Kotlin file
+     * sees UNSAVED Java edits (a new method, a changed signature) — the save-driven `java.membersByOwner` index
+     * only reflects saved files. Null when no open `.java` buffer declares [fqn]: the Kotlin backend then falls
+     * back to the index. Reuses the ONE producer ([JavaMembersByOwnerIndex.membersFor], same shape encoding) so
+     * live and saved members decode identically. Wired to [KotlinSourceAnalyzer.javaSourceMemberProvider].
+     */
+    private fun javaSourceBufferMembers(fqn: String): List<MemberValue>? {
+        val javaBuffers = openDocuments.entries.filter { it.key.toString().endsWith(".java") }
+        if (javaBuffers.isEmpty()) return null
+        val fingerprint = javaBuffers.fold(1) { acc, e -> acc * 31 + e.key.hashCode() * 31 + e.value.hashCode() }
+        var cached = javaBufferMembers
+        if (cached == null || cached.first != fingerprint) {
+            val map = HashMap<String, MutableList<MemberValue>>()
+            for (e in javaBuffers) {
+                val parsed = runCatching { JavaSourceIndexer.parse(e.value) }.getOrNull() ?: continue
+                JavaMembersByOwnerIndex.membersFor(parsed)
+                    .forEach { (owner, members) -> map.getOrPut(owner) { ArrayList() }.addAll(members) }
+            }
+            cached = fingerprint to map.mapValues { it.value.toList() }
+            javaBufferMembers = cached
+        }
+        return cached.second[fqn]
+    }
+
     /** The IDE's stable, path-free index-segment key for a BUNDLED jar (android.jar / desugar stubs / the
      *  bundled kotlin-stdlib; re-extracted from assets, so mtime is unstable), or null for a normal jar. */
     private fun bundledStableJarId(p: Path): String? {
@@ -1795,6 +1826,10 @@ class IdeServices private constructor(
                     // Live editor buffers (path → text) so cross-file completion/resolution/diagnostics see
                     // unsaved edits in OTHER open .kt files before they're saved + reindexed.
                     it.liveOverlayProvider = ::kotlinOverlay
+                    // Cross-LANGUAGE freshness: members of an open same-project Java class, parsed from its live
+                    // buffer, so a Java edit reflects in a calling Kotlin file before save (the mirror of
+                    // liveOverlayProvider for the .kt→.java direction).
+                    it.javaSourceMemberProvider = ::javaSourceBufferMembers
                     // Editor support for a compiler plugin's generated members (kotlinx.serialization's
                     // `serializer()`): the contributed providers, or the built-ins when nothing is registered.
                     it.syntheticMemberProviders = {

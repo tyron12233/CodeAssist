@@ -160,7 +160,10 @@ class JavaIndexTest {
 
     @Test
     fun sourceDeclarationsFromPsiParse() {
-        val src = "package com.foo;\npublic class Use { public int run(String a) { return 0; } int field; }"
+        val src = "package com.foo;\npublic class Use {\n" +
+            "  public static void main(String[] args) {}\n" +
+            "  public int run(String a) { return 0; }\n" +
+            "  int field;\n}"
         val input = Input(IndexOrigin.SOURCE, "com/foo/Use.java", t = src, fileId = 7)
 
         val syms = JavaSourceSymbolsIndex.index(input)
@@ -176,6 +179,21 @@ class JavaIndexTest {
         )
         // `field` is package-private -> excluded from the public-only membersByOwner index.
         assertTrue(byOwner["com.foo.Use"]?.none { it.name == "field" } == true, "non-public field excluded")
+
+        // Each member carries its encoded SHAPE (parameters + static flag + return type) so the Kotlin backend
+        // resolves a same-project call with real arity — the fix for shapeless (0-param) cross-language members.
+        val mainSig = byOwner["com.foo.Use"]?.first { it.name == "main" }?.signature
+        val main = dev.ide.index.JavaSourceMemberCodec.decodeMethod(mainSig ?: "")
+        assertEquals(true, main?.static, "`main` is static")
+        assertEquals(listOf("String[]"), main?.paramTypes, "`main` param type recorded AS WRITTEN")
+        assertEquals(listOf("args"), main?.paramNames, "`main` param name recorded")
+        assertEquals("void", main?.returnType)
+
+        val run = dev.ide.index.JavaSourceMemberCodec.decodeMethod(
+            byOwner["com.foo.Use"]?.first { it.name == "run" }?.signature ?: "",
+        )
+        assertEquals(false, run?.static, "instance method `run` is not static")
+        assertEquals(listOf("String"), run?.paramTypes)
     }
 
     @Test

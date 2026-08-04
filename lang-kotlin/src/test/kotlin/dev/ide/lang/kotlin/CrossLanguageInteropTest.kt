@@ -7,7 +7,9 @@ import dev.ide.index.IndexOrigin
 import dev.ide.index.IndexScope
 import dev.ide.index.IndexService
 import dev.ide.index.IndexStatus
+import dev.ide.index.JavaSourceMemberCodec
 import dev.ide.index.MemberValue
+import dev.ide.lang.dom.Diagnostic
 import dev.ide.platform.Disposable
 import kotlinx.coroutines.runBlocking
 import java.nio.file.Path
@@ -15,25 +17,34 @@ import kotlin.test.Test
 import kotlin.test.assertTrue
 
 /**
- * Cross-language SOURCE interop: a Kotlin file enumerating a same-project Java SOURCE class's members,
- * which have no `.class` and no `@Metadata`; they come from the `java.membersByOwner` index (keyed by owner
- * FQN, public-only). Here a fake [IndexService] stands in for the real one (built in ide-core), serving the
- * `JavaSrc` type name + its members, to verify the lang-kotlin consumer path end to end.
+ * Cross-language SOURCE interop: a Kotlin file resolving a same-project Java SOURCE class, whose members have
+ * no `.class` and no `@Metadata` and arrive through the `java.membersByOwner` index (keyed by owner FQN,
+ * public-only). A fake [IndexService] stands in for the real one (built in ide-core), serving type names +
+ * members exactly as the real index would — including each member's SHAPE encoded via [JavaSourceMemberCodec],
+ * so this verifies the whole lang-kotlin consumer path: a `static` method surfaces on `Type.` and a call
+ * type-checks with real arity (the reported `Test.main(arrayOf(""))` bug), while instance members stay on an
+ * instance receiver.
  */
 class CrossLanguageInteropTest {
 
-    private val javaSrcFqn = "com.example.JavaSrc"
+    private val greeterFqn = "com.example.Greeter"
+
+    /** A Java class: `static void main(String[])`, instance `String greet(String)`, `static final int VERSION`. */
+    private val greeterMembers = listOf(
+        MemberValue("main", greeterFqn, "method",
+            JavaSourceMemberCodec.encodeMethod(static = true, listOf("args"), listOf("String[]"), "void", -1)),
+        MemberValue("greet", greeterFqn, "method",
+            JavaSourceMemberCodec.encodeMethod(static = false, listOf("name"), listOf("String"), "String", -1)),
+        MemberValue("VERSION", greeterFqn, "field",
+            JavaSourceMemberCodec.encodeField(static = true, "int")),
+    )
 
     @Suppress("UNCHECKED_CAST")
     private val fakeIndex = object : IndexService {
         override fun <V : Any> exact(id: IndexId, key: String): Sequence<V> = when {
-            id.value == "java.membersByOwner" && key == javaSrcFqn -> sequenceOf(
-                MemberValue("greet", javaSrcFqn, "method", ""),
-                MemberValue("count", javaSrcFqn, "field", ""),
-                // a private one must NOT be here — the index only emits public members (visibility-safe)
-            ) as Sequence<V>
-            id.value == "java.classNames" && key == "JavaSrc" ->
-                sequenceOf(ClassNameValue(javaSrcFqn, IndexOrigin.SOURCE, "class")) as Sequence<V>
+            id.value == "java.membersByOwner" && key == greeterFqn -> greeterMembers.asSequence() as Sequence<V>
+            id.value == "java.classNames" && key == "Greeter" ->
+                sequenceOf(ClassNameValue(greeterFqn, IndexOrigin.SOURCE, "class")) as Sequence<V>
             else -> emptySequence()
         }
 
@@ -45,14 +56,72 @@ class CrossLanguageInteropTest {
         override fun observeStatus(listener: (IndexStatus) -> Unit) = Disposable { }
     }
 
+    private val srcDir = tempProject(emptyMap())
+    private val analyzer = KotlinSourceAnalyzer(fakeContext(srcDir)).apply { indexService = fakeIndex }
+
+    private fun completions(fileName: String, code: String): List<String> =
+        runBlocking { analyzer.completeAtCaret(srcDir, fileName, code) }.items.mapNotNull { it.symbol?.name }
+
+    private fun diagnose(fileName: String, code: String): List<Diagnostic> {
+        val doc = SnippetDoc(code, DiskFile(srcDir.resolve(fileName)))
+        return runBlocking { analyzer.incrementalParser.parseFull(doc); analyzer.analyze(doc.file).diagnostics }
+    }
+
     @Test
-    fun kotlinSeesJavaSourceClassMembers() {
-        val srcDir = tempProject(emptyMap())
-        val analyzer = KotlinSourceAnalyzer(fakeContext(srcDir)).apply { indexService = fakeIndex }
-        val items = runBlocking {
-            analyzer.completeAtCaret(srcDir, "Use.kt", "import com.example.JavaSrc\nfun f(j: JavaSrc) { j.| }")
-        }.items.mapNotNull { it.symbol?.name }
-        assertTrue("greet" in items, "Kotlin should see the Java SOURCE method via java.membersByOwner; got $items")
-        assertTrue("count" in items, "Kotlin should see the Java SOURCE field; got $items")
+    fun staticMembersSurfaceOnTheTypeReceiver() {
+        val items = completions(
+            "TypeRecv.kt",
+            "import com.example.Greeter\nfun f() { Greeter.| }",
+        )
+        assertTrue("main" in items, "a Java `static` method must surface on `Greeter.`; got $items")
+        assertTrue("VERSION" in items, "a Java `static` field must surface on `Greeter.`; got $items")
+        assertTrue("greet" !in items, "a Java INSTANCE method must NOT surface on the type receiver; got $items")
+    }
+
+    @Test
+    fun instanceMembersSurfaceOnAnInstanceReceiver() {
+        val items = completions(
+            "InstRecv.kt",
+            "import com.example.Greeter\nfun f(g: Greeter) { g.| }",
+        )
+        assertTrue("greet" in items, "a Java instance method must surface on an instance receiver; got $items")
+        assertTrue("main" !in items, "a Java `static` method must NOT surface on an instance receiver; got $items")
+    }
+
+    @Test
+    fun staticCallWithCorrectArityDoesNotFalselyError() {
+        // The reported bug: `main(String[])` came back shapeless (0 params) so a 1-arg call was "too many".
+        val d = diagnose(
+            "GoodCall.kt",
+            "import com.example.Greeter\nfun f() { Greeter.main(arrayOf(\"\")) }",
+        )
+        assertTrue(
+            d.none { it.code == "kt.argumentCount" },
+            "`Greeter.main(arrayOf(\"\"))` matches `main(String[])` — no argument-count error; got $d",
+        )
+    }
+
+    @Test
+    fun staticCallWithTooManyArgumentsIsFlagged() {
+        val d = diagnose(
+            "BadCall.kt",
+            "import com.example.Greeter\nfun f() { Greeter.main(arrayOf(\"\"), arrayOf(\"\")) }",
+        )
+        assertTrue(
+            d.any { it.code == "kt.argumentCount" },
+            "two arguments to a 1-parameter `main` must be flagged too-many; got $d",
+        )
+    }
+
+    @Test
+    fun instanceCallResolvesWithoutFalseError() {
+        val d = diagnose(
+            "InstCall.kt",
+            "import com.example.Greeter\nfun f(g: Greeter) { val s: String = g.greet(\"x\") }",
+        )
+        assertTrue(
+            d.none { it.code == "kt.argumentCount" || it.code == "kt.unresolved" },
+            "`g.greet(\"x\")` returning String must resolve cleanly; got $d",
+        )
     }
 }

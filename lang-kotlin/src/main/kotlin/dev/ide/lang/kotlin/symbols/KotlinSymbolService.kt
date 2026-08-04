@@ -8,6 +8,7 @@ import dev.ide.index.ClassNameValue
 import dev.ide.index.IndexId
 import dev.ide.index.IndexOrigin
 import dev.ide.index.IndexService
+import dev.ide.index.JavaSourceMemberCodec
 import dev.ide.index.MemberValue
 import dev.ide.index.PackageTypesIndex
 import dev.ide.index.PackagesIndex
@@ -87,6 +88,13 @@ class KotlinSymbolService(
      *  `platform.kotlinSyntheticMember`; queried lazily so a re-registration is picked up. See
      *  [KotlinSyntheticMemberProvider]. */
     private val syntheticMemberProviders: () -> List<KotlinSyntheticMemberProvider> = { emptyList() },
+    /** Optional: members of a currently-OPEN Java SOURCE class ([MemberValue]s keyed by owner FQN, encoded
+     *  via [dev.ide.index.JavaSourceMemberCodec]), parsed from its live editor buffer. Non-null return =
+     *  "this fqn is a same-project Java source class, use these members" (an UNSAVED edit is visible before it
+     *  is saved + reindexed); null = not an open Java buffer, so the save-driven `java.membersByOwner` index
+     *  answers instead. A same-project Java source class is treated as VOLATILE (never pinned in the classpath
+     *  memos) so both live-buffer and post-save edits show at once. */
+    private val javaSourceMemberProvider: (String) -> List<MemberValue>? = { null },
 ) : KotlinTypeContext, Closeable {
 
     // Kotlin's stdlib is an IMPLICIT dependency of every Kotlin file (like java.lang for Java). Always
@@ -978,13 +986,13 @@ class KotlinSymbolService(
             )
         )
             return membersNamed(typeFqn, typeArgs, name)
-        return checkMembersMemo.getOrPut("$typeFqn $name") {
-            membersNamed(
-                typeFqn,
-                emptyList(),
-                name
-            )
-        }
+        val key = "$typeFqn $name"
+        checkMembersMemo[key]?.let { return it }
+        val result = membersNamed(typeFqn, emptyList(), name)
+        // A project JAVA SOURCE receiver is volatile too (an edit adds/removes a member) — so a member the user
+        // just typed into the Java class isn't wrongly flagged unresolved. The probe runs only on a memo MISS.
+        if (!isJavaSourceType(typeFqn)) checkMembersMemo[key] = result
+        return result
     }
 
     override fun supertypesOf(typeFqn: String): List<TypeRef> =
@@ -1049,12 +1057,14 @@ class KotlinSymbolService(
                 emptyList(),
                 HashSet()
             ) // mid-build: don't pin a partial shape
-            else -> classpathOwnMembersMemo.getOrPut(kfqn) {
-                ownAndInherited(
-                    fqn,
-                    emptyList(),
-                    HashSet()
-                )
+            else -> {
+                classpathOwnMembersMemo[kfqn]?.let { return it }
+                val members = ownAndInherited(fqn, emptyList(), HashSet())
+                // A project JAVA SOURCE class is VOLATILE — its members change on an edit/save, so it must not be
+                // pinned in the session-stable classpath memo (the same reason a synthetic class isn't). The
+                // [isJavaSourceType] probe runs only here, on a memo MISS. Classpath binaries cache as before.
+                if (!isJavaSourceType(kfqn)) classpathOwnMembersMemo[kfqn] = members
+                members
             }
         }
     }
@@ -1123,11 +1133,31 @@ class KotlinSymbolService(
                 synthesizeBeanProps = !it.isKotlin && !fqn.startsWith("kotlin.")
             )
         }
-        // Cross-language: a same-project Java SOURCE class (no .class, no metadata) — its members come from
-        // the `java.membersByOwner` index (public, keyed by owner FQN).
-        index?.exact<MemberValue>(MEMBERS_BY_OWNER, fqn)?.map { memberFromIndex(it) }?.toList()
-            ?.takeIf { it.isNotEmpty() }?.let { return it }
+        // Cross-language: a same-project Java SOURCE class (no .class, no metadata). Its members come LIVE from
+        // an open editor buffer when the host serves one (so an unsaved Java edit is visible), else the
+        // save-driven `java.membersByOwner` index — both decoded through the same [memberFromIndex]. Kept fresh
+        // (never pinned) via [isJavaSourceType] in [ownAndInheritedCached] / [membersNamedForCheck].
+        javaSourceMembers(fqn).takeIf { it.isNotEmpty() }?.let { return it }
         return emptyList()
+    }
+
+    /** Members of a same-project Java SOURCE class [fqn]: the host's LIVE open-buffer members if it has any for
+     *  [fqn] (unsaved edits win), else the save-driven `java.membersByOwner` index. Both are [MemberValue]s
+     *  carrying the shape encoded by [JavaSourceMemberCodec], rebuilt into full [KotlinSymbol]s here. */
+    private fun javaSourceMembers(fqn: String): List<KotlinSymbol> {
+        javaSourceMemberProvider(fqn)?.let { return it.map(::memberFromIndex) }
+        return index?.exact<MemberValue>(MEMBERS_BY_OWNER, fqn)?.map(::memberFromIndex)?.toList() ?: emptyList()
+    }
+
+    /** Whether [fqn] is a project JAVA SOURCE class (no `.class`) — an open buffer the host serves, or a
+     *  SOURCE-origin entry in the shared `java.classNames` index. Such a class's members are VOLATILE (an edit
+     *  or save must show), so its enumeration is never pinned in the session-stable classpath memos. The index
+     *  probe is a single exact lookup, done only on a memo MISS (mirrors the uncached SOURCE lookups in
+     *  [isKnownType] / [resolveTypeName]); a Kotlin source class never reaches here (the source model owns it). */
+    private fun isJavaSourceType(fqn: String): Boolean {
+        if (javaSourceMemberProvider(fqn) != null) return true
+        return index?.exact<ClassNameValue>(JAVA_CLASS_NAMES, fqn.substringAfterLast('.'))
+            ?.any { it.fqn == fqn && it.origin == IndexOrigin.SOURCE } == true
     }
 
     /** The compiler-synthesized static members of a (source) enum [fqn]: `values(): Array<E>`,
@@ -1166,14 +1196,79 @@ class KotlinSymbolService(
         )
     }
 
+    /** Rebuild a Java SOURCE member ([MemberValue] carrying a [JavaSourceMemberCodec]-encoded shape) into a
+     *  full [KotlinSymbol]: `static` -> [Modifier.STATIC] (so a static method surfaces on `Type.` and resolves
+     *  a `Type.m(...)` call), real parameter types/names + return type mapped to Kotlin, and `paramHasDefault`
+     *  all-false (Java has no default arguments — so the applicability check validates arity precisely instead
+     *  of backing off). An empty/legacy signature degrades to a bare name + kind. */
     private fun memberFromIndex(mv: MemberValue): KotlinSymbol {
-        val isMethod = mv.kind == "method"
+        val ownerSym = KotlinSymbol(mv.owner.substringAfterLast('.'), SymbolKind.CLASS, origin = SOURCE)
+        if (mv.kind == "method") {
+            val m = JavaSourceMemberCodec.decodeMethod(mv.signature)
+                ?: return KotlinSymbol(mv.name, SymbolKind.METHOD, owner = ownerSym, origin = SOURCE, signature = "()")
+            // A vararg parameter's type is its ELEMENT type (`vararg xs: String`, not `Array<String>`) — matching
+            // [KotlinSymbol.paramTypes]'s contract; the `...` is dropped so the element text maps straight through.
+            val paramTypes = m.paramTypes.mapIndexed { i, t ->
+                javaTypeTextToKotlin(if (i == m.varargIndex) t.removeSuffix("...").trim() else t)
+            }
+            val returnType = javaTypeTextToKotlin(m.returnType)
+            return KotlinSymbol(
+                name = mv.name,
+                kind = SymbolKind.METHOD,
+                type = returnType,
+                owner = ownerSym,
+                modifiers = if (m.static) setOf(Modifier.STATIC) else emptySet(),
+                origin = SOURCE,
+                paramTypes = paramTypes,
+                paramNames = m.paramNames,
+                // Java has no default parameters — a full false-mask (size == arity) lets the applicability
+                // check judge arity precisely rather than back off on "unknown defaults".
+                paramHasDefault = List(paramTypes.size) { false },
+                varargParamIndex = m.varargIndex,
+                signature = javaMethodDisplaySignature(m, returnType),
+            )
+        }
+        val f = JavaSourceMemberCodec.decodeField(mv.signature)
+        val fieldType = f?.type?.let { javaTypeTextToKotlin(it) }
         return KotlinSymbol(
             name = mv.name,
-            kind = if (isMethod) SymbolKind.METHOD else SymbolKind.FIELD,
-            origin = SOURCE, // a Java SOURCE member
-            signature = if (isMethod) "()" else null,
+            kind = SymbolKind.FIELD,
+            type = fieldType,
+            owner = ownerSym,
+            modifiers = if (f?.static == true) setOf(Modifier.STATIC) else emptySet(),
+            origin = SOURCE,
+            signature = fieldType?.let { ": $it" },
         )
+    }
+
+    /** Map a Java type TEXT as written (`String[]`, `int`, `List<String>`, `String...`) to a [KotlinType]:
+     *  arrays / var-args -> `Array<E>` (primitives -> their specialised `*Array`), primitives -> their Kotlin
+     *  classifier, otherwise the generic-aware [typeFromText] (with no file context — resolves built-ins,
+     *  same-package/imported project types via the index). Null when the text is blank or doesn't resolve; the
+     *  caller keeps the (null) slot so arity is preserved. */
+    private fun javaTypeTextToKotlin(raw: String?): KotlinType? {
+        if (raw.isNullOrBlank()) return null
+        var t = raw.trim()
+        if (t.endsWith("...")) t = t.removeSuffix("...").trim() + "[]" // a var-arg's element is an array here
+        if (t.endsWith("[]")) {
+            val element = t.removeSuffix("[]").trim()
+            JAVA_PRIMITIVE_ARRAYS[element]?.let { return typeByFqn(it) }
+            return typeByFqn("kotlin.Array", listOfNotNull(javaTypeTextToKotlin(element)))
+        }
+        JAVA_PRIMITIVES[t]?.let { return typeByFqn(it) }
+        return typeFromText(t, null)
+    }
+
+    /** A Kotlin-style display signature for a decoded Java method: `(name: Type, vararg xs: E): Ret`. */
+    private fun javaMethodDisplaySignature(m: JavaSourceMemberCodec.Method, returnType: KotlinType?): String {
+        val params = m.paramNames.indices.joinToString(", ") { i ->
+            val name = m.paramNames[i].ifEmpty { "p$i" }
+            val isVararg = i == m.varargIndex
+            val typeText = m.paramTypes.getOrNull(i)?.let { if (isVararg) it.removeSuffix("...").trim() else it }
+            val rendered = typeText?.let { javaTypeTextToKotlin(it)?.toString() ?: it } ?: "Any"
+            (if (isVararg) "vararg " else "") + "$name: $rendered"
+        }
+        return "($params)" + (returnType?.let { ": $it" } ?: "")
     }
 
     fun extensionsFor(
@@ -2873,6 +2968,9 @@ class KotlinSymbolService(
         private const val CALLABLE_QUERY_LIMIT = 2000
         // Java + Kotlin source producers merged (see [ClassNameIndex]); binary/SDK types ride the Java id.
         private val CLASS_NAMES = ClassNameIndex.ALL
+        // The Java-only class-name id, for the "is this a project Java SOURCE class?" probe (a Kotlin source
+        // class is handled by the source model, not this branch).
+        private val JAVA_CLASS_NAMES = ClassNameIndex.JAVA
         private val TYPE_SHAPE = IndexId("kotlin.typeShape")
         private val BUILTINS = IndexId("kotlin.builtins")
         private val PACKAGES = PackagesIndex.ALL
@@ -2880,5 +2978,19 @@ class KotlinSymbolService(
         private val MEMBERS_BY_OWNER = IndexId("java.membersByOwner")
         private val SOURCE = SymbolOrigin(fromSource = true, file = null)
         private val BINARY = SymbolOrigin(fromSource = false, file = null)
+
+        // Java primitive type text -> its Kotlin classifier, for mapping a Java SOURCE member's parameter/return
+        // type (`int`, `void`, …) to a resolvable [KotlinType]. `void` -> Unit (a Java `void` return is Unit).
+        private val JAVA_PRIMITIVES = mapOf(
+            "int" to "kotlin.Int", "long" to "kotlin.Long", "short" to "kotlin.Short", "byte" to "kotlin.Byte",
+            "char" to "kotlin.Char", "boolean" to "kotlin.Boolean", "float" to "kotlin.Float",
+            "double" to "kotlin.Double", "void" to "kotlin.Unit",
+        )
+        // A Java primitive ARRAY (`int[]`) maps to Kotlin's specialised array type, not `Array<Int>`.
+        private val JAVA_PRIMITIVE_ARRAYS = mapOf(
+            "int" to "kotlin.IntArray", "long" to "kotlin.LongArray", "short" to "kotlin.ShortArray",
+            "byte" to "kotlin.ByteArray", "char" to "kotlin.CharArray", "boolean" to "kotlin.BooleanArray",
+            "float" to "kotlin.FloatArray", "double" to "kotlin.DoubleArray",
+        )
     }
 }

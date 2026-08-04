@@ -22,6 +22,76 @@ data class SymbolValue(val name: String, val kind: String, val fileId: Int, val 
 data class MemberValue(val name: String, val owner: String, val kind: String, val signature: String)
 
 /**
+ * Codec for the SHAPE of a project Java SOURCE member, carried in [MemberValue.signature] by the
+ * `java.membersByOwner` index (and the host's live open-buffer provider) so a Kotlin file resolving a
+ * same-project Java class sees real parameter types, the `static` flag, and the return type — not just a
+ * name. The producer (the Java backend) and the consumer (the Kotlin backend) share this contract; a
+ * different language backend never reads it. Type texts are stored AS WRITTEN in the Java source
+ * (`String[]`, `int`, `List<String>`, `String...`) — a resolution-free structural parse can't do better,
+ * and the consumer maps them to Kotlin types leniently. The separators are control characters that cannot
+ * appear in Java type text or identifiers, and an EMPTY signature decodes to null so a member from an old
+ * index segment (or a producer that carried no shape) degrades gracefully to name + kind only.
+ */
+object JavaSourceMemberCodec {
+    private const val FIELD = '\u0001' // between the top-level fields of one member
+    private const val ITEM = '\u0002'  // between parameters
+    private const val PAIR = '\u0003'  // between a parameter's name and its type text
+
+    /** A method's decoded shape; [paramTypes] are positional with [paramNames], [varargIndex] is -1 if none. */
+    data class Method(
+        val static: Boolean,
+        val paramNames: List<String>,
+        val paramTypes: List<String>,
+        val returnType: String?,
+        val varargIndex: Int,
+    )
+
+    /** A field's decoded shape. */
+    data class Field(val static: Boolean, val type: String?)
+
+    fun encodeMethod(
+        static: Boolean,
+        paramNames: List<String>,
+        paramTypes: List<String>,
+        returnType: String?,
+        varargIndex: Int,
+    ): String {
+        val params = paramNames.indices.joinToString(ITEM.toString()) { i ->
+            "${paramNames[i]}$PAIR${paramTypes.getOrElse(i) { "" }}"
+        }
+        return "${if (static) "1" else "0"}$FIELD$varargIndex$FIELD$params$FIELD${returnType ?: ""}"
+    }
+
+    fun encodeField(static: Boolean, type: String?): String = "${if (static) "1" else "0"}$FIELD${type ?: ""}"
+
+    fun decodeMethod(signature: String): Method? {
+        if (signature.isEmpty()) return null
+        val parts = signature.split(FIELD)
+        if (parts.size < 4) return null
+        val names = ArrayList<String>()
+        val types = ArrayList<String>()
+        if (parts[2].isNotEmpty()) for (p in parts[2].split(ITEM)) {
+            val np = p.split(PAIR)
+            names += np.getOrElse(0) { "" }
+            types += np.getOrElse(1) { "" }
+        }
+        return Method(
+            static = parts[0] == "1",
+            paramNames = names,
+            paramTypes = types,
+            returnType = parts[3].ifEmpty { null },
+            varargIndex = parts[1].toIntOrNull() ?: -1,
+        )
+    }
+
+    fun decodeField(signature: String): Field? {
+        if (signature.isEmpty()) return null
+        val parts = signature.split(FIELD)
+        return Field(static = parts[0] == "1", type = parts.getOrNull(1)?.ifEmpty { null })
+    }
+}
+
+/**
  * source-doc hit: real parameter [names] + cleaned [doc] (javadoc/KDoc) for a method declared on the owner
  * type the index is keyed by, recovered from attached SOURCES (a compiled artifact carries neither). The
  * type's own doc is stored as the entry with an empty [name] (and [arity] -1). [arity] picks the overload.

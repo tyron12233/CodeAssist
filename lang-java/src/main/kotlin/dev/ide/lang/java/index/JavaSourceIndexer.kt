@@ -34,7 +34,25 @@ object JavaSourceIndexer {
 
     enum class DeclKind { CLASS, INTERFACE, ENUM, RECORD, ANNOTATION, METHOD, FIELD }
 
-    data class Decl(val name: String, val kind: DeclKind, val offset: Int, val container: String?, val public: Boolean)
+    /**
+     * One declaration. [static] and the method/field shape fields ([paramTypes]/[paramNames]/[returnType]/
+     * [varargIndex]) are populated for METHOD (all of them) and FIELD ([static] + [returnType] = the field
+     * type) declarations, so [JavaMembersByOwnerIndex] can carry a same-project Java member's real shape to
+     * the Kotlin backend. Type texts are AS WRITTEN (`String[]`, `int`, `List<T>`, `String...`) — read from
+     * the type element's source text, so the parse stays resolution-free. Empty/`-1`/false for type decls.
+     */
+    data class Decl(
+        val name: String,
+        val kind: DeclKind,
+        val offset: Int,
+        val container: String?,
+        val public: Boolean,
+        val static: Boolean = false,
+        val paramNames: List<String> = emptyList(),
+        val paramTypes: List<String> = emptyList(),
+        val returnType: String? = null,
+        val varargIndex: Int = -1,
+    )
     data class Parsed(val packageName: String?, val decls: List<Decl>)
 
     /** One member's annotation use, for the annotated-by index: `owner#member` derives from [member]. */
@@ -147,13 +165,31 @@ object JavaSourceIndexer {
         fun offsetOf(e: PsiNameIdentifierOwner): Int = e.nameIdentifier?.textOffset ?: 0
         fun isPublic(e: PsiModifierListOwner) = e.hasModifierProperty(PsiModifier.PUBLIC)
 
+        fun isStatic(e: PsiModifierListOwner) = e.hasModifierProperty(PsiModifier.STATIC)
+        // The type element's raw source text — AS WRITTEN (`String[]`, `int`, `List<T>`, `String...`), no
+        // resolution. Null typeElement (var-args synthesise none, an unusual malformed decl) falls back to "".
+        fun typeText(e: com.intellij.psi.PsiTypeElement?): String = e?.text ?: ""
+
         fun visitClass(cls: PsiClass, container: String?) {
             val name = cls.name ?: return
-            decls += Decl(name, kindOf(cls), offsetOf(cls), container, isPublic(cls))
+            decls += Decl(name, kindOf(cls), offsetOf(cls), container, isPublic(cls), isStatic(cls))
             cls.methods.forEach { m: PsiMethod ->
-                if (!m.isConstructor) decls += Decl(m.name, DeclKind.METHOD, offsetOf(m), name, isPublic(m))
+                if (m.isConstructor) return@forEach
+                val params = m.parameterList.parameters
+                decls += Decl(
+                    m.name, DeclKind.METHOD, offsetOf(m), name, isPublic(m), isStatic(m),
+                    paramNames = params.map { it.name },
+                    paramTypes = params.map { typeText(it.typeElement) },
+                    returnType = m.returnTypeElement?.text,
+                    varargIndex = params.indexOfFirst { it.isVarArgs },
+                )
             }
-            cls.fields.forEach { f: PsiField -> decls += Decl(f.name, DeclKind.FIELD, offsetOf(f), name, isPublic(f)) }
+            cls.fields.forEach { f: PsiField ->
+                decls += Decl(
+                    f.name, DeclKind.FIELD, offsetOf(f), name, isPublic(f), isStatic(f),
+                    returnType = typeText(f.typeElement),
+                )
+            }
             cls.innerClasses.forEach { visitClass(it, name) }
         }
         psi.classes.forEach { visitClass(it, null) }
