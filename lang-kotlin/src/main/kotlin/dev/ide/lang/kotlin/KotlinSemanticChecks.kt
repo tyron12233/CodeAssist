@@ -3226,10 +3226,21 @@ internal class KotlinSemanticChecks(private val service: KotlinSymbolService) {
      * brought into scope.
      */
     private fun delegateOperatorNotInScope(prop: KtProperty, resolver: KotlinResolver): Diagnostic? {
-        val missing = resolver.missingDelegateOperators(prop)
-        if (missing.isEmpty()) return null
         val anchor = prop.delegateExpression ?: return null
         val r = anchor.textRange
+        // A delegate whose type is a terminal type (Unit/Nothing) can never provide the operators — e.g.
+        // `var x by remember { }`, whose empty lambda makes the delegate Unit. There's nothing to import, so
+        // report it with a message about the type rather than the "import the extension" wording below.
+        resolver.nonDelegatableType(prop)?.let { typeName ->
+            val ops = if (prop.isVar) "getValue'/'setValue" else "getValue"
+            return Diagnostic(
+                TextRange(r.startOffset, r.endOffset), Severity.ERROR,
+                "Type '$typeName' can't be used as a property delegate: it has no '$ops' operator",
+                KotlinDiagnosticCodes.DELEGATE_OPERATOR,
+            )
+        }
+        val missing = resolver.missingDelegateOperators(prop)
+        if (missing.isEmpty()) return null
         val ops = missing.joinToString("' and '")
         return Diagnostic(
             TextRange(r.startOffset, r.endOffset), Severity.ERROR,

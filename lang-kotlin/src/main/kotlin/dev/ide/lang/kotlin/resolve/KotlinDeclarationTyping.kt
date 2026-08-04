@@ -28,6 +28,24 @@ import org.jetbrains.kotlin.psi.KtProperty
  * delegate type or a supertype, satisfies it. Empty when the delegate type is unknown OR the operator
  * isn't modeled at all on the classpath (conservative — never invents a rejection).
  */
+/**
+ * The delegate expression's type name when it is a TERMINAL type that can never host a `getValue`/`setValue`
+ * operator — `kotlin.Unit` or `kotlin.Nothing`. This is the `var x by remember { }` case: the empty lambda
+ * makes `remember` return `Unit`, so the delegate itself is invalid. Distinguished from
+ * [missingDelegateOperators] because there is nothing to import — the fix is to write a real delegate, not add
+ * an import — so the diagnostic gets a different message and offers no import quick-fix. Null for any other
+ * (potentially delegatable, or unknown/uninferable) type, so it never invents a rejection.
+ */
+fun KotlinResolver.nonDelegatableType(property: KtProperty): String? {
+    val delegate = property.delegateExpression ?: return null
+    val dt = inferType(delegate)?.takeIf { !it.isTypeParameter } ?: return null
+    return when (dt.qualifiedName) {
+        "kotlin.Unit" -> "Unit"
+        "kotlin.Nothing" -> "Nothing"
+        else -> null
+    }
+}
+
 fun KotlinResolver.missingDelegateOperators(property: KtProperty): List<String> {
     val delegate = property.delegateExpression ?: return emptyList()
     val dt = inferType(delegate) ?: return emptyList()

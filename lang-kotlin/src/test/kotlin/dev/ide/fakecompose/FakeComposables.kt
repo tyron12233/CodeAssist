@@ -154,3 +154,8 @@ fun <T> FakeListScope.fakeItems(
     contentType: ((T) -> Any)? = null,
     itemContent: @Composable FakeItemScope.(T) -> Unit = {},
 ) {}
+
+/** The real `LazyListScope.items` is INLINE. Mirror that exactly to test whether an INLINE top-level extension
+ *  on the implicit receiver is still flagged unresolved when un-imported (the reported `items(list)` gap). */
+@Suppress("NOTHING_TO_INLINE")
+inline fun <T> FakeListScope.fakeInlineItems(items: List<T>) {}

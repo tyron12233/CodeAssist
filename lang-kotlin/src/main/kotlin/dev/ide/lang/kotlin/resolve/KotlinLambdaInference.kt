@@ -44,8 +44,14 @@ internal fun KotlinResolver.bindLambdaReturn(
     }
 }
 
-internal fun KotlinResolver.inferLambdaResult(lambda: KtLambdaExpression): TypeRef? =
-    inferType(lambda.bodyExpression?.statements?.lastOrNull())
+internal fun KotlinResolver.inferLambdaResult(lambda: KtLambdaExpression): TypeRef? {
+    val statements = lambda.bodyExpression?.statements ?: return null
+    // An empty lambda body (`{ }`) has result type Unit. This is what makes `remember { }` type as Unit — and
+    // in turn makes a `by`-delegate on it invalid (Unit has no getValue/setValue). A non-empty body's result is
+    // its last statement's type.
+    if (statements.isEmpty()) return service.typeByFqn("kotlin.Unit")
+    return inferType(statements.last())
+}
 
 /** The `(P…) -> R` type a lambda is expected to be (from the parameter it fills), receiver-bound — used
  *  to type the lambda's `it`/named parameters. */
