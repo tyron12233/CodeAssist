@@ -747,10 +747,9 @@ private fun CodeEditorContent(
             return true
         }
         if ((ev.isCtrlPressed || ev.isMetaPressed) && ev.key == Key.S) {
-            // Reformat-on-save (Settings → Code Style) reformats first, then saves the result.
-            if (runCatching { backend.settings.settings().formatOnSave }.getOrDefault(false)) {
-                scope.launch { runFormat(0, 0); onSave() }
-            } else onSave()
+            // Reformat-on-save (Settings → Code Style) is applied by the save path itself (AppState.save), so
+            // it covers every save trigger — this key, the toolbar button, autosave — uniformly.
+            onSave()
             return true
         }
         // Find (⌘/Ctrl-F) / find+replace (⌘/Ctrl-R); seed the query from the current selection.

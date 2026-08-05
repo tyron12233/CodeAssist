@@ -7,6 +7,7 @@ import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshots.SnapshotStateMap
+import androidx.compose.ui.text.TextRange
 import dev.ide.ui.backend.IdeBackend
 import dev.ide.ui.backend.NodeKind
 import dev.ide.ui.backend.RunStatus
@@ -20,6 +21,7 @@ import dev.ide.ui.backend.UiOpenTab
 import dev.ide.ui.backend.UiOpenTabs
 import dev.ide.ui.backend.UiSettings
 import dev.ide.ui.editor.core.EditorSession
+import dev.ide.ui.editor.core.RangeEdit
 import dev.ide.ui.editor.languageFor
 import dev.ide.ui.editor.preview.PreviewKind
 import dev.ide.ui.editor.preview.previewKindOf
@@ -566,12 +568,48 @@ class IdeUiState(
         openFiles.take(i).forEach(::close)
     }
 
-    /** Persist [file]'s buffer to disk, rebase its saved baseline, and clear the dirty flag. No-op if clean. */
+    /** Persist [file]'s buffer to disk, rebase its saved baseline, and clear the dirty flag. No-op if clean.
+     *  When "Reformat on save" (Settings ▸ Code Style) is on, the buffer is reformatted first — for EVERY save
+     *  path (toolbar button, Cmd/Ctrl-S, autosave), not just the editor's key handler, so it works on-device
+     *  too and for every language with a formatter (Kotlin included). Formatting is a suspend backend call, so
+     *  that path saves asynchronously; the plain path stays synchronous. */
     fun save(file: OpenFile) {
+        if (file.readOnly || !file.modified) return
+        if (runCatching { backend.settings.settings().formatOnSave }.getOrDefault(false)) {
+            scope.launch {
+                reformatBuffer(file)
+                writeToDisk(file)
+            }
+        } else {
+            writeToDisk(file)
+        }
+    }
+
+    private fun writeToDisk(file: OpenFile) {
         if (file.readOnly || !file.modified) return
         val text = file.text // one lazy materialization, on save (not per keystroke)
         backend.editor.saveFile(file.path, text)
         file.onSaved(text)
+    }
+
+    /** Reformat [file]'s live buffer in place (whole-document) before a save. Works with or without a mounted
+     *  editor, so a non-active tab formats too. Best-effort: a formatter failure or an already-formatted buffer
+     *  leaves it untouched. Mirrors CodeEditor.applyBufferEdits' caret shift; the editor (if mounted) brings the
+     *  caret back into view via its editCount effect. */
+    private suspend fun reformatBuffer(file: OpenFile) {
+        val session = file.session
+        val text = session.doc.text
+        val caretBefore = session.selection.start.coerceIn(0, session.doc.length)
+        val raw = runCatching { backend.editor.formatDocument(file.path, text) }.getOrNull().orEmpty()
+        if (raw.isEmpty()) return
+        val len = session.doc.length
+        val edits = raw.map { e ->
+            val st = e.start.coerceIn(0, len)
+            RangeEdit(st, e.end.coerceIn(st, len), e.newText, st + e.newText.length)
+        }
+        var caret = caretBefore
+        for (e in edits) if (e.start <= caret) caret += e.text.length - (e.end - e.start)
+        session.applyEdits(edits, TextRange(caret.coerceAtLeast(0)))
     }
 
     /** Save the active tab (Cmd/Ctrl-S, toolbar). */
