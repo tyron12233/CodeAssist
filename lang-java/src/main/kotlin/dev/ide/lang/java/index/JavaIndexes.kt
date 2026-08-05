@@ -41,11 +41,20 @@ private fun isSource(i: IndexInput) =
 private val TYPE_KINDS =
     setOf(DeclKind.CLASS, DeclKind.INTERFACE, DeclKind.ENUM, DeclKind.RECORD, DeclKind.ANNOTATION)
 
-/** The ASM class shape for [input], read ONCE per class and SHARED across the `java.*` binary indexes that
- *  need it (`classNames`, `packageTypes`, `members`) via [IndexInput.shared] — a library `.class` was
- *  previously parsed once PER index. The result (incl. a null for unreadable bytecode) is cached on the input. */
+/** The raw ASM [org.objectweb.asm.ClassReader] for [input], constructed ONCE per class and SHARED — via the
+ *  cross-family [IndexInput.CLASS_READER] key — with the Kotlin binary indexes, so a library `.class`' constant
+ *  pool is parsed a single time for the whole pass instead of once per index (≈6× on every android.jar class). */
+private fun sharedReader(input: IndexInput): org.objectweb.asm.ClassReader? =
+    input.shared(IndexInput.CLASS_READER) {
+        val bytes = runCatching { input.bytes() }.getOrNull() ?: return@shared null
+        runCatching { org.objectweb.asm.ClassReader(bytes) }.getOrNull()
+    }
+
+/** The ASM class shape for [input], distilled ONCE per class and SHARED across the `java.*` binary indexes that
+ *  need it (`classNames`, `packageTypes`, `members`) via [IndexInput.shared] — over the [sharedReader]. The
+ *  result (incl. a null for unreadable bytecode) is cached on the input. */
 private fun sharedBytecode(input: IndexInput): JavaBytecode.ClassInfo? =
-    input.shared("java.classfile") { JavaBytecode.read(input.bytes()) }
+    input.shared("java.classfile") { sharedReader(input)?.let { JavaBytecode.read(it) } }
 
 /** The declaration kind of a library/SDK class file if it declares a `public` top-level type (JPMS gates
  *  packages, not the package-private types inside them), read from the ASM access flags; null when the type

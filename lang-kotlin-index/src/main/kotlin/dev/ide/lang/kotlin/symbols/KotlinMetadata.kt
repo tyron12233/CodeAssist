@@ -86,7 +86,14 @@ object KotlinMetadata {
         val supertypeFqns: List<String> get() = supertypes.mapNotNull { (it as? KotlinType)?.qualifiedName }
     }
 
-    fun isKotlin(classBytes: ByteArray): Boolean = extract(classBytes) != null
+    fun isKotlin(classBytes: ByteArray): Boolean = extractBytes(classBytes) != null
+
+    /** Construct a [ClassReader] once for the [ByteArray]-taking public entry points; null on unreadable bytes.
+     *  The index build reuses a single reader across every binary index via [sharedClassReader] and calls the
+     *  `ClassReader`-taking overloads directly, so it never comes through here. */
+    private fun readerOf(bytes: ByteArray): ClassReader? = runCatching { ClassReader(bytes) }.getOrNull()
+
+    private fun extractBytes(bytes: ByteArray): Metadata? = readerOf(bytes)?.let { extract(it) }
 
     /**
      * Whether [classBytes] is a Kotlin **file/multi-file facade** or **synthetic** JVM class (`FooKt`,
@@ -95,8 +102,12 @@ object KotlinMetadata {
      * `class`/`object`/`interface`/`enum`/`annotation` and for plain (non-Kotlin) bytecode. Lets class-name
      * completion drop facades the bytecode-name-only `java.classNames` index can't distinguish.
      */
-    fun isFacadeOrSynthetic(classBytes: ByteArray): Boolean {
-        val metadata = extract(classBytes) ?: return false
+    fun isFacadeOrSynthetic(classBytes: ByteArray): Boolean =
+        readerOf(classBytes)?.let { isFacadeOrSynthetic(it) } ?: false
+
+    /** [isFacadeOrSynthetic] over an already-parsed [reader] (the index-build path reuses one shared reader). */
+    internal fun isFacadeOrSynthetic(reader: ClassReader): Boolean {
+        val metadata = extract(reader) ?: return false
         return when (runCatching { KotlinClassMetadata.readLenient(metadata) }.getOrNull()) {
             is KotlinClassMetadata.FileFacade, is KotlinClassMetadata.MultiFileClassFacade, is KotlinClassMetadata.MultiFileClassPart, is KotlinClassMetadata.SyntheticClass -> true
 
@@ -111,7 +122,7 @@ object KotlinMetadata {
      * facade, non-Kotlin bytecode). Lets a decompiler expand the near-empty facade into its real declarations.
      */
     fun multifileFacadeParts(classBytes: ByteArray): List<String>? {
-        val metadata = extract(classBytes) ?: return null
+        val metadata = extractBytes(classBytes) ?: return null
         val km = runCatching { KotlinClassMetadata.readLenient(metadata) }.getOrNull()
         return (km as? KotlinClassMetadata.MultiFileClassFacade)?.partClassNames
     }
@@ -159,7 +170,7 @@ object KotlinMetadata {
 
     /** [jvmNameIndex] off a class's raw bytes (the jar-reading path) — decodes its `@Metadata` first. */
     fun jvmNameIndex(classBytes: ByteArray): Map<String, Set<String>>? =
-        extract(classBytes)?.let { jvmNameIndex(it) }
+        extractBytes(classBytes)?.let { jvmNameIndex(it) }
 
     /** First-char titlecase, matching the reflective reader's `get`/`set` accessor-name convention. */
     private fun String.capitalizeAscii(): String =
@@ -244,11 +255,16 @@ object KotlinMetadata {
     /** One-shot guard so a decode failure (e.g. `kotlin-metadata-jvm` missing on ART) is logged once, not per class. */
     private val loggedDecodeFailure = java.util.concurrent.atomic.AtomicBoolean(false)
 
-    fun decode(classBytes: ByteArray, ctx: KotlinTypeContext?): Decoded? {
-        val metadata = extract(classBytes) ?: return null
+    fun decode(classBytes: ByteArray, ctx: KotlinTypeContext?): Decoded? =
+        readerOf(classBytes)?.let { decode(it, ctx) }
+
+    /** [decode] over an already-parsed [reader]; the index-build path reuses ONE reader per class ([sharedMetadata]),
+     *  so a plain Java class is not re-parsed by each `kotlin.*` binary index (nor by `typeShape`'s facade check). */
+    internal fun decode(reader: ClassReader, ctx: KotlinTypeContext?): Decoded? {
+        val metadata = extract(reader) ?: return null
         // `@Composable` isn't in the @Metadata blob; detect it from the bytecode (the annotation and/or the
         // synthetic `Composer` parameter the plugin appends), correlated to the metadata function by name.
-        val composable = composableMethodNames(classBytes)
+        val composable = composableMethodNames(reader)
         val kmResult = runCatching { KotlinClassMetadata.readLenient(metadata) }
         // DIAGNOSTIC: if reading the @Metadata blob throws (a missing kotlin-metadata-jvm class on ART, or an
         // unparseable blob), every Kotlin library symbol silently vanishes — log the first occurrence with the
@@ -275,9 +291,8 @@ object KotlinMetadata {
 
     /** JVM method names that are `@Composable`: either carry the annotation or take a `Composer` parameter
      *  (the plugin appends one). Read straight from the bytecode — the Kotlin metadata doesn't store it. */
-    private fun composableMethodNames(bytes: ByteArray): Set<String> {
+    private fun composableMethodNames(reader: ClassReader): Set<String> {
         val names = HashSet<String>()
-        val reader = runCatching { ClassReader(bytes) }.getOrNull() ?: return names
         reader.accept(object : ClassVisitor(Opcodes.ASM9) {
             override fun visitMethod(
                 access: Int,
@@ -639,7 +654,7 @@ object KotlinMetadata {
         if (m == Modality.ABSTRACT) setOf(Modifier.ABSTRACT) else emptySet()
 
     /** Pull the `@kotlin.Metadata` annotation values off the class with ASM, or null if absent. */
-    private fun extract(classBytes: ByteArray): Metadata? {
+    private fun extract(reader: ClassReader): Metadata? {
         var found = false
         var k = 1
         var mv = IntArray(0)
@@ -648,7 +663,6 @@ object KotlinMetadata {
         var xi = 0
         val d1 = ArrayList<String>()
         val d2 = ArrayList<String>()
-        val reader = runCatching { ClassReader(classBytes) }.getOrNull() ?: return null
         reader.accept(object : ClassVisitor(Opcodes.ASM9) {
             override fun visitAnnotation(
                 descriptor: String?, visible: Boolean

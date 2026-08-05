@@ -47,8 +47,12 @@ object JavaBytecode {
     private val BINARY = SymbolOrigin(fromSource = false, file = null)
     private const val OBJECT = "java.lang.Object"
 
-    fun read(bytes: ByteArray, ctx: KotlinTypeContext?): JavaShape? {
-        val cr = runCatching { ClassReader(bytes) }.getOrNull() ?: return null
+    fun read(bytes: ByteArray, ctx: KotlinTypeContext?): JavaShape? =
+        (runCatching { ClassReader(bytes) }.getOrNull() ?: return null).let { read(it, ctx) }
+
+    /** [read] over an already-parsed [cr] — the index build reuses ONE shared reader per class (see
+     *  [dev.ide.lang.kotlin.index.sharedClassReader]) instead of constructing one here per binary index. */
+    fun read(cr: ClassReader, ctx: KotlinTypeContext?): JavaShape? {
         val members = ArrayList<KotlinSymbol>()
         val typeParams = ArrayList<String>()
         val typeParamBounds = ArrayList<TypeRef>()

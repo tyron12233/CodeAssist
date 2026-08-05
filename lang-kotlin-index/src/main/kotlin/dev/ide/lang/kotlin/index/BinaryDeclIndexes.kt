@@ -62,8 +62,7 @@ object BinarySubtypeIndex : IndexExtension<String, SubtypeValue> {
     override val inputFilter = binaryClassFilter
 
     override fun index(input: IndexInput): Map<String, Collection<SubtypeValue>> {
-        val bytes = runCatching { input.bytes() }.getOrNull() ?: return emptyMap()
-        val r = runCatching { ClassReader(bytes) }.getOrNull() ?: return emptyMap()
+        val r = sharedClassReader(input) ?: return emptyMap()
         if (r.access and Opcodes.ACC_SYNTHETIC != 0) return emptyMap()
         val fqn = dotted(r.className)
         val kind = kindOf(r.access)
@@ -89,8 +88,7 @@ object BinaryAnnotationIndex : IndexExtension<String, AnnotatedValue> {
     override val inputFilter = binaryClassFilter
 
     override fun index(input: IndexInput): Map<String, Collection<AnnotatedValue>> {
-        val bytes = runCatching { input.bytes() }.getOrNull() ?: return emptyMap()
-        val r = runCatching { ClassReader(bytes) }.getOrNull() ?: return emptyMap()
+        val r = sharedClassReader(input) ?: return emptyMap()
         val out = HashMap<String, MutableList<AnnotatedValue>>()
         val owner = dotted(r.className)
         val ownerKind = kindOf(r.access)

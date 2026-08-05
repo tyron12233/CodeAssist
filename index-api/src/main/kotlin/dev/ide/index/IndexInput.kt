@@ -32,4 +32,13 @@ interface IndexInput {
      * no caching (each call recomputes) — inputs that aren't shared across extensions need nothing more.
      */
     fun <T> shared(key: String, compute: () -> T): T = compute()
+
+    companion object {
+        /** [shared] key under which a binary `.class` input's parsed ASM `ClassReader` is cached. The Java and
+         *  Kotlin binary index families both parse the same class; keying the reader here lets every one of them
+         *  reuse ONE constant-pool parse instead of constructing its own (≈6 per android.jar class before this).
+         *  The cached value is an `org.objectweb.asm.ClassReader` — a type known only to those modules; this key
+         *  is just the neutral coordination point so they agree on it. */
+        const val CLASS_READER: String = "asm.classReader"
+    }
 }

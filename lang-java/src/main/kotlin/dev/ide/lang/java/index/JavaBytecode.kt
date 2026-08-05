@@ -19,12 +19,18 @@ object JavaBytecode {
     data class Member(val name: String, val descriptor: String)
     class ClassInfo(val access: Int, val internalName: String, val methods: List<Member>, val fields: List<Member>)
 
-    fun read(bytes: ByteArray): ClassInfo? = runCatching {
+    fun read(bytes: ByteArray): ClassInfo? =
+        (runCatching { ClassReader(bytes) }.getOrNull() ?: return null).let { read(it) }
+
+    /** [read] over an already-parsed [reader] — the index build shares ONE reader per class across the Java AND
+     *  Kotlin binary index families (keyed on [dev.ide.index.IndexInput.CLASS_READER]) rather than constructing
+     *  one per index, so every `android.jar` class is fed to the constant-pool parser once, not ≈6 times. */
+    fun read(reader: ClassReader): ClassInfo? = runCatching {
         val methods = ArrayList<Member>()
         val fields = ArrayList<Member>()
         var access = 0
         var internalName = ""
-        ClassReader(bytes).accept(
+        reader.accept(
             object : ClassVisitor(Opcodes.ASM9) {
                 override fun visit(
                     version: Int, acc: Int, name: String?, sig: String?, superName: String?, ifaces: Array<out String>?,

@@ -64,4 +64,21 @@ class BinaryDecodeSharingTest {
 
         assertEquals(1, input.computeRuns["kotlin.metadata"], "one shared @Metadata decode per class")
     }
+
+    @Test
+    fun binaryIndexesShareOneClassReaderPerClass() {
+        val input = RecordingInput(IndexOrigin.LIBRARY, "p/Foo.class", plainClassBytes())
+
+        // The five `kotlin.*` binary indexes each need the parsed class. Before the shared-reader change a plain
+        // Java class (the android.jar shape) was fed to a fresh ASM ClassReader by typeShape (facade check +
+        // @Metadata decode + JavaBytecode fallback), subtype.binary, and annotation.binary — several constant-pool
+        // parses of the same bytes. They now all run over ONE reader cached under IndexInput.CLASS_READER.
+        KotlinTypeShapeIndex.index(input)
+        BinarySubtypeIndex.index(input)
+        BinaryAnnotationIndex.index(input)
+        KotlinCallableIndex.index(input)
+        KotlinPackageDeclIndex.index(input)
+
+        assertEquals(1, input.computeRuns[IndexInput.CLASS_READER], "one shared ClassReader per class")
+    }
 }

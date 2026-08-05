@@ -52,19 +52,21 @@ object KotlinTypeShapeIndex : IndexExtension<String, TypeShape> {
     }
 
     override fun index(input: IndexInput): Map<String, Collection<TypeShape>> {
-        val bytes = runCatching { input.bytes() }.getOrNull() ?: return emptyMap()
+        // ONE ASM parse of the class, shared with every other binary index in this pass ([sharedClassReader]);
+        // the facade check, the @Metadata decode, and the Java-bytecode fallback all run over this same reader.
+        val reader = sharedClassReader(input) ?: return emptyMap()
         // A facade/synthetic class is not a referenceable type — its callables feed the extension/top-level
         // scan (`kotlin.callables`), not a member shape. Skip it BEFORE the bytecode fallback: the multi-file
         // FACADE (@Metadata k=4) isn't handled by KotlinMetadata.decode, so it would otherwise fall through and
         // be indexed as a bogus type (its members duplicating the parts' top-level callables).
-        if (KotlinMetadata.isFacadeOrSynthetic(bytes)) return emptyMap()
+        if (KotlinMetadata.isFacadeOrSynthetic(reader)) return emptyMap()
         // A Kotlin @Metadata class; otherwise plain Java/Android bytecode. The decode is SHARED with the other
         // kotlin.* binary indexes for this class ([sharedMetadata]).
         sharedMetadata(input)?.let { d ->
             val fqn = d.classFqn ?: return emptyMap()
             return mapOf(fqn to listOf(TypeShape.of(d, null)))
         }
-        val js = runCatching { JavaBytecode.read(bytes, null) }.getOrNull() ?: return emptyMap()
+        val js = runCatching { JavaBytecode.read(reader, null) }.getOrNull() ?: return emptyMap()
         // The consumer queries dotted FQNs (`Outer.Inner`); the entry is `Outer$Inner.class`.
         val fqn = input.unitName?.removeSuffix(".class")?.replace('/', '.')?.replace('$', '.')
             ?: return emptyMap()
