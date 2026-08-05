@@ -47,6 +47,16 @@ internal object KotlinCompletionItems {
         /** The item is a segment of an `import`/`package` directive: a callable inserts its BARE name
          *  (`import a.b.map`), never the call form `map()` — unlike a fully-qualified call in code. */
         bareCallable: Boolean = false,
+        /** For a TYPE candidate: the number of type parameters the type declares, so a generic type inserts the
+         *  angle brackets ready for arguments (`List` → `List<>`). 0 = non-generic (or the position doesn't want
+         *  them). Computed by the caller, which has the symbol service. */
+        typeParamCount: Int = 0,
+        /** For a TYPE candidate that should complete as a CONSTRUCTOR call — a superclass in a supertype list, or
+         *  an instantiable class where a value is expected — the number of REQUIRED (non-defaulted, non-vararg)
+         *  arguments of its cheapest constructor: `>= 0` inserts the `()` (caret lands inside when `> 0`), `-1`
+         *  keeps the bare type (an interface, a non-instantiable type, or a non-constructor position). Computed
+         *  by the caller. */
+        ctorRequiredArgs: Int = -1,
     ): CompletionItem {
         val isFunction = s.kind == SymbolKind.METHOD || s.kind == SymbolKind.CONSTRUCTOR
         val sig = s.signature
@@ -79,6 +89,22 @@ internal object KotlinCompletionItems {
             isFunction && callSyntaxFollows -> s.name to CaretAction.AtEnd                 // parens/braces already there
             isFunction && hasParams -> "${s.name}()" to CaretAction.At(s.name.length + 1)  // between the parens
             isFunction -> "${s.name}()" to CaretAction.AtEnd                               // no-arg call
+            // A TYPE candidate that wants angle brackets and/or a constructor call, composed as `Name<>()`:
+            //  - a generic type gets `<>` (`List` → `List<>`, `class Foo : ArrayList<>()`);
+            //  - a superclass / instantiable value-position class gets `()` (`class Foo : Base()`, `val v = Foo()`).
+            // The caret lands at the first thing to fill: inside `<>` for a generic (type arguments come first),
+            // else inside `()` when the constructor needs arguments, else after. Skipped when the call syntax
+            // already follows (`: Base█()`), so nothing is doubled.
+            s.kind in TYPE_KINDS && !callSyntaxFollows && (typeParamCount > 0 || ctorRequiredArgs >= 0) -> {
+                val generic = typeParamCount > 0
+                val text = s.name + (if (generic) "<>" else "") + (if (ctorRequiredArgs >= 0) "()" else "")
+                val caret = when {
+                    generic -> CaretAction.At(s.name.length + 1)                 // inside `<>`
+                    ctorRequiredArgs > 0 -> CaretAction.At(s.name.length + 1)     // inside `()`
+                    else -> CaretAction.AtEnd
+                }
+                text to caret
+            }
             else -> s.name to CaretAction.AtEnd
         }
         // Read like Kotlin source: the label is `println(message: String)` (name + params adjacent), and the

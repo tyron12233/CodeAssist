@@ -63,6 +63,7 @@ import org.jetbrains.kotlin.psi.KtSuperExpression
 import org.jetbrains.kotlin.psi.KtSuperTypeCallEntry
 import org.jetbrains.kotlin.psi.KtThisExpression
 import org.jetbrains.kotlin.psi.KtSuperTypeList
+import org.jetbrains.kotlin.psi.KtSuperTypeListEntry
 import org.jetbrains.kotlin.psi.KtTypeParameter
 import org.jetbrains.kotlin.psi.KtTypeReference
 import org.jetbrains.kotlin.psi.KtAnnotationEntry
@@ -277,15 +278,28 @@ class KotlinCompletion(
             out
         }
 
-        val symbolItems = candidates.map {
+        // Smart TYPE-candidate insertion (angle brackets for a generic, a `()` constructor call for a
+        // superclass / instantiable value). The facts need the symbol service, so compute them here (see
+        // [typeInsertFacts]) and hand the pure item builder two plain ints.
+        //  - A DIRECT entry in a class's supertype list (`class Foo : Ba█`): the type reference's parent is a
+        //    supertype-list entry — unlike a nested type argument (`class Foo : List<Ba█>`), whose reference
+        //    sits under a type projection. A class there is a constructor call; an interface stays bare.
+        val superTypeEntry = climbTo<KtTypeReference>(markerLeaf)?.parent is KtSuperTypeListEntry
+        val typePosition = inTypePosition(markerLeaf)
+
+        val symbolItems = candidates.map { c ->
+            val (typeParamCount, ctorRequiredArgs) =
+                typeInsertFacts(c.symbol, superTypeEntry, pos.nameReference, typePosition, followingChar)
             KotlinCompletionItems.toItem(
-                it.symbol,
-                it.importEdit,
+                c.symbol,
+                c.importEdit,
                 followingChar,
-                it.relevance(),
+                c.relevance(),
                 infix = pos.infixInsert,
                 callableRef = callableRef,
                 bareCallable = pos.bareCallable,
+                typeParamCount = typeParamCount,
+                ctorRequiredArgs = ctorRequiredArgs,
             )
         }
 
@@ -1150,6 +1164,67 @@ class KotlinCompletion(
         if (call.calleeExpression !== nameRef) return null
         val q = call.parent as? KtQualifiedExpression ?: return null
         return if (q.selectorExpression === call) q.receiverExpression else null
+    }
+
+    /**
+     * The `(typeParamCount, ctorRequiredArgs)` a TYPE candidate should insert with (consumed by
+     * [KotlinCompletionItems.toItem]): the type's arity for a generic `<>`, and the required-argument count of
+     * its cheapest constructor for a `()` call — a superclass in a supertype list ([superTypeEntry], any class),
+     * or an instantiable class in a value position ([valuePosition], not an interface/abstract/object). Returns
+     * `0 to -1` (bare type) for a non-type candidate or when a fact can't be decided, so completion never
+     * regresses on an unknown type. Consults the symbol service, so it runs here rather than in the pure item
+     * builder; the per-candidate cost is the same order as the auto-import lookup the loop already does.
+     */
+    private fun typeInsertFacts(
+        s: KotlinSymbol,
+        superTypeEntry: Boolean,
+        valuePosition: Boolean,
+        typePosition: Boolean,
+        followingChar: Char?,
+    ): Pair<Int, Int> {
+        if (s.kind !in TYPE_KINDS) return 0 to -1
+        val fqn = (s.type as? KotlinType)?.qualifiedName ?: return 0 to -1
+        val ctorRequiredArgs = when {
+            s.kind != SymbolKind.CLASS -> -1                        // only a class completes as a constructor call
+            superTypeEntry -> ctorRequiredArgsOf(fqn)               // a superclass always needs its `()`
+            // A value position (`val v = Foo█`, an argument, a `return`): an instantiable class completes as a
+            // constructor call. Excludes interfaces/abstract/sealed (isNonInstantiableType) and objects (used as
+            // the singleton, not `Object()`), and backs off on an unknown type. Not when a `.` follows — the
+            // user is reaching for a member/companion (`Color.Red`), not constructing.
+            valuePosition && followingChar != '.' &&
+                service.isNonInstantiableType(fqn) == false && !service.isObject(fqn) -> ctorRequiredArgsOf(fqn)
+
+            else -> -1
+        }
+        // Angle brackets in a type position (`val x: List█`), or whenever a constructor call is being added (so
+        // a generic value/superclass reads `ArrayList<>()`). A bare generic in a value position with no call
+        // gets none — a lone `List<>` value is meaningless.
+        val typeParamCount =
+            if (typePosition || ctorRequiredArgs >= 0) service.classTypeParameters(fqn).size else 0
+        return typeParamCount to ctorRequiredArgs
+    }
+
+    /** The required (non-defaulted, non-vararg) argument count of [fqn]'s cheapest constructor — decides whether
+     *  the caret lands inside the inserted `()`. 0 when the type has no explicit constructor (an implicit no-arg
+     *  one) or none is known yet, so a class still gets its `()`. Reads the source model for a same-project class
+     *  (its constructor shape isn't in the classpath index) and [KotlinSymbolService.constructorsOf] for a
+     *  library binary. */
+    private fun ctorRequiredArgsOf(fqn: String): Int {
+        fun required(paramCount: Int, varargIndex: Int, hasDefault: List<Boolean>): Int {
+            var req = 0
+            for (i in 0 until paramCount) {
+                if (i == varargIndex || hasDefault.getOrNull(i) == true) continue
+                req++
+            }
+            return req
+        }
+        service.sourceClass(fqn)?.let { rc ->
+            if (rc.constructors.isEmpty()) return 0 // implicit no-arg primary
+            return rc.constructors.minOf { required(it.paramTexts.size, it.varargParamIndex, it.paramHasDefault) }
+        }
+        val ctors = service.constructorsOf(fqn)
+        if (ctors.isEmpty()) return 0
+        return ctors.minOf { required(it.paramTypes.size, it.varargParamIndex, it.paramHasDefault) }
     }
 
     private fun inTypePosition(leaf: PsiElement?): Boolean = climbTo<KtTypeReference>(leaf) != null
