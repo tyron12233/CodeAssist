@@ -5,8 +5,6 @@ import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.gestures.Orientation
-import androidx.compose.foundation.gestures.awaitEachGesture
-import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.gestures.draggable
 import androidx.compose.foundation.gestures.rememberDraggableState
@@ -32,10 +30,7 @@ import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.nestedscroll.NestedScrollConnection
 import androidx.compose.ui.input.nestedscroll.NestedScrollSource
 import androidx.compose.ui.input.nestedscroll.nestedScroll
-import androidx.compose.ui.input.pointer.PointerEventPass
 import androidx.compose.ui.input.pointer.pointerInput
-import androidx.compose.ui.input.pointer.positionChange
-import androidx.compose.ui.input.pointer.util.VelocityTracker
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalViewConfiguration
 import androidx.compose.ui.unit.Dp
@@ -47,9 +42,6 @@ import kotlinx.coroutines.launch
 import kotlin.math.abs
 import kotlin.math.roundToInt
 
-/** The zone along the left screen edge where a rightward swipe always grabs the drawer. */
-private val EdgeGrabWidth = 24.dp
-
 /** Fling speed (px/s, expressed in dp) past which a release commits to open/close regardless of position. */
 private val FlingCommit = 320.dp
 
@@ -59,13 +51,14 @@ private val FlingCommit = 320.dp
  * counterpart to the expanded layout's docked navigator pane.
  *
  * Gestures (when [gesturesEnabled]) are nested-scroll aware, so they never fight the code editor:
- *  - a swipe **starting at the left screen edge** always drags the drawer open (intercepted before the
- *    editor sees it);
- *  - elsewhere, a rightward drag opens the drawer only when the content underneath consumed **no
- *    horizontal scroll for the whole gesture** — i.e. the editor was already at its horizontal start when
- *    the finger went down — and only when the gesture is horizontal-dominant. A gesture that starts by
- *    scrolling the editor sideways keeps the axis: if it later reaches the editor's left edge, the drawer
- *    stays put (you have to lift and swipe again), so a scroll never turns into a drawer mid-stroke;
+ *  - a rightward drag opens the drawer only when the content underneath consumed **no horizontal scroll
+ *    for the whole gesture** — i.e. the editor was already at its horizontal start when the finger went
+ *    down — and only when the gesture is horizontal-dominant. A gesture that starts by scrolling the
+ *    editor sideways keeps the axis: if it later reaches the editor's left edge, the drawer stays put (you
+ *    have to lift and swipe again), so a scroll never turns into a drawer mid-stroke. This cooperative
+ *    path is the ONLY swipe-open: there is deliberately no edge-grab that preempts the editor, since that
+ *    stole a rightward scroll-back near the left margin and made horizontal scrolling flaky. Open the
+ *    drawer over horizontally-scrolled content via the top-bar toggle (or scroll back to the start first);
  *  - with the drawer open, the pushed content is covered by a tap-to-close catcher and a horizontal drag
  *    anywhere (drawer or content) moves the drawer; release settles to the nearer edge, flings commit.
  *
@@ -205,47 +198,7 @@ fun PushDrawer(
                     // running it inline on the draggable coroutine let a stale snap cancel it, leaving the
                     // drawer stuck mid-swipe on release instead of snapping to the nearer edge.
                     onDragStopped = { velocity -> scope.launch { settle(velocity) } },
-                )
-                // Edge grab: a drag that *starts* within the left edge zone opens the drawer no matter
-                // what sits under the finger. Watched on the Initial pass so, once claimed (past slop,
-                // rightward, horizontal-dominant), the events are consumed before the editor's scroll
-                // containers can treat them as a pan. A vertical-dominant start bails out and leaves the
-                // gesture to the child untouched.
-                .pointerInput(gesturesEnabled, maxPx) {
-                    if (!gesturesEnabled) return@pointerInput
-                    val edgePx = EdgeGrabWidth.toPx()
-                    awaitEachGesture {
-                        val down = awaitFirstDown(requireUnconsumed = false, pass = PointerEventPass.Initial)
-                        if (offset.value > 0.5f || down.position.x > edgePx) return@awaitEachGesture
-                        var totalX = 0f
-                        var totalY = 0f
-                        var claimed = false
-                        val tracker = VelocityTracker()
-                        while (true) {
-                            val event = awaitPointerEvent(PointerEventPass.Initial)
-                            val change = event.changes.firstOrNull { it.id == down.id } ?: break
-                            if (!change.pressed) {
-                                if (claimed) {
-                                    change.consume()
-                                    scope.launch { settle(tracker.calculateVelocity().x) }
-                                }
-                                break
-                            }
-                            val delta = change.positionChange()
-                            totalX += delta.x
-                            totalY += delta.y
-                            if (!claimed) {
-                                if (abs(totalY) > viewConfiguration.touchSlop && abs(totalY) > abs(totalX)) break
-                                if (totalX > viewConfiguration.touchSlop && totalX > abs(totalY)) claimed = true
-                            }
-                            if (claimed) {
-                                tracker.addPosition(change.uptimeMillis, change.position)
-                                dragBy(delta.x)
-                                change.consume()
-                            }
-                        }
-                    }
-                },
+                ),
         ) {
             // ONE moving plane carries both panes (a push, not an overlay): the drawer hangs off the
             // plane's left edge at a constant offset, so the single dynamic placement lambda below is the

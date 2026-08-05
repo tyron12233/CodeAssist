@@ -282,22 +282,22 @@ internal fun Modifier.editorInput(
             // scrollables and detectTapGestures (tap/double-tap) still run.
             interaction.lastInputWasTouch = true
             val handleRadius = 14.dp.toPx()
-            fun handleCenter(offset: Int): Offset {
+            // A handle grab must land ON the handle glyph, which is drawn BELOW its anchor line — so require the
+            // touch to be at/below that line's bottom. Without this the grab circle reaches a few dp up into the
+            // text, and a horizontal scroll swipe over the text would drag the caret/selection instead of
+            // scrolling (leaving the text row itself free to scroll).
+            fun onHandle(offset: Int): Boolean {
                 val (_, x, top) = geometry.caretGeometry(offset)
-                return Offset(x, top + metrics.lineHeight + handleRadius * 0.6f)
+                val lineBottom = top + metrics.lineHeight
+                val center = Offset(x, lineBottom + handleRadius * 0.6f)
+                return down.position.y >= lineBottom && (down.position - center).getDistance() < handleRadius
             }
 
             val sel = session.selection
             val hit: Char? = when {
-                interaction.handlesVisible && !sel.collapsed &&
-                    (down.position - handleCenter(sel.min)).getDistance() < handleRadius -> 'a'
-
-                interaction.handlesVisible && !sel.collapsed &&
-                    (down.position - handleCenter(sel.max)).getDistance() < handleRadius -> 'b'
-
-                interaction.handlesVisible && sel.collapsed &&
-                    (down.position - handleCenter(sel.start)).getDistance() < handleRadius -> 'c'
-
+                interaction.handlesVisible && !sel.collapsed && onHandle(sel.min) -> 'a'
+                interaction.handlesVisible && !sel.collapsed && onHandle(sel.max) -> 'b'
+                interaction.handlesVisible && sel.collapsed && onHandle(sel.start) -> 'c'
                 else -> null
             }
             if (hit != null) {
