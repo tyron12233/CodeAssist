@@ -7,10 +7,15 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.WindowInsetsSides
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.only
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.systemGestures
+import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -99,6 +104,12 @@ private fun ViewModeToggle(
 ) {
     Row(
         Modifier.height(EditorToolbarHeight)
+            // Edge-to-edge (enableEdgeToEdge + a safeDrawing root inset, which does NOT cover systemGestures)
+            // anchors this control against the right screen edge, where the system back-gesture zone consumes
+            // the down event on the last segment (Split) before its clickable ever sees it — so Split can't be
+            // selected while Preview, one segment further in, still works. Inset the pill clear of the end
+            // gesture inset so every segment stays tappable (empty on desktop / 3-button nav → a no-op there).
+            .windowInsetsPadding(WindowInsets.systemGestures.only(WindowInsetsSides.End))
             .background(
                 Ide.colors.editorBg,
                 androidx.compose.foundation.shape.RoundedCornerShape(Ca.radius.sm)
