@@ -7,7 +7,11 @@ import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.background
+import androidx.compose.foundation.gestures.Orientation
+import androidx.compose.foundation.gestures.draggable
+import androidx.compose.foundation.gestures.rememberDraggableState
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.WindowInsets
@@ -61,13 +65,13 @@ import dev.ide.ui.components.PushDrawer
 import dev.ide.ui.components.RailActionItem
 import dev.ide.ui.components.RailSide
 import dev.ide.ui.components.SegmentedPanelSwitcher
-import dev.ide.ui.components.SidebarDivider
 import dev.ide.ui.components.SidebarPane
 import dev.ide.ui.components.SidebarPanel
 import dev.ide.ui.components.pluginPanels
 import dev.ide.ui.components.RightToolOverlay
 import dev.ide.ui.ext.ToolWindowAnchor
 import dev.ide.ui.generated.resources.Res
+import dev.ide.ui.generated.resources.buildc_build
 import dev.ide.ui.generated.resources.edchrome_files
 import dev.ide.ui.generated.resources.edchrome_more
 import dev.ide.ui.generated.resources.edchrome_settings_and_tools
@@ -78,6 +82,7 @@ import dev.ide.ui.generated.resources.search
 import dev.ide.ui.generated.resources.structure_title
 import dev.ide.ui.icons.CaIcons
 import dev.ide.ui.platform.isMobilePlatform
+import dev.ide.ui.platform.verticalResizeCursor
 import dev.ide.ui.theme.Motion
 import kotlinx.coroutines.launch
 import org.jetbrains.compose.resources.stringResource
@@ -271,6 +276,7 @@ internal fun ExpandedLayout(
     val rightPanels = pluginPanels(ToolWindowAnchor.RIGHT, state.backend, state.active?.path)
     val moreLabel = stringResource(Res.string.edchrome_more)
     val settingsLabel = stringResource(Res.string.edchrome_settings_and_tools)
+    val buildConsoleLabel = stringResource(Res.string.buildc_build)
     Box(Modifier.fillMaxSize()) {
         Row(Modifier.fillMaxSize()) {
             ActivityRail(
@@ -282,35 +288,71 @@ internal fun ExpandedLayout(
                     Box(Modifier.padding(vertical = 2.dp).width(32.dp).height(1.dp).background(MaterialTheme.colorScheme.outlineVariant))
                 },
                 footer = {
+                    // The build console is a BOTTOM tool window (docked below the editor, see the centre column);
+                    // IntelliJ-style its toggle lives at the lower-left of the rail, tinted while it's open.
+                    RailActionItem(CaIcons.terminal, buildConsoleLabel, active = state.consoleOpen) {
+                        state.consoleOpen = !state.consoleOpen
+                    }
                     RailActionItem(CaIcons.ellipsis, moreLabel) { state.moreOpen = true }
-                    RailActionItem(CaIcons.gear, settingsLabel, onOpenHub)
+                    RailActionItem(CaIcons.gear, settingsLabel, onClick = onOpenHub)
                 },
             )
-            SidebarPane(leftPanels, state.selectedLeftPanel, RailSide.Left, paneWidth = LeftPaneWidth)
-            EditorCenter(state, indexStatus, compact = false, Modifier.weight(1f).fillMaxHeight())
-            if (state.consoleOpen) {
-                SidebarDivider()
-                GlassSurface(Modifier.width(380.dp).fillMaxHeight(), GlassMaterial.Regular) {
-                    // Collected here (not threaded from the parent) so ~10/s app-log updates recompose only
-                    // the console subtree, not the whole editor layout.
-                    val appLog by state.backend.build.appLog.collectAsState()
-                    BuildConsole(
-                        buildState = buildState,
-                        indexStatus = indexStatus,
-                        onRun = { state.requestRun { state.backend.build.runBuild() } },
-                        onStop = { state.backend.build.stopBuild() },
-                        onCollapse = { state.consoleOpen = false },
-                        modifier = Modifier.fillMaxSize().padding(14.dp),
-                        onOpenDiagnostic = { d -> d.file?.let { state.openAtLine(it, d.line, d.column) } },
-                        backend = state.backend,
-                        activeFilePath = state.active?.path,
-                        appLog = appLog,
-                    )
+            // Centre column spanning the width between the two activity rails: the editor (with the left/right
+            // tool panes) on top, and the build console docked along the BOTTOM (IntelliJ bottom tool window)
+            // rather than as a right-edge pane. The rails stay full-height, so their footer buttons — including
+            // the console toggle — sit in the lower corners. The divider above the console drags to resize it.
+            BoxWithConstraints(Modifier.weight(1f).fillMaxHeight()) {
+                val density = LocalDensity.current
+                val minConsole = 140.dp
+                val maxConsole = (maxHeight - 200.dp).coerceAtLeast(minConsole)
+                var consoleHeight by remember { mutableStateOf(300.dp) }
+                val consoleH = consoleHeight.coerceIn(minConsole, maxConsole)
+                Column(Modifier.fillMaxSize()) {
+                    Row(Modifier.weight(1f).fillMaxWidth()) {
+                        SidebarPane(leftPanels, state.selectedLeftPanel, RailSide.Left, paneWidth = LeftPaneWidth)
+                        EditorCenter(state, indexStatus, compact = false, Modifier.weight(1f).fillMaxHeight())
+                        // Right-edge tool-window pane. Fully plugin-derived: nothing lays down when no plugin
+                        // contributes a RIGHT tool window (the AI chat is one such plugin).
+                        SidebarPane(rightPanels, state.selectedRightPanel, RailSide.Right, paneWidth = RightPaneWidth)
+                    }
+                    if (state.consoleOpen) {
+                        // Resize grip: a thin 1dp splitter line with a slightly taller invisible grab strip and a
+                        // vertical-resize cursor on hover (desktop). The console is bottom-anchored, so dragging
+                        // this top edge UP grows it.
+                        Box(
+                            Modifier.fillMaxWidth().height(5.dp)
+                                .verticalResizeCursor()
+                                .draggable(
+                                    orientation = Orientation.Vertical,
+                                    state = rememberDraggableState { dy ->
+                                        consoleHeight = (consoleH - with(density) { dy.toDp() })
+                                            .coerceIn(minConsole, maxConsole)
+                                    },
+                                ),
+                            contentAlignment = Alignment.Center,
+                        ) {
+                            Box(Modifier.fillMaxWidth().height(1.dp).background(MaterialTheme.colorScheme.outlineVariant))
+                        }
+                        GlassSurface(Modifier.fillMaxWidth().height(consoleH), GlassMaterial.Regular) {
+                            // Collected here (not threaded from the parent) so ~10/s app-log updates recompose only
+                            // the console subtree, not the whole editor layout.
+                            val appLog by state.backend.build.appLog.collectAsState()
+                            BuildConsole(
+                                buildState = buildState,
+                                indexStatus = indexStatus,
+                                onRun = { state.requestRun { state.backend.build.runBuild() } },
+                                onStop = { state.backend.build.stopBuild() },
+                                onCollapse = { state.consoleOpen = false },
+                                modifier = Modifier.fillMaxSize().padding(14.dp),
+                                onOpenDiagnostic = { d -> d.file?.let { state.openAtLine(it, d.line, d.column) } },
+                                backend = state.backend,
+                                activeFilePath = state.active?.path,
+                                appLog = appLog,
+                            )
+                        }
+                    }
                 }
             }
-            // Right-edge tool-window pane + its own activity rail. Fully plugin-derived: nothing lays down when
-            // no plugin contributes a RIGHT tool window (the AI chat is one such plugin).
-            SidebarPane(rightPanels, state.selectedRightPanel, RailSide.Right, paneWidth = RightPaneWidth)
             if (rightPanels.isNotEmpty()) {
                 ActivityRail(
                     panels = rightPanels,

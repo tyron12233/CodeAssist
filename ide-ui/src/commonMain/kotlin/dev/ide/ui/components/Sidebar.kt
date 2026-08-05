@@ -267,19 +267,20 @@ fun SidebarDivider() {
 }
 
 /** A non-panel rail action (icon + label), styled like a [RailIcon] but without the sliding indicator — used
- *  for the left rail's footer (More, Settings & Tools). */
+ *  for the left rail's footer (Build console, More, Settings & Tools). [active] renders it as a lit toggle
+ *  (used by the bottom-tool-window button so it reflects whether the console is open). */
 @Composable
-fun RailActionItem(icon: ImageVector, label: String, onClick: () -> Unit) {
+fun RailActionItem(icon: ImageVector, label: String, active: Boolean = false, onClick: () -> Unit) {
     Column(
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.spacedBy(3.dp),
     ) {
-        IconButtonCa(icon, label, onClick, iconSize = 22, boxSize = 46)
+        IconButtonCa(icon, label, onClick, active = active, iconSize = 22, boxSize = 46)
         Text(
             label,
-            color = MaterialTheme.colorScheme.outline,
+            color = if (active) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outline,
             fontSize = 10.5f.sp,
-            fontWeight = FontWeight.Normal,
+            fontWeight = if (active) FontWeight.SemiBold else FontWeight.Normal,
             maxLines = 1,
             overflow = TextOverflow.Ellipsis,
         )
