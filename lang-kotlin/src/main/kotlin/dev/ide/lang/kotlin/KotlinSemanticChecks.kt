@@ -581,38 +581,54 @@ internal class KotlinSemanticChecks(private val service: KotlinSymbolService) {
         if (parent is KtValueArgumentName) return null
 
         val off = ref.textRange.startOffset
-        // A value binding of the same name in scope makes this a legitimate read, not an un-invoked function.
-        // Implicit-receiver / enclosing-class members are of unknown kind here, so ANY match backs off (a member
-        // function used bare is a conservative miss, never a false positive on a member value).
-        if (resolver.localsAt(off).any { it.name == name }) return null
-        if (resolver.isTypeParameterInScope(name, off)) return null
-        if (resolver.localTypesInScope(off).containsKey(name)) return null
-        if (resolver.enclosingClassMembersContain(off, name)) return null
-        if (resolver.implicitReceiversAt(off).any { recv ->
-                service.membersNamedForCheck(recv.qualifiedName, recv.typeArguments, name).isNotEmpty()
-            }
-        ) return null
+        val ctx = resolver.fileContext
+        // Resolve [name] in value position and classify EVERY candidate: a VALUE (a property, a parameter/local
+        // `val`/`var`, a local class/object, a known type) makes this a legitimate read → back off; a FUNCTION (a
+        // top-level / member / in-scope extension function) makes it an un-invoked call. Flag ONLY when there is a
+        // function candidate AND no value candidate — so a bare member/extension function (`setContent` inside a
+        // ComponentActivity) IS flagged, while a bare property read (`dp`, a member `val`) is never mis-flagged.
+        var function = false
+        for (local in resolver.localsAt(off)) if (local.name == name) {
+            if (local.kind == SymbolKind.METHOD) function = true else return null // a local `fun` vs a `val`/param
+        }
+        if (resolver.isTypeParameterInScope(name, off)) return null        // a reified `T` in value position
+        if (resolver.localTypesInScope(off).containsKey(name)) return null  // a local class/object (a classifier)
         // A known classifier of this name is the [classifierUsedAsValue] case (or a valid object read), not ours.
-        if (service.resolveTypeName(name, resolver.fileContext)?.let { service.isKnownType(it) } == true) return null
+        if (service.resolveTypeName(name, ctx)?.let { service.isKnownType(it) } == true) return null
 
-        // Same-file top-level declarations (the disk-based model can lag the live buffer): a same-file `fun` is
-        // the error, but a same-file property/object/class of this name is a value → back off.
+        // Same-file top-level declarations (the disk model can lag the live buffer): a property/object/class of
+        // this name is a value → back off; a same-file `fun` is a function candidate.
         val sameFile = ref.containingKtFile.declarations.filter {
             it is org.jetbrains.kotlin.psi.KtNamedDeclaration && it.name == name
         }
         if (sameFile.any { it !is KtNamedFunction }) return null
-        val sameFileFunction = sameFile.any { it is KtNamedFunction }
+        if (sameFile.any { it is KtNamedFunction }) function = true
 
-        // In-scope top-level callables of this name: ALL must be functions (a top-level `val` of the same name is
-        // a value read → back off). Both the function-ness AND this value-shadow test come from one query, so the
-        // two can't disagree; a not-yet-built index simply returns nothing and the check backs off.
+        // Members of an implicit `this` (enclosing class, apply/with/run receiver) plus extensions in scope on
+        // it: a member/extension PROPERTY of this name is a value read → back off; a function is a candidate.
+        // Only in-scope extensions count (an un-imported one is unresolved — its own diagnostic — never here).
+        for (recv in resolver.implicitReceiversAt(off)) {
+            val candidates = service.membersNamedForCheck(recv.qualifiedName, recv.typeArguments, name)
+                .filter { !it.isExtension || extensionInScope(it, ctx) } +
+                resolver.scopeMemberExtensions(off, recv, name).filter { it.name == name }
+            for (c in candidates) if (c.kind == SymbolKind.METHOD) function = true else return null
+        }
+        // Enclosing-class members of the LIVE buffer, kind-aware (a member `val`/ctor-param/enum const → value).
+        when (resolver.enclosingClassMemberKind(off, name)) {
+            true -> function = true
+            false -> return null
+            null -> {}
+        }
+
+        // In-scope top-level callables of this name: a top-level `val` is a value read → back off; only functions
+        // are candidates. A not-yet-built index returns nothing, so no candidate is found and the check backs off.
         val topLevels = service.topLevelByName(name)
-            .filter { Modifier.PRIVATE !in it.modifiers && resolver.topLevelInScope(it, resolver.fileContext) }
+            .filter { Modifier.PRIVATE !in it.modifiers && resolver.topLevelInScope(it, ctx) }
         if (topLevels.any { it.kind != SymbolKind.METHOD }) return null
+        if (topLevels.isNotEmpty()) function = true
 
-        // Must actually resolve to a function in scope; otherwise it's unresolved (its own diagnostic) or a form
-        // we don't model.
-        if (!sameFileFunction && topLevels.isEmpty()) return null
+        // No function candidate → it's unresolved (its own diagnostic) or a form we don't model.
+        if (!function) return null
 
         val r = ref.textRange
         return Diagnostic(

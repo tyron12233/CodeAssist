@@ -44,10 +44,12 @@ class FunctionUsedAsValueTest {
     @Test fun doesNotFlagLocalLambdaRead() =
         assertFalse(hasFunctionCallExpected("package demo\nfun f() { val helper = {}\nhelper }\n"))
 
-    // An enclosing-class member of unknown kind backs the check off — a member VALUE read is never mis-flagged
-    // (the price is not flagging a bare member-function read, a deliberate conservative miss).
-    @Test fun doesNotFlagEnclosingMemberRead() =
-        assertFalse(hasFunctionCallExpected("package demo\nclass C { fun m() {}\nfun f() { m } }\n"))
+    // A bare enclosing-class member FUNCTION read is flagged (kind-aware); a member VALUE read is not.
+    @Test fun flagsEnclosingMemberFunctionRead() =
+        assertTrue(hasFunctionCallExpected("package demo\nclass C { fun m() {}\nfun f() { m } }\n"))
+
+    @Test fun doesNotFlagEnclosingMemberValueRead() =
+        assertFalse(hasFunctionCallExpected("package demo\nclass C { val m = 1\nfun f() { m } }\n"))
 
     // A classifier used as a value is the CLASSIFIER_AS_VALUE case, not this one.
     @Test fun doesNotFlagClassifierAsValue() =

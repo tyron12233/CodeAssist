@@ -499,7 +499,26 @@ fun KotlinResolver.bareNameResolves(name: String, offset: Int): Boolean {
     // A `private` top-level from ANOTHER file is out of scope (this file's own privates already resolved above
     // via `ktFile.declarations`), so a cross-file private reference stays unresolved — as the compiler reports.
     if (service.topLevelByName(name).any { Modifier.PRIVATE !in it.modifiers && topLevelInScope(it, fileContext) }) return true
-    if (fileContext.imports.any { !it.isStar && it.simpleName == name }) return true
+    // An explicit import brings [name] into scope, but ONLY as what it NAMES. A TYPE/object import, an
+    // object/enum-entry MEMBER import (its owner is a type), or a non-extension top-level callable (line 501
+    // usually resolved that) is usable bare. But an import of a pure EXTENSION
+    // (`import androidx.activity.compose.setContent`) does NOT make it usable without its receiver — and no
+    // implicit receiver of the right type is in scope here (checked above) — so it stays unresolved, exactly
+    // as Kotlin reports. Only a POSITIVELY-confirmed pure extension falls through; anything unrecognized
+    // (a typealias, an unresolved category) resolves, so this never false-positives.
+    val matchingImports = fileContext.imports.filter { !it.isStar && it.simpleName == name }
+    if (matchingImports.isNotEmpty()) {
+        val extPackages = service.extensionPackages(name)
+        val hasNonExtensionTopLevel = service.topLevelByName(name).any { it.receiverTypeFqn == null }
+        val allPureExtension = matchingImports.all { imp ->
+            val owner = imp.fqn.substringBeforeLast('.', "")
+            owner in extPackages && !hasNonExtensionTopLevel &&
+                !service.typeFqnKnown(imp.fqn) &&                              // not a type/object import
+                !(owner.isNotEmpty() && service.typeFqnKnown(owner))           // not an object/enum member import
+        }
+        if (!allPureExtension) return true
+        // else: every matching import is a confirmed pure extension with no applicable receiver → not resolvable.
+    }
     // A different-package project type isn't in scope until imported (resolveTypeName resolves a project type
     // bare only same-package), so an unimported same-module type is flagged by the bare-reference diagnostic.
     return service.resolveTypeName(name, fileContext)?.let { service.isKnownType(it) } == true
@@ -536,6 +555,28 @@ internal fun KotlinResolver.enclosingClassMembersContain(offset: Int, name: Stri
         node = node.parent
     }
     return false
+}
+
+/** The KIND of an enclosing-class member named [name] in the LIVE buffer (the disk model can lag an edit):
+ *  `true` = a member FUNCTION (a candidate un-invoked call), `false` = a VALUE (a property, a `val`/`var`
+ *  constructor parameter, or an enum constant → a legitimate bare read), `null` = no such member. A value
+ *  anywhere on the enclosing chain wins (never mis-flag a value read); otherwise a function if one was seen. */
+internal fun KotlinResolver.enclosingClassMemberKind(offset: Int, name: String): Boolean? {
+    var node: PsiElement? = elementAt(offset)
+    var sawFunction = false
+    while (node != null) {
+        if (node is KtClassOrObject) {
+            for (d in node.declarations) {
+                if ((d is KtProperty && d.name == name) ||
+                    (d is org.jetbrains.kotlin.psi.KtEnumEntry && d.name == name)
+                ) return false
+                if (d is KtNamedFunction && d.name == name) sawFunction = true
+            }
+            if (node.primaryConstructorParameters.any { it.hasValOrVar() && it.name == name }) return false
+        }
+        node = node.parent
+    }
+    return if (sawFunction) true else null
 }
 
 /** True if any enclosing class has a companion object, whose members are bare-accessible but not

@@ -2131,6 +2131,44 @@ class KotlinSymbolService(
         return out
     }
 
+    /**
+     * Packages declaring an EXTENSION callable (function/property) named [name] — the extension-only half of
+     * [callablePackages] (which unions the non-extension top-levels too). Lets the unresolved-reference check
+     * confirm POSITIVELY that an `import p.name` names a pure extension (usable only WITH a receiver), so a bare
+     * `name` with no applicable receiver is flagged unresolved, while a type / object-or-enum member / typealias
+     * / non-extension top-level import (none of which land here) is never mistaken for one.
+     */
+    fun extensionPackages(name: String): Set<String> {
+        if (name.isEmpty()) return emptySet()
+        val out = HashSet<String>()
+        model().extensions.filter { it.name == name }
+            .forEach { rc -> rc.ctx.packageName.ifEmpty { null }?.let { out += it } }
+        val idx = index
+        if (idx != null) {
+            for (id in listOf(
+                KotlinCallableIndex.id,
+                KotlinSourceCallableIndex.id,
+                KotlinBuiltinCallableIndex.id
+            )) {
+                idx.exact<CallableShape>(id, KotlinCallableIndex.nameKey(name)).forEach { shape ->
+                    shape.packageName?.let { out += it }
+                }
+            }
+        } else {
+            // No wired index (standalone / tests): the reader scans `.class` extensions keyed by receiver, so
+            // collect the package of any extension named [name]. Bounded by the (small) non-indexed classpath.
+            reader.scan(this).extensionsByReceiver.values.forEach { syms ->
+                syms.forEach { s ->
+                    if (s.name == name) {
+                        (s.packageName ?: s.declaringClassFqn?.substringBeforeLast('.', "")?.ifEmpty { null })
+                            ?.let { out += it }
+                    }
+                }
+            }
+        }
+        return out
+    }
+
     /** Whether a WIRED classpath index has finished building — the gate for negative conclusions that need a
      *  complete classpath view (the unresolved-import check). False when no index is wired or it's still in
      *  "dumb mode", so those runs never draw a false conclusion. Distinct from [classpathReady], which treats a

@@ -50,6 +50,49 @@ class KotlinBareExtensionImportTest {
     }
 
     @Test
+    fun bareImportedExtensionOnImplicitReceiverIsFunctionCallExpected() {
+        // Case B: an imported extension resolves on the implicit `this`, but used BARE (not invoked) it is a
+        // function used as a value → the compiler's FUNCTION_CALL_EXPECTED, not unresolved.
+        val diags = diagnose(
+            "package demo\nimport dev.ide.fakecompose.FakeModifier\nimport dev.ide.fakecompose.fakePadding\n" +
+                "fun FakeModifier.use() { fakePadding }"
+        )
+        assertTrue(
+            diags.any { it.code == "kt.functionCallExpected" && "fakePadding" in it.message },
+            "a bare imported extension function on the implicit receiver must be FUNCTION_CALL_EXPECTED; got $diags",
+        )
+        assertTrue(diags.none { it.code == "kt.unresolved" && "fakePadding" in it.message }, "not unresolved: $diags")
+    }
+
+    @Test
+    fun bareImportedExtensionAtTopLevelIsUnresolved() {
+        // Case A: at top level there is no receiver for the extension, so even though it is imported the bare
+        // reference does not resolve — an import doesn't supply a receiver, so Kotlin reports it unresolved.
+        val diags = diagnose(
+            "package demo\nimport dev.ide.fakecompose.FakeModifier\nimport dev.ide.fakecompose.fakePadding\n" +
+                "fun test() { fakePadding }"
+        )
+        assertTrue(
+            diags.any { it.code == "kt.unresolved" && "fakePadding" in it.message },
+            "an imported extension used bare with no receiver in scope must be unresolved; got $diags",
+        )
+    }
+
+    @Test
+    fun bareMemberPropertyOnImplicitReceiverIsNotFlagged() {
+        // Negative (no false positive): a bare MEMBER property read on the implicit receiver is a value, not an
+        // un-invoked function — neither unresolved nor FUNCTION_CALL_EXPECTED.
+        val diags = diagnose(
+            "package demo\nimport dev.ide.fakecompose.FakeState\n" +
+                "fun FakeState<Int>.use() { value }"
+        )
+        assertTrue(
+            diags.none { (it.code == "kt.functionCallExpected" || it.code == "kt.unresolved") && "value" in it.message },
+            "a bare member property read must not be flagged; got $diags",
+        )
+    }
+
+    @Test
     fun nonExtensionMemberOnImplicitReceiverStillResolves() {
         // A genuine member of the receiver (FakeState.value) resolves bare — the fix gates only extensions.
         val diags = diagnose(
