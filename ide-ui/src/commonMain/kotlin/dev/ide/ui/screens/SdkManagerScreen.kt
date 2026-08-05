@@ -66,6 +66,8 @@ import dev.ide.ui.generated.resources.sdk_downloading_detail
 import dev.ide.ui.generated.resources.sdk_downloads
 import dev.ide.ui.generated.resources.sdk_installed
 import dev.ide.ui.generated.resources.sdk_jdk
+import dev.ide.ui.generated.resources.sdk_jdk_android_runtime
+import dev.ide.ui.generated.resources.sdk_jdk_android_runtime_desc
 import dev.ide.ui.generated.resources.sdk_jdk_downloading
 import dev.ide.ui.generated.resources.sdk_jdk_no_sources
 import dev.ide.ui.generated.resources.sdk_jdk_sources
@@ -158,15 +160,25 @@ fun SdkManagerScreen(backend: IdeBackend, onBack: () -> Unit) {
             // JDK sources
             SectionHeader(stringResource(Res.string.sdk_jdk))
             Card {
-                Text(stringResource(Res.string.sdk_jdk_version, jdk?.version ?: "?"), style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.onSurface)
-                jdk?.home?.takeIf { it.isNotEmpty() }?.let {
-                    Text(it, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.outline, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.fillMaxWidth())
+                if (jdk?.androidRuntime == true) {
+                    // ART reports java.home /apex/com.android.art + java.version 0 — it is the Android runtime,
+                    // not a JDK. Label it plainly (no bogus "JDK 0", no /apex path) and point at the JDK-source
+                    // download below, which is the meaningful action here (java.* docs for the bundled toolchain).
+                    Text(stringResource(Res.string.sdk_jdk_android_runtime), style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.onSurface)
+                } else {
+                    Text(stringResource(Res.string.sdk_jdk_version, jdk?.version ?: "?"), style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.onSurface)
+                    jdk?.home?.takeIf { it.isNotEmpty() }?.let {
+                        Text(it, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.outline, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.fillMaxWidth())
+                    }
                 }
                 Spacer(Modifier.height(8.dp))
                 if (jdk?.srcZip != null) {
                     StatusTag(CaIcons.check, stringResource(Res.string.sdk_jdk_sources_available), Ide.colors.run)
                 } else {
-                    Text(stringResource(Res.string.sdk_jdk_no_sources), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    // ART: explain why there's no JDK and what the buttons do; JVM: the generic no-sources prompt.
+                    val noSources = if (jdk?.androidRuntime == true) stringResource(Res.string.sdk_jdk_android_runtime_desc)
+                                    else stringResource(Res.string.sdk_jdk_no_sources)
+                    Text(noSources, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     Spacer(Modifier.height(10.dp))
                     // FlowRow so the buttons wrap onto another line on a narrow phone instead of clipping.
                     FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {

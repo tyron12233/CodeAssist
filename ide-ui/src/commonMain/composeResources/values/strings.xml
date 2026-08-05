@@ -812,6 +812,8 @@ We never collect your code, file or project names, which features you use, or an
     <string name="sdk_clear_finished">Clear finished</string>
     <string name="sdk_jdk">JDK</string>
     <string name="sdk_jdk_version">JDK %1$s</string>
+    <string name="sdk_jdk_android_runtime">Android runtime (ART)</string>
+    <string name="sdk_jdk_android_runtime_desc">This device runs on ART, not a JDK. The editor compiles Java with a bundled toolchain. Download JDK sources below for java.* documentation.</string>
     <string name="sdk_jdk_sources_available">Sources available, android.* and java.* docs are on.</string>
     <string name="sdk_jdk_no_sources">No JDK sources found. Download a JDK that bundles them:</string>
     <string name="sdk_jdk_downloading">JDK %1$d…</string>

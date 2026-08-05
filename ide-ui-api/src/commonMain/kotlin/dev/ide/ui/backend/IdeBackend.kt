@@ -1522,8 +1522,9 @@ data class UiSdkPackage(
     val incomplete: Boolean = false,
 )
 
-/** The active JDK and whether its sources are available for docs. */
-data class UiJdkInfo(val home: String, val version: String, val srcZip: String?)
+/** The active JDK and whether its sources are available for docs. [androidRuntime] = true on ART, where the
+ *  "JDK" is the Android runtime (`/apex/com.android.art`, version `0`) — the UI labels it as such, not "JDK 0". */
+data class UiJdkInfo(val home: String, val version: String, val srcZip: String?, val androidRuntime: Boolean = false)
 
 enum class UiSeverity { Error, Warning, Info, Hint }
 

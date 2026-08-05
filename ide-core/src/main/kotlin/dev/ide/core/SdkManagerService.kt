@@ -80,7 +80,7 @@ class SdkManagerService(
     /** The src.zip from a previously downloaded JDK (for the analyzer to attach), or null. */
     fun jdkSourceOverride(): Path? = jdk.overrideSrcZip()
 
-    fun jdkInfo(): UiJdkInfo = jdk.info().let { UiJdkInfo(it.home, it.version, it.srcZip) }
+    fun jdkInfo(): UiJdkInfo = jdk.info().let { UiJdkInfo(it.home, it.version, it.srcZip, it.androidRuntime) }
 
     /** Where Android packages install: the detected SDK, else a conventional per-OS location (created on use). */
     fun androidSdkRoot(): Path = AndroidSdk.findSdkRoot(workspaceRoot) ?: defaultAndroidSdkRoot()

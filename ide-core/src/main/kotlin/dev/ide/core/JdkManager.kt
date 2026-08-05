@@ -25,7 +25,9 @@ import java.nio.file.Paths
  */
 class JdkManager(private val platformDir: Path, private val fetcher: SdkNetFetcher = HttpSdkNetFetcher) {
 
-    data class Info(val home: String, val version: String, val srcZip: String?)
+    /** [androidRuntime] = true on ART/Dalvik, where the "running JDK" is the Android runtime (java.home
+     *  `/apex/com.android.art`, java.version `0`), NOT a JDK — so the UI must not present it as "JDK 0". */
+    data class Info(val home: String, val version: String, val srcZip: String?, val androidRuntime: Boolean = false)
 
     /** The src.zip that's actually usable for docs: the running JDK's, or a previously downloaded override. */
     fun effectiveSrcZip(): Path? = currentSrcZip() ?: overrideSrcZip()
@@ -34,7 +36,18 @@ class JdkManager(private val platformDir: Path, private val fetcher: SdkNetFetch
         home = System.getProperty("java.home").orEmpty(),
         version = System.getProperty("java.version").orEmpty(),
         srcZip = effectiveSrcZip()?.toString(),
+        androidRuntime = isAndroidRuntime(System.getProperty("java.vm.name"), System.getProperty("java.vendor")),
     )
+
+    companion object {
+        /** Whether these runtime properties describe Android's ART/Dalvik runtime — where `java.home` is
+         *  `/apex/com.android.art` and `java.version` is `0` (there is no JDK; the editor compiles Java with a
+         *  bundled toolchain). ART reports `java.vm.name` = "Dalvik" and `java.vendor` = "The Android Project"
+         *  for backwards compatibility. Pure so it's testable off-device. Matches `SdkManagerService`'s check. */
+        fun isAndroidRuntime(vmName: String?, vendor: String?): Boolean =
+            vmName.orEmpty().contains("Dalvik", ignoreCase = true) ||
+                vendor.orEmpty().contains("Android", ignoreCase = true)
+    }
 
     private fun currentSrcZip(): Path? =
         runCatching { Paths.get(System.getProperty("java.home")).resolve("lib").resolve("src.zip") }
