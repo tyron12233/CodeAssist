@@ -63,9 +63,6 @@ import kotlin.time.Duration.Companion.milliseconds
 /** Idle delay before the live buffer is re-interpreted, so a burst of typing settles into one re-composition. */
 private const val PREVIEW_DEBOUNCE_MS = 400L
 
-/** How often to re-check index readiness while the preview waits for library composables to become resolvable. */
-private const val PREVIEW_READINESS_POLL_MS = 500L
-
 /**
  * The Compose `@Preview` pane. Shares the exact [PreviewSurface] chrome with the layout-XML preview —
  * device selection, rotation, the Light/Night toggle, free pan + pinch/zoom — so both Preview views look
@@ -106,17 +103,32 @@ fun ComposePreviewPane(
     }
     // Gate rendering on the workspace index being ready to resolve LIBRARY composables. Interpreting a preview
     // while the index is still building resolves library calls (e.g. material3's `lightColorScheme`) to zero
-    // candidates and latches a "unresolved call" failure that never self-heals on its own. Poll readiness and
-    // re-attempt the render (bump `nonce`) the moment the index catches up. Defaults ready=true (no host / a
-    // backend that doesn't index), so nothing changes when the index is already built.
+    // candidates and latches a "unresolved call" failure that never self-heals on its own.
+    //
+    // The index can build SEVERAL times on a cold open: the initial build, then a resync once dependency
+    // resolution / an SDK-source attach commits the resolved classpath (each is one building→settled cycle).
+    // A preview lowered in a transient gap BETWEEN those builds resolves against a PARTIAL classpath — the
+    // "resumed straight into a preview, it rendered with unresolved-call warnings and stayed stuck" report.
+    // So observe the index build state directly (its edges are the ONLY thing that moves readiness): show
+    // Preparing whenever it's building, and re-lower (bump `nonce`) on EVERY building→settled edge, so the
+    // final settle always re-lowers against the complete classpath, overwriting any earlier partial render.
+    // Defaults ready=true (no host / a backend that doesn't index), so nothing changes when it's already built.
     var ready by remember(path) { mutableStateOf(true) }
-    LaunchedEffect(path, nonce) {
+    LaunchedEffect(path, host) {
         if (host == null) { ready = true; return@LaunchedEffect }
-        if (backend.preview.composePreviewReady(path)) { ready = true; return@LaunchedEffect }
-        ready = false
-        while (!backend.preview.composePreviewReady(path)) delay(PREVIEW_READINESS_POLL_MS.milliseconds)
-        ready = true
-        nonce++ // library composables resolve now — re-run the interpreter
+        ready = runCatching { backend.preview.composePreviewReady(path) }.getOrDefault(true)
+        var building = backend.search.indexStatus.value.building
+        backend.search.indexStatus.collect { status ->
+            if (status.building == building) return@collect
+            building = status.building
+            if (building) {
+                ready = false // a (re)build started — hold the preview until it settles
+            } else {
+                // A build just settled: re-check readiness and re-lower against the now-current classpath.
+                ready = runCatching { backend.preview.composePreviewReady(path) }.getOrDefault(true)
+                if (ready) nonce++
+            }
+        }
     }
     // The engine is "working" either while the host is actively lowering/interpreting the rendered buffer
     // (it reports this via onBusy) or while a live edit is still settling through the debounce before the
