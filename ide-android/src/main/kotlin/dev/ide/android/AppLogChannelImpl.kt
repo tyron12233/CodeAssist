@@ -15,31 +15,32 @@ import kotlinx.coroutines.flow.StateFlow
  * untrusted app connecting to another's abstract socket — so the transport is Binder; this channel is the sink
  * the (system-instantiated) service routes to via [AppLogSinkRegistry] (both live in the IDE process).
  *
- * Only frames whose HELLO package matches the currently-launched app ([activePackage], set by [start])
- * contribute — stray or stale connections are dropped. Emissions are coalesced (~10/s) so a chatty app can't
- * thrash the UI or the flow.
+ * Only frames whose HELLO package is one of the [accepted] applicationIds (set by [watch] from the open
+ * project's Android apps) contribute — stray binds from other apps are dropped. A HELLO from a NEW app process
+ * (a pid not seen for the current session) begins a fresh session (clears the buffer); a reconnect of the same
+ * process keeps it. Records are gated by that session's pid, so only the connected app's lines append.
+ * Emissions are coalesced (~10/s) so a chatty app can't thrash the UI or the flow.
  */
 class AppLogChannelImpl : AppLogChannel {
     private val _logs = MutableStateFlow(AppLogSnapshot())
     override val logs: StateFlow<AppLogSnapshot> get() = _logs
 
-    @Volatile private var activePackage: String? = null
-    /** The package whose HELLO we accepted for the current connection; gates records against [activePackage]. */
-    @Volatile private var connectedPackage: String? = null
+    /** applicationIds this channel accepts a HELLO from (the open project's Android apps, all variants). */
+    @Volatile private var accepted: Set<String> = emptySet()
+    /** The package + process of the current live session; records are gated on this pid. */
+    @Volatile private var sessionPackage: String? = null
+    @Volatile private var sessionPid: Int = -1
 
     private val lock = Any()
     private val entries = ArrayDeque<AppLogEntry>()
-    private var totalAppended = 0L // guarded by lock; monotonic within a session, reset on start/clear
+    private var totalAppended = 0L // guarded by lock; monotonic within a session, reset on new session/clear
     @Volatile private var dirty = false
 
     @Volatile private var flushThread: Thread? = null
 
     @Synchronized
-    override fun start(packageName: String) {
-        activePackage = packageName
-        connectedPackage = null
-        synchronized(lock) { entries.clear(); totalAppended = 0 }
-        _logs.value = AppLogSnapshot(entries = emptyList(), connected = false, packageName = packageName, totalAppended = 0)
+    override fun watch(packages: Set<String>) {
+        accepted = packages
         AppLogSinkRegistry.active = this
         ensureFlush()
     }
@@ -52,8 +53,9 @@ class AppLogChannelImpl : AppLogChannel {
     @Synchronized
     override fun stop() {
         if (AppLogSinkRegistry.active === this) AppLogSinkRegistry.active = null
-        activePackage = null
-        connectedPackage = null
+        accepted = emptySet()
+        sessionPackage = null
+        sessionPid = -1
         synchronized(lock) { entries.clear() }
         _logs.value = AppLogSnapshot()
         flushThread?.interrupt(); flushThread = null
@@ -61,27 +63,34 @@ class AppLogChannelImpl : AppLogChannel {
 
     /**
      * A batch of wire payloads pushed by the bound bridge (via [dev.ide.android.applog.AppLogSinkService]). A
-     * HELLO for the active package marks the connection live; subsequent records append while the connection's
-     * package still matches the launched app (a stale app from a prior run is dropped).
+     * HELLO from a watched applicationId marks the connection live — a new process (fresh pid) resets the buffer
+     * to that session; records then append while their pid matches the session (a stray app's frames are dropped).
      */
     fun acceptFrames(frames: List<String>) {
         for (payload in frames) {
             when (val ev = AppLogWire.parse(payload)) {
                 is AppLogEvent.Hello ->
-                    if (ev.packageName == activePackage) {
-                        connectedPackage = ev.packageName
-                        _logs.value = _logs.value.copy(connected = true, packageName = ev.packageName)
+                    if (ev.packageName in accepted) {
+                        val newSession = ev.packageName != sessionPackage || ev.pid != sessionPid
+                        sessionPackage = ev.packageName
+                        sessionPid = ev.pid
+                        if (newSession) {
+                            synchronized(lock) { entries.clear(); totalAppended = 0 }
+                            _logs.value = AppLogSnapshot(connected = true, packageName = ev.packageName, totalAppended = 0)
+                        } else {
+                            _logs.value = _logs.value.copy(connected = true, packageName = ev.packageName)
+                        }
                     }
                 is AppLogEvent.Record ->
-                    if (connectedPackage != null && connectedPackage == activePackage) append(ev.entry)
+                    if (sessionPackage != null && ev.entry.pid == sessionPid) append(ev.entry)
                 null -> {} // malformed / unrecognized frame — ignore
             }
         }
     }
 
-    /** The bound bridge went away (its process died or it unbound). Mark the stream not-connected. */
+    /** The bound bridge went away (its process died or it unbound). Mark the stream not-connected; keep the
+     *  session identity so a same-process reconnect resumes (only a new pid starts a fresh session). */
     fun onClientDisconnected() {
-        connectedPackage = null
         _logs.value = _logs.value.copy(connected = false)
     }
 
@@ -118,13 +127,11 @@ class AppLogChannelImpl : AppLogChannel {
 }
 
 /**
- * Process-global handle to the active [AppLogChannelImpl] so a submit can reach the channel started for the
- * current run. Set for the duration of a run ([AppLogChannelImpl.start]) and cleared on [AppLogChannelImpl.stop].
- *
- * Per-process: the value is meaningful only in the process that ran the build (isolation off → the UI process;
- * isolation on → the `:build` daemon). The exported [dev.ide.android.applog.AppLogSinkService] always runs in
- * the UI process, so under isolation it does NOT read this singleton directly — it relays frames to the daemon
- * via [dev.ide.android.daemon.UiAppLogRelay], and the daemon's binder feeds ITS process's `active` here.
+ * Process-global handle to the UI-process [AppLogChannelImpl] the exported sink service routes frames to. Set
+ * by [AppLogChannelImpl.watch] (the engine configures it on project open, independent of any build/run) and
+ * cleared on [AppLogChannelImpl.stop]. App-log capture is a device-global, UI-process concern — the sink
+ * ([dev.ide.android.applog.AppLogSinkService]) always runs in the UI process and feeds this channel directly,
+ * so capture no longer depends on the build daemon (the old `:build` relay is gone).
  */
 object AppLogSinkRegistry {
     @Volatile var active: AppLogChannelImpl? = null

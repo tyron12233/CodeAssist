@@ -45,19 +45,23 @@ data class AppLogSnapshot(
 
 /**
  * The on-device channel that receives a running debug app's logs (forwarded by the injected
- * [dev.ide.android.support.tools.AndroidAppLogRuntime] bridge over an abstract-namespace `LocalSocket`) and
- * exposes them as a live [logs] snapshot. A platform port, supplied by `:ide-android` (it needs Android's
- * `LocalServerSocket`); absent on the desktop, where there is no app to run.
+ * [dev.ide.android.support.tools.AndroidAppLogRuntime] bridge over Binder) and exposes them as a live [logs]
+ * snapshot. A platform port, supplied by `:ide-android`; absent on the desktop, where there is no app to run.
  *
- * The IDE calls [start] with the package it is about to launch (which resets the buffer to that session), and
- * [clear]/[stop] from the Logcat UI. The bridge inside the app connects to the server socket this port hosts.
+ * **Capture is decoupled from the Run button.** The IDE calls [watch] with the open project's Android app
+ * applicationIds (all variants) on project open and whenever the model changes; the channel then starts/continues
+ * a live session for whichever of those packages connects. So logs show whether the app was launched from the
+ * IDE's Run button OR straight from the device launcher — a new app process (fresh pid) begins a fresh session
+ * (clears the buffer); a reconnect of the same process keeps it. [clear]/[stop] back the Logcat UI + project close.
  */
 interface AppLogChannel {
     /** The live buffer + connection state, rendered by the "Logcat" console tab. */
     val logs: StateFlow<AppLogSnapshot>
 
-    /** Begin a fresh capture session for [packageName] (clears the buffer, ensures the server socket is up). */
-    fun start(packageName: String)
+    /** Set the app applicationIds whose forwarded logs this channel accepts (the open project's Android apps).
+     *  Idempotent; registers this channel as the active sink. Does NOT clear the buffer — a session begins when
+     *  a watched app connects (its HELLO), so a passive re-watch on a model change never drops live logs. */
+    fun watch(packages: Set<String>)
 
     /** Clear the current buffer (keeps listening). */
     fun clear()
@@ -69,7 +73,7 @@ interface AppLogChannel {
 /** The no-op channel used when no host supplied one (desktop / tests): always empty, controls are inert. */
 internal object NoopAppLogChannel : AppLogChannel {
     override val logs: StateFlow<AppLogSnapshot> = MutableStateFlow(AppLogSnapshot())
-    override fun start(packageName: String) {}
+    override fun watch(packages: Set<String>) {}
     override fun clear() {}
     override fun stop() {}
 }

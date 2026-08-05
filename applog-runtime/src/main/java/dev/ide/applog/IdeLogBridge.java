@@ -213,8 +213,14 @@ public final class IdeLogBridge {
                     || TAG_ANDROID_RUNTIME.equals(tag)) continue;
                 log(System.currentTimeMillis(), pid, level, tag, message);
             }
-        } catch (Throwable ignored) {
-            // exec denied (SELinux) or logcat unavailable — the stdio tees + crash handler still work.
+        } catch (Throwable blocked) {
+            // exec denied (SELinux) or logcat unavailable — the stdio tees + crash handler still work. Surface a
+            // one-off note so an otherwise-empty tab isn't read as a total failure: on this device android.util.Log
+            // output can't be captured, but println/System.err and crashes are still forwarded. (Sent via log(),
+            // not the parser, so the SELF_TAG duplicate-filter above doesn't drop it.)
+            log(System.currentTimeMillis(), pid, 'W', SELF_TAG,
+                "android.util.Log output can't be captured on this device (logcat access is blocked). "
+                    + "System.out/System.err (println) and uncaught exceptions are still forwarded.");
         } finally {
             if (proc != null) try { proc.destroy(); } catch (Throwable ignored) {}
         }

@@ -694,8 +694,14 @@ internal class BuildService(private val ctx: EngineContext) : Disposable {
                     val installer =
                         ctx.apkInstaller ?: return fail("APK install is only available on device.")
                     val android = androidBuild ?: return fail("Android SDK not found.")
-                    val pkg = module.facets.get(AndroidFacet.KEY)?.namespace
+                    val facet = module.facets.get(AndroidFacet.KEY)
                         ?: return fail("No Android package for '${parts[0]}'.")
+                    // Install + launch by the app's EFFECTIVE applicationId (namespace + flavor/build-type
+                    // suffixes), not the bare namespace — that's what the installed app is + reports at runtime.
+                    // App-log capture isn't started here: it's configured on project open (over all the project's
+                    // app IDs), so logs are captured whether the app is launched from here OR the device launcher.
+                    val launchPkg = AndroidVariants.select(module, variant)
+                        ?.let { AndroidVariants.applicationId(facet, it) } ?: facet.namespace
                     val project = ctx.projectOf(module) ?: return fail("Internal error: no project for module '${module.name}'.")
                     val graph = android.createBuildGraph(
                         project, BuildRequest(
@@ -703,17 +709,13 @@ internal class BuildService(private val ctx: EngineContext) : Disposable {
                         )
                     )
                     val apk = AndroidBuildSystem.signedApkPath(module, variant)
-                    // Start a fresh app-log capture session for this package before launching, so the channel is
-                    // registered to accept the frames the injected bridge pushes over Binder once the app boots.
-                    // No-op off-device.
-                    ctx.appLogChannel?.start(pkg)
                     // On a successful build, install + launch (the OS shows its own install-confirmation).
                     launch(
                         module.name,
                         graph,
                         "> Run $variant · ${module.name}",
                         firstBuildDexBanner(module)
-                    ) { log -> installer.installAndLaunch(apk, pkg, log) }
+                    ) { log -> installer.installAndLaunch(apk, launchPkg, log) }
                 }
 
                 else -> fail("Unknown task: $id")

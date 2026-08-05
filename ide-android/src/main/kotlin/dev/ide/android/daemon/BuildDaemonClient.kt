@@ -47,7 +47,6 @@ class BuildDaemonClient(
         override fun binderDied() {
             log.warn("ui(pid=${Process.myPid()}): daemon died (binderDied) — IDE SURVIVED.")
             daemon = null
-            UiAppLogRelay.setDaemon(null) // stop relaying app-log frames to the dead daemon channel
             onDeath()
         }
     }
@@ -75,7 +74,6 @@ class BuildDaemonClient(
         override fun onServiceConnected(name: ComponentName?, service: IBinder?) {
             val d = IBuildDaemon.Stub.asInterface(service)
             daemon = d
-            UiAppLogRelay.setDaemon(d) // the daemon owns the run's app-log channel — relay sink frames to it
             runCatching { service?.linkToDeath(deathRecipient, 0) }
             runCatching { d.registerCallback(callback) }
             val daemonPid = runCatching { d.pid() }.getOrDefault(-1)
@@ -91,7 +89,6 @@ class BuildDaemonClient(
         override fun onServiceDisconnected(name: ComponentName?) {
             log.warn("ui(pid=${Process.myPid()}): daemon disconnected")
             daemon = null
-            UiAppLogRelay.setDaemon(null)
         }
     }
 
@@ -116,5 +113,5 @@ class BuildDaemonClient(
     fun closeRunInput() = runCatching { daemon?.closeRunInput() }
     fun answerPermission(id: Int, decision: Int) = runCatching { daemon?.answerPermission(id, decision) }
     fun clearAppLog() = runCatching { daemon?.clearAppLog() }
-    fun unbind() = runCatching { UiAppLogRelay.setDaemon(null); appContext.unbindService(connection) }
+    fun unbind() = runCatching { appContext.unbindService(connection) }
 }

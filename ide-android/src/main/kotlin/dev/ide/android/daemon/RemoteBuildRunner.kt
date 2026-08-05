@@ -1,9 +1,13 @@
 package dev.ide.android.daemon
 
 import android.content.Context
+import dev.ide.core.AppLogLevel
+import dev.ide.core.AppLogSnapshot
 import dev.ide.core.BuildRunner
 import dev.ide.core.IdeServices
 import dev.ide.platform.log.Log
+import dev.ide.ui.backend.AppLogLineUi
+import dev.ide.ui.backend.AppLogUi
 import dev.ide.ui.backend.BuildDiagnosticUi
 import dev.ide.ui.backend.BuildLogLine
 import dev.ide.ui.backend.BuildState
@@ -16,6 +20,7 @@ import dev.ide.ui.backend.RunPhase
 import dev.ide.ui.backend.RunStatus
 import dev.ide.ui.backend.RunTaskOption
 import dev.ide.ui.backend.StepStatus
+import dev.ide.ui.backend.UiLogLevel
 import dev.ide.ui.backend.UiPermissionDecision
 import dev.ide.ui.backend.UiPermissionRequest
 import kotlinx.coroutines.CoroutineScope
@@ -24,8 +29,11 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
@@ -52,18 +60,12 @@ class RemoteBuildRunner(context: Context, private val services: IdeServices) : B
     private val _buildState = MutableStateFlow(BuildState())
     private val _runConsole = MutableStateFlow<RunConsoleUi?>(null)
     private val _permissionRequest = MutableStateFlow<UiPermissionRequest?>(null)
-    private val _appLog = MutableStateFlow(dev.ide.ui.backend.AppLogUi())
     override val buildState: StateFlow<BuildState> = _buildState.asStateFlow()
     override val runConsole: StateFlow<RunConsoleUi?> = _runConsole.asStateFlow()
     override val permissionRequest: StateFlow<UiPermissionRequest?> = _permissionRequest.asStateFlow()
-    // App-log (Logcat tab) across the :build boundary: the built app's frames reach the daemon's channel via
-    // UiAppLogRelay (the sink runs in the UI process), and the daemon streams them back as onAppLog/onAppLogState
-    // deltas, reassembled into _appLog here (mirrors the run-console streaming).
-    override val appLog: StateFlow<dev.ide.ui.backend.AppLogUi> = _appLog.asStateFlow()
-    override fun clearAppLog() {
-        _appLog.update { it.copy(lines = emptyList()) } // optimistic; the daemon also emits a reset
-        runCatching { client.clearAppLog() }
-    }
+    // App-log (Logcat tab): read the UI-process channel DIRECTLY (declared after `scope`, below). Capture is
+    // configured on project open and fed straight by the sink, so it works whether the app was launched from
+    // the IDE or the device launcher, and no longer depends on the build daemon (the old relay is gone).
 
     @Volatile
     private var connected = false
@@ -93,6 +95,30 @@ class RemoteBuildRunner(context: Context, private val services: IdeServices) : B
     @Volatile
     private var lastActivityMs = 0L
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
+
+    // The UI-process app-log channel, mapped to the UI DTO. `services` is the UI engine, whose channel the sink
+    // feeds and which is watch()ed on project open — so this reflects a running app's logs regardless of how it
+    // was launched or whether the build ran in the :build daemon.
+    override val appLog: StateFlow<AppLogUi> =
+        services.appLogState.map { it.toAppLogUi() }.stateIn(scope, SharingStarted.Eagerly, AppLogUi())
+    override fun clearAppLog() { runCatching { services.clearAppLog() } }
+
+    private fun AppLogSnapshot.toAppLogUi(): AppLogUi = AppLogUi(
+        lines = entries.map { e ->
+            AppLogLineUi(
+                message = e.message,
+                level = when (e.level) {
+                    AppLogLevel.VERBOSE, AppLogLevel.DEBUG -> UiLogLevel.Debug
+                    AppLogLevel.INFO -> UiLogLevel.Info
+                    AppLogLevel.WARN -> UiLogLevel.Warn
+                    AppLogLevel.ERROR -> UiLogLevel.Error
+                },
+                tag = e.tag, pid = e.pid, tid = e.tid,
+                timeLabel = appLogTimeLabel(e.timestampMs), timestampMs = e.timestampMs,
+            )
+        },
+        connected = connected, packageName = packageName,
+    )
 
     @Volatile
     private var watchdog: Job? = null
@@ -167,23 +193,8 @@ class RemoteBuildRunner(context: Context, private val services: IdeServices) : B
                 dev.ide.android.ApkLauncher.launch(appContext, pkg) { msg -> _buildState.update { it.copy(log = it.log + line(msg)) } }
             }
         },
-        onAppLog = { level, tag, pid, tid, message, ts ->
-            val line = dev.ide.ui.backend.AppLogLineUi(
-                message = message,
-                level = dev.ide.ui.backend.UiLogLevel.entries.getOrElse(level) { dev.ide.ui.backend.UiLogLevel.Info },
-                tag = tag, pid = pid, tid = tid, timeLabel = appLogTimeLabel(ts), timestampMs = ts,
-            )
-            _appLog.update { ui ->
-                val next = ui.lines + line
-                ui.copy(lines = if (next.size > MAX_APP_LOG_LINES) next.subList(next.size - MAX_APP_LOG_LINES, next.size) else next)
-            }
-        },
-        onAppLogState = { connectedNow, pkg, reset ->
-            _appLog.update { ui ->
-                if (reset) dev.ide.ui.backend.AppLogUi(connected = connectedNow, packageName = pkg.ifEmpty { null })
-                else ui.copy(connected = connectedNow, packageName = pkg.ifEmpty { ui.packageName })
-            }
-        },
+        // App-log deltas are no longer streamed from the daemon — the UI channel is fed directly by the sink and
+        // read via `services` above (BuildDaemonClient's onAppLog/onAppLogState default to no-ops).
         onConnected = ::onDaemonConnected,
         onDeath = {
             _buildState.update {
@@ -326,7 +337,6 @@ class RemoteBuildRunner(context: Context, private val services: IdeServices) : B
     private companion object {
         const val CONSOLE_CHUNK_MAX = 8192
         const val CONSOLE_TRANSCRIPT_MAX = 1_000_000
-        const val MAX_APP_LOG_LINES = 5000
 
         // Handshake watchdog: how often to check, and how long the daemon may stay silent before the first
         // step arrives. Generous — a cold daemon open (model load + engine init, no index) is well under

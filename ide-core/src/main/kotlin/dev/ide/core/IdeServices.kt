@@ -570,6 +570,25 @@ class IdeServices private constructor(
      *  desktop). Surfaced to the UI's "Logcat" console tab through [dev.ide.core.backend.BuildBackend]. */
     val appLogState: StateFlow<AppLogSnapshot> get() = (appLogChannel ?: NoopAppLogChannel).logs
 
+    /** Clear the Logcat buffer (the tab's Clear action). Routed through the engine so it hits the one
+     *  device-global channel regardless of build-process isolation. */
+    fun clearAppLog() = (appLogChannel ?: NoopAppLogChannel).clear()
+
+    /** (Re)configure app-log capture to accept the open project's Android app applicationIds (every variant),
+     *  so a running debug app's forwarded logs are captured whether it was launched from the IDE's Run button
+     *  OR straight from the device launcher — capture is no longer tied to a build/run. Called on project open
+     *  and on every configuration change (an applicationId edit updates the accepted set). No-op with no channel
+     *  wired (desktop) or on the headless :build engine (it never hosts the log sink). */
+    private fun refreshAppLogWatch() {
+        val channel = appLogChannel ?: return
+        val ids = runCatching {
+            modules().flatMapTo(linkedSetOf<String>()) { m ->
+                if (m.facets.get(AndroidFacet.KEY) != null) AndroidVariants.candidateApplicationIds(m) else emptySet()
+            }
+        }.getOrDefault(emptySet())
+        channel.watch(ids)
+    }
+
     // Live stage of the real-view layout render (relink → render), for the floating status chip; null = idle.
     private val _realViewProgress = MutableStateFlow<PreviewProgress?>(null)
     val realViewProgress: StateFlow<PreviewProgress?> get() = _realViewProgress
@@ -796,6 +815,14 @@ class IdeServices private constructor(
         // Provision kotlin-stdlib as a real project dependency (bundled jar, never the host runtime) before
         // anything reads a Kotlin module's classpath.
         runCatching { ensureKotlinStdlib() }
+        // App-log capture (the Logcat tab): tell the channel which app applicationIds this project can run, so a
+        // running debug app is recognized whether launched from the IDE or the device launcher — decoupled from
+        // the Run button. UI engine only; the headless :build daemon never hosts the sink. Re-run on any config
+        // change (an applicationId/suffix edit changes the accepted set).
+        if (!buildOnly) {
+            runCatching { refreshAppLogWatch() }
+            addConfigurationListener { runCatching { refreshAppLogWatch() }.getOrNull() }
+        }
         indexService.observeStatus { s ->
             // Emit one INDEXING Started/Finished per build on the building→done edges (progress ticks in
             // between keep `building` true). observeStatus replays the current status synchronously, which is

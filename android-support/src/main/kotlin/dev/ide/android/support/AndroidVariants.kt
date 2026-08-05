@@ -34,6 +34,32 @@ object AndroidVariants {
         compute(module).let { all -> all.firstOrNull { it.name.endsWith("debug", ignoreCase = true) } ?: all.firstOrNull() }
 
     /**
+     * The effective **applicationId** of [variant] (AGP: a flavor override else the namespace, plus the flavor
+     * and build-type `applicationIdSuffix`es). This is what the installed app reports as `getPackageName()` at
+     * runtime — so it, NOT the bare namespace, is the identity to install/launch by and to match forwarded app
+     * logs against. Single source of truth; the build DAG ([AndroidBuildSystem]) uses the same computation.
+     */
+    fun applicationId(facet: AndroidFacet, variant: AndroidVariant): String {
+        val flavorAppId = variant.flavorNames.firstNotNullOfOrNull { fn ->
+            facet.productFlavors.firstOrNull { it.name == fn }?.applicationId
+        }
+        val flavorIdSuffix = variant.flavorNames.mapNotNull { fn ->
+            facet.productFlavors.firstOrNull { it.name == fn }?.applicationIdSuffix
+        }.joinToString("")
+        val buildTypeSuffix = facet.buildType(variant.buildTypeName)?.applicationIdSuffix ?: ""
+        return (flavorAppId ?: facet.namespace) + flavorIdSuffix + buildTypeSuffix
+    }
+
+    /** Every applicationId [module] could install as — the effective id of each of its variants, plus the bare
+     *  namespace as a floor. Used to configure app-log capture so a running app is recognized no matter which
+     *  variant is installed and whether it was launched from the IDE or the device launcher. Empty when [module]
+     *  is not an Android module. */
+    fun candidateApplicationIds(module: Module): Set<String> {
+        val facet = module.facets.get(AndroidFacet.KEY) ?: return emptySet()
+        return compute(module).mapTo(linkedSetOf(facet.namespace)) { applicationId(facet, it) }
+    }
+
+    /**
      * Pick [lib]'s variant matching the [consumer] variant of a depender whose config is [consumerFacet].
      * Build-type-first, then **flavor-dimension-aware** (a flavor matches only within the same dimension, not
      * by raw name) preferring the most shared dimensions, then a **debuggability** fallback when the lib has no

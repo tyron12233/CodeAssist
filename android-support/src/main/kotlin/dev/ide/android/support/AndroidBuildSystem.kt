@@ -283,14 +283,9 @@ class AndroidBuildSystem(
         val versionNameAuthoritative = flavorVersionName != null || facet.versionName != AndroidFacet.DEFAULT_VERSION_NAME
 
         // applicationId (AGP: flavor override else namespace, + flavor & build-type suffixes) — the value of
-        // the ${applicationId} manifest placeholder Firebase/Play Services authorities depend on.
-        val flavorAppId = variant.flavorNames.firstNotNullOfOrNull { fn ->
-            facet.productFlavors.firstOrNull { it.name == fn }?.applicationId
-        }
-        val flavorIdSuffix = variant.flavorNames.mapNotNull { fn ->
-            facet.productFlavors.firstOrNull { it.name == fn }?.applicationIdSuffix
-        }.joinToString("")
-        val applicationId = (flavorAppId ?: facet.namespace) + flavorIdSuffix + (bt?.applicationIdSuffix ?: "")
+        // the ${applicationId} manifest placeholder Firebase/Play Services authorities depend on. Same
+        // computation the run/launch + app-log-capture paths use (AndroidVariants.applicationId), one source.
+        val applicationId = AndroidVariants.applicationId(facet, variant)
         val manifestPlaceholders = mapOf("applicationId" to applicationId, "packageName" to facet.namespace)
         // Library manifests to merge, in decreasing priority: local android-lib modules, then external AARs.
         val depLibManifests = depAndroidLibs.mapNotNull { lib ->

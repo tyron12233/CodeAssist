@@ -88,26 +88,30 @@ transport constants (`SINK_ACTION`/`BINDER_DESCRIPTOR`/`TXN_SUBMIT`) live in `Ap
 
 - **`AppLogSinkService`** (`:ide-android`) — the exported Binder service resolvable by `SINK_ACTION`. It has no
   `android:process`, so it ALWAYS runs in the UI (main) process (the built app resolves + binds it there). Its
-  `onTransact(TXN_SUBMIT)` reads the `String[]` and delivers it to the `AppLogChannelImpl` that was `start()`ed
-  for the run — which is NOT always in this process (see the relay below). `onUnbind` marks the stream
-  disconnected.
+  `onTransact(TXN_SUBMIT)` reads the `String[]` and feeds it DIRECTLY to the UI-process `AppLogChannelImpl`
+  (`AppLogSinkRegistry.active`). `onUnbind` marks the stream disconnected. There is no cross-process relay — see
+  "Capture is device-global" below.
 - **`AppLogChannel`** platform port (`:ide-core`), supplied by `AppLogChannelImpl`, whose `acceptFrames` decodes
   each payload with `AppLogWire.parse` and publishes a ring-buffered `StateFlow<AppLogSnapshot>` (coalesced
-  ~10/s). Only frames whose HELLO package matches the last-launched app (`start(pkg)`, called just before
-  install/launch, which also registers the channel as the active sink) contribute. `AppLogSnapshot.totalAppended`
-  is a monotonic counter that lets a cross-process consumer compute new lines even after the ring buffer trims.
+  ~10/s). It accepts a HELLO from any applicationId in its **watch set** (`watch(pkgs)`; the open project's
+  Android app applicationIds across all variants, computed by `AndroidVariants.candidateApplicationIds`), which
+  the engine sets on project open + every config change. A HELLO from a NEW app process (fresh pid) starts a
+  fresh session (clears the buffer); a same-pid reconnect keeps it. Records are gated on the session pid.
+  `AppLogSnapshot.totalAppended` is a monotonic counter for computing new lines after the ring buffer trims.
 - **UI:** a fourth `Logcat` tab in `BuildConsole` (level filter, tag/text search, connection pill, clear,
-  tailing) fed by `BuildService.appLog: StateFlow<AppLogUi>`.
-- **Build-process isolation + the cross-process relay:** when the build/run runs in the `:build` daemon (the
-  default), the `AppLogChannelImpl` that gets `start()`ed for the run lives in `:build`, but the sink service
-  runs in the UI process — so `AppLogSinkRegistry.active` is null where the sink executes and frames would be
-  dropped. The sink bridges the gap through **`UiAppLogRelay`** (UI process): `BuildDaemonClient` registers the
-  live daemon binder in it on connect (clears it on death/unbind), and the sink forwards each batch to the
-  daemon over the `oneway IBuildDaemon.submitAppLogFrames` / `appLogClientGone` calls; the daemon feeds its own
-  process's `AppLogSinkRegistry.active`. The daemon's channel then streams to the UI as
-  `IBuildCallback.onAppLog`/`onAppLogState` deltas, reassembled in `RemoteBuildRunner` (mirrors the run-console
-  streaming). When isolation is OFF no daemon is bound, `UiAppLogRelay.deliverFrames` returns false, and the
-  sink feeds the UI-process channel directly, whose snapshot `BuildService.appLog` maps straight through.
+  tailing) fed by `BuildService.appLog: StateFlow<AppLogUi>` (both build-runners expose the SAME UI-process
+  channel, so the tab is identical whether the build ran in-process or in the `:build` daemon).
+- **Capture is device-global + decoupled from the Run button.** Capture used to start only in the `androidRun`
+  task (`start(pkg=namespace)`), so logs appeared ONLY when you launched from the IDE, in that IDE session, and
+  ONLY when the app's applicationId equalled its namespace. Now the engine `watch()`es the project's app IDs on
+  open, and the sink feeds the UI channel directly. So logs show whether the app is launched from the IDE's Run
+  button OR straight from the **device launcher**, and for apps with an `applicationIdSuffix`/flavor
+  `applicationId` (the match is on the effective applicationId, `AndroidVariants.applicationId`, which is also
+  what the run installs + launches by). Because the sink and the channel are both in the UI process, build-
+  process isolation no longer matters here — the old `UiAppLogRelay` + the daemon's app-log streaming are gone.
+- **`Log.*` on strict-SELinux devices.** The bridge captures `android.util.Log.*` by exec'ing `logcat` (own-PID,
+  no permission). Where SELinux blocks that exec, the bridge forwards a one-off note (tag `IdeLogBridge`) so an
+  otherwise-empty tab isn't read as a total failure — `System.out`/`System.err` (println) and crashes still forward.
 
 ## Setting
 
@@ -118,6 +122,6 @@ read per build (a toggle applies on the next build, no restart).
 
 The sink service is exported with no permission (the built app is signed with a different key, so a signature
 permission can't gate it), so any app could bind it. Acceptable for a debug-only developer tool: the channel
-drops every frame whose HELLO package isn't the currently-launched app, so a stray bind contributes nothing.
-The HELLO frame already carries a `token` field (currently empty) for a per-run token to be minted by the IDE
-and validated on submit — the intended hardening.
+drops every frame whose HELLO package isn't in the open project's app-ID watch set, so a stray bind from an
+unrelated app contributes nothing. The HELLO frame already carries a `token` field (currently empty) for a
+per-run token to be minted by the IDE and validated on submit — the intended hardening.
