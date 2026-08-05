@@ -1,7 +1,10 @@
 package dev.ide.android
 
+import android.app.Activity
 import android.content.Context
 import android.graphics.Typeface
+import android.os.Handler
+import android.os.Looper
 import android.util.TypedValue
 import android.view.ViewGroup
 import android.widget.ImageView
@@ -17,10 +20,14 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.viewinterop.AndroidView
+import com.google.android.gms.ads.AdError
 import com.google.android.gms.ads.AdListener
 import com.google.android.gms.ads.AdLoader
 import com.google.android.gms.ads.AdRequest
+import com.google.android.gms.ads.FullScreenContentCallback
 import com.google.android.gms.ads.LoadAdError
+import com.google.android.gms.ads.interstitial.InterstitialAd
+import com.google.android.gms.ads.interstitial.InterstitialAdLoadCallback
 import com.google.android.gms.ads.nativead.MediaView
 import com.google.android.gms.ads.nativead.NativeAd
 import com.google.android.gms.ads.nativead.NativeAdView
@@ -55,6 +62,10 @@ private val webViewAvailable: Boolean by lazy {
  *
  * There is no purchase flow: ads are removed for free via the in-app toggle, and the house ad's tap opens the
  * donation page. [openUrl] backs that donation link.
+ *
+ * The one non-native placement is the full-screen interstitial ([preloadInterstitial]/[showInterstitial]):
+ * a real AdMob `InterstitialAd` shown occasionally at natural breaks (a long-running build, a finished tutorial
+ * lesson), driven by the shared UI controllers and gated by the same "show ads" toggle.
  */
 class AndroidAdHost(
     private val openUrl: (String) -> Unit,
@@ -62,12 +73,75 @@ class AndroidAdHost(
     private val privacyOptionsRequiredProvider: () -> Boolean = { false },
     /** Opens the UMP privacy-options form (needs the foreground Activity — supplied by the caller). */
     private val onShowPrivacyOptions: () -> Unit = {},
+    /** Supplies the current foreground Activity — required to SHOW the full-screen build interstitial. */
+    private val activityProvider: () -> Activity? = { null },
 ) : AdHost {
     override val available: Boolean = true
 
     override val privacyOptionsRequired: Boolean get() = privacyOptionsRequiredProvider()
 
     override fun showPrivacyOptions() = onShowPrivacyOptions()
+
+    // Full-screen interstitial, shared across trigger points (long build, finished lesson). Preloaded just
+    // before a possible show and shown if the caller's gate allows. Single-use: cleared once shown/dismissed
+    // and reloaded for next time. Touched on the main thread (the callers invoke on the Main dispatcher, and
+    // AdMob requires main-thread load/show); the volatiles just publish state safely to any stray reader.
+    @Volatile private var interstitial: InterstitialAd? = null
+    @Volatile private var loadingInterstitial = false
+    private val mainHandler = Handler(Looper.getMainLooper())
+
+    override fun preloadInterstitial() {
+        // AdMob load must run on the main thread; hop there defensively if a caller ever invokes us off it.
+        mainHandler.post {
+            if (!webViewAvailable || interstitial != null || loadingInterstitial) return@post
+            val ctx = activityProvider()?.applicationContext ?: return@post
+            loadingInterstitial = true
+            runCatching {
+                InterstitialAd.load(
+                    ctx,
+                    BuildConfig.AD_INTERSTITIAL_UNIT_ID,
+                    AdRequest.Builder().build(),
+                    object : InterstitialAdLoadCallback() {
+                        override fun onAdLoaded(ad: InterstitialAd) {
+                            loadingInterstitial = false
+                            ad.fullScreenContentCallback = object : FullScreenContentCallback() {
+                                override fun onAdDismissedFullScreenContent() { interstitial = null }
+                                override fun onAdFailedToShowFullScreenContent(error: AdError) { interstitial = null }
+                            }
+                            interstitial = ad
+                            adLog.info("interstitial loaded (unit ${BuildConfig.AD_INTERSTITIAL_UNIT_ID})")
+                        }
+
+                        override fun onAdFailedToLoad(error: LoadAdError) {
+                            loadingInterstitial = false
+                            // Code 3 is NO_FILL (expected for a while on a fresh real unit); other codes point at
+                            // a config/network problem. Never crash — we just don't show one this time.
+                            adLog.warn(
+                                "interstitial failed (unit ${BuildConfig.AD_INTERSTITIAL_UNIT_ID}): " +
+                                    "code=${error.code} domain=${error.domain} message=${error.message}"
+                            )
+                        }
+                    },
+                )
+            }.onFailure { e ->
+                loadingInterstitial = false
+                adLog.warn("build interstitial load skipped (no WebView / SDK unavailable): ${e.message}")
+            }
+        }
+    }
+
+    override fun showInterstitial(): Boolean {
+        // Callers invoke on the Main dispatcher, and AdMob requires show() on the main thread. If somehow
+        // off-main, skip this round (return false) rather than risk an off-thread show.
+        if (Looper.myLooper() != Looper.getMainLooper()) return false
+        val ad = interstitial ?: return false
+        val activity = activityProvider() ?: return false
+        interstitial = null // single-use
+        ad.show(activity)
+        // Warm the next one so a later trigger can show without waiting on its own preload.
+        preloadInterstitial()
+        return true
+    }
 
     @Composable
     override fun NativeAd(placement: AdPlacement, modifier: Modifier) {

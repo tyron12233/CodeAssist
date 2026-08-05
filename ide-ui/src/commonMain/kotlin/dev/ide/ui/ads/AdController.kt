@@ -11,6 +11,9 @@ import dev.ide.ui.backend.IdeBackend
 /** App-global preference: whether the user wants ads shown (default true). Flipped by the disable-ads toggle. */
 const val ADS_ENABLED_PREF = "ads.enabled"
 
+/** Show a tutorials interstitial on every Nth finished lesson (see [AdController.shouldShowLessonInterstitial]). */
+private const val LESSON_INTERSTITIAL_EVERY = 2
+
 /**
  * Common-side ad gating + state. Holds the user's "show ads" preference (persisted through
  * [IdeBackend.settings]) and combines it with the host's [AdHost.available] into [adsActive]. There is no paid
@@ -46,6 +49,20 @@ class AdController(
     fun updateAdsEnabled(enabled: Boolean) {
         adsEnabled = enabled
         backend.settings.setPreference(ADS_ENABLED_PREF, enabled.toString())
+    }
+
+    /** Count of eligible (ads-active) lesson finishes so far this session — drives the every-Nth gate below. */
+    private var lessonFinishes = 0
+
+    /**
+     * Whether a just-finished tutorial lesson should show the full-screen interstitial. Ads must be active, and
+     * only every [LESSON_INTERSTITIAL_EVERY]th eligible finish qualifies, so a run of short lessons doesn't pop
+     * an ad each time. Call exactly once per lesson completion — it advances the counter as a side effect.
+     */
+    fun shouldShowLessonInterstitial(): Boolean {
+        if (!adsActive) return false
+        lessonFinishes++
+        return lessonFinishes % LESSON_INTERSTITIAL_EVERY == 0
     }
 }
 

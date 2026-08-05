@@ -181,6 +181,8 @@ class MainActivity : ComponentActivity() {
                     openUrl = { url -> fileOps.openInBrowser(url) },
                     privacyOptionsRequiredProvider = { adConsent.privacyOptionsRequired },
                     onShowPrivacyOptions = { adConsent.showPrivacyOptions(this@MainActivity) },
+                    // The full-screen build interstitial needs the foreground Activity to show().
+                    activityProvider = { this@MainActivity },
                 )
             }
 

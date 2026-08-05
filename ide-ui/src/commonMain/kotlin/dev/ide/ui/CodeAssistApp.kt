@@ -23,6 +23,7 @@ import androidx.compose.material3.Surface
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontFamily
 import dev.ide.ui.ads.AdController
+import dev.ide.ui.ads.BuildAdInterstitial
 import dev.ide.ui.ads.LocalAds
 import dev.ide.ui.backend.AdHost
 import dev.ide.ui.backend.FileActions
@@ -386,6 +387,9 @@ fun CodeAssistApp(
         // The M3 background fills the whole window edge-to-edge (behind the system bars); content is
         // then inset by `safeDrawing`. On desktop these insets are empty, so this is a no-op there.
         CompositionLocalProvider(LocalAds provides adController) {
+        // Occasional full-screen ad over a LONG build (Android only; inert on desktop / when ads are off).
+        // Renders nothing — it just observes the build state and asks the host to present an interstitial.
+        BuildAdInterstitial(backend, adController)
         Surface(Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
             Box(Modifier.fillMaxSize().windowInsetsPadding(WindowInsets.safeDrawing)) {
                 ScreenHost(screen, Modifier.fillMaxSize()) { s ->

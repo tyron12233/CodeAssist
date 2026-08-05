@@ -52,7 +52,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.graphics.vector.ImageVector
-import dev.ide.ui.backend.AdPlacement
+import dev.ide.ui.ads.rememberAds
 import dev.ide.ui.backend.EditorService
 import dev.ide.ui.backend.IdeBackend
 import dev.ide.ui.backend.UiCompletionResult
@@ -61,7 +61,6 @@ import dev.ide.ui.backend.UiExerciseResult
 import dev.ide.ui.backend.UiInlayHint
 import dev.ide.ui.backend.UiLesson
 import dev.ide.ui.backend.UiLessonStep
-import dev.ide.ui.components.AdSlot
 import dev.ide.ui.components.IconButtonCa
 import dev.ide.ui.components.entrancePop
 import dev.ide.ui.components.entranceSlideUp
@@ -126,6 +125,9 @@ fun LessonPlayerScreen(
     LaunchedEffect(steps.size) { if (steps.isNotEmpty()) stepIndex = stepIndex.coerceIn(0, steps.size - 1) }
     val step = steps.getOrNull(stepIndex)
 
+    // Ad gating (null on desktop / when hosted without ads). Drives the completion interstitial below.
+    val ads = rememberAds()
+
     // Advance gating per step: concept always; interactive/quiz flip it when solved/answered.
     var canAdvance by remember(step?.id) { mutableStateOf(step is UiLessonStep.Concept) }
 
@@ -182,10 +184,11 @@ fun LessonPlayerScreen(
             }
 
             val isLast = stepIndex >= steps.size - 1
-            // The completion moment: once the final step is solved/answered, a native ad sits above the Finish
-            // button — a natural break, not mid-lesson. `canAdvance` gates it so it never covers unsolved content.
-            if (isLast && canAdvance) {
-                AdSlot(AdPlacement.LESSON_COMPLETE, Modifier.padding(horizontal = 20.dp).padding(top = 8.dp))
+            // Preload the completion interstitial as the learner reaches the final step (once it's solved /
+            // answered) so it's ready the instant they tap Finish. Ads-active gated; a no-op on desktop and when
+            // ads are off. The show itself happens on Finish below, throttled to every 2nd lesson.
+            LaunchedEffect(isLast, canAdvance) {
+                if (isLast && canAdvance && ads?.adsActive == true) ads.host.preloadInterstitial()
             }
 
             // Bottom navigation bar: Back + Next / Finish.
@@ -206,7 +209,14 @@ fun LessonPlayerScreen(
                 ) {
                     val id = lessonId
                     if (id != null && step != null) backend.learn.markStepComplete(id, step.id)
-                    if (isLast) onExit() else stepIndex++
+                    if (isLast) {
+                        // Every 2nd finished lesson shows the full-screen interstitial (ads-active gated); it
+                        // overlays as we return to the track. shouldShowLessonInterstitial advances the counter.
+                        if (ads?.shouldShowLessonInterstitial() == true) ads.host.showInterstitial()
+                        onExit()
+                    } else {
+                        stepIndex++
+                    }
                 }
             }
         }

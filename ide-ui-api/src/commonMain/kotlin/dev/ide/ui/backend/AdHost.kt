@@ -35,11 +35,14 @@ enum class AdPlacement {
  * [NativeAd] and never link an ad SDK. The host supplies a concrete implementation to
  * [dev.ide.ui.CodeAssistApp]; [None] (the default) means "this platform has no ads".
  *
- * Ads are NATIVE only — the host renders them inside the app's own card chrome (see
- * [dev.ide.ui.components.AdSlot]), never as banners or interstitials. Whether ads are shown at all is decided
- * in common by [dev.ide.ui.ads.AdController] from the user's "show ads" preference; this port only reports
- * whether an ad network is [available] and paints the ad body. There is no purchase flow — removing ads is
- * free (the toggle), and supporting the project is a plain donation link the host opens itself.
+ * Ad slots are NATIVE — the host renders them inside the app's own card chrome (see
+ * [dev.ide.ui.components.AdSlot]), never as banners. The one exception is a single full-screen interstitial
+ * shown occasionally at natural breaks ([preloadInterstitial]/[showInterstitial]) — currently a long-running
+ * build finishing its wait and a completed tutorial lesson. Whether ads are shown at all — native slots AND
+ * that interstitial — is decided in common by [dev.ide.ui.ads.AdController] from the user's "show ads"
+ * preference; this port only reports whether an ad network is [available] and paints/presents the ad. There is
+ * no purchase flow — removing ads is free (the toggle), and supporting the project is a plain donation link the
+ * host opens itself.
  */
 interface AdHost {
     /** Whether an ad network is wired on this host (false on desktop). Gates every ad slot. */
@@ -68,6 +71,22 @@ interface AdHost {
      */
     @Composable
     fun NativeAd(placement: AdPlacement, modifier: Modifier)
+
+    /**
+     * Begin loading the full-screen interstitial ahead of showing it (idempotent — a repeat call while one is
+     * loading or already loaded is a no-op). Callers preload at the last natural moment before a possible show
+     * (a build starting, a learner reaching a lesson's final step) so an ad is ready in time. No-op where
+     * unsupported (desktop; the default).
+     */
+    fun preloadInterstitial() {}
+
+    /**
+     * Show a preloaded interstitial, if one is ready. Returns true only when an ad was actually presented (so the
+     * caller can advance its frequency bookkeeping); false when none was ready or the host has no ads. Called
+     * only while ads are active, at a natural break (a build still running past the threshold, a lesson just
+     * finished). No-op → false where unsupported (desktop; the default).
+     */
+    fun showInterstitial(): Boolean = false
 
     /** A no-op bridge for hosts without ads (desktop; the default). */
     object None : AdHost {
