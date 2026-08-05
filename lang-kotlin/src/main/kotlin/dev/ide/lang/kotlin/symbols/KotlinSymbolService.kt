@@ -221,6 +221,12 @@ class KotlinSymbolService(
     // the same `Type.` companion repeatedly; for a CLASSPATH type the companion's shape is session-stable.
     private val companionMembersMemo = ConcurrentHashMap<String, List<KotlinSymbol>>()
 
+    // Per-fqn memo of a mapped JVM type's STATIC members (`java.lang.String` → `valueOf`/`format`/`join`,
+    // `java.lang.Integer` → `parseInt`). A JVM type named by its Java FQN maps to a Kotlin classifier whose API
+    // omits these statics, so [ownAndInherited] (which walks the mapped Kotlin type) drops them; this reads them
+    // back from the real bytecode shape. Session-stable like the sibling classpath memos (dropped on build-start).
+    private val mappedStaticsMemo = ConcurrentHashMap<String, List<KotlinSymbol>>()
+
     // Per-fqn memo of "does this classpath BINARY type exist?" (the [typeShape] presence half of [isKnownType]),
     // probed per name reference by the unresolved-member/-type checks. Binary existence is session-stable; the
     // SOURCE-class half stays uncached (a Java class added mid-edit must resolve without a rebuild).
@@ -257,7 +263,7 @@ class KotlinSymbolService(
         val status = idx.status
         val building = status.building
         if (building && !extMemoBuilding) {
-            classpathExtMemo.clear(); checkMembersMemo.clear(); companionMembersMemo.clear(); classpathTypeExistsMemo.clear(); classpathOwnMembersMemo.clear(); classpathSupertypeMemo.clear(); topLevelLibMemo.clear(); topLevelBuiltinMemo.clear()
+            classpathExtMemo.clear(); checkMembersMemo.clear(); companionMembersMemo.clear(); mappedStaticsMemo.clear(); classpathTypeExistsMemo.clear(); classpathOwnMembersMemo.clear(); classpathSupertypeMemo.clear(); topLevelLibMemo.clear(); topLevelBuiltinMemo.clear()
         }
         extMemoBuilding = building
         // Not ready ⇒ queries return PARTIAL results (whatever segments are open) for progressive completion;
@@ -964,6 +970,31 @@ class KotlinSymbolService(
                 exactName
             )
         }
+    }
+
+    /**
+     * The STATIC members of a JVM type NAMED BY ITS JAVA FQN — `java.lang.String` → `valueOf`/`format`/`join`/
+     * `copyValueOf`/`CASE_INSENSITIVE_ORDER`, `java.lang.Integer` → `parseInt`, `java.util.List` → `of`, … Kotlin
+     * maps such a type to a classifier (`kotlin.String`) whose API intentionally omits these JVM statics, so
+     * [ownAndInherited] — which enumerates the mapped Kotlin type — never surfaces them, and a `java.lang.String.`
+     * type reference came up empty. Read them from the real bytecode shape so they resolve and complete, exactly
+     * as a non-mapped type's statics already do (`android.widget.FrameLayout.LayoutParams.MATCH_PARENT`). Empty
+     * for any type that ISN'T a mapped JVM FQN (bare `String`/`List` present as `kotlin.*`, so they stay
+     * static-free as before) — the sole hot-path cost is one map lookup. The caller offers these ONLY for a
+     * receiver written as the explicit JVM FQN (a dotted `java.lang.String`), never a bare `String`, since
+     * Kotlin exposes the JVM statics only through the Java spelling — both resolve to the same [typeFqn] here.
+     */
+    fun mappedTypeStatics(typeFqn: String): List<KotlinSymbol> {
+        if (Builtins.kotlinTypeFor(typeFqn) == null) return emptyList() // not an explicit mapped JVM FQN
+        val compute = {
+            typeShape(typeFqn)
+                ?.let { membersFromShape(it, emptyList(), HashSet(), synthesizeBeanProps = false) }
+                ?.filter { Modifier.STATIC in it.modifiers }
+                ?: emptyList()
+        }
+        val idx = index
+        // Cache for a classpath binary (session-stable); uncached with no index (tests) or mid-build (partial).
+        return if (idx == null || !classpathCacheUsable(idx)) compute() else mappedStaticsMemo.getOrPut(typeFqn, compute)
     }
 
     /**

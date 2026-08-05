@@ -447,7 +447,16 @@ class KotlinCompletion(
                 // out of its member list by SourceIndex, so — unlike a classpath binary's — they don't arrive
                 // through `membersForCompletion`; add them explicitly so `Outer.` surfaces them.
                 val nestedTypes = service.nestedTypesOf(recvType.qualifiedName, prefix)
-                members + nestedTypes + enumConstants + listOfNotNull(companion) + service.companionMembersFor(
+                // A JVM type NAMED BY ITS JAVA FQN (`java.lang.String.valueOf`, `java.lang.Integer.parseInt`): its
+                // statics live on the JVM class, but Kotlin maps the type to a classifier whose API omits them, so
+                // they never arrive through `members`. Offered ONLY when the receiver is SPELLED as the fully-
+                // qualified name — a bare `String.` must stay static-free, since Kotlin exposes these statics only
+                // through the `java.lang.String` spelling (both resolve to the same type here).
+                val mappedStatics = if (receiver.text == recvType.qualifiedName)
+                    service.mappedTypeStatics(recvType.qualifiedName)
+                        .filter { matcher.matches(it.name) && memberVisibleOn(it, typeReceiver = true, enclosing) }
+                else emptyList()
+                members + nestedTypes + enumConstants + listOfNotNull(companion) + mappedStatics + service.companionMembersFor(
                     recvType.qualifiedName, prefix
                 ).filter { memberVisibleOn(it, typeReceiver = false, enclosing) }
             } else {

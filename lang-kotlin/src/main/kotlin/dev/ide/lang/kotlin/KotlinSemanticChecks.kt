@@ -3107,8 +3107,15 @@ internal class KotlinSemanticChecks(private val service: KotlinSymbolService) {
         // members/extensions are materialized + receiver-bound — not the type's whole extension set (the
         // `kotlin.Any` bucket alone is thousands on a Compose classpath). A `Type.member` reference (`Color.Red`)
         // also sees the type's companion-object members/statics, which instance membersNamed doesn't list.
+        // A JVM type named by its Java FQN (`java.lang.String.valueOf`, `java.lang.Integer.parseInt`) reaches its
+        // statics through the Java spelling only — the mapped Kotlin classifier's API omits them, so
+        // `membersNamedForCheck` misses them. Mirror the completion gate (spelled as the FQN, a type receiver) so
+        // a bare `String.valueOf` stays flagged (Kotlin reports it) while the explicit FQN resolves.
+        val typeStatics = if (resolver.isTypeReceiver(receiver) && receiver.text == recvType.qualifiedName)
+            service.mappedTypeStatics(recvType.qualifiedName).filter { it.name == name } else emptyList()
         val matching = service.membersNamedForCheck(recvType.qualifiedName, recvType.typeArguments, name) +
-            if (resolver.isTypeReceiver(receiver)) service.companionMembersFor(recvType.qualifiedName, name).filter { it.name == name } else emptyList()
+            (if (resolver.isTypeReceiver(receiver)) service.companionMembersFor(recvType.qualifiedName, name).filter { it.name == name } else emptyList()) +
+            typeStatics
         if (matching.isNotEmpty()) {
             // A plain member resolves outright. An EXTENSION resolves only when it is actually in scope —
             // imported, same-package, or default-imported — so an unimported `16.dp` / `14.sp` (the extension is
