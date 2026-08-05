@@ -620,6 +620,63 @@ class MavenDependencyResolverTest {
     }
 
     @Test
+    fun gmmConstraintSuppliesVersionForAVersionlessEdge() {
+        // Gradle's platform-in-a-library / atomic-group pattern: a variant declares a dependency EDGE with no
+        // version and relies on a `dependencyConstraint` (same module here) to supply it. The constraint must
+        // be the version SOURCE, not merely align a GA already in the graph — else the edge is dropped and its
+        // class is missing at runtime. (A bare constraint with no edge is still never pulled; see the test below.)
+        val files = FakeRepo()
+        files.putModule("libA", "1.0", variants = listOf(
+            GmmVar("api", libApi, files = listOf("libA-1.0.jar"),
+                deps = listOf(Dep("g", "shared", "")),              // versionless edge
+                constraints = listOf(Dep("g", "shared", "1.0"))),   // version lives only here
+        ))
+        files.put("shared", "1.0")
+        val (resolver, _) = newResolver(files)
+        val result = runBlocking { resolver.resolve(listOf(coord("libA", "1.0")), listOf(repo), ConflictPolicy.NEWEST, noProgress) }
+        val shared = result.resolved.singleOrNull { it.coordinate.name == "shared" }
+        assertNotNull(shared, "a same-module constraint must supply the version for a versionless edge: ${result.resolved.map { it.coordinate.name }}")
+        assertEquals("1.0", shared.coordinate.version)
+    }
+
+    @Test
+    fun kmpComposeUiVersionlessSavedStateComposeResolvesViaConstraint() {
+        // The reported Glance 1.3.0-alpha02 crash, end-to-end. An app pulls a KMP compose-ui whose ANDROID
+        // platform module declares `savedstate-compose` as a runtime edge WITHOUT a version — the version comes
+        // from the Compose group's `dependencyConstraints` (published on every variant, so on the api variant
+        // the resolver reads). The available-at redirect + runtime-variant follow surface the edge; the
+        // constraint must then place it. Before the fix it was dropped, so the dexed APK threw at NavHost render:
+        // NoClassDefFoundError: androidx.savedstate.compose.LocalSavedStateRegistryOwnerKt.
+        val cx = "androidx.compose.ui"; val ss = "androidx.savedstate"
+        val androidRuntime = mapOf(
+            "org.gradle.category" to "library", "org.gradle.usage" to "java-runtime",
+            "org.jetbrains.kotlin.platform.type" to "androidJvm", "org.gradle.jvm.environment" to "android")
+        val files = FakeRepo()
+        files.putModule("glance-appwidget", "1.3.0-alpha02", group = "androidx.glance", packaging = "aar", variants = listOf(
+            GmmVar("releaseApiElements-published", androidApi, files = listOf("glance-appwidget-1.3.0-alpha02.aar"),
+                deps = listOf(Dep(cx, "ui", "1.9.0")))))
+        files.putModule("ui", "1.9.0", group = cx, variants = listOf(
+            GmmVar("releaseApiElements-published", androidApi, availableAt = Triple(cx, "ui-android", "1.9.0"))))
+        files.putModule("ui-android", "1.9.0", group = cx, packaging = "aar", variants = listOf(
+            // api variant: no savedstate edge and no savedstate constraint — this exercises reading the
+            // constraint from the RUNTIME variant, where the runtime-only edge and its alignment both live.
+            GmmVar("releaseApiElements-published", androidApi, files = listOf("ui-android-1.9.0.aar")),
+            // runtime variant: the versionless edge, with its version supplied by a co-located constraint.
+            GmmVar("releaseRuntimeElements-published", androidRuntime, files = listOf("ui-android-1.9.0.aar"),
+                deps = listOf(Dep(ss, "savedstate-compose", "")),
+                constraints = listOf(Dep(ss, "savedstate-compose", "1.3.0")))))
+        files.putModule("savedstate-compose", "1.3.0", group = ss, packaging = "aar", variants = listOf(
+            GmmVar("releaseApiElements-published", androidApi, files = listOf("savedstate-compose-1.3.0.aar"))))
+        val (resolver, _) = newResolver(files)
+        val result = runBlocking {
+            resolver.resolve(listOf(Coordinate("androidx.glance", "glance-appwidget", "1.3.0-alpha02")), listOf(repo), ConflictPolicy.NEWEST, noProgress)
+        }
+        val savedstate = result.resolved.singleOrNull { it.coordinate.name == "savedstate-compose" }
+        assertNotNull(savedstate, "savedstate-compose (versioned only by the Compose group constraint) must reach the closure: ${result.resolved.map { it.coordinate.name }}")
+        assertEquals("1.3.0", savedstate.coordinate.version)
+    }
+
+    @Test
     fun constraintBumpToUnwalkedVersionFetchesTheNewVersionsFile() {
         // The lifecycle `-ktx` bug: `ktx` is WALKED at 1.0 (a plain GMM jar), then a dependencyConstraint bumps
         // it to 2.0 — a version we never walked, whose files live elsewhere via `available-at` (`ktx-android`).

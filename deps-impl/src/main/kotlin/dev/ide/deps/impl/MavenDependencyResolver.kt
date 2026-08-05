@@ -235,9 +235,23 @@ class MavenDependencyResolver(
                         // by kotlinx-serialization) is provided by the platform stdlib — never walk/fetch it
                         // (it 404s in modern Kotlin, surfacing as unresolved). See [METADATA_ONLY_MODULES].
                         if (childGa in METADATA_ONLY_MODULES) continue
-                        // A `strictly` pin forces the version; else a versionless transitive (one whose own
-                        // metadata left the version to a BOM it didn't carry) is placeable iff a BOM manages it.
-                        val version = d.strictly?.ifBlank { null } ?: d.version?.ifBlank { null } ?: platformManaged[childGa] ?: continue
+                        // The version this edge resolves to. A concrete `strictly`/`requires` on the edge is used
+                        // as-is; a VERSIONLESS edge (one whose own metadata left the version to alignment) is
+                        // placeable when a version SOURCE can supply one: a GMM `dependencyConstraint` seen so far
+                        // (a same-module or already-walked one — Gradle's platform-in-a-library / atomic-group
+                        // alignment, incl. its `strictly` form), an imported BOM, or a version another edge has
+                        // already required for this GA. Post-walk alignment then snaps it to the group's newest.
+                        // Without this, an intra-group AndroidX edge versioned only by constraints — e.g.
+                        // compose-ui → androidx.savedstate:savedstate-compose — is dropped, so the class is absent
+                        // at runtime (NoClassDefFoundError: androidx.savedstate.compose.LocalSavedStateRegistryOwnerKt).
+                        // A bare constraint with NO edge is still never pulled (this only fires inside the edge loop).
+                        val version = d.strictly?.ifBlank { null }
+                            ?: d.version?.ifBlank { null }
+                            ?: strictVersions[childGa]
+                            ?: constraints[childGa]?.let { MavenVersion.newest(it) }
+                            ?: platformManaged[childGa]
+                            ?: seenVersions[childGa]?.let { MavenVersion.newest(it) }
+                            ?: continue
                         if (childGa.excludedBy(req.exclusions)) continue
                         d.strictly?.ifBlank { null }?.let { strictVersions.putIfAbsent(childGa, it) }
                         edges.getOrPut(ga) { linkedSetOf() }.add(childGa)
@@ -772,17 +786,21 @@ class MavenDependencyResolver(
         // `NoClassDefFoundError`. Deduped by group:name (the api entry wins when both list it). A runtime
         // variant that itself redirects via `available-at` (rare) carries no direct deps, so it adds nothing.
         val apiDeps = variant.dependencies
-        val runtimeOnly = GmmVariantSelector.runtimeVariant(gmm, variantRequest)
-            ?.takeIf { it !== variant }
+        val runtimeVar = GmmVariantSelector.runtimeVariant(gmm, variantRequest)?.takeIf { it !== variant }
+        val runtimeOnly = runtimeVar
             ?.dependencies
             ?.filter { rd -> apiDeps.none { it.group == rd.group && it.name == rd.name } }
             ?: emptyList()
         val transitives = (apiDeps + runtimeOnly).map {
             ChildDep(it.group, it.name, it.version?.ifBlank { null }, it.strictly?.ifBlank { null }, it.excludes, "jar")
         }
-        val constraints = variant.dependencyConstraints.map {
-            ChildDep(it.group, it.name, it.version?.ifBlank { null }, it.strictly?.ifBlank { null }, emptySet(), "jar")
-        }
+        // Constraints from BOTH the api and runtime variants (deduped by GA). AGP publishes the group-alignment
+        // block on every variant, but a runtime-only edge's aligning version can live on the runtime variant —
+        // and the version SOURCE for a versionless edge is looked up from these (see the transitive walk), so
+        // reading only the api variant's constraints would drop such an edge (the savedstate-compose case).
+        val constraints = (variant.dependencyConstraints + runtimeVar?.dependencyConstraints.orEmpty())
+            .distinctBy { GA(it.group, it.name) }
+            .map { ChildDep(it.group, it.name, it.version?.ifBlank { null }, it.strictly?.ifBlank { null }, emptySet(), "jar") }
         // The artifact's real path is the file's `url` (relative to the module dir), NOT its `name`: AGP
         // publishes an AAR with a logical name like `datastore-preferences-release.aar` but a url of
         // `datastore-preferences-android-1.1.1.aar`. All primary files are kept (a variant rarely ships more
