@@ -23,9 +23,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.SpanStyle
-import androidx.compose.ui.text.buildAnnotatedString
-import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.withStyle
+import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.unit.dp
 import dev.ide.ui.ComposePreviewHost
 import dev.ide.ui.backend.IdeBackend
@@ -35,6 +33,8 @@ import dev.ide.ui.editor.highlight
 import dev.ide.ui.editor.preview.LessonComposePreview
 import dev.ide.ui.editor.preview.LessonLayoutPreview
 import dev.ide.ui.icons.CaIcons
+import dev.ide.ui.markdown.MdStyles
+import dev.ide.ui.markdown.buildInline
 import dev.ide.ui.theme.Ca
 
 /** Render a lesson's content blocks (explanation text with tiny inline markup, read-only code samples,
@@ -135,36 +135,25 @@ private fun Callout(kind: String, text: String) {
     }
 }
 
-/** Parse the tiny lesson markup — `**bold**` and `` `code` `` — into an [AnnotatedString]. */
+/**
+ * Render inline lesson markup — `**bold**`, `*italic*`, `` `code` ``, links — into an [AnnotatedString],
+ * via the shared Markdown inline scanner ([buildInline]). Base spans carry no color so the caller's `Text`
+ * color applies; only code + links are tinted.
+ */
 @Composable
 fun inlineMarkup(md: String): AnnotatedString {
     val codeFamily = Ide.type.codeFamily
     val codeBg = MaterialTheme.colorScheme.surfaceContainerHigh
     val codeColor = MaterialTheme.colorScheme.onSurface
-    return remember(md, codeFamily, codeBg, codeColor) {
-        buildAnnotatedString {
-            var i = 0
-            while (i < md.length) {
-                when {
-                    md.startsWith("**", i) -> {
-                        val end = md.indexOf("**", i + 2)
-                        if (end < 0) { append(md.substring(i)); i = md.length }
-                        else {
-                            withStyle(SpanStyle(fontWeight = FontWeight.Bold, color = codeColor)) { append(md.substring(i + 2, end)) }
-                            i = end + 2
-                        }
-                    }
-                    md[i] == '`' -> {
-                        val end = md.indexOf('`', i + 1)
-                        if (end < 0) { append(md.substring(i)); i = md.length }
-                        else {
-                            withStyle(SpanStyle(fontFamily = codeFamily, background = codeBg, color = codeColor)) { append(md.substring(i + 1, end)) }
-                            i = end + 1
-                        }
-                    }
-                    else -> { append(md[i]); i++ }
-                }
-            }
-        }
+    val linkColor = MaterialTheme.colorScheme.primary
+    return remember(md, codeFamily, codeBg, codeColor, linkColor) {
+        buildInline(
+            md,
+            MdStyles(
+                base = SpanStyle(),
+                code = SpanStyle(fontFamily = codeFamily, background = codeBg, color = codeColor),
+                link = SpanStyle(color = linkColor, textDecoration = TextDecoration.Underline),
+            ),
+        )
     }
 }

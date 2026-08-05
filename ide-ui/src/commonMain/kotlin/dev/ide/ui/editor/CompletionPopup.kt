@@ -32,6 +32,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.buildAnnotatedString
@@ -114,11 +115,14 @@ private fun CompletionListPanel(
     onHover: (Int) -> Unit,
     onInfo: (() -> Unit)?,
 ) {
+    val shape = RoundedCornerShape(Ca.radius.md)
     Column(
         Modifier
             .width(width)
-            .background(Ide.colors.glassThick, RoundedCornerShape(Ca.radius.md))
-            .border(1.dp, MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(Ca.radius.md)),
+            // Clip to the rounded shape so a selected row's full-bleed background doesn't square off the corners.
+            .clip(shape)
+            .background(Ide.colors.glassThick, shape)
+            .border(1.dp, MaterialTheme.colorScheme.outlineVariant, shape),
     ) {
         if (items.isEmpty()) {
             Text(
@@ -170,11 +174,14 @@ private fun DocPanel(item: UiCompletionItem, doc: String, maxHeight: Dp, modifie
                 modifier = Modifier.weight(1f),
             )
         }
-        Text(
-            doc,
-            style = MaterialTheme.typography.bodyMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        // Completion docs are javadoc/KDoc (JavadocText.clean'd or raw KDoc) — the same dialect the hover popup
+        // renders — so parse + render through the shared QuickDoc path rather than as plain text.
+        val codeStyle = SpanStyle(fontFamily = Ide.type.codeFamily, color = MaterialTheme.colorScheme.primary)
+        val content = remember(doc, codeStyle) { parseQuickDoc(doc, codeStyle) }
+        QuickDocBody(
+            content,
             modifier = Modifier.verticalScroll(rememberScrollState()).padding(horizontal = 12.dp).padding(bottom = 10.dp),
+            descriptionStyle = MaterialTheme.typography.bodyMedium,
         )
     }
 }

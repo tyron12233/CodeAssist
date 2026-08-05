@@ -51,6 +51,7 @@ import androidx.compose.ui.input.key.type
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.TextRange
+import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.text.style.TextOverflow
@@ -241,19 +242,35 @@ internal fun QuickDocPopup(doc: UiQuickDoc, modifier: Modifier = Modifier) {
             if (content == null) {
                 Text(stringResource(Res.string.edoverlay_no_documentation), style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.outline)
             } else {
-                if (content.description.isNotEmpty()) {
-                    Text(content.description, style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                }
-                for (sec in content.sections) {
-                    Spacer(Modifier.size(10.dp))
-                    if (sec.title.isNotEmpty()) {
-                        Text(docSectionLabel(sec.title), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, fontWeight = FontWeight.SemiBold)
-                        Spacer(Modifier.size(3.dp))
-                    }
-                    for (item in sec.items) {
-                        Text(item, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(bottom = 2.dp))
-                    }
-                }
+                QuickDocBody(content)
+            }
+        }
+    }
+}
+
+/**
+ * The rendered body of a parsed quick-doc: the description, then its tag sections (Parameters / Returns /
+ * Throws / See also). Shared by the hover [QuickDocPopup] and the completion popup's doc panel so both render
+ * javadoc/KDoc through the one path. The caller owns any scrolling + outer padding via [modifier].
+ */
+@Composable
+internal fun QuickDocBody(
+    content: QuickDocContent,
+    modifier: Modifier = Modifier,
+    descriptionStyle: TextStyle = MaterialTheme.typography.bodyLarge,
+) {
+    Column(modifier) {
+        if (content.description.isNotEmpty()) {
+            Text(content.description, style = descriptionStyle, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
+        for (sec in content.sections) {
+            Spacer(Modifier.size(10.dp))
+            if (sec.title.isNotEmpty()) {
+                Text(docSectionLabel(sec.title), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, fontWeight = FontWeight.SemiBold)
+                Spacer(Modifier.size(3.dp))
+            }
+            for (item in sec.items) {
+                Text(item, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(bottom = 2.dp))
             }
         }
     }

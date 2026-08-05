@@ -92,8 +92,8 @@ import dev.ide.agent.ui.generated.resources.chat_stop
 import dev.ide.agent.ui.generated.resources.chat_thinking
 import dev.ide.agent.ui.generated.resources.chat_title
 import dev.ide.ui.icons.CaIcons
+import dev.ide.ui.markdown.Markdown
 import dev.ide.ui.screens.CodeSample
-import dev.ide.ui.screens.inlineMarkup
 import dev.ide.ui.theme.Ca
 import org.jetbrains.compose.resources.stringResource
 
@@ -462,16 +462,15 @@ private fun ToolStatusIcon(status: UiAgentToolStatus) {
 
 @Composable
 private fun AssistantMarkdown(text: String) {
-    val blocks = remember(text) { splitFences(text) }
-    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        blocks.forEach { block ->
-            if (block.code) {
-                CodeSample(block.text, block.lang)
-            } else if (block.text.isNotBlank()) {
-                Text(inlineMarkup(block.text), color = Ca.colors.textPrimary, style = Ca.type.footnote)
-            }
-        }
-    }
+    // The shared Markdown renderer (headings, lists, quotes, emphasis, links), tuned to the chat's compact
+    // footnote style; fenced code uses the syntax-highlighted CodeSample card.
+    Markdown(
+        text,
+        paragraphStyle = Ca.type.footnote,
+        color = Ca.colors.textPrimary,
+        spacing = 8.dp,
+        codeBlock = { code, lang -> CodeSample(code, lang) },
+    )
 }
 
 @Composable
@@ -650,37 +649,3 @@ private fun nextMode(mode: UiAgentPermissionMode): UiAgentPermissionMode = when 
     UiAgentPermissionMode.PLAN_ONLY -> UiAgentPermissionMode.ASK_EACH
 }
 
-private data class MdBlock(val code: Boolean, val text: String, val lang: String)
-
-/** Split assistant text into plain and fenced-code segments, tolerating an unclosed fence while streaming. */
-private fun splitFences(text: String): List<MdBlock> {
-    if (!text.contains("```")) return listOf(MdBlock(false, text, ""))
-    val blocks = ArrayList<MdBlock>()
-    val lines = text.split('\n')
-    var inCode = false
-    var lang = ""
-    val buffer = StringBuilder()
-    fun flush(code: Boolean) {
-        if (buffer.isNotEmpty()) {
-            blocks += MdBlock(code, buffer.toString().trimEnd('\n'), lang)
-            buffer.setLength(0)
-        }
-    }
-    for (line in lines) {
-        if (line.trimStart().startsWith("```")) {
-            if (inCode) {
-                flush(true)
-                inCode = false
-                lang = ""
-            } else {
-                flush(false)
-                inCode = true
-                lang = line.trimStart().removePrefix("```").trim()
-            }
-        } else {
-            buffer.append(line).append('\n')
-        }
-    }
-    flush(inCode)
-    return blocks
-}

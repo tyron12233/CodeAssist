@@ -1,4 +1,4 @@
-package dev.ide.ui.editor.preview
+package dev.ide.ui.markdown
 
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.SpanStyle
