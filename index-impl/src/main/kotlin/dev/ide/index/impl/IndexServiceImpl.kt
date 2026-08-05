@@ -82,6 +82,17 @@ class IndexServiceImpl(
      * the safety of concurrent same-segment builds never has to be relied on.
      */
     private val readOnly: Boolean = false,
+    /**
+     * Collapse the parallel index build to a SINGLE background thread. Set on 32-bit ARM ART devices (via
+     * [dev.ide.platform.RuntimeInfo.is32Bit]), where a wide (4-8 coroutine) library/SDK index build allocating
+     * heavily WHILE the editor parses/resolves on the `ide-engine` thread provokes a native torn-reference
+     * SIGSEGV in the runtime's concurrent-copying GC — the crash that survives even after concurrent `buildTree`
+     * is serialized away by the global parse lock. Reducing concurrent allocators to (editor + one index thread)
+     * is the direct application of the "stop provoking the ART fault" strategy. The build stays byte-identical
+     * (entries are written to the segment writers in input order regardless of parse parallelism), only slower.
+     * No effect on 64-bit devices or the desktop.
+     */
+    private val singleThreadedBuild: Boolean = false,
 ) : IndexService, Closeable {
 
     private class State(val ext: IndexExtension<*, *>) {
@@ -313,8 +324,14 @@ class IndexServiceImpl(
             // semaphore. On a warm cache nothing takes a permit and all opens run wide (the ~10s reopen the
             // old flat concurrency=2 caused drops ~I/O-parallelism-fold); a cold build stays memory-bounded.
             val cores = Runtime.getRuntime().availableProcessors()
-            val ioConcurrency = minOf(8, maxOf(4, cores))
-            val buildPermits = if (constrained) 2 else minOf(4, maxOf(1, cores - 1))
+            // On a 32-bit ARM process, run the whole build on ONE thread so nothing allocates concurrently with
+            // the editor's `ide-engine` thread (see [singleThreadedBuild]); otherwise fan out across cores.
+            val ioConcurrency = if (singleThreadedBuild) 1 else minOf(8, maxOf(4, cores))
+            val buildPermits = when {
+                singleThreadedBuild -> 1
+                constrained -> 2
+                else -> minOf(4, maxOf(1, cores - 1))
+            }
             val buildGate = kotlinx.coroutines.sync.Semaphore(buildPermits)
             val done = AtomicInteger(0)
             // Artifacts dropped by the per-artifact catch below (an unreadable/corrupt jar, or a failed segment
@@ -747,7 +764,9 @@ class IndexServiceImpl(
         val total = dirty.size
         var processed = 0
         val srcDispatcher =
-            Dispatchers.IO.limitedParallelism(minOf(8, maxOf(4, Runtime.getRuntime().availableProcessors())))
+            Dispatchers.IO.limitedParallelism(
+                if (singleThreadedBuild) 1 else minOf(8, maxOf(4, Runtime.getRuntime().availableProcessors()))
+            )
         coroutineScope {
             for (batch in dirty.chunked(PARALLEL_BATCH)) {
                 val computed = batch.map { d ->

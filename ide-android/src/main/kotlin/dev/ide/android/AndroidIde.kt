@@ -4,7 +4,10 @@ import android.content.Context
 import android.os.Build
 import android.os.Environment
 import androidx.core.app.NotificationManagerCompat
+import dev.ide.analytics.AnalyticsEvent
 import dev.ide.analytics.DeviceInfo
+import dev.ide.analytics.EventCategory
+import dev.ide.analytics.Events
 import dev.ide.build.jvm.run.VmProgramInterpreter
 import dev.ide.analytics.impl.AnalyticsLogSink
 import dev.ide.analytics.impl.DefaultAnalyticsService
@@ -13,6 +16,7 @@ import dev.ide.core.ANALYTICS_SERVICE
 import dev.ide.core.IdeServicesBackend
 import dev.ide.core.ProjectManager
 import dev.ide.core.settings.BuiltInSettingsPages
+import dev.ide.platform.log.Log
 import dev.ide.platform.log.Log.addSink
 import java.io.File
 import java.io.IOException
@@ -41,6 +45,11 @@ object AndroidIde {
     fun bootstrap(context: Context): Session {
         val startNs = System.nanoTime()
 
+        // Pin the process word-size BEFORE any engine is created. On a 32-bit ARM process the engine collapses
+        // background index concurrency to stop provoking the 32-bit-ART torn-reference SIGSEGV (see RuntimeInfo).
+        // `android.os.Process.is64Bit()` reports THIS process, not merely device capability (API 23+; minSdk 26).
+        dev.ide.platform.RuntimeInfo.set32Bit(!android.os.Process.is64Bit())
+
         // App-specific EXTERNAL storage (Android/data/<pkg>/files/codeassist)
         val home = appHomeDir(context).apply { mkdirs() }
         val manager = createProjectManager(context)
@@ -56,6 +65,14 @@ object AndroidIde {
         runCatching { manager.importLegacyProjects() }
 
         val analytics = buildAnalytics(manager, home)
+
+        // Crash breadcrumb: the 32-bit-ART SIGSEGV is a native fault, uncatchable in-process — so read what the
+        // engine was doing if the PREVIOUS process died natively (via the OS exit reason), THEN arm the file for
+        // this session's engine to write into. This is our only signal for that crash. See EngineBreadcrumb.
+        val crumbFile = File(home, "last-engine-op.log")
+        dev.ide.platform.EngineBreadcrumb.init(crumbFile.toPath())
+        reportPreviousNativeCrash(context, analytics, dev.ide.platform.EngineBreadcrumb.readLast())
+
         // Start with no project open (the picker is shown); opening one from it creates that project's engine
         // on demand. The download cache is shared across projects via the ProjectManager (sharedCachesRoot).
         // Build-process isolation (docs/build-process-isolation.md): always provide the factory that routes a
@@ -265,6 +282,46 @@ object AndroidIde {
      * install id is a random UUID persisted once in prefs (not tied to any account); the session id is fresh
      * per launch. The service starts gated on the stored consent and collects nothing until it's granted.
      */
+    /**
+     * If the PREVIOUS process died of a native crash (the 32-bit-ART SIGSEGV; see [dev.ide.platform.RuntimeInfo]),
+     * surface the engine breadcrumb it left ([prev]) — to the Logs viewer, and for opt-in users as a CRASH
+     * analytics event carrying ONLY the coarse engine lane (never a file/path/source). Needs the OS exit reason
+     * (`ActivityManager.getHistoricalProcessExitReasons`, API 30+; the crashing Android-12 devices have it);
+     * below API 30 it can't confirm a crash, so it stays silent. Best-effort — never throws into bootstrap.
+     */
+    private fun reportPreviousNativeCrash(
+        context: Context,
+        analytics: dev.ide.analytics.AnalyticsService,
+        prev: dev.ide.platform.EngineBreadcrumb.Crumb?,
+    ) {
+        if (prev == null || Build.VERSION.SDK_INT < 30) return
+        runCatching {
+            val am = context.getSystemService(Context.ACTIVITY_SERVICE) as? android.app.ActivityManager ?: return
+            val exit = am.getHistoricalProcessExitReasons(context.packageName, 0, 1).firstOrNull() ?: return
+            val native = exit.reason == android.app.ApplicationExitInfo.REASON_CRASH_NATIVE ||
+                exit.reason == android.app.ApplicationExitInfo.REASON_SIGNALED
+            if (!native) return
+            // Guard against an ancient stale crumb being blamed on an unrelated recent native death.
+            if (kotlin.math.abs(exit.timestamp - prev.epochMillis) > 10 * 60_000L) return
+            Log.logger("ide.crash").warn(
+                "Recovered from a native crash in the previous session. Engine lane in flight: '${prev.op}' " +
+                    "on thread '${prev.thread}'. OS exit: ${exit.description} (reason=${exit.reason})."
+            )
+            analytics.track(
+                AnalyticsEvent(
+                    Events.APP_CRASH,
+                    EventCategory.CRASH,
+                    mapOf(
+                        "kind" to "native",
+                        "engine_lane" to prev.op, // coarse lane only — no file/path/source (analytics-safe)
+                        "thread" to prev.thread,
+                        "exit_reason" to exit.reason.toString(),
+                    ),
+                )
+            )
+        }
+    }
+
     private fun buildAnalytics(
         manager: ProjectManager, home: File
     ): dev.ide.analytics.AnalyticsService {

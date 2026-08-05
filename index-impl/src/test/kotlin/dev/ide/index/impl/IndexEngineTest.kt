@@ -468,6 +468,38 @@ class IndexEngineTest {
         assertTrue(rankMerged(emptyList(), 10).isEmpty(), "empty input → empty")
     }
 
+    /**
+     * The 32-bit-ARM crash mitigation collapses the parallel build to ONE thread (`singleThreadedBuild = true`,
+     * gated by [dev.ide.platform.RuntimeInfo.is32Bit]). It must be a pure concurrency/throughput change: the
+     * index it produces has to be IDENTICAL to the parallel build's — same classes, queryable the same way —
+     * because entries are written to the segment writers in input order regardless of parse parallelism. This
+     * builds the same many-jar classpath both ways and asserts the query results match exactly.
+     */
+    @Test
+    fun singleThreadedBuildProducesTheSameIndexAsParallel() = withTempDir("idxST") { stCache ->
+        val parCache = Files.createTempDirectory("idxPar")
+        val libs = Files.createTempDirectory("idxManyLibs")
+        try {
+            // Enough jars that a parallel build genuinely fans out (> the batch/permit width).
+            val jars = (0 until 40).map { i ->
+                libs.resolve("lib$i.jar").also { storedJar(it, "com/pkg$i/Type$i.class", byteArrayOf(i.toByte())) }
+            }
+            val scope = IndexScope(libraryJars = jars)
+
+            val single = IndexServiceImpl(listOf(TestClassIndex), stCache, singleThreadedBuild = true)
+            val parallel = IndexServiceImpl(listOf(TestClassIndex), parCache, singleThreadedBuild = false)
+            runBlocking { single.ensureUpToDate(scope); parallel.ensureUpToDate(scope) }
+
+            fun fqns(svc: IndexServiceImpl) =
+                svc.prefix<ClassNameValue>(CLASS, "Type", 500).map { it.value.fqn }.toSortedSet()
+            val expected = (0 until 40).map { "com.pkg$it.Type$it" }.toSortedSet()
+            assertEquals(expected, fqns(parallel), "parallel build must index every jar")
+            assertEquals(fqns(parallel), fqns(single), "single-threaded build must index identically to the parallel build")
+        } finally {
+            stCache.toFile().deleteRecursively(); parCache.toFile().deleteRecursively(); libs.toFile().deleteRecursively()
+        }
+    }
+
     /** A single-entry STORED (uncompressed) jar: file size is a deterministic function of the entry-name
      *  length + data length, so two such jars can be forced to an identical size (and mtime) on disk. */
     private fun storedJar(path: Path, entryName: String, data: ByteArray) {

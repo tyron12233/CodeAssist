@@ -41,7 +41,9 @@ import dev.ide.core.backend.SdkBackend
 import dev.ide.core.backend.SearchBackend
 import dev.ide.core.backend.SettingsBackend
 import dev.ide.core.backend.SigningBackend
+import dev.ide.platform.EngineBreadcrumb
 import dev.ide.platform.EngineCanceledException
+import dev.ide.platform.EnginePhase
 import dev.ide.platform.EngineScheduler
 import dev.ide.platform.log.Log
 import dev.ide.platform.log.LogLevel
@@ -192,7 +194,19 @@ class IdeServicesBackend(
      *     (throws [EngineCanceledException]; callers map it to a "skipped, retry next edit" result).
      *  3. [preview] — preview rendering/lowering: lowest priority, preempted by both; retries automatically.
      */
-    private val scheduler = EngineScheduler(engineDispatcher)
+    // The observer records a crash breadcrumb the instant a lane's block STARTS running on the engine worker
+    // (EnginePhase.RUNNING fires on the ide-engine thread). Persists only the coarse lane name — no file/path/
+    // source (analytics-safe) — so if the process then dies of the 32-bit-ART native SIGSEGV, the next launch
+    // can read what the engine was doing (see EngineBreadcrumb / RuntimeInfo). No-op until the launcher arms the
+    // breadcrumb file; the direct withContext(engineDispatcher) editor ops don't route through the scheduler, so
+    // the dominant per-keystroke work (completion=interactive, analysis/highlight/fold=background) is what's
+    // captured — exactly the "crashes while typing" surface.
+    private val scheduler = EngineScheduler(
+        engineDispatcher,
+        observer = { lane, phase, _ ->
+            if (phase == EnginePhase.RUNNING) EngineBreadcrumb.record(lane.name.lowercase())
+        },
+    )
     override suspend fun <T> interactive(block: suspend () -> T): T = logEditorFailures("completion") { scheduler.interactive(block = block) }
     override suspend fun <T> background(block: suspend () -> T): T = logEditorFailures("analysis") { scheduler.background(block = block) }
     override suspend fun <T> preview(block: suspend () -> T): T = logEditorFailures("preview") { scheduler.preview(block = block) }
@@ -548,6 +562,9 @@ class IdeServicesBackend(
         runCatching { analytics.close() }
         activeServices?.close()
         runCatching { engineExecutor.shutdown() } // stop the dedicated ide-engine thread on teardown
+        // Clean shutdown ⇒ drop the crash breadcrumb, so a file that survives to the next launch means the
+        // process did NOT exit cleanly (crashed/killed) — the fallback signal where the OS exit reason is absent.
+        runCatching { EngineBreadcrumb.clear() }
     }
 
     private companion object {

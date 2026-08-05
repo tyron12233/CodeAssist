@@ -221,6 +221,7 @@ import dev.ide.ui.backend.IndexWorkState
 import dev.ide.ui.backend.IndexerUiStat
 import dev.ide.ui.backend.PreviewProgress
 import dev.ide.vfs.VirtualFile
+import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -525,7 +526,14 @@ class IdeServices private constructor(
 
     private val docVersion = AtomicLong(0)
 
-    private val indexScope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
+    // On a 32-bit ARM process, serialize ALL background index-scope work (the initial build launch, per-save
+    // reindex, warm-ups) onto ONE thread so it never fans across the shared pool alongside the editor — part of
+    // collapsing concurrent heap churn away from the `ide-engine` thread to stop provoking the 32-bit-ART
+    // torn-reference SIGSEGV (see [dev.ide.platform.RuntimeInfo]). 64-bit / desktop keep the full Default pool.
+    private val indexDispatcher: CoroutineDispatcher =
+        if (dev.ide.platform.RuntimeInfo.is32Bit) Dispatchers.Default.limitedParallelism(1)
+        else Dispatchers.Default
+    private val indexScope = CoroutineScope(SupervisorJob() + indexDispatcher)
 
     /** The workspace index (class names, packages, members, source symbols). Built in the background. The index
      *  extensions are contributed app-global (see [registerStaticPlugins]); this just queries them. */
@@ -543,6 +551,9 @@ class IdeServices private constructor(
             // The source side IS per-project (not shareable), so persist its per-file partitions under the
             // project's own caches — a re-open then re-parses only the source files that changed since last time.
             sourceCacheRoot = store.rootPath.resolve(".platform/caches/source-index"),
+            // 32-bit ARM ART: build on ONE thread so the index never allocates wide alongside the editor's
+            // ide-engine thread (the 32-bit torn-reference SIGSEGV mitigation; see dev.ide.platform.RuntimeInfo).
+            singleThreadedBuild = dev.ide.platform.RuntimeInfo.is32Bit,
         )
     }
 
