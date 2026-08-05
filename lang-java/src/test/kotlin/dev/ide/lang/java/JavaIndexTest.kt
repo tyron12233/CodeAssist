@@ -234,4 +234,49 @@ class JavaIndexTest {
             "method param names + javadoc",
         )
     }
+
+    @Test
+    fun sourceDocConstructorAndUndocumentedMethod() {
+        val src = "package p;\npublic class Box {\n/** Make a box. */\npublic Box(int size, String label) {}\n" +
+            "public int area(int w, int h) { return w * h; }\n}"
+        val docs = JavaSourceDocIndex.index(Input(IndexOrigin.LIBRARY_SOURCE, "p/Box.java", t = src))
+        val entries = docs["p.Box"]
+        assertNotNull(entries, "keyed by owner FQN; got ${docs.keys}")
+        // A constructor is keyed by the class simple name, with real param names + arity + its javadoc.
+        assertTrue(
+            entries.any { it.name == "Box" && it.names == listOf("size", "label") && it.doc?.contains("Make a box") == true },
+            "constructor param names + javadoc; got $entries",
+        )
+        // An UNDOCUMENTED method still contributes real parameter names (bytecode has none) — doc null.
+        assertTrue(
+            entries.any { it.name == "area" && it.names == listOf("w", "h") && it.doc == null },
+            "undocumented method still yields param names; got $entries",
+        )
+    }
+
+    @Test
+    fun sourceDocParamNamesEvenWithoutAnyJavadoc() {
+        // No javadoc anywhere: Java bytecode carries no parameter names, so the source-doc index must STILL
+        // emit them (unlike Kotlin, whose @Metadata has names and which skips a doc-less file).
+        val src = "package p; public class U { public void set(int row, int col) {} }"
+        val docs = JavaSourceDocIndex.index(Input(IndexOrigin.LIBRARY_SOURCE, "p/U.java", t = src))
+        assertTrue(
+            docs["p.U"]?.any { it.name == "set" && it.names == listOf("row", "col") } == true,
+            "param names present without any javadoc; got ${docs["p.U"]}",
+        )
+    }
+
+    @Test
+    fun sourceDocNestedClassAndGenericParam() {
+        val src = "package p;\npublic class Outer {\npublic static class Inner {\n/** Put. */\n" +
+            "public void put(java.util.Map<String, Integer> m, int n) {}\n}\n}"
+        val docs = JavaSourceDocIndex.index(Input(IndexOrigin.LIBRARY_SOURCE, "p/Outer.java", t = src))
+        val inner = docs["p.Outer.Inner"]
+        assertNotNull(inner, "nested member keyed by nested FQN; got ${docs.keys}")
+        // The generic `Map<String, Integer>` is ONE parameter (its inner comma is not a param separator).
+        assertTrue(
+            inner.any { it.name == "put" && it.names == listOf("m", "n") && it.doc?.contains("Put") == true },
+            "generic param counts as one; got $inner",
+        )
+    }
 }

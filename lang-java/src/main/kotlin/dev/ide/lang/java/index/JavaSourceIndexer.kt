@@ -1,9 +1,7 @@
 package dev.ide.lang.java.index
 
 import com.intellij.lang.java.JavaLanguage
-import com.intellij.psi.PsiAnnotation
 import com.intellij.psi.PsiClass
-import com.intellij.psi.PsiDocCommentOwner
 import com.intellij.psi.PsiField
 import com.intellij.psi.PsiJavaFile
 import com.intellij.psi.PsiMethod
@@ -11,8 +9,6 @@ import com.intellij.psi.PsiModifier
 import com.intellij.psi.PsiModifierListOwner
 import com.intellij.psi.PsiNameIdentifierOwner
 import dev.ide.index.IndexInput
-import dev.ide.index.IndexOrigin
-import dev.ide.index.SourceDocValue
 import dev.ide.psi.IntellijPsiHost
 
 /**
@@ -25,10 +21,11 @@ import dev.ide.psi.IntellijPsiHost
  * The parse is shared per-input via [IndexInput.shared] (ONE [PsiJavaFile] for all of a file's indexes in a
  * pass) and content-cached across passes ([cache]). NOTE: PSI parsing serializes under the global parse lock
  * (concurrent `buildTree` is not ART-safe — see [IntellijPsiHost]), so a large parallel index build funnels
- * Java source parses through it — correct, but a known perf tradeoff versus the JDT parser, and most
- * pronounced for LIBRARY_SOURCE (JDK `src.zip` / Android sources). What keeps it affordable is that the parse
- * is genuinely structural: method bodies stay unexpanded chameleons, since nothing here reads one. A lighter
- * stub-based indexer is the future optimization (as `:lang-kotlin-index` did for Kotlin).
+ * Java source parses through it — correct, but a known perf tradeoff versus the JDT parser. What keeps it
+ * affordable is that the parse is genuinely structural: method bodies stay unexpanded chameleons, since nothing
+ * here reads one. This runs ONLY for project `.java` SOURCE (declarations/relations/mains); `LIBRARY_SOURCE`
+ * (JDK `src.zip` / Android sources) — once the dominant cost here — is now the lexer-based [JavaSourceDocScan]'s
+ * job, off this parse and off the lock. A lighter stub-based indexer for the SOURCE side is a future step.
  */
 object JavaSourceIndexer {
 
@@ -70,13 +67,12 @@ object JavaSourceIndexer {
     /** The file's type relations + its import map (simple name → FQN), shared across the indexes. */
     data class Relations(val packageName: String?, val types: List<TypeInfo>, val imports: Map<String, String>)
 
-    /** Everything the SOURCE indexes need from ONE structural parse: declarations, relations, main entry points,
-     *  and (for LIBRARY_SOURCE only) the per-owner source docs (param names + cleaned javadoc). */
+    /** Everything the project-SOURCE indexes need from ONE structural parse: declarations, relations, and main
+     *  entry points. (Library-source docs are extracted separately by the lexer-based [JavaSourceDocScan].) */
     data class Extracted(
         val parsed: Parsed,
         val relations: Relations,
         val mains: List<Pair<String, Boolean>>,
-        val docs: Map<String, Collection<SourceDocValue>> = emptyMap(),
     )
 
     private val EMPTY = Extracted(Parsed(null, emptyList()), Relations(null, emptyList(), emptyMap()), emptyList())
@@ -96,18 +92,13 @@ object JavaSourceIndexer {
             IntellijPsiHost.parseStructural("Indexed.java", JavaLanguage.INSTANCE, text) { extract(it as PsiJavaFile) }
         }.getOrNull()
 
-    /** All source-index data for [input], parsed ONCE per file per pass and shared across every source index.
-     *  Source docs are extracted only for `LIBRARY_SOURCE` (the only origin `java.sourceDoc` indexes), so a
-     *  project-source file isn't charged the javadoc walk. */
+    /** All source-index data for [input], parsed ONCE per file per pass and shared across every source index. */
     fun sharedExtracted(input: IndexInput): Extracted =
-        input.shared("java.extracted") {
-            input.text()?.let { extractAll(it, withDocs = input.origin == IndexOrigin.LIBRARY_SOURCE) } ?: EMPTY
-        }
+        input.shared("java.extracted") { input.text()?.let { extractAll(it) } ?: EMPTY }
 
     fun sharedParsed(input: IndexInput): Parsed = sharedExtracted(input).parsed
     fun sharedRelations(input: IndexInput): Relations = sharedExtracted(input).relations
     fun sharedMains(input: IndexInput): List<Pair<String, Boolean>> = sharedExtracted(input).mains
-    fun sharedDocs(input: IndexInput): Map<String, Collection<SourceDocValue>> = sharedExtracted(input).docs
 
     /** Declarations of [text] (for input-less callers, e.g. IdeServices), content-cached across passes. */
     @Synchronized
@@ -118,42 +109,10 @@ object JavaSourceIndexer {
         return extracted.parsed
     }
 
-    // `withDocs` is set only for LIBRARY_SOURCE inputs (JDK src.zip / sources-android-NN), whose sole index is
-    // `java.sourceDoc`. That path consumes ONLY the docs, so we skip declsOf/relationsOf/mainsOf entirely there
-    // (they would be walked and discarded on every SDK source file — pure waste on a large sources tree). The
-    // SOURCE path is the inverse: it needs decls/relations/mains (six indexes share them) and never docs.
-    private fun extractAll(text: String, withDocs: Boolean = false): Extracted =
+    private fun extractAll(text: String): Extracted =
         parseStructural(text) { psi ->
-            if (withDocs) Extracted(EMPTY.parsed, EMPTY.relations, emptyList(), docsOf(psi))
-            else Extracted(declsOf(psi), relationsOf(psi), JavaMainScan.mainsOf(psi))
+            Extracted(declsOf(psi), relationsOf(psi), JavaMainScan.mainsOf(psi))
         } ?: EMPTY
-
-    // --- source docs (param names + cleaned javadoc; LIBRARY_SOURCE only) ---------------------------------
-
-    fun docsOf(psi: PsiJavaFile): Map<String, Collection<SourceDocValue>> {
-        val pkg = psi.packageName.ifEmpty { null }
-        val out = HashMap<String, MutableList<SourceDocValue>>()
-        val path = ArrayDeque<String>()
-
-        fun docText(owner: PsiDocCommentOwner): String? =
-            owner.docComment?.text?.let { JavaDoc.clean(it) }?.takeIf { it.isNotEmpty() }
-
-        fun visit(cls: PsiClass) {
-            val name = cls.name ?: return
-            path.addLast(name)
-            val fqn = if (pkg.isNullOrEmpty()) path.joinToString(".") else "$pkg.${path.joinToString(".")}"
-            docText(cls)?.let { out.getOrPut(fqn) { ArrayList() }.add(SourceDocValue("", -1, emptyList(), it)) }
-            for (m in cls.methods) {
-                val params = m.parameterList.parameters.map { it.name }
-                val memberName = if (m.isConstructor) name else m.name
-                out.getOrPut(fqn) { ArrayList() }.add(SourceDocValue(memberName, params.size, params, docText(m)))
-            }
-            cls.innerClasses.forEach { visit(it) }
-            path.removeLastOrNull()
-        }
-        psi.classes.forEach { visit(it) }
-        return out
-    }
 
     // --- declarations -------------------------------------------------------------------------------------
 

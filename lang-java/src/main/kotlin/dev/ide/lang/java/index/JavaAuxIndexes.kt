@@ -110,16 +110,16 @@ object JavaSourceAnnotationIndex : IndexExtension<String, AnnotatedValue> {
  */
 object JavaSourceDocIndex : IndexExtension<String, SourceDocValue> {
     override val id = IndexId("java.sourceDoc")
-    override val version = 1
+    // v2: switched from an IntelliJ-PSI parse to a lexer scan (JavaSourceDocScan) — bumped so stale v1 segments
+    // rebuild with the new extractor. The lexer drops the global parse lock, so a large LIBRARY_SOURCE tree
+    // (JDK src.zip / Android sources-android-NN) re-parallelizes across cores instead of funnelling through it.
+    override val version = 2
     override val keyDescriptor: KeyDescriptor<String> = StringKeyDescriptor
     override val valueExternalizer = SourceDocExternalizer
     override val matching = MatchingMode.PREFIX_ONLY
     override val inputFilter =
         InputFilter { it.origin == IndexOrigin.LIBRARY_SOURCE && it.unitName?.endsWith(".java") == true }
 
-    // Reads the docs off the ONE shared structural parse (`sharedExtracted`) the other Java source indexes use,
-    // rather than parsing the file a SECOND time — the dominant cost when indexing large LIBRARY_SOURCE trees
-    // (JDK src.zip / Android sources-android-NN). The extraction itself lives in JavaSourceIndexer.docsOf.
     override fun index(input: IndexInput): Map<String, Collection<SourceDocValue>> =
-        JavaSourceIndexer.sharedDocs(input)
+        input.text()?.let { JavaSourceDocScan.scan(it) } ?: emptyMap()
 }
