@@ -52,6 +52,8 @@ object KotlinDiagnosticCodes {
     const val ABSTRACT_INSTANTIATION = "kt.abstractInstantiation"
     /** A class supertype written without its constructor call (`class C : Base` → should be `Base()`). */
     const val SUPERTYPE_NOT_INITIALIZED = "kt.supertypeNotInitialized"
+    /** A supertype that is a `final` class (Kotlin's default) and so cannot be extended. */
+    const val FINAL_SUPERTYPE = "kt.finalSupertype"
     const val LATEINIT = "kt.lateinit"
     const val VAL_VAR_PARAMETER = "kt.valVarParameter"
     const val VAL_REASSIGN = "kt.valReassign"

@@ -138,6 +138,10 @@ class BuiltinsReader(private val jars: List<Path>) {
                     isKotlin = true,
                     isInterface = Flags.CLASS_KIND.get(cls.flags) == ProtoBuf.Class.Kind.INTERFACE,
                     isAbstract = Flags.MODALITY.get(cls.flags).let { it == ProtoBuf.Modality.ABSTRACT || it == ProtoBuf.Modality.SEALED },
+                    // A plain final builtin class (`String`, `Int`, …): kind CLASS + modality FINAL. Extending one
+                    // is FINAL_SUPERTYPE, same as the @Metadata path; enum/annotation/object kinds are excluded.
+                    isFinalClass = Flags.CLASS_KIND.get(cls.flags) == ProtoBuf.Class.Kind.CLASS &&
+                        Flags.MODALITY.get(cls.flags) == ProtoBuf.Modality.FINAL,
                 )
             }
             out

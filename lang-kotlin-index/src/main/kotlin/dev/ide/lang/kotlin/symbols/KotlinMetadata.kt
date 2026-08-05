@@ -70,6 +70,10 @@ object KotlinMetadata {
         val isInterface: Boolean = false,
         /** True when this class is an `abstract` (or `sealed`) class — it cannot be instantiated directly. */
         val isAbstractClass: Boolean = false,
+        /** True when this class is a plain FINAL class — a real `class` (not interface/enum/annotation/object)
+         *  whose modality is `final` (Kotlin's default). Such a class cannot be extended, driving the
+         *  final-supertype check. `open`/`abstract`/`sealed` classes are false (they may be extended). */
+        val isFinalClass: Boolean = false,
         /** A `sealed` class/interface's DIRECT subclass FQNs (`km.sealedSubclasses`), for `when`-exhaustiveness
          *  over a library sealed type; empty otherwise. */
         val sealedSubclasses: List<String> = emptyList(),
@@ -377,6 +381,9 @@ object KotlinMetadata {
             isInterface = km.kind == ClassKind.INTERFACE,
             // SEALED is abstract for instantiation purposes too (a sealed class can't be instantiated directly).
             isAbstractClass = km.modality == Modality.ABSTRACT || km.modality == Modality.SEALED,
+            // A plain final class (kind CLASS + modality FINAL): the only shape a `: Super()` supertype is
+            // illegal to extend. enum/annotation/object kinds and open/abstract/sealed modality are excluded.
+            isFinalClass = km.kind == ClassKind.CLASS && km.modality == Modality.FINAL,
             sealedSubclasses = km.sealedSubclasses.map {
                 it.replace(
                     '/', '.'

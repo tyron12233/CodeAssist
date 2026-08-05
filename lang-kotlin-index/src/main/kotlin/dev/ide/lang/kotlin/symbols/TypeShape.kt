@@ -40,6 +40,10 @@ class TypeShape(
     /** A `sealed` class/interface's DIRECT subclass FQNs (from `@Metadata` `sealedSubclasses`); empty otherwise.
      *  Drives `when`-exhaustiveness over a LIBRARY sealed type (a project sealed type uses the source model). */
     val sealedSubclasses: List<String> = emptyList(),
+    /** True when this type is a plain FINAL class (a real class, not interface/enum/annotation/object, whose
+     *  modality is `final`) — it cannot be extended, driving the final-supertype check. Indexed so the consumer
+     *  needn't re-decode. `open`/`abstract` classes and any non-final Java class are false (they may be extended). */
+    val isFinalClass: Boolean = false,
 ) {
     /** Rebind every contained [KotlinType] to [ctx] (used after reading a context-free index entry). */
     fun withContext(ctx: KotlinTypeContext?): TypeShape = TypeShape(
@@ -48,7 +52,7 @@ class TypeShape(
         typeParameterVariances,
         supertypes.map { it.rebind(ctx) },
         members.map { it.rebindTypes(ctx) },
-        isObject, companionObjectName, isKotlin, isInterface, isAbstract, sealedSubclasses,
+        isObject, companionObjectName, isKotlin, isInterface, isAbstract, sealedSubclasses, isFinalClass,
     )
 
     companion object {
@@ -60,7 +64,8 @@ class TypeShape(
             js.members,
             isKotlin = false,
             isInterface = js.isInterface,
-            isAbstract = js.isAbstract
+            isAbstract = js.isAbstract,
+            isFinalClass = js.isFinal,
         )
 
         /** A Kotlin `@Metadata` class: supertypes carry their type arguments (so inherited generic members
@@ -80,6 +85,7 @@ class TypeShape(
             isInterface = d.isInterface,
             isAbstract = d.isAbstractClass,
             sealedSubclasses = d.sealedSubclasses,
+            isFinalClass = d.isFinalClass,
         )
     }
 }

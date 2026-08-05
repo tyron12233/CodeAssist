@@ -37,6 +37,9 @@ class JavaShape(
     val isInterface: Boolean = false,
     /** True when this type is `abstract` (`ACC_ABSTRACT`, which interfaces also set) — cannot be instantiated. */
     val isAbstract: Boolean = false,
+    /** True when this type is a `final` class (`ACC_FINAL`, and not an interface/enum) — it cannot be extended,
+     *  driving the final-supertype check. A non-final Java class is `open` from Kotlin's view, so it is false. */
+    val isFinal: Boolean = false,
 )
 
 object JavaBytecode {
@@ -180,6 +183,10 @@ object JavaBytecode {
             typeParams, typeParamBounds, superTypes, members,
             isInterface = classAccess and Opcodes.ACC_INTERFACE != 0,
             isAbstract = classAccess and Opcodes.ACC_ABSTRACT != 0,
+            // A final class (but not an enum — enums are ACC_FINAL yet extending one is a different error, and
+            // not an interface, which never sets ACC_FINAL). Non-final Java classes are open from Kotlin.
+            isFinal = classAccess and Opcodes.ACC_FINAL != 0 &&
+                classAccess and Opcodes.ACC_INTERFACE == 0 && classAccess and Opcodes.ACC_ENUM == 0,
         )
     }
 

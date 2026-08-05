@@ -2716,6 +2716,21 @@ class KotlinSymbolService(
         return null
     }
 
+    /**
+     * Whether [fqn] is a plain FINAL class that CANNOT be extended (`class Cow : Animal()` where `Animal` is a
+     * final class — Kotlin's FINAL_SUPERTYPE). True only for a real class (not interface/enum/annotation/object)
+     * with no `open`/`abstract`/`sealed` modality; a non-final Java class is `open` from Kotlin's view (false).
+     * Returns `null` when it can't be decided (the type doesn't resolve in any source/classpath/built-in source,
+     * or the classpath index is in dumb mode), so the caller MUST back off rather than flag. Project source first
+     * (a freshly-edited class resolves before the index catches up), then classpath binaries + built-ins (which
+     * carry no modality, so an unrecorded built-in stays `false` → the check simply doesn't fire on it).
+     */
+    fun isFinalType(fqn: String): Boolean? {
+        sourceClass(fqn)?.let { return it.isFinalClass }
+        (typeShape(fqn) ?: builtinShape(fqn))?.let { return it.isFinalClass }
+        return null
+    }
+
     /** Whether [fqn] declares a companion object — where an `operator fun invoke` could make `Type()` a valid
      *  CALL rather than a (forbidden) constructor invocation. The abstract-instantiation check backs off when
      *  this is true, so it never false-positives on the companion-invoke factory pattern. */

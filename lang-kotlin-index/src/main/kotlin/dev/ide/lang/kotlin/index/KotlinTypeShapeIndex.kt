@@ -87,7 +87,7 @@ object TypeShapeExternalizer : Externalizer<TypeShape> {
      * diligently, `kotlin.builtins` now corrected). Increment FORMAT (never a per-index base) for every future
      * wire-format change here, and only ever increase it.
      */
-    const val FORMAT = 2 // 1: TypeShape.typeParameterVariances; 2: KotlinType.projection (use-site variance)
+    const val FORMAT = 3 // 1: TypeShape.typeParameterVariances; 2: KotlinType.projection (use-site variance); 3: TypeShape.isFinalClass
 
     private val BINARY = SymbolOrigin(fromSource = false, file = null)
 
@@ -104,6 +104,7 @@ object TypeShapeExternalizer : Externalizer<TypeShape> {
         out.writeBoolean(value.isInterface)
         out.writeBoolean(value.isAbstract)
         writeStrings(out, value.sealedSubclasses)
+        out.writeBoolean(value.isFinalClass)
     }
 
     override fun read(inp: DataInput): TypeShape {
@@ -118,6 +119,7 @@ object TypeShapeExternalizer : Externalizer<TypeShape> {
         val isInterface = inp.readBoolean()
         val isAbstract = inp.readBoolean()
         val sealedSubclasses = readStrings(inp)
+        val isFinalClass = inp.readBoolean()
         return TypeShape(
             tps,
             bounds,
@@ -129,7 +131,8 @@ object TypeShapeExternalizer : Externalizer<TypeShape> {
             isKotlin,
             isInterface,
             isAbstract,
-            sealedSubclasses
+            sealedSubclasses,
+            isFinalClass
         )
     }
 

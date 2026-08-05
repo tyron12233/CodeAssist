@@ -170,6 +170,91 @@ class KotlinInheritanceDiagnosticsTest {
         )
     }
 
+    // --- final supertype (Kotlin classes are final by default) ---
+
+    @Test
+    fun extendingFinalClassWithConstructorCallIsFlagged() {
+        // The reported bug: `class Cow(...) : Animal2()` where Animal2 is a plain final class.
+        val d = diagnose("Cow.kt", "package demo\nclass Cow(val n: Int = 0) : Animal2()")
+        val err = d.firstOrNull { it.code == "kt.finalSupertype" }
+        assertNotNull(err, "extending a final class should be flagged; got $d")
+        assertTrue(err.message.contains("final"), "message mentions finality; got '${err.message}'")
+    }
+
+    @Test
+    fun extendingFinalClassBareFormIsFlaggedOnceNotAsUninitialized() {
+        // Bare form `: Animal2` — the final error subsumes the "must be initialized" one (matches kotlinc).
+        val d = codes("CowBare.kt", "package demo\nclass CowBare : Animal2")
+        assertTrue("kt.finalSupertype" in d, "bare final supertype is flagged; got $d")
+        assertFalse("kt.supertypeNotInitialized" in d, "a final supertype must not ALSO be flagged uninitialized; got $d")
+    }
+
+    @Test
+    fun extendingFinalDataClassIsFlagged() {
+        assertTrue(
+            "kt.finalSupertype" in codes("SubData.kt", "package demo\nclass SubData : Box()"),
+            "a data class is final and cannot be extended",
+        )
+    }
+
+    @Test
+    fun objectExtendingFinalClassIsFlagged() {
+        assertTrue(
+            "kt.finalSupertype" in codes("Obj.kt", "package demo\nobject Obj : Animal2()"),
+            "an object extending a final class is still FINAL_SUPERTYPE",
+        )
+    }
+
+    @Test
+    fun extendingOpenClassIsNotFlagged() {
+        assertFalse(
+            "kt.finalSupertype" in codes("SubBase.kt", "package demo\nclass SubBase : Base()"),
+            "an `open` class may be extended",
+        )
+    }
+
+    @Test
+    fun extendingAbstractClassIsNotFlagged() {
+        assertFalse(
+            "kt.finalSupertype" in codes("SubAnimal.kt", "package demo\nclass SubAnimal : Animal() { override fun sound() = \"x\" }"),
+            "an abstract class may be extended",
+        )
+    }
+
+    @Test
+    fun implementingInterfaceIsNotFlagged() {
+        assertFalse(
+            "kt.finalSupertype" in codes("Impl.kt", "package demo\nclass Impl : Named { override val name = \"x\" }"),
+            "an interface is not a final class — implementing it is fine",
+        )
+    }
+
+    @Test
+    fun unresolvedFinalSupertypeBacksOff() {
+        assertFalse(
+            "kt.finalSupertype" in codes("Unk.kt", "package demo\nclass Unk : Mystery()"),
+            "an unresolved supertype must back off (no false positive)",
+        )
+    }
+
+    @Test
+    fun extendingFinalKotlinBuiltinIsFlagged() {
+        // The closed gap: a final Kotlin built-in (`String`) resolved via `.kotlin_builtins`, not project source.
+        assertTrue(
+            "kt.finalSupertype" in codes("SubStr.kt", "package demo\nclass SubStr : String()"),
+            "extending the final built-in `String` should be flagged",
+        )
+    }
+
+    @Test
+    fun implementingBuiltinInterfaceIsNotFlagged() {
+        // A built-in INTERFACE (`Comparable`) is not a final class — implementing it must not be flagged.
+        assertFalse(
+            "kt.finalSupertype" in codes("Cmp.kt", "package demo\nclass Cmp : Comparable<Int> { override fun compareTo(other: Int) = 0 }"),
+            "a built-in interface is not a final class",
+        )
+    }
+
     // --- implement-members quick-fix ---
 
     @Test
@@ -236,6 +321,8 @@ class KotlinInheritanceDiagnosticsTest {
                     package demo
                     interface Named { val name: String }
                     abstract class Animal { abstract fun sound(): String; open fun legs(): Int = 4 }
+                    class Animal2
+                    data class Box(val n: Int = 0)
                     interface Clickable { fun onClick(); fun onLongClick(): Boolean = false }
                     open class Base { open fun render(): String = ""; fun fixed() {} }
                     interface Producer

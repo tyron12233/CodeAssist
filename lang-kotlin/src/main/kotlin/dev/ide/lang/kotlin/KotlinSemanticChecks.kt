@@ -62,6 +62,7 @@ import org.jetbrains.kotlin.psi.KtPrimaryConstructor
 import org.jetbrains.kotlin.psi.KtSecondaryConstructor
 import org.jetbrains.kotlin.psi.KtStringTemplateExpression
 import org.jetbrains.kotlin.psi.KtSuperTypeEntry
+import org.jetbrains.kotlin.psi.KtDelegatedSuperTypeEntry
 import org.jetbrains.kotlin.psi.KtBlockStringTemplateEntry
 import org.jetbrains.kotlin.psi.KtLiteralStringTemplateEntry
 import org.jetbrains.kotlin.psi.KtFunctionLiteral
@@ -311,6 +312,7 @@ internal class KotlinSemanticChecks(private val service: KotlinSymbolService) {
                 }
             }
             KotlinPerf.span("sem.superInit") { reportAll(supertypeNotInitialized(psi, resolver)) }
+            KotlinPerf.span("sem.finalSuper") { reportAll(finalSupertype(psi, resolver)) }
         },
     )
 
@@ -333,10 +335,39 @@ internal class KotlinSemanticChecks(private val service: KotlinSymbolService) {
             if (resolver.isTypeParameterInScope(name, entry.textRange.startOffset)) continue
             val fqn = service.resolveTypeName(name, resolver.fileContext) ?: continue
             if (service.isInterfaceType(fqn) != false) continue // interface (bare-legal) or unknown → back off
+            if (service.isFinalType(fqn) == true) continue // a final supertype is reported by finalSupertype instead
             val r = entry.textRange
             out += Diagnostic(
                 TextRange(r.startOffset, r.endOffset), Severity.ERROR,
                 "This type has a constructor, and thus must be initialized here", KotlinDiagnosticCodes.SUPERTYPE_NOT_INITIALIZED,
+            )
+        }
+        return out
+    }
+
+    /**
+     * A supertype that resolves to a plain FINAL class — Kotlin's FINAL_SUPERTYPE ("This type is final, so it
+     * cannot be extended"). Kotlin classes are final by default, so `class Cow : Animal()` is illegal unless
+     * `Animal` is `open`/`abstract`/`sealed` (or an interface). Fires for both the bare (`: Animal`) and the
+     * initialized (`: Animal()`) supertype forms; an interface, an `open`/`abstract`/`sealed` class, a
+     * type-parameter bound, or an unresolved name backs off ([KotlinSymbolService.isFinalType] returns
+     * false/null), so the parse-only model never false-positives.
+     */
+    private fun finalSupertype(cls: KtClassOrObject, resolver: KotlinResolver): List<Diagnostic> {
+        if (cls is KtEnumEntry) return emptyList() // an enum entry's supertype is its own enum (implicit)
+        if (cls is KtClass && (cls.isInterface() || cls.isAnnotation())) return emptyList() // an interface extending a class is a different error
+        val out = ArrayList<Diagnostic>()
+        for (entry in cls.superTypeListEntries) {
+            if (entry is KtDelegatedSuperTypeEntry) continue // `: Iface by impl` is interface delegation, never a class
+            val userType = entry.typeReference?.typeElement as? KtUserType ?: continue
+            val name = userType.referenceExpression?.getReferencedName() ?: continue
+            if (resolver.isTypeParameterInScope(name, entry.textRange.startOffset)) continue
+            val fqn = service.resolveTypeName(name, resolver.fileContext) ?: continue
+            if (service.isFinalType(fqn) != true) continue // open/abstract/sealed/interface/unknown → back off
+            val r = (entry.typeReference ?: entry).textRange // underline just the type name, not its `()`
+            out += Diagnostic(
+                TextRange(r.startOffset, r.endOffset), Severity.ERROR,
+                "This type is final, so it cannot be extended.", KotlinDiagnosticCodes.FINAL_SUPERTYPE,
             )
         }
         return out

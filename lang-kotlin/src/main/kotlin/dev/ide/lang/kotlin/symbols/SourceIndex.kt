@@ -141,6 +141,10 @@ class RawClass(
     /** True for a `sealed` class/interface — its subclasses are exhaustively enumerable (same-module), driving
      *  the cross-file `when`-exhaustiveness check. */
     val isSealed: Boolean = false,
+    /** True for a plain FINAL class — a concrete class that is not `open`/`abstract`/`sealed` and is not an
+     *  interface/enum/annotation/object. Such a class cannot be extended (Kotlin classes are final by default),
+     *  driving the final-supertype check. An `object` (which also can't be extended) is signalled by [isObject]. */
+    val isFinalClass: Boolean = false,
     /** True for a LOCAL type: an anonymous object (`object : T { }` / `object { }`) or a class/object declared
      *  inside a function/initializer body. Its [fqn] is a synthetic, deterministic key ([SourceIndexBuilder.
      *  localTypeFqn]) that the resolver recomputes from the same PSI, so member enumeration / diagnostics flow
@@ -370,6 +374,14 @@ object SourceIndexBuilder {
             isAnnotation = asClass?.isAnnotation() == true,
             isAbstract = asClass?.let { it.hasModifier(KtTokens.ABSTRACT_KEYWORD) || it.hasModifier(KtTokens.SEALED_KEYWORD) } == true,
             isSealed = asClass?.isSealed() == true,
+            // A plain final class: a KtClass that is not an interface/enum/annotation and carries no
+            // open/abstract/sealed modifier. An `object` has `asClass == null` here, so it stays false (an
+            // object can't be extended either, but that is a different error than FINAL_SUPERTYPE).
+            isFinalClass = asClass?.let {
+                !it.isInterface() && !it.isEnum() && !it.isAnnotation() &&
+                    !it.hasModifier(KtTokens.OPEN_KEYWORD) && !it.hasModifier(KtTokens.ABSTRACT_KEYWORD) &&
+                    !it.hasModifier(KtTokens.SEALED_KEYWORD)
+            } == true,
             isLocal = isLocal,
             annotationNames = c.annotationEntries.mapNotNull { it.shortName?.asString() },
             annotationFqns = annoFqns(c, ctx),
