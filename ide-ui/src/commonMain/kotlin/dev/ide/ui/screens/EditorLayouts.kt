@@ -139,6 +139,10 @@ internal fun buildLeftPanels(
     val sourceDesc = stringResource(Res.string.edsheet_source_control_desc)
     val sourceHeading = stringResource(Res.string.edsheet_source_control)
 
+    // Remembered HERE (the panel host stays composed while the drawer/left panel is swapped) rather than inside
+    // SearchScreen, so a search survives navigating to a result and reopening Search for the next occurrence.
+    val searchState = remember { SearchState() }
+
     val builtIns = listOf(
         SidebarPanel(LeftPanelId.FILES, filesTitle, CaIcons.docText, order = 10) {
             FilesPanelContent(
@@ -152,6 +156,7 @@ internal fun buildLeftPanels(
                 indexing = indexBuilding,
                 onOpenAt = { p, o -> state.openAt(p, o); closeDrawer() },
                 modifier = Modifier.fillMaxSize(),
+                searchState = searchState,
             )
         },
         SidebarPanel(LeftPanelId.STRUCTURE, structureTitle, CaIcons.code, order = 30) {

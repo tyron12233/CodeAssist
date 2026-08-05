@@ -67,10 +67,27 @@ import kotlinx.coroutines.delay
 import org.jetbrains.compose.resources.StringResource
 import org.jetbrains.compose.resources.stringResource
 
-private enum class SearchTab(val labelRes: StringResource, val icon: androidx.compose.ui.graphics.vector.ImageVector) {
+internal enum class SearchTab(val labelRes: StringResource, val icon: androidx.compose.ui.graphics.vector.ImageVector) {
     Symbols(Res.string.search_tab_symbols, CaIcons.code),
     Members(Res.string.search_tab_members, CaIcons.layers),
     Text(Res.string.search_tab_text, CaIcons.docText),
+}
+
+/**
+ * Hoisted [SearchScreen] state — the query, active tab, text-search options, and the three result lists. The
+ * panel host ([buildLeftPanels]) remembers it at a scope that stays composed while the drawer/left panel is
+ * swapped, so a search SURVIVES navigating to a result and returning: opening a result deselects the left
+ * panel on phone, which disposes the SearchScreen subtree — plain `remember` state would be lost with it, and
+ * the results would vanish when you reopen Search to jump to the next occurrence.
+ */
+internal class SearchState {
+    val tab = mutableStateOf(SearchTab.Symbols)
+    val query = mutableStateOf("")
+    val symbols = mutableStateOf<List<SymbolHit>>(emptyList())
+    val members = mutableStateOf<List<SymbolHit>>(emptyList())
+    val matches = mutableStateOf<List<UiTextMatch>>(emptyList())
+    val searching = mutableStateOf(false)
+    val options = mutableStateOf(UiSearchOptions())
 }
 
 /**
@@ -79,20 +96,23 @@ private enum class SearchTab(val labelRes: StringResource, val icon: androidx.co
  * Hosted as a side pane on desktop and a bottom sheet on phone (see EditorScreen). Talks only to [IdeBackend].
  */
 @Composable
-fun SearchScreen(
+internal fun SearchScreen(
     backend: IdeBackend,
     indexing: Boolean,
     onOpenAt: (String, Int) -> Unit,
     modifier: Modifier = Modifier,
     codeFont: FontFamily = FontFamily.Monospace,
+    // Hoisted so a search survives the panel being disposed on navigate-and-return (see [SearchState]). The
+    // default keeps the screen self-contained for standalone/preview use; the panel host passes a remembered one.
+    searchState: SearchState = remember { SearchState() },
 ) {
-    var tab by remember { mutableStateOf(SearchTab.Symbols) }
-    var query by remember { mutableStateOf("") }
-    var symbols by remember { mutableStateOf<List<SymbolHit>>(emptyList()) }
-    var members by remember { mutableStateOf<List<SymbolHit>>(emptyList()) }
-    var matches by remember { mutableStateOf<List<UiTextMatch>>(emptyList()) }
-    var searching by remember { mutableStateOf(false) }
-    var options by remember { mutableStateOf(UiSearchOptions()) }
+    var tab by searchState.tab
+    var query by searchState.query
+    var symbols by searchState.symbols
+    var members by searchState.members
+    var matches by searchState.matches
+    var searching by searchState.searching
+    var options by searchState.options
 
     // Debounced query — re-runs on the active tab and (for text) the options. ≥2 chars, like the palette.
     LaunchedEffect(query, tab, options) {
