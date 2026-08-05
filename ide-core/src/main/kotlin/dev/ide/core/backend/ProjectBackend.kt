@@ -297,6 +297,10 @@ internal class ProjectBackend(private val ctx: BackendContext) : ProjectService 
     //                 path. A v1 first line is always an integer, so the "#v2" marker disambiguates on read.
     private val openTabsFile: Path? get() = ctx.servicesOrNull?.workspaceRoot?.resolve(".platform/open-tabs.txt")
 
+    /** True once a session has been saved for this project — the open-tabs file exists (even recording zero
+     *  tabs). Distinguishes a first open from a project deliberately left with no tabs open. */
+    override fun hasSavedSession(): Boolean = openTabsFile?.toFile()?.exists() == true
+
     override fun openTabs(): UiOpenTabs {
         val file = (openTabsFile ?: return UiOpenTabs()).toFile()
         if (!file.exists()) return UiOpenTabs()

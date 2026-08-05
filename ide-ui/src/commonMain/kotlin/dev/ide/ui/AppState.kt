@@ -580,12 +580,15 @@ class IdeUiState(
     /**
      * Reopen the tabs persisted from a previous session with this project (in tab order + the active tab),
      * each restored to where the user left it: its view mode, caret, and scroll position. Files that no longer
-     * exist on disk are skipped. Returns true if at least one tab was restored, so the caller can fall back to
-     * [defaultFile] when there was no remembered session.
+     * exist on disk are skipped. Returns true when the previous session was HANDLED — either tabs were
+     * restored, or the project was opened before and deliberately left with no tabs (a persisted-but-empty
+     * session) — so the caller only falls back to [defaultFile] on a genuine first open (no session yet).
      */
     suspend fun restoreTabs(): Boolean {
         val saved = backend.projects.openTabs()
-        if (saved.tabs.isEmpty()) return false
+        // No tabs to restore: respect an intentionally-empty reopen (session file exists → stay empty), and
+        // only fall through to a default file on a first open (no session file yet).
+        if (saved.tabs.isEmpty()) return backend.projects.hasSavedSession()
         for (tab in saved.tabs) {
             val name = tab.path.substringAfterLast('/').substringAfterLast('\\')
             runCatching {
@@ -602,7 +605,9 @@ class IdeUiState(
                 }
             }
         }
-        if (openFiles.isEmpty()) return false
+        // Every saved tab's file is gone now, but the project WAS opened before — treat it as handled (leave
+        // the editor empty) rather than surprising the user with an unrelated default file.
+        if (openFiles.isEmpty()) return true
         activeIndex = saved.activeIndex.coerceIn(0, openFiles.lastIndex)
         return true
     }

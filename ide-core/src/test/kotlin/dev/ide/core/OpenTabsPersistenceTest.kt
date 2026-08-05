@@ -6,69 +6,98 @@ import dev.ide.ui.backend.UiOpenTabs
 import java.nio.file.Files
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 
 /**
  * The editor remembers the session per project: [IdeServicesBackend.saveOpenTabs] writes the open tabs — each
  * with its caret, scroll line, and view mode — under the project's `.platform/`, and [IdeServicesBackend.openTabs]
  * reads them back on the next launch. SDK-independent — pure file I/O over a bootstrapped Java demo.
+ *
+ * NB: block-body tests — an expression body `= withTempDir(...) { … }` returns the block's value (Boolean, from
+ * the trailing `deleteRecursively()`), and a non-Unit-returning test is silently NOT registered by JUnit Jupiter.
  */
 class OpenTabsPersistenceTest {
 
     @Test
-    fun roundTripsOpenTabsWithPerTabState() = withTempDir("ide-tabs") { dir ->
-        IdeServices.bootstrapJavaDemo(dir).use { ide ->
-            val backend = IdeServicesBackend(ide)
+    fun roundTripsOpenTabsWithPerTabState() {
+        withTempDir("ide-tabs") { dir ->
+            IdeServices.bootstrapJavaDemo(dir).use { ide ->
+                val backend = IdeServicesBackend(ide)
 
-            // Nothing saved yet → an empty session.
-            assertEquals(UiOpenTabs(), backend.projects.openTabs())
+                // Nothing saved yet → an empty session.
+                assertEquals(UiOpenTabs(), backend.projects.openTabs())
 
-            val tabs = UiOpenTabs(
-                listOf(
-                    UiOpenTab("/a/Foo.java", caret = 42, scrollLine = 3, viewMode = "text"),
-                    UiOpenTab("/a/Bar.java", caret = 0, scrollLine = 0, viewMode = "blocks"),
-                    UiOpenTab("/b/layout.xml", caret = 128, scrollLine = 7, viewMode = "split"),
-                ),
-                activeIndex = 2,
-            )
-            backend.projects.saveOpenTabs(tabs)
+                val tabs = UiOpenTabs(
+                    listOf(
+                        UiOpenTab("/a/Foo.java", caret = 42, scrollLine = 3, viewMode = "text"),
+                        UiOpenTab("/a/Bar.java", caret = 0, scrollLine = 0, viewMode = "blocks"),
+                        UiOpenTab("/b/layout.xml", caret = 128, scrollLine = 7, viewMode = "split"),
+                    ),
+                    activeIndex = 2,
+                )
+                backend.projects.saveOpenTabs(tabs)
 
-            // Persisted alongside the rest of the workspace state, not in the (disposable) caches dir.
-            assertTrue(Files.exists(ide.workspaceRoot.resolve(".platform/open-tabs.txt")), "tabs file written")
+                // Persisted alongside the rest of the workspace state, not in the (disposable) caches dir.
+                assertTrue(Files.exists(ide.workspaceRoot.resolve(".platform/open-tabs.txt")), "tabs file written")
 
-            // Caret, scroll line, view mode, and active index all round-trip.
-            assertEquals(tabs, backend.projects.openTabs(), "full per-tab session round-trips")
+                // Caret, scroll line, view mode, and active index all round-trip.
+                assertEquals(tabs, backend.projects.openTabs(), "full per-tab session round-trips")
+            }
+            dir.toFile().deleteRecursively()
         }
-        dir.toFile().deleteRecursively()
     }
 
     @Test
-    fun toleratesAMissingOrEmptyActiveIndex() = withTempDir("ide-tabs-empty") { dir ->
-        IdeServices.bootstrapJavaDemo(dir).use { ide ->
-            val backend = IdeServicesBackend(ide)
-            backend.projects.saveOpenTabs(UiOpenTabs(emptyList(), activeIndex = -1))
-            val restored = backend.projects.openTabs()
-            assertEquals(emptyList(), restored.paths)
-            assertEquals(-1, restored.activeIndex)
+    fun toleratesAMissingOrEmptyActiveIndex() {
+        withTempDir("ide-tabs-empty") { dir ->
+            IdeServices.bootstrapJavaDemo(dir).use { ide ->
+                val backend = IdeServicesBackend(ide)
+                backend.projects.saveOpenTabs(UiOpenTabs(emptyList(), activeIndex = -1))
+                val restored = backend.projects.openTabs()
+                assertEquals(emptyList(), restored.paths)
+                assertEquals(-1, restored.activeIndex)
+            }
+            dir.toFile().deleteRecursively()
         }
-        dir.toFile().deleteRecursively()
     }
 
     @Test
-    fun readsLegacyV1Format() = withTempDir("ide-tabs-v1") { dir ->
-        IdeServices.bootstrapJavaDemo(dir).use { ide ->
-            val backend = IdeServicesBackend(ide)
-            // An old (pre-caret/scroll) session file: active index, then bare paths.
-            val file = ide.workspaceRoot.resolve(".platform/open-tabs.txt")
-            Files.createDirectories(file.parent)
-            Files.writeString(file, "1\n/a/Foo.java\n/a/Bar.java\n")
+    fun hasSavedSessionDistinguishesFirstOpenFromDeliberatelyEmpty() {
+        withTempDir("ide-tabs-session") { dir ->
+            IdeServices.bootstrapJavaDemo(dir).use { ide ->
+                val backend = IdeServicesBackend(ide)
 
-            val restored = backend.projects.openTabs()
-            assertEquals(listOf("/a/Foo.java", "/a/Bar.java"), restored.paths, "legacy paths still read")
-            assertEquals(1, restored.activeIndex)
-            // Legacy tabs default to top-of-file / plain text.
-            assertEquals(UiOpenTab("/a/Foo.java"), restored.tabs.first())
+                // First open: no session file yet → the caller may auto-open a default file.
+                assertFalse(backend.projects.hasSavedSession(), "no session before the first save")
+
+                // Closing the last tab persists an EMPTY session. openTabs() still reads as empty, but the session
+                // now EXISTS — the caller must respect the empty editor instead of re-opening a default file.
+                backend.projects.saveOpenTabs(UiOpenTabs(emptyList(), activeIndex = -1))
+                assertTrue(backend.projects.hasSavedSession(), "an empty session still counts as opened-before")
+                assertEquals(emptyList(), backend.projects.openTabs().tabs, "the persisted session records zero tabs")
+            }
+            dir.toFile().deleteRecursively()
         }
-        dir.toFile().deleteRecursively()
+    }
+
+    @Test
+    fun readsLegacyV1Format() {
+        withTempDir("ide-tabs-v1") { dir ->
+            IdeServices.bootstrapJavaDemo(dir).use { ide ->
+                val backend = IdeServicesBackend(ide)
+                // An old (pre-caret/scroll) session file: active index, then bare paths.
+                val file = ide.workspaceRoot.resolve(".platform/open-tabs.txt")
+                Files.createDirectories(file.parent)
+                Files.writeString(file, "1\n/a/Foo.java\n/a/Bar.java\n")
+
+                val restored = backend.projects.openTabs()
+                assertEquals(listOf("/a/Foo.java", "/a/Bar.java"), restored.paths, "legacy paths still read")
+                assertEquals(1, restored.activeIndex)
+                // Legacy tabs default to top-of-file / plain text.
+                assertEquals(UiOpenTab("/a/Foo.java"), restored.tabs.first())
+            }
+            dir.toFile().deleteRecursively()
+        }
     }
 }

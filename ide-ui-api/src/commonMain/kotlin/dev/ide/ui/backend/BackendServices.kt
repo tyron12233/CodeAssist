@@ -606,6 +606,11 @@ interface ProjectService {
     /** The editor tabs open the last time the active project was used. */
     fun openTabs(): UiOpenTabs = UiOpenTabs()
 
+    /** Whether a tab session was ever persisted for the active project (the open-tabs file exists) — true even
+     *  when it recorded ZERO tabs. Lets the UI tell a genuine first open (auto-open a default file) from a
+     *  project the user deliberately left with no tabs open (respect the empty editor on return). */
+    fun hasSavedSession(): Boolean = false
+
     /** Persist the open editor tabs for the active project. */
     fun saveOpenTabs(tabs: UiOpenTabs) {}
 
