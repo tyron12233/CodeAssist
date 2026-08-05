@@ -22,6 +22,7 @@ import org.jetbrains.kotlin.psi.KtObjectLiteralExpression
 import org.jetbrains.kotlin.psi.KtParenthesizedExpression
 import org.jetbrains.kotlin.psi.KtPostfixExpression
 import org.jetbrains.kotlin.psi.KtPrefixExpression
+import org.jetbrains.kotlin.psi.KtProperty
 import org.jetbrains.kotlin.psi.KtQualifiedExpression
 import org.jetbrains.kotlin.psi.KtStringTemplateExpression
 import org.jetbrains.kotlin.psi.KtSuperExpression
@@ -658,6 +659,13 @@ internal fun KotlinResolver.typeOfName(name: String, offset: Int): KotlinType? {
         if (imp.isStar || imp.simpleName != name) continue
         service.importedMemberSymbol(imp.fqn)?.let { return it.type as? KotlinType }
     }
+    // A same-file TOP-LEVEL property: infer its type from the initializer via live PSI (`sameFileProperty`
+    // runs full `inferType`), NOT the disk model's crude callee-name parse — which mistypes a builder chain
+    // `Retrofit.Builder().…​.build()` as its FIRST callee `Retrofit.Builder` (a known type without the built
+    // type's members → the reported `a.create()` false "unresolved"). Mirrors the same-file MEMBER preference
+    // above; a cross-file top-level property still falls through to the model type below.
+    ktFile.declarations.firstOrNull { it is KtProperty && it.receiverTypeReference == null && it.name == name }
+        ?.let { return sameFileProperty(it as KtProperty, null).type as? KotlinType }
     service.topLevelByName(name).firstOrNull { it.kind == SymbolKind.FIELD }
         ?.let { return it.type as? KotlinType }
     // A bare type name used as an expression (e.g. `Foo` in `Foo.CONST`): a LOCAL type in scope first (a local

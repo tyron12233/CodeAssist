@@ -2825,7 +2825,7 @@ class KotlinSymbolService(
         val tps = (rc.typeParameterNames + ownerTypeParams).toHashSet()
         val type = markTypeParameters(
             typeFromText(rc.returnText, rc.ctx)
-                ?: inferInitializerType(rc.initializerText, rc.ctx)
+                ?: inferInitializerType(rc.initializerText)
                 ?: inferReturnFromBody(rc, ownerFqn),
             tps,
         )
@@ -2960,14 +2960,18 @@ class KotlinSymbolService(
      * returns null so real resolution runs — earlier this branch returned a bogus type for any `name(...)` text
      * (e.g. `this.trim` parsed as a type), which masked the real return type.
      */
-    private fun inferInitializerType(text: String?, ctx: FileContext?): KotlinType? {
+    /**
+     * A cheap, RESOLUTION-FREE type for a property/expression-body initializer — used only as a fast-path so a
+     * literal `const`/property needs no resolver. It types ONLY the sound literal cases; anything STRUCTURAL (a
+     * constructor call, a builder chain, a member/factory call) returns null and is deferred to
+     * [inferReturnFromBody], which runs the real [KotlinResolver] over the initializer PSI. A text heuristic
+     * cannot tell `Foo()` (Foo) from `Foo().bar()` (bar's return) from `foo()` (not a constructor) and would
+     * DROP generics (`MutableStateFlow(Key())` → raw), so guessing structure here only ever shadows correct PSI
+     * inference — the top-level-property builder-chain bug (`Retrofit.Builder().…​.build()` → `Retrofit.Builder`).
+     */
+    private fun inferInitializerType(text: String?): KotlinType? {
         val e = text?.trim() ?: return null
         return when {
-            // `Foo(...)` / `pkg.Foo(...)`: only when the callee before `(` resolves to a real type — not a plain
-            // function call (`make()`) or a member call on a value (`this.trim()`), which aren't constructors.
-            e.endsWith(")") && e.first().isLetter() ->
-                e.substringBefore('(').takeIf { it.isNotEmpty() }
-                    ?.let { typeFromText(it, ctx) }?.takeIf { isKnownType(it.qualifiedName) }
             // A pure string literal/template that is the ENTIRE initializer (`= "x"`, `= "v=$v"`) — not `"x".y`
             // (doesn't end in `"`) nor `"a" + "b"` (an inner quote), which would mistype as String.
             e.startsWith("\"") && e.indexOf('"', 1) == e.length - 1 -> typeByFqn("kotlin.String")
