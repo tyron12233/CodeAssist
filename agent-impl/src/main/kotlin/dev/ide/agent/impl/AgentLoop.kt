@@ -39,6 +39,9 @@ class AgentLoop(
     private val thinkingBudget: Int? = null,
     /** Offer the provider's native web search each request (providers without one ignore it). */
     private val webSearch: Boolean = false,
+    /** OpenAI-dialect reasoning effort forwarded to each request; null leaves the provider default. Only the
+     *  OpenAI-compatible providers honor it. */
+    private val reasoningEffort: String? = null,
     /** Trims re-sent tool output so a long task does not re-bill the whole transcript each step. */
     private val compactor: HistoryCompactor = HistoryCompactor(),
 ) {
@@ -77,6 +80,7 @@ class AgentLoop(
                 thinking = true,
                 thinkingBudget = thinkingBudget,
                 webSearch = webSearch,
+                reasoningEffort = reasoningEffort,
             )
             val turn = Turn()
             client.chat(request).collect { event -> turn.consume(event, sink) }

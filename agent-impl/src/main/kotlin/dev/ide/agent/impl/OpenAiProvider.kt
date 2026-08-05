@@ -73,6 +73,10 @@ class OpenAiProvider(private val transport: LlmTransport) : LlmProvider {
         put("model", request.model)
         put("stream", true)
         put(if (official) "max_completion_tokens" else "max_tokens", request.maxTokens)
+        // A reasoning model applies a default reasoning effort even when none is sent; on chat completions
+        // that default plus function tools is rejected, so forwarding "none" is how a tool-using agent runs
+        // against such a model. Non-reasoning models ignore the field. Sent only when explicitly requested.
+        request.reasoningEffort?.takeIf { it.isNotBlank() }?.let { put("reasoning_effort", it) }
         put("stream_options", buildJsonObject { put("include_usage", true) })
         if (request.tools.isNotEmpty()) {
             put("tools", buildJsonArray {

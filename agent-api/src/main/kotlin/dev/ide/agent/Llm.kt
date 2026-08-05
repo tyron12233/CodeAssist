@@ -65,6 +65,12 @@ data class LlmRequest(
      *  Gemini's `google_search` grounding). The provider runs the search itself and folds the results into the
      *  turn — it is not a client-executed [ToolSpec]. Providers without native search ignore the flag. */
     val webSearch: Boolean = false,
+    /** OpenAI-dialect reasoning effort (`"none"`/`"minimal"`/`"low"`/`"medium"`/`"high"`); null leaves the
+     *  provider default. Newer OpenAI reasoning models reject function tools combined with a non-`"none"`
+     *  reasoning effort on `/v1/chat/completions`, so sending `"none"` lets a tool-using agent run against
+     *  them. Only the OpenAI-compatible providers (OpenAI, OpenRouter, custom gateways) honor it; others
+     *  ignore it. */
+    val reasoningEffort: String? = null,
 )
 
 /** A normalized streaming event. Providers emit these; the agent loop assembles them into a turn. */

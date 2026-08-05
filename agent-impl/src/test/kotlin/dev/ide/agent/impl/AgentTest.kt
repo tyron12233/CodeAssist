@@ -184,6 +184,23 @@ class AgentTest {
     }
 
     @Test
+    fun openAiSendsReasoningEffortOnlyWhenRequested() {
+        val transport = CapturingTransport(payloads = listOf("[DONE]"))
+        val client = OpenAiProvider(transport).client(ProviderConfig("k"))
+
+        runBlocking {
+            client.chat(LlmRequest("gpt-5.6-luna", null, listOf(LlmMessage.user("hi")), reasoningEffort = "none")).toList()
+        }
+        assertTrue(transport.lastBody!!.contains("\"reasoning_effort\":\"none\""), transport.lastBody)
+
+        // Left null (the default), the field is absent so non-reasoning models aren't sent an unknown parameter.
+        runBlocking {
+            client.chat(LlmRequest("gpt-4o", null, listOf(LlmMessage.user("hi")))).toList()
+        }
+        assertTrue(!transport.lastBody!!.contains("reasoning_effort"), transport.lastBody)
+    }
+
+    @Test
     fun agentLoopRunsToolThenAnswers() {
         val ws = FakeWorkspace(mutableMapOf("A.kt" to "hi"))
         val client = ScriptedClient(
@@ -218,6 +235,27 @@ class AgentTest {
             events.filterIsInstance<AgentEvent.AssistantTextDelta>().joinToString("") { it.text },
         )
         assertNotNull(events.filterIsInstance<AgentEvent.TurnCompleted>().lastOrNull())
+    }
+
+    @Test
+    fun agentLoopForwardsReasoningEffort() {
+        var captured: LlmRequest? = null
+        val client = LlmClient { request ->
+            captured = request
+            listOf<LlmStreamEvent>(LlmStreamEvent.Completed(StopReason.END_TURN)).asFlow()
+        }
+        val loop = AgentLoop(
+            client = client,
+            model = "gpt-5.6-luna",
+            tools = SimpleToolRegistry(builtinTools(FakeWorkspace())),
+            gate = AllowAllGate,
+            systemPrompt = { "system" },
+            reasoningEffort = "none",
+        )
+
+        runBlocking { loop.send("hi", AgentEventSink { }) }
+
+        assertEquals("none", captured?.reasoningEffort)
     }
 
     @Test

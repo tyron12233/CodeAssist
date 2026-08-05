@@ -82,12 +82,49 @@ internal object AgentSettingsPage : SettingsPage {
             title = "Model",
             description = "Optional. Leave blank to use the provider's default model.",
         ),
+        SettingControl.Choice(
+            key = "reasoningEffort",
+            title = "Reasoning effort",
+            description = "For OpenAI (and OpenAI-compatible gateway/OpenRouter) reasoning models. Newer models " +
+                "(e.g. GPT-5.x) reject function tools combined with reasoning on the chat-completions API, so " +
+                "pick None to let the agent's tools work. Default sends nothing (correct for other providers).",
+            default = AgentBackend.REASONING_EFFORT_DEFAULT,
+            options = listOf(
+                SettingControl.Choice.Option(AgentBackend.REASONING_EFFORT_DEFAULT, "Default"),
+                SettingControl.Choice.Option("none", "None"),
+                SettingControl.Choice.Option("minimal", "Minimal"),
+                SettingControl.Choice.Option("low", "Low"),
+                SettingControl.Choice.Option("medium", "Medium"),
+                SettingControl.Choice.Option("high", "High"),
+            ),
+        ),
         SettingControl.Toggle(
             key = "webSearch",
             title = "Web search",
             description = "Let the agent search the web when the provider supports it (Anthropic and Gemini). " +
                 "The web_fetch and http_request tools work regardless.",
             default = true,
+        ),
+        SettingControl.IntSlider(
+            key = "maxTokens",
+            title = "Max response tokens",
+            description = "Upper bound on the tokens the model may generate in a single response.",
+            default = AgentBackend.DEFAULT_MAX_TOKENS,
+            min = 1024,
+            max = 32768,
+            step = 1024,
+            unit = "tok",
+            advanced = true,
+        ),
+        SettingControl.IntSlider(
+            key = "maxIterations",
+            title = "Max tool iterations",
+            description = "How many tool-call rounds the agent may take in one turn before it must stop.",
+            default = AgentBackend.DEFAULT_MAX_ITERATIONS,
+            min = 1,
+            max = 100,
+            step = 1,
+            advanced = true,
         ),
         SettingControl.Text(
             key = "gatewayKey",

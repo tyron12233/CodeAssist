@@ -279,8 +279,11 @@ internal class AgentBackend(private val ctx: BackendContext) : AgentService {
         val maxTokens = prefInt("maxTokens") ?: DEFAULT_MAX_TOKENS
         val thinkingBudget = prefInt("thinkingBudget")
         val webSearch = prefBool("webSearch", default = true)
+        // "default" (or unset) leaves the field off the request so non-reasoning models and non-OpenAI
+        // providers are unaffected; any other value is forwarded as reasoning_effort by the OpenAI dialect.
+        val reasoningEffort = pref("reasoningEffort")?.takeIf { it != REASONING_EFFORT_DEFAULT }
         val signature =
-            "${cfg.selectedId}|$model|${cfg.baseUrl}|${cfg.apiKey.hashCode()}|${cfg.caCertificatePem.hashCode()}|$maxIterations|$maxTokens|$thinkingBudget|$webSearch"
+            "${cfg.selectedId}|$model|${cfg.baseUrl}|${cfg.apiKey.hashCode()}|${cfg.caCertificatePem.hashCode()}|$maxIterations|$maxTokens|$thinkingBudget|$webSearch|$reasoningEffort"
         if (loop == null || loopSignature != signature) {
             val client = provider.client(ProviderConfig(cfg.apiKey, cfg.baseUrl, cfg.caCertificatePem))
             loop = AgentLoop(
@@ -289,6 +292,7 @@ internal class AgentBackend(private val ctx: BackendContext) : AgentService {
                 maxIterations = maxIterations,
                 thinkingBudget = thinkingBudget,
                 webSearch = webSearch,
+                reasoningEffort = reasoningEffort,
             )
             loopSignature = signature
         }
@@ -445,6 +449,9 @@ internal class AgentBackend(private val ctx: BackendContext) : AgentService {
         const val AI_PAGE = "ai"
         const val MODE_PREF = "agent.permissionMode"
         const val GATEWAY = "gateway"
+
+        /** The "leave it to the provider" reasoning-effort choice: nothing is sent on the request. */
+        const val REASONING_EFFORT_DEFAULT = "default"
 
         /** Cap on the project-instruction excerpt folded into the system prompt (keeps requests bounded). */
         const val MAX_INSTRUCTIONS_CHARS = 6_000
