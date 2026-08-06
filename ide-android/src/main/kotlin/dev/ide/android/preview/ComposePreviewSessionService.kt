@@ -1,6 +1,7 @@
 package dev.ide.android.preview
 
 import android.app.Service
+import android.content.ComponentCallbacks2
 import android.content.Intent
 import android.content.res.Configuration
 import android.hardware.HardwareBuffer
@@ -16,7 +17,9 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.platform.LocalConfiguration
 import dev.ide.android.AndroidPreviewResources
 import dev.ide.android.DexPeerFactory
+import dev.ide.android.support.AndroidSupport
 import dev.ide.android.support.resources.ResourceModel
+import dev.ide.android.support.tasks.InProcessDexGate
 import dev.ide.core.LoweredComposePreview
 import dev.ide.core.preview.ComposePreviewWireCodec
 import dev.ide.interp.PreviewResourceResolver
@@ -195,6 +198,22 @@ class ComposePreviewSessionService : Service() {
     }
 
     override fun onBind(intent: Intent?): IBinder = binder
+
+    /**
+     * Release the process-wide shared dex classpath cache under memory pressure, when no in-process dex is
+     * running anywhere in this `:preview` process ([InProcessDexGate.isIdle], shared with the co-hosted
+     * [PreviewRenderService] whose real-view dexing is what populates it). Closing a provider mid-read would
+     * break that dex, so the idle gate is required. This process's own heavier caches — [executorCache] (pins
+     * every dep jar's handles) and [resourceCache] — are already LRU-bounded and freed in [onDestroy]; they are
+     * left intact here because a live [Session] holds its executor and closing it would pull jars out from under it.
+     */
+    override fun onTrimMemory(level: Int) {
+        super.onTrimMemory(level)
+        if (level >= ComponentCallbacks2.TRIM_MEMORY_RUNNING_LOW && InProcessDexGate.isIdle()) {
+            log.info(":preview(pid=${Process.myPid()}): onTrimMemory($level) idle → releasing dex caches")
+            runCatching { AndroidSupport.releaseDexCaches() }
+        }
+    }
 
     override fun onDestroy() {
         sessions.values.forEach { runCatching { it.close() } }

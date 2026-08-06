@@ -1,5 +1,7 @@
 package dev.ide.android.support.tasks
 
+import java.util.concurrent.Semaphore
+
 /**
  * Picks how many dex invocations to run at once and how many threads each may use. Dexing many library jars
  * is embarrassingly parallel (independent per-jar archives), but each in-process D8 invocation holds
@@ -81,4 +83,88 @@ object DexConcurrency {
         val cores = runtime.availableProcessors().coerceAtLeast(1)
         return (cores / workers).coerceIn(1, 4)
     }
+}
+
+/**
+ * A PROCESS-WIDE budget for IN-PROCESS D8 invocations (archives + merges) sharing the ONE app heap on ART.
+ *
+ * [DexConcurrency.plan]/[DexConcurrency.archivePlan] bound the fan-out WITHIN a single dex task, each sized
+ * against the full heap. But the Android build runs the three scope-merge tasks (`mergeProjectDex`/
+ * `mergeLibDex`/`mergeExtDex`) as independent DAG nodes at the SAME level (each only `dependsOn dexBuilder`),
+ * so the executor can run them at once — and each plans as if it alone owns the heap, over-committing 2-3x
+ * exactly where memory is scarcest: the RAM-starved device where the merge can't fork off-heap and falls back
+ * in-process. Forked work is already bounded by `R8ForkSupport.withForkPermit`; this is the missing equivalent
+ * for the in-process path.
+ *
+ * A count of "[UNIT_BYTES] heap credits" ([permits], sized ONCE off max heap) is shared across every
+ * in-process D8 call regardless of which task issued it: a per-class ARCHIVE worker (small — one library over
+ * the shared android.jar index) draws one credit; a final/MERGE pass (a larger working set finalizing many
+ * class-dex at once) draws several. The archive step (`dexBuilder`) completes before any merge starts, so the
+ * two phases never contend — the credits simply admit as many concurrent archives, then as many concurrent
+ * merges, as the heap actually backs. Because [permits] is derived from the same heap model as [archivePlan],
+ * it is >= any single task's own worker count, so a lone task is never throttled below its plan; the cap only
+ * bites when independent tasks would otherwise sum past the heap. On a desktop JVM the heap is large,
+ * [permits] is high, and nothing is throttled.
+ *
+ * Deadlock-free: an invocation acquires its credits ONCE (it never holds credits while awaiting more), and a
+ * lone invocation whose estimate exceeds the whole pool is clamped to the pool size so it always proceeds. The
+ * blocking [Semaphore] is acquired on `Dispatchers.IO` worker threads (designed for blocking), never on a
+ * thread another in-process D8 call needs to make progress.
+ */
+object InProcessDexGate {
+    /** One heap credit ≈ one library archive worker's working set — the [DexConcurrency] `ARCHIVE_PER_WORKER_BYTES`
+     *  unit, so the shared pool and [archivePlan] agree on how many concurrent archives a heap backs. */
+    private const val UNIT_BYTES = 96L * 1024 * 1024
+    private const val HEAP_FRACTION = 0.85
+    /** Reserved off the top before dividing into credits — the once-parsed shared android.jar/classpath index
+     *  that lives in the heap for the whole build regardless of concurrency ([archivePlan]'s `ARCHIVE_SHARED_
+     *  BASE_BYTES`). Subtracting it makes [computePermits] equal [archivePlan]'s worker count on the same heap,
+     *  so a lone archive task is never throttled below its plan while concurrent tasks still share one budget. */
+    private const val SHARED_BASE_BYTES = 96L * 1024 * 1024
+    /** Cap so a large desktop heap doesn't mint an absurd permit count (irrelevant, just tidy). */
+    private const val MAX_PERMITS = 64
+    /** A DexIndexed (merge/mono) pass finalizes many class-dex at once — a bigger peak than one per-class
+     *  archive worker — so it draws more credits. Conservative so concurrent merges serialize on a tight heap. */
+    private const val MERGE_PEAK_BYTES = 256L * 1024 * 1024
+
+    private val permits: Int by lazy { computePermits(Runtime.getRuntime().maxMemory()) }
+    private val sem: Semaphore by lazy { Semaphore(permits, /* fair = */ true) }
+
+    /** Run [block] as a per-class ARCHIVE invocation (one credit). */
+    fun <T> withArchivePermit(block: () -> T): T = withCredits(1, block)
+
+    /** Run [block] as a final/MERGE invocation (several credits — a larger working set). */
+    fun <T> withMergePermit(block: () -> T): T = withCredits(unitsFor(MERGE_PEAK_BYTES), block)
+
+    private inline fun <T> withCredits(want: Int, block: () -> T): T {
+        val cost = want.coerceIn(1, permits)   // never demand more than the whole pool → no deadlock
+        sem.acquire(cost)
+        try {
+            return block()
+        } finally {
+            sem.release(cost)
+        }
+    }
+
+    /** Heap credits the in-process pool grants: (~[HEAP_FRACTION] of max heap, less the [SHARED_BASE_BYTES]
+     *  index) in [UNIT_BYTES] units, in [1, [MAX_PERMITS]]. Mirrors [archivePlan]'s worker math. */
+    internal fun computePermits(maxMemoryBytes: Long): Int =
+        ((maxMemoryBytes.toDouble() * HEAP_FRACTION - SHARED_BASE_BYTES) / UNIT_BYTES).toInt().coerceIn(1, MAX_PERMITS)
+
+    /** Credits an invocation with a [peakBytes] working set draws (>= 1). */
+    internal fun unitsFor(peakBytes: Long): Int =
+        Math.ceil(peakBytes.toDouble() / UNIT_BYTES).toInt().coerceAtLeast(1)
+
+    /** The pool size in effect this process (test/introspection). */
+    internal fun permitCount(): Int = permits
+
+    /**
+     * True when NO in-process D8 invocation is running right now (every credit free). This is the precise,
+     * process-wide moment it is safe to release the shared classpath providers a running dex might be reading
+     * (see `SharedDexClasspath.clear` / `AndroidSupport.releaseDexCaches`) — unlike a per-service "am I busy"
+     * flag, it sees dexing issued by ANY task or service in the process (e.g. the `:preview` render + compose
+     * services sharing one process). A forked dex never draws a credit, but a forked dex also never reads a
+     * shared in-process provider, so it doesn't affect this signal's safety.
+     */
+    fun isIdle(): Boolean = sem.availablePermits() >= permits
 }

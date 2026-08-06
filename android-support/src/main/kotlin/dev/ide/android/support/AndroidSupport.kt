@@ -8,6 +8,7 @@ import dev.ide.android.support.templates.MaterialYouAppTemplate
 import dev.ide.android.support.templates.MemoryMatchSampleTemplate
 import dev.ide.android.support.templates.SnakeSampleTemplate
 import dev.ide.android.support.templates.TicTacToeSampleTemplate
+import dev.ide.android.support.tools.SharedDexClasspath
 import dev.ide.model.impl.FacetCodecRegistry
 import dev.ide.model.impl.FileIconRegistry
 import dev.ide.model.impl.ModuleTypeRegistry
@@ -48,5 +49,20 @@ object AndroidSupport {
         templates.register(TicTacToeSampleTemplate, PLUGIN)
         templates.register(MemoryMatchSampleTemplate, PLUGIN)
         templates.register(Game2048SampleTemplate, PLUGIN)
+    }
+
+    /**
+     * Release the process-wide dex caches held between builds — the shared, once-parsed D8 classpath providers
+     * ([SharedDexClasspath]): open archive handles plus the retained class-descriptor indexes for `android.jar`
+     * and every library jar. Standing heap + file descriptors that outlive a build and are otherwise held for
+     * the whole session. A host wires this to the build (and preview) process's `onTrimMemory` so the OS's
+     * memory-pressure signal reclaims them; they rebuild lazily on the next build, re-indexing `android.jar` once.
+     *
+     * Call ONLY when no build/render is dexing — closing a provider a running D8 invocation reads through would
+     * break that dex. The caller is responsible for that idle check (e.g. `BuildDaemonService` gates on the
+     * build/run being inactive).
+     */
+    fun releaseDexCaches() {
+        SharedDexClasspath.clear()
     }
 }

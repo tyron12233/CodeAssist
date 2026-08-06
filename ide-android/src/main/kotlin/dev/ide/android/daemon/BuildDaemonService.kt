@@ -5,6 +5,7 @@ import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.app.PendingIntent
 import android.app.Service
+import android.content.ComponentCallbacks2
 import android.content.Intent
 import android.content.pm.ServiceInfo
 import android.os.Build
@@ -14,6 +15,7 @@ import android.os.Looper
 import android.os.Process
 import dev.ide.android.AndroidIde
 import dev.ide.android.AppLogSinkRegistry
+import dev.ide.android.support.AndroidSupport
 import dev.ide.core.AppLogLevel
 import dev.ide.core.IdeServices
 import dev.ide.core.ProjectManager
@@ -471,6 +473,21 @@ class BuildDaemonService : Service() {
     }
 
     override fun onBind(intent: Intent?): IBinder = binder
+
+    /**
+     * Reclaim the process-wide dex classpath cache (open archive handles + retained class-descriptor indexes
+     * for android.jar and every library, held by [dev.ide.android.support.tools.SharedDexClasspath] for the
+     * whole `:build` session) when the OS signals memory pressure or backgrounds this process — but NEVER
+     * mid-build: closing a shared ZipFile a running D8 invocation is reading through would break it, so gate on
+     * the build/run being idle. The cache rebuilds lazily on the next build (re-indexing android.jar once).
+     */
+    override fun onTrimMemory(level: Int) {
+        super.onTrimMemory(level)
+        if (level >= ComponentCallbacks2.TRIM_MEMORY_RUNNING_LOW && !buildActive && !runActive) {
+            log.info("daemon(pid=${Process.myPid()}): onTrimMemory($level) while idle → releasing dex caches")
+            runCatching { AndroidSupport.releaseDexCaches() }
+        }
+    }
 
     override fun onDestroy() {
         super.onDestroy()

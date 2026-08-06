@@ -59,6 +59,25 @@ internal object SharedDexClasspath {
             return built
         }
     }
+
+    /**
+     * Close and drop every cached provider — each an open archive handle (a [java.util.zip.ZipFile]) plus the
+     * retained class-descriptor index for android.jar or a library. The cache is otherwise process-wide and
+     * held for the whole session (up to [MAX_ENTRIES] archives), so this is how a host reclaims that standing
+     * heap + file descriptors between builds or under memory pressure (see `AndroidSupport.releaseDexCaches`,
+     * wired to a build/preview service's `onTrimMemory`). Providers rebuild lazily on the next [provider] call,
+     * so the only re-cost after a clear is re-indexing android.jar once.
+     *
+     * MUST NOT run while a dex invocation is reading through a shared provider: closing its ZipFile mid-read
+     * would break that dex. Callers gate this on an idle build/render — the same invariant [MAX_ENTRIES] relies
+     * on to avoid evicting (and closing) an in-use provider mid-build.
+     */
+    fun clear() {
+        synchronized(lock) {
+            cache.values.forEach { p -> (p as? Closeable)?.let { runCatching { it.close() } } }
+            cache.clear()
+        }
+    }
 }
 
 /**

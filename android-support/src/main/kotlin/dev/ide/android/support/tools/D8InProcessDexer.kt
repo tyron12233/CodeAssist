@@ -6,6 +6,7 @@ import com.android.tools.r8.D8Command
 import com.android.tools.r8.Diagnostic
 import com.android.tools.r8.DiagnosticsHandler
 import com.android.tools.r8.OutputMode
+import dev.ide.android.support.tasks.InProcessDexGate
 import java.nio.file.Files
 import java.nio.file.Path
 import java.util.concurrent.Executors
@@ -98,7 +99,7 @@ class D8InProcessDexer : Dexer {
                 diagnostics.add("error: ${d.diagnosticMessage}")
             }
         }
-        return try {
+        val compile: () -> ToolResult = compile@{ try {
             val builder =
                 D8Command.builder(handler)
                     .addProgramFiles(programs)
@@ -152,6 +153,12 @@ class D8InProcessDexer : Dexer {
             // The captured handler diagnostics carry the real cause (e.g. a duplicate-class error); humanize them
             // into an actionable Problem instead of the generic CompilationFailedException message.
             ToolResult(false, DexDiagnostics.humanize(diagnostics + "D8 dexing failed: ${t.message}"))
-        }
+        } }
+        // Draw from the process-wide in-process heap budget so concurrent dex tasks (the three scope merges run
+        // as one DAG level) don't each plan against the full app heap and over-commit on a phone — see
+        // [InProcessDexGate]. A merge (DexIndexed) has a larger working set than a per-class archive, so it draws
+        // more credits; a lone task is never throttled below its own plan, and a forked dexer never reaches here.
+        return if (mode == OutputMode.DexFilePerClassFile) InProcessDexGate.withArchivePermit(compile)
+        else InProcessDexGate.withMergePermit(compile)
     }
 }
