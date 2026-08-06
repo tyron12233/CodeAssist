@@ -171,6 +171,13 @@ interface EditorService {
     /** Quick documentation (signature + doc comment) for the symbol at [offset], or null. */
     suspend fun quickDocAt(path: String, text: String, offset: Int): UiQuickDoc? = null
 
+    /** Expand the selection `[selStart, selEnd)` to the smallest enclosing structural node — one step of a walk
+     *  UP the tolerant DOM (word → expression → statement → block → method → class …). Returns that node's
+     *  range, or null when nothing larger encloses the selection (or the backend can't parse [path]). Because it
+     *  re-derives from the passed selection, repeated calls climb the tree one level at a time. Drives the
+     *  editor's "expand selection" gesture (multi-click / triple-tap). */
+    suspend fun expandSelection(path: String, text: String, selStart: Int, selEnd: Int): UiTextRange? = null
+
     /** The renameable symbol under the caret at [offset], or null. */
     suspend fun prepareRename(path: String, text: String, offset: Int): UiRenameTarget? = null
 

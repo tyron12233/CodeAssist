@@ -153,6 +153,11 @@ internal class EditorBackend(private val ctx: BackendContext) : EditorService {
         null
     }
 
+    override suspend fun expandSelection(path: String, text: String, selStart: Int, selEnd: Int): UiTextRange? =
+        withContext(ctx.engineDispatcher) {
+            ctx.services.expandSelection(Paths.get(path), text, selStart, selEnd)
+        }?.let { UiTextRange(it.start, it.end) }
+
     override suspend fun prepareRename(path: String, text: String, offset: Int): UiRenameTarget? =
         withContext(ctx.engineDispatcher) {
             ctx.services.prepareRename(

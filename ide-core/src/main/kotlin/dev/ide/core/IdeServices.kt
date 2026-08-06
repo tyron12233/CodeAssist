@@ -2161,6 +2161,27 @@ class IdeServices private constructor(
         )
     }
 
+    /**
+     * The smallest node in [file]'s tolerant DOM that STRICTLY encloses the selection `[selStart, selEnd)` — one
+     * step of the editor's "expand selection" (a walk UP the tree). Returns that node's range, or null when
+     * [file] is outside the project, can't be parsed, or nothing larger encloses the selection. Same-range
+     * wrapper nodes are skipped so each call advances by a real structural level; because it re-derives from the
+     * passed selection, repeated invocations climb the tree one level at a time.
+     */
+    fun expandSelection(file: Path, text: String, selStart: Int, selEnd: Int): TextRange? {
+        val parsed = parse(file, text) ?: return null
+        val lo = minOf(selStart, selEnd).coerceIn(0, text.length)
+        val hi = maxOf(selStart, selEnd).coerceIn(0, text.length)
+        var node: dev.ide.lang.dom.DomNode? = parsed.nodeAt(lo)
+        while (node != null) {
+            val r = node.range
+            // Encloses the whole selection AND is strictly wider on at least one side.
+            if (r.start <= lo && r.end >= hi && (r.start < lo || r.end > hi)) return r
+            node = node.parent
+        }
+        return null
+    }
+
     // ---- analysis (diagnostics) ----
 
     private val analysisEnvironment = IdeAnalysisEnvironment()

@@ -800,7 +800,7 @@ class EditorSession(
         else setCaret(offset)
     }
 
-    /** Select the whole line containing [offset] (excluding the trailing newline) — the triple-tap gesture. */
+    /** Select the whole line containing [offset] (excluding the trailing newline). */
     fun selectLineAt(offset: Int) {
         val line = doc.lineForOffset(offset.coerceIn(0, doc.length))
         updateSelectionAndComposing(TextRange(doc.lineStart(line), doc.lineEnd(line)), null)

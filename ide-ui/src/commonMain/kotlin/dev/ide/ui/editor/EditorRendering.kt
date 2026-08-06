@@ -120,6 +120,10 @@ internal fun DrawScope.drawEditor(
     caretContent: Offset,
     handlesVisible: Boolean,
     handleColor: Color,
+    /** When non-null, draw the selection background over this `(min, max)` range instead of the live selection —
+     *  the interpolated span of an in-progress expand animation. The logical selection is already the final
+     *  range (caret/handles reflect it); this only grows the highlight. */
+    animatedSelection: Pair<Int, Int>? = null,
 ) {
     val doc = session.doc
     val sel = session.selection
@@ -260,14 +264,16 @@ internal fun DrawScope.drawEditor(
             }
         }
 
-        // selection background
-        if (!sel.collapsed) {
-            val sLine = doc.lineForOffset(sel.min)
-            val eLine = doc.lineForOffset(sel.max)
+        // selection background — an in-progress expand animation overrides the drawn range (see [animatedSelection]).
+        val selMin = (animatedSelection?.first ?: sel.min).coerceIn(0, doc.length)
+        val selMax = (animatedSelection?.second ?: sel.max).coerceIn(selMin, doc.length)
+        if (selMax > selMin) {
+            val sLine = doc.lineForOffset(selMin)
+            val eLine = doc.lineForOffset(selMax)
             for (line in max(sLine, firstVisible)..min(eLine, lastVisible)) {
                 if (foldModel.isHidden(line)) continue
-                val vStart = if (line == sLine) rawToVisual(line, sel.min - doc.lineStart(line)) else 0
-                val vEnd = if (line == eLine) rawToVisual(line, sel.max - doc.lineStart(line)) else -1
+                val vStart = if (line == sLine) rawToVisual(line, selMin - doc.lineStart(line)) else 0
+                val vEnd = if (line == eLine) rawToVisual(line, selMax - doc.lineStart(line)) else -1
                 fillRange(line, vStart, vEnd, colors.selection, trailingMarker = true) // marker = selected line break
             }
         }
