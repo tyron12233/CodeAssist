@@ -479,14 +479,22 @@ class Interpreter(
                     // The receiver evaluated to a CLASS
                     if (receiver is Class<*>) readStaticMember(receiver, binding.name)
                     else {
-                        val extOwner =
-                            (binding as? Binding.Property)?.takeIf { it.isExtension }?.ownerFqn
+                        val prop = binding as? Binding.Property
+                        val extOwner = prop?.takeIf { it.isExtension }?.ownerFqn
                         if (extOwner != null) readExtensionProperty(
                             receiver,
                             extOwner,
                             binding.name
                         )
-                        else readProperty(receiver, binding.name)
+                        else {
+                            // A value-class member property (`Size.width`, `Offset.x`): the receiver is the
+                            // UNBOXED underlying (a Long for Size), whose runtime class carries no getter — the
+                            // getter is a static `get<Name>-impl(underlying)` on the value class. Route it there
+                            // (owner from the resolver); [NotValueClassMember] falls back to the reflective read.
+                            val getter = "get" + binding.name.replaceFirstChar { if (it.isLowerCase()) it.titlecase() else it.toString() }
+                            val vc = dispatcher.invokeUnboxedValueClassMember(prop?.ownerFqn, getter, receiver, emptyList())
+                            if (vc !== NotValueClassMember) vc else readProperty(receiver, binding.name)
+                        }
                     }
                 }
             }
@@ -806,6 +814,17 @@ class Interpreter(
                 }
             }
             val right = eval(call.args.first().value, env)
+            // A value-class arithmetic operator (`Size / 2f` → `Size.div-impl`, `Offset + o`, `Dp * n`): the
+            // receiver is the UNBOXED underlying (a Long for Size/Offset, a Float for Dp), which IS a `Number`,
+            // so the primitive-arithmetic shortcut below would silently misfire (dividing the packed bits as a
+            // raw Long → garbage). Route it to the value class's static operator impl first, keyed on the owner
+            // the resolver put on the callee; [NotValueClassMember] falls through to the numeric/dispatch paths.
+            // A primitive-numeric owner is skipped so hot `Int + Int` arithmetic doesn't pay a class-load probe.
+            val opOwner = (callee as? ResolvedCallable.Library)?.ownerFqn
+            if (op in ARITHMETIC && left != null && opOwner != null && opOwner !in PRIMITIVE_NUMERIC_FQNS) {
+                val vc = dispatcher.invokeUnboxedValueClassMember(opOwner, op, left, listOf(right))
+                if (vc !== NotValueClassMember) return vc
+            }
             when {
                 op == "eq" -> return left == right
                 op == "ne" -> return left != right
@@ -3373,6 +3392,12 @@ class Interpreter(
         val ARITHMETIC = setOf("plus", "minus", "times", "div", "rem")
         val COMPARISON = setOf("lt", "le", "gt", "ge")
         val BITWISE = setOf("and", "or", "xor", "shl", "shr", "ushr")
+        /** Owners of the primitive-numeric arithmetic operators (`5 + 3`), computed as intrinsics — never a
+         *  value-class member, so the value-class operator probe skips them to keep hot arithmetic class-load-free. */
+        val PRIMITIVE_NUMERIC_FQNS = setOf(
+            "kotlin.Int", "kotlin.Long", "kotlin.Float", "kotlin.Double", "kotlin.Short", "kotlin.Byte",
+            "kotlin.Char", "kotlin.UInt", "kotlin.ULong", "kotlin.UShort", "kotlin.UByte",
+        )
         val COMPONENT = Regex("component(\\d+)")
 
         /** Common Kotlin type names → their JVM classes, for `is`/`catch` checks against reflectable values. */

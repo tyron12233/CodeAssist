@@ -331,6 +331,12 @@ class ComposeDispatcher(
         return zeroReturn(returnType)
     }
 
+    /** Value-class member (operator / property getter) dispatch — a reflective (class-loading) concern the
+     *  [fallback] [ReflectiveDispatcher] owns; delegate so `Size.div`/`Size.width` on the unboxed underlying
+     *  route to the static impl instead of hitting this dispatcher's default no-op. */
+    override fun invokeUnboxedValueClassMember(ownerFqn: String?, name: String, receiver: Any, args: List<Any?>): Any? =
+        fallback.invokeUnboxedValueClassMember(ownerFqn, name, receiver, args)
+
     /** Thread the live composer through a `@Composable` property getter (`MaterialTheme.colorScheme`,
      *  `MaterialTheme.typography`, …). Returns null when there's no composer (outside a composition) or the
      *  property isn't a composable getter — the interpreter then reads it plainly. */

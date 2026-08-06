@@ -185,6 +185,15 @@ interface Dispatcher {
      *  [ExtensionPropertyValue], or null to read it normally (reflection). Default: null (no override); only
      *  the Compose preview dispatcher supplies one. */
     fun readExtensionPropertyOverride(receiver: Any, ownerFqn: String, name: String): ExtensionPropertyValue? = null
+
+    /** Invoke a value-class MEMBER (a property getter `Size.getWidth`, an operator `Size.div`, any member) whose
+     *  [receiver] is the UNBOXED underlying the interpreter holds (a `Long` for `Size`/`Color`/`Offset`, a
+     *  `Float` for `Dp`) and whose owner the resolver named ([ownerFqn]). Such a member compiles to a static
+     *  `name-<hash>` impl on the value class taking the underlying first, so it can't be reflected as an instance
+     *  method on the raw `Long`/`Float`. Returns [NotValueClassMember] when [ownerFqn] isn't a loadable inline
+     *  value class (the caller keeps its numeric/reflective path). The default (non-reflective) dispatcher can't
+     *  load classes, so it never matches. */
+    fun invokeUnboxedValueClassMember(ownerFqn: String?, name: String, receiver: Any, args: List<Any?>): Any? = NotValueClassMember
 }
 
 /** The result of a [Dispatcher.readComposableProperty] — a box so a legitimately-`null` property value is
@@ -194,6 +203,11 @@ class ComposablePropertyValue(val value: Any?)
 /** The result of a [Dispatcher.readExtensionPropertyOverride] — a box so a legitimately-`null` override value
  *  is distinguishable from "no override" (null box). */
 class ExtensionPropertyValue(val value: Any?)
+
+/** Sentinel returned by [Dispatcher.invokeUnboxedValueClassMember] when the receiver is NOT an unboxed inline
+ *  value class of the named owner, so the caller keeps its existing path (numeric arithmetic / reflective
+ *  getter). Distinct from a matched member's legitimately-`null` result. */
+object NotValueClassMember
 
 /**
  * An interpreted lambda value. When a lambda is passed to a library function, the dispatcher wraps this in a
@@ -1074,6 +1088,33 @@ class ReflectiveDispatcher(
         if (cls.isInstance(receiver)) return null
         val isValueClass = cls.declaredMethods.any { it.name == "box-impl" && Modifier.isStatic(it.modifiers) }
         return if (isValueClass) ownerJvm else null
+    }
+
+    /**
+     * Invoke a value-class MEMBER — a property getter (`Size.getWidth`), an operator (`Size.div`), any member —
+     * whose [receiver] is the UNBOXED underlying the interpreter holds (a `Long` for `Size`/`Color`/`Offset`, a
+     * `Float` for `Dp`) and whose owner the resolver named ([ownerFqn]). Such a member compiles to a static
+     * `name-<hash>` impl on the value class taking the underlying as its first parameter (`Size.div-impl(long,
+     * float)`), so it is routed statically with the receiver prepended — exactly the [unboxedValueClassOwner]
+     * MEMBER path, reused here for the operator/property call sites the interpreter handles itself.
+     *
+     * Returns [NotValueClassMember] when [ownerFqn] isn't a loadable inline value class, or [receiver] is
+     * already a BOXED instance of it (the caller then keeps its existing path — numeric arithmetic for an
+     * operator, the reflective getter for a property). A matched member's result (possibly null) otherwise.
+     */
+    override fun invokeUnboxedValueClassMember(ownerFqn: String?, name: String, receiver: Any, args: List<Any?>): Any? {
+        // Only the UNBOXED UNDERLYING — a primitive wrapper the interpreter holds for a value class (a `Long` for
+        // `Size`/`Color`/`Offset`, a `Float` for `Dp`). This deliberately EXCLUDES an object receiver, most
+        // importantly a value class's own COMPANION (`Color.Magenta` reads `Color$Companion.getMagenta()`, whose
+        // binding owner is the value class `Color` too): routing that to `Color.getMagenta-impl(companion)` would
+        // find nothing and throw, blanking the caller. A companion isn't a primitive, so it falls through here.
+        if (receiver !is Number && receiver !is Char && receiver !is Boolean) return NotValueClassMember
+        val jvm = ownerFqn?.let { jvmName(it) } ?: return NotValueClassMember
+        val cls = loadClassOrNull(jvm) ?: return NotValueClassMember
+        if (cls.isInstance(receiver)) return NotValueClassMember
+        if (cls.declaredMethods.none { it.name == "box-impl" && Modifier.isStatic(it.modifiers) }) return NotValueClassMember
+        val all = listOf(receiver) + args
+        return invokeStatic(jvm, name, all, List(all.size) { false }, receiverCount = 1)
     }
 
     /** Whether [paramType] is an inline value class whose underlying type accepts [value] — so an unboxed
