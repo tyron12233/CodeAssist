@@ -1701,6 +1701,8 @@ class IdeServices private constructor(
             ?: LanguageLevel.JAVA_17
         val (added, updated) = GradleImport.reconcile(store, spec, level)
         store.save()
+        // Merge (not clobber) any settings-declared repositories so a manually-added one survives the sync.
+        GradleImport.writeRepositories(workspaceRoot, spec.customRepos)
         GradleImport.markCompatibilityMode(workspaceRoot, spec.report.notes)
         val message = buildString {
             append("Synced from Gradle")
@@ -1709,6 +1711,13 @@ class IdeServices private constructor(
         }
         return GradleSyncOutcome(true, message, spec.report.notes)
     }
+
+    /** Convert this compatibility-mode project to a native CodeAssist project (see [GradleImport.convertToNative]).
+     *  Pure disk operation — the model is already the source of truth, so nothing needs re-resolving. */
+    internal fun convertToNative(): GradleImport.ConvertOutcome = GradleImport.convertToNative(workspaceRoot)
+
+    /** Restore a converted project's Gradle build files and re-enter compatibility mode. */
+    internal fun revertToGradle(): GradleImport.ConvertOutcome = GradleImport.revertToGradle(workspaceRoot)
 
     fun sourceRoots(module: Module): List<Path> = module.sourceSets.flatMap { it.contentRoots }
         .filter { ContentRole.SOURCE in it.roles || ContentRole.GENERATED in it.roles }
@@ -4477,6 +4486,8 @@ class IdeServices private constructor(
             ensureSdks(store, sdk, root)
             GradleImport.populate(store, spec, languageLevel)
             store.save()
+            // Custom Maven repositories captured from settings.gradle → the format DependencyService reads.
+            GradleImport.writeRepositories(root, spec.customRepos)
             GradleImport.markCompatibilityMode(root, spec.report.notes)
             return true
         }

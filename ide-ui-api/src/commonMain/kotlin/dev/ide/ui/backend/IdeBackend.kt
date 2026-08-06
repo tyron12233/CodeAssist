@@ -1089,6 +1089,13 @@ data class UiCompatibilityInfo(val summary: String, val notes: List<String> = em
 /** The result of re-syncing a compatibility-mode project from its Gradle scripts (see [ProjectService.syncGradle]). */
 data class UiSyncResult(val ok: Boolean, val message: String, val notes: List<String> = emptyList())
 
+/**
+ * The result of converting a Gradle compatibility-mode project to a native CodeAssist project — or reverting
+ * one (see [ProjectService.convertToNative]/[ProjectService.revertToGradle]). [canRevert] is true after a
+ * successful convert (the Gradle files were backed up and can be restored).
+ */
+data class UiConvertResult(val ok: Boolean, val message: String, val canRevert: Boolean = false)
+
 /** How the project tree is shaped — a curated module view, or the raw filesystem (see [IdeBackend.fileTree]). */
 enum class TreeViewMode { Project, AllFiles }
 

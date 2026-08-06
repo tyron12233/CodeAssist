@@ -5,6 +5,7 @@ import dev.ide.model.DependencyScope
 import org.junit.jupiter.api.Test
 import java.nio.file.Files
 import java.nio.file.Path
+import kotlin.io.path.readText
 import kotlin.io.path.writeText
 import kotlin.test.assertContains
 import kotlin.test.assertEquals
@@ -306,6 +307,270 @@ class GradleImportTest {
                 assertContains(ide.moduleNames().toSet(), "lib")
                 assertTrue(ide.isCompatibilityMode(), "still flagged as compatibility mode after a sync")
             }
+        }
+    }
+
+    /** A `build-logic` precompiled convention plugin + shared `object Deps` constants: a module applying the
+     *  convention id inherits its plugins, `android {}`, and `dependencies {}`, and `Deps.x` refs resolve. */
+    @Test
+    fun mergesConventionPluginAndConstants() {
+        withTempDir("gradle-convention") { tmp ->
+            val proj = tmp.resolve("Conv")
+            fun w(rel: String, text: String) {
+                val f = proj.resolve(rel); Files.createDirectories(f.parent); f.writeText(text.trimIndent())
+            }
+            w("settings.gradle.kts", """
+                rootProject.name = "Conv"
+                include(":feature")
+            """)
+            w("build-logic/convention/src/main/kotlin/Deps.kt", """
+                object Deps {
+                    const val okhttp = "com.squareup.okhttp3:okhttp:4.12.0"
+                }
+            """)
+            w("build-logic/convention/src/main/kotlin/myapp.android.library.gradle.kts", """
+                plugins {
+                    id("com.android.library")
+                    id("org.jetbrains.kotlin.android")
+                }
+                android {
+                    compileSdk = 34
+                    defaultConfig { minSdk = 21 }
+                }
+                dependencies {
+                    implementation("androidx.core:core-ktx:1.12.0")
+                    implementation(Deps.okhttp)
+                }
+            """)
+            w("feature/build.gradle.kts", """
+                plugins {
+                    id("myapp.android.library")
+                }
+                android {
+                    namespace = "com.example.feature"
+                }
+            """)
+            w("feature/src/main/AndroidManifest.xml", """<manifest package="com.example.feature"/>""")
+
+            val spec = GradleImport.parse(proj)
+            assertNotNull(spec)
+            val feature = spec.modules.first { it.name == "feature" }
+            assertEquals(GradleImport.Kind.ANDROID_LIB, feature.kind, "com.android.library from the convention")
+            assertTrue(feature.isKotlin, "kotlin.android from the convention")
+            assertEquals("com.example.feature", feature.namespace, "module's own namespace wins")
+            assertEquals(34, feature.compileSdk, "compileSdk inherited from the convention")
+            assertEquals(21, feature.minSdk)
+            val coords = feature.mavenDeps.map { it.coordinate }.toSet()
+            assertContains(coords, "androidx.core:core-ktx:1.12.0")
+            assertContains(coords, "com.squareup.okhttp3:okhttp:4.12.0") // resolved via `object Deps` constant
+        }
+    }
+
+    /** An imperative `Plugin<Project>` convention (registered via `gradlePlugin`) can't be read, so the Android
+     *  kind is inferred from the module's manifest/res and a note is recorded rather than silently dropping it. */
+    @Test
+    fun infersAndroidKindWhenConventionUnreadable() {
+        withTempDir("gradle-imperative") { tmp ->
+            val proj = tmp.resolve("Imp")
+            fun w(rel: String, text: String) {
+                val f = proj.resolve(rel); Files.createDirectories(f.parent); f.writeText(text.trimIndent())
+            }
+            w("settings.gradle.kts", """
+                rootProject.name = "Imp"
+                include(":app")
+            """)
+            w("build-logic/convention/build.gradle.kts", """
+                gradlePlugin {
+                    plugins {
+                        register("androidApp") {
+                            id = "myapp.android.application"
+                            implementationClass = "AndroidApplicationConventionPlugin"
+                        }
+                    }
+                }
+            """)
+            w("app/build.gradle.kts", """
+                plugins {
+                    id("myapp.android.application")
+                }
+            """)
+            w("app/src/main/AndroidManifest.xml", """
+                <manifest package="com.example.imp">
+                    <application>
+                        <activity android:name=".Main">
+                            <intent-filter>
+                                <action android:name="android.intent.action.MAIN"/>
+                            </intent-filter>
+                        </activity>
+                    </application>
+                </manifest>
+            """)
+
+            val spec = GradleImport.parse(proj)
+            assertNotNull(spec)
+            val app = spec.modules.first { it.name == "app" }
+            assertEquals(GradleImport.Kind.ANDROID_APP, app.kind, "inferred from the manifest launcher activity")
+            assertTrue(
+                spec.report.notes.any { "myapp.android.application" in it || "convention plugin" in it },
+                "the unreadable convention plugin is noted",
+            )
+        }
+    }
+
+    /** Custom Maven repositories from settings are captured to `.platform/repositories.txt`, and a re-sync
+     *  merges (never clobbers) a repo the user added through the Repositories manager. */
+    @Test
+    fun capturesAndMergesSettingsRepositories() {
+        withTempDir("gradle-repos") { tmp ->
+            val legacyHome = tmp.resolve("legacy")
+            val src = legacyHome.resolve("Repo")
+            fun w(rel: String, text: String) {
+                val f = src.resolve(rel); Files.createDirectories(f.parent); f.writeText(text.trimIndent())
+            }
+            w("settings.gradle.kts", """
+                rootProject.name = "Repo"
+                include(":app")
+                dependencyResolutionManagement {
+                    repositories {
+                        google()
+                        mavenCentral()
+                        maven { url = uri("https://jitpack.io") }
+                        maven("https://plugins.example.com/m2")
+                    }
+                }
+            """)
+            w("app/build.gradle.kts", """
+                plugins { id("java-library") }
+            """)
+            w("app/src/main/java/com/example/App.java", "package com.example; class App {}")
+
+            // Parser captures both custom repos (defaults skipped).
+            val spec = GradleImport.parse(src)
+            assertNotNull(spec)
+            assertEquals(
+                setOf("https://jitpack.io", "https://plugins.example.com/m2"),
+                spec.customRepos.map { it.url }.toSet(),
+            )
+
+            val manager = ProjectManager.desktop(tmp.resolve("projects"), legacyDataDirs = listOf(legacyHome))
+            assertEquals(1, manager.importLegacyProjects())
+            val dest = Path.of(manager.list().first().rootPath)
+            val reposFile = dest.resolve(".platform/repositories.txt")
+            assertTrue(Files.exists(reposFile), "repositories.txt written at import")
+            assertTrue(reposFile.readText().contains("https://jitpack.io"))
+
+            // Simulate a user-added repo, then re-sync: both survive (merge, not clobber).
+            reposFile.writeText(reposFile.readText() + "MyCorp\thttps://repo.mycorp.com/m2\n")
+            manager.open(dest.toString()).use { ide -> assertTrue(ide.syncGradleFromScripts().ok) }
+            val after = reposFile.readText()
+            assertTrue(after.contains("https://repo.mycorp.com/m2"), "manually-added repo preserved across re-sync")
+            assertTrue(after.contains("https://jitpack.io"))
+        }
+    }
+
+    /** The richer `android {}` fields flow onto the ModuleSpec; an unmodeled feature is noted, not silent. */
+    @Test
+    fun parsesRicherAndroidConfig() {
+        withTempDir("gradle-rich") { tmp ->
+            val proj = tmp.resolve("Rich")
+            fun w(rel: String, text: String) {
+                val f = proj.resolve(rel); Files.createDirectories(f.parent); f.writeText(text.trimIndent())
+            }
+            w("settings.gradle.kts", "rootProject.name = \"Rich\"\ninclude(\":app\")")
+            w("app/build.gradle.kts", """
+                plugins {
+                    id("com.android.application")
+                    id("org.jetbrains.kotlin.android")
+                    id("kotlin-parcelize")
+                }
+                android {
+                    namespace = "com.example.rich"
+                    compileSdk = 34
+                    defaultConfig {
+                        minSdk = 24
+                        versionCode = 7
+                        versionName = "1.2.3"
+                        buildConfigField("String", "API_URL", "\"https://x\"")
+                    }
+                    buildTypes {
+                        release {
+                            isMinifyEnabled = true
+                            proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
+                            applicationIdSuffix = ".prod"
+                        }
+                        debug {
+                            isDebuggable = true
+                            versionNameSuffix = "-dev"
+                        }
+                    }
+                    buildFeatures {
+                        viewBinding = true
+                    }
+                }
+            """)
+            w("app/src/main/AndroidManifest.xml", """<manifest package="com.example.rich"/>""")
+
+            val spec = GradleImport.parse(proj)
+            assertNotNull(spec)
+            val app = spec.modules.first { it.name == "app" }
+            assertEquals(7, app.versionCode)
+            assertEquals("1.2.3", app.versionName)
+            assertTrue(app.viewBinding, "buildFeatures { viewBinding = true }")
+            assertTrue(app.parcelize, "kotlin-parcelize plugin")
+            val release = app.buildTypes.first { it.name == "release" }
+            assertTrue(release.minifyEnabled)
+            assertEquals(".prod", release.applicationIdSuffix)
+            assertContains(release.proguardFiles, "proguard-android-optimize.txt")
+            assertContains(release.proguardFiles, "proguard-rules.pro")
+            val debug = app.buildTypes.first { it.name == "debug" }
+            assertEquals(true, debug.debuggable)
+            assertEquals("-dev", debug.versionNameSuffix)
+            assertTrue(spec.report.notes.any { "buildConfigField" in it }, "unmodeled buildConfigField noted")
+        }
+    }
+
+    /** Convert moves the Gradle files to a backup dir, drops the compat marker, and keeps the native model;
+     *  revert restores them and re-enters compatibility mode. */
+    @Test
+    fun convertToNativeAndRevert() {
+        withTempDir("gradle-convert") { tmp ->
+            val legacyHome = tmp.resolve("legacy")
+            writeLegacyGradleProject(legacyHome.resolve("MyApp"))
+            val manager = ProjectManager.desktop(tmp.resolve("projects"), legacyDataDirs = listOf(legacyHome))
+            assertEquals(1, manager.importLegacyProjects())
+            val dest = Path.of(manager.list().first().rootPath)
+
+            manager.open(dest.toString()).use { ide ->
+                assertTrue(ide.isCompatibilityMode())
+                val outcome = ide.convertToNative()
+                assertTrue(outcome.ok, outcome.message)
+                assertTrue(outcome.canRevert)
+                assertFalse(ide.isCompatibilityMode(), "marker dropped after convert")
+            }
+
+            // Scripts moved to the backup; the module + workspace model is intact.
+            assertFalse(Files.exists(dest.resolve("settings.gradle")), "root settings moved out")
+            assertFalse(Files.exists(dest.resolve("app/build.gradle")), "module script moved out")
+            assertTrue(Files.exists(dest.resolve(".platform/gradle-backup/settings.gradle")), "backed up")
+            assertTrue(Files.exists(dest.resolve(".platform/gradle-backup/app/build.gradle")), "backed up (nested)")
+            assertTrue(Files.exists(dest.resolve(".platform/workspace.json")), "native model kept")
+            assertTrue(Files.exists(dest.resolve("app/module.toml")), "module.toml kept")
+            assertTrue(
+                Files.exists(dest.resolve("app/src/main/java/com/example/myapp/MainActivity.java")),
+                "sources untouched",
+            )
+            assertFalse(GradleImport.isGradleProject(dest), "no longer looks like a Gradle project")
+
+            // It still opens as a native project.
+            manager.open(dest.toString()).use { ide ->
+                assertEquals(setOf("app", "core"), ide.moduleNames().toSet())
+                // Revert restores the scripts and compatibility mode.
+                assertTrue(ide.revertToGradle().ok)
+                assertTrue(ide.isCompatibilityMode(), "compatibility mode restored")
+            }
+            assertTrue(Files.exists(dest.resolve("settings.gradle")), "root settings restored")
+            assertTrue(Files.exists(dest.resolve("app/build.gradle")), "module script restored")
+            assertFalse(Files.exists(dest.resolve(".platform/gradle-backup")), "backup dir removed after revert")
         }
     }
 }

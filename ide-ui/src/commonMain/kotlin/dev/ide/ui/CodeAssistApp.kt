@@ -177,6 +177,10 @@ fun CodeAssistApp(
     val importGradleFailedMsg = stringResource(Res.string.import_gradle_failed)
     // True while a picked Gradle folder is being copied + imported (a blocking, non-cancellable operation).
     var importBusy by remember { mutableStateOf(false) }
+    // The import-time "compatibility mode vs convert" chooser (shown after the folder pick request), and a
+    // one-shot carried into the freshly-opened editor's state when Convert was chosen.
+    var showImportModeChoice by remember { mutableStateOf(false) }
+    var pendingGradleConvert by remember { mutableStateOf(false) }
     val scope = rememberCoroutineScope()
 
     // Session resume across a process kill: the project that was on screen last run (captured up-front, before
@@ -188,13 +192,36 @@ fun CodeAssistApp(
     val reopenLast = remember { backend.settings.preference(REOPEN_LAST_PROJECT_PREF)?.toBooleanStrictOrNull() != false }
     var lastPersistedProject by remember { mutableStateOf("") }
 
+    // Pick a Gradle folder and import it (always in compatibility mode first). When [convert] was chosen at the
+    // mode prompt, flag the freshly-opened editor to run the convert flow once it's up (see EditorCenter).
+    val runGradleImport: (Boolean) -> Unit = { convert ->
+        doImportGradle(
+            fileActions = fileActions,
+            scope = scope,
+            onBusy = { importBusy = true },
+            import = { p -> backend.projects.importGradleProject(p) },
+        ) { result ->
+            importBusy = false
+            when {
+                result == null -> {} // cancelled — stay on the picker
+                result.success -> { if (convert) pendingGradleConvert = true; screen = Screen.Editor }
+                else -> importError = result.message.ifBlank { importGradleFailedMsg }
+            }
+        }
+    }
+
     // Create a project backup zip and hand it to the host's share/save sheet.
     val backupAndShare: suspend () -> Unit =
         { backend.projects.backupProjects()?.let { fileActions.share(it) } }
 
     // The active project changes (create/open) bump the epoch; re-key per-project state on it.
     val epoch by backend.projects.projectEpoch.collectAsState()
-    val state = remember(backend, epoch) { IdeUiState(backend, composePreviewHost) }
+    val state = remember(backend, epoch) {
+        IdeUiState(backend, composePreviewHost, initialGradleConvertPrompt = pendingGradleConvert)
+    }
+    // Clear the one-shot after it's been baked into the (re-created) state, so navigating back to a project
+    // later never re-triggers the convert prompt.
+    LaunchedEffect(state) { if (pendingGradleConvert) pendingGradleConvert = false }
     // Cancel the state's async file-read scope when it's replaced (project/backend change) or leaves composition,
     // so a slow read for an abandoned project can't resolve against the new one.
     DisposableEffect(state) { onDispose { state.dispose() } }
@@ -418,21 +445,7 @@ fun CodeAssistApp(
                                                 }
                                             }
                                         }) else null,
-                                        onImportGradle = if (fileActions.canPickDirectory) ({
-                                            doImportGradle(
-                                                fileActions = fileActions,
-                                                scope = scope,
-                                                onBusy = { importBusy = true },
-                                                import = { p -> backend.projects.importGradleProject(p) },
-                                            ) { result ->
-                                                importBusy = false
-                                                when {
-                                                    result == null -> {} // cancelled — stay on the picker
-                                                    result.success -> screen = Screen.Editor
-                                                    else -> importError = result.message.ifBlank { importGradleFailedMsg }
-                                                }
-                                            }
-                                        }) else null,
+                                        onImportGradle = if (fileActions.canPickDirectory) ({ showImportModeChoice = true }) else null,
                                         onExportProject = if (fileActions.canShare || fileActions.canExport || fileActions.canReveal) ({ p -> exportTarget = p; screen = Screen.ExportProject }) else null,
                                         onBackup = { scope.launch { backupAndShare() } },
                                         onOpenHub = { hubReturn = Screen.Projects; screen = Screen.Hub },
@@ -717,6 +730,12 @@ fun CodeAssistApp(
                 importError = importError,
                 onDismissImportError = { importError = null },
                 importBusy = importBusy,
+            )
+            dev.ide.ui.screens.GradleImportModeDialog(
+                visible = showImportModeChoice,
+                onCompat = { showImportModeChoice = false; runGradleImport(false) },
+                onConvert = { showImportModeChoice = false; runGradleImport(true) },
+                onDismiss = { showImportModeChoice = false },
             )
         }
         }

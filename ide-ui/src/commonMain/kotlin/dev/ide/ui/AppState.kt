@@ -158,7 +158,14 @@ class IdeUiState(
     // state mutations and the JVM `Dispatchers.IO` pool for the blocking disk read.
     mainDispatcher: CoroutineDispatcher = Dispatchers.Main,
     private val ioDispatcher: CoroutineDispatcher = platformIoDispatcher,
+    initialGradleConvertPrompt: Boolean = false,
 ) {
+    /**
+     * One-shot: the project was just imported with "Convert to CodeAssist project" chosen at the picker, so
+     * the editor should open the convert-confirmation dialog once. Consumed (set false) by `EditorCenter` on
+     * first show. Held here (not a param through EditorScreen) so it rides the per-project state rebuild.
+     */
+    var pendingGradleConvertPrompt by mutableStateOf(initialGradleConvertPrompt)
     /** Which shape the file tree takes — curated Project view vs the raw All-Files view (IntelliJ-style). */
     var treeMode by mutableStateOf(TreeViewMode.Project)
         private set

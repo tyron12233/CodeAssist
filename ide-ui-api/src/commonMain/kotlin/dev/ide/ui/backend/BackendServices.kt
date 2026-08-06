@@ -635,6 +635,17 @@ interface ProjectService {
     suspend fun syncGradle(): UiSyncResult = UiSyncResult(false, "Not a Gradle project")
 
     /**
+     * Convert the open Gradle compatibility-mode project to a native CodeAssist project: the leftover Gradle
+     * build files are MOVED to a backup folder and the compatibility marker is dropped, so `module.toml`
+     * becomes the sole source of truth (Re-sync no longer applies). The model is unchanged — no re-resolve or
+     * re-index needed. No-op returning `ok = false` when the project isn't a compatibility-mode import.
+     */
+    suspend fun convertToNative(): UiConvertResult = UiConvertResult(false, "Not a Gradle project")
+
+    /** Undo a [convertToNative]: restore the backed-up Gradle build files and re-enter compatibility mode. */
+    suspend fun revertToGradle(): UiConvertResult = UiConvertResult(false, "Nothing to revert")
+
+    /**
      * Import the Gradle project at [sourceRootPath] into a new native workspace under the projects root and
      * open it in compatibility mode (bumps [projectEpoch]). Returns a failure result when the folder isn't an
      * importable Gradle project or no project manager is available.
