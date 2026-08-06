@@ -3052,8 +3052,10 @@ internal class KotlinSemanticChecks(private val service: KotlinSymbolService) {
         if (resolver.localTypesInScope(off).containsKey(name)) return null // a local `class Foo` / `object O` in scope
         // In scope (imported / same-package / default / builtin / star-imported) → resolves; don't flag. A
         // DIFFERENT-package project type needs an import too (resolveTypeName resolves a project SOURCE type bare
-        // only when same-package), so an unimported same-module type is flagged (with an "Import" quick-fix).
-        val resolved = service.resolveTypeName(name, ctx)
+        // only when same-package), so an unimported same-module type is flagged (with an "Import" quick-fix). The
+        // ENCLOSING class is passed so a member/return typed as a NESTED class of it (`pending: Plan?` inside
+        // `class Game { private class Plan }`) resolves by simple name instead of being falsely flagged.
+        val resolved = service.resolveTypeName(name, ctx, resolver.enclosingClassFqn(off))
         if (resolved != null && service.isKnownType(resolved)) return null
         val r = ref.textRange
         return Diagnostic(TextRange(r.startOffset, r.endOffset), Severity.ERROR, "Unresolved reference: $name", KotlinDiagnosticCodes.UNRESOLVED)

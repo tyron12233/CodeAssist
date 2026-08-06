@@ -397,7 +397,16 @@ class ReflectiveDispatcher(
             // SUPER is resolved by the interpreter (source super → the supertype body; binary super → no-op), so
             // it normally never reaches here; if it does, the only sound thing is a plain instance invocation.
             DispatchKind.MEMBER, DispatchKind.OPERATOR, DispatchKind.INVOKE, DispatchKind.SUPER -> {
-                val target = receiver ?: throw InterpreterException("instance call `${callee.displayName}` has no receiver")
+                // The three operations Kotlin's `Any?` extensions define on a NULL receiver — `null.toString()` is
+                // "null", `null.hashCode()` is 0, `null.equals(x)` is `x == null`. A real instance method can't be
+                // called on null, so a null receiver here is always one of these (or a genuine NPE in the program).
+                if (receiver == null) return when {
+                    callee.displayName == "toString" && args.isEmpty() -> "null"
+                    callee.displayName == "hashCode" && args.isEmpty() -> 0
+                    callee.displayName == "equals" && args.size == 1 -> args[0] == null
+                    else -> throw InterpreterException("instance call `${callee.displayName}` has no receiver")
+                }
+                val target = receiver
                 // A value-class member (`Color.copy(alpha = …)`, `Dp.coerceIn(…)`): the receiver is the UNBOXED
                 // underlying value (a `Long` for `Color`), and the member compiles to a STATIC `name-<hash>` on
                 // the value class taking that value as its first parameter — NOT an instance method on the
@@ -1421,6 +1430,13 @@ class ReflectiveDispatcher(
             "kotlin.collections.Map" to "java.util.Map",
             "kotlin.collections.MutableMap" to "java.util.LinkedHashMap",
             "kotlin.collections.Set" to "java.util.Set",
+            // The concrete-collection typealiases (`kotlin/collections/TypeAliases.kt`) → their java.util impls,
+            // so a `HashMap<K,V>()` / `ArrayList<T>()` constructor call loads a real class instead of the aliasFQN.
+            "kotlin.collections.ArrayList" to "java.util.ArrayList",
+            "kotlin.collections.HashMap" to "java.util.HashMap",
+            "kotlin.collections.LinkedHashMap" to "java.util.LinkedHashMap",
+            "kotlin.collections.HashSet" to "java.util.HashSet",
+            "kotlin.collections.LinkedHashSet" to "java.util.LinkedHashSet",
             "kotlin.text.StringBuilder" to "java.lang.StringBuilder",
             // Common exception aliases (Kotlin declares these as typealiases to the java.lang types), so a
             // `throw IllegalArgumentException(...)` constructs the real JVM exception.

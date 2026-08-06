@@ -293,4 +293,26 @@ class KotlinUnresolvedTypeTest {
             "a package-segment receiver must not be flagged; got $diags",
         )
     }
+
+    @Test
+    fun nestedClassTypeReferencedBySimpleNameInEnclosingClassIsNotFlagged() {
+        // A member/return typed as a PRIVATE NESTED class referenced by SIMPLE name from within the enclosing
+        // class body (`private var pending: Plan?`, `fun make(): Plan`) must resolve — not be flagged unresolved.
+        // (Regression for the 2048 app: `Plan` marked "Unresolved reference" in the editor while the preview ran.)
+        val code = """
+            package com.example
+            class Game {
+                private var pending: Plan? = null
+                private class Plan(val n: Int)
+                fun make(): Plan = Plan(1)
+            }
+        """.trimIndent()
+        // Seed the same file into the source model (as a saved file would be), so the nested `Game.Plan` FQN is
+        // known — the editor resolves the simple `Plan` against the enclosing class.
+        val diags = diagnose("Game.kt", code, seed = mapOf("Game.kt" to code))
+        assertTrue(
+            diags.none { it.code == "kt.unresolved" && it.message.contains("Plan") },
+            "a nested class referenced by simple name in its enclosing class must not be flagged unresolved; got $diags",
+        )
+    }
 }

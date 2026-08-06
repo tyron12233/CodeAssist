@@ -654,36 +654,64 @@ class ComposeDispatcher(
     // and compose that destination's content lambda directly, keyed by the route TYPE the call-site type
     // argument carries (`composable<Home> { }` → key `Home`). No serializers, no real graph — the visible result.
 
-    /** A NavHost builder's collected `composable<T> { content }` registrations: route type FQN → content lambda. */
-    private class NavGraphCollector { val destinations = LinkedHashMap<String, InterpretedLambda>() }
+    /** A NavHost builder's collected destinations: route (a `composable<T>` type-arg FQN, or a `composable("route")`
+     *  string) → content lambda. [graphStart] records a nested `navigation(startDestination, route) { }` graph's
+     *  route → its start destination, so a start pointing at a graph resolves through to that graph's start. */
+    private class NavGraphCollector {
+        val destinations = LinkedHashMap<String, InterpretedLambda>()
+        val graphStart = LinkedHashMap<String, String>()
+    }
 
-    /** The active collector while a NavHost builder lambda runs, so a `composable<T>` inside it registers here. */
+    /** The active collector while a NavHost builder lambda runs, so a `composable`/`navigation` inside it registers here. */
     @Volatile private var navCollector: NavGraphCollector? = null
 
     /**
      * Intercept a Navigation-Compose call, or return [NOT_NAV] to dispatch it normally. `rememberNavController`
      * yields an opaque placeholder (only [renderNavHost] reads a NavHost's args, and it ignores the controller);
-     * `composable<T>` registers on the active collector; `NavHost` runs the builder then composes the start
-     * destination.
+     * `composable`/`dialog` register a destination on the active collector; `navigation` runs a nested graph's
+     * builder (flattening its destinations); `NavHost` runs the builder then composes the start destination.
+     * Intercepting the builder DSL is ALSO what keeps a nav-builder call from reaching the real
+     * `NavGraphBuilder` reflectively — our collector isn't one, so a fallen-through call (`composable("route"){}`,
+     * `navigation{}`) crashes with `no method getProvider() on …NavGraphCollector`.
      */
     private fun handleNavCall(call: RNode.Call, callee: ResolvedCallable.Library, composer: Any?, receiver: Any?, args: List<Any?>): Any? {
         val owner = callee.ownerFqn ?: return NOT_NAV
         if (!owner.startsWith("androidx.navigation")) return NOT_NAV
         return when (callee.methodName) {
             "rememberNavController" -> NAV_CONTROLLER_STUB
-            "composable" -> registerNavDestination(call, args)
+            "composable", "dialog" -> registerNavDestination(call, args)
+            "navigation" -> registerNavGraph(call, callee, args)
             "NavHost" -> if (composer != null) renderNavHost(call, callee, composer, args) else NOT_NAV
             else -> NOT_NAV
         }
     }
 
-    /** Register a `composable<T> { content }` on the active collector, keyed by T's FQN (from the call-site type
-     *  argument). [NOT_NAV] when it isn't inside a NavHost builder (no active collector) or carries no type arg. */
+    /** Register a `composable<T> { content }` / `composable("route") { content }` (or a `dialog`) on the active
+     *  collector, keyed by the route TYPE argument's FQN when present, else the string route (first String arg).
+     *  [NOT_NAV] when not inside a NavHost/navigation builder, or no route/content is present. */
     private fun registerNavDestination(call: RNode.Call, args: List<Any?>): Any? {
         val collector = navCollector ?: return NOT_NAV
-        val routeFqn = call.typeArguments.firstOrNull()?.fqn ?: return NOT_NAV
         val content = args.lastOrNull { it is InterpretedLambda } as? InterpretedLambda ?: return NOT_NAV
-        collector.destinations[routeFqn] = content
+        val route = call.typeArguments.firstOrNull()?.fqn
+            ?: args.firstOrNull { it is String } as? String ?: return NOT_NAV
+        collector.destinations[route] = content
+        return Unit
+    }
+
+    /** Run a nested `navigation(startDestination, route) { builder }` (string or typed) into the SAME collector so
+     *  its destinations register flat, and record `route → startDestination` (when both are string routes) so a
+     *  start pointing at the graph resolves through. [NOT_NAV] outside an active builder or with no builder lambda. */
+    private fun registerNavGraph(call: RNode.Call, callee: ResolvedCallable.Library, args: List<Any?>): Any? {
+        val collector = navCollector ?: return NOT_NAV
+        val builder = args.lastOrNull { it is InterpretedLambda } as? InterpretedLambda ?: return NOT_NAV
+        val ordered = reorderNamedArgs(callee.paramNames, call.args, args)
+        val strings = ordered.filterIsInstance<String>()
+        fun namedString(name: String): String? =
+            callee.paramNames.indexOf(name).let { if (it >= 0) ordered.getOrNull(it) else null } as? String
+        val start = namedString("startDestination") ?: strings.getOrNull(0)
+        val route = namedString("route") ?: strings.getOrNull(1)
+        if (route != null && start != null) collector.graphStart[route] = start
+        builder.invoke(listOf(collector)) // nested composable/navigation calls register on `collector`
         return Unit
     }
 
@@ -713,11 +741,18 @@ class ComposeDispatcher(
         }
     }
 
-    /** The content lambda for [start]'s route, matched against [collector] by route FQN then simple name. */
+    /** The content lambda for [start]'s route, matched against [collector] by route FQN/string then simple name.
+     *  A start that names a nested GRAPH (not a leaf destination) resolves through its start destination (bounded
+     *  against a cycle), so `NavHost(startDestination = "home") { navigation(route="home", start="feed"){…} }`
+     *  shows the `feed` screen. */
     private fun matchDestination(start: Any?, collector: NavGraphCollector): InterpretedLambda? {
-        val fqn = routeFqnOf(start) ?: return null
-        collector.destinations[fqn]?.let { return it }
-        val simple = fqn.substringAfterLast('.')
+        var route = routeFqnOf(start) ?: return null
+        val visited = HashSet<String>()
+        while (route !in collector.destinations && route in collector.graphStart && visited.add(route)) {
+            route = collector.graphStart.getValue(route)
+        }
+        collector.destinations[route]?.let { return it }
+        val simple = route.substringAfterLast('.')
         return collector.destinations.entries.firstOrNull { it.key.substringAfterLast('.') == simple }?.value
     }
 

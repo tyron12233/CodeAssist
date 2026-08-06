@@ -450,6 +450,15 @@ internal fun KotlinResolver.computeCallTargets(call: KtCallExpression): List<Kot
         name,
         exactName = true
     ).filter { it.name == name && it.kind == SymbolKind.METHOD && (!it.isExtension || extensionInScope(it)) }
+    // A fully-qualified top-level call `kotlin.math.abs(x)` / `kotlinx.coroutines.flow.flowOf(…)`: the receiver is
+    // a PACKAGE (not a value/type — `memberReceiverOf` was null and the in-scope lookup above missed, since the
+    // name isn't imported). Resolve the top-level function by its package FQN. Purely additive: only fires for a
+    // qualified call that otherwise resolves to nothing, and matches only a real function in that exact package.
+    if (q != null && q.selectorExpression === call) {
+        packageDottedPath(q.receiverExpression)?.let { pkg ->
+            out += service.topLevelByName(name).filter { it.kind == SymbolKind.METHOD && it.packageName == pkg }
+        }
+    }
     // A capitalized callee is a constructor call (`Foo(…)`): its parameters come from the type's constructors.
     if (name.firstOrNull()?.isUpperCase() == true) {
         service.resolveTypeName(name, fileContext)?.let { fqn ->
@@ -463,6 +472,19 @@ internal fun KotlinResolver.computeCallTargets(call: KtCallExpression): List<Kot
         }
     }
     return out
+}
+
+/** The dotted name path of a pure package/qualifier receiver (`kotlin.math` → "kotlin.math"), or null when [expr]
+ *  is anything other than a chain of name references (a call, indexing, literal, `this`, …). Used to resolve a
+ *  fully-qualified top-level call by its package. */
+private fun packageDottedPath(expr: org.jetbrains.kotlin.psi.KtExpression): String? = when (expr) {
+    is KtNameReferenceExpression -> expr.getReferencedName()
+    is KtQualifiedExpression -> {
+        val recv = packageDottedPath(expr.receiverExpression) ?: return null
+        val sel = (expr.selectorExpression as? KtNameReferenceExpression)?.getReferencedName() ?: return null
+        "$recv.$sel"
+    }
+    else -> null
 }
 
 internal fun KotlinResolver.sourceCtorSymbol(

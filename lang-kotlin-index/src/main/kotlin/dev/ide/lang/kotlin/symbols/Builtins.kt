@@ -139,6 +139,33 @@ object Builtins {
         "kotlin.collections.LinkedHashMap" to listOf(
             "kotlin.collections.MutableMap", "kotlin.collections.Map", "kotlin.Any",
         ),
+        // The SAME chains keyed by the JAVA fqn the concrete-collection typealiases EXPAND to (`hashMapOf()`
+        // returns `HashMap<K,V>` = `java.util.HashMap`, not the kotlin alias — and `kotlinTypeFor` intentionally
+        // doesn't fold a java.util type back). Without these, a `val m = hashMapOf(...)` typed `java.util.HashMap`
+        // has no walkable supertypes standalone (the JDK isn't indexed), so `m.put`/`m.getOrPut` find no
+        // candidates — while `mutableMapOf()` (typed `MutableMap`) resolves. This ADDS supertypes only; it does
+        // not fold the type identity (JAVA_TO_KOTLIN stays as-is), so a bytecode java.util.HashMap keeps its shape.
+        "java.util.ArrayList" to listOf(
+            "kotlin.collections.MutableList", "kotlin.collections.List",
+            "kotlin.collections.MutableCollection", "kotlin.collections.Collection",
+            "kotlin.collections.MutableIterable", "kotlin.collections.Iterable", "kotlin.Any",
+        ),
+        "java.util.HashMap" to listOf(
+            "kotlin.collections.MutableMap", "kotlin.collections.Map", "kotlin.Any",
+        ),
+        "java.util.LinkedHashMap" to listOf(
+            "kotlin.collections.MutableMap", "kotlin.collections.Map", "kotlin.Any",
+        ),
+        "java.util.HashSet" to listOf(
+            "kotlin.collections.MutableSet", "kotlin.collections.Set",
+            "kotlin.collections.MutableCollection", "kotlin.collections.Collection",
+            "kotlin.collections.MutableIterable", "kotlin.collections.Iterable", "kotlin.Any",
+        ),
+        "java.util.LinkedHashSet" to listOf(
+            "kotlin.collections.MutableSet", "kotlin.collections.Set",
+            "kotlin.collections.MutableCollection", "kotlin.collections.Collection",
+            "kotlin.collections.MutableIterable", "kotlin.collections.Iterable", "kotlin.Any",
+        ),
         "kotlin.Comparator" to listOf("kotlin.Any"),
         // The StringBuilder/StringBuffer typealiases (see KOTLIN_TO_JAVA): a CharSequence, so CharSequence
         // extensions (and Any's scope functions) walk up from it in dumb mode / standalone.

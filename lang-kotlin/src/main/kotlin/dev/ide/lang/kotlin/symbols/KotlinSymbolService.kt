@@ -695,22 +695,42 @@ class KotlinSymbolService(
         KotlinType(fqn, args, nullable, this)
 
     /** Resolve a (possibly generic / nullable / qualified) type TEXT to a [KotlinType]. */
-    fun typeFromText(text: String?, ctx: FileContext?): KotlinType? {
+    fun typeFromText(text: String?, ctx: FileContext?, enclosingClassFqn: String? = null): KotlinType? {
         if (text.isNullOrBlank()) return null
         val trimmed = text.trim()
         // A function type (`(A) -> B`, `T.() -> R`, `suspend (…) -> …`, `@Composable (…) -> …`) maps to a
         // `kotlin.FunctionN` carrying the extension-receiver / composable flags — so a content-lambda parameter
         // (`Row(content: RowScope.() -> Unit)`) establishes its implicit `this` receiver during resolution.
-        functionTypeFromText(trimmed, ctx)?.let { return it }
+        functionTypeFromText(trimmed, ctx, enclosingClassFqn)?.let { return it }
         val nullable = trimmed.endsWith("?")
         val core = trimmed.removeSuffix("?").trim()
         val head = core.substringBefore('<').trim()
         val argText = core.substringAfter('<', "").substringBeforeLast('>', "")
-        val fqn = resolveTypeName(head, ctx) ?: return null
+        // Expand a NON-generic project typealias applied WITHOUT type arguments (`Board = List<Tile>`, used as
+        // `Board`) to its target type, so member/extension resolution runs on the REAL type (`plan.settled: Board`
+        // → `List<Tile>`, and `.any { }` / `it.value` resolve). A generic alias, or one applied with args, is left
+        // to normal resolution (no unsound substitution). The target is resolved in the ALIAS's own file context
+        // (its imports/package), and [aliasExpandDepth] bounds a cyclic/deep alias chain.
+        if (argText.isBlank() && aliasExpandDepth.get() < ALIAS_EXPAND_LIMIT) {
+            model().typeAliasBySimpleName[head]?.takeIf { it.typeParamCount == 0 && it.targetText.isNotBlank() }?.let { alias ->
+                aliasExpandDepth.set(aliasExpandDepth.get() + 1)
+                try {
+                    typeFromText(alias.targetText, alias.ctx)?.let { return if (nullable) it.withNullable(true) else it }
+                } finally {
+                    aliasExpandDepth.set(aliasExpandDepth.get() - 1)
+                }
+            }
+        }
+        val fqn = resolveTypeName(head, ctx, enclosingClassFqn) ?: return null
         val args = if (argText.isBlank()) emptyList()
-        else splitTopLevel(argText).mapNotNull { typeFromText(it, ctx) }
+        else splitTopLevel(argText).mapNotNull { typeFromText(it, ctx, enclosingClassFqn) }
         return KotlinType(fqn, args, nullable, this)
     }
+
+    /** Re-entrancy depth for project-typealias expansion in [typeFromText] — bounds a cyclic/deeply-chained
+     *  alias so resolution can't recurse forever (a cyclic alias is invalid Kotlin, but the buffer may be mid-edit). */
+    private val aliasExpandDepth = ThreadLocal.withInitial { 0 }
+    private val ALIAS_EXPAND_LIMIT = 8
 
     /**
      * Parse a Kotlin function type from source text into a `kotlin.FunctionN` (the shape resolution expects).
@@ -718,7 +738,7 @@ class KotlinSymbolService(
      * receiver (`Receiver.(params) -> R`, possibly generic), value parameters, the result type, and an outer
      * `?`. Returns null when [text] is not a function type, so the caller falls through to plain-type parsing.
      */
-    private fun functionTypeFromText(text: String, ctx: FileContext?): KotlinType? {
+    private fun functionTypeFromText(text: String, ctx: FileContext?, enclosingClassFqn: String? = null): KotlinType? {
         var s = text.trim()
         val nullable =
             s.endsWith("?") && s.startsWith("(") // only a fully-parenthesized `(…)?` is a nullable fn type
@@ -753,12 +773,13 @@ class KotlinSymbolService(
             if (paramsInner.isBlank()) emptyList() else splitTopLevelParens(paramsInner).mapNotNull {
                 typeFromText(
                     it,
-                    ctx
+                    ctx,
+                    enclosingClassFqn,
                 )
             }
-        val returnType = typeFromText(returnText, ctx) ?: return null
+        val returnType = typeFromText(returnText, ctx, enclosingClassFqn) ?: return null
         val isExtension = receiverText.isNotEmpty()
-        val receiverType = if (isExtension) typeFromText(receiverText, ctx) else null
+        val receiverType = if (isExtension) typeFromText(receiverText, ctx, enclosingClassFqn) else null
         if (isExtension && receiverType == null) return null
         val arity = (if (isExtension) 1 else 0) + params.size
         val fqn = "kotlin." + (if (suspend) "SuspendFunction" else "Function") + arity
@@ -854,7 +875,7 @@ class KotlinSymbolService(
      * package stays unresolved (the diagnostic flags the missing import) and completion offers no members on it —
      * resolving it would only surface members the code can't call until the import is added.
      */
-    fun resolveTypeName(name: String, ctx: FileContext?): String? {
+    fun resolveTypeName(name: String, ctx: FileContext?, enclosingClassFqn: String? = null): String? {
         val simple = name.trim().removeSuffix("?").substringBefore('<').trim()
         if (simple.isEmpty()) return null
         if ('.' in simple) {
@@ -919,6 +940,17 @@ class KotlinSymbolService(
             if (typeShape(cand) != null) return cand
         }
         // 7. An explicit import whose target is not a known type and that nothing local shadowed: return its FQN
+        // 7a. A NESTED type reached by SIMPLE name from within an enclosing class (`Plan` inside `class Game {
+        //    private class Plan }`, or a sibling nested type). Walk up the enclosing chain trying `<owner>.<simple>`,
+        //    so a member typed as the nested class (`var pending: Plan?`) resolves instead of staying unresolved.
+        if (enclosingClassFqn != null) {
+            var owner: String? = enclosingClassFqn
+            while (!owner.isNullOrEmpty()) {
+                val cand = "$owner.$simple"
+                if (cand in model().classByFqn || typeShape(cand) != null) return cand
+                owner = owner.substringBeforeLast('.', "").ifEmpty { null }
+            }
+        }
         //    so the unresolved-type/import diagnostic still points at the intended name (the pre-fix behaviour
         //    for the no-conflict case — a genuinely missing import with no same-named local declaration).
         explicitImportFqn?.let { return it }
@@ -1174,6 +1206,16 @@ class KotlinSymbolService(
                 visited,
                 synthesizeBeanProps = !it.isKotlin && !fqn.startsWith("kotlin.")
             )
+        }
+        // A concrete mapped collection (`java.util.HashMap`/`ArrayList`/…) with no loadable shape — the JDK isn't
+        // indexed yet (dumb mode) or at all (standalone). Fall back to its built-in supertype chain so its members
+        // (`MutableMap.put`, `MutableList.add`, …) still resolve, exactly as the interface forms already do, rather
+        // than reporting a bogus unresolved-member. The shared `visited` set dedups the closure to each type once,
+        // and `typeArgs` bind through (`HashMap<K,V>` → `MutableMap<K,V>`). On-device this block is skipped (the
+        // platform shape resolves above); it only covers the no-shape case.
+        Builtins.builtinSupertypes(fqn).takeIf { it.isNotEmpty() }?.let { supers ->
+            val inherited = supers.flatMap { ownAndInherited(it, typeArgs, visited) }
+            if (inherited.isNotEmpty()) return inherited
         }
         // Cross-language: a same-project Java SOURCE class (no .class, no metadata). Its members come LIVE from
         // an open editor buffer when the host serves one (so an unsaved Java edit is visible), else the
@@ -2854,13 +2896,15 @@ class KotlinSymbolService(
         // a member type that references the class's `T` must be a type parameter so a `Box<String>` receiver can
         // bind it (see [ownAndInherited]'s source-class substitution). The callable's own params win on a clash.
         val tps = (rc.typeParameterNames + ownerTypeParams).toHashSet()
+        // Resolve the member's types with [ownerFqn] as the enclosing class, so a member typed as a NESTED class of
+        // the owner (`var pending: Plan?` inside `class Game { private class Plan }`) resolves by simple name.
         val type = markTypeParameters(
-            typeFromText(rc.returnText, rc.ctx)
+            typeFromText(rc.returnText, rc.ctx, ownerFqn)
                 ?: inferInitializerType(rc.initializerText)
                 ?: inferReturnFromBody(rc, ownerFqn),
             tps,
         )
-        val receiverFqn = rc.receiverText?.let { resolveTypeName(it, rc.ctx) }
+        val receiverFqn = rc.receiverText?.let { resolveTypeName(it, rc.ctx, ownerFqn) }
         val sig = if (rc.isFunction) {
             "(" + rc.paramTexts.joinToString(", ") { (n, t) -> "$n: ${t ?: "?"}" } + ")" +
                     (rc.returnText?.let { ": $it" } ?: "")
@@ -2894,7 +2938,7 @@ class KotlinSymbolService(
             else emptyList(),
             paramTypes = if (rc.isFunction) rc.paramTexts.map { (_, t) ->
                 markTypeParameters(
-                    typeFromText(t, rc.ctx),
+                    typeFromText(t, rc.ctx, ownerFqn),
                     tps
                 )
             } else emptyList(),

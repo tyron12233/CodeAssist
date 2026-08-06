@@ -151,6 +151,70 @@ class SourceClassTest {
         assertEquals(true, runProgram(code, "main/0", emptyList()))
     }
 
+    // Enum entries are in scope UNQUALIFIED inside the enum's own body — `this == Small`, a `when` branch, a
+    // companion/member method returning `Medium`. (Regression for the Jetsnack Glance previews' "in Companion:
+    // unresolved name Small/Medium/Large".)
+    @Test fun bareEnumEntryReferenceInsideEnumBody() {
+        val code = """
+            enum class Size {
+                Small, Medium, Large;
+                fun isSmall(): Boolean { return this == Small }
+                fun rank(): Int { return when (this) { Small -> 1; Medium -> 2; Large -> 3 } }
+            }
+            fun main(): Int { return (if (Size.Small.isSmall()) 100 else 0) + Size.Large.rank() }
+        """.trimIndent()
+        assertEquals(103, runProgram(code, "main/0", emptyList()))
+    }
+
+    // A member typed as a PRIVATE NESTED class referenced by SIMPLE name (`private var pending: Plan?` inside
+    // `class Game { private class Plan }`) must resolve — otherwise reading it gives an untyped value and a
+    // downstream `plan.settled.any { }` fails candidates=0. (Regression for the 2048 preview: `Plan` unresolved.)
+    @Test fun nestedClassReferencedBySimpleNameInMemberType() {
+        val code = """
+            data class Tile(val value: Int)
+            class Game {
+                private var pending: Plan? = null
+                private class Plan(val settled: List<Tile>, val gained: Int)
+                fun make(): Plan = Plan(listOf(Tile(2), Tile(2048)), 4)
+                fun endMove(): Boolean {
+                    pending = make()
+                    val p = pending ?: return false
+                    return p.settled.any { it.value >= 2048 }
+                }
+            }
+            fun main(): Boolean = Game().endMove()
+        """.trimIndent()
+        assertEquals(true, runProgram(code, "main/0", emptyList()))
+    }
+
+    // A value typed as a project typealias for a collection (`Board = List<Tile>`) must resolve stdlib
+    // extensions (`any`/`map`/…) AND the element type on the ALIASED type — the alias is expanded during type
+    // resolution. (Regression for the 2048 preview's "in Game2048State: unresolved/ambiguous call `any`".)
+    @Test fun typealiasReceiverResolvesCollectionExtensionsAndElementType() {
+        val code = """
+            data class Tile(val value: Int)
+            typealias Board = List<Tile>
+            data class MovePlan(val settled: Board, val gained: Int)
+            fun main(): Boolean {
+                val plan = MovePlan(listOf(Tile(2), Tile(2048)), 4)
+                return plan.settled.any { it.value >= 2048 }
+            }
+        """.trimIndent()
+        assertEquals(true, runProgram(code, "main/0", emptyList()))
+    }
+
+    @Test fun bareEnumEntryFromEnumsOwnCompanion() {
+        // The companion is nested INSIDE the enum, so the enum's entries are in scope unqualified within it.
+        val code = """
+            enum class Kind {
+                Alpha, Beta;
+                companion object { fun first(): Kind { return Alpha } }
+            }
+            fun main(): String { return Kind.first().name }
+        """.trimIndent()
+        assertEquals("Alpha", runProgram(code, "main/0", emptyList()))
+    }
+
     @Test fun indexedAssignmentThroughSetOperator() {
         // `cells[i] = v` lowers to the `set` operator (the write mirror of the `get` used by `at`).
         val code = """

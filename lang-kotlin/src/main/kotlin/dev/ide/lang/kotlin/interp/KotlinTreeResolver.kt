@@ -1080,7 +1080,39 @@ class KotlinTreeResolver(
         if (typeFqn != null && runCatching { service.isKnownType(typeFqn) }.getOrDefault(false)) {
             return RNode.Name(Binding.ObjectRef(typeFqn, name), span(e))
         }
+        // A bare ENUM ENTRY referenced from inside the enum's own body (`this == Small`, `when (x) { Small -> }`,
+        // a companion/member method returning `Medium`): the entries are in scope unqualified within the enum
+        // class. Resolve it like the qualified `EnumFqn.entry` — a read of the static entry member off the enum
+        // type reference. (Jetsnack's Glance widgets hit this: "in Companion: unresolved name Small/Medium/Large".)
+        for (ctx in classStack.asReversed()) {
+            // The enclosing enum is either this context itself or, inside the enum's own `companion object`
+            // (fqn `<Enum>.Companion`), the parent — whose entries are still in scope unqualified. `fileClasses`
+            // is keyed by SIMPLE name, so match the entry whose fqn is the candidate's.
+            for (enumFqn in listOf(ctx.fqn, ctx.fqn.removeSuffix(".Companion")).distinct()) {
+                val info = fileClasses[enumFqn.substringAfterLast('.')]?.takeIf { it.fqn == enumFqn }
+                if (info != null && info.flavor == ClassFlavor.ENUM && name in info.enumEntryNames) {
+                    val enumRef = RNode.Name(Binding.ObjectRef(enumFqn, info.simpleName), span(e))
+                    return RNode.PropertyGet(enumRef, Binding.Property(name, enumFqn, backingField = false), span(e))
+                }
+            }
+        }
         return unsupported("unresolved name `$name`", e)
+    }
+
+    /** Whether [expr] is a PACKAGE qualifier (`kotlin.math`, `kotlinx.coroutines.flow`) — a pure chain of name
+     *  references that is neither a value (no inferred type) nor a type reference. The receiver of a
+     *  fully-qualified top-level call. */
+    private fun isPackageReceiver(expr: KtExpression): Boolean {
+        if (!isDottedNameChain(expr)) return false
+        if (runCatching { resolver.inferType(expr) }.getOrNull() != null) return false
+        return !runCatching { resolver.isTypeReceiver(expr) }.getOrDefault(false)
+    }
+
+    private fun isDottedNameChain(expr: KtExpression): Boolean = when (expr) {
+        is KtNameReferenceExpression -> true
+        is KtDotQualifiedExpression ->
+            expr.selectorExpression is KtNameReferenceExpression && isDottedNameChain(expr.receiverExpression)
+        else -> false
     }
 
     private fun qualifiedNode(e: KtDotQualifiedExpression): RNode {
@@ -1100,6 +1132,16 @@ class KotlinTreeResolver(
         // nothing), and a nested type is misread as a property on the OUTER type's companion
         // (`LineHeightStyle.Alignment` -> "no readable property Alignment on LineHeightStyle$Companion").
         typeOrObjectRef(e)?.let { return it }
+        // A fully-qualified TOP-LEVEL function call (`kotlin.math.abs(x)`, `kotlinx.coroutines.delay(200)`): the
+        // receiver is a PACKAGE, so lowering it as a value fails with "unresolved name `kotlin`". Route the call
+        // to the top-level path — `chooseCallee` resolves the function by its package FQN (see the FQN branch in
+        // `computeCallTargets`). Gated to a package receiver (not a value/type), so `obj.foo()` / `Type.staticFoo()`
+        // still lower normally, and only when the function actually resolves (else fall through to the located error).
+        (sel0 as? KtCallExpression)?.let { sel ->
+            if (isPackageReceiver(recvExpr) && runCatching { chooseCallee(sel) }.getOrNull() != null) {
+                return callNode(sel, receiverNode = null, receiverExpr = null)
+            }
+        }
         val receiver = lower(e.receiverExpression)
         if (receiver is RNode.Unsupported) return receiver
         return when (val sel = e.selectorExpression) {
@@ -2348,16 +2390,31 @@ class KotlinTreeResolver(
      *  [name] on [call] — from `kotlinx.coroutines` (delay/yield/withContext/…) or `androidx.compose.runtime`
      *  (withFrameNanos/withFrameMillis) — or null when none matches (so a same-named user function isn't
      *  canonicalized to the interpreter intrinsic). Any such prefixed owner makes the interpreter's gate fire. */
-    private fun coroutineIntrinsicOwner(call: KtCallExpression, name: String): String? =
-        runCatching { resolver.callTargets(call) }.getOrDefault(emptyList()).firstNotNullOfOrNull { s ->
+    private fun coroutineIntrinsicOwner(call: KtCallExpression, name: String): String? {
+        val intrinsicPkgs = listOf("kotlinx.coroutines", "androidx.compose.runtime")
+        val targets = runCatching { resolver.callTargets(call) }.getOrDefault(emptyList())
+        targets.firstNotNullOfOrNull { s ->
             if (s.name != name) return@firstNotNullOfOrNull null
-            val pkgs = listOf("kotlinx.coroutines", "androidx.compose.runtime")
             when {
-                pkgs.any { s.declaringClassFqn?.startsWith(it) == true } -> s.declaringClassFqn
-                s.packageName in pkgs -> s.packageName
+                intrinsicPkgs.any { s.declaringClassFqn?.startsWith(it) == true } -> s.declaringClassFqn
+                s.packageName in intrinsicPkgs -> s.packageName
                 else -> null
             }
+        }?.let { return it }
+        // Fallback for a not-yet-indexed classpath. `callTargets` can't enumerate `delay` until the coroutines jar
+        // is indexed, so a `delay(200)` in a preview fails as `candidates=0` while the workspace index is still
+        // partial (a common first-open / finished-but-partial state). An EXPLICIT or star import of the name from a
+        // coroutine/frame package proves intent — a user function named `delay` wouldn't be imported from
+        // kotlinx.coroutines — so canonicalize on the import when resolution found NOTHING (only then, so a
+        // genuinely-resolved same-named user function is never hijacked).
+        if (targets.isNotEmpty()) return null
+        return intrinsicPkgs.firstOrNull { pkg ->
+            ktFile.importDirectives.any { imp ->
+                val fq = imp.importedFqName?.asString()
+                fq == "$pkg.$name" || (imp.isAllUnder && fq == pkg)
+            }
         }
+    }
 
     /** Whether [call] (named [name]) is a genuine `kotlinx.coroutines.flow` `collect`/`collectLatest` — a
      *  candidate whose package or declaring facade is in the flow package. Gates canonicalizing the flow-collect
@@ -2770,7 +2827,8 @@ class KotlinTreeResolver(
         for (argName in named) {
             val id = argName.asName.identifier
             if (id in known) continue
-            diagnostics += LoweringDiagnostic("Cannot find a parameter with this name: $id", span(argName.referenceExpression))
+            val at = span(argName.referenceExpression)
+            diagnostics += LoweringDiagnostic("Cannot find a parameter with this name: $id (at ${ktFile.name}:${lineColOf(at.start)})", at)
         }
     }
 
@@ -2779,12 +2837,36 @@ class KotlinTreeResolver(
 
     private fun unsupported(reason: String, e: PsiElement): RNode.Unsupported {
         val span = span(e)
-        diagnostics += LoweringDiagnostic(reason, span)
-        return RNode.Unsupported(reason, e.text.take(80), span)
+        // Attach the source location so a preview error is LOCATABLE — the reason flows unchanged to both the
+        // lowering diagnostics and the runtime `Unsupported` throw, so the user sees "… at File.kt:42:9" instead
+        // of a bare "unresolved call `toSet`". Computed here (the lowerer has the PSI/text); the offset already
+        // rides on the span for callers that want to jump to it.
+        val located = "$reason (at ${ktFile.name}:${lineColOf(span.start)})"
+        diagnostics += LoweringDiagnostic(located, span)
+        return RNode.Unsupported(located, e.text.take(80), span)
     }
 
     private fun emptyBlock(e: PsiElement) = RNode.Block(emptyList(), isExpression = false, span(e))
     private fun span(e: PsiElement): SourceSpan = SourceSpan(e.textRange.startOffset, e.textRange.endOffset)
+
+    /** The full file text, for [lineColOf] — read once (diagnostics are rare, but a large file's text needn't be
+     *  re-fetched per gap). */
+    private val fileText: String by lazy { ktFile.text }
+
+    /** `line:column` (both 1-based) of a source [offset] in [fileText] — the human-locatable position of a
+     *  lowering gap, so a preview error points at the exact construct. `?` if the offset is out of range. */
+    private fun lineColOf(offset: Int): String {
+        val text = fileText
+        if (offset < 0 || offset > text.length) return "?"
+        var line = 1
+        var col = 1
+        var i = 0
+        while (i < offset) {
+            if (text[i] == '\n') { line++; col = 1 } else col++
+            i++
+        }
+        return "$line:$col"
+    }
 
     /** The source start offset of the lowering unit (function / property / class) currently being lowered —
      *  the base for EDIT-STABLE call-site keys. */

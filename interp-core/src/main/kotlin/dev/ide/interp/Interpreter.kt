@@ -1310,6 +1310,7 @@ class Interpreter(
             is Sequence<*> -> recv.forEach(block)
             is Map<*, *> -> recv.entries.forEach(block)
             is Array<*> -> recv.forEach(block)
+            is CharSequence -> recv.forEach { block(it) } // `String`/CharSequence iterate their Chars
             is IntArray -> recv.forEach { block(it) }
             is LongArray -> recv.forEach { block(it) }
             is DoubleArray -> recv.forEach { block(it) }
@@ -1319,6 +1320,31 @@ class Interpreter(
             is CharArray -> recv.forEach { block(it) }
             is BooleanArray -> recv.forEach { block(it) }
             else -> throw InterpreterException("`forEach` receiver is not iterable (${recv::class.simpleName})")
+        }
+    }
+
+    /** Natural (`compareTo`) ordering with the stdlib's null-handling (`null` sorts first), for the comparator
+     *  factories (`compareBy`/`compareByDescending`/…) — mirrors `kotlin.comparisons.compareValues`. */
+    private fun naturalCompare(a: Any?, b: Any?): Int {
+        if (a === b) return 0
+        if (a == null) return -1
+        if (b == null) return 1
+        @Suppress("UNCHECKED_CAST")
+        return (a as Comparable<Any?>).compareTo(b)
+    }
+
+    /** The elements of an iterable-like receiver (Iterable/Sequence/Map-entries/Array/primitive array/CharSequence)
+     *  as a List, or null when [recv] isn't one — so an aggregate intrinsic (`sumOf`/`maxOf`/…) that can't handle
+     *  the receiver falls through to reflection rather than guessing. Mirrors [forEachElement]'s element supply. */
+    private fun elementListOrNull(recv: Any?): List<Any?>? {
+        if (recv == null) return null
+        return when (recv) {
+            is Iterable<*>, is Sequence<*>, is Map<*, *>, is CharSequence,
+            is Array<*>, is IntArray, is LongArray, is DoubleArray, is FloatArray,
+            is ShortArray, is ByteArray, is CharArray, is BooleanArray -> {
+                val out = ArrayList<Any?>(); forEachElement(recv) { out.add(it) }; out
+            }
+            else -> null
         }
     }
 
@@ -1559,38 +1585,84 @@ class Interpreter(
             name == "with" && call.dispatch == DispatchKind.TOP_LEVEL && args.size == 2 ->
                 Handled(lambda(args[1].value).invoke(listOf(eval(args[0].value, env))))
             // `xs.sumOf { selector }` / `xs.sum()` — @InlineOnly (no JVM method); sum the (selected) elements,
-            // preserving Int/Long/Double as Kotlin does. `withIndex()`/ranges are Iterable, so all flow through.
+            // preserving Int/Long/Double as Kotlin does. Works over any iterable-like receiver (list/array/
+            // sequence/`withIndex()`/ranges), so `IntArray.sumOf { }` flows through too.
             name == "sumOf" && call.dispatch == DispatchKind.EXTENSION && args.size == 1 -> {
-                val elems = (receiver() as? Iterable<*>) ?: return null
+                val elems = elementListOrNull(receiver()) ?: return null
                 val sel = lambda(args[0].value)
                 Handled(numericSum(elems.map { sel.invoke(listOf(it)) }))
             }
 
             name == "sum" && call.dispatch == DispatchKind.EXTENSION && args.isEmpty() ->
-                (receiver() as? Iterable<*>)?.let { Handled(numericSum(it.toList())) }
-            // `xs.maxOf/minOf { selector }` — the max/min of the selected Comparable values.
-            (name == "maxOf" || name == "minOf") && call.dispatch == DispatchKind.EXTENSION && args.size == 1 -> {
-                val elems = (receiver() as? Iterable<*>)?.toList() ?: return null
-                if (elems.isEmpty()) throw InterpreterException("`$name` on an empty collection")
+                elementListOrNull(receiver())?.let { Handled(numericSum(it)) }
+            // `xs.maxOf/minOf { selector }` — the max/min of the selected Comparable values (throws on empty).
+            // `maxOfOrNull`/`minOfOrNull` are the null-on-empty variants.
+            (name == "maxOf" || name == "minOf" || name == "maxOfOrNull" || name == "minOfOrNull") &&
+                call.dispatch == DispatchKind.EXTENSION && args.size == 1 -> {
+                val elems = elementListOrNull(receiver()) ?: return null
+                val orNull = name.endsWith("OrNull")
+                if (elems.isEmpty())
+                    if (orNull) return Handled(null) else throw InterpreterException("`$name` on an empty collection")
                 val sel = lambda(args[0].value)
-                Handled(
-                    reduceByComparison(
-                        elems.map { sel.invoke(listOf(it)) },
-                        wantMax = name == "maxOf"
-                    )
-                )
+                Handled(reduceByComparison(elems.map { sel.invoke(listOf(it)) }, wantMax = name.startsWith("maxOf")))
             }
-            // `list.getOrElse(index) { default }` — the element, or the lambda's result (given the index) when out of bounds.
+            // `xs.maxOfWith/minOfWith(comparator) { selector }` (+ their `OrNull` variants) — the max/min selected
+            // value BY the supplied Comparator, rather than by natural ordering. @InlineOnly.
+            (name == "maxOfWith" || name == "minOfWith" || name == "maxOfWithOrNull" || name == "minOfWithOrNull") &&
+                call.dispatch == DispatchKind.EXTENSION && args.size == 2 -> {
+                val elems = elementListOrNull(receiver()) ?: return null
+                val orNull = name.endsWith("OrNull")
+                if (elems.isEmpty())
+                    if (orNull) return Handled(null) else throw InterpreterException("`$name` on an empty collection")
+                @Suppress("UNCHECKED_CAST")
+                val comparator = eval(args[0].value, env) as? Comparator<Any?>
+                    ?: throw InterpreterException("`$name` requires a Comparator argument")
+                val sel = lambda(args[1].value)
+                val selected = elems.map { sel.invoke(listOf(it)) }
+                val wantMax = name.startsWith("maxOf")
+                var acc = selected[0]
+                for (i in 1 until selected.size) {
+                    val cmp = comparator.compare(acc, selected[i])
+                    if (if (wantMax) cmp < 0 else cmp > 0) acc = selected[i]
+                }
+                Handled(acc)
+            }
+            // `xs.flatMapIndexed { index, element -> iterable }` — @InlineOnly; concatenate the per-element
+            // iterables the transform produces, passing each element's index.
+            name == "flatMapIndexed" && call.dispatch == DispatchKind.EXTENSION && args.size == 1 -> {
+                val transform = lambda(args[0].value)
+                val budget = LoopBudget()
+                val out = ArrayList<Any?>()
+                var i = 0
+                forEachElement(receiver()) { element ->
+                    forEachElement(transform.invoke(listOf(i++, element))) { out.add(it) }
+                    guardLoop(budget)
+                }
+                Handled(out)
+            }
+            // `list.getOrElse(index) { default }` — the element, or the lambda's result (given the index) when out
+            // of bounds; `map.getOrElse(key) { default }` — the value, or the (no-arg) lambda's result. Both
+            // @InlineOnly (list on CollectionsKt, map on MapsKt), null-based for the map (`get(key) ?: default()`).
             name == "getOrElse" && call.dispatch == DispatchKind.EXTENSION && args.size == 2 -> {
-                val list = receiver() as? List<*> ?: return null
-                val idx = (eval(args[0].value, env) as? Number)?.toInt() ?: return null
-                Handled(
-                    if (idx in list.indices) list[idx] else lambda(args[1].value).invoke(
-                        listOf(
-                            idx
-                        )
-                    )
-                )
+                when (val recv = receiver()) {
+                    is Map<*, *> -> {
+                        @Suppress("UNCHECKED_CAST") val m = recv as Map<Any?, Any?>
+                        Handled(m[eval(args[0].value, env)] ?: lambda(args[1].value).invoke(emptyList()))
+                    }
+                    is List<*> -> {
+                        val idx = (eval(args[0].value, env) as? Number)?.toInt() ?: return null
+                        Handled(if (idx in recv.indices) recv[idx] else lambda(args[1].value).invoke(listOf(idx)))
+                    }
+                    else -> null
+                }
+            }
+            // `map.getOrPut(key) { default }` — @InlineOnly (MapsKt); returns the value, or computes + stores the
+            // default and returns it. Null-based like the stdlib (`get(key) ?: default().also { put }`).
+            name == "getOrPut" && call.dispatch == DispatchKind.EXTENSION && args.size == 2 -> {
+                @Suppress("UNCHECKED_CAST")
+                val m = (receiver() as? MutableMap<Any?, Any?>) ?: return null
+                val key = eval(args[0].value, env)
+                Handled(m[key] ?: lambda(args[1].value).invoke(emptyList()).also { m[key] = it })
             }
             // `s.uppercase()` / `s.lowercase()` — @InlineOnly one-liners over the receiver CharSequence.
             (name == "uppercase" || name == "lowercase") && call.dispatch == DispatchKind.EXTENSION && args.isEmpty() ->
@@ -1765,6 +1837,23 @@ class Interpreter(
                     )
                 )
             }
+            // `xs.find { predicate }` / `findLast { predicate }` — @InlineOnly (they delegate to
+            // `firstOrNull`/`lastOrNull` with the predicate, so no JVM method is emitted). `find` yields the FIRST
+            // matching element (stopping early), `findLast` the LAST; both null when nothing matches.
+            (name == "find" || name == "findLast") && call.dispatch == DispatchKind.EXTENSION && args.size == 1 -> {
+                val predicate = lambda(args[0].value)
+                val budget = LoopBudget()
+                var found: Any? = null
+                var done = false // `find` stops at the first hit; `findLast` keeps the last
+                forEachElement(receiver()) { element ->
+                    if (!done && predicate.invoke(listOf(element)) == true) {
+                        found = element
+                        if (name == "find") done = true
+                    }
+                    guardLoop(budget)
+                }
+                Handled(found)
+            }
             // `xs.firstNotNullOf { transform }` / `firstNotNullOfOrNull { }` — the first non-null transform result;
             // @InlineOnly. `firstNotNullOf` throws when none is found, the `OrNull` variant yields null.
             (name == "firstNotNullOf" || name == "firstNotNullOfOrNull") && call.dispatch == DispatchKind.EXTENSION && args.size == 1 -> {
@@ -1783,6 +1872,32 @@ class Interpreter(
                 if (found == null && name == "firstNotNullOf")
                     throw NoSuchElementException("No element of the collection was transformed to a non-null value.")
                 Handled(found)
+            }
+            // `compareBy { selector }` / `compareByDescending { selector }` — build a real `Comparator` from the
+            // selector. @InlineOnly (the single-selector forms; the vararg `compareBy(...)` has a JVM method and
+            // reflects). `descending` swaps the operands. The comparator is a real object handed to `sortedWith`/
+            // `maxWith`/etc., which dispatch reflectively over it.
+            (name == "compareBy" || name == "compareByDescending") && call.dispatch == DispatchKind.TOP_LEVEL && args.size == 1 -> {
+                val sel = lambda(args[0].value)
+                val desc = name == "compareByDescending"
+                Handled(Comparator<Any?> { a, b ->
+                    if (desc) naturalCompare(sel.invoke(listOf(b)), sel.invoke(listOf(a)))
+                    else naturalCompare(sel.invoke(listOf(a)), sel.invoke(listOf(b)))
+                })
+            }
+            // `comparator.thenBy { selector }` / `thenByDescending { }` — @InlineOnly extensions that chain a
+            // secondary ordering: use the receiver comparator first, break ties by the (natural/descending) selector.
+            (name == "thenBy" || name == "thenByDescending") && call.dispatch == DispatchKind.EXTENSION && args.size == 1 -> {
+                @Suppress("UNCHECKED_CAST")
+                val base = (receiver() as? Comparator<Any?>) ?: return null
+                val sel = lambda(args[0].value)
+                val desc = name == "thenByDescending"
+                Handled(Comparator<Any?> { a, b ->
+                    val primary = base.compare(a, b)
+                    if (primary != 0) primary
+                    else if (desc) naturalCompare(sel.invoke(listOf(b)), sel.invoke(listOf(a)))
+                    else naturalCompare(sel.invoke(listOf(a)), sel.invoke(listOf(b)))
+                })
             }
 
             else -> null
@@ -3293,6 +3408,14 @@ class Interpreter(
         val INLINE_INTRINSIC_FACADES = setOf(
             "kotlin.StandardKt", "kotlin.text.StringsKt", "kotlin.collections.CollectionsKt",
             "kotlin.collections.MapsKt", // MutableMap `+=`/`-=` (plusAssign/minusAssign) are @InlineOnly here
+            // Arrays carry the SAME @InlineOnly HOFs (`find`/`sumOf`/`flatMapIndexed`/…) on their own facade; the
+            // intrinsics dispatch by receiver shape ([forEachElement]/[elementListOrNull]), so an array receiver is
+            // handled identically to a list. (NOT `SequencesKt`: a sequence can be lazy/infinite, and these
+            // intrinsics force it eagerly — modeling that would need lazy-aware handling, so it's left to reflect.)
+            "kotlin.collections.ArraysKt",
+            // Comparator factories `compareBy`/`compareByDescending`/`thenBy`/`thenByDescending` (single-selector
+            // forms) are @InlineOnly here — built into real `Comparator`s by the intrinsics.
+            "kotlin.comparisons.ComparisonsKt",
             "kotlinx.coroutines.DelayKt",
             // The precondition family (`require`/`check`/`error`/`requireNotNull`/`checkNotNull`) — @InlineOnly
             // (they carry contracts), so no JVM method exists to reflect. `TODO` lives on `StandardKt` above.
