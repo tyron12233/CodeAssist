@@ -152,12 +152,24 @@ internal fun KotlinResolver.computeCallee(call: KtCallExpression): KotlinSymbol?
     // trailing slot (an uncertain/generic/unresolved slot never over-filters), so a call never fails to resolve.
     val viable = candidates.filter { trailingLambdaSlotIsFunctional(it, call) }.ifEmpty { candidates }
     val exact = viable.filter { it.paramTypes.size == argCount }
-    if (exact.isNotEmpty()) return bestOverload(exact, call, receiverType)
     val moreParams =
         viable.filter { it.paramTypes.isNotEmpty() && it.paramTypes.size > argCount }
-    if (moreParams.isNotEmpty()) return bestOverload(moreParams, call, receiverType)
     val fewerParams =
         viable.filter { it.paramTypes.isNotEmpty() && it.paramTypes.size < argCount }
+    if (exact.isNotEmpty()) {
+        // Normally the exact-arity tier wins. But if EVERY exact-arity candidate is INAPPLICABLE (its parameter
+        // types contradict the arguments) while a defaulted/vararg overload one tier down IS applicable, that
+        // lower overload is the real target: `Animatable(0.4f)` must pick `Animatable(Float, Float = …)` (2
+        // params, one defaulted) over the exact-arity `Animatable(Color)` — a Float argument can't be a Color.
+        // Only pay the applicability probe when such a lower-tier alternative exists, so the common
+        // single-arity-tier resolution keeps its fast path (bestOverload already filters within a tier).
+        if ((moreParams.isNotEmpty() || fewerParams.isNotEmpty()) && exact.none { isApplicable(it, call, receiverType) }) {
+            (moreParams + fewerParams).filter { isApplicable(it, call, receiverType) }
+                .ifEmpty { null }?.let { return bestOverload(it, call, receiverType) }
+        }
+        return bestOverload(exact, call, receiverType)
+    }
+    if (moreParams.isNotEmpty()) return bestOverload(moreParams, call, receiverType)
     if (fewerParams.isNotEmpty()) return bestOverload(fewerParams, call, receiverType)
     return viable.firstOrNull()
 }

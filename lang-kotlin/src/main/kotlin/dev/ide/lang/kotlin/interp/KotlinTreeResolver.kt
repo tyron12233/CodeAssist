@@ -2478,9 +2478,20 @@ class KotlinTreeResolver(
                 .ifEmpty { candidates.filter { it.paramTypes.size >= argCount } }
                 .ifEmpty { candidates }
         } else {
-            candidates.filter { it.paramTypes.size == argCount || it.paramNames.size == argCount || acceptsVararg(it) }
-                .ifEmpty { candidates.filter { it.paramTypes.isEmpty() && argCount == 0 } }
-                .ifEmpty { candidates }
+            val exactArity = candidates.filter { it.paramTypes.size == argCount || it.paramNames.size == argCount || acceptsVararg(it) }
+            // Normally an exact-arity candidate wins. But if NO exact-arity candidate accepts the arguments while
+            // a DEFAULTED overload with more params does, that overload is the real target: `Animatable(0.4f)`
+            // must reach `Animatable(Float, Float = …)` (2 params, one defaulted) — the only exact-arity candidate
+            // `Animatable(Color)` can't take a Float. Add such defaulted-more-params overloads (required params
+            // satisfied) only in that case, so the common exact-arity resolution is unchanged; the type/required
+            // tie-break below then discards the non-binding exact candidate. Falls back so a call never fails.
+            if (exactArity.none { argsBindable(it, valueArgs, exact = false) }) {
+                (exactArity + candidates.filter { it.paramTypes.size > argCount && requiredParamsSatisfied(it, valueArgs) })
+                    .ifEmpty { candidates.filter { it.paramTypes.isEmpty() && argCount == 0 } }
+                    .ifEmpty { candidates }
+            } else {
+                exactArity
+            }
         }
         if (byArity.size == 1) return byArity.single()
         // Tie-break by argument types: keep candidates whose params accept the (inferred) argument types,
