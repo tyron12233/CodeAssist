@@ -256,6 +256,8 @@ We never collect your code, file or project names, which features you use, or an
     <!-- buildc (BuildConsole/BuildDock) — uses StringResource fields on LogLevelFilter + statusTag -->
     <string name="buildc_build">Build</string>
     <string name="buildc_collapse">Collapse</string>
+    <string name="buildc_fullscreen">Full screen</string>
+    <string name="buildc_exit_fullscreen">Exit full screen</string>
     <string name="buildc_status_idle">Idle</string>
     <string name="buildc_status_running">Running…</string>
     <string name="buildc_status_succeeded">Succeeded</string>

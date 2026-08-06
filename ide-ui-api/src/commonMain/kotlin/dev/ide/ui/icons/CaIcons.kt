@@ -61,6 +61,10 @@ object CaIcons {
     val chevronLeft = build("chevron-left", s("M15 6l-6 6 6 6"))
     val chevronDown = build("chevron-down", s("M6 9l6 6 6-6"))
     val chevronUp = build("chevron-up", s("M6 15l6-6 6 6"))
+    /** Fullscreen / expand: opposite corner brackets (top-left + bottom-right). */
+    val expand = build("expand", s("M10 4H4v6"), s("M14 20h6v-6"))
+    /** Exit fullscreen / collapse: opposite corner brackets pointing inward. */
+    val collapse = build("collapse", s("M4 10h6V4"), s("M20 14h-6v6"))
     val caretRight = build("caret-right", f("M10 7l5 5-5 5z"))
     val caretDown = build("caret-down", f("M7 10l5 5 5-5z"))
     val close = build("close", s("M6 6l12 12M18 6L6 18"))

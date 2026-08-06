@@ -37,6 +37,7 @@ import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
+import androidx.compose.material3.Surface
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -54,6 +55,8 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.window.Dialog
+import androidx.compose.ui.window.DialogProperties
 import androidx.compose.ui.platform.ClipEntry
 import androidx.compose.ui.platform.LocalClipboard
 import androidx.compose.ui.platform.LocalClipboardManager
@@ -98,6 +101,8 @@ import dev.ide.ui.generated.resources.buildc_tab_problems
 import dev.ide.ui.generated.resources.buildc_tab_log
 import dev.ide.ui.generated.resources.buildc_tab_steps
 import dev.ide.ui.generated.resources.buildc_tab_logcat
+import dev.ide.ui.generated.resources.buildc_exit_fullscreen
+import dev.ide.ui.generated.resources.buildc_fullscreen
 import dev.ide.ui.generated.resources.buildc_logcat_empty
 import dev.ide.ui.generated.resources.buildc_logcat_connected
 import dev.ide.ui.generated.resources.buildc_logcat_waiting
@@ -1013,8 +1018,42 @@ private fun shortTask(task: String): String = task.substringAfterLast(':').ifEmp
 
 @Composable
 private fun LogcatTab(appLog: AppLogUi, onClear: () -> Unit) {
+    // Filter/search + full-screen state are hoisted so the inline view and the full-screen overlay share them
+    // (same active filter, same query, same live buffer) — toggling full-screen never loses the user's context.
     var level by remember { mutableStateOf(LogLevelFilter.All) }
     var query by remember { mutableStateOf("") }
+    var fullScreen by remember { mutableStateOf(false) }
+
+    LogcatBody(appLog, level, { level = it }, query, { query = it }, onClear, fullScreen) { fullScreen = !fullScreen }
+
+    // Full-screen overlay: the same live Logcat filling the whole window. Back / scrim tap dismisses.
+    if (fullScreen) {
+        Dialog(
+            onDismissRequest = { fullScreen = false },
+            properties = DialogProperties(usePlatformDefaultWidth = false),
+        ) {
+            Surface(Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.surface) {
+                Box(Modifier.fillMaxSize().padding(14.dp)) {
+                    LogcatBody(appLog, level, { level = it }, query, { query = it }, onClear, fullScreen = true) { fullScreen = false }
+                }
+            }
+        }
+    }
+}
+
+/** The Logcat tab body — status, search, the full-screen toggle, level filters, and the list — shared by the
+ *  inline and full-screen views (state is hoisted by [LogcatTab]). */
+@Composable
+private fun LogcatBody(
+    appLog: AppLogUi,
+    level: LogLevelFilter,
+    onLevel: (LogLevelFilter) -> Unit,
+    query: String,
+    onQuery: (String) -> Unit,
+    onClear: () -> Unit,
+    fullScreen: Boolean,
+    onToggleFullScreen: () -> Unit,
+) {
     val q = query.trim()
     val filtered = remember(appLog.lines, level, q) {
         appLog.lines.filter {
@@ -1029,7 +1068,13 @@ private fun LogcatTab(appLog: AppLogUi, onClear: () -> Unit) {
             horizontalArrangement = Arrangement.spacedBy(8.dp),
         ) {
             LogcatStatus(appLog)
-            SearchField(query, { query = it }, Modifier.weight(1f))
+            SearchField(query, onQuery, Modifier.weight(1f))
+            IconButtonCa(
+                if (fullScreen) CaIcons.collapse else CaIcons.expand,
+                stringResource(if (fullScreen) Res.string.buildc_exit_fullscreen else Res.string.buildc_fullscreen),
+                onClick = onToggleFullScreen,
+                boxSize = 30, iconSize = 16, tint = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
             IconButtonCa(
                 CaIcons.close, stringResource(Res.string.clear), onClick = onClear,
                 boxSize = 30, iconSize = 16, tint = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -1039,7 +1084,7 @@ private fun LogcatTab(appLog: AppLogUi, onClear: () -> Unit) {
             Modifier.fillMaxWidth().padding(bottom = 6.dp),
             horizontalArrangement = Arrangement.spacedBy(6.dp),
         ) {
-            LogLevelFilter.entries.forEach { f -> ConsoleChip(stringResource(f.label), f == level) { level = f } }
+            LogLevelFilter.entries.forEach { f -> ConsoleChip(stringResource(f.label), f == level) { onLevel(f) } }
         }
         Box(
             Modifier.weight(1f).fillMaxWidth()
@@ -1093,14 +1138,17 @@ private fun LogcatList(lines: List<AppLogLineUi>, connected: Boolean) {
 }
 
 /**
- * One Android-Studio-style Logcat row on a SINGLE line (no wrap): `time  PID-TID  <level chip>  tag  message`,
- * the message tinted by level. Long lines overflow to the right (the list scrolls horizontally).
+ * One Android-Studio-style Logcat row: `time  PID-TID  <level chip>  tag  message`, the message tinted by level.
+ * Long lines don't wrap — they overflow to the right (the list scrolls horizontally). A MULTI-LINE message (a
+ * forwarded crash: `FATAL EXCEPTION` + its full stack trace arrives as ONE record whose message contains `\n`)
+ * keeps every line: the message renders all its lines (still un-wrapped), and the metadata top-aligns with the
+ * first one. A normal single-line record is unchanged.
  */
 @Composable
 private fun LogcatRow(line: AppLogLineUi) {
     Row(
         Modifier.padding(start = 14.dp, top = 1.dp, bottom = 1.dp),
-        verticalAlignment = Alignment.CenterVertically,
+        verticalAlignment = Alignment.Top,
         horizontalArrangement = Arrangement.spacedBy(8.dp),
     ) {
         if (line.timeLabel.isNotEmpty()) Text(
@@ -1113,7 +1161,9 @@ private fun LogcatRow(line: AppLogLineUi) {
         if (line.tag.isNotEmpty()) Text(
             line.tag, color = MaterialTheme.colorScheme.onSurfaceVariant, style = Ide.type.codeSmall, softWrap = false, maxLines = 1,
         )
-        Text(line.message, color = logcatColor(line.level), style = Ide.type.codeSmall, softWrap = false, maxLines = 1)
+        // No maxLines cap: explicit `\n`s in a crash stack trace each render as their own line (softWrap stays
+        // off, so a single long line still overflows horizontally rather than wrapping).
+        Text(line.message, color = logcatColor(line.level), style = Ide.type.codeSmall, softWrap = false)
     }
 }
 
