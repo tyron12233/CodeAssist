@@ -2360,10 +2360,25 @@ class KotlinTreeResolver(
                     }
                 }
             } else if (receiverType == null) {
-                // The implicit `it` (harmless when unused).
+                // A receiver-LESS lambda with no explicit params: the implicit `it` (harmless when unused, e.g. a
+                // plain `() -> R`). No shape lookup needed — bind unconditionally, as before.
                 val slot = newSlot()
                 bind("it", Binding.Local(slot, "it", mutable = false))
                 add(RParam(slot, "it", null))
+            } else {
+                // A RECEIVER lambda with no explicit params. Kotlin's implicit `it` exists when the expected
+                // functional type has exactly ONE value parameter — e.g. `LazyItemScope.(index: Int) -> Unit`
+                // written `items(n) { Text("Item: $it") }`, whose `it` is the index bound AFTER the `<this>`
+                // receiver. Previously `it` was synthesized only for a receiver-LESS lambda, so a bare `it` here
+                // was "unresolved name `it`". Bind it only when the shape confirms a single value parameter (a
+                // `ColumnScope.() -> Unit` has none — no `it`; a two-param shape needs explicit params). The
+                // enclosing callee is already resolved+cached from the receiver lookup, so this is cheap.
+                val valueParamTypes = runCatching { resolver.expectedLambdaShape(e)?.parameterTypes }.getOrNull()
+                if (valueParamTypes?.size == 1) {
+                    val slot = newSlot()
+                    bind("it", Binding.Local(slot, "it", mutable = false))
+                    add(RParam(slot, "it", valueParamTypes.single() as? KotlinType))
+                }
             }
         }
         val lowered = e.bodyExpression?.let { lowerBlock(it) } ?: emptyBlock(e)
