@@ -36,6 +36,7 @@ import dev.ide.ui.generated.resources.import_unrecognized
 import dev.ide.ui.generated.resources.settings_title
 import dev.ide.ui.navigation.ScreenHost
 import dev.ide.ui.platform.PlatformBackHandler
+import dev.ide.ui.platform.PlatformSystemBars
 import dev.ide.ui.platform.ioDispatcher
 import dev.ide.ui.screens.CreateProjectScreen
 import dev.ide.ui.screens.CodeStyleScreen
@@ -346,6 +347,9 @@ fun CodeAssistApp(
         "system" -> isSystemInDarkTheme()
         else -> true
     }
+    // Keep the system-bar icons legible against the app theme: dark icons in light mode, light icons in dark mode.
+    // Reactive, so a theme toggle re-applies it (the host's one-time edge-to-edge setup can't follow the toggle).
+    PlatformSystemBars(darkTheme = dark)
 
 
 

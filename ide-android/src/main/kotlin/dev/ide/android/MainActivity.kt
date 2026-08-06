@@ -7,7 +7,6 @@ import android.os.Bundle
 import android.webkit.MimeTypeMap
 import android.widget.Toast
 import androidx.activity.ComponentActivity
-import androidx.activity.SystemBarStyle
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
@@ -49,7 +48,10 @@ class MainActivity : ComponentActivity() {
     private val adConsent by lazy { AdConsentManager(this) }
 
     override fun onCreate(savedInstanceState: Bundle?) {
-        enableEdgeToEdge(statusBarStyle = SystemBarStyle.dark(0xfff))
+        // Edge-to-edge with default (auto) bar styles; the system-bar ICON appearance is then driven reactively
+        // by the app theme via `PlatformSystemBars` (light icons in dark mode, dark icons in light mode) — a fixed
+        // `SystemBarStyle.dark` here forced light icons even in light mode.
+        enableEdgeToEdge()
         super.onCreate(savedInstanceState)
         inbound.value = extractStream(intent)
         // Gather UMP consent BEFORE initializing the Ads SDK (mediation + EEA/UK requirement); only initialize
