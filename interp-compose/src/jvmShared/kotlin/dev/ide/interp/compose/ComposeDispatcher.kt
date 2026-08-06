@@ -254,7 +254,7 @@ class ComposeDispatcher(
                             lambda.invoke(a)
                         } catch (t: Throwable) {
                             contentLambdaError = contentLambdaError ?: t
-                            zeroReturn(method.returnType)
+                            safeGuardReturn(method.returnType, a)
                         } finally {
                             composablesSuppressed.set(prevSuppressed)
                         }
@@ -303,6 +303,32 @@ class ComposeDispatcher(
         java.lang.Float.TYPE -> 0f
         java.lang.Double.TYPE -> 0.0
         else -> null
+    }
+
+    /**
+     * The value a GUARDED lambda returns after swallowing an interpreter failure. Usually [zeroReturn], but a
+     * `Modifier.drawWithCache { }` block is `CacheDrawScope.() -> DrawResult` and Compose dereferences that result
+     * DURING DRAW — returning `null` there NPEs the draw pass and CRASHES the in-process IDE (a draw-phase throw is
+     * outside [ComposePreviewRenderer]'s composition try/catch). So for a `DrawResult` return, build a valid EMPTY
+     * result from the `CacheDrawScope` receiver (`onDrawBehind { }` = draw nothing) instead — the preview degrades
+     * to a blank draw + the partial-render chip rather than taking down the IDE. Reflective (no compile-time
+     * compose-ui edge); any failure falls back to [zeroReturn], never worse than before.
+     */
+    private fun safeGuardReturn(returnType: Class<*>, args: List<Any?>): Any? {
+        if (returnType.name == "androidx.compose.ui.draw.DrawResult") {
+            val cacheScope = args.firstOrNull()
+            if (cacheScope != null) runCatching {
+                val onDrawBehind = cacheScope.javaClass.methods.firstOrNull {
+                    it.name == "onDrawBehind" && it.parameterCount == 1
+                }
+                if (onDrawBehind != null) {
+                    onDrawBehind.isAccessible = true
+                    val noOp: (Any?) -> Unit = { }
+                    return onDrawBehind.invoke(cacheScope, noOp)
+                }
+            }
+        }
+        return zeroReturn(returnType)
     }
 
     /** Thread the live composer through a `@Composable` property getter (`MaterialTheme.colorScheme`,
