@@ -2459,13 +2459,19 @@ class KotlinSymbolService(
      *  `StringBuilder` only scores into at a longer prefix. Marking such a result incomplete makes the engine
      *  RE-QUERY as the prefix narrows instead of client-side-narrowing the stale page (which permanently hides
      *  those types until the completion session is restarted). */
-    fun typeNameCandidates(prefix: String, limit: Int = 100): TypeNameCandidates {
+    fun typeNameCandidates(prefix: String, limit: Int = 100, currentFilePath: String? = null): TypeNameCandidates {
         val m = PrefixMatcher(prefix)
         val out = LinkedHashMap<String, KotlinSymbol>()
+        // The declaring file's basename of the completion's current file (the model stores absolute paths, the
+        // resolver a bare name — compare by basename so a private class matches its own file either way).
+        val currentFileName = currentFilePath?.substringAfterLast('/')
         model().classByFqn.values.filter {
-            !it.isCompanion && !it.isLocal && (prefix.isEmpty() || m.matches(
-                it.simpleName
-            ))
+            // A `private` TOP-LEVEL class is FILE-private — visible only in its own declaring file. Offer it as a
+            // type-name candidate ONLY when completing in that same file; never cross-file (that surfaced a
+            // sample's `private enum class BoxState` in sibling files, labelled "same package", with no usable import).
+            !it.isCompanion && !it.isLocal &&
+                !(it.isPrivate && currentFileName != null && it.ctx.path.substringAfterLast('/') != currentFileName) &&
+                (prefix.isEmpty() || m.matches(it.simpleName))
         }
             .forEach {
                 out[it.fqn] = KotlinSymbol(

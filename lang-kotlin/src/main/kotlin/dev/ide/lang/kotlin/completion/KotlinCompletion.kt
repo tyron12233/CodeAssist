@@ -209,7 +209,7 @@ class KotlinCompletion(
                 )
                 // A type slot also carries a few keyword positions (a `where` clause after a generic
                 // signature); KotlinKeywords returns nothing for a plain type reference, so this is safe.
-                CompletionPosition.TypeReference -> service.typeNameCandidates(prefix).let {
+                CompletionPosition.TypeReference -> service.typeNameCandidates(prefix, currentFilePath = resolver.fileContext.path).let {
                     // At an annotation NAME (`@Comp…`) only annotation classes belong — restrict to them so the
                     // popup isn't every classifier (IntelliJ's `@` filter). Non-annotation position → all types.
                     val syms = if (inAnnotationNamePosition(markerLeaf))
@@ -591,7 +591,7 @@ class KotlinCompletion(
         // The type the context wants → offer literals/enum constants and rank assignable candidates first.
         val expected = resolver.expectedTypeAt(offset)
         expected?.let { extra += expectedExtras(it, matcher, autoImport) }
-        val types = KotlinPerf.span("typeNames") { service.typeNameCandidates(prefix) }
+        val types = KotlinPerf.span("typeNames") { service.typeNameCandidates(prefix, currentFilePath = resolver.fileContext.path) }
         val raw =
             KotlinPerf.span("scope") { resolver.scopeSymbolsAt(offset, prefix) } + types.symbols
         return PositionResult(

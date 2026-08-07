@@ -150,6 +150,12 @@ class RawClass(
      *  localTypeFqn]) that the resolver recomputes from the same PSI, so member enumeration / diagnostics flow
      *  through the normal FQN machinery. Kept OUT of type-name completion (no one references it by that name). */
     val isLocal: Boolean = false,
+    /** True when the declaration carries the `private` modifier. A `private` TOP-LEVEL class is FILE-private —
+     *  visible only within its own declaring file — so it must not be offered as a cross-file auto-import
+     *  candidate (the `androidx` `updateTransition` sample's `private enum class BoxState` was surfacing in
+     *  other files in the same package, labelled "same package", with no usable import). Compared against the
+     *  completion's current file ([ctx].path) to keep same-file references working. */
+    val isPrivate: Boolean = false,
     /** Simple names of the annotations on the class declaration (`@Serializable class Foo` → `["Serializable"]`),
      *  detected by annotation simple name the same way [RawCallable.isComposable] is — no type resolution. Lets a
      *  [KotlinSyntheticMemberProvider] recognize its marker annotation (kotlinx.serialization's `@Serializable`,
@@ -400,6 +406,7 @@ object SourceIndexBuilder {
                     !it.hasModifier(KtTokens.SEALED_KEYWORD)
             } == true,
             isLocal = isLocal,
+            isPrivate = c.hasModifier(KtTokens.PRIVATE_KEYWORD),
             annotationNames = c.annotationEntries.mapNotNull { it.shortName?.asString() },
             annotationFqns = annoFqns(c, ctx),
             optInLevel = sourceOptInLevel(c))
