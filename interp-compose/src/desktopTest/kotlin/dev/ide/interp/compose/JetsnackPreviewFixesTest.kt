@@ -103,6 +103,52 @@ class JetsnackPreviewFixesTest {
         assertTrue(!castErr(hard) && partials.none(castErr), "no IntOffset cast failure; hard=$hard partials=${partials.filterNotNull()}")
     }
 
+    @OptIn(ExperimentalComposeUiApi::class)
+    @Test
+    fun aValueClassProvidedToACompositionLocalIsBoxedForConsumers() {
+        // `CompositionLocalProvider(LocalContentColor provides <Color>)` stored the interpreter's UNBOXED Long;
+        // a `Text` with default color reads `LocalContentColor.current` (compiled code) and casts to Color →
+        // "Long cannot be cast to Color" (Jetsnack Button/Card, any default-colored Text under JetsnackSurface).
+        // The resolver substitutes T=Color into `provides`' param even though the JVM erases it, so the arg is
+        // now boxed before storage. Render so the compiled Text actually reads `.current`.
+        val code = """
+            package demo
+            import androidx.compose.material3.LocalContentColor
+            import androidx.compose.material3.Text
+            import androidx.compose.runtime.Composable
+            import androidx.compose.runtime.CompositionLocalProvider
+            import androidx.compose.ui.graphics.Color
+            @Composable fun box() {
+                CompositionLocalProvider(LocalContentColor provides Color(0xFF112233)) {
+                    Text("hi")
+                }
+            }
+        """.trimIndent()
+        val service = KotlinSymbolService(sourceRoots = emptyList(), classpathJars = classpathJars())
+        val parsed = KotlinIncrementalParser().parseFull(Doc(code)) as KotlinParsedFile
+        val lowering = KotlinPreviewLowering(service)
+        val program = lowering.program(parsed)
+        val classes = lowering.classes(parsed)
+        val entry = program["box/0"]!!
+        var hard: String? = null
+        val partials = java.util.Collections.synchronizedList(mutableListOf<String?>())
+        val renderer = ComposePreviewRenderer(loader = null)
+        val content: @Composable () -> Unit = {
+            renderer.Render(entry, program, classes, emptyList(), onError = { hard = it.message }, onPartialError = { partials.add(it?.message) })
+        }
+        val threw = try {
+            val scene = ImageComposeScene(200, 200, Density(1f), content = content)
+            try { scene.render(0L) } finally { scene.close() }
+            null
+        } catch (t: Throwable) {
+            if (t is UnsatisfiedLinkError || t is NoClassDefFoundError || t.javaClass.simpleName.contains("LibraryLoad")) return
+            "${t.javaClass.simpleName}: ${t.message}"
+        }
+        val colorCast = { s: String? -> s != null && s.contains("cannot be cast") && s.contains("Color") }
+        assertTrue(!colorCast(threw) && !colorCast(hard) && partials.none(colorCast),
+            "a value class provided to a CompositionLocal must be boxed; threw=$threw hard=$hard partials=${partials.filterNotNull()}")
+    }
+
     private class Doc(override val text: CharSequence) : DocumentSnapshot {
         override val file: VirtualFile = F(); override val version = 1L
         override fun length() = text.length

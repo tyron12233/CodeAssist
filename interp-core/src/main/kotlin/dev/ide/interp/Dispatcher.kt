@@ -4,6 +4,7 @@ import dev.ide.lang.kotlin.interp.DispatchKind
 import dev.ide.lang.kotlin.interp.RArg
 import dev.ide.lang.kotlin.interp.RNode
 import dev.ide.lang.kotlin.interp.ResolvedCallable
+import dev.ide.lang.kotlin.symbols.KotlinType
 import java.lang.reflect.Method
 import java.lang.reflect.Modifier
 
@@ -425,8 +426,10 @@ class ReflectiveDispatcher(
         // Bind named arguments back to their declared positions (a no-op for a purely positional call), so a
         // call like `f(b = …, a = …)` or one that omits defaulted params dispatches correctly.
         @Suppress("NAME_SHADOWING")
-        val args = if (callee is ResolvedCallable.Library)
-            reorderNamedArgs(callee.paramNames, call.args, args) else args
+        val args = boxProvidedCompositionLocalValue(
+            callee,
+            if (callee is ResolvedCallable.Library) reorderNamedArgs(callee.paramNames, call.args, args) else args,
+        )
         return when (call.dispatch) {
             // SUPER is resolved by the interpreter (source super → the supertype body; binary super → no-op), so
             // it normally never reaches here; if it does, the only sound thing is a plain instance invocation.
@@ -959,6 +962,37 @@ class ReflectiveDispatcher(
      *  parameter, but BOXED for a nullable one (`fontStyle: FontStyle?` → JVM type `FontStyle`); a value-class
      *  expression evaluates to the unboxed underlying value, so the boxed parameter needs the synthetic static
      *  `box-impl` applied first. Anything already the right type, a null, or a primitive param passes through. */
+    /**
+     * `CompositionLocal.provides(value: T)` stores its value in an ERASED `Object` slot (`provides` is generic in
+     * `T`), so a value class the interpreter holds UNBOXED (a `Long` for `Color`) is stored raw; a consumer reading
+     * `LocalX.current` in COMPILED code then casts to the value class → `class java.lang.Long cannot be cast to
+     * …Color` (Jetsnack `JetsnackSurface`'s `LocalContentColor provides contentColor`, breaking default-colored
+     * `Text`). Box the provided value to its RESOLVED value-class type — the resolver substitutes `T` (the callee's
+     * `paramTypes` carries `Color`) even though reflection sees `Object` — so what's stored is the boxed value class.
+     *
+     * DELIBERATELY scoped to `CompositionLocal.provides`: a bundled, reflectively-dispatched call, so this never
+     * boxes an argument headed for the bytecode-VM library executor (which operates on the unboxed underlying and
+     * would then hit `Color cannot be cast to Long`) nor a value-class member/operator. Boxing a value class into a
+     * general erased slot is broader but not safe across the on-device VM path, so it stays narrow.
+     */
+    private fun boxProvidedCompositionLocalValue(callee: ResolvedCallable, args: List<Any?>): List<Any?> {
+        val lib = callee as? ResolvedCallable.Library ?: return args
+        if (lib.methodName != "provides" || lib.ownerFqn?.contains("CompositionLocal") != true || args.size != 1) return args
+        val a = args[0]
+        if (a == null || a === OmittedArg || a is InterpretedLambda) return args
+        val vc = resolvedValueClass(lib.paramTypes.firstOrNull()) ?: return args
+        if (vc.isInstance(a)) return args
+        val boxed = boxValueClassIfNeeded(a, vc)
+        return if (boxed !== a) listOf(boxed) else args
+    }
+
+    /** The inline value-class Class named by a resolved [t] (loadable + carries a static `box-impl`), else null. */
+    private fun resolvedValueClass(t: KotlinType?): Class<*>? {
+        val fqn = t?.qualifiedName ?: return null
+        val cls = runCatching { loadClass(jvmName(fqn)) }.getOrNull() ?: return null
+        return if (cls.declaredMethods.any { it.name == "box-impl" && Modifier.isStatic(it.modifiers) }) cls else null
+    }
+
     private fun boxValueClassIfNeeded(value: Any?, paramType: Class<*>): Any? {
         if (value == null || paramType.isInstance(value)) return value
         // Inverse of boxing: a BOXED value-class instance (a `Dp`, `Color`, `TextUnit`, …) reaching a parameter
