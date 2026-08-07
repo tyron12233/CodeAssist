@@ -62,6 +62,7 @@ private fun nestedNameCandidates(fqn: String): List<String> {
  *  have their own handling and must not be read as a real member). */
 internal fun mangledNameMatches(jvmName: String, kotlinName: String): Boolean {
     if (jvmName == kotlinName) return true
+    if (firstLetterCaseVariant(jvmName, kotlinName)) return true
     if (jvmName.startsWith("$kotlinName-") && '$' !in jvmName) return true
     val dollar = jvmName.indexOf('$')
     if (dollar <= 0) return false
@@ -70,6 +71,22 @@ internal fun mangledNameMatches(jvmName: String, kotlinName: String): Boolean {
     val baseMatches = base == kotlinName || base.startsWith("$kotlinName-")
     return baseMatches && '$' !in suffix && suffix !in NON_INTERNAL_DOLLAR_SUFFIXES
 }
+
+/**
+ * Whether [a] and [b] are identical except for the CASE of their first letter (`ScaleToBounds`↔`scaleToBounds`).
+ * Compose "factory functions that mimic a constructor" are conventionally PascalCase, and several were RENAMED
+ * to camelCase across versions — androidx renamed `SharedTransitionScope.ResizeMode.ScaleToBounds()` to
+ * `scaleToBounds()`. A parse-only preview lowers the SOURCE call name verbatim, so a project written against the
+ * older API looks up `ScaleToBounds` while the runtime it dispatches against (the project's newer Compose, or the
+ * IDE's bundled one) only declares `scaleToBounds`. Bridging names that differ ONLY in the first letter's case is
+ * narrow enough that it can't collide with an unrelated member (the whole rest of the name must be equal), and it
+ * is only ever consulted on [mangledNameMatches]'s FALLBACK path — reached only when the looked-up name is not a
+ * declaration the class's `@Metadata` names, i.e. the exact name genuinely does not exist on the class.
+ */
+private fun firstLetterCaseVariant(a: String, b: String): Boolean =
+    a.length == b.length && a.isNotEmpty() &&
+        a[0] != b[0] && a[0].lowercaseChar() == b[0].lowercaseChar() &&
+        a.regionMatches(1, b, 1, a.length - 1)
 
 /** The `$`-suffixed synthetics [mangledNameMatches] must NOT treat as an `internal` module suffix — they are
  *  compiler-generated siblings of a real member (handled elsewhere), not the member itself. */
