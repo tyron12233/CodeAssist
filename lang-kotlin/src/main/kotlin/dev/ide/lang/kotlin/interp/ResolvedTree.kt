@@ -296,9 +296,17 @@ data class ResolvedFunction(
     /** True for a top-level `var` with a plain backing field (no custom accessors), where [body] is its
      *  initializer. The interpreter backs it with mutable STORAGE (lazily initialized from [body] on first
      *  read) so reads see prior writes — powering the lazy-cache idiom of generated `ImageVector`/icon files:
-     *  `if (_x != null) return _x!!; _x = build(); return _x!!`. A plain `val` / a property with a custom
-     *  getter stays re-evaluated per read (false). */
+     *  `if (_x != null) return _x!!; _x = build(); return _x!!`. A property with a custom getter stays
+     *  re-evaluated per read (false); a plain-backing-field `val` is [singletonBackingField] instead. */
     val mutableBackingField: Boolean = false,
+    /** True for a top-level `val` with a plain backing field (no custom accessors), where [body] is its
+     *  initializer. Real Kotlin compiles such a `val` to a `<clinit>`-initialized static field, so it holds ONE
+     *  instance for the program's life; the interpreter mirrors that by evaluating [body] once on first read and
+     *  caching the result (read-only — no write path). This preserves object IDENTITY, which matters for the
+     *  custom-theme idiom `val LocalX = staticCompositionLocalOf { … }`: re-evaluating it per read would mint a
+     *  fresh `CompositionLocal` each time, so a `provides` and a later `.current` would never match. A `val`
+     *  with a custom getter (which computes) stays re-evaluated per read (false). */
+    val singletonBackingField: Boolean = false,
 ) {
     val isComplete: Boolean get() = diagnostics.isEmpty()
 }

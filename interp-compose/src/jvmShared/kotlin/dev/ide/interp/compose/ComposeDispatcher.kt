@@ -475,7 +475,19 @@ class ComposeDispatcher(
      * lambda body's composables compose into the right group; non-composer leading args (a scope receiver)
      * are passed to the lambda, the trailing `Composer`/`$changed` are stripped.
      */
-    private fun composableLambdaProxy(lambda: InterpretedLambda, functionalInterface: Class<*>): Any =
+    /** Box an interpreted lambda's return value to [valueClass] when the lambda's functional type returns an inline
+     *  value class the interpreter holds UNBOXED (a `Float` for `Dp`, `Long` for `Color`). Without it a library
+     *  consumer that casts the result to the value class (`animateDp`'s converter) throws `Float cannot be cast to
+     *  Dp`. No-op when the value is null, already the value class, or has no `box-impl`. */
+    private fun boxLambdaReturn(value: Any?, valueClass: Class<*>?): Any? {
+        if (valueClass == null || value == null || valueClass.isInstance(value)) return value
+        val box = valueClass.declaredMethods.firstOrNull {
+            it.name == "box-impl" && java.lang.reflect.Modifier.isStatic(it.modifiers) && it.parameterCount == 1
+        } ?: return value
+        return runCatching { box.isAccessible = true; box.invoke(null, value) }.getOrDefault(value)
+    }
+
+    private fun composableLambdaProxy(lambda: InterpretedLambda, functionalInterface: Class<*>, valueClassReturn: Class<*>? = null): Any =
         Proxy.newProxyInstance(
             functionalInterface.classLoader ?: javaClass.classLoader, arrayOf(functionalInterface),
         ) { _, method, callArgs ->
@@ -518,7 +530,7 @@ class ComposeDispatcher(
                         val prevSuppressed = composablesSuppressed.get()
                         composablesSuppressed.set(composerArg == null)
                         try {
-                            lambda.invoke(real)
+                            boxLambdaReturn(lambda.invoke(real), valueClassReturn)
                         } catch (ce: kotlin.coroutines.cancellation.CancellationException) {
                             throw ce // recomposition cancellation is control flow — never swallow it
                         } catch (e: Throwable) {

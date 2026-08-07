@@ -955,10 +955,14 @@ class Interpreter(
             // by [bindParams].
             val target = sourceFunctionFor(callee, call.args.size)
                 ?: throw InterpreterException("no source function `${callee.displayName}/${call.args.size}`")
-            // A top-level `var` backing-field READ: return its live storage value, lazily initialized from the
-            // initializer ([target.body]) on first read. Keeps `_x` reads consistent with prior `_x = …` writes
-            // (the write path is in [RNode.Assign]), so a lazy-cache getter returns what it just built.
-            if (target.mutableBackingField && call.args.isEmpty()) {
+            // A top-level plain-backing-field property READ: return its live storage value, lazily initialized
+            // from the initializer ([target.body]) on first read and cached thereafter (keyed `name/0`). For a
+            // `var` this keeps reads consistent with prior `_x = …` writes (the lazy-cache icon idiom; write path
+            // in [RNode.Assign]). For a `val` it preserves the single-instance identity real Kotlin gives a
+            // `<clinit>` static field — without it, `val LocalX = staticCompositionLocalOf { … }` would mint a
+            // fresh CompositionLocal per read, so a theme's `provides` and a later `.current` never match and the
+            // preview fails with "No X provided" (a custom-theme app like Jetsnack blanks entirely).
+            if ((target.mutableBackingField || target.singletonBackingField) && call.args.isEmpty()) {
                 val key = "${callee.displayName}/0"
                 val current = topLevelPropertyState.getOrDefault(key, NO_VALUE)
                 if (current !== NO_VALUE) return current
@@ -1038,10 +1042,21 @@ class Interpreter(
             )
                 ?: throw InterpreterException("member extension `${callee.displayName}` scope receiver is null")
             val extReceiver = call.receiver?.let { eval(it, env) }
+            // Reorder named args into declared positions with [OmittedArg] holes for skipped defaults — exactly as
+            // the source-call and constructor paths do. Without it a call that names a LATE parameter while
+            // skipping earlier defaults (`Modifier.sharedBounds(state, animatedVisibilityScope = avs,
+            // boundsTransform = bt)` skips `enter`/`exit`) collapses to contiguous args, so the `$default`
+            // synthetic binds them to the wrong slots and the dispatcher reports "no member extension …(N)".
+            val paramNames = when (val c = callee) {
+                is ResolvedCallable.Library -> c.paramNames
+                is ResolvedCallable.Source -> c.paramNames
+                else -> emptyList()
+            }
+            val reordered = reorderNamedArgs(paramNames, call.args, call.args.map { eval(it.value, env) })
             // Pass the scope as the dispatch receiver and the extension receiver as the head of the args; the
             // dispatcher invokes it as an instance method on the scope (and threads BOTH receivers through the
             // `$default` synthetic when a value param is defaulted).
-            val args = listOf(extReceiver) + call.args.map { eval(it.value, env) }
+            val args = listOf(extReceiver) + reordered
             return checkedDispatch(call, scope, args)
         }
         // `super.foo(...)`: dispatch to the SUPERCLASS implementation, skipping the lexical class's own override.

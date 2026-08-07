@@ -792,6 +792,13 @@ class ReflectiveDispatcher(
         val cls = loadClassOrNull(ownerFqn)
             ?: (if ('.' !in ownerFqn) runCatching { Class.forName("java.lang.$ownerFqn", false, loader) }.getOrNull() else null)
             ?: throw InterpreterException("cannot load class `$ownerFqn`")
+        // A `fun interface` SAM constructor — `BoundsTransform { … }` — is an INTERFACE with one abstract method,
+        // not a class with a constructor. Kotlin's SAM-constructor syntax lowered to a call the resolver saw as a
+        // CONSTRUCTOR; realize it as a proxy of the interface routing its single abstract method to the lambda
+        // (the same shape as passing the lambda where the interface is expected).
+        if (cls.isInterface && args.size == 1) {
+            (args.single() as? InterpretedLambda)?.let { lam -> funInterfaceSamProxy(lam, cls)?.let { return it } }
+        }
         // An interior [OmittedArg] hole means a defaulted param was skipped — there's no exact-arity match, so
         // go straight to the synthetic (and a hole must never reach `newInstance`).
         val hasOmitted = args.any { it === OmittedArg }
@@ -1093,10 +1100,14 @@ class ReflectiveDispatcher(
     /**
      * Invoke a value-class MEMBER — a property getter (`Size.getWidth`), an operator (`Size.div`), any member —
      * whose [receiver] is the UNBOXED underlying the interpreter holds (a `Long` for `Size`/`Color`/`Offset`, a
-     * `Float` for `Dp`) and whose owner the resolver named ([ownerFqn]). Such a member compiles to a static
-     * `name-<hash>` impl on the value class taking the underlying as its first parameter (`Size.div-impl(long,
-     * float)`), so it is routed statically with the receiver prepended — exactly the [unboxedValueClassOwner]
-     * MEMBER path, reused here for the operator/property call sites the interpreter handles itself.
+     * `Float` for `Dp`) and whose owner the resolver named ([ownerFqn]).
+     *
+     * Most members compile to a static `name-<hash>` impl on the value class taking the underlying as its first
+     * parameter (`Size.div-impl(long, float)`), so the common path routes statically with the receiver prepended.
+     * But a value class's OWN property getter is an INSTANCE method on the boxed class (`Dp.getValue()` — there is
+     * NO `getValue-impl`), as is `compareTo`; those can't be found statically. For that miss the underlying is
+     * BOXED (`box-impl`) and the member invoked on the box (which, via [invokeInstance]'s boxed fallback, still
+     * reaches any static-impl member too).
      *
      * Returns [NotValueClassMember] when [ownerFqn] isn't a loadable inline value class, or [receiver] is
      * already a BOXED instance of it (the caller then keeps its existing path — numeric arithmetic for an
@@ -1112,9 +1123,23 @@ class ReflectiveDispatcher(
         val jvm = ownerFqn?.let { jvmName(it) } ?: return NotValueClassMember
         val cls = loadClassOrNull(jvm) ?: return NotValueClassMember
         if (cls.isInstance(receiver)) return NotValueClassMember
-        if (cls.declaredMethods.none { it.name == "box-impl" && Modifier.isStatic(it.modifiers) }) return NotValueClassMember
+        val boxImpl = cls.declaredMethods.firstOrNull {
+            it.name == "box-impl" && Modifier.isStatic(it.modifiers) && it.parameterCount == 1
+        } ?: return NotValueClassMember
         val all = listOf(receiver) + args
-        return invokeStatic(jvm, name, all, List(all.size) { false }, receiverCount = 1)
+        // Static `name-<hash>` impl (operators, most members) — unchanged from before; keeps the defaulted-arg
+        // `$default` synthetic handling that [invokeStatic] provides.
+        return try {
+            invokeStatic(jvm, name, all, List(all.size) { false }, receiverCount = 1)
+        } catch (miss: InterpreterException) {
+            // No static impl: an INSTANCE-only member on the box (a value class's own `getValue()` property
+            // getter / `compareTo`). Box the underlying and invoke the member on the box.
+            val boxed = runCatching {
+                runCatching { boxImpl.isAccessible = true }
+                boxImpl.invoke(null, *bindArgs(boxImpl.parameterTypes, listOf(receiver), listOf(false), boxImpl.genericParameterTypes))
+            }.getOrNull() ?: throw miss
+            invokeInstance(boxed, name, args, List(args.size) { false })
+        }
     }
 
     /** Whether [paramType] is an inline value class whose underlying type accepts [value] — so an unboxed
@@ -1146,6 +1171,32 @@ class ReflectiveDispatcher(
                     ?: regularLambdaProxy(lam, params[i])
             } ?: coerceArg(args[i], params[i], genericParams?.getOrNull(i))
         }
+
+    /** Realize a Kotlin `fun interface` SAM constructor (`BoundsTransform { a, b -> … }`) as a JVM proxy of
+     *  [funInterface] whose single abstract method (whatever its name — `transform`, `compare`, …, NOT just
+     *  `invoke`) runs [lambda]. Null when [funInterface] has no single abstract method (not a functional
+     *  interface), so the caller keeps its honest "no constructor" boundary. */
+    private fun funInterfaceSamProxy(lambda: InterpretedLambda, funInterface: Class<*>): Any? {
+        val sam = funInterface.methods.firstOrNull {
+            Modifier.isAbstract(it.modifiers) && !it.isDefault && !Modifier.isStatic(it.modifiers)
+        } ?: return null
+        return java.lang.reflect.Proxy.newProxyInstance(
+            funInterface.classLoader ?: loader, arrayOf(funInterface),
+        ) { _, method, callArgs ->
+            when {
+                method.name == sam.name && method.parameterCount == sam.parameterCount -> {
+                    val a = callArgs?.toList() ?: emptyList()
+                    if (a.lastOrNull() is kotlin.coroutines.Continuation<*>)
+                        suspendBridge?.runSuspending(lambda, a) ?: lambda.invoke(a)
+                    else lambda.invoke(a)
+                }
+                method.name == "toString" -> "InterpretedSam(${funInterface.simpleName})"
+                method.name == "hashCode" -> System.identityHashCode(lambda)
+                method.name == "equals" -> callArgs?.getOrNull(0) === lambda
+                else -> null
+            }
+        }
+    }
 
     private fun regularLambdaProxy(lambda: InterpretedLambda, functionalInterface: Class<*>): Any {
         // A SUSPEND lambda — a `pointerInput { … }` gesture block, a `LaunchedEffect { … }` body, a coroutine
