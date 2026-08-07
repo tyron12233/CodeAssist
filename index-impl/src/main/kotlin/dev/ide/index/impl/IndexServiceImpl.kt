@@ -21,8 +21,10 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.TimeoutCancellationException
 import kotlinx.coroutines.sync.withPermit
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeout
 import kotlinx.coroutines.yield
 import java.io.BufferedInputStream
 import java.io.BufferedOutputStream
@@ -279,7 +281,24 @@ class IndexServiceImpl(
 
     // ---- build ----
 
+    /** A hard cap on a single index build. The fleet showed builds running for HOURS (max ~21h) — a stuck /
+     *  pathological run that would otherwise burn battery and CPU indefinitely. p99 is ~80s and even the legit
+     *  tail is minutes, so 15min is generous headroom; the build yields cooperatively (see [buildIndex]), so the
+     *  timeout actually cancels it. On timeout the index is left PARTIAL but usable (ready stays false, so the
+     *  name environment keeps probing) rather than wedged. */
+    private val buildHardLimitMs = 15 * 60_000L
+
     override suspend fun ensureUpToDate(scope: IndexScope) {
+        try {
+            withTimeout(buildHardLimitMs) { buildIndex(scope) }
+        } catch (_: TimeoutCancellationException) {
+            Log.logger("index")
+                .warn("index build exceeded ${buildHardLimitMs / 60_000}min — stopping; index left partial but usable")
+            setStatus(IndexStatus(false, "Indexing timed out", 1.0))
+        }
+    }
+
+    private suspend fun buildIndex(scope: IndexScope) {
         setStatus(
             IndexStatus(
                 building = true, message = "Indexing…", fraction = -1.0, phase = "Starting…"
