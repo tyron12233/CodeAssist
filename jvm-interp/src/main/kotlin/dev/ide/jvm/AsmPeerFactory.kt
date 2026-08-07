@@ -31,14 +31,17 @@ import org.objectweb.asm.commons.Method as AsmMethod
  */
 open class AsmPeerFactory(
     private val parent: ClassLoader = AsmPeerFactory::class.java.classLoader,
-    /** When set, an exception thrown by a proxy peer method that re-enters interpreted code (an overridden or
-     *  default interface method invoked by platform code, e.g. during a layout/measure/draw pass or a posted
-     *  callback outside the render's error boundary) is reported here and the method returns a zero value,
-     *  instead of propagating into the platform caller. A preview host sets this so such a failure degrades
-     *  instead of crashing the process; a console run leaves it null so failures propagate. Mirrors
-     *  [dev.ide.jvm.ReflectiveBridge]'s sink for the lambda-proxy path. */
+    /** When set, an exception thrown by a peer method that re-enters interpreted code (an overridden or default
+     *  interface method invoked by platform code, e.g. during a layout/measure/draw pass or a posted callback
+     *  outside the render's error boundary) is reported here and the method returns a zero value, instead of
+     *  propagating into the platform caller. A preview host sets this so such a failure degrades instead of
+     *  crashing the process; a console run leaves it null so failures propagate. Mirrors
+     *  [dev.ide.jvm.ReflectiveBridge]'s sink for the lambda-proxy path. Guards the proxy peer path here and,
+     *  exposed via [peerExceptionSink], the generated-subclass path at the [Vm] dispatch boundary. */
     private val proxyExceptionSink: ((Throwable) -> Unit)? = null,
 ) : PeerFactory {
+
+    final override val peerExceptionSink: ((Throwable) -> Unit)? get() = proxyExceptionSink
 
     private val loader = PeerClassLoader(parent)
     private val generated = ConcurrentHashMap<String, Class<*>>()

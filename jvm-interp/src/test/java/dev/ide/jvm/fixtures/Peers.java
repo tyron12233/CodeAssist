@@ -29,6 +29,13 @@ public final class Peers {
         @Override public int describe() { return super.describe() + 1; }
     }
 
+    /** A concrete-class peer whose interpreted override throws — reached through the real template method
+     *  {@link Shape#describe()}, so platform code invokes the throwing override across the generated-subclass
+     *  peer dispatch (the surface the peer-exception sink must degrade instead of crashing). */
+    static class Boomer extends Shape {
+        @Override public int sides() { throw new RuntimeException("boom-sides"); }
+    }
+
     static class Doubler implements IntUnaryOperator {
         @Override public int applyAsInt(int v) { return v * 2; }
     }
@@ -51,6 +58,9 @@ public final class Peers {
 
     /** Calls the real template method, which dispatches back to the interpreted override. */
     public static int describeTriangle() { return new Triangle().describe(); }
+
+    /** Real template method calling an interpreted override that throws (see {@link Boomer}). */
+    public static int describeBoomThroughRealCode() { return new Boomer().describe(); }
 
     /** The override calls super, which reaches the real implementation through the peer. */
     public static int describeSquare() { return new Square().describe(); }
