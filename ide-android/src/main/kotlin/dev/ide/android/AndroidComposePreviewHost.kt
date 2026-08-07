@@ -42,6 +42,7 @@ import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
 import dev.ide.interp.PreviewResourceResolver
 import dev.ide.interp.PreviewSandboxPolicy
@@ -236,12 +237,19 @@ class AndroidComposePreviewHost(private val backend: IdeServicesBackend) : Compo
                         // Remote render: wait only for the remote res roots (`:preview` rebuilds its own resources)
                         // — NOT the in-process resource parse, which the isolated path doesn't use.
                         if (!remoteResReady) CircularProgressIndicator(Modifier.size(28.dp)) else {
-                            val widthPx = ((preview.config.widthDp ?: DEFAULT_PREVIEW_WIDTH_DP) * density).toInt().coerceIn(1, MAX_PREVIEW_PX)
-                            val heightPx = ((preview.config.heightDp ?: DEFAULT_PREVIEW_HEIGHT_DP) * density).toInt().coerceIn(1, MAX_PREVIEW_PX)
+                            // A wrap-to-content preview (no device / widthDp / heightDp / showSystemUi) is rendered
+                            // at the device viewport as a MAX bound; the `:preview` measures the composable's
+                            // intrinsic size within it and reports it back so the frame is cropped + the card sized
+                            // to the content. A fixed-size preview fills the surface (no crop).
+                            val cfg = preview.config
+                            val wrapContent = cfg.device == null && cfg.widthDp == null && cfg.heightDp == null && !cfg.showSystemUi
+                            val widthPx = ((cfg.widthDp ?: DEFAULT_PREVIEW_WIDTH_DP) * density).toInt().coerceIn(1, MAX_PREVIEW_PX)
+                            val heightPx = ((cfg.heightDp ?: DEFAULT_PREVIEW_HEIGHT_DP) * density).toInt().coerceIn(1, MAX_PREVIEW_PX)
                             RemoteComposePreview(
                                 client = remoteClient, lowered = s.lowered, jars = remoteJars,
                                 resRoots = remoteRes?.first ?: emptyArray(), namespace = remoteRes?.second ?: "",
                                 widthPx = widthPx, heightPx = heightPx, density = density, night = night,
+                                wrapContent = wrapContent,
                                 onUnavailable = { useRemote = false }, modifier = Modifier.fillMaxWidth(),
                             )
                         }
@@ -476,6 +484,7 @@ private fun RemoteComposePreview(
     heightPx: Int,
     density: Float,
     night: Boolean,
+    wrapContent: Boolean,
     onUnavailable: () -> Unit,
     modifier: Modifier,
 ) {
@@ -487,6 +496,9 @@ private fun RemoteComposePreview(
     val cpKey = jars.joinToString("\n")
     val resKey = resRoots.joinToString("\n")
     var frame by remember(client, cpKey, resKey, namespace) { mutableStateOf<Bitmap?>(null) }
+    // The measured content size (surface px) of a wrap-to-content preview — the `:preview` reports it so we crop
+    // the fixed-surface frame to just the content and let the card size to it. Null for a fixed-size preview.
+    var contentSize by remember(client, cpKey, resKey, namespace) { mutableStateOf<IntSize?>(null) }
     // Hold the Session in a plain box, NOT a mutableStateOf<Session> — a Compose-tracked field of our own type
     // makes the compiler emit a `Session.$stable` read, which crashes (NoSuchFieldError) if that class wasn't
     // instrumented. An Int epoch (bumped when the session opens/closes) drives the effects instead.
@@ -502,9 +514,10 @@ private fun RemoteComposePreview(
         val sink = object : ComposePreviewRemoteClient.FrameSink {
             override fun onFrame(bitmap: Bitmap, seq: Long) { main.post { frame = bitmap } }
             override fun onError(message: String) { main.post { fallback() } }
+            override fun onContentSize(widthPx: Int, heightPx: Int) { main.post { contentSize = IntSize(widthPx, heightPx) } }
         }
         Thread {
-            val s = client.openSession(openLowered, widthPx, heightPx, density, night, sink, jars, resRoots, namespace)
+            val s = client.openSession(openLowered, widthPx, heightPx, density, night, sink, jars, resRoots, namespace, wrapContent = wrapContent)
             main.post {
                 if (disposed) { s?.close() }
                 else { sessionBox[0] = s; sessionEpoch++; if (s == null) fallback() }
@@ -529,7 +542,19 @@ private fun RemoteComposePreview(
         if (sessionBox[0] != null) { delay(REMOTE_FIRST_FRAME_TIMEOUT_MS); if (frame == null) fallback() }
     }
 
-    val bmp = frame
+    // A wrap-to-content preview renders into the fixed device-sized surface with the composable measured at its
+    // intrinsic size, top-left. Crop the streamed frame to the reported content size so the card shows just the
+    // content (at its own aspect) instead of the full device surface with empty space below/right.
+    val full = frame
+    val cs = contentSize
+    val bmp = remember(full, cs, wrapContent) {
+        if (full == null) null
+        else if (wrapContent && cs != null && (cs.width < full.width || cs.height < full.height) && cs.width > 0 && cs.height > 0) {
+            runCatching {
+                Bitmap.createBitmap(full, 0, 0, cs.width.coerceAtMost(full.width), cs.height.coerceAtMost(full.height))
+            }.getOrDefault(full)
+        } else full
+    }
     Box(modifier, contentAlignment = Alignment.Center) {
         if (bmp != null) {
             // The frame is drawn scaled to the pane width (ContentScale.FillWidth = uniform scale). Forward each

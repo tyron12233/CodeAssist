@@ -22,9 +22,14 @@ interface IComposePreviewSession {
     // composables the bundled Compose lacks (empty -> bundled-only). [resRoots] = the project resource roots
     // (empty -> no project resources). Frames stream via [cb].onFrame, pixels written under [frameDir]. Returns a
     // sessionId (>= 0) or -1 on failure (cb.onError carries the reason).
+    // [wrapContent] = a wrap-to-content preview (`@Preview` with no device/size): the composable is measured at
+    // its INTRINSIC size (bounded by [widthPx]x[heightPx] as a max, mirroring the in-process card) and its size
+    // reported via cb.onContentSize so the IDE crops the frame + sizes the card to the content; false = the
+    // content fills the fixed [widthPx]x[heightPx] surface (a device/@Preview(widthDp/heightDp) preview).
     int open(
         String blobFile, in String[] classpath, in String[] resRoots, String packageName, int minApi,
-        int widthPx, int heightPx, float density, boolean night, String frameDir, IComposePreviewCallback cb);
+        int widthPx, int heightPx, float density, boolean night, boolean wrapContent, String frameDir,
+        IComposePreviewCallback cb);
 
     // Live edit: push a re-lowered program into the running session; it re-renders (remembered state survives).
     // oneway — the IDE must never block on it: the service hops to its (possibly-busy) render thread to apply the

@@ -116,11 +116,13 @@ internal class ComposePreviewService(private val ctx: EngineContext) {
         if (blocked(BuiltInSettingsPages.SANDBOX_PROCESS)) add("processControl")
     }
 
-    /** Whether the `@Preview` should render in the `:preview` OS process (the isolation toggle, default OFF).
-     *  The Android host reads this to choose the remote streaming path over the in-process renderer. */
+    /** Whether the `@Preview` should render in the `:preview` OS process (the isolation toggle, default ON).
+     *  The Android host reads this to choose the remote streaming path over the in-process renderer, so a crash or
+     *  runaway recomposition pegs only `:preview`, not the IDE. Parameterized / locale previews still fall back
+     *  in-process (the remote path doesn't cover them yet), as does any remote failure. */
     fun previewIsolated(): Boolean =
         ctx.projectPref("settings.${BuiltInSettingsPages.PREVIEW}.${BuiltInSettingsPages.PREVIEW_ISOLATE}")
-            ?.toBooleanStrictOrNull() ?: false
+            ?.toBooleanStrictOrNull() ?: true
 
     fun composePreviewReady(file: Path): Boolean {
         val module = ctx.moduleForEditableFile(file) ?: return true
