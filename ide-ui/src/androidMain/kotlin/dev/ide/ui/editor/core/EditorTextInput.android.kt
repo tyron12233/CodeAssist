@@ -4,6 +4,7 @@ import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
 import android.graphics.Matrix
+import android.provider.Settings
 import android.text.InputType
 import android.util.Log
 import android.view.View
@@ -15,6 +16,7 @@ import android.view.inputmethod.ExtractedTextRequest
 import android.view.inputmethod.InputConnection
 import android.view.inputmethod.InputMethodManager
 import android.view.inputmethod.SurroundingText
+import android.view.inputmethod.TextAttribute
 import androidx.annotation.RequiresApi
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusEventModifierNode
@@ -200,14 +202,25 @@ private class EditorImeRequest(
     private val options: () -> EditorImeOptions,
 ) : PlatformTextInputMethodRequest {
     override fun createInputConnection(outAttributes: EditorInfo): InputConnection {
-        // "Raw code" mode = the suggestions setting is OFF. We DON'T use TYPE_TEXT_VARIATION_VISIBLE_PASSWORD
-        // (gave a password-style keyboard) or IME_FLAG_NO_PERSONALIZED_LEARNING (triggers Gboard's incognito
-        // UI). NO_SUGGESTIONS is still hinted for IMEs that honor it; the real defense against autocorrect/
-        // auto-space (which Gboard applies even with NO_SUGGESTIONS) is the input connection STARVING the IME
-        // of text context — see [EditorInputConnection]'s rawMode. Mirrors sora-editor's `disallowSuggestions`.
+        // "Raw code" mode = the suggestions setting is OFF. NO_SUGGESTIONS is hinted for IMEs that honor it;
+        // the real defense against autocorrect/auto-space (which Gboard applies even with NO_SUGGESTIONS) is
+        // the input connection STARVING the IME of text context — see [EditorInputConnection]'s rawMode.
+        // Mirrors sora-editor's `disallowSuggestions`. IME_FLAG_NO_PERSONALIZED_LEARNING stays out (it
+        // triggers Gboard's incognito UI).
         val rawMode = !options().softKeyboardSuggestions
         var inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_FLAG_MULTI_LINE
-        if (rawMode) inputType = inputType or InputType.TYPE_TEXT_FLAG_NO_SUGGESTIONS
+        if (rawMode) {
+            inputType = inputType or InputType.TYPE_TEXT_FLAG_NO_SUGGESTIONS
+            // SwiftKey ignores NO_SUGGESTIONS and keeps predicting from its own optimistic model, so
+            // starvation alone never hides its suggestion strip. The one hint it honors is a password
+            // field (predictions, autocorrect, and flow typing are always off there), so raw mode adds
+            // VISIBLE_PASSWORD for the keyboards known to need it. Not applied across the board: on
+            // honoring IMEs (Gboard) the password variation needlessly degrades the keyboard (password
+            // layout, no glide typing).
+            if (imeIgnoresNoSuggestions(view.context)) {
+                inputType = inputType or InputType.TYPE_TEXT_VARIATION_VISIBLE_PASSWORD
+            }
+        }
         outAttributes.inputType = inputType
         outAttributes.imeOptions = EditorInfo.IME_FLAG_NO_FULLSCREEN or
             EditorInfo.IME_FLAG_NO_EXTRACT_UI or
@@ -224,6 +237,24 @@ private class EditorImeRequest(
  *  one-shot/initial snapshot. */
 private const val MAX_EXTRACT_CHARS = 100_000
 private const val NO_MONITOR = -1
+
+/**
+ * Soft keyboards that keep their suggestion strip and autocorrect despite TYPE_TEXT_FLAG_NO_SUGGESTIONS
+ * and full context starvation (they predict from their own model of what they typed). Raw mode adds
+ * TYPE_TEXT_VARIATION_VISIBLE_PASSWORD for these. Matched by package prefix so beta/OEM builds count too.
+ */
+private val NO_SUGGESTIONS_DEAF_IMES = arrayOf(
+    "com.touchtype.swiftkey", // Microsoft SwiftKey (the prefix match covers .beta / .phone.trial)
+)
+
+/** Whether the ACTIVE input method is one that ignores the no-suggestions hint. Read per connection:
+ *  switching keyboards rebinds the input and re-creates the connection, so this stays current. */
+private fun imeIgnoresNoSuggestions(context: Context): Boolean {
+    val ime = Settings.Secure.getString(context.contentResolver, Settings.Secure.DEFAULT_INPUT_METHOD)
+        ?: return false
+    val pkg = ime.substringBefore('/')
+    return NO_SUGGESTIONS_DEAF_IMES.any { pkg == it || pkg.startsWith("$it.") }
+}
 
 /** Wire-level IME trace for diagnosing keyboard-specific behavior (SwiftKey auto-space, composing flows).
  *  Off by default; enable without a rebuild via `adb shell setprop log.tag.EditorIme D`, read with
@@ -507,6 +538,32 @@ private class EditorInputConnection(
         imeLog { "setSelection [$start,$end) sel=${session.selection}" }
         if (rawMode) return false // a starved IME thinks the field is empty — don't let it yank the caret
         session.imeSetSelection(start, end)
+        return true
+    }
+
+    /**
+     * API 34 range replacement, how modern keyboards rewrite a PREVIOUS word in place (SwiftKey's
+     * retro-correction as the next word is typed). Overriding this is load-bearing: [BaseInputConnection]'s
+     * own implementation applies the edit to its internal dummy Editable and reports success, so the IME
+     * then models a text change that never reached our buffer, and every absolute offset it sends
+     * afterwards lands off-target (words visibly "mix up" mid-typing). In [rawMode] a rewrite of existing
+     * text is exactly what the user turned off: refuse it, and resync so the IME drops the phantom edit
+     * it already applied to its own model.
+     */
+    override fun replaceText(
+        start: Int,
+        end: Int,
+        text: CharSequence,
+        newCursorPosition: Int,
+        textAttribute: TextAttribute?,
+    ): Boolean {
+        imeLog { "replaceText [$start,$end) \"$text\" ncp=$newCursorPosition sel=${session.selection} comp=${session.composing}" }
+        if (start < 0 || end < 0) return false
+        if (rawMode) {
+            session.imeRewriteRefused()
+            return false
+        }
+        session.imeReplaceText(start, end, text.toString(), newCursorPosition)
         return true
     }
 

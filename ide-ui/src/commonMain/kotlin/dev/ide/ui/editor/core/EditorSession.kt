@@ -1233,6 +1233,32 @@ class EditorSession(
         )
     }
 
+    /**
+     * `InputConnection.replaceText` (API 34+, how modern keyboards rewrite a PREVIOUS word without moving
+     * through the selection): atomically replace `[start, end)` with [text], finishing any active
+     * composition first (the framework contract: the replacement never leaves a composing region), with
+     * the caret placed by [newCursorPosition] using commitText semantics relative to the replacement.
+     * Applied literally, in one batch (one undo step, one IME push): the IME initiated the edit against
+     * offsets it computed itself, so its model stays coherent and no resync is needed.
+     */
+    fun imeReplaceText(start: Int, end: Int, text: String, newCursorPosition: Int) {
+        beginBatch()
+        if (composing != null) updateSelectionAndComposing(selection, null)
+        val s = min(start, end).coerceIn(0, doc.length)
+        val e = max(start, end).coerceIn(0, doc.length)
+        replaceRange(s, e, text, TextRange(imeCaret(s, text.length, newCursorPosition)))
+        endBatch()
+    }
+
+    /**
+     * The platform refused an IME-initiated rewrite of existing text (rawMode `replaceText`). The IME has
+     * already applied that edit to its own optimistic model, so without a restart every absolute offset it
+     * sends afterwards is shifted by the phantom text; force the restart so it re-reads our state.
+     */
+    fun imeRewriteRefused() {
+        resyncIme(force = true)
+    }
+
     fun imeTextBeforeCursor(n: Int): String {
         val end = selection.min
         return doc.substring((end - n.coerceIn(0, MAX_IPC_TEXT)).coerceAtLeast(0), end)
