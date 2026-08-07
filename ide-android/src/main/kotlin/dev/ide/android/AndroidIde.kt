@@ -283,11 +283,12 @@ object AndroidIde {
      * per launch. The service starts gated on the stored consent and collects nothing until it's granted.
      */
     /**
-     * If the PREVIOUS process died of a native crash (the 32-bit-ART SIGSEGV; see [dev.ide.platform.RuntimeInfo]),
-     * surface the engine breadcrumb it left ([prev]) — to the Logs viewer, and for opt-in users as a CRASH
-     * analytics event carrying ONLY the coarse engine lane (never a file/path/source). Needs the OS exit reason
-     * (`ActivityManager.getHistoricalProcessExitReasons`, API 30+; the crashing Android-12 devices have it);
-     * below API 30 it can't confirm a crash, so it stays silent. Best-effort — never throws into bootstrap.
+     * If the PREVIOUS process died of a native crash (the ART SIGSEGV; see [dev.ide.platform.RuntimeInfo]; seen
+     * on 32-bit AND 64-bit devices), surface the engine breadcrumb it left ([prev]) — to the Logs viewer, and
+     * for opt-in users as a CRASH analytics event carrying ONLY the fine engine op + whether an index build was
+     * in flight (never a file/path/source). Needs the OS exit reason (`ActivityManager.
+     * getHistoricalProcessExitReasons`, API 30+; the crashing Android-12 devices have it); below API 30 it
+     * can't confirm a crash, so it stays silent. Best-effort — never throws into bootstrap.
      */
     private fun reportPreviousNativeCrash(
         context: Context,
@@ -304,8 +305,9 @@ object AndroidIde {
             // Guard against an ancient stale crumb being blamed on an unrelated recent native death.
             if (kotlin.math.abs(exit.timestamp - prev.epochMillis) > 10 * 60_000L) return
             Log.logger("ide.crash").warn(
-                "Recovered from a native crash in the previous session. Engine lane in flight: '${prev.op}' " +
-                    "on thread '${prev.thread}'. OS exit: ${exit.description} (reason=${exit.reason})."
+                "Recovered from a native crash in the previous session. Engine op in flight: '${prev.op}' " +
+                    "on thread '${prev.thread}' (index building: ${prev.indexBuilding}). " +
+                    "OS exit: ${exit.description} (reason=${exit.reason})."
             )
             analytics.track(
                 AnalyticsEvent(
@@ -313,8 +315,9 @@ object AndroidIde {
                     EventCategory.CRASH,
                     mapOf(
                         "kind" to "native",
-                        "engine_lane" to prev.op, // coarse lane only — no file/path/source (analytics-safe)
+                        "engine_lane" to prev.op, // fine op label — no file/path/source (analytics-safe)
                         "thread" to prev.thread,
+                        "index_building" to prev.indexBuilding.toString(),
                         "exit_reason" to exit.reason.toString(),
                     ),
                 )

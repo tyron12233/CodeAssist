@@ -7,9 +7,10 @@ import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 /**
- * [EngineBreadcrumb] is the only signal we get for the native 32-bit-ART SIGSEGV (uncatchable in-process), so
- * it must reliably persist the last engine op and read it back on the next launch. These pin that round-trip,
- * the "latest wins" overwrite, and the clean-shutdown [EngineBreadcrumb.clear].
+ * [EngineBreadcrumb] is the only signal we get for the native ART SIGSEGV (uncatchable in-process; on 32-bit
+ * AND 64-bit devices), so it must reliably persist the last engine op — and whether an index build was in
+ * flight — and read them back on the next launch. These pin that round-trip, the "latest wins" overwrite, the
+ * index-concurrency marker, and the clean-shutdown [EngineBreadcrumb.clear].
  */
 class EngineBreadcrumbTest {
 
@@ -52,6 +53,55 @@ class EngineBreadcrumbTest {
             assertTrue(EngineBreadcrumb.readLast() != null)
             EngineBreadcrumb.clear()
             assertNull(EngineBreadcrumb.readLast(), "a clean shutdown clears the breadcrumb")
+        } finally {
+            dir.toFile().deleteRecursively()
+        }
+    }
+
+    @Test
+    fun crumbCarriesWhetherAnIndexBuildWasInFlight() {
+        val dir = Files.createTempDirectory("crumb")
+        try {
+            EngineBreadcrumb.init(dir.resolve("c.log"))
+            EngineBreadcrumb.record("analysis")
+            assertEquals(false, EngineBreadcrumb.readLast()?.indexBuilding, "no build marked ⇒ false")
+
+            EngineBreadcrumb.noteIndexBuilding(true)
+            EngineBreadcrumb.record("semantic")
+            assertEquals(true, EngineBreadcrumb.readLast()?.indexBuilding, "a build in flight is recorded")
+
+            EngineBreadcrumb.noteIndexBuilding(false)
+            assertEquals(false, EngineBreadcrumb.readLast()?.indexBuilding, "the flag clears when the build ends")
+        } finally {
+            EngineBreadcrumb.clear(); dir.toFile().deleteRecursively()
+        }
+    }
+
+    @Test
+    fun anIndexBuildWithNoEngineOpStillReportsAsIndexOnly() {
+        val dir = Files.createTempDirectory("crumb")
+        try {
+            // A native death during the startup index build, before any editor op recorded a crumb.
+            EngineBreadcrumb.init(dir.resolve("c.log"))
+            EngineBreadcrumb.noteIndexBuilding(true)
+            val c = EngineBreadcrumb.readLast()
+            assertTrue(c != null, "an index-only death must still be reported")
+            assertEquals("(index-only)", c!!.op)
+            assertTrue(c.indexBuilding)
+            assertTrue(c.epochMillis > 0, "timestamped from the flag file")
+        } finally {
+            EngineBreadcrumb.clear(); dir.toFile().deleteRecursively()
+        }
+    }
+
+    @Test
+    fun clearAlsoDropsTheIndexFlag() {
+        val dir = Files.createTempDirectory("crumb")
+        try {
+            EngineBreadcrumb.init(dir.resolve("c.log"))
+            EngineBreadcrumb.noteIndexBuilding(true)
+            EngineBreadcrumb.clear()
+            assertNull(EngineBreadcrumb.readLast(), "clear drops both the crumb and the index flag")
         } finally {
             dir.toFile().deleteRecursively()
         }
