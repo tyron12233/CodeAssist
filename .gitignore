@@ -49,3 +49,6 @@ docs/*.png
 # Built app artifacts (never commit; releases attach these, Play gets the AAB)
 *.aab
 *.apk
+
+# Release announcement drafts (never commit; they feed `gh release create` from the working tree only)
+discord_release_*.txt
