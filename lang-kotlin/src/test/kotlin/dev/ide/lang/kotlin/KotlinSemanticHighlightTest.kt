@@ -68,6 +68,33 @@ class KotlinSemanticHighlightTest {
     }
 
     @Test
+    fun whenSubjectValIsALocalVariable() {
+        // `when (val navKey = key)` — the subject val's declaration AND its references in the branches must color
+        // as a local variable, not a class property. Its parent is the KtWhenExpression (not a block), which is
+        // exactly the case the highlighter used to miss (declaration fell to PROPERTY, references got no color).
+        val code = "fun f(key: Any) {\n" +
+            "  when (val navKey = key) {\n" +
+            "    is String -> navKey.length\n" +
+            "    else -> navKey.hashCode()\n" +
+            "  }\n" +
+            "}\n"
+        val toks = tokens("WhenSubject.kt", code)
+        assertTrue(
+            toks.any { it.text == "navKey" && it.kind == "localVariable" && HighlightModifier.DECLARATION in it.mods },
+            "the when-subject val declaration should be a localVariable declaration; got $toks",
+        )
+        // one declaration + two references, all local (never a property).
+        assertTrue(
+            toks.count { it.text == "navKey" && it.kind == "localVariable" } >= 3,
+            "the when-subject val and both references should all be localVariable; got $toks",
+        )
+        assertTrue(
+            toks.none { it.text == "navKey" && it.kind == "property" },
+            "the when-subject val must not be colored as a property; got $toks",
+        )
+    }
+
+    @Test
     fun stdlibInfixCallIsMarked() {
         val toks = tokens("Infix.kt", "package demo\nfun f() { val p = 1 to 2 }\n")
         assertTrue(

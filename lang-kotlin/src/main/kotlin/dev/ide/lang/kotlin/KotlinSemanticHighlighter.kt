@@ -19,6 +19,7 @@ import org.jetbrains.kotlin.psi.KtCatchClause
 import org.jetbrains.kotlin.psi.KtClass
 import org.jetbrains.kotlin.psi.KtClassOrObject
 import org.jetbrains.kotlin.psi.KtForExpression
+import org.jetbrains.kotlin.psi.KtWhenExpression
 import org.jetbrains.kotlin.psi.KtFunction
 import org.jetbrains.kotlin.psi.KtAnnotationEntry
 import org.jetbrains.kotlin.psi.KtBinaryExpression
@@ -188,7 +189,9 @@ class KotlinSemanticHighlighter(
                     )
 
                 is KtProperty -> {
-                    val local = psi.parent is KtBlockExpression
+                    // A when-subject `val` (`when (val x = …)`) is a KtProperty whose parent is the
+                    // KtWhenExpression, not a block — it is still a local binding, not a class property.
+                    val local = psi.parent is KtBlockExpression || psi.parent is KtWhenExpression
                     val const = psi.hasModifier(KtTokens.CONST_KEYWORD)
                     val depr =
                         if (isDeprecatedDecl(psi)) setOf(HighlightModifier.DEPRECATED) else emptySet()
@@ -673,6 +676,13 @@ class KotlinSemanticHighlighter(
 
                 is KtCatchClause -> node.catchParameter?.takeIf { it.name == name }
                     ?.let { return it }
+
+                // A when-subject variable (`when (val x = …) { … }`) is in scope across every branch. It lives on
+                // the KtWhenExpression, not as a block statement, so the KtBlockExpression branch never sees it.
+                // The offset guard keeps a self-reference inside its own initializer from binding to it.
+                is KtWhenExpression ->
+                    node.subjectVariable?.takeIf { it.name == name && it.textRange.endOffset <= offset }
+                        ?.let { return it }
 
                 is KtClassOrObject -> {
                     // Plain (non-val/var) primary-constructor params are visible in init blocks / property
