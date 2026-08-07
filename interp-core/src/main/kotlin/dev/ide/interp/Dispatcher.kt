@@ -544,7 +544,7 @@ class ReflectiveDispatcher(
         // receiver coerced to the impl's unboxed parameter — how the compiler always calls a value-class member.
         // Only reached on the miss path, so a normal member call never pays for the value-class probe.
         boxedValueClassMember(target, name, args, composable)?.let { return it.value }
-        throw InterpreterException("no method `$name`(${args.size}) on ${target.javaClass.name}")
+        throw InterpreterException("no method `$name`(${args.size}) on ${target.javaClass.name}" + dispatchFailureDetail(target.javaClass, name, args))
     }
 
     /** A member call on a BOXED inline value-class [receiver], routed to its static `name-<hash>` impl (see the
@@ -606,7 +606,28 @@ class ReflectiveDispatcher(
                 return m.invoke(null, *bindArgs(m.parameterTypes, args, composable, m.genericParameterTypes))
             }
         }
-        throw InterpreterException("no static `$name`(${args.size}) on $ownerFqn")
+        throw InterpreterException("no static `$name`(${args.size}) on $ownerFqn" + dispatchFailureDetail(cls, name, args))
+    }
+
+    /** A one-line summary appended to a dispatch-failure message: the supplied ARG runtime types, and what the
+     *  class actually offers for [name] — how many same-named methods, and the `$default` synthetics with their
+     *  parameter shapes (scanning declared AND public methods). Turns an environment-specific "no method"/"no
+     *  static" — a preview that renders on desktop but fails only on device — into a self-diagnosing report:
+     *  `0 $default synthetic(s)` means the defaulted-arg synthetic was stripped/absent in that build, while an
+     *  unexpected arg type points at a wrong receiver/argument upstream. Only computed on the (cold) throw path. */
+    private fun dispatchFailureDetail(cls: Class<*>, name: String, args: List<Any?>): String {
+        val argTypes = args.joinToString(", ") { a ->
+            when { a == null -> "null"; a === OmittedArg -> "_"; else -> a.javaClass.name }
+        }
+        val all = runCatching { (cls.methods.asSequence() + cls.declaredMethods.asSequence()).distinct().toList() }.getOrDefault(emptyList())
+        val named = all.count { runCatching { KotlinJvmNames.matches(cls, it.name, name) }.getOrDefault(false) }
+        val synthetics = all.filter {
+            Modifier.isStatic(it.modifiers) && it.name.endsWith("\$default") &&
+                runCatching { isDefaultSynthetic(cls, it.name, name) }.getOrDefault(false)
+        }
+        val synShapes = synthetics.joinToString("; ") { it.parameterTypes.joinToString(",") { p -> p.simpleName } }
+        return " [args: [$argTypes]; $named `$name` method(s); ${synthetics.size} \$default synthetic(s)" +
+            (if (synShapes.isNotEmpty()) " ($synShapes)" else "") + "]"
     }
 
     private class Invoked(val value: Any?)
@@ -684,7 +705,12 @@ class ReflectiveDispatcher(
         val key = "d|$name|${argShape(realArgs)}"
         cache[key]?.let { InterpProfile.count("cacheHit"); return it.method }
         InterpProfile.count("cacheMiss")
-        val fitting = (cls.methods.asSequence() + interfaceDefaultSynthetics(cls, name))
+        // `cls.methods` is PUBLIC-only; also scan `cls.declaredMethods` (any visibility) so a synthetic that a
+        // release build's optimizer (D8/R8) left non-public — present but not surfaced by getMethods() — is still
+        // found (a preview that works on desktop but fails on device with "no static/method"). A superset:
+        // isDefaultSynthetic + fitsDefaultSynthetic still gate every candidate, and the invoke force-accesses it.
+        val fitting = (cls.methods.asSequence() + cls.declaredMethods.asSequence() + interfaceDefaultSynthetics(cls, name))
+            .distinct()
             .filter { Modifier.isStatic(it.modifiers) && isDefaultSynthetic(cls, it.name, name) && fitsDefaultSynthetic(it, realArgs) }
             .toList()
         val minArity = fitting.minOfOrNull { it.parameterCount }
