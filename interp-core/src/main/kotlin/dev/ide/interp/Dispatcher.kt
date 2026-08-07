@@ -261,7 +261,10 @@ interface InterpretedLambda {
  * Returning null falls back to [ReflectiveDispatcher]'s plain proxy.
  */
 fun interface LambdaProxyStrategy {
-    fun proxyOrNull(lambda: InterpretedLambda, functionalInterface: Class<*>, composableParam: Boolean): Any?
+    /** [returnValueClass] is the lambda's value-class RETURN type (e.g. `IntOffset` for a `Density.() -> IntOffset`
+     *  `Modifier.offset { }` block), or null when the return isn't a value class — the proxy BOXES the
+     *  interpreter's unboxed result so the compiled callee's cast to the value class succeeds. */
+    fun proxyOrNull(lambda: InterpretedLambda, functionalInterface: Class<*>, composableParam: Boolean, returnValueClass: Class<*>?): Any?
 }
 
 /**
@@ -675,9 +678,10 @@ class ReflectiveDispatcher(
             if (a === OmittedArg) continue
             val slot = if (trailingLambda && i == k - 1) n - 1 else i
             if (slot !in 0 until n) continue
-            slots[slot] = if (a is InterpretedLambda)
-                (lambdaProxies?.proxyOrNull(a, params[slot], composable.getOrElse(i) { false }) ?: regularLambdaProxy(a, params[slot]))
-            else coerceArg(a, params[slot], realGenericParams?.getOrNull(slot))
+            slots[slot] = if (a is InterpretedLambda) {
+                val rvc = lambdaReturnValueClass(realGenericParams?.getOrNull(slot))
+                (lambdaProxies?.proxyOrNull(a, params[slot], composable.getOrElse(i) { false }, rvc) ?: regularLambdaProxy(a, params[slot], rvc))
+            } else coerceArg(a, params[slot], realGenericParams?.getOrNull(slot))
             provided[slot] = true
         }
         // A set mask bit i ⇒ use the default for value param i. The receiver(s) precede the value params in the
@@ -886,9 +890,10 @@ class ReflectiveDispatcher(
             // A set mask bit i ⇒ use the default for value param i. An explicit null is "provided" (no bit).
             if (i < realArgs.size && realArgs[i] !== OmittedArg) {
                 val a = realArgs[i]
-                slots[i] = if (a is InterpretedLambda)
-                    (lambdaProxies?.proxyOrNull(a, params[i], composable.getOrElse(i) { false }) ?: regularLambdaProxy(a, params[i]))
-                else coerceArg(a, params[i], realGenericParams?.getOrNull(i))
+                slots[i] = if (a is InterpretedLambda) {
+                    val rvc = lambdaReturnValueClass(realGenericParams?.getOrNull(i))
+                    (lambdaProxies?.proxyOrNull(a, params[i], composable.getOrElse(i) { false }, rvc) ?: regularLambdaProxy(a, params[i], rvc))
+                } else coerceArg(a, params[i], realGenericParams?.getOrNull(i))
             } else {
                 slots[i] = zeroValue(params[i])
                 masks[i / 32] = masks[i / 32] or (1 shl (i % 32))
@@ -1216,10 +1221,20 @@ class ReflectiveDispatcher(
     private fun bindArgs(params: Array<Class<*>>, args: List<Any?>, composable: List<Boolean>, genericParams: Array<java.lang.reflect.Type>? = null): Array<Any?> =
         Array(args.size) { i ->
             (args[i] as? InterpretedLambda)?.let { lam ->
-                lambdaProxies?.proxyOrNull(lam, params[i], composable.getOrElse(i) { false })
-                    ?: regularLambdaProxy(lam, params[i])
+                val rvc = lambdaReturnValueClass(genericParams?.getOrNull(i))
+                lambdaProxies?.proxyOrNull(lam, params[i], composable.getOrElse(i) { false }, rvc)
+                    ?: regularLambdaProxy(lam, params[i], rvc)
             } ?: coerceArg(args[i], params[i], genericParams?.getOrNull(i))
         }
+
+    /** The value-class RETURN type of a functional-interface parameter, read off its generic type
+     *  (`Density.() -> IntOffset` erases to `Function1<Density, IntOffset>`, whose LAST type argument is the
+     *  return) — so an interpreted lambda that returns a value class (`Modifier.offset { IntOffset(…) }`,
+     *  `graphicsLayer` blocks, `drawBehind`) has its UNBOXED result (a `Long`) BOXED before the compiled callee
+     *  casts it (`class java.lang.Long cannot be cast to …IntOffset` otherwise). Null when the return isn't a
+     *  value class. The non-composable-lambda analog of the composable path's return boxing. */
+    private fun lambdaReturnValueClass(genericType: java.lang.reflect.Type?): Class<*>? =
+        (genericType as? java.lang.reflect.ParameterizedType)?.actualTypeArguments?.lastOrNull()?.let { valueClassOf(it) }
 
     /** Realize a Kotlin `fun interface` SAM constructor (`BoundsTransform { a, b -> … }`) as a JVM proxy of
      *  [funInterface] whose single abstract method (whatever its name — `transform`, `compare`, …, NOT just
@@ -1247,7 +1262,7 @@ class ReflectiveDispatcher(
         }
     }
 
-    private fun regularLambdaProxy(lambda: InterpretedLambda, functionalInterface: Class<*>): Any {
+    private fun regularLambdaProxy(lambda: InterpretedLambda, functionalInterface: Class<*>, returnValueClass: Class<*>? = null): Any {
         // A SUSPEND lambda — a `pointerInput { … }` gesture block, a `LaunchedEffect { … }` body, a coroutine
         // builder — is invoked with a trailing `Continuation` argument (its JVM `Function.invoke` is erased to
         // `invoke(Object)`, so suspend can only be seen at CALL time, not from the interface). When a
@@ -1265,7 +1280,9 @@ class ReflectiveDispatcher(
                     val a = callArgs?.toList() ?: emptyList()
                     if (a.lastOrNull() is kotlin.coroutines.Continuation<*>)
                         suspendBridge?.runSuspending(lambda, a) ?: runCatching { lambda.invoke(a) }.getOrDefault(Unit)
-                    else lambda.invoke(a)
+                    // Box a value-class result (an interpreter-unboxed `Long` for `IntOffset`/`Dp`/… returned by a
+                    // `Density.() -> IntOffset` block) so the compiled callee's cast to the value class succeeds.
+                    else lambda.invoke(a).let { if (returnValueClass != null) boxValueClassIfNeeded(it, returnValueClass) else it }
                 }
                 "toString" -> "InterpretedLambda"
                 "hashCode" -> System.identityHashCode(lambda)
@@ -1402,7 +1419,7 @@ class ReflectiveDispatcher(
         for (j in 0 until args.size - fixed) {
             val a = args[fixed + j]
             val v = (a as? InterpretedLambda)?.let { lam ->
-                lambdaProxies?.proxyOrNull(lam, componentType, composable.getOrElse(fixed + j) { false }) ?: regularLambdaProxy(lam, componentType)
+                lambdaProxies?.proxyOrNull(lam, componentType, composable.getOrElse(fixed + j) { false }, null) ?: regularLambdaProxy(lam, componentType)
             } ?: boxValueClassIfNeeded(a, componentType)
             java.lang.reflect.Array.set(varargArray, j, v)
         }

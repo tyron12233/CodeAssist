@@ -1975,6 +1975,14 @@ class Interpreter(
             else -> null
         }
 
+        "isBlank" -> (recv as? CharSequence)?.let { Handled(it.isBlank()) }
+        "isEmpty" -> when (recv) {
+            is CharSequence -> Handled(recv.isEmpty())
+            is Collection<*> -> Handled(recv.isEmpty())
+            is Map<*, *> -> Handled(recv.isEmpty())
+            else -> null
+        }
+
         else -> null
     }
 
@@ -2839,20 +2847,26 @@ class Interpreter(
                 leadingReceivers = 1
             )
         }
-        val cls = loadClassAcross(ownerFqn, initialize = false, preferred = classLoader)
         // A missing library facade (e.g. a Compose icon's per-icon `…Kt`) is a recoverable boundary:
         // partial rendering skips the one statement rather than failing the whole preview.
+        loadClassAcross(ownerFqn, initialize = false, preferred = classLoader)
             ?: throw InterpreterBoundaryException("cannot load facade `$ownerFqn` for extension property `$name`")
-        val getter = getterName
-        val m = cls.methods.firstOrNull {
-            java.lang.reflect.Modifier.isStatic(it.modifiers) && it.parameterCount == 1 && KotlinJvmNames.matches(
-                cls,
-                it.name,
-                getter
-            )
-        } ?: throw InterpreterException("no extension-property getter `$name` on `$ownerFqn`")
-        runCatching { m.isAccessible = true }
-        return m.invoke(null, receiver)
+        // Route the getter through the dispatcher as an EXTENSION call (receiver as the leading argument), so
+        // OVERLOAD selection picks the getter whose parameter accepts the receiver and the receiver is COERCED
+        // (numeric widening/narrowing, value-class (un)boxing) — mirroring [writeExtensionProperty]. A bare
+        // `m.invoke(null, receiver)` over the first matching getter bound `0.5.sp` (a `Double`) to `getSp(Int)`
+        // (`.sp`/`.dp`/… each have Int/Float/Double overloads) → "argument type mismatch", degrading a project's
+        // typography/dimensions on every preview. The facade is confirmed loadable above, so routing here can't
+        // turn a missing-facade boundary into a hard error.
+        val getter = ResolvedCallable.Library(
+            displayName = getterName, ownerFqn = ownerFqn, methodName = getterName,
+            paramTypes = emptyList(), isStatic = true, isConstructor = false, isInline = false,
+        )
+        val call = RNode.Call(
+            getter, DispatchKind.EXTENSION, receiver = null, args = emptyList(),
+            callSiteKey = CallSiteKey(0), source = SourceSpan(0, 0),
+        )
+        return checkedDispatch(call, receiver, emptyList())
     }
 
     /** Write an extension property (`role = Role.RadioButton` inside a `semantics { }` lambda): its setter is a
@@ -3466,7 +3480,7 @@ class Interpreter(
 
         /** The `@InlineOnly` empty/blank predicates, dispatched by name in [evalEmptyBlankPredicate]. */
         val EMPTY_BLANK_PREDICATES =
-            setOf("isNotBlank", "isNotEmpty", "isNullOrBlank", "isNullOrEmpty")
+            setOf("isBlank", "isEmpty", "isNotBlank", "isNotEmpty", "isNullOrBlank", "isNullOrEmpty")
 
         /** `kotlin.math` single-argument functions modeled over [java.lang.Math] (all compute in `Double`).
          *  `round` is ties-to-even ([Math.rint], matching `kotlin.math.round`); `Double.roundToInt/Long` (ties

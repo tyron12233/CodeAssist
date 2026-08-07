@@ -55,12 +55,15 @@ class ComposeDispatcher(
 
     private val fallback: Dispatcher = fallback ?: ReflectiveDispatcher(
         loader = loader ?: ReflectiveDispatcher::class.java.classLoader,
-        lambdaProxies = LambdaProxyStrategy { lambda, fi, composable ->
+        lambdaProxies = LambdaProxyStrategy { lambda, fi, composable, returnVc ->
             // A composable function-type param threads the Composer. A PLAIN param gets the guarded proxy:
             // real framework code invokes these outside the renderer's guarded composition pass (a
             // `graphicsLayer` block during measure/semantics, an `onClick` from input dispatch), where a
             // propagated InterpreterException would crash the whole app instead of failing the preview.
-            if (composable) composableLambdaProxy(lambda, fi) else guardedLambdaProxy(lambda, fi)
+            // `returnVc` boxes a value-class return (`Modifier.offset { IntOffset(…) }`) so the compiled
+            // callee's cast to the value class succeeds — the cast runs AFTER the proxy returns (at measure), so
+            // the guard can't catch a raw `Long`; it must be boxed here.
+            if (composable) composableLambdaProxy(lambda, fi, returnVc) else guardedLambdaProxy(lambda, fi, returnVc)
         },
         // Run interpreted `suspend` blocks (a `LaunchedEffect`/`launch` body) as real, cancellable coroutines
         // off the caller thread, so `delay`-driven timers actually tick instead of busy-looping the UI thread.
@@ -239,7 +242,7 @@ class ComposeDispatcher(
      * and the call degrades to the return type's zero value. Suspend invocations (a trailing Continuation)
      * route through the coroutine bridge, exactly like the unguarded default proxy.
      */
-    private fun guardedLambdaProxy(lambda: InterpretedLambda, functionalInterface: Class<*>): Any =
+    private fun guardedLambdaProxy(lambda: InterpretedLambda, functionalInterface: Class<*>, returnValueClass: Class<*>? = null): Any =
         Proxy.newProxyInstance(functionalInterface.classLoader ?: javaClass.classLoader, arrayOf(functionalInterface)) { _, method, callArgs ->
             when (method.name) {
                 "invoke" -> {
@@ -251,7 +254,10 @@ class ComposeDispatcher(
                         val prevSuppressed = composablesSuppressed.get()
                         composablesSuppressed.set(true)
                         try {
-                            lambda.invoke(a)
+                            // Box a value-class return (`Modifier.offset { IntOffset(…) }` — the block's unboxed
+                            // `Long`) so the compiled callee's cast to the value class succeeds. The cast runs
+                            // after this proxy returns (at measure), so it can't be caught below — box it here.
+                            boxLambdaReturn(lambda.invoke(a), returnValueClass)
                         } catch (t: Throwable) {
                             contentLambdaError = contentLambdaError ?: t
                             safeGuardReturn(method.returnType, a)

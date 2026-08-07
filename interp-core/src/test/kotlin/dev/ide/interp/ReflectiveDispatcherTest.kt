@@ -218,7 +218,7 @@ class ReflectiveDispatcherTest {
         // The Compose bridge's seam: a lambda bound to a `@Composable` param routes through the injected
         // strategy with composableParam=true, even though the callee (`forEach`) isn't itself composable.
         var sawComposable: Boolean? = null
-        val strategy = LambdaProxyStrategy { lam, fi, composable ->
+        val strategy = LambdaProxyStrategy { lam, fi, composable, _ ->
             sawComposable = composable
             java.lang.reflect.Proxy.newProxyInstance(fi.classLoader, arrayOf(fi)) { _, m, a ->
                 if (m.name == "accept") lam.invoke(a?.toList() ?: emptyList()) else null
