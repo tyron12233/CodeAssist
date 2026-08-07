@@ -1080,6 +1080,12 @@ class ReflectiveDispatcher(
         // so convert an integer arg to the exact integer param type. Only fires on a genuine mismatch — an
         // exact-type arg already `isInstance`s its wrapper above; integer↔float is left alone.
         if (isIntegerValue(value) && isIntegerType(paramType) && !wrap(paramType).isInstance(value)) return coerceNumber(value as Number, paramType)
+        // The FLOATING analog: the interpreter's floating math produces a `Double` where a `Float` param is
+        // expected (`Color.copy(alpha = ((4.5f * ln(x)) + 2f) / 100f)` — the interpreter widens the expression to
+        // Double via `ln`/mixed arithmetic, but `copy`'s param is `float`). Reflection won't narrow Double→float,
+        // so convert between the two floating types (and vice versa). Scoped to float↔float, so the integer rule's
+        // deliberate Float↛Int rejection is untouched.
+        if (isFloatingValue(value) && isFloatingType(paramType) && !wrap(paramType).isInstance(value)) return coerceNumber(value as Number, paramType)
         return boxValueClassIfNeeded(value, paramType)
     }
 
@@ -1425,6 +1431,7 @@ class ReflectiveDispatcher(
         is InterpretedLambda -> p.isInterface
         else -> wrap(p).isInstance(a) || acceptsValueClassUnderlying(p, a) || acceptsBoxedValueClassUnboxed(p, a) ||
             (isIntegerValue(a) && isIntegerType(p)) ||
+            (isFloatingValue(a) && isFloatingType(p)) ||
             (p.isArray && a is Collection<*> && collectionFitsArray(a, p.componentType))
     }
 
@@ -1502,11 +1509,21 @@ class ReflectiveDispatcher(
 
     private fun isIntegerValue(a: Any?): Boolean = a is Int || a is Long || a is Short || a is Byte
 
+    private fun isFloatingType(p: Class<*>): Boolean = when (p) {
+        Float::class.javaPrimitiveType, java.lang.Float::class.java,
+        Double::class.javaPrimitiveType, java.lang.Double::class.java -> true
+        else -> false
+    }
+
+    private fun isFloatingValue(a: Any?): Boolean = a is Float || a is Double
+
     private fun coerceNumber(n: Number, p: Class<*>): Any = when (wrap(p)) {
         java.lang.Long::class.java -> n.toLong()
         Integer::class.java -> n.toInt()
         java.lang.Short::class.java -> n.toShort()
         java.lang.Byte::class.java -> n.toByte()
+        java.lang.Float::class.java -> n.toFloat()
+        java.lang.Double::class.java -> n.toDouble()
         else -> n
     }
 
