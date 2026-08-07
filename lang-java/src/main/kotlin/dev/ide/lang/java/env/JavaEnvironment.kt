@@ -200,6 +200,7 @@ class JavaEnvironment private constructor(
                 synthetic = { syntheticProvider() },
                 overlay = { overlayProvider() },
                 parse = { name, text -> parse(name, text) },
+                psiManager = { com.intellij.psi.PsiManager.getInstance(project) },
             )
             injectedFinder = finder
             com.intellij.psi.PsiElementFinder.EP.getPoint(project)
