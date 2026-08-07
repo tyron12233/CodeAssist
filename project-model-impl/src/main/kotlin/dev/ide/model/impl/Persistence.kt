@@ -262,7 +262,11 @@ object ModelPersistence {
         }
         val moduleTable = doc["module"].asObject()
         val typeId = moduleTable["type"] as String
-        val languageLevel = LanguageLevel.valueOf(moduleTable["languageLevel"] as String)
+        // A module.toml written by an older/newer build can carry a languageLevel this build's enum doesn't
+        // have (Java levels come and go over time). Fall back to the default rather than failing the whole
+        // project open — a legacy project must still open (observed as an IllegalArgumentException in the field).
+        val languageLevel = runCatching { LanguageLevel.valueOf(moduleTable["languageLevel"] as String) }
+            .getOrDefault(LanguageLevel.JAVA_17)
         val output = moduleTable["output"] as String
         val sdk = moduleTable["sdk"] as String?
 
