@@ -63,6 +63,11 @@
     <string name="import_failed">无法导入该项目工程包！</string>
     <string name="import_unrecognized_title">该文件导入失败!</string>
     <string name="import_unrecognized">CodeAssist 无法识别此文件！请选择 .caproj 格式项目工程包进行导入。</string>
+    <!-- Gradle 项目导入（尽力而为的兼容模式） -->
+    <string name="import_gradle_title">导入 Gradle 项目</string>
+    <string name="import_gradle_subtitle">打开现有的 Gradle 构建（尽力而为）</string>
+    <string name="import_gradle_busy">正在导入 Gradle 项目…</string>
+    <string name="import_gradle_failed">该文件夹不是可导入的 Gradle 项目。</string>
     <plurals name="caproj_files">
         <item quantity="one">%1$d 个文件</item>
         <item quantity="other">%1$d 个文件</item>
@@ -95,6 +100,9 @@
     <string name="support_star">前往Github收藏项目</string>
     <string name="support_show_ads">展示广告</string>
     <string name="support_show_ads_desc">应用内可能会展示广告，但你可以随时关闭</string>
+    <string name="support_ad_privacy">管理广告同意</string>
+    <string name="support_ad_privacy_desc">查看或更改你的广告隐私选择。</string>
+    <string name="support_ad_privacy_button">管理</string>
     <string name="ad_label">广告</string>
     <string name="house_ad_support_title">喜欢 CodeAssist 吗?</string>
     <string name="house_ad_support_content">可通过GitHub赞助渠道支持本项目开发</string>
@@ -134,6 +142,10 @@
     <string name="delete_project_content">“%1$s” 及其所有文件将被永久删除，无法撤销！要执行删除操作吗？</string>
     <string name="cancel">取消</string>
     <string name="delete">删除</string>
+    <string name="color_picker_title">自定义颜色</string>
+    <string name="color_hue">色相</string>
+    <string name="color_saturation">饱和度</string>
+    <string name="color_lightness">明度</string>
     <string name="project_name">项目名称</string>
     <string name="package_name">包名</string>
     <string name="creating">构建中…</string>
@@ -194,6 +206,7 @@
     <string name="tab_close_to_the_right">收拢到右侧</string>
     <string name="tab_close_to_the_left">收拢到左侧</string>
     <string name="tab_close_all">全部关闭</string>
+    <string name="tab_open_files">打开的文件</string>
 
     <!-- filetree (FileNavigator) — reuses existing `modules` plural -->
     <string name="filetree_open_in_file_manager">在文件管理器中打开</string>
@@ -295,6 +308,57 @@
     <string name="symbolbar_move_line_down">下移行</string>
     <string name="symbolbar_duplicate_line">复制行</string>
     <string name="symbolbar_next_problem">下一个问题</string>
+    <string name="symbolbar_customize">自定义符号</string>
+    <string name="symbolbar_comment">行注释</string>
+    <string name="symed_pin">固定到固定行</string>
+    <string name="symed_unpin">取消固定</string>
+    <string name="symed_add_action">添加操作键</string>
+    <string name="symed_title">符号与宏</string>
+    <string name="symed_symbols">符号</string>
+    <string name="symed_scope_global">全局</string>
+    <string name="symed_scope_project">本项目</string>
+    <string name="symed_scope_hint_global">应用于所有项目。</string>
+    <string name="symed_scope_hint_project">保存在本项目中，可与团队共享。</string>
+    <string name="symed_project_unavailable">打开项目以在此处自定义其符号。</string>
+    <string name="symed_add_hint">添加符号或运算符</string>
+    <string name="symed_add">添加</string>
+    <string name="symed_move_up">上移</string>
+    <string name="symed_move_down">下移</string>
+    <string name="symed_remove">移除</string>
+    <string name="symed_reset">重置为默认</string>
+    <string name="symed_suggest">从文件建议</string>
+    <string name="symed_presets">预设</string>
+    <string name="symed_export">复制为 JSON</string>
+    <string name="symed_import">粘贴 JSON</string>
+    <string name="symed_import_title">粘贴符号与宏的 JSON</string>
+    <string name="symed_import_apply">导入</string>
+    <string name="symed_import_bad">这看起来不是有效的自定义文件。</string>
+    <string name="symed_empty">尚无符号。添加一个、选择预设、重置为默认，或从当前文件建议。</string>
+    <string name="symed_exported">已复制到剪贴板</string>
+    <string name="symed_tab_macros">宏</string>
+    <string name="symed_add_macro">添加宏</string>
+    <string name="symed_macros_empty">尚无宏。添加一个以在键入时将缩写展开为代码片段。</string>
+    <string name="symed_macro_abbrev">缩写</string>
+    <string name="symed_macro_template">模板</string>
+    <string name="symed_macro_desc">描述（可选）</string>
+    <string name="symed_macro_languages">语言（无 = 全部）</string>
+    <string name="symed_macro_enabled">启用</string>
+    <string name="symed_macro_preview">预览</string>
+    <string name="symed_macro_syntax">$1 $2 制表符占位 · ${1:default} · $END$ 光标 · $FILE$ $DATE$ $USER$</string>
+    <string name="symed_save">保存</string>
+    <string name="symed_all_languages">全部</string>
+    <string name="symed_edit_key">编辑键</string>
+    <string name="symed_key_label">标签（显示内容）</string>
+    <string name="symed_key_inserts">插入内容</string>
+    <string name="symed_key_action">操作</string>
+    <string name="symed_key_pinned">已固定</string>
+    <string name="symed_delete">删除</string>
+    <string name="symed_insert_token">插入（点击添加到末尾）</string>
+    <string name="symed_variable">变量</string>
+    <string name="symed_macro_type">类型 — 可选（例如 java.lang.String）</string>
+    <string name="symed_macro_type_hint">在接收此类型的对象后提供。实例替换 `expr.` — 使用 $EXPR$ 表示；静态在 `Type.` 后继续。</string>
+    <string name="symed_scope_instance">实例</string>
+    <string name="symed_scope_static">静态</string>
     <string name="edbottomnav_source">源代码</string>
     <string name="breadcrumb_code">代码</string>
     <string name="breadcrumb_blocks">积木</string>
@@ -357,10 +421,15 @@
     <string name="sources_download">下载</string>
     <string name="sources_downloading">正在下载…</string>
     <string name="sources_download_failed">下载失败：%1$s</string>
+    <string name="library_readonly_source">库源码 · 只读</string>
+    <string name="library_readonly_decompiled">已反编译 · 只读</string>
+    <string name="editor_large_file_notice">大文件：为控制内存，代码智能功能受限</string>
+    <string name="library_decompile_java">反编译为 Java</string>
     <string name="structure_title">结构</string>
     <string name="structure_filter">筛选…</string>
     <string name="structure_no_symbols">此文件中没有符号</string>
     <string name="structure_no_matches">没有匹配项</string>
+    <string name="structure_no_file">打开文件以查看其结构</string>
     <string name="comingsoon_footnote">即将推出</string>
     <string name="edscreen_project_root">项目根目录</string>
     <!-- NOTE: CodeAssistApp.kt reuses settings_title (must exist — expect from settings batch); dep flagged -->
@@ -506,6 +575,7 @@
     <string name="preview_choose_preview">选择预览</string>
     <string name="preview_no_preview_found">未找到 @Preview</string>
     <string name="preview_renders_on_device">Compose 预览将在设备上渲染</string>
+    <string name="preview_preparing">正在准备预览（建立库索引）…</string>
     <string name="preview_device_phone">手机</string>
     <string name="preview_device_compact">紧凑</string>
     <string name="preview_device_tablet">平板</string>
@@ -514,6 +584,10 @@
     <string name="preview_night">深色</string>
     <string name="preview_zoom_in">放大</string>
     <string name="preview_fit">适应</string>
+    <string name="preview_lock">锁定视图以使点击操作到达预览（禁用平移和缩放）</string>
+    <string name="preview_unlock">解锁视图以重新进行平移和缩放</string>
+    <string name="preview_collapse_toolbar">折叠工具栏</string>
+    <string name="preview_expand_toolbar">展开工具栏</string>
     <string name="preview_problems">预览问题</string>
     <string name="preview_copy_problems">复制问题</string>
     <string name="preview_render_error">渲染错误</string>
@@ -533,6 +607,15 @@
     <string name="edoverlay_select_all">全选</string>
     <string name="edoverlay_quick_documentation">快速文档</string>
     <string name="edoverlay_quick_actions">快速操作</string>
+
+    <string name="nav_go_to">转到</string>
+    <string name="nav_declaration">声明</string>
+    <string name="nav_implementations">实现</string>
+    <string name="nav_type_declaration">类型声明</string>
+    <string name="nav_super">父类</string>
+    <string name="nav_none">源码中未找到。</string>
+    <string name="ctxmenu_actions">操作</string>
+    <string name="ctxmenu_intentions">意图</string>
 
     <!-- dialogs: NewFileDialog (enums hold StringResource label) -->
     <string name="newfile_title">新建文件</string>
@@ -657,6 +740,8 @@
     <string name="settings_settings_subtitle">外观、编辑器、代码补全与分析</string>
     <string name="settings_code_style">代码样式</string>
     <string name="settings_code_style_subtitle">按语言配置格式化方案和实时预览</string>
+    <string name="settings_symbols">符号与宏</string>
+    <string name="settings_symbols_subtitle">自定义键盘符号栏和文本宏</string>
     <string name="settings_sdk_manager">SDK 管理器</string>
     <string name="settings_sdk_manager_subtitle">下载 Android SDK 和 JDK 源码</string>
     <string name="settings_keystore_manager">密钥库管理器</string>
@@ -666,6 +751,33 @@
     <string name="plugins_restart_hint">重启后将应用插件更改。</string>
     <string name="plugins_required">必需</string>
     <string name="plugins_requires">需要 %1$s</string>
+    <string name="settings_storage">存储</string>
+    <string name="settings_storage_subtitle">查看空间占用并释放空间</string>
+    <string name="storage_total_used">总占用</string>
+    <string name="storage_clear">清除</string>
+    <string name="storage_clear_all_caches">清除所有缓存</string>
+    <string name="storage_projects_header">项目</string>
+    <string name="storage_open_badge">打开</string>
+    <string name="storage_unavailable">存储信息不可用。</string>
+    <string name="storage_freed">已释放 %1$s</string>
+    <string name="storage_clear_sdk_title">清除 Android SDK？</string>
+    <string name="storage_clear_sdk_body">这将删除已下载的 SDK 组件和下载内容（%1$s）。下次构建需要时会重新下载。</string>
+    <string name="storage_cat_dependencies_title">依赖</string>
+    <string name="storage_cat_dependencies_desc">已下载的库，需要时会重新下载</string>
+    <string name="storage_cat_index_title">索引</string>
+    <string name="storage_cat_index_desc">代码搜索与补全索引，自动重建</string>
+    <string name="storage_cat_build_title">构建输出</string>
+    <string name="storage_cat_build_desc">编译的类与 dex 缓存，下次构建时重建</string>
+    <string name="storage_cat_preview_title">预览</string>
+    <string name="storage_cat_preview_desc">布局与 Compose 预览缓存，按需重新生成</string>
+    <string name="storage_cat_language_title">语言缓存</string>
+    <string name="storage_cat_language_desc">Kotlin 与自定义视图缓存，自动重建</string>
+    <string name="storage_cat_sdk_title">Android SDK 与下载</string>
+    <string name="storage_cat_sdk_desc">SDK 组件和下载，可重新下载</string>
+    <string name="storage_cat_projects_title">项目文件</string>
+    <string name="storage_cat_projects_desc">你的源代码和项目设置</string>
+    <string name="storage_cat_other_title">其他</string>
+    <string name="storage_cat_other_desc">密钥库、备份和应用数据</string>
 
     <!-- keystore (KeystoreManagerScreen) -->
     <string name="keystore_manager_title">密钥库管理器</string>
@@ -701,6 +813,8 @@
     <string name="sdk_clear_finished">清除已完成任务</string>
     <string name="sdk_jdk">JDK</string>
     <string name="sdk_jdk_version">JDK %1$s</string>
+    <string name="sdk_jdk_android_runtime">Android 运行时（ART）</string>
+    <string name="sdk_jdk_android_runtime_desc">此设备运行在 ART 上，而非 JDK。编辑器使用内置工具链编译 Java。请在下方下载 JDK 源代码以查看 java.* 文档。</string>
     <string name="sdk_jdk_sources_available">源代码已就绪，已启用 android.* 和 java.* 文档。</string>
     <string name="sdk_jdk_no_sources">未找到 JDK 源代码。请下载包含源代码的 JDK：</string>
     <string name="sdk_jdk_downloading">JDK %1$d…</string>
@@ -780,6 +894,11 @@
     <string name="dep_section_version">版本</string>
     <string name="dep_section_scope">作用域</string>
     <string name="dep_section_exclusions">排除项</string>
+    <string name="dep_section_downloaded">已下载</string>
+    <string name="dep_downloaded_help">版本仍缓存在磁盘上。删除不再使用的版本以释放空间；构建需要时会重新下载。</string>
+    <string name="dep_downloaded_empty">尚未下载任何版本。</string>
+    <string name="dep_in_use">使用中</string>
+    <string name="dep_delete_version_named">删除版本 %1$s</string>
     <string name="dep_exclusions_help">要排除的传递 group:name 条目（任一侧均可使用 *），以逗号或空格分隔。</string>
     <string name="dep_exclusions_hint">例如 com.google.guava:guava, org.json:*</string>
     <string name="dep_version_hint">版本</string>
