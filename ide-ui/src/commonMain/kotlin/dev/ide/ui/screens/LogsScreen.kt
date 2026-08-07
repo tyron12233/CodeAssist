@@ -44,6 +44,7 @@ import dev.ide.ui.backend.FileActions
 import dev.ide.ui.backend.IdeBackend
 import dev.ide.ui.backend.UiLogEntry
 import dev.ide.ui.components.PeekTimestampReveal
+import dev.ide.ui.components.clipForClipboard
 import dev.ide.ui.generated.resources.Res
 import dev.ide.ui.generated.resources.logs_copy_all
 import dev.ide.ui.generated.resources.logs_empty
@@ -129,7 +130,7 @@ fun LogsScreen(
             HeaderAction(if (paused) CaIcons.play else CaIcons.stop, if (paused) stringResource(Res.string.logs_resume) else stringResource(Res.string.logs_pause), paused) { paused = !paused }
             HeaderAction(CaIcons.refresh, stringResource(Res.string.refresh)) { all = backend.diagnostics.recentLogs() }
             HeaderAction(CaIcons.copy, stringResource(Res.string.logs_copy_all)) {
-                clipboard.setText(AnnotatedString(shown.joinToString("\n\n") { renderForCopy(it) }))
+                clipboard.setText(AnnotatedString(clipForClipboard(shown.joinToString("\n\n") { renderForCopy(it) })))
             }
             if (fileActions.canShare) {
                 HeaderAction(CaIcons.share, stringResource(Res.string.share)) {

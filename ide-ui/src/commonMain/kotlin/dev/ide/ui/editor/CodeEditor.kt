@@ -45,6 +45,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Popup
 import androidx.compose.ui.window.PopupProperties
 import dev.ide.ui.backend.IdeBackend
+import dev.ide.ui.components.clipForClipboard
 import dev.ide.ui.backend.UiCompletionItem
 import dev.ide.ui.backend.UiAction
 import dev.ide.ui.backend.UiNavKind
@@ -700,11 +701,12 @@ private fun CodeEditorContent(
                 }
 
                 Key.C -> {
-                    editorSession.selectedText()?.let { clipboard.setText(AnnotatedString(it)) }; return true
+                    // Cap the payload so a multi-MB selection can't blow the clipboard's Binder transaction.
+                    editorSession.selectedText()?.let { clipboard.setText(AnnotatedString(clipForClipboard(it))) }; return true
                 }
 
                 Key.X -> {
-                    editorSession.cutSelection()?.let { clipboard.setText(AnnotatedString(it)) }; return true
+                    editorSession.cutSelection()?.let { clipboard.setText(AnnotatedString(clipForClipboard(it))) }; return true
                 }
 
                 Key.V -> {

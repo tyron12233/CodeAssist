@@ -598,7 +598,8 @@ private class EditorInputConnection(
 
     private fun setClipboardText(text: String) {
         val cm = view.context.getSystemService(Context.CLIPBOARD_SERVICE) as? ClipboardManager ?: return
-        cm.setPrimaryClip(ClipData.newPlainText(null, text))
+        // Cap the payload: a multi-MB selection would overflow the clipboard's Binder transaction and crash.
+        cm.setPrimaryClip(ClipData.newPlainText(null, dev.ide.ui.components.clipForClipboard(text)))
     }
 
     private fun clipboardText(): String? {
