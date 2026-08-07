@@ -750,11 +750,16 @@ class IdeUiState(
      */
     fun syncOpenTabsFromDisk() {
         scope.launch {
-            for (i in openFiles.indices) {
-                val f = openFiles[i]
+            // openFiles can be mutated (a tab opened/closed) while this suspends on disk I/O, so a captured
+            // index goes stale — re-indexing it threw IndexOutOfBounds in the field. Snapshot the targets, then
+            // write each result back at that exact tab's CURRENT index, skipping it if the tab is gone or has
+            // since been edited (so an external write never clobbers in-progress user edits).
+            for (f in openFiles.toList()) {
                 if (f.readOnly || f.modified) continue
                 val text = readTabText(f.path) ?: continue
                 if (text == f.savedText) continue // untouched → preserve session/undo/caret
+                val i = openFiles.indexOf(f)
+                if (i < 0 || openFiles[i].modified) continue
                 val name = f.path.substringAfterLast('/').substringAfterLast('\\')
                 openFiles[i] = OpenFile(f.path, name, text)
                 backend.editor.updateDocument(f.path, text)
