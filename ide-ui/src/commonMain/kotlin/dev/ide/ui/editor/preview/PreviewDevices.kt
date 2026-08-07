@@ -8,6 +8,41 @@ package dev.ide.ui.editor.preview
  */
 object PreviewDevices {
 
+    /** Android Studio's default device for a sizeless `@Preview(showSystemUi = true)`: a generic phone. Its
+     *  dp match the off-screen render's fallback viewport ([DEFAULT_VIEWPORT_WIDTH_DP]/[DEFAULT_VIEWPORT_HEIGHT_DP])
+     *  so the card and the streamed frame share one aspect ratio. */
+    val DEFAULT_PHONE = DeviceProfile("Phone", 411, 731, 2.625f)
+
+    /** Heights (dp) of the mock status + navigation bars [SystemUiChrome] draws around a
+     *  `@Preview(showSystemUi = true)`. Shared so the off-screen render can target the BODY area between them
+     *  (device height minus these), letting the streamed frame fill the chrome's content slot with no letterbox. */
+    const val STATUS_BAR_DP = 24
+    const val NAV_BAR_DP = 38
+
+    /** The off-screen render's fallback viewport (dp) when a preview declares no device/size and doesn't wrap. */
+    const val DEFAULT_VIEWPORT_WIDTH_DP = 411
+    const val DEFAULT_VIEWPORT_HEIGHT_DP = 731
+
+    /**
+     * The logical size (dp) the off-screen preview surface should render at for a given `@Preview`, so the
+     * streamed frame matches the card's aspect (device size) instead of a fixed default — the fix for the
+     * "letterboxed / doesn't fill the phone" render. Returns null for a **wrap-to-content** preview (no
+     * device/size and no system UI), which the caller renders into the default viewport as a max bound and
+     * crops to the measured content.
+     *
+     * For `showSystemUi` the height is the device BODY between the mock status + nav bars, so the frame fills
+     * [SystemUiChrome]'s content slot exactly; a sizeless `showSystemUi` preview frames the [DEFAULT_PHONE].
+     */
+    fun renderSurfaceDp(device: String?, widthDp: Int?, heightDp: Int?, showSystemUi: Boolean): Pair<Int, Int>? {
+        val wrap = device.isNullOrBlank() && widthDp == null && heightDp == null && !showSystemUi
+        if (wrap) return null
+        val profile = resolve(device, widthDp, heightDp) ?: if (showSystemUi) DEFAULT_PHONE else null
+        val wDp = profile?.wdp ?: DEFAULT_VIEWPORT_WIDTH_DP
+        val hFull = profile?.hdp ?: DEFAULT_VIEWPORT_HEIGHT_DP
+        val hDp = if (showSystemUi) (hFull - STATUS_BAR_DP - NAV_BAR_DP).coerceAtLeast(1) else hFull
+        return wDp to hDp
+    }
+
     /** Curated logical sizes (dp) + density for the common `Devices.*` ids. Approximate but representative. */
     private val known: Map<String, DeviceProfile> = mapOf(
         "id:pixel" to DeviceProfile("Pixel", 411, 731, 2.6f),
