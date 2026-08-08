@@ -125,6 +125,9 @@ class ComposePreviewWireCodecTest {
             body = RNode.Block(allNodes(), isExpression = false, span),
             diagnostics = listOf(LoweringDiagnostic("fd", span)),
             receiverSlot = SlotId(30), returnsUnit = true, mutableBackingField = true,
+            // Regression: the pre-extraction codec MISSED this field, so `:preview` decoded every top-level
+            // `val` as re-evaluated-per-read and custom-theme CompositionLocal identity broke remotely.
+            singletonBackingField = true,
         ),
         program = mapOf("Preview/1" to smallFn("Preview"), "Helper/0" to smallFn("Helper")),
         classes = listOf(fullClass()),

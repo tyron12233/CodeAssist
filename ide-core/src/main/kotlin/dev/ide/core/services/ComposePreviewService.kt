@@ -47,22 +47,25 @@ internal class ComposePreviewService(private val ctx: EngineContext) {
             }
         }
 
-        fun lowerByOwner(pf: dev.ide.lang.kotlin.symbols.KotlinSymbolService.PreviewSourceFile): dev.ide.lang.kotlin.interp.PreviewFileModel? {
+        // Lazy handles: the expansion pulls exactly the reached declaration out of the located file, so
+        // following one helper into a big screen file doesn't lower its unrelated siblings (the cold-preview
+        // dominant cost on a big project).
+        fun lazyByOwner(pf: dev.ide.lang.kotlin.symbols.KotlinSymbolService.PreviewSourceFile): dev.ide.lang.kotlin.interp.PreviewLazyFile? {
             val path = runCatching { java.nio.file.Paths.get(pf.file.path).normalize() }.getOrNull()
             val owner = path?.let { p ->
                 kotlinModules.firstOrNull { (_, _, roots) -> roots.any { p.startsWith(it) } }?.second
             }
-            return (owner ?: entry).loweredFile(pf)
+            return (owner ?: entry).lazyLoweredFile(pf)
         }
 
-        val provider = object : dev.ide.lang.kotlin.interp.PreviewDeclProvider {
-            override fun fileDeclaringType(fqn: String): dev.ide.lang.kotlin.interp.PreviewFileModel? =
+        val provider = object : dev.ide.lang.kotlin.interp.LazyPreviewDeclProvider {
+            override fun fileDeclaringType(fqn: String): dev.ide.lang.kotlin.interp.PreviewLazyFile? =
                 kotlinModules.firstNotNullOfOrNull { (_, a, _) -> a.findDeclaringTypeFile(fqn) }
-                    ?.let(::lowerByOwner)
+                    ?.let(::lazyByOwner)
 
-            override fun filesDeclaringFunction(name: String): List<dev.ide.lang.kotlin.interp.PreviewFileModel> =
+            override fun filesDeclaringFunction(name: String): List<dev.ide.lang.kotlin.interp.PreviewLazyFile> =
                 kotlinModules.flatMap { (_, a, _) -> a.findDeclaringFunctionFiles(name) }
-                    .distinctBy { it.file.path }.mapNotNull(::lowerByOwner)
+                    .distinctBy { it.file.path }.mapNotNull(::lazyByOwner)
         }
         return entry.lowerFileWithDeps(vf, provider)
     }

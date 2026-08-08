@@ -12,6 +12,7 @@ import java.nio.file.Path
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNotNull
+import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 /**
@@ -80,6 +81,65 @@ class KotlinCrossFilePreviewTest {
         val model = lowerCrossFile(service, dir, "Use.kt", entry)
         assertTrue(model.program["caller/0"]?.isComplete == true, "caller should lower")
         assertNotNull(model.program["helper/1"], "the cross-file helper function must be merged into the program")
+    }
+
+    @Test
+    fun crossFilePullIsFunctionGranular() {
+        // Pulling `helper` out of a sibling file must NOT lower/merge that file's unrelated declarations —
+        // whole-file merging is what made the first preview on a big project (Jetsnack) take 10+ seconds:
+        // a card preview transitively lowered nearly the whole app at file granularity.
+        val entry = """
+            package com.example.compose
+            fun caller(): Int = helper(2)
+        """.trimIndent()
+        val (service, dir) = serviceOver(
+            mapOf(
+                "Helper.kt" to """
+                    package com.example.compose
+
+                    fun helper(n: Int): Int = n + 1
+
+                    fun unrelatedSibling(): String = "never referenced"
+
+                    class UnrelatedType(val x: Int)
+                """.trimIndent(),
+                "Use.kt" to entry,
+            ),
+        )
+        val model = lowerCrossFile(service, dir, "Use.kt", entry)
+        assertNotNull(model.program["helper/1"], "the reached helper must be merged")
+        assertNull(model.program["unrelatedSibling/0"], "an unreached sibling must not be lowered/merged")
+        assertTrue(model.classes.none { it.simpleName == "UnrelatedType" }, "an unreached sibling class must not be merged")
+    }
+
+    @Test
+    fun crossFileFunctionWithObjectLiteralBringsItsAnonymousClass() {
+        // An `object : Runnable {}` literal inside a PULLED cross-file function synthesizes a per-file
+        // anonymous class; per-declaration pulling must merge that class with the function, or its
+        // constructor call has nothing to build at render time.
+        val entry = """
+            package com.example.compose
+            fun caller(): Any = makeRunnable()
+        """.trimIndent()
+        val (service, dir) = serviceOver(
+            mapOf(
+                "Maker.kt" to """
+                    package com.example.compose
+
+                    fun makeRunnable(): Runnable = object : Runnable {
+                        override fun run() {}
+                    }
+                """.trimIndent(),
+                "Use.kt" to entry,
+            ),
+        )
+        val model = lowerCrossFile(service, dir, "Use.kt", entry)
+        val maker = assertNotNull(model.program["makeRunnable/0"], "the cross-file function must be merged")
+        assertTrue(maker.isComplete, "the object literal must lower: ${maker.diagnostics}")
+        assertTrue(
+            model.classes.any { "\$anon\$" in it.fqn },
+            "the function's anonymous class must ride into the model; classes=${model.classes.map { it.fqn }}",
+        )
     }
 
     @Test

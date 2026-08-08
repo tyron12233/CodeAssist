@@ -105,6 +105,16 @@ class KotlinTreeResolver(
     private val anonymousClasses = ArrayList<ResolvedClass>()
     private var anonCounter = 0
 
+    /** High-water mark into the anonymous-class list, so a per-declaration lowering (the lazy preview cache)
+     *  can attribute the anonymous classes [anonymousClassesSince] a declaration's lowering synthesized — they
+     *  must travel WITH that declaration into the preview model, or its `object : Foo {}` constructor call has
+     *  no class to build. */
+    fun anonymousClassMark(): Int = anonymousClasses.size
+
+    /** The anonymous classes synthesized since [mark] (see [anonymousClassMark]). */
+    fun anonymousClassesSince(mark: Int): List<ResolvedClass> =
+        if (anonymousClasses.size <= mark) emptyList() else ArrayList(anonymousClasses.subList(mark, anonymousClasses.size))
+
     /** The implicit `this` receivers of the enclosing receiver-lambdas (`RowScope.() -> Unit` content slots),
      *  each bound to the slot the scope instance arrives in at runtime — so a member extension of the scope
      *  (`RowScope.weight`) can dispatch onto it, and a bare extension call can use it as its extension receiver. */

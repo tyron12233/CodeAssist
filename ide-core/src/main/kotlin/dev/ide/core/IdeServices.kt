@@ -1871,6 +1871,12 @@ class IdeServices private constructor(
                     it.isAndroidModule =
                         module.facets.get(AndroidFacet.KEY) != null || module.type.platform == PlatformKind.ANDROID
                     it.extensionCacheDir = store.rootPath.resolve(".platform/caches/kotlin-ext")
+                    // Lowered Compose-preview declarations persist across launches, so the first preview after
+                    // a reopen decodes instead of re-running overload resolution over the reachable closure.
+                    // Per-module subdir: two modules can see the same dependency source file with different
+                    // classpaths, and their entries must not collide on the shared path-derived file name.
+                    it.previewLoweringCacheDir =
+                        store.rootPath.resolve(".platform/caches/preview-lowering/${module.id.value}")
                     // Synthetic "light" classes (Android R/BuildConfig, …), minus the Kotlin file facades.
                     it.syntheticClassProvider = { kotlinSyntheticClasses(module) }
                     // Real parameter names + javadoc/KDoc from attached sources: the persistent source-doc
