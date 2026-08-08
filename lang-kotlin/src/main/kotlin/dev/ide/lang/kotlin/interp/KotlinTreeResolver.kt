@@ -1016,6 +1016,19 @@ class KotlinTreeResolver(
         // inside a `Column {}`/`buildAnnotatedString {}` scope) with a bogus property read on the scope.
         for (i in receiverScopes.indices.reversed()) {
             val rs = receiverScopes[i]
+            // A SOURCE extension property in scope on this receiver — `with(density) { cardWidthWithPaddingPx }`,
+            // or a `Density.() -> Float` lambda body reading a file-level `val Density.cardWidthWithPaddingPx`
+            // (Jetsnack's `offsetGradientBackground(width = { 6 * cardWidthWithPaddingPx })`). Its getter is
+            // interpreted (no compiled facade), so lower it as a source EXTENSION call on the scope's `this`,
+            // mirroring the enclosing-class path below. `propertyBinding` (used just below for a MEMBER or a
+            // reflected LIBRARY extension) would mis-bind a source extension to a non-existent facade getter.
+            sourceExtensionProperty(name, rs.type)?.let { sym ->
+                return RNode.Call(
+                    toCallable(sym), DispatchKind.EXTENSION,
+                    RNode.Name(Binding.Local(rs.slot, "this", mutable = false), span(e)),
+                    emptyList(), csk(e.textRange.startOffset), span(e),
+                )
+            }
             val declaresIt = runCatching {
                 service.membersForCompletion(rs.type.qualifiedName, rs.type.typeArguments, name)
                     .any { it.name == name && it.kind == SymbolKind.FIELD && (!it.isExtension || extensionInScope(it)) }
@@ -2486,7 +2499,18 @@ class KotlinTreeResolver(
         // `getSize`, keyed on `kotlin.Any`) win the overload tie-break over the real source extension — or
         // resolve at all where nothing legal exists. Member-extensions (`packageName == null`; resolved via
         // their in-scope receiver, e.g. `RowScope.weight`) are NOT import-gated and pass through unchanged.
-        val inScope = raw.filter { !it.isExtension || it.packageName == null || extensionInScope(it) }
+        val inScope = raw.filter {
+            !it.isExtension || it.packageName == null || extensionInScope(it) ||
+                // A MEMBER extension whose declaring class is an ACTIVE receiver scope — `Dp.toPx()` inside a
+                // `Density.() -> Float` lambda or a `val Density.cardWidthWithPaddingPx` getter (Jetsnack's
+                // gradient). The editor resolver surfaces such a candidate with its declaring PACKAGE set (not
+                // null) and doesn't import-gate it to the implicit receiver, so `extensionInScope` drops it and
+                // the call ties out. It IS in scope precisely when an in-scope receiver is (a subtype of) its
+                // declaring class — the same `findScopeReceiver` condition the MEMBER_EXTENSION dispatch relies
+                // on. (In a `with(receiver){}` block the resolver ALSO emits a `packageName == null` copy that
+                // already survives; this admits the equivalent one for a receiver-lambda / ext-property getter.)
+                (it.declaringClassFqn?.let { fqn -> findScopeReceiver(fqn) != null } == true)
+        }
         // Fast path: the overwhelmingly common call resolves to a single (or zero) candidate. Return it without
         // building the signature-dedup key (a per-candidate string + param-type list) or running the
         // type-directed tie-break ladder below (and the inference it drives). Behaviour-preserving: with one
