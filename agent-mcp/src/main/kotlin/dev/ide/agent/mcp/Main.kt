@@ -33,22 +33,33 @@ import java.util.concurrent.CountDownLatch
 fun main(args: Array<String>) {
     var project = System.getenv("CODEASSIST_MCP_PROJECT")
     var autoAccept = false
+    var httpPort: Int? = null
     var i = 0
     while (i < args.size) {
         when (args[i]) {
             "--project" -> project = args.getOrNull(++i) ?: error("--project requires a directory argument")
             "--auto-accept" -> autoAccept = true
+            "--http" -> {
+                val next = args.getOrNull(i + 1)
+                httpPort = next?.toIntOrNull() ?: CodeAssistMcpServer.DEFAULT_HTTP_PORT
+                if (next?.toIntOrNull() != null) i++
+            }
             "--help", "-h" -> {
                 println(
                     """
-                    |Usage: agent-mcp [--project <dir>] [--auto-accept]
+                    |Usage: agent-mcp [--project <dir>] [--auto-accept] [--http [<port>]]
                     |
                     |  --project <dir>  Project root to serve (default: current directory, or
                     |                   ${'$'}CODEASSIST_MCP_PROJECT).
                     |  --auto-accept    Authorize mutating tools (writes, deletes, HTTP requests) without
                     |                   prompting. Off by default: they are refused.
+                    |  --http [<port>]  Serve over HTTP (Streamable HTTP, request-response mode) instead of
+                    |                   stdio. Defaults to port ${'$'}{CodeAssistMcpServer.DEFAULT_HTTP_PORT}.
+                    |                   Useful for the standalone binary with an adb forward + a remote MCP
+                    |                   server; the IDE's in-app server uses the same code path.
                     |
-                    |Serves the Model Context Protocol over stdin/stdout (stdio transport).
+                    |Serves the Model Context Protocol over stdin/stdout (stdio transport), or over HTTP
+                    |when --http is given.
                     """.trimMargin(),
                 )
                 return
@@ -63,6 +74,15 @@ fun main(args: Array<String>) {
 
     val workspace = FileSystemAgentWorkspace(root)
     val gate = if (autoAccept) AllowAllGate else ReadOnlyGate
+
+    if (httpPort != null) {
+        val server = CodeAssistMcpServer.startHttpServer(workspace, port = httpPort, gate = gate)
+        System.err.println("CodeAssist MCP server ready over HTTP (project: $root, port: ${server.port})")
+        System.err.println("Mutating tools: ${if (autoAccept) "auto-accepted" else "denied"}.")
+        Runtime.getRuntime().addShutdownHook(Thread { server.close() })
+        SHUTDOWN_LATCH.await()
+        return
+    }
 
     // MCP output MUST be the only thing on stdout; anything else a client parses as a protocol message.
     System.err.println("CodeAssist MCP server ready (project: $root)")
