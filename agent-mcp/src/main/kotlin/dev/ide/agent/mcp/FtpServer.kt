@@ -239,8 +239,9 @@ class FtpServer(
                     }
                 }
             } ?: run { reply(550, "No such file or directory."); return true }
-            val conn = dataConnection() ?: return true
+            // Clients open the data socket only after reading 150, so the 150 must go out before we accept.
             reply(150, "Opening data connection.")
+            val conn = dataConnection() ?: return true
             conn.use {
                 val out = it.getOutputStream()
                 for (f in items) {
@@ -261,8 +262,8 @@ class FtpServer(
                 reply(550, "No such file.")
                 return true
             }
-            val conn = dataConnection() ?: return true
             reply(150, "Opening data connection.")
+            val conn = dataConnection() ?: return true
             conn.use {
                 val out = it.getOutputStream()
                 Files.newInputStream(target, StandardOpenOption.READ).use { input -> input.copyTo(out) }
@@ -275,8 +276,8 @@ class FtpServer(
 
         private fun stor(arg: String): Boolean {
             val target = resolve(arg) ?: run { reply(550, "Invalid path."); return true }
-            val conn = dataConnection() ?: return true
             reply(150, "Opening data connection.")
+            val conn = dataConnection() ?: return true
             return try {
                 Files.createDirectories(target.parent)
                 conn.use {
@@ -353,7 +354,6 @@ class FtpServer(
          *  [Path] inside [root]; null when it would escape the root (e.g. `..`). */
         private fun resolve(arg: String): Path? {
             val cleaned = arg.replace('\\', '/')
-            if (cleaned.isEmpty()) return resolve(cwd)
             val base = if (cleaned.startsWith("/")) root else root.resolve(cwd)
             val target = base.resolve(cleaned.trimStart('/')).normalize()
             return target.takeIf { it.startsWith(root) }

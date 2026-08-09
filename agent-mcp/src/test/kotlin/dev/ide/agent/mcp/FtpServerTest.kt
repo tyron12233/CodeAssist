@@ -77,7 +77,7 @@ class FtpServerTest {
 
     /** A tiny FTP control client (enough for USER/PASS/PASV/STOR/RETR/LIST/... over one socket). */
     private class RawFtpClient(port: Int) : AutoCloseable {
-        private val socket = Socket("127.0.0.1", port)
+        private val socket = Socket("127.0.0.1", port).apply { soTimeout = 10_000 }
         private val reader = socket.getInputStream().bufferedReader(Charsets.US_ASCII)
         private val writer = BufferedWriter(OutputStreamWriter(socket.getOutputStream(), Charsets.US_ASCII))
 
@@ -105,9 +105,11 @@ class FtpServerTest {
          *  completion code. */
         fun dataCmd(verbArg: String, payload: ByteArray): Int {
             val port = dataPort(cmdPASV())
+            writer.write("$verbArg\r\n")
+            writer.flush()
             val pre = readReply()
             check(pre.startsWith("150")) { "expected 150 for $verbArg, got: $pre" }
-            Socket("127.0.0.1", port).use { it.getOutputStream().write(payload) }
+            Socket("127.0.0.1", port).apply { soTimeout = 10_000 }.use { it.getOutputStream().write(payload) }
             lastReply = readReply()
             return lastCode
         }
@@ -115,9 +117,11 @@ class FtpServerTest {
         /** Downloads the data for [verbArg] (e.g. `RETR x.txt`) and returns the raw bytes. */
         fun dataText(verbArg: String): String {
             val port = dataPort(cmdPASV())
+            writer.write("$verbArg\r\n")
+            writer.flush()
             val pre = readReply()
             check(pre.startsWith("150")) { "expected 150 for $verbArg, got: $pre" }
-            val bytes = Socket("127.0.0.1", port).use { it.getInputStream().readBytes() }
+            val bytes = Socket("127.0.0.1", port).apply { soTimeout = 10_000 }.use { it.getInputStream().readBytes() }
             lastReply = readReply()
             return bytes.toString(Charsets.UTF_8)
         }
