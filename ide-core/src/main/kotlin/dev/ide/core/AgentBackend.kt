@@ -61,29 +61,6 @@ internal class AgentBackend(private val ctx: BackendContext) : AgentService {
     private val transport = OkHttpLlmTransport()
     private val registry = AgentProviders.registry(transport)
     private val workspace = IdeAgentWorkspace(ctx)
-    private val tools = SimpleToolRegistry(builtinTools(workspace) + ftpControlTool)
-    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
-    private val log = Log.logger("ide.agent")
-
-    /** The in-app MCP-over-HTTP server, started when the "MCP server" AI setting is on. The server is
-     *  opt-in: enabling it is itself the permission to edit the open project, so its tools run under
-     *  [AllowAllGate] (a remote client cannot answer the interactive UI prompts). */
-    @Volatile
-    private var mcpServer: HttpMcpServer? = null
-
-    /** The local FTP asset server, started when the More-menu "FTP server" toggle (or the `ftp_server`
-     *  tool) is on. Anonymous and bound to 127.0.0.1 only; uploads land in `<project>/assets`. */
-    @Volatile
-    private var ftpServer: FtpServer? = null
-
-    init {
-        if (prefBool("mcpServer", default = false)) {
-            mcpServer = startMcpServer()
-        }
-        if (prefBool(FTP_PREF, default = false)) {
-            ftpServer = startFtpServer()
-        }
-    }
 
     /** The `ftp_server` tool: start, stop, or query the local FTP asset server. Advertised on the MCP
      *  server and to the in-app chat agent (which both share [tools]), so the feature is controllable from
@@ -113,6 +90,30 @@ internal class AgentBackend(private val ctx: BackendContext) : AgentService {
             } else {
                 ToolExecutionResult.ok("FTP asset server is stopped.")
             }
+        }
+    }
+
+    private val tools = SimpleToolRegistry(builtinTools(workspace) + ftpControlTool)
+    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
+    private val log = Log.logger("ide.agent")
+
+    /** The in-app MCP-over-HTTP server, started when the "MCP server" AI setting is on. The server is
+     *  opt-in: enabling it is itself the permission to edit the open project, so its tools run under
+     *  [AllowAllGate] (a remote client cannot answer the interactive UI prompts). */
+    @Volatile
+    private var mcpServer: HttpMcpServer? = null
+
+    /** The local FTP asset server, started when the More-menu "FTP server" toggle (or the `ftp_server`
+     *  tool) is on. Anonymous and bound to 127.0.0.1 only; uploads land in `<project>/assets`. */
+    @Volatile
+    private var ftpServer: FtpServer? = null
+
+    init {
+        if (prefBool("mcpServer", default = false)) {
+            mcpServer = startMcpServer()
+        }
+        if (prefBool(FTP_PREF, default = false)) {
+            ftpServer = startFtpServer()
         }
     }
 
