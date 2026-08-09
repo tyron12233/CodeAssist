@@ -1,0 +1,59 @@
+name: MCP server
+
+on:
+  push:
+    branches: [ main, master ]
+  pull_request:
+  workflow_dispatch:
+
+# Build + test the standalone MCP server (:agent-mcp). Pure Kotlin/JVM like the rest of the framework, so
+# CI_CORE_ONLY drops the IDE shells (which need the Android SDK) and CI needs no SDK provisioning. The
+# server's stdio wire path is covered by in-process pipe-stream tests, and `installDist` proves the module
+# produces a runnable launcher clients can spawn.
+env:
+  CI_CORE_ONLY: "true"
+  JAVA_VERSION: "25"
+
+concurrency:
+  group: mcp-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    name: agent-mcp tests + distribution
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up JDK ${{ env.JAVA_VERSION }}
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: ${{ env.JAVA_VERSION }}
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v4
+
+      # Same as ci.yml: one-shot CI builds gain nothing from incremental compilation, and a restored
+      # incremental cache can produce phantom "unresolved reference" errors after the classpath changes.
+      - name: Disable Kotlin incremental compilation (CI)
+        run: |
+          mkdir -p ~/.gradle
+          echo "kotlin.incremental=false" >> ~/.gradle/gradle.properties
+
+      - name: Unit tests
+        run: ./gradlew :agent-mcp:test --console=plain --stacktrace
+
+      - name: Build runnable distribution
+        run: ./gradlew :agent-mcp:installDist --console=plain --stacktrace
+
+      - name: Upload test reports
+        if: ${{ always() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: mcp-test-reports
+          path: |
+            agent-mcp/build/reports/tests/**
+            agent-mcp/build/test-results/**
+          if-no-files-found: ignore
+          retention-days: 14
