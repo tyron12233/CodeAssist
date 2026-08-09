@@ -7,8 +7,12 @@ import android.provider.OpenableColumns
 import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.core.content.FileProvider
+import androidx.lifecycle.lifecycleScope
 import dev.ide.core.CaprojFormat
 import dev.ide.ui.backend.IdeBackend
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import java.io.File
 
 /**
@@ -19,8 +23,21 @@ import java.io.File
  */
 internal class AndroidFileOps(private val activity: ComponentActivity) {
 
-    /** Hand the APK at [path] to the system package installer (the OS install-confirmation UI). */
-    fun promptInstall(path: String) = runCatching {
+    /** Prefer Shizuku for a built APK, falling back to the OS install-confirmation UI. */
+    fun promptInstall(path: String) {
+        activity.lifecycleScope.launch {
+            val result = withContext(Dispatchers.IO) {
+                ShizukuApkInstaller.install(activity, File(path).toPath()) { }
+            }
+            if (result == ShizukuApkInstaller.Result.SUCCESS) {
+                Toast.makeText(activity, "Installed ${File(path).name} with Shizuku", Toast.LENGTH_SHORT).show()
+            } else {
+                promptSystemInstall(path)
+            }
+        }
+    }
+
+    private fun promptSystemInstall(path: String) = runCatching {
         val uri = FileProvider.getUriForFile(activity, "${activity.packageName}.fileprovider", File(path))
         val intent = Intent(Intent.ACTION_VIEW).apply {
             setDataAndType(uri, "application/vnd.android.package-archive")

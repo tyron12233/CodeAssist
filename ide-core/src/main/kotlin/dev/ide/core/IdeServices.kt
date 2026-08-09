@@ -295,7 +295,7 @@ class AndroidDeviceTools(
 
 /**
  * Installs (and then launches) a freshly built APK: the on-device "Run" for an android-app. Supplied by
- * :ide-android (it needs Android's `PackageInstaller` + the OS install-confirmation UI); null on the
+ * :ide-android (it prefers Shizuku when available and otherwise uses Android's `PackageInstaller`); null on the
  * desktop, where the android task stops at producing the signed artifact. [installAndLaunch] returns once
  * the installation is initiated and streams progress + the eventual launch to [log].
  */

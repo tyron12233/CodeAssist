@@ -18,11 +18,11 @@ import java.nio.file.Files
 import java.nio.file.Path
 
 /**
- * On-device [ApkInstaller]: installs a built APK via Android's [PackageInstaller] and launches it on
- * success, the device "Run" for an android-app. The OS shows its own install-confirmation (this app holds
- * `REQUEST_INSTALL_PACKAGES`); if the app isn't yet allowed to install unknown apps, it opens the relevant
- * Settings screen. A per-session receiver handles the pending-user-action prompt, then launches the
- * installed package. Streams progress to the build console via [installAndLaunch]'s `log`.
+ * On-device [ApkInstaller]: prefers Shizuku for a built APK, falls back to Android's [PackageInstaller],
+ * and launches it on success. The fallback shows the OS confirmation (this app holds
+ * `REQUEST_INSTALL_PACKAGES`) and opens the relevant Settings screen when unknown-app installs aren't yet
+ * allowed. A per-session receiver handles the fallback's pending-user-action prompt. Progress from either
+ * path is streamed to the build console via [installAndLaunch]'s `log`.
  *
  * Under build-process isolation this runs in the `:build` process (no foreground activity), so the launch is
  * handed to the UI process via [PackageLaunchBridge] — firing the activity from `:build` would trip Android's
@@ -33,6 +33,17 @@ class ApkInstallerImpl(context: Context) : ApkInstaller {
 
     override suspend fun installAndLaunch(apk: Path, packageName: String, log: (String) -> Unit): Boolean = withContext(Dispatchers.IO) {
         if (!Files.exists(apk)) { log("APK not found: $apk"); return@withContext false }
+
+        when (ShizukuApkInstaller.install(context, apk, log)) {
+            ShizukuApkInstaller.Result.SUCCESS -> {
+                log("Installed $packageName with Shizuku.")
+                if (!PackageLaunchBridge.forwardLaunch(packageName)) ApkLauncher.launch(context, packageName, log)
+                return@withContext true
+            }
+            ShizukuApkInstaller.Result.FAILED -> log("Falling back to the system package installer…")
+            ShizukuApkInstaller.Result.UNAVAILABLE -> Unit
+        }
+
         val pm = context.packageManager
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O && !pm.canRequestPackageInstalls()) {
             log("Allow CodeAssist to install apps (Settings → Install unknown apps), then Run again.")

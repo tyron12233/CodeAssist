@@ -153,7 +153,7 @@ object AndroidIde {
         // loading of the user's/libraries' code. The peer factory dexes the small generated peer classes the
         // VM needs when an interpreted object is handed to real platform code (a Comparator, a Runnable).
         val programInterpreter = VmProgramInterpreter(peerFactory = DexPeerFactory())
-        // Installs + launches a built APK (the android Run) via the system package installer.
+        // Installs + launches a built APK (the android Run), preferring Shizuku with a system-installer fallback.
         val apkInstaller = ApkInstallerImpl(context)
         // The debug-only in-app log bridge: extract the bundled runtime jar (woven into debug builds); the
         // bridge inside the built app binds the IDE's exported AppLogSinkService over Binder and pushes its
