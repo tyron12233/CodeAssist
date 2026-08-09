@@ -43,6 +43,9 @@ object CodeAssistMcpServer {
     /** Default port for the in-IDE MCP-over-HTTP server (`adb forward tcp:8765 tcp:8765`). */
     const val DEFAULT_HTTP_PORT = 8765
 
+    /** Default port for the local FTP asset server (`adb forward tcp:8021 tcp:8021`). */
+    const val DEFAULT_FTP_PORT = 8021
+
     /**
      * Builds a configured [McpServer.McpSyncServer] that serves [tools] over [transportProvider].
      * Defaults the tool registry to the built-in tool set bound to [workspace] (the engine-backed port
@@ -114,6 +117,14 @@ object CodeAssistMcpServer {
         provider.bind(port)
         return HttpMcpServer(provider)
     }
+
+    /**
+     * Starts the local FTP asset server rooted at [root] (callers pass their `<project>/assets` directory,
+     * created on start). Anonymous, bound to 127.0.0.1 only, so uploads land directly in [root] and nothing
+     * leaks off the device. The returned [FtpServer] is closed to stop listening.
+     */
+    fun startFtpServer(root: java.nio.file.Path, port: Int = DEFAULT_FTP_PORT): FtpServer =
+        FtpServer(root, port).start()
 
     private fun toolSpec(
         tool: AgentTool,

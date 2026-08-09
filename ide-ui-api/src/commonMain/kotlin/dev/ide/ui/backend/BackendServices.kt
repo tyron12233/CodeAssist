@@ -1127,6 +1127,15 @@ interface AgentService {
     /** Answer a pending [permissionRequest]. */
     fun answerPermission(id: Int, decision: UiAgentPermissionDecision)
 
+    /** Whether the backend hosts the local FTP asset server (the More-menu toggle + `ftp_server` tool). */
+    fun ftpServerSupported(): Boolean = false
+
+    /** Whether the local FTP asset server is currently running. */
+    fun ftpServerEnabled(): Boolean = false
+
+    /** Start or stop the local FTP asset server (persisted under `settings.ai.ftpServer`). */
+    fun setFtpServerEnabled(enabled: Boolean) {}
+
     /** A no-op agent for backends that wire none. */
     object Unsupported : AgentService {
         override val chatState: StateFlow<UiAgentChatState> =

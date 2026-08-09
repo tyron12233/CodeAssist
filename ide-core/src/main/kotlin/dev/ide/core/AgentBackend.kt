@@ -3,10 +3,14 @@ package dev.ide.core
 import dev.ide.agent.AgentEvent
 import dev.ide.agent.AgentEventSink
 import dev.ide.agent.AgentPermissionGate
+import dev.ide.agent.AgentTool
 import dev.ide.agent.AllowAllGate
 import dev.ide.agent.PermissionMode
 import dev.ide.agent.ProviderConfig
 import dev.ide.agent.SimpleToolRegistry
+import dev.ide.agent.ToolArgs
+import dev.ide.agent.ToolExecutionResult
+import dev.ide.agent.ToolSpec
 import dev.ide.agent.WriteRequest
 import dev.ide.agent.impl.AgentLoop
 import dev.ide.agent.impl.AgentProviders
@@ -14,7 +18,9 @@ import dev.ide.agent.impl.OkHttpLlmTransport
 import dev.ide.agent.impl.SystemPrompt
 import dev.ide.agent.impl.builtinTools
 import dev.ide.agent.mcp.CodeAssistMcpServer
+import dev.ide.agent.mcp.FtpServer
 import dev.ide.agent.mcp.HttpMcpServer
+import dev.ide.agent.toolSchema
 import dev.ide.platform.log.Log
 import dev.ide.ui.backend.AgentService
 import dev.ide.ui.backend.UiAgentChatState
@@ -39,6 +45,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import java.nio.file.Files
 import java.util.concurrent.atomic.AtomicInteger
 import java.util.concurrent.atomic.AtomicLong
 import kotlin.io.path.readText
@@ -54,7 +61,7 @@ internal class AgentBackend(private val ctx: BackendContext) : AgentService {
     private val transport = OkHttpLlmTransport()
     private val registry = AgentProviders.registry(transport)
     private val workspace = IdeAgentWorkspace(ctx)
-    private val tools = SimpleToolRegistry(builtinTools(workspace))
+    private val tools = SimpleToolRegistry(builtinTools(workspace) + ftpControlTool)
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
     private val log = Log.logger("ide.agent")
 
@@ -64,9 +71,48 @@ internal class AgentBackend(private val ctx: BackendContext) : AgentService {
     @Volatile
     private var mcpServer: HttpMcpServer? = null
 
+    /** The local FTP asset server, started when the More-menu "FTP server" toggle (or the `ftp_server`
+     *  tool) is on. Anonymous and bound to 127.0.0.1 only; uploads land in `<project>/assets`. */
+    @Volatile
+    private var ftpServer: FtpServer? = null
+
     init {
         if (prefBool("mcpServer", default = false)) {
             mcpServer = startMcpServer()
+        }
+        if (prefBool(FTP_PREF, default = false)) {
+            ftpServer = startFtpServer()
+        }
+    }
+
+    /** The `ftp_server` tool: start, stop, or query the local FTP asset server. Advertised on the MCP
+     *  server and to the in-app chat agent (which both share [tools]), so the feature is controllable from
+     *  a client as well as the More-menu toggle. Non-mutating: no project file changes. */
+    private val ftpControlTool = object : AgentTool {
+        override val spec = ToolSpec(
+            name = "ftp_server",
+            description = "Start, stop, or query the local FTP asset server (anonymous, bound to " +
+                "127.0.0.1:${CodeAssistMcpServer.DEFAULT_FTP_PORT}). When running, files uploaded over FTP " +
+                "land in the open project's assets/ folder, reachable from a PC with \"adb forward tcp:" +
+                CodeAssistMcpServer.DEFAULT_FTP_PORT + " tcp:" + CodeAssistMcpServer.DEFAULT_FTP_PORT + "\". " +
+                "action=status only reports the current state.",
+            parameters = toolSchema {
+                string("action", "start, stop, or status", enum = listOf("start", "stop", "status"))
+            },
+        )
+        override suspend fun execute(args: ToolArgs): ToolExecutionResult {
+            when (args.string("action")) {
+                "start" -> setFtpServerEnabled(true)
+                "stop" -> setFtpServerEnabled(false)
+            }
+            return if (ftpServer != null) {
+                ToolExecutionResult.ok(
+                    "FTP asset server is RUNNING on 127.0.0.1:${CodeAssistMcpServer.DEFAULT_FTP_PORT} " +
+                        "(uploads land in <project>/assets/).",
+                )
+            } else {
+                ToolExecutionResult.ok("FTP asset server is stopped.")
+            }
         }
     }
 
@@ -112,6 +158,32 @@ internal class AgentBackend(private val ctx: BackendContext) : AgentService {
     } catch (e: Exception) {
         log.error("Failed to start the MCP server on port ${CodeAssistMcpServer.DEFAULT_HTTP_PORT}: ${e.message}", e)
         null
+    }
+
+    /** Binds the FTP asset server to `<project>/assets` (created on start); null when no project is open or
+     *  startup fails (e.g. port taken). */
+    private fun startFtpServer(): FtpServer? = try {
+        val assets = ctx.servicesOrNull?.workspaceRoot?.resolve("assets")
+            ?: return null
+        Files.createDirectories(assets)
+        CodeAssistMcpServer.startFtpServer(assets, CodeAssistMcpServer.DEFAULT_FTP_PORT)
+    } catch (e: Exception) {
+        log.error("Failed to start the FTP server on port ${CodeAssistMcpServer.DEFAULT_FTP_PORT}: ${e.message}", e)
+        null
+    }
+
+    override fun ftpServerSupported(): Boolean = true
+
+    override fun ftpServerEnabled(): Boolean = ftpServer != null
+
+    override fun setFtpServerEnabled(enabled: Boolean) {
+        ctx.manager?.setPreference("settings.$AI_PAGE.$FTP_PREF", enabled.toString())
+        if (enabled) {
+            if (ftpServer == null) ftpServer = startFtpServer()
+        } else {
+            ftpServer?.close()
+            ftpServer = null
+        }
     }
 
     private fun modePref(): PermissionMode =
@@ -479,6 +551,9 @@ internal class AgentBackend(private val ctx: BackendContext) : AgentService {
         const val AI_PAGE = "ai"
         const val MODE_PREF = "agent.permissionMode"
         const val GATEWAY = "gateway"
+
+        /** The `settings.ai.*` pref backing the FTP asset server toggle (`ftpServer`). */
+        const val FTP_PREF = "ftpServer"
 
         /** The port the in-app MCP server listens on (see the "MCP server" AI setting). */
         const val MCP_PORT = CodeAssistMcpServer.DEFAULT_HTTP_PORT
