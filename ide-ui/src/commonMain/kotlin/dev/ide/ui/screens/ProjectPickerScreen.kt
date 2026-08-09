@@ -42,7 +42,6 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ImageBitmap
-import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.font.FontWeight
@@ -54,7 +53,6 @@ import dev.ide.ui.backend.UiDrawable
 import dev.ide.ui.backend.UiProjectIcon
 import dev.ide.ui.editor.preview.decodeImageBytes
 import dev.ide.ui.editor.preview.drawUiDrawable
-import dev.ide.ui.components.BetaBanner
 import dev.ide.ui.components.CenteredDialog
 import dev.ide.ui.components.darken
 import dev.ide.ui.components.ProjectTile
@@ -77,8 +75,6 @@ import dev.ide.ui.generated.resources.export_share
 import dev.ide.ui.generated.resources.import_gradle_subtitle
 import dev.ide.ui.generated.resources.import_gradle_title
 import dev.ide.ui.generated.resources.import_project
-import dev.ide.ui.generated.resources.join_the_community
-import dev.ide.ui.generated.resources.join_the_community_content
 import dev.ide.ui.generated.resources.modules
 import dev.ide.ui.generated.resources.new_project
 import dev.ide.ui.generated.resources.new_project_content
@@ -92,12 +88,6 @@ import dev.ide.ui.generated.resources.project_opened_weeks
 import dev.ide.ui.generated.resources.projects
 import dev.ide.ui.generated.resources.recovered_projects
 import dev.ide.ui.generated.resources.recovered_projects_content
-import dev.ide.ui.generated.resources.support_chip_free
-import dev.ide.ui.generated.resources.support_chip_open_source
-import dev.ide.ui.generated.resources.support_content
-import dev.ide.ui.generated.resources.support_sponsor
-import dev.ide.ui.generated.resources.support_star
-import dev.ide.ui.generated.resources.support_title
 import dev.ide.ui.generated.resources.your_files
 import dev.ide.ui.generated.resources.your_projects
 import dev.ide.ui.icons.CaIcons
@@ -177,15 +167,9 @@ fun ProjectPickerScreen(
                 // A secondary path: import an existing Gradle project (best-effort compatibility mode).
                 if (onImportGradle != null) ImportGradleCard(onImportGradle)
 
-                // The support card: CodeAssist is free, ad-free and open source, so the only "monetisation"
-                // is an optional sponsor/star. Shown whenever the host can open links.
-                if (onSponsor != null || onStarOnGitHub != null) {
-                    SupportCard(onSponsor = onSponsor, onStar = onStarOnGitHub)
-                }
                 if (showLegacyRecovery && compatibilityCount > 0) {
                     LegacyRecoveryBanner(count = compatibilityCount, onDismiss = onDismissLegacyRecovery)
                 }
-                if (onJoinDiscord != null) DiscordCard(onJoinDiscord)
 
                 if (projects.isEmpty()) {
                     Text(stringResource(Res.string.no_project_yet), color = MaterialTheme.colorScheme.outline, style = MaterialTheme.typography.bodyMedium)
@@ -209,7 +193,6 @@ fun ProjectPickerScreen(
                 // A native ad below the project list — an idle "between tasks" spot, never over the actions.
                 // Renders nothing unless ads are active (host available, enabled, not a supporter).
                 AdSlot(AdPlacement.PROJECTS)
-                BetaBanner(onSubmit = onSubmitSuggestions)
                 StorageAccessCard(path = storagePath, onOpenInFiles = onOpenInFiles)
             }
         }
@@ -363,129 +346,6 @@ private fun SectionLabel(text: String, count: Int? = null) {
                 Text(count.toString(), color = MaterialTheme.colorScheme.outline, style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.SemiBold)
             }
         }
-    }
-}
-
-/** Discord brand "blurple" — used only for the community card's icon/accent. */
-private val DiscordBlurple = Color(0xFF5865F2)
-
-/** A slim, blurple-tinted card inviting the user to join the community Discord. */
-@Composable
-private fun DiscordCard(onClick: () -> Unit) {
-    val interaction = remember { MutableInteractionSource() }
-    val shape = RoundedCornerShape(Ca.radius.lg)
-    Row(
-        Modifier
-            .fillMaxWidth()
-            .pressScale(interaction)
-            .background(DiscordBlurple.copy(alpha = 0.12f), shape)
-            .border(1.dp, DiscordBlurple.copy(alpha = 0.35f), shape)
-            .clickable(interaction, indication = null, onClick = onClick)
-            .padding(14.dp),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(12.dp),
-    ) {
-        Box(
-            Modifier.size(40.dp).background(DiscordBlurple, RoundedCornerShape(Ca.radius.md)),
-            contentAlignment = Alignment.Center,
-        ) {
-            Icon(CaIcons.discord, null, Modifier.size(22.dp), tint = Color.White)
-        }
-        Column(Modifier.weight(1f)) {
-            Text(stringResource(Res.string.join_the_community), color = MaterialTheme.colorScheme.onSurface, style = MaterialTheme.typography.titleMedium)
-            Text(stringResource(Res.string.join_the_community_content), color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodyMedium)
-        }
-        Icon(CaIcons.chevronRight, null, Modifier.size(20.dp), tint = DiscordBlurple)
-    }
-}
-
-/** GitHub Sponsors' pink — the support card's icon/accent, kept distinct from the app accent. */
-private val SponsorPink = Color(0xFFDB61A2)
-
-/**
- * A persistent card asking for support. CodeAssist is free, ad-free and fully open source, so the only
- * ask is an optional GitHub sponsorship or a star. [onSponsor]/[onStar] are wired by the host to open the
- * respective URLs; a null action simply hides that button.
- */
-@Composable
-private fun SupportCard(onSponsor: (() -> Unit)?, onStar: (() -> Unit)?) {
-    val shape = RoundedCornerShape(Ca.radius.lg)
-    Column(
-        Modifier
-            .fillMaxWidth()
-            .background(SponsorPink.copy(alpha = 0.10f), shape)
-            .border(1.dp, SponsorPink.copy(alpha = 0.30f), shape)
-            .padding(14.dp),
-        verticalArrangement = Arrangement.spacedBy(12.dp),
-    ) {
-        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-            Box(
-                Modifier.size(40.dp).background(SponsorPink, RoundedCornerShape(Ca.radius.md)),
-                contentAlignment = Alignment.Center,
-            ) {
-                Icon(CaIcons.heart, null, Modifier.size(22.dp), tint = Color.White)
-            }
-            Column(Modifier.weight(1f)) {
-                Text(stringResource(Res.string.support_title), color = MaterialTheme.colorScheme.onSurface, style = MaterialTheme.typography.titleMedium)
-                Text(stringResource(Res.string.support_content), color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodyMedium)
-            }
-        }
-
-        // The ads on/off switch used to live here; it moved to Settings → Privacy & Data. This card is now
-        // just the support actions (Sponsor / Star), kept separate from ads.
-        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-            if (onSponsor != null) {
-                SupportButton(stringResource(Res.string.support_sponsor), CaIcons.heart, Modifier.weight(1f), filled = true, onClick = onSponsor)
-            }
-            if (onStar != null) {
-                SupportButton(stringResource(Res.string.support_star), CaIcons.star, Modifier.weight(1f), filled = false, onClick = onStar)
-            }
-        }
-    }
-}
-
-
-@Composable
-private fun SupportChip(text: String) {
-    Row(
-        Modifier
-            .background(MaterialTheme.colorScheme.surfaceContainerHigh, RoundedCornerShape(Ca.radius.pill))
-            .padding(horizontal = 10.dp, vertical = 4.dp),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(5.dp),
-    ) {
-        Icon(CaIcons.check, null, Modifier.size(13.dp), tint = SponsorPink)
-        Text(text, color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodySmall, fontWeight = FontWeight.Medium)
-    }
-}
-
-/** A support action: a filled (sponsor) or outlined (star) button with a leading glyph. */
-@Composable
-private fun SupportButton(text: String, icon: ImageVector, modifier: Modifier = Modifier, filled: Boolean, onClick: () -> Unit) {
-    val interaction = remember { MutableInteractionSource() }
-    val shape = RoundedCornerShape(Ca.radius.control)
-    val surface =
-        if (filled) Modifier.background(SponsorPink, shape)
-        else Modifier.background(MaterialTheme.colorScheme.surfaceContainerHigh, shape).border(1.dp, MaterialTheme.colorScheme.outlineVariant, shape)
-    Row(
-        modifier
-            .pressScale(interaction)
-            .then(surface)
-            .clickable(interaction, indication = null, onClick = onClick)
-            .padding(vertical = 10.dp),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.Center,
-    ) {
-        Icon(icon, null, Modifier.size(16.dp), tint = if (filled) Color.White else MaterialTheme.colorScheme.onSurfaceVariant)
-        Spacer(Modifier.size(6.dp))
-        Text(
-            text,
-            color = if (filled) Color.White else MaterialTheme.colorScheme.onSurface,
-            style = MaterialTheme.typography.bodyLarge,
-            fontWeight = FontWeight.SemiBold,
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis,
-        )
     }
 }
 
