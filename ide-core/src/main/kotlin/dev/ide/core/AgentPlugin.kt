@@ -105,6 +105,16 @@ internal object AgentSettingsPage : SettingsPage {
                 "The web_fetch and http_request tools work regardless.",
             default = true,
         ),
+        SettingControl.Toggle(
+            key = "mcpServer",
+            title = "MCP server",
+            description = "Expose the agent's tools over MCP on port " + AgentBackend.MCP_PORT +
+                " (Streamable HTTP). Connect from a desktop client with \"adb forward tcp:" + AgentBackend.MCP_PORT +
+                " tcp:" + AgentBackend.MCP_PORT + "\" then add a remote MCP server at \"http://127.0.0.1:" +
+                AgentBackend.MCP_PORT + "/mcp\". Warning: any client that can reach the port can edit the open " +
+                "project, without further permission prompts. Applies on the next launch.",
+            default = false,
+        ),
         SettingControl.IntSlider(
             key = "maxTokens",
             title = "Max response tokens",

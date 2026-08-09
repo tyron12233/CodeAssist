@@ -3,6 +3,7 @@ package dev.ide.core
 import dev.ide.agent.AgentEvent
 import dev.ide.agent.AgentEventSink
 import dev.ide.agent.AgentPermissionGate
+import dev.ide.agent.AllowAllGate
 import dev.ide.agent.PermissionMode
 import dev.ide.agent.ProviderConfig
 import dev.ide.agent.SimpleToolRegistry
@@ -12,6 +13,9 @@ import dev.ide.agent.impl.AgentProviders
 import dev.ide.agent.impl.OkHttpLlmTransport
 import dev.ide.agent.impl.SystemPrompt
 import dev.ide.agent.impl.builtinTools
+import dev.ide.agent.mcp.CodeAssistMcpServer
+import dev.ide.agent.mcp.HttpMcpServer
+import dev.ide.platform.log.Log
 import dev.ide.ui.backend.AgentService
 import dev.ide.ui.backend.UiAgentChatState
 import dev.ide.ui.backend.UiAgentConfig
@@ -52,6 +56,19 @@ internal class AgentBackend(private val ctx: BackendContext) : AgentService {
     private val workspace = IdeAgentWorkspace(ctx)
     private val tools = SimpleToolRegistry(builtinTools(workspace))
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
+    private val log = Log.logger("ide.agent")
+
+    /** The in-app MCP-over-HTTP server, started when the "MCP server" AI setting is on. The server is
+     *  opt-in: enabling it is itself the permission to edit the open project, so its tools run under
+     *  [AllowAllGate] (a remote client cannot answer the interactive UI prompts). */
+    @Volatile
+    private var mcpServer: HttpMcpServer? = null
+
+    init {
+        if (prefBool("mcpServer", default = false)) {
+            mcpServer = startMcpServer()
+        }
+    }
 
     private val _chatState = MutableStateFlow(UiAgentChatState())
     override val chatState: StateFlow<UiAgentChatState> = _chatState.asStateFlow()
@@ -83,6 +100,19 @@ internal class AgentBackend(private val ctx: BackendContext) : AgentService {
     private fun prefInt(key: String): Int? = pref(key)?.toIntOrNull()
 
     private fun prefBool(key: String, default: Boolean): Boolean = pref(key)?.toBooleanStrictOrNull() ?: default
+
+    /** Binds the MCP-over-HTTP server to the engine workspace; null when startup fails (e.g. port taken). */
+    private fun startMcpServer(): HttpMcpServer? = try {
+        CodeAssistMcpServer.startHttpServer(
+            workspace = workspace,
+            port = CodeAssistMcpServer.DEFAULT_HTTP_PORT,
+            tools = tools,
+            gate = AllowAllGate,
+        )
+    } catch (e: Exception) {
+        log.error("Failed to start the MCP server on port ${CodeAssistMcpServer.DEFAULT_HTTP_PORT}: ${e.message}", e)
+        null
+    }
 
     private fun modePref(): PermissionMode =
         runCatching { PermissionMode.valueOf(ctx.manager?.preference(MODE_PREF).orEmpty()) }
@@ -449,6 +479,9 @@ internal class AgentBackend(private val ctx: BackendContext) : AgentService {
         const val AI_PAGE = "ai"
         const val MODE_PREF = "agent.permissionMode"
         const val GATEWAY = "gateway"
+
+        /** The port the in-app MCP server listens on (see the "MCP server" AI setting). */
+        const val MCP_PORT = CodeAssistMcpServer.DEFAULT_HTTP_PORT
 
         /** The "leave it to the provider" reasoning-effort choice: nothing is sent on the request. */
         const val REASONING_EFFORT_DEFAULT = "default"
