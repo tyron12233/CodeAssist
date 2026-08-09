@@ -76,9 +76,9 @@ class AndroidAdHost(
     /** Supplies the current foreground Activity — required to SHOW the full-screen build interstitial. */
     private val activityProvider: () -> Activity? = { null },
 ) : AdHost {
-    override val available: Boolean = true
+    override val available: Boolean = !BuildConfig.DEBUG
 
-    override val privacyOptionsRequired: Boolean get() = privacyOptionsRequiredProvider()
+    override val privacyOptionsRequired: Boolean get() = available && privacyOptionsRequiredProvider()
 
     override fun showPrivacyOptions() = onShowPrivacyOptions()
 
@@ -91,6 +91,7 @@ class AndroidAdHost(
     private val mainHandler = Handler(Looper.getMainLooper())
 
     override fun preloadInterstitial() {
+        if (!available) return
         // AdMob load must run on the main thread; hop there defensively if a caller ever invokes us off it.
         mainHandler.post {
             if (!webViewAvailable || interstitial != null || loadingInterstitial) return@post
@@ -131,6 +132,7 @@ class AndroidAdHost(
     }
 
     override fun showInterstitial(): Boolean {
+        if (!available) return false
         // Callers invoke on the Main dispatcher, and AdMob requires show() on the main thread. If somehow
         // off-main, skip this round (return false) rather than risk an off-thread show.
         if (Looper.myLooper() != Looper.getMainLooper()) return false
@@ -145,6 +147,7 @@ class AndroidAdHost(
 
     @Composable
     override fun NativeAd(placement: AdPlacement, modifier: Modifier) {
+        if (!available) return
         val context = LocalContext.current
         var ad by remember(placement) { mutableStateOf<NativeAd?>(null) }
 

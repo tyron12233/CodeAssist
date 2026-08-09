@@ -56,7 +56,7 @@ class MainActivity : ComponentActivity() {
         inbound.value = extractStream(intent)
         // Gather UMP consent BEFORE initializing the Ads SDK (mediation + EEA/UK requirement); only initialize
         // once consent allows ad requests. Failure resolves too, so a consent hiccup never blocks the IDE.
-        adConsent.gather(this) { if (adConsent.canRequestAds) initAds(applicationContext) }
+        adConsent.gather(this) { if (adConsent.canRequestAds && !BuildConfig.DEBUG) initAds(applicationContext) }
 
         setContent {
             var backend by remember { mutableStateOf<IdeBackend?>(null) }
