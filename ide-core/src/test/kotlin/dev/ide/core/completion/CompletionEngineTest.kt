@@ -267,6 +267,41 @@ class CompletionEngineTest {
         assertEquals(listOf("w"), runBlocking { engine.complete(params(position = null)) }.items.map { it.label })
     }
 
+    @Test
+    fun truncatedResultIsReportedIncomplete() {
+        // Capping the ranked list is itself a truncation: the editor must keep re-querying as the prefix grows
+        // instead of narrowing the capped list client-side (a member below the cap, `setText` on a wide
+        // Android View subclass, is otherwise unreachable by typing).
+        val (engine, _) = engineWith(
+            CompletionContribution(contributor("many") { _, r -> repeat(50) { i -> r.addElement(item("f$i")) } }),
+        )
+        val capped = runBlocking { engine.complete(params(), options = CompletionOptions(maxItems = 10)) }
+        assertEquals(10, capped.items.size)
+        assertTrue(capped.isIncomplete, "a capped result must be incomplete")
+
+        val whole = runBlocking { engine.complete(params(), options = CompletionOptions(maxItems = 50)) }
+        assertEquals(50, whole.items.size)
+        assertFalse(whole.isIncomplete, "an uncapped result must stay complete so the editor can narrow locally")
+    }
+
+    @Test
+    fun overloadsSurviveDeduplication() {
+        // Overloads share label / insert text / container and differ only in the signature line, so the
+        // duplicate guard has to key on `detail` too, or only one arbitrary `print` row survives.
+        val overload = { detail: String ->
+            CompletionItem("f", "f()", CompletionItemKind.METHOD, detail = detail, container = "Out")
+        }
+        val (engine, _) = engineWith(
+            CompletionContribution(contributor("a") { _, r ->
+                r.addElement(overload("(int i): void"))
+                r.addElement(overload("(String s): void"))
+                r.addElement(overload("(int i): void")) // a genuine duplicate: still collapses
+            }),
+        )
+        val details = runBlocking { engine.complete(params()) }.items.map { it.detail }
+        assertEquals(listOf("(int i): void", "(String s): void"), details)
+    }
+
     // --- minimal fakes ---
 
     private class N(

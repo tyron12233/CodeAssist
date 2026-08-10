@@ -16,6 +16,7 @@ import java.nio.file.Files
 import kotlin.test.AfterTest
 import kotlin.test.BeforeTest
 import kotlin.test.Test
+import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 
@@ -271,6 +272,74 @@ class JavaCompletionTest {
             item.additionalEdits.any { it.newText.contains("import java.util.ArrayList;") },
             "an unimported type should carry an auto-import edit; got ${item.additionalEdits}",
         )
+    }
+
+    // --- member-access shape: overrides collapse, overloads survive, `Type.class` ------------------------
+
+    @Test
+    fun overriddenMemberIsOfferedOnce() {
+        // `allMethods` reports a re-declared method once per hierarchy level; only the most-derived one is
+        // reachable through the receiver, so `receiver.` must not repeat it. On a deep Android View hierarchy
+        // those duplicates crowded real members (`setText`) out of the result cap.
+        File(srcRoot, "com/foo/Loud.java").writeText(
+            "package com.foo;\npublic class Loud extends Greeter { public String greet(String who) { return who; } }"
+        )
+        val labels = labelsAt("package com.foo;\nclass Use { void run() { new Loud().gr| } }")
+        assertEquals(1, labels.count { it == "greet" }, "an override must be offered once; got $labels")
+    }
+
+    @Test
+    fun overloadsAreAllOffered() {
+        File(srcRoot, "com/foo/Over.java").writeText(
+            """
+            package com.foo;
+            public class Over {
+                public void put(int i) {}
+                public void put(String s) {}
+            }
+            """.trimIndent()
+        )
+        val puts = itemsAt("package com.foo;\nclass Use { void run() { new Over().pu| } }").filter { it.label == "put" }
+        assertEquals(2, puts.size, "both overloads must be offered; got ${puts.map { it.detail }}")
+    }
+
+    @Test
+    fun staticQualifierOffersClassLiteral() {
+        val labels = labelsAt("package com.foo;\nclass Use { void run() { Object o = Greeter.cla|; } }")
+        assertTrue("class" in labels, "`Type.` should offer the `class` literal; got $labels")
+    }
+
+    @Test
+    fun annotationParameterListOffersAttributeNames() {
+        File(srcRoot, "com/foo/Marked.java").writeText(
+            """
+            package com.foo;
+            public @interface Marked {
+                String name();
+                int level() default 0;
+            }
+            """.trimIndent()
+        )
+        val items = itemsAt("package com.foo;\nclass Use { @Marked(lev|) void run() {} }")
+        val level = items.firstOrNull { it.label == "level" }
+        assertTrue(level != null, "an annotation's attribute name should be offered; got ${items.map { it.label }}")
+        assertEquals("level = ", level.insertText, "an attribute completes to `name = `")
+    }
+
+    @Test
+    fun alreadySuppliedAnnotationAttributeIsNotRepeated() {
+        File(srcRoot, "com/foo/Marked2.java").writeText(
+            """
+            package com.foo;
+            public @interface Marked2 {
+                String name();
+                int level() default 0;
+            }
+            """.trimIndent()
+        )
+        val labels = labelsAt("package com.foo;\nclass Use { @Marked2(name = \"x\", lev|) void run() {} }")
+        assertTrue("level" in labels, "the unsupplied attribute should be offered; got $labels")
+        assertFalse("name" in labels, "an attribute already supplied must not be offered again; got $labels")
     }
 
     @Test
