@@ -1,8 +1,8 @@
 package dev.ide.lang.kotlin.compile
 
+import dev.ide.platform.ToolUrlClassLoader
 import org.jetbrains.kotlin.compiler.plugin.CompilerPluginRegistrar
 import org.jetbrains.kotlin.compiler.plugin.ExperimentalCompilerApi
-import java.net.URLClassLoader
 import java.nio.file.Files
 import java.nio.file.Path
 import java.util.zip.ZipFile
@@ -19,18 +19,20 @@ import java.util.zip.ZipFile
  *
  * In both cases the parent is the compiler's own classloader, which carries the `CompilerPluginRegistrar`
  * base type (and, on ART, any plugin registrar already dexed into the app — e.g. Compose), so a plugin that
- * bottoms out at an already-present class still resolves through parent delegation.
+ * bottoms out at an already-present class still resolves through parent delegation. The one exception is
+ * [dev.ide.platform.ToolClassIsolation]: a package the app carries at an incompatible version is loaded from
+ * the plugin's own jars instead.
  */
 interface KotlinPluginLoader {
     /** A classloader over [classpath] from which the plugin's registrar classes can be loaded. */
     fun load(classpath: List<Path>): ClassLoader
 }
 
-/** Desktop default: a `URLClassLoader` over the plugin jars, parented to the compiler classloader. */
+/** Desktop default: a [ToolUrlClassLoader] over the plugin jars, parented to the compiler classloader. */
 object DefaultKotlinPluginLoader : KotlinPluginLoader {
     @OptIn(ExperimentalCompilerApi::class)
     override fun load(classpath: List<Path>): ClassLoader =
-        URLClassLoader(
+        ToolUrlClassLoader(
             classpath.filter { Files.exists(it) }.map { it.toUri().toURL() }.toTypedArray(),
             CompilerPluginRegistrar::class.java.classLoader,
         )

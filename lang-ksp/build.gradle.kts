@@ -111,6 +111,12 @@ bundleProcessor("glide", libs.glide.ksp)
 val roomProcessor: Configuration by configurations.creating   // room-compiler + its processor closure
 val roomLibs: Configuration by configurations.creating        // room-runtime/-common annotations + RoomDatabase
 val moshiLibs: Configuration by configurations.creating       // moshi runtime (JsonClass marker + KSerializer machinery)
+val hiltLibs: Configuration by configurations.creating        // hilt-core (dagger.hilt.InstallIn marker) + the dagger runtime
+// The Dagger the APP carries: it dexes bundletool for in-process .aab building, whose closure drags in an
+// ANCIENT dagger runtime. HiltProcessorDaggerShadowingTest parents the processor loader on exactly that jar to
+// reproduce the device classloader shape (see ToolClassIsolation). It is resolved from bundletool so the
+// fixture tracks whatever version the app actually ships instead of a hardcoded guess.
+val appProvidedDagger: Configuration by configurations.creating
 // The KSP2 runner as an isolated classpath — KspSourceGeneratorTest hands its path to KspSourceGenerator's
 // loader (the production reflective path), mirroring how the app will feed the bundled runner jar.
 val kspRunner: Configuration by configurations.creating
@@ -122,6 +128,8 @@ dependencies {
     roomProcessor(libs.room.compiler)
     roomLibs(libs.room.runtime)
     moshiLibs(libs.moshi.runtime)
+    hiltLibs(libs.hilt.core)
+    appProvidedDagger(libs.android.bundletool)
     kspRunner(libs.ksp.aa.embeddable)
 
     kspThinRuntime(libs.ksp.aa)               // non-embeddable — KSP impl classes extracted, its bundled AA dropped
@@ -144,6 +152,16 @@ tasks.named<Test>("test") {
         systemProperty("room.processor.classpath", roomProcessor.asPath)
         systemProperty("room.libs.classpath", roomLibs.asPath)
         systemProperty("moshi.libs.classpath", moshiLibs.asPath)
+        systemProperty("hilt.libs.classpath", hiltLibs.asPath)
+        // Just the dagger runtime (+ the javax.inject it implements) out of bundletool's closure: what the
+        // app's own classloader carries, and nothing else, so the fixture is the shadowing pair and not a
+        // second copy of bundletool's whole world.
+        systemProperty(
+            "app.dagger.classpath",
+            appProvidedDagger.filter { f ->
+                (f.name.startsWith("dagger-") && !f.name.contains("compiler")) || f.name.startsWith("javax.inject")
+            }.asPath,
+        )
         systemProperty("ksp.runner.classpath", kspRunner.asPath)
         systemProperty("ksp.thin.runtime.classpath", kspThinRuntime.asPath)
         systemProperty("sqlite.stub.jar", sqliteStubJar.get().archiveFile.get().asFile.absolutePath)
