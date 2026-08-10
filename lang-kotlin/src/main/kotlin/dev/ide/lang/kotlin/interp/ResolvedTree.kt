@@ -678,18 +678,28 @@ fun expandPreviewModel(seed: PreviewFileModel, maxFiles: Int, provider: LazyPrev
     // where `requestType` is in scope) — so no forward reference from `enqueueClass`.
     val superWork = ArrayDeque<String>()
 
+    // A function's body PLUS its parameter-default expressions: a source type/object referenced ONLY in a
+    // defaulted parameter (`fun JetsnackSurface(color: Color = JetsnackTheme.colors.uiBackground, …)`) is
+    // otherwise never discovered, so the interpreter can't load it at run time ("cannot load `JetsnackTheme`
+    // (a project-source object isn't available)") and the defaulted value falls back to a zero — a Jetsnack
+    // `JetsnackCard`/`JetsnackSurface` then draws with the wrong (unspecified) background. Class-ctor param
+    // defaults were already scanned ([enqueueClass]); function param defaults were the gap.
+    fun enqueueFn(fn: ResolvedFunction) {
+        work.add(fn.body)
+        fn.params.forEach { p -> p.default?.let(work::add) }
+    }
     fun enqueueClass(c: ResolvedClass) {
         if (!enqueuedClasses.add(c.fqn)) return
         c.superCall?.args?.forEach { work.add(it.value) }
         c.primaryParams.forEach { p -> p.default?.let(work::add) }
         c.initSteps.forEach(work::add)
-        c.methods.values.forEach { work.add(it.body) }
+        c.methods.values.forEach(::enqueueFn)
         c.enumEntries.forEach { e -> e.args.forEach { work.add(it.value) } }
         c.secondaryCtors.forEach { ctor -> work.add(ctor.body); ctor.delegationArgs.forEach { work.add(it.value) } }
         c.superCall?.fqn?.let(superWork::add)
         c.supertypes.forEach(superWork::add)
     }
-    program.values.forEach { work.add(it.body) }
+    program.values.forEach(::enqueueFn)
     classesByFqn.values.toList().forEach(::enqueueClass)
 
     // The file-count runaway guard: a NEW file is followed only under the cap; an already-touched file's
@@ -721,7 +731,7 @@ fun expandPreviewModel(seed: PreviewFileModel, maxFiles: Int, provider: LazyPrev
             file.functionKeys(name).forEach { key ->
                 if (key !in program) file.function(key)?.let { fn ->
                     program[key] = fn
-                    work.add(fn.body)
+                    enqueueFn(fn)
                     // A function whose body holds an `object : Foo {}` literal synthesized a class for it —
                     // merge + scan it with the function, or its constructor call has nothing to build.
                     file.anonymousClassesFor(key).forEach { c ->

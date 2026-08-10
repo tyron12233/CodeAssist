@@ -64,6 +64,15 @@ class Interpreter(
     /** Executes library classes the loaders cannot load (project-jar dependency code, run in the bytecode VM
      *  on device instead of a DexClassLoader). Null → the honest "cannot load" boundaries stand. */
     private val libraryFallback: LibraryExecutor? = null,
+    /** Single-instance storage for top-level `val`/`var` backing fields ([topLevelPropertyState]). Defaults to a
+     *  fresh per-interpreter map (console/tests). The Compose preview passes a REMEMBERED, render-stable map so a
+     *  top-level `val`'s ONE instance survives an interpreter RE-CREATION within a render: `ComposePreviewRenderer`
+     *  rebuilds the Interpreter whenever its `remember(program, classes)` key churns (the isolated `:preview`
+     *  render re-supplies program/classes across recompositions), and a fresh per-interpreter map would re-mint a
+     *  `staticCompositionLocalOf { }` in a top-level `val` per interpreter — so `provides` (one instance) and a
+     *  later `.current` (a re-minted instance) mismatch and the default lambda throws ("No JetsnackColorPalette
+     *  provided" — the out-of-process custom-theme preview rendered grey). Sharing the map keeps identity stable. */
+    topLevelPropertyStore: MutableMap<String, Any?> = HashMap(),
 ) {
     /** Source classes indexed by fully-qualified name and by simple name (a constructor callee carries the
      *  simple name; an object/enum reference carries the resolved FQN). */
@@ -148,17 +157,46 @@ class Interpreter(
     }
 
     /** A benign stand-in for a parameter whose default couldn't be evaluated (gap-tolerant mode): the zero of a
-     *  primitive type so a later arithmetic/boolean read doesn't NPE on unboxing, else null. */
-    private fun zeroForType(qualifiedName: String?): Any? = when (qualifiedName) {
-        "kotlin.Int" -> 0
-        "kotlin.Long" -> 0L
-        "kotlin.Short" -> 0.toShort()
-        "kotlin.Byte" -> 0.toByte()
-        "kotlin.Char" -> '\u0000'
-        "kotlin.Double" -> 0.0
-        "kotlin.Float" -> 0f
-        "kotlin.Boolean" -> false
-        else -> null
+     *  primitive type (so a later arithmetic/boolean read doesn't NPE on unboxing), or the UNBOXED zero of an
+     *  inline value class the interpreter holds unboxed (`Color`/`Dp`/…) — never null for a value class, since
+     *  null then crashes a value-class-mangled dispatch (`ColorKt.compositeOver--OWjLjI(long, long)` →
+     *  "argument 2 has type long, got null", blanking a Jetsnack `JetsnackCard` preview whose defaulted
+     *  `color = JetsnackTheme.colors.uiBackground` couldn't evaluate) — else null. */
+    private fun zeroForType(qualifiedName: String?): Any? {
+        when (qualifiedName) {
+            "kotlin.Int" -> return 0
+            "kotlin.Long" -> return 0L
+            "kotlin.Short" -> return 0.toShort()
+            "kotlin.Byte" -> return 0.toByte()
+            "kotlin.Char" -> return '\u0000'
+            "kotlin.Double" -> return 0.0
+            "kotlin.Float" -> return 0f
+            "kotlin.Boolean" -> return false
+        }
+        // An inline VALUE CLASS the interpreter holds unboxed: its zero is the zero of its underlying primitive
+        // (the single parameter of the synthetic static `box-impl`). `Color`/`Offset`/`Size`/`TextUnit` erase to
+        // `long`, `Dp` to `float`. Falls through to null when the type isn't loadable / isn't a value class /
+        // is reference-backed (a non-primitive `box-impl` param), preserving the prior behaviour there.
+        qualifiedName?.let { fqn ->
+            val cls = runCatching { loadClassAcross(fqn, initialize = false, preferred = classLoader) }.getOrNull()
+            val box = cls?.declaredMethods?.firstOrNull {
+                it.name == "box-impl" && java.lang.reflect.Modifier.isStatic(it.modifiers) && it.parameterCount == 1
+            }
+            box?.parameterTypes?.firstOrNull()?.let { u ->
+                return when (u) {
+                    java.lang.Long.TYPE -> 0L
+                    Integer.TYPE -> 0
+                    java.lang.Float.TYPE -> 0f
+                    java.lang.Double.TYPE -> 0.0
+                    java.lang.Short.TYPE -> 0.toShort()
+                    java.lang.Byte.TYPE -> 0.toByte()
+                    Character.TYPE -> '\u0000'
+                    java.lang.Boolean.TYPE -> false
+                    else -> null
+                }
+            }
+        }
+        return null
     }
 
     /** The declared value-parameter count the resolver pinned for [callee] (a source callee carries it in its
@@ -199,7 +237,7 @@ class Interpreter(
      *  updates it — so a getter's `if (_x != null) return _x!!; _x = build(); return _x!!` sees its own write.
      *  Per-interpreter (statics reset between runs, like a fresh class load). `NO_VALUE` distinguishes an
      *  uninitialized slot from one holding a genuine `null` (the icon backing field starts null). */
-    private val topLevelPropertyState = HashMap<String, Any?>()
+    private val topLevelPropertyState: MutableMap<String, Any?> = topLevelPropertyStore
     private val NO_VALUE = Any()
 
     /** Marker distinguishing a `getValue` call (no value argument) from a `setValue` in [callDelegateOp] —
@@ -466,11 +504,29 @@ class Interpreter(
                 // no instance — read the static field (or its `getName()` static getter) off the class.
                 staticHolder != null -> readStaticMember(staticHolder, binding.name)
                 receiverNode == null -> {
-                    // A top-level property (`LocalTextStyle`, `PI`) — its getter is a STATIC method on the declaring
-                    // `…Kt` facade (`getLocalTextStyle()`); the resolver records the facade in the binding's owner.
-                    val owner = (binding as? Binding.Property)?.ownerFqn
-                        ?: throw InterpreterException("top-level property read `${binding.name}` not supported (no owner)")
-                    readTopLevelProperty(owner, binding.name)
+                    // A PROJECT-source top-level `val`/`var` read here as a Property binding must go through the
+                    // SAME single-instance storage ([topLevelPropertyState]) as a source-call read, or it is
+                    // re-evaluated per read — minting a fresh value each time. For `val Local… =
+                    // staticCompositionLocalOf { … }` (the custom-theme idiom) that breaks CompositionLocal
+                    // IDENTITY: `Provide…(Local provides …)` stores under instance A while a later `Local.current`
+                    // (read through this path) re-mints instance B, so the lookup misses and B's default lambda
+                    // throws ("No JetsnackColorPalette provided" — the out-of-process Jetsnack preview). The
+                    // source-call read already caches (see the singleton branch above); a reference the resolver
+                    // instead lowered as a Property binding must share that cache. Library top-level properties
+                    // (no source fn) keep the reflective facade read unchanged.
+                    val srcKey = "${binding.name}/0"
+                    val srcFn = functions[srcKey]?.takeIf { it.singletonBackingField || it.mutableBackingField }
+                    if (srcFn != null) {
+                        val cached = topLevelPropertyState.getOrDefault(srcKey, NO_VALUE)
+                        if (cached !== NO_VALUE) cached
+                        else invokeFunction(srcFn, NO_RECEIVER, emptyList()).also { topLevelPropertyState[srcKey] = it }
+                    } else {
+                        // A LIBRARY top-level property (`LocalTextStyle`, `PI`) — its getter is a STATIC method on
+                        // the declaring `…Kt` facade (`getLocalTextStyle()`); the resolver records the facade owner.
+                        val owner = (binding as? Binding.Property)?.ownerFqn
+                            ?: throw InterpreterException("top-level property read `${binding.name}` not supported (no owner)")
+                        readTopLevelProperty(owner, binding.name)
+                    }
                 }
 
                 else -> {
