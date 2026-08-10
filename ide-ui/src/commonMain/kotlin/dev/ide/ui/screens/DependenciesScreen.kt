@@ -183,6 +183,7 @@ import org.jetbrains.compose.resources.pluralStringResource
 import org.jetbrains.compose.resources.stringResource
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import kotlin.coroutines.cancellation.CancellationException
 import kotlin.math.roundToInt
 
 /** Top-level split: what the module DECLARES (the roots you added) vs the RESOLVED transitive closure. The
@@ -262,7 +263,11 @@ fun DependenciesPane(
 
     LaunchedEffect(moduleName, reloadKey) {
         loading = true
-        deps = runCatching { backend.deps.moduleDependencies(moduleName) }.getOrNull()
+        val loaded = runCatching { backend.deps.moduleDependencies(moduleName) }
+        // A cancelled load (this effect restarting, or the pane leaving composition) must leave the current
+        // model alone: swallowing it here would blank the pane to "couldn't load" on the way to a reload.
+        loaded.exceptionOrNull()?.let { if (it is CancellationException) throw it }
+        deps = loaded.getOrNull()
         loading = false
     }
     LaunchedEffect(toast) { if (toast != null) { delay(2600); toast = null } }
