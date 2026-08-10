@@ -32,6 +32,9 @@ admobMediationPangle = "8.2.0.4.0"     # com.google.ads.mediation:pangle — Pan
 admobMediationMintegral = "17.1.71.0"  # com.google.ads.mediation:mintegral — Mintegral adapter (native-capable)
 androidStub = "4.1.1.4"     # com.google.android:android — the throwaway stub android.jar (compileOnly) :applog-runtime compiles against
 okhttp = "4.12.0"           # com.squareup.okhttp3 — HTTP + SSE transport for the agent's LLM client (:agent-impl); runs on JVM and ART
+# The Model Context Protocol Java SDK (io.modelcontextprotocol.sdk:mcp) — the wire protocol for
+# :agent-mcp's stdio server. 2.0.0 tracks the 2025-11-25 spec; the `mcp` bundle pulls mcp-core + Jackson 3.
+mcp = "2.0.0"
 cfr = "0.152"               # org.benf:cfr — single-jar Java decompiler for the "navigate into library class" view (:decompiler). Chosen over Fernflower/Vineflower because those NPE on ART (their plugin loader calls Class.getProtectionDomain(), null on Android); CFR is self-contained and runs on-device.
 # KSP2 (Kotlin Symbol Processing, standalone Analysis-API runner). 2.3.10 explicitly supports Kotlin 2.4.0
 # ("Sanitize ':' in internal-name module suffix so KSP works with Kotlin 2.4.0 default module names", #2964)
@@ -149,6 +152,9 @@ android-stub = { module = "com.google.android:android", version.ref = "androidSt
 # desktop and ART (bundled into :ide-android like the other in-process tools). okhttp-sse tracks okhttp.
 okhttp = { module = "com.squareup.okhttp3:okhttp", version.ref = "okhttp" }
 okhttp-sse = { module = "com.squareup.okhttp3:okhttp-sse", version.ref = "okhttp" }
+# The MCP SDK convenience bundle (mcp-core + Jackson 3): stdio server/client transports and the full
+# tools/resources/prompts JSON-RPC model for :agent-mcp.
+mcp = { module = "io.modelcontextprotocol.sdk:mcp", version.ref = "mcp" }
 # KSP2 standalone runner. `symbol-processing-api` = the processor SPI (SymbolProcessor/…Provider/KSPLogger/
 # Resolver/CodeGenerator), on the compile classpath so a bundled processor and our runner see the types.
 # `symbol-processing-common-deps` = KSPConfig/KSPJvmConfig. `symbol-processing-aa-embeddable` = the ~78 MB

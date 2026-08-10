@@ -1,0 +1,58 @@
+name: APK
+
+on:
+  push:
+    branches: [ main, master ]
+  pull_request:
+  workflow_dispatch:
+
+# Build the installable Android APK (:ide-android). Unlike the framework jobs, this needs the full
+# module set (CI_CORE_ONLY must stay unset) and the Android SDK; the runner's stock SDK plus the exact
+# platform AGP wants (android-36.1 for compileSdk=36 + compileSdkMinor=1) are provisioned with
+# setup-android. The `debug` variant is signed with the debug key so the artifact installs directly.
+env:
+  JAVA_VERSION: "25"
+
+concurrency:
+  group: apk-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    name: assembleDebug
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up JDK ${{ env.JAVA_VERSION }}
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: ${{ env.JAVA_VERSION }}
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v4
+
+      # Provision the Android SDK the module needs (licenses accepted by setup-android). sdkmanager is a
+      # no-op for components the runner already ships.
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v3
+        with:
+          packages: "platform-tools platforms;android-36 platforms;android-36.1 build-tools;36.0.0"
+
+      # Same as the framework jobs: one-shot CI builds gain nothing from incremental compilation.
+      - name: Disable Kotlin incremental compilation (CI)
+        run: |
+          mkdir -p ~/.gradle
+          echo "kotlin.incremental=false" >> ~/.gradle/gradle.properties
+
+      - name: Build debug APK
+        run: ./gradlew :ide-android:assembleDebug --console=plain --stacktrace
+
+      - name: Upload APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: codeassist-debug-apk
+          path: ide-android/build/outputs/apk/debug/*.apk
+          if-no-files-found: error
+          retention-days: 30
