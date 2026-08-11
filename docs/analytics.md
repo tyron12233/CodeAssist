@@ -41,7 +41,7 @@ Events (the `event` column), by category:
 
 | Category      | Events (props in parens) |
 |---------------|--------|
-| `performance` | `cold_start` (`duration_ms` — full on-device bootstrap, once per launch; also the per-launch anchor), `index_perf` (`duration_ms` + `heap_*_mb` — per index build/reindex; **plus** the phase split `lib_ms`/`src_ms`, the cache-effectiveness counts `artifacts`/`artifacts_built`/`artifacts_reused`, the source-diff counts `src_files`/`src_parsed`, and a per-indexer breakdown `idx.<index-id>.ms` for each index that cost ≥1ms — e.g. `idx.java.classNames.ms`, `idx.android.resources.ms` — where the id is a fixed index-kind name, never a file/project/package name), `build_result` (`ok`, `duration_ms`, `steps`, `peak_heap_mb`/`min_headroom_mb`/`heap_max_mb`, and on failure `failure_kind` = `compile`/`resource`/`tool`/`oom`/`no_diagnostic` — per build/run), `completion_perf` / `analysis_perf` (`count`, `mean_ms`, `p50_ms`, `p95_ms`, `max_ms`) |
+| `performance` | `cold_start` (`duration_ms` — full on-device bootstrap, once per launch; also the per-launch anchor), `index_perf` (`duration_ms` + `heap_*_mb` — per index build/reindex; **plus** the phase split `lib_ms`/`src_ms`, the cache-effectiveness counts `artifacts`/`artifacts_built`/`artifacts_reused`, the source-diff counts `src_files`/`src_parsed`, and a per-indexer breakdown `idx.<index-id>.ms` for each index that cost ≥1ms — e.g. `idx.java.classNames.ms`, `idx.android.resources.ms` — where the id is a fixed index-kind name, never a file/project/package name), `build_result` (`ok`, `duration_ms`, `steps`, `peak_heap_mb`/`min_headroom_mb`/`heap_max_mb`, and on failure `failure_kind` = `compile`/`resource`/`tool`/`oom`/`no_diagnostic` — per build/run), `completion_perf` / `analysis_perf` (`count`, `mean_ms`, `p50_ms`, `p95_ms`, `max_ms`, plus the window's peak `heap_used_mb`/`heap_max_mb`/`heap_headroom_mb`) |
 | `crash`       | `app_crash` (scrubbed — see below; also carries the crash-time `heap_*_mb` and always pins at least one `dev.ide.*` frame, walking the cause chain if the top of the stack is all framework code), `error_logged` (a caught ERROR-level failure, scrubbed + throttled) |
 
 `failure_kind` categorizes a failed build so the ~50% "failure" rate is actionable: a compiler/resource
@@ -50,8 +50,29 @@ and `oom` at memory pressure. It is a fixed bucket name — never a message, fil
 
 `completion_perf` and `analysis_perf` are **aggregated**, not one event per keystroke: latencies are
 accumulated client-side and emitted as a single summary every 50 samples (and on shutdown), so a
-per-keystroke metric costs ~one analytics row per window instead of thousands. Free-form per-event detail
-goes in the `props` JSONB column and is **string-only** — never user content.
+per-keystroke metric costs ~one analytics row per window instead of thousands. Each window also reports the
+worst heap reading taken across its samples, which gives a heap series through ordinary editing sessions:
+a crash reports only the heap at the instant it died, always at the ceiling, so it cannot tell a slow climb
+apart from one large allocation. Free-form per-event detail goes in the `props` JSONB column and is
+**string-only** — never user content.
+
+A native crash (`app_crash` with `kind` = `native`) is a separate path, because a `SIGSEGV` kills the process
+below the JVM and no exception is ever thrown. On the next launch the app asks the OS why the previous
+process died (`ActivityManager.getHistoricalProcessExitReasons`, API 30+), reports each record once, and
+ignores records older than a day so an update cannot re-attribute old history to the new version. Two
+sources are combined:
+
+- the engine breadcrumb (`engine_lane`, `thread`, `index_building`, `since_op_ms`), a file naming the editor
+  op the engine most recently *started*. It records starts only, so `since_op_ms` (the gap to the process
+  death) is what says whether that op was still running or had finished long before.
+- the OS tombstone (`arch`, `signal`, `signal_code`, `fault_addr`, `fault_thread`, `cause`, `abort_msg`,
+  `native_frames`, `uptime_s`), parsed from `ApplicationExitInfo.getTraceInputStream()`. This names the
+  thread that actually faulted, which the breadcrumb cannot: it distinguishes a fault inside the editor
+  engine from one on a render, GC or JIT thread. `native_frames` holds native symbols with the binary they
+  came from reduced to a basename (`libart.so!art::…`), so no install path is reported, and the parser
+  applies the same reduction to any path in `abort_msg`. Everything else about the tombstone (register and
+  memory dumps, memory maps, log buffers, open file descriptors) is discarded unparsed. `process` says
+  which of our processes died: the IDE, or one of the `build` / `preview` children.
 
 ## What we never collect
 
