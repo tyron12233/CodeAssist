@@ -817,6 +817,7 @@ class IdeUiState(
         scope.launch {
             val newPath = withContext(ioDispatcher) { backend.files.movePath(path, destDir) } ?: return@launch
             rebaseTabs(path, newPath) // re-read moved tabs off the main thread
+            refreshCleanTabs() // a move rewrites importers' package/import lines — reflect that in open tabs
             loadTree()
         }
     }

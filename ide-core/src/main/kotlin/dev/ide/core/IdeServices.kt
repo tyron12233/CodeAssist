@@ -127,6 +127,7 @@ import dev.ide.lang.java.index.JavaSourceSymbolsIndex
 import dev.ide.lang.jdt.rename.JdtRename
 import dev.ide.lang.jdt.synthetic.SyntheticJavaSource
 import dev.ide.lang.kotlin.KotlinLanguageBackend
+import dev.ide.lang.kotlin.KotlinPackageRewrite
 import dev.ide.lang.kotlin.KotlinSourceAnalyzer
 import dev.ide.lang.kotlin.compile.BundledKotlinStdlib
 import dev.ide.lang.kotlin.compile.DefaultKotlinPluginLoader
@@ -2610,22 +2611,23 @@ class IdeServices private constructor(
     }
 
     /**
-     * After a `.java` file (or a directory of them) lands at [dest], rewrite each moved file's `package`
+     * After a `.java`/`.kt` file (or a directory of them) lands at [dest], rewrite each moved file's `package`
      * declaration to match its new source-root-relative location, and — when [updateReferences] (a move, not a
-     * copy) — rewrite explicit `import old.Type;` / `import static old.Type.…;` statements across the project to
-     * the new package. A file outside any source root, or already in the right package, is left untouched.
-     * Fully-qualified usages and same-package (un-imported) references are not rewritten — the compiler flags
-     * those for the import quick-fix. Touches disk and the live overlay together; callers do the reindex.
+     * copy) — rewrite explicit imports of the moved top-level declarations across the project to the new
+     * package (`import old.Type;` for Java, `import old.Type` for Kotlin, including member/`as` suffixes). A
+     * file outside any source root, or already in the right package, is left untouched. Fully-qualified usages
+     * and same-package (un-imported) references are not rewritten — the compiler flags those for the import
+     * quick-fix. Touches disk and the live overlay together; callers do the reindex.
      */
     private fun fixPackagesAfterRelocation(dest: Path, updateReferences: Boolean) {
         val movedFiles = when {
             Files.isDirectory(dest) -> runCatching {
                 Files.walk(dest).use { s ->
-                    s.filter { it.toString().endsWith(".java") }.collect(Collectors.toList())
+                    s.filter { isRelocatableSource(it) }.collect(Collectors.toList())
                 }
             }.getOrDefault(emptyList())
 
-            dest.toString().endsWith(".java") -> listOf(dest)
+            isRelocatableSource(dest) -> listOf(dest)
             else -> return
         }
         val typeRenames = LinkedHashMap<String, String>() // old FQN → new FQN, for the import sweep
@@ -2637,13 +2639,12 @@ class IdeServices private constructor(
             val key = normPath(f)
             movedKeys.add(key)
             val text = openDocuments[key] ?: runCatching { f.readText() }.getOrNull() ?: continue
-            val oldPkg = PACKAGE_DECL.find(text)?.groupValues?.get(1) ?: ""
-            if (oldPkg == newPkg) continue
-            val updated = withPackageDeclaration(text, newPkg) ?: continue
-            openDocuments[key] = updated
-            runCatching { f.writeText(updated) }
-            if (updateReferences) for (type in topLevelTypeNames(text, f)) {
-                val oldFqn = if (oldPkg.isEmpty()) type else "$oldPkg.$type"
+            val rewrite = (if (isKotlinSource(f)) rewriteKotlinPackage(f, text, newPkg)
+            else rewriteJavaPackage(f, text, newPkg)) ?: continue
+            openDocuments[key] = rewrite.updated
+            runCatching { f.writeText(rewrite.updated) }
+            if (updateReferences) for (type in rewrite.topLevelNames) {
+                val oldFqn = if (rewrite.oldPkg.isEmpty()) type else "${rewrite.oldPkg}.$type"
                 val newFqn = if (newPkg.isEmpty()) type else "$newPkg.$type"
                 typeRenames[oldFqn] = newFqn
             }
@@ -2651,6 +2652,35 @@ class IdeServices private constructor(
         if (updateReferences && typeRenames.isNotEmpty()) updateImportsForMovedTypes(
             typeRenames, movedKeys
         )
+    }
+
+    /** A moved file whose `package` line tracks its directory: Java and Kotlin sources (not `.kts` scripts). */
+    private fun isRelocatableSource(p: Path): Boolean =
+        p.toString().let { it.endsWith(".java") || it.endsWith(".kt") }
+
+    private fun isKotlinSource(p: Path): Boolean = p.toString().endsWith(".kt")
+
+    /** A moved file's new package line and the top-level names it declares (for the reference sweep). */
+    private class PackageRewrite(
+        val updated: String, val oldPkg: String, val topLevelNames: List<String>
+    )
+
+    /** [PackageRewrite] for a moved `.java` file, or null when its package already matches [newPkg]. */
+    private fun rewriteJavaPackage(file: Path, text: String, newPkg: String): PackageRewrite? {
+        val oldPkg = PACKAGE_DECL.find(text)?.groupValues?.get(1) ?: ""
+        if (oldPkg == newPkg) return null
+        val updated = withPackageDeclaration(text, newPkg) ?: return null
+        return PackageRewrite(updated, oldPkg, topLevelTypeNames(text, file))
+    }
+
+    /**
+     * [PackageRewrite] for a moved `.kt` file, or null when its package already matches [newPkg]. The actual
+     * parse + directive edit lives in [KotlinPackageRewrite] (in `:lang-kotlin`, which owns the Kotlin PSI);
+     * this only adapts its plain-data result to the shared [PackageRewrite] shape.
+     */
+    private fun rewriteKotlinPackage(file: Path, text: String, newPkg: String): PackageRewrite? {
+        val r = KotlinPackageRewrite.rewrite(file.fileName.toString(), text, newPkg) ?: return null
+        return PackageRewrite(r.updatedText, r.oldPackage, r.topLevelNames)
     }
 
     /** Top-level type names declared in [text] (binding-free JDT parse), falling back to the file-name type. */
@@ -2663,20 +2693,42 @@ class IdeServices private constructor(
 
     /** Rewrite explicit imports of the moved types ([renames]: old FQN → new FQN) across the project. */
     private fun updateImportsForMovedTypes(renames: Map<String, String>, skip: Set<Path>) {
-        for (file in projectJavaFiles()) {
+        for (file in projectSourceFiles()) {
             val key = normPath(file)
             if (key in skip) continue
             val text = openDocuments[key] ?: runCatching { file.readText() }.getOrNull() ?: continue
-            var updated = text
-            for ((oldFqn, newFqn) in renames) {
-                updated = updated.replace("import $oldFqn;", "import $newFqn;")
-                    .replace("import static $oldFqn.", "import static $newFqn.")
-            }
+            val updated =
+                if (isKotlinSource(file)) rewriteKotlinImports(text, renames)
+                else rewriteJavaImports(text, renames)
             if (updated != text) {
                 openDocuments[key] = updated
                 runCatching { file.writeText(updated) }
             }
         }
+    }
+
+    /** [text] with each `import old;` / `import static old.…;` (Java syntax) repointed to its new FQN. */
+    private fun rewriteJavaImports(text: String, renames: Map<String, String>): String {
+        var updated = text
+        for ((oldFqn, newFqn) in renames) {
+            updated = updated.replace("import $oldFqn;", "import $newFqn;")
+                .replace("import static $oldFqn.", "import static $newFqn.")
+        }
+        return updated
+    }
+
+    /**
+     * [text] with each Kotlin `import old…` repointed to its new FQN. Boundary-aware: `import a.b.Widget` is
+     * rewritten but `import a.b.WidgetFactory` is not, and an `as` alias or a `.member` suffix is preserved
+     * because only the matched FQN prefix is replaced.
+     */
+    private fun rewriteKotlinImports(text: String, renames: Map<String, String>): String {
+        var updated = text
+        for ((oldFqn, newFqn) in renames) {
+            updated = Regex("(?m)^([ \\t]*import[ \\t]+)" + Regex.escape(oldFqn) + "(?![A-Za-z0-9_])")
+                .replace(updated) { m -> m.groupValues[1] + newFqn }
+        }
+        return updated
     }
 
     /**
@@ -2790,6 +2842,20 @@ class IdeServices private constructor(
             runCatching {
                 Files.walk(root).use { s ->
                     s.filter { it.toString().endsWith(".java") }.forEach { out.add(it) }
+                }
+            }
+        }
+        return out
+    }
+
+    /** Every `.java`/`.kt` file across the workspace's modules (for the move-time import sweep). */
+    private fun projectSourceFiles(): List<Path> {
+        val out = ArrayList<Path>()
+        for (m in modules()) for (root in sourceRoots(m)) {
+            if (!Files.isDirectory(root)) continue
+            runCatching {
+                Files.walk(root).use { s ->
+                    s.filter { isRelocatableSource(it) }.forEach { out.add(it) }
                 }
             }
         }
