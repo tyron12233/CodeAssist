@@ -110,6 +110,7 @@ class JavaScope(
             is PsiClass -> {
                 typeParameters(e, out)
                 inheritedMembers(e, staticContext, out)
+                recordComponents(e, staticContext, out)
             }
 
             is PsiCodeBlock -> declaredBefore(e, out)
@@ -211,6 +212,19 @@ class JavaScope(
 
     private fun typeParameters(owner: PsiTypeParameterListOwner, out: NameFilteredSink) {
         owner.typeParameters.forEach { out.add(it) }
+    }
+
+    /** A record's components are nameable bare inside its own body (they back its implicit fields, and each
+     *  method body may reference them). Instance state, so hidden in a static context; only the record's OWN
+     *  components (a record is final and inherits none). This is the fallback for when record augmentation is
+     *  off ([dev.ide.lang.java.env.JavaRecordSupport]): when it is ON, the real backing field is already offered
+     *  by [inheritedMembers], so a component is skipped when a same-named field exists to avoid a duplicate. */
+    private fun recordComponents(cls: PsiClass, staticContext: Boolean, out: NameFilteredSink) {
+        if (!cls.isRecord || staticContext) return
+        cls.recordComponents.forEach { rc ->
+            val name = rc.name
+            if (out.wants(name) && cls.fields.none { it.name == name }) out.add(rc)
+        }
     }
 
     /** Static-import targets: `import static p.C.m;` brings in `m`, `import static p.C.*;` all of C's statics. */

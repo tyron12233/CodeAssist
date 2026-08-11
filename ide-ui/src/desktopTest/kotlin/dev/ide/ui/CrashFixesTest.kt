@@ -2,6 +2,8 @@ package dev.ide.ui
 
 import dev.ide.ui.components.clipForClipboard
 import dev.ide.ui.editor.core.EditorDocument
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.runBlocking
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
@@ -32,5 +34,31 @@ class CrashFixesTest {
         assertTrue(clipped.length <= 200_000 + 200, "kept within the clipboard cap")
         assertTrue(clipped.endsWith("TAIL_END"), "keeps the tail where a build's errors/status live")
         assertTrue(clipped.startsWith("["), "notes that earlier text was dropped")
+    }
+
+    @Test
+    fun renamingOntoAnAlreadyOpenTabLeavesOneTabPerPath() {
+        val disk = mutableMapOf("/p/A.java" to "class A {}", "/p/B.java" to "class B {}")
+        val backend = object : StubBackend() {
+            override fun readFile(path: String) = disk[path] ?: ""
+        }
+        // Unconfined dispatchers make the async tab reload run synchronously here.
+        val state = IdeUiState(backend, mainDispatcher = Dispatchers.Unconfined, ioDispatcher = Dispatchers.Unconfined)
+        runBlocking {
+            state.openSuspend("/p/A.java", "A.java")
+            state.openSuspend("/p/B.java", "B.java")
+        }
+        assertEquals(2, state.openFiles.size, "two distinct files, two tabs")
+
+        // Rename A.java onto B.java, which is itself open: the followed tab lands on a path another tab holds.
+        disk["/p/B.java"] = "class A {}"
+        state.reloadAfterRename(activePath = "/p/A.java", newPath = "/p/B.java")
+
+        // Two tabs sharing a path repeat the tab strip's lazy key, which throws and takes the editor down.
+        assertEquals(
+            listOf("/p/B.java"), state.openFiles.map { it.path },
+            "the redundant tab must be dropped, leaving one tab per path",
+        )
+        assertEquals(0, state.activeIndex, "the active tab follows its path to the tab that kept it")
     }
 }

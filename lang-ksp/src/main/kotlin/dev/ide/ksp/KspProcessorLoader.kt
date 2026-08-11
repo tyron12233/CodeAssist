@@ -1,6 +1,6 @@
 package dev.ide.ksp
 
-import java.net.URLClassLoader
+import dev.ide.platform.ToolUrlClassLoader
 import java.nio.file.Files
 import java.nio.file.Path
 
@@ -24,16 +24,19 @@ import java.nio.file.Path
  * so the `KSPConfig`/`SymbolProcessorProvider`/`KSPLogger` the caller builds are the SAME types the loaded
  * runner and processors resolve (parent-first delegation). The runner's own relocated `ksp.*` Analysis API
  * lives only in the child, so it can never clash with the IDE's own compiler platform.
+ *
+ * Parent-first has one exception, [dev.ide.platform.ToolClassIsolation]: a package the app carries for its own
+ * reasons at an incompatible version (`dagger.*`, via bundletool) comes from the processor's own jars.
  */
 fun interface KspProcessorLoader {
     fun load(classpath: List<Path>): ClassLoader
 }
 
-/** Desktop default: a `URLClassLoader` over the runner + processor jars, parented to this module's loader
+/** Desktop default: a [ToolUrlClassLoader] over the runner + processor jars, parented to this module's loader
  *  (which carries the shipped `symbol-processing-api` + `-common-deps`). */
 object DefaultKspProcessorLoader : KspProcessorLoader {
     override fun load(classpath: List<Path>): ClassLoader =
-        URLClassLoader(
+        ToolUrlClassLoader(
             classpath.filter { Files.exists(it) }.map { it.toUri().toURL() }.toTypedArray(),
             KspProcessorLoader::class.java.classLoader,
         )

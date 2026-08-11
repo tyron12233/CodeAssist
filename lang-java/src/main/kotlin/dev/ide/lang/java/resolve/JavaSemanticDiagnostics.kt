@@ -228,7 +228,32 @@ internal object JavaSemanticDiagnostics {
         if (ref.multiResolve(false).isNotEmpty()) return
         val nameEl = ref.referenceNameElement ?: return
         val name = ref.referenceName ?: return
+        // A record's implicit component accessor / field is valid but does not resolve here — the standalone
+        // PSI core synthesizes no record members (no augment provider) — so suppress the spurious "Cannot
+        // resolve" it would otherwise raise on every accessor/component use.
+        if (isRecordComponentReference(ref, name)) return
         out += diag(nameEl, "Cannot resolve symbol '$name'", JavaDiagnosticCodes.UNRESOLVED)
+    }
+
+    /** Whether [ref]/[name] names a record's implicit component: `p.x` / `p.x()` where `p`'s type is a record
+     *  with a component `x`, or a bare `x` inside an enclosing record's body. Narrow — a matching record
+     *  component must exist — so it never hides a genuine unresolved symbol (a name that IS a component is not
+     *  an error to begin with; it simply can't be resolved in this synthesizer-less core). */
+    private fun isRecordComponentReference(ref: PsiJavaCodeReferenceElement, name: String): Boolean {
+        val qualifier = (ref as? PsiReferenceExpression)?.qualifierExpression
+        if (qualifier != null) {
+            val cls = (qualifier.type as? PsiClassType)?.resolve() ?: return false
+            return cls.isRecord && cls.recordComponents.any { it.name == name }
+        }
+        if (ref !is PsiReferenceExpression) return false
+        // Walk STRICTLY-enclosing classes (the 2-arg `getParentOfType` is strict): the 3-arg form with
+        // `strict = false` would return `cls` itself and loop forever.
+        var cls = PsiTreeUtil.getParentOfType(ref, PsiClass::class.java)
+        while (cls != null) {
+            if (cls.isRecord && cls.recordComponents.any { it.name == name }) return true
+            cls = PsiTreeUtil.getParentOfType(cls, PsiClass::class.java)
+        }
+        return false
     }
 
     private fun qualifierResolvable(qualifier: PsiElement?): Boolean = when (qualifier) {

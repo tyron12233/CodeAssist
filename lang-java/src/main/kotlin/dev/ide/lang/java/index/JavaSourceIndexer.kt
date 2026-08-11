@@ -132,7 +132,9 @@ object JavaSourceIndexer {
         fun visitClass(cls: PsiClass, container: String?) {
             val name = cls.name ?: return
             decls += Decl(name, kindOf(cls), offsetOf(cls), container, isPublic(cls), isStatic(cls))
-            cls.methods.forEach { m: PsiMethod ->
+            // OWN members only (see [ownMethodsSafe]): indexing must not trigger record augmentation on the
+            // PomModel-less index host. Behaviour-preserving — own == all for a class with no augments.
+            cls.ownMethodsSafe().forEach { m: PsiMethod ->
                 if (m.isConstructor) return@forEach
                 val params = m.parameterList.parameters
                 decls += Decl(
@@ -143,13 +145,13 @@ object JavaSourceIndexer {
                     varargIndex = params.indexOfFirst { it.isVarArgs },
                 )
             }
-            cls.fields.forEach { f: PsiField ->
+            cls.ownFieldsSafe().forEach { f: PsiField ->
                 decls += Decl(
                     f.name, DeclKind.FIELD, offsetOf(f), name, isPublic(f), isStatic(f),
                     returnType = typeText(f.typeElement),
                 )
             }
-            cls.innerClasses.forEach { visitClass(it, name) }
+            cls.ownInnerClassesSafe().forEach { visitClass(it, name) }
         }
         psi.classes.forEach { visitClass(it, null) }
         return Parsed(pkg, decls)
@@ -180,14 +182,14 @@ object JavaSourceIndexer {
             cls.extendsList?.referenceElements?.forEach { supers += it.text }
             cls.implementsList?.referenceElements?.forEach { supers += it.text }
             val memberAnns = ArrayList<MemberAnnotation>()
-            cls.methods.forEach { m ->
+            cls.ownMethodsSafe().forEach { m ->
                 annotationsOf(m).forEach { memberAnns += MemberAnnotation(m.name, DeclKind.METHOD, it) }
             }
-            cls.fields.forEach { f ->
+            cls.ownFieldsSafe().forEach { f ->
                 annotationsOf(f).forEach { memberAnns += MemberAnnotation(f.name, DeclKind.FIELD, it) }
             }
             types += TypeInfo(fqn, kindOf(cls), supers, annotationsOf(cls), memberAnns)
-            cls.innerClasses.forEach { visitClass(it) }
+            cls.ownInnerClassesSafe().forEach { visitClass(it) }
             path.removeLastOrNull()
         }
         psi.classes.forEach { visitClass(it) }

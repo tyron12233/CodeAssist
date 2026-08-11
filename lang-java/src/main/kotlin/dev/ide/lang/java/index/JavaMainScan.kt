@@ -40,15 +40,18 @@ object JavaMainScan {
             pkg.isNullOrEmpty() -> name
             else -> "$pkg.$name"
         }
+        // OWN members only (see [ownMethodsSafe]): the scan runs on the PomModel-less index host, where reading
+        // a record's augmented members would throw. A record has no `main`, so this loses nothing.
+        val methods = cls.ownMethodsSafe()
         var staticFound = false
-        for (m in cls.methods) {
+        for (m in methods) {
             if (m.isConstructor || m.name != "main" || !isVoid(m)) continue
             if (m.hasModifierProperty(PsiModifier.STATIC) && m.hasModifierProperty(PsiModifier.PUBLIC) && isStringArrayParams(m)) {
                 out.add(binary to false); staticFound = true
             }
         }
         if (topLevel && !staticFound && !cls.isInterface && !cls.hasModifierProperty(PsiModifier.ABSTRACT) && hasNoArgCtor(cls)) {
-            for (m in cls.methods) {
+            for (m in methods) {
                 if (m.isConstructor || m.name != "main" || !isVoid(m)) continue
                 if (m.hasModifierProperty(PsiModifier.STATIC) || m.hasModifierProperty(PsiModifier.ABSTRACT) ||
                     m.hasModifierProperty(PsiModifier.PRIVATE)
@@ -56,11 +59,11 @@ object JavaMainScan {
                 if (m.parameterList.isEmpty || isStringArrayParams(m)) { out.add(binary to true); break }
             }
         }
-        cls.innerClasses.forEach { visit(it, pkg, binary, topLevel = false, out) }
+        cls.ownInnerClassesSafe().forEach { visit(it, pkg, binary, topLevel = false, out) }
     }
 
     private fun hasNoArgCtor(cls: PsiClass): Boolean {
-        val ctors = cls.constructors
+        val ctors = cls.ownMethodsSafe().filter { it.isConstructor }
         return ctors.isEmpty() || ctors.any { it.parameterList.isEmpty }
     }
 

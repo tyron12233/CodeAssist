@@ -739,6 +739,7 @@ class IdeUiState(
                 openFiles[i] = OpenFile(diskPath, name, text)
                 backend.editor.updateDocument(diskPath, text)
             }
+            dedupeTabsByPath()
             loadTree()
         }
     }
@@ -850,6 +851,28 @@ class IdeUiState(
             openFiles[i] = OpenFile(rebased, name, text)
             backend.editor.updateDocument(rebased, text)
         }
+        dedupeTabsByPath()
+    }
+
+    /**
+     * Collapse tabs that have ended up pointing at the same file, keeping the first.
+     *
+     * Re-pointing a tab after a rename or move ([rebaseTabs], [reloadAfterRename]) can land it on a path that
+     * another tab already holds: renaming `a/Foo.kt` over an open `a/Bar.kt`, or moving a directory into one
+     * whose files are already open. Two tabs for one path are not merely redundant, since the tab strip keys
+     * its lazy row by path and a repeated key throws (`Key "…" was already used`), taking the whole editor
+     * down. The backend is NOT told the file closed, because the kept tab still has it open.
+     */
+    private fun dedupeTabsByPath() {
+        val seen = HashSet<String>()
+        val duplicates = openFiles.indices.filter { !seen.add(openFiles[it].path) }
+        if (duplicates.isEmpty()) return
+        val activePath = openFiles.getOrNull(activeIndex)?.path
+        // Remove from the end so the lower indices stay valid as the list shrinks.
+        duplicates.asReversed().forEach { openFiles.removeAt(it) }
+        // The active tab may have been one of the removed duplicates; follow its path to the tab that kept it.
+        activeIndex = openFiles.indexOfFirst { it.path == activePath }
+            .takeIf { it >= 0 } ?: activeIndex.coerceIn(0, openFiles.lastIndex.coerceAtLeast(0))
     }
 
     /** Re-read clean (unmodified) tabs whose disk content changed — e.g. references rewritten by a rename. */

@@ -371,4 +371,48 @@ class JavaCompletionTest {
         assertTrue("Marker" in labels, "a library annotation must be offered at `@…`; got $labels")
         assertFalse("MarkerBase" in labels, "a non-annotation library class must NOT be offered at `@…`; got $labels")
     }
+
+    // --- static-import member completion (`import static Type.name`) --------------------------------------
+
+    @Test
+    fun staticImportOffersStaticMethods() {
+        // `import static java.util.Collections.empty|` must offer the STATIC METHODS (emptyList/…), not the
+        // private nested implementation classes (EmptyList/…) that used to leak in (accessibility unchecked).
+        val labels = labelsAt("package com.foo;\nimport static java.util.Collections.empty|;\nclass Use {}")
+        assertTrue("emptyList" in labels, "static import should offer the static method emptyList; got $labels")
+        assertFalse("EmptyList" in labels, "a private nested class must not leak into a static-import popup; got $labels")
+    }
+
+    @Test
+    fun staticImportOffersStaticFields() {
+        val labels = labelsAt("package com.foo;\nimport static java.lang.Math.P|;\nclass Use {}")
+        assertTrue("PI" in labels, "static import should offer the static field PI; got $labels")
+    }
+
+    @Test
+    fun staticMemberAccessInExpressionStillOffersMethodCall() {
+        // In an EXPRESSION (not an import) a static member still completes to a call `name()`, unaffected.
+        val item = itemsAt("package com.foo;\nclass Use { void m() { java.util.Collections.empty| } }")
+            .firstOrNull { it.label == "emptyList" }
+        assertTrue(item != null && item.insertText.endsWith("()"), "a static member in an expression completes to a call; got ${item?.insertText}")
+    }
+
+    // --- record component accessors -----------------------------------------------------------------------
+
+    @Test
+    fun recordMemberAccessOffersComponentAccessors() {
+        val items = itemsAt("package com.foo;\nrecord Point(int x, int y) {}\nclass Use { void m(Point p) { p.| } }")
+        val x = items.firstOrNull { it.label == "x" }
+        assertTrue(x != null, "record member access should offer the component accessor x; got ${items.map { it.label }}")
+        assertEquals("x()", x.insertText, "a record accessor completes to a call `x()`")
+        assertEquals(CompletionItemKind.METHOD, x.kind, "a record accessor is a method")
+        assertTrue(items.any { it.label == "y" }, "should also offer the y accessor; got ${items.map { it.label }}")
+    }
+
+    @Test
+    fun explicitRecordAccessorIsNotDuplicated() {
+        val xs = itemsAt("package com.foo;\nrecord Point(int x, int y) { public int x() { return x; } }\nclass Use { void m(Point p) { p.x| } }")
+            .filter { it.label == "x" }
+        assertEquals(1, xs.size, "an explicitly-declared accessor must not be offered twice; got ${xs.map { it.detail }}")
+    }
 }

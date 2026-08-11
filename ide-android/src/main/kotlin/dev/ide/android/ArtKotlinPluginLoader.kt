@@ -4,6 +4,7 @@ import dalvik.system.DexClassLoader
 import dev.ide.android.support.tools.ArtReflectionRewrite
 import dev.ide.android.support.tools.D8InProcessDexer
 import dev.ide.lang.kotlin.compile.KotlinPluginLoader
+import dev.ide.platform.ToolClassIsolation
 import java.nio.file.Files
 import java.nio.file.Path
 import java.nio.file.StandardCopyOption
@@ -23,7 +24,8 @@ import java.util.zip.ZipOutputStream
  * Content-addressed: the dexed `plugin.jar` is cached under [cacheRoot]/<hash> keyed by the classpath's
  * path+size+mtime, so a plugin is dexed once per version (the D8 pass is the expensive part). The parent is
  * the app classloader, which holds the dexed Kotlin compiler and any plugin registrar already dexed into the
- * app (e.g. Compose), so a registrar referencing those resolves through parent delegation.
+ * app (e.g. Compose), so a registrar referencing those resolves through parent delegation, except for the
+ * packages [ToolClassIsolation] pins to the tool's own jars (see [ToolDexClassLoader]).
  */
 class ArtKotlinPluginLoader(
     private val androidJar: Path,
@@ -60,7 +62,7 @@ class ArtKotlinPluginLoader(
         // actually exercise this path on device). Pass an app-private odex dir; it is ignored on newer APIs.
         val odex = cacheDir.resolve("odex")
         Files.createDirectories(odex)
-        return DexClassLoader(pluginJar.toString(), odex.toString(), null, javaClass.classLoader)
+        return ToolDexClassLoader(pluginJar.toString(), odex.toString(), javaClass.classLoader)
     }
 
     /**
@@ -93,6 +95,30 @@ class ArtKotlinPluginLoader(
             Files.move(tmp, pluginJar, StandardCopyOption.ATOMIC_MOVE, StandardCopyOption.REPLACE_EXISTING)
         } finally {
             runCatching { tmp.toFile().setWritable(true); Files.deleteIfExists(tmp) }
+        }
+    }
+
+    /**
+     * The ART counterpart of `ToolUrlClassLoader`: parent-first (so the SPI/compiler/stdlib types stay the
+     * app's), except for [ToolClassIsolation.CHILD_FIRST_PACKAGES], which the tool's own dex must supply.
+     * Without this, the app's bundletool-provided Dagger ~2.2x shadowed the bundled Hilt processor's Dagger
+     * 2.6x and the processor died with `NoSuchMethodError` on `DoubleCheck.provider(dagger.internal.Provider)`.
+     */
+    private class ToolDexClassLoader(dexPath: String, odex: String, parent: ClassLoader?) :
+        DexClassLoader(dexPath, odex, null, parent) {
+        // No explicit class-loading lock: libcore's `ClassLoader.loadClass` isn't synchronized either (ART's
+        // class linker is what serializes definition, and returns the already-defined class), and Android's
+        // ClassLoader doesn't expose `getClassLoadingLock`.
+        override fun loadClass(name: String, resolve: Boolean): Class<*> {
+            if (ToolClassIsolation.isChildFirst(name)) {
+                findLoadedClass(name)?.let { return it }
+                // Absent from the tool's dex: fall through to the normal parent-first delegation.
+                try {
+                    return findClass(name)
+                } catch (_: ClassNotFoundException) {
+                }
+            }
+            return super.loadClass(name, resolve)
         }
     }
 

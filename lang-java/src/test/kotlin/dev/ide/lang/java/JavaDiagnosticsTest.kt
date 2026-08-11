@@ -80,6 +80,46 @@ class JavaDiagnosticsTest {
         assertTrue(d.isEmpty(), "valid code must not produce unresolved diagnostics; got ${d.map { it.message }}")
     }
 
+    @Test
+    fun recordComponentAccessHasNoFalseUnresolved() {
+        // A source record's implicit accessors/fields are not synthesized in the standalone core, so `p.x()`,
+        // `p.y()` and the bare `x`/`y` in the record body must NOT be flagged "Cannot resolve".
+        val d = diagnose(
+            """
+            package com.foo;
+            record Point(int x, int y) { int sum() { return x + y; } }
+            class Use {
+                void m() {
+                    Point p = new Point(1, 2);
+                    int a = p.x();
+                    int b = p.y();
+                }
+            }
+            """.trimIndent()
+        ).diagnostics.filter { it.code == JavaDiagnosticCodes.UNRESOLVED }
+        assertTrue(d.isEmpty(), "record component/accessor use must not be flagged unresolved; got ${d.map { it.message }}")
+    }
+
+    @Test
+    fun recordCanonicalConstructorArityIsChecked() {
+        // Proves record augmentation is live: the canonical constructor `Point(int,int)` is synthesized, so
+        // `new Point(1)` is a wrong-arity call. (With augmentation off this would silently pass — no ctor to
+        // resolve against — so this doubles as a liveness check for JavaRecordSupport on desktop.)
+        val d = diagnose(
+            "package com.foo;\nrecord Point(int x, int y) {}\nclass Use { void m() { Object o = new Point(1); } }"
+        ).diagnostics.filter { it.code == JavaDiagnosticCodes.CANNOT_APPLY }
+        assertTrue(d.isNotEmpty(), "a wrong-arity canonical-constructor call should be flagged; got ${d.map { it.message }}")
+    }
+
+    @Test
+    fun nonComponentAccessOnRecordIsStillReported() {
+        // The suppression is narrow: a name that is NOT a component of the record is a genuine error.
+        val d = diagnose(
+            "package com.foo;\nrecord Point(int x, int y) {}\nclass Use { void m() { Point p = new Point(1, 2); p.z(); } }"
+        ).diagnostics.filter { it.code == JavaDiagnosticCodes.UNRESOLVED }
+        assertTrue(d.any { it.message.contains("z") }, "a non-component access on a record must still be flagged; got ${d.map { it.message }}")
+    }
+
     // --- assignment-conversion (type mismatch) checks -----------------------------------------------------
 
     private fun typeErrors(src: String) = diagnose(src).diagnostics.filter {

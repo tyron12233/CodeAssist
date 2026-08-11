@@ -129,6 +129,14 @@ executable script — there is no script interpreter on the sync path. Derived s
 indices, resolved dependencies) lives under a disposable `caches/` directory. Writes go to a temp file
 and are atomically renamed, so a model file is never left half-written.
 
+Loading is fault-isolating rather than all-or-nothing, because the files can be damaged from outside the
+IDE: on-device projects live in browsable external app storage, so a module directory can be deleted or
+moved while `workspace.json` still lists it. A module whose `module.toml` is missing or unparsable is left
+out of the model and reported, and so is an unreadable project entry; the derived workspace tables
+(`libraries.json`, `sdks.json`) fall back to empty and are rebuilt. Nothing damaged is rewritten, so a file
+that failed to parse stays on disk exactly as it is and can be repaired by hand. Only a missing or
+unparsable `workspace.json`, or a schema version from a newer build, fails the open outright.
+
 In gradle-compat mode the truth lives in the Gradle files; the framework holds only a derived model
 snapshot and caches.
 
