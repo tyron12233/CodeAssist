@@ -1,6 +1,7 @@
 package dev.ide.core
 
 import dev.ide.analysis.ACTION_PROVIDER_EP
+import dev.ide.analysis.ANALYZER_EP
 import dev.ide.android.support.AndroidBuildConfigProvider
 import dev.ide.android.support.AndroidRClassProvider
 import dev.ide.android.support.AndroidSupport
@@ -10,6 +11,7 @@ import dev.ide.android.support.metadata.AndroidSdkMetadata
 import dev.ide.block.BLOCK_MAPPING_EP
 import dev.ide.block.impl.JavaBlockMapping
 import dev.ide.core.actions.BuiltInActions
+import dev.ide.core.analysis.PackageMismatchAnalyzer
 import dev.ide.core.completion.BufferWordsContributor
 import dev.ide.core.completion.CompletionStats
 import dev.ide.core.completion.PostfixContributor
@@ -148,6 +150,7 @@ object BuiltInPlugins {
         BuiltInPlugin(JdtAnalysisPlugin()),
         BuiltInPlugin(JavaPsiAnalysisPlugin()),
         BuiltInPlugin(KotlinAnalysisPlugin()),
+        BuiltInPlugin(PackageMismatchPlugin()),
         BuiltInPlugin(XmlAnalysisPlugin(env)),
         BuiltInPlugin(AndroidXmlPlugin(env)),
         BuiltInPlugin(IdeCoreServicesPlugin()),
@@ -542,6 +545,25 @@ private class KotlinAnalysisPlugin : Plugin {
 
     override fun register(reg: PluginRegistration) {
         reg.contributeVia { ext, pid -> KotlinAnalysisSupport.register(ext, pid) }
+    }
+}
+
+/**
+ * The cross-language "package does not match file location" inspection (Java + Kotlin). Host-level because it
+ * needs the file's module source roots (not just the language tree) to derive the expected package, and its
+ * fix reuses both languages' package-text rewriters. `dependsOn` both language backends so the file types are
+ * registered before it runs.
+ */
+private class PackageMismatchPlugin : Plugin {
+    override val manifest = PluginManifest(
+        id = "package-mismatch",
+        name = "Package Mismatch Inspection",
+        description = "Flags a Java/Kotlin file whose package does not match its directory, with a fix to correct it.",
+        dependsOn = listOf("jdt-language", "kotlin-language"),
+    )
+
+    override fun register(reg: PluginRegistration) {
+        reg.contributeVia { ext, pid -> ext.register(ANALYZER_EP, PackageMismatchAnalyzer(), pid) }
     }
 }
 
