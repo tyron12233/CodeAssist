@@ -36,6 +36,7 @@ import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyListScope
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
@@ -579,11 +580,15 @@ private fun DepContent(deps: UiModuleDeps, tab: DepTab, resolvedView: DepView, c
             // (resolved) transitive children.
             DepTab.Declared -> {
                 if (deps.declared.isEmpty()) item("empty") { EmptyRow(stringResource(Res.string.dep_none_declared)) }
-                items(deps.declared, key = { "decl:${it.coordinate}" }) { node ->
-                    val open = expanded["decl:${node.coordinate}"] == true
+                // A module may declare the same coordinate more than once (two scopes, or one per variant),
+                // so the coordinate alone is not unique and a lazy list rejects a repeated key. The
+                // declaration index disambiguates, and declaration order is stable.
+                itemsIndexed(deps.declared, key = { i, node -> "decl:$i:${node.coordinate}" }) { i, node ->
+                    val rowKey = "decl:$i:${node.coordinate}"
+                    val open = expanded[rowKey] == true
                     Column(Modifier.fillMaxWidth().animateItem()) {
                         DependencyRow(node, codeFont, depth = 0, expandable = node.children.isNotEmpty(), expanded = open,
-                            onToggle = { expanded["decl:${node.coordinate}"] = !open },
+                            onToggle = { expanded[rowKey] = !open },
                             onRemove = { onRemove(node.coordinate) }, unresolved = node.coordinate in unresolvedSet,
                             conflict = conflictFor(node),
                             onEdit = if (node.kind == UiDepKind.Jar || node.kind == UiDepKind.Aar) {
@@ -607,8 +612,10 @@ private fun DepContent(deps: UiModuleDeps, tab: DepTab, resolvedView: DepView, c
             DepTab.Resolved -> when (resolvedView) {
                 DepView.Tree -> {
                     if (deps.declared.isEmpty()) item("empty") { EmptyRow(stringResource(Res.string.dep_nothing_resolved)) }
-                    deps.declared.forEach { root ->
-                        treeRows(root, root, nodesByCoord, 0, emptyList(), expanded, codeFont, realConflicts, { onRemove(root.coordinate) }, onExcludeTransitive)
+                    // Seed each root's key path with its declaration index, so two declarations of one
+                    // coordinate produce distinct row keys instead of a duplicate the lazy list rejects.
+                    deps.declared.forEachIndexed { i, root ->
+                        treeRows(root, root, nodesByCoord, 0, listOf("#$i"), expanded, codeFont, realConflicts, { onRemove(root.coordinate) }, onExcludeTransitive)
                     }
                 }
                 DepView.Graph -> {
