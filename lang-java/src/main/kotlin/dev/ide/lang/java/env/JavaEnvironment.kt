@@ -161,7 +161,13 @@ class JavaEnvironment private constructor(
             val env = KotlinCoreEnvironment.createForProduction(
                 disposable, configuration, EnvironmentConfigFiles.JVM_CONFIG_FILES,
             )
-            JavaEnvironment(env, disposable, usable, sourceRoots, jdkHome).also { it.installInjectedFinder() }
+            JavaEnvironment(env, disposable, usable, sourceRoots, jdkHome).also {
+                it.installInjectedFinder()
+                // Stand up IntelliJ's real record augmentation (accessors / canonical ctor / backing fields) on
+                // this resolution project; capability-gated + best-effort, so it degrades to the hand-rolled
+                // record support if the platform can't host it. See [JavaRecordSupport].
+                JavaRecordSupport.ensureFor(it.project)
+            }
         }
 
         private val log = Log.logger("JavaEnvironment")

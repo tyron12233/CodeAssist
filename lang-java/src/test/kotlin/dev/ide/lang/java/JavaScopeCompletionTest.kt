@@ -132,6 +132,14 @@ class JavaScopeCompletionTest {
     }
 
     @Test
+    fun offersRecordComponentInBody() {
+        // A record's components are nameable bare in its own body (they back its implicit fields); the
+        // standalone core synthesizes no fields, so JavaScope adds the components explicitly.
+        assertOffers("x", "package com.foo;\nrecord Point(int x, int y) { int sum() { return x| ; } }")
+        assertOffers("y", "package com.foo;\nrecord Point(int x, int y) { int sum() { return y| ; } }")
+    }
+
+    @Test
     fun offersTypeParameter() {
         assertOffers("T", "package com.foo;\nclass Use<T> { void run() { T| } }")
         assertOffers("R", "package com.foo;\nclass Use { <R> R run() { R| } }")
