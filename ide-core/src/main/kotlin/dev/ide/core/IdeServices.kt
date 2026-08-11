@@ -501,9 +501,15 @@ class IdeServices private constructor(
     fun noteCompletionAccepted(label: String) =
         completionStats.noteAccepted(CompletionStats.keyOf(label))
 
-    /** The backend whose `languages` contains [language], or the first (Java/JDT) as a fallback. */
+    /** The backend whose `languages` contains [language], or the first (Java/JDT) as a fallback. Only reached
+     *  for a language some backend DOES claim: an unclaimed one is served by [PlainTextAnalyzer] (see
+     *  [analyzerFor]), never by this fallback. */
     private fun backendFor(language: LanguageId): LanguageBackend =
         languageBackends.firstOrNull { language in it.languages } ?: languageBackends.first()
+
+    /** Whether some registered [LanguageBackend] claims [language] (i.e. the file has real language services). */
+    private fun hasLanguageBackend(language: LanguageId): Boolean =
+        languageBackends.any { language in it.languages }
 
     /** File-name-suffix → [LanguageId] mappings contributed via [FILE_TYPE_EP] (built-ins in [BuiltInPlugins]),
      *  priority-sorted and cached. Every built-in plugin registers before any engine is built, so the lazy
@@ -513,12 +519,13 @@ class IdeServices private constructor(
         platform.extensions.extensions(FILE_TYPE_EP).sortedBy { it.order }
     }
 
-    /** The language of [file] by its registered [FileTypeMapping], else Java. A mapping may target a language
-     *  with no [LanguageBackend] (ProGuard, Markdown): that file is edited as plain text and, because the
-     *  analysis pipeline dispatches by language, is never analysed as Java. */
+    /** The language of [file] by its registered [FileTypeMapping], else [PLAIN_TEXT_LANGUAGE]. A mapping may
+     *  target a language with no [LanguageBackend] (ProGuard, Markdown), and an unregistered file type (a
+     *  `res/raw/` asset, a `.txt`/`.json`/`.csv`) maps to none at all: either way the file is edited as plain
+     *  text ([PlainTextAnalyzer]) and never analysed as Java. */
     private fun languageFor(file: Path): LanguageId {
-        val name = file.fileName?.toString() ?: return LanguageId("java")
-        return fileTypeMappings.firstOrNull { it.matches(name) }?.language ?: LanguageId("java")
+        val name = file.fileName?.toString() ?: return PLAIN_TEXT_LANGUAGE
+        return fileTypeMappings.firstOrNull { it.matches(name) }?.language ?: PLAIN_TEXT_LANGUAGE
     }
 
     private fun isKotlin(file: Path): Boolean =
@@ -1801,10 +1808,13 @@ class IdeServices private constructor(
         return out.values.toList()
     }
 
-    /** The per-(module, language) analyzer, resolved (and cached) as a MODULE-scoped service. */
+    /** The per-(module, language) analyzer, resolved (and cached) as a MODULE-scoped service. A language no
+     *  backend claims gets the [PlainTextAnalyzer], NOT the Java one: parsing e.g. a `res/raw/notes.txt` as
+     *  Java reports its whole content as errors. */
     private fun analyzerFor(
         module: Module, language: LanguageId = LanguageId("java")
-    ): SourceAnalyzer = module.service(analyzerKeyFor(language))
+    ): SourceAnalyzer =
+        if (hasLanguageBackend(language)) module.service(analyzerKeyFor(language)) else PlainTextAnalyzer
 
     /** Construct the analyzer for [module] in [language]. Invoked once by the module-scoped analyzer
      *  service factory; the module container caches and disposes the result. */
@@ -1871,6 +1881,12 @@ class IdeServices private constructor(
                     it.isAndroidModule =
                         module.facets.get(AndroidFacet.KEY) != null || module.type.platform == PlatformKind.ANDROID
                     it.extensionCacheDir = store.rootPath.resolve(".platform/caches/kotlin-ext")
+                    // Lowered Compose-preview declarations persist across launches, so the first preview after
+                    // a reopen decodes instead of re-running overload resolution over the reachable closure.
+                    // Per-module subdir: two modules can see the same dependency source file with different
+                    // classpaths, and their entries must not collide on the shared path-derived file name.
+                    it.previewLoweringCacheDir =
+                        store.rootPath.resolve(".platform/caches/preview-lowering/${module.id.value}")
                     // Synthetic "light" classes (Android R/BuildConfig, …), minus the Kotlin file facades.
                     it.syntheticClassProvider = { kotlinSyntheticClasses(module) }
                     // Real parameter names + javadoc/KDoc from attached sources: the persistent source-doc
@@ -4064,6 +4080,11 @@ class IdeServices private constructor(
     private inner class IdeAnalysisEnvironment : AnalysisEnvironment {
         override suspend fun targetFor(file: VirtualFile, needsBindings: Boolean): AnalysisTarget? {
             val path = Paths.get(file.path)
+            val language = languageFor(path)
+            // Nothing to analyze when no backend claims the file's language (a `res/raw/` data file, a `.txt`,
+            // Markdown, ProGuard keep rules): bail before building a target, so such a file is never parsed,
+            // and in particular never parsed as Java.
+            if (!hasLanguageBackend(language)) return null
             // `moduleForEditableFile` (not `moduleForFile`) so XML resource files + the manifest, which sit
             // outside the source roots, still resolve to a module and get analyzed.
             val module = moduleForEditableFile(path) ?: return null
@@ -4072,7 +4093,7 @@ class IdeServices private constructor(
                 openDocuments[key] ?: runCatching { key.readText() }.getOrNull() ?: return null
             // Pick the analyzer by the file's language (Java / Kotlin / XML); each backend's diagnostic +
             // action providers are language-gated, so the one pipeline serves every language.
-            val analyzer = analyzerFor(module, languageFor(path))
+            val analyzer = analyzerFor(module, language)
             // Tier gate: a SEMANTIC+ pass gets the binding-resolved tree (so analyzers can resolve types/
             // symbols and the one pass also yields the compiler diagnostics); a SYNTAX-only pass gets the
             // cheap syntax tree (no classpath scan, no shadow-file move) the incremental parser produces.

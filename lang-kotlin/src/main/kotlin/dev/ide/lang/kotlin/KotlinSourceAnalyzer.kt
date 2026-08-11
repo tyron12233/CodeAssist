@@ -35,9 +35,11 @@ import dev.ide.lang.formatting.FormattingService
 import dev.ide.lang.imports.ImportOrganizerService
 import dev.ide.lang.highlight.SemanticHighlightService
 import dev.ide.lang.kotlin.interp.KotlinPreviewLowering
-import dev.ide.lang.kotlin.interp.PreviewDeclProvider
+import dev.ide.lang.kotlin.interp.LazyPreviewDeclProvider
 import dev.ide.lang.kotlin.interp.PreviewFileModel
 import dev.ide.lang.kotlin.interp.PreviewInfo
+import dev.ide.lang.kotlin.interp.PreviewLazyFile
+import dev.ide.lang.kotlin.interp.PreviewLoweringDiskCache
 import dev.ide.lang.kotlin.interp.PreviewModel
 import dev.ide.lang.kotlin.interp.ResolvedClass
 import dev.ide.lang.kotlin.interp.ResolvedFunction
@@ -110,6 +112,13 @@ class KotlinSourceAnalyzer(ctx: CompilationContext) : SourceAnalyzer, Disposable
     /** Injected by the host: where to persist the classpath extension scan across launches. */
     @Volatile
     var extensionCacheDir: Path? = null
+
+    /** Injected by the host: where to persist lowered Compose-preview declarations across launches, so the
+     *  first preview after a project reopen decodes instead of re-running overload resolution (the dominant
+     *  cold cost on a big project). Null → in-memory lowering cache only. Must be set before the first preview
+     *  use (the host sets it at analyzer creation, like [extensionCacheDir]). */
+    @Volatile
+    var previewLoweringCacheDir: Path? = null
 
     /** Injected by the host: synthetic ("light") classes this module should resolve (Android `R`/`BuildConfig`,
      *  ViewBinding, …). The host excludes the Kotlin `<File>Kt` facades (a Kotlin file uses its own top-level
@@ -323,8 +332,24 @@ class KotlinSourceAnalyzer(ctx: CompilationContext) : SourceAnalyzer, Disposable
 
     // --- Compose preview (interpreter integration; see docs/compose-interpreter.md) ---
 
-    /** PSI→ResolvedTree lowering for the Compose-preview interpreter, with its own per-function memoization. */
-    private val previewLowering by lazy { KotlinPreviewLowering(service, ::sharedCachesFor) }
+    /** PSI→ResolvedTree lowering for the Compose-preview interpreter, with its own per-declaration memoization
+     *  (and disk persistence when the host provided [previewLoweringCacheDir]). The disk salt is this module's
+     *  classpath jar fingerprint: a dependency change alters overload resolution, so stale entries must miss —
+     *  the same signal that makes the host dispose this whole analyzer on classpath change. */
+    private val previewLowering by lazy {
+        val disk = previewLoweringCacheDir?.let { dir ->
+            runCatching {
+                val fp = classpathJars.asSequence()
+                    .map { p ->
+                        val a = runCatching { Files.readAttributes(p, java.nio.file.attribute.BasicFileAttributes::class.java) }.getOrNull()
+                        "$p:${a?.size() ?: -1}:${a?.lastModifiedTime()?.toMillis() ?: -1}"
+                    }
+                    .sorted().joinToString("|").hashCode().toString(16)
+                PreviewLoweringDiskCache(dir, "cp=$fp")
+            }.getOrNull()
+        }
+        KotlinPreviewLowering(service, ::sharedCachesFor, disk)
+    }
 
     /** The `@Preview @Composable` functions in [file]'s last parse — the editor's preview targets. */
     fun composePreviews(file: VirtualFile): List<PreviewInfo> =
@@ -572,11 +597,11 @@ class KotlinSourceAnalyzer(ctx: CompilationContext) : SourceAnalyzer, Disposable
 
     /** Cross-MODULE preview model for [file]: seed from [file]'s own lowering, then run the reachable-declaration
      *  expansion over the supplied [provider] (the host's cross-module dispatcher). Null when [file] isn't parsed.
-     *  This is the multi-module counterpart to [lowerFileWithDeps] — see [IdeServices] for how the provider is
-     *  built (find a reached declaration across the dependency-module closure, lower it with its OWNING module's
-     *  analyzer). */
+     *  This is the multi-module counterpart to [lowerFileWithDeps] — see `ComposePreviewService` for how the
+     *  provider is built (find a reached declaration across the dependency-module closure, lower it with its
+     *  OWNING module's analyzer). */
     fun lowerFileWithDeps(
-        file: VirtualFile, provider: PreviewDeclProvider,
+        file: VirtualFile, provider: LazyPreviewDeclProvider,
     ): PreviewModel? =
         lastByFile[file.path]?.let {
             previewLowering.expand(
@@ -599,6 +624,11 @@ class KotlinSourceAnalyzer(ctx: CompilationContext) : SourceAnalyzer, Disposable
      *  module's analyzer — so a dependency module's file resolves against ITS OWN classpath. */
     fun loweredFile(pf: KotlinSymbolService.PreviewSourceFile): PreviewFileModel? =
         previewLowering.loweredFile(pf)
+
+    /** The lazily-lowering handle for [pf], lowered by THIS module's analyzer on demand — the cross-module
+     *  expansion pulls exactly the reached declaration through it instead of materializing the whole file. */
+    fun lazyLoweredFile(pf: KotlinSymbolService.PreviewSourceFile): PreviewLazyFile? =
+        previewLowering.lazyFile(pf)
 
     /** The incremental-analyze engine (runs the semantic checks with per-declaration caching). Holds the
      *  per-file analyze cache, so a single instance is kept for the analyzer's lifetime. */

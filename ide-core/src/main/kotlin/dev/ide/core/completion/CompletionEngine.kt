@@ -57,11 +57,18 @@ class CompletionEngine(private val extensions: ExtensionRegistry) {
             // packages (e.g. androidx.compose.ui.Modifier vs java.lang.reflect.Modifier) are not duplicates —
             // both must survive so the user can pick, disambiguated by package. Without it, whichever a
             // contributor emitted first shadowed the other (dropping the Compose type on some devices).
-            .distinctBy { listOf(it.kind, it.label, it.insertText, it.container) }
-            .take(options.maxItems)
+            // `detail` (the signature line) is part of the key for the same reason: a method's OVERLOADS share
+            // label/insertText/container and differ only there, so leaving it out collapsed `print(int)`,
+            // `print(String)`, … into a single arbitrary row.
+            .distinctBy { listOf(it.kind, it.label, it.insertText, it.container, it.detail) }
+        val shown = ranked.take(options.maxItems)
         return CompletionResult(
-            ranked,
-            isIncomplete = sink.isIncomplete,
+            shown,
+            // Truncating here IS an incomplete result: the editor must re-query as the prefix grows instead of
+            // narrowing this capped list client-side. Without it, `receiver.` on a wide type (an Android View
+            // subclass has >200 members) served the top-200 as authoritative, so everything below the cap
+            // (`setText` on a Button, say) could never be reached by typing.
+            isIncomplete = sink.isIncomplete || ranked.size > shown.size,
             replacementRange = sink.replacementRange ?: params.replacementRange,
         )
     }

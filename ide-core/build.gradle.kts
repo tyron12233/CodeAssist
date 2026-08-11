@@ -54,3 +54,14 @@ dependencies {
     // Bouncy Castle: the keystore-registry test creates a real keystore (KeystoreCrypto.create needs BC at runtime).
     testImplementation(libs.bouncycastle.pkix)
 }
+
+// Several tests boot a real IdeServices and build the full library index (android.jar, the JDK, the Android
+// SDK sources) in the single shared worker JVM. The index store's NIO buffers are only released when the
+// referencing ByteBuffers are collected, so with Gradle's default 512m worker both ceilings run within a few
+// MB of full (the heap peaks around 498m, and MaxDirectMemorySize defaults to the max heap). An index build
+// then intermittently fails with "Cannot reserve N bytes of direct buffer memory", skips the artifact, and a
+// test that needs it waits out its index timeout and fails on the missing symbols. Give the worker real room.
+// Scoped to the unit `test` task so regressionTest keeps its own settings.
+tasks.named<Test>("test") {
+    maxHeapSize = "1536m"
+}

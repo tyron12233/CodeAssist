@@ -17,8 +17,14 @@ import dev.ide.interp.InterpreterException
  */
 class ComposeRuntime(private val dispatcher: ComposeDispatcher) : ComposableInvoker {
 
+    // Nesting depth of interpreted composables in the CURRENT composition pass (single-threaded — composition and
+    // recomposition are serialized on one thread, sharing [ComposeDispatcher.composer]). Depth 1 is the preview
+    // ROOT (the renderer's direct call); a nested composable is deeper. Used to decide containment on a throw.
+    private var depth = 0
+
     override fun invokeComposable(callSiteKey: Int, restartable: Boolean, force: Boolean, args: List<Any?>, body: () -> Any?): Any? {
         val outer = dispatcher.composer ?: return body() // no composition in progress → just run it
+        val depthNow = ++depth
         // The composer-op driver for this composer — host reflection for a bridged host composer, the VM-backed
         // driver for an interpreted (VmObject) composer produced by the project runtime (milestone A). `group`
         // (from startRestartGroup) and `scope` (from endRestartGroup) share the composer's nature, so one pick
@@ -51,15 +57,29 @@ class ComposeRuntime(private val dispatcher: ComposeDispatcher) : ComposableInvo
             }
             scope = ops.endRestartGroup(group)
         } catch (t: Throwable) {
-            // The body failed mid-composition (e.g. an interpreter error, or a library composable that threw
-            // with a node still open). Unwind to the pre-restart-group marker so any dangling group/node is
-            // closed and the slot table isn't left corrupt, then rethrow for the caller (the preview renderer)
-            // to surface as an error view rather than aborting — and, critically, so the IDE's own composition
-            // around the preview doesn't crash on its next `endNode`.
+            // The body failed mid-composition (an interpreter error, a library composable that threw with a node
+            // still open, or the user's own `?: throw` for an app-level CompositionLocal a @Preview doesn't provide
+            // — e.g. Jetsnack's `DestinationBar` reading `LocalSharedTransitionScope`). First unwind to the
+            // pre-restart-group marker so any dangling group/node is closed and the slot table isn't left corrupt.
             runCatching { ops.endToMarker(outer, marker) }
+            // Recomposition cancellation is control flow — never contain it.
+            if (t is kotlin.coroutines.cancellation.CancellationException) throw t
+            // Graceful degradation: a NESTED composable (depth > 1) is CONTAINED at its own group — record the
+            // failure for the host's partial-render note and contribute nothing, so its siblings AND ancestors keep
+            // composing (one broken widget doesn't blank the whole preview). This holds on every path — initial
+            // compose, recompose, and the VM library-executor path — because containment happens at the throw's own
+            // composable rather than relying on an enclosing content-lambda proxy the recompose path can bypass. The
+            // ROOT composable (depth 1) still rethrows, so a wholly-broken preview surfaces as a clear error
+            // (the renderer's onError) rather than a silent blank. Balancing already done via [endToMarker] above;
+            // returning here skips [updateScope] (a failed body has no valid restart scope to register).
+            if (depthNow > 1) {
+                dispatcher.contentLambdaError = dispatcher.contentLambdaError ?: t
+                return Unit
+            }
             throw t
         } finally {
             dispatcher.composer = outer
+            depth--
         }
         // On recomposition the runtime hands us a fresh composer; re-run the whole composable (it reopens its
         // own restart group and re-registers), exactly as the plugin's restart lambda re-invokes the function.

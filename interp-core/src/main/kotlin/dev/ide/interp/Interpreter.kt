@@ -64,6 +64,15 @@ class Interpreter(
     /** Executes library classes the loaders cannot load (project-jar dependency code, run in the bytecode VM
      *  on device instead of a DexClassLoader). Null → the honest "cannot load" boundaries stand. */
     private val libraryFallback: LibraryExecutor? = null,
+    /** Single-instance storage for top-level `val`/`var` backing fields ([topLevelPropertyState]). Defaults to a
+     *  fresh per-interpreter map (console/tests). The Compose preview passes a REMEMBERED, render-stable map so a
+     *  top-level `val`'s ONE instance survives an interpreter RE-CREATION within a render: `ComposePreviewRenderer`
+     *  rebuilds the Interpreter whenever its `remember(program, classes)` key churns (the isolated `:preview`
+     *  render re-supplies program/classes across recompositions), and a fresh per-interpreter map would re-mint a
+     *  `staticCompositionLocalOf { }` in a top-level `val` per interpreter — so `provides` (one instance) and a
+     *  later `.current` (a re-minted instance) mismatch and the default lambda throws ("No JetsnackColorPalette
+     *  provided" — the out-of-process custom-theme preview rendered grey). Sharing the map keeps identity stable. */
+    topLevelPropertyStore: MutableMap<String, Any?> = HashMap(),
 ) {
     /** Source classes indexed by fully-qualified name and by simple name (a constructor callee carries the
      *  simple name; an object/enum reference carries the resolved FQN). */
@@ -148,17 +157,46 @@ class Interpreter(
     }
 
     /** A benign stand-in for a parameter whose default couldn't be evaluated (gap-tolerant mode): the zero of a
-     *  primitive type so a later arithmetic/boolean read doesn't NPE on unboxing, else null. */
-    private fun zeroForType(qualifiedName: String?): Any? = when (qualifiedName) {
-        "kotlin.Int" -> 0
-        "kotlin.Long" -> 0L
-        "kotlin.Short" -> 0.toShort()
-        "kotlin.Byte" -> 0.toByte()
-        "kotlin.Char" -> '\u0000'
-        "kotlin.Double" -> 0.0
-        "kotlin.Float" -> 0f
-        "kotlin.Boolean" -> false
-        else -> null
+     *  primitive type (so a later arithmetic/boolean read doesn't NPE on unboxing), or the UNBOXED zero of an
+     *  inline value class the interpreter holds unboxed (`Color`/`Dp`/…) — never null for a value class, since
+     *  null then crashes a value-class-mangled dispatch (`ColorKt.compositeOver--OWjLjI(long, long)` →
+     *  "argument 2 has type long, got null", blanking a Jetsnack `JetsnackCard` preview whose defaulted
+     *  `color = JetsnackTheme.colors.uiBackground` couldn't evaluate) — else null. */
+    private fun zeroForType(qualifiedName: String?): Any? {
+        when (qualifiedName) {
+            "kotlin.Int" -> return 0
+            "kotlin.Long" -> return 0L
+            "kotlin.Short" -> return 0.toShort()
+            "kotlin.Byte" -> return 0.toByte()
+            "kotlin.Char" -> return '\u0000'
+            "kotlin.Double" -> return 0.0
+            "kotlin.Float" -> return 0f
+            "kotlin.Boolean" -> return false
+        }
+        // An inline VALUE CLASS the interpreter holds unboxed: its zero is the zero of its underlying primitive
+        // (the single parameter of the synthetic static `box-impl`). `Color`/`Offset`/`Size`/`TextUnit` erase to
+        // `long`, `Dp` to `float`. Falls through to null when the type isn't loadable / isn't a value class /
+        // is reference-backed (a non-primitive `box-impl` param), preserving the prior behaviour there.
+        qualifiedName?.let { fqn ->
+            val cls = runCatching { loadClassAcross(fqn, initialize = false, preferred = classLoader) }.getOrNull()
+            val box = cls?.declaredMethods?.firstOrNull {
+                it.name == "box-impl" && java.lang.reflect.Modifier.isStatic(it.modifiers) && it.parameterCount == 1
+            }
+            box?.parameterTypes?.firstOrNull()?.let { u ->
+                return when (u) {
+                    java.lang.Long.TYPE -> 0L
+                    Integer.TYPE -> 0
+                    java.lang.Float.TYPE -> 0f
+                    java.lang.Double.TYPE -> 0.0
+                    java.lang.Short.TYPE -> 0.toShort()
+                    java.lang.Byte.TYPE -> 0.toByte()
+                    Character.TYPE -> '\u0000'
+                    java.lang.Boolean.TYPE -> false
+                    else -> null
+                }
+            }
+        }
+        return null
     }
 
     /** The declared value-parameter count the resolver pinned for [callee] (a source callee carries it in its
@@ -199,7 +237,7 @@ class Interpreter(
      *  updates it — so a getter's `if (_x != null) return _x!!; _x = build(); return _x!!` sees its own write.
      *  Per-interpreter (statics reset between runs, like a fresh class load). `NO_VALUE` distinguishes an
      *  uninitialized slot from one holding a genuine `null` (the icon backing field starts null). */
-    private val topLevelPropertyState = HashMap<String, Any?>()
+    private val topLevelPropertyState: MutableMap<String, Any?> = topLevelPropertyStore
     private val NO_VALUE = Any()
 
     /** Marker distinguishing a `getValue` call (no value argument) from a `setValue` in [callDelegateOp] —
@@ -466,11 +504,29 @@ class Interpreter(
                 // no instance — read the static field (or its `getName()` static getter) off the class.
                 staticHolder != null -> readStaticMember(staticHolder, binding.name)
                 receiverNode == null -> {
-                    // A top-level property (`LocalTextStyle`, `PI`) — its getter is a STATIC method on the declaring
-                    // `…Kt` facade (`getLocalTextStyle()`); the resolver records the facade in the binding's owner.
-                    val owner = (binding as? Binding.Property)?.ownerFqn
-                        ?: throw InterpreterException("top-level property read `${binding.name}` not supported (no owner)")
-                    readTopLevelProperty(owner, binding.name)
+                    // A PROJECT-source top-level `val`/`var` read here as a Property binding must go through the
+                    // SAME single-instance storage ([topLevelPropertyState]) as a source-call read, or it is
+                    // re-evaluated per read — minting a fresh value each time. For `val Local… =
+                    // staticCompositionLocalOf { … }` (the custom-theme idiom) that breaks CompositionLocal
+                    // IDENTITY: `Provide…(Local provides …)` stores under instance A while a later `Local.current`
+                    // (read through this path) re-mints instance B, so the lookup misses and B's default lambda
+                    // throws ("No JetsnackColorPalette provided" — the out-of-process Jetsnack preview). The
+                    // source-call read already caches (see the singleton branch above); a reference the resolver
+                    // instead lowered as a Property binding must share that cache. Library top-level properties
+                    // (no source fn) keep the reflective facade read unchanged.
+                    val srcKey = "${binding.name}/0"
+                    val srcFn = functions[srcKey]?.takeIf { it.singletonBackingField || it.mutableBackingField }
+                    if (srcFn != null) {
+                        val cached = topLevelPropertyState.getOrDefault(srcKey, NO_VALUE)
+                        if (cached !== NO_VALUE) cached
+                        else invokeFunction(srcFn, NO_RECEIVER, emptyList()).also { topLevelPropertyState[srcKey] = it }
+                    } else {
+                        // A LIBRARY top-level property (`LocalTextStyle`, `PI`) — its getter is a STATIC method on
+                        // the declaring `…Kt` facade (`getLocalTextStyle()`); the resolver records the facade owner.
+                        val owner = (binding as? Binding.Property)?.ownerFqn
+                            ?: throw InterpreterException("top-level property read `${binding.name}` not supported (no owner)")
+                        readTopLevelProperty(owner, binding.name)
+                    }
                 }
 
                 else -> {
@@ -955,10 +1011,14 @@ class Interpreter(
             // by [bindParams].
             val target = sourceFunctionFor(callee, call.args.size)
                 ?: throw InterpreterException("no source function `${callee.displayName}/${call.args.size}`")
-            // A top-level `var` backing-field READ: return its live storage value, lazily initialized from the
-            // initializer ([target.body]) on first read. Keeps `_x` reads consistent with prior `_x = …` writes
-            // (the write path is in [RNode.Assign]), so a lazy-cache getter returns what it just built.
-            if (target.mutableBackingField && call.args.isEmpty()) {
+            // A top-level plain-backing-field property READ: return its live storage value, lazily initialized
+            // from the initializer ([target.body]) on first read and cached thereafter (keyed `name/0`). For a
+            // `var` this keeps reads consistent with prior `_x = …` writes (the lazy-cache icon idiom; write path
+            // in [RNode.Assign]). For a `val` it preserves the single-instance identity real Kotlin gives a
+            // `<clinit>` static field — without it, `val LocalX = staticCompositionLocalOf { … }` would mint a
+            // fresh CompositionLocal per read, so a theme's `provides` and a later `.current` never match and the
+            // preview fails with "No X provided" (a custom-theme app like Jetsnack blanks entirely).
+            if ((target.mutableBackingField || target.singletonBackingField) && call.args.isEmpty()) {
                 val key = "${callee.displayName}/0"
                 val current = topLevelPropertyState.getOrDefault(key, NO_VALUE)
                 if (current !== NO_VALUE) return current
@@ -1038,10 +1098,21 @@ class Interpreter(
             )
                 ?: throw InterpreterException("member extension `${callee.displayName}` scope receiver is null")
             val extReceiver = call.receiver?.let { eval(it, env) }
+            // Reorder named args into declared positions with [OmittedArg] holes for skipped defaults — exactly as
+            // the source-call and constructor paths do. Without it a call that names a LATE parameter while
+            // skipping earlier defaults (`Modifier.sharedBounds(state, animatedVisibilityScope = avs,
+            // boundsTransform = bt)` skips `enter`/`exit`) collapses to contiguous args, so the `$default`
+            // synthetic binds them to the wrong slots and the dispatcher reports "no member extension …(N)".
+            val paramNames = when (val c = callee) {
+                is ResolvedCallable.Library -> c.paramNames
+                is ResolvedCallable.Source -> c.paramNames
+                else -> emptyList()
+            }
+            val reordered = reorderNamedArgs(paramNames, call.args, call.args.map { eval(it.value, env) })
             // Pass the scope as the dispatch receiver and the extension receiver as the head of the args; the
             // dispatcher invokes it as an instance method on the scope (and threads BOTH receivers through the
             // `$default` synthetic when a value param is defaulted).
-            val args = listOf(extReceiver) + call.args.map { eval(it.value, env) }
+            val args = listOf(extReceiver) + reordered
             return checkedDispatch(call, scope, args)
         }
         // `super.foo(...)`: dispatch to the SUPERCLASS implementation, skipping the lexical class's own override.
@@ -1960,6 +2031,14 @@ class Interpreter(
             else -> null
         }
 
+        "isBlank" -> (recv as? CharSequence)?.let { Handled(it.isBlank()) }
+        "isEmpty" -> when (recv) {
+            is CharSequence -> Handled(recv.isEmpty())
+            is Collection<*> -> Handled(recv.isEmpty())
+            is Map<*, *> -> Handled(recv.isEmpty())
+            else -> null
+        }
+
         else -> null
     }
 
@@ -2824,20 +2903,26 @@ class Interpreter(
                 leadingReceivers = 1
             )
         }
-        val cls = loadClassAcross(ownerFqn, initialize = false, preferred = classLoader)
         // A missing library facade (e.g. a Compose icon's per-icon `…Kt`) is a recoverable boundary:
         // partial rendering skips the one statement rather than failing the whole preview.
+        loadClassAcross(ownerFqn, initialize = false, preferred = classLoader)
             ?: throw InterpreterBoundaryException("cannot load facade `$ownerFqn` for extension property `$name`")
-        val getter = getterName
-        val m = cls.methods.firstOrNull {
-            java.lang.reflect.Modifier.isStatic(it.modifiers) && it.parameterCount == 1 && KotlinJvmNames.matches(
-                cls,
-                it.name,
-                getter
-            )
-        } ?: throw InterpreterException("no extension-property getter `$name` on `$ownerFqn`")
-        runCatching { m.isAccessible = true }
-        return m.invoke(null, receiver)
+        // Route the getter through the dispatcher as an EXTENSION call (receiver as the leading argument), so
+        // OVERLOAD selection picks the getter whose parameter accepts the receiver and the receiver is COERCED
+        // (numeric widening/narrowing, value-class (un)boxing) — mirroring [writeExtensionProperty]. A bare
+        // `m.invoke(null, receiver)` over the first matching getter bound `0.5.sp` (a `Double`) to `getSp(Int)`
+        // (`.sp`/`.dp`/… each have Int/Float/Double overloads) → "argument type mismatch", degrading a project's
+        // typography/dimensions on every preview. The facade is confirmed loadable above, so routing here can't
+        // turn a missing-facade boundary into a hard error.
+        val getter = ResolvedCallable.Library(
+            displayName = getterName, ownerFqn = ownerFqn, methodName = getterName,
+            paramTypes = emptyList(), isStatic = true, isConstructor = false, isInline = false,
+        )
+        val call = RNode.Call(
+            getter, DispatchKind.EXTENSION, receiver = null, args = emptyList(),
+            callSiteKey = CallSiteKey(0), source = SourceSpan(0, 0),
+        )
+        return checkedDispatch(call, receiver, emptyList())
     }
 
     /** Write an extension property (`role = Role.RadioButton` inside a `semantics { }` lambda): its setter is a
@@ -3451,7 +3536,7 @@ class Interpreter(
 
         /** The `@InlineOnly` empty/blank predicates, dispatched by name in [evalEmptyBlankPredicate]. */
         val EMPTY_BLANK_PREDICATES =
-            setOf("isNotBlank", "isNotEmpty", "isNullOrBlank", "isNullOrEmpty")
+            setOf("isBlank", "isEmpty", "isNotBlank", "isNotEmpty", "isNullOrBlank", "isNullOrEmpty")
 
         /** `kotlin.math` single-argument functions modeled over [java.lang.Math] (all compute in `Double`).
          *  `round` is ties-to-even ([Math.rint], matching `kotlin.math.round`); `Double.roundToInt/Long` (ties

@@ -115,7 +115,7 @@ object ComposableAbi {
         originalArgs: List<Any?>,
         composer: Any,
         declaredParamCount: Int = originalArgs.size,
-        lambdaProxy: (InterpretedLambda, Class<*>) -> Any = { l, _ -> l },
+        lambdaProxy: (InterpretedLambda, Class<*>, Class<*>?) -> Any = { l, _, _ -> l },
         loader: ClassLoader? = null,
         receiver: Any? = null,
         receiverCount: Int = 0,
@@ -166,7 +166,8 @@ object ComposableAbi {
             if (a === OmittedArg) continue
             val slot = if (trailingLambda && i == k - 1) n - 1 else i
             if (slot !in 0 until n) continue
-            val raw = if (a is InterpretedLambda) lambdaProxy(a, paramTypes[slot]) else boxValueClassIfNeeded(a, paramTypes[slot])
+            val raw = if (a is InterpretedLambda) lambdaProxy(a, paramTypes[slot], valueClassLambdaReturn(m.genericParameterTypes.getOrNull(slot)))
+                else boxValueClassIfNeeded(a, paramTypes[slot])
             // A NON-FUNCTION value bound to an EVENT-HANDLER parameter (`onClick: () -> Unit`, `onValueChange:
             // (T) -> Unit`) — a null (unprovided/null callback) or a non-function (`onClick = onItemClick(x)`,
             // a common mistake for `onClick = { onItemClick(x) }`, evaluates to the handler's `Unit` RESULT) —
@@ -235,6 +236,7 @@ object ComposableAbi {
             // produced the wrong type, or a value class left unboxed) deep in a composition.
             throw IllegalArgumentException(
                 "ABI invoke mismatch for ${m.declaringClass.name}.${m.name}: " +
+                        "receiver=${receiver?.javaClass?.name ?: "null"} " +
                         "params=${m.parameterTypes.map { it.simpleName }} args=${args.map { it?.javaClass?.name ?: "null" }}",
                 e,
             )
@@ -280,6 +282,23 @@ object ComposableAbi {
      * value class (has the synthetic static `box-impl`) and [value] is its underlying primitive, box it. Values
      * already of the right type, nulls, and unboxed-primitive parameters pass through unchanged.
      */
+    /** The value-class return type of a function-typed parameter, or null. A lambda param `(…) -> Dp` reflects as
+     *  `FunctionN<…, Dp>` (the LAST type argument is the return type); a `@Composable (…) -> Dp` transforms to
+     *  `FunctionN<…, Composer, Int, Dp>` — still last. When that return is an inline value class (`Dp`/`Color`/…)
+     *  the interpreter holds it UNBOXED (a `Float`/`Long`), so an interpreted lambda returning it must have the
+     *  value BOXED before it flows back into library code that casts to the value class (e.g. `animateDp`'s
+     *  converter → `Float cannot be cast to Dp`). Null when the return isn't a resolvable value class. */
+    private fun valueClassLambdaReturn(genericType: java.lang.reflect.Type?): Class<*>? {
+        val pt = genericType as? java.lang.reflect.ParameterizedType ?: return null
+        val last = pt.actualTypeArguments.lastOrNull() ?: return null
+        val cls = when (last) {
+            is Class<*> -> last
+            is java.lang.reflect.WildcardType -> last.upperBounds.firstOrNull() as? Class<*>
+            else -> null
+        } ?: return null
+        return if (cls.declaredMethods.any { it.name == "box-impl" && Modifier.isStatic(it.modifiers) }) cls else null
+    }
+
     private fun boxValueClassIfNeeded(value: Any?, paramType: Class<*>): Any? {
         if (value == null || paramType.isInstance(value)) return value
         // Inverse of boxing: a BOXED value-class instance reaching a parameter typed as its UNBOXED underlying —

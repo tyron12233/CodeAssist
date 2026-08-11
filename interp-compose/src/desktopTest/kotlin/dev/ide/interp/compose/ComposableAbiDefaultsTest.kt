@@ -164,7 +164,7 @@ class ComposableAbiDefaultsTest {
 
     /** Wrap an interpreted content lambda as a proxy of its transformed `@Composable () -> Unit` interface
      *  (a `Function2<Composer, Int, Unit>`); strips the trailing Composer/`$changed`. */
-    private fun contentProxy(lambda: dev.ide.interp.InterpretedLambda, fi: Class<*>): Any =
+    private fun contentProxy(lambda: dev.ide.interp.InterpretedLambda, fi: Class<*>, valueClassReturn: Class<*>? = null): Any =
         java.lang.reflect.Proxy.newProxyInstance(fi.classLoader, arrayOf(fi)) { _, m, _ ->
             if (m.name == "invoke") lambda.invoke(emptyList()) else null
         }
@@ -548,7 +548,7 @@ class ComposableAbiDefaultsTest {
     }
 
     /** A general proxy: wrap an interpreted lambda as any single-method functional interface. */
-    private fun anyProxy(lambda: dev.ide.interp.InterpretedLambda, fi: Class<*>): Any =
+    private fun anyProxy(lambda: dev.ide.interp.InterpretedLambda, fi: Class<*>, valueClassReturn: Class<*>? = null): Any =
         java.lang.reflect.Proxy.newProxyInstance(fi.classLoader, arrayOf(fi)) { _, m, a ->
             if (m.name == "invoke") lambda.invoke(a?.toList() ?: emptyList()) else null
         }

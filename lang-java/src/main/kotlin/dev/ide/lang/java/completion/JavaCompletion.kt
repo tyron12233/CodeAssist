@@ -5,6 +5,7 @@ import com.intellij.psi.PsiAssignmentExpression
 import com.intellij.psi.PsiCatchSection
 import com.intellij.psi.PsiClass
 import com.intellij.psi.PsiAnnotation
+import com.intellij.psi.PsiAnnotationParameterList
 import com.intellij.psi.PsiClassType
 import com.intellij.psi.PsiSwitchBlock
 import com.intellij.psi.PsiSwitchLabelStatementBase
@@ -21,6 +22,7 @@ import com.intellij.psi.PsiMember
 import com.intellij.psi.PsiMethod
 import com.intellij.psi.PsiMethodCallExpression
 import com.intellij.psi.PsiModifier
+import com.intellij.psi.PsiNameValuePair
 import com.intellij.psi.PsiNewExpression
 import com.intellij.psi.PsiPackage
 import com.intellij.psi.PsiParameter
@@ -47,6 +49,7 @@ import dev.ide.lang.dom.TextRange
 import dev.ide.lang.java.JavaImportEdits
 import dev.ide.lang.java.env.JavaEnvironment
 import dev.ide.psi.IntellijPsiHost
+import dev.ide.lang.java.resolve.JavaOverrides
 import dev.ide.lang.java.resolve.JavaScope
 import dev.ide.lang.java.resolve.JavaSymbol
 import dev.ide.lang.resolve.Symbol
@@ -132,6 +135,9 @@ class JavaCompletion(
                 // `case |` on an enum switch: float the selector enum's constants to the top (still allow the
                 // ordinary name reference, since a constant expression is also legal there).
                 addSwitchCaseCompletions(leaf, params, result)
+                // `@Anno(attr|)`: the annotation type's attribute names, ahead of the ordinary name reference
+                // (a single-element annotation's bare value is a name reference too).
+                addAnnotationAttributes(leaf, params, result)
                 fillNameReference(leaf, markerOffset, psi, params, result)
             }
 
@@ -260,7 +266,10 @@ class JavaCompletion(
                 resolved.subPackages.forEach { emitPackage(it, params, result) }
                 resolved.getClasses(scope()).forEach { emitClass(it, params, result) }
             }
-            is PsiClass -> emitMembers(resolved, place, staticOnly = true, params, result)
+            is PsiClass -> {
+                emitMembers(resolved, place, staticOnly = true, params, result)
+                emitClassLiteral(params, result)
+            }
             else -> when (val type = qualifier.type) {
                 // `arr.` — arrays have a `length` pseudo-field, a covariant `clone()`, and Object's methods.
                 is PsiArrayType -> emitArrayMembers(place, params, result)
@@ -336,6 +345,14 @@ class JavaCompletion(
         ).forEach { result.addElement(it) }
     }
 
+    /** `Type.class`, a class literal: legal after any type qualifier, and not a member `allFields` reports. */
+    private fun emitClassLiteral(params: CompletionParams, result: CompletionResultSet) {
+        if (!params.prefixMatches("class")) return
+        result.addElement(
+            CompletionItem(label = "class", insertText = "class", kind = CompletionItemKind.KEYWORD, detail = "Class<?>"),
+        )
+    }
+
     /** Members of an array expression: the `length` field, `clone()`, and inherited `java.lang.Object` methods. */
     private fun emitArrayMembers(place: PsiElement, params: CompletionParams, result: CompletionResultSet) {
         if (params.prefixMatches("length")) {
@@ -363,17 +380,24 @@ class JavaCompletion(
     ) {
         val helper = env.facade.resolveHelper
         fun accessible(m: PsiMember) = helper.isAccessible(m, place, null)
-        cls.allMethods.forEach { m ->
-            if (m.isConstructor) return@forEach
+        // `allMethods`/`allFields` walk the whole supertype graph and report EVERY declaration, so an overridden
+        // method (`View.setVisibility` re-declared in TextView and again in Button) and a shadowed field arrive
+        // once per level. Only the most-derived one is reachable through this receiver, and the walk is ordered
+        // most-derived first, so the first declaration per key wins. Deep Android View hierarchies otherwise
+        // spent a large share of the result cap on rows that all insert the same text. The prefix gate runs
+        // first: every declaration a collapse merges shares its name, so it changes nothing but cost.
+        JavaOverrides.mostDerived(
+            cls.allMethods.filter { !it.isConstructor && params.prefixMatches(it.name) },
+            JavaOverrides::enumerationKey,
+        ).forEach { m ->
             if (staticOnly && !m.hasModifierProperty(PsiModifier.STATIC)) return@forEach
-            if (!params.prefixMatches(m.name)) return@forEach
             if (accessible(m)) result.addElement(methodItem(m, callableWeight = callableWeightOf(m, cls)))
         }
-        cls.allFields.forEach { f ->
-            if (staticOnly && !f.hasModifierProperty(PsiModifier.STATIC)) return@forEach
-            if (!params.prefixMatches(f.name)) return@forEach
-            if (accessible(f)) result.addElement(fieldItem(f, callableWeight = callableWeightOf(f, cls)))
-        }
+        JavaOverrides.mostDerived(cls.allFields.filter { params.prefixMatches(it.name) }) { it.name }
+            .forEach { f ->
+                if (staticOnly && !f.hasModifierProperty(PsiModifier.STATIC)) return@forEach
+                if (accessible(f)) result.addElement(fieldItem(f, callableWeight = callableWeightOf(f, cls)))
+            }
         cls.allInnerClasses.forEach { c ->
             val n = c.name ?: return@forEach
             if (staticOnly && !c.hasModifierProperty(PsiModifier.STATIC)) return@forEach
@@ -390,10 +414,10 @@ class JavaCompletion(
         params: CompletionParams,
         result: CompletionResultSet,
     ) {
-        // Lexical scope (locals, params, enclosing-type members), built on the spliced live tree.
+        // Lexical scope (locals, params, enclosing-type members incl. inherited), built on the spliced live
+        // tree. The prefix is pushed into the walk so a wide enclosing hierarchy isn't fully materialised.
         JavaScope(leaf, markerOffset, null, env.facade, env.project)
-            .symbols()
-            .filter { params.prefixMatches(it.name) }
+            .symbolsMatching { params.prefixMatches(it) }
             .forEach { result.addElement(symbolItem(it)) }
         // Types visible without a qualifier.
         fillTypeReference(psi, params, result, leaf = leaf)
@@ -633,6 +657,36 @@ class JavaCompletion(
                     ),
                 )
             }
+        }
+    }
+
+    // --- annotation attribute names (`@Anno(attr| = …)`) --------------------------------------------------
+
+    /** Inside an annotation's parameter list at a NAME position, offer the annotation type's not-yet-supplied
+     *  attributes as `name = ` insertions. A single-element annotation's bare value parses as an ordinary name
+     *  reference, so this runs alongside the name-reference branch rather than instead of it. */
+    private fun addAnnotationAttributes(leaf: PsiElement, params: CompletionParams, result: CompletionResultSet) {
+        PsiTreeUtil.getParentOfType(leaf, PsiAnnotationParameterList::class.java, false) ?: return
+        val pair = PsiTreeUtil.getParentOfType(leaf, PsiNameValuePair::class.java, false)
+        // `@Anno(value = x|)`: the caret is in the VALUE of an already-named pair, not a name position.
+        pair?.nameIdentifier?.let { if (!PsiTreeUtil.isAncestor(it, leaf, false)) return }
+        val ann = PsiTreeUtil.getParentOfType(leaf, PsiAnnotation::class.java, false) ?: return
+        val cls = ann.nameReferenceElement?.resolve() as? PsiClass ?: return
+        if (!cls.isAnnotationType) return
+        val supplied = ann.parameterList.attributes.mapNotNullTo(HashSet()) { if (it === pair) null else it.name }
+        for (m in cls.methods) {
+            if (m.name in supplied || !params.prefixMatches(m.name)) continue
+            result.addElement(
+                CompletionItem(
+                    label = m.name,
+                    insertText = "${m.name} = ",
+                    kind = CompletionItemKind.FIELD,
+                    detail = m.returnType?.presentableText,
+                    container = cls.name,
+                    symbol = JavaSymbol(m),
+                    sortPriority = -20, // an attribute name is the only thing usually wanted here
+                ),
+            )
         }
     }
 

@@ -1,8 +1,10 @@
 package dev.ide.lang.java.resolve
 
 import com.intellij.psi.PsiClass
+import com.intellij.psi.PsiMember
 import com.intellij.psi.PsiMethod
 import com.intellij.psi.PsiModifier
+import com.intellij.psi.util.TypeConversionUtil
 
 /** Override / abstract-member analysis over IntelliJ PSI, shared by the abstract-not-implemented diagnostic
  *  ([JavaSemanticDiagnostics]) and the implement-members fix (`analysis/JavaQuickFixes`). */
@@ -36,4 +38,33 @@ internal object JavaOverrides {
      *  detection; not full JLS override equivalence). */
     fun erasedSignature(m: PsiMethod): String =
         m.name + "(" + m.parameterList.parameters.joinToString(",") { it.type.canonicalText } + ")"
+
+    /**
+     * Override-matching key for member ENUMERATION (`allMethods` de-duplication). Unlike [erasedSignature] the
+     * parameter types are really erased, so an override that only re-states its parameters more precisely still
+     * matches what it overrides (`addAll(Collection<? extends E>)` / `addAll(Collection<E>)` → `addAll(Collection)`).
+     * Deliberately coarse: merging here only ever drops a row that would insert identical text, and a real
+     * overload differs in erased parameters by definition. An override across type SUBSTITUTION
+     * (`compareTo(T)` vs `compareTo(Money)`) still keys apart, so both rows survive as they did before.
+     */
+    fun enumerationKey(m: PsiMethod): String = buildString {
+        append(m.name).append('(')
+        m.parameterList.parameters.forEachIndexed { i, p ->
+            if (i > 0) append(',')
+            append((TypeConversionUtil.erasure(p.type) ?: p.type).canonicalText)
+        }
+        append(')')
+    }
+
+    /**
+     * Collapse a most-derived-first member sequence (`PsiClass.allMethods` / `allFields`) to the declaration
+     * actually reachable through the receiver: the first one per [key]. Those APIs report every declaration in
+     * the supertype graph, so an overridden method or a shadowed field arrives once per level: three identical
+     * `setVisibility` rows on an Android `Button`, all inserting the same text.
+     */
+    fun <T : PsiMember> mostDerived(members: Iterable<T>, key: (T) -> String): Collection<T> {
+        val out = LinkedHashMap<String, T>()
+        for (m in members) out.putIfAbsent(key(m), m)
+        return out.values
+    }
 }
