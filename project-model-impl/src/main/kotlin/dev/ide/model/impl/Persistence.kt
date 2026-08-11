@@ -17,6 +17,7 @@ import dev.ide.model.SdkDependency
 import dev.ide.model.SdkRef
 import dev.ide.model.impl.format.Json
 import dev.ide.model.impl.format.Toml
+import dev.ide.platform.log.Log
 import java.nio.file.AtomicMoveNotSupportedException
 import java.nio.file.Files
 import java.nio.file.Path
@@ -61,6 +62,8 @@ object ModelPersistence {
     private const val MODULE_FILE = "module.toml"
 
     private val RESERVED_TABLES = setOf("module", "sourceSets", "dependencies")
+
+    private val log = Log.logger("ide.model")
 
     fun exists(root: Path): Boolean = Files.exists(root.resolve(PLATFORM_DIR).resolve(WORKSPACE_FILE))
 
@@ -181,24 +184,56 @@ object ModelPersistence {
 
     // --- load ---
 
+    /**
+     * Read the workspace snapshot under [root].
+     *
+     * Loading is deliberately fault-isolating rather than all-or-nothing. It used to be the latter, and the
+     * field data showed the cost: one missing or malformed file anywhere under the workspace threw out of here
+     * and left the project permanently unopenable, with no way to repair it from inside the IDE. The most
+     * common case by far is a `module.toml` that is simply gone, because the module directory was deleted or
+     * moved outside the IDE while `workspace.json` still lists it (on-device projects live in browsable
+     * external app storage). Now the workspace opens with whatever is readable and every skipped piece is
+     * logged; only a missing or unparsable `workspace.json` itself, or a schema from a newer build, still
+     * fails the open.
+     *
+     * Nothing damaged is rewritten: a skipped module is left out of the model, so [save] does not touch its
+     * manifest and a file that merely failed to parse stays on disk exactly as it is.
+     */
     fun load(root: Path): WorkspaceData {
         val platformDir = root.resolve(PLATFORM_DIR)
         val wsObj = Json.parse((platformDir.resolve(WORKSPACE_FILE)).readText()).asObject()
-        val version = (wsObj["version"] as Number).toInt()
+        // The schema field is advisory: a workspace.json that lost it, or holds it as a string, still describes
+        // a readable workspace, so assume the current schema rather than failing the open on a header value.
+        val version = (wsObj["version"] as? Number)?.toInt() ?: WORKSPACE_SCHEMA_VERSION
         require(version <= WORKSPACE_SCHEMA_VERSION) {
             "workspace.json schema version $version is newer than supported $WORKSPACE_SCHEMA_VERSION"
         }
 
-        val projects = (wsObj["projects"] as List<*>).map { pAny ->
-            val p = pAny.asObject()
+        return WorkspaceData(
+            schemaVersion = version,
+            projects = (wsObj["projects"] as? List<*>).orEmpty().mapNotNull { loadProject(root, it) },
+            // Both of these hold derived state (resolved artifacts, detected platforms) that the IDE can
+            // rebuild, so an unreadable one costs a re-resolve rather than the whole project.
+            libraries = runCatching { loadLibraries(platformDir.resolve(LIBRARIES_FILE)) }
+                .onFailure { log.error("$LIBRARIES_FILE could not be read; resolved libraries will be rebuilt", it) }
+                .getOrDefault(emptyList()),
+            sdks = runCatching { loadSdks(platformDir.resolve(SDKS_FILE)) }
+                .onFailure { log.error("$SDKS_FILE could not be read; platforms will need re-detecting", it) }
+                .getOrDefault(emptyList()),
+        )
+    }
+
+    /** One `projects[]` entry, or null when it cannot be read, so one damaged project in a multi-project
+     *  workspace does not stop the others from opening. */
+    private fun loadProject(root: Path, entry: Any?): ProjectData? {
+        val name = (entry as? Map<*, *>)?.get("name")?.toString() ?: "?"
+        return runCatching {
+            val p = entry.asObject()
             val rootRel = p["root"] as String
             val projectRoot = resolveRel(root, rootRel)
-            val modules = (p["modules"] as List<*>).map { mAny ->
-                val m = mAny.asObject()
-                val dir = m["dir"] as String
-                val toml = Toml.parse((resolveRel(projectRoot, dir).resolve(MODULE_FILE)).readText())
-                tomlToModule(m["id"] as String, m["name"] as String, dir, toml)
-            }
+            val damaged = ArrayList<Pair<String, Throwable>>()
+            val modules = (p["modules"] as? List<*>).orEmpty().mapNotNull { loadModule(projectRoot, it, damaged) }
+            reportSkippedModules(name, damaged)
             ProjectData(
                 id = p["id"] as String,
                 name = p["name"] as String,
@@ -206,42 +241,81 @@ object ModelPersistence {
                 buildSystemId = p["buildSystem"] as String,
                 settings = (p["settings"] as? Map<*, *>)?.entries?.associate { it.key.toString() to it.value.toString() } ?: emptyMap(),
                 modules = modules,
-                libraries = (p["libraries"] as? List<*>)?.map { libraryFromJson(it) } ?: emptyList(),
+                libraries = (p["libraries"] as? List<*>)?.mapNotNull { loadLibrary(it) } ?: emptyList(),
             )
-        }
+        }.onFailure {
+            log.error("Skipped project '$name': its entry in $WORKSPACE_FILE could not be read.", it)
+        }.getOrNull()
+    }
 
-        return WorkspaceData(
-            schemaVersion = version,
-            projects = projects,
-            libraries = loadLibraries(platformDir.resolve(LIBRARIES_FILE)),
-            sdks = loadSdks(platformDir.resolve(SDKS_FILE)),
+    /**
+     * One module of a project, or null when its manifest is missing or unreadable. A failure is recorded in
+     * [damaged] for [reportSkippedModules] rather than reported here, since an ERROR surfaces to the user as a
+     * dialog and a stale workspace can list several missing modules at once.
+     */
+    private fun loadModule(
+        projectRoot: Path,
+        entry: Any?,
+        damaged: MutableList<Pair<String, Throwable>>,
+    ): ModuleData? {
+        val name = (entry as? Map<*, *>)?.get("name")?.toString() ?: "?"
+        return runCatching {
+            val m = entry.asObject()
+            val dir = m["dir"] as String
+            val toml = Toml.parse((resolveRel(projectRoot, dir).resolve(MODULE_FILE)).readText())
+            tomlToModule(m["id"] as String, m["name"] as String, dir, toml)
+        }.onFailure {
+            log.warn("module '$name': $MODULE_FILE is missing or could not be read", it)
+            damaged += name to it
+        }.getOrNull()
+    }
+
+    /** Tell the user once that a project opened short of some of its modules. Losing a module changes the shape
+     *  of the project, so it is reported rather than passed over, but one report covers all of them. */
+    private fun reportSkippedModules(project: String, damaged: List<Pair<String, Throwable>>) {
+        if (damaged.isEmpty()) return
+        val names = damaged.joinToString(", ") { it.first }
+        log.error(
+            "Project '$project' opened without ${damaged.size} module(s) whose $MODULE_FILE is missing or " +
+                "unreadable: $names. Those manifests were left on disk untouched.",
+            damaged.first().second,
         )
     }
+
+    private fun loadLibrary(entry: Any?): LibraryData? = runCatching { libraryFromJson(entry) }
+        .onFailure { log.error("skipping a library entry that could not be read", it) }
+        .getOrNull()
 
     private fun loadLibraries(path: Path): List<LibraryData> {
         if (!Files.exists(path)) return emptyList()
         val obj = Json.parse(path.readText()).asObject()
-        return (obj["libraries"] as? List<*>)?.map { libraryFromJson(it) } ?: emptyList()
+        return (obj["libraries"] as? List<*>)?.mapNotNull { loadLibrary(it) } ?: emptyList()
     }
 
     private fun loadSdks(path: Path): List<SdkData> {
         if (!Files.exists(path)) return emptyList()
         val obj = Json.parse(path.readText()).asObject()
-        return (obj["sdks"] as? List<*>)?.map { sAny ->
-            val s = sAny.asObject()
-            val name = s["name"] as String
-            val buildTools = s["buildTools"] as String?
-            // Back-compat: a v1 sdks.json has no `kind`. Infer it — an SDK named `android*` or carrying
-            // build-tools is the Android platform; everything else is the JVM/core-Java platform.
-            val kind = (s["kind"] as? String)?.let { PlatformKind.valueOf(it) }
-                ?: if (name.startsWith("android") || buildTools != null) PlatformKind.ANDROID else PlatformKind.JVM
-            SdkData(
-                name = name,
-                bootClasspath = (s["bootClasspath"] as? List<*>)?.map { it as String } ?: emptyList(),
-                buildToolsPath = buildTools,
-                kind = kind,
-            )
+        return (obj["sdks"] as? List<*>)?.mapNotNull { sAny ->
+            runCatching { sdkFromJson(sAny) }
+                .onFailure { log.error("skipping an SDK entry that could not be read", it) }
+                .getOrNull()
         } ?: emptyList()
+    }
+
+    private fun sdkFromJson(any: Any?): SdkData {
+        val s = any.asObject()
+        val name = s["name"] as String
+        val buildTools = s["buildTools"] as String?
+        // Back-compat: a v1 sdks.json has no `kind`. Infer it — an SDK named `android*` or carrying
+        // build-tools is the Android platform; everything else is the JVM/core-Java platform.
+        val kind = (s["kind"] as? String)?.let { PlatformKind.valueOf(it) }
+            ?: if (name.startsWith("android") || buildTools != null) PlatformKind.ANDROID else PlatformKind.JVM
+        return SdkData(
+            name = name,
+            bootClasspath = (s["bootClasspath"] as? List<*>)?.map { it as String } ?: emptyList(),
+            buildToolsPath = buildTools,
+            kind = kind,
+        )
     }
 
     private fun libraryFromJson(any: Any?): LibraryData {
