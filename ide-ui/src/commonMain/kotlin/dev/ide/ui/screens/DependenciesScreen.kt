@@ -620,7 +620,11 @@ private fun DepContent(deps: UiModuleDeps, tab: DepTab, resolvedView: DepView, c
                 }
                 DepView.Graph -> {
                     if (deps.nodes.isEmpty()) item("empty") { EmptyRow(stringResource(Res.string.dep_nothing_resolved)) }
-                    val sorted = deps.nodes.sortedWith(compareByDescending<UiDependencyNode> { it.declared }.thenBy { it.coordinate })
+                    // Collapse to one row per coordinate before keying by it — the backend's resolved list can
+                    // carry a coordinate twice (e.g. merged across configurations/variants), and a duplicate
+                    // lazy key throws in the measure pass. Matches the by-coordinate `nodesByCoord` map above.
+                    val sorted = deps.nodes.distinctBy { it.coordinate }
+                        .sortedWith(compareByDescending<UiDependencyNode> { it.declared }.thenBy { it.coordinate })
                     items(sorted, key = { "graph:${it.coordinate}" }) { node -> Box(Modifier.animateItem()) { GraphRow(node, nodesByCoord, codeFont, conflictFor(node)) } }
                 }
             }

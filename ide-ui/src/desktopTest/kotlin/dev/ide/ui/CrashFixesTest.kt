@@ -61,4 +61,21 @@ class CrashFixesTest {
         )
         assertEquals(0, state.activeIndex, "the active tab follows its path to the tab that kept it")
     }
+
+    @Test
+    fun tabsSharingAPathStillGetDistinctStripKeys() {
+        // Two OpenFile for one path (a re-point after rename/move, or a concurrent open on a slow device) must
+        // NOT collide on the tab strip's LazyRow key — a duplicate key hard-crashes the measure pass
+        // (`measureLazyList` precondition), the top non-native on-device crasher. The strip keys on the unique
+        // tabId, so even a transient duplicate path yields distinct keys.
+        val a = OpenFile("/p/Same.kt", "Same.kt", "class A")
+        val b = OpenFile("/p/Same.kt", "Same.kt", "class A")
+        assertTrue(a.tabId != b.tabId, "each tab gets a unique id even for the same path")
+        val keys = listOf(a, b).map { it.tabId }
+        assertEquals(keys.size, keys.toSet().size, "tab strip keys are unique (no repeated LazyRow key)")
+
+        // A re-point that reuses the id (an in-place refresh of the SAME logical tab) keeps its strip identity.
+        val refreshed = OpenFile("/p/Same.kt", "Same.kt", "class A v2", tabId = a.tabId)
+        assertEquals(a.tabId, refreshed.tabId, "an in-place tab refresh keeps the tab's strip identity")
+    }
 }

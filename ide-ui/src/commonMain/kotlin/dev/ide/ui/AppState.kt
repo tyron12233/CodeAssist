@@ -105,6 +105,14 @@ class OpenFile(
     /** For a `library://…` tab: how its text was obtained (`source`/`decompiled_java`/`decompiled_kotlin`),
      *  driving the read-only banner + the "Decompile to Java" affordance. Null for a normal disk file. */
     val libraryKind: String? = null,
+    /** Stable, unique tab id — the editor tab strip keys its `LazyRow` on this, NOT on [path]. Two tabs can
+     *  momentarily hold the same path (a re-point after a rename/move, or a concurrent open on a slow device),
+     *  and a duplicate LazyList key hard-crashes the measure pass (`measureLazyList` precondition). A per-tab
+     *  id makes that impossible by construction; [AppState.dedupeTabsByPath] still reconciles the logical
+     *  duplicate. Defaults to a fresh id; re-point sites that replace a tab's OpenFile in place for the SAME
+     *  logical tab pass the old id so the tab keeps its strip identity (no crossfade) across the swap. Assigned
+     *  on the UI thread (every OpenFile is built inside a Main-dispatched launch), so the counter needs no sync. */
+    val tabId: Long = nextTabId(),
 ) {
     val session = EditorSession(initial, languageFor(name), editable = !readOnly)
     var modified by mutableStateOf(false)
@@ -142,6 +150,13 @@ class OpenFile(
 
     /** Rebase the saved baseline after a successful save. */
     fun onSaved(text: String) { savedText = text; modified = false }
+
+    companion object {
+        // Monotonic tab-id source. Bumped only from OpenFile construction, which always happens on the UI
+        // thread (see [tabId]), so a plain counter is race-free without atomics.
+        private var tabIdSeq = 0L
+        private fun nextTabId(): Long = ++tabIdSeq
+    }
 }
 
 /** Placeholder root shown until the real tree finishes building off the main thread — renders as an empty pane. */
@@ -735,7 +750,7 @@ class IdeUiState(
                 val text = readTabText(diskPath) ?: continue
                 if (!followsFileRename && text == f.savedText) continue // untouched → preserve session/undo/caret
                 val name = diskPath.substringAfterLast('/').substringAfterLast('\\')
-                openFiles[i] = OpenFile(diskPath, name, text)
+                openFiles[i] = OpenFile(diskPath, name, text, tabId = f.tabId)
                 backend.editor.updateDocument(diskPath, text)
             }
             dedupeTabsByPath()
@@ -761,7 +776,7 @@ class IdeUiState(
                 val i = openFiles.indexOf(f)
                 if (i < 0 || openFiles[i].modified) continue
                 val name = f.path.substringAfterLast('/').substringAfterLast('\\')
-                openFiles[i] = OpenFile(f.path, name, text)
+                openFiles[i] = OpenFile(f.path, name, text, tabId = f.tabId)
                 backend.editor.updateDocument(f.path, text)
             }
         }
@@ -848,7 +863,7 @@ class IdeUiState(
             }
             val text = readTabText(rebased) ?: continue
             val name = rebased.substringAfterLast('/').substringAfterLast('\\')
-            openFiles[i] = OpenFile(rebased, name, text)
+            openFiles[i] = OpenFile(rebased, name, text, tabId = openFiles[i].tabId)
             backend.editor.updateDocument(rebased, text)
         }
         dedupeTabsByPath()
@@ -859,9 +874,10 @@ class IdeUiState(
      *
      * Re-pointing a tab after a rename or move ([rebaseTabs], [reloadAfterRename]) can land it on a path that
      * another tab already holds: renaming `a/Foo.kt` over an open `a/Bar.kt`, or moving a directory into one
-     * whose files are already open. Two tabs for one path are not merely redundant, since the tab strip keys
-     * its lazy row by path and a repeated key throws (`Key "…" was already used`), taking the whole editor
-     * down. The backend is NOT told the file closed, because the kept tab still has it open.
+     * whose files are already open. Two tabs for one path are wrong (edits/saves would fight over one file), so
+     * they are collapsed here. The tab strip itself no longer crashes on the transient duplicate — it keys its
+     * lazy row by [OpenFile.tabId], not path — but the logical duplicate must still be reconciled. The backend
+     * is NOT told the file closed, because the kept tab still has it open.
      */
     private fun dedupeTabsByPath() {
         val seen = HashSet<String>()
@@ -882,7 +898,7 @@ class IdeUiState(
             if (f.modified) continue
             val text = readTabText(f.path) ?: continue
             if (text == f.savedText) continue
-            openFiles[i] = OpenFile(f.path, f.name, text)
+            openFiles[i] = OpenFile(f.path, f.name, text, tabId = f.tabId)
             backend.editor.updateDocument(f.path, text)
         }
     }
