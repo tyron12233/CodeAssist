@@ -553,8 +553,12 @@ private fun CodeEditorContent(
     }
 
     // code-action availability — debounced on the selection + text revision, so the lightbulb appears when the
-    // caret rests on (or selects) something actionable.
-    LaunchedEffect(path, editorSession.selection, editorSession.textRevision) {
+    // caret rests on (or selects) something actionable. Also keyed on [diagnostics]: the daemon delivers a fresh
+    // analysis asynchronously (no selection/text change of its own), and the lightbulb is gated on the caret
+    // sitting on a diagnostic — so without this key, a fix that only materializes once analysis lands (e.g. the
+    // auto-import quick-fix) would never re-resolve after being dismissed until an unrelated caret move or edit
+    // (undo) happened to re-fire the effect.
+    LaunchedEffect(path, editorSession.selection, editorSession.textRevision, editorSession.diagnostics) {
         acts.refreshAvailability(isFocused)
     }
 
@@ -1026,6 +1030,7 @@ private fun CodeEditorContent(
             vOffset = geometry.vOffset,
             hOffset = geometry.hOffset,
             onOpenSheet = { acts.openSheet(it) },
+            onChipExtent = { geometry.chipExtent.floatValue = it },
         )
 
         SelectionToolbarLayer(
