@@ -22,6 +22,7 @@ import dev.ide.ui.backend.UiOpenTabs
 import dev.ide.ui.backend.UiSettings
 import dev.ide.ui.editor.core.EditorSession
 import dev.ide.ui.editor.core.RangeEdit
+import dev.ide.ui.editor.core.mapOffsetThroughEdits
 import dev.ide.ui.editor.languageFor
 import dev.ide.ui.editor.preview.PreviewKind
 import dev.ide.ui.editor.preview.previewKindOf
@@ -614,9 +615,7 @@ class IdeUiState(
             val st = e.start.coerceIn(0, len)
             RangeEdit(st, e.end.coerceIn(st, len), e.newText, st + e.newText.length)
         }
-        var caret = caretBefore
-        for (e in edits) if (e.start <= caret) caret += e.text.length - (e.end - e.start)
-        session.applyEdits(edits, TextRange(caret.coerceAtLeast(0)))
+        session.applyEdits(edits, TextRange(mapOffsetThroughEdits(caretBefore, edits)))
     }
 
     /** Save the active tab (Cmd/Ctrl-S, toolbar). */

@@ -57,6 +57,7 @@ import dev.ide.ui.editor.core.EditorImeHandle
 import dev.ide.ui.editor.core.EditorSession
 import dev.ide.ui.editor.core.RangeEdit
 import dev.ide.ui.editor.core.isLarge
+import dev.ide.ui.editor.core.mapOffsetThroughEdits
 import dev.ide.ui.editor.core.smartEnter
 import dev.ide.ui.editor.core.textInputCodePoint
 import dev.ide.ui.editor.core.wordRangeAt
@@ -477,9 +478,7 @@ private fun CodeEditorContent(
             val st = e.start.coerceIn(0, len)
             RangeEdit(st, e.end.coerceIn(st, len), e.newText, st + e.newText.length)
         }
-        var caret = caretBefore
-        for (e in edits) if (e.start <= caret) caret += e.text.length - (e.end - e.start)
-        applyEditsKeepingViewport(edits, TextRange(caret.coerceAtLeast(0)), anchorLine)
+        applyEditsKeepingViewport(edits, TextRange(mapOffsetThroughEdits(caretBefore, edits)), anchorLine)
     }
 
     // Reformat Code: the minimal edits to reformat the whole buffer, or just the selection when
