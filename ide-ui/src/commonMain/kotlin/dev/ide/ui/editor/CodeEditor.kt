@@ -600,6 +600,29 @@ private fun CodeEditorContent(
     // ---- per-line diagnostic segments (recomputed per edit — O(diagnostics), they are few) ----
     // Keyed on the document *instance* (an edit swaps it; a caret move doesn't), so the key compare is O(1).
     val diagByLine = remember(diagnostics, doc) { mapDiagnosticsToLines(diagnostics, doc) }
+    // The draw palette depends only on the theme, so build it once per theme instead of allocating a fresh
+    // EditorDrawColors (17 fields + the alpha-blended copies) on every drawBehind frame during a fling.
+    val drawColors = remember(colors) {
+        EditorDrawColors(
+            background = colors.editorBg,
+            currentLine = colors.currentLine,
+            caret = colors.accent,
+            selection = colors.accent.copy(alpha = 0.30f),
+            gutterText = colors.gutterText,
+            gutterCurrent = colors.textSecondary,
+            gutterBorder = colors.separator,
+            error = colors.error,
+            warning = colors.warning,
+            info = colors.info,
+            muted = colors.textTertiary,
+            composing = colors.textSecondary,
+            indentGuide = colors.hairline,
+            findMatch = colors.warning.copy(alpha = 0.28f),
+            findCurrent = colors.accent.copy(alpha = 0.5f),
+            occurrence = colors.textSecondary.copy(alpha = 0.18f),
+            templateField = colors.accent.copy(alpha = 0.16f),
+        )
+    }
     val bracketPair = remember(doc, editorSession.selection) {
         matchingBracket(doc.chars, editorSession.selection.start)
     }
@@ -990,26 +1013,9 @@ private fun CodeEditorContent(
                         currentMatch = find.currentIndex,
                         occurrences = occurrences,
                         templateFields = snippet?.fieldRanges().orEmpty(),
-                        structure = geometry.editorStructure.value,
-                        colors = EditorDrawColors(
-                            background = colors.editorBg,
-                            currentLine = colors.currentLine,
-                            caret = colors.accent,
-                            selection = colors.accent.copy(alpha = 0.30f),
-                            gutterText = colors.gutterText,
-                            gutterCurrent = colors.textSecondary,
-                            gutterBorder = colors.separator,
-                            error = colors.error,
-                            warning = colors.warning,
-                            info = colors.info,
-                            muted = colors.textTertiary,
-                            composing = colors.textSecondary,
-                            indentGuide = colors.hairline,
-                            findMatch = colors.warning.copy(alpha = 0.28f),
-                            findCurrent = colors.accent.copy(alpha = 0.5f),
-                            occurrence = colors.textSecondary.copy(alpha = 0.18f),
-                            templateField = colors.accent.copy(alpha = 0.16f),
-                        ),
+                        indentColsFor = renderState::indentColsFor,
+                        stickyHeadersFor = { renderState.stickyHeadersFor(geometry.editorStructure.value, it) },
+                        colors = drawColors,
                         caretVisible = isFocused && (blinkOn || !editorSession.selection.collapsed),
                         caretContent = interaction.caretContent, // animated, content-space; read here → redraw per frame
                         handlesVisible = interaction.handlesVisible && interaction.lastInputWasTouch,

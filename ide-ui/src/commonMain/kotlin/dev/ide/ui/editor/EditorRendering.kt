@@ -114,7 +114,10 @@ internal fun DrawScope.drawEditor(
     occurrences: List<Match>,
     /** Live template (snippet) field ranges to box while stepping through tab stops; empty when not in a template. */
     templateFields: List<IntRange>,
-    structure: List<UiFileSymbol>,
+    /** Leading-indent columns of a line (blank ⇒ -1), cached by the caller so the guide layer never walks the rope per frame. */
+    indentColsFor: (Int) -> Int,
+    /** Sticky-header declarations enclosing the given top visible line — memoized by the caller across frames. */
+    stickyHeadersFor: (Int) -> List<UiFileSymbol>,
     colors: EditorDrawColors,
     caretVisible: Boolean,
     caretContent: Offset,
@@ -288,29 +291,15 @@ internal fun DrawScope.drawEditor(
         // blank lines so a guide spans a block's empty rows. Drawn under the text.
         run {
             val unit = 4
-            fun indentCols(line: Int): Int {
-                val end = doc.lineEnd(line)
-                var i = doc.lineStart(line)
-                var c = 0
-                while (i < end) {
-                    when (doc.charAt(i)) {
-                        ' ' -> c++
-                        '\t' -> c += unit
-                        else -> return c
-                    }
-                    i++
-                }
-                return -1 // blank line
-            }
             for (line in visibleLines) {
-                var cols = indentCols(line)
+                var cols = indentColsFor(line)
                 if (cols < 0) { // blank: bridge with the shallower of the nearest non-blank neighbours
                     var up = line - 1
-                    while (up >= 0 && indentCols(up) < 0) up--
+                    while (up >= 0 && indentColsFor(up) < 0) up--
                     var dn = line + 1
-                    while (dn < doc.lineCount && indentCols(dn) < 0) dn++
-                    val a = if (up >= 0) indentCols(up) else 0
-                    val b = if (dn < doc.lineCount) indentCols(dn) else 0
+                    while (dn < doc.lineCount && indentColsFor(dn) < 0) dn++
+                    val a = if (up >= 0) indentColsFor(up) else 0
+                    val b = if (dn < doc.lineCount) indentColsFor(dn) else 0
                     cols = min(a, b)
                 }
                 val spanH = (if (wrap) vlayout.rowsOf(line).coerceAtLeast(1) else 1) * lineH
@@ -485,8 +474,8 @@ internal fun DrawScope.drawEditor(
     // sticky scroll headers — the declarations enclosing the top visible line, pinned at the top. Drawn LAST
     // (over the scrolling code) and reads the live scroll offset in the draw phase, so it tracks a fling with
     // no recomposition. Pinned horizontally (ignores hOff) so a header stays anchored when scrolled sideways.
-    if (structure.isNotEmpty() && firstVisible > 0) {
-        val sticky = stickyHeaderItems(structure, firstVisible, doc, STICKY_MAX)
+    if (firstVisible > 0) {
+        val sticky = stickyHeadersFor(firstVisible)
         if (sticky.isNotEmpty()) {
             val pinnedLeft = gutterWidth + metrics.padLeft
             for ((i, item) in sticky.withIndex()) {
@@ -507,6 +496,33 @@ internal fun DrawScope.drawEditor(
 
 /** Cap on pinned sticky-header rows (deeper nesting drops the outermost), so they never eat the viewport. */
 internal const val STICKY_MAX = 3
+
+/** Tab width the indent-guide layer counts each `\t` as (a flat advance, matching the original guide code). */
+internal const val INDENT_GUIDE_TAB_WIDTH = 4
+
+/** Size cap on the per-line indent cache before it's cleared wholesale (indent recompute is cheap). */
+internal const val INDENT_CACHE_MAX = 4096
+
+/**
+ * Leading-whitespace width of [line] in display columns — spaces count 1, tabs count [tabWidth] each (a flat
+ * advance, not a tab-stop round, matching the indent-guide layer's long-standing behaviour). Returns -1 for a
+ * blank line (no non-whitespace char), which the guide layer bridges from its nearest non-blank neighbours.
+ * Pure and rope-only (no shaping), so it's unit-testable without a `TextMeasurer`.
+ */
+internal fun leadingIndentCols(doc: EditorDocument, line: Int, tabWidth: Int): Int {
+    val end = doc.lineEnd(line)
+    var i = doc.lineStart(line)
+    var c = 0
+    while (i < end) {
+        when (doc.charAt(i)) {
+            ' ' -> c++
+            '\t' -> c += tabWidth
+            else -> return c
+        }
+        i++
+    }
+    return -1
+}
 
 /**
  * The declarations enclosing [firstVisibleLine] — i.e. whose name line has scrolled above the viewport top but

@@ -195,6 +195,112 @@ class LineStylesTest {
     }
 
     @Test
+    fun bulkMultiLineInsertMatchesFresh() {
+        // A single edit that inserts hundreds of lines drives splice() with inserted >> removed — the path
+        // that used to do one O(N) add(firstLine) per inserted line (O(K·N) overall). Assert the incremental
+        // result still equals a from-scratch reset and the line count is right.
+        var doc = EditorDocument.of("class A {\n}\n")
+        val styles = LineStyles(CodeLanguage.Java)
+        styles.reset(doc)
+        val block = (0 until 500).joinToString("\n") { "    int x$it = $it;" } + "\n"
+        val at = doc.lineStart(1) // start of the closing-brace line
+        doc = edit(doc, styles, at, at, block)
+        assertEquals(503, doc.lineCount) // 2 original + 500 inserted + trailing-newline line
+        assertIncrementalMatchesFresh(doc, styles, CodeLanguage.Java)
+    }
+
+    @Test
+    fun bulkMultiLineDeleteMatchesFresh() {
+        // The mirror case: a single edit that removes hundreds of lines drives splice() with removed >>
+        // inserted (the subList.clear() path). Build a tall doc, then delete most of it in one splice.
+        var doc = EditorDocument.of((0 until 500).joinToString("\n") { "int a$it = $it;" } + "\n")
+        val styles = LineStyles(CodeLanguage.Java)
+        styles.reset(doc)
+        val from = doc.lineStart(10)
+        val to = doc.lineStart(480)
+        doc = edit(doc, styles, from, to, "")
+        assertIncrementalMatchesFresh(doc, styles, CodeLanguage.Java)
+    }
+
+    @Test
+    fun bulkInsertOpeningBlockCommentRipplesPastInsertedRegion() {
+        // A bulk insert whose new lines open an unterminated block comment must restyle the lines BELOW the
+        // inserted region too — exercises the re-tokenize walk continuing past the freshly-inserted placeholders.
+        var doc = EditorDocument.of("int a;\nint b;\nint c;\n")
+        val styles = LineStyles(CodeLanguage.Java)
+        styles.reset(doc)
+        val block = "/* open\n" + (0 until 300).joinToString("\n") { "still comment $it" } + "\n"
+        doc = edit(doc, styles, 0, 0, block)
+        assertIncrementalMatchesFresh(doc, styles, CodeLanguage.Java)
+        // Everything after the unterminated `/*` — including the pre-existing lines — is now comment.
+        assertEquals(listOf(TokenType.COMMENT), styles.spansFor(doc.lineCount - 2).map { it.type })
+    }
+
+    @Test
+    fun lazyTokenizationOfAFarLineCarriesStateFromTheTop() {
+        // Querying a line WITHOUT having queried the ones above it must still carry lexer state from the top —
+        // the lazy high-water prefix extends up to the requested line. Line 0 opens a block comment, so a
+        // first-ever query of line 3 must see it as a comment.
+        val doc = EditorDocument.of("/* open\nstill\nmore\nend of comment")
+        val styles = LineStyles(CodeLanguage.Java)
+        styles.reset(doc)
+        assertEquals(listOf(TokenType.COMMENT), styles.spansFor(3).map { it.type }, "far line inherits block-comment state")
+        assertIncrementalMatchesFresh(doc, styles, CodeLanguage.Java)
+    }
+
+    @Test
+    fun editRangeReachingBeyondHighWaterMatchesFresh() {
+        // Delete a range that extends past the tokenized prefix: only lines 0..1 are tokenized (we query line 1)
+        // before deleting lines 1..14. The splice must still produce a result equal to a fresh re-tokenization.
+        var doc = EditorDocument.of((0 until 20).joinToString("\n") { "int a$it = $it;" })
+        val styles = LineStyles(CodeLanguage.Java)
+        styles.reset(doc)
+        styles.spansFor(1) // tokenize only lines 0..1 → highWater = 1
+        val from = doc.lineStart(1)
+        val to = doc.lineStart(15)
+        doc = edit(doc, styles, from, to, "")
+        assertIncrementalMatchesFresh(doc, styles, CodeLanguage.Java)
+    }
+
+    @Test
+    fun revisionsAreStableAndBumpOnlyOnRetokenize() {
+        val doc = EditorDocument.of("val a = 1\nval b = 2\nval c = 3")
+        val styles = LineStyles(CodeLanguage.Kotlin)
+        styles.reset(doc)
+        val r0 = styles.revOf(0)
+        val r1 = styles.revOf(1)
+        // A repeat query returns the SAME revision (no re-tokenization) — the render cache relies on this.
+        assertEquals(r0, styles.revOf(0))
+        assertEquals(r1, styles.revOf(1))
+        // Editing line 1 in place bumps its revision but leaves line 0's untouched.
+        val l1 = doc.lineStart(1)
+        edit(doc, styles, l1, l1, "x")
+        assertEquals(r0, styles.revOf(0), "unedited line keeps its revision")
+        assertTrue(styles.revOf(1) != r1, "edited line gets a fresh revision")
+    }
+
+    @Test
+    fun fuzzLazyInterleavedEqualsFresh() {
+        // Like the other fuzz, but between edits we query only a RANDOM single line (keeping the tokenized
+        // prefix partial), so edits frequently reach past the high-water mark — the lazy-tokenization edge.
+        val rnd = Random(29)
+        val snippets = listOf("/*", "*" + "/", "//x", "\"s\"", "int ", "\n", "\n\n", "}", "{", "a", " ")
+        var doc = EditorDocument.of((0 until 40).joinToString("\n") { "int x$it = $it; /* c$it */" })
+        val styles = LineStyles(CodeLanguage.Java)
+        styles.reset(doc)
+        repeat(1200) { iter ->
+            val len = doc.text.length
+            val start = rnd.nextInt(len + 1)
+            val end = (start + rnd.nextInt(8)).coerceAtMost(len)
+            val ins = if (rnd.nextBoolean()) snippets[rnd.nextInt(snippets.size)] else ""
+            doc = edit(doc, styles, start, end, ins)
+            if (doc.lineCount > 0) styles.spansFor(rnd.nextInt(doc.lineCount)) // partial: keep highWater low
+            if (iter % 25 == 0) assertIncrementalMatchesFresh(doc, styles, CodeLanguage.Java)
+        }
+        assertIncrementalMatchesFresh(doc, styles, CodeLanguage.Java)
+    }
+
+    @Test
     fun markdownConstructsAreTyped() {
         assertEquals(TokenType.TYPE, typeAt("## Heading", 0, CodeLanguage.Markdown), "heading")
         assertEquals(TokenType.KEYWORD, typeAt("- item", 0, CodeLanguage.Markdown), "bullet marker")
