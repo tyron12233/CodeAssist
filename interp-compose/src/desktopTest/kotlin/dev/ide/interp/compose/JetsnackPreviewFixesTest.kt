@@ -9,12 +9,8 @@ import dev.ide.lang.incremental.DocumentSnapshot
 import dev.ide.lang.kotlin.interp.KotlinPreviewLowering
 import dev.ide.lang.kotlin.parse.KotlinIncrementalParser
 import dev.ide.lang.kotlin.parse.KotlinParsedFile
-import dev.ide.lang.kotlin.symbols.KotlinSymbolService
 import dev.ide.platform.ContentHash
 import dev.ide.vfs.VirtualFile
-import java.io.File
-import java.nio.file.Path
-import java.nio.file.Paths
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
@@ -24,12 +20,10 @@ import kotlin.test.assertTrue
  * concrete preview failure against REAL bundled Compose.
  */
 class JetsnackPreviewFixesTest {
-    private fun classpathJars(): List<Path> =
-        System.getProperty("java.class.path").split(File.pathSeparator).filter { it.endsWith(".jar") }.map { Paths.get(it) }
 
     private fun interpret(body: String, imports: String = ""): Any? {
         val code = "package demo\n$imports\n" + body.trimIndent()
-        val service = KotlinSymbolService(sourceRoots = emptyList(), classpathJars = classpathJars())
+        val service = previewSymbolService()
         val parsed = KotlinIncrementalParser().parseFull(Doc(code)) as KotlinParsedFile
         val program = KotlinPreviewLowering(service).program(parsed)
         return Interpreter(program, ComposeDispatcher()).call(program["box/0"]!!, emptyList())
@@ -78,7 +72,7 @@ class JetsnackPreviewFixesTest {
                 Box(Modifier.size(50.dp).offset { IntOffset(x = 4, y = 8) }) { Text("hi") }
             }
         """.trimIndent()
-        val service = KotlinSymbolService(sourceRoots = emptyList(), classpathJars = classpathJars())
+        val service = previewSymbolService()
         val parsed = KotlinIncrementalParser().parseFull(Doc(code)) as KotlinParsedFile
         val lowering = KotlinPreviewLowering(service)
         val program = lowering.program(parsed)
@@ -124,7 +118,7 @@ class JetsnackPreviewFixesTest {
                 }
             }
         """.trimIndent()
-        val service = KotlinSymbolService(sourceRoots = emptyList(), classpathJars = classpathJars())
+        val service = previewSymbolService()
         val parsed = KotlinIncrementalParser().parseFull(Doc(code)) as KotlinParsedFile
         val lowering = KotlinPreviewLowering(service)
         val program = lowering.program(parsed)

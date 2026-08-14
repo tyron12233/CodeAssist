@@ -37,6 +37,13 @@ class RegressionSuite internal constructor(
 ) {
     constructor(name: String) : this(name, defaultBaselineDir(), System.getProperty("bench.updateBaselines") == "true")
 
+    init {
+        require(!(update && Bench.quick)) {
+            "-Dbench.updateBaselines cannot be combined with -Dbench.quick: a single-batch measurement must " +
+                "never become a committed baseline."
+        }
+    }
+
     private val file: Path = baselineDir.resolve("$name.json")
     private val baseline: Map<String, Double> =
         if (Files.exists(file)) FlatJson.read(Files.readString(file)) else emptyMap()
@@ -89,6 +96,19 @@ class RegressionSuite internal constructor(
         val rows = entries.map { evaluate(it) }
         println(render(rows))
 
+        val failures = rows.filter { it.verdict == Verdict.FAIL }
+
+        // A quick run measures one batch instead of five, so its numbers carry real machine noise: report
+        // what moved, but never fail on it and never write it to a baseline file. It is an iteration mode.
+        if (Bench.quick) {
+            println("  → -Dbench.quick=true: single-batch numbers, baselines neither gated nor recorded.")
+            if (failures.isNotEmpty()) {
+                println(failures.joinToString("\n") { "  ! would FAIL at full precision — ${it.entry.key}: ${it.reason}" })
+                println("  → re-run without -Dbench.quick to confirm.")
+            }
+            return
+        }
+
         val newSeeds = rows.filter { it.verdict == Verdict.NEW }
         if (update || newSeeds.isNotEmpty()) persist(rows)
         if (newSeeds.isNotEmpty() && !update) {
@@ -96,7 +116,6 @@ class RegressionSuite internal constructor(
         }
         if (update) println("  → -Dbench.updateBaselines=true: rewrote ${relativeFile()} from this run.")
 
-        val failures = rows.filter { it.verdict == Verdict.FAIL }
         if (failures.isNotEmpty()) {
             val detail = failures.joinToString("\n") { "  - ${it.entry.key}: ${it.reason}" }
             throw AssertionError("[$name] ${failures.size} completion-regression metric(s) failed:\n$detail")

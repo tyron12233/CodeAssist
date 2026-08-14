@@ -21,13 +21,9 @@ import dev.ide.lang.incremental.DocumentSnapshot
 import dev.ide.lang.kotlin.interp.KotlinPreviewLowering
 import dev.ide.lang.kotlin.parse.KotlinIncrementalParser
 import dev.ide.lang.kotlin.parse.KotlinParsedFile
-import dev.ide.lang.kotlin.symbols.KotlinSymbolService
 import dev.ide.platform.ContentHash
 import dev.ide.vfs.VirtualFile
 import org.jetbrains.skia.Bitmap
-import java.io.File
-import java.nio.file.Path
-import java.nio.file.Paths
 import kotlin.test.Test
 import kotlin.test.assertTrue
 
@@ -80,12 +76,10 @@ class GradientShadowPixelReproTest {
         }
     """.trimIndent()
 
-    private fun classpathJars(): List<Path> =
-        System.getProperty("java.class.path").split(File.pathSeparator).filter { it.endsWith(".jar") }.map { Paths.get(it) }
 
     /** Per-frame pixel signatures for the INTERPRETED preview of [SOURCE], or null if Skiko can't rasterize. */
     private fun interpretedSignatures(): List<Long>? {
-        val service = KotlinSymbolService(sourceRoots = emptyList(), classpathJars = classpathJars())
+        val service = previewSymbolService()
         val parsed = KotlinIncrementalParser().parseFull(GsDoc(SOURCE)) as KotlinParsedFile
         val program = KotlinPreviewLowering(service).program(parsed)
         val entry = program["P/0"] ?: error("no P/0; have ${program.keys}")

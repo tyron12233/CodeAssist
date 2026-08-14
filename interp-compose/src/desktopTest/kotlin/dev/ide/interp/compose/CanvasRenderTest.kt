@@ -10,13 +10,9 @@ import dev.ide.lang.incremental.DocumentSnapshot
 import dev.ide.lang.kotlin.interp.KotlinPreviewLowering
 import dev.ide.lang.kotlin.parse.KotlinIncrementalParser
 import dev.ide.lang.kotlin.parse.KotlinParsedFile
-import dev.ide.lang.kotlin.symbols.KotlinSymbolService
 import dev.ide.platform.ContentHash
 import dev.ide.vfs.VirtualFile
 import org.jetbrains.skia.Bitmap
-import java.io.File
-import java.nio.file.Path
-import java.nio.file.Paths
 import kotlin.test.Test
 import kotlin.test.assertTrue
 
@@ -31,9 +27,6 @@ import kotlin.test.assertTrue
  * checks no-op rather than fail — the value-level fix is guarded Skiko-free by `SizeValueClassProbeTest`.
  */
 class CanvasRenderTest {
-
-    private fun classpathJars(): List<Path> =
-        System.getProperty("java.class.path").split(File.pathSeparator).filter { it.endsWith(".jar") }.map { Paths.get(it) }
 
     private val HEADER = """
         package demo
@@ -54,7 +47,7 @@ class CanvasRenderTest {
     /** Red pixels painted by the Canvas body, or -1 if Skiko rasterization is unavailable in this environment. */
     private fun redPixels(body: String, wrap: Boolean = false): Int {
         val code = "$HEADER\n@Composable fun P() { Canvas(Modifier.fillMaxSize()) {\n$body\n} }"
-        val service = KotlinSymbolService(sourceRoots = emptyList(), classpathJars = classpathJars())
+        val service = previewSymbolService()
         val parsed = KotlinIncrementalParser().parseFull(CRDoc(code)) as KotlinParsedFile
         val program = KotlinPreviewLowering(service).program(parsed)
         val entry = program["P/0"] ?: error("no P/0; have ${program.keys}")
@@ -120,7 +113,7 @@ class CanvasRenderTest {
     /** Non-transparent, non-white pixels a FULL `@Composable fun P()` [source] paints, or -1 if Skiko is
      *  unavailable. Used for the `Modifier.drawWithCache { … }` samples, which use a `Spacer`, not a `Canvas`. */
     private fun nonBlankPixels(source: String): Int {
-        val service = KotlinSymbolService(sourceRoots = emptyList(), classpathJars = classpathJars())
+        val service = previewSymbolService()
         val parsed = KotlinIncrementalParser().parseFull(CRDoc(source)) as KotlinParsedFile
         val program = KotlinPreviewLowering(service).program(parsed)
         val entry = program["P/0"] ?: error("no P/0; have ${program.keys}")

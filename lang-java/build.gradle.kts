@@ -28,10 +28,11 @@ dependencies {
     testImplementation(libs.kotlinx.coroutines.test)
 }
 
-// Each test class stands up an IntelliJ platform environment; start a fresh JVM per test class so the
-// KotlinCoreEnvironment / PSI footprint can't accumulate across classes and OOM the shared worker
-// (mirrors :lang-kotlin's `test` config).
+// Each test class stands up an IntelliJ platform environment, so the worker needs real heap. It does NOT
+// need a fresh JVM per class: standing the environment up is the expensive part, and sharing one worker
+// amortizes it across the suite (measured: 8.8s of in-test work at forkEvery(1), 2.0s sharing one worker,
+// 23s → 12s wall). If the PSI footprint ever does accumulate to an OOM, set a middle `forkEvery(N)` rather
+// than going back to 1.
 tasks.named<Test>("test") {
     maxHeapSize = "3g"
-    setForkEvery(1)
 }

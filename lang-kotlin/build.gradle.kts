@@ -123,15 +123,34 @@ tasks.named<org.jetbrains.kotlin.gradle.tasks.KotlinCompile>("compileTestKotlin"
 }
 
 // The compile/ tests run the real in-process K2 compiler (KotlinCoreEnvironment + kotlinc invocations).
-// In the default single shared worker JVM (forkEvery=0) that compiler state accumulates across test
-// classes until the heap is exhausted; the OOM then surfaces as a spurious assertion failure (a compile
-// reports success=false, or incremental NOOP/INCREMENTAL detection falls back to FULL). Give the worker
-// real heap and start a fresh JVM per test class so the compiler footprint can't build up. Scoped to the
-// unit `test` task so the regressionTest benchmarks keep their own JVM/heap settings.
+// In a shared worker JVM that compiler state accumulates across test classes until the heap is exhausted;
+// the OOM then surfaces as a spurious assertion failure (a compile reports success=false, or incremental
+// NOOP/INCREMENTAL detection falls back to FULL). They need real heap and a fresh JVM per class.
+//
+// Nothing else here does: the other ~160 classes are parse/resolve/completion tests that stand up no
+// compiler, and a fresh 3 GB JVM per class cost them far more than the tests themselves (a ~0.9 s start
+// each — 60% of the task's wall time). So the two kinds run as two tasks, and only the compiler suite pays
+// the strict policy. `check` runs both. To filter WITHIN the compiler suite, name its task:
+// `:lang-kotlin:compilerTest --tests '*IncrementalKotlinCompilerTest*'` — a `--tests` filter on `test`
+// can never match those classes, since the exclusion below still applies.
+val compilerTestPattern = "dev.ide.lang.kotlin.compile.*"
+
 tasks.named<Test>("test") {
-    maxHeapSize = "3g"
-    setForkEvery(1)
+    filter { excludeTestsMatching(compilerTestPattern) }
+    maxHeapSize = "1536m"
     // Point the real-foundation reproduction/regression test at the extracted classes.jar (self-gates if absent).
     dependsOn(extractComposeFoundationClasses)
     systemProperty("compose.foundation.classes.jar", composeFoundationJar.get().asFile.absolutePath)
 }
+
+val testSourceSet = the<SourceSetContainer>()["test"]
+val compilerTest = tasks.register<Test>("compilerTest") {
+    group = "verification"
+    description = "Runs the real-K2-compiler suites ($compilerTestPattern), one fresh JVM per test class."
+    testClassesDirs = testSourceSet.output.classesDirs
+    classpath = testSourceSet.runtimeClasspath
+    filter { includeTestsMatching(compilerTestPattern) }
+    maxHeapSize = "3g"
+    setForkEvery(1)
+}
+tasks.named("check") { dependsOn(compilerTest) }

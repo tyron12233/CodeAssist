@@ -5,12 +5,8 @@ import dev.ide.lang.incremental.DocumentSnapshot
 import dev.ide.lang.kotlin.interp.KotlinPreviewLowering
 import dev.ide.lang.kotlin.parse.KotlinIncrementalParser
 import dev.ide.lang.kotlin.parse.KotlinParsedFile
-import dev.ide.lang.kotlin.symbols.KotlinSymbolService
 import dev.ide.platform.ContentHash
 import dev.ide.vfs.VirtualFile
-import java.io.File
-import java.nio.file.Path
-import java.nio.file.Paths
 import kotlin.test.Test
 import kotlin.test.assertTrue
 
@@ -25,8 +21,6 @@ import kotlin.test.assertTrue
  */
 class SharingStartedReproTest {
 
-    private fun classpathJars(): List<Path> =
-        System.getProperty("java.class.path").split(File.pathSeparator).filter { it.endsWith(".jar") }.map { Paths.get(it) }
 
     @Test
     fun whileSubscribedWithIntLiteralAndDefaultedArg() {
@@ -35,7 +29,7 @@ class SharingStartedReproTest {
             import kotlinx.coroutines.flow.SharingStarted
             fun box(): Any = SharingStarted.WhileSubscribed(5000)
         """.trimIndent()
-        val service = KotlinSymbolService(sourceRoots = emptyList(), classpathJars = classpathJars())
+        val service = previewSymbolService()
         val parsed = KotlinIncrementalParser().parseFull(Doc(code)) as KotlinParsedFile
         val program = KotlinPreviewLowering(service).program(parsed)
         val box = program["box/0"]!!
