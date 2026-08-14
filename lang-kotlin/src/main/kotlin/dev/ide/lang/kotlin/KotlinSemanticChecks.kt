@@ -2673,9 +2673,10 @@ internal class KotlinSemanticChecks(private val service: KotlinSymbolService) {
      * Both lower- and upper-case names are checked (a capitalized name resolves via a type/object/import, a
      * same-file class, or a constructor — [KotlinResolver.bareNameResolves] knows all of these). Skipped for:
      * member selectors (handled by [unresolvedMember]), the receiver of a qualified expression (could be a
-     * package or a type's static access), type-position references (handled by [unresolvedTypeReference]) and
-     * annotations, import/package directives, named-argument labels, the implicit lambda `it`, a property
-     * accessor's `field`, and any scope with a companion object (whose members are bare-accessible but not modeled).
+     * package or a type's static access — but see the gate at the end), type-position references (handled by
+     * [unresolvedTypeReference]) and annotations, import/package directives, named-argument labels, the
+     * implicit lambda `it`, a property accessor's `field`, and a name that resolves through a companion object
+     * in scope ([KotlinResolver.companionMemberInScope]).
      */
     private fun unresolvedBareReference(expr: KtNameReferenceExpression, resolver: KotlinResolver): Diagnostic? {
         val parent = expr.parent
@@ -2706,13 +2707,34 @@ internal class KotlinSemanticChecks(private val service: KotlinSymbolService) {
         if (name == "it" && hasAncestor(expr) { it is org.jetbrains.kotlin.psi.KtLambdaExpression }) return null
         if (name == "field" && hasAncestor(expr) { it is KtPropertyAccessor }) return null
         val off = expr.textRange.startOffset
-        if (resolver.companionInScope(off) || resolver.bareNameResolves(name, off)) return null
-        // A qualified-expression receiver (see above) is flagged only when it's confidently a known, unimported
-        // LIBRARY type — a real missing import — never a package segment or a generated/same-package class the
-        // index doesn't hold as a library type.
-        if (isQualifiedReceiver && !service.hasLibraryType(name)) return null
+        if (resolver.bareNameResolves(name, off) || resolver.companionMemberInScope(name, off)) return null
+        // A qualified-expression receiver (see above) is flagged only on POSITIVE evidence that it names
+        // something real that isn't in scope — never a package segment or a generated/same-package class:
+        //  - a known, unimported LIBRARY type (`FontWeight.Bold` with no import), or
+        //  - a known top-level / extension CALLABLE that no import brings into scope (`viewModelScope.launch { }`
+        //    without `import androidx.lifecycle.viewModelScope`), which Kotlin reports as unresolved too.
+        if (isQualifiedReceiver && !service.hasLibraryType(name) && !unimportedCallableReceiver(name)) return null
         val r = expr.textRange
         return Diagnostic(TextRange(r.startOffset, r.endOffset), Severity.ERROR, "Unresolved reference: $name", KotlinDiagnosticCodes.UNRESOLVED)
+    }
+
+    /**
+     * Whether a bare lowercase [name] standing in RECEIVER position (`viewModelScope.launch { }`,
+     * `binding.root`) names a package-level CALLABLE the classpath knows but no import brings into scope — a
+     * missing import, which Kotlin reports as "Unresolved reference". The caller has already established that
+     * the name resolves to nothing here; this only rules out the two innocent receiver shapes:
+     *  - a PACKAGE qualifier — the leftmost segment of a fully-qualified reference (`kotlinx.coroutines.delay(1)`)
+     *    parses as a receiver too, so a known root package ([KotlinSymbolService.isRootPackage]) is never flagged;
+     *  - a generated / not-yet-built same-package class (`R`, `BuildConfig`) — those are Capitalized, and only
+     *    lowercase names reach the callable evidence below (a TYPE receiver is handled by `hasLibraryType`).
+     * Gated on a finished classpath index (the [unresolvedImports] gate): a still-building index answers
+     * "no such callable" for everything, and this check needs a POSITIVE existence answer to fire at all.
+     */
+    private fun unimportedCallableReceiver(name: String): Boolean {
+        if (name.firstOrNull()?.isLowerCase() != true) return false
+        if (!service.classpathIndexReady()) return false
+        if (service.callablePackages(name).isEmpty()) return false
+        return !service.isRootPackage(name)
     }
 
     /**

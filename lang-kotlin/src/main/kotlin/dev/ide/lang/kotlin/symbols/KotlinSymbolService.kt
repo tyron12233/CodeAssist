@@ -2205,6 +2205,43 @@ class KotlinSymbolService(
     }
 
     /**
+     * The package-level callables named [name] declared in package [pkg] — exactly what `import pkg.name`
+     * brings into scope: top-level functions/properties AND extensions (also package-level). The symbol-level
+     * counterpart of [callablePackages], which answers only "which packages"; the import line's semantic
+     * highlighting needs the symbol itself, so `import kotlinx.coroutines.withContext` can color its leaf as
+     * the `suspend` FUNCTION it names rather than leaving it to the lexer's shape guess. Same three sources
+     * (project model, the callable indexes, the index-free scan) as [callablePackages].
+     */
+    fun packageCallables(pkg: String, name: String): List<KotlinSymbol> {
+        if (name.isEmpty()) return emptyList()
+        val out = ArrayList<KotlinSymbol>()
+        topLevelByName(name).filterTo(out) { packageOf(it) == pkg }
+        model().extensions.filter { it.name == name && it.ctx.packageName == pkg }
+            .forEach { out += toSymbol(it, null) }
+        val idx = index
+        if (idx != null) {
+            for (id in listOf(
+                KotlinCallableIndex.id,
+                KotlinSourceCallableIndex.id,
+                KotlinBuiltinCallableIndex.id
+            )) {
+                idx.exact<CallableShape>(id, KotlinCallableIndex.nameKey(name))
+                    .forEach { if (it.packageName == pkg) out += it.toSymbol(this) }
+            }
+        } else {
+            reader.scan(this).extensionsByReceiver.values.forEach { syms ->
+                syms.forEach { if (it.name == name && packageOf(it) == pkg) out += it }
+            }
+        }
+        return out
+    }
+
+    /** A callable's declaring package: its own [KotlinSymbol.packageName], else the package of the JVM facade
+     *  it compiles into (`kotlinx.coroutines.BuildersKt` → `kotlinx.coroutines`). Null when neither is known. */
+    private fun packageOf(sym: KotlinSymbol): String? =
+        sym.packageName ?: sym.declaringClassFqn?.substringBeforeLast('.', "")?.ifEmpty { null }
+
+    /**
      * Packages declaring an EXTENSION callable (function/property) named [name] — the extension-only half of
      * [callablePackages] (which unions the non-extension top-levels too). Lets the unresolved-reference check
      * confirm POSITIVELY that an `import p.name` names a pure extension (usable only WITH a receiver), so a bare
@@ -2429,6 +2466,21 @@ class KotlinSymbolService(
                 out.getOrPut(seg) { KotlinSymbol(seg, SymbolKind.PACKAGE, origin = SOURCE) }
         }
         return out.values.take(limit)
+    }
+
+    /**
+     * Whether [name] is a known ROOT package segment (`kotlin`, `kotlinx`, `androidx`, `com`, a project source
+     * package root) — the "this bare name qualifies a package, not a value" signal. The leftmost segment of a
+     * fully-qualified reference (`kotlinx.coroutines.delay(1)`) parses as a qualified expression's RECEIVER, so
+     * the unresolved-reference check consults this before flagging one. Classpath packages come from the
+     * `java.packages`/`kotlin.packages` indexes — which key EVERY package prefix, so the root segment is a
+     * key of its own — and project ones from the live model (the index lags the buffer). An exact-key query,
+     * not [rootPackages]' prefix/camel-hump matching.
+     */
+    fun isRootPackage(name: String): Boolean {
+        if (name.isEmpty()) return false
+        if (index?.exactAll<String>(PACKAGES, name)?.any() == true) return true
+        return model().classByFqn.keys.any { it.startsWith("$name.") }
     }
 
     /**

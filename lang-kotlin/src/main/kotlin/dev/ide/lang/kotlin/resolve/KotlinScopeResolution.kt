@@ -24,6 +24,7 @@ import org.jetbrains.kotlin.psi.KtFunction
 import org.jetbrains.kotlin.psi.KtFunctionLiteral
 import org.jetbrains.kotlin.psi.KtLambdaExpression
 import org.jetbrains.kotlin.psi.KtNameReferenceExpression
+import org.jetbrains.kotlin.psi.KtNamedDeclaration
 import org.jetbrains.kotlin.psi.KtNamedFunction
 import org.jetbrains.kotlin.psi.KtParameter
 import org.jetbrains.kotlin.psi.KtParenthesizedExpression
@@ -32,6 +33,7 @@ import org.jetbrains.kotlin.psi.KtPropertyAccessor
 import org.jetbrains.kotlin.psi.KtQualifiedExpression
 import org.jetbrains.kotlin.psi.KtSecondaryConstructor
 import org.jetbrains.kotlin.psi.KtSuperTypeCallEntry
+import org.jetbrains.kotlin.psi.KtUserType
 import org.jetbrains.kotlin.psi.KtWhenExpression
 
 /** Scope and name resolution: locals, implicit receivers, same-file symbols, enclosing class/companion context, and type-receiver classification. */
@@ -581,16 +583,57 @@ internal fun KotlinResolver.enclosingClassMemberKind(offset: Int, name: String):
     return if (sawFunction) true else null
 }
 
-/** True if any enclosing class has a companion object, whose members are bare-accessible but not
- *  modeled, so the unresolved-reference diagnostic backs off to avoid false positives. */
-fun KotlinResolver.companionInScope(offset: Int): Boolean {
+/**
+ * Whether [name] resolves through a COMPANION object in scope at [offset] — a companion's members (and the
+ * companion's own name, `companion object Factory`) are bare-accessible throughout the enclosing class's body.
+ * Three sources, so the unresolved-reference diagnostic doesn't need the old blanket "any enclosing class has
+ * a companion → back off" rule (which silently suppressed EVERY unresolved bare name in such a class — the
+ * common `class MyViewModel { … companion object { … } }` shape, where a missing `viewModelScope`/`withContext`
+ * import was never reported):
+ *  - the LIVE buffer's own companion declarations (an edit is seen before the disk model catches up);
+ *  - the symbol model's view of the enclosing class's companion ([KotlinSymbolService.companionMembersFor] —
+ *    the companion's inherited members plus compiler-plugin synthetics like `serializer()`);
+ *  - a SUPERTYPE's companion, whose members are bare-accessible in a subclass body too.
+ *
+ * Backs off (returns true) when an enclosing class's supertype can't be resolved: that supertype may declare a
+ * companion contributing [name], and erring toward "resolved" keeps the check false-positive-free.
+ */
+fun KotlinResolver.companionMemberInScope(name: String, offset: Int): Boolean {
+    if (name.isEmpty()) return false
     var node: PsiElement? = elementAt(offset)
     while (node != null) {
-        if (node is KtClassOrObject && node.companionObjects.isNotEmpty()) return true
+        if (node is KtClassOrObject) {
+            // `companion object Factory` referenced by its own name (`Factory.create()`).
+            if (node.companionObjects.any { it.name == name }) return true
+            for (comp in node.companionObjects) {
+                if (comp.declarations.any { it is KtNamedDeclaration && it.name == name }) return true
+                // A companion with a supertype we can't enumerate could inherit `name` → back off.
+                if (comp.superTypeListEntries.isNotEmpty() && !supertypesResolvable(comp)) return true
+            }
+            val fqn = node.fqName?.asString()
+            if (fqn != null) {
+                if (service.companionMembersFor(fqn, name).any { it.name == name }) return true
+                if (service.supertypesOf(fqn).any { sup ->
+                        service.companionMembersFor(sup.qualifiedName, name).any { it.name == name }
+                    }
+                ) return true
+            }
+            if (node.superTypeListEntries.isNotEmpty() && !supertypesResolvable(node)) return true
+        }
         node = node.parent
     }
     return false
 }
+
+/** Whether every supertype named in [cls]'s supertype list resolves to a known type (or is a type parameter) —
+ *  i.e. the inherited scope is fully enumerable. False when any entry's name can't be resolved. */
+private fun KotlinResolver.supertypesResolvable(cls: KtClassOrObject): Boolean =
+    cls.superTypeListEntries.all { entry ->
+        val userType = entry.typeReference?.typeElement as? KtUserType ?: return@all true
+        val name = userType.referenceExpression?.getReferencedName() ?: return@all true
+        if (isTypeParameterInScope(name, entry.textRange.startOffset)) return@all true
+        service.resolveTypeName(name, fileContext)?.let { service.isKnownType(it) } == true
+    }
 
 /** Named LOCAL types in scope at [offset] (simple name → the synthetic FQN they were registered under): a
  *  `class`/`object` declared as a statement in this block or an enclosing one. So a `LocalClass()` / a local

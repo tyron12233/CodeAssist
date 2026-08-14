@@ -19,6 +19,7 @@ import org.jetbrains.kotlin.psi.KtCatchClause
 import org.jetbrains.kotlin.psi.KtClass
 import org.jetbrains.kotlin.psi.KtClassOrObject
 import org.jetbrains.kotlin.psi.KtForExpression
+import org.jetbrains.kotlin.psi.KtImportDirective
 import org.jetbrains.kotlin.psi.KtWhenExpression
 import org.jetbrains.kotlin.psi.KtFunction
 import org.jetbrains.kotlin.psi.KtAnnotationEntry
@@ -57,6 +58,8 @@ import org.jetbrains.kotlin.psi.psiUtil.getStrictParentOfType
  *  - local variables / parameters in use, with `var` (mutable) vs `val` (read-only);
  *  - destructuring bindings (`val (a, b) = …`, `for ((k, v) in …)`, `{ (a, b) -> }`) at declaration and use;
  *  - type references, separating a type parameter (`T`) from a class;
+ *  - import lines — the imported name reads as what it names (a type, a member imported through one, or a
+ *    top-level/extension callable, `suspend`/`@Composable`/extension included), not as the lexer's shape guess;
  *  - inside string literals: interpolated variables/expressions (`$name`, `${p.x}` — via the normal walk), plus
  *    the interpolation delimiters (`$`/`${`/`}`) and escape sequences (`\n`, `\uXXXX`) as distinct kinds.
  *
@@ -300,6 +303,15 @@ class KotlinSemanticHighlighter(
                 }
 
                 is KtStringTemplateExpression -> classifyStringTemplate(psi, ::emit)
+                // An import line. The lexical layer can only guess by shape — a Capitalized leaf reads as a
+                // type, a callable leaf (`import kotlinx.coroutines.withContext`) stays uncolored — so classify
+                // the imported name off the symbol model. This OWNS its subtree (no descent): the qualifier
+                // segments are package names, which the generic reference path would try (and fail) to resolve.
+                is KtImportDirective -> {
+                    KotlinPerf.span("hl.import") { classifyImport(psi, resolver, ::emit) }
+                    return
+                }
+
                 else -> {}
             }
             var c = psi.firstChild
@@ -343,6 +355,81 @@ class KotlinSemanticHighlighter(
                 child = child.nextSibling
             }
         }
+    }
+
+    /**
+     * Color an import's imported NAME (and its `as` alias) for what it actually names: a type, a member
+     * imported through one (`java.lang.Math.max`, `Foo.Companion.TAG`, an enum entry), or a package-level
+     * callable (`kotlinx.coroutines.withContext` → a `suspend` function; `androidx.lifecycle.viewModelScope`
+     * → an extension property). A star import's leaf is a package, and a name the model can't resolve is left
+     * to the lexical layer — so an unresolvable import simply stays as the lexer drew it.
+     */
+    private fun classifyImport(
+        imp: KtImportDirective,
+        resolver: KotlinResolver,
+        emit: (com.intellij.openapi.util.TextRange?, HighlightKind, Set<HighlightModifier>) -> Unit
+    ) {
+        if (imp.isAllUnder) return // `import pkg.*` — the last segment is a package, not a name
+        val leafRef = when (val ref = imp.importedReference) {
+            is KtQualifiedExpression -> ref.selectorExpression as? KtNameReferenceExpression
+            is KtNameReferenceExpression -> ref
+            else -> null
+        } ?: return
+        val fqn = imp.importedFqName?.asString()?.takeIf { '.' in it } ?: return
+        val (kind, mods) = importedClassification(fqn, resolver) ?: return
+        emit(leafRef.textRange, kind, mods)
+        // `import a.b.c as d` — the alias denotes the same thing, so it reads the same.
+        imp.alias?.nameIdentifier?.let { emit(it.textRange, kind, mods) }
+    }
+
+    /** What an import's fully-qualified [fqn] names, or null when the parse-only model can't tell. The probe
+     *  order follows Kotlin naming convention — a lowercase leaf is looked up as a CALLABLE first, a
+     *  Capitalized one as a TYPE — so the common case costs one lookup family, not all three. */
+    private fun importedClassification(
+        fqn: String,
+        resolver: KotlinResolver
+    ): Pair<HighlightKind, Set<HighlightModifier>>? {
+        val leaf = fqn.substringAfterLast('.')
+        val owner = fqn.substringBeforeLast('.', "")
+        if (leaf.isEmpty() || owner.isEmpty()) return null
+        val callableFirst = leaf.firstOrNull()?.isLowerCase() == true
+        if (callableFirst) packageCallable(owner, leaf, resolver)?.let { return it }
+        if (resolver.service.typeFqnKnown(fqn)) return HighlightKind.CLASS to emptySet()
+        // A member imported THROUGH a type: an object/companion member, a Java static (`java.lang.Math.max`),
+        // an enum entry (`java.time.DayOfWeek.MONDAY`). The LONGEST type prefix owns the leaf.
+        var prefix = owner
+        while (prefix.isNotEmpty()) {
+            if (resolver.service.typeFqnKnown(prefix)) {
+                if (leaf in resolver.enumConstantNames(prefix)) return HighlightKind.ENUM_CONSTANT to emptySet()
+                return resolver.staticMemberNamed(prefix, leaf)?.let(::symbolClassification)
+            }
+            prefix = prefix.substringBeforeLast('.', "")
+        }
+        return if (callableFirst) null else packageCallable(owner, leaf, resolver)
+    }
+
+    /** The classification of a top-level / extension callable [name] declared in package [owner], or null. */
+    private fun packageCallable(
+        owner: String,
+        name: String,
+        resolver: KotlinResolver
+    ): Pair<HighlightKind, Set<HighlightModifier>>? =
+        resolver.service.packageCallables(owner, name).firstOrNull()?.let(::symbolClassification)
+
+    /** A resolved symbol's highlight kind + its orthogonal facts (composable / extension / suspend / deprecated). */
+    private fun symbolClassification(sym: KotlinSymbol): Pair<HighlightKind, Set<HighlightModifier>> {
+        val mods = HashSet<HighlightModifier>(4)
+        if (sym.isComposable) mods += HighlightModifier.COMPOSABLE
+        if (sym.isExtension) mods += HighlightModifier.EXTENSION
+        if (sym.isSuspend) mods += HighlightModifier.SUSPEND
+        if (sym.isDeprecated) mods += HighlightModifier.DEPRECATED
+        val kind = when (sym.kind) {
+            SymbolKind.METHOD -> HighlightKind.FUNCTION
+            SymbolKind.ENUM_CONSTANT -> HighlightKind.ENUM_CONSTANT
+            SymbolKind.CLASS -> HighlightKind.CLASS
+            else -> HighlightKind.PROPERTY
+        }
+        return kind to mods
     }
 
     private fun classKind(c: KtClass): HighlightKind = when {
