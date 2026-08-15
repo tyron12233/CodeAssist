@@ -296,9 +296,17 @@ data class ResolvedFunction(
     /** True for a top-level `var` with a plain backing field (no custom accessors), where [body] is its
      *  initializer. The interpreter backs it with mutable STORAGE (lazily initialized from [body] on first
      *  read) so reads see prior writes — powering the lazy-cache idiom of generated `ImageVector`/icon files:
-     *  `if (_x != null) return _x!!; _x = build(); return _x!!`. A plain `val` / a property with a custom
-     *  getter stays re-evaluated per read (false). */
+     *  `if (_x != null) return _x!!; _x = build(); return _x!!`. A property with a custom getter stays
+     *  re-evaluated per read (false); a plain-backing-field `val` is [singletonBackingField] instead. */
     val mutableBackingField: Boolean = false,
+    /** True for a top-level `val` with a plain backing field (no custom accessors), where [body] is its
+     *  initializer. Real Kotlin compiles such a `val` to a `<clinit>`-initialized static field, so it holds ONE
+     *  instance for the program's life; the interpreter mirrors that by evaluating [body] once on first read and
+     *  caching the result (read-only — no write path). This preserves object IDENTITY, which matters for the
+     *  custom-theme idiom `val LocalX = staticCompositionLocalOf { … }`: re-evaluating it per read would mint a
+     *  fresh `CompositionLocal` each time, so a `provides` and a later `.current` would never match. A `val`
+     *  with a custom getter (which computes) stays re-evaluated per read (false). */
+    val singletonBackingField: Boolean = false,
 ) {
     val isComplete: Boolean get() = diagnostics.isEmpty()
 }
@@ -579,62 +587,159 @@ interface PreviewDeclProvider {
 }
 
 /**
+ * A located source file whose declarations lower ON DEMAND — the function-granular counterpart to
+ * [PreviewFileModel]. Cross-file expansion asks for exactly the reached declaration instead of merging the
+ * whole file, so pulling one helper out of a large screen file doesn't lower its twenty siblings (the cold
+ * Jetsnack profile: a card preview lowered 173 functions when 59 were reachable). Implementations serve from
+ * the per-file lowering cache, so repeated requests are cheap and idempotent.
+ */
+interface PreviewLazyFile {
+    val path: String
+
+    /** Program keys (`"name/arity"`) of the top-level callables named [name] declared here — including the
+     *  synthetic `name/0` getter of a valued top-level property — WITHOUT lowering anything. */
+    fun functionKeys(name: String): List<String>
+
+    /** Lower (or serve cached) the top-level callable [key]; null when this file doesn't declare it. */
+    fun function(key: String): ResolvedFunction?
+
+    /** The anonymous `object : Foo {}` classes synthesized while lowering [key] (empty for most functions).
+     *  Meaningful only after [function]`(key)` returned non-null; the expander merges them alongside the
+     *  function so its object-literal constructor call has a class to build. */
+    fun anonymousClassesFor(key: String): List<ResolvedClass>
+
+    /** Lower (or serve cached) the source classes for [nameOrFqn]: the matching class (exact FQN, else simple
+     *  name) FIRST, followed by the classes nested under it (its companion, inner enums, …) so runtime lookups
+     *  like `fqn.Companion` resolve. Empty when no class here matches. */
+    fun classesFor(nameOrFqn: String): List<ResolvedClass>
+}
+
+/** Locates the [PreviewLazyFile] declaring a reached type/function. Implementations: a same-module provider
+ *  (over one [dev.ide.lang.kotlin.symbols.KotlinSymbolService]) and a cross-module dispatcher (fanning out
+ *  across an entry module + its dependency modules' analyzers). */
+interface LazyPreviewDeclProvider {
+    fun fileDeclaringType(fqn: String): PreviewLazyFile?
+    fun filesDeclaringFunction(name: String): List<PreviewLazyFile>
+}
+
+/** Adapt an eagerly-lowered [PreviewFileModel] to the lazy contract (tests / already-materialized models). */
+fun PreviewFileModel.asLazy(): PreviewLazyFile = object : PreviewLazyFile {
+    override val path: String get() = this@asLazy.path
+    override fun functionKeys(name: String) = program.keys.filter { it.substringBeforeLast('/') == name }
+    override fun function(key: String) = program[key]
+    // An eager model can't attribute anonymous classes per function — hand over every synthesized one (they
+    // carry the `$anon$` marker in their FQN); the expander's putIfAbsent dedups.
+    override fun anonymousClassesFor(key: String): List<ResolvedClass> = classes.filter { "\$anon\$" in it.fqn }
+    override fun classesFor(nameOrFqn: String): List<ResolvedClass> {
+        val simple = nameOrFqn.substringAfterLast('.')
+        val matched = classes.firstOrNull { it.fqn == nameOrFqn } ?: classes.firstOrNull { it.simpleName == simple }
+            ?: return emptyList()
+        return listOf(matched) + classes.filter { it !== matched && it.fqn.startsWith("${matched.fqn}.") }
+    }
+}
+
+/** Adapt an eager [PreviewDeclProvider] to the lazy contract (compat for existing providers/tests). */
+fun PreviewDeclProvider.asLazy(): LazyPreviewDeclProvider = object : LazyPreviewDeclProvider {
+    override fun fileDeclaringType(fqn: String) = this@asLazy.fileDeclaringType(fqn)?.asLazy()
+    override fun filesDeclaringFunction(name: String) = this@asLazy.filesDeclaringFunction(name).map { it.asLazy() }
+}
+
+/**
  * Expand a preview's [seed] (the entry file's lowered program + classes) across files AND modules: follow every
  * reachable Source declaration the preview touches (a type it constructs/references, a top-level function it
- * calls, a member's owner, a property/object/enum/`is`/cast reference) to the file that declares it, lower +
- * merge that file via [provider], and repeat over the newly merged bodies until nothing new is reached. So a
- * `data class` or helper declared in a sibling file — or in a dependency module — becomes constructible/callable
- * by the interpreter instead of crashing the render with a missing class.
+ * calls, a member's owner, a property/object/enum/`is`/cast reference) to the declaration that provides it,
+ * lower + merge THAT DECLARATION via [provider], and repeat over the newly merged bodies until nothing new is
+ * reached. So a `data class` or helper declared in a sibling file — or in a dependency module — becomes
+ * constructible/callable by the interpreter instead of crashing the render with a missing class.
  *
- * The [seed]'s declarations win on a `name/arity` / FQN collision; at most [maxFiles] OTHER files are followed
- * (a runaway guard — a real preview reaches a handful). [provider] must be idempotent per path; the expander
- * also de-dups by [PreviewFileModel.path].
+ * Function-granular: a requested function name merges every overload of that name from its declaring file(s)
+ * (the interpreter looks a source call up by declared arity with an argument-count fallback, so all same-name
+ * keys must be present) but NOT the file's unrelated declarations; a requested type merges the matching class
+ * plus its nested classes. The [seed]'s declarations win on a `name/arity` / FQN collision; at most [maxFiles]
+ * OTHER files are followed (a runaway guard — a real preview reaches a handful).
  */
-fun expandPreviewModel(seed: PreviewFileModel, maxFiles: Int, provider: PreviewDeclProvider): PreviewModel {
+fun expandPreviewModel(seed: PreviewFileModel, maxFiles: Int, provider: LazyPreviewDeclProvider): PreviewModel {
     val program = LinkedHashMap<String, ResolvedFunction>(seed.program)
     val classesByFqn = LinkedHashMap<String, ResolvedClass>()
     seed.classes.forEach { classesByFqn.putIfAbsent(it.fqn, it) }
 
-    val mergedPaths = hashSetOf(seed.path)
+    val touchedPaths = hashSetOf(seed.path)
     val requestedTypes = HashSet<String>()
     val requestedFns = HashSet<String>()
+    // Classes whose bodies are queued for scanning. A class can be MERGED without being enqueued (it rode in
+    // as a nested sibling of a requested class); if it is later reached in its own right it must still be
+    // enqueued then, or its member bodies' cross-file references are never followed.
+    val enqueuedClasses = HashSet<String>()
     val work = ArrayDeque<RNode>()
-    // Supertype FQNs whose declaring file must be merged: a subclass drags in its cross-file SUPERCLASS so its
+    // Supertype FQNs whose declaring class must be merged: a subclass drags in its cross-file SUPERCLASS so its
     // super-constructor/init run and inherited members resolve. `reachableSourceClasses` already follows
     // supertypes; the expander that builds the RUNTIME model must too, or inherited `val`s read null and
     // inherited calls throw "no member". A plain deque drained through `requestType` in the work loop (below,
     // where `requestType` is in scope) — so no forward reference from `enqueueClass`.
     val superWork = ArrayDeque<String>()
 
+    // A function's body PLUS its parameter-default expressions: a source type/object referenced ONLY in a
+    // defaulted parameter (`fun JetsnackSurface(color: Color = JetsnackTheme.colors.uiBackground, …)`) is
+    // otherwise never discovered, so the interpreter can't load it at run time ("cannot load `JetsnackTheme`
+    // (a project-source object isn't available)") and the defaulted value falls back to a zero — a Jetsnack
+    // `JetsnackCard`/`JetsnackSurface` then draws with the wrong (unspecified) background. Class-ctor param
+    // defaults were already scanned ([enqueueClass]); function param defaults were the gap.
+    fun enqueueFn(fn: ResolvedFunction) {
+        work.add(fn.body)
+        fn.params.forEach { p -> p.default?.let(work::add) }
+    }
     fun enqueueClass(c: ResolvedClass) {
+        if (!enqueuedClasses.add(c.fqn)) return
         c.superCall?.args?.forEach { work.add(it.value) }
         c.primaryParams.forEach { p -> p.default?.let(work::add) }
         c.initSteps.forEach(work::add)
-        c.methods.values.forEach { work.add(it.body) }
+        c.methods.values.forEach(::enqueueFn)
         c.enumEntries.forEach { e -> e.args.forEach { work.add(it.value) } }
         c.secondaryCtors.forEach { ctor -> work.add(ctor.body); ctor.delegationArgs.forEach { work.add(it.value) } }
         c.superCall?.fqn?.let(superWork::add)
         c.supertypes.forEach(superWork::add)
     }
-    program.values.forEach { work.add(it.body) }
+    program.values.forEach(::enqueueFn)
     classesByFqn.values.toList().forEach(::enqueueClass)
 
-    fun merge(m: PreviewFileModel) {
-        if (m.path in mergedPaths || mergedPaths.size >= maxFiles) return
-        mergedPaths += m.path
-        m.program.forEach { (k, v) -> if (program.putIfAbsent(k, v) == null) work.add(v.body) }
-        m.classes.forEach { c -> if (classesByFqn.putIfAbsent(c.fqn, c) == null) enqueueClass(c) }
+    // The file-count runaway guard: a NEW file is followed only under the cap; an already-touched file's
+    // further declarations still merge (mirrors the old whole-file merge, which had everything by then).
+    fun admit(file: PreviewLazyFile): Boolean {
+        if (file.path in touchedPaths) return true
+        if (touchedPaths.size >= maxFiles) return false
+        touchedPaths += file.path
+        return true
     }
     fun requestType(rawName: String?) {
         val name = rawName?.trimStart('.')?.takeIf { it.isNotBlank() } ?: return
-        if (!requestedTypes.add(name)) return
         val simple = name.substringAfterLast('.')
-        if (name in classesByFqn || classesByFqn.values.any { it.simpleName == simple }) return
-        provider.fileDeclaringType(name)?.let(::merge)
+        // Already merged (possibly as a bystander) → make sure its bodies are scanned, nothing to pull.
+        (classesByFqn[name] ?: classesByFqn.values.firstOrNull { it.simpleName == simple })
+            ?.let { enqueueClass(it); return }
+        if (!requestedTypes.add(name)) return
+        val file = provider.fileDeclaringType(name) ?: return
+        if (file.path == seed.path || !admit(file)) return
+        val matched = file.classesFor(name)
+        if (matched.isEmpty()) return
+        matched.forEach { classesByFqn.putIfAbsent(it.fqn, it) }
+        enqueueClass(matched.first())
     }
     fun requestFn(name: String, arity: Int) {
         if ("$name/$arity" in program || !requestedFns.add("$name/$arity")) return
-        provider.filesDeclaringFunction(name).forEach(::merge)
+        provider.filesDeclaringFunction(name).forEach { file ->
+            if (file.path == seed.path || !admit(file)) return@forEach
+            file.functionKeys(name).forEach { key ->
+                if (key !in program) file.function(key)?.let { fn ->
+                    program[key] = fn
+                    enqueueFn(fn)
+                    // A function whose body holds an `object : Foo {}` literal synthesized a class for it —
+                    // merge + scan it with the function, or its constructor call has nothing to build.
+                    file.anonymousClassesFor(key).forEach { c ->
+                        if (classesByFqn.putIfAbsent(c.fqn, c) == null) enqueueClass(c)
+                    }
+                }
+            }
+        }
     }
 
     while (work.isNotEmpty() || superWork.isNotEmpty()) {

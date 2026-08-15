@@ -52,4 +52,45 @@ class TopLevelMutablePropertyTest {
         """.trimIndent()
         assertEquals(15, run(code))
     }
+
+    @Test fun topLevelValIsOneInstanceAcrossReads() {
+        // A plain-backing-field `val` is a `<clinit>` static field in real Kotlin: ONE instance for the program's
+        // life. Reading it twice must yield the SAME object. Re-evaluating the initializer per read (the old
+        // behaviour) would `Box()` twice → `===` false. This identity is exactly what a `provides`/`.current`
+        // CompositionLocal pair relies on (`val LocalX = staticCompositionLocalOf { … }`).
+        val code = """
+            package demo
+            class Box
+            val singleton = Box()
+            fun f(): Boolean = singleton === singleton
+        """.trimIndent()
+        assertEquals(true, run(code))
+    }
+
+    @Test fun topLevelValInitializerRunsOnce() {
+        // The initializer (`make()`, which bumps `calls`) runs on the first read only; the second read returns the
+        // cached instance. Re-evaluating per read would make it 2.
+        val code = """
+            package demo
+            var calls = 0
+            class Box
+            fun make(): Box { calls = calls + 1; return Box() }
+            val singleton = make()
+            fun f(): Int { val a = singleton; val b = singleton; return calls }
+        """.trimIndent()
+        assertEquals(1, run(code))
+    }
+
+    @Test fun valWithCustomGetterStaysReEvaluated() {
+        // A `val` with a CUSTOM getter computes on every access — it has no backing field, so it must NOT be
+        // cached. Two reads produce two `Box()` instances → `===` false. Guards the fix from over-caching
+        // computed properties.
+        val code = """
+            package demo
+            class Box
+            val computed: Box get() = Box()
+            fun f(): Boolean = computed === computed
+        """.trimIndent()
+        assertEquals(false, run(code))
+    }
 }

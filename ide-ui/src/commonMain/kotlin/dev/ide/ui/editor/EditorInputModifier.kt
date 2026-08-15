@@ -182,6 +182,7 @@ internal fun Modifier.editorInput(
                 if (released && !longPressed && !doubleTapSecondTap && !interaction.touchScrolled) {
                     focus.requestFocus()
                     onDismissQuickDoc() // a tap in the editor dismisses an open quick-doc popup
+                    interaction.pendingTapDismiss = null // re-armed below only when a tap lands inside a selection
                     // Third quick tap near the double-tap → select the whole line.
                     val triple = nearArm
                     // A tap on a gutter error/warning glyph opens that line's diagnostic sheet.
@@ -204,14 +205,29 @@ internal fun Modifier.editorInput(
                         gutterDiag != null -> acts.openSheet(gutterDiag)
                         else -> {
                             val newCaret = geometry.offsetAt(pos)
-                            // Re-tap the existing caret position to TOGGLE the Paste/Select-all toolbar; a first
-                            // tap just places the caret. Tapping a new spot hides it.
                             val prev = session.selection
-                            val reTap = prev.collapsed && prev.start == newCaret
-                            session.setCaret(newCaret)
-                            if (interaction.lastInputWasTouch) {
-                                interaction.handlesVisible = reTap && !interaction.handlesVisible
-                                editorIme.show() // explicit tap → raise the keyboard
+                            when {
+                                // Tap INSIDE an existing selection → keep it for now (no flicker) and DEFER the
+                                // decision: a following double-tap expands it (onDoubleTap), while a lone tap
+                                // dismisses it (onTap, once the double-tap window lapses). This is also what lets a
+                                // fully-selected file be dismissed by a single tap — there, every tap is "inside".
+                                !prev.collapsed && newCaret in prev.min..prev.max -> {
+                                    interaction.pendingTapDismiss = newCaret
+                                    if (interaction.lastInputWasTouch) {
+                                        interaction.handlesVisible = true
+                                        editorIme.show() // explicit tap → raise the keyboard
+                                    }
+                                }
+                                // Re-tap the existing caret position to TOGGLE the Paste/Select-all toolbar; a
+                                // first tap just places the caret. Tapping a new spot hides it.
+                                else -> {
+                                    val reTap = prev.collapsed && prev.start == newCaret
+                                    session.setCaret(newCaret)
+                                    if (interaction.lastInputWasTouch) {
+                                        interaction.handlesVisible = reTap && !interaction.handlesVisible
+                                        editorIme.show() // explicit tap → raise the keyboard
+                                    }
+                                }
                             }
                         }
                     }
@@ -219,9 +235,15 @@ internal fun Modifier.editorInput(
             },
             onDoubleTap = { pos ->
                 focus.requestFocus()
-                session.selectWordAt(geometry.offsetAt(pos))
+                interaction.pendingTapDismiss = null // a double-tap cancels the deferred single-tap dismiss
+                val offset = geometry.offsetAt(pos)
+                val prev = session.selection
+                // Double-tap ON an existing selection → expand it up the DOM tree; otherwise select the word.
+                // The first tap kept the selection (see onPress), so it's still live here to test + expand from.
+                if (!prev.collapsed && offset in prev.min..prev.max) acts.expandSelection()
+                else session.selectWordAt(offset)
                 if (interaction.lastInputWasTouch) interaction.handlesVisible = true
-                // arm triple-tap: a quick third tap nearby (within the window below) selects the line
+                // arm triple-tap: a quick third tap nearby (within the window below) selects the whole line
                 interaction.tripleArmed = true
                 interaction.tripleArmPos = pos
                 interaction.tripleArmMark = TimeSource.Monotonic.markNow()
@@ -231,6 +253,7 @@ internal fun Modifier.editorInput(
             onLongPress = { pos ->
                 longPressed = true
                 focus.requestFocus()
+                interaction.pendingTapDismiss = null
                 // Long-press → select the word under the finger and raise the selection chrome (handles + the
                 // floating toolbar), the standard Android text gesture.
                 completion.dismiss()
@@ -238,6 +261,16 @@ internal fun Modifier.editorInput(
                 if (interaction.lastInputWasTouch) {
                     interaction.handlesVisible = true
                     editorIme.show() // explicit long-press → raise the keyboard
+                }
+            },
+            onTap = {
+                // A confirmed single tap (no double-tap followed) that had landed inside a selection dismisses it,
+                // placing the caret there. Deferred from onPress so double-tap-to-expand stays flicker-free.
+                val target = interaction.pendingTapDismiss
+                if (target != null) {
+                    interaction.pendingTapDismiss = null
+                    session.setCaret(target)
+                    interaction.handlesVisible = false
                 }
             },
         )
@@ -252,22 +285,35 @@ internal fun Modifier.editorInput(
                 interaction.lastInputWasTouch = false
                 focus.requestFocus()
                 down.consume() // keep the scroll containers + detectTapGestures out of it
-                // Count consecutive clicks ourselves: 1 → caret, 2 → word, 3 → line, then wrap.
+                // Count consecutive clicks ourselves: 1 → caret, 2 → word, 3 → line, 4th+ → expand up the tree.
+                val anchor = geometry.offsetAt(down.position)
                 val near = (down.position - interaction.mouseLastClickPos).getDistance() < 24f
-                interaction.mouseClicks =
-                    if (near && down.uptimeMillis - interaction.mouseLastClickMs <= 300L) (interaction.mouseClicks % 3) + 1 else 1
+                val continuing = near && down.uptimeMillis - interaction.mouseLastClickMs <= 300L
+                // On a fresh burst, remember whether it began on an existing selection (so a double-click there
+                // expands it rather than word-selecting) and that selection's span (the first click collapses it).
+                if (!continuing) {
+                    val s = session.selection
+                    interaction.burstOnSelection = !s.collapsed && anchor in s.min..s.max
+                    interaction.burstSelStart = s.min
+                    interaction.burstSelEnd = s.max
+                }
+                interaction.mouseClicks = if (continuing) interaction.mouseClicks + 1 else 1
                 interaction.mouseLastClickMs = down.uptimeMillis
                 interaction.mouseLastClickPos = down.position
-                val anchor = geometry.offsetAt(down.position)
                 // A click on a gutter error/warning glyph opens that line's diagnostic sheet.
                 val gutterDiag = if (down.position.x < gutterWidthPx)
                     acts.diagnosticOnLine(geometry.lineAtY(down.position.y)) else null
                 when {
                     interaction.mouseClicks == 1 && geometry.foldActionAt(down.position) -> {} // fold chevron / placeholder
                     gutterDiag != null && interaction.mouseClicks == 1 -> acts.openSheet(gutterDiag)
+                    interaction.mouseClicks == 1 -> session.setCaret(anchor)
+                    // A double-click that began on a selection expands it (walk up the PSI/DOM tree) from the
+                    // remembered span; otherwise it's the normal word select.
+                    interaction.mouseClicks == 2 && interaction.burstOnSelection ->
+                        acts.expandSelection(interaction.burstSelStart, interaction.burstSelEnd)
                     interaction.mouseClicks == 2 -> session.selectWordAt(anchor)
                     interaction.mouseClicks == 3 -> session.selectLineAt(anchor)
-                    else -> session.setCaret(anchor)
+                    else -> acts.expandSelection() // 4th-and-further click → keep expanding up the tree
                 }
                 // Anchor the drag at the current selection start so a drag after a double/triple click still
                 // extends from where the click landed.

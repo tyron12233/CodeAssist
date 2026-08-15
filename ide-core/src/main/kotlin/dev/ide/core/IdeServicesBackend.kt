@@ -195,21 +195,25 @@ class IdeServicesBackend(
      *  3. [preview] — preview rendering/lowering: lowest priority, preempted by both; retries automatically.
      */
     // The observer records a crash breadcrumb the instant a lane's block STARTS running on the engine worker
-    // (EnginePhase.RUNNING fires on the ide-engine thread). Persists only the coarse lane name — no file/path/
-    // source (analytics-safe) — so if the process then dies of the 32-bit-ART native SIGSEGV, the next launch
-    // can read what the engine was doing (see EngineBreadcrumb / RuntimeInfo). No-op until the launcher arms the
-    // breadcrumb file; the direct withContext(engineDispatcher) editor ops don't route through the scheduler, so
-    // the dominant per-keystroke work (completion=interactive, analysis/highlight/fold=background) is what's
-    // captured — exactly the "crashes while typing" surface.
+    // (EnginePhase.RUNNING fires on the ide-engine thread). Persists the fine op label the caller passed (or the
+    // lane name if none) — no file/path/source (analytics-safe) — so if the process then dies of the native
+    // SIGSEGV (32-bit AND 64-bit; see EngineBreadcrumb / RuntimeInfo), the next launch can read WHICH engine
+    // activity was in flight, not just "background". No-op until the launcher arms the breadcrumb file; the
+    // direct withContext(engineDispatcher) editor ops don't route through the scheduler, so the dominant
+    // per-keystroke work (completion=interactive, analysis/semantic/folding=background) is what's captured —
+    // exactly the "crashes while typing" surface.
     private val scheduler = EngineScheduler(
         engineDispatcher,
-        observer = { lane, phase, _ ->
-            if (phase == EnginePhase.RUNNING) EngineBreadcrumb.record(lane.name.lowercase())
+        observer = { lane, phase, label ->
+            if (phase == EnginePhase.RUNNING) EngineBreadcrumb.record(label.ifEmpty { lane.name.lowercase() })
         },
     )
-    override suspend fun <T> interactive(block: suspend () -> T): T = logEditorFailures("completion") { scheduler.interactive(block = block) }
-    override suspend fun <T> background(block: suspend () -> T): T = logEditorFailures("analysis") { scheduler.background(block = block) }
-    override suspend fun <T> preview(block: suspend () -> T): T = logEditorFailures("preview") { scheduler.preview(block = block) }
+    override suspend fun <T> interactive(op: String, block: suspend () -> T): T =
+        logEditorFailures("completion") { scheduler.interactive(label = op.ifEmpty { "completion" }, block = block) }
+    override suspend fun <T> background(op: String, block: suspend () -> T): T =
+        logEditorFailures("analysis") { scheduler.background(label = op.ifEmpty { "background" }, block = block) }
+    override suspend fun <T> preview(op: String, block: suspend () -> T): T =
+        logEditorFailures("preview") { scheduler.preview(label = op.ifEmpty { "preview" }, block = block) }
 
     private val editorLog = Log.logger("ide.editor")
 
@@ -324,9 +328,14 @@ class IdeServicesBackend(
                 var startNs = 0L
                 var building = false
                 svc.indexStatus.collectLatest { st ->
-                    if (st.building && !building) { building = true; startNs = System.nanoTime() }
-                    else if (!st.building && building) {
+                    if (st.building && !building) {
+                        building = true; startNs = System.nanoTime()
+                        // Mark the index as in flight so a native crash this session is attributed to
+                        // concurrent index churn (the leading hypothesis for the residual SIGSEGV).
+                        EngineBreadcrumb.noteIndexBuilding(true)
+                    } else if (!st.building && building) {
                         building = false
+                        EngineBreadcrumb.noteIndexBuilding(false)
                         val props = buildMap {
                             put("duration_ms", ((System.nanoTime() - startNs) / 1_000_000).toString())
                             // Phase split + cache effectiveness + source-diff counts: is the wall time in the

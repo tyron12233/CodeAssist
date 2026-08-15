@@ -12,8 +12,10 @@ import android.os.Handler
 import android.os.HandlerThread
 import android.os.Looper
 import android.os.SystemClock
+import android.view.Gravity
 import android.view.KeyEvent
 import android.view.MotionEvent
+import android.view.WindowManager
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.platform.ComposeView
 import androidx.lifecycle.Lifecycle
@@ -165,6 +167,17 @@ class OffscreenComposeSurface(
                 setContent(content)
             }
             p.setContentView(view)
+            // A Presentation is a Dialog: its window defaults to WRAP_CONTENT + centre gravity, so the ComposeView
+            // can end up inset/centred within the VirtualDisplay rather than filling it from (0,0). That put a gap
+            // at the top of the captured frame AND offset injected touches (the render is captured in DISPLAY px
+            // but events dispatch into the WINDOW, whose origin was shifted) — taps landed above where you touched.
+            // Pin the window to fill the display, top-left, no dialog inset/dim, so both share one (0,0) origin.
+            p.window?.apply {
+                setLayout(WindowManager.LayoutParams.MATCH_PARENT, WindowManager.LayoutParams.MATCH_PARENT)
+                setGravity(Gravity.TOP or Gravity.START)
+                clearFlags(WindowManager.LayoutParams.FLAG_DIM_BEHIND)
+                decorView.setPadding(0, 0, 0, 0)
+            }
             p.show()
             presentation = p
         }

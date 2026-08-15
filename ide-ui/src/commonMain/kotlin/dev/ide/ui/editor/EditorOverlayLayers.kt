@@ -18,6 +18,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Popup
 import dev.ide.ui.backend.UiDiagnostic
 import dev.ide.ui.backend.UiSeverity
+import dev.ide.ui.components.clipForClipboard
 import dev.ide.ui.editor.core.EditorSession
 import kotlin.math.roundToInt
 
@@ -125,11 +126,13 @@ internal fun SelectionToolbarLayer(
             SelectionToolbar(
                 hasSelection = !session.selection.collapsed,
                 onCopy = {
-                    session.selectedText()?.let { clipboard.setText(AnnotatedString(it)) }
+                    // Cap the payload: putting a multi-MB selection on the system clipboard marshals it across a
+                    // Binder transaction and throws TransactionTooLargeException (crash observed in the field).
+                    session.selectedText()?.let { clipboard.setText(AnnotatedString(clipForClipboard(it))) }
                     interaction.handlesVisible = false
                 },
                 onCut = {
-                    session.cutSelection()?.let { clipboard.setText(AnnotatedString(it)) }
+                    session.cutSelection()?.let { clipboard.setText(AnnotatedString(clipForClipboard(it))) }
                     interaction.handlesVisible = false
                 },
                 onPaste = {

@@ -19,6 +19,7 @@ import dev.ide.ui.backend.UiPackagedEntry
 import dev.ide.ui.backend.UiProjectIcon
 import dev.ide.ui.backend.UiOpenTab
 import dev.ide.ui.backend.UiOpenTabs
+import dev.ide.ui.backend.UiConvertResult
 import dev.ide.ui.backend.UiProjectResult
 import dev.ide.ui.backend.UiProjectTemplate
 import dev.ide.ui.backend.UiStorageCategory
@@ -203,6 +204,34 @@ internal class ProjectBackend(private val ctx: BackendContext) : ProjectService 
             }.getOrElse { e ->
                 log.error("Gradle sync failed", e)
                 UiSyncResult(false, e.message ?: "Gradle sync failed")
+            }
+        }
+    }
+
+    override suspend fun convertToNative(): UiConvertResult {
+        val svc = ctx.servicesOrNull ?: return UiConvertResult(false, "No project is open.")
+        return withContext(Dispatchers.IO) {
+            runCatching {
+                // Pure disk move + marker drop — the native model is already the source of truth, so nothing
+                // needs re-resolving or re-indexing.
+                val o = svc.convertToNative()
+                UiConvertResult(o.ok, o.message, o.canRevert)
+            }.getOrElse { e ->
+                log.error("Convert to native failed", e)
+                UiConvertResult(false, e.message ?: "Convert failed")
+            }
+        }
+    }
+
+    override suspend fun revertToGradle(): UiConvertResult {
+        val svc = ctx.servicesOrNull ?: return UiConvertResult(false, "No project is open.")
+        return withContext(Dispatchers.IO) {
+            runCatching {
+                val o = svc.revertToGradle()
+                UiConvertResult(o.ok, o.message, o.canRevert)
+            }.getOrElse { e ->
+                log.error("Revert to Gradle failed", e)
+                UiConvertResult(false, e.message ?: "Revert failed")
             }
         }
     }

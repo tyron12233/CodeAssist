@@ -381,6 +381,58 @@ class EditorSessionTest {
     }
 
     @Test
+    fun imeReplaceTextReplacesTheRangeInOurBuffer() {
+        // InputConnection.replaceText (API 34): the keyboard rewrites a PREVIOUS word in place. It must
+        // land in the session's buffer (BaseInputConnection's own version edits its internal dummy
+        // Editable, so the IME models a change that never happened and later offsets land off-target).
+        val s = session("helo world", 10)
+        s.imeReplaceText(0, 4, "hello", 1)
+        assertEquals("hello world", s.doc.text)
+        assertEquals(TextRange(5), s.selection, "caret uses commitText semantics relative to the replacement")
+    }
+
+    @Test
+    fun imeReplaceTextFinishesTheCompositionFirst() {
+        // The framework contract: replaceText finishes any active composition (keeping its text), then
+        // replaces the range. The composed word must survive, not be dropped or re-targeted.
+        val s = session("teh ", 4)
+        s.imeSetComposingText("word", 1)
+        assertEquals("teh word", s.doc.text)
+        s.imeReplaceText(0, 3, "the", 1)
+        assertEquals("the word", s.doc.text)
+        assertNull(s.composing, "composition is finished, not left dangling")
+        assertEquals(TextRange(3), s.selection)
+    }
+
+    @Test
+    fun imeReplaceTextIsOneUndoStepAndOneImePush() {
+        val s = session("abc def", 7)
+        var imePushes = 0
+        s.imeListener = object : EditorSession.ImeListener {
+            override fun onStateChanged() { imePushes++ }
+            override fun onRestartInput() {}
+        }
+        s.imeSetComposingText("xyz", 1)
+        imePushes = 0
+        s.imeReplaceText(0, 3, "ABC", 1)
+        assertEquals("ABC defxyz", s.doc.text)
+        assertEquals(1, imePushes, "the composition finish + replace coalesce into one IME push")
+        s.undo()
+        assertEquals("abc defxyz", s.doc.text, "one undo step reverts the whole replaceText")
+    }
+
+    @Test
+    fun imeReplaceTextClampsHostileOffsets() {
+        val s = session("ab", 2)
+        s.imeReplaceText(5, 99, "x", 1) // both past the end: degrade to an append, don't crash
+        assertEquals("abx", s.doc.text)
+        assertEquals(TextRange(3), s.selection)
+        s.imeReplaceText(2, 0, "Y", 1) // reversed order: normalize the range
+        assertEquals("Yx", s.doc.text)
+        assertEquals(TextRange(1), s.selection)
+    }
+
+    @Test
     fun batchedImeEditsPushImeOnce() {
         // The session has no host text mirror to coalesce anymore; what a batch coalesces is the IME push.
         val s = session("x", 1)

@@ -150,6 +150,12 @@ class RawClass(
      *  localTypeFqn]) that the resolver recomputes from the same PSI, so member enumeration / diagnostics flow
      *  through the normal FQN machinery. Kept OUT of type-name completion (no one references it by that name). */
     val isLocal: Boolean = false,
+    /** True when the declaration carries the `private` modifier. A `private` TOP-LEVEL class is FILE-private —
+     *  visible only within its own declaring file — so it must not be offered as a cross-file auto-import
+     *  candidate (the `androidx` `updateTransition` sample's `private enum class BoxState` was surfacing in
+     *  other files in the same package, labelled "same package", with no usable import). Compared against the
+     *  completion's current file ([ctx].path) to keep same-file references working. */
+    val isPrivate: Boolean = false,
     /** Simple names of the annotations on the class declaration (`@Serializable class Foo` → `["Serializable"]`),
      *  detected by annotation simple name the same way [RawCallable.isComposable] is — no type resolution. Lets a
      *  [KotlinSyntheticMemberProvider] recognize its marker annotation (kotlinx.serialization's `@Serializable`,
@@ -163,21 +169,31 @@ class RawClass(
     val optInLevel: String? = null,
 )
 
+/** A source `typealias Name<…> = Target`: its FQN, the target type reference text, the number of its own type
+ *  parameters, and the file context to resolve [targetText] in. Lets the resolver EXPAND a (non-generic) alias
+ *  to its real type for member/extension resolution (`Board = List<Tile>` → `plan.settled.any { }` resolves). */
+class TypeAliasDecl(val fqn: String, val targetText: String, val typeParamCount: Int, val ctx: FileContext) {
+    val simpleName: String get() = fqn.substringAfterLast('.')
+}
+
 class SourceFile(
     val ctx: FileContext,
     val topLevel: List<RawCallable>,
     val extensions: List<RawCallable>,
     val classes: List<RawClass>,
-    /** Simple names of `typealias` declarations in the file — type references to them must not be flagged
-     *  unresolved (the model resolves classes, not aliases). */
-    val typeAliases: List<String> = emptyList(),
+    /** `typealias` declarations in the file — type references to them must not be flagged unresolved (the model
+     *  resolves classes, not aliases), and a non-generic one expands to its target for member resolution. */
+    val typeAliases: List<TypeAliasDecl> = emptyList(),
 )
 
 class ModuleSourceModel(val files: List<SourceFile>) {
     val classByFqn: Map<String, RawClass> = files.flatMap { it.classes }.associateBy { it.fqn }
     val topLevel: List<RawCallable> = files.flatMap { it.topLevel }
     val extensions: List<RawCallable> = files.flatMap { it.extensions }
-    val typeAliasNames: Set<String> = files.flatMapTo(HashSet()) { it.typeAliases }
+    val typeAliasNames: Set<String> = files.flatMapTo(HashSet()) { f -> f.typeAliases.map { it.simpleName } }
+    /** Project typealiases keyed by SIMPLE name, for alias expansion. A cross-package simple-name collision keeps
+     *  the first — project aliases are effectively unique by simple name in practice. */
+    val typeAliasBySimpleName: Map<String, TypeAliasDecl> = files.flatMap { it.typeAliases }.associateBy { it.simpleName }
 
     companion object {
         val EMPTY = ModuleSourceModel(emptyList())
@@ -215,14 +231,21 @@ object SourceIndexBuilder {
         val topLevel = ArrayList<RawCallable>()
         val extensions = ArrayList<RawCallable>()
         val classes = ArrayList<RawClass>()
-        val typeAliases = ArrayList<String>()
+        val typeAliases = ArrayList<TypeAliasDecl>()
 
         for (decl in kt.declarations) {
             when (decl) {
                 is KtNamedFunction -> callable(decl, ctx, parsed).let { if (it.receiverText != null) extensions += it else topLevel += it }
                 is KtProperty -> property(decl, ctx, parsed).let { if (it.receiverText != null) extensions += it else topLevel += it }
                 is KtClassOrObject -> classes += collectClasses(decl, ctx, parsed)
-                is org.jetbrains.kotlin.psi.KtTypeAlias -> decl.name?.let { typeAliases += it }
+                is org.jetbrains.kotlin.psi.KtTypeAlias -> decl.name?.let { name ->
+                    typeAliases += TypeAliasDecl(
+                        fqn = if (pkg.isEmpty()) name else "$pkg.$name",
+                        targetText = decl.getTypeReference()?.text ?: "",
+                        typeParamCount = decl.typeParameters.size,
+                        ctx = ctx,
+                    )
+                }
                 else -> {}
             }
         }
@@ -383,6 +406,7 @@ object SourceIndexBuilder {
                     !it.hasModifier(KtTokens.SEALED_KEYWORD)
             } == true,
             isLocal = isLocal,
+            isPrivate = c.hasModifier(KtTokens.PRIVATE_KEYWORD),
             annotationNames = c.annotationEntries.mapNotNull { it.shortName?.asString() },
             annotationFqns = annoFqns(c, ctx),
             optInLevel = sourceOptInLevel(c))

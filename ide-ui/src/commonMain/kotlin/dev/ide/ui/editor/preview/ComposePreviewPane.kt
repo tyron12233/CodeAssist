@@ -154,8 +154,13 @@ fun ComposePreviewPane(
     val cfg = current?.config
 
     // A @Preview(device=...)/widthDp/heightDp sizes the card to that profile instead of the user's selection.
-    val deviceOverride = remember(cfg?.device, cfg?.widthDp, cfg?.heightDp) {
-        cfg?.let { PreviewDevices.resolve(it.device, it.widthDp, it.heightDp) }
+    // A sizeless @Preview(showSystemUi=true) frames the DEFAULT_PHONE (Android Studio parity), so the card + the
+    // mock system-UI chrome have a real phone viewport to fill instead of the user's picker device.
+    val deviceOverride = remember(cfg?.device, cfg?.widthDp, cfg?.heightDp, cfg?.showSystemUi) {
+        cfg?.let {
+            PreviewDevices.resolve(it.device, it.widthDp, it.heightDp)
+                ?: if (it.showSystemUi) PreviewDevices.DEFAULT_PHONE else null
+        }
     }
     // With no device/size and no system UI, a Compose @Preview wraps the composable's own size (not a phone).
     val wrap = current != null && deviceOverride == null && !(cfg?.showSystemUi ?: false)
@@ -411,7 +416,7 @@ private fun SystemUiChrome(dark: Boolean, modifier: Modifier, content: @Composab
     val fg = Color.White.copy(alpha = 0.85f)
     Column(modifier) {
         Row(
-            Modifier.fillMaxWidth().height(24.dp).background(bar).padding(horizontal = 10.dp),
+            Modifier.fillMaxWidth().height(PreviewDevices.STATUS_BAR_DP.dp).background(bar).padding(horizontal = 10.dp),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.SpaceBetween,
         ) {
@@ -422,7 +427,7 @@ private fun SystemUiChrome(dark: Boolean, modifier: Modifier, content: @Composab
         }
         Box(Modifier.weight(1f).fillMaxWidth()) { content() }
         Row(
-            Modifier.fillMaxWidth().height(38.dp).background(bar),
+            Modifier.fillMaxWidth().height(PreviewDevices.NAV_BAR_DP.dp).background(bar),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.SpaceEvenly,
         ) {

@@ -131,6 +131,23 @@ class ReflectiveDispatcherTest {
     }
 
     @Test
+    fun mangledNameMatchesBridgesTheFakeConstructorPascalToCamelRename() {
+        // Compose "factory that mimics a constructor" functions are conventionally PascalCase and several were
+        // renamed to camelCase (androidx renamed `SharedTransitionScope.ResizeMode.ScaleToBounds()` →
+        // `scaleToBounds()`). A parse-only preview lowers the SOURCE name verbatim, so a project on the old API
+        // looks up `ScaleToBounds` while the runtime only has `scaleToBounds`. Names differing ONLY in the first
+        // letter's case bridge (both directions), covering the `$default` synthetic once its suffix is stripped.
+        assertTrue(mangledNameMatches("scaleToBounds", "ScaleToBounds"), "camelCase runtime ← PascalCase lookup")
+        assertTrue(mangledNameMatches("ScaleToBounds", "scaleToBounds"), "PascalCase runtime ← camelCase lookup")
+        // The rest of the name must match EXACTLY — a first-letter case bridge can't paper over any other diff.
+        assertTrue(!mangledNameMatches("scaleToBound", "ScaleToBounds"), "differing length is not a case variant")
+        assertTrue(!mangledNameMatches("scaletobounds", "ScaleToBounds"), "an interior case difference is not bridged")
+        assertTrue(!mangledNameMatches("remeasureToBounds", "ScaleToBounds"), "a different name is not bridged")
+        // A leading non-letter (a synthetic prefix) can't be a case variant of a letter.
+        assertTrue(!mangledNameMatches("1caleToBounds", "ScaleToBounds"))
+    }
+
+    @Test
     fun kotlinJvmNamesResolvesFromMetadataNotNameShape() {
         // The proper resolution kotlin-reflect uses: read the ACTUAL emitted JVM name out of the class's
         // `@kotlin.Metadata` (the compiler stores the mangled name there) instead of guessing the shape.
@@ -201,7 +218,7 @@ class ReflectiveDispatcherTest {
         // The Compose bridge's seam: a lambda bound to a `@Composable` param routes through the injected
         // strategy with composableParam=true, even though the callee (`forEach`) isn't itself composable.
         var sawComposable: Boolean? = null
-        val strategy = LambdaProxyStrategy { lam, fi, composable ->
+        val strategy = LambdaProxyStrategy { lam, fi, composable, _ ->
             sawComposable = composable
             java.lang.reflect.Proxy.newProxyInstance(fi.classLoader, arrayOf(fi)) { _, m, a ->
                 if (m.name == "accept") lam.invoke(a?.toList() ?: emptyList()) else null

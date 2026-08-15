@@ -37,6 +37,7 @@ import dev.ide.ui.components.GlassSurface
 import dev.ide.ui.components.IconButtonCa
 import dev.ide.ui.generated.resources.Res
 import dev.ide.ui.generated.resources.dismiss
+import dev.ide.ui.generated.resources.gradle_convert
 import dev.ide.ui.generated.resources.gradle_mode_title
 import dev.ide.ui.generated.resources.gradle_resync
 import dev.ide.ui.generated.resources.gradle_syncing
@@ -61,6 +62,7 @@ internal fun GradleCompatBanner(
     visible: Boolean,
     compact: Boolean,
     onDismiss: () -> Unit,
+    onConvert: () -> Unit,
 ) {
     val scope = rememberCoroutineScope()
     var expanded by remember { mutableStateOf(false) }
@@ -112,6 +114,17 @@ internal fun GradleCompatBanner(
                         if (syncing) CircularProgressIndicator(Modifier.size(13.dp), color = Ide.colors.warning, strokeWidth = 2.dp)
                         else Icon(CaIcons.refresh, stringResource(Res.string.gradle_resync), Modifier.size(13.dp), tint = Ide.colors.warning)
                         if (!compact) Text(stringResource(Res.string.gradle_resync), color = Ide.colors.warning, style = MaterialTheme.typography.bodySmall, fontWeight = FontWeight.SemiBold)
+                    }
+                    // Convert: make module.toml the source of truth (moves the Gradle files to a backup folder).
+                    Row(
+                        Modifier.background(Ide.colors.warning.copy(alpha = 0.18f), RoundedCornerShape(Ca.radius.pill))
+                            .clickable(enabled = !syncing, onClick = onConvert)
+                            .padding(horizontal = 10.dp, vertical = 5.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(4.dp),
+                    ) {
+                        Icon(CaIcons.check, stringResource(Res.string.gradle_convert), Modifier.size(13.dp), tint = Ide.colors.warning)
+                        if (!compact) Text(stringResource(Res.string.gradle_convert), color = Ide.colors.warning, style = MaterialTheme.typography.bodySmall, fontWeight = FontWeight.SemiBold)
                     }
                     if (info.notes.isNotEmpty()) {
                         IconButtonCa(

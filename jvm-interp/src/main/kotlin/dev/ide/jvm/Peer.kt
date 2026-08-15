@@ -82,4 +82,12 @@ interface PeerFactory {
 
     /** The interpreted internal name a [reflectionClass] result stands for, or null if [cls] is not one. */
     fun interpretedNameOf(cls: Class<*>): String?
+
+    /** When set, an exception thrown by an interpreted override re-entered from platform code (a preview
+     *  layout/measure/draw pass or a posted callback outside a render's error boundary) is reported here and the
+     *  peer method returns a type-correct zero instead of propagating into the platform caller — so a preview
+     *  degrades instead of crashing the process. Null (the default) propagates, as a console run wants. Guards
+     *  BOTH the proxy peer path ([AsmPeerFactory.createProxyPeer]) and the generated-subclass path (at the [Vm]
+     *  dispatch boundary), so a concrete-class peer's override is covered too. */
+    val peerExceptionSink: ((Throwable) -> Unit)? get() = null
 }

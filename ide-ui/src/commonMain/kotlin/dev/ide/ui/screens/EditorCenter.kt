@@ -67,9 +67,24 @@ internal fun EditorCenter(
     val depsState by state.backend.deps.depsState.collectAsState()
     val depsScope = rememberCoroutineScope()
     // Gradle compatibility mode: non-null only for a project imported from Gradle. Drives the top-bar compat
-    // chip + the details banner below the toolbar; the chip re-opens a dismissed banner.
-    val compatInfo = remember(project.rootPath) { state.backend.projects.compatibilityInfo() }
+    // chip + the details banner below the toolbar; the chip re-opens a dismissed banner. `compatEpoch` re-keys
+    // the disk read so a convert/revert (which drops/re-adds the marker without changing rootPath) refreshes it
+    // — otherwise the cached non-null value would leave a ghost banner/chip after converting.
+    var compatEpoch by remember(project.rootPath) { mutableStateOf(0) }
+    val compatInfo = remember(project.rootPath, compatEpoch) { state.backend.projects.compatibilityInfo() }
     var showCompatBanner by remember(project.rootPath) { mutableStateOf(compatInfo != null) }
+    var showConvertDialog by remember(project.rootPath) { mutableStateOf(false) }
+    // One-shot: an import where "Convert to CodeAssist project" was chosen at the picker. Now that the editor
+    // is open (so the reader's notes are known), run the convert flow — the confirm dialog is the gate when
+    // `gradle.convert.warnUnresolved` is on (default); otherwise convert straight away.
+    LaunchedEffect(project.rootPath) {
+        if (!state.pendingGradleConvertPrompt) return@LaunchedEffect
+        state.pendingGradleConvertPrompt = false
+        if (compatInfo == null) return@LaunchedEffect
+        val warn = state.backend.settings.preference("gradle.convert.warnUnresolved")?.toBooleanStrictOrNull() != false
+        if (warn) showConvertDialog = true
+        else if (state.backend.projects.convertToNative().ok) { compatEpoch++; showCompatBanner = false }
+    }
     // @Preview presence (enables the Design view-mode toggle + top-bar shortcut) is set by the editor daemon's
     // PREVIEWS pass below — no separate detection effect.
     var hasPreview by remember(state.active?.path) { mutableStateOf(false) }
@@ -177,6 +192,18 @@ internal fun EditorCenter(
                     visible = showCompatBanner,
                     compact = compact,
                     onDismiss = { showCompatBanner = false },
+                    onConvert = { showConvertDialog = true },
+                )
+            }
+            // Hosted outside the compatInfo guard so it survives the marker being dropped on convert (which
+            // nulls compatInfo) and can still show its Undo/Done result step.
+            if (showConvertDialog) {
+                ConvertToNativeDialog(
+                    notes = compatInfo?.notes ?: emptyList(),
+                    backend = state.backend,
+                    onConverted = { compatEpoch++; showCompatBanner = false },
+                    onReverted = { compatEpoch++; showCompatBanner = true },
+                    onClose = { showConvertDialog = false },
                 )
             }
             TabsStrip(

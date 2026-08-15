@@ -68,6 +68,13 @@ We never collect your code, file or project names, which features you use, or an
     <string name="import_gradle_subtitle">Open an existing Gradle build (best effort)</string>
     <string name="import_gradle_busy">Importing Gradle project…</string>
     <string name="import_gradle_failed">That folder isn\'t an importable Gradle project.</string>
+    <!-- Import-time choice: keep Gradle (compatibility) vs convert to the native module system -->
+    <string name="import_gradle_mode_title">Import Gradle project</string>
+    <string name="import_gradle_mode_message">How should CodeAssist open this project?</string>
+    <string name="import_gradle_mode_compat">Compatibility mode</string>
+    <string name="import_gradle_mode_compat_desc">Keep the Gradle files and re-sync from them. You can convert later.</string>
+    <string name="import_gradle_mode_convert">Convert to CodeAssist</string>
+    <string name="import_gradle_mode_convert_desc">Switch to CodeAssist\'s module system. Gradle files are moved to a backup folder.</string>
     <plurals name="caproj_files">
         <item quantity="one">%1$d file</item>
         <item quantity="other">%1$d files</item>
@@ -249,6 +256,8 @@ We never collect your code, file or project names, which features you use, or an
     <!-- buildc (BuildConsole/BuildDock) — uses StringResource fields on LogLevelFilter + statusTag -->
     <string name="buildc_build">Build</string>
     <string name="buildc_collapse">Collapse</string>
+    <string name="buildc_fullscreen">Full screen</string>
+    <string name="buildc_exit_fullscreen">Exit full screen</string>
     <string name="buildc_status_idle">Idle</string>
     <string name="buildc_status_running">Running…</string>
     <string name="buildc_status_succeeded">Succeeded</string>
@@ -417,6 +426,16 @@ We never collect your code, file or project names, which features you use, or an
     <string name="gradle_mode_title">Gradle compatibility mode</string>
     <string name="gradle_resync">Re-sync</string>
     <string name="gradle_syncing">Syncing from Gradle…</string>
+    <string name="gradle_convert">Convert</string>
+    <string name="gradle_convert_title">Convert to a CodeAssist project?</string>
+    <string name="gradle_convert_body">The Gradle build files move to a backup folder and CodeAssist\'s own module system takes over. Re-syncing from Gradle won\'t be available afterward. You can undo this.</string>
+    <string name="gradle_convert_notes_intro">The importer read these best-effort — they won\'t be re-checked after converting:</string>
+    <string name="gradle_convert_action">Convert</string>
+    <string name="gradle_convert_working">Converting…</string>
+    <string name="gradle_converted">Converted to a CodeAssist project.</string>
+    <string name="gradle_convert_failed">Couldn\'t convert this project.</string>
+    <string name="gradle_convert_undo">Undo</string>
+    <string name="gradle_convert_done">Done</string>
     <string name="sources_not_installed">Android platform sources (%1$s) aren't installed. It is needed for android.* parameter names &amp; docs.</string>
     <string name="sources_download">Download</string>
     <string name="sources_downloading">Downloading…</string>

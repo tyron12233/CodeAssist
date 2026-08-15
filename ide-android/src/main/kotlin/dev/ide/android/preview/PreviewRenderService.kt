@@ -1,12 +1,16 @@
 package dev.ide.android.preview
 
 import android.app.Service
+import android.content.ComponentCallbacks2
 import android.content.Intent
 import android.graphics.Bitmap
 import android.os.Build
 import android.os.IBinder
 import android.os.Process
 import dev.ide.android.AndroidIde
+import dev.ide.android.support.AndroidSupport
+import dev.ide.android.support.tasks.InProcessDexGate
+import dev.ide.platform.log.Log
 import dev.ide.preview.impl.PreviewViewTreeCodec
 import dev.ide.preview.impl.RealViewRequest
 import dev.ide.preview.realview.AndroidRealViewRuntime
@@ -27,6 +31,8 @@ import java.nio.file.Paths
  * Binder and there is no PNG encode/decode.
  */
 class PreviewRenderService : Service() {
+
+    private val log = Log.logger("ide.preview.realview")
 
     // android.jar is provisioned per-process (idempotent, marker-guarded); the runtime's own dex/oat cache
     // lives under this process's cache dir.
@@ -104,4 +110,19 @@ class PreviewRenderService : Service() {
     }
 
     override fun onBind(intent: Intent?): IBinder = binder
+
+    /**
+     * Release the process-wide shared dex classpath cache (open archive handles + descriptor indexes for
+     * android.jar and every library that real-view dexing populated via `SharedLibraryDexer`) under memory
+     * pressure — but only when no in-process dex is running anywhere in this `:preview` process
+     * ([InProcessDexGate.isIdle], which also covers the co-hosted [ComposePreviewSessionService]), since closing
+     * a provider mid-read would break that dex. Rebuilds lazily on the next render.
+     */
+    override fun onTrimMemory(level: Int) {
+        super.onTrimMemory(level)
+        if (level >= ComponentCallbacks2.TRIM_MEMORY_RUNNING_LOW && InProcessDexGate.isIdle()) {
+            log.info(":preview(pid=${Process.myPid()}): onTrimMemory($level) idle → releasing dex caches")
+            runCatching { AndroidSupport.releaseDexCaches() }
+        }
+    }
 }

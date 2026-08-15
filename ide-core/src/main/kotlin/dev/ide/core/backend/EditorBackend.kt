@@ -61,13 +61,13 @@ import kotlinx.coroutines.withContext
 internal class EditorBackend(private val ctx: BackendContext) : EditorService {
 
     override suspend fun breadcrumbAt(path: String, text: String, offset: Int): List<String> = try {
-        ctx.background { ctx.services.breadcrumbAt(Paths.get(path), text, offset) }
+        ctx.background(op = "docBreadcrumb") { ctx.services.breadcrumbAt(Paths.get(path), text, offset) }
     } catch (_: EngineCanceledException) {
         emptyList()
     } // re-runs on the next caret move
 
     override suspend fun fileStructure(path: String, text: String): List<UiFileSymbol> = try {
-        ctx.background {
+        ctx.background(op = "fileStructure") {
             ctx.services.fileStructure(Paths.get(path), text).map {
                 UiFileSymbol(
                     it.name,
@@ -153,6 +153,11 @@ internal class EditorBackend(private val ctx: BackendContext) : EditorService {
         null
     }
 
+    override suspend fun expandSelection(path: String, text: String, selStart: Int, selEnd: Int): UiTextRange? =
+        withContext(ctx.engineDispatcher) {
+            ctx.services.expandSelection(Paths.get(path), text, selStart, selEnd)
+        }?.let { UiTextRange(it.start, it.end) }
+
     override suspend fun prepareRename(path: String, text: String, offset: Int): UiRenameTarget? =
         withContext(ctx.engineDispatcher) {
             ctx.services.prepareRename(
@@ -192,7 +197,7 @@ internal class EditorBackend(private val ctx: BackendContext) : EditorService {
     override suspend fun complete(path: String, text: String, offset: Int): UiCompletionResult {
         val t0 = System.nanoTime()
         val result = try {
-            ctx.interactive { ctx.services.complete(Paths.get(path), text, offset) }
+            ctx.interactive(op = "completion") { ctx.services.complete(Paths.get(path), text, offset) }
         } catch (_: EngineCanceledException) {
             throw AnalysisPreempted()
         }
@@ -237,7 +242,7 @@ internal class EditorBackend(private val ctx: BackendContext) : EditorService {
         val t0 = System.nanoTime()
         val diagnostics = try {
             timedPass("diagnostics", path, { it.size }) {
-                ctx.background { ctx.services.analyzeDiagnostics(Paths.get(path), text) }
+                ctx.background(op = "analysis") { ctx.services.analyzeDiagnostics(Paths.get(path), text) }
             }
         } catch (_: EngineCanceledException) {
             throw AnalysisPreempted() // preempted: don't record a (misleadingly short) latency sample
@@ -267,7 +272,7 @@ internal class EditorBackend(private val ctx: BackendContext) : EditorService {
     ): List<UiInlayHint> {
         val hints = try {
             timedPass("inlay", path, { it.size }) {
-                ctx.background {
+                ctx.background(op = "inlay") {
                     ctx.services.inlayHints(
                         Paths.get(path), text, startOffset, endOffset
                     )
@@ -300,7 +305,7 @@ internal class EditorBackend(private val ctx: BackendContext) : EditorService {
         // Background lane: completion (interactive) preempts it. A preemption just means "no panel this round";
         // the editor re-queries on the next caret move / edit, so swallowing it to null is correct (no retry needed).
         val help = try {
-            ctx.background { ctx.services.signatureHelp(Paths.get(path), text, offset) }
+            ctx.background(op = "signature") { ctx.services.signatureHelp(Paths.get(path), text, offset) }
         } catch (_: EngineCanceledException) {
             return null
         } ?: return null
@@ -325,7 +330,7 @@ internal class EditorBackend(private val ctx: BackendContext) : EditorService {
     override suspend fun semanticTokens(path: String, text: String): List<UiSemanticToken> {
         val tokens = try {
             timedPass("semantic", path, { it.size }) {
-                ctx.background { ctx.services.semanticTokens(Paths.get(path), text) }
+                ctx.background(op = "semantic") { ctx.services.semanticTokens(Paths.get(path), text) }
             }
         } catch (_: EngineCanceledException) {
             // Preempted by completion on the shared engine thread — surface it so the host retries and keeps
@@ -345,7 +350,7 @@ internal class EditorBackend(private val ctx: BackendContext) : EditorService {
     override suspend fun codeFolds(path: String, text: String): List<UiFoldRegion> {
         val folds = try {
             timedPass("folds", path, { it.size }) {
-                ctx.background { ctx.services.codeFolds(Paths.get(path), text) }
+                ctx.background(op = "folding") { ctx.services.codeFolds(Paths.get(path), text) }
             }
         } catch (_: EngineCanceledException) {
             throw AnalysisPreempted() // preempted by completion — host retries, keeps current folds meanwhile

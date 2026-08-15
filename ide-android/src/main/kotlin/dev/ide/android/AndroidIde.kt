@@ -71,7 +71,7 @@ object AndroidIde {
         // this session's engine to write into. This is our only signal for that crash. See EngineBreadcrumb.
         val crumbFile = File(home, "last-engine-op.log")
         dev.ide.platform.EngineBreadcrumb.init(crumbFile.toPath())
-        reportPreviousNativeCrash(context, analytics, dev.ide.platform.EngineBreadcrumb.readLast())
+        reportPreviousNativeCrash(context, manager, analytics, dev.ide.platform.EngineBreadcrumb.readLast())
 
         // Start with no project open (the picker is shown); opening one from it creates that project's engine
         // on demand. The download cache is shared across projects via the ProjectManager (sharedCachesRoot).
@@ -282,44 +282,122 @@ object AndroidIde {
      * install id is a random UUID persisted once in prefs (not tied to any account); the session id is fresh
      * per launch. The service starts gated on the stored consent and collects nothing until it's granted.
      */
+    /** The newest process-exit record already reported, so the OS's multi-launch exit history is not re-sent. */
+    private const val PREF_NATIVE_CRASH_REPORTED = "crash.native.reported.at"
+
+    /** How far back a process-exit record may be and still be reported. The event carries the version running
+     *  now, so an older record would be attributed to the wrong release. */
+    private const val NATIVE_CRASH_MAX_AGE_MS = 24 * 60 * 60 * 1000L
+
     /**
-     * If the PREVIOUS process died of a native crash (the 32-bit-ART SIGSEGV; see [dev.ide.platform.RuntimeInfo]),
-     * surface the engine breadcrumb it left ([prev]) — to the Logs viewer, and for opt-in users as a CRASH
-     * analytics event carrying ONLY the coarse engine lane (never a file/path/source). Needs the OS exit reason
-     * (`ActivityManager.getHistoricalProcessExitReasons`, API 30+; the crashing Android-12 devices have it);
-     * below API 30 it can't confirm a crash, so it stays silent. Best-effort — never throws into bootstrap.
+     * If a PREVIOUS process died of a native crash (the ART SIGSEGV; see [dev.ide.platform.RuntimeInfo]; seen on
+     * 32-bit AND 64-bit devices), report it: to the Logs viewer, and for opt-in users as a CRASH analytics event.
+     * Needs the OS exit reason (`ActivityManager.getHistoricalProcessExitReasons`, API 30+; the crashing
+     * Android-12 devices have it); below API 30 it can't confirm a crash, so it stays silent. Never throws into
+     * bootstrap.
+     *
+     * Two sources are combined, because neither alone localises the fault:
+     *  - the engine breadcrumb [prev], which names the editor op the engine most recently STARTED. It records
+     *    only op starts, so an op that finished long before the crash still reads as the last one; `since_op_ms`
+     *    ships the gap between that op and the death so a stale crumb is recognisable rather than believed.
+     *  - the OS tombstone ([dev.ide.platform.NativeTombstone]), which names the thread that actually faulted,
+     *    the signal and its code, the fault address and the native backtrace. This is what distinguishes a fault
+     *    inside the editor engine from one on a render/GC/JIT thread that the breadcrumb cannot see.
+     *
+     * Every property is a signal, a symbol, an address or a thread name; paths are reduced to basenames by the
+     * parser, so no file name or source content is reported.
+     *
+     * Each exit record is reported once ([PREF_NATIVE_CRASH_REPORTED]), since the OS keeps it for many launches,
+     * and records older than [NATIVE_CRASH_MAX_AGE_MS] are dropped so an update does not import old history
+     * under the new version's name.
      */
     private fun reportPreviousNativeCrash(
         context: Context,
+        manager: ProjectManager,
         analytics: dev.ide.analytics.AnalyticsService,
         prev: dev.ide.platform.EngineBreadcrumb.Crumb?,
     ) {
-        if (prev == null || Build.VERSION.SDK_INT < 30) return
+        if (Build.VERSION.SDK_INT < 30) return
         runCatching {
             val am = context.getSystemService(Context.ACTIVITY_SERVICE) as? android.app.ActivityManager ?: return
-            val exit = am.getHistoricalProcessExitReasons(context.packageName, 0, 1).firstOrNull() ?: return
-            val native = exit.reason == android.app.ApplicationExitInfo.REASON_CRASH_NATIVE ||
-                exit.reason == android.app.ApplicationExitInfo.REASON_SIGNALED
-            if (!native) return
-            // Guard against an ancient stale crumb being blamed on an unrelated recent native death.
-            if (kotlin.math.abs(exit.timestamp - prev.epochMillis) > 10 * 60_000L) return
-            Log.logger("ide.crash").warn(
-                "Recovered from a native crash in the previous session. Engine lane in flight: '${prev.op}' " +
-                    "on thread '${prev.thread}'. OS exit: ${exit.description} (reason=${exit.reason})."
-            )
-            analytics.track(
-                AnalyticsEvent(
-                    Events.APP_CRASH,
-                    EventCategory.CRASH,
-                    mapOf(
-                        "kind" to "native",
-                        "engine_lane" to prev.op, // coarse lane only — no file/path/source (analytics-safe)
-                        "thread" to prev.thread,
-                        "exit_reason" to exit.reason.toString(),
-                    ),
-                )
-            )
+            // Read a window of records rather than just the newest: the `:build` and `:preview` processes exit
+            // routinely, and with a window of one their exits hide a native death of the IDE process.
+            val reported = manager.preference(PREF_NATIVE_CRASH_REPORTED)?.toLongOrNull() ?: 0L
+            val now = System.currentTimeMillis()
+            val fresh = am.getHistoricalProcessExitReasons(context.packageName, 0, 20)
+                .filter {
+                    it.reason == android.app.ApplicationExitInfo.REASON_CRASH_NATIVE ||
+                        it.reason == android.app.ApplicationExitInfo.REASON_SIGNALED
+                }
+                .filter { it.timestamp > reported && now - it.timestamp < NATIVE_CRASH_MAX_AGE_MS }
+                .sortedBy { it.timestamp }
+                .takeLast(5)
+            if (fresh.isEmpty()) return
+            manager.setPreference(PREF_NATIVE_CRASH_REPORTED, fresh.last().timestamp.toString())
+            fresh.forEach { reportNativeExit(it, analytics, prev) }
         }
+    }
+
+    /** Log and track one native exit record, with the breadcrumb attached when it is recent enough to describe
+     *  this death rather than an earlier one. */
+    private fun reportNativeExit(
+        exit: android.app.ApplicationExitInfo,
+        analytics: dev.ide.analytics.AnalyticsService,
+        prev: dev.ide.platform.EngineBreadcrumb.Crumb?,
+    ) {
+        val sinceOp = prev?.let { exit.timestamp - it.epochMillis }
+        // A crumb from long before the death describes an unrelated session, not this crash.
+        val crumb = if (sinceOp != null && sinceOp > -60_000L && sinceOp < 10 * 60_000L) prev else null
+        val tomb = runCatching {
+            exit.traceInputStream?.use { dev.ide.platform.NativeTombstone.parse(it) }
+        }.getOrNull()
+
+        Log.logger("ide.crash").warn(
+            "Recovered from a native crash in a previous session of '${exit.processName}'. " +
+                "OS exit: ${exit.description} (reason=${exit.reason}, status=${exit.status}). " +
+                (tomb?.let {
+                    "Fault: ${it.signal}/${it.signalCode} at 0x${java.lang.Long.toHexString(it.faultAddress ?: 0)} " +
+                        "on thread '${it.faultingThread}' (${it.arch}). ${it.cause ?: ""} ${it.topFrames(4)}. "
+                } ?: "No tombstone available. ") +
+                (crumb?.let {
+                    "Engine op last started: '${it.op}' ${sinceOp}ms before the death " +
+                        "(index building: ${it.indexBuilding})."
+                } ?: "No recent engine breadcrumb.")
+        )
+        analytics.track(
+            AnalyticsEvent(
+                Events.APP_CRASH,
+                EventCategory.CRASH,
+                buildMap {
+                    put("kind", "native")
+                    put("exit_reason", exit.reason.toString())
+                    put("exit_status", exit.status.toString())
+                    // The process that died: the IDE, or one of the `:build` / `:preview` children.
+                    put("process", exit.processName.substringAfter(':', missingDelimiterValue = "main"))
+                    put("importance", exit.importance.toString())
+                    put("pss_kb", exit.pss.toString())
+                    put("rss_kb", exit.rss.toString())
+                    crumb?.let {
+                        put("engine_lane", it.op)
+                        put("thread", it.thread)
+                        put("index_building", it.indexBuilding.toString())
+                        put("since_op_ms", sinceOp.toString())
+                    }
+                    tomb?.let {
+                        it.arch?.let { v -> put("arch", v) }
+                        it.signal?.let { v -> put("signal", v) }
+                        it.signalCode?.let { v -> put("signal_code", v) }
+                        it.faultAddress?.let { v -> put("fault_addr", "0x" + java.lang.Long.toHexString(v)) }
+                        // The thread that actually faulted, as opposed to the one that wrote the breadcrumb.
+                        it.faultingThread?.let { v -> put("fault_thread", v) }
+                        it.cause?.let { v -> put("cause", v) }
+                        it.abortMessage?.let { v -> put("abort_msg", v) }
+                        it.uptimeSeconds?.let { v -> put("uptime_s", v.toString()) }
+                        it.topFrames(5).take(500).ifEmpty { null }?.let { v -> put("native_frames", v) }
+                    }
+                },
+            )
+        )
     }
 
     private fun buildAnalytics(

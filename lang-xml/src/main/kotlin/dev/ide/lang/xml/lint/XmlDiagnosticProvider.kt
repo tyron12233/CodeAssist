@@ -21,7 +21,8 @@ import dev.ide.lang.xml.lint.XmlLintRules.AttributeProblem
  *    filesystem I/O behind [XmlResourceHost].
  *
  * Quick-fixes are built by [XmlQuickFixes]; this class only locates problems and maps them to [Diagnostic]s.
- * Declares `languages = {xml}`.
+ * Declares `languages = {xml}`. XML under `res/raw/` is a verbatim asset rather than an Android resource, so
+ * it gets the well-formedness checks only - never the schema / resource-reference ones.
  */
 class XmlDiagnosticProvider(
     private val host: XmlResourceHost,
@@ -36,6 +37,9 @@ class XmlDiagnosticProvider(
         val text = parsed.text().toString()
         val path = file.path.replace('\\', '/')
         val isLayout = path.contains("/res/layout")
+        // `res/raw/` holds verbatim assets (aapt2 copies them, it never compiles them as resources), so an XML
+        // file there is arbitrary data rather than Android markup: only the generic XML checks apply to it.
+        val isRawAsset = path.contains("/res/raw")
         val out = ArrayList<Diagnostic>()
 
         // Well-formedness (the tolerant parser's own diagnostics).
@@ -75,6 +79,8 @@ class XmlDiagnosticProvider(
                 )
             }
         }
+
+        if (isRawAsset) return out   // a raw asset gets well-formedness only; the Android checks below don't apply
 
         // D) Wrong attributes + wrong attribute values (the Android schema is consulted via the checker, which
         //    is conservative - it only judges what it positively knows, so custom/cold cases aren't flagged).

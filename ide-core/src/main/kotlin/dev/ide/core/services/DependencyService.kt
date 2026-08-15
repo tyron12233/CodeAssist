@@ -5,6 +5,7 @@ import dev.ide.android.support.gms.GoogleServices
 import dev.ide.android.support.tools.AarExtractor
 import dev.ide.core.DependencyPartition
 import dev.ide.core.EngineContext
+import kotlin.coroutines.cancellation.CancellationException
 import kotlin.io.path.readText
 import kotlin.io.path.writeText
 import kotlinx.coroutines.cancel
@@ -785,7 +786,7 @@ internal class DependencyService(private val ctx: EngineContext) : Disposable {
         val result = if (externalCoords.isEmpty()) null else {
             _depsState.value =
                 DepsResolveState(resolving = true, message = "Resolving ${module.name}…")
-            runCatching {
+            try {
                 resolverFor(module).resolve(
                     externalCoords,
                     currentRepositories(),
@@ -794,13 +795,27 @@ internal class DependencyService(private val ctx: EngineContext) : Disposable {
                     platforms = declaredPlatforms(module),
                     exclusions = exclusionsByCoord,
                 )
-            }.onFailure {
-                // The Dependencies-screen resolve is cancelled when the screen leaves composition; this also
-                // catches an unexpected error. Logged so a "screen shows unresolved but no resolver failure"
-                // case is explained (cancellation) rather than looking like a silent hang.
-                depsLog.warn("moduleDependencies(${module.name}) resolve aborted: ${it.javaClass.simpleName}: ${it.message}")
-            }.getOrNull().also { _depsState.update { s -> s.copy(resolving = false) } }
+            } catch (cancel: CancellationException) {
+                // The screen's resolve is cancelled whenever the pane leaves composition or reloads (adding a
+                // dependency, enabling a Hilt/Room processor, tapping refresh). Rethrow instead of swallowing:
+                // the caller's `LaunchedEffect` then simply dies, leaving the last good model on screen. Turning
+                // cancellation into a RESULT here published a graph-less model, which the loop below read as
+                // "every declared dependency is unresolved": a red "N unresolved" banner listing the whole
+                // module, with nothing actually wrong.
+                throw cancel
+            } catch (e: Exception) {
+                depsLog.warn("moduleDependencies(${module.name}) resolve failed: ${e.javaClass.simpleName}: ${e.message}")
+                null
+            } finally {
+                _depsState.update { s -> s.copy(resolving = false) }
+            }
         }
+        // Whether a resolve actually produced a graph. When it didn't (it failed above, or there was nothing to
+        // resolve), the absence of a node proves nothing about a declared coordinate, so the display falls back
+        // to the authoritative verdict (the one the resolver recorded, which the editor's banner shows) instead
+        // of inventing one per declared dependency.
+        val resolveRan = result != null
+        val recordedUnresolved = declaredUnresolved(module).toSet()
 
         val conflictGAs = result?.conflicts?.map { it.coordinate }?.toSet().orEmpty()
         val edges = LinkedHashMap<String, List<String>>()
@@ -839,7 +854,9 @@ internal class DependencyService(private val ctx: EngineContext) : Disposable {
                     val resolvedNode = nodes.values.firstOrNull { "${it.group}:${it.name}" == ga }
                     if (resolvedNode != null) declaredRoots += resolvedNode.copy(exclusions = excl, scope = scopeLabel(entry.scope), variant = entry.variant)
                     else {
-                        unresolved += entry.library.name
+                        // No node for a declared coordinate means "unresolved" only if a resolve actually ran;
+                        // with no graph to compare against, defer to the recorded verdict (see `resolveRan`).
+                        if (resolveRan || entry.library.name in recordedUnresolved) unresolved += entry.library.name
                         val lib = findLibrary(entry.library.name)
                         val kind =
                             if (lib?.kind == LibraryKind.AAR) UiDepKind.Aar else UiDepKind.Jar

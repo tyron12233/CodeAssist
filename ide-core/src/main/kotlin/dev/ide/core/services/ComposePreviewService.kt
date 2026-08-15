@@ -47,22 +47,25 @@ internal class ComposePreviewService(private val ctx: EngineContext) {
             }
         }
 
-        fun lowerByOwner(pf: dev.ide.lang.kotlin.symbols.KotlinSymbolService.PreviewSourceFile): dev.ide.lang.kotlin.interp.PreviewFileModel? {
+        // Lazy handles: the expansion pulls exactly the reached declaration out of the located file, so
+        // following one helper into a big screen file doesn't lower its unrelated siblings (the cold-preview
+        // dominant cost on a big project).
+        fun lazyByOwner(pf: dev.ide.lang.kotlin.symbols.KotlinSymbolService.PreviewSourceFile): dev.ide.lang.kotlin.interp.PreviewLazyFile? {
             val path = runCatching { java.nio.file.Paths.get(pf.file.path).normalize() }.getOrNull()
             val owner = path?.let { p ->
                 kotlinModules.firstOrNull { (_, _, roots) -> roots.any { p.startsWith(it) } }?.second
             }
-            return (owner ?: entry).loweredFile(pf)
+            return (owner ?: entry).lazyLoweredFile(pf)
         }
 
-        val provider = object : dev.ide.lang.kotlin.interp.PreviewDeclProvider {
-            override fun fileDeclaringType(fqn: String): dev.ide.lang.kotlin.interp.PreviewFileModel? =
+        val provider = object : dev.ide.lang.kotlin.interp.LazyPreviewDeclProvider {
+            override fun fileDeclaringType(fqn: String): dev.ide.lang.kotlin.interp.PreviewLazyFile? =
                 kotlinModules.firstNotNullOfOrNull { (_, a, _) -> a.findDeclaringTypeFile(fqn) }
-                    ?.let(::lowerByOwner)
+                    ?.let(::lazyByOwner)
 
-            override fun filesDeclaringFunction(name: String): List<dev.ide.lang.kotlin.interp.PreviewFileModel> =
+            override fun filesDeclaringFunction(name: String): List<dev.ide.lang.kotlin.interp.PreviewLazyFile> =
                 kotlinModules.flatMap { (_, a, _) -> a.findDeclaringFunctionFiles(name) }
-                    .distinctBy { it.file.path }.mapNotNull(::lowerByOwner)
+                    .distinctBy { it.file.path }.mapNotNull(::lazyByOwner)
         }
         return entry.lowerFileWithDeps(vf, provider)
     }
@@ -116,11 +119,13 @@ internal class ComposePreviewService(private val ctx: EngineContext) {
         if (blocked(BuiltInSettingsPages.SANDBOX_PROCESS)) add("processControl")
     }
 
-    /** Whether the `@Preview` should render in the `:preview` OS process (the isolation toggle, default OFF).
-     *  The Android host reads this to choose the remote streaming path over the in-process renderer. */
+    /** Whether the `@Preview` should render in the `:preview` OS process (the isolation toggle, default ON).
+     *  The Android host reads this to choose the remote streaming path over the in-process renderer, so a crash or
+     *  runaway recomposition pegs only `:preview`, not the IDE. Parameterized / locale previews still fall back
+     *  in-process (the remote path doesn't cover them yet), as does any remote failure. */
     fun previewIsolated(): Boolean =
         ctx.projectPref("settings.${BuiltInSettingsPages.PREVIEW}.${BuiltInSettingsPages.PREVIEW_ISOLATE}")
-            ?.toBooleanStrictOrNull() ?: false
+            ?.toBooleanStrictOrNull() ?: true
 
     fun composePreviewReady(file: Path): Boolean {
         val module = ctx.moduleForEditableFile(file) ?: return true

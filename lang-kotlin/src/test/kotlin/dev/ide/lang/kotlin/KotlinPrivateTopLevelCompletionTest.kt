@@ -29,9 +29,34 @@ class KotlinPrivateTopLevelCompletionTest {
         assertTrue("helperLocal" in labels, "a private top-level in the SAME file must still be offered; got ${labels.take(30)}")
     }
 
+    // A private top-level TYPE is FILE-scoped too — the same rule as functions, but it flows through the
+    // type-NAME candidate path (`typeNameCandidates`), which used to leak it cross-file, labelled "same package"
+    // with no usable import (the reported `private enum class BoxState` from a copied `updateTransition` sample).
+
+    @Test
+    fun privateTopLevelTypeFromAnotherFileIsNotOffered() {
+        assertTrue(
+            "BoxState" !in labels("Use.kt", "package demo\nfun use() { val x: BoxSt| }"),
+            "a PRIVATE top-level type from another file must NOT be offered as a type-name candidate",
+        )
+        assertTrue(
+            "PublicState" in labels("Use.kt", "package demo\nfun use() { val x: PublicSt| }"),
+            "but a PUBLIC top-level type from another file must still be offered",
+        )
+    }
+
+    @Test
+    fun privateTopLevelTypeInTheSameFileIsStillOffered() {
+        val labels = labels("Use.kt", "package demo\nprivate enum class LocalState { A, B }\nfun use() { val x: LocalSt| }")
+        assertTrue("LocalState" in labels, "a private top-level type in the SAME file must still be offered; got ${labels.take(30)}")
+    }
+
     companion object {
         val srcDir: Path = tempProject(
-            mapOf("Helper.kt" to "package demo\nprivate fun helperSecret() {}\nfun helperPublic() {}\n"),
+            mapOf(
+                "Helper.kt" to "package demo\nprivate fun helperSecret() {}\nfun helperPublic() {}\n" +
+                    "private enum class BoxState { Collapsed, Expanded }\nclass PublicState\n",
+            ),
         )
         val analyzer = KotlinSourceAnalyzer(fakeContext(srcDir))
     }

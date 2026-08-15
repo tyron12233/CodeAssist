@@ -36,12 +36,14 @@ import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.input.key.onPreviewKeyEvent
-import androidx.compose.ui.input.pointer.pointerInteropFilter
+import androidx.compose.ui.input.pointer.changedToDownIgnoreConsumed
+import androidx.compose.ui.input.pointer.changedToUpIgnoreConsumed
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
-import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
 import dev.ide.interp.PreviewResourceResolver
 import dev.ide.interp.PreviewSandboxPolicy
@@ -58,6 +60,7 @@ import dev.ide.interp.compose.PreviewParameterBinding
 import dev.ide.interp.compose.VmLibraryExecutor
 import dev.ide.ui.ComposePreviewHost
 import dev.ide.ui.backend.UiComposePreview
+import dev.ide.ui.editor.preview.PreviewDevices
 import dev.ide.ui.editor.preview.PreviewIssue
 import dev.ide.ui.editor.preview.PreviewIssueLevel
 import dev.ide.ui.editor.preview.PreviewRenderError
@@ -72,9 +75,8 @@ import kotlinx.coroutines.withContext
 private const val PREVIEW_READY_POLL_MS = 600L
 private const val PREVIEW_READY_MAX_ATTEMPTS = 300
 
-/** Off-screen render canvas for an isolated preview when `@Preview` declares no size (px = dp × density, clamped). */
-private const val DEFAULT_PREVIEW_WIDTH_DP = 411
-private const val DEFAULT_PREVIEW_HEIGHT_DP = 731
+/** Upper bound on the off-screen render canvas (px = dp × density, clamped); the surface's dp size comes from
+ *  [PreviewDevices.renderSurfaceDp] so it matches the card's device/aspect. */
 private const val MAX_PREVIEW_PX = 2400
 /** Fall back to the in-process renderer if the `:preview` session streams no frame within this long of opening. */
 private const val REMOTE_FIRST_FRAME_TIMEOUT_MS = 6_000L
@@ -236,12 +238,33 @@ class AndroidComposePreviewHost(private val backend: IdeServicesBackend) : Compo
                         // Remote render: wait only for the remote res roots (`:preview` rebuilds its own resources)
                         // — NOT the in-process resource parse, which the isolated path doesn't use.
                         if (!remoteResReady) CircularProgressIndicator(Modifier.size(28.dp)) else {
-                            val widthPx = ((preview.config.widthDp ?: DEFAULT_PREVIEW_WIDTH_DP) * density).toInt().coerceIn(1, MAX_PREVIEW_PX)
-                            val heightPx = ((preview.config.heightDp ?: DEFAULT_PREVIEW_HEIGHT_DP) * density).toInt().coerceIn(1, MAX_PREVIEW_PX)
+                            // A wrap-to-content preview (no device / widthDp / heightDp / showSystemUi) is rendered
+                            // at the device viewport as a MAX bound; the `:preview` measures the composable's
+                            // intrinsic size within it and reports it back so the frame is cropped + the card sized
+                            // to the content. A fixed-size preview fills the surface (no crop): render at the ACTUAL
+                            // device size (via PreviewDevices) so the streamed frame matches the card's aspect — a
+                            // fixed default (411×731) letterboxed a taller phone, leaving white bands. For
+                            // showSystemUi the render targets the BODY between the mock status + nav bars so the
+                            // content fills the chrome's slot (Studio parity: a sizeless one frames DEFAULT_PHONE).
+                            val cfg = preview.config
+                            val surfaceDp = PreviewDevices.renderSurfaceDp(cfg.device, cfg.widthDp, cfg.heightDp, cfg.showSystemUi)
+                            val wrapContent = surfaceDp == null
+                            val wDp = surfaceDp?.first ?: PreviewDevices.DEFAULT_VIEWPORT_WIDTH_DP
+                            val hDp = surfaceDp?.second ?: PreviewDevices.DEFAULT_VIEWPORT_HEIGHT_DP
+                            // Clamp UNIFORMLY (both axes by the same factor) so the surface keeps the card's aspect
+                            // even when a high-density / tall device would exceed MAX_PREVIEW_PX — a per-axis clamp
+                            // skewed the aspect, which re-introduced letterboxing AND offset the forwarded touch
+                            // coordinates (the FillWidth frame no longer lined up with the display rect).
+                            val rawW = wDp * density
+                            val rawH = hDp * density
+                            val clamp = minOf(1f, MAX_PREVIEW_PX / rawW, MAX_PREVIEW_PX / rawH)
+                            val widthPx = (rawW * clamp).toInt().coerceAtLeast(1)
+                            val heightPx = (rawH * clamp).toInt().coerceAtLeast(1)
                             RemoteComposePreview(
                                 client = remoteClient, lowered = s.lowered, jars = remoteJars,
                                 resRoots = remoteRes?.first ?: emptyArray(), namespace = remoteRes?.second ?: "",
                                 widthPx = widthPx, heightPx = heightPx, density = density, night = night,
+                                wrapContent = wrapContent,
                                 onUnavailable = { useRemote = false }, modifier = Modifier.fillMaxWidth(),
                             )
                         }
@@ -476,6 +499,7 @@ private fun RemoteComposePreview(
     heightPx: Int,
     density: Float,
     night: Boolean,
+    wrapContent: Boolean,
     onUnavailable: () -> Unit,
     modifier: Modifier,
 ) {
@@ -487,6 +511,9 @@ private fun RemoteComposePreview(
     val cpKey = jars.joinToString("\n")
     val resKey = resRoots.joinToString("\n")
     var frame by remember(client, cpKey, resKey, namespace) { mutableStateOf<Bitmap?>(null) }
+    // The measured content size (surface px) of a wrap-to-content preview — the `:preview` reports it so we crop
+    // the fixed-surface frame to just the content and let the card size to it. Null for a fixed-size preview.
+    var contentSize by remember(client, cpKey, resKey, namespace) { mutableStateOf<IntSize?>(null) }
     // Hold the Session in a plain box, NOT a mutableStateOf<Session> — a Compose-tracked field of our own type
     // makes the compiler emit a `Session.$stable` read, which crashes (NoSuchFieldError) if that class wasn't
     // instrumented. An Int epoch (bumped when the session opens/closes) drives the effects instead.
@@ -502,9 +529,10 @@ private fun RemoteComposePreview(
         val sink = object : ComposePreviewRemoteClient.FrameSink {
             override fun onFrame(bitmap: Bitmap, seq: Long) { main.post { frame = bitmap } }
             override fun onError(message: String) { main.post { fallback() } }
+            override fun onContentSize(widthPx: Int, heightPx: Int) { main.post { contentSize = IntSize(widthPx, heightPx) } }
         }
         Thread {
-            val s = client.openSession(openLowered, widthPx, heightPx, density, night, sink, jars, resRoots, namespace)
+            val s = client.openSession(openLowered, widthPx, heightPx, density, night, sink, jars, resRoots, namespace, wrapContent = wrapContent)
             main.post {
                 if (disposed) { s?.close() }
                 else { sessionBox[0] = s; sessionEpoch++; if (s == null) fallback() }
@@ -529,14 +557,29 @@ private fun RemoteComposePreview(
         if (sessionBox[0] != null) { delay(REMOTE_FIRST_FRAME_TIMEOUT_MS); if (frame == null) fallback() }
     }
 
-    val bmp = frame
+    // A wrap-to-content preview renders into the fixed device-sized surface with the composable measured at its
+    // intrinsic size, top-left. Crop the streamed frame to the reported content size so the card shows just the
+    // content (at its own aspect) instead of the full device surface with empty space below/right.
+    val full = frame
+    val cs = contentSize
+    val bmp = remember(full, cs, wrapContent) {
+        if (full == null) null
+        else if (wrapContent && cs != null && (cs.width < full.width || cs.height < full.height) && cs.width > 0 && cs.height > 0) {
+            runCatching {
+                Bitmap.createBitmap(full, 0, 0, cs.width.coerceAtMost(full.width), cs.height.coerceAtMost(full.height))
+            }.getOrDefault(full)
+        } else full
+    }
     Box(modifier, contentAlignment = Alignment.Center) {
         if (bmp != null) {
-            // The frame is drawn scaled to the pane width (ContentScale.FillWidth = uniform scale). Forward each
-            // pointer event to the remote session, mapping the tap from displayed pixels back to the off-screen
-            // canvas' pixels (canvasPx = displayPx * bitmapWidth / displayedWidth). Single-pointer (tap/scroll/
-            // drag); multi-touch is a follow-up.
-            var displayWidth by remember { mutableStateOf(0) }
+            // The frame is drawn scaled to the pane width (ContentScale.FillWidth). Forward each pointer event to
+            // the remote session, mapped to the off-screen canvas px. We use a NATIVE pointerInput (not
+            // pointerInteropFilter): PointerInputScope guarantees `change.position` lies within (0,0)..`size`, so
+            // the fraction position/size is exact regardless of the preview surface's graphicsLayer fit/zoom
+            // SCALE and the previewed density — pointerInteropFilter reported coordinates in a scale-mismatched
+            // space, so taps landed increasingly above the touch toward the bottom of the preview.
+            val bw = bmp.width
+            val bh = bmp.height
             val focusRequester = remember { FocusRequester() }
             Image(
                 bitmap = bmp.asImageBitmap(),
@@ -544,7 +587,6 @@ private fun RemoteComposePreview(
                 contentScale = ContentScale.FillWidth,
                 modifier = Modifier
                     .fillMaxWidth()
-                    .onSizeChanged { displayWidth = it.width }
                     .focusRequester(focusRequester)
                     .focusable()
                     // Forward key events (hardware keyboard, nav/shortcut keys, onKeyEvent handlers) to the focused
@@ -558,15 +600,27 @@ private fun RemoteComposePreview(
                             true
                         } else false
                     }
-                    .pointerInteropFilter { ev ->
-                        val s = sessionBox[0]
-                        if (s != null && displayWidth > 0) {
-                            // Tap focuses the preview so keyboard/nav keys route to it (tap elsewhere to leave).
-                            if (ev.actionMasked == AndroidMotionEvent.ACTION_DOWN) runCatching { focusRequester.requestFocus() }
-                            val scale = bmp.width.toFloat() / displayWidth
-                            s.dispatchInput(ev.actionMasked, ev.x * scale, ev.y * scale, ev.getPointerId(0), ev.eventTime)
+                    // Re-launched on a surface resize (the canvas px change); the session is read live from the box.
+                    .pointerInput(bw, bh) {
+                        awaitPointerEventScope {
+                            while (true) {
+                                val change = awaitPointerEvent().changes.firstOrNull() ?: continue
+                                val s = sessionBox[0]
+                                if (s != null && size.width > 0 && size.height > 0) {
+                                    val action = when {
+                                        change.changedToDownIgnoreConsumed() -> AndroidMotionEvent.ACTION_DOWN
+                                        change.changedToUpIgnoreConsumed() -> AndroidMotionEvent.ACTION_UP
+                                        else -> AndroidMotionEvent.ACTION_MOVE
+                                    }
+                                    // Tap focuses the preview so keyboard/nav keys route to it (tap elsewhere to leave).
+                                    if (action == AndroidMotionEvent.ACTION_DOWN) runCatching { focusRequester.requestFocus() }
+                                    // position ∈ (0,0)..size (guaranteed by PointerInputScope) → exact fraction → canvas px.
+                                    val cx = (change.position.x / size.width).coerceIn(0f, 1f) * bw
+                                    val cy = (change.position.y / size.height).coerceIn(0f, 1f) * bh
+                                    s.dispatchInput(action, cx, cy, change.id.value.toInt(), change.uptimeMillis)
+                                }
+                            }
                         }
-                        true
                     },
             )
         } else {

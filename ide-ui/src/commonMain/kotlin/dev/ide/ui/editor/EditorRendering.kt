@@ -120,6 +120,10 @@ internal fun DrawScope.drawEditor(
     caretContent: Offset,
     handlesVisible: Boolean,
     handleColor: Color,
+    /** When non-null, draw the selection background over this `(min, max)` range instead of the live selection —
+     *  the interpolated span of an in-progress expand animation. The logical selection is already the final
+     *  range (caret/handles reflect it); this only grows the highlight. */
+    animatedSelection: Pair<Int, Int>? = null,
 ) {
     val doc = session.doc
     val sel = session.selection
@@ -182,22 +186,28 @@ internal fun DrawScope.drawEditor(
         val maxCol = l.layoutInput.text.length
         val startCol = vStart.coerceIn(0, maxCol)
         val endCol = if (vEnd < 0) -1 else vEnd.coerceIn(0, maxCol)
-        if (!wrap) {
-            val x0 = textLeft + l.getHorizontalPosition(startCol, usePrimaryDirection = true)
-            val x1 = if (endCol >= 0) textLeft + l.getHorizontalPosition(endCol, usePrimaryDirection = true)
-            else textLeft + l.size.width + marker
-            if (x1 > x0) drawRect(color, Offset(x0, top), Size(x1 - x0, lineH))
-            return
-        }
-        val firstSub = l.getLineForOffset(startCol)
-        val lastSub = if (endCol >= 0) l.getLineForOffset(endCol) else (l.lineCount - 1).coerceAtLeast(0)
-        for (s in firstSub..lastSub) {
-            val x0 = textLeft + (if (s == firstSub) l.getHorizontalPosition(startCol, usePrimaryDirection = true) else l.getLineLeft(s))
-            val x1 = textLeft + when {
-                s == lastSub && endCol >= 0 -> l.getHorizontalPosition(endCol, usePrimaryDirection = true)
-                else -> l.getLineRight(s) + if (s == lastSub) marker else 0f
+        // The clamp covers the common stale-offset case, but a one-frame layout/offset mismatch can still make
+        // Compose's getHorizontalPosition/getLineForOffset throw an internal IllegalArgumentException on some
+        // budget-device layouts. This is pure decoration (selection / occurrence / template-field highlight) that
+        // re-renders next frame, so degrade to skipping this line rather than crashing the whole editor.
+        runCatching {
+            if (!wrap) {
+                val x0 = textLeft + l.getHorizontalPosition(startCol, usePrimaryDirection = true)
+                val x1 = if (endCol >= 0) textLeft + l.getHorizontalPosition(endCol, usePrimaryDirection = true)
+                else textLeft + l.size.width + marker
+                if (x1 > x0) drawRect(color, Offset(x0, top), Size(x1 - x0, lineH))
+            } else {
+                val firstSub = l.getLineForOffset(startCol)
+                val lastSub = if (endCol >= 0) l.getLineForOffset(endCol) else (l.lineCount - 1).coerceAtLeast(0)
+                for (s in firstSub..lastSub) {
+                    val x0 = textLeft + (if (s == firstSub) l.getHorizontalPosition(startCol, usePrimaryDirection = true) else l.getLineLeft(s))
+                    val x1 = textLeft + when {
+                        s == lastSub && endCol >= 0 -> l.getHorizontalPosition(endCol, usePrimaryDirection = true)
+                        else -> l.getLineRight(s) + if (s == lastSub) marker else 0f
+                    }
+                    if (x1 > x0) drawRect(color, Offset(x0, top + s * lineH), Size(x1 - x0, lineH))
+                }
             }
-            if (x1 > x0) drawRect(color, Offset(x0, top + s * lineH), Size(x1 - x0, lineH))
         }
     }
 
@@ -260,14 +270,16 @@ internal fun DrawScope.drawEditor(
             }
         }
 
-        // selection background
-        if (!sel.collapsed) {
-            val sLine = doc.lineForOffset(sel.min)
-            val eLine = doc.lineForOffset(sel.max)
+        // selection background — an in-progress expand animation overrides the drawn range (see [animatedSelection]).
+        val selMin = (animatedSelection?.first ?: sel.min).coerceIn(0, doc.length)
+        val selMax = (animatedSelection?.second ?: sel.max).coerceIn(selMin, doc.length)
+        if (selMax > selMin) {
+            val sLine = doc.lineForOffset(selMin)
+            val eLine = doc.lineForOffset(selMax)
             for (line in max(sLine, firstVisible)..min(eLine, lastVisible)) {
                 if (foldModel.isHidden(line)) continue
-                val vStart = if (line == sLine) rawToVisual(line, sel.min - doc.lineStart(line)) else 0
-                val vEnd = if (line == eLine) rawToVisual(line, sel.max - doc.lineStart(line)) else -1
+                val vStart = if (line == sLine) rawToVisual(line, selMin - doc.lineStart(line)) else 0
+                val vEnd = if (line == eLine) rawToVisual(line, selMax - doc.lineStart(line)) else -1
                 fillRange(line, vStart, vEnd, colors.selection, trailingMarker = true) // marker = selected line break
             }
         }

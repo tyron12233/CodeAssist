@@ -42,6 +42,10 @@ class ComposePreviewRemoteClient(context: Context) {
     interface FrameSink {
         fun onFrame(bitmap: Bitmap, seq: Long)
         fun onError(message: String)
+
+        /** The measured content size (surface px) of a wrap-to-content preview — the IDE crops the frame to it and
+         *  sizes the card. Default no-op: a fixed-size preview never reports one (content fills the surface). */
+        fun onContentSize(widthPx: Int, heightPx: Int) {}
     }
 
     /** A rendered frame + the `:preview` process id it was rendered in (so callers can confirm isolation). */
@@ -105,6 +109,7 @@ class ComposePreviewRemoteClient(context: Context) {
         resRoots: Array<String> = emptyArray(),
         packageName: String = "",
         minApi: Int = 26,
+        wrapContent: Boolean = false,
     ): Session? {
         val d = awaitDaemon(BIND_TIMEOUT_MS) ?: return null
         val local = seq.incrementAndGet()
@@ -126,11 +131,12 @@ class ComposePreviewRemoteClient(context: Context) {
                 if (bmp != null) sink.onFrame(bmp, s)
             }
             override fun onError(message: String?) { sink.onError(message ?: "unknown error") }
+            override fun onContentSize(widthPx: Int, heightPx: Int) { sink.onContentSize(widthPx, heightPx) }
         }
         val blob = File(dir, "req-open.blob")
         return runCatching {
             blob.writeBytes(ComposePreviewWireCodec.encode(lowered))
-            val id = d.open(blob.path, classpath, resRoots, packageName, minApi, widthPx, heightPx, density, night, dir.path, callback)
+            val id = d.open(blob.path, classpath, resRoots, packageName, minApi, widthPx, heightPx, density, night, wrapContent, dir.path, callback)
             if (id < 0) { dir.deleteRecursively(); null }
             else Session(d, id, runCatching { d.pid() }.getOrDefault(-1), dir)
         }.getOrElse { log.warn("compose openSession threw", it); dir.deleteRecursively(); null }

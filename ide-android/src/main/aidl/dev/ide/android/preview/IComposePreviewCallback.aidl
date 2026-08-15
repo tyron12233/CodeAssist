@@ -19,4 +19,11 @@ oneway interface IComposePreviewCallback {
 
     // A fatal render error for the session (the IDE surfaces an error view / falls back in-process).
     void onError(String message);
+
+    // The measured CONTENT size of a wrap-to-content preview (`@Preview` with no device/size), in surface pixels.
+    // The surface itself is rendered at a fixed max size (the device viewport), the composable wrapped to its
+    // intrinsic size at top-left; this reports that intrinsic size so the IDE crops the streamed frame to it and
+    // sizes the preview card to the content (matching the in-process host). Fires whenever the measured size
+    // changes. Not sent for a fixed-size preview (its content fills the surface — content size == surface size).
+    void onContentSize(int widthPx, int heightPx);
 }

@@ -832,6 +832,54 @@ class KotlinTreeResolverTest {
         assertTrue(fn.isComplete, "state-by-delegate through a lambda-return should lower; diags=${fn.diagnostics}")
     }
 
+    @Test
+    fun fullyQualifiedTopLevelCallResolvesByPackage() {
+        // `kotlin.math.abs(-5)` — the receiver `kotlin.math` is a PACKAGE, so lowering it as a value used to fail
+        // with "unresolved name `kotlin`". It must resolve the top-level function by its package FQN instead.
+        // (Regression for the 2048 preview's "in Game2048Screen: unresolved name `kotlinx`".)
+        val fn = lower("fun f() { kotlin.math.abs(-5) }")
+        val call = assertIs<RNode.Call>(fn.stmts()[0], "a fully-qualified top-level call must resolve, not fail as unresolved")
+        assertEquals("abs", call.callee.displayName)
+        assertEquals(DispatchKind.TOP_LEVEL, call.dispatch)
+        // A value/type receiver still lowers normally — this must not hijack a member call.
+        assertTrue(lower("fun f() { val s = \"x\"; s.length }").isComplete, "a member access must still lower")
+    }
+
+    @Test
+    fun coroutineIntrinsicCanonicalizesFromImportWhenClasspathUnindexed() {
+        // `delay`/`yield`/… are canonicalized to a kotlinx.coroutines-owned Call so the interpreter runs them as
+        // intrinsics. That's normally gated on a RESOLVED candidate, but the coroutines jar may not be indexed yet
+        // (a partial first-open / finished-but-partial index), so `callTargets` finds nothing and `delay(200)`
+        // fails as `candidates=0`. An EXPLICIT/star import proves intent, so canonicalize on it. (This test's
+        // classpath is stdlib-only — coroutines is unresolvable — exactly the unindexed state.)
+        val imported = lower("import kotlinx.coroutines.delay\nfun f() { delay(200) }")
+        val call = assertIs<RNode.Call>(imported.stmts()[0], "an imported delay must canonicalize to a Call, not Unsupported")
+        assertEquals("delay", call.callee.displayName)
+        assertEquals("kotlinx.coroutines", assertIs<ResolvedCallable.Library>(call.callee).ownerFqn)
+        // Without an import there is no proof of intent — a bare unresolvable `delay` must NOT be hijacked.
+        assertIs<RNode.Unsupported>(lower("fun f() { delay(200) }").stmts()[0], "a bare unresolvable delay must stay Unsupported")
+    }
+
+    @Test
+    fun loweringGapsCarryASourceLocation() {
+        // A preview error must be LOCATABLE: an unresolvable construct's lowering diagnostic (and the reused
+        // `RNode.Unsupported.reason`, which the runtime error surfaces) carries `File:line:col`, so the user is
+        // pointed at the exact line instead of a bare "unresolved call". The gap here is on line 3.
+        val fn = lower("package demo\nfun f() {\n    totallyUnknownThing(1)\n}")
+        assertFalse(fn.isComplete, "an unresolvable call should be a lowering gap")
+        val reasons = fn.diagnostics.map { it.reason }
+        assertTrue(
+            reasons.any { it.contains("Use.kt:3:") },
+            "a lowering gap's diagnostic must carry a File:line:col location; got $reasons",
+        )
+        val gapReasons = ArrayList<String>()
+        fn.body.walk { if (it is RNode.Unsupported) gapReasons += it.reason }
+        assertTrue(
+            gapReasons.any { it.contains("Use.kt:3:") },
+            "the RNode.Unsupported reason (reused by the runtime error) must carry the location; got $gapReasons",
+        )
+    }
+
     companion object {
         val srcDir: Path = tempProject(
             mapOf(

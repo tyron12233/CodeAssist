@@ -520,8 +520,10 @@ fun KotlinResolver.bareNameResolves(name: String, offset: Int): Boolean {
         // else: every matching import is a confirmed pure extension with no applicable receiver → not resolvable.
     }
     // A different-package project type isn't in scope until imported (resolveTypeName resolves a project type
-    // bare only same-package), so an unimported same-module type is flagged by the bare-reference diagnostic.
-    return service.resolveTypeName(name, fileContext)?.let { service.isKnownType(it) } == true
+    // bare only same-package), so an unimported same-module type is flagged by the bare-reference diagnostic. The
+    // ENCLOSING class is passed so a NESTED-class constructor (`Plan(1)` inside `class Game { private class Plan }`)
+    // resolves by simple name.
+    return service.resolveTypeName(name, fileContext, enclosingClassFqn(offset))?.let { service.isKnownType(it) } == true
 }
 
 /**
@@ -801,8 +803,10 @@ internal fun KotlinResolver.sameFileProperty(p: KtProperty, ownerFqn: String?): 
     return KotlinSymbol(
         name = p.name ?: "_", kind = SymbolKind.FIELD,
         // A `by`-delegated member/top-level property types as its delegate's `value` (the State/Lazy
-        // convention), the same as [localVar] — the value lives in the delegate, not the initializer.
-        type = retText?.let { service.typeFromText(it, fileContext) }
+        // convention), the same as [localVar] — the value lives in the delegate, not the initializer. The type is
+        // resolved with [ownerFqn] as the enclosing class, so a member typed as a NESTED class of the owner
+        // (`var pending: Plan?` inside `class Game { private class Plan }`) resolves by simple name.
+        type = retText?.let { service.typeFromText(it, fileContext, ownerFqn) }
             ?: inferType(p.initializer)
             ?: p.delegateExpression?.let(::delegatedValueType),
         owner = ownerFqn?.let {

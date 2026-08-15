@@ -1,11 +1,14 @@
 package dev.ide.android.preview
 
 import android.app.Service
+import android.content.ComponentCallbacks2
 import android.content.Intent
 import android.content.res.Configuration
 import android.hardware.HardwareBuffer
 import android.os.IBinder
 import android.os.Process
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.wrapContentSize
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.getValue
@@ -13,10 +16,15 @@ import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalConfiguration
 import dev.ide.android.AndroidPreviewResources
 import dev.ide.android.DexPeerFactory
+import dev.ide.android.support.AndroidSupport
 import dev.ide.android.support.resources.ResourceModel
+import dev.ide.android.support.tasks.InProcessDexGate
 import dev.ide.core.LoweredComposePreview
 import dev.ide.core.preview.ComposePreviewWireCodec
 import dev.ide.interp.PreviewResourceResolver
@@ -82,6 +90,7 @@ class ComposePreviewSessionService : Service() {
             heightPx: Int,
             density: Float,
             night: Boolean,
+            wrapContent: Boolean,
             frameDir: String?,
             cb: IComposePreviewCallback?,
         ): Int = runCatching {
@@ -92,6 +101,7 @@ class ComposePreviewSessionService : Service() {
                 cachedExecutor(classpath),
                 resDirs = resRoots?.filter { it.isNotBlank() }.orEmpty(),
                 namespace = packageName?.takeIf { it.isNotBlank() },
+                wrapContent = wrapContent,
             )
             session.start(lowered)
             sessions[id] = session
@@ -196,6 +206,22 @@ class ComposePreviewSessionService : Service() {
 
     override fun onBind(intent: Intent?): IBinder = binder
 
+    /**
+     * Release the process-wide shared dex classpath cache under memory pressure, when no in-process dex is
+     * running anywhere in this `:preview` process ([InProcessDexGate.isIdle], shared with the co-hosted
+     * [PreviewRenderService] whose real-view dexing is what populates it). Closing a provider mid-read would
+     * break that dex, so the idle gate is required. This process's own heavier caches — [executorCache] (pins
+     * every dep jar's handles) and [resourceCache] — are already LRU-bounded and freed in [onDestroy]; they are
+     * left intact here because a live [Session] holds its executor and closing it would pull jars out from under it.
+     */
+    override fun onTrimMemory(level: Int) {
+        super.onTrimMemory(level)
+        if (level >= ComponentCallbacks2.TRIM_MEMORY_RUNNING_LOW && InProcessDexGate.isIdle()) {
+            log.info(":preview(pid=${Process.myPid()}): onTrimMemory($level) idle → releasing dex caches")
+            runCatching { AndroidSupport.releaseDexCaches() }
+        }
+    }
+
     override fun onDestroy() {
         sessions.values.forEach { runCatching { it.close() } }
         sessions.clear()
@@ -230,9 +256,14 @@ class ComposePreviewSessionService : Service() {
         val executor: VmLibraryExecutor?,
         val resDirs: List<String>,
         val namespace: String?,
+        val wrapContent: Boolean = false,
     ) {
         private var surface = newSurface()
         private val programState = mutableStateOf<LoweredComposePreview?>(null)
+        // Last content size reported to the IDE (surface px), so a wrap preview only re-emits onContentSize when the
+        // measured size actually changes (a recomposition/animation re-measures every frame otherwise).
+        @Volatile private var lastContentW = -1
+        @Volatile private var lastContentH = -1
         // Night drives the composition reactively (via a `key(night)` remount), so a night toggle re-renders on
         // the SAME surface instead of tearing it down. Resources bake night in, so they're swapped alongside it.
         private val nightState = mutableStateOf(night)
@@ -245,6 +276,9 @@ class ComposePreviewSessionService : Service() {
         fun start(lowered: LoweredComposePreview) {
             programState.value = lowered
             nightState.value = night
+            // A (re)start rebuilds the surface/composition, so re-report the content size on the next measure even
+            // if it matches the last one (the IDE may have reset its own state, e.g. after a resize teardown).
+            lastContentW = -1; lastContentH = -1
             // Project resource resolver (night baked in), served from the process cache on a re-open; mirrors the
             // in-process host.
             currentResources = cachedResources(resDirs, namespace, density, night)
@@ -278,7 +312,23 @@ class ComposePreviewSessionService : Service() {
                             // remount reads the night-matched resolver.
                             val renderer = remember { ComposePreviewRenderer(resources = currentResources, libraryExecutor = executor) }
                             val onErr: @Composable (Throwable) -> Unit = { t -> reportError(t) }
-                            renderer.Render(p.entry, p.program, p.classes, emptyList(), onErr) {}
+                            if (wrapContent) {
+                                // Wrap-to-content preview: measure the composable at its INTRINSIC size, bounded by
+                                // the surface (width x height) as a MAX — the ComposeView already fills the surface,
+                                // so `wrapContentSize` measures the child with that max and min 0. This mirrors the
+                                // in-process card's `wrapContentSize().widthIn(max).heightIn(max)`: a `fillMaxSize`
+                                // root fills to the device size, an intrinsic-sized one wraps smaller. The measured
+                                // size (top-left aligned) is reported so the IDE crops the frame + sizes the card.
+                                Box(
+                                    Modifier
+                                        .wrapContentSize(Alignment.TopStart)
+                                        .onSizeChanged { reportContentSize(it.width, it.height) },
+                                ) {
+                                    renderer.Render(p.entry, p.program, p.classes, emptyList(), onErr) {}
+                                }
+                            } else {
+                                renderer.Render(p.entry, p.program, p.classes, emptyList(), onErr) {}
+                            }
                         }
                     }
                 }
@@ -323,6 +373,18 @@ class ComposePreviewSessionService : Service() {
             // or [onDestroy] does. Closing it would pull the jars out from under a concurrent session on the same
             // classpath.
             runCatching { frameDir.listFiles()?.forEach { it.delete() } }
+        }
+
+        /** Report the wrap preview's measured content size (surface px) to the IDE, deduped so a re-measure that
+         *  didn't change the size is silent. Clamped to the surface: content bounded by the surface can't exceed it,
+         *  and a 0 (a not-yet-laid-out or fillMaxSize-in-unbounded pass) is dropped so the IDE never crops to empty. */
+        private fun reportContentSize(w: Int, h: Int) {
+            if (w <= 0 || h <= 0) return
+            val cw = w.coerceAtMost(width)
+            val ch = h.coerceAtMost(height)
+            if (cw == lastContentW && ch == lastContentH) return
+            lastContentW = cw; lastContentH = ch
+            runCatching { cb.onContentSize(cw, ch) }.onFailure { log.warn("compose session $id content-size push failed", it) }
         }
 
         private fun pushFrame(frame: OffscreenComposeSurface.Frame) {

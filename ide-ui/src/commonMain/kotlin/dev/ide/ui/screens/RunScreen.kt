@@ -60,6 +60,7 @@ import dev.ide.ui.backend.RunPhase
 import dev.ide.ui.backend.RunStatus
 import dev.ide.ui.backend.UiSeverity
 import dev.ide.ui.components.AdSlot
+import dev.ide.ui.components.clipForClipboard
 import dev.ide.ui.components.Chip
 import dev.ide.ui.components.IconButtonCa
 import dev.ide.ui.generated.resources.Res
@@ -157,7 +158,7 @@ private fun RunTopBar(console: RunConsoleUi?, buildFailed: Boolean, onBack: () -
         if (console != null && console.transcript.isNotEmpty()) {
             IconButtonCa(
                 CaIcons.copy, stringResource(Res.string.copy),
-                onClick = { clipboard.setText(AnnotatedString(console.transcript.joinToString("") { it.text })) },
+                onClick = { clipboard.setText(AnnotatedString(clipForClipboard(console.transcript.joinToString("") { it.text }))) },
                 boxSize = iconBox, iconSize = 16, tint = MaterialTheme.colorScheme.onSurfaceVariant,
             )
         }

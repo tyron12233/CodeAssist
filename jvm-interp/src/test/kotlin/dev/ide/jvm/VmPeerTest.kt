@@ -92,6 +92,24 @@ class VmPeerTest {
         assertTrue(reported is RuntimeException, "the failure is reported to the sink")
     }
 
+    @Test fun generatedClassPeerExceptionPropagatesWithoutASinkAndDegradesWithOne() {
+        // A CONCRETE-class peer is a generated subclass whose overridden methods dispatch through Vm.peerDispatch
+        // with no bytecode guard (only the proxy path self-guards). Platform code (Shape.describe, real) calls the
+        // interpreted override (Boomer.sides) which throws — the surface that crashed the arm64 3.9.2 preview
+        // (Interpreter.step CCE via a Compose CarouselPagerState override). A console run (no sink) propagates;
+        // a preview host sets a sink so it degrades to a zero return.
+        assertFailsWith<RuntimeException> { vm.invokeStatic(PEERS, "describeBoomThroughRealCode", "()I") }
+
+        var reported: Throwable? = null
+        val guardedVm = Vm(
+            policy = InterpretPolicy { name -> !name.startsWith("dev/ide/jvm/host/") && InterpretPolicy.DEFAULT.interpret(name) },
+            peerFactory = AsmPeerFactory(proxyExceptionSink = { reported = it }),
+        )
+        // sides() degrades to 0, so the real describe() returns 0 * 100 = 0 instead of crashing.
+        assertEquals(0, guardedVm.invokeStatic(PEERS, "describeBoomThroughRealCode", "()I"), "a guarded generated-class peer degrades")
+        assertTrue(reported is RuntimeException, "the failure is reported to the sink")
+    }
+
     @Test fun realSuperConstructorCallsInterpretedOverrideDuringConstruction() {
         // Eager's real constructor calls tag() while the interpreted subclass is still inside super() — its
         // field initializers haven't run, exactly like a real Java subclass at that point.

@@ -152,12 +152,24 @@ internal fun KotlinResolver.computeCallee(call: KtCallExpression): KotlinSymbol?
     // trailing slot (an uncertain/generic/unresolved slot never over-filters), so a call never fails to resolve.
     val viable = candidates.filter { trailingLambdaSlotIsFunctional(it, call) }.ifEmpty { candidates }
     val exact = viable.filter { it.paramTypes.size == argCount }
-    if (exact.isNotEmpty()) return bestOverload(exact, call, receiverType)
     val moreParams =
         viable.filter { it.paramTypes.isNotEmpty() && it.paramTypes.size > argCount }
-    if (moreParams.isNotEmpty()) return bestOverload(moreParams, call, receiverType)
     val fewerParams =
         viable.filter { it.paramTypes.isNotEmpty() && it.paramTypes.size < argCount }
+    if (exact.isNotEmpty()) {
+        // Normally the exact-arity tier wins. But if EVERY exact-arity candidate is INAPPLICABLE (its parameter
+        // types contradict the arguments) while a defaulted/vararg overload one tier down IS applicable, that
+        // lower overload is the real target: `Animatable(0.4f)` must pick `Animatable(Float, Float = …)` (2
+        // params, one defaulted) over the exact-arity `Animatable(Color)` — a Float argument can't be a Color.
+        // Only pay the applicability probe when such a lower-tier alternative exists, so the common
+        // single-arity-tier resolution keeps its fast path (bestOverload already filters within a tier).
+        if ((moreParams.isNotEmpty() || fewerParams.isNotEmpty()) && exact.none { isApplicable(it, call, receiverType) }) {
+            (moreParams + fewerParams).filter { isApplicable(it, call, receiverType) }
+                .ifEmpty { null }?.let { return bestOverload(it, call, receiverType) }
+        }
+        return bestOverload(exact, call, receiverType)
+    }
+    if (moreParams.isNotEmpty()) return bestOverload(moreParams, call, receiverType)
     if (fewerParams.isNotEmpty()) return bestOverload(fewerParams, call, receiverType)
     return viable.firstOrNull()
 }
@@ -450,6 +462,15 @@ internal fun KotlinResolver.computeCallTargets(call: KtCallExpression): List<Kot
         name,
         exactName = true
     ).filter { it.name == name && it.kind == SymbolKind.METHOD && (!it.isExtension || extensionInScope(it)) }
+    // A fully-qualified top-level call `kotlin.math.abs(x)` / `kotlinx.coroutines.flow.flowOf(…)`: the receiver is
+    // a PACKAGE (not a value/type — `memberReceiverOf` was null and the in-scope lookup above missed, since the
+    // name isn't imported). Resolve the top-level function by its package FQN. Purely additive: only fires for a
+    // qualified call that otherwise resolves to nothing, and matches only a real function in that exact package.
+    if (q != null && q.selectorExpression === call) {
+        packageDottedPath(q.receiverExpression)?.let { pkg ->
+            out += service.topLevelByName(name).filter { it.kind == SymbolKind.METHOD && it.packageName == pkg }
+        }
+    }
     // A capitalized callee is a constructor call (`Foo(…)`): its parameters come from the type's constructors.
     if (name.firstOrNull()?.isUpperCase() == true) {
         service.resolveTypeName(name, fileContext)?.let { fqn ->
@@ -463,6 +484,19 @@ internal fun KotlinResolver.computeCallTargets(call: KtCallExpression): List<Kot
         }
     }
     return out
+}
+
+/** The dotted name path of a pure package/qualifier receiver (`kotlin.math` → "kotlin.math"), or null when [expr]
+ *  is anything other than a chain of name references (a call, indexing, literal, `this`, …). Used to resolve a
+ *  fully-qualified top-level call by its package. */
+private fun packageDottedPath(expr: org.jetbrains.kotlin.psi.KtExpression): String? = when (expr) {
+    is KtNameReferenceExpression -> expr.getReferencedName()
+    is KtQualifiedExpression -> {
+        val recv = packageDottedPath(expr.receiverExpression) ?: return null
+        val sel = (expr.selectorExpression as? KtNameReferenceExpression)?.getReferencedName() ?: return null
+        "$recv.$sel"
+    }
+    else -> null
 }
 
 internal fun KotlinResolver.sourceCtorSymbol(

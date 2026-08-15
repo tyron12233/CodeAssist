@@ -1,5 +1,8 @@
 package dev.ide.ui.editor
 
+import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
@@ -42,6 +45,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Popup
 import androidx.compose.ui.window.PopupProperties
 import dev.ide.ui.backend.IdeBackend
+import dev.ide.ui.components.clipForClipboard
 import dev.ide.ui.backend.UiCompletionItem
 import dev.ide.ui.backend.UiAction
 import dev.ide.ui.backend.UiNavKind
@@ -245,6 +249,17 @@ private fun CodeEditorContent(
     var snippet by remember(path) { mutableStateOf<SnippetSession?>(null) }
     val sig = rememberSignatureHelpController(path, backend)
     val acts = rememberEditorActionsController(path, editorSession, backend) { completion.dismiss() }
+    // Animate the "expand selection" gesture: the logical selection snaps to the enclosing node immediately,
+    // while the DRAWN highlight grows from the previous range to it over a short tween (1f = settled). Keyed on
+    // the request token so each expansion (and each step of a chain) restarts the growth from the new base.
+    val expandProgress = remember { Animatable(1f) }
+    var expandAnimToken by remember { mutableIntStateOf(-1) }
+    LaunchedEffect(acts.selectionExpand?.token) {
+        val e = acts.selectionExpand ?: return@LaunchedEffect
+        expandAnimToken = e.token // mark this request's animation as started (drawBehind treats not-yet-started as 0f)
+        expandProgress.snapTo(0f)
+        expandProgress.animateTo(1f, tween(durationMillis = 180, easing = FastOutSlowInEasing))
+    }
     val find = rememberFindReplaceController(path, editorSession)
     var gotoLineOpen by remember(path) { mutableStateOf(false) }
     var quickDoc by remember(path) { mutableStateOf<UiQuickDoc?>(null) }
@@ -686,11 +701,12 @@ private fun CodeEditorContent(
                 }
 
                 Key.C -> {
-                    editorSession.selectedText()?.let { clipboard.setText(AnnotatedString(it)) }; return true
+                    // Cap the payload so a multi-MB selection can't blow the clipboard's Binder transaction.
+                    editorSession.selectedText()?.let { clipboard.setText(AnnotatedString(clipForClipboard(it))) }; return true
                 }
 
                 Key.X -> {
-                    editorSession.cutSelection()?.let { clipboard.setText(AnnotatedString(it)) }; return true
+                    editorSession.cutSelection()?.let { clipboard.setText(AnnotatedString(clipForClipboard(it))) }; return true
                 }
 
                 Key.V -> {
@@ -936,6 +952,19 @@ private fun CodeEditorContent(
                     onKey = ::handleKey,
                 )
                 .drawBehind {
+                    // Interpolate the drawn selection span for an in-flight expand animation (reads snapshot
+                    // state → this draw re-runs per frame while it animates). Before the tween has started for
+                    // this request, treat progress as 0 (draw the pre-expand span) so the final range never
+                    // flashes for a frame. Null once settled.
+                    val expand = acts.selectionExpand
+                    val animatedSel: Pair<Int, Int>? = if (expand != null) {
+                        val ep = if (expandAnimToken == expand.token) expandProgress.value else 0f
+                        if (ep < 1f) {
+                            val mn = expand.fromMin + ((expand.toMin - expand.fromMin) * ep).toInt()
+                            val mx = expand.fromMax + ((expand.toMax - expand.fromMax) * ep).toInt()
+                            mn to mx
+                        } else null
+                    } else null
                     drawEditor(
                         session = editorSession,
                         metrics = metrics,
@@ -982,6 +1011,7 @@ private fun CodeEditorContent(
                         caretContent = interaction.caretContent, // animated, content-space; read here → redraw per frame
                         handlesVisible = interaction.handlesVisible && interaction.lastInputWasTouch,
                         handleColor = colors.accent,
+                        animatedSelection = animatedSel,
                     )
                 },
         )

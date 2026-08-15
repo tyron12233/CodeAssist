@@ -112,7 +112,40 @@ class Vm(
         // setImageDrawable), and the override may hand `this` back to platform code — which must resolve to this
         // peer-under-construction, not a second, no-argument peer built before initPeer records this one.
         if (obj.peer == null) obj.peer = peer
-        runInterpretedOverride(obj, name, descriptor, args)
+        val sink = peerFactory.peerExceptionSink
+        if (sink == null) {
+            runInterpretedOverride(obj, name, descriptor, args)
+        } else {
+            // A concrete-class peer is a GENERATED subclass whose overridden methods dispatch here with no
+            // bytecode-level guard (only the proxy path self-guards in AsmPeerFactory). When platform code
+            // invokes such an override during a preview layout/measure/draw pass and the interpreted body
+            // throws, letting it propagate crashes the process (the arm64 3.9.2 Interpreter.step CCE, via a
+            // Compose CarouselPagerState override). Route it to the sink and return a type-correct zero so the
+            // preview degrades instead. A console run leaves the sink null so genuine failures propagate.
+            try {
+                runInterpretedOverride(obj, name, descriptor, args)
+            } catch (t: Throwable) {
+                sink(t)
+                zeroForReturn(Descriptors.returnType(descriptor))
+            }
+        }
+    }
+
+    /** A type-correct zero for a method whose return descriptor is [retDesc], handed back to platform code when
+     *  a guarded peer override fails (see [peerDispatch]). Boxed to match the primitive the generated peer
+     *  method unboxes — an `Int` for a `boolean`/`char` return would mis-unbox — so it mirrors
+     *  [AsmPeerFactory]'s proxy-path zero rather than [Descriptors.defaultValue]. */
+    private fun zeroForReturn(retDesc: String): Any? = when (retDesc) {
+        "V" -> null
+        "Z" -> false
+        "C" -> 0.toChar()
+        "B" -> 0.toByte()
+        "S" -> 0.toShort()
+        "I" -> 0
+        "J" -> 0L
+        "F" -> 0f
+        "D" -> 0.0
+        else -> null // object or array
     }
 
     /** The interpreted [VmClass] for [internalName], or null when it should be bridged (platform/absent).

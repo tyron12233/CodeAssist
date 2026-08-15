@@ -16,6 +16,7 @@ import java.nio.file.Files
 import kotlin.test.AfterTest
 import kotlin.test.BeforeTest
 import kotlin.test.Test
+import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 
@@ -273,6 +274,74 @@ class JavaCompletionTest {
         )
     }
 
+    // --- member-access shape: overrides collapse, overloads survive, `Type.class` ------------------------
+
+    @Test
+    fun overriddenMemberIsOfferedOnce() {
+        // `allMethods` reports a re-declared method once per hierarchy level; only the most-derived one is
+        // reachable through the receiver, so `receiver.` must not repeat it. On a deep Android View hierarchy
+        // those duplicates crowded real members (`setText`) out of the result cap.
+        File(srcRoot, "com/foo/Loud.java").writeText(
+            "package com.foo;\npublic class Loud extends Greeter { public String greet(String who) { return who; } }"
+        )
+        val labels = labelsAt("package com.foo;\nclass Use { void run() { new Loud().gr| } }")
+        assertEquals(1, labels.count { it == "greet" }, "an override must be offered once; got $labels")
+    }
+
+    @Test
+    fun overloadsAreAllOffered() {
+        File(srcRoot, "com/foo/Over.java").writeText(
+            """
+            package com.foo;
+            public class Over {
+                public void put(int i) {}
+                public void put(String s) {}
+            }
+            """.trimIndent()
+        )
+        val puts = itemsAt("package com.foo;\nclass Use { void run() { new Over().pu| } }").filter { it.label == "put" }
+        assertEquals(2, puts.size, "both overloads must be offered; got ${puts.map { it.detail }}")
+    }
+
+    @Test
+    fun staticQualifierOffersClassLiteral() {
+        val labels = labelsAt("package com.foo;\nclass Use { void run() { Object o = Greeter.cla|; } }")
+        assertTrue("class" in labels, "`Type.` should offer the `class` literal; got $labels")
+    }
+
+    @Test
+    fun annotationParameterListOffersAttributeNames() {
+        File(srcRoot, "com/foo/Marked.java").writeText(
+            """
+            package com.foo;
+            public @interface Marked {
+                String name();
+                int level() default 0;
+            }
+            """.trimIndent()
+        )
+        val items = itemsAt("package com.foo;\nclass Use { @Marked(lev|) void run() {} }")
+        val level = items.firstOrNull { it.label == "level" }
+        assertTrue(level != null, "an annotation's attribute name should be offered; got ${items.map { it.label }}")
+        assertEquals("level = ", level.insertText, "an attribute completes to `name = `")
+    }
+
+    @Test
+    fun alreadySuppliedAnnotationAttributeIsNotRepeated() {
+        File(srcRoot, "com/foo/Marked2.java").writeText(
+            """
+            package com.foo;
+            public @interface Marked2 {
+                String name();
+                int level() default 0;
+            }
+            """.trimIndent()
+        )
+        val labels = labelsAt("package com.foo;\nclass Use { @Marked2(name = \"x\", lev|) void run() {} }")
+        assertTrue("level" in labels, "the unsupplied attribute should be offered; got $labels")
+        assertFalse("name" in labels, "an attribute already supplied must not be offered again; got $labels")
+    }
+
     @Test
     fun annotationPositionOffersOnlyIndexedAnnotationTypes() {
         // `@Mark|` — an annotation NAME position. The index-backed coarse filter (TypeCtx.ANNOTATION) keeps
@@ -301,5 +370,49 @@ class JavaCompletionTest {
         val labels = res.items.map { it.label }
         assertTrue("Marker" in labels, "a library annotation must be offered at `@…`; got $labels")
         assertFalse("MarkerBase" in labels, "a non-annotation library class must NOT be offered at `@…`; got $labels")
+    }
+
+    // --- static-import member completion (`import static Type.name`) --------------------------------------
+
+    @Test
+    fun staticImportOffersStaticMethods() {
+        // `import static java.util.Collections.empty|` must offer the STATIC METHODS (emptyList/…), not the
+        // private nested implementation classes (EmptyList/…) that used to leak in (accessibility unchecked).
+        val labels = labelsAt("package com.foo;\nimport static java.util.Collections.empty|;\nclass Use {}")
+        assertTrue("emptyList" in labels, "static import should offer the static method emptyList; got $labels")
+        assertFalse("EmptyList" in labels, "a private nested class must not leak into a static-import popup; got $labels")
+    }
+
+    @Test
+    fun staticImportOffersStaticFields() {
+        val labels = labelsAt("package com.foo;\nimport static java.lang.Math.P|;\nclass Use {}")
+        assertTrue("PI" in labels, "static import should offer the static field PI; got $labels")
+    }
+
+    @Test
+    fun staticMemberAccessInExpressionStillOffersMethodCall() {
+        // In an EXPRESSION (not an import) a static member still completes to a call `name()`, unaffected.
+        val item = itemsAt("package com.foo;\nclass Use { void m() { java.util.Collections.empty| } }")
+            .firstOrNull { it.label == "emptyList" }
+        assertTrue(item != null && item.insertText.endsWith("()"), "a static member in an expression completes to a call; got ${item?.insertText}")
+    }
+
+    // --- record component accessors -----------------------------------------------------------------------
+
+    @Test
+    fun recordMemberAccessOffersComponentAccessors() {
+        val items = itemsAt("package com.foo;\nrecord Point(int x, int y) {}\nclass Use { void m(Point p) { p.| } }")
+        val x = items.firstOrNull { it.label == "x" }
+        assertTrue(x != null, "record member access should offer the component accessor x; got ${items.map { it.label }}")
+        assertEquals("x()", x.insertText, "a record accessor completes to a call `x()`")
+        assertEquals(CompletionItemKind.METHOD, x.kind, "a record accessor is a method")
+        assertTrue(items.any { it.label == "y" }, "should also offer the y accessor; got ${items.map { it.label }}")
+    }
+
+    @Test
+    fun explicitRecordAccessorIsNotDuplicated() {
+        val xs = itemsAt("package com.foo;\nrecord Point(int x, int y) { public int x() { return x; } }\nclass Use { void m(Point p) { p.x| } }")
+            .filter { it.label == "x" }
+        assertEquals(1, xs.size, "an explicitly-declared accessor must not be offered twice; got ${xs.map { it.detail }}")
     }
 }

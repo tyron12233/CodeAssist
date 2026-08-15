@@ -55,12 +55,15 @@ class ComposeDispatcher(
 
     private val fallback: Dispatcher = fallback ?: ReflectiveDispatcher(
         loader = loader ?: ReflectiveDispatcher::class.java.classLoader,
-        lambdaProxies = LambdaProxyStrategy { lambda, fi, composable ->
+        lambdaProxies = LambdaProxyStrategy { lambda, fi, composable, returnVc ->
             // A composable function-type param threads the Composer. A PLAIN param gets the guarded proxy:
             // real framework code invokes these outside the renderer's guarded composition pass (a
             // `graphicsLayer` block during measure/semantics, an `onClick` from input dispatch), where a
             // propagated InterpreterException would crash the whole app instead of failing the preview.
-            if (composable) composableLambdaProxy(lambda, fi) else guardedLambdaProxy(lambda, fi)
+            // `returnVc` boxes a value-class return (`Modifier.offset { IntOffset(…) }`) so the compiled
+            // callee's cast to the value class succeeds — the cast runs AFTER the proxy returns (at measure), so
+            // the guard can't catch a raw `Long`; it must be boxed here.
+            if (composable) composableLambdaProxy(lambda, fi, returnVc) else guardedLambdaProxy(lambda, fi, returnVc)
         },
         // Run interpreted `suspend` blocks (a `LaunchedEffect`/`launch` body) as real, cancellable coroutines
         // off the caller thread, so `delay`-driven timers actually tick instead of busy-looping the UI thread.
@@ -239,7 +242,7 @@ class ComposeDispatcher(
      * and the call degrades to the return type's zero value. Suspend invocations (a trailing Continuation)
      * route through the coroutine bridge, exactly like the unguarded default proxy.
      */
-    private fun guardedLambdaProxy(lambda: InterpretedLambda, functionalInterface: Class<*>): Any =
+    private fun guardedLambdaProxy(lambda: InterpretedLambda, functionalInterface: Class<*>, returnValueClass: Class<*>? = null): Any =
         Proxy.newProxyInstance(functionalInterface.classLoader ?: javaClass.classLoader, arrayOf(functionalInterface)) { _, method, callArgs ->
             when (method.name) {
                 "invoke" -> {
@@ -251,10 +254,13 @@ class ComposeDispatcher(
                         val prevSuppressed = composablesSuppressed.get()
                         composablesSuppressed.set(true)
                         try {
-                            lambda.invoke(a)
+                            // Box a value-class return (`Modifier.offset { IntOffset(…) }` — the block's unboxed
+                            // `Long`) so the compiled callee's cast to the value class succeeds. The cast runs
+                            // after this proxy returns (at measure), so it can't be caught below — box it here.
+                            boxLambdaReturn(lambda.invoke(a), returnValueClass)
                         } catch (t: Throwable) {
                             contentLambdaError = contentLambdaError ?: t
-                            zeroReturn(method.returnType)
+                            safeGuardReturn(method.returnType, a)
                         } finally {
                             composablesSuppressed.set(prevSuppressed)
                         }
@@ -304,6 +310,38 @@ class ComposeDispatcher(
         java.lang.Double.TYPE -> 0.0
         else -> null
     }
+
+    /**
+     * The value a GUARDED lambda returns after swallowing an interpreter failure. Usually [zeroReturn], but a
+     * `Modifier.drawWithCache { }` block is `CacheDrawScope.() -> DrawResult` and Compose dereferences that result
+     * DURING DRAW — returning `null` there NPEs the draw pass and CRASHES the in-process IDE (a draw-phase throw is
+     * outside [ComposePreviewRenderer]'s composition try/catch). So for a `DrawResult` return, build a valid EMPTY
+     * result from the `CacheDrawScope` receiver (`onDrawBehind { }` = draw nothing) instead — the preview degrades
+     * to a blank draw + the partial-render chip rather than taking down the IDE. Reflective (no compile-time
+     * compose-ui edge); any failure falls back to [zeroReturn], never worse than before.
+     */
+    private fun safeGuardReturn(returnType: Class<*>, args: List<Any?>): Any? {
+        if (returnType.name == "androidx.compose.ui.draw.DrawResult") {
+            val cacheScope = args.firstOrNull()
+            if (cacheScope != null) runCatching {
+                val onDrawBehind = cacheScope.javaClass.methods.firstOrNull {
+                    it.name == "onDrawBehind" && it.parameterCount == 1
+                }
+                if (onDrawBehind != null) {
+                    onDrawBehind.isAccessible = true
+                    val noOp: (Any?) -> Unit = { }
+                    return onDrawBehind.invoke(cacheScope, noOp)
+                }
+            }
+        }
+        return zeroReturn(returnType)
+    }
+
+    /** Value-class member (operator / property getter) dispatch — a reflective (class-loading) concern the
+     *  [fallback] [ReflectiveDispatcher] owns; delegate so `Size.div`/`Size.width` on the unboxed underlying
+     *  route to the static impl instead of hitting this dispatcher's default no-op. */
+    override fun invokeUnboxedValueClassMember(ownerFqn: String?, name: String, receiver: Any, args: List<Any?>): Any? =
+        fallback.invokeUnboxedValueClassMember(ownerFqn, name, receiver, args)
 
     /** Thread the live composer through a `@Composable` property getter (`MaterialTheme.colorScheme`,
      *  `MaterialTheme.typography`, …). Returns null when there's no composer (outside a composition) or the
@@ -443,7 +481,19 @@ class ComposeDispatcher(
      * lambda body's composables compose into the right group; non-composer leading args (a scope receiver)
      * are passed to the lambda, the trailing `Composer`/`$changed` are stripped.
      */
-    private fun composableLambdaProxy(lambda: InterpretedLambda, functionalInterface: Class<*>): Any =
+    /** Box an interpreted lambda's return value to [valueClass] when the lambda's functional type returns an inline
+     *  value class the interpreter holds UNBOXED (a `Float` for `Dp`, `Long` for `Color`). Without it a library
+     *  consumer that casts the result to the value class (`animateDp`'s converter) throws `Float cannot be cast to
+     *  Dp`. No-op when the value is null, already the value class, or has no `box-impl`. */
+    private fun boxLambdaReturn(value: Any?, valueClass: Class<*>?): Any? {
+        if (valueClass == null || value == null || valueClass.isInstance(value)) return value
+        val box = valueClass.declaredMethods.firstOrNull {
+            it.name == "box-impl" && java.lang.reflect.Modifier.isStatic(it.modifiers) && it.parameterCount == 1
+        } ?: return value
+        return runCatching { box.isAccessible = true; box.invoke(null, value) }.getOrDefault(value)
+    }
+
+    private fun composableLambdaProxy(lambda: InterpretedLambda, functionalInterface: Class<*>, valueClassReturn: Class<*>? = null): Any =
         Proxy.newProxyInstance(
             functionalInterface.classLoader ?: javaClass.classLoader, arrayOf(functionalInterface),
         ) { _, method, callArgs ->
@@ -486,7 +536,7 @@ class ComposeDispatcher(
                         val prevSuppressed = composablesSuppressed.get()
                         composablesSuppressed.set(composerArg == null)
                         try {
-                            lambda.invoke(real)
+                            boxLambdaReturn(lambda.invoke(real), valueClassReturn)
                         } catch (ce: kotlin.coroutines.cancellation.CancellationException) {
                             throw ce // recomposition cancellation is control flow — never swallow it
                         } catch (e: Throwable) {
@@ -654,36 +704,64 @@ class ComposeDispatcher(
     // and compose that destination's content lambda directly, keyed by the route TYPE the call-site type
     // argument carries (`composable<Home> { }` → key `Home`). No serializers, no real graph — the visible result.
 
-    /** A NavHost builder's collected `composable<T> { content }` registrations: route type FQN → content lambda. */
-    private class NavGraphCollector { val destinations = LinkedHashMap<String, InterpretedLambda>() }
+    /** A NavHost builder's collected destinations: route (a `composable<T>` type-arg FQN, or a `composable("route")`
+     *  string) → content lambda. [graphStart] records a nested `navigation(startDestination, route) { }` graph's
+     *  route → its start destination, so a start pointing at a graph resolves through to that graph's start. */
+    private class NavGraphCollector {
+        val destinations = LinkedHashMap<String, InterpretedLambda>()
+        val graphStart = LinkedHashMap<String, String>()
+    }
 
-    /** The active collector while a NavHost builder lambda runs, so a `composable<T>` inside it registers here. */
+    /** The active collector while a NavHost builder lambda runs, so a `composable`/`navigation` inside it registers here. */
     @Volatile private var navCollector: NavGraphCollector? = null
 
     /**
      * Intercept a Navigation-Compose call, or return [NOT_NAV] to dispatch it normally. `rememberNavController`
      * yields an opaque placeholder (only [renderNavHost] reads a NavHost's args, and it ignores the controller);
-     * `composable<T>` registers on the active collector; `NavHost` runs the builder then composes the start
-     * destination.
+     * `composable`/`dialog` register a destination on the active collector; `navigation` runs a nested graph's
+     * builder (flattening its destinations); `NavHost` runs the builder then composes the start destination.
+     * Intercepting the builder DSL is ALSO what keeps a nav-builder call from reaching the real
+     * `NavGraphBuilder` reflectively — our collector isn't one, so a fallen-through call (`composable("route"){}`,
+     * `navigation{}`) crashes with `no method getProvider() on …NavGraphCollector`.
      */
     private fun handleNavCall(call: RNode.Call, callee: ResolvedCallable.Library, composer: Any?, receiver: Any?, args: List<Any?>): Any? {
         val owner = callee.ownerFqn ?: return NOT_NAV
         if (!owner.startsWith("androidx.navigation")) return NOT_NAV
         return when (callee.methodName) {
             "rememberNavController" -> NAV_CONTROLLER_STUB
-            "composable" -> registerNavDestination(call, args)
+            "composable", "dialog" -> registerNavDestination(call, args)
+            "navigation" -> registerNavGraph(call, callee, args)
             "NavHost" -> if (composer != null) renderNavHost(call, callee, composer, args) else NOT_NAV
             else -> NOT_NAV
         }
     }
 
-    /** Register a `composable<T> { content }` on the active collector, keyed by T's FQN (from the call-site type
-     *  argument). [NOT_NAV] when it isn't inside a NavHost builder (no active collector) or carries no type arg. */
+    /** Register a `composable<T> { content }` / `composable("route") { content }` (or a `dialog`) on the active
+     *  collector, keyed by the route TYPE argument's FQN when present, else the string route (first String arg).
+     *  [NOT_NAV] when not inside a NavHost/navigation builder, or no route/content is present. */
     private fun registerNavDestination(call: RNode.Call, args: List<Any?>): Any? {
         val collector = navCollector ?: return NOT_NAV
-        val routeFqn = call.typeArguments.firstOrNull()?.fqn ?: return NOT_NAV
         val content = args.lastOrNull { it is InterpretedLambda } as? InterpretedLambda ?: return NOT_NAV
-        collector.destinations[routeFqn] = content
+        val route = call.typeArguments.firstOrNull()?.fqn
+            ?: args.firstOrNull { it is String } as? String ?: return NOT_NAV
+        collector.destinations[route] = content
+        return Unit
+    }
+
+    /** Run a nested `navigation(startDestination, route) { builder }` (string or typed) into the SAME collector so
+     *  its destinations register flat, and record `route → startDestination` (when both are string routes) so a
+     *  start pointing at the graph resolves through. [NOT_NAV] outside an active builder or with no builder lambda. */
+    private fun registerNavGraph(call: RNode.Call, callee: ResolvedCallable.Library, args: List<Any?>): Any? {
+        val collector = navCollector ?: return NOT_NAV
+        val builder = args.lastOrNull { it is InterpretedLambda } as? InterpretedLambda ?: return NOT_NAV
+        val ordered = reorderNamedArgs(callee.paramNames, call.args, args)
+        val strings = ordered.filterIsInstance<String>()
+        fun namedString(name: String): String? =
+            callee.paramNames.indexOf(name).let { if (it >= 0) ordered.getOrNull(it) else null } as? String
+        val start = namedString("startDestination") ?: strings.getOrNull(0)
+        val route = namedString("route") ?: strings.getOrNull(1)
+        if (route != null && start != null) collector.graphStart[route] = start
+        builder.invoke(listOf(collector)) // nested composable/navigation calls register on `collector`
         return Unit
     }
 
@@ -713,11 +791,18 @@ class ComposeDispatcher(
         }
     }
 
-    /** The content lambda for [start]'s route, matched against [collector] by route FQN then simple name. */
+    /** The content lambda for [start]'s route, matched against [collector] by route FQN/string then simple name.
+     *  A start that names a nested GRAPH (not a leaf destination) resolves through its start destination (bounded
+     *  against a cycle), so `NavHost(startDestination = "home") { navigation(route="home", start="feed"){…} }`
+     *  shows the `feed` screen. */
     private fun matchDestination(start: Any?, collector: NavGraphCollector): InterpretedLambda? {
-        val fqn = routeFqnOf(start) ?: return null
-        collector.destinations[fqn]?.let { return it }
-        val simple = fqn.substringAfterLast('.')
+        var route = routeFqnOf(start) ?: return null
+        val visited = HashSet<String>()
+        while (route !in collector.destinations && route in collector.graphStart && visited.add(route)) {
+            route = collector.graphStart.getValue(route)
+        }
+        collector.destinations[route]?.let { return it }
+        val simple = route.substringAfterLast('.')
         return collector.destinations.entries.firstOrNull { it.key.substringAfterLast('.') == simple }?.value
     }
 

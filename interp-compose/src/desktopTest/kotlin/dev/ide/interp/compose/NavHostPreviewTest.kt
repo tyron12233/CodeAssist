@@ -58,6 +58,66 @@ class NavHostPreviewTest {
         typeArguments = listOf(RTypeArg(routeFqn, listOf(routeFqn))),
     )
 
+    /** A `composable("route") { fakeItem(screen) }` STRING-route registration (no type argument — the shape whose
+     *  fall-through to the real `NavGraphBuilder` produced the `getProvider() on …NavGraphCollector` crash). */
+    private fun stringComposableCall(route: String, screen: String, key: Int) = RNode.Call(
+        ResolvedCallable.Library(
+            "composable", "$navPkg.NavGraphBuilderKt", "composable", emptyList(),
+            isStatic = true, isConstructor = false, isInline = true, isComposable = false,
+            paramNames = listOf("route", "arguments", "deepLinks", "content"),
+        ),
+        DispatchKind.EXTENSION, receiver = null,
+        args = listOf(
+            RArg(RNode.Const(route, null, span)),
+            RArg(RNode.Lambda(emptyList(), fakeItem(screen, key + 1), emptyList(), span), trailingLambda = true),
+        ),
+        callSiteKey = CallSiteKey(key), source = span,
+    )
+
+    /** A nested `navigation(startDestination, route) { children }` graph registration. */
+    private fun navigationCall(startDestination: String, route: String, key: Int, children: List<RNode.Call>) = RNode.Call(
+        ResolvedCallable.Library(
+            "navigation", "$navPkg.NavGraphBuilderKt", "navigation", emptyList(),
+            isStatic = true, isConstructor = false, isInline = false, isComposable = false,
+            paramNames = listOf("startDestination", "route", "builder"),
+        ),
+        DispatchKind.EXTENSION, receiver = null,
+        args = listOf(
+            RArg(RNode.Const(startDestination, null, span)), RArg(RNode.Const(route, null, span)),
+            RArg(RNode.Lambda(emptyList(), RNode.Block(children, false, span), emptyList(), span), trailingLambda = true),
+        ),
+        callSiteKey = CallSiteKey(key), source = span,
+    )
+
+    /** A `rememberNavController()` call (intercepted to a placeholder). */
+    private fun rememberNavCall(key: Int) = RNode.Call(
+        ResolvedCallable.Library("rememberNavController", "$navPkg.NavHostControllerKt", "rememberNavController", emptyList(), isStatic = true, isConstructor = false, isInline = false, isComposable = true),
+        DispatchKind.TOP_LEVEL, receiver = null, args = emptyList(), callSiteKey = CallSiteKey(key), source = span,
+    )
+
+    /** A `NavHost(nav, startDestination = [start]) { builder }` call over [children]. */
+    private fun navHostCall(start: RNode, children: List<RNode.Call>) = RNode.Call(
+        ResolvedCallable.Library(
+            "NavHost", "$navPkg.NavHostKt", "NavHost", emptyList(),
+            isStatic = true, isConstructor = false, isInline = false, isComposable = true,
+            paramNames = listOf("navController", "startDestination", "builder"),
+        ),
+        DispatchKind.TOP_LEVEL, receiver = null,
+        args = listOf(
+            RArg(rememberNavCall(1)), RArg(start),
+            RArg(RNode.Lambda(emptyList(), RNode.Block(children, false, span), emptyList(), span), trailingLambda = true),
+        ),
+        callSiteKey = CallSiteKey(10), source = span,
+    )
+
+    private fun renderPreview(navHost: RNode.Call): Throwable? {
+        val entry = ResolvedFunction("Preview", emptyList(), RNode.Block(listOf(navHost), false, span), emptyList(), returnsUnit = true)
+        var failure: Throwable? = null
+        val renderer = ComposePreviewRenderer()
+        composeOnce { renderer.Render(entry, emptyMap(), emptyList()) { failure = it } }
+        return failure
+    }
+
     @Test
     fun navHostRendersTheStartDestination() {
         // A route type: `@Serializable data object Home` — a project SOURCE object, so its start-destination
@@ -100,6 +160,38 @@ class NavHostPreviewTest {
         if (failure != null) throw AssertionError("preview failed", failure)
         assertEquals(listOf("Home"), ItemCapture.items,
             "the NavHost preview should compose ONLY the start destination (Home), not Detail")
+    }
+
+    @Test
+    fun navHostRendersStringRouteStartDestination() {
+        // Jetsnack-style STRING routes: `NavHost(startDestination = "home") { composable("home"){}; composable("detail"){} }`.
+        // Before string-route interception these fell through to the real `NavGraphBuilder.composable`, which calls
+        // `getProvider()` on our collector → crash. Now they register by string route and the start (Home) renders.
+        val navHost = navHostCall(
+            RNode.Const("home", null, span),
+            listOf(stringComposableCall("home", "Home", 20), stringComposableCall("detail", "Detail", 30)),
+        )
+        val failure = renderPreview(navHost)
+        if (failure != null) throw AssertionError("string-route NavHost preview failed", failure)
+        assertEquals(listOf("Home"), ItemCapture.items,
+            "the string-route NavHost should compose ONLY the start destination (Home)")
+    }
+
+    @Test
+    fun navHostFollowsNestedNavigationGraphToItsStart() {
+        // `NavHost(startDestination = "home") { navigation(startDestination = "feed", route = "home") {
+        //     composable("feed"){}; composable("profile"){} } }` — the NavHost start ("home") names the nested
+        // GRAPH, which resolves through to the graph's start destination (Feed). The nested `navigation {}` call
+        // must not fall through to the real builder (another getProvider() crash).
+        val nested = navigationCall(
+            startDestination = "feed", route = "home", key = 40,
+            children = listOf(stringComposableCall("feed", "Feed", 50), stringComposableCall("profile", "Profile", 60)),
+        )
+        val navHost = navHostCall(RNode.Const("home", null, span), listOf(nested))
+        val failure = renderPreview(navHost)
+        if (failure != null) throw AssertionError("nested-navigation NavHost preview failed", failure)
+        assertEquals(listOf("Feed"), ItemCapture.items,
+            "a start pointing at a nested graph should resolve through to that graph's start (Feed)")
     }
 
     @Test

@@ -64,6 +64,15 @@ class Interpreter(
     /** Executes library classes the loaders cannot load (project-jar dependency code, run in the bytecode VM
      *  on device instead of a DexClassLoader). Null → the honest "cannot load" boundaries stand. */
     private val libraryFallback: LibraryExecutor? = null,
+    /** Single-instance storage for top-level `val`/`var` backing fields ([topLevelPropertyState]). Defaults to a
+     *  fresh per-interpreter map (console/tests). The Compose preview passes a REMEMBERED, render-stable map so a
+     *  top-level `val`'s ONE instance survives an interpreter RE-CREATION within a render: `ComposePreviewRenderer`
+     *  rebuilds the Interpreter whenever its `remember(program, classes)` key churns (the isolated `:preview`
+     *  render re-supplies program/classes across recompositions), and a fresh per-interpreter map would re-mint a
+     *  `staticCompositionLocalOf { }` in a top-level `val` per interpreter — so `provides` (one instance) and a
+     *  later `.current` (a re-minted instance) mismatch and the default lambda throws ("No JetsnackColorPalette
+     *  provided" — the out-of-process custom-theme preview rendered grey). Sharing the map keeps identity stable. */
+    topLevelPropertyStore: MutableMap<String, Any?> = HashMap(),
 ) {
     /** Source classes indexed by fully-qualified name and by simple name (a constructor callee carries the
      *  simple name; an object/enum reference carries the resolved FQN). */
@@ -148,17 +157,46 @@ class Interpreter(
     }
 
     /** A benign stand-in for a parameter whose default couldn't be evaluated (gap-tolerant mode): the zero of a
-     *  primitive type so a later arithmetic/boolean read doesn't NPE on unboxing, else null. */
-    private fun zeroForType(qualifiedName: String?): Any? = when (qualifiedName) {
-        "kotlin.Int" -> 0
-        "kotlin.Long" -> 0L
-        "kotlin.Short" -> 0.toShort()
-        "kotlin.Byte" -> 0.toByte()
-        "kotlin.Char" -> '\u0000'
-        "kotlin.Double" -> 0.0
-        "kotlin.Float" -> 0f
-        "kotlin.Boolean" -> false
-        else -> null
+     *  primitive type (so a later arithmetic/boolean read doesn't NPE on unboxing), or the UNBOXED zero of an
+     *  inline value class the interpreter holds unboxed (`Color`/`Dp`/…) — never null for a value class, since
+     *  null then crashes a value-class-mangled dispatch (`ColorKt.compositeOver--OWjLjI(long, long)` →
+     *  "argument 2 has type long, got null", blanking a Jetsnack `JetsnackCard` preview whose defaulted
+     *  `color = JetsnackTheme.colors.uiBackground` couldn't evaluate) — else null. */
+    private fun zeroForType(qualifiedName: String?): Any? {
+        when (qualifiedName) {
+            "kotlin.Int" -> return 0
+            "kotlin.Long" -> return 0L
+            "kotlin.Short" -> return 0.toShort()
+            "kotlin.Byte" -> return 0.toByte()
+            "kotlin.Char" -> return '\u0000'
+            "kotlin.Double" -> return 0.0
+            "kotlin.Float" -> return 0f
+            "kotlin.Boolean" -> return false
+        }
+        // An inline VALUE CLASS the interpreter holds unboxed: its zero is the zero of its underlying primitive
+        // (the single parameter of the synthetic static `box-impl`). `Color`/`Offset`/`Size`/`TextUnit` erase to
+        // `long`, `Dp` to `float`. Falls through to null when the type isn't loadable / isn't a value class /
+        // is reference-backed (a non-primitive `box-impl` param), preserving the prior behaviour there.
+        qualifiedName?.let { fqn ->
+            val cls = runCatching { loadClassAcross(fqn, initialize = false, preferred = classLoader) }.getOrNull()
+            val box = cls?.declaredMethods?.firstOrNull {
+                it.name == "box-impl" && java.lang.reflect.Modifier.isStatic(it.modifiers) && it.parameterCount == 1
+            }
+            box?.parameterTypes?.firstOrNull()?.let { u ->
+                return when (u) {
+                    java.lang.Long.TYPE -> 0L
+                    Integer.TYPE -> 0
+                    java.lang.Float.TYPE -> 0f
+                    java.lang.Double.TYPE -> 0.0
+                    java.lang.Short.TYPE -> 0.toShort()
+                    java.lang.Byte.TYPE -> 0.toByte()
+                    Character.TYPE -> '\u0000'
+                    java.lang.Boolean.TYPE -> false
+                    else -> null
+                }
+            }
+        }
+        return null
     }
 
     /** The declared value-parameter count the resolver pinned for [callee] (a source callee carries it in its
@@ -199,7 +237,7 @@ class Interpreter(
      *  updates it — so a getter's `if (_x != null) return _x!!; _x = build(); return _x!!` sees its own write.
      *  Per-interpreter (statics reset between runs, like a fresh class load). `NO_VALUE` distinguishes an
      *  uninitialized slot from one holding a genuine `null` (the icon backing field starts null). */
-    private val topLevelPropertyState = HashMap<String, Any?>()
+    private val topLevelPropertyState: MutableMap<String, Any?> = topLevelPropertyStore
     private val NO_VALUE = Any()
 
     /** Marker distinguishing a `getValue` call (no value argument) from a `setValue` in [callDelegateOp] —
@@ -466,11 +504,29 @@ class Interpreter(
                 // no instance — read the static field (or its `getName()` static getter) off the class.
                 staticHolder != null -> readStaticMember(staticHolder, binding.name)
                 receiverNode == null -> {
-                    // A top-level property (`LocalTextStyle`, `PI`) — its getter is a STATIC method on the declaring
-                    // `…Kt` facade (`getLocalTextStyle()`); the resolver records the facade in the binding's owner.
-                    val owner = (binding as? Binding.Property)?.ownerFqn
-                        ?: throw InterpreterException("top-level property read `${binding.name}` not supported (no owner)")
-                    readTopLevelProperty(owner, binding.name)
+                    // A PROJECT-source top-level `val`/`var` read here as a Property binding must go through the
+                    // SAME single-instance storage ([topLevelPropertyState]) as a source-call read, or it is
+                    // re-evaluated per read — minting a fresh value each time. For `val Local… =
+                    // staticCompositionLocalOf { … }` (the custom-theme idiom) that breaks CompositionLocal
+                    // IDENTITY: `Provide…(Local provides …)` stores under instance A while a later `Local.current`
+                    // (read through this path) re-mints instance B, so the lookup misses and B's default lambda
+                    // throws ("No JetsnackColorPalette provided" — the out-of-process Jetsnack preview). The
+                    // source-call read already caches (see the singleton branch above); a reference the resolver
+                    // instead lowered as a Property binding must share that cache. Library top-level properties
+                    // (no source fn) keep the reflective facade read unchanged.
+                    val srcKey = "${binding.name}/0"
+                    val srcFn = functions[srcKey]?.takeIf { it.singletonBackingField || it.mutableBackingField }
+                    if (srcFn != null) {
+                        val cached = topLevelPropertyState.getOrDefault(srcKey, NO_VALUE)
+                        if (cached !== NO_VALUE) cached
+                        else invokeFunction(srcFn, NO_RECEIVER, emptyList()).also { topLevelPropertyState[srcKey] = it }
+                    } else {
+                        // A LIBRARY top-level property (`LocalTextStyle`, `PI`) — its getter is a STATIC method on
+                        // the declaring `…Kt` facade (`getLocalTextStyle()`); the resolver records the facade owner.
+                        val owner = (binding as? Binding.Property)?.ownerFqn
+                            ?: throw InterpreterException("top-level property read `${binding.name}` not supported (no owner)")
+                        readTopLevelProperty(owner, binding.name)
+                    }
                 }
 
                 else -> {
@@ -479,14 +535,22 @@ class Interpreter(
                     // The receiver evaluated to a CLASS
                     if (receiver is Class<*>) readStaticMember(receiver, binding.name)
                     else {
-                        val extOwner =
-                            (binding as? Binding.Property)?.takeIf { it.isExtension }?.ownerFqn
+                        val prop = binding as? Binding.Property
+                        val extOwner = prop?.takeIf { it.isExtension }?.ownerFqn
                         if (extOwner != null) readExtensionProperty(
                             receiver,
                             extOwner,
                             binding.name
                         )
-                        else readProperty(receiver, binding.name)
+                        else {
+                            // A value-class member property (`Size.width`, `Offset.x`): the receiver is the
+                            // UNBOXED underlying (a Long for Size), whose runtime class carries no getter — the
+                            // getter is a static `get<Name>-impl(underlying)` on the value class. Route it there
+                            // (owner from the resolver); [NotValueClassMember] falls back to the reflective read.
+                            val getter = "get" + binding.name.replaceFirstChar { if (it.isLowerCase()) it.titlecase() else it.toString() }
+                            val vc = dispatcher.invokeUnboxedValueClassMember(prop?.ownerFqn, getter, receiver, emptyList())
+                            if (vc !== NotValueClassMember) vc else readProperty(receiver, binding.name)
+                        }
                     }
                 }
             }
@@ -806,6 +870,17 @@ class Interpreter(
                 }
             }
             val right = eval(call.args.first().value, env)
+            // A value-class arithmetic operator (`Size / 2f` → `Size.div-impl`, `Offset + o`, `Dp * n`): the
+            // receiver is the UNBOXED underlying (a Long for Size/Offset, a Float for Dp), which IS a `Number`,
+            // so the primitive-arithmetic shortcut below would silently misfire (dividing the packed bits as a
+            // raw Long → garbage). Route it to the value class's static operator impl first, keyed on the owner
+            // the resolver put on the callee; [NotValueClassMember] falls through to the numeric/dispatch paths.
+            // A primitive-numeric owner is skipped so hot `Int + Int` arithmetic doesn't pay a class-load probe.
+            val opOwner = (callee as? ResolvedCallable.Library)?.ownerFqn
+            if (op in ARITHMETIC && left != null && opOwner != null && opOwner !in PRIMITIVE_NUMERIC_FQNS) {
+                val vc = dispatcher.invokeUnboxedValueClassMember(opOwner, op, left, listOf(right))
+                if (vc !== NotValueClassMember) return vc
+            }
             when {
                 op == "eq" -> return left == right
                 op == "ne" -> return left != right
@@ -936,10 +1011,14 @@ class Interpreter(
             // by [bindParams].
             val target = sourceFunctionFor(callee, call.args.size)
                 ?: throw InterpreterException("no source function `${callee.displayName}/${call.args.size}`")
-            // A top-level `var` backing-field READ: return its live storage value, lazily initialized from the
-            // initializer ([target.body]) on first read. Keeps `_x` reads consistent with prior `_x = …` writes
-            // (the write path is in [RNode.Assign]), so a lazy-cache getter returns what it just built.
-            if (target.mutableBackingField && call.args.isEmpty()) {
+            // A top-level plain-backing-field property READ: return its live storage value, lazily initialized
+            // from the initializer ([target.body]) on first read and cached thereafter (keyed `name/0`). For a
+            // `var` this keeps reads consistent with prior `_x = …` writes (the lazy-cache icon idiom; write path
+            // in [RNode.Assign]). For a `val` it preserves the single-instance identity real Kotlin gives a
+            // `<clinit>` static field — without it, `val LocalX = staticCompositionLocalOf { … }` would mint a
+            // fresh CompositionLocal per read, so a theme's `provides` and a later `.current` never match and the
+            // preview fails with "No X provided" (a custom-theme app like Jetsnack blanks entirely).
+            if ((target.mutableBackingField || target.singletonBackingField) && call.args.isEmpty()) {
                 val key = "${callee.displayName}/0"
                 val current = topLevelPropertyState.getOrDefault(key, NO_VALUE)
                 if (current !== NO_VALUE) return current
@@ -1019,10 +1098,21 @@ class Interpreter(
             )
                 ?: throw InterpreterException("member extension `${callee.displayName}` scope receiver is null")
             val extReceiver = call.receiver?.let { eval(it, env) }
+            // Reorder named args into declared positions with [OmittedArg] holes for skipped defaults — exactly as
+            // the source-call and constructor paths do. Without it a call that names a LATE parameter while
+            // skipping earlier defaults (`Modifier.sharedBounds(state, animatedVisibilityScope = avs,
+            // boundsTransform = bt)` skips `enter`/`exit`) collapses to contiguous args, so the `$default`
+            // synthetic binds them to the wrong slots and the dispatcher reports "no member extension …(N)".
+            val paramNames = when (val c = callee) {
+                is ResolvedCallable.Library -> c.paramNames
+                is ResolvedCallable.Source -> c.paramNames
+                else -> emptyList()
+            }
+            val reordered = reorderNamedArgs(paramNames, call.args, call.args.map { eval(it.value, env) })
             // Pass the scope as the dispatch receiver and the extension receiver as the head of the args; the
             // dispatcher invokes it as an instance method on the scope (and threads BOTH receivers through the
             // `$default` synthetic when a value param is defaulted).
-            val args = listOf(extReceiver) + call.args.map { eval(it.value, env) }
+            val args = listOf(extReceiver) + reordered
             return checkedDispatch(call, scope, args)
         }
         // `super.foo(...)`: dispatch to the SUPERCLASS implementation, skipping the lexical class's own override.
@@ -1310,6 +1400,7 @@ class Interpreter(
             is Sequence<*> -> recv.forEach(block)
             is Map<*, *> -> recv.entries.forEach(block)
             is Array<*> -> recv.forEach(block)
+            is CharSequence -> recv.forEach { block(it) } // `String`/CharSequence iterate their Chars
             is IntArray -> recv.forEach { block(it) }
             is LongArray -> recv.forEach { block(it) }
             is DoubleArray -> recv.forEach { block(it) }
@@ -1319,6 +1410,31 @@ class Interpreter(
             is CharArray -> recv.forEach { block(it) }
             is BooleanArray -> recv.forEach { block(it) }
             else -> throw InterpreterException("`forEach` receiver is not iterable (${recv::class.simpleName})")
+        }
+    }
+
+    /** Natural (`compareTo`) ordering with the stdlib's null-handling (`null` sorts first), for the comparator
+     *  factories (`compareBy`/`compareByDescending`/…) — mirrors `kotlin.comparisons.compareValues`. */
+    private fun naturalCompare(a: Any?, b: Any?): Int {
+        if (a === b) return 0
+        if (a == null) return -1
+        if (b == null) return 1
+        @Suppress("UNCHECKED_CAST")
+        return (a as Comparable<Any?>).compareTo(b)
+    }
+
+    /** The elements of an iterable-like receiver (Iterable/Sequence/Map-entries/Array/primitive array/CharSequence)
+     *  as a List, or null when [recv] isn't one — so an aggregate intrinsic (`sumOf`/`maxOf`/…) that can't handle
+     *  the receiver falls through to reflection rather than guessing. Mirrors [forEachElement]'s element supply. */
+    private fun elementListOrNull(recv: Any?): List<Any?>? {
+        if (recv == null) return null
+        return when (recv) {
+            is Iterable<*>, is Sequence<*>, is Map<*, *>, is CharSequence,
+            is Array<*>, is IntArray, is LongArray, is DoubleArray, is FloatArray,
+            is ShortArray, is ByteArray, is CharArray, is BooleanArray -> {
+                val out = ArrayList<Any?>(); forEachElement(recv) { out.add(it) }; out
+            }
+            else -> null
         }
     }
 
@@ -1559,38 +1675,84 @@ class Interpreter(
             name == "with" && call.dispatch == DispatchKind.TOP_LEVEL && args.size == 2 ->
                 Handled(lambda(args[1].value).invoke(listOf(eval(args[0].value, env))))
             // `xs.sumOf { selector }` / `xs.sum()` — @InlineOnly (no JVM method); sum the (selected) elements,
-            // preserving Int/Long/Double as Kotlin does. `withIndex()`/ranges are Iterable, so all flow through.
+            // preserving Int/Long/Double as Kotlin does. Works over any iterable-like receiver (list/array/
+            // sequence/`withIndex()`/ranges), so `IntArray.sumOf { }` flows through too.
             name == "sumOf" && call.dispatch == DispatchKind.EXTENSION && args.size == 1 -> {
-                val elems = (receiver() as? Iterable<*>) ?: return null
+                val elems = elementListOrNull(receiver()) ?: return null
                 val sel = lambda(args[0].value)
                 Handled(numericSum(elems.map { sel.invoke(listOf(it)) }))
             }
 
             name == "sum" && call.dispatch == DispatchKind.EXTENSION && args.isEmpty() ->
-                (receiver() as? Iterable<*>)?.let { Handled(numericSum(it.toList())) }
-            // `xs.maxOf/minOf { selector }` — the max/min of the selected Comparable values.
-            (name == "maxOf" || name == "minOf") && call.dispatch == DispatchKind.EXTENSION && args.size == 1 -> {
-                val elems = (receiver() as? Iterable<*>)?.toList() ?: return null
-                if (elems.isEmpty()) throw InterpreterException("`$name` on an empty collection")
+                elementListOrNull(receiver())?.let { Handled(numericSum(it)) }
+            // `xs.maxOf/minOf { selector }` — the max/min of the selected Comparable values (throws on empty).
+            // `maxOfOrNull`/`minOfOrNull` are the null-on-empty variants.
+            (name == "maxOf" || name == "minOf" || name == "maxOfOrNull" || name == "minOfOrNull") &&
+                call.dispatch == DispatchKind.EXTENSION && args.size == 1 -> {
+                val elems = elementListOrNull(receiver()) ?: return null
+                val orNull = name.endsWith("OrNull")
+                if (elems.isEmpty())
+                    if (orNull) return Handled(null) else throw InterpreterException("`$name` on an empty collection")
                 val sel = lambda(args[0].value)
-                Handled(
-                    reduceByComparison(
-                        elems.map { sel.invoke(listOf(it)) },
-                        wantMax = name == "maxOf"
-                    )
-                )
+                Handled(reduceByComparison(elems.map { sel.invoke(listOf(it)) }, wantMax = name.startsWith("maxOf")))
             }
-            // `list.getOrElse(index) { default }` — the element, or the lambda's result (given the index) when out of bounds.
+            // `xs.maxOfWith/minOfWith(comparator) { selector }` (+ their `OrNull` variants) — the max/min selected
+            // value BY the supplied Comparator, rather than by natural ordering. @InlineOnly.
+            (name == "maxOfWith" || name == "minOfWith" || name == "maxOfWithOrNull" || name == "minOfWithOrNull") &&
+                call.dispatch == DispatchKind.EXTENSION && args.size == 2 -> {
+                val elems = elementListOrNull(receiver()) ?: return null
+                val orNull = name.endsWith("OrNull")
+                if (elems.isEmpty())
+                    if (orNull) return Handled(null) else throw InterpreterException("`$name` on an empty collection")
+                @Suppress("UNCHECKED_CAST")
+                val comparator = eval(args[0].value, env) as? Comparator<Any?>
+                    ?: throw InterpreterException("`$name` requires a Comparator argument")
+                val sel = lambda(args[1].value)
+                val selected = elems.map { sel.invoke(listOf(it)) }
+                val wantMax = name.startsWith("maxOf")
+                var acc = selected[0]
+                for (i in 1 until selected.size) {
+                    val cmp = comparator.compare(acc, selected[i])
+                    if (if (wantMax) cmp < 0 else cmp > 0) acc = selected[i]
+                }
+                Handled(acc)
+            }
+            // `xs.flatMapIndexed { index, element -> iterable }` — @InlineOnly; concatenate the per-element
+            // iterables the transform produces, passing each element's index.
+            name == "flatMapIndexed" && call.dispatch == DispatchKind.EXTENSION && args.size == 1 -> {
+                val transform = lambda(args[0].value)
+                val budget = LoopBudget()
+                val out = ArrayList<Any?>()
+                var i = 0
+                forEachElement(receiver()) { element ->
+                    forEachElement(transform.invoke(listOf(i++, element))) { out.add(it) }
+                    guardLoop(budget)
+                }
+                Handled(out)
+            }
+            // `list.getOrElse(index) { default }` — the element, or the lambda's result (given the index) when out
+            // of bounds; `map.getOrElse(key) { default }` — the value, or the (no-arg) lambda's result. Both
+            // @InlineOnly (list on CollectionsKt, map on MapsKt), null-based for the map (`get(key) ?: default()`).
             name == "getOrElse" && call.dispatch == DispatchKind.EXTENSION && args.size == 2 -> {
-                val list = receiver() as? List<*> ?: return null
-                val idx = (eval(args[0].value, env) as? Number)?.toInt() ?: return null
-                Handled(
-                    if (idx in list.indices) list[idx] else lambda(args[1].value).invoke(
-                        listOf(
-                            idx
-                        )
-                    )
-                )
+                when (val recv = receiver()) {
+                    is Map<*, *> -> {
+                        @Suppress("UNCHECKED_CAST") val m = recv as Map<Any?, Any?>
+                        Handled(m[eval(args[0].value, env)] ?: lambda(args[1].value).invoke(emptyList()))
+                    }
+                    is List<*> -> {
+                        val idx = (eval(args[0].value, env) as? Number)?.toInt() ?: return null
+                        Handled(if (idx in recv.indices) recv[idx] else lambda(args[1].value).invoke(listOf(idx)))
+                    }
+                    else -> null
+                }
+            }
+            // `map.getOrPut(key) { default }` — @InlineOnly (MapsKt); returns the value, or computes + stores the
+            // default and returns it. Null-based like the stdlib (`get(key) ?: default().also { put }`).
+            name == "getOrPut" && call.dispatch == DispatchKind.EXTENSION && args.size == 2 -> {
+                @Suppress("UNCHECKED_CAST")
+                val m = (receiver() as? MutableMap<Any?, Any?>) ?: return null
+                val key = eval(args[0].value, env)
+                Handled(m[key] ?: lambda(args[1].value).invoke(emptyList()).also { m[key] = it })
             }
             // `s.uppercase()` / `s.lowercase()` — @InlineOnly one-liners over the receiver CharSequence.
             (name == "uppercase" || name == "lowercase") && call.dispatch == DispatchKind.EXTENSION && args.isEmpty() ->
@@ -1765,6 +1927,23 @@ class Interpreter(
                     )
                 )
             }
+            // `xs.find { predicate }` / `findLast { predicate }` — @InlineOnly (they delegate to
+            // `firstOrNull`/`lastOrNull` with the predicate, so no JVM method is emitted). `find` yields the FIRST
+            // matching element (stopping early), `findLast` the LAST; both null when nothing matches.
+            (name == "find" || name == "findLast") && call.dispatch == DispatchKind.EXTENSION && args.size == 1 -> {
+                val predicate = lambda(args[0].value)
+                val budget = LoopBudget()
+                var found: Any? = null
+                var done = false // `find` stops at the first hit; `findLast` keeps the last
+                forEachElement(receiver()) { element ->
+                    if (!done && predicate.invoke(listOf(element)) == true) {
+                        found = element
+                        if (name == "find") done = true
+                    }
+                    guardLoop(budget)
+                }
+                Handled(found)
+            }
             // `xs.firstNotNullOf { transform }` / `firstNotNullOfOrNull { }` — the first non-null transform result;
             // @InlineOnly. `firstNotNullOf` throws when none is found, the `OrNull` variant yields null.
             (name == "firstNotNullOf" || name == "firstNotNullOfOrNull") && call.dispatch == DispatchKind.EXTENSION && args.size == 1 -> {
@@ -1783,6 +1962,32 @@ class Interpreter(
                 if (found == null && name == "firstNotNullOf")
                     throw NoSuchElementException("No element of the collection was transformed to a non-null value.")
                 Handled(found)
+            }
+            // `compareBy { selector }` / `compareByDescending { selector }` — build a real `Comparator` from the
+            // selector. @InlineOnly (the single-selector forms; the vararg `compareBy(...)` has a JVM method and
+            // reflects). `descending` swaps the operands. The comparator is a real object handed to `sortedWith`/
+            // `maxWith`/etc., which dispatch reflectively over it.
+            (name == "compareBy" || name == "compareByDescending") && call.dispatch == DispatchKind.TOP_LEVEL && args.size == 1 -> {
+                val sel = lambda(args[0].value)
+                val desc = name == "compareByDescending"
+                Handled(Comparator<Any?> { a, b ->
+                    if (desc) naturalCompare(sel.invoke(listOf(b)), sel.invoke(listOf(a)))
+                    else naturalCompare(sel.invoke(listOf(a)), sel.invoke(listOf(b)))
+                })
+            }
+            // `comparator.thenBy { selector }` / `thenByDescending { }` — @InlineOnly extensions that chain a
+            // secondary ordering: use the receiver comparator first, break ties by the (natural/descending) selector.
+            (name == "thenBy" || name == "thenByDescending") && call.dispatch == DispatchKind.EXTENSION && args.size == 1 -> {
+                @Suppress("UNCHECKED_CAST")
+                val base = (receiver() as? Comparator<Any?>) ?: return null
+                val sel = lambda(args[0].value)
+                val desc = name == "thenByDescending"
+                Handled(Comparator<Any?> { a, b ->
+                    val primary = base.compare(a, b)
+                    if (primary != 0) primary
+                    else if (desc) naturalCompare(sel.invoke(listOf(b)), sel.invoke(listOf(a)))
+                    else naturalCompare(sel.invoke(listOf(a)), sel.invoke(listOf(b)))
+                })
             }
 
             else -> null
@@ -1823,6 +2028,14 @@ class Interpreter(
             is CharSequence -> Handled(recv.isNotEmpty())
             is Collection<*> -> Handled(recv.isNotEmpty())
             is Map<*, *> -> Handled(recv.isNotEmpty())
+            else -> null
+        }
+
+        "isBlank" -> (recv as? CharSequence)?.let { Handled(it.isBlank()) }
+        "isEmpty" -> when (recv) {
+            is CharSequence -> Handled(recv.isEmpty())
+            is Collection<*> -> Handled(recv.isEmpty())
+            is Map<*, *> -> Handled(recv.isEmpty())
             else -> null
         }
 
@@ -2690,20 +2903,26 @@ class Interpreter(
                 leadingReceivers = 1
             )
         }
-        val cls = loadClassAcross(ownerFqn, initialize = false, preferred = classLoader)
         // A missing library facade (e.g. a Compose icon's per-icon `…Kt`) is a recoverable boundary:
         // partial rendering skips the one statement rather than failing the whole preview.
+        loadClassAcross(ownerFqn, initialize = false, preferred = classLoader)
             ?: throw InterpreterBoundaryException("cannot load facade `$ownerFqn` for extension property `$name`")
-        val getter = getterName
-        val m = cls.methods.firstOrNull {
-            java.lang.reflect.Modifier.isStatic(it.modifiers) && it.parameterCount == 1 && KotlinJvmNames.matches(
-                cls,
-                it.name,
-                getter
-            )
-        } ?: throw InterpreterException("no extension-property getter `$name` on `$ownerFqn`")
-        runCatching { m.isAccessible = true }
-        return m.invoke(null, receiver)
+        // Route the getter through the dispatcher as an EXTENSION call (receiver as the leading argument), so
+        // OVERLOAD selection picks the getter whose parameter accepts the receiver and the receiver is COERCED
+        // (numeric widening/narrowing, value-class (un)boxing) — mirroring [writeExtensionProperty]. A bare
+        // `m.invoke(null, receiver)` over the first matching getter bound `0.5.sp` (a `Double`) to `getSp(Int)`
+        // (`.sp`/`.dp`/… each have Int/Float/Double overloads) → "argument type mismatch", degrading a project's
+        // typography/dimensions on every preview. The facade is confirmed loadable above, so routing here can't
+        // turn a missing-facade boundary into a hard error.
+        val getter = ResolvedCallable.Library(
+            displayName = getterName, ownerFqn = ownerFqn, methodName = getterName,
+            paramTypes = emptyList(), isStatic = true, isConstructor = false, isInline = false,
+        )
+        val call = RNode.Call(
+            getter, DispatchKind.EXTENSION, receiver = null, args = emptyList(),
+            callSiteKey = CallSiteKey(0), source = SourceSpan(0, 0),
+        )
+        return checkedDispatch(call, receiver, emptyList())
     }
 
     /** Write an extension property (`role = Role.RadioButton` inside a `semantics { }` lambda): its setter is a
@@ -3258,6 +3477,12 @@ class Interpreter(
         val ARITHMETIC = setOf("plus", "minus", "times", "div", "rem")
         val COMPARISON = setOf("lt", "le", "gt", "ge")
         val BITWISE = setOf("and", "or", "xor", "shl", "shr", "ushr")
+        /** Owners of the primitive-numeric arithmetic operators (`5 + 3`), computed as intrinsics — never a
+         *  value-class member, so the value-class operator probe skips them to keep hot arithmetic class-load-free. */
+        val PRIMITIVE_NUMERIC_FQNS = setOf(
+            "kotlin.Int", "kotlin.Long", "kotlin.Float", "kotlin.Double", "kotlin.Short", "kotlin.Byte",
+            "kotlin.Char", "kotlin.UInt", "kotlin.ULong", "kotlin.UShort", "kotlin.UByte",
+        )
         val COMPONENT = Regex("component(\\d+)")
 
         /** Common Kotlin type names → their JVM classes, for `is`/`catch` checks against reflectable values. */
@@ -3293,6 +3518,14 @@ class Interpreter(
         val INLINE_INTRINSIC_FACADES = setOf(
             "kotlin.StandardKt", "kotlin.text.StringsKt", "kotlin.collections.CollectionsKt",
             "kotlin.collections.MapsKt", // MutableMap `+=`/`-=` (plusAssign/minusAssign) are @InlineOnly here
+            // Arrays carry the SAME @InlineOnly HOFs (`find`/`sumOf`/`flatMapIndexed`/…) on their own facade; the
+            // intrinsics dispatch by receiver shape ([forEachElement]/[elementListOrNull]), so an array receiver is
+            // handled identically to a list. (NOT `SequencesKt`: a sequence can be lazy/infinite, and these
+            // intrinsics force it eagerly — modeling that would need lazy-aware handling, so it's left to reflect.)
+            "kotlin.collections.ArraysKt",
+            // Comparator factories `compareBy`/`compareByDescending`/`thenBy`/`thenByDescending` (single-selector
+            // forms) are @InlineOnly here — built into real `Comparator`s by the intrinsics.
+            "kotlin.comparisons.ComparisonsKt",
             "kotlinx.coroutines.DelayKt",
             // The precondition family (`require`/`check`/`error`/`requireNotNull`/`checkNotNull`) — @InlineOnly
             // (they carry contracts), so no JVM method exists to reflect. `TODO` lives on `StandardKt` above.
@@ -3303,7 +3536,7 @@ class Interpreter(
 
         /** The `@InlineOnly` empty/blank predicates, dispatched by name in [evalEmptyBlankPredicate]. */
         val EMPTY_BLANK_PREDICATES =
-            setOf("isNotBlank", "isNotEmpty", "isNullOrBlank", "isNullOrEmpty")
+            setOf("isBlank", "isEmpty", "isNotBlank", "isNotEmpty", "isNullOrBlank", "isNullOrEmpty")
 
         /** `kotlin.math` single-argument functions modeled over [java.lang.Math] (all compute in `Double`).
          *  `round` is ties-to-even ([Math.rint], matching `kotlin.math.round`); `Double.roundToInt/Long` (ties

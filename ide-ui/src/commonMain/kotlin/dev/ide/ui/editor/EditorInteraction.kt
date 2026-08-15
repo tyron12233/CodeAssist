@@ -68,11 +68,24 @@ internal class EditorInteraction(initialRevision: Int) {
     // triple branch requires the press to have begun after this mark (a genuine third tap).
     var tripleArmMark by mutableStateOf<TimeSource.Monotonic.ValueTimeMark?>(null)
 
-    // Mouse click-count tracking (single → caret, double → word, triple → line). We count clicks ourselves so
-    // the mouse path can own the whole gesture (click + drag-to-select) and consume the drag.
+    // A tap landed inside an existing selection: the offset to place the caret at IF this turns out to be a lone
+    // tap (dismiss), decided in onTap once the double-tap window lapses. Null when no such tap is pending. Keeps
+    // the selection alive between press and onTap so a double-tap can expand it without a flicker.
+    var pendingTapDismiss: Int? = null
+
+    // Mouse click-count tracking (single → caret, double → word, triple → line, 4th+ → expand). A double-click
+    // whose burst BEGAN on a selection expands instead of word-selecting (see [burstOnSelection]). We count
+    // clicks ourselves so the mouse path can own the whole gesture (click + drag-to-select) and consume the drag.
     var mouseClicks by mutableIntStateOf(0)
     var mouseLastClickMs by mutableLongStateOf(0L)
     var mouseLastClickPos by mutableStateOf(Offset.Zero)
+
+    // Captured when a click/tap burst begins (its first click): whether the cursor was already inside a
+    // non-collapsed selection, and that selection's span. A double-click that started on a selection expands it
+    // (from [burstSelStart, burstSelEnd), since the first click has by then collapsed the live selection).
+    var burstOnSelection = false
+    var burstSelStart = 0
+    var burstSelEnd = 0
 }
 
 @Composable

@@ -133,6 +133,13 @@ class ComposePreviewRenderer(
             (if (prev == null) emptySet() else program.keys.filterTo(HashSet()) { program[it] !== prev[it] })
                 .also { prevProgram[0] = program }
         }
+        // Single-instance storage for top-level `val`/`var`s, REMEMBERED with no key so it OUTLIVES the interpreter
+        // below: `remember(program, classes)` rebuilds the Interpreter whenever program/classes identity churns
+        // (the isolated `:preview` render re-supplies them across recompositions), and a fresh per-interpreter map
+        // would re-mint a `staticCompositionLocalOf { }` in a top-level `val` per interpreter — breaking project
+        // CompositionLocal identity (`provides`/`.current` land on different instances → "No X provided", the grey
+        // out-of-process custom-theme preview). Sharing the store keeps a top-level val's one instance stable.
+        val topLevelStore = remember { HashMap<String, Any?>() }
         val interpreter = remember(program, classes) {
             // tolerateGaps: a single unsupported construct skips rather than blanking the whole preview (the
             // editor default); a lesson passes false so a gap surfaces as a visible error instead of a blank.
@@ -146,7 +153,8 @@ class ComposePreviewRenderer(
                 dirtyCallees = dirtyCallees,
                 resources = resources,
                 hooks = hooks,
-                libraryFallback = libraryExecutor
+                libraryFallback = libraryExecutor,
+                topLevelPropertyStore = topLevelStore,
             )
         }
         // Phase label for the profiler: the very first composition, an edit that dirtied some functions
@@ -173,6 +181,20 @@ class ComposePreviewRenderer(
         }
         if (aborted.value) {
             onError(InterpreterException("preview stopped: runaway recomposition (a library kept invalidating the composition, e.g. by writing state it reads while composing). Remove or guard that composable."))
+            return
+        }
+        // A @Preview with a REQUIRED, non-nullable parameter that [args] doesn't supply (no `@PreviewParameter`,
+        // no default) can't be invoked safely: the interpreter would bind it to `null`, which then NPEs deep in a
+        // library's MEASURE/DRAW pass (e.g. `LazyColumn(contentPadding = null)` — `PaddingValues` is non-null),
+        // and that pass runs OUTSIDE this composition try/catch (in the host view's layout/draw), so it crashes
+        // the IDE rather than failing the preview. Android Studio likewise won't render such a preview. Surface a
+        // clear error during composition (caught here) instead. Only a confidently non-nullable, defaultless,
+        // uncovered, non-vararg parameter trips this — a nullable one keeps working (null is a valid value), and
+        // an untyped one is left alone (never over-fires on a well-formed preview, which has no such parameter).
+        val unsatisfied = entry.params.drop(args.size).filter { it.default == null && !it.vararg && it.type?.nullable == false }
+        if (unsatisfied.isNotEmpty()) {
+            val names = unsatisfied.joinToString(", ") { "`${it.name}: ${it.type?.qualifiedName?.substringAfterLast('.') ?: "?"}`" }
+            onError(InterpreterException("preview `${entry.name}` needs a value for parameter $names — a @Preview parameter must be annotated @PreviewParameter or have a default (it can't be called with a missing non-null argument)"))
             return
         }
         // We're inside the IDE's composition: thread its composer, then drive the preview through its own

@@ -89,9 +89,9 @@ object BuiltInSettingsPages {
     const val SANDBOX_PROCESS = "sandboxProcessControl"
 
     /** Render the Compose `@Preview` in the `:preview` OS process (docs/compose-preview-isolation.md). Default
-     *  OFF (experimental): a runaway recomposition then pegs only `:preview`, not the IDE, but the isolated path
-     *  doesn't yet match the in-process host on content sizing / `@PreviewParameter` / locale (it falls back
-     *  in-process for those and on any remote failure). Read by `ComposePreviewService.previewIsolated()`. */
+     *  ON: a runaway recomposition or crash then pegs only `:preview`, not the IDE. The isolated path now sizes
+     *  wrap-to-content previews to match the in-process host; `@PreviewParameter` / locale previews still fall
+     *  back in-process (not covered yet), as does any remote failure. Read by `ComposePreviewService.previewIsolated()`. */
     const val PREVIEW_ISOLATE = "previewIsolate"
 
     // Keys the backend special-cases (routed to a non-generic-store effect).
@@ -209,9 +209,9 @@ object BuiltInSettingsPages {
                 default = true, group = "Preview sandbox",
             ),
             SettingControl.Toggle(
-                PREVIEW_ISOLATE, "Render in a separate process (experimental)",
-                "Render the @Preview in the :preview OS process instead of the IDE, so a runaway recomposition or crash can't freeze the IDE. Experimental: falls back to the in-process renderer for @PreviewParameter / locale previews and on any remote failure.",
-                default = false, group = "Preview process",
+                PREVIEW_ISOLATE, "Render in a separate process",
+                "Render the @Preview in the :preview OS process instead of the IDE, so a runaway recomposition or crash can't take down the IDE. Falls back to the in-process renderer for @PreviewParameter / locale previews and on any remote failure. Turn off to always render in-process (more interactive, but a preview crash can affect the IDE).",
+                default = true, group = "Preview process",
             ),
         )
     }

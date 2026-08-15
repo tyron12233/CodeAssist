@@ -171,6 +171,13 @@ interface EditorService {
     /** Quick documentation (signature + doc comment) for the symbol at [offset], or null. */
     suspend fun quickDocAt(path: String, text: String, offset: Int): UiQuickDoc? = null
 
+    /** Expand the selection `[selStart, selEnd)` to the smallest enclosing structural node — one step of a walk
+     *  UP the tolerant DOM (word → expression → statement → block → method → class …). Returns that node's
+     *  range, or null when nothing larger encloses the selection (or the backend can't parse [path]). Because it
+     *  re-derives from the passed selection, repeated calls climb the tree one level at a time. Drives the
+     *  editor's "expand selection" gesture (multi-click / triple-tap). */
+    suspend fun expandSelection(path: String, text: String, selStart: Int, selEnd: Int): UiTextRange? = null
+
     /** The renameable symbol under the caret at [offset], or null. */
     suspend fun prepareRename(path: String, text: String, offset: Int): UiRenameTarget? = null
 
@@ -626,6 +633,17 @@ interface ProjectService {
      * suspends off the main thread. No-op returning `ok = false` when the project isn't a Gradle import.
      */
     suspend fun syncGradle(): UiSyncResult = UiSyncResult(false, "Not a Gradle project")
+
+    /**
+     * Convert the open Gradle compatibility-mode project to a native CodeAssist project: the leftover Gradle
+     * build files are MOVED to a backup folder and the compatibility marker is dropped, so `module.toml`
+     * becomes the sole source of truth (Re-sync no longer applies). The model is unchanged — no re-resolve or
+     * re-index needed. No-op returning `ok = false` when the project isn't a compatibility-mode import.
+     */
+    suspend fun convertToNative(): UiConvertResult = UiConvertResult(false, "Not a Gradle project")
+
+    /** Undo a [convertToNative]: restore the backed-up Gradle build files and re-enter compatibility mode. */
+    suspend fun revertToGradle(): UiConvertResult = UiConvertResult(false, "Nothing to revert")
 
     /**
      * Import the Gradle project at [sourceRootPath] into a new native workspace under the projects root and

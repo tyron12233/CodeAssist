@@ -55,6 +55,13 @@ internal class EditorActionsController(
     var sheetActions by mutableStateOf<List<UiAction>>(emptyList())
         private set
 
+    /** The most recent selection-expand request, for the editor to animate the growing highlight. The logical
+     *  selection already jumped to the enclosing node; this only drives the visual tween. Null = nothing to
+     *  animate; [SelectionExpand.token] bumps per request so an identical range still restarts the animation. */
+    var selectionExpand by mutableStateOf<SelectionExpand?>(null)
+        private set
+    private var expandToken = 0
+
     /** Re-resolve the actions available at the current selection (debounced); driven from an effect. */
     suspend fun refreshAvailability(focused: Boolean) {
         delay(250.milliseconds)
@@ -154,6 +161,35 @@ internal class EditorActionsController(
 
     fun closeSheet() { sheet = null }
 
+    /** Expand the selection to the smallest enclosing structural node — the "expand selection" gesture. Walks
+     *  UP the backend's tolerant DOM one level (word → expression → statement → block → method → class …), so
+     *  repeated invocations keep widening it. Triggered by double-clicking/-tapping an existing selection, and
+     *  by a 4th-and-further consecutive click. A no-op when nothing larger encloses the range. */
+    fun expandSelection() {
+        val sel = session.selection
+        expandSelection(sel.min, sel.max)
+    }
+
+    /** Expand from an explicit base range `[fromStart, fromEnd)` rather than the live selection — used by the
+     *  mouse path, where the first click of a double-click has already collapsed the on-screen selection. */
+    fun expandSelection(fromStart: Int, fromEnd: Int) {
+        val text = session.doc.text
+        scope.launch {
+            val range = runCatching {
+                backend.editor.expandSelection(path, text, fromStart, fromEnd)
+            }.getOrNull() ?: return@launch
+            val len = session.doc.length
+            val start = range.start.coerceIn(0, len)
+            val end = range.end.coerceIn(start, len)
+            if (end > start) {
+                val fromMin = minOf(fromStart, fromEnd).coerceIn(0, len)
+                val fromMax = maxOf(fromStart, fromEnd).coerceIn(fromMin, len)
+                selectionExpand = SelectionExpand(fromMin, fromMax, start, end, ++expandToken)
+                session.setSelectionRange(start, end)
+            }
+        }
+    }
+
     fun applySheetFix(index: Int) {
         val d = sheet ?: return
         val act = sheetActions.getOrNull(index) ?: return
@@ -180,6 +216,16 @@ internal class EditorActionsController(
         }
     }
 }
+
+/** A one-shot selection-expand animation request (see [EditorActionsController.selectionExpand]): grow the
+ *  drawn highlight from `[fromMin, fromMax)` to `[toMin, toMax)`. [token] bumps per request. */
+internal data class SelectionExpand(
+    val fromMin: Int,
+    val fromMax: Int,
+    val toMin: Int,
+    val toMax: Int,
+    val token: Int,
+)
 
 @Composable
 internal fun rememberEditorActionsController(

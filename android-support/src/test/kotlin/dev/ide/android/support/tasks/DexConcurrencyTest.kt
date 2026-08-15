@@ -50,4 +50,44 @@ class DexConcurrencyTest {
         assertEquals(1, plan.workers)
         assertEquals(1, plan.threadsPerInvocation)
     }
+
+    // --- InProcessDexGate: the process-wide budget that stops concurrent dex tasks over-committing the heap ---
+
+    @Test
+    fun gateGrantsAsManyCreditsAsArchivePlanGrantsWorkers() {
+        // The gate must never throttle a single task below its own plan, so on a given heap its credit count
+        // equals what [archivePlan] would grant workers (both reserve the shared android.jar-index base, then
+        // divide the rest into ~96 MB units). At 576 MB that's 4 — matching the on-device archive fan-out above.
+        assertEquals(4, InProcessDexGate.computePermits(576 * mb))
+        assertEquals(
+            DexConcurrency.archivePlanFor(52, cores = 8, maxMemoryBytes = 576 * mb).workers,
+            InProcessDexGate.computePermits(576 * mb),
+            "gate credits track archivePlan workers on the same heap",
+        )
+    }
+
+    @Test
+    fun tightHeapCollapsesTheGateToOneCredit() {
+        // A 256 MB ART heap backs a single in-process working set: one credit, so the three scope merges
+        // (each drawing a clamped merge cost) serialize instead of running 2-3 at once and OOMing.
+        assertEquals(1, InProcessDexGate.computePermits(256 * mb))
+    }
+
+    @Test
+    fun bigDesktopHeapIsNeverGateThrottled() {
+        // A large heap mints many credits (capped only so the number stays tidy), so a desktop build's dex
+        // tasks are never serialized by the gate — behaviour there is unchanged.
+        assertTrue(InProcessDexGate.computePermits(4096 * mb) >= 8, "a 4 GB heap grants plenty of credits")
+    }
+
+    @Test
+    fun mergeDrawsMoreCreditsThanAnArchive() {
+        // A DexIndexed merge finalizes many class-dex at once — a bigger working set than one per-class archive
+        // worker — so it draws several credits to one. That is what serializes concurrent merges on a tight heap.
+        assertTrue(
+            InProcessDexGate.unitsFor(256 * mb) > InProcessDexGate.unitsFor(96 * mb),
+            "a merge's estimated working set costs more credits than an archive's",
+        )
+        assertEquals(1, InProcessDexGate.unitsFor(1 * mb), "a tiny working set still costs at least one credit")
+    }
 }

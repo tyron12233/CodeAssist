@@ -4,6 +4,7 @@ import dev.ide.lang.kotlin.interp.DispatchKind
 import dev.ide.lang.kotlin.interp.RArg
 import dev.ide.lang.kotlin.interp.RNode
 import dev.ide.lang.kotlin.interp.ResolvedCallable
+import dev.ide.lang.kotlin.symbols.KotlinType
 import java.lang.reflect.Method
 import java.lang.reflect.Modifier
 
@@ -62,6 +63,7 @@ private fun nestedNameCandidates(fqn: String): List<String> {
  *  have their own handling and must not be read as a real member). */
 internal fun mangledNameMatches(jvmName: String, kotlinName: String): Boolean {
     if (jvmName == kotlinName) return true
+    if (firstLetterCaseVariant(jvmName, kotlinName)) return true
     if (jvmName.startsWith("$kotlinName-") && '$' !in jvmName) return true
     val dollar = jvmName.indexOf('$')
     if (dollar <= 0) return false
@@ -70,6 +72,22 @@ internal fun mangledNameMatches(jvmName: String, kotlinName: String): Boolean {
     val baseMatches = base == kotlinName || base.startsWith("$kotlinName-")
     return baseMatches && '$' !in suffix && suffix !in NON_INTERNAL_DOLLAR_SUFFIXES
 }
+
+/**
+ * Whether [a] and [b] are identical except for the CASE of their first letter (`ScaleToBounds`↔`scaleToBounds`).
+ * Compose "factory functions that mimic a constructor" are conventionally PascalCase, and several were RENAMED
+ * to camelCase across versions — androidx renamed `SharedTransitionScope.ResizeMode.ScaleToBounds()` to
+ * `scaleToBounds()`. A parse-only preview lowers the SOURCE call name verbatim, so a project written against the
+ * older API looks up `ScaleToBounds` while the runtime it dispatches against (the project's newer Compose, or the
+ * IDE's bundled one) only declares `scaleToBounds`. Bridging names that differ ONLY in the first letter's case is
+ * narrow enough that it can't collide with an unrelated member (the whole rest of the name must be equal), and it
+ * is only ever consulted on [mangledNameMatches]'s FALLBACK path — reached only when the looked-up name is not a
+ * declaration the class's `@Metadata` names, i.e. the exact name genuinely does not exist on the class.
+ */
+private fun firstLetterCaseVariant(a: String, b: String): Boolean =
+    a.length == b.length && a.isNotEmpty() &&
+        a[0] != b[0] && a[0].lowercaseChar() == b[0].lowercaseChar() &&
+        a.regionMatches(1, b, 1, a.length - 1)
 
 /** The `$`-suffixed synthetics [mangledNameMatches] must NOT treat as an `internal` module suffix — they are
  *  compiler-generated siblings of a real member (handled elsewhere), not the member itself. */
@@ -185,6 +203,15 @@ interface Dispatcher {
      *  [ExtensionPropertyValue], or null to read it normally (reflection). Default: null (no override); only
      *  the Compose preview dispatcher supplies one. */
     fun readExtensionPropertyOverride(receiver: Any, ownerFqn: String, name: String): ExtensionPropertyValue? = null
+
+    /** Invoke a value-class MEMBER (a property getter `Size.getWidth`, an operator `Size.div`, any member) whose
+     *  [receiver] is the UNBOXED underlying the interpreter holds (a `Long` for `Size`/`Color`/`Offset`, a
+     *  `Float` for `Dp`) and whose owner the resolver named ([ownerFqn]). Such a member compiles to a static
+     *  `name-<hash>` impl on the value class taking the underlying first, so it can't be reflected as an instance
+     *  method on the raw `Long`/`Float`. Returns [NotValueClassMember] when [ownerFqn] isn't a loadable inline
+     *  value class (the caller keeps its numeric/reflective path). The default (non-reflective) dispatcher can't
+     *  load classes, so it never matches. */
+    fun invokeUnboxedValueClassMember(ownerFqn: String?, name: String, receiver: Any, args: List<Any?>): Any? = NotValueClassMember
 }
 
 /** The result of a [Dispatcher.readComposableProperty] — a box so a legitimately-`null` property value is
@@ -194,6 +221,11 @@ class ComposablePropertyValue(val value: Any?)
 /** The result of a [Dispatcher.readExtensionPropertyOverride] — a box so a legitimately-`null` override value
  *  is distinguishable from "no override" (null box). */
 class ExtensionPropertyValue(val value: Any?)
+
+/** Sentinel returned by [Dispatcher.invokeUnboxedValueClassMember] when the receiver is NOT an unboxed inline
+ *  value class of the named owner, so the caller keeps its existing path (numeric arithmetic / reflective
+ *  getter). Distinct from a matched member's legitimately-`null` result. */
+object NotValueClassMember
 
 /**
  * An interpreted lambda value. When a lambda is passed to a library function, the dispatcher wraps this in a
@@ -230,7 +262,10 @@ interface InterpretedLambda {
  * Returning null falls back to [ReflectiveDispatcher]'s plain proxy.
  */
 fun interface LambdaProxyStrategy {
-    fun proxyOrNull(lambda: InterpretedLambda, functionalInterface: Class<*>, composableParam: Boolean): Any?
+    /** [returnValueClass] is the lambda's value-class RETURN type (e.g. `IntOffset` for a `Density.() -> IntOffset`
+     *  `Modifier.offset { }` block), or null when the return isn't a value class — the proxy BOXES the
+     *  interpreter's unboxed result so the compiled callee's cast to the value class succeeds. */
+    fun proxyOrNull(lambda: InterpretedLambda, functionalInterface: Class<*>, composableParam: Boolean, returnValueClass: Class<*>?): Any?
 }
 
 /**
@@ -391,13 +426,24 @@ class ReflectiveDispatcher(
         // Bind named arguments back to their declared positions (a no-op for a purely positional call), so a
         // call like `f(b = …, a = …)` or one that omits defaulted params dispatches correctly.
         @Suppress("NAME_SHADOWING")
-        val args = if (callee is ResolvedCallable.Library)
-            reorderNamedArgs(callee.paramNames, call.args, args) else args
+        val args = boxProvidedCompositionLocalValue(
+            callee,
+            if (callee is ResolvedCallable.Library) reorderNamedArgs(callee.paramNames, call.args, args) else args,
+        )
         return when (call.dispatch) {
             // SUPER is resolved by the interpreter (source super → the supertype body; binary super → no-op), so
             // it normally never reaches here; if it does, the only sound thing is a plain instance invocation.
             DispatchKind.MEMBER, DispatchKind.OPERATOR, DispatchKind.INVOKE, DispatchKind.SUPER -> {
-                val target = receiver ?: throw InterpreterException("instance call `${callee.displayName}` has no receiver")
+                // The three operations Kotlin's `Any?` extensions define on a NULL receiver — `null.toString()` is
+                // "null", `null.hashCode()` is 0, `null.equals(x)` is `x == null`. A real instance method can't be
+                // called on null, so a null receiver here is always one of these (or a genuine NPE in the program).
+                if (receiver == null) return when {
+                    callee.displayName == "toString" && args.isEmpty() -> "null"
+                    callee.displayName == "hashCode" && args.isEmpty() -> 0
+                    callee.displayName == "equals" && args.size == 1 -> args[0] == null
+                    else -> throw InterpreterException("instance call `${callee.displayName}` has no receiver")
+                }
+                val target = receiver
                 // A value-class member (`Color.copy(alpha = …)`, `Dp.coerceIn(…)`): the receiver is the UNBOXED
                 // underlying value (a `Long` for `Color`), and the member compiles to a STATIC `name-<hash>` on
                 // the value class taking that value as its first parameter — NOT an instance method on the
@@ -504,7 +550,7 @@ class ReflectiveDispatcher(
         // receiver coerced to the impl's unboxed parameter — how the compiler always calls a value-class member.
         // Only reached on the miss path, so a normal member call never pays for the value-class probe.
         boxedValueClassMember(target, name, args, composable)?.let { return it.value }
-        throw InterpreterException("no method `$name`(${args.size}) on ${target.javaClass.name}")
+        throw InterpreterException("no method `$name`(${args.size}) on ${target.javaClass.name}" + dispatchFailureDetail(target.javaClass, name, args))
     }
 
     /** A member call on a BOXED inline value-class [receiver], routed to its static `name-<hash>` impl (see the
@@ -566,7 +612,28 @@ class ReflectiveDispatcher(
                 return m.invoke(null, *bindArgs(m.parameterTypes, args, composable, m.genericParameterTypes))
             }
         }
-        throw InterpreterException("no static `$name`(${args.size}) on $ownerFqn")
+        throw InterpreterException("no static `$name`(${args.size}) on $ownerFqn" + dispatchFailureDetail(cls, name, args))
+    }
+
+    /** A one-line summary appended to a dispatch-failure message: the supplied ARG runtime types, and what the
+     *  class actually offers for [name] — how many same-named methods, and the `$default` synthetics with their
+     *  parameter shapes (scanning declared AND public methods). Turns an environment-specific "no method"/"no
+     *  static" — a preview that renders on desktop but fails only on device — into a self-diagnosing report:
+     *  `0 $default synthetic(s)` means the defaulted-arg synthetic was stripped/absent in that build, while an
+     *  unexpected arg type points at a wrong receiver/argument upstream. Only computed on the (cold) throw path. */
+    private fun dispatchFailureDetail(cls: Class<*>, name: String, args: List<Any?>): String {
+        val argTypes = args.joinToString(", ") { a ->
+            when { a == null -> "null"; a === OmittedArg -> "_"; else -> a.javaClass.name }
+        }
+        val all = runCatching { (cls.methods.asSequence() + cls.declaredMethods.asSequence()).distinct().toList() }.getOrDefault(emptyList())
+        val named = all.count { runCatching { KotlinJvmNames.matches(cls, it.name, name) }.getOrDefault(false) }
+        val synthetics = all.filter {
+            Modifier.isStatic(it.modifiers) && it.name.endsWith("\$default") &&
+                runCatching { isDefaultSynthetic(cls, it.name, name) }.getOrDefault(false)
+        }
+        val synShapes = synthetics.joinToString("; ") { it.parameterTypes.joinToString(",") { p -> p.simpleName } }
+        return " [args: [$argTypes]; $named `$name` method(s); ${synthetics.size} \$default synthetic(s)" +
+            (if (synShapes.isNotEmpty()) " ($synShapes)" else "") + "]"
     }
 
     private class Invoked(val value: Any?)
@@ -614,9 +681,10 @@ class ReflectiveDispatcher(
             if (a === OmittedArg) continue
             val slot = if (trailingLambda && i == k - 1) n - 1 else i
             if (slot !in 0 until n) continue
-            slots[slot] = if (a is InterpretedLambda)
-                (lambdaProxies?.proxyOrNull(a, params[slot], composable.getOrElse(i) { false }) ?: regularLambdaProxy(a, params[slot]))
-            else coerceArg(a, params[slot], realGenericParams?.getOrNull(slot))
+            slots[slot] = if (a is InterpretedLambda) {
+                val rvc = lambdaReturnValueClass(realGenericParams?.getOrNull(slot))
+                (lambdaProxies?.proxyOrNull(a, params[slot], composable.getOrElse(i) { false }, rvc) ?: regularLambdaProxy(a, params[slot], rvc))
+            } else coerceArg(a, params[slot], realGenericParams?.getOrNull(slot))
             provided[slot] = true
         }
         // A set mask bit i ⇒ use the default for value param i. The receiver(s) precede the value params in the
@@ -644,7 +712,12 @@ class ReflectiveDispatcher(
         val key = "d|$name|${argShape(realArgs)}"
         cache[key]?.let { InterpProfile.count("cacheHit"); return it.method }
         InterpProfile.count("cacheMiss")
-        val fitting = (cls.methods.asSequence() + interfaceDefaultSynthetics(cls, name))
+        // `cls.methods` is PUBLIC-only; also scan `cls.declaredMethods` (any visibility) so a synthetic that a
+        // release build's optimizer (D8/R8) left non-public — present but not surfaced by getMethods() — is still
+        // found (a preview that works on desktop but fails on device with "no static/method"). A superset:
+        // isDefaultSynthetic + fitsDefaultSynthetic still gate every candidate, and the invoke force-accesses it.
+        val fitting = (cls.methods.asSequence() + cls.declaredMethods.asSequence() + interfaceDefaultSynthetics(cls, name))
+            .distinct()
             .filter { Modifier.isStatic(it.modifiers) && isDefaultSynthetic(cls, it.name, name) && fitsDefaultSynthetic(it, realArgs) }
             .toList()
         val minArity = fitting.minOfOrNull { it.parameterCount }
@@ -769,6 +842,13 @@ class ReflectiveDispatcher(
         val cls = loadClassOrNull(ownerFqn)
             ?: (if ('.' !in ownerFqn) runCatching { Class.forName("java.lang.$ownerFqn", false, loader) }.getOrNull() else null)
             ?: throw InterpreterException("cannot load class `$ownerFqn`")
+        // A `fun interface` SAM constructor — `BoundsTransform { … }` — is an INTERFACE with one abstract method,
+        // not a class with a constructor. Kotlin's SAM-constructor syntax lowered to a call the resolver saw as a
+        // CONSTRUCTOR; realize it as a proxy of the interface routing its single abstract method to the lambda
+        // (the same shape as passing the lambda where the interface is expected).
+        if (cls.isInterface && args.size == 1) {
+            (args.single() as? InterpretedLambda)?.let { lam -> funInterfaceSamProxy(lam, cls)?.let { return it } }
+        }
         // An interior [OmittedArg] hole means a defaulted param was skipped — there's no exact-arity match, so
         // go straight to the synthetic (and a hole must never reach `newInstance`).
         val hasOmitted = args.any { it === OmittedArg }
@@ -813,9 +893,10 @@ class ReflectiveDispatcher(
             // A set mask bit i ⇒ use the default for value param i. An explicit null is "provided" (no bit).
             if (i < realArgs.size && realArgs[i] !== OmittedArg) {
                 val a = realArgs[i]
-                slots[i] = if (a is InterpretedLambda)
-                    (lambdaProxies?.proxyOrNull(a, params[i], composable.getOrElse(i) { false }) ?: regularLambdaProxy(a, params[i]))
-                else coerceArg(a, params[i], realGenericParams?.getOrNull(i))
+                slots[i] = if (a is InterpretedLambda) {
+                    val rvc = lambdaReturnValueClass(realGenericParams?.getOrNull(i))
+                    (lambdaProxies?.proxyOrNull(a, params[i], composable.getOrElse(i) { false }, rvc) ?: regularLambdaProxy(a, params[i], rvc))
+                } else coerceArg(a, params[i], realGenericParams?.getOrNull(i))
             } else {
                 slots[i] = zeroValue(params[i])
                 masks[i / 32] = masks[i / 32] or (1 shl (i % 32))
@@ -881,6 +962,37 @@ class ReflectiveDispatcher(
      *  parameter, but BOXED for a nullable one (`fontStyle: FontStyle?` → JVM type `FontStyle`); a value-class
      *  expression evaluates to the unboxed underlying value, so the boxed parameter needs the synthetic static
      *  `box-impl` applied first. Anything already the right type, a null, or a primitive param passes through. */
+    /**
+     * `CompositionLocal.provides(value: T)` stores its value in an ERASED `Object` slot (`provides` is generic in
+     * `T`), so a value class the interpreter holds UNBOXED (a `Long` for `Color`) is stored raw; a consumer reading
+     * `LocalX.current` in COMPILED code then casts to the value class → `class java.lang.Long cannot be cast to
+     * …Color` (Jetsnack `JetsnackSurface`'s `LocalContentColor provides contentColor`, breaking default-colored
+     * `Text`). Box the provided value to its RESOLVED value-class type — the resolver substitutes `T` (the callee's
+     * `paramTypes` carries `Color`) even though reflection sees `Object` — so what's stored is the boxed value class.
+     *
+     * DELIBERATELY scoped to `CompositionLocal.provides`: a bundled, reflectively-dispatched call, so this never
+     * boxes an argument headed for the bytecode-VM library executor (which operates on the unboxed underlying and
+     * would then hit `Color cannot be cast to Long`) nor a value-class member/operator. Boxing a value class into a
+     * general erased slot is broader but not safe across the on-device VM path, so it stays narrow.
+     */
+    private fun boxProvidedCompositionLocalValue(callee: ResolvedCallable, args: List<Any?>): List<Any?> {
+        val lib = callee as? ResolvedCallable.Library ?: return args
+        if (lib.methodName != "provides" || lib.ownerFqn?.contains("CompositionLocal") != true || args.size != 1) return args
+        val a = args[0]
+        if (a == null || a === OmittedArg || a is InterpretedLambda) return args
+        val vc = resolvedValueClass(lib.paramTypes.firstOrNull()) ?: return args
+        if (vc.isInstance(a)) return args
+        val boxed = boxValueClassIfNeeded(a, vc)
+        return if (boxed !== a) listOf(boxed) else args
+    }
+
+    /** The inline value-class Class named by a resolved [t] (loadable + carries a static `box-impl`), else null. */
+    private fun resolvedValueClass(t: KotlinType?): Class<*>? {
+        val fqn = t?.qualifiedName ?: return null
+        val cls = runCatching { loadClass(jvmName(fqn)) }.getOrNull() ?: return null
+        return if (cls.declaredMethods.any { it.name == "box-impl" && Modifier.isStatic(it.modifiers) }) cls else null
+    }
+
     private fun boxValueClassIfNeeded(value: Any?, paramType: Class<*>): Any? {
         if (value == null || paramType.isInstance(value)) return value
         // Inverse of boxing: a BOXED value-class instance (a `Dp`, `Color`, `TextUnit`, …) reaching a parameter
@@ -1007,6 +1119,12 @@ class ReflectiveDispatcher(
         // so convert an integer arg to the exact integer param type. Only fires on a genuine mismatch — an
         // exact-type arg already `isInstance`s its wrapper above; integer↔float is left alone.
         if (isIntegerValue(value) && isIntegerType(paramType) && !wrap(paramType).isInstance(value)) return coerceNumber(value as Number, paramType)
+        // The FLOATING analog: the interpreter's floating math produces a `Double` where a `Float` param is
+        // expected (`Color.copy(alpha = ((4.5f * ln(x)) + 2f) / 100f)` — the interpreter widens the expression to
+        // Double via `ln`/mixed arithmetic, but `copy`'s param is `float`). Reflection won't narrow Double→float,
+        // so convert between the two floating types (and vice versa). Scoped to float↔float, so the integer rule's
+        // deliberate Float↛Int rejection is untouched.
+        if (isFloatingValue(value) && isFloatingType(paramType) && !wrap(paramType).isInstance(value)) return coerceNumber(value as Number, paramType)
         return boxValueClassIfNeeded(value, paramType)
     }
 
@@ -1067,6 +1185,51 @@ class ReflectiveDispatcher(
         return if (isValueClass) ownerJvm else null
     }
 
+    /**
+     * Invoke a value-class MEMBER — a property getter (`Size.getWidth`), an operator (`Size.div`), any member —
+     * whose [receiver] is the UNBOXED underlying the interpreter holds (a `Long` for `Size`/`Color`/`Offset`, a
+     * `Float` for `Dp`) and whose owner the resolver named ([ownerFqn]).
+     *
+     * Most members compile to a static `name-<hash>` impl on the value class taking the underlying as its first
+     * parameter (`Size.div-impl(long, float)`), so the common path routes statically with the receiver prepended.
+     * But a value class's OWN property getter is an INSTANCE method on the boxed class (`Dp.getValue()` — there is
+     * NO `getValue-impl`), as is `compareTo`; those can't be found statically. For that miss the underlying is
+     * BOXED (`box-impl`) and the member invoked on the box (which, via [invokeInstance]'s boxed fallback, still
+     * reaches any static-impl member too).
+     *
+     * Returns [NotValueClassMember] when [ownerFqn] isn't a loadable inline value class, or [receiver] is
+     * already a BOXED instance of it (the caller then keeps its existing path — numeric arithmetic for an
+     * operator, the reflective getter for a property). A matched member's result (possibly null) otherwise.
+     */
+    override fun invokeUnboxedValueClassMember(ownerFqn: String?, name: String, receiver: Any, args: List<Any?>): Any? {
+        // Only the UNBOXED UNDERLYING — a primitive wrapper the interpreter holds for a value class (a `Long` for
+        // `Size`/`Color`/`Offset`, a `Float` for `Dp`). This deliberately EXCLUDES an object receiver, most
+        // importantly a value class's own COMPANION (`Color.Magenta` reads `Color$Companion.getMagenta()`, whose
+        // binding owner is the value class `Color` too): routing that to `Color.getMagenta-impl(companion)` would
+        // find nothing and throw, blanking the caller. A companion isn't a primitive, so it falls through here.
+        if (receiver !is Number && receiver !is Char && receiver !is Boolean) return NotValueClassMember
+        val jvm = ownerFqn?.let { jvmName(it) } ?: return NotValueClassMember
+        val cls = loadClassOrNull(jvm) ?: return NotValueClassMember
+        if (cls.isInstance(receiver)) return NotValueClassMember
+        val boxImpl = cls.declaredMethods.firstOrNull {
+            it.name == "box-impl" && Modifier.isStatic(it.modifiers) && it.parameterCount == 1
+        } ?: return NotValueClassMember
+        val all = listOf(receiver) + args
+        // Static `name-<hash>` impl (operators, most members) — unchanged from before; keeps the defaulted-arg
+        // `$default` synthetic handling that [invokeStatic] provides.
+        return try {
+            invokeStatic(jvm, name, all, List(all.size) { false }, receiverCount = 1)
+        } catch (miss: InterpreterException) {
+            // No static impl: an INSTANCE-only member on the box (a value class's own `getValue()` property
+            // getter / `compareTo`). Box the underlying and invoke the member on the box.
+            val boxed = runCatching {
+                runCatching { boxImpl.isAccessible = true }
+                boxImpl.invoke(null, *bindArgs(boxImpl.parameterTypes, listOf(receiver), listOf(false), boxImpl.genericParameterTypes))
+            }.getOrNull() ?: throw miss
+            invokeInstance(boxed, name, args, List(args.size) { false })
+        }
+    }
+
     /** Whether [paramType] is an inline value class whose underlying type accepts [value] — so an unboxed
      *  value-class value fits a boxed value-class parameter (it'll be boxed by [boxValueClassIfNeeded]). */
     private fun acceptsValueClassUnderlying(paramType: Class<*>, value: Any?): Boolean {
@@ -1092,12 +1255,48 @@ class ReflectiveDispatcher(
     private fun bindArgs(params: Array<Class<*>>, args: List<Any?>, composable: List<Boolean>, genericParams: Array<java.lang.reflect.Type>? = null): Array<Any?> =
         Array(args.size) { i ->
             (args[i] as? InterpretedLambda)?.let { lam ->
-                lambdaProxies?.proxyOrNull(lam, params[i], composable.getOrElse(i) { false })
-                    ?: regularLambdaProxy(lam, params[i])
+                val rvc = lambdaReturnValueClass(genericParams?.getOrNull(i))
+                lambdaProxies?.proxyOrNull(lam, params[i], composable.getOrElse(i) { false }, rvc)
+                    ?: regularLambdaProxy(lam, params[i], rvc)
             } ?: coerceArg(args[i], params[i], genericParams?.getOrNull(i))
         }
 
-    private fun regularLambdaProxy(lambda: InterpretedLambda, functionalInterface: Class<*>): Any {
+    /** The value-class RETURN type of a functional-interface parameter, read off its generic type
+     *  (`Density.() -> IntOffset` erases to `Function1<Density, IntOffset>`, whose LAST type argument is the
+     *  return) — so an interpreted lambda that returns a value class (`Modifier.offset { IntOffset(…) }`,
+     *  `graphicsLayer` blocks, `drawBehind`) has its UNBOXED result (a `Long`) BOXED before the compiled callee
+     *  casts it (`class java.lang.Long cannot be cast to …IntOffset` otherwise). Null when the return isn't a
+     *  value class. The non-composable-lambda analog of the composable path's return boxing. */
+    private fun lambdaReturnValueClass(genericType: java.lang.reflect.Type?): Class<*>? =
+        (genericType as? java.lang.reflect.ParameterizedType)?.actualTypeArguments?.lastOrNull()?.let { valueClassOf(it) }
+
+    /** Realize a Kotlin `fun interface` SAM constructor (`BoundsTransform { a, b -> … }`) as a JVM proxy of
+     *  [funInterface] whose single abstract method (whatever its name — `transform`, `compare`, …, NOT just
+     *  `invoke`) runs [lambda]. Null when [funInterface] has no single abstract method (not a functional
+     *  interface), so the caller keeps its honest "no constructor" boundary. */
+    private fun funInterfaceSamProxy(lambda: InterpretedLambda, funInterface: Class<*>): Any? {
+        val sam = funInterface.methods.firstOrNull {
+            Modifier.isAbstract(it.modifiers) && !it.isDefault && !Modifier.isStatic(it.modifiers)
+        } ?: return null
+        return java.lang.reflect.Proxy.newProxyInstance(
+            funInterface.classLoader ?: loader, arrayOf(funInterface),
+        ) { _, method, callArgs ->
+            when {
+                method.name == sam.name && method.parameterCount == sam.parameterCount -> {
+                    val a = callArgs?.toList() ?: emptyList()
+                    if (a.lastOrNull() is kotlin.coroutines.Continuation<*>)
+                        suspendBridge?.runSuspending(lambda, a) ?: lambda.invoke(a)
+                    else lambda.invoke(a)
+                }
+                method.name == "toString" -> "InterpretedSam(${funInterface.simpleName})"
+                method.name == "hashCode" -> System.identityHashCode(lambda)
+                method.name == "equals" -> callArgs?.getOrNull(0) === lambda
+                else -> null
+            }
+        }
+    }
+
+    private fun regularLambdaProxy(lambda: InterpretedLambda, functionalInterface: Class<*>, returnValueClass: Class<*>? = null): Any {
         // A SUSPEND lambda — a `pointerInput { … }` gesture block, a `LaunchedEffect { … }` body, a coroutine
         // builder — is invoked with a trailing `Continuation` argument (its JVM `Function.invoke` is erased to
         // `invoke(Object)`, so suspend can only be seen at CALL time, not from the interface). When a
@@ -1115,7 +1314,9 @@ class ReflectiveDispatcher(
                     val a = callArgs?.toList() ?: emptyList()
                     if (a.lastOrNull() is kotlin.coroutines.Continuation<*>)
                         suspendBridge?.runSuspending(lambda, a) ?: runCatching { lambda.invoke(a) }.getOrDefault(Unit)
-                    else lambda.invoke(a)
+                    // Box a value-class result (an interpreter-unboxed `Long` for `IntOffset`/`Dp`/… returned by a
+                    // `Density.() -> IntOffset` block) so the compiled callee's cast to the value class succeeds.
+                    else lambda.invoke(a).let { if (returnValueClass != null) boxValueClassIfNeeded(it, returnValueClass) else it }
                 }
                 "toString" -> "InterpretedLambda"
                 "hashCode" -> System.identityHashCode(lambda)
@@ -1252,7 +1453,7 @@ class ReflectiveDispatcher(
         for (j in 0 until args.size - fixed) {
             val a = args[fixed + j]
             val v = (a as? InterpretedLambda)?.let { lam ->
-                lambdaProxies?.proxyOrNull(lam, componentType, composable.getOrElse(fixed + j) { false }) ?: regularLambdaProxy(lam, componentType)
+                lambdaProxies?.proxyOrNull(lam, componentType, composable.getOrElse(fixed + j) { false }, null) ?: regularLambdaProxy(lam, componentType)
             } ?: boxValueClassIfNeeded(a, componentType)
             java.lang.reflect.Array.set(varargArray, j, v)
         }
@@ -1281,6 +1482,7 @@ class ReflectiveDispatcher(
         is InterpretedLambda -> p.isInterface
         else -> wrap(p).isInstance(a) || acceptsValueClassUnderlying(p, a) || acceptsBoxedValueClassUnboxed(p, a) ||
             (isIntegerValue(a) && isIntegerType(p)) ||
+            (isFloatingValue(a) && isFloatingType(p)) ||
             (p.isArray && a is Collection<*> && collectionFitsArray(a, p.componentType))
     }
 
@@ -1358,11 +1560,21 @@ class ReflectiveDispatcher(
 
     private fun isIntegerValue(a: Any?): Boolean = a is Int || a is Long || a is Short || a is Byte
 
+    private fun isFloatingType(p: Class<*>): Boolean = when (p) {
+        Float::class.javaPrimitiveType, java.lang.Float::class.java,
+        Double::class.javaPrimitiveType, java.lang.Double::class.java -> true
+        else -> false
+    }
+
+    private fun isFloatingValue(a: Any?): Boolean = a is Float || a is Double
+
     private fun coerceNumber(n: Number, p: Class<*>): Any = when (wrap(p)) {
         java.lang.Long::class.java -> n.toLong()
         Integer::class.java -> n.toInt()
         java.lang.Short::class.java -> n.toShort()
         java.lang.Byte::class.java -> n.toByte()
+        java.lang.Float::class.java -> n.toFloat()
+        java.lang.Double::class.java -> n.toDouble()
         else -> n
     }
 
@@ -1421,6 +1633,13 @@ class ReflectiveDispatcher(
             "kotlin.collections.Map" to "java.util.Map",
             "kotlin.collections.MutableMap" to "java.util.LinkedHashMap",
             "kotlin.collections.Set" to "java.util.Set",
+            // The concrete-collection typealiases (`kotlin/collections/TypeAliases.kt`) → their java.util impls,
+            // so a `HashMap<K,V>()` / `ArrayList<T>()` constructor call loads a real class instead of the aliasFQN.
+            "kotlin.collections.ArrayList" to "java.util.ArrayList",
+            "kotlin.collections.HashMap" to "java.util.HashMap",
+            "kotlin.collections.LinkedHashMap" to "java.util.LinkedHashMap",
+            "kotlin.collections.HashSet" to "java.util.HashSet",
+            "kotlin.collections.LinkedHashSet" to "java.util.LinkedHashSet",
             "kotlin.text.StringBuilder" to "java.lang.StringBuilder",
             // Common exception aliases (Kotlin declares these as typealiases to the java.lang types), so a
             // `throw IllegalArgumentException(...)` constructs the real JVM exception.

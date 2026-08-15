@@ -43,15 +43,18 @@ internal interface BackendContext {
     val engineDispatcher: CoroutineDispatcher
 
     /** Highest-priority editor lane (completion): preempts background + preview. The block may suspend
-     *  (a contributor may do out-of-process work off the worker); the worker frees while it waits. */
-    suspend fun <T> interactive(block: suspend () -> T): T
+     *  (a contributor may do out-of-process work off the worker); the worker frees while it waits. [op] is a
+     *  fine-grained crash-breadcrumb label (see [dev.ide.platform.EngineBreadcrumb]); default → the lane name. */
+    suspend fun <T> interactive(op: String = "", block: suspend () -> T): T
 
     /** Background editor lane (analysis/hints/semantic/folding): preempts preview, preempted by interactive.
-     *  The block may suspend (a provider may do out-of-process work off the worker). */
-    suspend fun <T> background(block: suspend () -> T): T
+     *  The block may suspend (a provider may do out-of-process work off the worker). [op] labels the crash
+     *  breadcrumb — pass a distinct value per sub-op so a native death is not attributed to the whole lane. */
+    suspend fun <T> background(op: String = "", block: suspend () -> T): T
 
-    /** Lowest-priority editor lane (preview rendering/lowering): preempted by both, retries. */
-    suspend fun <T> preview(block: suspend () -> T): T
+    /** Lowest-priority editor lane (preview rendering/lowering): preempted by both, retries. [op] labels the
+     *  crash breadcrumb; default → the lane name. */
+    suspend fun <T> preview(op: String = "", block: suspend () -> T): T
 
     /** A [StateFlow] that re-points to the live engine's flow on each project swap (yields [default] with no
      *  project open). */
