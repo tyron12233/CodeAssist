@@ -420,6 +420,18 @@ private fun SelectChip(label: String, selected: Boolean, enabled: Boolean, onCli
  * A value text field with the SAME completion the XML editor gives (via the backend, over the live buffer).
  * Commits the value on Done / focus loss / completion pick; the popup narrows as the user types.
  */
+/**
+ * The typed prefix a completion list filters on: the text between the completion's [replaceStart] and the
+ * [caret]. Both ends are clamped, and the caret is clamped to [replaceStart] rather than to 0, so the range
+ * can never invert. It genuinely can: the completion pass is debounced while the caret is not, so a
+ * [replaceStart] computed for an earlier position outlives it for a frame or two, and `substring` throws on
+ * `start > end` from inside the composition.
+ */
+internal fun completionPrefix(text: String, replaceStart: Int, caret: Int): String {
+    val start = replaceStart.coerceIn(0, text.length)
+    return text.substring(start, caret.coerceIn(start, text.length))
+}
+
 @Composable
 private fun CompletionTextField(
     attrName: String,
@@ -497,7 +509,11 @@ private fun CompletionTextField(
             CompletionList(
                 items = items,
                 selectedIndex = selectedIndex,
-                prefix = field.text.substring(replace.first.coerceIn(0, field.text.length), field.selection.start.coerceIn(0, field.text.length)),
+                // Ordered like [pick]: the caret is clamped to START, not just to the text. `replace` is computed
+                // by the debounced LaunchedEffect above, so between a caret move and the next completion pass it
+                // still describes the OLD position -- moving the caret back before the replace start left
+                // start > end and threw StringIndexOutOfBounds out of the composition.
+                prefix = completionPrefix(field.text, replace.first, field.selection.start),
                 width = 300.dp,
                 onPick = { pick(it) },
                 onHover = { selectedIndex = it },

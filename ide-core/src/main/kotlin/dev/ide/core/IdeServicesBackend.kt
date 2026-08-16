@@ -257,8 +257,31 @@ class IdeServicesBackend(
     @OptIn(kotlinx.coroutines.ExperimentalCoroutinesApi::class)
     override fun <T> engineFlow(default: T, select: (IdeServices) -> StateFlow<T>): StateFlow<T> =
         _projectEpoch
-            .flatMapLatest { activeServices?.let(select) ?: MutableStateFlow(default) }
+            .flatMapLatest { engineSelect(default, select) }
             .stateIn(engineScope, SharingStarted.Eagerly, default)
+
+    /**
+     * [select] against the currently active engine, degrading to a constant [default] when there is no project
+     * or the engine can no longer serve it.
+     *
+     * The guard is not defensive padding. [select] is arbitrary engine code -- `runner(it).buildState` resolves
+     * the WORKSPACE-scoped build service, whose factory resolves [ENGINE_CONTEXT] -- and it runs on
+     * [engineScope], not on the caller. Once a container has been disposed its registrations are gone and every
+     * lookup is a hard `error("no service registered")`, which in a flow is not a stale value but process
+     * death. Telemetry has that exact stack (`ServiceContainerImpl.getService` under this `flatMapLatest`)
+     * across 3.5 through 3.9, always on a build or permission surface. The interleaving that leaves a disposed
+     * engine reachable here is NOT pinned down -- [swapEngine] publishes `activeServices` before the epoch bump
+     * and only closes the outgoing engine afterwards, so a straight read should see the live one -- but the
+     * boundary is right either way: a project that is going away has nothing to report, and [default] is the
+     * honest answer.
+     */
+    private fun <T> engineSelect(default: T, select: (IdeServices) -> StateFlow<T>): StateFlow<T> {
+        val services = activeServices ?: return MutableStateFlow(default)
+        return runCatching { select(services) }.getOrElse { t ->
+            log.warn("engine flow unavailable (project closing or engine disposed)", t)
+            MutableStateFlow(default)
+        }
+    }
 
     /** Aggregates per-keystroke latencies (completion/analysis) into periodic summary events. */
     private val perf = PerfSampler { name, props -> track(name, props) }
