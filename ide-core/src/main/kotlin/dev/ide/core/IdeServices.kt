@@ -1891,12 +1891,14 @@ class IdeServices private constructor(
                     // Synthetic "light" classes (Android R/BuildConfig, …), minus the Kotlin file facades.
                     it.syntheticClassProvider = { kotlinSyntheticClasses(module) }
                     // Real parameter names + javadoc/KDoc from attached sources: the persistent source-doc
-                    // index, with the module's JDT resolver (project dirs + -sources.jars + JDK src.zip +
-                    // Android sources) as the live parse fallback before the index has built.
-                    val jdtFallback =
-                        (analyzerFor(module) as? JdtSourceAnalyzer)?.sourceMethodResolver
-                            ?: SourceDocProvider.NONE
-                    it.sourceDocProvider = IndexBackedSourceDocs(indexService, jdtFallback)
+                    // index, with a live parse over the module's source roots (project dirs + -sources.jars +
+                    // JDK src.zip + Android sources) for what the index can't answer. Read through the neutral
+                    // JvmIndexScopeProvider. This used to cast to JdtSourceAnalyzer, which stopped matching
+                    // when the IntelliJ-PSI backend took over `.java`, silently leaving every Java parameter
+                    // named `p0` in Kotlin (the index covers LIBRARY_SOURCE only, never project sources).
+                    val liveFallback = (analyzerFor(module) as? JvmIndexScopeProvider)
+                        ?.let { a -> AnalyzerSourceDocs(a) } ?: SourceDocProvider.NONE
+                    it.sourceDocProvider = IndexBackedSourceDocs(indexService, liveFallback)
                     // Live editor buffers (path → text) so cross-file completion/resolution/diagnostics see
                     // unsaved edits in OTHER open .kt files before they're saved + reindexed.
                     it.liveOverlayProvider = ::kotlinOverlay

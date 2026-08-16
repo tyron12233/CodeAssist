@@ -7,13 +7,20 @@ import dev.ide.lang.hints.InlayHintPart
 import dev.ide.lang.hints.InlayHintService
 import dev.ide.lang.kotlin.parse.KotlinParsedFile
 import dev.ide.lang.kotlin.resolve.*
+import dev.ide.lang.kotlin.symbols.KotlinSymbol
 import dev.ide.lang.kotlin.symbols.KotlinType
 import dev.ide.vfs.VirtualFile
 import com.intellij.psi.PsiElement
 import org.jetbrains.kotlin.psi.KtBlockExpression
+import org.jetbrains.kotlin.psi.KtCallExpression
+import org.jetbrains.kotlin.psi.KtConstantExpression
+import org.jetbrains.kotlin.psi.KtExpression
 import org.jetbrains.kotlin.psi.KtLambdaExpression
 import org.jetbrains.kotlin.psi.KtNameReferenceExpression
+import org.jetbrains.kotlin.psi.KtPrefixExpression
 import org.jetbrains.kotlin.psi.KtProperty
+import org.jetbrains.kotlin.psi.KtStringTemplateExpression
+import org.jetbrains.kotlin.psi.KtValueArgument
 
 /**
  * Inlay hints for Kotlin, computed over the live PSI + the backend's own inference (no FIR). Mirrors the
@@ -21,7 +28,9 @@ import org.jetbrains.kotlin.psi.KtProperty
  *  - **local `val`/`var` inferred types** — `val x = foo()` → `x: Bar` (only when there's no explicit type),
  *  - **lambda parameter types** — `list.map { x -> … }` → `x: String`, and the implicit `it` → `it: String`,
  *  - **lambda scope receivers** — `Column { … }` → `this: ColumnScope`, for any receiver-typed lambda
- *    (`RowScope.() -> Unit`, a DSL builder block, `with(x) { … }`).
+ *    (`RowScope.() -> Unit`, a DSL builder block, `with(x) { … }`),
+ *  - **parameter names**: at a call site, the name of each parameter in front of a literal argument
+ *    (`setPadding(/*left:*/ 0, …)`), which is where a bare `0, 0, 8, 0` says least about what it means.
  *
  * Every hint comes from a type the resolver could infer; an unknown type simply yields no hint (so a
  * half-typed buffer never shows a wrong or `Unknown` annotation).
@@ -46,6 +55,7 @@ class KotlinInlayHintService(
             when (psi) {
                 is KtProperty -> localTypeHint(psi, resolver)?.let { out += it }
                 is KtLambdaExpression -> lambdaHints(psi, resolver, out)
+                is KtCallExpression -> parameterNameHints(psi, resolver, out)
                 else -> {}
             }
             var c = psi.firstChild
@@ -125,4 +135,76 @@ class KotlinInlayHintService(
 
     private fun typeHint(offset: Int, type: KotlinType): InlayHint =
         InlayHint(offset, listOf(InlayHintPart(": " + type)), InlayHintKind.TYPE, tooltip = type.qualifiedName, paddingLeft = false)
+
+    /**
+     * `setPadding(0, 8, 0, 8)` → `setPadding(left: 0, top: 8, …)`. Only LITERAL arguments are annotated: a
+     * named variable already reads as its own documentation, and hinting every argument turns a call into
+     * noise. Same rule as the Java side, so the two editors agree on when a hint is worth showing.
+     *
+     * This is where a Java method's real parameter names surface in a Kotlin file, so it depends on the two
+     * things that recover them for a binary callee: the `MethodParameters` attribute
+     * ([dev.ide.lang.kotlin.symbols.JavaBytecode]) and the attached-source enrichment
+     * ([dev.ide.lang.kotlin.symbols.KotlinSymbolService]). When neither can, the name is a synthetic `p0`
+     * and no hint is emitted (`p0: 8` teaches nothing).
+     */
+    private fun parameterNameHints(
+        call: KtCallExpression,
+        resolver: KotlinResolver,
+        out: MutableList<InlayHint>
+    ) {
+        // Resolving a callee is the expensive step and most calls take no literal at all, so the cheap
+        // syntactic test runs FIRST, since this walk covers every call in the viewport on each render.
+        val args = call.valueArguments.filterIsInstance<KtValueArgument>()
+        if (args.none { it.getArgumentName() == null && isLiteralLike(it.getArgumentExpression()) }) return
+        // calleeFunctionOf picks the single best overload but only ever considers FUNCTIONS, so a constructor
+        // call (`Point(1, 2)`) falls through to the full target set, which is an overload set, hence the
+        // agreement rule in [agreedParamName].
+        val candidates = listOfNotNull(resolver.calleeFunctionOf(call)).ifEmpty { resolver.callTargets(call) }
+        if (candidates.isEmpty()) return
+
+        args.forEachIndexed { i, arg ->
+            if (arg.getArgumentName() != null) return@forEachIndexed // `left = 0` already names itself
+            val expr = arg.getArgumentExpression() ?: return@forEachIndexed
+            if (!isLiteralLike(expr)) return@forEachIndexed
+            val name = agreedParamName(candidates, arg, i, resolver) ?: return@forEachIndexed
+            out += InlayHint(
+                expr.textRange.startOffset,
+                listOf(InlayHintPart("$name:")),
+                InlayHintKind.PARAMETER,
+                paddingRight = true,
+            )
+        }
+    }
+
+    /**
+     * The name every candidate gives the parameter this argument fills, or null when they disagree, when none
+     * can name it, or when any of them takes a vararg there (one vararg name would repeat down the whole
+     * trailing run). Unresolved overloads are the normal case for a constructor call, and a hint that names
+     * the wrong parameter is worse than no hint at all.
+     */
+    private fun agreedParamName(
+        candidates: List<KotlinSymbol>,
+        arg: KtValueArgument,
+        argIndex: Int,
+        resolver: KotlinResolver,
+    ): String? {
+        val names = HashSet<String>()
+        for (c in candidates) {
+            val paramIndex = resolver.argParamIndex(arg, argIndex, c)
+            if (paramIndex == c.varargParamIndex) return null
+            val n = c.paramNames.getOrNull(paramIndex) ?: continue
+            if (n.isEmpty() || resolver.isSyntheticParamName(n)) continue
+            names += n
+        }
+        return names.singleOrNull()
+    }
+
+    /** A literal (`0`, `"s"`, `true`, `null`), optionally signed (`-1`): an argument whose text carries no
+     *  hint of what it means. A `KtConstantExpression` covers numbers/booleans/`null`. */
+    private fun isLiteralLike(e: KtExpression?): Boolean = when (e) {
+        is KtConstantExpression -> true
+        is KtStringTemplateExpression -> true
+        is KtPrefixExpression -> isLiteralLike(e.baseExpression)
+        else -> false
+    }
 }
