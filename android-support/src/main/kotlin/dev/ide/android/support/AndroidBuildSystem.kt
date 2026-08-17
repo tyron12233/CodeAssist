@@ -25,6 +25,7 @@ import dev.ide.android.support.tasks.PackageApkTask
 import dev.ide.android.support.tasks.PackagingRules
 import dev.ide.android.support.tasks.ProcessGoogleServicesTask
 import dev.ide.android.support.tasks.R8MinifyTask
+import dev.ide.android.support.tasks.SharedLibraryDexer
 import dev.ide.android.support.tasks.SignApkTask
 import dev.ide.android.support.tasks.SignBundleTask
 import dev.ide.android.support.tools.Aapt2
@@ -897,6 +898,62 @@ class AndroidBuildSystem(
         }
         visit(app)
         return out.values.toList()
+    }
+
+    /**
+     * Dex [app]'s external libraries into the shared cross-project dex cache WITHOUT running a build, so that a
+     * later build (or layout-preview render) finds them already dexed instead of paying for them at the moment the
+     * user asked for something. Cold library dexing dominates a first build, and it is the one part that depends on
+     * nothing having been compiled first — which is what makes warming it ahead of time possible at all.
+     *
+     * Deliberately narrow. It runs the SAME [SharedLibraryDexer] over the SAME cache under the SAME key the build
+     * uses, so whatever it banks a build reuses verbatim (and vice versa) — but it archives into [warmRoot], NOT
+     * the build's own `extArchives`, so it can never leave a half-written bucket where a build would read one.
+     * Publishing into the shared cache is already staged-and-renamed with first-writer-wins, so a build dexing the
+     * same library at the same time is safe.
+     *
+     * Cancellation is the caller's: [checkCanceled] is consulted between libraries, and whatever completed before
+     * that point stays in the cache (each library is banked as it finishes), so a warm that is interrupted still
+     * leaves the next build less to do.
+     *
+     * At minSdk 26+ (no desugaring) a library's cache key is its own content alone, so these buckets are reused by
+     * any build of any project. Below 26 the key folds in a digest of the WHOLE library set, so a build whose
+     * external scope differs from the resolved set — an instrumented debug build, which appends the app-log bridge
+     * runtime — keys differently and misses them. The warm is still worth running there (the layout preview and an
+     * uninstrumented build do hit it), but it is not the guarantee it is at 26+.
+     *
+     * Returns how many libraries it had to dex (0 when the cache was already warm for this library set), or -1 when
+     * there is nothing to warm: not an Android module, no shared cache configured, or no external libraries.
+     */
+    suspend fun warmLibraryDexCache(
+        app: Module,
+        variantName: String,
+        warmRoot: Path,
+        log: (String) -> Unit = {},
+        checkCanceled: () -> Unit = {},
+    ): Int {
+        val facet = app.facets.get(AndroidFacet.KEY) ?: return -1
+        val cache = dexCacheRoot ?: return -1
+        val variant = AndroidVariants.select(app, variantName)
+        // The build's own explosion root, so an AAR the build already exploded is reused rather than re-exploded.
+        val libs = AndroidLibraries.resolve(app, Layout(app, variantName).explodedAar, variant?.configurations)
+        if (libs.dexJars.isEmpty()) return -1
+        Files.createDirectories(warmRoot)
+        // Debug: the variant a first build and the layout preview both consume. A release build minifies through
+        // R8 instead and shares none of these buckets, so warming it would be wasted work.
+        val release = false
+        val desugarJson = (if (facet.coreLibraryDesugaringEnabled) desugarLib else null)
+            ?.extractConfigJson(warmRoot.resolve("desugar.json"))
+        val universe = SharedLibraryDexer.computeUniverse(libs.dexJars, warmRoot, facet.minSdk, desugarJson)
+        val missing = SharedLibraryDexer.undexedLibraries(libs.dexJars, universe, cache, facet.minSdk, release)
+        if (missing.isEmpty()) return 0
+        log("dex cache warm: ${missing.size} of ${libs.dexJars.size} library(ies) not dexed yet")
+        val libDexer = SharedLibraryDexer(
+            dexer, sdk.androidJar, facet.minSdk, release, cache, desugarJson,
+            log = log, checkCanceled = checkCanceled,
+        )
+        libDexer.dexScope(libs.dexJars, warmRoot.resolve("ext"), universe)
+        return missing.size
     }
 
     private fun roots(variant: AndroidVariant, role: ContentRole): List<Path> =
