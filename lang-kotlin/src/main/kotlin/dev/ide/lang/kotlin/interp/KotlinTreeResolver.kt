@@ -1374,6 +1374,12 @@ class KotlinTreeResolver(
         val name = e.callableReference.getReferencedName()
         val receiverExpr = e.receiverExpression
         if (receiverExpr == null) {
+            // `::localFn` — a local function is ALREADY a closure held in a slot, so the reference IS that value:
+            // no forwarding lambda is needed (and none could be built — there is no compiled target to dispatch
+            // into). Checked before the top-level lookup because a local shadows a same-named top-level function.
+            if (localFunctionsInScope(e, e.textRange.startOffset, name).any { it.receiverTypeReference == null }) {
+                resolveLocal(name)?.let { return RNode.Name(it, span) }
+            }
             // `::foo` — a top-level function, else `::Type` — a constructor reference.
             service.topLevelByName(name).firstOrNull { it.kind == SymbolKind.METHOD }?.let {
                 return synthRefLambda(toCallable(it), DispatchKind.TOP_LEVEL, receiverNode = null, arity = it.paramTypes.size, span = span)
@@ -1563,6 +1569,19 @@ class KotlinTreeResolver(
                 val recv = if (binding is Binding.DelegatedLocal) RNode.PropertyGet(delegateRef(binding, call), binding.valueProperty, span(call))
                 else RNode.Name(binding, span(call))
                 return RNode.Call(synthMember("invoke"), DispatchKind.INVOKE, recv, lowerArgs(call), csk(call.textRange.startOffset), span(call))
+            }
+        }
+        // A LOCAL EXTENSION function called on its receiver (`fun String.twice()` … then `"ab".twice()`). It lives
+        // in a local slot like any other local function — there is no compiled facade to dispatch into — so this
+        // is an `invoke` on that value with the receiver passed as the LEADING argument, filling the receiver
+        // slot [localFunctionNode] reserves. Guarded by the PSI so only a genuine local extension takes this path.
+        if (receiverNode != null && bareCalleeName != null &&
+            localFunctionsInScope(call, call.textRange.startOffset, bareCalleeName).any { it.receiverTypeReference != null }
+        ) {
+            resolveLocal(bareCalleeName)?.let { binding ->
+                val fnValue = RNode.Name(binding, span(call))
+                val args = listOf(RArg(receiverNode)) + lowerArgs(call)
+                return RNode.Call(synthMember("invoke"), DispatchKind.INVOKE, fnValue, args, csk(call.textRange.startOffset), span(call))
             }
         }
         checkNamedArguments(call)
@@ -2290,8 +2309,11 @@ class KotlinTreeResolver(
      * its body as LOCAL (not a non-local return from the enclosing function). The name is bound in the enclosing
      * block scope BEFORE the body is lowered, so the function can call itself (recursion resolves through the
      * invoke-on-local path in [callNode]); the body + params are lowered in a fresh pushed scope, exactly like a
-     * lambda. Not modeled: default parameter values, and a forward reference to a sibling local function declared
-     * later in the same block (a backward reference / self-recursion works).
+     * lambda. Parameters go through [loweredValueParams], so declared DEFAULTS and a `vararg` are carried on the
+     * [RParam]s and honoured at call time exactly as a top-level function's are. An EXTENSION local
+     * (`fun String.twice()`) binds its receiver to a leading slot and pushes a receiver scope, so `this` and
+     * bare-member access in the body resolve to it. Not modeled: a forward reference to a sibling local function
+     * declared later in the same block — which Kotlin rejects too (a backward reference / self-recursion works).
      */
     private fun localFunctionNode(fn: KtNamedFunction): RNode {
         val name = fn.name ?: return unsupported("local function without a name", fn)
@@ -2299,15 +2321,21 @@ class KotlinTreeResolver(
         // Bind the name in the ENCLOSING scope first so the body (recursion) and later statements resolve it.
         bind(name, Binding.Local(slot, name, mutable = false))
         scopes.addLast(HashMap())
-        val params = fn.valueParameters.map { p ->
-            val pSlot = newSlot()
-            val pName = p.name ?: "_"
-            bind(pName, Binding.Local(pSlot, pName, mutable = false))
-            RParam(pSlot, pName, service.typeFromText(p.typeReference?.text, resolver.fileContext))
+        // An extension local's receiver takes the FIRST slot, matching the extension-dispatch convention the
+        // caller uses (the receiver value is passed as the head of the argument list — see [callNode]).
+        val recvType = fn.receiverTypeReference?.text?.let { service.typeFromText(it, resolver.fileContext) }
+        val receiverSlot = if (fn.receiverTypeReference != null) newSlot() else null
+        var pushedReceiver = false
+        if (receiverSlot != null && recvType != null) {
+            receiverScopes.addLast(ReceiverScope(receiverSlot, recvType, fn.name)); pushedReceiver = true
         }
+        val valueParams = loweredValueParams(fn.valueParameters)
+        val params = if (receiverSlot != null)
+            listOf(RParam(receiverSlot, "<this>", recvType)) + valueParams else valueParams
         val body = fn.bodyBlockExpression?.let { lowerBlock(it) }
             ?: fn.bodyExpression?.let { lower(it) }
             ?: emptyBlock(fn)
+        if (pushedReceiver) receiverScopes.removeLast()
         scopes.removeLast()
         val lambda = RNode.Lambda(params, body, captures = emptyList(), source = span(fn), isLocalFunction = true)
         return RNode.LocalVar(slot, name, mutable = false, lambda, span(fn))

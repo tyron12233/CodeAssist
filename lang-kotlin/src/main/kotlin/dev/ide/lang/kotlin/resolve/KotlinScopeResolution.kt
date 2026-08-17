@@ -174,26 +174,28 @@ fun KotlinResolver.localsAt(offset: Int): List<KotlinSymbol> {
     var node: PsiElement? = elementAt(offset)
     while (node != null) {
         when (node) {
-            is KtBlockExpression -> node.statements.filter { it.textRange.endOffset <= offset }
-                .forEach { st ->
-                    when (st) {
-                        is KtProperty -> out += localVar(st)
-                        is KtDestructuringDeclaration -> out += destructuringLocals(
-                            st,
-                            inferType(st.initializer)
-                        )
-
-                        is KtNamedFunction -> out += KotlinSymbol(
-                            st.name ?: "_",
-                            SymbolKind.METHOD,
-                            type = service.typeFromText(st.typeReference?.text, fileContext),
-                            origin = SOURCE,
-                            declarationNode = runCatching { parsed.adapt(st) }.getOrNull(),
-                        )
-
-                        else -> {}
+            is KtBlockExpression -> node.statements.forEach { st ->
+                // A local FUNCTION is in scope from its declaration on AND inside its own body (self-recursion:
+                // `fun fact(n: Int): Int = … fact(n - 1)`); everything else only once its declaration closed.
+                // An EXTENSION local (`fun String.twice()`) is not callable by bare name — it surfaces on a
+                // matching receiver through [scopeMemberExtensions], mirroring [sameFileScopeSymbols].
+                if (st is KtNamedFunction) {
+                    if (st.receiverTypeReference == null && localFunctionVisibleAt(st, offset)) {
+                        out += localFunction(st)
                     }
+                    return@forEach
                 }
+                if (st.textRange.endOffset > offset) return@forEach
+                when (st) {
+                    is KtProperty -> out += localVar(st)
+                    is KtDestructuringDeclaration -> out += destructuringLocals(
+                        st,
+                        inferType(st.initializer)
+                    )
+
+                    else -> {}
+                }
+            }
             // A lambda's value parameters are handled by the KtLambdaExpression branch below (which types
             // `it`/named params from the functional parameter the lambda fills). Skip the KtFunctionLiteral
             // here — it IS a KtFunction, and adding its params via param() (type-from-text only) would
@@ -266,6 +268,86 @@ fun KotlinResolver.localsAt(offset: Int): List<KotlinSymbol> {
     // member property's initializer/delegate, or the superclass delegation call) — see [constructorScopeParams].
     constructorScopeParams(offset).forEach { out += param(it) }
     return out
+}
+
+/**
+ * Whether the local function [fn] is in scope at [offset]: at or after its declaration, or anywhere inside its
+ * own body. The second case is what makes SELF-RECURSION resolve (`fun fact(n: Int): Int = … fact(n - 1)`) —
+ * without it the callee sat outside the "declared before the caret" window and read as unresolved. A local
+ * function declared LATER in the block stays out of scope, matching Kotlin (no forward reference between
+ * sibling local functions).
+ */
+internal fun localFunctionVisibleAt(fn: KtNamedFunction, offset: Int): Boolean {
+    val r = fn.textRange
+    return r.endOffset <= offset || (offset >= r.startOffset && offset <= r.endOffset)
+}
+
+/**
+ * The local functions in scope at [offset] — declared in any block enclosing [from] and visible there (see
+ * [localFunctionVisibleAt]), optionally narrowed to one [name]. Both plain and EXTENSION locals; callers filter.
+ * Allocation-free until something matches (almost no file declares a local function, and this sits on the
+ * per-call resolution path): the enclosing blocks are walked by sibling pointer rather than through
+ * `KtBlockExpression.statements`, which materializes a list per block per query.
+ */
+internal fun localFunctionsInScope(
+    from: PsiElement?,
+    offset: Int,
+    name: String? = null
+): List<KtNamedFunction> {
+    var out: MutableList<KtNamedFunction>? = null
+    var node: PsiElement? = from
+    while (node != null) {
+        if (node is KtBlockExpression) forEachLocalFunction(node) { fn ->
+            if ((name == null || fn.name == name) && localFunctionVisibleAt(fn, offset)) {
+                (out ?: ArrayList<KtNamedFunction>(2).also { out = it }) += fn
+            }
+        }
+        node = node.parent
+    }
+    return out ?: emptyList()
+}
+
+/** Apply [action] to each local function declared directly in [block], walking children by sibling pointer so
+ *  the common "no local functions here" case costs nothing. */
+internal inline fun forEachLocalFunction(block: KtBlockExpression, action: (KtNamedFunction) -> Unit) {
+    var child: PsiElement? = block.firstChild
+    while (child != null) {
+        if (child is KtNamedFunction) action(child)
+        child = child.nextSibling
+    }
+}
+
+internal fun KotlinResolver.localFunctionsInScope(offset: Int, name: String? = null): List<KtNamedFunction> =
+    localFunctionsInScope(elementAt(offset), offset, name)
+
+/**
+ * A symbol for a LOCAL function declaration (`fun helper(x: Int) = …` inside a body). Carries the same shape as
+ * [sameFileFunction] — value-parameter types/names, per-parameter defaults, the vararg index, type parameters,
+ * `@Composable`/`inline`/`suspend` — minus the owner/package (a local has neither). Previously locals got a
+ * name-and-kind-only symbol, so every call-applicability check saw a ZERO-parameter function: `helper(1)` was
+ * reported "Too many arguments (expected 0)", a named argument "Cannot find a parameter with this name", and a
+ * genuinely missing argument went unreported. The return type stays the DECLARED one; an expression body's
+ * inferred type is resolved per call site by [inferredReturnTypeForCall] through [declarationNode].
+ */
+internal fun KotlinResolver.localFunction(fn: KtNamedFunction): KotlinSymbol {
+    val params = fn.valueParameters.map { (it.name ?: "_") to it.typeReference?.text }
+    val retText = fn.typeReference?.text
+    return KotlinSymbol(
+        name = fn.name ?: "_", kind = SymbolKind.METHOD,
+        type = retText?.let { service.typeFromText(it, fileContext) },
+        origin = SOURCE,
+        signature = "(" + params.joinToString(", ") { (n, t) -> "$n: ${t ?: "?"}" } + ")" + (retText?.let { ": $it" }
+            ?: ""),
+        paramTypes = params.map { (_, t) -> service.typeFromText(t, fileContext) },
+        paramNames = params.map { (n, _) -> n },
+        paramHasDefault = fn.valueParameters.map { it.hasDefaultValue() },
+        varargParamIndex = fn.valueParameters.indexOfFirst { it.isVarArg },
+        typeParameters = fn.typeParameters.mapNotNull { it.name },
+        isComposable = fn.annotationEntries.any { it.shortName?.asString() == "Composable" },
+        isInline = fn.hasModifier(org.jetbrains.kotlin.lexer.KtTokens.INLINE_KEYWORD),
+        isSuspend = fn.hasModifier(org.jetbrains.kotlin.lexer.KtTokens.SUSPEND_KEYWORD),
+        declarationNode = runCatching { parsed.adapt(fn) }.getOrNull(),
+    )
 }
 
 /**
@@ -494,6 +576,13 @@ fun KotlinResolver.bareNameResolves(name: String, offset: Int): Boolean {
             service.membersNamed(recv.qualifiedName, recv.typeArguments, name)
                 .any { !it.isExtension || extensionInScope(it) }
         }
+    ) return true
+    // A LOCAL extension function called bare on an implicit `this` of its receiver type — in practice its own
+    // recursive self-call (`fun String.twice(): String = if (n == 0) this else twice()`). Locals of that shape
+    // are deliberately kept out of [localsAt] (an extension is not bare-callable in general), so without this
+    // the recursion read as unresolved. Needs no import check: a local is always in its own scope.
+    if (localFunctionsInScope(offset, name).any { it.receiverTypeReference != null } &&
+        implicitReceiversAt(offset).any { recv -> scopeMemberExtensions(offset, recv, name).any { it.name == name } }
     ) return true
     // A top-level callable (`remember`, `mutableStateOf`) resolves bare only when it is actually in
     // scope — explicitly imported, star-imported, same-package, or default-imported. A classpath

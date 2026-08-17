@@ -6,6 +6,7 @@ import dev.ide.lang.resolve.Modifier
 import dev.ide.lang.resolve.SymbolKind
 import dev.ide.lang.resolve.TypeRef
 import com.intellij.psi.PsiElement
+import org.jetbrains.kotlin.psi.KtBlockExpression
 import org.jetbrains.kotlin.psi.KtCallableDeclaration
 import org.jetbrains.kotlin.psi.KtClassOrObject
 import org.jetbrains.kotlin.psi.KtNamedFunction
@@ -59,26 +60,28 @@ fun KotlinResolver.scopeMemberExtensions(
     fun matches(n: String) = namePrefix.isEmpty() || n.startsWith(namePrefix, ignoreCase = true)
     val out = ArrayList<KotlinSymbol>()
     val liveOwners = HashSet<String>()
+    // A declared extension whose receiver matches → a bound symbol in [out]. Shared by the class-member and
+    // local cases below, which differ only in where the declaration was found.
+    fun collect(d: KtCallableDeclaration) {
+        val recvRef = d.receiverTypeReference ?: return
+        val name = d.name ?: return
+        if (!matches(name)) return
+        val recvFqn = service.resolveTypeName(recvRef.text, fileContext) ?: return
+        if (recvFqn !in recvTargets) return
+        sameFileMemberExtension(d, recvFqn)?.let { out += bindMemberExtensionReceiver(it, receiverType) }
+    }
     // (a) Live-buffer enclosing classes/objects — covers an extension just typed in the file being edited
-    //     (the disk-based symbol model may not carry it yet).
+    //     (the disk-based symbol model may not carry it yet) — and enclosing BLOCKS, which carry LOCAL
+    //     extensions (`fun String.twice()` declared in a function body). A local belongs to no class, so
+    //     neither the class walk nor the disk model sees it, and `"a".twice()` used to read as unresolved.
     var node: PsiElement? = elementAt(offset)
     while (node != null) {
         if (node is KtClassOrObject) {
             node.fqName?.asString()?.let { liveOwners += it }
-            for (d in node.declarations) {
-                if (d !is KtCallableDeclaration || d.receiverTypeReference == null) continue
-                val name = d.name ?: continue
-                if (!matches(name)) continue
-                val recvFqn =
-                    service.resolveTypeName(d.receiverTypeReference!!.text, fileContext) ?: continue
-                if (recvFqn !in recvTargets) continue
-                sameFileMemberExtension(d, recvFqn)?.let {
-                    out += bindMemberExtensionReceiver(
-                        it,
-                        receiverType
-                    )
-                }
-            }
+            for (d in node.declarations) if (d is KtCallableDeclaration) collect(d)
+        }
+        if (node is KtBlockExpression) forEachLocalFunction(node) {
+            if (localFunctionVisibleAt(it, offset)) collect(it)
         }
         node = node.parent
     }

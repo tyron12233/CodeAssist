@@ -1742,6 +1742,11 @@ internal class KotlinSemanticChecks(private val service: KotlinSymbolService) {
         val candidates = call.containingKtFile.declarations.filterIsInstance<KtNamedFunction>()
             .filter { it.name == name && it.receiverTypeReference == null }
         val fn = candidates.singleOrNull() ?: return null // overloaded or not same-file → don't guess
+        // A LOCAL function of the same name SHADOWS that top-level one, so its arity is not this call's
+        // (`fun f() { fun g() {}; g() }` beside a top-level `fun g(a: Int)`). The local is judged by the
+        // resolved-symbol checks instead. Only reached once a same-named top-level function exists, so the
+        // scope walk stays off the common path.
+        if (localFunctionsInScope(call, call.textRange.startOffset, name).isNotEmpty()) return null
         val params = fn.valueParameters
         if (params.any { it.isVarArg }) return null
         val required = params.count { !it.hasDefaultValue() && !it.isVarArg }
