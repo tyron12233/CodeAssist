@@ -93,6 +93,50 @@ fun KotlinResolver.scopeMemberExtensions(
             .filter { it.isExtension && it.receiverTypeFqn != null && it.receiverTypeFqn in recvTargets }
             .forEach { out += bindMemberExtensionReceiver(it, receiverType) }
     }
+    // (c) IMPORTED through a singleton: `import okhttp3.MediaType.Companion.toMediaType`, then
+    //     `"application/json".toMediaType()`. A member of an object/companion needs no dispatch receiver, so
+    //     the import alone puts the extension in scope, and this is the one member-extension case an import
+    //     does reach (a regular class's member extension can never be imported). Cases (a)/(b) are
+    //     import-free by construction, which is why the seam had no import path at all and the whole OkHttp /
+    //     Retrofit idiom read as an unresolved reference.
+    out += importedSingletonExtensions(recvTargets, receiverType, namePrefix, liveOwners)
+    return out
+}
+
+/**
+ * Member extensions the file's imports bring into scope through an `object` or companion object, applicable to
+ * a receiver in [recvTargets]. Both import spellings Kotlin accepts are handled: through the companion itself
+ * (`import Foo.Companion.bar`, the OkHttp form) and through the enclosing class (`import Foo.bar`), plus a
+ * star import of either.
+ *
+ * The container's last segment must start with an uppercase letter, which is what keeps this off the hot path:
+ * an ordinary `import kotlinx.coroutines.flow.Flow` has a package as its container and is rejected before any
+ * type lookup. A lowercase-named object would be missed, which is a naming-convention violation and strictly
+ * better than paying a member query per import on every completion keystroke.
+ */
+private fun KotlinResolver.importedSingletonExtensions(
+    recvTargets: Set<String>,
+    receiverType: KotlinType,
+    namePrefix: String,
+    liveOwners: Set<String>,
+): List<KotlinSymbol> {
+    val out = ArrayList<KotlinSymbol>()
+    for (imp in fileContext.imports) {
+        val container = if (imp.isStar) imp.fqn else imp.fqn.substringBeforeLast('.', "")
+        if (container.isEmpty() || container in liveOwners) continue
+        if (container.substringAfterLast('.').firstOrNull()?.isUpperCase() != true) continue
+        // A non-star import names ONE member, so a prefix that can't match it skips the lookup entirely.
+        val member = if (imp.isStar) null else imp.fqn.substringAfterLast('.')
+        if (member != null && namePrefix.isNotEmpty() && !member.startsWith(namePrefix, ignoreCase = true)) continue
+        val candidates =
+            if (service.isSingletonObject(container)) service.membersForCompletion(container, emptyList(), member ?: namePrefix)
+            // Not a singleton itself: the import may still reach its COMPANION's member (`import Foo.bar`).
+            else service.companionMembersFor(container, member ?: namePrefix)
+        candidates.asSequence()
+            .filter { member == null || it.name == member }
+            .filter { it.isExtension && it.receiverTypeFqn != null && it.receiverTypeFqn in recvTargets }
+            .forEach { out += bindMemberExtensionReceiver(it, receiverType) }
+    }
     return out
 }
 

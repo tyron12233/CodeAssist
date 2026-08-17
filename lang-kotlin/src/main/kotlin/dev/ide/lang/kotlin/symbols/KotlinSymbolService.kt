@@ -1544,6 +1544,25 @@ class KotlinSymbolService(
         return typeShape(fqn)?.isObject == true
     }
 
+    /**
+     * Whether [typeFqnRaw] is a singleton `object`, **including a companion object** (which [isObject]
+     * deliberately excludes, since a bare `Foo.` reference there denotes the class, not the companion).
+     *
+     * Used to decide whether an imported member is reachable without a dispatch receiver: a member of a
+     * singleton is, so `import okhttp3.MediaType.Companion.toMediaType` puts that member extension in scope,
+     * whereas a member extension of a regular class can never be imported.
+     */
+    fun isSingletonObject(typeFqnRaw: String): Boolean {
+        val fqn = Builtins.kotlinTypeFor(typeFqnRaw) ?: typeFqnRaw
+        model().classByFqn[fqn]?.let { return it.isObject }
+        if (typeShape(fqn)?.isObject == true) return true
+        // A CLASSPATH companion's own shape does not come back with `isObject` set (bytecode/`@Metadata` model
+        // it as a nested class), so ask the ENCLOSING class whether this is its companion. Exact rather than a
+        // "the simple name is Companion" guess, so a named `companion object Factory` is recognized too.
+        val outer = fqn.substringBeforeLast('.', "")
+        return outer.isNotEmpty() && companionObjectFqn(outer) == fqn
+    }
+
     /** The companion object's FQN (`androidx…Color.Companion`) for [typeFqnRaw], or null if it has none. */
     private fun companionObjectFqn(typeFqnRaw: String): String? {
         val fqn = Builtins.kotlinTypeFor(typeFqnRaw) ?: typeFqnRaw
