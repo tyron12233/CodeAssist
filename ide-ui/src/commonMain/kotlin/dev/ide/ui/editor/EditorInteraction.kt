@@ -50,6 +50,9 @@ internal class EditorInteraction(initialRevision: Int) {
     var touchDownPos = Offset.Zero
     var touchScrolled = false
 
+    /** A long press has already fired in the current touch gesture, so its lift must not commit a tap. */
+    var longPressed = false
+
     // The document line the mouse is hovering (desktop) — drives showing an expandable fold chevron on hover.
     // -1 when the pointer is a touch or has left the editor.
     var hoveredLine by mutableIntStateOf(-1)

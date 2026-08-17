@@ -149,6 +149,7 @@ internal fun Modifier.editorInput(
                     PointerEventType.Press -> {
                         interaction.touchDownPos = change.position
                         interaction.touchScrolled = false
+                        interaction.longPressed = false
                     }
 
                     PointerEventType.Move ->
@@ -165,13 +166,11 @@ internal fun Modifier.editorInput(
     // it must re-launch when a zoom rescales the line metrics — otherwise a post-zoom tap maps through stale
     // lineHeight to the wrong line.
     .pointerInput(session, metrics, gutterWidthPx, wrapActive) {
-        var longPressed = false
         detectTapGestures(
             // Place the caret in onPress (fires on the first finger-lift) instead of onTap — when onDoubleTap is
             // set, onTap is held back by the double-tap timeout (~300ms), which is the lag. tryAwaitRelease()
             // returns on that first up; false if the gesture became a scroll (cancelled).
             onPress = { pos ->
-                longPressed = false
                 val pressMark = TimeSource.Monotonic.markNow()
                 val released = tryAwaitRelease()
                 val nearArm = interaction.tripleArmed && (pos - interaction.tripleArmPos).getDistance() < 60f
@@ -179,7 +178,7 @@ internal fun Modifier.editorInput(
                     nearArm && interaction.tripleArmMark?.let { (it - pressMark).isPositive() } == true
                 // A swipe that traveled past touch-slop is a scroll, never a tap — don't place the caret or
                 // raise the keyboard even if no scroll container happened to consume the drag.
-                if (released && !longPressed && !doubleTapSecondTap && !interaction.touchScrolled) {
+                if (released && !interaction.longPressed && !doubleTapSecondTap && !interaction.touchScrolled) {
                     focus.requestFocus()
                     onDismissQuickDoc() // a tap in the editor dismisses an open quick-doc popup
                     interaction.pendingTapDismiss = null // re-armed below only when a tap lands inside a selection
@@ -250,19 +249,9 @@ internal fun Modifier.editorInput(
                 interaction.tripleArmJob?.cancel()
                 interaction.tripleArmJob = scope.launch { delay(320.milliseconds); interaction.tripleArmed = false }
             },
-            onLongPress = { pos ->
-                longPressed = true
-                focus.requestFocus()
-                interaction.pendingTapDismiss = null
-                // Long-press → select the word under the finger and raise the selection chrome (handles + the
-                // floating toolbar), the standard Android text gesture.
-                completion.dismiss()
-                session.selectWordAt(geometry.offsetAt(pos))
-                if (interaction.lastInputWasTouch) {
-                    interaction.handlesVisible = true
-                    editorIme.show() // explicit long-press → raise the keyboard
-                }
-            },
+            // No onLongPress here on purpose: detectTapGestures fires it on a timer and then consumes every
+            // event until the finger lifts, which killed the swipe of anyone who rested a moment before
+            // dragging. The editor detects the long press itself, below, without consuming the gesture.
             onTap = {
                 // A confirmed single tap (no double-tap followed) that had landed inside a selection dismisses it,
                 // placing the caret there. Deferred from onPress so double-tap-to-expand stays flicker-free.
@@ -327,6 +316,7 @@ internal fun Modifier.editorInput(
             // Touch: only claim the gesture for a selection-handle drag; otherwise leave it unconsumed so the
             // scrollables and detectTapGestures (tap/double-tap) still run.
             interaction.lastInputWasTouch = true
+            interaction.longPressed = false
             val handleRadius = 14.dp.toPx()
             // A handle grab must land ON the handle glyph, which is drawn BELOW its anchor line — so require the
             // touch to be at/below that line's bottom. Without this the grab circle reaches a few dp up into the
@@ -360,6 +350,59 @@ internal fun Modifier.editorInput(
                     }
                     change.consume()
                 }
+                return@awaitEachGesture
+            }
+            // Long press, owned here rather than by detectTapGestures. It fires only while the finger has stayed
+            // put: any travel past touch-slop (or a scroll container claiming the drag) is a scroll, and cancels
+            // it. Nothing is consumed either way, so a drag that starts AFTER the press still reaches the scroll
+            // containers — their slop detection is still armed — and pans the editor as usual.
+            val slop = viewConfiguration.touchSlop
+            val resolved = withTimeoutOrNull(viewConfiguration.longPressTimeoutMillis) {
+                while (true) {
+                    val event = awaitPointerEvent()
+                    val change = event.changes.firstOrNull { it.id == down.id } ?: break
+                    if (!change.pressed || change.isConsumed) break
+                    if ((change.position - down.position).getDistance() > slop) break
+                }
+            }
+            if (resolved != null) return@awaitEachGesture
+            // Timed out with the finger still down and still: select the word under it and raise the selection
+            // chrome (handles + the floating toolbar), the standard Android text gesture.
+            val wasSelection = session.selection
+            val hadHandles = interaction.handlesVisible
+            interaction.longPressed = true
+            focus.requestFocus()
+            interaction.pendingTapDismiss = null
+            completion.dismiss()
+            session.selectWordAt(geometry.offsetAt(down.position))
+            if (interaction.lastInputWasTouch) interaction.handlesVisible = true
+            // The keyboard waits for the lift. Raising it mid-gesture resizes the window, and the
+            // bring-caret-into-view effect that a new viewport triggers would jerk the scroll out from under a
+            // finger that is about to pan. So watch (still consuming nothing) which one this turns into: a lift
+            // completes the long press, while travel past slop means the finger is panning after all — then the
+            // long press is abandoned, the document is left exactly as it was, and the drag reaches the scroll
+            // containers as if the press had never lingered.
+            var panned = false
+            var lifted = false
+            while (true) {
+                val event = awaitPointerEvent()
+                val change = event.changes.firstOrNull { it.id == down.id } ?: break
+                if (!change.pressed) {
+                    lifted = true; break
+                }
+                if (change.isConsumed || (change.position - down.position).getDistance() > slop) {
+                    panned = true; break
+                }
+            }
+            when {
+                panned -> {
+                    interaction.longPressed = false
+                    interaction.handlesVisible = hadHandles
+                    if (wasSelection.collapsed) session.setCaret(wasSelection.start)
+                    else session.setSelectionRange(wasSelection.start, wasSelection.end)
+                }
+
+                lifted && interaction.lastInputWasTouch -> editorIme.show()
             }
         }
     }
