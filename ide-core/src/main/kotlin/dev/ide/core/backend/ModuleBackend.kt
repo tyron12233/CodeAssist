@@ -115,10 +115,8 @@ internal class ModuleBackend(private val ctx: BackendContext) : ModuleService {
                 .also { if (it.success) ctx.bumpFileSystemEpoch() }
         }
 
-    override suspend fun toolchainWarnings(filePath: String): List<UiToolchainWarning> =
-        withContext(Dispatchers.IO) {
-            ctx.services.moduleService.toolchainWarnings(Paths.get(filePath))
-        }
+    override suspend fun toolchainWarnings(): List<UiToolchainWarning> =
+        withContext(Dispatchers.IO) { ctx.services.moduleService.toolchainWarnings() }
 
     override suspend fun fixToolchainWarning(moduleName: String, warningId: String): UiConfigResult =
         withContext(Dispatchers.IO) {

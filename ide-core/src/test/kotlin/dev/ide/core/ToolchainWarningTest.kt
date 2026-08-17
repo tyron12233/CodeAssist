@@ -9,7 +9,6 @@ import dev.ide.model.LibraryRef
 import dev.ide.model.ModuleId
 import dev.ide.testkit.TestJars
 import dev.ide.testkit.withTempDir
-import java.nio.file.Files
 import java.nio.file.Path
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -32,33 +31,33 @@ class ToolchainWarningTest {
     private val hiltWarningId = "ksp-runtime:hilt"
 
     @Test
-    fun aStaleRuntimeIsReportedOnTheModulesFilesWithAFixLabel() {
+    fun aStaleRuntimeIsReportedForItsOwnModuleWithADirectionalFixLabel() {
         withTempDir("toolchain-warn") { dir ->
             IdeServices.bootstrapDemo(dir).use { ide ->
-                val activity = assertNotNull(anAppSourceFile(ide), "the demo app has a source file")
                 assertTrue(
-                    ide.moduleService.toolchainWarnings(activity).isEmpty(),
-                    "a module with no bundled processor active must report nothing",
+                    ide.moduleService.toolchainWarnings().isEmpty(),
+                    "a project with no bundled processor active must report nothing",
                 )
 
                 declareStaleHilt(ide, dir)
 
-                val warnings = ide.moduleService.toolchainWarnings(activity)
+                // Project-wide and with NO file open: the problem is a property of the module's configuration,
+                // so it is knowable as soon as the project loads.
+                val warnings = ide.moduleService.toolchainWarnings()
                 val hilt = assertNotNull(warnings.firstOrNull { it.id == hiltWarningId }, "expected a hilt warning: $warnings")
+                assertEquals(1, warnings.size, "only the offending module is reported: $warnings")
                 assertEquals("app", hilt.moduleName)
+                assertTrue("app" in hilt.title, "the title names the module, since several can be listed: ${hilt.title}")
                 assertTrue("dagger.internal.Provider" in hilt.detail, "names the missing symbol: ${hilt.detail}")
                 // The bundled version (2.60.1) is NEWER than the declared 2.48, so the fix is an update.
                 assertEquals("Update hilt-android to 2.60.1", hilt.fixLabel)
                 assertTrue(hilt.acceptable, "the user may choose to build anyway")
 
-                // A file outside that module is unaffected: the banner is per module, not per project.
-                val coreFile = aSourceFileUnder(dir.resolve("core"))
-                if (coreFile != null) {
-                    assertTrue(
-                        ide.moduleService.toolchainWarnings(coreFile).none { it.id == hiltWarningId },
-                        "the java-lib module declares no Hilt, so it must stay quiet",
-                    )
-                }
+                // The sibling modules declare no Hilt, so nothing is attributed to them.
+                assertTrue(
+                    warnings.none { it.moduleName != "app" },
+                    "a module that declares none of the bundled processors must stay quiet: $warnings",
+                )
             }
             dir.toFile().deleteRecursively()
         }
@@ -73,16 +72,15 @@ class ToolchainWarningTest {
     fun acceptingIsPersistedAndUnblocksGeneration() {
         withTempDir("toolchain-accept") { dir ->
             IdeServices.bootstrapDemo(dir).use { ide ->
-                val activity = assertNotNull(anAppSourceFile(ide))
                 declareStaleHilt(ide, dir)
-                assertTrue(ide.moduleService.toolchainWarnings(activity).any { it.id == hiltWarningId })
+                assertTrue(ide.moduleService.toolchainWarnings().any { it.id == hiltWarningId })
 
                 val accepted = ide.moduleService.acceptToolchainWarning("app", hiltWarningId)
                 assertTrue(accepted.success, accepted.message)
                 assertTrue("still expected to fail" in accepted.message, "the message must not read like a fix: ${accepted.message}")
 
                 assertTrue(
-                    ide.moduleService.toolchainWarnings(activity).none { it.id == hiltWarningId },
+                    ide.moduleService.toolchainWarnings().none { it.id == hiltWarningId },
                     "an accepted warning leaves the banner",
                 )
                 assertEquals(
@@ -150,19 +148,4 @@ class ToolchainWarningTest {
             ide.modules().first { it.name == "app" }.facets.get(AndroidFacet.KEY),
             "the demo app is an Android module",
         )
-
-    private fun anAppSourceFile(ide: IdeServices): Path? {
-        val app = ide.modules().firstOrNull { it.name == "app" } ?: return null
-        return app.sourceSets.flatMap { it.contentRoots }
-            .mapNotNull { runCatching { Path.of(it.dir.path) }.getOrNull() }
-            .firstNotNullOfOrNull { aSourceFileUnder(it) }
-    }
-
-    private fun aSourceFileUnder(root: Path): Path? =
-        if (!Files.isDirectory(root)) null
-        else Files.walk(root).use { s ->
-            s.filter { Files.isRegularFile(it) }
-                .filter { val n = it.toString(); n.endsWith(".kt") || n.endsWith(".java") }
-                .findFirst().orElse(null)
-        }
 }

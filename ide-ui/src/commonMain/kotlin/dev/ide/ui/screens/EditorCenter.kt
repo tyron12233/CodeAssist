@@ -206,6 +206,12 @@ internal fun EditorCenter(
                     onClose = { showConvertDialog = false },
                 )
             }
+            // A toolchain problem that will break a module's build (a bundled KSP processor whose generated code
+            // needs a newer runtime than the module declares): said here, with its fix, rather than left to
+            // appear as unresolved symbols in generated code after a build. Project-scoped and above the tabs,
+            // so it shows on open even with no file open, and even when the offending module (typically a `di/`
+            // one) is never opened at all.
+            ToolchainWarningBanner(state, compact)
             TabsStrip(
                 openFiles = state.openFiles,
                 activeIndex = state.activeIndex,
@@ -220,10 +226,6 @@ internal fun EditorCenter(
                 EditorDaemonEffect(state, active, indexStatus) { hasPreview = it }
                 BreadcrumbBar(state, active, hasPreview)
                 AndroidSourcesBanner(state)
-                // A toolchain problem that will break this module's build (a bundled KSP processor whose
-                // generated code needs a newer runtime than the module declares): said here, with its fix,
-                // rather than left to appear as unresolved symbols in generated code after a build.
-                ToolchainWarningBanner(state, active.path)
                 ReadOnlyBanner(state, active)
                 LargeFileBanner(active)
                 // The code editor and the preview, each as a Modifier-parameterized slot, so the single-pane modes

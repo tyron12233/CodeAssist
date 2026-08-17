@@ -438,6 +438,7 @@ We never collect your code, file or project names, which features you use, or an
     <string name="gradle_convert_undo">Undo</string>
     <string name="gradle_convert_done">Done</string>
     <string name="toolchain_warning_build_anyway">Build anyway</string>
+    <string name="toolchain_warning_many">%1$d modules have a runtime out of step with a bundled processor</string>
     <string name="toolchain_warning_accept_note">Builds of this module will keep failing until the versions match.</string>
     <string name="toolchain_warning_working">Working…</string>
     <string name="sources_not_installed">Android platform sources (%1$s) aren't installed. It is needed for android.* parameter names &amp; docs.</string>

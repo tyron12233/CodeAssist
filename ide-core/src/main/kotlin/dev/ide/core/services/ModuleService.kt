@@ -240,30 +240,40 @@ internal class ModuleService(private val ctx: EngineContext) {
         .filterIsInstance<LibraryDependency>().map { it.library.name }.distinct()
 
     /**
-     * The toolchain problems that will break the build for the module owning [filePath]. Today: a bundled KSP
+     * The toolchain problems that will break the build, over EVERY module of the workspace. Today: a bundled KSP
      * processor whose generated code references types the module's declared runtime does not carry. The IDE runs
      * the processor version it ships (executed code cannot be downloaded), so the runtime has to agree with it.
      *
+     * Project-wide rather than per open file: this is a property of a module's configuration, knowable as soon as
+     * the project loads, and the module that has it is often one nobody opens (a `di/` or `data/` module). The
+     * catalog's declared-dependency gate means a module declaring none of the bundled processors costs one list
+     * scan, so walking every module is cheap.
+     *
      * Already-accepted problems are excluded: the user has been told and chose to build anyway, so the banner
-     * goes away and the build console carries the warning instead.
+     * goes away and the build console carries the warning on every build instead.
      */
-    fun toolchainWarnings(filePath: Path): List<UiToolchainWarning> {
-        val module = ctx.moduleForFile(filePath) ?: return emptyList()
-        val accepted = module.facets.get(AndroidFacet.KEY)?.buildFeatures?.kspRuntimeMismatchAccepted.orEmpty()
-        val classpath = compileLibraryClasspath(module)
-        return KspProcessorCatalog.blessed().runtimeMismatches(classpath, declaredCoordinates(module))
-            .filterNot { it.processor.id in accepted }
-            .map { m ->
-                UiToolchainWarning(
-                    id = "$KSP_RUNTIME_WARNING_PREFIX${m.processor.id}",
-                    moduleName = module.name,
-                    title = "${m.processor.displayName} runtime is out of step with the bundled processor",
-                    detail = "The bundled ${m.processor.displayName} processor generates code referencing " +
-                        "${m.missingTypeNames.joinToString()}, which ${module.name}'s runtime does not provide. " +
-                        "The IDE always runs the processor version it bundles, so the runtime has to match.",
-                    fixLabel = m.requiredCoordinates.firstOrNull()?.let { fixLabelFor(m.declared, it) },
-                )
-            }
+    fun toolchainWarnings(): List<UiToolchainWarning> {
+        val catalog = KspProcessorCatalog.blessed()
+        return ctx.modules().flatMap { module ->
+            val accepted = module.facets.get(AndroidFacet.KEY)?.buildFeatures?.kspRuntimeMismatchAccepted.orEmpty()
+            val declared = declaredCoordinates(module)
+            if (declared.isEmpty()) return@flatMap emptyList()
+            catalog.runtimeMismatches(compileLibraryClasspath(module), declared)
+                .filterNot { it.processor.id in accepted }
+                .map { m ->
+                    UiToolchainWarning(
+                        id = "$KSP_RUNTIME_WARNING_PREFIX${m.processor.id}",
+                        moduleName = module.name,
+                        // The module is in the title because several can be listed at once now.
+                        title = "${module.name}: ${m.processor.displayName} runtime is out of step",
+                        detail = "The bundled ${m.processor.displayName} processor generates code referencing " +
+                            "${m.missingTypeNames.joinToString()}, which ${module.name}'s runtime does not " +
+                            "provide. The IDE always runs the processor version it bundles, so the runtime has " +
+                            "to match.",
+                        fixLabel = m.requiredCoordinates.firstOrNull()?.let { fixLabelFor(m.declared, it) },
+                    )
+                }
+        }
     }
 
     /**

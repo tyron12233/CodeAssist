@@ -501,11 +501,15 @@ interface ModuleService {
     ): UiConfigResult = UiConfigResult(false, "Packaging options not supported by this backend")
 
     /**
-     * Toolchain problems that will break the build for the module owning [filePath] (a bundled KSP processor
-     * whose generated code needs a newer runtime than the module declares). Drives the editor banner; empty for
-     * a healthy module, so the banner costs nothing when there is nothing to say.
+     * Toolchain problems that will break the build, across EVERY module of the open project (a bundled KSP
+     * processor whose generated code needs a newer runtime than the module declares). Drives the editor banner.
+     *
+     * Project-wide, not per file: the problem belongs to a module's configuration, so it is knowable the moment
+     * the project opens and should not wait for someone to open a file from the offending module (typically a
+     * `di/` module nobody edits). Empty for a healthy project, so the banner costs nothing when there is nothing
+     * to say. The probe short-circuits on modules that declare none of the bundled processors.
      */
-    suspend fun toolchainWarnings(filePath: String): List<UiToolchainWarning> = emptyList()
+    suspend fun toolchainWarnings(): List<UiToolchainWarning> = emptyList()
 
     /** Apply [warningId]'s fix on [moduleName]: set the declared runtime to the version the IDE bundles. */
     suspend fun fixToolchainWarning(moduleName: String, warningId: String): UiConfigResult =
