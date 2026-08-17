@@ -24,6 +24,7 @@ import dev.ide.model.event.ModuleSettingsChanged
 import dev.ide.model.event.ProjectAdded
 import dev.ide.model.event.ProjectModelEvent
 import dev.ide.model.event.ProjectRemoved
+import dev.ide.model.event.ProjectSettingsChanged
 import dev.ide.model.event.SourceSetsChanged
 import dev.ide.vfs.VirtualFile
 
@@ -35,6 +36,7 @@ internal class WorkspaceTransactionImpl(private val store: ProjectModelStore) : 
     private val base = store.data
     private val added = LinkedHashMap<String, ProjectData>()
     private val removed = LinkedHashSet<String>()
+    private val rebound = LinkedHashMap<String, String>()
     private var done = false
 
     override fun addProject(name: String, buildSystem: BuildSystemId, rootDir: VirtualFile): Project {
@@ -54,6 +56,11 @@ internal class WorkspaceTransactionImpl(private val store: ProjectModelStore) : 
         removed.add(id.value)
     }
 
+    override fun setBuildSystem(id: ProjectId, buildSystem: BuildSystemId) {
+        added[id.value]?.let { added[id.value] = it.copy(buildSystemId = buildSystem.value); return }
+        rebound[id.value] = buildSystem.value
+    }
+
     override fun commit() {
         check(!done) { "transaction already committed or disposed" }
         done = true
@@ -61,6 +68,12 @@ internal class WorkspaceTransactionImpl(private val store: ProjectModelStore) : 
         val result = LinkedHashMap<String, ProjectData>()
         for (p in base.projects) result[p.id] = p
         for (id in removed) if (result.remove(id) != null) events.add(ProjectRemoved(ProjectId(id)))
+        for ((id, buildSystemId) in rebound) {
+            val current = result[id] ?: continue
+            if (current.buildSystemId == buildSystemId) continue
+            result[id] = current.copy(buildSystemId = buildSystemId)
+            events.add(ProjectSettingsChanged(ProjectId(id)))
+        }
         for ((id, pd) in added) {
             result[id] = pd
             events.add(ProjectAdded(ProjectId(id)))
@@ -141,7 +154,7 @@ internal class ProjectModelTransactionImpl(
 internal class ModuleBuilder(
     private val id: String,
     private val name: String,
-    private val dirRelPath: String,
+    dirRelPath: String,
     private val typeId: String,
     initial: ModuleData?,
     private val codecs: FacetCodecRegistry,
@@ -153,12 +166,21 @@ internal class ModuleBuilder(
     var facetsChanged = false; private set
     var settingsChanged = false; private set
 
+    private var dirRelPathField: String = dirRelPath
     private var languageLevelField: LanguageLevel = initial?.languageLevel ?: LanguageLevel.JAVA_17
     private var sdkField: SdkRef? = initial?.sdk?.let { SdkRef(it) }
     private var outputRelPath: String = initial?.outputRelPath ?: "build/classes"
     private val deps = ArrayList<OrderEntry>(initial?.dependencies ?: emptyList())
     private val sourceSets = ArrayList<SourceSetData>(initial?.sourceSets ?: emptyList())
     private val facets = LinkedHashMap<String, FacetData>().apply { initial?.facets?.forEach { put(it.tomlTable, it) } }
+
+    override var dirRelPath: String
+        get() = dirRelPathField
+        set(value) {
+            if (value == dirRelPathField) return
+            dirRelPathField = value
+            settingsChanged = true
+        }
 
     override var languageLevel: LanguageLevel
         get() = languageLevelField
@@ -244,7 +266,7 @@ internal class ModuleBuilder(
     fun toData(): ModuleData = ModuleData(
         id = id,
         name = name,
-        dirRelPath = dirRelPath,
+        dirRelPath = dirRelPathField,
         typeId = typeId,
         languageLevel = languageLevelField,
         outputRelPath = outputRelPath,

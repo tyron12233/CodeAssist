@@ -177,7 +177,18 @@ import dev.ide.model.Module
 import dev.ide.model.ModuleDependency
 import dev.ide.model.ModuleId
 import dev.ide.model.Project
+import dev.ide.core.sync.ExternalProjectMarker
+import dev.ide.core.sync.ExternalRepositories
+import dev.ide.core.sync.NoSyncProgress
+import dev.ide.core.sync.ProjectSyncOutcome
+import dev.ide.core.sync.ProjectSyncService
+import dev.ide.core.sync.SyncStamp
 import dev.ide.model.impl.DefaultFileIconProvider
+import dev.ide.model.impl.ExternalModelApplier
+import dev.ide.model.sync.ModelOwnership
+import dev.ide.model.sync.SyncReason
+import dev.ide.model.sync.SyncRequest
+import dev.ide.model.sync.SyncSeverity
 import dev.ide.model.impl.FacetCodecRegistry
 import dev.ide.model.impl.FileIconRegistry
 import dev.ide.model.impl.ModelPersistence
@@ -405,6 +416,7 @@ internal val ACTION_MANAGER = ServiceKey<ActionManager>("ide.service.actions")
 internal val DEPENDENCY_SERVICE = ServiceKey<DependencyService>("ide.service.dependencies")
 internal val MODULE_SERVICE = ServiceKey<ModuleService>("ide.service.modules")
 internal val BUILD_SERVICE = ServiceKey<BuildService>("ide.service.build")
+internal val PROJECT_SYNC_SERVICE = ServiceKey<ProjectSyncService>("ide.service.projectSync")
 internal val LANGUAGE_FEATURE_SERVICE =
     ServiceKey<LanguageFeatureService>("ide.service.languageFeatures")
 internal val ANDROID_RESOURCE_SERVICE =
@@ -1686,39 +1698,25 @@ class IdeServices private constructor(
         store.workspace.projects.firstOrNull()?.name ?: (workspaceRoot.fileName?.toString()
             ?: "workspace")
 
-    /** True when this project was imported from Gradle and runs in compatibility mode. */
-    fun isCompatibilityMode(): Boolean = GradleImport.isCompatibilityMode(workspaceRoot)
+    /** WORKSPACE-scoped sync driver for a project whose model comes from a foreign build system. */
+    internal val projectSync: ProjectSyncService
+        get() = store.workspaceContainer.getService(PROJECT_SYNC_SERVICE)
 
-    /** The reader notes recorded at import/sync time (what the tolerant Gradle reader couldn't fully extract). */
-    fun compatibilityNotes(): List<String> = GradleImport.readNotes(workspaceRoot)
+    /** True when this project's model comes from a foreign build system's files (Gradle compatibility mode). */
+    fun isCompatibilityMode(): Boolean = projectSync.isExternal()
+
+    /** The notes recorded at import/sync time (what the importer couldn't fully extract). */
+    fun compatibilityNotes(): List<String> = projectSync.marker()?.notes ?: emptyList()
+
+    /** True when a watched build file changed since the last sync, so the model is out of date. */
+    fun isSyncStale(): Boolean = projectSync.isStale()
 
     /**
-     * Re-read the Gradle build scripts still present at [workspaceRoot] into the OPEN model: add any new
-     * modules, and refresh each module's declared dependencies + Android facet from the scripts (the scripts
-     * are the source of truth in compatibility mode, so a user-added dependency not in the scripts is
-     * dropped). Model + persistence only — the caller re-resolves dependencies and re-indexes afterwards.
+     * Re-read the build files still present at [workspaceRoot] into the OPEN model: add the modules they
+     * declare, refresh each module's dependencies and facets from them, and drop the modules they no longer
+     * declare. Model + persistence only; the caller re-resolves dependencies and re-indexes afterwards.
      */
-    internal fun syncGradleFromScripts(): GradleSyncOutcome {
-        val spec = GradleImport.parse(workspaceRoot)
-            ?: return GradleSyncOutcome(
-                false,
-                "No Gradle build scripts were found to sync from.",
-                emptyList()
-            )
-        val level = store.workspace.projects.firstOrNull()?.modules?.firstOrNull()?.languageLevel
-            ?: LanguageLevel.JAVA_17
-        val (added, updated) = GradleImport.reconcile(store, spec, level)
-        store.save()
-        // Merge (not clobber) any settings-declared repositories so a manually-added one survives the sync.
-        GradleImport.writeRepositories(workspaceRoot, spec.customRepos)
-        GradleImport.markCompatibilityMode(workspaceRoot, spec.report.notes)
-        val message = buildString {
-            append("Synced from Gradle")
-            if (added > 0) append(" · $added module${if (added == 1) "" else "s"} added")
-            if (updated > 0) append(" · $updated module${if (updated == 1) "" else "s"} updated")
-        }
-        return GradleSyncOutcome(true, message, spec.report.notes)
-    }
+    internal suspend fun syncFromBuildFiles(): ProjectSyncOutcome = projectSync.sync(SyncReason.MANUAL)
 
     /** Convert this compatibility-mode project to a native CodeAssist project (see [GradleImport.convertToNative]).
      *  Pure disk operation — the model is already the source of truth, so nothing needs re-resolving. */
@@ -4564,20 +4562,38 @@ class IdeServices private constructor(
         }
 
         /**
-         * Best-effort import of the Gradle project at [root] into the native model, writing a workspace there
-         * (so it lists/opens like any project) flagged as **compatibility mode**. Reads the Gradle scripts
-         * tolerantly (see [GradleImport]) — the result may have unresolved dependencies and may not build
-         * without adjustment. Returns false (writing nothing) if [root] isn't an importable Gradle project.
+         * Import the foreign-build-system project at [root] into a workspace written there (so it lists and
+         * opens like any project), owned by the [dev.ide.model.sync.ProjectImporter] that claims it. The
+         * import reads the build files without executing them, so the result may have unresolved
+         * dependencies and may not build without adjustment. Returns false (writing nothing) when no
+         * importer claims [root].
          */
-        fun importGradleProjectAt(root: Path, sdk: SdkData, languageLevel: LanguageLevel): Boolean {
-            val spec = GradleImport.parse(root) ?: return false
-            val (_, store) = openStore(root)
+        fun importExternalProjectAt(
+            root: Path,
+            sdk: SdkData,
+            languageLevel: LanguageLevel,
+            env: ApplicationEnvironment = ApplicationEnvironment(),
+        ): Boolean {
+            // Detect before opening a store, so a folder no importer claims is left untouched on disk.
+            val importer = ProjectSyncService.importerFor(env.platform.extensions, root) ?: return false
+            val (_, store) = openStore(root, env)
             ensureSdks(store, sdk, root)
-            GradleImport.populate(store, spec, languageLevel)
+            val outcome = runSync { importer.resolve(SyncRequest(root, NoSyncProgress, SyncReason.IMPORT)) }
+            val model = outcome.model ?: return false
+            ExternalModelApplier(store).apply(model, languageLevel, removeAbsent = false)
             store.save()
-            // Custom Maven repositories captured from settings.gradle → the format DependencyService reads.
-            GradleImport.writeRepositories(root, spec.customRepos)
-            GradleImport.markCompatibilityMode(root, spec.report.notes)
+            // Custom Maven repositories captured from the build files → the format DependencyService reads.
+            ExternalRepositories.merge(root, model.repositories)
+            if (importer.ownership == ModelOwnership.EXTERNAL) {
+                ExternalProjectMarker.write(
+                    root,
+                    importer.id.value,
+                    "Imported from ${importer.displayName}. The build files were read statically, not executed, " +
+                        "so dependencies and versions are extracted as far as they can be read.",
+                    outcome.messages.filter { it.severity != SyncSeverity.INFO }.map { it.text },
+                )
+            }
+            SyncStamp.write(root, importer.id.value, SyncStamp.match(root, importer.syncFiles()))
             return true
         }
     }

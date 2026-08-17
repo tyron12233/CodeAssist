@@ -365,6 +365,10 @@ interface Sdk {
 interface WorkspaceTransaction {
     fun addProject(name: String, buildSystem: BuildSystemId, rootDir: VirtualFile): Project
     fun removeProject(id: ProjectId)
+
+    /** Rebind which build system owns [id]. Used when a project's build system is (re-)identified, e.g. a
+     *  workspace first imported natively that a [dev.ide.model.sync.ProjectImporter] has since claimed. */
+    fun setBuildSystem(id: ProjectId, buildSystem: BuildSystemId)
     fun commit()
     fun dispose()
 }
@@ -381,6 +385,13 @@ interface ProjectModelTransaction {
 
 interface ModifiableModule {
     var languageLevel: LanguageLevel
+
+    /**
+     * The module's directory, relative to the project root. Defaults to the module name; set it when the
+     * layout differs (a nested module such as `features/home`, or an imported project whose directory names
+     * don't match its module names).
+     */
+    var dirRelPath: String
 
     /** The explicit platform-SDK override (see [Module.sdk]); `null` clears it (back to the type default). */
     var sdk: SdkRef?

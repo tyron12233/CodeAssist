@@ -425,6 +425,7 @@ We never collect your code, file or project names, which features you use, or an
     <!-- app/banners/editor-screen -->
     <string name="gradle_mode_title">Gradle compatibility mode</string>
     <string name="gradle_resync">Re-sync</string>
+    <string name="gradle_sync_needed">The build files changed since the last sync. Re-sync to update the project.</string>
     <string name="gradle_syncing">Syncing from Gradle…</string>
     <string name="gradle_convert">Convert</string>
     <string name="gradle_convert_title">Convert to a CodeAssist project?</string>

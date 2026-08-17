@@ -1084,9 +1084,14 @@ data class UiImportPreview(
  * Gradle scripts were read statically, not evaluated, so its model is a best-effort approximation: builds and
  * dependency resolution may fail, and versions/config the reader couldn't extract are listed in [notes].
  */
-data class UiCompatibilityInfo(val summary: String, val notes: List<String> = emptyList())
+data class UiCompatibilityInfo(
+    val summary: String,
+    val notes: List<String> = emptyList(),
+    /** True when a watched build file changed since the last sync, so the model is out of date. */
+    val syncNeeded: Boolean = false,
+)
 
-/** The result of re-syncing a compatibility-mode project from its Gradle scripts (see [ProjectService.syncGradle]). */
+/** The result of re-syncing a project from its build files (see [ProjectService.syncProject]). */
 data class UiSyncResult(val ok: Boolean, val message: String, val notes: List<String> = emptyList())
 
 /**

@@ -40,6 +40,7 @@ import dev.ide.ui.generated.resources.dismiss
 import dev.ide.ui.generated.resources.gradle_convert
 import dev.ide.ui.generated.resources.gradle_mode_title
 import dev.ide.ui.generated.resources.gradle_resync
+import dev.ide.ui.generated.resources.gradle_sync_needed
 import dev.ide.ui.generated.resources.gradle_syncing
 import dev.ide.ui.generated.resources.hide_details
 import dev.ide.ui.generated.resources.show_details
@@ -69,6 +70,8 @@ internal fun GradleCompatBanner(
     var syncing by remember { mutableStateOf(false) }
     var result by remember { mutableStateOf<String?>(null) }
     val syncingLabel = stringResource(Res.string.gradle_syncing)
+    // A changed build file makes the model out of date; say so in place of the standing explanation.
+    val leadLine = if (info.syncNeeded) stringResource(Res.string.gradle_sync_needed) else info.summary
 
     AnimatedVisibility(visible) {
         GlassSurface(modifier = Modifier.fillMaxWidth(), material = GlassMaterial.Regular) {
@@ -89,7 +92,7 @@ internal fun GradleCompatBanner(
                             maxLines = 1, overflow = TextOverflow.Ellipsis,
                         )
                         Text(
-                            result ?: info.summary,
+                            result ?: leadLine,
                             color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.labelSmall,
                             maxLines = 3, overflow = TextOverflow.Ellipsis,
                         )
@@ -101,7 +104,7 @@ internal fun GradleCompatBanner(
                                 syncing = true
                                 result = syncingLabel
                                 scope.launch {
-                                    val r = state.backend.projects.syncGradle()
+                                    val r = state.backend.projects.syncProject()
                                     result = r.message
                                     syncing = false
                                     if (r.ok) state.reanalyzeOpenFiles()

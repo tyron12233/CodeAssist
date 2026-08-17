@@ -200,7 +200,7 @@ fun CodeAssistApp(
             fileActions = fileActions,
             scope = scope,
             onBusy = { importBusy = true },
-            import = { p -> backend.projects.importGradleProject(p) },
+            import = { p -> backend.projects.importExternalProject(p) },
         ) { result ->
             importBusy = false
             when {

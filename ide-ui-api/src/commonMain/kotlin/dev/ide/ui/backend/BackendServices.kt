@@ -622,17 +622,17 @@ interface ProjectService {
     fun saveOpenTabs(tabs: UiOpenTabs) {}
 
     /**
-     * Compatibility details for the currently-open project, or null when it is a native project (not imported
-     * from Gradle). Drives the editor's compatibility-mode notice — see [UiCompatibilityInfo].
+     * Compatibility details for the currently-open project, or null when it is a native project (one whose
+     * model the IDE owns). Drives the editor's compatibility-mode notice, see [UiCompatibilityInfo].
      */
     fun compatibilityInfo(): UiCompatibilityInfo? = null
 
     /**
-     * Re-read the open compatibility-mode project's Gradle build scripts into the model (modules, dependencies,
-     * Android config), then re-resolve dependencies and re-index. Slow (parses + network resolution), so it
-     * suspends off the main thread. No-op returning `ok = false` when the project isn't a Gradle import.
+     * Re-read the open project's build files into the model (modules, dependencies, Android config), then
+     * re-resolve dependencies and re-index. Slow (parses plus network resolution), so it suspends off the main
+     * thread. No-op returning `ok = false` for a project whose model the IDE itself owns.
      */
-    suspend fun syncGradle(): UiSyncResult = UiSyncResult(false, "Not a Gradle project")
+    suspend fun syncProject(): UiSyncResult = UiSyncResult(false, "This project has no build files to sync from.")
 
     /**
      * Convert the open Gradle compatibility-mode project to a native CodeAssist project: the leftover Gradle
@@ -646,12 +646,12 @@ interface ProjectService {
     suspend fun revertToGradle(): UiConvertResult = UiConvertResult(false, "Nothing to revert")
 
     /**
-     * Import the Gradle project at [sourceRootPath] into a new native workspace under the projects root and
-     * open it in compatibility mode (bumps [projectEpoch]). Returns a failure result when the folder isn't an
-     * importable Gradle project or no project manager is available.
+     * Import the foreign-build-system project at [sourceRootPath] (a Gradle folder today) into a new workspace
+     * under the projects root and open it in compatibility mode (bumps [projectEpoch]). Returns a failure
+     * result when no importer recognizes the folder or no project manager is available.
      */
-    suspend fun importGradleProject(sourceRootPath: String): UiProjectResult =
-        UiProjectResult(false, "Gradle import not supported by this backend")
+    suspend fun importExternalProject(sourceRootPath: String): UiProjectResult =
+        UiProjectResult(false, "Project import not supported by this backend")
 
     /**
      * Export the project at [rootPath] to a shareable `.caproj` package and return its path (under the app's

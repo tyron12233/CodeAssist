@@ -50,17 +50,21 @@ import dev.ide.android.support.tools.ResourceShrink
 import dev.ide.android.support.tools.R8Subprocess
 import dev.ide.android.support.tools.Shrinker
 import dev.ide.android.support.tools.SigningConfig
+import dev.ide.build.BuildContext
+import dev.ide.build.BuildEnv
 import dev.ide.build.BuildGoal
 import dev.ide.build.BuildRequest
 import dev.ide.build.BuildSystem
 import dev.ide.build.SourceGenerator
-import dev.ide.build.SyncResult
 import dev.ide.build.Task
 import dev.ide.build.TaskDescriptor
 import dev.ide.build.TaskGraph
 import dev.ide.build.TaskName
 import dev.ide.build.TaskContainer
+import dev.ide.build.engine.DefaultBuildEnv
 import dev.ide.build.engine.DefaultTaskContainer
+import dev.ide.build.engine.SimpleBuildConfiguration
+import dev.ide.build.engine.applyBuildPlugins
 import dev.ide.build.engine.GenerateSourcesTask
 import dev.ide.build.engine.JarTask
 import dev.ide.build.engine.LifecycleTask
@@ -80,7 +84,6 @@ import dev.ide.model.ModuleDependency
 import dev.ide.model.ModuleId
 import dev.ide.model.ModuleType
 import dev.ide.model.Project
-import dev.ide.platform.ProgressReporter
 import java.nio.file.Files
 import java.nio.file.Path
 import java.nio.file.Paths
@@ -161,8 +164,6 @@ class AndroidBuildSystem(
     private val compileBootclasspath: List<Path> =
         listOf(sdk.androidJar) + listOfNotNull(sdk.coreLambdaStubs.takeIf { Files.exists(it) })
 
-    override suspend fun sync(project: Project, progress: ProgressReporter): SyncResult = SyncResult(true, emptyList())
-
     override fun supports(moduleType: ModuleType): Boolean = moduleType.id.startsWith("android")
 
     override fun tasks(project: Project): List<TaskDescriptor> =
@@ -180,7 +181,15 @@ class AndroidBuildSystem(
             }
         }.distinctBy { it.name }
 
-    override fun createBuildGraph(project: Project, request: BuildRequest): TaskGraph {
+    override fun createBuildGraph(project: Project, request: BuildRequest): TaskGraph =
+        createBuildGraph(project, request, BuildContext(env = env(project)))
+
+    /** The environment for a graph the host realized without one: the project root plus the Android platform
+     *  classpath every module in this graph compiles against. */
+    private fun env(project: Project): BuildEnv =
+        DefaultBuildEnv(Paths.get(project.rootDir.path), bootClasspathFor = { compileBootclasspath })
+
+    override fun createBuildGraph(project: Project, request: BuildRequest, ctx: BuildContext): TaskGraph {
         val byId = project.modules.associateBy { it.id }
         val targets = (if (request.targets.isEmpty()) project.modules.map { it.id } else request.targets)
             .mapNotNull { byId[it] }
@@ -213,6 +222,9 @@ class AndroidBuildSystem(
                 appendApp(tasks, target, variant, request.goal, byId)
             }
         }
+        // Contributed build logic (BUILD_PLUGIN_EP) lands after every android/java task is registered, so it
+        // can wire by name to them (`:app:assembleDebug`, `:app:compileJava`); realize once afterwards.
+        applyBuildPlugins(SimpleBuildConfiguration(project, request, tasks, id, ctx.env), ctx.plugins)
         return tasks.build()
     }
 

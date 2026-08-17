@@ -163,13 +163,15 @@ both levels, bounded by device-aware limits. A `CoordinationPolicy`
 
 The design separates three concerns that a typical build tool bundles together:
 
-- **The `BuildSystem` SPI** — a stable contract the rest of the IDE talks to (`sync`, `supports`,
-  `createBuildGraph`, `tasks`).
+- **The `BuildSystem` SPI**: a stable contract the rest of the IDE talks to (`supports`,
+  `createBuildGraph`, `tasks`, `runTasks`/`actionFor`). Reading a project model out of a foreign build
+  system's files is a separate SPI (`ProjectImporter`), and build logic can be contributed to any graph
+  through `BuildPlugin`.
 - **A generic incremental task engine** — a DAG of tasks, each declaring typed inputs and outputs,
   executed only when fingerprints change, with results restorable from a cache. This engine is
   build-system-agnostic.
-- **Implementations** — the native build system (Java and Android pipelines) and a Gradle
-  compatibility importer.
+- **Implementations**: the native build system (Java and Android pipelines), plus contributed build logic,
+  importers, and build systems from plugins.
 
 The task engine is the durable idea: a build is a DAG of tasks with typed inputs/outputs, up-to-date
 checking by fingerprint, and a persistent cache. Editing one file re-runs only the affected subgraph.

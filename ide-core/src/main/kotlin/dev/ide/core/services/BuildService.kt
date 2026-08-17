@@ -16,7 +16,9 @@ import dev.ide.android.support.tools.AndroidAppLogRuntime
 import dev.ide.android.support.tools.AndroidSdk
 import dev.ide.android.support.tools.DebugKeystore
 import dev.ide.android.support.tools.SigningConfig
+import dev.ide.build.BUILD_PLUGIN_EP
 import dev.ide.build.BUILD_SYSTEM_EP
+import dev.ide.build.BuildContext
 import dev.ide.build.BuildDiagnostic
 import dev.ide.build.BuildGoal
 import dev.ide.build.BuildLogEntry
@@ -25,11 +27,13 @@ import dev.ide.build.BuildRequest
 import dev.ide.build.BuildSeverity
 import dev.ide.build.CyclicTaskDependencyException
 import dev.ide.build.RUN_TASK_PROVIDER_EP
+import dev.ide.build.RunAction
 import dev.ide.build.SOURCE_GENERATOR_EP
 import dev.ide.build.SourceGenerator
 import dev.ide.build.TaskGraph
 import dev.ide.build.VariantSelector
 import dev.ide.build.engine.BuildCache
+import dev.ide.build.engine.DefaultBuildEnv
 import dev.ide.build.engine.GuardCategory
 import dev.ide.build.engine.Guards
 import dev.ide.build.engine.PermissionBroker
@@ -493,6 +497,53 @@ internal class BuildService(private val ctx: EngineContext) : Disposable {
             ?: androidBuild?.takeIf { it.supports(moduleType) }
             ?: ctx.platform.extensions.extensions(BUILD_SYSTEM_EP).firstOrNull { it.supports(moduleType) }
 
+    /**
+     * The build system BOUND to [project]: a contributed [BUILD_SYSTEM_EP] system whose id matches
+     * [dev.ide.model.Project.buildSystemId] owns that project's builds outright, ahead of the built-ins. This
+     * is how a foreign build system takes over a project its importer claimed. Null when nothing is bound
+     * (the usual case), and the per-module-type selection above applies instead.
+     */
+    internal fun buildSystemFor(project: dev.ide.model.Project): dev.ide.build.BuildSystem? =
+        ctx.platform.extensions.extensions(BUILD_SYSTEM_EP).lastOrNull { it.id == project.buildSystemId }
+
+    /**
+     * The per-graph [BuildContext]: the build logic plugins contributed to [BUILD_PLUGIN_EP] plus the host's
+     * paths and per-module platform classpath. Read at graph time rather than cached, so a plugin enabled
+     * after the project opened contributes to the next build.
+     */
+    private fun buildContext(): BuildContext = BuildContext(
+        plugins = ctx.platform.extensions.extensions(BUILD_PLUGIN_EP),
+        env = DefaultBuildEnv(ctx.workspaceRoot, ctx.sharedCachesRoot) { ctx.bootClasspathFor(it) },
+        extensions = ctx.platform.extensions,
+    )
+
+    /**
+     * The executable form of a Run row the host itself doesn't own: one contributed by the project's bound
+     * build system, or by a [RunTaskProvider]. Returns the name to label the build with and the action, or
+     * null when nobody claims [id]. A contributor that throws while building its action is left to the
+     * caller's handler, which reports it as a failed start rather than as an unknown task.
+     */
+    private fun contributedAction(id: String): Pair<String, RunAction>? {
+        val context = buildContext()
+        for (project in ctx.store.workspace.projects) {
+            val system = buildSystemFor(project) ?: continue
+            val spec = project.runTasksSafely(system).firstOrNull { it.id == id } ?: continue
+            system.actionFor(spec, project, context)?.let { return project.name to it }
+        }
+        for (provider in ctx.platform.extensions.extensions(RUN_TASK_PROVIDER_EP)) {
+            for (module in ctx.modules()) {
+                val spec = provider.tasksFor(module).firstOrNull { it.id == id } ?: continue
+                val project = ctx.projectOf(module) ?: continue
+                provider.actionFor(spec, project, module, context)?.let { return module.name to it }
+            }
+        }
+        return null
+    }
+
+    /** A contributed build system's rows, never letting a broken extension break the Run picker. */
+    private fun dev.ide.model.Project.runTasksSafely(system: dev.ide.build.BuildSystem) =
+        runCatching { system.runTasks(this) }.getOrDefault(emptyList())
+
     /** Tasks the UI's Run picker offers: a `run` for each runnable console (Java/Kotlin) module + Android
      *  `assemble<Variant>`. A module is runnable when its Run configuration names a main class, or one is
      *  auto-detected in its sources (see [runnableMainFor]). */
@@ -533,8 +584,15 @@ internal class BuildService(private val ctx: EngineContext) : Disposable {
                 add(RunTaskOption("assembleAar:${m.name}:${v.name}", "assembleAar$cap (.aar) · ${m.name}", "android"))
             }
         }
-        // Plugin-contributed run-task options (RUN_TASK_PROVIDER_EP), merged after the built-ins. A provider
-        // reuses a built-in id prefix (build:/run:/assemble:) to execute through the existing id dispatch below.
+        // A contributed build system bound to a project lists its own tasks, so a foreign build system's
+        // targets appear here and dispatch back to it through BuildSystem.actionFor.
+        for (project in ctx.store.workspace.projects) {
+            val system = buildSystemFor(project) ?: continue
+            for (spec in project.runTasksSafely(system)) add(RunTaskOption(spec.id, spec.label, spec.group))
+        }
+        // Plugin-contributed run-task options (RUN_TASK_PROVIDER_EP), merged after the built-ins. An id with a
+        // built-in prefix (build:/run:/assemble:) runs through the host's pipeline; any other id is dispatched
+        // back to the provider's RunTaskProvider.actionFor.
         val providers = ctx.platform.extensions.extensions(RUN_TASK_PROVIDER_EP)
         for (m in ctx.modules()) {
             for (spec in providers.flatMap { it.tasksFor(m) }) add(RunTaskOption(spec.id, spec.label, spec.group))
@@ -597,7 +655,8 @@ internal class BuildService(private val ctx: EngineContext) : Disposable {
                     val graph = android.createBuildGraph(
                         project, BuildRequest(
                             listOf(module.id), VariantSelector(variant), BuildGoal.ASSEMBLE
-                        )
+                        ),
+                        buildContext(),
                     )
                     launch(
                         module.name,
@@ -619,7 +678,8 @@ internal class BuildService(private val ctx: EngineContext) : Disposable {
                     val graph = android.createBuildGraph(
                         project, BuildRequest(
                             listOf(module.id), VariantSelector(variant), BuildGoal.BUNDLE
-                        )
+                        ),
+                        buildContext(),
                     )
                     val aab = AndroidBuildSystem.signedAabPath(module, variant)
                     launch(
@@ -640,7 +700,8 @@ internal class BuildService(private val ctx: EngineContext) : Disposable {
                         ?: return fail("Android SDK (platform + build-tools) not found — install one to assemble Android modules.")
                     val project = ctx.projectOf(module) ?: return fail("Internal error: no project for module '${module.name}'.")
                     val graph = android.createBuildGraph(
-                        project, BuildRequest(listOf(module.id), VariantSelector(variant), BuildGoal.ASSEMBLE)
+                        project, BuildRequest(listOf(module.id), VariantSelector(variant), BuildGoal.ASSEMBLE),
+                        buildContext(),
                     )
                     val aar = AndroidBuildSystem.aarPath(module, variant)
                     launch(
@@ -662,7 +723,8 @@ internal class BuildService(private val ctx: EngineContext) : Disposable {
                         ?: return fail("Android SDK (platform + build-tools) not found — install one to prepare the preview.")
                     val project = ctx.projectOf(module) ?: return fail("Internal error: no project for module '${module.name}'.")
                     val graph = android.createBuildGraph(
-                        project, BuildRequest(listOf(module.id), VariantSelector(variant), BuildGoal.DEX)
+                        project, BuildRequest(listOf(module.id), VariantSelector(variant), BuildGoal.DEX),
+                        buildContext(),
                     )
                     launch(module.name, graph, "> prepare libraries (dex) $variant · ${module.name}", firstBuildDexBanner(module)) { log ->
                         log("Libraries prepared — the layout preview can now render.")
@@ -677,10 +739,11 @@ internal class BuildService(private val ctx: EngineContext) : Disposable {
                         ?: return fail("No module '$moduleName'.")
                     unresolvedBlocker(module)?.let { return fail(it) }
                     val project = ctx.projectOf(module) ?: return fail("Internal error: no project for module '${module.name}'.")
-                    val bs = buildSystemFor(module.type)
+                    val bs = buildSystemFor(project) ?: buildSystemFor(module.type)
                         ?: return fail("No build system supports module type '${module.type.id}'.")
                     val graph = bs.createBuildGraph(
-                        project, BuildRequest(listOf(module.id), VariantSelector(ctx.activeVariant(module)), BuildGoal.ASSEMBLE)
+                        project, BuildRequest(listOf(module.id), VariantSelector(ctx.activeVariant(module)), BuildGoal.ASSEMBLE),
+                        buildContext(),
                     )
                     launch(module.name, graph, "> build ${module.name}") { log -> log("Built: ${jarPath(module)}") }
                 }
@@ -706,7 +769,8 @@ internal class BuildService(private val ctx: EngineContext) : Disposable {
                     val graph = android.createBuildGraph(
                         project, BuildRequest(
                             listOf(module.id), VariantSelector(variant), BuildGoal.ASSEMBLE
-                        )
+                        ),
+                        buildContext(),
                     )
                     val apk = AndroidBuildSystem.signedApkPath(module, variant)
                     // On a successful build, install + launch (the OS shows its own install-confirmation).
@@ -718,7 +782,13 @@ internal class BuildService(private val ctx: EngineContext) : Disposable {
                     ) { log -> installer.installAndLaunch(apk, launchPkg, log) }
                 }
 
-                else -> fail("Unknown task: $id")
+                // Not one of the host's own ids: hand it to whoever contributed it (a plugin build system for
+                // this project, or a RunTaskProvider). Its graph runs through the same executor and console.
+                else -> {
+                    val contributed = contributedAction(id) ?: return fail("Unknown task: $id")
+                    val (label, action) = contributed
+                    launch(label, action.graph, action.header, action.banner, onSuccess = action.onSuccess)
+                }
             }
         } catch (e: CyclicTaskDependencyException) {
             fail("Build configuration error — cyclic task dependency: ${e.cycle.joinToString(" → ") { it.value }}")

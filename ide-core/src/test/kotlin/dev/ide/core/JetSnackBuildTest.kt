@@ -32,7 +32,7 @@ class JetSnackBuildTest {
 
         withTempDir("jetsnack-build") { tmp ->
             copyProject(src!!, tmp)
-            check(IdeServices.importGradleProjectAt(tmp, sdk, LanguageLevel.JAVA_17)) { "import failed" }
+            check(IdeServices.importExternalProjectAt(tmp, sdk, LanguageLevel.JAVA_17)) { "import failed" }
 
             IdeServices.open(tmp).use { ide ->
                 runBlocking {

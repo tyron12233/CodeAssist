@@ -1,57 +1,49 @@
 package dev.ide.core
 
-import dev.ide.android.support.AndroidFacet
-import dev.ide.android.support.BuildFeatures
-import dev.ide.android.support.BuildType
-import dev.ide.android.support.ProductFlavor
 import dev.ide.core.gradle.GradleScript
 import dev.ide.core.gradle.GradleVersionCatalog
+import dev.ide.core.sync.ExternalProjectMarker
 import dev.ide.model.BuildSystemId
-import dev.ide.model.ContentRole
 import dev.ide.model.Coordinate
 import dev.ide.model.DependencyScope
-import dev.ide.model.LanguageLevel
-import dev.ide.model.LibraryDependency
-import dev.ide.model.LibraryRef
-import dev.ide.model.ModifiableModule
-import dev.ide.model.ModuleDependency
-import dev.ide.model.ModuleId
-import dev.ide.model.PlatformDependency
-import dev.ide.model.SourceSetTemplate
-import dev.ide.model.impl.ProjectModelStore
 import java.nio.file.Files
 import java.nio.file.Path
 import java.nio.file.StandardCopyOption
 import kotlin.io.path.readText
-import kotlin.io.path.writeText
-
-/** The result of a re-sync from the Gradle scripts: whether it ran, a one-line message, and the reader notes. */
-internal data class GradleSyncOutcome(val ok: Boolean, val message: String, val notes: List<String>)
 
 /**
- * Best-effort import of a Gradle project into the native project model, so it opens in **compatibility
- * mode**. A tolerant, structure-aware reader of the Gradle scripts (see [GradleScript]) — NOT a Gradle
- * evaluator — extracts what the model needs: modules, plugin/module type, the `android {}` SDK/namespace/
- * build-types/flavors, and `dependencies {}` (inline coordinates, `project(...)`, `platform(...)` BOMs,
- * and version-catalog accessors like `libs.androidx.core.ktx`, with `$var`/`gradle.properties`
- * interpolation). Good enough to browse, edit, and re-sync the code.
+ * The reader behind the Gradle [dev.ide.model.sync.ProjectImporter]: a tolerant, structure-aware reader of
+ * the Gradle scripts (see [GradleScript]), not a Gradle evaluator. It extracts what the project model needs:
+ * modules, plugin/module type, the `android {}` SDK/namespace/build-types/flavors, and `dependencies {}`
+ * (inline coordinates, `project(...)`, `platform(...)` BOMs, and version-catalog accessors like
+ * `libs.androidx.core.ktx`, with `$var`/`gradle.properties` interpolation). Enough to browse, edit, and
+ * re-sync the code.
  *
- * Deliberately partial: build-script *logic* (conditionals, custom tasks, computed values) is ignored and
- * some versions may be unresolved, so a compatibility-mode project may show unresolved symbols and may not
- * build without adjustment. Anything the reader couldn't extract is collected into a [SyncReport] and
- * surfaced in the UI. Imported projects are marked with [markCompatibilityMode]. Full Gradle sync is
- * roadmap step 9.
+ * Deliberately partial: build-script logic (conditionals, custom tasks, computed values) is ignored and some
+ * versions may be unresolved, so an imported project may show unresolved symbols and may not build without
+ * adjustment. Anything the reader couldn't extract is collected into a [SyncReport] and surfaced in the UI.
+ *
+ * [dev.ide.core.gradle.GradleProjectImporter] maps the [ProjectSpec] this produces onto the neutral
+ * [dev.ide.model.sync.ExternalProjectModel]; nothing here touches the live model.
  */
 object GradleImport {
 
     private val SETTINGS_FILES = listOf("settings.gradle", "settings.gradle.kts")
     private val BUILD_FILES = listOf("build.gradle", "build.gradle.kts")
     private val CATALOG_FILES = listOf("gradle/libs.versions.toml", "libs.versions.toml")
-    private const val COMPAT_MARKER = "imported-from-gradle"
+
+    /** Restated when [revertToGradle] puts the build files back and the project re-enters compatibility mode. */
+    private const val RESTORED_SUMMARY =
+        "Restored the Gradle build files. The project is read from them again, statically rather than by " +
+            "running Gradle."
 
     /** True when [root] looks like a Gradle project (has a settings or build script). */
     fun isGradleProject(root: Path): Boolean =
         Files.isDirectory(root) && (SETTINGS_FILES + BUILD_FILES).any { Files.exists(root.resolve(it)) }
+
+    /** The root-level Gradle files that identify the project: its settings script, build script, and catalog. */
+    fun buildFiles(root: Path): List<Path> =
+        (SETTINGS_FILES + BUILD_FILES + CATALOG_FILES).map { root.resolve(it) }.filter { Files.exists(it) }
 
     // --- model ---
 
@@ -627,11 +619,6 @@ object GradleImport {
 
     // --- repositories ---
 
-    private val DEFAULT_REPO_URLS = setOf(
-        "https://repo1.maven.org/maven2",
-        "https://dl.google.com/android/maven2",
-    )
-
     /** Custom Maven repositories from `settings.gradle` (dependencyResolutionManagement / pluginManagement /
      *  top-level) and the root build's `allprojects`. Skips the built-in google()/mavenCentral() defaults. */
     private fun parseRepositories(settings: String?, rootBuild: String, notes: MutableList<String>): List<RepoSpec> {
@@ -674,25 +661,6 @@ object GradleImport {
     private fun hostName(url: String): String =
         url.substringAfter("://").substringBefore('/').removePrefix("www.").ifEmpty { url }
 
-    /** Merge [repos] into `<root>/.platform/repositories.txt` (the tab-delimited format DependencyService reads),
-     *  keeping any repo already there (a re-sync must not drop a manually-added one) and skipping the defaults. */
-    fun writeRepositories(root: Path, repos: List<RepoSpec>) {
-        val file = root.resolve(".platform").resolve("repositories.txt")
-        val merged = LinkedHashMap<String, RepoSpec>()
-        readOrNull(file)?.lineSequence()?.forEach { line ->
-            val p = line.split('\t')
-            if (p.size == 2 && p[1].isNotBlank()) merged[p[1].trimEnd('/')] = RepoSpec(p[0], p[1])
-        }
-        for (r in repos) {
-            val key = r.url.trimEnd('/')
-            if (key in DEFAULT_REPO_URLS) continue
-            merged.putIfAbsent(key, r)
-        }
-        if (merged.isEmpty()) return
-        Files.createDirectories(file.parent)
-        file.writeText(merged.values.joinToString("") { "${it.name}\t${it.url}\n" })
-    }
-
     // --- helpers ---
 
     private fun manifestPackage(dir: Path): String? =
@@ -708,155 +676,6 @@ object GradleImport {
         if (Files.isRegularFile(path)) runCatching { path.readText() }.getOrNull() else null
 
     private fun readStripped(path: Path): String? = readOrNull(path)?.let { GradleScript.stripComments(it) }
-
-    // --- model building ---
-
-    /** Author [spec] into [store] (workspace must be empty). Mirrors how the built-in templates build a project. */
-    fun populate(store: ProjectModelStore, spec: ProjectSpec, languageLevel: LanguageLevel) {
-        store.workspace.beginModification().apply {
-            addProject(spec.name, BuildSystemId.NATIVE, store.vfs.root())
-            commit()
-        }
-        store.workspace.projects.first { it.name == spec.name }.beginModification().apply {
-            for (m in spec.modules) {
-                val module = addModule(m.name, store.moduleTypes.resolve(typeIdFor(m.kind)))
-                module.languageLevel = languageLevel
-                configureSourceSetsAndFacet(module, m)
-                applyDependencies(module, m)
-            }
-            commit()
-        }
-    }
-
-    /** Re-read the scripts at [store]'s root into the OPEN model: add any new modules, and refresh each
-     *  module's declared dependencies + Android facet from the scripts. Returns (addedModules, updatedModules). */
-    fun reconcile(store: ProjectModelStore, spec: ProjectSpec, languageLevel: LanguageLevel): Pair<Int, Int> {
-        val project = store.workspace.projects.firstOrNull() ?: return 0 to 0
-        val existing = project.modules.associateBy { it.name }
-        var added = 0
-        var updated = 0
-        project.beginModification().apply {
-            for (m in spec.modules) {
-                val current = existing[m.name]
-                if (current == null) {
-                    val module = addModule(m.name, store.moduleTypes.resolve(typeIdFor(m.kind)))
-                    module.languageLevel = languageLevel
-                    configureSourceSetsAndFacet(module, m)
-                    applyDependencies(module, m)
-                    added++
-                } else {
-                    val module = module(current.id)
-                    // The scripts are the source of truth: drop the previously-imported external/module
-                    // dependencies and re-declare from the (re-read) scripts. SDK entries are left alone.
-                    for (e in current.dependencies) {
-                        if (e is LibraryDependency || e is PlatformDependency || e is ModuleDependency) module.removeDependency(e)
-                    }
-                    applyDependencies(module, m)
-                    if (m.kind != Kind.JAVA) module.putFacet(buildFacet(m))
-                    updated++
-                }
-            }
-            commit()
-        }
-        return added to updated
-    }
-
-    private fun typeIdFor(kind: Kind): String = when (kind) {
-        Kind.ANDROID_APP -> "android-app"
-        Kind.ANDROID_LIB -> "android-lib"
-        Kind.JAVA -> "java-lib"
-    }
-
-    private fun configureSourceSetsAndFacet(module: ModifiableModule, m: ModuleSpec) {
-        when (m.kind) {
-            Kind.JAVA -> module.addSourceSet(
-                SourceSetTemplate(
-                    "main",
-                    DependencyScope.IMPLEMENTATION,
-                    linkedMapOf(
-                        "src/main/java" to setOf(ContentRole.SOURCE),
-                        "src/main/kotlin" to setOf(ContentRole.SOURCE),
-                    ),
-                ),
-            )
-            // Android module types supply their own src/main/{java,kotlin,res,assets} source sets.
-            else -> module.putFacet(buildFacet(m))
-        }
-    }
-
-    private fun buildFacet(m: ModuleSpec): AndroidFacet = AndroidFacet(
-        namespace = m.namespace ?: "com.example.${m.name}",
-        compileSdk = m.compileSdk ?: 34,
-        minSdk = m.minSdk ?: 21,
-        targetSdk = m.targetSdk ?: m.minSdk ?: 21,
-        // Only override the facet defaults when actually parsed, so an unset value keeps deferring to the
-        // manifest (AndroidFacet's DSL-wins rule).
-        versionCode = m.versionCode ?: AndroidFacet.DEFAULT_VERSION_CODE,
-        versionName = m.versionName ?: AndroidFacet.DEFAULT_VERSION_NAME,
-        isApplication = m.kind == Kind.ANDROID_APP,
-        flavorDimensions = m.flavorDimensions,
-        buildTypes = if (m.buildTypes.isEmpty()) AndroidFacet.DEFAULT_BUILD_TYPES
-        else m.buildTypes.map {
-            BuildType(
-                it.name,
-                debuggable = it.debuggable ?: (it.name == "debug"),
-                minifyEnabled = it.minifyEnabled,
-                shrinkResources = it.shrinkResources,
-                proguardFiles = it.proguardFiles,
-                applicationIdSuffix = it.applicationIdSuffix,
-                versionNameSuffix = it.versionNameSuffix,
-            )
-        },
-        productFlavors = m.productFlavors.map { ProductFlavor(it.name, dimension = it.dimension) },
-        buildFeatures = BuildFeatures(
-            viewBinding = m.viewBinding,
-            compose = m.isCompose,
-            parcelize = m.parcelize,
-            serialization = m.serialization,
-            kspProcessors = m.kspProcessors,
-        ),
-    )
-
-    private fun applyDependencies(module: ModifiableModule, m: ModuleSpec) {
-        for (d in m.moduleDeps) {
-            module.addDependency(ModuleDependency(ModuleId(d.name), d.scope, exported = d.scope == DependencyScope.API, variant = d.variant))
-        }
-        for (d in m.platformDeps) {
-            coordinateOrNull(d.coordinate)?.let { module.addDependency(PlatformDependency(it, d.scope, variant = d.variant)) }
-        }
-        for (d in m.mavenDeps) {
-            module.addDependency(LibraryDependency(LibraryRef(d.coordinate), d.scope, exported = d.scope == DependencyScope.API, variant = d.variant))
-        }
-    }
-
-    private fun coordinateOrNull(coord: String): Coordinate? {
-        val p = coord.split(":")
-        return when (p.size) {
-            2 -> Coordinate(p[0], p[1], "")
-            3 -> Coordinate(p[0], p[1], p[2])
-            else -> null
-        }
-    }
-
-    // --- compatibility marker ---
-
-    private fun markerFile(root: Path): Path = root.resolve(".platform").resolve(COMPAT_MARKER)
-
-    /** Record that the project at [root] was imported from Gradle (so the UI shows a compatibility warning),
-     *  storing the [notes] the reader produced so they can be surfaced later. */
-    fun markCompatibilityMode(root: Path, notes: List<String> = emptyList()) {
-        val file = markerFile(root)
-        Files.createDirectories(file.parent)
-        val summary = "Imported from a Gradle project. Some features and builds may not be fully supported."
-        file.writeText((listOf(summary) + notes).joinToString("\n", postfix = "\n"))
-    }
-
-    /** True if the project at [root] was imported from Gradle. */
-    fun isCompatibilityMode(root: Path): Boolean = Files.exists(markerFile(root))
-
-    /** The reader notes recorded at import/sync time (empty if none / not a compatibility-mode project). */
-    fun readNotes(root: Path): List<String> =
-        readOrNull(markerFile(root))?.lineSequence()?.drop(1)?.filter { it.isNotBlank() }?.toList() ?: emptyList()
 
     // --- convert to a native CodeAssist project ---
 
@@ -886,7 +705,7 @@ object GradleImport {
      * project is never left half-native.
      */
     fun convertToNative(root: Path): ConvertOutcome {
-        if (!isCompatibilityMode(root)) return ConvertOutcome(false, "This project isn't a Gradle import.")
+        if (!ExternalProjectMarker.exists(root)) return ConvertOutcome(false, "This project isn't a Gradle import.")
         val backup = backupDir(root)
         if (Files.exists(backup)) return ConvertOutcome(false, "This project was already converted.")
 
@@ -907,7 +726,7 @@ object GradleImport {
             runCatching { deleteTreeQuietly(backup) }
             return ConvertOutcome(false, "Conversion failed and was rolled back: ${e.message ?: e.javaClass.simpleName}")
         }
-        runCatching { Files.deleteIfExists(markerFile(root)) }
+        ExternalProjectMarker.clear(root)
         return ConvertOutcome(true, "Converted to a CodeAssist project.", canRevert = moved.isNotEmpty())
     }
 
@@ -927,7 +746,7 @@ object GradleImport {
         } catch (e: Exception) {
             return ConvertOutcome(false, "Revert failed: ${e.message ?: e.javaClass.simpleName}")
         }
-        markCompatibilityMode(root, parse(root)?.report?.notes ?: emptyList())
+        ExternalProjectMarker.write(root, BuildSystemId.GRADLE_COMPAT.value, RESTORED_SUMMARY, parse(root)?.report?.notes ?: emptyList())
         return ConvertOutcome(true, "Restored the Gradle build files.")
     }
 

@@ -184,26 +184,28 @@ internal class ProjectBackend(private val ctx: BackendContext) : ProjectService 
         if (!svc.isCompatibilityMode()) return null
         return UiCompatibilityInfo(
             summary = "Opened in Gradle compatibility mode. The build scripts were read statically, not run, " +
-                "so dependencies and versions were extracted best-effort — builds and dependency resolution may fail.",
+                "so dependencies and versions come from what could be read; builds and dependency resolution " +
+                "may still fail.",
             notes = runCatching { svc.compatibilityNotes() }.getOrDefault(emptyList()),
+            syncNeeded = runCatching { svc.isSyncStale() }.getOrDefault(false),
         )
     }
 
-    override suspend fun syncGradle(): UiSyncResult {
+    override suspend fun syncProject(): UiSyncResult {
         val svc = ctx.servicesOrNull ?: return UiSyncResult(false, "No project is open.")
         return withContext(Dispatchers.IO) {
             runCatching {
-                val outcome = svc.syncGradleFromScripts()
-                if (outcome.ok) {
-                    // The scripts (re-)declared the model's dependencies; re-resolve them and rebuild the
+                val outcome = svc.syncFromBuildFiles()
+                if (outcome.ok && outcome.modelChanged) {
+                    // The build files (re-)declared the model's dependencies; re-resolve them and rebuild the
                     // index so new modules/sources and changed classpaths take effect in the open project.
                     svc.dependencies.retryDependencyResolution()
                     svc.reindex()
                 }
                 UiSyncResult(outcome.ok, outcome.message, outcome.notes)
             }.getOrElse { e ->
-                log.error("Gradle sync failed", e)
-                UiSyncResult(false, e.message ?: "Gradle sync failed")
+                log.error("Project sync failed", e)
+                UiSyncResult(false, e.message ?: "Project sync failed")
             }
         }
     }
@@ -236,17 +238,17 @@ internal class ProjectBackend(private val ctx: BackendContext) : ProjectService 
         }
     }
 
-    override suspend fun importGradleProject(sourceRootPath: String): UiProjectResult {
-        val mgr = ctx.manager ?: return UiProjectResult(false, "Gradle import not supported by this backend")
+    override suspend fun importExternalProject(sourceRootPath: String): UiProjectResult {
+        val mgr = ctx.manager ?: return UiProjectResult(false, "Project import not supported by this backend")
         return withContext(Dispatchers.IO) {
             runCatching {
-                val next = mgr.importGradleProject(Paths.get(sourceRootPath))
+                val next = mgr.importExternalProject(Paths.get(sourceRootPath))
                     ?: return@runCatching UiProjectResult(false, "That folder isn't an importable Gradle project.")
                 ctx.swapEngine(next)
                 UiProjectResult(true, "Imported ${next.projectDisplayName()}", next.workspaceRoot.toString())
             }.getOrElse { e ->
-                log.error("Couldn't import the Gradle project at $sourceRootPath", e)
-                UiProjectResult(false, e.message ?: "Failed to import Gradle project")
+                log.error("Couldn't import the project at $sourceRootPath", e)
+                UiProjectResult(false, e.message ?: "Failed to import the project")
             }
         }
     }

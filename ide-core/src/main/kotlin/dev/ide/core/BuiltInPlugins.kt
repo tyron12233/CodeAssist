@@ -16,6 +16,8 @@ import dev.ide.core.completion.BufferWordsContributor
 import dev.ide.core.completion.CompletionStats
 import dev.ide.core.completion.PostfixContributor
 import dev.ide.core.completion.UserLiveTemplateContributor
+import dev.ide.core.gradle.GradleBuildFileWriter
+import dev.ide.core.gradle.GradleProjectImporter
 import dev.ide.core.services.AndroidResourceService
 import dev.ide.core.services.BlockService
 import dev.ide.core.services.BuildService
@@ -27,6 +29,7 @@ import dev.ide.core.services.ModuleService
 import dev.ide.core.services.RefactorService
 import dev.ide.core.services.SearchService
 import dev.ide.core.services.SigningService
+import dev.ide.core.sync.ProjectSyncService
 import dev.ide.core.templates.CalculatorSampleTemplate
 import dev.ide.core.templates.JavaConsoleAppTemplate
 import dev.ide.core.templates.JavaLibraryTemplate
@@ -91,6 +94,8 @@ import dev.ide.model.impl.FileIconRegistry
 import dev.ide.model.impl.ModuleTypeRegistry
 import dev.ide.model.impl.ProjectTemplateRegistry
 import dev.ide.model.module
+import dev.ide.model.sync.BUILD_FILE_WRITER_EP
+import dev.ide.model.sync.PROJECT_IMPORTER_EP
 import dev.ide.platform.ServiceScopeLevel
 import dev.ide.plugin.Plugin
 import dev.ide.build.SOURCE_GENERATOR_EP
@@ -142,6 +147,7 @@ object BuiltInPlugins {
         BuiltInPlugin(JavaSupportPlugin()),
         BuiltInPlugin(KotlinSupportPlugin()),
         BuiltInPlugin(KspSupportPlugin(env)),
+        BuiltInPlugin(GradleSupportPlugin()),
         BuiltInPlugin(BlocksPlugin()),
         BuiltInPlugin(AndroidSupportPlugin(env, codecs)),
         BuiltInPlugin(SamplesPlugin()),
@@ -274,6 +280,24 @@ private class JavaSupportPlugin : Plugin {
             templates.register(JavaConsoleAppTemplate, pid)
             templates.register(JavaLibraryTemplate, pid)
         }
+    }
+}
+
+/**
+ * Gradle compatibility: the [GradleProjectImporter] that reads a Gradle project's scripts into the project
+ * model ([PROJECT_IMPORTER_EP]) and the [GradleBuildFileWriter] that writes dependency declarations back into
+ * `build.gradle(.kts)` ([BUILD_FILE_WRITER_EP]). Disabling it leaves Gradle folders unrecognized: they open
+ * as empty native workspaces instead of imported projects.
+ */
+private class GradleSupportPlugin : Plugin {
+    override val manifest = PluginManifest(
+        id = "gradle-support", name = "Gradle Support",
+        description = "Opens Gradle projects by reading their build scripts statically, and writes dependency declarations back to them.",
+    )
+
+    override fun register(reg: PluginRegistration) {
+        reg.register(PROJECT_IMPORTER_EP, GradleProjectImporter())
+        reg.register(BUILD_FILE_WRITER_EP, GradleBuildFileWriter())
     }
 }
 
@@ -675,6 +699,9 @@ private class IdeCoreServicesPlugin : Plugin {
                     ENGINE_CONTEXT
                 )
             )
+        }
+        reg.service(PROJECT_SYNC_SERVICE, ServiceScopeLevel.WORKSPACE) {
+            ProjectSyncService(getService(ENGINE_CONTEXT))
         }
         reg.service(LANGUAGE_FEATURE_SERVICE, ServiceScopeLevel.WORKSPACE) {
             LanguageFeatureService(getService(ENGINE_CONTEXT))
