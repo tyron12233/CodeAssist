@@ -378,6 +378,8 @@ class IdeUiState(
     var wordWrapEnabled by mutableStateOf(false)
     /** Indent wrapped continuation rows to the line's own indent (IntelliJ-style); only when wrapping. */
     var wrapIndentEnabled by mutableStateOf(true)
+    /** Draggable bar along the editor's bottom edge while a line runs past the view; none while wrapping. */
+    var horizontalScrollbarEnabled by mutableStateOf(true)
     /** Free (two-axis) touch scrolling: a single drag pans both axes at once (off = orientation-locked). */
     var twoAxisScrollEnabled by mutableStateOf(true)
     /** Two-finger pinch zooms the code font (Ctrl-+/-/0 always works regardless). */
@@ -445,6 +447,7 @@ class IdeUiState(
         reparseDelayMs = s.reparseDelayMs
         wordWrapEnabled = s.wordWrap
         wrapIndentEnabled = s.wrapIndent
+        horizontalScrollbarEnabled = s.horizontalScrollbar
         twoAxisScrollEnabled = s.twoAxisScroll
         pinchZoomEnabled = s.pinchZoom
         softKeyboardSuggestions = s.softKeyboardSuggestions

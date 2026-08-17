@@ -115,9 +115,11 @@ fun CodeEditor(
     completionDelayMs: Int = 110,
     /**
      * Scroll both axes at once with a single touch drag (Settings → Editor). Off = the classic
-     * orientation-locked drag (one axis per gesture). Touch-only: desktop trackpad/wheel already pans 2D.
+     * orientation-locked drag (one axis per gesture). Touch-only, hence the default: `scrollable2D` has no
+     * mouse-wheel handling, so a desktop editor must stay on the orientation-locked pair. The host ANDs the
+     * setting with the platform; passing it explicitly is what lets a test drive the touch path.
      */
-    twoAxisScroll: Boolean = true,
+    twoAxisScroll: Boolean = isMobilePlatform,
     /** Whether a two-finger pinch zooms the code font (Settings → Editor); Ctrl-+/-/0 always works. */
     pinchZoom: Boolean = true,
     /**
@@ -129,6 +131,8 @@ fun CodeEditor(
     wordWrap: Boolean = false,
     /** Indent wrapped continuation rows to the line's own indent (Settings → Editor); only when [wordWrap]. */
     wrapIndent: Boolean = true,
+    /** Show a draggable bar along the bottom edge while a line runs past the view (Settings → Editor). */
+    horizontalScrollbar: Boolean = true,
     /** Render programming ligatures (`->`, `!=`, …) when the code font provides them (Settings → Editor; on). */
     fontLigatures: Boolean = true,
     /**
@@ -163,6 +167,7 @@ fun CodeEditor(
             softKeyboardSuggestions,
             wordWrap,
             wrapIndent,
+            horizontalScrollbar,
             fontLigatures,
             obscured,
         )
@@ -186,11 +191,12 @@ private fun CodeEditorContent(
     onPreview: (variantId: String) -> Unit = {},
     completionAutoPopup: Boolean = true,
     completionDelayMs: Int = 110,
-    twoAxisScroll: Boolean = true,
+    twoAxisScroll: Boolean = isMobilePlatform,
     pinchZoom: Boolean = true,
     softKeyboardSuggestions: Boolean = true,
     wordWrap: Boolean = false,
     wrapIndent: Boolean = true,
+    horizontalScrollbar: Boolean = true,
     fontLigatures: Boolean = true,
     obscured: Boolean = false,
 ) {
@@ -966,7 +972,7 @@ private fun CodeEditorContent(
                     pinchZoom = pinchZoom,
                     liveScale = liveScale,
                     onFontScaleChange = onFontScaleChange,
-                    useTwoAxisScroll = twoAxisScroll && isMobilePlatform,
+                    useTwoAxisScroll = twoAxisScroll,
                     scroll2D = geometry.scroll2D,
                     vScroll = geometry.vScroll,
                     hScroll = geometry.hScroll,
@@ -1024,6 +1030,15 @@ private fun CodeEditorContent(
                     )
                 },
         )
+
+        if (horizontalScrollbar) {
+            HorizontalScrollbarLayer(
+                geometry = geometry,
+                gutterWidthPx = gutterWidthPx,
+                thumbColor = colors.textTertiary,
+                trackColor = colors.separator,
+            )
+        }
 
         DiagnosticChipsLayer(
             session = editorSession,
