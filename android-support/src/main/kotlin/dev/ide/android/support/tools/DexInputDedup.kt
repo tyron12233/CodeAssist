@@ -14,7 +14,7 @@ import java.util.zip.ZipOutputStream
  * duplicate classes the way the JVM already does, instead of failing.
  *
  * A `URLClassLoader` tolerates the same class appearing in several jars: the first jar on the classpath wins
- * and the rest are shadowed. **Dex has no such rule** — D8 rejects the whole input with
+ * and the rest are shadowed. **Dex has no such rule**: D8 rejects the whole input with
  * `Duplicate class '<name>'`. So a classpath the desktop loaders run happily can be undexable on device, which
  * is exactly what happens as soon as a module activates two bundled KSP processors: each processor's closure
  * ships its own copy of the shared transitive libraries (all four bundles carry `annotations-13.0.jar`; three
@@ -34,7 +34,7 @@ object DexInputDedup {
     /**
      * A classpath equivalent to [jars] with no class defined twice, first occurrence winning.
      *
-     * A jar whose classes are all new is passed through as its ORIGINAL path (no copy — the common case, and
+     * A jar whose classes are all new is passed through as its ORIGINAL path (no copy, the common case, and
      * what keeps a single-processor classpath free). A jar every one of whose classes is already defined is
      * dropped outright. Only a PARTIAL overlap (two versions of one library) needs a rewrite, into [outDir].
      */
@@ -43,7 +43,7 @@ object DexInputDedup {
         val out = ArrayList<Path>(jars.size)
         for ((index, jar) in jars.withIndex()) {
             val classes = classEntriesOf(jar)
-            if (classes.isEmpty()) {           // nothing to clash over (a resources-only jar) — keep verbatim
+            if (classes.isEmpty()) {           // nothing to clash over (a resources-only jar): keep verbatim
                 out.add(jar)
                 continue
             }

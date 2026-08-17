@@ -65,7 +65,7 @@ class JvmSourceAttachmentsTest {
         assertTrue(sources in JvmSourceAttachments.librarySourceArchives(ctx, jdkHome = null))
     }
 
-    /** On device `android.jar` is a bundled FLAT asset — nothing to derive; the host attaches sources itself. */
+    /** On device `android.jar` is a bundled FLAT asset: nothing to derive, so the host attaches sources itself. */
     @Test
     fun flatBundledAndroidJarHasNoDerivableSources() = withTempDir("device-home") { home ->
         val androidJar = zipAt(home.resolve("android.jar"))

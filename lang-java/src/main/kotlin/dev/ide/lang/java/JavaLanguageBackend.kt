@@ -64,7 +64,7 @@ class JavaLanguageBackend : LanguageBackend {
             // The library `-sources.jar`s the model declares, plus the JDK `src.zip` / Android framework
             // sources derived from the boot classpath. This is what the source-doc index and its live-parse
             // fallback read for real parameter names + javadoc, so leaving it empty renders every library
-            // parameter `p0` — in `.java`, and in `.kt` too (the Kotlin backend enriches binary symbols
+            // parameter `p0`, in `.java` and in `.kt` too (the Kotlin backend enriches binary symbols
             // through the same roots, published on JvmIndexScopeProvider).
             it.addSourceArchives(JvmSourceAttachments.librarySourceArchives(ctx, jdkHome?.toPath()))
         }

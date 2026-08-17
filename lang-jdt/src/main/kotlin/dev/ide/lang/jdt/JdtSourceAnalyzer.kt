@@ -154,7 +154,7 @@ class JdtSourceAnalyzer(ctx: CompilationContext) : SourceAnalyzer, Disposable, J
         // Source attachments for names/javadoc: library -sources.jars (+ exploded source dirs), the JDK
         // src.zip (under the boot JDK image), and the Android platform sources dir (sibling of android.jar).
         // Derived by the shared [JvmSourceAttachments] so this backend and the IntelliJ-PSI one publish the
-        // SAME roots — the set the source-doc index reads for real parameter names.
+        // SAME roots: the set the source-doc index reads for real parameter names.
         val attachmentDirs = JvmSourceAttachments.attachmentDirs(ctx)
         val androidSources = JvmSourceAttachments.androidPlatformSources(ctx)
         baseSourceDirs = sourceRootPaths + attachmentDirs + listOfNotNull(androidSources)

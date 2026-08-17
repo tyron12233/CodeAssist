@@ -15,7 +15,7 @@ import kotlin.test.assertTrue
  * That list is the ONLY route by which real parameter names reach the editor for a library: the host feeds it
  * both to `IndexScope.sourceArchives` (the `java.sourceDoc` index) and to the live-parse fallback behind the
  * Kotlin backend's `SourceDocProvider`. Java bytecode strips parameter names, so dropping the list doesn't
- * fail loudly — every library method just renders `p0`/`p1`, in `.java` and in `.kt` alike. This backend did
+ * fail loudly: every library method just renders `p0`/`p1`, in `.java` and in `.kt` alike. This backend did
  * drop it: it only ever received the JDK `src.zip` and the Android framework sources that the host attaches by
  * hand, never the declared attachments, so a dependency WITH sources still completed as `p0`.
  */

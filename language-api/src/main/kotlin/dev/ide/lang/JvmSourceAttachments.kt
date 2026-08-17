@@ -7,13 +7,13 @@ import java.nio.file.Paths
 /**
  * Derives the library/SDK SOURCE roots a JVM backend publishes as [JvmIndexScopeProvider.librarySourceArchives]:
  * the `-sources.jar`s the project model DECLARES ([CompilationContext.sourceAttachments]) plus the two roots a
- * backend must DERIVE from the boot classpath instead — the JDK `src.zip` and the Android platform
+ * backend must DERIVE from the boot classpath instead: the JDK `src.zip` and the Android platform
  * `sources/android-NN` dir.
  *
  * Shared, because every `.java` backend has to publish the same set: that one list is what feeds both the
  * `java.sourceDoc` index and the on-demand parse fallback, and those are the only places real parameter names
  * and javadoc for a library can come from (Java bytecode carries neither unless it was built with
- * `-parameters`). A backend that omits a root doesn't fail visibly — every parameter of every library method
+ * `-parameters`). A backend that omits a root doesn't fail visibly. Every parameter of every library method
  * just renders `p0`, in `.java` and, through the Kotlin backend's binary-symbol enrichment, in `.kt` as well.
  */
 object JvmSourceAttachments {
@@ -29,7 +29,7 @@ object JvmSourceAttachments {
     fun attachmentDirs(ctx: CompilationContext): List<Path> =
         attachments(ctx).filter { Files.isDirectory(it) }
 
-    /** `<jdkHome>/lib/src.zip` — the JDK's own sources — when the boot JDK image ships them. */
+    /** `<jdkHome>/lib/src.zip` (the JDK's own sources), when the boot JDK image ships them. */
     fun jdkSrcZip(jdkHome: Path?): Path? =
         jdkHome?.resolve("lib")?.resolve("src.zip")?.takeIf { Files.isRegularFile(it) }
 
@@ -42,7 +42,7 @@ object JvmSourceAttachments {
      * The Android platform `sources/android-NN` dir for a `platforms/android-NN/android.jar`, so framework APIs
      * complete with real parameter names + javadoc. Prefers the exact platform-dir name, but falls back to any
      * installed `sources/android-NN…` with the same MAJOR API level: the SDK ships framework sources keyed by
-     * base level (`android-36`) while the platform jar may be a minor/extension revision (`android-36.1`) — an
+     * base level (`android-36`) while the platform jar may be a minor/extension revision (`android-36.1`), and an
      * exact-name-only match would silently miss the sources whenever the two don't line up.
      *
      * Null for a bundled FLAT `android.jar` (the on-device asset has no `platforms/android-NN/` parent); the

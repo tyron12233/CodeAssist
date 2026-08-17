@@ -51,7 +51,7 @@ class ArtKotlinPluginLoader(
                 val patched = ArtReflectionRewrite.patch(jars, artSafe)
                 // Dex has no shadowing rule, so a classpath a `URLClassLoader` loads fine (first jar wins) is
                 // simply undexable: D8 fails the whole input on `Duplicate class`. A module that activates two
-                // bundled KSP processors hits this immediately — every processor closure ships its own copy of
+                // bundled KSP processors hits this immediately: every processor closure ships its own copy of
                 // the shared transitive libraries. Apply the classloader's own first-wins precedence instead.
                 val program = DexInputDedup.firstWins(patched, artSafe.resolve("dedup"))
                 val dexDir = cacheDir.resolve("dex")

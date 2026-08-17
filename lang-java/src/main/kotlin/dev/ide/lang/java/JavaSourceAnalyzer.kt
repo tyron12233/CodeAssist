@@ -80,7 +80,7 @@ class JavaSourceAnalyzer(private val env: JavaEnvironment) : SourceAnalyzer, Jvm
 
     /** Attached library/SDK SOURCE archives. Seeded by [JavaLanguageBackend] from the compilation context
      *  (`-sources.jar`s + the derived JDK `src.zip` / Android `sources/`) and grown by the host via
-     *  [addSourceJars] / [addSourceDirs] for the roots it alone knows — mirrors the JDT analyzer. */
+     *  [addSourceJars] / [addSourceDirs] for the roots it alone knows. Mirrors the JDT analyzer. */
     override var librarySourceArchives: List<java.nio.file.Path> = emptyList()
         private set
 

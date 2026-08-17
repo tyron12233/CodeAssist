@@ -13,7 +13,7 @@ import kotlin.test.assertSame
 import kotlin.test.assertTrue
 
 /**
- * [DexInputDedup] — the fix for `FAILED :<module>:generateSources: failed to dex compiler-plugin classpath:
+ * [DexInputDedup], the fix for `FAILED :<module>:generateSources: failed to dex compiler-plugin classpath:
  * Duplicate class '…'`. A module that activates two bundled KSP processors gets the UNION of two processor
  * closures, and each closure ships its own copy of the shared transitive libraries (all four bundles carry
  * `annotations-13.0.jar`; Room/Moshi/Hilt/Glide each carry their own `guava`, `kotlin-reflect`, `kotlinpoet`).

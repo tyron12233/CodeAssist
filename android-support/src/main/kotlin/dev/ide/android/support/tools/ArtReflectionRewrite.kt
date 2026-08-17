@@ -55,8 +55,8 @@ object ArtReflectionRewrite {
      * [outDir] with the call patched out; a jar that doesn't reference it is passed through as its ORIGINAL
      * path (no copy). [outDir] is created on demand and only ever holds rewritten jars.
      *
-     * The rewritten name carries the classpath INDEX, because a tool classpath can hold two same-named jars —
-     * a module using two bundled KSP processors gets each closure's own `annotations-13.0.jar` — and writing
+     * The rewritten name carries the classpath INDEX, because a tool classpath can hold two same-named jars
+     * (a module using two bundled KSP processors gets each closure's own `annotations-13.0.jar`), and writing
      * both to `outDir/<name>` would have one silently overwrite the other, substituting its classes for the
      * other's.
      */
