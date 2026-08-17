@@ -2,6 +2,7 @@ package dev.ide.lang.java
 
 import dev.ide.lang.BackendCapability
 import dev.ide.lang.CompilationContext
+import dev.ide.lang.JvmSourceAttachments
 import dev.ide.lang.LanguageBackend
 import dev.ide.lang.LanguageId
 import dev.ide.lang.SourceAnalyzer
@@ -59,7 +60,14 @@ class JavaLanguageBackend : LanguageBackend {
             ?: if (!hasAndroidJar) File(System.getProperty("java.home")).takeIf { it.exists() } else null
 
         val env = JavaEnvironment.create(classpath, sourceRoots, jdkHome)
-        return JavaSourceAnalyzer(env)
+        return JavaSourceAnalyzer(env).also {
+            // The library `-sources.jar`s the model declares, plus the JDK `src.zip` / Android framework
+            // sources derived from the boot classpath. This is what the source-doc index and its live-parse
+            // fallback read for real parameter names + javadoc, so leaving it empty renders every library
+            // parameter `p0` — in `.java`, and in `.kt` too (the Kotlin backend enriches binary symbols
+            // through the same roots, published on JvmIndexScopeProvider).
+            it.addSourceArchives(JvmSourceAttachments.librarySourceArchives(ctx, jdkHome?.toPath()))
+        }
     }
 
     private fun List<dev.ide.model.ClasspathEntry>.pathsOf(): List<Path> =

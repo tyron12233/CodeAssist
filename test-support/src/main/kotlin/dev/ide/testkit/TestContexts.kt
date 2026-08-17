@@ -22,12 +22,14 @@ fun libraryClasspath(jars: List<Path>): ClasspathSnapshot = snapshotOf(jars, Cla
  * A minimal [CompilationContext] for analyzer/parser/completion tests. [sourceRoots] are the source dirs;
  * [libraries] the LIBRARY classpath (e.g. the kotlin-stdlib jar); [bootClasspath] the SDK boot classpath
  * (empty by default — pass `Path.of(System.getProperty("java.home"))` for the JDK jrt image the way the JDT
- * tests do, or an `android.jar`); [languageLevel] defaults to Java 17.
+ * tests do, or an `android.jar`); [sourceAttachments] the libraries' `-sources.jar`s (real parameter names +
+ * javadoc); [languageLevel] defaults to Java 17.
  */
 fun compilationContext(
     sourceRoots: List<Path>,
     libraries: List<Path> = emptyList(),
     bootClasspath: List<Path> = emptyList(),
+    sourceAttachments: List<Path> = emptyList(),
     languageLevel: LanguageLevel = LanguageLevel.JAVA_17,
     outputDir: Path? = null,
     processors: List<AnnotationProcessor> = emptyList(),
@@ -35,6 +37,7 @@ fun compilationContext(
     val srcRoots = sourceRoots
     val libs = libraries
     val boot = bootClasspath
+    val attachments = sourceAttachments
     val level = languageLevel
     val out = outputDir ?: sourceRoots.first()
     val procs = processors
@@ -45,5 +48,6 @@ fun compilationContext(
         override val languageLevel: LanguageLevel = level
         override val outputDir: VirtualFile = DiskVirtualFile(out)
         override val processors: List<AnnotationProcessor> = procs
+        override val sourceAttachments: List<VirtualFile> = attachments.map { DiskVirtualFile(it) }
     }
 }
