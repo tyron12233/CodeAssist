@@ -121,9 +121,20 @@ data class BuildFeatures(
      * time. A set (not a flag per processor) so adding a processor to the catalog needs no new field.
      */
     val kspProcessors: Set<String> = emptySet(),
+    /**
+     * The ids of bundled KSP processors whose RUNTIME-version mismatch the user has explicitly accepted for
+     * this module (see `KspProcessorCatalog.RuntimeMismatch`). The IDE runs the processor version it bundles,
+     * so a project pinning an older runtime gets generated code that runtime cannot compile; source generation
+     * refuses to run in that state. Accepting it here downgrades the refusal to a per-build warning: the
+     * generated sources are produced and the compile fails on them, which is what the user asked for by
+     * accepting. Persisted per module so the choice survives a reload and reaches the build process.
+     */
+    val kspRuntimeMismatchAccepted: Set<String> = emptySet(),
 ) {
     /** True when at least one build feature is enabled (drives "emit only when set" persistence). */
-    val anyEnabled: Boolean get() = viewBinding || compose || parcelize || serialization || kspProcessors.isNotEmpty()
+    val anyEnabled: Boolean
+        get() = viewBinding || compose || parcelize || serialization ||
+            kspProcessors.isNotEmpty() || kspRuntimeMismatchAccepted.isNotEmpty()
 }
 
 /** A build type (`debug`/`release`/…): how a variant is assembled regardless of flavor. */

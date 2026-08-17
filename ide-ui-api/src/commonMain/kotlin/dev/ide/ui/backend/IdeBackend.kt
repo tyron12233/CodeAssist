@@ -937,6 +937,27 @@ data class UiCompilerPlugin(
 )
 
 /**
+ * A toolchain problem that will break the build for a module, surfaced as an editor banner rather than left to
+ * appear as a wall of errors in generated code.
+ *
+ * Today's only source is a bundled KSP processor whose generated code needs a newer runtime than the module
+ * declares: the IDE always runs the processor version it ships (executed code cannot be downloaded), so the
+ * two have to agree. [fixLabel] describes the version change that resolves it ("Update x to 2.60.1", or
+ * "Downgrade" when the module pins something newer than the IDE bundles) and [detail] explains why.
+ *
+ * [acceptable] means the user may choose to build anyway: the IDE stops blocking source generation and reports
+ * the problem once per build instead. That is not a fix, and the compile is still expected to fail.
+ */
+data class UiToolchainWarning(
+    val id: String,
+    val moduleName: String,
+    val title: String,
+    val detail: String,
+    val fixLabel: String? = null,
+    val acceptable: Boolean = true,
+)
+
+/**
  * A module's Android packaging options (AGP's `packaging { }`) — the merge rules the user configures for
  * how Java resources + native libraries with the same archive path are combined. Null when the module is
  * not Android. [defaultResourceExcludes]/[defaultResourceMerges] are AGP's always-applied defaults, shown

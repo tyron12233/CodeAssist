@@ -43,6 +43,7 @@ import dev.ide.ui.backend.UiPackagingRules
 import dev.ide.ui.backend.UiRunConfig
 import dev.ide.ui.backend.UiSdkOption
 import dev.ide.ui.backend.UiSourceSetInfo
+import dev.ide.ui.backend.UiToolchainWarning
 import java.nio.file.Files
 import java.nio.file.Path
 import java.nio.file.Paths
@@ -232,6 +233,145 @@ internal class ModuleService(private val ctx: EngineContext) {
                 .mapNotNull { runCatching { Paths.get(it.root.path) }.getOrNull() }
                 .filter { Files.exists(it) }
         }.getOrDefault(emptyList())
+
+    /** [moduleName]'s directly-declared library coordinates, as declared (version included when it has one):
+     *  the opt-in signal the KSP catalog gates activation on. */
+    private fun declaredCoordinates(module: Module): List<String> = module.dependencies
+        .filterIsInstance<LibraryDependency>().map { it.library.name }.distinct()
+
+    /**
+     * The toolchain problems that will break the build for the module owning [filePath]. Today: a bundled KSP
+     * processor whose generated code references types the module's declared runtime does not carry. The IDE runs
+     * the processor version it ships (executed code cannot be downloaded), so the runtime has to agree with it.
+     *
+     * Already-accepted problems are excluded: the user has been told and chose to build anyway, so the banner
+     * goes away and the build console carries the warning instead.
+     */
+    fun toolchainWarnings(filePath: Path): List<UiToolchainWarning> {
+        val module = ctx.moduleForFile(filePath) ?: return emptyList()
+        val accepted = module.facets.get(AndroidFacet.KEY)?.buildFeatures?.kspRuntimeMismatchAccepted.orEmpty()
+        val classpath = compileLibraryClasspath(module)
+        return KspProcessorCatalog.blessed().runtimeMismatches(classpath, declaredCoordinates(module))
+            .filterNot { it.processor.id in accepted }
+            .map { m ->
+                UiToolchainWarning(
+                    id = "$KSP_RUNTIME_WARNING_PREFIX${m.processor.id}",
+                    moduleName = module.name,
+                    title = "${m.processor.displayName} runtime is out of step with the bundled processor",
+                    detail = "The bundled ${m.processor.displayName} processor generates code referencing " +
+                        "${m.missingTypeNames.joinToString()}, which ${module.name}'s runtime does not provide. " +
+                        "The IDE always runs the processor version it bundles, so the runtime has to match.",
+                    fixLabel = m.requiredCoordinates.firstOrNull()?.let { fixLabelFor(m.declared, it) },
+                )
+            }
+    }
+
+    /**
+     * "Update" or "Downgrade", chosen by comparing the [declared] version against [required]: the bundled
+     * processor's version is fixed, so aligning to it can go either way, and a label that says the wrong
+     * direction is worse than a vague one.
+     */
+    private fun fixLabelFor(declared: List<String>, required: String): String {
+        val groupName = groupName(required) ?: required
+        val requiredVersion = required.substringAfterLast(':', "")
+        val declaredVersion = declared.firstOrNull { groupName(it) == groupName }
+            ?.substringAfterLast(':', "")?.takeIf { it != groupName.substringAfter(':') }
+        val verb = when {
+            declaredVersion.isNullOrBlank() -> "Set"
+            compareVersions(declaredVersion, requiredVersion) > 0 -> "Downgrade"
+            else -> "Update"
+        }
+        return "$verb ${groupName.substringAfter(':')} to $requiredVersion"
+    }
+
+    /** Dotted-numeric version compare, non-numeric parts falling back to a lexical compare of the whole. */
+    private fun compareVersions(a: String, b: String): Int {
+        val pa = a.split('.', '-')
+        val pb = b.split('.', '-')
+        for (i in 0 until maxOf(pa.size, pb.size)) {
+            val x = pa.getOrNull(i)?.toIntOrNull()
+            val y = pb.getOrNull(i)?.toIntOrNull()
+            if (x == null || y == null) return a.compareTo(b)
+            if (x != y) return x.compareTo(y)
+        }
+        return 0
+    }
+
+    /**
+     * Apply [warningId]'s fix: replace the module's declared runtime coordinate with the version the bundled
+     * processor was built against. A remove-then-add, since that is what rewrites the declaration in the build
+     * files too (for a project whose build scripts own the model, editing only the in-memory model would be
+     * undone by the next sync).
+     */
+    suspend fun fixToolchainWarning(moduleName: String, warningId: String): UiConfigResult {
+        val module = ctx.modules().firstOrNull { it.name == moduleName }
+            ?: return UiConfigResult(false, "No module '$moduleName'.")
+        val processor = kspRuntimeWarningProcessor(warningId)
+            ?: return UiConfigResult(false, "Unknown toolchain warning '$warningId'.")
+        val wanted = processor.runtimeCoordinates
+        var changed = 0
+        for (coordinate in wanted) {
+            val groupName = groupName(coordinate) ?: continue
+            // Drop whatever version is declared for this group:name (there may be none, when the runtime only
+            // arrives transitively), then declare the bundled one.
+            declaredCoordinates(module).filter { groupName(it) == groupName }
+                .forEach { ctx.dependencies.removeDependency(moduleName, it) }
+            val added = ctx.dependencies.addDependency(moduleName, coordinate, "implementation")
+            if (!added.success && !added.message.contains("already a dependency")) {
+                return UiConfigResult(false, "Couldn't set $coordinate: ${added.message}")
+            }
+            changed++
+        }
+        if (changed == 0) return UiConfigResult(false, "Nothing to change for '$warningId'.")
+        // The fix makes the problem go away, so a previously recorded acceptance is stale: clear it, or the
+        // build would keep warning about a mismatch that no longer exists.
+        setKspRuntimeAcceptance(module, processor.id, accepted = false)
+        ctx.invalidateAnalyzers()
+        ctx.resyncIndex()
+        return UiConfigResult(true, "Set ${wanted.joinToString()} on $moduleName.")
+    }
+
+    /**
+     * Record that the user accepts [warningId] on [moduleName]. Source generation stops refusing to run and
+     * reports the problem once per build instead, so the build proceeds to the compile error the generated code
+     * causes. Explicitly NOT a fix; persisted on the module so the build process honours it too.
+     */
+    fun acceptToolchainWarning(moduleName: String, warningId: String): UiConfigResult {
+        val module = ctx.modules().firstOrNull { it.name == moduleName }
+            ?: return UiConfigResult(false, "No module '$moduleName'.")
+        val processor = kspRuntimeWarningProcessor(warningId)
+            ?: return UiConfigResult(false, "Unknown toolchain warning '$warningId'.")
+        if (!setKspRuntimeAcceptance(module, processor.id, accepted = true)) {
+            return UiConfigResult(false, "'$moduleName' is not an Android module.")
+        }
+        return UiConfigResult(true, "${processor.displayName}: building anyway on $moduleName. The compile is still expected to fail.")
+    }
+
+    /** The catalog processor a `ksp-runtime:<id>` warning id refers to, or null when it isn't one. */
+    private fun kspRuntimeWarningProcessor(warningId: String): dev.ide.ksp.KspProcessor? =
+        warningId.removePrefix(KSP_RUNTIME_WARNING_PREFIX).takeIf { it != warningId }
+            ?.let { id -> kspProcessors.firstOrNull { it.id == id } }
+
+    /** Persist (or clear) the runtime-mismatch acceptance for [processorId]; false when [module] has no facet. */
+    private fun setKspRuntimeAcceptance(module: Module, processorId: String, accepted: Boolean): Boolean {
+        val facet = module.facets.get(AndroidFacet.KEY) ?: return false
+        val bf = facet.buildFeatures
+        val updated = bf.copy(
+            kspRuntimeMismatchAccepted =
+                if (accepted) bf.kspRuntimeMismatchAccepted + processorId
+                else bf.kspRuntimeMismatchAccepted - processorId,
+        )
+        if (updated == bf) return true
+        val project = ctx.projectOf(module) ?: return false
+        runCatching {
+            project.beginModification().apply {
+                module(module.id).putFacet(facet.copy(buildFeatures = updated))
+                commit()
+            }
+        }.onFailure { return false }
+        ctx.store.save()
+        return true
+    }
 
     /** The bundled Kotlin compiler plugins available to [moduleName] with their enable-state, or null for a
      *  non-Android module. [UiCompilerPlugin.applied] reflects the real build behavior — a plugin auto-applies
@@ -818,5 +958,9 @@ internal class ModuleService(private val ctx: EngineContext) {
     private companion object {
         /** The `[android]` codec key for the packaging block — edited via the Packaging tab, not the Settings fields. */
         const val PACKAGING_KEY = "packaging"
+
+        /** [UiToolchainWarning.id] prefix for a bundled-KSP-processor runtime mismatch; the suffix is the
+         *  catalog processor id, which is what the acceptance is persisted under. */
+        const val KSP_RUNTIME_WARNING_PREFIX = "ksp-runtime:"
     }
 }

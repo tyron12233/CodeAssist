@@ -500,6 +500,25 @@ interface ModuleService {
         moduleName: String, resources: UiPackagingRules, jniLibs: UiPackagingRules
     ): UiConfigResult = UiConfigResult(false, "Packaging options not supported by this backend")
 
+    /**
+     * Toolchain problems that will break the build for the module owning [filePath] (a bundled KSP processor
+     * whose generated code needs a newer runtime than the module declares). Drives the editor banner; empty for
+     * a healthy module, so the banner costs nothing when there is nothing to say.
+     */
+    suspend fun toolchainWarnings(filePath: String): List<UiToolchainWarning> = emptyList()
+
+    /** Apply [warningId]'s fix on [moduleName]: set the declared runtime to the version the IDE bundles. */
+    suspend fun fixToolchainWarning(moduleName: String, warningId: String): UiConfigResult =
+        UiConfigResult(false, "Toolchain warnings not supported by this backend")
+
+    /**
+     * Record that the user accepts [warningId] on [moduleName]: source generation stops refusing to run and the
+     * problem is reported once per build instead. Persisted on the module, and NOT a fix (the compile is still
+     * expected to fail on the generated code).
+     */
+    suspend fun acceptToolchainWarning(moduleName: String, warningId: String): UiConfigResult =
+        UiConfigResult(false, "Toolchain warnings not supported by this backend")
+
     /** For an Android module, the referenced-but-missing module-relative keep-rule files. */
     suspend fun missingProguardFiles(moduleName: String): List<UiMissingProguardFile> = emptyList()
 

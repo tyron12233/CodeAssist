@@ -90,24 +90,60 @@ class KspProcessorCatalog(val processors: List<KspProcessor>) {
 
     /**
      * A RUN-eligible processor whose generated code the module's declared runtime is too OLD to compile:
-     * [missing] are the [KspProcessor.requiredRuntimeClasses] absent from the module's classpath.
+     * [missing] are the [KspProcessor.requiredRuntimeClasses] absent from the module's classpath, and
+     * [declared] the module's own coordinates for that runtime (as declared, version included when it has one).
      */
-    class RuntimeMismatch(val processor: KspProcessor, val missing: List<String>) {
-        /** A build-console line that names the symbol, the cause, and the exact coordinate to bump. */
+    class RuntimeMismatch(
+        val processor: KspProcessor,
+        val missing: List<String>,
+        val declared: List<String> = emptyList(),
+    ) {
+        /** The missing classes as source-level names, for a human-readable message. */
+        val missingTypeNames: List<String> get() = missing.map { it.removeSuffix(".class").replace('/', '.') }
+
+        /** The coordinates the runtime has to be set to: the versions the bundled processor was built against. */
+        val requiredCoordinates: List<String> get() = processor.runtimeCoordinates
+
+        /** A build-console line that names the symbol, the cause, and the exact coordinate to change. */
         val message: String
             get() = "ksp: ${processor.displayName}: the bundled processor generates code referencing " +
-                missing.joinToString { it.removeSuffix(".class").replace('/', '.') } +
+                missingTypeNames.joinToString() +
                 ", which this module's runtime does not provide. The IDE always runs the processor version it " +
-                "bundles, so the runtime has to match. Update " +
-                processor.runtimeCoordinates.joinToString { upgradeHint(it) } + ", then rebuild."
+                "bundles, so the runtime has to match. Set " +
+                requiredCoordinates.joinToString { versionHint(it) } + ", then rebuild."
 
-        /** `group:name:version` rendered as the instruction to give the user: "`group:name` to `version`". */
-        private fun upgradeHint(coordinate: String): String {
+        /** `group:name:version` as the instruction to give the user: "`group:name` to `version`". */
+        private fun versionHint(coordinate: String): String {
             val version = coordinate.substringAfterLast(':', "")
             val groupName = groupName(coordinate) ?: return coordinate
             return if (version.isBlank() || version == groupName.substringAfter(':')) coordinate
             else "$groupName to $version"
         }
+    }
+
+    /**
+     * What a preflight found for a module: [blocking] problems fail source generation, [warnings] are reported
+     * and generation proceeds. A mismatch the user has explicitly ACCEPTED moves from the first list to the
+     * second: they have been told the build will fail downstream and chose to go ahead, so the IDE keeps saying
+     * so once per build without standing in the way.
+     */
+    class Preflight(val blocking: List<String> = emptyList(), val warnings: List<String> = emptyList())
+
+    /**
+     * The [Preflight] for a module, with [accepted] the processor ids whose mismatch the user has accepted
+     * (persisted per module). Blocking unless accepted.
+     */
+    fun preflight(
+        classpath: List<Path>,
+        declaredDependencies: List<String>,
+        accepted: Set<String> = emptySet(),
+    ): Preflight {
+        val (waived, blocking) = runtimeMismatches(classpath, declaredDependencies)
+            .partition { it.processor.id in accepted }
+        return Preflight(
+            blocking = blocking.map { it.message },
+            warnings = waived.map { "${it.message} (accepted for this module: building anyway)" },
+        )
     }
 
     /**
@@ -123,7 +159,10 @@ class KspProcessorCatalog(val processors: List<KspProcessor>) {
         applicable(classpath, declaredDependencies).mapNotNull { p ->
             p.requiredRuntimeClasses.filterNot { classpathHasClass(classpath, it) }
                 .takeIf { it.isNotEmpty() }
-                ?.let { RuntimeMismatch(p, it) }
+                ?.let { missing ->
+                    val wanted = p.runtimeCoordinates.mapNotNull { groupName(it) }.toSet()
+                    RuntimeMismatch(p, missing, declaredDependencies.filter { groupName(it) in wanted })
+                }
         }
 
     companion object {

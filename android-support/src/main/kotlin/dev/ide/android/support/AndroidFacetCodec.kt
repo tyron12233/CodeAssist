@@ -37,6 +37,10 @@ object AndroidFacetCodec : FacetCodec<AndroidFacet> {
         if (facet.buildFeatures.serialization) put("serialization", true)
         // Enabled KSP processors (sorted for a deterministic encode); absent when none are on.
         if (facet.buildFeatures.kspProcessors.isNotEmpty()) put("kspProcessors", facet.buildFeatures.kspProcessors.sorted())
+        // Runtime-version mismatches the user accepted ("build anyway"): persisted so the build process, which
+        // reloads this facet, keeps honouring the choice instead of refusing to generate again.
+        if (facet.buildFeatures.kspRuntimeMismatchAccepted.isNotEmpty())
+            put("kspRuntimeMismatchAccepted", facet.buildFeatures.kspRuntimeMismatchAccepted.sorted())
         // packaging: only when the user configured something (defaults are applied at build time, not stored).
         if (!facet.packaging.isDefault) put("packaging", encodePackaging(facet.packaging))
     }
@@ -64,6 +68,7 @@ object AndroidFacetCodec : FacetCodec<AndroidFacet> {
                 parcelize = values["parcelize"] as? Boolean ?: false,
                 serialization = values["serialization"] as? Boolean ?: false,
                 kspProcessors = values.stringList("kspProcessors").toSet(),
+                kspRuntimeMismatchAccepted = values.stringList("kspRuntimeMismatchAccepted").toSet(),
             ),
             packaging = decodePackaging(values.table("packaging")),
         )

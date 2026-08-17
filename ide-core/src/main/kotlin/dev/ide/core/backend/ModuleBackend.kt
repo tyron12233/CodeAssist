@@ -14,6 +14,7 @@ import dev.ide.ui.backend.UiMissingProguardFile
 import dev.ide.ui.backend.UiPackagingOptions
 import dev.ide.ui.backend.UiPackagingRules
 import dev.ide.ui.backend.UiSourceRootRole
+import dev.ide.ui.backend.UiToolchainWarning
 import java.nio.file.Paths
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -111,6 +112,24 @@ internal class ModuleBackend(private val ctx: BackendContext) : ModuleService {
     override suspend fun setCompilerPlugin(moduleName: String, pluginId: String, enabled: Boolean): UiConfigResult =
         withContext(Dispatchers.IO) {
             ctx.services.moduleService.setCompilerPlugin(moduleName, pluginId, enabled)
+                .also { if (it.success) ctx.bumpFileSystemEpoch() }
+        }
+
+    override suspend fun toolchainWarnings(filePath: String): List<UiToolchainWarning> =
+        withContext(Dispatchers.IO) {
+            ctx.services.moduleService.toolchainWarnings(Paths.get(filePath))
+        }
+
+    override suspend fun fixToolchainWarning(moduleName: String, warningId: String): UiConfigResult =
+        withContext(Dispatchers.IO) {
+            // The fix rewrites a declared dependency (and the build files that own it), so the tree is stale.
+            ctx.services.moduleService.fixToolchainWarning(moduleName, warningId)
+                .also { if (it.success) ctx.bumpFileSystemEpoch() }
+        }
+
+    override suspend fun acceptToolchainWarning(moduleName: String, warningId: String): UiConfigResult =
+        withContext(Dispatchers.IO) {
+            ctx.services.moduleService.acceptToolchainWarning(moduleName, warningId)
                 .also { if (it.success) ctx.bumpFileSystemEpoch() }
         }
 

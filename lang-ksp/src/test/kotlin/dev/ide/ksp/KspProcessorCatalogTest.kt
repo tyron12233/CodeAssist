@@ -159,17 +159,73 @@ class KspProcessorCatalogTest {
             val generator = KspSourceGenerator(
                 runnerClasspath = { listOf(jarWith(root, "runner.jar", "com/google/devtools/ksp/X.class")) },
                 processors = { listOf(jarWith(root, "processor.jar", "p/P.class")) },
-                preflight = { listOf("ksp: Hilt / Dagger: runtime too old") },
+                preflight = { KspProcessorCatalog.Preflight(blocking = listOf("ksp: runtime too old")) },
             )
 
             val result = generator.generate(request)
 
             assertFalse(result.success, "a blocking preflight problem must fail source generation")
-            assertEquals(listOf("ksp: Hilt / Dagger: runtime too old"), result.messages)
+            assertEquals(listOf("ksp: runtime too old"), result.messages)
             assertTrue(
                 Files.walk(genRoot).use { s -> s.filter { Files.isRegularFile(it) }.toList() }.isEmpty(),
                 "nothing may be generated when the preflight blocks the run",
             )
+        }
+    }
+
+    /**
+     * Accepting a mismatch (the editor banner's "Build anyway") has to UNBLOCK generation while still saying so
+     * on every build. If it silenced the problem instead, the user would be left with unexplained compile errors
+     * in generated code; if it kept blocking, accepting would mean nothing.
+     */
+    @Test
+    fun anAcceptedMismatchBecomesAWarningInsteadOfBlocking() {
+        val catalog = KspProcessorCatalog.blessed()
+        withTempDir("ksp-accepted") { root ->
+            val declared = listOf("com.google.dagger:hilt-android:2.48")
+            val old = listOf(jarWith(root, "dagger-2.48.jar", KspProcessorCatalog.HILT_MARKER))
+
+            val blocking = catalog.preflight(old, declared)
+            assertEquals(1, blocking.blocking.size, "unaccepted: blocks generation")
+            assertTrue(blocking.warnings.isEmpty())
+
+            val accepted = catalog.preflight(old, declared, accepted = setOf("hilt"))
+            assertTrue(accepted.blocking.isEmpty(), "accepted: generation is no longer blocked")
+            assertEquals(1, accepted.warnings.size, "accepted: still reported once per build")
+            assertTrue("building anyway" in accepted.warnings.single(), accepted.warnings.single())
+
+            // Accepting an UNRELATED processor changes nothing about this one.
+            assertEquals(1, catalog.preflight(old, declared, accepted = setOf("room")).blocking.size)
+        }
+    }
+
+    /** A generator run past an accepted warning still carries it in the result, so the console shows it. */
+    @Test
+    fun acceptedWarningsAreReportedOnASuccessfulRun() {
+        withTempDir("ksp-accepted-run") { root ->
+            val genRoot = Files.createDirectories(root.resolve("build/generated/ksp"))
+            val request = SourceGenRequest(
+                moduleName = "data",
+                kotlinSources = emptyList(),
+                javaSources = emptyList(),
+                classpath = emptyList(),
+                outputDir = genRoot,
+                acceptedWarnings = setOf("hilt"),
+            )
+            val logged = mutableListOf<String>()
+            val generator = KspSourceGenerator(
+                runnerClasspath = { listOf(jarWith(root, "runner.jar", "com/google/devtools/ksp/X.class")) },
+                processors = { listOf(jarWith(root, "processor.jar", "p/P.class")) },
+                // No provider on the fake processor jar, so the run stops right after the preflight; what
+                // matters here is that the warning survived into the messages either way.
+                preflight = { KspProcessorCatalog.Preflight(warnings = listOf("ksp: building anyway")) },
+                log = { logged += it },
+            )
+
+            val result = generator.generate(request)
+
+            assertTrue("ksp: building anyway" in logged, "an accepted warning is logged: $logged")
+            assertTrue(result.messages.any { "building anyway" in it }, "and carried in the result: ${result.messages}")
         }
     }
 

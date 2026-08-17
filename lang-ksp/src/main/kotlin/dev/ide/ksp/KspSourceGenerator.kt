@@ -37,12 +37,14 @@ class KspSourceGenerator(
      *  generator no-ops for that module. */
     private val processors: (request: SourceGenRequest) -> List<Path>,
     /**
-     * Blocking problems with the module's setup, checked BEFORE any processor runs (typically
-     * [KspProcessorCatalog.runtimeMismatches]: a declared runtime too old for the bundled processor's generated
-     * code). Non-empty fails source generation with exactly those messages, so the console names the real cause
-     * instead of the unresolved symbols it produces downstream. Empty by default (no preflight).
+     * Problems with the module's setup, checked BEFORE any processor runs (typically
+     * [KspProcessorCatalog.preflight]: a declared runtime too old for the bundled processor's generated code).
+     * [KspProcessorCatalog.Preflight.blocking] fails source generation with exactly those messages, so the
+     * console names the real cause instead of the unresolved symbols it produces downstream; `warnings` are
+     * reported and generation proceeds (what the user gets after accepting a mismatch). No preflight by default.
      */
-    private val preflight: (request: SourceGenRequest) -> List<String> = { emptyList() },
+    private val preflight: (request: SourceGenRequest) -> KspProcessorCatalog.Preflight =
+        { KspProcessorCatalog.Preflight() },
     /** Loads [runnerClasspath] + processors: `URLClassLoader` on desktop, `DexClassLoader` (bundled dex) on ART. */
     private val loader: KspProcessorLoader = DefaultKspProcessorLoader,
     /** Per-module KSP processor options (`room.generateKotlin`, `room.schemaLocation`, …). */
@@ -70,12 +72,16 @@ class KspSourceGenerator(
         // else: running anyway emits sources that reference symbols the module's runtime lacks, and the build
         // then fails with one unresolved-import error per generated file, pointing at generated code instead of
         // the version skew. Checked after the applicability gates so an inapplicable processor never complains.
-        preflight(request).takeIf { it.isNotEmpty() }?.let { problems ->
-            problems.forEach(log)
-            return SourceGenResult(false, problems)
+        val checks = preflight(request)
+        checks.warnings.forEach(log)
+        if (checks.blocking.isNotEmpty()) {
+            checks.blocking.forEach(log)
+            return SourceGenResult(false, checks.blocking)
         }
 
-        val messages = mutableListOf<String>()
+        // An accepted mismatch still says so on every build (the user was told the compile will fail and chose
+        // to proceed), so `messages` starts with the warnings rather than dropping them.
+        val messages = checks.warnings.toMutableList()
         val logger = CollectingLogger { messages += it; log(it) }
 
         // KSP writes into <generated>/{kotlin,java,resources}. The build wires <generated> as ONE
@@ -99,7 +105,9 @@ class KspSourceGenerator(
         if (providers.isEmpty()) {
             val m = "ksp: no SymbolProcessorProvider found on the processor classpath for ${request.moduleName}"
             log(m)
-            return SourceGenResult(false, listOf(m))
+            // Carry `messages` (the accepted-mismatch warnings) rather than replacing it: a second problem must
+            // not make the first one disappear from the console.
+            return SourceGenResult(false, messages + m)
         }
 
         val config = KSPJvmConfig.Builder().apply {

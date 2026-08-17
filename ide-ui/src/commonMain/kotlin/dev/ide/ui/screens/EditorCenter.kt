@@ -220,6 +220,10 @@ internal fun EditorCenter(
                 EditorDaemonEffect(state, active, indexStatus) { hasPreview = it }
                 BreadcrumbBar(state, active, hasPreview)
                 AndroidSourcesBanner(state)
+                // A toolchain problem that will break this module's build (a bundled KSP processor whose
+                // generated code needs a newer runtime than the module declares): said here, with its fix,
+                // rather than left to appear as unresolved symbols in generated code after a build.
+                ToolchainWarningBanner(state, active.path)
                 ReadOnlyBanner(state, active)
                 LargeFileBanner(active)
                 // The code editor and the preview, each as a Modifier-parameterized slot, so the single-pane modes

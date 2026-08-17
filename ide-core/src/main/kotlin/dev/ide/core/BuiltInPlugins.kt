@@ -390,9 +390,10 @@ private class KspSupportPlugin(private val env: ApplicationEnvironment) : Plugin
                 processors = { req -> catalog.classpathFor(req.classpath, req.declaredDependencies) },
                 // The IDE runs the processor version it BUNDLES, so a project pinning an older runtime gets
                 // generated sources its own runtime can't compile. Report that up front instead of letting the
-                // module fail on the symbols it produces.
+                // module fail on the symbols it produces. A mismatch the user accepted (the editor banner's
+                // "build anyway") arrives on the request and becomes a per-build warning instead.
                 preflight = { req ->
-                    catalog.runtimeMismatches(req.classpath, req.declaredDependencies).map { it.message }
+                    catalog.preflight(req.classpath, req.declaredDependencies, req.acceptedWarnings)
                 },
                 loader = loader,
                 jdkHome = jdkHome,

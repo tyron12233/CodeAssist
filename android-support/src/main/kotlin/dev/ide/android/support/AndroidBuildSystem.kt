@@ -325,7 +325,9 @@ class AndroidBuildSystem(
         // contributed (`generators` empty ⇒ no task, `sourceRoots` unchanged, build byte-identical).
         val generateSources: TaskName? = if (generators.isNotEmpty()) {
             val gs = step("generateSources")
-            tasks.task(gs, directDepCompiles + directDepKotlin) { GenerateSourcesTask(app, gs, generators, layout.kspGen) { kotlinClasspath } }
+            tasks.task(gs, directDepCompiles + directDepKotlin) {
+                GenerateSourcesTask(app, gs, generators, layout.kspGen, { kotlinClasspath }, acceptedGeneratorWarnings(app))
+            }
             gs
         } else null
         val genSourceRoots = sourceRoots + listOfNotNull(generateSources?.let { layout.kspGen })
@@ -770,7 +772,7 @@ class AndroidBuildSystem(
             val gs = TaskName(":${m.name}:generateSources")
             val genClasspath = classpath.toList()
             val gsDeps = compileDeps.toList()
-            tasks.task(gs, gsDeps) { GenerateSourcesTask(m, gs, generators, kspGen) { genClasspath } }
+            tasks.task(gs, gsDeps) { GenerateSourcesTask(m, gs, generators, kspGen, { genClasspath }, acceptedGeneratorWarnings(m)) }
             compileDeps.add(gs)
             gs
         } else null
@@ -860,6 +862,14 @@ class AndroidBuildSystem(
 
     private fun directModuleDeps(m: Module, byId: Map<ModuleId, Module>): List<Module> =
         m.dependencies.filterIsInstance<ModuleDependency>().mapNotNull { byId[it.target] }
+
+    /**
+     * Source-generator warnings [m] has accepted, for [dev.ide.build.SourceGenRequest.acceptedWarnings]: the
+     * KSP processor ids whose bundled-vs-declared runtime mismatch the user chose to build through. Read here
+     * rather than in the engine, since this is the layer that knows the Android facet.
+     */
+    private fun acceptedGeneratorWarnings(m: Module): Set<String> =
+        m.facets.get(AndroidFacet.KEY)?.buildFeatures?.kspRuntimeMismatchAccepted ?: emptySet()
 
     /** The signing config for [module]'s [buildType] variant — the resolver's answer, else the default debug [signing]. */
     private fun signingFor(module: Module, buildType: String): SigningConfig =
