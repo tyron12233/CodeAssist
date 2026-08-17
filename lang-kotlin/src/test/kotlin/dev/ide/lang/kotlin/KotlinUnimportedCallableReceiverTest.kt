@@ -90,6 +90,58 @@ class KotlinUnimportedCallableReceiverTest {
         assertTrue(u.none { it.contains("binding") }, "an unknown receiver must not be flagged; got $u")
     }
 
+    /**
+     * The CAPITALIZED top-level property case: Compose names every CompositionLocal that way (`LocalContext`,
+     * `LocalDensity`, `LocalLifecycleOwner`), so `LocalContext.current` with no import went unreported. The
+     * receiver evidence used to require a lowercase name, on the assumption that Capitalized ⇒ a type (covered
+     * by `hasLibraryType`) or a generated same-package class (must not be flagged). A Capitalized top-level
+     * CALLABLE is neither, so it fell through both gates.
+     */
+    @Test
+    fun unimportedCapitalizedTopLevelPropertyReceiverIsFlagged() {
+        val u = unresolved(diagnose("package demo\nfun f() { val c = LocalContext.current }"))
+        assertTrue(
+            u.any { it.contains("LocalContext") },
+            "an unimported Capitalized top-level property receiver must be flagged; got $u",
+        )
+    }
+
+    @Test
+    fun importedCapitalizedTopLevelPropertyReceiverResolves() {
+        val u = unresolved(
+            diagnose(
+                "package demo\nimport androidx.compose.ui.platform.LocalContext\n" +
+                    "fun f() { val c = LocalContext.current }"
+            )
+        )
+        assertTrue(u.none { it.contains("LocalContext") }, "once imported it must resolve; got $u")
+    }
+
+    @Test
+    fun flaggedCapitalizedReceiverOffersItsImportQuickFix() {
+        // The point of flagging it: the lightbulb keys off the diagnostic, so `LocalContext` now offers its import.
+        val code = "package demo\nfun f() { val c = LocalContext.current }"
+        val srcDir = tempProject(emptyMap())
+        val analyzer = KotlinSourceAnalyzer(fakeContext(srcDir)).apply { indexService = readyIndex }
+        val doc = SnippetDoc(code, DiskFile(srcDir.resolve("Use.kt")))
+        val titles = runBlocking {
+            analyzer.incrementalParser.parseFull(doc)
+            analyzer.importFixesAt(doc.file, code.indexOf("LocalContext") + 1).map { it.title }
+        }
+        assertTrue(
+            titles.any { it == "Import androidx.compose.ui.platform.LocalContext" },
+            "the flagged CompositionLocal must offer its import; got $titles",
+        )
+    }
+
+    @Test
+    fun unknownCapitalizedReceiverIsStillNotFlagged() {
+        // The reason the lowercase gate existed: a generated / not-yet-built same-package class is Capitalized
+        // and absent from the index. No callable evidence → still left alone.
+        val u = unresolved(diagnose("package demo\nfun f() { val d = BuildConfig.DEBUG }"))
+        assertTrue(u.none { it.contains("BuildConfig") }, "a generated same-package class must not be flagged; got $u")
+    }
+
     @Test
     fun sameFilePropertyReceiverIsNotFlagged() {
         // A same-file top-level property named like an indexed callable resolves without an import.
@@ -117,6 +169,19 @@ class KotlinUnimportedCallableReceiverTest {
             isComposable = false, isInline = false, isInfix = false, isSuspend = false,
         )
 
+        /** A CAPITALIZED top-level property, the Compose CompositionLocal shape (`val LocalContext: …`). */
+        private val localContext = CallableShape(
+            name = "LocalContext", kind = SymbolKind.FIELD, receiverFqn = null,
+            signature = ": ProvidableCompositionLocal<Context>",
+            packageName = "androidx.compose.ui.platform", receiverTypeParam = null,
+            typeParameters = emptyList(),
+            returnType = KotlinType("androidx.compose.runtime.ProvidableCompositionLocal"),
+            paramTypes = emptyList(), receiverTypeArgs = emptyList(),
+            declaringClassFqn = "androidx.compose.ui.platform.AndroidCompositionLocals_androidKt",
+            paramNames = emptyList(),
+            isComposable = false, isInline = false, isInfix = false, isSuspend = false,
+        )
+
         /** A top-level function whose name collides with a root PACKAGE (`scope.impl.…`). */
         private val scope = CallableShape(
             name = "scope", kind = SymbolKind.METHOD, receiverFqn = null, signature = "(): Unit",
@@ -133,6 +198,8 @@ class KotlinUnimportedCallableReceiverTest {
                     sequenceOf(viewModelScope)
                 id == KotlinCallableIndex.id && key == KotlinCallableIndex.topKey("appScope") -> sequenceOf(appScope)
                 id == KotlinCallableIndex.id && key == KotlinCallableIndex.topKey("scope") -> sequenceOf(scope)
+                id == KotlinCallableIndex.id && key == KotlinCallableIndex.topKey("LocalContext") ->
+                    sequenceOf(localContext)
                 // The package indexes key every package PREFIX: `scope` is a real root package here.
                 id in PackagesIndex.ALL && (key == "scope" || key == "scope.impl") -> sequenceOf(key)
                 else -> emptySequence()

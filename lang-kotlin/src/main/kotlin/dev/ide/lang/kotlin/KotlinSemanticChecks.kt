@@ -2724,19 +2724,26 @@ internal class KotlinSemanticChecks(private val service: KotlinSymbolService) {
     }
 
     /**
-     * Whether a bare lowercase [name] standing in RECEIVER position (`viewModelScope.launch { }`,
-     * `binding.root`) names a package-level CALLABLE the classpath knows but no import brings into scope — a
-     * missing import, which Kotlin reports as "Unresolved reference". The caller has already established that
-     * the name resolves to nothing here; this only rules out the two innocent receiver shapes:
+     * Whether a bare [name] standing in RECEIVER position (`viewModelScope.launch { }`,
+     * `LocalContext.current`) names a package-level CALLABLE the classpath knows but no import brings into
+     * scope: a missing import, which Kotlin reports as "Unresolved reference". The caller has already
+     * established that the name resolves to nothing here; this only rules out the innocent receiver shapes:
      *  - a PACKAGE qualifier — the leftmost segment of a fully-qualified reference (`kotlinx.coroutines.delay(1)`)
      *    parses as a receiver too, so a known root package ([KotlinSymbolService.isRootPackage]) is never flagged;
-     *  - a generated / not-yet-built same-package class (`R`, `BuildConfig`) — those are Capitalized, and only
-     *    lowercase names reach the callable evidence below (a TYPE receiver is handled by `hasLibraryType`).
+     *  - a generated / not-yet-built same-package class (`R`, `BuildConfig`), ruled out by the evidence itself,
+     *    since [KotlinSymbolService.callablePackages] answers for CALLABLES and a class name is not one (a TYPE
+     *    receiver is handled by `hasLibraryType` instead).
+     *
+     * Deliberately NOT restricted to lowercase names. It was, on the assumption that a Capitalized receiver is
+     * either a type or a generated class, but Compose names every CompositionLocal as a Capitalized top-level
+     * VAL (`LocalContext`, `LocalDensity`, `LocalLifecycleOwner`), which is neither, so `LocalContext.current`
+     * with no import fell through both gates and went unreported. The positive index evidence below is what
+     * makes this safe, not the case of the first letter.
+     *
      * Gated on a finished classpath index (the [unresolvedImports] gate): a still-building index answers
      * "no such callable" for everything, and this check needs a POSITIVE existence answer to fire at all.
      */
     private fun unimportedCallableReceiver(name: String): Boolean {
-        if (name.firstOrNull()?.isLowerCase() != true) return false
         if (!service.classpathIndexReady()) return false
         if (service.callablePackages(name).isEmpty()) return false
         return !service.isRootPackage(name)
