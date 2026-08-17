@@ -179,14 +179,13 @@ private fun WarningCard(
     onAccept: () -> Unit,
 ) {
     val workingLabel = stringResource(Res.string.toolchain_warning_working)
-    // Text and actions hang off one indent, so the icon column reads as a gutter rather than the text
-    // re-starting at a different x on every row.
-    val indent = if (indented) 12.dp else 24.dp
     Column(
         Modifier.fillMaxWidth().padding(start = if (indented) 12.dp else 0.dp)
             .padding(horizontal = 16.dp, vertical = 12.dp),
         verticalArrangement = Arrangement.spacedBy(8.dp),
     ) {
+        // The icon sits ON the card's padding edge, and the explanation and actions below start there too, so
+        // the card reads as one left edge. Only the title is offset, since it follows the icon in this row.
         Row(
             verticalAlignment = Alignment.Top,
             horizontalArrangement = Arrangement.spacedBy(8.dp),
@@ -223,7 +222,7 @@ private fun WarningCard(
             style = MaterialTheme.typography.labelSmall,
             maxLines = if (detailExpanded) Int.MAX_VALUE else 2,
             overflow = TextOverflow.Ellipsis,
-            modifier = Modifier.fillMaxWidth().padding(start = indent),
+            modifier = Modifier.fillMaxWidth(),
         )
 
         val fix: (@Composable () -> Unit)? = warning.fixLabel?.let { label ->
@@ -252,7 +251,7 @@ private fun WarningCard(
             // Phone: one full-width action per row, then the caveat on its own line. Nothing competes for
             // horizontal space, so no label is clipped and every target is comfortably tappable.
             Column(
-                Modifier.fillMaxWidth().padding(start = indent),
+                Modifier.fillMaxWidth(),
                 verticalArrangement = Arrangement.spacedBy(8.dp),
             ) {
                 fix?.invoke()
@@ -261,7 +260,7 @@ private fun WarningCard(
             }
         } else {
             Row(
-                Modifier.fillMaxWidth().padding(start = indent),
+                Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.spacedBy(10.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
