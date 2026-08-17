@@ -3,9 +3,6 @@ package dev.ide.android.support.tools
 import com.android.apksig.ApkSigner as ApksigApkSigner
 import java.nio.file.Files
 import java.nio.file.Path
-import java.security.KeyStore
-import java.security.PrivateKey
-import java.security.cert.X509Certificate
 
 /**
  * Signs an Android App Bundle (`.aab`). Unlike an APK, an `.aab` supports only **JAR (v1) signing** — there
@@ -49,11 +46,9 @@ class ApksigBundleSigner : BundleSigner {
     override fun sign(aab: Path, signedAab: Path, config: SigningConfig, minApi: Int): ToolResult {
         signedAab.parent?.let { Files.createDirectories(it) }
         return try {
-            val ks = KeyStore.getInstance("PKCS12")
-            Files.newInputStream(config.keystore).use { ks.load(it, config.storePass.toCharArray()) }
-            val key = ks.getKey(config.keyAlias, config.keyPass.toCharArray()) as PrivateKey
-            val certs = ks.getCertificateChain(config.keyAlias).map { it as X509Certificate }
-            val signer = ApksigApkSigner.SignerConfig.Builder("CERT", key, certs).build()
+            val material = KeystoreCrypto.signingKey(config.keystore, config.storePass, config.keyAlias, config.keyPass)
+                ?: return ToolResult.fail("apksig bundle signing failed: could not read the key '${config.keyAlias}' from ${config.keystore.fileName}")
+            val signer = ApksigApkSigner.SignerConfig.Builder("CERT", material.privateKey, material.chain).build()
             ApksigApkSigner.Builder(listOf(signer))
                 .setInputApk(aab.toFile())
                 .setOutputApk(signedAab.toFile())

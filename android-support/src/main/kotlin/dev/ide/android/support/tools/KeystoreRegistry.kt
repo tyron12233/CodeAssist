@@ -62,8 +62,10 @@ class KeystoreRegistry(private val dir: Path) {
 
     /**
      * Import the existing keystore at [source]: verify [storePass] opens it, pick [keyAlias] (or the sole
-     * alias), copy the file into the registry dir, and register it. [keyPass] defaults to [storePass] (the
-     * PKCS12 norm) when blank.
+     * alias), stage the file into the registry dir, and register it. [keyPass] defaults to [storePass] (the
+     * PKCS12 norm) when blank. Staging goes through [KeystoreCrypto.copyForSigning], so a keystore the signer
+     * could not read (a PBES2-protected PKCS12, or a JKS) is converted rather than copied, and the entry
+     * records the key password of the copy that was actually written.
      */
     @Synchronized
     fun import(name: String, source: Path, storePass: String, keyAlias: String, keyPass: String): Result<KeystoreEntry> {
@@ -80,8 +82,12 @@ class KeystoreRegistry(private val dir: Path) {
         val ext = source.fileName.toString().substringAfterLast('.', "jks")
         val file = dir.resolve("$id.$ext")
         Files.createDirectories(dir)
-        Files.copy(source, file, StandardCopyOption.REPLACE_EXISTING)
-        val entry = KeystoreEntry(id, baseName, file.toAbsolutePath().toString(), storePass, alias, keyPass.ifBlank { storePass })
+        val copy = KeystoreCrypto.copyForSigning(source, file, storePass, alias, keyPass)
+        if (!copy.success) {
+            runCatching { Files.deleteIfExists(file) }
+            return Result.failure(IllegalStateException(copy.message))
+        }
+        val entry = KeystoreEntry(id, baseName, file.toAbsolutePath().toString(), storePass, alias, copy.keyPass)
         save(load() + entry)
         return Result.success(entry)
     }
