@@ -388,6 +388,12 @@ private class KspSupportPlugin(private val env: ApplicationEnvironment) : Plugin
             SOURCE_GENERATOR_EP,
             KspSourceGenerator(
                 processors = { req -> catalog.classpathFor(req.classpath, req.declaredDependencies) },
+                // The IDE runs the processor version it BUNDLES, so a project pinning an older runtime gets
+                // generated sources its own runtime can't compile. Report that up front instead of letting the
+                // module fail on the symbols it produces.
+                preflight = { req ->
+                    catalog.runtimeMismatches(req.classpath, req.declaredDependencies).map { it.message }
+                },
                 loader = loader,
                 jdkHome = jdkHome,
             ),

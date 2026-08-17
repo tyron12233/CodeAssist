@@ -100,6 +100,79 @@ class KspProcessorCatalogTest {
         }
     }
 
+    /**
+     * The bundled processor version is fixed (executed code ships with the app, never downloaded), so a project
+     * pinning an OLDER runtime gets generated sources its own runtime cannot compile. Real case: Hilt/Dagger.
+     * The bundled 2.60.1 processor emits `_Factory` classes importing `dagger.internal.Provider`, absent from a
+     * pre-2.5x Dagger, so the module failed with "The import dagger.internal.Provider cannot be resolved" in
+     * every generated file, pointing at generated code instead of the version skew behind it.
+     */
+    @Test
+    fun aRuntimeTooOldForTheBundledProcessorIsReportedBeforeAnythingIsGenerated() {
+        val catalog = KspProcessorCatalog.blessed()
+        withTempDir("ksp-stale-runtime") { root ->
+            val declared = listOf("com.google.dagger:hilt-android:2.48")
+
+            // Hilt declared and its marker present, but the runtime predates `dagger.internal.Provider`.
+            val old = listOf(jarWith(root, "dagger-2.48.jar", KspProcessorCatalog.HILT_MARKER, "dagger/internal/Factory.class"))
+            assertEquals(
+                listOf("hilt"), catalog.applicable(old, declared).map { it.id },
+                "the processor is still RUN-eligible: the mismatch must not be hidden by skipping it",
+            )
+            val mismatches = catalog.runtimeMismatches(old, declared)
+            assertEquals(listOf("hilt"), mismatches.map { it.processor.id })
+            assertEquals(listOf("dagger/internal/Provider.class"), mismatches.single().missing)
+            val message = mismatches.single().message
+            assertTrue("dagger.internal.Provider" in message, "names the missing symbol: $message")
+            assertTrue("com.google.dagger:hilt-android to 2.60.1" in message, "names the version to bump to: $message")
+
+            // A runtime that DOES carry the class is accepted: the check is a class probe, not a version compare,
+            // so any runtime new enough to work passes regardless of its version string.
+            val current = listOf(
+                jarWith(root, "dagger-current.jar", KspProcessorCatalog.HILT_MARKER, "dagger/internal/Provider.class")
+            )
+            assertTrue(
+                catalog.runtimeMismatches(current, declared).isEmpty(),
+                "a runtime carrying dagger.internal.Provider must not be flagged",
+            )
+
+            // Not declared → not RUN-eligible → no complaint about an unrelated library's runtime.
+            assertTrue(
+                catalog.runtimeMismatches(old, declaredDependencies = emptyList()).isEmpty(),
+                "an inapplicable processor must never report a mismatch",
+            )
+        }
+    }
+
+    /** The preflight is what turns that mismatch into a failed `generateSources`, with no processor run. */
+    @Test
+    fun preflightProblemsFailGenerationWithoutRunningTheProcessor() {
+        withTempDir("ksp-preflight") { root ->
+            val genRoot = Files.createDirectories(root.resolve("build/generated/ksp"))
+            val request = SourceGenRequest(
+                moduleName = "data",
+                kotlinSources = emptyList(),
+                javaSources = emptyList(),
+                classpath = emptyList(),
+                outputDir = genRoot,
+            )
+            val generator = KspSourceGenerator(
+                runnerClasspath = { listOf(jarWith(root, "runner.jar", "com/google/devtools/ksp/X.class")) },
+                processors = { listOf(jarWith(root, "processor.jar", "p/P.class")) },
+                preflight = { listOf("ksp: Hilt / Dagger: runtime too old") },
+            )
+
+            val result = generator.generate(request)
+
+            assertFalse(result.success, "a blocking preflight problem must fail source generation")
+            assertEquals(listOf("ksp: Hilt / Dagger: runtime too old"), result.messages)
+            assertTrue(
+                Files.walk(genRoot).use { s -> s.filter { Files.isRegularFile(it) }.toList() }.isEmpty(),
+                "nothing may be generated when the preflight blocks the run",
+            )
+        }
+    }
+
     @Test
     fun kspSourceGeneratorRunsTheCatalogSelectedProcessor() {
         val runner = classpathProp("ksp.runner.classpath")

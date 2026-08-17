@@ -28,6 +28,19 @@ class KspProcessor(
      * so the toggle works exactly like the Compose/Parcelize compiler-plugin toggles.
      */
     val runtimeCoordinates: List<String>,
+    /**
+     * Class entries the BUNDLED processor's generated code references that only a matching-or-newer runtime
+     * carries. Dagger's generated `_Factory` classes, for instance, import `dagger.internal.Provider`, which exists only
+     * in the Dagger runtime that shipped with that processor generation.
+     *
+     * The IDE always runs the version it bundles (executed code must ship with the app, never be downloaded),
+     * so a project pinning an OLDER runtime gets generated sources its own runtime cannot compile. Probing for
+     * the class is used rather than comparing version numbers: it is exactly the condition that matters, needs
+     * no per-library release history, and can't reject a runtime that actually works.
+     *
+     * Empty ⇒ no known requirement beyond the runtime being present at all.
+     */
+    val requiredRuntimeClasses: List<String> = emptyList(),
     /** The processor's classpath (bundled in-app). Empty ⇒ the processor isn't bundled in this build → skipped. */
     val jars: () -> List<Path>,
 )
@@ -75,6 +88,44 @@ class KspProcessorCatalog(val processors: List<KspProcessor>) {
     fun classpathFor(classpath: List<Path>, declaredDependencies: List<String>): List<Path> =
         applicable(classpath, declaredDependencies).flatMap { it.jars() }.filter { Files.exists(it) }
 
+    /**
+     * A RUN-eligible processor whose generated code the module's declared runtime is too OLD to compile:
+     * [missing] are the [KspProcessor.requiredRuntimeClasses] absent from the module's classpath.
+     */
+    class RuntimeMismatch(val processor: KspProcessor, val missing: List<String>) {
+        /** A build-console line that names the symbol, the cause, and the exact coordinate to bump. */
+        val message: String
+            get() = "ksp: ${processor.displayName}: the bundled processor generates code referencing " +
+                missing.joinToString { it.removeSuffix(".class").replace('/', '.') } +
+                ", which this module's runtime does not provide. The IDE always runs the processor version it " +
+                "bundles, so the runtime has to match. Update " +
+                processor.runtimeCoordinates.joinToString { upgradeHint(it) } + ", then rebuild."
+
+        /** `group:name:version` rendered as the instruction to give the user: "`group:name` to `version`". */
+        private fun upgradeHint(coordinate: String): String {
+            val version = coordinate.substringAfterLast(':', "")
+            val groupName = groupName(coordinate) ?: return coordinate
+            return if (version.isBlank() || version == groupName.substringAfter(':')) coordinate
+            else "$groupName to $version"
+        }
+    }
+
+    /**
+     * The RUN-eligible processors whose runtime is too old for the code they would generate. Reported as a
+     * build failure BEFORE any processor runs. Otherwise generation "succeeds" and the module fails later with
+     * one unresolved-symbol error per generated file, which points at the generated code rather than the
+     * version skew that caused it.
+     *
+     * Deliberately not folded into [applicable]: silently skipping the processor would replace those errors
+     * with "cannot find symbol `Foo_Factory`" at every INJECTION SITE, which is even further from the cause.
+     */
+    fun runtimeMismatches(classpath: List<Path>, declaredDependencies: List<String>): List<RuntimeMismatch> =
+        applicable(classpath, declaredDependencies).mapNotNull { p ->
+            p.requiredRuntimeClasses.filterNot { classpathHasClass(classpath, it) }
+                .takeIf { it.isNotEmpty() }
+                ?.let { RuntimeMismatch(p, it) }
+        }
+
     companion object {
         /** Marker class entries for the blessed catalog (the runtime each ships in). */
         const val ROOM_MARKER = "androidx/room/RoomDatabase.class"
@@ -107,6 +158,11 @@ class KspProcessorCatalog(val processors: List<KspProcessor>) {
                     KspProcessor(
                         "hilt", "Hilt / Dagger", "Generate Hilt/Dagger dependency-injection components.",
                         HILT_MARKER, listOf("com.google.dagger:hilt-android:2.60.1"),
+                        // Dagger's generated `_Factory` classes import `dagger.internal.Provider`, which the
+                        // bundled 2.60.1 runtime has and a pre-2.5x one does not (that generation's generated
+                        // code used `javax.inject.Provider`). A project pinning an older Hilt otherwise builds
+                        // to "The import dagger.internal.Provider cannot be resolved" in every generated file.
+                        requiredRuntimeClasses = listOf("dagger/internal/Provider.class"),
                     ) { bundledJars("hilt") },
                     KspProcessor(
                         "glide", "Glide", "Generate Glide's GlideApp/module API from @GlideModule.",

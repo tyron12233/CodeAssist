@@ -259,14 +259,22 @@ internal class ModuleService(private val ctx: EngineContext) {
         val declaredCoords = module.dependencies.filterIsInstance<LibraryDependency>()
             .mapNotNull { groupName(it.library.name) }.toSet()
         val kspRows = kspProcessors.map { p ->
+            val applied = p.runtimeCoordinates.mapNotNull { groupName(it) }.any { it in declaredCoords } &&
+                KspProcessorCatalog.classpathHasClass(classpath, p.probeClassEntry)
+            // A runtime too OLD for the bundled processor's generated code: the row would otherwise read
+            // "applied" while every build fails on symbols that runtime doesn't have. Same probe the build's
+            // preflight uses (KspProcessorCatalog.runtimeMismatches).
+            val staleRuntime = applied &&
+                p.requiredRuntimeClasses.any { !KspProcessorCatalog.classpathHasClass(classpath, it) }
             UiCompilerPlugin(
                 id = p.id,
                 title = p.displayName,
                 description = p.description,
                 enabled = p.id in bf.kspProcessors,
-                applied = p.runtimeCoordinates.mapNotNull { groupName(it) }.any { it in declaredCoords } &&
-                    KspProcessorCatalog.classpathHasClass(classpath, p.probeClassEntry),
-                note = "KSP annotation processor. Runs once its runtime is a declared dependency of the module.",
+                applied = applied,
+                note = if (staleRuntime)
+                    "Runtime too old for the bundled processor. Update ${p.runtimeCoordinates.joinToString()}."
+                else "KSP annotation processor. Runs once its runtime is a declared dependency of the module.",
             )
         }
         return UiCompilerPlugins(moduleName, plugins + kspRows)

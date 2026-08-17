@@ -36,6 +36,13 @@ class KspSourceGenerator(
      *  probing `request.classpath` for a runtime marker — add `room-runtime` and Room turns on). Empty → the
      *  generator no-ops for that module. */
     private val processors: (request: SourceGenRequest) -> List<Path>,
+    /**
+     * Blocking problems with the module's setup, checked BEFORE any processor runs (typically
+     * [KspProcessorCatalog.runtimeMismatches]: a declared runtime too old for the bundled processor's generated
+     * code). Non-empty fails source generation with exactly those messages, so the console names the real cause
+     * instead of the unresolved symbols it produces downstream. Empty by default (no preflight).
+     */
+    private val preflight: (request: SourceGenRequest) -> List<String> = { emptyList() },
     /** Loads [runnerClasspath] + processors: `URLClassLoader` on desktop, `DexClassLoader` (bundled dex) on ART. */
     private val loader: KspProcessorLoader = DefaultKspProcessorLoader,
     /** Per-module KSP processor options (`room.generateKotlin`, `room.schemaLocation`, …). */
@@ -58,6 +65,15 @@ class KspSourceGenerator(
         val processorJars = processors(request).filter { java.nio.file.Files.exists(it) }
         val runner = runnerClasspath().filter { java.nio.file.Files.exists(it) }
         if (processorJars.isEmpty() || runner.isEmpty()) return SourceGenResult.OK
+
+        // A blocking setup problem (a runtime too old for the bundled processor) is reported here and nowhere
+        // else: running anyway emits sources that reference symbols the module's runtime lacks, and the build
+        // then fails with one unresolved-import error per generated file, pointing at generated code instead of
+        // the version skew. Checked after the applicability gates so an inapplicable processor never complains.
+        preflight(request).takeIf { it.isNotEmpty() }?.let { problems ->
+            problems.forEach(log)
+            return SourceGenResult(false, problems)
+        }
 
         val messages = mutableListOf<String>()
         val logger = CollectingLogger { messages += it; log(it) }
