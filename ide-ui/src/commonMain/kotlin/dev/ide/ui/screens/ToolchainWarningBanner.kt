@@ -118,7 +118,7 @@ internal fun ToolchainWarningBanner(state: IdeUiState, compact: Boolean) {
             Row(
                 Modifier.fillMaxWidth()
                     .clickable { listOpen = !listOpen }
-                    .padding(horizontal = 12.dp, vertical = 8.dp),
+                    .padding(horizontal = 16.dp, vertical = 12.dp),
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
             ) {
@@ -184,8 +184,8 @@ private fun WarningCard(
     val indent = if (indented) 12.dp else 24.dp
     Column(
         Modifier.fillMaxWidth().padding(start = if (indented) 12.dp else 0.dp)
-            .padding(horizontal = 12.dp, vertical = 8.dp),
-        verticalArrangement = Arrangement.spacedBy(6.dp),
+            .padding(horizontal = 16.dp, vertical = 12.dp),
+        verticalArrangement = Arrangement.spacedBy(8.dp),
     ) {
         Row(
             verticalAlignment = Alignment.Top,
@@ -253,7 +253,7 @@ private fun WarningCard(
             // horizontal space, so no label is clipped and every target is comfortably tappable.
             Column(
                 Modifier.fillMaxWidth().padding(start = indent),
-                verticalArrangement = Arrangement.spacedBy(6.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp),
             ) {
                 fix?.invoke()
                 accept?.invoke()
@@ -262,7 +262,7 @@ private fun WarningCard(
         } else {
             Row(
                 Modifier.fillMaxWidth().padding(start = indent),
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                horizontalArrangement = Arrangement.spacedBy(10.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 fix?.invoke()
@@ -293,7 +293,7 @@ private fun BannerAction(
                 RoundedCornerShape(Ca.radius.pill),
             )
             .clickable(enabled = enabled, onClick = onClick)
-            .padding(horizontal = 12.dp, vertical = 8.dp),
+            .padding(horizontal = 16.dp, vertical = 10.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = if (stretch) Arrangement.Center else Arrangement.Start,
     ) {
