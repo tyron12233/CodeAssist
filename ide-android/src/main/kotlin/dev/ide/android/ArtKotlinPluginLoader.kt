@@ -3,6 +3,7 @@ package dev.ide.android
 import dalvik.system.DexClassLoader
 import dev.ide.android.support.tools.ArtReflectionRewrite
 import dev.ide.android.support.tools.D8InProcessDexer
+import dev.ide.android.support.tools.DexInputDedup
 import dev.ide.lang.kotlin.compile.KotlinPluginLoader
 import dev.ide.platform.ToolClassIsolation
 import java.nio.file.Files
@@ -48,9 +49,14 @@ class ArtKotlinPluginLoader(
             val artSafe = Files.createTempDirectory(cacheDir, "art-safe-")
             try {
                 val patched = ArtReflectionRewrite.patch(jars, artSafe)
+                // Dex has no shadowing rule, so a classpath a `URLClassLoader` loads fine (first jar wins) is
+                // simply undexable: D8 fails the whole input on `Duplicate class`. A module that activates two
+                // bundled KSP processors hits this immediately — every processor closure ships its own copy of
+                // the shared transitive libraries. Apply the classloader's own first-wins precedence instead.
+                val program = DexInputDedup.firstWins(patched, artSafe.resolve("dedup"))
                 val dexDir = cacheDir.resolve("dex")
                 Files.createDirectories(dexDir)
-                val r = D8InProcessDexer().dex(patched, androidJar, minApi, release = false, outDir = dexDir, threads = 0, desugaredLibConfig = null)
+                val r = D8InProcessDexer().dex(program, androidJar, minApi, release = false, outDir = dexDir, threads = 0, desugaredLibConfig = null)
                 check(r.success) { "failed to dex compiler-plugin classpath: ${r.log.joinToString("\n")}" }
                 packageDex(dexDir, pluginJar)
             } finally {
