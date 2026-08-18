@@ -46,7 +46,11 @@ object AwtNameRemapper {
         return internalName
     }
 
-    /** The original AWT or Swing name a toolkit [internalName] stands for, for error messages. */
+    /** Whether [internalName] is one of the toolkit's own mirrored types, i.e. the inverse of [handles]. */
+    fun handlesToolkitName(internalName: String): Boolean = PREFIXES.any { internalName.startsWith(it.second) }
+
+    /** The original AWT or Swing name a toolkit [internalName] stands for, for error messages and for
+     *  generating the compile-time API jar (see [SwingApiStubs]). */
     fun originalName(internalName: String): String {
         for ((from, to) in PREFIXES) {
             if (internalName.startsWith(to)) return from + internalName.substring(to.length)

@@ -1,12 +1,7 @@
 package dev.ide.awt.event
 
+import dev.ide.awt.AWTEvent
 import dev.ide.awt.Component
-
-/** `java.awt.AWTEvent`: what every event carries, the object it happened to and what kind it was. */
-open class AWTEvent(val source: Any?, val id: Int) {
-    /** AWT spells it `getID`, not `getId`, so it is declared rather than left to the [id] property. */
-    fun getID(): Int = id
-}
 
 /**
  * `java.awt.event.ActionEvent`: a button was activated. [actionCommand] defaults to the button's text, as in

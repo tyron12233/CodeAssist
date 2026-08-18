@@ -549,7 +549,14 @@ class ProjectManager private constructor(
         ): ProjectManager {
 
 
-            val sdk = SdkData("android", bootClasspath, buildToolsPath = null, kind = PlatformKind.ANDROID)
+            // android.jar carries no java.awt/javax.swing, so a Swing project could not be compiled on
+            // device without the owned toolkit's API on the platform classpath (see [SwingApiStubs]).
+            val sdk = SdkData(
+                "android",
+                bootClasspath + listOfNotNull(SwingApiStubs.bundled()?.toString()),
+                buildToolsPath = null,
+                kind = PlatformKind.ANDROID,
+            )
             // android.jar is the first boot entry; later entries (the desugar stubs) join the compile platform.
             val tools = AndroidDeviceTools(Paths.get(bootClasspath.first()), androidToolsDir, debugKeystore, deviceApiLevel,
                 desugarStubs = bootClasspath.drop(1).map { Paths.get(it) }, r8Shrinker = r8Shrinker, r8MergeDexer = r8MergeDexer,

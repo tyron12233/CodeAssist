@@ -4409,10 +4409,14 @@ class IdeServices private constructor(
             // android.jar omits java.lang.invoke.StringConcatFactory / LambdaMetafactory; ship the build-tools
             // desugar stubs alongside it on the boot classpath so Java ≥ 9 string-concat (`"a" + b`) and
             // lambdas resolve during analysis (and compilation). Compile-only — see AndroidSdk.coreLambdaStubs.
+            // android.jar has no java.awt/javax.swing either, and the IDE prefers this SDK over the JDK
+            // whenever one is installed — so a Swing project would not compile on a desktop that happens to
+            // have the Android SDK. The owned toolkit's API (see [SwingApiStubs]) fills that in.
             val boot =
-                listOf(sdk.androidJar.toString()) + listOfNotNull(sdk.coreLambdaStubs.takeIf {
-                    Files.exists(it)
-                }?.toString())
+                listOf(sdk.androidJar.toString()) + listOfNotNull(
+                    sdk.coreLambdaStubs.takeIf { Files.exists(it) }?.toString(),
+                    SwingApiStubs.bundled()?.toString(),
+                )
             return SdkData(
                 "android",
                 boot,

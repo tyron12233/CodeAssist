@@ -34,3 +34,35 @@ dependencies {
 tasks.withType<JavaCompile>().configureEach {
     options.release.set(17)
 }
+
+// --- the compile-time java.awt/javax.swing API jar ------------------------------------------------
+// A project that uses Swing must COMPILE against those names, and the platform it compiles against usually
+// lacks them: android.jar on device, and android.jar on the desktop too whenever an Android SDK is installed
+// (IdeServices prefers it). SwingApiStubs runs the name remap BACKWARDS over this module's own classes to
+// produce that API, so what a program compiles against and what it runs on can never drift apart.
+//
+// Compile-only, and shipped as an ordinary resource of :ide-core so one artifact serves desktop and device.
+// It must never reach a class loader: nothing may define a class in java.*.
+val swingApiStubsJar = tasks.register<JavaExec>("swingApiStubsJar") {
+    description = "Generate the compile-time java.awt/javax.swing API jar from the owned toolkit."
+    dependsOn(tasks.named("classes"))
+    classpath = sourceSets.main.get().runtimeClasspath
+    mainClass.set("dev.ide.awt.interp.SwingApiStubs")
+    val out = layout.buildDirectory.file("swing-api/swing-api-stubs.jar")
+    argsProvider(sourceSets.main.get().output.classesDirs, out)
+    inputs.files(sourceSets.main.get().output.classesDirs)
+    outputs.file(out)
+}
+
+/** The generator takes `<classesDir> <outJar>`; the Kotlin output dir is the one holding the toolkit. */
+fun JavaExec.argsProvider(classesDirs: FileCollection, out: Provider<RegularFile>) {
+    argumentProviders.add {
+        listOf(classesDirs.first { it.path.contains("kotlin") }.absolutePath, out.get().asFile.absolutePath)
+    }
+}
+
+/** Consumed by :ide-core, which embeds it as a resource. */
+val swingApiStubs: Configuration by configurations.creating { isCanBeResolved = false }
+artifacts.add(swingApiStubs.name, swingApiStubsJar.map { layout.buildDirectory.file("swing-api/swing-api-stubs.jar").get().asFile }) {
+    builtBy(swingApiStubsJar)
+}
