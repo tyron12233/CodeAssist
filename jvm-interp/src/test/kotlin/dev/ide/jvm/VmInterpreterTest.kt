@@ -162,6 +162,16 @@ class VmInterpreterTest {
         }
     }
 
+    @Test fun bridgedCallOnAReceiverFromANonExportedPackage() {
+        // The receiver's runtime class is public but lives in a package java.base does not export, so the
+        // method must resolve to the exported supertype's declaration; picking the runtime class's own would
+        // throw IllegalAccessException from Method.invoke.
+        assertEquals(
+            Bridged.decoderCharsetName(),
+            call(BRIDGED, "decoderCharsetName", "()Ljava/lang/String;"),
+        )
+    }
+
     // ---- invokedynamic: lambdas, method references, string concatenation --------------------------
 
     @Test fun stringConcatenation() {

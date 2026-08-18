@@ -23,4 +23,15 @@ public final class Bridged {
     public static String concat(int x) {
         return "v" + x;
     }
+
+    /**
+     * A bridged call whose receiver's RUNTIME class is a public class in a package its module does not export
+     * (`Charset.forName("UTF-8")` is a `sun.nio.cs.UTF_8`, which declares its own `newDecoder`). Resolution has
+     * to land on the exported supertype's method (`java.nio.charset.Charset.newDecoder`), or reflection throws
+     * `IllegalAccessException`. Same shape as every `Graphics2D` Swing hands a `paintComponent`, whose runtime
+     * class is `sun.java2d.SunGraphics2D`.
+     */
+    public static String decoderCharsetName() {
+        return java.nio.charset.Charset.forName("UTF-8").newDecoder().charset().name();
+    }
 }
