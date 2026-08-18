@@ -30,6 +30,7 @@ import dev.ide.ui.backend.FileActions
 import dev.ide.ui.backend.IdeBackend
 import dev.ide.ui.components.BetaInfo
 import dev.ide.ui.components.OnboardingSheet
+import dev.ide.ui.ext.UiPluginHost
 import dev.ide.ui.generated.resources.Res
 import dev.ide.ui.generated.resources.import_gradle_failed
 import dev.ide.ui.generated.resources.import_unrecognized
@@ -116,11 +117,12 @@ fun CodeAssistApp(
     // no specific plugin and a disabled plugin contributes nothing. Loaded eagerly (idempotent) so the tool-
     // window/action registries are populated before the editor composes — the top-bar toggles + side panes read
     // straight from ToolWindowRegistry.
-    remember(backend) {
-        backend.uiPlugins().forEach { dev.ide.ui.ext.UiPluginHost.register(it) }
-        dev.ide.ui.ext.UiPluginHost.ensureLoaded()
-        Unit
+    // noinspection RememberReturnType
+    remember(Unit) {
+        backend.uiPlugins().forEach { UiPluginHost.register(it) }
+        UiPluginHost.ensureLoaded()
     }
+
     // Persisted IDE settings drive the theme (and seed the editor's live prefs). Re-read after the Settings
     // screen writes; appearance changes then take effect immediately.
     var settings by remember { mutableStateOf(backend.settings.settings()) }
