@@ -110,6 +110,17 @@ class D8InProcessDexer : Dexer {
             // merge (the merger gets the same library and finalizes it), exactly as AGP's archive→merge flow.
             if (mode == OutputMode.DexFilePerClassFile) {
                 builder.setIntermediate(true)
+                // Desugaring some classes needs a helper class that belongs to the whole program rather than to
+                // any one input (a Java record needs the tag class standing in for java.lang.Record below API
+                // 34). A per-class archive has no output slot for it, so hand D8 the bucket directory to park
+                // them in: it writes `<class>.globals` beside that class's `.dex` and [dex] gives them back to
+                // the merge. Without this D8 fails the build outright. See [DexGlobalSynthetics].
+                builder.setGlobalSyntheticsOutput(outDir)
+            } else {
+                // Merging intermediates: return the global synthetics the archive step parked next to them, so
+                // each is created once, in the same output as the classes referencing it.
+                val globals = DexGlobalSynthetics.accompanying(programs)
+                if (globals.isNotEmpty()) builder.addGlobalSyntheticsFiles(globals)
             }
             // Feed the desugaring classpath + android.jar (bootclasspath) as SHARED, cached resource providers
             // (AGP's ClassFileProviderFactory) instead of re-adding the files each invocation: android.jar and

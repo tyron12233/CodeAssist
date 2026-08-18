@@ -4,6 +4,7 @@ import dev.ide.android.support.tools.Aapt2
 import dev.ide.android.support.tools.ApkSigner
 import dev.ide.android.support.tools.DesugaredLibrary
 import dev.ide.android.support.tools.DexDiagnostics
+import dev.ide.android.support.tools.DexGlobalSynthetics
 import dev.ide.android.support.tools.Dexer
 import dev.ide.android.support.tools.L8Request
 import dev.ide.android.support.tools.MergePlan
@@ -1146,18 +1147,22 @@ internal object DexArchives {
         }
     }
 
-    /** Delete the per-class `.dex` for a `com/example/Foo.class` relpath (DexFilePerClassFile names it `Foo.dex`). */
+    /** Delete the per-class `.dex` for a `com/example/Foo.class` relpath (DexFilePerClassFile names it
+     *  `Foo.dex`), together with the `Foo.globals` D8 writes beside it when desugaring that class produced a
+     *  global synthetic ([DexGlobalSynthetics]); a stale one would otherwise reach the next merge. */
     fun deleteClassDex(root: Path, classRelPath: String) {
-        runCatching { Files.deleteIfExists(root.resolve(classRelPath.removeSuffix(".class") + ".dex")) }
+        val base = classRelPath.removeSuffix(".class")
+        runCatching { Files.deleteIfExists(root.resolve("$base.dex")) }
+        runCatching { Files.deleteIfExists(root.resolve(base + DexGlobalSynthetics.EXTENSION)) }
     }
 
-    /** Drop every per-class `.dex` + the manifest (the project has no classes anymore). */
+    /** Drop every per-class `.dex` (+ its global synthetics) + the manifest (the project has no classes anymore). */
     fun clearClassDex(root: Path) {
         if (!Files.isDirectory(root)) return
         Files.walk(root).use { s ->
             s.filter {
-                Files.isRegularFile(it) && (it.toString()
-                    .endsWith(".dex") || it.fileName.toString() == CLASS_MANIFEST)
+                Files.isRegularFile(it) && (it.toString().endsWith(".dex") || it.toString()
+                    .endsWith(DexGlobalSynthetics.EXTENSION) || it.fileName.toString() == CLASS_MANIFEST)
             }.collect(Collectors.toList())
         }.forEach { runCatching { Files.deleteIfExists(it) } }
     }

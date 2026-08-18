@@ -142,7 +142,9 @@ class ForkedD8Dexer(
                 note = "dex merge: forked VM, ${xmx}MB heap"
                 forkXmxMb = xmx
                 log.info("forked-D8 merge: runs in a forked $launcher -Xmx${xmx}m (${dexes.size} dex)")
-                return D8Dexer(dexes.map { it.toPath() }, Paths.get(launcher), listOf("-Xmx${xmx}m"))
+                // The tool classpath is dex extracted from the bundled R8, so there is no jar to read a version
+                // marker from; state its global-synthetics support (R8 8) rather than have it probed.
+                return D8Dexer(dexes.map { it.toPath() }, Paths.get(launcher), listOf("-Xmx${xmx}m"), supportsGlobalSynthetics = true)
             }
         }
         return inProcess("the device wouldn't start a forked VM at ${candidates.last()}MB+")
