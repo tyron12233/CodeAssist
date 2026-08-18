@@ -31,8 +31,12 @@ interface IBuildDaemon {
     // --- Phase 4: interactive run (the program runs in :build; these drive its stdin + the sandbox prompts).
     void sendRunInput(String text);   // feed one line of stdin to the running program
     void closeRunInput();             // EOF the program's stdin
-    // Forward a tap on the run surface into a WINDOWED program; x/y are in the frame's pixel space.
-    oneway void sendRunPointer(float x, float y);
+    // Drive a WINDOWED program (a Swing app) whose frames the UI is showing. Actions are RunPointer/RunKey
+    // constants; x/y are in the frame's pixel space. The surface size lets the program lay out at exactly the
+    // size it is drawn at instead of being scaled to fit it.
+    oneway void sendRunPointer(int action, float x, float y);
+    oneway void sendRunKey(int action, int keyCode, int keyChar);
+    oneway void setRunSurfaceSize(int widthPx, int heightPx);
     void answerPermission(int id, int decision); // answer a pending sandbox prompt (UiPermissionDecision ordinal)
     void clearAppLog();               // clear the app-log (Logcat) buffer
 

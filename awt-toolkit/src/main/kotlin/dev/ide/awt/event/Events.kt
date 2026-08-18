@@ -46,6 +46,7 @@ class MouseEvent(
         @JvmField val MOUSE_ENTERED = 504
         @JvmField val MOUSE_EXITED = 505
         @JvmField val MOUSE_MOVED = 503
+        @JvmField val MOUSE_DRAGGED = 506
         @JvmField val BUTTON1 = 1
     }
 }

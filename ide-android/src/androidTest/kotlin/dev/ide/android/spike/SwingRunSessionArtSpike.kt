@@ -86,7 +86,8 @@ class SwingRunSessionArtSpike {
         )
 
         // 2. A forwarded tap crosses back into the program and changes what it paints.
-        run!!.tap(BUTTON_X, BUTTON_Y)
+        run!!.pointer(POINTER_DOWN, BUTTON_X, BUTTON_Y)
+        run.pointer(POINTER_UP, BUTTON_X, BUTTON_Y)
         assertTrue("no frame after the tap", host.awaitFrameAfter(first.seq, INPUT_TIMEOUT_MS))
         log("frame after the tap: seq=${host.latest()!!.seq}")
 
@@ -158,6 +159,10 @@ class SwingRunSessionArtSpike {
 
         /** `new Color(0x2D, 0x6C, 0xDF)` in the fixture, opaque. */
         const val FIXTURE_BLUE = 0xFF2D6CDF.toInt()
+
+        // Mirrors dev.ide.build.engine.RunPointer.
+        const val POINTER_DOWN = 0
+        const val POINTER_UP = 2
 
         const val STARTUP_TIMEOUT_MS = 20_000L
         const val INPUT_TIMEOUT_MS = 10_000L

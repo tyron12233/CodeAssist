@@ -328,9 +328,16 @@ interface BuildService {
     /** Signal end-of-input (EOF / Ctrl-D) to the running program's stdin. */
     fun closeRunInput() {}
 
-    /** Forward a tap into a windowed program's UI; [x] and [y] are in the frame's pixel space. No-op for a
-     *  console run, which has no window to tap. */
-    fun sendRunPointer(x: Float, y: Float) {}
+    /** Forward a pointer event into a windowed program's UI; [x] and [y] are in the frame's pixel space and
+     *  [action] is a `RunPointer` constant. No-op for a console run, which has no window. */
+    fun sendRunPointer(action: Int, x: Float, y: Float) {}
+
+    /** Forward a key event into a windowed program's UI. No-op for a console run. */
+    fun sendRunKey(action: Int, keyCode: Int, keyChar: Char) {}
+
+    /** Tell a windowed program the pixel size its window is drawn at, so it paints at that size rather than
+     *  being scaled to fit. No-op for a console run. */
+    fun setRunSurfaceSize(widthPx: Int, heightPx: Int) {}
 
     /** The pending permission a running program is asking for (the run sandbox), or null. */
     val permissionRequest: StateFlow<UiPermissionRequest?> get() = MutableStateFlow(null)

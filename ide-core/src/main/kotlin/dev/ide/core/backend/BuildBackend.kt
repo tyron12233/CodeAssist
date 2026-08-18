@@ -28,6 +28,9 @@ internal class BuildBackend(private val ctx: BackendContext) : BuildService {
     override val runConsole: StateFlow<RunConsoleUi?> = ctx.engineFlow<RunConsoleUi?>(null) { runner(it).runConsole }
     override fun sendRunInput(text: String) = runner(ctx.services).sendRunInput(text)
     override fun closeRunInput() = runner(ctx.services).closeRunInput()
+    override fun sendRunPointer(action: Int, x: Float, y: Float) = runner(ctx.services).sendRunPointer(action, x, y)
+    override fun sendRunKey(action: Int, keyCode: Int, keyChar: Char) = runner(ctx.services).sendRunKey(action, keyCode, keyChar)
+    override fun setRunSurfaceSize(widthPx: Int, heightPx: Int) = runner(ctx.services).setRunSurfaceSize(widthPx, heightPx)
 
     override val permissionRequest: StateFlow<UiPermissionRequest?> =
         ctx.engineFlow<UiPermissionRequest?>(null) { runner(it).permissionRequest }

@@ -119,7 +119,13 @@ fun RunScreen(
         BuildPhaseStrip(rc, build, onOpenDiagnostic)
         // A windowed program shows its window; a console program shows only its transcript.
         rc.frame?.let { frame ->
-            RunSurface(frame, onTap = { x, y -> backend.build.sendRunPointer(x, y) }, modifier = Modifier.weight(1f))
+            RunSurface(
+                frame = frame,
+                onPointer = { action, x, y -> backend.build.sendRunPointer(action, x, y) },
+                onKey = { action, code, char -> backend.build.sendRunKey(action, code, char) },
+                onSurfaceSize = { w, h -> backend.build.setRunSurfaceSize(w, h) },
+                modifier = Modifier.weight(1f),
+            )
         }
         Transcript(rc, Modifier.weight(1f).padding(horizontal = 14.dp))
         when {

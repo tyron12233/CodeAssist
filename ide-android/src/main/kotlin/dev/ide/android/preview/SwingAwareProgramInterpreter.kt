@@ -4,7 +4,7 @@ import android.content.Context
 import dev.ide.build.engine.InterpretRunRequest
 import dev.ide.build.engine.ProgramInterpreter
 import dev.ide.build.engine.ProgramIo
-import dev.ide.build.engine.RunPointerInput
+import dev.ide.build.engine.RunWindow
 import dev.ide.platform.log.Log
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Dispatchers
@@ -57,6 +57,8 @@ class SwingAwareProgramInterpreter(
             classpath = request.classpath.map { it.toString() },
             mainClass = request.mainClass,
             args = request.args,
+            // A starting size only: the Run pane reports its own the moment it is laid out, and the program
+            // is re-laid-out at that size, so nothing is ever scaled in the steady state.
             widthPx = SURFACE_WIDTH,
             heightPx = SURFACE_HEIGHT,
             frameDir = frameDir,
@@ -68,7 +70,11 @@ class SwingAwareProgramInterpreter(
         }
 
         io.started()
-        io.windowed(RunPointerInput { x, y -> session.tap(x, y) })
+        io.windowed(object : RunWindow {
+            override fun pointer(action: Int, x: Float, y: Float) = session.pointer(action, x, y)
+            override fun key(action: Int, keyCode: Int, keyChar: Char) = session.key(action, keyCode, keyChar)
+            override fun resize(widthPx: Int, heightPx: Int) = session.resize(widthPx, heightPx)
+        })
         try {
             val code = exit.await()
             io.exited(code)
@@ -108,7 +114,7 @@ class SwingAwareProgramInterpreter(
     private companion object {
         val MARKERS = listOf("javax/swing/", "java/awt/")
 
-        /** The surface a program's window is painted at until the Run pane reports its own size. */
+        /** The size a program's window is painted at until the Run pane reports its own. */
         const val SURFACE_WIDTH = 720
         const val SURFACE_HEIGHT = 1080
     }

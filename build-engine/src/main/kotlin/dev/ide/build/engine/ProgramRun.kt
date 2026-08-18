@@ -40,16 +40,43 @@ interface ProgramIo {
     fun frame(path: String, width: Int, height: Int, seq: Long) {}
 
     /**
-     * Announces that this program has a window, handing the host the way to send input back into it. Called
-     * once, before the first [frame]. A host that cannot show a window can ignore it and will simply receive
-     * frames nobody looks at.
+     * Announces that this program has a window, handing the host the way to drive it. Called once, before the
+     * first [frame]. A host that cannot show a window can ignore it and will simply receive frames nobody
+     * looks at.
      */
-    fun windowed(input: RunPointerInput) {}
+    fun windowed(window: RunWindow) {}
 }
 
-/** Forwards a pointer event into a windowed program; [x] and [y] are in the frame's pixel space. */
-fun interface RunPointerInput {
-    fun tap(x: Float, y: Float)
+/**
+ * The handle a host drives a windowed program with. Coordinates are in the frame's own pixel space, which the
+ * host maps from wherever it drew the frame.
+ */
+interface RunWindow {
+    /** A pointer event; [action] is one of [RunPointer]'s constants. */
+    fun pointer(action: Int, x: Float, y: Float)
+
+    /** A key event; [action] is one of [RunKey]'s constants, [keyCode] an AWT `VK_` code, and [keyChar] the
+     *  character typed or [RunKey.CHAR_UNDEFINED] for a key that produces none. */
+    fun key(action: Int, keyCode: Int, keyChar: Char)
+
+    /** The size the host will draw at, so the program's window is painted at exactly that size instead of
+     *  being scaled. Called whenever the surface resizes. */
+    fun resize(widthPx: Int, heightPx: Int)
+}
+
+/** Pointer actions, named here so neither the UI nor the toolkit has to speak Android's `MotionEvent`. */
+object RunPointer {
+    const val DOWN = 0
+    const val MOVE = 1
+    const val UP = 2
+    const val CANCEL = 3
+}
+
+/** Key actions, and the "no character" sentinel AWT spells `KeyEvent.CHAR_UNDEFINED`. */
+object RunKey {
+    const val DOWN = 0
+    const val UP = 1
+    const val CHAR_UNDEFINED = '\uFFFF'
 }
 
 /**

@@ -133,6 +133,34 @@ open class Component {
 
     // ---- input -------------------------------------------------------------------------------------
 
+    private val keyListeners = ArrayList<dev.ide.awt.event.KeyListener>()
+
+    fun addKeyListener(l: dev.ide.awt.event.KeyListener?) {
+        if (l != null) keyListeners.add(l)
+    }
+
+    fun removeKeyListener(l: dev.ide.awt.event.KeyListener?) {
+        if (l != null) keyListeners.remove(l)
+    }
+
+    fun getKeyListeners(): Array<dev.ide.awt.event.KeyListener> = keyListeners.toTypedArray()
+
+    private var focusable = true
+
+    /**
+     * Whether this component can take keyboard focus. True by default, as in AWT, where it is focus TRAVERSAL
+     * that is restricted rather than focusability: pressing a panel that has a `KeyListener` therefore starts
+     * sending it keys, which is what a program that draws and reads the keyboard expects.
+     */
+    open fun isFocusable(): Boolean = focusable
+
+    open fun setFocusable(value: Boolean) {
+        focusable = value
+    }
+
+    /** Ask the window to send keys here. No-op when this component is not in a window yet. */
+    fun requestFocusInWindow(): Boolean = surface()?.focusOn(this) ?: false
+
     fun addMouseListener(l: MouseListener?) {
         if (l != null) mouseListeners.add(l)
     }
@@ -146,6 +174,20 @@ open class Component {
     /** Whether ([px], [py]) in this component's own space is inside it. */
     open fun contains(px: Int, py: Int): Boolean = px >= 0 && py >= 0 && px < widthPx && py < heightPx
 
+    /** Deliver a key event to this component's listeners. */
+    protected open fun processKeyEvent(e: dev.ide.awt.event.KeyEvent) {
+        for (l in keyListeners.toList()) {
+            when (e.id) {
+                dev.ide.awt.event.KeyEvent.KEY_PRESSED -> l.keyPressed(e)
+                dev.ide.awt.event.KeyEvent.KEY_RELEASED -> l.keyReleased(e)
+                dev.ide.awt.event.KeyEvent.KEY_TYPED -> l.keyTyped(e)
+            }
+        }
+    }
+
+    /** Entry point for the surface, which is outside this class's package in AWT terms. */
+    internal fun dispatchKeyEvent(e: dev.ide.awt.event.KeyEvent) = processKeyEvent(e)
+
     /**
      * Deliver [e] to this component. Widgets that react to the mouse (a button) override this, call `super`
      * to keep the listeners working, and add their own behaviour, exactly as `AbstractButton` does.
@@ -158,6 +200,8 @@ open class Component {
                 MouseEvent.MOUSE_CLICKED -> l.mouseClicked(e)
                 MouseEvent.MOUSE_ENTERED -> l.mouseEntered(e)
                 MouseEvent.MOUSE_EXITED -> l.mouseExited(e)
+                MouseEvent.MOUSE_DRAGGED -> Unit // a drag reaches MouseMotionListener in AWT, which is not modelled
+
             }
         }
     }
@@ -311,6 +355,9 @@ open class Container : Component() {
 internal interface Surface {
     /** Mark the next frame as needing a repaint. */
     fun invalidateFrame()
+
+    /** Send keyboard events to [component] from now on. Returns false when it cannot take focus. */
+    fun focusOn(component: Component): Boolean
 
     /** A graphics bound to the backend but to no canvas, for measuring text outside a paint pass. */
     fun measuringGraphics(): CanvasGraphics?

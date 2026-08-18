@@ -183,8 +183,16 @@ class BuildDaemonService : Service() {
             services?.buildRunner?.closeRunInput()
         }
 
-        override fun sendRunPointer(x: Float, y: Float) {
-            services?.buildRunner?.sendRunPointer(x, y)
+        override fun sendRunPointer(action: Int, x: Float, y: Float) {
+            services?.buildRunner?.sendRunPointer(action, x, y)
+        }
+
+        override fun sendRunKey(action: Int, keyCode: Int, keyChar: Int) {
+            services?.buildRunner?.sendRunKey(action, keyCode, keyChar.toChar())
+        }
+
+        override fun setRunSurfaceSize(widthPx: Int, heightPx: Int) {
+            services?.buildRunner?.setRunSurfaceSize(widthPx, heightPx)
         }
 
         override fun answerPermission(id: Int, decision: Int) {

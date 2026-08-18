@@ -7,7 +7,6 @@ import android.content.ServiceConnection
 import android.graphics.Bitmap
 import android.os.IBinder
 import android.os.Process
-import android.view.MotionEvent
 import dev.ide.platform.log.Log
 import java.io.File
 import java.nio.ByteBuffer
@@ -154,12 +153,17 @@ class SwingRunRemoteClient(context: Context) {
             id = sessionId
         }
 
-        /** Forward a tap. [x]/[y] are in the frame's pixel space, which the pane maps from the touch. */
-        fun tap(x: Float, y: Float) {
+        /** Forward a pointer event. [action] is a `RunPointer` constant; [x]/[y] are in the frame's pixel
+         *  space, which the pane maps from the touch. */
+        fun pointer(action: Int, x: Float, y: Float) {
             if (finished.get()) return
-            val now = System.currentTimeMillis()
-            // The toolkit turns a completed tap into press + release + click, so only the UP is forwarded.
-            runCatching { remote.dispatchPointer(id, MotionEvent.ACTION_UP, x, y, now) }
+            runCatching { remote.dispatchPointer(id, action, x, y, System.currentTimeMillis()) }
+        }
+
+        /** Forward a key event to whatever component holds focus in the program's window. */
+        fun key(action: Int, keyCode: Int, keyChar: Char) {
+            if (finished.get()) return
+            runCatching { remote.dispatchKey(id, action, keyCode, keyChar.code, System.currentTimeMillis()) }
         }
 
         /** Re-target the painted surface when the Run pane resizes. */

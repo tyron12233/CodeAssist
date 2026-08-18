@@ -6,7 +6,6 @@ import android.graphics.Bitmap
 import android.graphics.Canvas
 import android.os.IBinder
 import android.os.Process
-import android.view.MotionEvent
 import dev.ide.android.DexPeerFactory
 import dev.ide.awt.ToolkitWindows
 import dev.ide.awt.Window
@@ -104,6 +103,10 @@ class SwingRunSessionService : Service() {
             sessions[sessionId]?.postPointer(action, x, y)
         }
 
+        override fun dispatchKey(sessionId: Int, action: Int, keyCode: Int, keyChar: Int, eventTimeMs: Long) {
+            sessions[sessionId]?.postKey(action, keyCode, keyChar.toChar())
+        }
+
         override fun resize(sessionId: Int, widthPx: Int, heightPx: Int) {
             sessions[sessionId]?.postResize(widthPx, heightPx)
         }
@@ -151,6 +154,10 @@ class SwingRunSessionService : Service() {
         fun start() = thread.start()
 
         fun postPointer(action: Int, x: Float, y: Float) = pending.add { deliverPointer(action, x, y) }
+
+        fun postKey(action: Int, keyCode: Int, keyChar: Char) = pending.add {
+            ToolkitWindows.displayable().lastOrNull()?.key(action, keyCode, keyChar)
+        }
 
         fun postResize(w: Int, h: Int) = pending.add {
             width = w
@@ -227,12 +234,9 @@ class SwingRunSessionService : Service() {
             while (true) (pending.poll() ?: return).invoke()
         }
 
-        /** Deliver a forwarded pointer event to the frontmost window. */
+        /** Deliver a forwarded pointer event to the frontmost window, which owns press capture and focus. */
         private fun deliverPointer(action: Int, x: Float, y: Float) {
-            val window = ToolkitWindows.displayable().lastOrNull() ?: return
-            // The toolkit models a click as press + release + click; only a completed tap is forwarded as one,
-            // so ACTION_UP is the event that counts and MOVE/DOWN are absorbed until drag support exists.
-            if (action == MotionEvent.ACTION_UP) window.click(x.toInt(), y.toInt())
+            ToolkitWindows.displayable().lastOrNull()?.pointer(action, x.toInt(), y.toInt())
         }
 
         private fun repaintDirtyWindows() {

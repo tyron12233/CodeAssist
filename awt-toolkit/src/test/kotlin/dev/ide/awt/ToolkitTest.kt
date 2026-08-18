@@ -2,6 +2,10 @@ package dev.ide.awt
 
 import dev.ide.awt.event.ActionEvent
 import dev.ide.awt.event.ActionListener
+import dev.ide.awt.event.KeyAdapter
+import dev.ide.awt.event.KeyEvent
+import dev.ide.awt.event.MouseAdapter
+import dev.ide.awt.event.MouseEvent
 import dev.ide.preview.PaintStyle
 import dev.ide.swing.JButton
 import dev.ide.swing.JFrame
@@ -26,6 +30,16 @@ class ToolkitTest {
     @AfterTest fun tearDown() {
         ToolkitWindows.disposeAll()
         ToolkitEventQueue.clear()
+    }
+
+    private companion object {
+        // Mirrors dev.ide.build.engine.RunPointer / RunKey, which the toolkit does not depend on.
+        const val POINTER_DOWN = 0
+        const val POINTER_MOVE = 1
+        const val POINTER_UP = 2
+        const val KEY_DOWN = 0
+        const val KEY_UP = 1
+        const val CHAR_UNDEFINED = '\uFFFF'
     }
 
     private fun frame(title: String = "test", width: Int = 200, height: Int = 100): JFrame =
@@ -238,6 +252,102 @@ class ToolkitTest {
         button.doClick()
 
         assertEquals(0, fired)
+    }
+
+    @Test fun aDragOffTheButtonBeforeReleasingCancelsTheClick() {
+        // The gesture every touch UI has to get right: press, slide away, let go, and nothing fires.
+        val f = frame(width = 200, height = 100)
+        var fired = 0
+        val button = JButton("Click me")
+        button.addActionListener { fired++ }
+        f.add(button, BorderLayout.SOUTH)
+        f.setVisible(true)
+        f.validate()
+
+        val b = button.getBounds()
+        f.pointer(POINTER_DOWN, b.x + b.width / 2, b.y + b.height / 2)
+        f.pointer(POINTER_MOVE, b.x + b.width / 2, 5)
+        f.pointer(POINTER_UP, b.x + b.width / 2, 5)
+
+        assertEquals(0, fired, "a release outside the pressed button must not fire it")
+    }
+
+    @Test fun theComponentPressedKeepsTheGestureEvenAfterThePointerLeavesIt() {
+        val f = frame(width = 200, height = 100)
+        val seen = ArrayList<Int>()
+        val panel = object : JPanel() {}
+        panel.addMouseListener(object : MouseAdapter() {
+            override fun mousePressed(e: MouseEvent) { seen.add(e.id) }
+            override fun mouseReleased(e: MouseEvent) { seen.add(e.id) }
+        })
+        f.add(panel, BorderLayout.CENTER)
+        f.setVisible(true)
+        f.validate()
+
+        f.pointer(POINTER_DOWN, 20, 20)
+        // Far outside the panel: capture means the release still belongs to it.
+        f.pointer(POINTER_UP, -50, -50)
+
+        assertEquals(listOf(MouseEvent.MOUSE_PRESSED, MouseEvent.MOUSE_RELEASED), seen)
+    }
+
+    @Test fun keysReachTheComponentThatWasPressed() {
+        val f = frame(width = 200, height = 100)
+        val typed = StringBuilder()
+        val panel = object : JPanel() {}
+        panel.addKeyListener(object : KeyAdapter() {
+            override fun keyPressed(e: KeyEvent) { typed.append("P${e.getKeyCode()}") }
+            override fun keyTyped(e: KeyEvent) { typed.append(e.getKeyChar()) }
+            override fun keyReleased(e: KeyEvent) { typed.append("R") }
+        })
+        f.add(panel, BorderLayout.CENTER)
+        f.setVisible(true)
+        f.validate()
+
+        f.pointer(POINTER_DOWN, 20, 20)
+        f.pointer(POINTER_UP, 20, 20)
+        assertEquals(panel, f.getFocusOwner(), "pressing a component gives it the keyboard")
+
+        f.key(KEY_DOWN, KeyEvent.VK_SPACE, ' ')
+        f.key(KEY_UP, KeyEvent.VK_SPACE, ' ')
+
+        assertEquals("P32 R", typed.toString())
+    }
+
+    @Test fun aKeyWithNoCharacterProducesNoTypedEvent() {
+        val f = frame()
+        val events = ArrayList<Int>()
+        val panel = object : JPanel() {}
+        panel.addKeyListener(object : KeyAdapter() {
+            override fun keyPressed(e: KeyEvent) { events.add(e.id) }
+            override fun keyTyped(e: KeyEvent) { events.add(e.id) }
+        })
+        f.add(panel, BorderLayout.CENTER)
+        f.setVisible(true)
+        f.validate()
+        f.pointer(POINTER_DOWN, 5, 5)
+
+        f.key(KEY_DOWN, KeyEvent.VK_LEFT, CHAR_UNDEFINED)
+
+        assertEquals(listOf(KeyEvent.KEY_PRESSED), events, "an arrow key types nothing")
+    }
+
+    @Test fun aComponentThatRefusesFocusDoesNotTakeTheKeyboard() {
+        val f = frame(width = 200, height = 100)
+        val keeper = object : JPanel() {}
+        val refuser = object : JPanel() {}.apply { setFocusable(false) }
+        keeper.setPreferredSize(Dimension(0, 40))
+        refuser.setPreferredSize(Dimension(0, 40))
+        f.add(keeper, BorderLayout.NORTH)
+        f.add(refuser, BorderLayout.SOUTH)
+        f.setVisible(true)
+        f.validate()
+
+        f.pointer(POINTER_DOWN, 10, keeper.getY() + 5)
+        f.pointer(POINTER_UP, 10, keeper.getY() + 5)
+        f.pointer(POINTER_DOWN, 10, refuser.getY() + 5)
+
+        assertEquals(keeper, f.getFocusOwner(), "focus stays with the last component that would take it")
     }
 
     // ---- window lifetime ---------------------------------------------------------------------------

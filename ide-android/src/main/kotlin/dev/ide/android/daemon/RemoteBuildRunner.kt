@@ -245,7 +245,11 @@ class RemoteBuildRunner(context: Context, private val services: IdeServices) : B
     override fun sendRunInput(text: String) { runCatching { client.sendRunInput(text) } }
     override fun closeRunInput() { runCatching { client.closeRunInput() } }
 
-    override fun sendRunPointer(x: Float, y: Float) { runCatching { client.sendRunPointer(x, y) } }
+    override fun sendRunPointer(action: Int, x: Float, y: Float) { runCatching { client.sendRunPointer(action, x, y) } }
+
+    override fun sendRunKey(action: Int, keyCode: Int, keyChar: Char) { runCatching { client.sendRunKey(action, keyCode, keyChar) } }
+
+    override fun setRunSurfaceSize(widthPx: Int, heightPx: Int) { runCatching { client.setRunSurfaceSize(widthPx, heightPx) } }
     override fun answerPermission(id: Int, decision: UiPermissionDecision) { runCatching { client.answerPermission(id, decision.ordinal) } }
 
     /** Fires on first connect AND on every auto-restart after a daemon death — (re)drive a pending build so a

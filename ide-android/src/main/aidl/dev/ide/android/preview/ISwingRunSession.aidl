@@ -27,11 +27,16 @@ interface ISwingRunSession {
         in String[] classpath, String mainClass, in String[] args,
         int widthPx, int heightPx, String frameDir, ISwingRunCallback cb);
 
-    // Forward a pointer event into the program's window. [action] is a MotionEvent action
-    // (ACTION_DOWN/MOVE/UP/CANCEL); [x]/[y] are in the frame's pixel space, which the IDE maps from the tap on
-    // the displayed frame. oneway, so a stream of MOVE events never blocks the IDE; the session queues it onto
-    // the toolkit thread, which is the only thread that ever touches the widget tree.
+    // Forward a pointer event into the program's window. [action] is a RunPointer constant (DOWN/MOVE/UP/
+    // CANCEL, the neutral ones, so neither side has to speak MotionEvent); [x]/[y] are in the frame's pixel
+    // space, which the IDE maps from the touch on the displayed frame. oneway, so a stream of MOVE events never
+    // blocks the IDE; the session queues it onto the toolkit thread, the only thread that touches the widgets.
     oneway void dispatchPointer(int sessionId, int action, float x, float y, long eventTimeMs);
+
+    // Forward a key event. [action] is a RunKey constant (DOWN/UP), [keyCode] an AWT VK_ code, and [keyChar]
+    // the character typed as an int (RunKey.CHAR_UNDEFINED when the key produces none). It reaches whichever
+    // component holds focus, which the toolkit gives to the last component pressed.
+    oneway void dispatchKey(int sessionId, int action, int keyCode, int keyChar, long eventTimeMs);
 
     // Re-target the painted surface when the run pane resizes. The program's windows are laid out again at the
     // new size and a frame follows. oneway.

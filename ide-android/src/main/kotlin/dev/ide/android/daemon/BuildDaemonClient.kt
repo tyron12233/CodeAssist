@@ -117,7 +117,9 @@ class BuildDaemonClient(
     fun stopBuild() = runCatching { daemon?.stopBuild() }
     fun sendRunInput(text: String) = runCatching { daemon?.sendRunInput(text) }
     fun closeRunInput() = runCatching { daemon?.closeRunInput() }
-    fun sendRunPointer(x: Float, y: Float) = runCatching { daemon?.sendRunPointer(x, y) }
+    fun sendRunPointer(action: Int, x: Float, y: Float) = runCatching { daemon?.sendRunPointer(action, x, y) }
+    fun sendRunKey(action: Int, keyCode: Int, keyChar: Char) = runCatching { daemon?.sendRunKey(action, keyCode, keyChar.code) }
+    fun setRunSurfaceSize(widthPx: Int, heightPx: Int) = runCatching { daemon?.setRunSurfaceSize(widthPx, heightPx) }
     fun answerPermission(id: Int, decision: Int) = runCatching { daemon?.answerPermission(id, decision) }
     fun clearAppLog() = runCatching { daemon?.clearAppLog() }
     fun unbind() = runCatching { appContext.unbindService(connection) }
