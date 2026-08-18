@@ -8,7 +8,9 @@ import dev.ide.build.engine.StreamingTextDecoder
 import dev.ide.jvm.AsmPeerFactory
 import dev.ide.jvm.ClassBytesSource
 import dev.ide.jvm.InterpretPolicy
+import dev.ide.jvm.PeerDispatch
 import dev.ide.jvm.PeerFactory
+import dev.ide.jvm.PeerSpec
 import dev.ide.jvm.Vm
 import dev.ide.jvm.VmInterruptedException
 import dev.ide.jvm.VmMethodView
@@ -45,8 +47,11 @@ import java.util.jar.JarFile
  * large-stack thread in its own [ThreadGroup] (interpreted recursion uses the host stack); a `Thread` the
  * program starts is a REAL host thread that inherits the group and runs interpreted bytecode concurrently on
  * the multi-threaded [Vm]. As on a real JVM, the run ends when `main` AND every non-daemon thread it started
- * have finished. Cancellation asks the VM to stop (its loop unwinds even a tight compute loop) and interrupts
- * the whole group (to break a blocked stdin read, `sleep`, `wait`, or `join` on any thread).
+ * have finished, AND every window it opened has closed (see [ProgramWindows]). That last one is what a GUI
+ * program still has outstanding when `main` returns, since it lives on afterwards on the AWT event thread,
+ * which belongs to the host rather than to this group. Cancellation disposes those windows, asks the VM to
+ * stop (its loop unwinds even a tight compute loop), and interrupts the whole group (to break a blocked stdin
+ * read, `sleep`, `wait`, or `join` on any thread).
  *
  * [peerFactory] produces the real subclasses that let platform code invoke an interpreted object's overrides
  * (e.g. a `Comparator` handed to `Collections.sort`). Desktop uses the default ASM factory; a device host
@@ -59,7 +64,12 @@ class VmProgramInterpreter(
     override suspend fun run(request: InterpretRunRequest, io: ProgramIo): Int = withContext(Dispatchers.IO) {
         val jars = ArrayList<JarFile>()
         val source = classpathSource(request.classpath, jars)
-        val vm = Vm(source, InterpretPolicy.DEFAULT, RunBridge(javaClass.classLoader), peerFactory, SPAWNED_STACK_BYTES)
+        // Windows the program opens keep the run alive past `main`; they are created either as a peer (the
+        // program's own `class MyFrame extends JFrame`) or through the bridge (a plain `new JFrame()`), so both
+        // producers report into the same tracker.
+        val windows = ProgramWindows()
+        val bridge = RunBridge(javaClass.classLoader, windows)
+        val vm = Vm(source, InterpretPolicy.DEFAULT, bridge, WindowTrackingPeers(peerFactory, windows), SPAWNED_STACK_BYTES)
         val outcome = Outcome()
         // A dedicated group so every Thread the program starts (a real host thread, created by the creating
         // thread) inherits it and can be interrupted together on Stop.
@@ -87,6 +97,7 @@ class VmProgramInterpreter(
                     try {
                         awaitCancellation()
                     } finally {
+                        windows.disposeAll()
                         vm.requestCancel()
                         group.interrupt()
                         runCatching { thread.join(2000) }
@@ -94,16 +105,26 @@ class VmProgramInterpreter(
                 }
                 thread.start()
                 try {
-                    // Wait for main, then for the non-daemon threads it started (JVM exit semantics).
+                    // Wait for main, then for the non-daemon threads it started (JVM exit semantics), then for
+                    // the program's windows: a GUI program's `main` returns at `setVisible(true)` and the
+                    // program lives on afterwards on the AWT event thread, which is outside this group.
                     runInterruptible {
                         thread.join()
                         awaitNonDaemonThreads(group)
+                        if (outcome.error !is ControlledExit) awaitWindowsClosed(windows)
                     }
                 } finally {
                     killer.cancel()
                 }
             }
         } finally {
+            // The program's threads are already unwound here: `killer.cancel()` above runs the killer's
+            // `finally` (VM cancel + group interrupt) and `coroutineScope` waits for it to finish. Its windows
+            // are not, on the one path that skips the wait: a `System.exit`, which on a real JVM takes the
+            // windows with it. Nothing the program owns may outlive the run and reach a jar the next lines
+            // close (a class it had not loaded yet then fails with `IllegalStateException: zip file closed`)
+            // or a console that has already been detached.
+            windows.disposeAll()
             System.setOut(savedOut); System.setErr(savedErr); System.setIn(savedIn)
             jars.forEach { runCatching { it.close() } }
         }
@@ -127,6 +148,15 @@ class VmProgramInterpreter(
             if (pending.isEmpty()) return
             pending.forEach { it.join() }
         }
+    }
+
+    /** Block while the program still has a window on screen, so a GUI run lasts as long as its UI does. Polled
+     *  rather than event-driven: the alternative is an AWT window listener, and this module is shared with the
+     *  device, where `java.awt` does not exist. Costs one reflective `isDisplayable` per tracked window per
+     *  interval, and a program with no windows (every console run) never enters the loop. An interrupt (Stop,
+     *  which disposes the windows first) propagates out as cancellation. */
+    private fun awaitWindowsClosed(windows: ProgramWindows) {
+        while (windows.liveCount() > 0) Thread.sleep(WINDOW_POLL_MS)
     }
 
     /** Resolve and invoke the program entry point: prefer a static `main` (with or without a `String[]`), else
@@ -198,8 +228,30 @@ class VmProgramInterpreter(
         }
     }
 
+    /**
+     * A [PeerFactory] that reports every peer it builds to [windows]. A program's own window class
+     * (`class MyFrame extends JFrame`) reaches the platform as a generated peer, not through the bridge's
+     * `construct`, so this is the only place that instance can be seen.
+     */
+    private class WindowTrackingPeers(
+        private val delegate: PeerFactory,
+        private val windows: ProgramWindows,
+    ) : PeerFactory by delegate {
+        override fun createPeer(
+            vmObject: Any,
+            spec: PeerSpec,
+            dispatch: PeerDispatch,
+            superConstructorDescriptor: String,
+            superConstructorArgs: List<Any?>,
+        ): Any = delegate.createPeer(vmObject, spec, dispatch, superConstructorDescriptor, superConstructorArgs)
+            .also { windows.record(it) }
+    }
+
     private companion object {
         val ARGS_DESC = listOf("[Ljava/lang/String;")
+        /** How often [awaitWindowsClosed] rechecks. Long enough to be free, short enough that the run console
+         *  flips to finished the moment the user closes the window. */
+        const val WINDOW_POLL_MS = 100L
         // Interpreted recursion runs on this thread's host stack, so give it plenty of headroom (matches the
         // old in-process dex runner's user-main thread).
         const val STACK_BYTES = 16L * 1024 * 1024
