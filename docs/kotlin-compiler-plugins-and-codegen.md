@@ -168,6 +168,36 @@ sources ┤                                                 ├─ compileKotlin
         └─────────────── (generated roots) ──────────────┘
 ```
 
+### The Gradle-plugin half
+
+Running the processor is not always the whole of a "KSP library". Several ship a **Gradle plugin** that
+contributes two things a project's build files never spell out, because applying the plugin is the opt-in:
+processor options, and (for some) a bytecode transform. There is no Gradle plugin here, so this build
+system owns both halves, and they have to ship together.
+
+**Hilt is the case that forced this.** Its plugin sets
+`dagger.hilt.android.internal.disableAndroidSuperclassValidation=true`, without which the processor rejects
+a plain `@AndroidEntryPoint` (the form every AGP project uses) with *"Expected @AndroidEntryPoint to have a
+value. Did you forget to apply the Gradle Plugin?"*. That option is a **promise**: it tells the processor
+that something else will rewrite each annotated class to extend the `Hilt_`-prefixed base the processor
+generates. In an AGP build the plugin's ASM instrumentation does it; here `transformHiltClasses`
+(`HiltEntryPoints`) does, on the module's own compiled classes, between `compileJava`/`compileKotlin` and
+dex/jar. Setting the option without doing the rewrite would only trade a build error for an app that
+silently injects nothing.
+
+Two shapes fall out of this, both reusable by the next library that needs them:
+
+- **Per-processor options** live on the catalog entry (`KspProcessor.options`) and are merged for the
+  processors that actually run, so a Room-only module's KSP invocation is unchanged.
+- **A post-compile class transform** is a task producing a *copy* of the compile output, which then
+  replaces it as the dex/R8/jar input. Not an in-place rewrite: that would leave the compile task's own
+  output fingerprint changed behind its back, so it would never be up to date again. Not an overlay dir
+  either: the per-class dexer keys by package-relative path and would take the layer, but R8 jars each
+  program dir separately and would see the class twice. The transform is gated on the module *declaring*
+  the runtime (the same explicit-opt-in rule that decides whether the processor runs), and rewrites a class
+  only when the generated base is present in the output, so a build where the processor did not run is left
+  alone rather than pointed at a type that doesn't exist.
+
 ### Incrementality
 
 Lean on KSP's own incremental model (`Dependencies`, aggregating/isolating outputs) rather than teaching

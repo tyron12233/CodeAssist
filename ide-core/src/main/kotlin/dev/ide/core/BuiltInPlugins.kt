@@ -399,6 +399,9 @@ private class KspSupportPlugin(private val env: ApplicationEnvironment) : Plugin
                 preflight = { req ->
                     catalog.preflight(req.classpath, req.declaredDependencies, req.acceptedWarnings)
                 },
+                // The processor options a library's own Gradle plugin would contribute (Hilt's
+                // `disableAndroidSuperclassValidation`), which no project build file spells out.
+                processorOptions = { req -> catalog.optionsFor(req.classpath, req.declaredDependencies) },
                 loader = loader,
                 jdkHome = jdkHome,
             ),

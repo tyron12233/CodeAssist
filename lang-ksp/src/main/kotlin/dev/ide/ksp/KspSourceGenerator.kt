@@ -47,8 +47,14 @@ class KspSourceGenerator(
         { KspProcessorCatalog.Preflight() },
     /** Loads [runnerClasspath] + processors: `URLClassLoader` on desktop, `DexClassLoader` (bundled dex) on ART. */
     private val loader: KspProcessorLoader = DefaultKspProcessorLoader,
-    /** Per-module KSP processor options (`room.generateKotlin`, `room.schemaLocation`, …). */
-    private val processorOptions: (moduleName: String) -> Map<String, String> = { emptyMap() },
+    /**
+     * KSP processor options (`room.generateKotlin`, Hilt's `disableAndroidSuperclassValidation`, …) for the
+     * module being generated. Takes the whole request, not just the module name, because the options that
+     * matter are per-PROCESSOR (the ones a library's Gradle plugin would contribute), so the resolver has to
+     * see the same classpath/declared-dependency signal that decides which processors run (typically
+     * [KspProcessorCatalog.optionsFor]).
+     */
+    private val processorOptions: (request: SourceGenRequest) -> Map<String, String> = { emptyMap() },
     /** JDK home for the KSP frontend's Java resolution (null on ART; the host JDK on desktop). */
     private val jdkHome: Path? = null,
     private val languageVersion: String = DEFAULT_LANGUAGE_VERSION,
@@ -126,7 +132,7 @@ class KspSourceGenerator(
             apiVersion = this@KspSourceGenerator.apiVersion
             jvmTarget = this@KspSourceGenerator.jvmTarget
             jdkHome = this@KspSourceGenerator.jdkHome?.toFile()
-            processorOptions = this@KspSourceGenerator.processorOptions(request.moduleName)
+            processorOptions = this@KspSourceGenerator.processorOptions(request)
         }.build()
 
         return runCatching { runKsp(cl, config, providers, logger) }

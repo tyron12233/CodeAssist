@@ -28,6 +28,7 @@ import dev.ide.android.support.tasks.R8MinifyTask
 import dev.ide.android.support.tasks.SharedLibraryDexer
 import dev.ide.android.support.tasks.SignApkTask
 import dev.ide.android.support.tasks.SignBundleTask
+import dev.ide.android.support.tasks.TransformHiltClassesTask
 import dev.ide.android.support.tools.Aapt2
 import dev.ide.android.support.tools.Aapt2Subprocess
 import dev.ide.android.support.tools.AndroidAppLogRuntime
@@ -80,6 +81,7 @@ import dev.ide.model.ClasspathEntryKind
 import dev.ide.model.ContentRole
 import dev.ide.model.DependencyScope
 import dev.ide.model.LanguageLevel
+import dev.ide.model.LibraryDependency
 import dev.ide.model.Module
 import dev.ide.model.ModuleDependency
 import dev.ide.model.ModuleId
@@ -456,6 +458,20 @@ class AndroidBuildSystem(
 
         if (goal == BuildGoal.COMPILE_ONLY) return
 
+        // Hilt: rewrite each `@AndroidEntryPoint`/`@HiltAndroidApp` class to extend its generated `Hilt_`
+        // sibling: the half of Hilt that the Gradle plugin (which this build system has no equivalent of)
+        // contributes, and which the processor option the IDE passes it promises will happen. The rewritten
+        // copy REPLACES the raw compile output as the dex/R8 input; the raw dirs stay untouched, so they
+        // remain the compile classpath and the compile tasks keep their up-to-date check.
+        val transformHilt = if (usesHilt(app)) step("transformHiltClasses") else null
+        if (transformHilt != null) {
+            val deps = listOf(compile) + if (appHasKotlin) listOf(compileKotlin) else emptyList()
+            tasks.task(transformHilt, deps) {
+                TransformHiltClassesTask(transformHilt, appProjectClasses, layout.hiltClasses)
+            }
+        }
+        val dexProjectClasses = if (transformHilt != null) listOf(layout.hiltClasses) else appProjectClasses
+
         val pkg = step("packageApk")
         val sign = step("sign")
 
@@ -538,9 +554,9 @@ class AndroidBuildSystem(
             val resourceShrink = if (shrinkResources) ResourceShrink(layout.protoAp, layout.shrunkProtoAp) else null
 
             val minifyTask = TaskName(":${app.name}:minify${v}WithR8")
-            tasks.task(minifyTask, listOf(aapt2Link, generateRFile, compile) + moduleJarProducers) {
+            tasks.task(minifyTask, listOf(aapt2Link, generateRFile, compile) + listOfNotNull(transformHilt) + moduleJarProducers) {
                 R8MinifyTask(
-                    minifyTask, appProjectClasses + subProjectJars + externalJars + rJars, sdk.androidJar, facet.minSdk,
+                    minifyTask, dexProjectClasses + subProjectJars + externalJars + rJars, sdk.androidJar, facet.minSdk,
                     keepRuleFiles, inlineRules, facet.r8FullMode,
                     layout.dexArchives.resolve("r8-staging"), layout.dex, shrinker,
                     mappingOutput = layout.mappingTxt,
@@ -570,8 +586,8 @@ class AndroidBuildSystem(
             // fork helps it too. Otherwise R stays in dexBuilder + the project merge (AGP's scope for R).
             val forkedR = dexExtOnePass
             val dexBuilder = step("dexBuilder")
-            tasks.task(dexBuilder, listOf(compile, generateRFile) + moduleJarProducers) {
-                DexArchiveBuilderTask(dexBuilder, appProjectClasses, subProjectJars, externalJars, sdk.androidJar,
+            tasks.task(dexBuilder, listOf(compile, generateRFile) + listOfNotNull(transformHilt) + moduleJarProducers) {
+                DexArchiveBuilderTask(dexBuilder, dexProjectClasses, subProjectJars, externalJars, sdk.androidJar,
                     facet.minSdk, release, layout.dexArchives.resolve("project.jar"),
                     layout.projectArchives, layout.subArchives, layout.extArchives, dexer, dexCacheRoot,
                     desugaredLibConfig = desugarJson,
@@ -812,9 +828,19 @@ class AndroidBuildSystem(
         val classes = TaskName(":${m.name}:classes")
         val classDirs = listOf(classesOut) + if (libHasKotlin) listOf(libKotlin) else emptyList()
         tasks.task(classes, listOf(compile, procRes)) { LifecycleTask(classes, trackedDirs = classDirs + buildDir.resolve("resources")) }
+        // A library's own `@AndroidEntryPoint` fragments/views need the same superclass rewrite as an app's,
+        // and its `jar` is what the consuming app dexes (and what `assembleAar` packages), so the rewritten
+        // copy is what gets jarred. The raw class dirs stay the compile classpath for dependent modules.
+        val transformHilt = if (usesHilt(m)) TaskName(":${m.name}:transformHiltClasses") else null
+        val hiltClasses = buildDir.resolve("intermediates").resolve("hilt-classes")
+        if (transformHilt != null) {
+            tasks.task(transformHilt, listOf(classes)) { TransformHiltClassesTask(transformHilt, classDirs, hiltClasses) }
+        }
         if (withJar) {
             val jar = TaskName(":${m.name}:jar")
-            tasks.task(jar, listOf(classes)) { JarTask(jar, classDirs, jarPath(m)) }
+            tasks.task(jar, listOf(classes) + listOfNotNull(transformHilt)) {
+                JarTask(jar, if (transformHilt != null) listOf(hiltClasses) else classDirs, jarPath(m))
+            }
         }
     }
 
@@ -882,6 +908,20 @@ class AndroidBuildSystem(
 
     /** True if module [m] carries Kotlin sources (and Kotlin compilation is wired). */
     private fun moduleHasKotlin(m: Module): Boolean = kotlin != null && containsKotlin(moduleRoots(m, ContentRole.SOURCE))
+
+    /**
+     * True when [m] **directly declares** the Hilt Android runtime, so its compiled classes need the
+     * `@AndroidEntryPoint` superclass rewrite ([dev.ide.android.support.tools.HiltEntryPoints]).
+     *
+     * Gated on the declared coordinate rather than a classpath probe for two reasons: it is the same
+     * explicit-opt-in rule that decides whether the bundled Hilt KSP processor runs at all (a module that only
+     * reaches Hilt transitively generates no `Hilt_` classes, so there is nothing to rewrite), and it is model
+     * data, available while the task graph is being built, where a probe would have to open every dependency
+     * jar and would read an AAR that a first, clean build has not exploded yet.
+     */
+    private fun usesHilt(m: Module): Boolean = m.dependencies
+        .filterIsInstance<LibraryDependency>()
+        .any { it.library.name.split(':').take(2).joinToString(":") == HILT_ANDROID_COORDINATE }
 
     /** A module's content roots tagged with [role], across its non-test source sets. */
     private fun moduleRoots(m: Module, role: ContentRole): List<Path> =
@@ -985,6 +1025,9 @@ class AndroidBuildSystem(
         val kspGen: Path = moduleDirField.resolve("build").resolve("generated").resolve("ksp").resolve(variantName)
         val classes: Path = inter.resolve("classes")
         val kotlinClasses: Path = inter.resolve("kotlin-classes")   // K2 output (dexed as project scope)
+        // transformHiltClasses output: `classes` + `kotlin-classes` copied with Hilt's `@AndroidEntryPoint`
+        // superclass rewrite applied. Replaces both as the dex/R8 input when the module uses Hilt.
+        val hiltClasses: Path = inter.resolve("hilt-classes")
         val dexArchives: Path = inter.resolve("dex-archives")   // dexBuilder scope roots + the project staging jar
         val projectArchives: Path = dexArchives.resolve("project")  // dexBuilder: app classes, per content hash
         val subArchives: Path = dexArchives.resolve("sub")          // dexBuilder: sub-module jars, per content hash
@@ -1025,6 +1068,10 @@ class AndroidBuildSystem(
     }
 
     companion object {
+        /** The `group:name` of the Hilt runtime that carries `@AndroidEntryPoint`: the module's opt-in
+         *  signal for the entry-point rewrite (see [usesHilt]). */
+        private const val HILT_ANDROID_COORDINATE = "com.google.dagger:hilt-android"
+
         private fun String.cap() = replaceFirstChar { it.uppercase() }
 
         /** The signed-APK output path for [module] + [variantName] (matches [Layout.signedApk]) — so a host

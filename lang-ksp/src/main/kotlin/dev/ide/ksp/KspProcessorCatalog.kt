@@ -41,6 +41,13 @@ class KspProcessor(
      * Empty ⇒ no known requirement beyond the runtime being present at all.
      */
     val requiredRuntimeClasses: List<String> = emptyList(),
+    /**
+     * Processor options (KSP's `-P ksp:apoption=…`) to pass whenever this processor runs: the ones a
+     * processor's own **Gradle plugin** would contribute, which a project's build files never spell out and
+     * this build system therefore has to supply itself. Merged across the applicable processors
+     * ([KspProcessorCatalog.optionsFor]).
+     */
+    val options: Map<String, String> = emptyMap(),
     /** The processor's classpath (bundled in-app). Empty ⇒ the processor isn't bundled in this build → skipped. */
     val jars: () -> List<Path>,
 )
@@ -87,6 +94,11 @@ class KspProcessorCatalog(val processors: List<KspProcessor>) {
     /** The union of the RUN-eligible processors' bundled jars (declared-aware; skips any not bundled here). */
     fun classpathFor(classpath: List<Path>, declaredDependencies: List<String>): List<Path> =
         applicable(classpath, declaredDependencies).flatMap { it.jars() }.filter { Files.exists(it) }
+
+    /** The merged [KspProcessor.options] of the RUN-eligible processors: the processor options a project
+     *  would otherwise get from each library's Gradle plugin. Later processors win a (never expected) clash. */
+    fun optionsFor(classpath: List<Path>, declaredDependencies: List<String>): Map<String, String> =
+        applicable(classpath, declaredDependencies).fold(LinkedHashMap()) { acc, p -> acc.putAll(p.options); acc }
 
     /**
      * A RUN-eligible processor whose generated code the module's declared runtime is too OLD to compile:
@@ -173,6 +185,21 @@ class KspProcessorCatalog(val processors: List<KspProcessor>) {
         const val GLIDE_MARKER = "com/bumptech/glide/annotation/GlideModule.class"
 
         /**
+         * The processor option Hilt's **Gradle plugin** sets, and which Hilt's processor requires before it
+         * will read an `@AndroidEntryPoint` class's base type from the class's own `extends` clause.
+         *
+         * Without it the processor insists the annotation carry an explicit base: `@AndroidEntryPoint` with
+         * no value fails the build with "Expected @AndroidEntryPoint to have a value. Did you forget to apply
+         * the Gradle Plugin?", which is exactly the setup every Hilt project written for AGP has.
+         *
+         * The option is a promise that something rewrites each annotated class to extend the generated
+         * `Hilt_` sibling; in an AGP build that is the plugin's bytecode transform, here it is
+         * `transformHiltClasses` (`dev.ide.android.support.tools.HiltEntryPoints`). The two must ship
+         * together: the option alone turns a build error into an app that silently never injects anything.
+         */
+        val HILT_OPTIONS = mapOf("dagger.hilt.android.internal.disableAndroidSuperclassValidation" to "true")
+
+        /**
          * The blessed catalog (Room, Moshi, Hilt/Dagger, Glide). Each entry's [KspProcessor.jars] is supplied
          * by [bundledJars] — keyed by processor id — so the host wires in whatever it bundles (e.g. an
          * extracted asset dir); an id with no bundled jars is simply skipped. Keeping the id→jars mapping
@@ -202,6 +229,7 @@ class KspProcessorCatalog(val processors: List<KspProcessor>) {
                         // code used `javax.inject.Provider`). A project pinning an older Hilt otherwise builds
                         // to "The import dagger.internal.Provider cannot be resolved" in every generated file.
                         requiredRuntimeClasses = listOf("dagger/internal/Provider.class"),
+                        options = HILT_OPTIONS,
                     ) { bundledJars("hilt") },
                     KspProcessor(
                         "glide", "Glide", "Generate Glide's GlideApp/module API from @GlideModule.",
