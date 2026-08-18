@@ -33,6 +33,8 @@ import dev.ide.core.sync.ProjectSyncService
 import dev.ide.core.templates.CalculatorSampleTemplate
 import dev.ide.core.templates.JavaConsoleAppTemplate
 import dev.ide.core.templates.JavaLibraryTemplate
+import dev.ide.core.templates.SwingAppTemplate
+import dev.ide.core.templates.SwingCanvasTemplate
 import dev.ide.core.templates.KotlinConsoleAppTemplate
 import dev.ide.core.templates.KotlinLibraryTemplate
 import dev.ide.core.templates.NotesSampleTemplate
@@ -279,6 +281,8 @@ private class JavaSupportPlugin : Plugin {
             val templates = ProjectTemplateRegistry(ext)
             templates.register(JavaConsoleAppTemplate, pid)
             templates.register(JavaLibraryTemplate, pid)
+            templates.register(SwingAppTemplate, pid)
+            templates.register(SwingCanvasTemplate, pid)
         }
     }
 }
