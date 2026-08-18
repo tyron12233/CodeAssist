@@ -39,6 +39,7 @@ import dev.ide.build.engine.GuardCategory
 import dev.ide.build.engine.Guards
 import dev.ide.build.engine.PermissionBroker
 import dev.ide.build.engine.ProgramIo
+import dev.ide.build.engine.RunPointerInput
 import dev.ide.build.engine.SimpleTaskContext
 import dev.ide.build.engine.TaskExecutorImpl
 import dev.ide.build.engine.TaskStatus
@@ -74,6 +75,7 @@ import dev.ide.ui.backend.BuildStepUi
 import dev.ide.ui.backend.ConsoleChunk
 import dev.ide.ui.backend.ConsoleChunkKind
 import dev.ide.ui.backend.RunConsoleUi
+import dev.ide.ui.backend.RunFrameUi
 import dev.ide.ui.backend.RunPhase
 import dev.ide.ui.backend.RunStatus
 import dev.ide.ui.backend.RunTaskOption
@@ -319,6 +321,14 @@ internal class BuildService(private val ctx: EngineContext) : Disposable {
     @Volatile
     private var currentRunIo: RunProgramIo? = null
 
+    /** Set while a WINDOWED program is running: the way a tap on its frame reaches it. */
+    private var currentRunPointer: RunPointerInput? = null
+
+    /** Forward a tap on the run surface into a windowed program. Ignored when the run has no window. */
+    fun sendRunPointer(x: Float, y: Float) {
+        currentRunPointer?.tap(x, y)
+    }
+
     /** Feed a line of input to the running program (newline appended) and echo it into the transcript. */
     fun sendRunInput(text: String) {
         val io = currentRunIo ?: return
@@ -384,6 +394,7 @@ internal class BuildService(private val ctx: EngineContext) : Disposable {
         }
         currentRunIo?.input?.close()
         currentRunIo = null
+        currentRunPointer = null
     }
 
     /** The host's [ProgramIo] for a console run: routes the program's output into [runConsole], provides a
@@ -399,6 +410,16 @@ internal class BuildService(private val ctx: EngineContext) : Disposable {
             if (_runConsole.value?.id == sessionId) appendConsoleChunk(
                 ConsoleChunkKind.OUTPUT, text
             )
+        }
+
+        override fun frame(path: String, width: Int, height: Int, seq: Long) {
+            _runConsole.update {
+                if (it?.id == sessionId) it.copy(frame = RunFrameUi(path, width, height, seq)) else it
+            }
+        }
+
+        override fun windowed(input: RunPointerInput) {
+            if (_runConsole.value?.id == sessionId) currentRunPointer = input
         }
 
         override fun started() {

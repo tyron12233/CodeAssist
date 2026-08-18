@@ -588,7 +588,18 @@ data class RunConsoleUi(
     val transcript: List<ConsoleChunk> = emptyList(),
     val acceptsInput: Boolean = false,
     val exitCode: Int? = null,
+    /** The latest frame of a windowed program's UI, or null for a console run (the common case). */
+    val frame: RunFrameUi? = null,
 )
+
+/**
+ * One frame of a windowed program: raw RGBA_8888 pixels, row-major, in the file at [path].
+ *
+ * A path rather than the bytes, and rather than a platform image type: the pixels come from another process
+ * over the shared filesystem, and this type crosses into multiplatform UI code. [seq] increases monotonically,
+ * so a screen redrawing slower than the program repaints can tell a new frame from the one it already drew.
+ */
+class RunFrameUi(val path: String, val width: Int, val height: Int, val seq: Long)
 
 /** Severity of a [BuildLogLine] — drives the per-line color and the Log tab's level filter. */
 enum class UiLogLevel { Debug, Info, Warn, Error }

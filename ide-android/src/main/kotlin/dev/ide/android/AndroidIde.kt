@@ -8,6 +8,7 @@ import dev.ide.analytics.AnalyticsEvent
 import dev.ide.analytics.DeviceInfo
 import dev.ide.analytics.EventCategory
 import dev.ide.analytics.Events
+import dev.ide.android.preview.SwingAwareProgramInterpreter
 import dev.ide.build.jvm.run.VmProgramInterpreter
 import dev.ide.analytics.impl.AnalyticsLogSink
 import dev.ide.analytics.impl.DefaultAnalyticsService
@@ -152,7 +153,13 @@ object AndroidIde {
         // Runs a console app by INTERPRETING its compiled bytecode on the VM — no dexing, no dynamic class
         // loading of the user's/libraries' code. The peer factory dexes the small generated peer classes the
         // VM needs when an interpreted object is handed to real platform code (a Comparator, a Runnable).
-        val programInterpreter = VmProgramInterpreter(peerFactory = DexPeerFactory())
+        // A WINDOWED program (a Swing app) cannot run this way: ART has no java.awt and no javax.swing, so the
+        // bridge would ask it for a class no device has, and a console has no surface to draw on anyway. Those
+        // go to the owned toolkit in :preview instead, and their frames come back to the Run screen.
+        val programInterpreter = SwingAwareProgramInterpreter(
+            context,
+            VmProgramInterpreter(peerFactory = DexPeerFactory()),
+        )
         // Installs + launches a built APK (the android Run) via the system package installer.
         val apkInstaller = ApkInstallerImpl(context)
         // The debug-only in-app log bridge: extract the bundled runtime jar (woven into debug builds); the

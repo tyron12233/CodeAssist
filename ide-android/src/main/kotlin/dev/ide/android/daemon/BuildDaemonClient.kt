@@ -24,6 +24,8 @@ class BuildDaemonClient(
     private val onDiagnostic: (severity: String, message: String, kind: String, source: String, file: String?, line: Int, column: Int, detail: String?, task: String?) -> Unit = { _, _, _, _, _, _, _, _, _ -> },
     private val onRunConsole: (runId: Int, moduleName: String, mainClass: String, phase: Int, acceptsInput: Boolean, hasExit: Boolean, exitCode: Int) -> Unit = { _, _, _, _, _, _, _ -> },
     private val onConsoleChunk: (runId: Int, text: String, kind: Int) -> Unit = { _, _, _ -> },
+    private val onRunFrame: (runId: Int, path: String, width: Int, height: Int, seq: Long) -> Unit =
+        { _, _, _, _, _ -> },
     private val onPermission: (reqId: Int, category: String, detail: String) -> Unit = { _, _, _ -> },
     /** The daemon installed an android-app APK; launch it here in the UI process (foreground-activity rules). */
     private val onLaunchPackage: (packageName: String) -> Unit = {},
@@ -62,6 +64,10 @@ class BuildDaemonClient(
         override fun onRunConsole(runId: Int, moduleName: String?, mainClass: String?, phase: Int, acceptsInput: Boolean, hasExit: Boolean, exitCode: Int) =
             onRunConsole.invoke(runId, moduleName ?: "", mainClass ?: "", phase, acceptsInput, hasExit, exitCode)
         override fun onConsoleChunk(runId: Int, text: String?, kind: Int) = onConsoleChunk.invoke(runId, text ?: "", kind)
+
+        override fun onRunFrame(runId: Int, path: String?, width: Int, height: Int, seq: Long) {
+            onRunFrame.invoke(runId, path ?: return, width, height, seq)
+        }
         override fun onPermission(reqId: Int, category: String?, detail: String?) = onPermission.invoke(reqId, category ?: "", detail ?: "")
         override fun onLaunchPackage(packageName: String?) = onLaunchPackage.invoke(packageName ?: "")
         override fun onAppLog(level: Int, tag: String?, pid: Int, tid: Int, message: String?, timestampMs: Long) =
@@ -111,6 +117,7 @@ class BuildDaemonClient(
     fun stopBuild() = runCatching { daemon?.stopBuild() }
     fun sendRunInput(text: String) = runCatching { daemon?.sendRunInput(text) }
     fun closeRunInput() = runCatching { daemon?.closeRunInput() }
+    fun sendRunPointer(x: Float, y: Float) = runCatching { daemon?.sendRunPointer(x, y) }
     fun answerPermission(id: Int, decision: Int) = runCatching { daemon?.answerPermission(id, decision) }
     fun clearAppLog() = runCatching { daemon?.clearAppLog() }
     fun unbind() = runCatching { appContext.unbindService(connection) }

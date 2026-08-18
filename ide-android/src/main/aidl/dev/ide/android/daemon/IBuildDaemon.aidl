@@ -31,6 +31,8 @@ interface IBuildDaemon {
     // --- Phase 4: interactive run (the program runs in :build; these drive its stdin + the sandbox prompts).
     void sendRunInput(String text);   // feed one line of stdin to the running program
     void closeRunInput();             // EOF the program's stdin
+    // Forward a tap on the run surface into a WINDOWED program; x/y are in the frame's pixel space.
+    oneway void sendRunPointer(float x, float y);
     void answerPermission(int id, int decision); // answer a pending sandbox prompt (UiPermissionDecision ordinal)
     void clearAppLog();               // clear the app-log (Logcat) buffer
 

@@ -28,6 +28,7 @@ interface BuildRunner {
     fun stopBuild()
     fun sendRunInput(text: String)
     fun closeRunInput()
+    fun sendRunPointer(x: Float, y: Float)
     fun answerPermission(id: Int, decision: UiPermissionDecision)
     fun clearAppLog()
 }
@@ -49,5 +50,6 @@ internal class InProcessBuildRunner(private val build: dev.ide.core.services.Bui
     override fun stopBuild() = build.stopBuild()
     override fun sendRunInput(text: String) = build.sendRunInput(text)
     override fun closeRunInput() = build.closeRunInput()
+    override fun sendRunPointer(x: Float, y: Float) = build.sendRunPointer(x, y)
     override fun answerPermission(id: Int, decision: UiPermissionDecision) = build.answerPermission(id, decision)
 }

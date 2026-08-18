@@ -111,13 +111,21 @@ class SwingRunRemoteClient(context: Context) {
         heightPx: Int,
         frameDir: File,
         host: Host,
+        /**
+         * When set, frames are handed over as the FILE they arrived in and [Host.onFrame] is not called.
+         *
+         * A caller that draws the frame itself wants a [Bitmap]; a caller that only forwards it onward (the run
+         * engine, whose screen is in another process again) wants the path, because decoding pixels just to
+         * hand them to someone else is pure waste. Whoever takes the path owns deleting it.
+         */
+        rawFrames: ((path: String, widthPx: Int, heightPx: Int, seq: Long) -> Unit)? = null,
     ): Session? {
         val remote = awaitDaemon(BIND_TIMEOUT_MS) ?: run {
             log.warn("could not reach :preview to run $mainClass")
             return null
         }
         frameDir.mkdirs()
-        val session = Session(remote, host)
+        val session = Session(remote, host, rawFrames)
         val id = runCatching {
             remote.open(
                 classpath.toTypedArray(), mainClass, args.toTypedArray(),
@@ -137,6 +145,7 @@ class SwingRunRemoteClient(context: Context) {
     inner class Session internal constructor(
         private val remote: ISwingRunSession,
         private val host: Host,
+        private val rawFrames: ((String, Int, Int, Long) -> Unit)? = null,
     ) {
         private var id = -1
         private val finished = AtomicBoolean(false)
@@ -177,7 +186,12 @@ class SwingRunRemoteClient(context: Context) {
         internal val callback = object : ISwingRunCallback.Stub() {
 
             override fun onFrame(frameFile: String?, widthPx: Int, heightPx: Int, seq: Long) {
-                val file = File(frameFile ?: return)
+                val path = frameFile ?: return
+                rawFrames?.let { forward ->
+                    runCatching { forward(path, widthPx, heightPx, seq) }
+                    return
+                }
+                val file = File(path)
                 val bytes = runCatching { file.readBytes() }.getOrNull()
                 file.delete()
                 if (bytes == null || widthPx <= 0 || heightPx <= 0) return

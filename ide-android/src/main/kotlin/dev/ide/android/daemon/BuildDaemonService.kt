@@ -183,6 +183,10 @@ class BuildDaemonService : Service() {
             services?.buildRunner?.closeRunInput()
         }
 
+        override fun sendRunPointer(x: Float, y: Float) {
+            services?.buildRunner?.sendRunPointer(x, y)
+        }
+
         override fun answerPermission(id: Int, decision: Int) {
             val dec = UiPermissionDecision.entries.getOrNull(decision) ?: return
             services?.buildRunner?.answerPermission(id, dec)
@@ -327,6 +331,7 @@ class BuildDaemonService : Service() {
         // then never re-read it — silently dropping everything printed afterward (the program's whole output
         // truncated to a non-deterministic prefix). Track how far into the trailing chunk we've streamed and
         // emit only its new tail.
+        var lastFrameSeq = -1L // the last windowed frame pushed, so a repeat state emission is not re-sent
         var sentCount = 0 // leading chunks fully streamed
         var sentTail = 0  // chars of transcript[sentCount] already streamed (the still-growing trailing chunk)
         svc.buildRunner.runConsole.collect { rc ->
@@ -350,9 +355,14 @@ class BuildDaemonService : Service() {
                 RunPhase.Finished -> NotifContent.PREPARING
             }
             runActive = rc.phase != RunPhase.Finished; refreshForeground()
-            if (rc.id != lastId) { lastId = rc.id; sentCount = 0; sentTail = 0 }
+            if (rc.id != lastId) { lastId = rc.id; sentCount = 0; sentTail = 0; lastFrameSeq = -1L }
             runCatching {
                 cb?.onRunConsole(rc.id, rc.moduleName, rc.mainClass, rc.phase.ordinal, rc.acceptsInput, rc.exitCode != null, rc.exitCode ?: 0)
+            }
+            // A windowed program's frame: only the path crosses, and only once per frame the program produced.
+            rc.frame?.takeIf { it.seq != lastFrameSeq }?.let { frame ->
+                lastFrameSeq = frame.seq
+                runCatching { cb?.onRunFrame(rc.id, frame.path, frame.width, frame.height, frame.seq) }
             }
             val t = rc.transcript
             while (sentCount < t.size) {

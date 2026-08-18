@@ -328,6 +328,10 @@ interface BuildService {
     /** Signal end-of-input (EOF / Ctrl-D) to the running program's stdin. */
     fun closeRunInput() {}
 
+    /** Forward a tap into a windowed program's UI; [x] and [y] are in the frame's pixel space. No-op for a
+     *  console run, which has no window to tap. */
+    fun sendRunPointer(x: Float, y: Float) {}
+
     /** The pending permission a running program is asking for (the run sandbox), or null. */
     val permissionRequest: StateFlow<UiPermissionRequest?> get() = MutableStateFlow(null)
 

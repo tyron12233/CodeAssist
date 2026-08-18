@@ -25,6 +25,31 @@ interface ProgramIo {
     val stdin: InputStream
     fun started() {}
     fun exited(code: Int) {}
+
+    /**
+     * One frame of a WINDOWED program's UI: raw RGBA_8888 pixels, row-major, at [path].
+     *
+     * A PATH rather than the bytes, because on device this crosses two process boundaries (the program runs in
+     * `:preview`, the run is driven from `:build`, the screen is in the IDE) and a window's worth of pixels is
+     * megabytes, well past what a Binder transaction carries. Bulk over the shared filesystem, control over
+     * IPC, the same split the Compose preview uses. The host reads and deletes the file.
+     *
+     * [seq] increases monotonically so a host drawing slower than the program repaints can drop a stale frame.
+     * A console run never calls this, hence the no-op default.
+     */
+    fun frame(path: String, width: Int, height: Int, seq: Long) {}
+
+    /**
+     * Announces that this program has a window, handing the host the way to send input back into it. Called
+     * once, before the first [frame]. A host that cannot show a window can ignore it and will simply receive
+     * frames nobody looks at.
+     */
+    fun windowed(input: RunPointerInput) {}
+}
+
+/** Forwards a pointer event into a windowed program; [x] and [y] are in the frame's pixel space. */
+fun interface RunPointerInput {
+    fun tap(x: Float, y: Float)
 }
 
 /**
