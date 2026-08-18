@@ -164,7 +164,12 @@ class SwingRunSessionService : Service() {
             height = h
             bitmap = null
             canvas = null
-            ToolkitWindows.displayable().forEach { it.setSize(w, h) }
+            ToolkitWindows.displayable().forEach {
+                it.setSize(w, h)
+                // A window already at this size is not invalidated by setSize, but the bitmap it was drawn
+                // into is gone, so the host still needs a frame.
+                it.invalidateFrame()
+            }
         }
 
         fun stop() {

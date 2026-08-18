@@ -350,6 +350,47 @@ class ToolkitTest {
         assertEquals(keeper, f.getFocusOwner(), "focus stays with the last component that would take it")
     }
 
+    @Test fun resizingRelaysOutAndOwesANewFrame() {
+        // The host draws the last frame it was given, so a resize that changes the layout without owing a
+        // repaint leaves it drawing a picture whose buttons have moved. Taps then land nowhere.
+        val f = frame(width = 200, height = 100)
+        val button = JButton("Click me")
+        f.add(button, BorderLayout.SOUTH)
+        f.setVisible(true)
+        f.paintTo(backend)
+        assertFalse(f.needsRepaint(), "a window just painted owes nothing")
+        val before = button.getBounds()
+
+        f.setSize(400, 300)
+        f.validate()
+
+        assertTrue(f.needsRepaint(), "a resize owes a frame")
+        assertTrue(button.getY() > before.y, "the layout moved: $before then ${button.getBounds()}")
+        assertEquals(400, button.getWidth(), "the button spans the new width")
+    }
+
+    @Test fun aTapLandsOnTheButtonWhereTheRESIZEDLayoutPutIt() {
+        val f = frame(width = 200, height = 100)
+        var fired = 0
+        val button = JButton("Click me")
+        button.addActionListener { fired++ }
+        f.add(button, BorderLayout.SOUTH)
+        f.setVisible(true)
+        f.validate()
+        val old = button.getBounds()
+
+        f.setSize(400, 300)
+        f.validate()
+        val now = button.getBounds()
+
+        // Where the button used to be is now empty space, and where it is now must take the tap.
+        f.click(old.x + old.width / 2, old.y + old.height / 2)
+        assertEquals(0, fired, "the OLD position is no longer the button: old=$old now=$now")
+
+        f.click(now.x + now.width / 2, now.y + now.height / 2)
+        assertEquals(1, fired, "the new position is: $now")
+    }
+
     // ---- window lifetime ---------------------------------------------------------------------------
 
     @Test fun aWindowIsDisplayableBetweenSetVisibleAndDispose() {

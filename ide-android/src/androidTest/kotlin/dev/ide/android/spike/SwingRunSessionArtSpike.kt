@@ -91,7 +91,27 @@ class SwingRunSessionArtSpike {
         assertTrue("no frame after the tap", host.awaitFrameAfter(first.seq, INPUT_TIMEOUT_MS))
         log("frame after the tap: seq=${host.latest()!!.seq}")
 
-        // 3. Stopping ends the run, and the client is told.
+        // 3. A RESIZED surface must re-lay-out and stream a frame at the new size, or the pane would keep
+        //    drawing a picture whose buttons have moved and every tap would land nowhere.
+        val beforeResize = host.latest()!!.seq
+        run.resize(RESIZED_WIDTH, RESIZED_HEIGHT)
+        assertTrue("no frame after the resize", host.awaitFrameSized(RESIZED_WIDTH, RESIZED_HEIGHT, INPUT_TIMEOUT_MS))
+        val resized = host.latest()!!
+        assertTrue("the frame is newer than the resize", resized.seq > beforeResize)
+        log("frame after resize: seq=${resized.seq} ${resized.bitmap.width}x${resized.bitmap.height}")
+
+        // 4. And a tap at the button's NEW position still reaches it: the button is the SOUTH child, so it
+        //    moved down with the taller surface.
+        val tapY = RESIZED_HEIGHT - BUTTON_INSET_FROM_BOTTOM
+        run.pointer(POINTER_DOWN, RESIZED_WIDTH / 2f, tapY)
+        run.pointer(POINTER_UP, RESIZED_WIDTH / 2f, tapY)
+        assertTrue(
+            "the tap did not reach the button at its resized position",
+            host.awaitFrameAfter(resized.seq, INPUT_TIMEOUT_MS),
+        )
+        log("frame after the resized tap: seq=${host.latest()!!.seq}")
+
+        // 5. Stopping ends the run, and the client is told.
         run.stop()
         assertTrue("the client was not told the run ended", host.awaitExit(EXIT_TIMEOUT_MS))
         log("exited with code ${host.exitCode.get()} '${host.exitError.get()}'")
@@ -136,6 +156,17 @@ class SwingRunSessionArtSpike {
             exited.countDown()
         }
 
+        /** Wait for a frame drawn at exactly [width] x [height], i.e. one that answers a resize. */
+        fun awaitFrameSized(width: Int, height: Int, timeoutMs: Long): Boolean {
+            val deadline = System.currentTimeMillis() + timeoutMs
+            while (System.currentTimeMillis() < deadline) {
+                val f = latest.get()
+                if (f != null && f.bitmap.width == width && f.bitmap.height == height) return true
+                Thread.sleep(20)
+            }
+            return false
+        }
+
         /** Wait for a frame newer than [seq], which is how "the UI changed" is observed from outside. */
         fun awaitFrameAfter(seq: Long, timeoutMs: Long): Boolean {
             val deadline = System.currentTimeMillis() + timeoutMs
@@ -163,6 +194,12 @@ class SwingRunSessionArtSpike {
         // Mirrors dev.ide.build.engine.RunPointer.
         const val POINTER_DOWN = 0
         const val POINTER_UP = 2
+
+        const val RESIZED_WIDTH = 400
+        const val RESIZED_HEIGHT = 300
+
+        /** The button is the SOUTH child; its centre sits this far above the bottom of the window. */
+        const val BUTTON_INSET_FROM_BOTTOM = 14f
 
         const val STARTUP_TIMEOUT_MS = 20_000L
         const val INPUT_TIMEOUT_MS = 10_000L

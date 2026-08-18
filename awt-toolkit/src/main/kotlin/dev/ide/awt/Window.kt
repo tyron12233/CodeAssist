@@ -42,6 +42,18 @@ open class Window : Container(), Surface {
         needsFrame = true
     }
 
+    /**
+     * Anything that invalidates the layout also makes what is on screen stale, so a window owes a frame.
+     *
+     * Without this a resize was silent: the tree was laid out again at the new size, but no repaint was owed,
+     * so the host kept showing the frame from BEFORE the resize. Everything downstream then mapped a touch
+     * faithfully onto a picture whose buttons had already moved, which is exactly as wrong as mapping it badly.
+     */
+    override fun invalidate() {
+        super.invalidate()
+        needsFrame = true
+    }
+
     override fun measuringGraphics(): CanvasGraphics? = measuring
 
     /** Attach a drawing backend, so the tree beneath can measure text. Called by the host, once. */
