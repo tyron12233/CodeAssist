@@ -471,6 +471,25 @@ fun KotlinResolver.typeDenotationFqn(expr: KtExpression): String? = when (expr) 
     else -> null // calls, literals, `this`, `super` → instances
 }
 
+/**
+ * The FQN of the `object` singleton a BARE [name] denotes at [offset] — a local `object`, a same-file or
+ * nested one reached by simple name, an imported one (`import nav.NavKeys.shoppingListScreen`) — or null when
+ * [name] isn't one. A value in scope of that name shadows it, as does anything the name resolves to that
+ * isn't a singleton.
+ *
+ * The counterpart of [typeDenotationFqn], which deliberately EXCLUDES objects: a bare object reference is the
+ * INSTANCE (a value), not a type/static receiver. Case-blind — an object may be named in any case
+ * (`data object shoppingListScreen`), so the capitalized-name shortcut that guards the type paths can't be
+ * used here.
+ */
+fun KotlinResolver.objectDenotationFqn(name: String, offset: Int): String? {
+    if (name.isEmpty()) return null
+    if (localsAt(offset).any { it.name == name }) return null // a value of that name shadows the object
+    localTypesInScope(offset)[name]?.let { return it.takeIf { fqn -> service.isObject(fqn) } }
+    return service.resolveTypeName(name, fileContext, enclosingClassFqn(offset))
+        ?.takeIf { service.isObject(it) }
+}
+
 /** Whether [name] is a type parameter declared by an enclosing function / class / property at [offset]
  *  (`fun <T>`, `class C<T>`, `val <T> List<T>.x`) — so a generic type reference isn't flagged unresolved. */
 fun KotlinResolver.isTypeParameterInScope(name: String, offset: Int): Boolean {

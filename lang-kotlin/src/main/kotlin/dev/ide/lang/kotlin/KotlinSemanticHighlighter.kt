@@ -56,6 +56,9 @@ import org.jetbrains.kotlin.psi.psiUtil.getStrictParentOfType
  *  - call sites resolved to a function — with the Kotlin distinctions the user asked for:
  *    `@Composable` (Android-Studio style), extension, and `suspend`;
  *  - local variables / parameters in use, with `var` (mutable) vs `val` (read-only);
+ *  - `object` singletons wherever they are NAMED as a value — through their owner (`NavKeys.shoppingListScreen`),
+ *    bare after an import, or as a qualifier — not just at their declaration. An object may be named in any case,
+ *    so a lowercase one (`data object shoppingListScreen`) is invisible to the lexer's Capitalized-means-type guess;
  *  - destructuring bindings (`val (a, b) = …`, `for ((k, v) in …)`, `{ (a, b) -> }`) at declaration and use;
  *  - type references, separating a type parameter (`T`) from a class;
  *  - import lines — the imported name reads as what it names (a type, a member imported through one, or a
@@ -394,7 +397,10 @@ class KotlinSemanticHighlighter(
         if (leaf.isEmpty() || owner.isEmpty()) return null
         val callableFirst = leaf.firstOrNull()?.isLowerCase() == true
         if (callableFirst) packageCallable(owner, leaf, resolver)?.let { return it }
-        if (resolver.service.typeFqnKnown(fqn)) return HighlightKind.CLASS to emptySet()
+        // An imported `object` reads as an object, not a class — `import nav.NavKeys.shoppingListScreen` names
+        // the singleton, and the use sites it puts in scope are colored that way too.
+        if (resolver.service.typeFqnKnown(fqn))
+            return (if (resolver.service.isObject(fqn)) HighlightKind.OBJECT else HighlightKind.CLASS) to emptySet()
         // A member imported THROUGH a type: an object/companion member, a Java static (`java.lang.Math.max`),
         // an enum entry (`java.time.DayOfWeek.MONDAY`). The LONGEST type prefix owns the leaf.
         var prefix = owner
@@ -620,8 +626,14 @@ class KotlinSemanticHighlighter(
         // order-independent (unlike a local, which [localOrParamDecl] matches only before the offset), so this
         // matches regardless of declaration order. Runs last, so a nearer local / receiver / class member wins.
         topLevelPropertyInFile(name, ref)?.let { isVar ->
-            emit(ref.textRange, HighlightKind.PROPERTY, mutability(isVar))
+            emit(ref.textRange, HighlightKind.PROPERTY, mutability(isVar)); return
         }
+        // A bare reference to an `object` singleton — an imported one (`import nav.NavKeys.shoppingListScreen`),
+        // a nested one named from inside its owner, a local `object`. It denotes the INSTANCE, so none of the
+        // value lookups above resolve it; a lowercase-named one (`data object shoppingListScreen`) is invisible
+        // to the lexer's Capitalized-means-type guess too, which is why it read as plain text.
+        if (resolver.objectDenotationFqn(name, offset) != null)
+            emit(ref.textRange, HighlightKind.OBJECT, emptySet())
     }
 
     /** Whether [name] is a SAME-FILE top-level property (order-independent), returning its mutability (`var` →
@@ -698,10 +710,12 @@ class KotlinSemanticHighlighter(
         if (name.isEmpty()) return
         val receiver = q.receiverExpression
         val typeFqn = resolver.typeDenotationFqn(receiver)
+        val ownerFqn: String
         val member = if (typeFqn != null) {
             if (resolver.enumConstantNames(typeFqn).contains(name)) {
                 emit(ref.textRange, HighlightKind.ENUM_CONSTANT, emptySet()); return
             }
+            ownerFqn = typeFqn
             resolver.staticMemberNamed(typeFqn, name)
         } else {
             val inferred = resolver.inferType(receiver) ?: return
@@ -712,8 +726,17 @@ class KotlinSemanticHighlighter(
             val recvType =
                 resolver.receiverForMembers(inferred, receiver.textRange.startOffset) ?: return
             if (recvType.isTypeParameter) return
+            ownerFqn = recvType.qualifiedName
             resolver.instanceMemberNamed(recvType, name)
-        } ?: return
+        } ?: run {
+            // Not a member at all: a NESTED `object` named through its owner (`NavKeys.shoppingListScreen`).
+            // It denotes the singleton INSTANCE, so no member lookup finds it — and since an object may be
+            // named in any case, a lowercase one (`data object shoppingListScreen`) would otherwise be left
+            // to the lexer, which colors only Capitalized names.
+            if (resolver.service.isObject("$ownerFqn.$name"))
+                emit(ref.textRange, HighlightKind.OBJECT, emptySet())
+            return
+        }
         // A property/field read (a method ref without a call is rare; leave it to the lexical layer).
         if (member.kind == SymbolKind.FIELD || member.kind == SymbolKind.ENUM_CONSTANT) {
             val kind =
