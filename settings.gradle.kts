@@ -101,6 +101,7 @@ include(
     ":agent-mcp",   // Model Context Protocol server: exposes the agent's tools over stdio JSON-RPC to external clients
     ":layout-preview-api",  // owned XML-layout preview: render contracts (RCanvas/RenderNode/Renderer), android-free
     ":layout-preview-impl", // the preview engine: resource value resolver, inflater, built-in renderers, ASM bridge remapper
+    ":awt-toolkit", // owned java.awt/javax.swing over RCanvas + the ASM remapper that points a program at it
     ":bench-support", // test-only: shared regression/benchmark harness (consumed via testImplementation)
     ":test-support",  // test-only: shared fixtures/infrastructure (temp dirs, stubs, jars, contexts) — auto-wired
 )
