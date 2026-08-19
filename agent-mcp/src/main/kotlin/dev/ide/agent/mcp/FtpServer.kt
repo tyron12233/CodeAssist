@@ -29,10 +29,18 @@ import java.util.concurrent.atomic.AtomicBoolean
  * daemon accept thread, one daemon thread per control connection, and a short-lived passive data socket
  * bound to 127.0.0.1 for each transfer. `TYPE A` is accepted but transfers raw bytes like `TYPE I` (the
  * use-case is binary assets, where ASCII line-ending rewriting would corrupt the payload).
+ *
+ * Passive mode needs a second port, and a passive port picked at random is a port a desktop client cannot
+ * reach: `adb forward` forwards the ports it is told about, one at a time. So each transfer claims
+ * [passivePort] (the control port plus one by default) and only falls back to an ephemeral port when that
+ * one is busy, which is what makes `adb forward tcp:8021 tcp:8021` plus `adb forward tcp:8022 tcp:8022`
+ * enough to drive the server from a PC. A second concurrent client takes the fallback and stays on-device.
  */
 class FtpServer(
     root: Path,
     private val port: Int = CodeAssistMcpServer.DEFAULT_FTP_PORT,
+    /** The port passive transfers prefer; see the class doc for why it is fixed rather than ephemeral. */
+    private val passivePort: Int = if (port == 0) 0 else port + 1,
 ) : AutoCloseable {
     private val root: Path = root.toAbsolutePath().normalize()
     private val lock = Any()
@@ -106,14 +114,19 @@ class FtpServer(
         private var passive: ServerSocket? = null
 
         fun run() {
-            reply(220, "CodeAssist FTP asset server ready.")
-            while (true) {
-                val line = reader.readLine() ?: break
-                if (line.isBlank()) continue
-                val sp = line.indexOf(' ')
-                val verb = (if (sp > 0) line.substring(0, sp) else line).uppercase(Locale.ROOT)
-                val arg = if (sp > 0) line.substring(sp + 1).trim() else ""
-                if (!dispatch(verb, arg)) break
+            try {
+                reply(220, "CodeAssist FTP asset server ready.")
+                while (true) {
+                    val line = reader.readLine() ?: break
+                    if (line.isBlank()) continue
+                    val sp = line.indexOf(' ')
+                    val verb = (if (sp > 0) line.substring(0, sp) else line).uppercase(Locale.ROOT)
+                    val arg = if (sp > 0) line.substring(sp + 1).trim() else ""
+                    if (!dispatch(verb, arg)) break
+                }
+            } finally {
+                // A PASV nobody ever used still holds a listening port; the session owns it, so it frees it.
+                closeData()
             }
         }
 
@@ -297,8 +310,9 @@ class FtpServer(
         }
 
         private fun pasv(): Boolean {
+            // Free the previous listener first: it holds the fixed data port the new one wants.
+            closeData()
             val s = passiveSocket()
-            passive?.close()
             passive = s
             val p = s.localPort
             reply(227, "Entering Passive Mode (127,0,0,1,${p ushr 8},${p and 0xFF})")
@@ -306,18 +320,33 @@ class FtpServer(
         }
 
         private fun epsv(): Boolean {
+            closeData()
             val s = passiveSocket()
-            passive?.close()
             passive = s
             reply(229, "Entering Extended Passive Mode (|||${s.localPort}|)")
             return true
         }
 
+        /** Binds the data listener on [passivePort], or on an ephemeral port when that one is taken. */
         private fun passiveSocket(): ServerSocket {
+            tryBind(passivePort)?.let { return it }
             val s = ServerSocket()
             s.reuseAddress = true
             s.bind(InetSocketAddress("127.0.0.1", 0))
             return s
+        }
+
+        /** Binds a data listener on [port], or null when something already holds it. */
+        private fun tryBind(port: Int): ServerSocket? {
+            val s = ServerSocket()
+            s.reuseAddress = true
+            return try {
+                s.bind(InetSocketAddress("127.0.0.1", port))
+                s
+            } catch (e: IOException) {
+                s.close()
+                null
+            }
         }
 
         /** Accepts the data connection for the current passive socket (15s window), or replies 425. */
@@ -327,6 +356,7 @@ class FtpServer(
             return try {
                 p.accept()
             } catch (e: IOException) {
+                closeData()
                 reply(425, "Can't open data connection.")
                 null
             }

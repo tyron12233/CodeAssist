@@ -120,13 +120,96 @@ class HttpMcpServerTest {
         }
     }
 
-    private fun post(url: String, body: String, sessionId: String?): java.net.http.HttpRequest {
+    @Test
+    fun `a body with non-ASCII text is framed by bytes, not chars`() {
+        val fake = CodeAssistMcpServerTest.FakeWorkspace("a.kt" to "val greeting = \"hi\"")
+        val server = CodeAssistMcpServer.startHttpServer(fake, port = 0)
+        val http = java.net.http.HttpClient.newHttpClient()
+        try {
+            val base = "http://127.0.0.1:${server.port}/mcp"
+            val session = initialize(http, base)
+            // Content-Length counts bytes, and this payload runs well ahead of its char count, so a
+            // char-counted read would still be waiting for the difference when the client gave up.
+            val call =
+                """{"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"edit_file","arguments":{"path":"a.kt","old_string":"hi","new_string":"héllo 🎉 こんにちは"}}}"""
+            val response = http.send(post(base, call, session), java.net.http.HttpResponse.BodyHandlers.ofString())
+
+            assertEquals(200, response.statusCode())
+            assertEquals("val greeting = \"héllo 🎉 こんにちは\"", fake.readNow("a.kt"))
+        } finally {
+            server.close()
+        }
+    }
+
+    @Test
+    fun `a foreign Origin is refused so a rebound hostname cannot drive the server`() {
+        val server = CodeAssistMcpServer.startHttpServer(CodeAssistMcpServerTest.FakeWorkspace(), port = 0)
+        val http = java.net.http.HttpClient.newHttpClient()
+        try {
+            val base = "http://127.0.0.1:${server.port}/mcp"
+            val foreign = http.send(
+                post(base, INIT_BODY, null, origin = "http://evil.example"),
+                java.net.http.HttpResponse.BodyHandlers.ofString(),
+            )
+            assertEquals(403, foreign.statusCode(), "a page on another origin must not reach the tools")
+
+            val local = http.send(
+                post(base, INIT_BODY, null, origin = "http://127.0.0.1:5173"),
+                java.net.http.HttpResponse.BodyHandlers.ofString(),
+            )
+            assertEquals(200, local.statusCode(), "a loopback origin is the local client and stays allowed")
+        } finally {
+            server.close()
+        }
+    }
+
+    @Test
+    fun `an oversized Content-Length is refused instead of allocated`() {
+        val server = CodeAssistMcpServer.startHttpServer(CodeAssistMcpServerTest.FakeWorkspace(), port = 0)
+        try {
+            java.net.Socket("127.0.0.1", server.port).use { socket ->
+                socket.soTimeout = 20_000
+                socket.getOutputStream().write(
+                    "POST /mcp HTTP/1.1\r\nHost: 127.0.0.1\r\nContent-Length: 2000000000\r\n\r\n"
+                        .toByteArray(Charsets.US_ASCII),
+                )
+                socket.getOutputStream().flush()
+                val status = socket.getInputStream().bufferedReader(Charsets.ISO_8859_1).readLine()
+                assertTrue(status.orEmpty().startsWith("HTTP/1.1 413"), "expected 413, got: $status")
+            }
+        } finally {
+            server.close()
+        }
+    }
+
+    private fun post(
+        url: String,
+        body: String,
+        sessionId: String?,
+        origin: String? = null,
+    ): java.net.http.HttpRequest {
         val builder = java.net.http.HttpRequest.newBuilder(java.net.URI.create(url))
             .header("Content-Type", "application/json")
             .header("Accept", "application/json, text/event-stream")
+            // A deadline, so a framing regression fails the test instead of hanging CI on a read that
+            // will never be satisfied.
+            .timeout(java.time.Duration.ofSeconds(20))
             .POST(java.net.http.HttpRequest.BodyPublishers.ofString(body))
         if (sessionId != null) builder.header("Mcp-Session-Id", sessionId)
+        if (origin != null) builder.header("Origin", origin)
         return builder.build()
+    }
+
+    /** Runs the initialize handshake over raw HTTP and returns the session id the server handed out. */
+    private fun initialize(http: java.net.http.HttpClient, base: String): String {
+        val response = http.send(post(base, INIT_BODY, null), java.net.http.HttpResponse.BodyHandlers.ofString())
+        assertEquals(200, response.statusCode())
+        return response.headers().firstValue("mcp-session-id").orElseThrow()
+    }
+
+    private companion object {
+        const val INIT_BODY =
+            """{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-03-26","capabilities":{},"clientInfo":{"name":"smoke","version":"0"}}}"""
     }
 
     private fun newClient(port: Int) = McpClient.sync(

@@ -43,7 +43,11 @@ object CodeAssistMcpServer {
     /** Default port for the in-IDE MCP-over-HTTP server (`adb forward tcp:8765 tcp:8765`). */
     const val DEFAULT_HTTP_PORT = 8765
 
-    /** Default port for the local FTP asset server (`adb forward tcp:8021 tcp:8021`). */
+    /**
+     * Default control port for the local FTP asset server. Passive transfers take the next port up, so
+     * driving it from a PC means forwarding both: `adb forward tcp:8021 tcp:8021` and
+     * `adb forward tcp:8022 tcp:8022`.
+     */
     const val DEFAULT_FTP_PORT = 8021
 
     /**
