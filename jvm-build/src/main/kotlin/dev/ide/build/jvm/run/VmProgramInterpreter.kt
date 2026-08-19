@@ -100,7 +100,7 @@ class VmProgramInterpreter(
                         windows.disposeAll()
                         vm.requestCancel()
                         group.interrupt()
-                        runCatching { thread.join(2000) }
+                        runCatching { joinProgramThreads(group, thread, TEARDOWN_JOIN_MS) }
                     }
                 }
                 thread.start()
@@ -132,6 +132,35 @@ class VmProgramInterpreter(
         val code = exitCodeFor(outcome, io)
         io.exited(code)
         code
+    }
+
+    /**
+     * Wait, within [budgetMs] in total, for every thread the program started to finish: `main` plus anything it
+     * spawned, daemon threads included. Called after the group has been interrupted and the VM asked to unwind,
+     * so this is the wait for that request to take effect, not the request itself.
+     *
+     * Joining only `main` was enough for the run to report the right exit code, but a daemon the program left
+     * behind keeps interpreting for as long as it takes to notice the cancel, and by then the run has closed the
+     * classpath jars underneath it: the first not-yet-loaded class it touches fails with "zip file closed".
+     * Bounded rather than unbounded, so a thread that never reaches a cancellation point cannot hold the run
+     * open; the budget is the same one `main` already had.
+     */
+    private fun joinProgramThreads(group: ThreadGroup, main: Thread, budgetMs: Long) {
+        val deadline = System.nanoTime() + budgetMs * 1_000_000
+        fun leftMs() = (deadline - System.nanoTime()) / 1_000_000
+        while (true) {
+            val slice = leftMs()
+            if (slice <= 0) return
+            val snapshot = arrayOfNulls<Thread>(group.activeCount() + 8)
+            val n = group.enumerate(snapshot, true)
+            val alive = ((0 until n).mapNotNull { snapshot[it] } + main)
+                .filter { it.isAlive && it !== Thread.currentThread() }
+                .distinct()
+            if (alive.isEmpty()) return
+            // A short slice per thread so a drained group returns promptly and one slow thread cannot spend the
+            // whole budget while the others are already gone. `join(0)` would wait forever, hence the floor.
+            alive.forEach { t -> runCatching { t.join(leftMs().coerceIn(1, 100)) } }
+        }
     }
 
     /** Block until every non-daemon thread the program started (its `Thread`s live in [group]) has finished,
@@ -252,6 +281,8 @@ class VmProgramInterpreter(
         /** How often [awaitWindowsClosed] rechecks. Long enough to be free, short enough that the run console
          *  flips to finished the moment the user closes the window. */
         const val WINDOW_POLL_MS = 100L
+        /** Total time [joinProgramThreads] waits for the program's threads to notice the cancel and exit. */
+        const val TEARDOWN_JOIN_MS = 2000L
         // Interpreted recursion runs on this thread's host stack, so give it plenty of headroom (matches the
         // old in-process dex runner's user-main thread).
         const val STACK_BYTES = 16L * 1024 * 1024
