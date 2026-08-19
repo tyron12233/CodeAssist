@@ -6,7 +6,9 @@ import com.intellij.psi.PsiArrayType
 import com.intellij.psi.PsiAssignmentExpression
 import com.intellij.psi.PsiBreakStatement
 import com.intellij.psi.PsiClass
+import com.intellij.psi.PsiClassInitializer
 import com.intellij.psi.PsiClassType
+import com.intellij.psi.PsiCodeBlock
 import com.intellij.psi.PsiContinueStatement
 import com.intellij.psi.PsiConditionalExpression
 import com.intellij.psi.PsiElement
@@ -16,6 +18,7 @@ import com.intellij.psi.PsiField
 import com.intellij.psi.PsiJavaCodeReferenceElement
 import com.intellij.psi.PsiJavaFile
 import com.intellij.psi.PsiLambdaExpression
+import com.intellij.psi.LambdaUtil
 import com.intellij.psi.PsiLocalVariable
 import com.intellij.psi.PsiMethod
 import com.intellij.psi.PsiMethodCallExpression
@@ -36,6 +39,7 @@ import com.intellij.psi.PsiTypeParameter
 import com.intellij.psi.PsiUnaryExpression
 import com.intellij.psi.PsiVariable
 import com.intellij.psi.controlFlow.ControlFlowFactory
+import com.intellij.psi.controlFlow.ControlFlowOptions
 import com.intellij.psi.controlFlow.ControlFlowUtil
 import com.intellij.psi.controlFlow.LocalsOrMyInstanceFieldsControlFlowPolicy
 import com.intellij.psi.util.PsiTreeUtil
@@ -128,6 +132,21 @@ internal object JavaSemanticDiagnostics {
                 super.visitMethod(method)
                 checkControlFlow(method, out)
                 JavaDeclarationChecks.checkMethod(method, out)
+            }
+
+            // A block-bodied lambda and an instance/static initializer are executable scopes of their own,
+            // so each gets its own control flow (see [checkScopeFlow]). An expression-bodied lambda declares
+            // no local and cannot hold an unreachable statement, so it has nothing to analyze.
+            override fun visitLambdaExpression(expression: PsiLambdaExpression) {
+                super.visitLambdaExpression(expression)
+                val body = expression.body as? PsiCodeBlock ?: return
+                checkScopeFlow(expression, body, out)
+                checkLambdaMissingReturn(expression, body, out)
+            }
+
+            override fun visitClassInitializer(initializer: PsiClassInitializer) {
+                super.visitClassInitializer(initializer)
+                checkScopeFlow(initializer, initializer.body, out)
             }
 
             override fun visitThrowStatement(statement: PsiThrowStatement) {
@@ -333,45 +352,113 @@ internal object JavaSemanticDiagnostics {
         }
     }
 
-    // --- control flow (missing return + unreachable) — IntelliJ's own reachability ------------------------
+    // --- control flow (missing return, unreachable, definite assignment) --------------------------------
+
+    /**
+     * The executable scope an element belongs to: the nearest enclosing lambda, method, initializer block or
+     * field initializer. Definite assignment is a per-scope property, since each of those bodies gets its own
+     * control flow, so this is the key that decides which flow owns a given declaration or read.
+     *
+     * The walk stops at the first such ancestor, so a local declared inside a lambda (or inside a method of an
+     * anonymous / local class) reports that inner scope, never the method lexically wrapping it.
+     */
+    private fun executableScopeOf(element: PsiElement): PsiElement? {
+        var cur: PsiElement? = element
+        while (cur != null && cur !is PsiJavaFile) {
+            if (cur is PsiLambdaExpression || cur is PsiMethod || cur is PsiClassInitializer || cur is PsiField) return cur
+            cur = cur.parent
+        }
+        return null
+    }
+
+    /**
+     * Reachability and definite assignment over one executable scope: [body] is the code block to build the
+     * flow from, [owner] the scope that owns it ([executableScopeOf] of anything declared directly in it).
+     *
+     * IntelliJ's `ControlFlowAnalyzer` models a nested lambda / anonymous- or local-class body as an opaque
+     * step in the enclosing flow: it emits a synthetic read for every variable the nested body mentions, but
+     * none of the writes inside it (the body may run at any time, or never). A local both declared and
+     * assigned inside such a body therefore shows up in the enclosing flow as a read with no write before it,
+     * i.e. a "might not have been initialized" on code that is plainly fine, which is what a listener or
+     * lambda that declares its own local looks like. Symmetrically, an outer local merely captured by a
+     * nested body is read-before-write in the nested flow, which never sees its assignment.
+     *
+     * Both directions are the same mistake, judging a variable by a flow that is not its own, so a read is
+     * reported only when the flow being analyzed is the variable's own scope. Every scope is analyzed (methods
+     * here, lambdas and initializer blocks from their own visitors), so nothing is lost by the restriction:
+     * the genuine read-before-write inside a lambda is found by the lambda's flow.
+     */
+    private fun checkScopeFlow(owner: PsiElement, body: PsiElement, out: MutableList<Diagnostic>) {
+        val policy = LocalsOrMyInstanceFieldsControlFlowPolicy.getInstance()
+        // Reachability and definite assignment disagree about constant conditions, so each gets the flow
+        // that matches its JLS rule.
+        //
+        // Reachability (JLS 14.21) deliberately exempts `if`: `if (false) { ... }` and the dead arm of
+        // `if (true) ... else ...` are REACHABLE, the carve-out that makes `if (DEBUG) { ... }` legal
+        // conditional compilation. `while (false) { ... }` has no such exemption and stays an error. The
+        // default flow folds constant `if` conditions, so it must not drive this check.
+        runCatching {
+            ControlFlowFactory.getControlFlow(body, policy, ControlFlowOptions.NO_CONST_EVALUATE)
+        }.getOrNull()?.let { reachability ->
+            runCatching { ControlFlowUtil.getUnreachableStatement(reachability) }.getOrNull()?.let { unreachable ->
+                out += diag(unreachable, "Unreachable statement", JavaDiagnosticCodes.UNREACHABLE)
+            }
+        }
+        // Definite assignment (JLS 16.1) DOES read constant conditions (`int a; if (true) a = 1;` leaves `a`
+        // definitely assigned), so the read-before-write pass keeps the constant-evaluating flow.
+        // `getReadBeforeWriteLocals` is IntelliJ's own definite-assignment computation for locals, so
+        // "might not have been initialized" is as precise as the platform.
+        val flow = runCatching { ControlFlowFactory.getInstance(body.project).getControlFlow(body, policy) }
+            .getOrNull() ?: return
+        runCatching { ControlFlowUtil.getReadBeforeWriteLocals(flow) }.getOrDefault(emptyList()).forEach { ref ->
+            // The flow policy also tracks `this.field`, so this list can include instance fields read in
+            // a method that doesn't assign them, but such a field is legally assigned in a constructor
+            // (checked separately in JavaDeclarationChecks). Restrict to true LOCALS to stay zero-FP.
+            val local = ref.resolve() as? PsiLocalVariable ?: return@forEach
+            if (executableScopeOf(local) !== owner) return@forEach // another scope's variable (see the KDoc)
+            val name = ref.referenceName ?: return@forEach
+            out += diag(ref, "Variable '$name' might not have been initialized", JavaDiagnosticCodes.NOT_INITIALIZED)
+        }
+        // A blank-final LOCAL assigned on a path where it may already be assigned. Restricted to blank
+        // finals (final-with-initializer + final params are handled by checkFinalReassignment) and to
+        // locals (fields need cross-constructor analysis), so no double-report / field FP.
+        runCatching { ControlFlowUtil.getInitializedTwice(flow) }.getOrDefault(emptyList()).forEach { info ->
+            val v = (info.expression as? PsiReferenceExpression)?.resolve() as? PsiVariable ?: return@forEach
+            if (v is PsiLocalVariable && v.hasModifierProperty(PsiModifier.FINAL) && v.initializer == null &&
+                executableScopeOf(v) === owner
+            ) {
+                out += diag(info.expression, "Variable '${v.name}' might already have been assigned",
+                    JavaDiagnosticCodes.FINAL_REASSIGNMENT)
+            }
+        }
+    }
+
+    /**
+     * A block-bodied lambda whose functional interface returns a value, but whose body can complete without
+     * returning one (`Supplier<Integer> s = () -> { if (c) return 1; }`). The method-level
+     * [checkControlFlow] never saw these: a lambda body is not a [PsiMethod], and the enclosing method's flow
+     * treats it as an opaque step.
+     *
+     * The expected type comes from the target type rather than from a declaration, so the check backs off
+     * whenever that type is unavailable: a target that is unresolved or not a functional interface, or an
+     * inference that produced nothing. A body holding a syntax error backs off too, since the recovered flow
+     * of a broken body is not a sound basis for "can complete normally".
+     */
+    private fun checkLambdaMissingReturn(lambda: PsiLambdaExpression, body: PsiCodeBlock, out: MutableList<Diagnostic>) {
+        val returnType = runCatching { LambdaUtil.getFunctionalInterfaceReturnType(lambda) }.getOrNull() ?: return
+        if (returnType.equalsToText("void")) return
+        if (PsiTreeUtil.findChildOfType(body, PsiErrorElement::class.java) != null) return
+        // Same flow as the method check: constant conditions are not folded, so a trailing `if (c) return x;`
+        // is still a missing return, matching javac.
+        val flow = runCatching { ControlFlowFactory.getControlFlowNoConstantEvaluate(body) }.getOrNull() ?: return
+        if (runCatching { ControlFlowUtil.returnPresent(flow) }.getOrDefault(true)) return
+        val anchor = body.rBrace ?: return
+        out += diag(anchor, "Missing return statement", JavaDiagnosticCodes.MISSING_RETURN)
+    }
 
     private fun checkControlFlow(method: PsiMethod, out: MutableList<Diagnostic>) {
         val body = method.body ?: return
-        val policy = LocalsOrMyInstanceFieldsControlFlowPolicy.getInstance()
-        // Unreachable + read-before-write — off the standard flow (JLS reachability: folds `while(false)` but
-        // not `if(false)`). `getReadBeforeWriteLocals` is IntelliJ's own definite-assignment computation for
-        // locals, so "might not have been initialized" is as precise as the platform (no false positives).
-        runCatching { ControlFlowFactory.getInstance(method.project).getControlFlow(body, policy) }.getOrNull()
-            ?.let { flow ->
-                runCatching { ControlFlowUtil.getUnreachableStatement(flow) }.getOrNull()?.let { unreachable ->
-                    out += diag(unreachable, "Unreachable statement", JavaDiagnosticCodes.UNREACHABLE)
-                }
-                runCatching { ControlFlowUtil.getReadBeforeWriteLocals(flow) }.getOrDefault(emptyList()).forEach { ref ->
-                    // The flow policy also tracks `this.field`, so this list can include instance fields read in
-                    // a method that doesn't assign them — but such a field is legally assigned in a constructor
-                    // (checked separately in JavaDeclarationChecks). Restrict to true LOCALS to stay zero-FP.
-                    val local = ref.resolve() as? PsiLocalVariable ?: return@forEach
-                    // The whole-method flow's read-before-write verdict is only reliable when the read and the
-                    // variable's declaration share one executable scope. A read from inside a nested class or
-                    // lambda is a CAPTURE of an outer local, definite-assignment-checked at the capture site, not
-                    // by this flow — the method-level flow spuriously reports such captured reads (a definitely-
-                    // assigned `final` local read inside an anonymous class), so skip them (zero-FP).
-                    val readScope = PsiTreeUtil.getParentOfType(ref, PsiClass::class.java, PsiLambdaExpression::class.java)
-                    if (readScope != null && !PsiTreeUtil.isAncestor(readScope, local, true)) return@forEach
-                    val name = ref.referenceName ?: return@forEach
-                    out += diag(ref, "Variable '$name' might not have been initialized", JavaDiagnosticCodes.NOT_INITIALIZED)
-                }
-                // A blank-final LOCAL assigned on a path where it may already be assigned. Restricted to blank
-                // finals (final-with-initializer + final params are handled by checkFinalReassignment) and to
-                // locals (fields need cross-constructor analysis), so no double-report / field FP.
-                runCatching { ControlFlowUtil.getInitializedTwice(flow) }.getOrDefault(emptyList()).forEach { info ->
-                    val v = (info.expression as? PsiReferenceExpression)?.resolve() as? PsiVariable ?: return@forEach
-                    if (v is PsiLocalVariable && v.hasModifierProperty(PsiModifier.FINAL) && v.initializer == null) {
-                        out += diag(info.expression, "Variable '${v.name}' might already have been assigned",
-                            JavaDiagnosticCodes.FINAL_REASSIGNMENT)
-                    }
-                }
-            }
+        checkScopeFlow(method, body, out)
         // Missing return — a value-returning method whose end is reachable. Uses the no-constant-evaluate flow,
         // matching javac (`if (cond) return x;` at the end is still "missing return").
         val returnType = method.returnType
