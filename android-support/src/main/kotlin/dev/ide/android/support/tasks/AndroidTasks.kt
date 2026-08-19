@@ -1300,6 +1300,37 @@ internal object DexArchives {
      * move it into place, so a half-written bucket is never visible — and a lost race with another project
      * dexing the same jar concurrently just discards our copy (the winner's is already valid).
      */
+    /**
+     * Replace an INCOMPLETE [shared] bucket with [bucket], without ever leaving the shared path missing for
+     * longer than a rename.
+     *
+     * The shared cache is read concurrently — by another module's scope in this build, by another project's
+     * build, by the layout preview's readiness gate, by the ahead-of-build warm. Clearing the bucket first and
+     * then publishing (which is what this replaced) opened a window the length of a recursive delete of every
+     * per-class `.dex` in it, and any reader landing in that window sees no bucket, dexes the library itself,
+     * and then republishes the same way — so one racing pair keeps knocking each other's buckets out and the
+     * cache never converges. Staging into a sibling and swapping by rename keeps the gap to two renames.
+     */
+    fun replaceInCache(bucket: Path, shared: Path) {
+        runCatching {
+            shared.parent?.let { Files.createDirectories(it) }
+            val staged = shared.resolveSibling(shared.fileName.toString() + ".new-" + java.util.UUID.randomUUID())
+            clearDir(staged)
+            copyDir(bucket, staged)
+            if (runCatching { Files.move(staged, shared, StandardCopyOption.ATOMIC_MOVE) }.isSuccess) return
+            // The target exists, so the move needs the old bucket out of the way first. Rename it aside rather
+            // than delete it, so a failed swap can put it back and a reader never sees a half-deleted bucket.
+            val stale = shared.resolveSibling(shared.fileName.toString() + ".stale-" + java.util.UUID.randomUUID())
+            val movedAside = runCatching { Files.move(shared, stale) }.isSuccess
+            if (runCatching { Files.move(staged, shared) }.isSuccess) {
+                if (movedAside) clearDir(stale)
+            } else {
+                if (movedAside) runCatching { Files.move(stale, shared) }
+                clearDir(staged)
+            }
+        }
+    }
+
     fun publishToCache(bucket: Path, shared: Path) {
         runCatching {
             shared.parent?.let { Files.createDirectories(it) }

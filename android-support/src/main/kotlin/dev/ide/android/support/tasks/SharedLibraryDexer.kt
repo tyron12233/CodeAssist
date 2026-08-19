@@ -215,7 +215,7 @@ class SharedLibraryDexer(
         // readiness scan) has to prove it again. Written BEFORE publishing so the shared copy carries it too.
         DexArchives.markBucketVerified(bucket)
         if (shared != null && !DexArchives.bucketComplete(shared, jarClasses)) {
-            DexArchives.clearDir(shared); DexArchives.publishToCache(bucket, shared)
+            DexArchives.replaceInCache(bucket, shared)
         }
         return true
     }
@@ -228,6 +228,24 @@ class SharedLibraryDexer(
     fun cacheTag(desugarDigest: String): String = cacheTag(minApi, release, desugarDigest)
 
     companion object {
+        /** At and above this `minApi`, D8 desugars nothing by itself, so a library's dex depends only on the
+         *  library. Below it (or with core-library desugaring on) the output depends on the desugaring
+         *  CLASSPATH too, which is why the cache key has to fold the whole library set. */
+        const val DESUGAR_FREE_MIN_API = 26
+
+        /**
+         * Whether the shared-cache key for [minApi] and this desugaring config depends ONLY on a library's own
+         * content, so any two dexings of that library land in the same bucket.
+         *
+         * When it does not — the `-cp<digest>` component of [cacheTag], which folds a digest of the whole
+         * library universe — a bucket written for one library set is unreachable to a build whose set differs
+         * by a single jar. Anything that dexes AHEAD of a build has to check this: it cannot know the exact set
+         * the next build will resolve (an instrumented debug build appends the app-log bridge runtime), so
+         * without the guarantee it is writing buckets that build will ignore and dex again.
+         */
+        fun cacheKeyIsOwnContentOnly(minApi: Int, desugaredLibConfig: Path?): Boolean =
+            minApi >= DESUGAR_FREE_MIN_API && desugarConfigKey(desugaredLibConfig).isEmpty()
+
         /**
          * Static [computeUniverse] — builds the desugaring universe with no [Dexer]/instance. The layout-preview
          * readiness check ([undexedLibraries]) calls this; the instance overload delegates here, so the universe
@@ -245,7 +263,7 @@ class SharedLibraryDexer(
             val universeByHash = LinkedHashMap<String, Path>()
             for (j in libUniverse) hashOf[j]?.let { universeByHash.putIfAbsent(it, j) }
             val cfgKey = desugarConfigKey(desugaredLibConfig)
-            val desugaringNeeded = minApi < 26 || cfgKey.isNotEmpty()
+            val desugaringNeeded = minApi < DESUGAR_FREE_MIN_API || cfgKey.isNotEmpty()
             val classesOf =
                 if (desugaringNeeded) universeByHash.values.associateWith { DexArchives.classNamesOf(it) } else emptyMap()
             val desugarDigest = if (!desugaringNeeded) "" else {

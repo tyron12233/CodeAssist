@@ -1011,7 +1011,7 @@ internal class BuildService(private val ctx: EngineContext) : Disposable {
      * every filesystem touch happen inside the job, after the delay.
      */
     private fun scheduleDexWarm() {
-        if (ctx.projectPref(DEX_WARM_PREF) == "false") return
+        if (ctx.projectPref(DEX_WARM_PREF) != "true") return
         val previous = dexWarmJob
         dexWarmJob = buildScope.launch {
             previous?.cancelAndJoin()
@@ -1487,8 +1487,10 @@ internal class BuildService(private val ctx: EngineContext) : Disposable {
         /** Below this many library deps, dexing is quick enough that the first-build notice is just noise. */
         private const val FIRST_BUILD_DEX_BANNER_THRESHOLD = 8
 
-        /** Project pref that turns the background library-dex warm off (`"false"`); on by default. It costs CPU
-         *  after a dependency change, which a user on battery may not want to spend ahead of a build. */
+        /** Project pref that turns the background library-dex warm ON (`"true"`); OFF by default. It costs CPU
+         *  after a dependency change, which a user on battery may not want to spend ahead of a build — and while
+         *  it was on by default it doubled build times on projects where it overlapped a build, so it stays
+         *  opt-in until the overlap is measured on a device rather than an emulator. */
         private const val DEX_WARM_PREF = "build.dexWarm"
 
         /** How long after the last model/library change the warm starts. Long enough that a project open (many

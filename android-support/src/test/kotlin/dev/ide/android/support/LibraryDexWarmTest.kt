@@ -1,6 +1,7 @@
 package dev.ide.android.support
 
 import dev.ide.android.support.tools.DebugKeystore
+import dev.ide.android.support.tasks.SharedLibraryDexer
 import dev.ide.android.support.tools.Dexer
 import dev.ide.android.support.tools.ToolResult
 import dev.ide.build.BuildGoal
@@ -137,6 +138,52 @@ class LibraryDexWarmTest {
             )
             // Sanity: the build did dex SOMETHING (its own classes), so the assertion above isn't vacuous.
             assertTrue(dexer.archived.isNotEmpty(), "the build archived nothing at all:\n$log")
+        }
+    }
+
+    /**
+     * Below [SharedLibraryDexer.DESUGAR_FREE_MIN_API] the cache key folds a digest of the whole library set, so the
+     * warm cannot know the key the next build will look under — an instrumented debug build resolves a different
+     * set than the warm sees. Dexing anyway is not a weaker win but double the work, so the warm declines the
+     * module outright.
+     */
+    @Test
+    fun declinesAModuleWhoseCacheKeyABuildWouldMiss() {
+        val sdk = assumeAndroidSdk()
+
+        testEnv("dex-warm-desugar") { env ->
+            val dir = env.dir
+            val platform = env.platform
+            val jarLib = libraryJar(dir.resolve("jarlib.jar"), "com/example/jarlib/Greeter")
+
+            val store = ProjectModel.open(dir, platform, FacetCodecRegistry().register(AndroidFacetCodec))
+            ModuleTypeRegistry(platform.extensions).register(AndroidAppModuleType, AndroidSupport.PLUGIN)
+            val appType = ModuleTypeRegistry(platform.extensions).resolve("android-app")
+            store.workspace.beginModification().apply { addProject("demo", BuildSystemId.NATIVE, store.vfs.root()); commit() }
+            store.workspace.libraryTable.create("jarlib").apply {
+                kind = LibraryKind.JAR; addClassesRoot(store.vfs.fileFor(jarLib)); commit()
+            }
+            store.workspace.projects.single().beginModification().apply {
+                addModule("app", appType).apply {
+                    languageLevel = LanguageLevel.JAVA_17
+                    // minSdk 24: desugaring, so the key carries the library-set digest.
+                    putFacet(AndroidFacet(namespace = "com.example.app", compileSdk = 34, minSdk = 24, targetSdk = 34))
+                    addDependency(LibraryDependency(LibraryRef("jarlib"), DependencyScope.IMPLEMENTATION))
+                }
+                commit()
+            }
+            dir.writeSource("app/src/main/AndroidManifest.xml", MANIFEST)
+
+            val signing = DebugKeystore.getOrCreate(dir.resolve(".keystore/debug.ks"), sdk.keytool)
+            val sharedCache = dir.resolve(".caches/dex")
+            val dexer = RecordingDexer()
+            val buildSystem =
+                AndroidBuildSystem.inProcess(sdk, signing, dexCacheRoot = sharedCache, dexer = dexer, mergeDexer = dexer)
+            val app = store.workspace.projects.single().modules.single { it.name == "app" }
+
+            val warmed = runBlocking { buildSystem.warmLibraryDexCache(app, "debug", dir.resolve(".caches/dex-warm/app")) }
+            assertEquals(-1, warmed, "a module whose key a build would miss must report nothing to warm")
+            assertTrue(dexer.archived.isEmpty(), "the warm dexed anyway: ${dexer.archived}")
         }
     }
 

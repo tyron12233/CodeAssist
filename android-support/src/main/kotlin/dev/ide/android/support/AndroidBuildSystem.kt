@@ -956,14 +956,20 @@ class AndroidBuildSystem(
      * that point stays in the cache (each library is banked as it finishes), so a warm that is interrupted still
      * leaves the next build less to do.
      *
-     * At minSdk 26+ (no desugaring) a library's cache key is its own content alone, so these buckets are reused by
-     * any build of any project. Below 26 the key folds in a digest of the WHOLE library set, so a build whose
-     * external scope differs from the resolved set — an instrumented debug build, which appends the app-log bridge
-     * runtime — keys differently and misses them. The warm is still worth running there (the layout preview and an
-     * uninstrumented build do hit it), but it is not the guarantee it is at 26+.
+     * It runs ONLY where a hit is guaranteed ([SharedLibraryDexer.cacheKeyIsOwnContentOnly]). At minSdk 26+ with no
+     * core-library desugaring, a library's cache key is its own content alone and these buckets are reused by any
+     * build of any project. Below that the key folds in a digest of the whole library set, and the warm cannot know
+     * the set the next build will resolve — an instrumented debug build, the default Run flow, appends the app-log
+     * bridge runtime — so it would dex every library into buckets that build then ignores and dexes again. That is
+     * not a smaller win, it is double the work plus contention for the cores, heap and [InProcessDexGate] credits
+     * the build needs, which is how it doubled build times on such a project.
+     *
+     * Where it does run it takes a ONE-worker budget rather than planning against the whole device. Warming has no
+     * deadline and a build does, so background work must not be able to take the dex gate out from under one.
      *
      * Returns how many libraries it had to dex (0 when the cache was already warm for this library set), or -1 when
-     * there is nothing to warm: not an Android module, no shared cache configured, or no external libraries.
+     * there is nothing to warm: not an Android module, no shared cache configured, no external libraries, or a
+     * desugaring cache key the next build would miss.
      */
     suspend fun warmLibraryDexCache(
         app: Module,
@@ -974,6 +980,13 @@ class AndroidBuildSystem(
     ): Int {
         val facet = app.facets.get(AndroidFacet.KEY) ?: return -1
         val cache = dexCacheRoot ?: return -1
+        // Checked from the facet, before anything is resolved or hashed: on a desugaring module this is also the
+        // path that would re-read every library's zip directory on every armed warm, since computeUniverse builds
+        // its class-name map whenever desugaring is needed.
+        if (facet.minSdk < SharedLibraryDexer.DESUGAR_FREE_MIN_API || facet.coreLibraryDesugaringEnabled) {
+            log("dex cache warm: skipped — minSdk ${facet.minSdk} keys the cache on the whole library set, so a build would miss these buckets")
+            return -1
+        }
         val variant = AndroidVariants.select(app, variantName)
         // The build's own explosion root, so an AAR the build already exploded is reused rather than re-exploded.
         val libs = AndroidLibraries.resolve(app, Layout(app, variantName).explodedAar, variant?.configurations)
@@ -992,7 +1005,10 @@ class AndroidBuildSystem(
             dexer, sdk.androidJar, facet.minSdk, release, cache, desugarJson,
             log = log, checkCanceled = checkCanceled,
         )
-        libDexer.dexScope(libs.dexJars, warmRoot.resolve("ext"), universe)
+        // One worker, one thread: a warm has no deadline and a build does, so this must never hold the fan-out a
+        // build would otherwise get. It also bounds how long cancellation takes — checkCanceled lands between
+        // libraries, so a wider budget leaves that many D8 calls still running after a build has started.
+        libDexer.dexScope(libs.dexJars, warmRoot.resolve("ext"), universe, SharedLibraryDexer.ScopeBudget(1, 1))
         return missing.size
     }
 
