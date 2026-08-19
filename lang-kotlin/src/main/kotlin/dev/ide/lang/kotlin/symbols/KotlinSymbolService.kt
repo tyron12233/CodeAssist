@@ -926,18 +926,29 @@ class KotlinSymbolService(
         index?.exactAll<ClassNameValue>(CLASS_NAMES, simple)
             ?.firstOrNull { it.origin == IndexOrigin.SOURCE && it.fqn.substringBeforeLast('.', "") == samePkg }
             ?.let { return it.fqn }
-        // 5. A top-level synthetic class by simple name (e.g. `R` → `com.example.R`); nested types (`R.layout`)
-        //    are reached through their outer, never resolved bare.
-        synthetic().topLevelFqns.firstOrNull { it.substringAfterLast('.') == simple }
-            ?.let { return it }
-        // 6. A star-imported package, then Kotlin's implicit default star imports (kotlin.*, java.lang, …):
-        //    a simple name is visible if it lives in one of these packages.
         val starPackages =
             (ctx?.imports?.filter { it.isStar }?.map { it.packageName } ?: emptyList()) +
                     DefaultImports.STAR_PACKAGES
+        // 5. A top-level synthetic class (Android `R`/`BuildConfig`, a ViewBinding) by simple name; nested
+        //    types (`R.layout`) are reached through their outer, never resolved bare. Being generated changes
+        //    nothing about SCOPE: like a source class it resolves bare only from its own package, and needs an
+        //    import anywhere else. An explicit import already resolved it at step 2 (a synthetic FQN satisfies
+        //    [isKnownType]), so what remains here is the same-package case and a star import of its package,
+        //    which the step-6 loop below cannot cover, since a synthetic has no type shape to probe.
+        //    Resolving one from ANY package, as this did, is why `R.string.app_name` in a subpackage read as
+        //    fine in the editor and then failed to compile.
+        synthetic().topLevelFqns.firstOrNull {
+            it.substringAfterLast('.') == simple &&
+                it.substringBeforeLast('.', "").let { pkg -> pkg == samePkg || pkg in starPackages }
+        }?.let { return it }
+        // 6. A star-imported package, then Kotlin's implicit default star imports (kotlin.*, java.lang, …):
+        //    a simple name is visible if it lives in one of these packages.
         for (pkg in starPackages) { // existence via the type-shape index (self-gates in dumb mode); no live probe when wired
             val cand = "$pkg.$simple"
-            if (typeShape(cand) != null) return cand
+            // The module model is consulted alongside the type-shape index because a project SOURCE class has
+            // no shape (nothing compiled it yet), so a star-imported one would otherwise never resolve here,
+            // the way the same-package step above already handles.
+            if (cand in model().classByFqn || typeShape(cand) != null) return cand
         }
         // 7. An explicit import whose target is not a known type and that nothing local shadowed: return its FQN
         // 7a. A NESTED type reached by SIMPLE name from within an enclosing class (`Plan` inside `class Game {
@@ -2173,6 +2184,44 @@ class KotlinSymbolService(
         name.isNotEmpty() &&
                 index?.exactAll<ClassNameValue>(CLASS_NAMES, name)
                     ?.any { it.origin == IndexOrigin.LIBRARY } == true
+
+    /**
+     * Whether a contributed SYNTHETIC top-level class has simple [name] (Android `R`/`BuildConfig`, a
+     * ViewBinding). The counterpart of [hasLibraryType] for classes that exist in the editor without existing
+     * on the classpath: they are never in the class-name index, so the index-backed evidence misses them.
+     *
+     * A generated class resolves bare only from its OWN package, exactly like a source class, so this is the
+     * evidence that separates `R.string.app_name` in a file the namespace package (fine) from the same line in
+     * a subpackage or a different package (which needs `import <namespace>.R` and does not compile without it).
+     * Contribution is the whole signal: when no provider contributed an `R`, nothing here claims to know
+     * whether the name is real, and the caller backs off.
+     */
+    fun hasSyntheticType(name: String): Boolean =
+        name.isNotEmpty() && synthetic().topLevelFqns.any { it.substringAfterLast('.') == name }
+
+    /**
+     * Whether a project SOURCE type with simple [name] exists that a file could `import` (Kotlin from the
+     * module model, Java from the SOURCE-origin class-name index). The third evidence predicate beside
+     * [hasLibraryType] and [hasSyntheticType], and the one that covers a type declared right there in the
+     * project: a different-package project type needs an import exactly as a library type does, so
+     * `Holder.TAG` from a sibling package does not compile without `import demo.Holder`.
+     *
+     * Restricted to types that are actually importable, so the evidence matches what the "Import …" quick-fix
+     * can offer: a `private` top-level is file-scoped, a local class is body-scoped, and a companion is reached
+     * through its owner. Callers reach this only after the name failed to resolve in scope, so a same-package
+     * or imported type never gets here.
+     */
+    fun hasProjectSourceType(name: String): Boolean {
+        if (name.isEmpty()) return false
+        if (model().classByFqn.values.any {
+                it.simpleName == name && !it.isCompanion && !it.isLocal && !it.isPrivate
+            }
+        ) return true
+        // A project JAVA source class: no `.class` on disk while editing, so the index (SOURCE origin) is the
+        // only place it exists. Empty until the index is ready, which lands on the back-off side.
+        return index?.exactAll<ClassNameValue>(CLASS_NAMES, name)
+            ?.any { it.origin == IndexOrigin.SOURCE && it.fqn.substringAfterLast('.') == name } == true
+    }
 
     /**
      * Whether the classpath/source knows a type with exactly this [fqn], resolved by NAME (index-backed). Unlike

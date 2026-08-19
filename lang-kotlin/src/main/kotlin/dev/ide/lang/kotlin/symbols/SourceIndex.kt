@@ -269,6 +269,23 @@ object SourceIndexBuilder {
      *  the file facade when top-level) plus the decl's ordinal among the local types sharing that owner. Both
      *  this builder and the resolver call it over the same PSI, so the keys match. */
     fun localTypeFqn(decl: KtClassOrObject): String {
+        // A type declared INSIDE a local/anonymous one keys by its own simple name under that outer, exactly as
+        // a nested type of a named class does. Only a type with no name (an anonymous `object`) or one declared
+        // straight in a code block needs the positional `$L` key.
+        //
+        // Without this they were registered as SIBLINGS of their outer under the file facade, so nothing could
+        // address them by the name the code uses: `companionObjectFqn` builds "<outer>.Companion" and a nested
+        // type is probed as "<outer>.N", and both missed. That is why every `L.CONST` / `L.make()` / `L.N` on a
+        // LOCAL class read as an unresolved reference while the same code on a top-level class was fine.
+        val outer = com.intellij.psi.util.PsiTreeUtil.getParentOfType(decl, KtClassOrObject::class.java)
+        if (outer != null && outer.fqName == null) {
+            // A companion has no name of its own but is addressed as `Companion`, the same name [rawClass]
+            // records in `companionObjectName`.
+            val simple = decl.name
+                ?: (decl as? org.jetbrains.kotlin.psi.KtObjectDeclaration)
+                    ?.takeIf { it.isCompanion() }?.let { "Companion" }
+            if (simple != null) return "${localTypeFqn(outer)}.$simple"
+        }
         val owner = enclosingNamedOwnerFqn(decl)
         val ordinal = localTypeDecls(decl.containingKtFile)
             .filter { enclosingNamedOwnerFqn(it) == owner }

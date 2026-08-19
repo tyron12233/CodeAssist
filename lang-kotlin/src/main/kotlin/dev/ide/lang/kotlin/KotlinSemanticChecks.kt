@@ -2691,12 +2691,12 @@ internal class KotlinSemanticChecks(private val service: KotlinSymbolService) {
             (parent.parent as? KtQualifiedExpression)?.let { if (it.selectorExpression === parent) return null }
         }
         // `x.foo` / `x.foo()` — the receiver `x` of a qualified expression. Usually left alone: it may be a
-        // package segment (`androidx.compose.…`) or a not-yet-built same-package class (Android `R`/`BuildConfig`),
-        // neither of which is an error. But it may ALSO be a TYPE the file forgot to import, used for companion/
-        // static access (`FontWeight.Bold` with no `import …FontWeight`) — which Kotlin reports as "Unresolved
-        // reference", and which the selector's [unresolvedMember] can't flag (it can't type the unresolved
-        // receiver, so it backs off). Defer the decision: flag such a receiver ONLY if it's confidently a known,
-        // unimported LIBRARY type (the gate near the end) — never a package/generated-class receiver.
+        // package segment (`androidx.compose.…`), which is not an error. But it may ALSO be a TYPE the file
+        // forgot to import, used for companion/static access (`FontWeight.Bold` with no
+        // `import …FontWeight`), which Kotlin reports as "Unresolved reference", and which the selector's
+        // [unresolvedMember] can't flag (it can't type the unresolved receiver, so it backs off). Defer the
+        // decision: flag such a receiver only on positive evidence that it names something real and out of
+        // scope (the gate near the end), never on a bare package qualifier.
         val isQualifiedReceiver = parent is KtQualifiedExpression && parent.receiverExpression === expr
         // A callable reference `Type::member` / `::top` — its selector resolves against the receiver type or
         // top-level scope (see [KotlinResolver.callableReferenceTarget]), not the bare-name scope, so it must
@@ -2716,11 +2716,17 @@ internal class KotlinSemanticChecks(private val service: KotlinSymbolService) {
         // A qualified-expression receiver (see above) is flagged only on POSITIVE evidence that it names
         // something real that isn't in scope, or nothing at all that a receiver may legitimately be:
         //  - a known, unimported LIBRARY type (`FontWeight.Bold` with no import),
+        //  - a contributed SYNTHETIC class (Android `R`/`BuildConfig`, a ViewBinding) used from outside the
+        //    package that generates it (`R.string.app_name` in a subpackage with no `import <namespace>.R`),
+        //    which needs the import to compile exactly as a source class would,
+        //  - an importable project SOURCE type from another package (`Holder.TAG` with no `import demo.Holder`),
+        //    which Kotlin requires an import for just as it does for a library type,
         //  - a known top-level / extension CALLABLE that no import brings into scope (`viewModelScope.launch { }`
         //    without `import androidx.lifecycle.viewModelScope`), which Kotlin reports as unresolved too, or
         //  - a lower-case name that is neither a package qualifier nor a generated class, i.e. a plain VALUE
         //    read whose declaration is gone ([danglingValueReceiver]).
-        if (isQualifiedReceiver && !service.hasLibraryType(name) && !unimportedCallableReceiver(name) &&
+        if (isQualifiedReceiver && !service.hasLibraryType(name) && !service.hasSyntheticType(name) &&
+            !service.hasProjectSourceType(name) && !unimportedCallableReceiver(name) &&
             !danglingValueReceiver(name, expr, resolver)
         ) return null
         val r = expr.textRange
