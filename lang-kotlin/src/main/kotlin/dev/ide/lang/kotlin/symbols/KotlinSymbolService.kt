@@ -1449,6 +1449,46 @@ class KotlinSymbolService(
             .map { bindExtensionReceiver(it, fqn, typeArgs) }
     }
 
+    /**
+     * Member extensions an `import` can bring into scope, applicable to a receiver in [receiverTargets] and
+     * matching [namePrefix]: those declared in a PROJECT-SOURCE singleton container, an `object` (incl. a
+     * nested one) or a `companion object`. That is the only member-extension shape an import reaches (a plain
+     * class's needs a dispatch receiver), and it is how the widespread "extensions namespaced in an object"
+     * idiom is meant to be used:
+     *
+     * ```
+     * object StringUtils { fun String.twice() = this + this }   // one file
+     * import util.StringUtils.twice                             // another
+     * "a".twice()
+     * ```
+     *
+     * COMPLETION-ONLY: these are NOT in scope until the import exists, so resolution/diagnostics must keep
+     * flagging an un-imported call (the offer carries the import edit, which is what makes accepting it
+     * resolve; see `KotlinResolver.scopeMemberExtensions` case (c) for the in-scope path). Each symbol
+     * carries its container as [KotlinSymbol.declaringClassFqn]: the import line is spelled from it.
+     *
+     * A CLASSPATH container's member extensions are deliberately absent, since they are already receiver-keyed in
+     * `kotlin.callables`, so [extensionsFor] returns them and only the import edit was missing.
+     */
+    fun importableSingletonExtensions(
+        receiverTargets: Set<String>,
+        namePrefix: String,
+    ): List<KotlinSymbol> {
+        val candidates = model().singletonExtensions
+        if (candidates.isEmpty() || receiverTargets.isEmpty()) return emptyList()
+        val m = PrefixMatcher(namePrefix)
+        val out = ArrayList<KotlinSymbol>()
+        for ((rc, mem) in candidates) {
+            // Name first: the receiver-text resolution below is the expensive half, and a keystroke's prefix
+            // rules out nearly every candidate.
+            if (namePrefix.isNotEmpty() && !m.matches(mem.name)) continue
+            val recvFqn = resolveTypeName(mem.receiverText ?: continue, mem.ctx, rc.fqn) ?: continue
+            if (recvFqn !in receiverTargets) continue
+            out += toSymbol(mem, rc.fqn, rc.typeParameterNames, declaringFqn = rc.fqn)
+        }
+        return out
+    }
+
     /** True for a callable in a Kotlin compiler/runtime *implementation* package (`kotlin.jvm.internal`,
      *  `kotlin.coroutines.jvm.internal`, `kotlin.internal`, `kotlin.reflect.jvm.internal`). These are public in
      *  bytecode (so not flagged `internal`) but are never user-facing API, so they must not appear in
@@ -2163,12 +2203,14 @@ class KotlinSymbolService(
             val fqn = s.type?.qualifiedName
             if (fqn != null && '.' in fqn && fqn.substringAfterLast('.') == name) out += fqn
         }
-        // Members of a project companion object, importable by their simple name through the enclosing type
-        // (`import …MainActivity.Companion.TAG`) — companion members are accessible statically, so a bare
-        // unresolved `TAG` can offer its companion import (mirrors an `object` member's static import).
+        // Members of a project SINGLETON, a `companion object` (`import …MainActivity.Companion.TAG`) or a
+        // plain `object` (`import util.Config.DEBUG`, `import util.StringUtils.twice`), are importable by
+        // their simple name through the container, so a bare unresolved `TAG` / an unresolved `"a".twice()`
+        // can offer that import. A member EXTENSION is included on purpose: importing it through its
+        // singleton is the only way to reach it (the "extensions namespaced in an object" idiom).
         model().classByFqn.values.forEach { rc ->
-            if (rc.isCompanion && rc.members.any { it.name == name && it.visibility != "private" })
-                out += "${rc.fqn}.$name"
+            if (!rc.isObject || rc.isLocal || rc.isPrivate) return@forEach
+            if (rc.members.any { it.name == name && it.visibility != "private" }) out += "${rc.fqn}.$name"
         }
         return out.sorted()
     }
@@ -2916,6 +2958,12 @@ class KotlinSymbolService(
     fun isSourceClass(fqn: String): Boolean = fqn in model().classByFqn
     fun sourceClass(fqn: String): RawClass? = model().classByFqn[fqn]
 
+    /** The companion object's FQN when [fqn] is a PROJECT-SOURCE class that declares one; null otherwise (no
+     *  companion, or a classpath type, whose companion the binary paths already cover). One model-map lookup,
+     *  so the per-keystroke member-extension scope walk can ask it per enclosing class. */
+    fun sourceCompanionFqn(fqn: String): String? =
+        model().classByFqn[fqn]?.companionObjectName?.let { "$fqn.$it" }
+
     /**
      * A user-facing display name for a synthetic local/anonymous type key (`$L<ordinal>`): a local
      * `class`/`object`'s real name, or `<anonymous>` (with its single declared supertype — `<anonymous :
@@ -3016,7 +3064,11 @@ class KotlinSymbolService(
     private fun toSymbol(
         rc: RawCallable,
         ownerFqn: String?,
-        ownerTypeParams: List<String> = emptyList()
+        ownerTypeParams: List<String> = emptyList(),
+        /** Sets [KotlinSymbol.declaringClassFqn], normally null for a source member (nothing has compiled it
+         *  into a class yet), but the CONTAINER is load-bearing for a singleton's member extension: it is what
+         *  the `import util.StringUtils.twice` line is spelled from. See [importableSingletonExtensions]. */
+        declaringFqn: String? = null,
     ): KotlinSymbol {
         // Mark BOTH the callable's own type parameters AND the enclosing class's (`class Box<T> { val value: T }`):
         // a member type that references the class's `T` must be a type parameter so a `Box<String>` receiver can
@@ -3085,6 +3137,7 @@ class KotlinSymbolService(
             paramHasDefault = if (rc.isFunction) rc.paramHasDefault else emptyList(),
             // Top-level callables (no owner) carry their package for import-visibility; members don't.
             packageName = if (ownerFqn == null) rc.ctx.packageName.ifEmpty { null } else null,
+            declaringClassFqn = declaringFqn,
             declarationNode = rc.node,
         )
     }

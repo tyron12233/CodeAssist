@@ -191,6 +191,23 @@ class ModuleSourceModel(val files: List<SourceFile>) {
     val topLevel: List<RawCallable> = files.flatMap { it.topLevel }
     val extensions: List<RawCallable> = files.flatMap { it.extensions }
     val typeAliasNames: Set<String> = files.flatMapTo(HashSet()) { f -> f.typeAliases.map { it.simpleName } }
+
+    /**
+     * Every member extension declared in a SINGLETON container, an `object` (incl. a nested one) or a
+     * `companion object`, paired with that container. This is the ONLY member-extension shape an `import`
+     * can bring into scope (a regular class's needs a dispatch receiver), so it is what completion offers
+     * with an auto-import: `object StringUtils { fun String.twice() … }` → `import util.StringUtils.twice`.
+     * Private containers/members are excluded (not importable from another file), as are local objects.
+     * Computed once per model, since an edit rebuilds the model.
+     */
+    val singletonExtensions: List<Pair<RawClass, RawCallable>> by lazy(LazyThreadSafetyMode.PUBLICATION) {
+        files.flatMap { it.classes }
+            .filter { it.isObject && !it.isLocal && !it.isPrivate }
+            .flatMap { rc ->
+                rc.members.filter { it.receiverText != null && it.visibility != "private" }.map { rc to it }
+            }
+    }
+
     /** Project typealiases keyed by SIMPLE name, for alias expansion. A cross-package simple-name collision keeps
      *  the first — project aliases are effectively unique by simple name in practice. */
     val typeAliasBySimpleName: Map<String, TypeAliasDecl> = files.flatMap { it.typeAliases }.associateBy { it.simpleName }

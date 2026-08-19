@@ -669,10 +669,15 @@ internal fun KotlinResolver.typeOfName(name: String, offset: Int): KotlinType? {
     service.topLevelByName(name).firstOrNull { it.kind == SymbolKind.FIELD }
         ?.let { return it.type as? KotlinType }
     // A bare type name used as an expression (e.g. `Foo` in `Foo.CONST`): a LOCAL type in scope first (a local
-    // `object`/`class` the module model registered under a synthetic FQN), else a resolvable type name.
+    // `object`/`class` the module model registered under a synthetic FQN), else a resolvable type name. The
+    // ENCLOSING class is passed so a NESTED one reached by its simple name resolves (`object Inner` referenced
+    // as `Inner` from inside `class Host`: `with(Inner) { }`, `Inner.plain()`, `val x = Inner`). Without it
+    // the name resolved to nothing, so a `with(Inner) { … }` block had no receiver and every reference in it
+    // read as unresolved. Mirrors the unresolved-TYPE check, which already passes it.
     if (name.firstOrNull()?.isUpperCase() == true) {
         localTypesInScope(offset)[name]?.let { return service.typeByFqn(it) }
-        service.resolveTypeName(name, fileContext)?.let { return service.typeByFqn(it) }
+        service.resolveTypeName(name, fileContext, enclosingClassFqn(offset))
+            ?.let { return service.typeByFqn(it) }
     }
     return null
 }

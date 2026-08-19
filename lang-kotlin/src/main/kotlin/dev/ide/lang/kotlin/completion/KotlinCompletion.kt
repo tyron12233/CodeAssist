@@ -475,8 +475,14 @@ class KotlinCompletion(
                 ).filter { memberVisibleOn(it, typeReceiver = false, enclosing) }
             } else {
                 // Member-extensions in scope on an instance receiver (`map.printMap()` where `printMap` is a
-                // `Map<…>` extension declared in the enclosing class, `Modifier.weight` inside a `Row { }`).
-                members + resolver.scopeMemberExtensions(offset, recvType, prefix)
+                // `Map<…>` extension declared in the enclosing class, `Modifier.weight` inside a `Row { }`),
+                // plus the ones an `import` would bring into scope: a project `object`/`companion object`'s
+                // member extensions. Those are invisible until imported, which made the widespread "extensions
+                // namespaced in an object" idiom undiscoverable: nothing was offered on the receiver, so there
+                // was no way to reach `import util.StringUtils.twice` from the editor. Accepting one inserts
+                // that import (see [importEditFor]).
+                members + resolver.scopeMemberExtensions(offset, recvType, prefix) +
+                    resolver.importableSingletonExtensions(recvType, prefix)
             }
             return PositionResult(raw, memberAccess = true)
         }
@@ -1073,10 +1079,26 @@ class KotlinCompletion(
             s.packageName != null && (s.kind == SymbolKind.METHOD || s.kind == SymbolKind.FIELD) && (!s.isExtension || isTopLevelCallable(
                 s
             )) -> "${s.packageName}.${s.name}"
+            // A member extension of an `object` / `companion object` IS importable through its CONTAINER
+            // (`import util.StringUtils.twice`, `import okhttp3.MediaType.Companion.toMediaType`): a singleton
+            // needs no dispatch receiver, so the import alone puts it in scope. This is the one
+            // member-extension shape an import reaches; a plain class's still gets no edit above.
+            s.isExtension && (s.kind == SymbolKind.METHOD || s.kind == SymbolKind.FIELD) ->
+                singletonContainerFqn(s)?.let { "$it.${s.name}" }
 
             else -> null
         } ?: return emptyList()
         return autoImport.editForType(fqn)
+    }
+
+    /** The SINGLETON container an importable member extension is reached through: an `object` or `companion
+     *  object` FQN (`util.StringUtils`, `okhttp3.MediaType.Companion`), in dot form (a binary's declaring class
+     *  arrives `$`-nested). Null when there is no declaring container or it isn't a singleton: a regular
+     *  class's member extension needs its dispatch receiver in scope, so no import can make it resolve. */
+    private fun singletonContainerFqn(s: KotlinSymbol): String? {
+        if (isTopLevelCallable(s)) return null // a `…Kt` facade, imported by package.name above
+        val container = s.declaringClassFqn?.replace('$', '.') ?: return null
+        return container.takeIf { service.isSingletonObject(it) }
     }
 
     /**
