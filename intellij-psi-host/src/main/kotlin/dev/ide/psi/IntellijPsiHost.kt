@@ -11,6 +11,8 @@ import com.intellij.mock.MockApplication
 import com.intellij.openapi.application.ApplicationManager
 import com.intellij.openapi.project.Project
 import com.intellij.openapi.util.Disposer
+import com.intellij.openapi.util.registry.Registry
+import com.intellij.openapi.util.registry.StandaloneRegistryKeys
 import com.intellij.psi.PsiFile
 import com.intellij.psi.PsiFileFactory
 import org.jetbrains.kotlin.cli.common.messages.MessageCollector
@@ -89,6 +91,10 @@ object IntellijPsiHost {
         org.jetbrains.kotlin.K1Deprecation::class,
     )
     private val environment: KotlinCoreEnvironment by lazy {
+        // Before anything can resolve, supply the registry keys the platform expects a plugin descriptor to
+        // have declared. See [contributeJavaPsiRegistryKeys].
+        contributeJavaPsiRegistryKeys()
+
         // Keep the IntelliJ-core application environment (file types, parser defs, the mmapped classpath jar FS)
         // alive across a refcount of zero, so it is not torn down and re-stood-up. Must be set before the first
         // environment creation. Mirrors dev.ide.lang.kotlin.compile.KotlinEnvironmentKeepAlive (which the build
@@ -119,6 +125,46 @@ object IntellijPsiHost {
         )
         env
     }
+
+    /**
+     * Registry keys IntelliJ's Java PSI reads through `Registry.is`, with the defaults IntelliJ declares for
+     * them. They are declared in the Java PLUGIN's descriptor, not in the platform's bundled
+     * `misc/registry.properties`; this host embeds the platform jars and loads no plugin descriptors, so
+     * `RegistryKeyBean` never contributes them and `Registry.is` throws `MissingResourceException` on an
+     * undefined key.
+     *
+     * That throw escapes whatever resolution asked for the key. `javac.fresh.variables.for.captured.wildcards.only`
+     * is read by `InferenceSession`, which any generic call with a lambda argument goes through
+     * (`xs.stream().map(s -> ...)`), so a single such call used to take down the whole diagnostics pass for the
+     * file: no unresolved references, no type errors, nothing.
+     */
+    private val JAVA_PSI_REGISTRY_KEYS = mapOf(
+        // InferenceSession + InferenceIncorporationPhase (generic inference).
+        "javac.fresh.variables.for.captured.wildcards.only" to "true",
+        "javac.unchecked.subtyping.during.incorporation" to "true",
+        // PsiClassImplUtil (a class type's resolve scope).
+        "java.correct.class.type.by.place.resolve.scope" to "true",
+        // JavaFoldingBuilderBase.
+        "java.folding.icons.for.control.flow" to "true",
+    )
+
+    /**
+     * Contribute [JAVA_PSI_REGISTRY_KEYS] to the registry, skipping any key something else already supplied so
+     * a real descriptor always wins over this fallback. Best effort by design: the keys only restore the
+     * platform's own defaults, so failing to install them can leave resolution no worse off than not trying.
+     */
+    private fun contributeJavaPsiRegistryKeys() {
+        runCatching {
+            Registry.mutateContributedKeys { existing ->
+                existing + JAVA_PSI_REGISTRY_KEYS
+                    .filterKeys { it !in existing }
+                    .mapValues { (name, default) -> StandaloneRegistryKeys.of(name, default, PLUGIN_ID) }
+            }
+        }.onFailure { perf.warn("registry key contribution failed: ${it.javaClass.simpleName}: ${it.message}") }
+    }
+
+    /** Attribution for the contributed keys; the platform records a descriptor's origin. */
+    private const val PLUGIN_ID = "com.intellij.java"
 
     /** One-shot so only the FIRST (cold) parse logs its create/materialize split; later parses are silent. */
     private val firstParseLogged = AtomicBoolean(false)
