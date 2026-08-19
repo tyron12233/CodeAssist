@@ -88,11 +88,14 @@ open class Window : Container(), Surface {
     }
 
     /** Size the tree to the window's current bounds, then draw it into [canvas]. */
-    fun paintTo(canvas: RCanvas) {
+    @JvmOverloads
+    fun paintTo(canvas: RCanvas, atX: Int = 0, atY: Int = 0) {
         val graphics = backend ?: return
         validate()
         val g = CanvasGraphics(canvas, graphics, getBackground() ?: Color.WHITE)
-        g.push(0, 0, getWidth(), getHeight())
+        // A dialog sits somewhere over the window behind it, so it is drawn at its own position rather than
+        // at the origin; a frame filling the surface is simply at 0, 0.
+        g.push(atX, atY, getWidth(), getHeight())
         try {
             paint(g)
             // An open dropdown has to cover whatever is beneath it, and the only way for one component to
@@ -314,6 +317,20 @@ object ToolkitWindows {
     @Volatile
     @JvmStatic
     var installedBackend: RGraphics? = null
+
+    /**
+     * How a modal dialog keeps the UI running while the call that opened it waits. Installed by whatever
+     * drives the toolkit, since only it knows what one turn of its loop is. Null (the default) means a modal
+     * dialog cannot block, and [Dialog.setVisible] returns at once rather than hanging.
+     */
+    @Volatile
+    @JvmStatic
+    var installedPump: ModalPump? = null
+
+    /** The frontmost window that blocks the ones behind it, or null when nothing is modal. */
+    @Synchronized
+    @JvmStatic
+    fun modal(): Window? = open.lastOrNull { it.isDisplayable() && it is Dialog && it.isModal() }
 
     @Synchronized
     internal fun opened(w: Window) {

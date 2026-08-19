@@ -7,6 +7,7 @@ import android.graphics.Canvas
 import android.os.IBinder
 import android.os.Process
 import dev.ide.android.DexPeerFactory
+import dev.ide.awt.ModalPump
 import dev.ide.awt.ToolkitWindows
 import dev.ide.awt.Window
 import dev.ide.awt.interp.AwtNameRemapper
@@ -160,11 +161,12 @@ class SwingRunSessionService : Service() {
         fun postPointer(action: Int, x: Float, y: Float) = pending.add { deliverPointer(action, x, y) }
 
         fun postScroll(x: Float, y: Float, notches: Int) = pending.add {
-            ToolkitWindows.displayable().lastOrNull()?.wheel(x.toInt(), y.toInt(), notches)
+            val target = ToolkitWindows.modal() ?: ToolkitWindows.displayable().lastOrNull() ?: return@add
+            target.wheel(x.toInt() - target.getX(), y.toInt() - target.getY(), notches)
         }
 
         fun postKey(action: Int, keyCode: Int, keyChar: Char) = pending.add {
-            ToolkitWindows.displayable().lastOrNull()?.key(action, keyCode, keyChar)
+            (ToolkitWindows.modal() ?: ToolkitWindows.displayable().lastOrNull())?.key(action, keyCode, keyChar)
         }
 
         fun postResize(w: Int, h: Int) = pending.add {
@@ -198,14 +200,13 @@ class SwingRunSessionService : Service() {
             System.setErr(programOut)
             var error: Throwable? = null
             ToolkitWindows.installedBackend = graphics
+            // What one turn of this loop is, handed to the toolkit so a modal dialog can keep the UI running
+            // from inside the call that opened it. Without it `showMessageDialog` could only either return
+            // immediately or hang: the thread it would block on is this one.
+            ToolkitWindows.installedPump = ModalPump { turn() }
             try {
                 runMain()
-                while (running && ToolkitWindows.displayable().isNotEmpty()) {
-                    drainPending()
-                    ToolkitEventQueue.drain()
-                    repaintDirtyWindows()
-                    Thread.sleep(FRAME_INTERVAL_MS)
-                }
+                while (running && ToolkitWindows.displayable().isNotEmpty()) turn()
             } catch (e: InterruptedException) {
                 // Stop, or the service going away. Not a program failure.
             } catch (e: VmInterruptedException) {
@@ -216,6 +217,7 @@ class SwingRunSessionService : Service() {
                 System.setOut(savedOut)
                 System.setErr(savedErr)
                 ToolkitWindows.installedBackend = null
+                ToolkitWindows.installedPump = null
                 ToolkitWindows.disposeAll()
                 ToolkitEventQueue.clear()
                 running = false
@@ -243,31 +245,59 @@ class SwingRunSessionService : Service() {
             )
         }
 
+        /**
+         * One turn: deliver what arrived, run what was posted, repaint what asked, then yield.
+         *
+         * Also the body of the nested pump a modal dialog runs, which is the point of naming it: the dialog's
+         * loop and the program's loop have to be the same work, or the UI would behave differently while a
+         * dialog is up.
+         */
+        private fun turn() {
+            drainPending()
+            ToolkitEventQueue.drain()
+            repaintDirtyWindows()
+            Thread.sleep(FRAME_INTERVAL_MS)
+        }
+
         private fun drainPending() {
             while (true) (pending.poll() ?: return).invoke()
         }
 
-        /** Deliver a forwarded pointer event to the frontmost window, which owns press capture and focus. */
+        /**
+         * Deliver a forwarded pointer event to the window that owns the input.
+         *
+         * A modal dialog owns ALL of it while it is up, which is what modal means; otherwise the frontmost
+         * window does. Coordinates are the surface's, so they are shifted into the target window's own space.
+         */
         private fun deliverPointer(action: Int, x: Float, y: Float) {
-            ToolkitWindows.displayable().lastOrNull()?.pointer(action, x.toInt(), y.toInt())
+            val target = ToolkitWindows.modal() ?: ToolkitWindows.displayable().lastOrNull() ?: return
+            target.pointer(action, x.toInt() - target.getX(), y.toInt() - target.getY())
         }
 
         private fun repaintDirtyWindows() {
-            val window = ToolkitWindows.displayable().lastOrNull() ?: return
-            if (!window.needsRepaint()) return
-            pushFrame(window)
+            val windows = ToolkitWindows.displayable()
+            if (windows.isEmpty()) return
+            // Any window owing a frame means the whole surface is redrawn: they overlap, so there is no way to
+            // repaint one without the ones above it.
+            if (windows.none { it.needsRepaint() }) return
+            pushFrame(windows)
         }
 
-        /** Paint [window] into the session bitmap and hand the pixels to the IDE. */
-        private fun pushFrame(window: Window) {
+        /** Paint every window bottom-up into the session bitmap and hand the pixels to the IDE. */
+        private fun pushFrame(windows: List<Window>) {
             if (width <= 0 || height <= 0) return
             val target = bitmap ?: Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888).also {
                 bitmap = it
                 canvas = AndroidCanvas(Canvas(it))
             }
             target.eraseColor(0)
-            window.setSize(width, height)
-            window.paintTo(canvas ?: return)
+            val surface = canvas ?: return
+            for ((index, window) in windows.withIndex()) {
+                // The bottom window is the program's own and fills the surface; a dialog above it keeps the
+                // size it packed to and is drawn where it centred itself.
+                if (index == 0) window.setSize(width, height)
+                window.paintTo(surface, window.getX(), window.getY())
+            }
 
             val s = seq.incrementAndGet()
             val file = File(frameDir, "frame-$s.px")
