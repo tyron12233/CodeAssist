@@ -36,6 +36,7 @@ interface IBuildDaemon {
     // size it is drawn at instead of being scaled to fit it.
     oneway void sendRunPointer(int action, float x, float y);
     oneway void sendRunKey(int action, int keyCode, int keyChar);
+    oneway void sendRunScroll(float x, float y, int notches);
     oneway void setRunSurfaceSize(int widthPx, int heightPx);
     void answerPermission(int id, int decision); // answer a pending sandbox prompt (UiPermissionDecision ordinal)
     void clearAppLog();               // clear the app-log (Logcat) buffer

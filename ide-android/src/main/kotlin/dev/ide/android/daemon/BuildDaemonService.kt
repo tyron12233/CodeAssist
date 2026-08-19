@@ -191,6 +191,10 @@ class BuildDaemonService : Service() {
             services?.buildRunner?.sendRunKey(action, keyCode, keyChar.toChar())
         }
 
+        override fun sendRunScroll(x: Float, y: Float, notches: Int) {
+            services?.buildRunner?.sendRunScroll(x, y, notches)
+        }
+
         override fun setRunSurfaceSize(widthPx: Int, heightPx: Int) {
             services?.buildRunner?.setRunSurfaceSize(widthPx, heightPx)
         }

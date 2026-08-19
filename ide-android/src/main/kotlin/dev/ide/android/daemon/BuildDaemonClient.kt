@@ -119,6 +119,7 @@ class BuildDaemonClient(
     fun closeRunInput() = runCatching { daemon?.closeRunInput() }
     fun sendRunPointer(action: Int, x: Float, y: Float) = runCatching { daemon?.sendRunPointer(action, x, y) }
     fun sendRunKey(action: Int, keyCode: Int, keyChar: Char) = runCatching { daemon?.sendRunKey(action, keyCode, keyChar.code) }
+    fun sendRunScroll(x: Float, y: Float, notches: Int) = runCatching { daemon?.sendRunScroll(x, y, notches) }
     fun setRunSurfaceSize(widthPx: Int, heightPx: Int) = runCatching { daemon?.setRunSurfaceSize(widthPx, heightPx) }
     fun answerPermission(id: Int, decision: Int) = runCatching { daemon?.answerPermission(id, decision) }
     fun clearAppLog() = runCatching { daemon?.clearAppLog() }

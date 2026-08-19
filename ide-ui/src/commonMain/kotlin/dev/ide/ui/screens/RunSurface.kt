@@ -53,6 +53,7 @@ fun RunSurface(
     frame: RunFrameUi,
     onPointer: (action: Int, x: Float, y: Float) -> Unit,
     onKey: (action: Int, keyCode: Int, keyChar: Char) -> Unit,
+    onScroll: (x: Float, y: Float, notches: Int) -> Unit,
     onSurfaceSize: (widthPx: Int, heightPx: Int) -> Unit,
     modifier: Modifier = Modifier,
 ) {
@@ -100,13 +101,21 @@ fun RunSurface(
                     while (true) {
                         val event = awaitPointerEvent()
                         val position = event.changes.firstOrNull()?.position ?: continue
+                        val (x, y) = toProgramSpace(position.x, position.y, frame, drawn) ?: continue
+                        if (event.type == PointerEventType.Scroll) {
+                            // Compose reports a positive delta when the content should move down, which is
+                            // also AWT's sign convention, so it passes straight through.
+                            val notches = event.changes.firstOrNull()?.scrollDelta?.y?.toInt() ?: 0
+                            if (notches != 0) onScroll(x, y, notches)
+                            event.changes.forEach { it.consume() }
+                            continue
+                        }
                         val action = when (event.type) {
                             PointerEventType.Press -> RUN_POINTER_DOWN
                             PointerEventType.Move -> RUN_POINTER_MOVE
                             PointerEventType.Release -> RUN_POINTER_UP
                             else -> continue
                         }
-                        val (x, y) = toProgramSpace(position.x, position.y, frame, drawn) ?: continue
                         onPointer(action, x, y)
                         event.changes.forEach { it.consume() }
                     }

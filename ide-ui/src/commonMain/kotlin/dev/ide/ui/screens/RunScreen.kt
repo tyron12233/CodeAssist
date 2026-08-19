@@ -123,6 +123,7 @@ fun RunScreen(
                 frame = frame,
                 onPointer = { action, x, y -> backend.build.sendRunPointer(action, x, y) },
                 onKey = { action, code, char -> backend.build.sendRunKey(action, code, char) },
+                onScroll = { x, y, notches -> backend.build.sendRunScroll(x, y, notches) },
                 onSurfaceSize = { w, h -> backend.build.setRunSurfaceSize(w, h) },
                 modifier = Modifier.weight(1f),
             )

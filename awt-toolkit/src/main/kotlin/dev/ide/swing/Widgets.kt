@@ -18,6 +18,7 @@ import dev.ide.awt.event.MouseEvent
 open class JComponent : Container() {
 
     private var opaque = true
+    private var border: dev.ide.swing.border.Border? = null
 
     open fun isOpaque(): Boolean = opaque
 
@@ -25,9 +26,27 @@ open class JComponent : Container() {
         opaque = value
     }
 
+    /** The border, which also decides this component's insets, as it does in Swing. */
+    open fun getBorder(): dev.ide.swing.border.Border? = border
+
+    open fun setBorder(value: dev.ide.swing.border.Border?) {
+        border = value
+        invalidate()
+        repaint()
+    }
+
+    /** A bordered component reserves the border's space; a widget with padding of its own adds to it. */
+    override fun getInsets(): Insets = border?.getBorderInsets(this) ?: super.getInsets()
+
     override fun paint(g: Graphics) {
         paintComponent(g)
+        paintBorder(g)
         paintChildren(g)
+    }
+
+    /** Draw the border over the component's own content, as Swing does, so content cannot spill past it. */
+    protected open fun paintBorder(g: Graphics) {
+        border?.paintBorder(this, g, 0, 0, getWidth(), getHeight())
     }
 
     /**

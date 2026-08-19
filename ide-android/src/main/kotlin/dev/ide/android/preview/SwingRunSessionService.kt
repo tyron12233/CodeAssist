@@ -107,6 +107,10 @@ class SwingRunSessionService : Service() {
             sessions[sessionId]?.postKey(action, keyCode, keyChar.toChar())
         }
 
+        override fun dispatchScroll(sessionId: Int, x: Float, y: Float, notches: Int, eventTimeMs: Long) {
+            sessions[sessionId]?.postScroll(x, y, notches)
+        }
+
         override fun resize(sessionId: Int, widthPx: Int, heightPx: Int) {
             sessions[sessionId]?.postResize(widthPx, heightPx)
         }
@@ -154,6 +158,10 @@ class SwingRunSessionService : Service() {
         fun start() = thread.start()
 
         fun postPointer(action: Int, x: Float, y: Float) = pending.add { deliverPointer(action, x, y) }
+
+        fun postScroll(x: Float, y: Float, notches: Int) = pending.add {
+            ToolkitWindows.displayable().lastOrNull()?.wheel(x.toInt(), y.toInt(), notches)
+        }
 
         fun postKey(action: Int, keyCode: Int, keyChar: Char) = pending.add {
             ToolkitWindows.displayable().lastOrNull()?.key(action, keyCode, keyChar)

@@ -25,7 +25,7 @@ fun interface ActionListener {
 }
 
 /** `java.awt.event.MouseEvent`. [x] and [y] are in the receiving component's own coordinate space. */
-class MouseEvent(
+open class MouseEvent(
     source: Any?,
     id: Int,
     @JvmField val x: Int,
@@ -92,6 +92,16 @@ class KeyEvent(
         @JvmField val VK_UP = 38
         @JvmField val VK_RIGHT = 39
         @JvmField val VK_DOWN = 40
+        @JvmField val VK_DELETE = 127
+        @JvmField val VK_HOME = 36
+        @JvmField val VK_END = 35
+        @JvmField val VK_SHIFT = 16
+        @JvmField val VK_CONTROL = 17
+        @JvmField val VK_ALT = 18
+        @JvmField val VK_A = 65
+        @JvmField val VK_S = 83
+        @JvmField val VK_W = 87
+        @JvmField val VK_D = 68
     }
 }
 
@@ -107,4 +117,65 @@ open class KeyAdapter : KeyListener {
     override fun keyTyped(e: KeyEvent) {}
     override fun keyPressed(e: KeyEvent) {}
     override fun keyReleased(e: KeyEvent) {}
+}
+
+/** `java.awt.event.MouseMotionListener`: movement, with or without a button held. */
+interface MouseMotionListener {
+    fun mouseMoved(e: MouseEvent)
+    fun mouseDragged(e: MouseEvent)
+}
+
+/** `java.awt.event.MouseMotionAdapter`. */
+open class MouseMotionAdapter : MouseMotionListener {
+    override fun mouseMoved(e: MouseEvent) {}
+    override fun mouseDragged(e: MouseEvent) {}
+}
+
+/**
+ * `java.awt.event.MouseWheelEvent`. [wheelRotation] is in notches, positive when the content should scroll
+ * down, matching AWT; [scrollAmount] is how many units one notch means.
+ */
+class MouseWheelEvent(
+    source: Any?,
+    id: Int,
+    x: Int,
+    y: Int,
+    private val wheelRotation: Int,
+    private val scrollAmount: Int = 3,
+) : MouseEvent(source, id, x, y) {
+    fun getWheelRotation(): Int = wheelRotation
+    fun getScrollAmount(): Int = scrollAmount
+    fun getUnitsToScroll(): Int = wheelRotation * scrollAmount
+
+    companion object {
+        @JvmField val MOUSE_WHEEL = 507
+        @JvmField val WHEEL_UNIT_SCROLL = 0
+    }
+}
+
+/** `java.awt.event.MouseWheelListener`. */
+fun interface MouseWheelListener {
+    fun mouseWheelMoved(e: MouseWheelEvent)
+}
+
+/** `java.awt.event.ItemEvent`: a checkbox, radio button, or combo box selection changed. */
+class ItemEvent(
+    source: Any?,
+    id: Int,
+    private val item: Any?,
+    private val stateChange: Int,
+) : AWTEvent(source, id) {
+    fun getItem(): Any? = item
+    fun getStateChange(): Int = stateChange
+
+    companion object {
+        @JvmField val ITEM_STATE_CHANGED = 701
+        @JvmField val SELECTED = 1
+        @JvmField val DESELECTED = 2
+    }
+}
+
+/** `java.awt.event.ItemListener`. */
+fun interface ItemListener {
+    fun itemStateChanged(e: ItemEvent)
 }

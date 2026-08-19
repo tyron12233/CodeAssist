@@ -30,6 +30,7 @@ interface BuildRunner {
     fun closeRunInput()
     fun sendRunPointer(action: Int, x: Float, y: Float)
     fun sendRunKey(action: Int, keyCode: Int, keyChar: Char)
+    fun sendRunScroll(x: Float, y: Float, notches: Int)
     fun setRunSurfaceSize(widthPx: Int, heightPx: Int)
     fun answerPermission(id: Int, decision: UiPermissionDecision)
     fun clearAppLog()
@@ -54,6 +55,7 @@ internal class InProcessBuildRunner(private val build: dev.ide.core.services.Bui
     override fun closeRunInput() = build.closeRunInput()
     override fun sendRunPointer(action: Int, x: Float, y: Float) = build.sendRunPointer(action, x, y)
     override fun sendRunKey(action: Int, keyCode: Int, keyChar: Char) = build.sendRunKey(action, keyCode, keyChar)
+    override fun sendRunScroll(x: Float, y: Float, notches: Int) = build.sendRunScroll(x, y, notches)
     override fun setRunSurfaceSize(widthPx: Int, heightPx: Int) = build.setRunSurfaceSize(widthPx, heightPx)
     override fun answerPermission(id: Int, decision: UiPermissionDecision) = build.answerPermission(id, decision)
 }

@@ -59,6 +59,10 @@ interface RunWindow {
      *  character typed or [RunKey.CHAR_UNDEFINED] for a key that produces none. */
     fun key(action: Int, keyCode: Int, keyChar: Char)
 
+    /** A wheel or two-finger scroll at ([x], [y]); [notches] is positive when the content should move down.
+     *  It reaches the deepest scrollable thing under the pointer, as it does in AWT. */
+    fun scroll(x: Float, y: Float, notches: Int)
+
     /** The size the host will draw at, so the program's window is painted at exactly that size instead of
      *  being scaled. Called whenever the surface resizes. */
     fun resize(widthPx: Int, heightPx: Int)

@@ -160,6 +160,12 @@ class SwingRunRemoteClient(context: Context) {
             runCatching { remote.dispatchPointer(id, action, x, y, System.currentTimeMillis()) }
         }
 
+        /** Forward a scroll at ([x], [y]); [notches] is positive when the content should move down. */
+        fun scroll(x: Float, y: Float, notches: Int) {
+            if (finished.get()) return
+            runCatching { remote.dispatchScroll(id, x, y, notches, System.currentTimeMillis()) }
+        }
+
         /** Forward a key event to whatever component holds focus in the program's window. */
         fun key(action: Int, keyCode: Int, keyChar: Char) {
             if (finished.get()) return

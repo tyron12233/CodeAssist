@@ -249,6 +249,8 @@ class RemoteBuildRunner(context: Context, private val services: IdeServices) : B
 
     override fun sendRunKey(action: Int, keyCode: Int, keyChar: Char) { runCatching { client.sendRunKey(action, keyCode, keyChar) } }
 
+    override fun sendRunScroll(x: Float, y: Float, notches: Int) { runCatching { client.sendRunScroll(x, y, notches) } }
+
     override fun setRunSurfaceSize(widthPx: Int, heightPx: Int) { runCatching { client.setRunSurfaceSize(widthPx, heightPx) } }
     override fun answerPermission(id: Int, decision: UiPermissionDecision) { runCatching { client.answerPermission(id, decision.ordinal) } }
 

@@ -38,6 +38,9 @@ interface ISwingRunSession {
     // component holds focus, which the toolkit gives to the last component pressed.
     oneway void dispatchKey(int sessionId, int action, int keyCode, int keyChar, long eventTimeMs);
 
+    // Forward a wheel/two-finger scroll at [x]/[y]; [notches] is positive when the content should move down.
+    oneway void dispatchScroll(int sessionId, float x, float y, int notches, long eventTimeMs);
+
     // Re-target the painted surface when the run pane resizes. The program's windows are laid out again at the
     // new size and a frame follows. oneway.
     oneway void resize(int sessionId, int widthPx, int heightPx);

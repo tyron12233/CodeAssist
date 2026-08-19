@@ -335,6 +335,10 @@ interface BuildService {
     /** Forward a key event into a windowed program's UI. No-op for a console run. */
     fun sendRunKey(action: Int, keyCode: Int, keyChar: Char) {}
 
+    /** Forward a scroll into a windowed program's UI; [notches] is positive when the content should move
+     *  down. No-op for a console run. */
+    fun sendRunScroll(x: Float, y: Float, notches: Int) {}
+
     /** Tell a windowed program the pixel size its window is drawn at, so it paints at that size rather than
      *  being scaled to fit. No-op for a console run. */
     fun setRunSurfaceSize(widthPx: Int, heightPx: Int) {}

@@ -171,6 +171,25 @@ open class Component {
 
     fun getMouseListeners(): Array<MouseListener> = mouseListeners.toTypedArray()
 
+    private val motionListeners = ArrayList<dev.ide.awt.event.MouseMotionListener>()
+    private val wheelListeners = ArrayList<dev.ide.awt.event.MouseWheelListener>()
+
+    fun addMouseMotionListener(l: dev.ide.awt.event.MouseMotionListener?) {
+        if (l != null) motionListeners.add(l)
+    }
+
+    fun removeMouseMotionListener(l: dev.ide.awt.event.MouseMotionListener?) {
+        if (l != null) motionListeners.remove(l)
+    }
+
+    fun addMouseWheelListener(l: dev.ide.awt.event.MouseWheelListener?) {
+        if (l != null) wheelListeners.add(l)
+    }
+
+    fun removeMouseWheelListener(l: dev.ide.awt.event.MouseWheelListener?) {
+        if (l != null) wheelListeners.remove(l)
+    }
+
     /** Whether ([px], [py]) in this component's own space is inside it. */
     open fun contains(px: Int, py: Int): Boolean = px >= 0 && py >= 0 && px < widthPx && py < heightPx
 
@@ -200,14 +219,37 @@ open class Component {
                 MouseEvent.MOUSE_CLICKED -> l.mouseClicked(e)
                 MouseEvent.MOUSE_ENTERED -> l.mouseEntered(e)
                 MouseEvent.MOUSE_EXITED -> l.mouseExited(e)
-                MouseEvent.MOUSE_DRAGGED -> Unit // a drag reaches MouseMotionListener in AWT, which is not modelled
 
             }
         }
     }
 
+    /** Deliver movement to this component. Separate from [processMouseEvent] exactly as it is in AWT, where
+     *  motion is a different listener because most components ignore it. */
+    protected open fun processMouseMotionEvent(e: MouseEvent) {
+        for (l in motionListeners.toList()) {
+            when (e.id) {
+                MouseEvent.MOUSE_MOVED -> l.mouseMoved(e)
+                MouseEvent.MOUSE_DRAGGED -> l.mouseDragged(e)
+            }
+        }
+    }
+
+    /** Deliver a wheel notch. Returns true when this component consumed it, so a scroll pane below the
+     *  pointer scrolls rather than the one above it. */
+    protected open fun processMouseWheelEvent(e: dev.ide.awt.event.MouseWheelEvent): Boolean {
+        if (wheelListeners.isEmpty()) return false
+        for (l in wheelListeners.toList()) l.mouseWheelMoved(e)
+        return true
+    }
+
     /** Entry point for the surface, which is outside this class's package in AWT terms. */
-    internal fun dispatchMouseEvent(e: MouseEvent) = processMouseEvent(e)
+    internal fun dispatchMouseEvent(e: MouseEvent) {
+        if (e.id == MouseEvent.MOUSE_MOVED || e.id == MouseEvent.MOUSE_DRAGGED) processMouseMotionEvent(e)
+        processMouseEvent(e)
+    }
+
+    internal fun dispatchWheelEvent(e: dev.ide.awt.event.MouseWheelEvent): Boolean = processMouseWheelEvent(e)
 }
 
 /**

@@ -73,6 +73,7 @@ class SwingAwareProgramInterpreter(
         io.windowed(object : RunWindow {
             override fun pointer(action: Int, x: Float, y: Float) = session.pointer(action, x, y)
             override fun key(action: Int, keyCode: Int, keyChar: Char) = session.key(action, keyCode, keyChar)
+            override fun scroll(x: Float, y: Float, notches: Int) = session.scroll(x, y, notches)
             override fun resize(widthPx: Int, heightPx: Int) = session.resize(widthPx, heightPx)
         })
         try {

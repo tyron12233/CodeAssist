@@ -329,6 +329,11 @@ internal class BuildService(private val ctx: EngineContext) : Disposable {
         currentRunWindow?.pointer(action, x, y)
     }
 
+    /** Forward a scroll on the run surface into a windowed program. Ignored for a console run. */
+    fun sendRunScroll(x: Float, y: Float, notches: Int) {
+        currentRunWindow?.scroll(x, y, notches)
+    }
+
     /** Forward a key event into a windowed program. Ignored for a console run. */
     fun sendRunKey(action: Int, keyCode: Int, keyChar: Char) {
         currentRunWindow?.key(action, keyCode, keyChar)

@@ -2,6 +2,7 @@ package dev.ide.awt
 
 import dev.ide.awt.event.KeyEvent
 import dev.ide.awt.event.MouseEvent
+import dev.ide.awt.event.MouseWheelEvent
 import dev.ide.preview.RCanvas
 import dev.ide.preview.RGraphics
 import dev.ide.preview.RPaint
@@ -94,6 +95,9 @@ open class Window : Container(), Surface {
         g.push(0, 0, getWidth(), getHeight())
         try {
             paint(g)
+            // An open dropdown has to cover whatever is beneath it, and the only way for one component to
+            // draw over its siblings in a single pass is to draw after the whole tree has been painted.
+            paintOverlays(this, g, 0, 0)
         } finally {
             g.pop()
         }
@@ -111,7 +115,11 @@ open class Window : Container(), Surface {
         validate()
         when (action) {
             POINTER_DOWN -> {
-                val target = componentAt(x, y)
+                // An open dropdown covers what is beneath it, so it must be hit-tested before the tree is,
+                // exactly as it is painted after it. Otherwise a press meant for the list reaches whatever
+                // component happens to sit under the popup, and the popup never closes.
+                val target = openPopupAt(x, y) ?: componentAt(x, y)
+                closePopupsExcept(target)
                 pressed = target
                 focusOn(target)
                 send(target, MouseEvent.MOUSE_PRESSED, x, y)
@@ -129,6 +137,23 @@ open class Window : Container(), Surface {
                 // Outside its own bounds on purpose: a cancelled gesture must not read as a completed click.
                 target.dispatchMouseEvent(MouseEvent(target, MouseEvent.MOUSE_EXITED, -1, -1))
             }
+        }
+    }
+
+    /**
+     * Route a wheel notch to the deepest component under ([x], [y]) that will take it, walking up until one
+     * does. That is what makes a scroll pane inside another scroll pane take the notch instead of its parent.
+     */
+    fun wheel(x: Int, y: Int, notches: Int) {
+        validate()
+        var target: Component? = componentAt(x, y)
+        while (target != null) {
+            val e = MouseWheelEvent(target, MouseWheelEvent.MOUSE_WHEEL, x, y, notches)
+            if (target.dispatchWheelEvent(e)) {
+                invalidateFrame()
+                return
+            }
+            target = target.parent
         }
     }
 
@@ -176,6 +201,61 @@ open class Window : Container(), Surface {
 
     private fun hits(target: Component, x: Int, y: Int): Boolean =
         target.contains(x - absoluteX(target), y - absoluteY(target))
+
+    /** The combo box whose OPEN popup covers ([x], [y]), if any. */
+    private fun openPopupAt(x: Int, y: Int): Component? = findPopup(this, 0, 0) { combo, ox, oy ->
+        val height = combo.popupHeight()
+        if (x >= ox && x < ox + combo.getWidth() && y >= oy + combo.getHeight() && y < oy + combo.getHeight() + height) {
+            combo
+        } else {
+            null
+        }
+    }
+
+    /** Close every open dropdown except the one just pressed, which is how a dropdown dismisses. */
+    private fun closePopupsExcept(target: Component?) {
+        findPopup(this, 0, 0) { combo, _, _ ->
+            if (combo !== target) combo.setPopupVisible(false)
+            null
+        }
+    }
+
+    /** Visit every combo box with an open popup, in window coordinates, stopping at the first non-null. */
+    private fun findPopup(
+        container: Container,
+        offsetX: Int,
+        offsetY: Int,
+        visit: (dev.ide.swing.JComboBox<*>, Int, Int) -> Component?,
+    ): Component? {
+        for (child in container.components()) {
+            if (!child.isVisible()) continue
+            val x = offsetX + child.getX()
+            val y = offsetY + child.getY()
+            if (child is dev.ide.swing.JComboBox<*> && child.isPopupVisible()) {
+                visit(child, x, y)?.let { return it }
+            }
+            if (child is Container) findPopup(child, x, y, visit)?.let { return it }
+        }
+        return null
+    }
+
+    /** Walk the tree drawing anything that paints outside its own bounds, in the coordinates it expects. */
+    private fun paintOverlays(container: Container, g: CanvasGraphics, offsetX: Int, offsetY: Int) {
+        for (child in container.components()) {
+            if (!child.isVisible()) continue
+            val x = offsetX + child.getX()
+            val y = offsetY + child.getY()
+            if (child is dev.ide.swing.JComboBox<*> && child.isPopupVisible()) {
+                g.push(x, y, getWidth() - x, getHeight() - y)
+                try {
+                    child.paintPopup(g)
+                } finally {
+                    g.pop()
+                }
+            }
+            if (child is Container) paintOverlays(child, g, x, y)
+        }
+    }
 
     private fun absoluteX(c: Component): Int {
         var x = 0
