@@ -1007,15 +1007,20 @@ internal class BuildService(private val ctx: EngineContext) : Disposable {
 
     /**
      * Arm the background library-dex warm (see [dexWarmJob]), replacing any previously armed one. Runs on the
-     * publishing thread, so it stays a pref read plus a coroutine launch: the SDK probe behind [androidBuild] and
-     * every filesystem touch happen inside the job, after the delay.
+     * publishing thread, so it stays a coroutine launch and nothing else: the opt-in check, the SDK probe behind
+     * [androidBuild] and every filesystem touch happen inside the job, after the delay.
+     *
+     * The pref is read INSIDE the job rather than here. [ctx.projectPref] parses the project properties file, and
+     * this is armed from every model change — most of which arrive in bursts while a build publishes — so reading
+     * it on the publishing thread would charge every project a file read per change for a feature that is off by
+     * default and would never run. Reading it late also means toggling the pref takes effect without a restart.
      */
     private fun scheduleDexWarm() {
-        if (ctx.projectPref(DEX_WARM_PREF) != "true") return
         val previous = dexWarmJob
         dexWarmJob = buildScope.launch {
             previous?.cancelAndJoin()
             delay(DEX_WARM_DELAY_MS)          // let a burst of commits (and the resolution behind them) settle
+            if (ctx.projectPref(DEX_WARM_PREF) != "true") return@launch
             if (buildJob?.isActive == true) return@launch
             try {
                 warmLibraryDexCaches()
