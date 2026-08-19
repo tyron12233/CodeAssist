@@ -296,6 +296,11 @@ object AndroidIde {
      *  now, so an older record would be attributed to the wrong release. */
     private const val NATIVE_CRASH_MAX_AGE_MS = 24 * 60 * 60 * 1000L
 
+    /** How many exit records to open a tombstone for, and how many of those to report. The scan runs past the
+     *  reported cap because forked build-tool VMs are dropped from the middle of it. */
+    private const val NATIVE_CRASH_SCAN = 8
+    private const val NATIVE_CRASH_MAX_REPORTED = 5
+
     /**
      * If a PREVIOUS process died of a native crash (the ART SIGSEGV; see [dev.ide.platform.RuntimeInfo]; seen on
      * 32-bit AND 64-bit devices), report it: to the Logs viewer, and for opt-in users as a CRASH analytics event.
@@ -317,6 +322,12 @@ object AndroidIde {
      * Each exit record is reported once ([PREF_NATIVE_CRASH_REPORTED]), since the OS keeps it for many launches,
      * and records older than [NATIVE_CRASH_MAX_AGE_MS] are dropped so an update does not import old history
      * under the new version's name.
+     *
+     * A death of a VM this app FORKED to run a build tool is not reported at all
+     * ([dev.ide.platform.ForkedToolVm.isToolVmCrash]). Those forks are how the app measures the heap a device
+     * grants, and a rung the device refuses aborts by design; the OS files that abort under this package, so
+     * without the filter the app's own capability probe reads back as a crash on a healthy device — 12 of the
+     * 13 crashes reported for 3.9.6 were that probe.
      */
     private fun reportPreviousNativeCrash(
         context: Context,
@@ -331,17 +342,38 @@ object AndroidIde {
             // routinely, and with a window of one their exits hide a native death of the IDE process.
             val reported = manager.preference(PREF_NATIVE_CRASH_REPORTED)?.toLongOrNull() ?: 0L
             val now = System.currentTimeMillis()
-            val fresh = am.getHistoricalProcessExitReasons(context.packageName, 0, 20)
+            val candidates = am.getHistoricalProcessExitReasons(context.packageName, 0, 20)
                 .filter {
                     it.reason == android.app.ApplicationExitInfo.REASON_CRASH_NATIVE ||
                         it.reason == android.app.ApplicationExitInfo.REASON_SIGNALED
                 }
                 .filter { it.timestamp > reported && now - it.timestamp < NATIVE_CRASH_MAX_AGE_MS }
-                .sortedBy { it.timestamp }
-                .takeLast(5)
-            if (fresh.isEmpty()) return
-            manager.setPreference(PREF_NATIVE_CRASH_REPORTED, fresh.last().timestamp.toString())
-            fresh.forEach { reportNativeExit(it, analytics, prev) }
+                .sortedByDescending { it.timestamp }
+                .take(NATIVE_CRASH_SCAN)
+            if (candidates.isEmpty()) return
+            // Mark the whole window seen, including the forked-VM deaths dropped below: they are answered, not
+            // deferred, and re-reading them on every launch would only re-drop them.
+            manager.setPreference(PREF_NATIVE_CRASH_REPORTED, candidates.first().timestamp.toString())
+
+            // Newest first, so the ones that survive the filter are the most recent; parse each tombstone once
+            // and hand it to the reporter rather than re-reading the trace.
+            val reportable = ArrayList<Pair<android.app.ApplicationExitInfo, dev.ide.platform.NativeTombstone?>>()
+            for (exit in candidates) {
+                if (reportable.size >= NATIVE_CRASH_MAX_REPORTED) break
+                val tomb = runCatching {
+                    exit.traceInputStream?.use { dev.ide.platform.NativeTombstone.parse(it) }
+                }.getOrNull()
+                if (dev.ide.platform.ForkedToolVm.isToolVmCrash(tomb)) {
+                    Log.logger("ide.crash").info(
+                        "Ignoring a native death of a forked build-tool VM ('${tomb?.faultingThread}'): " +
+                            "${tomb?.abortMessage ?: tomb?.topFrames(2)}. Not an IDE crash — the fork ladder " +
+                            "steps down and the build runs in-process."
+                    )
+                    continue
+                }
+                reportable += exit to tomb
+            }
+            reportable.asReversed().forEach { (exit, tomb) -> reportNativeExit(exit, tomb, analytics, prev) }
         }
     }
 
@@ -349,15 +381,13 @@ object AndroidIde {
      *  this death rather than an earlier one. */
     private fun reportNativeExit(
         exit: android.app.ApplicationExitInfo,
+        tomb: dev.ide.platform.NativeTombstone?,
         analytics: dev.ide.analytics.AnalyticsService,
         prev: dev.ide.platform.EngineBreadcrumb.Crumb?,
     ) {
         val sinceOp = prev?.let { exit.timestamp - it.epochMillis }
         // A crumb from long before the death describes an unrelated session, not this crash.
         val crumb = if (sinceOp != null && sinceOp > -60_000L && sinceOp < 10 * 60_000L) prev else null
-        val tomb = runCatching {
-            exit.traceInputStream?.use { dev.ide.platform.NativeTombstone.parse(it) }
-        }.getOrNull()
 
         Log.logger("ide.crash").warn(
             "Recovered from a native crash in a previous session of '${exit.processName}'. " +

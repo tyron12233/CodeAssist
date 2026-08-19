@@ -74,6 +74,14 @@ sources are combined:
   memory dumps, memory maps, log buffers, open file descriptors) is discarded unparsed. `process` says
   which of our processes died: the IDE, or one of the `build` / `preview` children.
 
+One class of record is deliberately dropped rather than reported: the death of a command-line VM the app
+itself forked to run a build tool (`fault_thread` is a `dalvikvm` launcher). To find the heap a device grants
+R8 and D8, the app forks VMs at rising `-Xmx` values, and ART answers a heap it cannot reserve by aborting
+during runtime init rather than by exiting — an abort the OS files under this package. Those forks are a
+capability probe that self-falls back to in-process tools, so counting them as crashes makes a healthy device
+look broken. The ladder is also bounded by device RAM up front (`ForkedToolVm`), since ART reserves twice
+`-Xmx` of address space, so most devices never reach a rung that aborts at all.
+
 ## What we never collect
 
 A hard line, enforced at the call sites (not just by policy):

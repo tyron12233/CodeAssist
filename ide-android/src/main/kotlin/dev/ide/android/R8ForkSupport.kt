@@ -2,6 +2,7 @@ package dev.ide.android
 
 import android.app.ActivityManager
 import android.content.Context
+import dev.ide.platform.ForkedToolVm
 import dev.ide.platform.log.Log
 import java.io.File
 import java.util.concurrent.Semaphore
@@ -24,7 +25,9 @@ object R8ForkSupport {
 
     /** VM binaries that take `-cp <dexes> <class>` and build a multidex-aware classloader, inheriting
      *  BOOTCLASSPATH from this app process. First existing wins. `app_process` is unusable here (it resolves
-     *  the start class via the system loader, which misses an app class in a large multidex apk). */
+     *  the start class via the system loader, which misses an app class in a large multidex apk).
+     *  Their basenames are what a tombstone reports as the faulting thread of a fork, so they are mirrored in
+     *  [ForkedToolVm.LAUNCHER_THREAD_NAMES] — keep the two lists in step. */
     val LAUNCHERS = listOf(
         "/apex/com.android.art/bin/dalvikvm64",
         "/apex/com.android.art/bin/dalvikvm32",
@@ -86,15 +89,25 @@ object R8ForkSupport {
 
     /**
      * The largest heap (MB) a forked VM grants while loading R8, or null if forking is unavailable (no
-     * launcher / missing asset). Scans the ladder ascending and stops at the first rejection — heap
-     * reservation is monotonic in `-Xmx`, so the last accepted value is the ceiling. Forks several VMs
-     * (~0.5s each), so call off the main thread; intended for the on-demand "Detect device limit" action.
+     * launcher / missing asset / no heap this device can back). Scans the ladder ascending and stops at the
+     * first rejection — heap reservation is monotonic in `-Xmx`, so the last accepted value is the ceiling.
+     * Forks several VMs (~0.5s each), so call off the main thread.
+     *
+     * The ladder is first trimmed to what the device's RAM can back ([affordableHeaps]), because a rejection
+     * is not a polite `false`: a VM that cannot reserve its region space ABORTS, and the OS files that abort
+     * under this package. Trimming stops a small phone at a rung it can actually reach instead of walking up
+     * into a certain abort, and a device that grants the whole trimmed ladder never aborts at all.
      */
     fun detectCeiling(context: Context): Int? {
         val launcher = launcher() ?: return null
         val dexes = extractR8Dexes(context) ?: return null
+        val ladder = affordableHeaps(context, CEILING_LADDER)
+        if (ladder.isEmpty()) {
+            log.info("r8-fork: ${totalMemMb(context)}MB of device RAM can't back even a ${CEILING_LADDER.first()}MB fork — forking unavailable")
+            return null
+        }
         var ceiling: Int? = null
-        for (mb in CEILING_LADDER) {
+        for (mb in ladder) {
             if (canFork(launcher, dexes, mb)) ceiling = mb else break
         }
         log.info("r8-fork: detected forked-VM ceiling = ${ceiling ?: "none"}MB (app cap ${Runtime.getRuntime().maxMemory() / (1024 * 1024)}MB)")
@@ -102,6 +115,23 @@ object R8ForkSupport {
     }
 
     private val CEILING_LADDER = listOf(768, 1024, 1536, 2048, 3072, 4096)
+
+    /**
+     * [candidates] (`-Xmx` values in MB) minus the ones this device's RAM visibly cannot back, order kept.
+     * Every fork path filters through this so no path launches a VM whose only possible outcome is an ART
+     * startup abort; see [ForkedToolVm.affordableHeaps] for why the bound is on 2× the heap.
+     */
+    fun affordableHeaps(context: Context, candidates: List<Int>): List<Int> =
+        ForkedToolVm.affordableHeaps(candidates, totalMemMb(context))
+
+    /** Device-wide physical RAM (MB) via [ActivityManager.MemoryInfo.totalMem]; 0 if unavailable. Unlike
+     *  [availableMemMb] this doesn't move with load — it bounds what a heap RESERVATION can ever be. */
+    fun totalMemMb(context: Context): Long = runCatching {
+        val am = context.applicationContext.getSystemService(Context.ACTIVITY_SERVICE) as ActivityManager
+        val mi = ActivityManager.MemoryInfo()
+        am.getMemoryInfo(mi)
+        mi.totalMem / (1024 * 1024)
+    }.getOrDefault(0L)
 
     // --- Concurrent-fork budget + process-wide gate ---------------------------------------------------------
 
