@@ -83,11 +83,22 @@ class KotlinUnimportedCallableReceiverTest {
     }
 
     @Test
-    fun unknownReceiverIsStillNotFlagged() {
-        // No evidence at all (not a type, not a callable, not a package) → still left alone, as before: it may be
-        // a generated / not-yet-built class the index doesn't hold.
+    fun unknownLowercaseReceiverIsFlagged() {
+        // A lower-case receiver naming nothing at all (not a type, not a callable, not a package) is a plain
+        // VALUE read with no declaration: what a RENAME leaves behind. It used to be left alone on the grounds
+        // that it might be a generated / not-yet-built class, but those are Capitalized
+        // ([unknownCapitalizedReceiverIsStillNotFlagged]), so a lower-case one is simply broken code.
         val u = unresolved(diagnose("package demo\nfun f() { binding.root() }"))
-        assertTrue(u.none { it.contains("binding") }, "an unknown receiver must not be flagged; got $u")
+        assertTrue(u.any { it.contains("binding") }, "an undeclared lower-case receiver must be flagged; got $u")
+    }
+
+    @Test
+    fun declaredLowercaseReceiverIsNotFlagged() {
+        // The counterpart: once it IS declared, nothing is reported (the check keys on resolution, not on shape).
+        val u = unresolved(
+            diagnose("package demo\nclass V { fun root() {} }\nclass C {\n  val binding = V()\n  fun f() { binding.root() }\n}")
+        )
+        assertTrue(u.none { it.contains("binding") }, "a declared receiver must not be flagged; got $u")
     }
 
     /**

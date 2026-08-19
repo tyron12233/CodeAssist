@@ -2714,11 +2714,15 @@ internal class KotlinSemanticChecks(private val service: KotlinSymbolService) {
         val off = expr.textRange.startOffset
         if (resolver.bareNameResolves(name, off) || resolver.companionMemberInScope(name, off)) return null
         // A qualified-expression receiver (see above) is flagged only on POSITIVE evidence that it names
-        // something real that isn't in scope — never a package segment or a generated/same-package class:
-        //  - a known, unimported LIBRARY type (`FontWeight.Bold` with no import), or
+        // something real that isn't in scope, or nothing at all that a receiver may legitimately be:
+        //  - a known, unimported LIBRARY type (`FontWeight.Bold` with no import),
         //  - a known top-level / extension CALLABLE that no import brings into scope (`viewModelScope.launch { }`
-        //    without `import androidx.lifecycle.viewModelScope`), which Kotlin reports as unresolved too.
-        if (isQualifiedReceiver && !service.hasLibraryType(name) && !unimportedCallableReceiver(name)) return null
+        //    without `import androidx.lifecycle.viewModelScope`), which Kotlin reports as unresolved too, or
+        //  - a lower-case name that is neither a package qualifier nor a generated class, i.e. a plain VALUE
+        //    read whose declaration is gone ([danglingValueReceiver]).
+        if (isQualifiedReceiver && !service.hasLibraryType(name) && !unimportedCallableReceiver(name) &&
+            !danglingValueReceiver(name, expr, resolver)
+        ) return null
         val r = expr.textRange
         return Diagnostic(TextRange(r.startOffset, r.endOffset), Severity.ERROR, "Unresolved reference: $name", KotlinDiagnosticCodes.UNRESOLVED)
     }
@@ -2728,7 +2732,7 @@ internal class KotlinSemanticChecks(private val service: KotlinSymbolService) {
      * `LocalContext.current`) names a package-level CALLABLE the classpath knows but no import brings into
      * scope: a missing import, which Kotlin reports as "Unresolved reference". The caller has already
      * established that the name resolves to nothing here; this only rules out the innocent receiver shapes:
-     *  - a PACKAGE qualifier — the leftmost segment of a fully-qualified reference (`kotlinx.coroutines.delay(1)`)
+     *  - a PACKAGE qualifier, the leftmost segment of a fully-qualified reference (`kotlinx.coroutines.delay(1)`),
      *    parses as a receiver too, so a known root package ([KotlinSymbolService.isRootPackage]) is never flagged;
      *  - a generated / not-yet-built same-package class (`R`, `BuildConfig`), ruled out by the evidence itself,
      *    since [KotlinSymbolService.callablePackages] answers for CALLABLES and a class name is not one (a TYPE
@@ -2747,6 +2751,61 @@ internal class KotlinSemanticChecks(private val service: KotlinSymbolService) {
         if (!service.classpathIndexReady()) return false
         if (service.callablePackages(name).isEmpty()) return false
         return !service.isRootPackage(name)
+    }
+
+    /**
+     * Whether a bare [name] standing in RECEIVER position (`user.name`, `binding.root`, `state.value`) is a
+     * plain VALUE read that resolves to nothing: the shape a RENAME leaves behind. Rename `val user` and every
+     * `user.name` after it is dead, but neither this check's sibling nor [unresolvedMember] could say so: the
+     * member check backs off because it cannot type the receiver, and the bare-reference check treated any
+     * unknown receiver as innocent. So a renamed variable's usages stayed unmarked, which is how the compile
+     * error was first met at build time instead of in the editor.
+     *
+     * The caller has already established that [name] resolves to nothing in scope; this rules out the shapes a
+     * receiver may legitimately have while naming no value:
+     *  - a PACKAGE qualifier: the leftmost segment of a fully-qualified reference (`kotlinx.coroutines.delay(1)`)
+     *    parses as a receiver. Three things rule that out: a known root package
+     *    ([KotlinSymbolService.isRootPackage]); a segment of one of the file's own imports (which names a package
+     *    this project uses); and a chain that reaches a Capitalized segment (`unknownpkg.Foo.bar`), since a
+     *    package path is spelled to a TYPE while a value chain reads members off a value. The last one is what
+     *    keeps a package the index does not happen to know from being reported;
+     *  - a TYPE, generated or otherwise: `R.string.x`, `BuildConfig.DEBUG`, `ActivityMainBinding.inflate(…)`,
+     *    or a same-package class the disk index has not caught up to. Kotlin capitalizes every type name and
+     *    lower-cases every value and package name, so restricting to a lower-case initial excludes them all;
+     *    a Capitalized receiver keeps its existing, evidence-only treatment (`hasLibraryType`).
+     *
+     * Gated on a finished classpath index: a still-building index answers "not a package" for everything, and
+     * this rule reads that negative answer as evidence.
+     */
+    private fun danglingValueReceiver(
+        name: String, expr: KtNameReferenceExpression, resolver: KotlinResolver,
+    ): Boolean {
+        if (!service.classpathIndexReady()) return false
+        if (!name[0].isLowerCase()) return false
+        if (service.isRootPackage(name)) return false
+        if (resolver.fileContext.imports.any { imp -> imp.fqn.splitToSequence('.').any { it == name } }) return false
+        // A Capitalized segment further down the chain means the chain is spelled to a TYPE, so everything left
+        // of it is a package path (`unknownpkg.Foo.bar`), not a value read. The cost is a false NEGATIVE on a
+        // value chain ending in a Capitalized member (`config.MAX_SIZE`), which is the safe direction.
+        return qualifiedChainSelectors(expr).none { it.isNotEmpty() && it[0].isUpperCase() }
+    }
+
+    /** The selector names of the qualified chain [expr] heads: `a.b.C.d()` from `a` yields `[b, C, d]`. */
+    private fun qualifiedChainSelectors(expr: KtNameReferenceExpression): List<String> {
+        val out = ArrayList<String>(2)
+        var node: PsiElement = expr
+        var parent = node.parent
+        while (parent is KtQualifiedExpression && parent.receiverExpression === node) {
+            when (val sel = parent.selectorExpression) {
+                is KtNameReferenceExpression -> out += sel.getReferencedName()
+                is KtCallExpression -> (sel.calleeExpression as? KtNameReferenceExpression)
+                    ?.let { out += it.getReferencedName() }
+                else -> {}
+            }
+            node = parent
+            parent = node.parent
+        }
+        return out
     }
 
     /**
