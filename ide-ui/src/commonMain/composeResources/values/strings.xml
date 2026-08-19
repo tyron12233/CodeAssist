@@ -161,6 +161,9 @@ We never collect your code, file or project names, which features you use, or an
     <string name="performance_analytics">Performance analytics</string>
     <string name="sharing_performance_data">Sharing anonymous performance data</string>
     <string name="not_sharing_performance_data">Not sharing performance data</string>
+    <string name="ftp_server">FTP server</string>
+    <string name="ftp_server_running">Running on 127.0.0.1:8021 · uploads go to assets/</string>
+    <string name="ftp_server_stopped">Stopped · local asset upload server</string>
     <string name="compatibility">Compatibility</string>
     <plurals name="recovered_projects">
         <item quantity="one">Recovered %1$d project from an older version</item>

@@ -30,6 +30,7 @@ import dev.ide.ui.backend.IdeBackend
 import dev.ide.ui.backend.UiActionPlaces
 import dev.ide.ui.components.AnalyticsToggleRow
 import dev.ide.ui.components.BottomSheet
+import dev.ide.ui.components.FtpServerToggleRow
 import dev.ide.ui.components.CommandPalette
 import dev.ide.ui.components.DropdownOverlay
 import dev.ide.ui.ext.UiPluginHost
@@ -151,6 +152,16 @@ internal fun MoreSheetContent(
             Box(Modifier.fillMaxWidth().padding(vertical = 8.dp).height(1.dp).background(MaterialTheme.colorScheme.outlineVariant))
             Box(Modifier.padding(horizontal = 6.dp)) {
                 AnalyticsToggleRow(enabled = on, onChange = { on = it; backend.diagnostics.setAnalyticsConsent(it) })
+            }
+        }
+
+        // The local FTP asset server toggle sits below analytics; it's controllable from the app or via the
+        // `ftp_server` MCP tool (both flip the same `settings.ai.ftpServer` pref + live server state).
+        if (backend.agent.ftpServerSupported()) {
+            var on by remember { mutableStateOf(backend.agent.ftpServerEnabled()) }
+            Box(Modifier.fillMaxWidth().padding(vertical = 8.dp).height(1.dp).background(MaterialTheme.colorScheme.outlineVariant))
+            Box(Modifier.padding(horizontal = 6.dp)) {
+                FtpServerToggleRow(enabled = on, onChange = { on = it; backend.agent.setFtpServerEnabled(it) })
             }
         }
     }

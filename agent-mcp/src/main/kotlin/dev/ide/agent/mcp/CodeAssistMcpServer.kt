@@ -40,6 +40,12 @@ object CodeAssistMcpServer {
     const val PROJECT_MEMORY_URI = "codeassist://project/memory"
     const val AGENT_PROMPT = "codeassist_agent"
 
+    /** Default port for the in-IDE MCP-over-HTTP server (`adb forward tcp:8765 tcp:8765`). */
+    const val DEFAULT_HTTP_PORT = 8765
+
+    /** Default port for the local FTP asset server (`adb forward tcp:8021 tcp:8021`). */
+    const val DEFAULT_FTP_PORT = 8021
+
     /**
      * Builds a configured [McpServer.McpSyncServer] that serves [tools] over [transportProvider].
      * Defaults the tool registry to the built-in tool set bound to [workspace] (the engine-backed port
@@ -77,6 +83,49 @@ object CodeAssistMcpServer {
      * authorized through [gate] first and refused (as an MCP tool-level error the client's model can act
      * on) when denied.
      */
+    /**
+     * Starts an MCP-over-HTTP server (Streamable HTTP, request-response mode) exposing the same tool set
+     * as [build], bound to [port] (0 picks an ephemeral port). The returned [HttpMcpServer] is how a host
+     * (e.g. the IDE's engine) embeds the server: callers get the bound port to advertise and close it to
+     * stop listening. Any MCP Streamable HTTP client can connect, including opencode configured with a
+     * `remote` server (e.g. `http://127.0.0.1:8765/mcp` after `adb forward tcp:8765 tcp:8765`).
+     */
+    fun startHttpServer(
+        workspace: AgentWorkspace,
+        port: Int = DEFAULT_HTTP_PORT,
+        tools: AgentToolRegistry = SimpleToolRegistry(builtinTools(workspace)),
+        gate: AgentPermissionGate = AllowAllGate,
+        serverName: String = DEFAULT_SERVER_NAME,
+        serverVersion: String = DEFAULT_SERVER_VERSION,
+        mapper: McpJsonMapper = McpJsonDefaults.getMapper(),
+    ): HttpMcpServer {
+        val provider = HttpStreamableServerTransportProvider(mapper)
+        val toolSpecs = tools.tools.map { tool -> toolSpec(tool, workspace, gate, mapper) }
+        McpServer.sync(provider)
+            .serverInfo(serverName, serverVersion)
+            .capabilities(
+                McpSchema.ServerCapabilities.builder()
+                    .tools(true)
+                    .resources(true, false)
+                    .prompts(true)
+                    .build(),
+            )
+            .tools(toolSpecs)
+            .resources(projectOverviewResource(workspace, mapper), projectMemoryResource(workspace, mapper))
+            .prompts(agentPrompt(workspace, tools))
+            .build()
+        provider.bind(port)
+        return HttpMcpServer(provider)
+    }
+
+    /**
+     * Starts the local FTP asset server rooted at [root] (callers pass their `<project>/assets` directory,
+     * created on start). Anonymous, bound to 127.0.0.1 only, so uploads land directly in [root] and nothing
+     * leaks off the device. The returned [FtpServer] is closed to stop listening.
+     */
+    fun startFtpServer(root: java.nio.file.Path, port: Int = DEFAULT_FTP_PORT): FtpServer =
+        FtpServer(root, port).start()
+
     private fun toolSpec(
         tool: AgentTool,
         workspace: AgentWorkspace,

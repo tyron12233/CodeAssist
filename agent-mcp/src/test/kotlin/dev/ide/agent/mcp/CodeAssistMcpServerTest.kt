@@ -225,7 +225,7 @@ class CodeAssistMcpServerTest {
         result.content().joinToString("\n") { (it as McpSchema.TextContent).text() }
 
     /** An in-memory [AgentWorkspace] for the wire-level tests. */
-    private class FakeWorkspace(
+    internal class FakeWorkspace(
         val files: MutableMap<String, String> = mutableMapOf(),
         private val memory: String = "",
     ) : AgentWorkspace {
@@ -268,7 +268,7 @@ class CodeAssistMcpServerTest {
     }
 
     /** Refuses every mutating tool. */
-    private object DenyGate : AgentPermissionGate {
+    internal object DenyGate : AgentPermissionGate {
         override val mode: PermissionMode get() = PermissionMode.PLAN_ONLY
         override suspend fun authorize(request: WriteRequest): Boolean = false
     }
