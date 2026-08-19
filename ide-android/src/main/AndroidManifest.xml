@@ -41,6 +41,7 @@
          biggest lever against OOM during on-device builds; the dexer also bounds its parallelism to the heap
          (see DexConcurrency). -->
     <application
+            android:name=".CodeAssistApplication"
             android:allowBackup="true"
             android:largeHeap="true"
             android:icon="@mipmap/ic_launcher"
@@ -161,6 +162,16 @@
                     android:name="android.support.FILE_PROVIDER_PATHS"
                     android:resource="@xml/file_paths" />
         </provider>
+
+        <!-- Shizuku supplies an adb/root-privileged binder. APK installation prefers it when the service is
+             running and the user has granted CodeAssist access, then falls back to PackageInstaller. -->
+        <provider
+                android:name="rikka.shizuku.ShizukuProvider"
+                android:authorities="${applicationId}.shizuku"
+                android:enabled="true"
+                android:exported="true"
+                android:multiprocess="false"
+                android:permission="android.permission.INTERACT_ACROSS_USERS_FULL" />
 
         <!-- Surfaces the whole app directory as a browsable, read/write root in the system Files app and
              any SAF file manager — so users can drop in icons/layouts/assets and edit project files from a
