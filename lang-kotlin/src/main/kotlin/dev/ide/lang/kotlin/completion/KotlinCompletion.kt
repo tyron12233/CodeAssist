@@ -285,7 +285,9 @@ class KotlinCompletion(
         //    supertype-list entry — unlike a nested type argument (`class Foo : List<Ba█>`), whose reference
         //    sits under a type projection. A class there is a constructor call; an interface stays bare.
         val superTypeEntry = climbTo<KtTypeReference>(markerLeaf)?.parent is KtSuperTypeListEntry
-        val typePosition = inTypePosition(markerLeaf)
+        // A type reference by position, or a type offered into a declaration's RECEIVER slot ([PositionResult.
+        // typeInsert]). Either way a generic candidate inserts its `<>`.
+        val typePosition = inTypePosition(markerLeaf) || pos.typeInsert
 
         val symbolItems = candidates.map { c ->
             val (typeParamCount, ctorRequiredArgs) =
@@ -388,6 +390,10 @@ class KotlinCompletion(
          *  its BARE name (`import a.b.map`), never the call form `map()` — unlike a fully-qualified call in code
          *  (`a.b.map(...)`), where the parens are wanted. */
         val bareCallable: Boolean = false,
+        /** The candidates are TYPE names being inserted as a type reference even though the caret isn't inside
+         *  one: the receiver slot of a declaration name (`fun <caret>` -> `fun List<>.…`). Makes a generic
+         *  candidate insert its `<>` exactly as a real type position does. */
+        val typeInsert: Boolean = false,
     )
 
     private fun classifyPosition(
@@ -590,8 +596,15 @@ class KotlinCompletion(
         // (`val`/`var`/`vararg`/`reified`), so keyword context stays on there.
         val declName = declarationNameKind(markerLeaf)
         if (declName != DeclNameKind.NONE) {
+            // …with ONE exception: a `fun`/`val` name may be preceded by a RECEIVER TYPE (`fun String.shout()`,
+            // `val List<T>.second`), which is the only way to declare an extension. So type names do belong at
+            // `fun <caret>`; nothing offered them, leaving only the buffer-word guesses, with no way to reach
+            // (or auto-import) the receiver type from the popup. See [receiverTypeCandidates] for the gate.
+            val types = receiverTypeCandidates(markerLeaf, declName, prefix, resolver)
             return PositionResult(
-                emptyList(), extra = extra, keywordContext = declName == DeclNameKind.PARAM
+                types?.symbols.orEmpty(), extra = extra,
+                keywordContext = declName == DeclNameKind.PARAM,
+                capped = types?.capped == true, typeInsert = types != null,
             )
         }
         // The type the context wants → offer literals/enum constants and rank assignable candidates first.
@@ -618,6 +631,34 @@ class KotlinCompletion(
         val decl = leaf?.parent as? KtNamedDeclaration ?: return DeclNameKind.NONE
         if (decl.nameIdentifier !== leaf) return DeclNameKind.NONE
         return if (decl is KtParameter || decl is KtTypeParameter) DeclNameKind.PARAM else DeclNameKind.DECL
+    }
+
+    /**
+     * The RECEIVER-type candidates for a declaration-name spot: the types that can precede the name being
+     * typed, turning the declaration into an extension (`fun <caret>` → `fun String.shout()`). Null (offer
+     * nothing, as before) when this isn't such a spot:
+     *  - a parameter / type-parameter / class / object / typealias name, none of which takes a receiver;
+     *  - a declaration that ALREADY has its receiver (`fun String.na<caret>`): the user is naming it now;
+     *  - a LOCAL `val`/`var`, since Kotlin forbids a local extension property (a local `fun` is fine);
+     *  - a prefix that starts lowercase, which by convention is a name being invented, not a type being
+     *    reached for, and the popup must not start suggesting types while someone types `fun render…`.
+     * An empty prefix still offers them, so an explicitly-invoked popup at `fun ` lists the receiver options.
+     */
+    private fun receiverTypeCandidates(
+        markerLeaf: PsiElement?,
+        declName: DeclNameKind,
+        prefix: String,
+        resolver: KotlinResolver,
+    ): KotlinSymbolService.TypeNameCandidates? {
+        if (declName != DeclNameKind.DECL) return null
+        if (prefix.isNotEmpty() && !prefix.first().isUpperCase()) return null
+        val takesReceiver = when (val decl = markerLeaf?.parent) {
+            is KtNamedFunction -> decl.receiverTypeReference == null
+            is KtProperty -> decl.receiverTypeReference == null && !decl.isLocal
+            else -> false
+        }
+        if (!takesReceiver) return null
+        return service.typeNameCandidates(prefix, currentFilePath = resolver.fileContext.path)
     }
 
     // --- override / named-argument / expected-type extras ---
