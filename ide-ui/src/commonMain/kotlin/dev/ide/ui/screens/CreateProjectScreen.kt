@@ -28,10 +28,8 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -61,7 +59,6 @@ import dev.ide.ui.icons.TreeIcon
 import dev.ide.ui.icons.TreeIcons
 import dev.ide.ui.theme.resolveTint
 import dev.ide.ui.theme.Ca
-import kotlinx.coroutines.launch
 import org.jetbrains.compose.resources.stringResource
 
 /**
@@ -165,39 +162,7 @@ private fun ColumnScope.Configure(
     onBack: () -> Unit,
     onCreated: () -> Unit,
 ) {
-    var name by remember(template) { mutableStateOf(defaultName(template)) }
-    var pkg by remember(template) { mutableStateOf("") }
-    var pkgEdited by remember(template) { mutableStateOf(false) }
-    // Auto-derive the package from the name until the user edits it themselves.
-    val effectivePkg = if (pkgEdited) pkg else "com.example.${slug(name).replace("-", "")}".ifEmpty { "com.example.app" }
-
-    val paramValues = remember(template) {
-        mutableStateMapOf<String, String>().apply {
-            template.parameters.forEach { p -> put(p.key, defaultValue(p)) }
-        }
-    }
-
-    val scope = rememberCoroutineScope()
-    var busy by remember { mutableStateOf(false) }
-    var error by remember { mutableStateOf<String?>(null) }
-
-    val nameValid = name.isNotBlank()
-    val pkgValid = effectivePkg.isNotBlank() && effectivePkg.all { it.isLetterOrDigit() || it == '.' || it == '_' }
-
-    fun create() {
-        if (!nameValid || !pkgValid || busy) return
-        busy = true; error = null
-        val args = HashMap<String, String>().apply {
-            put("name", name.trim())
-            put("packageName", effectivePkg.trim().trim('.'))
-            paramValues.forEach { (k, v) -> put(k, v) }
-        }
-        scope.launch {
-            val result = backend.projects.createProject(template.id, args)
-            busy = false
-            if (result.success) onCreated() else error = result.message
-        }
-    }
+    val state = rememberCreateProjectFormState(backend, template)
 
     Header(title = template.displayName, subtitle = template.description, onBack = onBack)
     Spacer(Modifier.height(20.dp))
@@ -205,17 +170,17 @@ private fun ColumnScope.Configure(
         Modifier.weight(1f).verticalScroll(rememberScrollState()),
         verticalArrangement = Arrangement.spacedBy(16.dp),
     ) {
-        FormField(stringResource(Res.string.project_name), name, "MyProject", onChange = { name = it })
-        FormField(stringResource(Res.string.package_name), effectivePkg, "com.example.app", onChange = { pkg = it; pkgEdited = true })
+        FormField(stringResource(Res.string.project_name), state.name, "MyProject", onChange = state::updateName)
+        FormField(stringResource(Res.string.package_name), state.packageName, "com.example.app", onChange = state::updatePackage)
         template.parameters.forEach { p ->
-            ParamControl(p, value = paramValues[p.key] ?: defaultValue(p), onChange = { paramValues[p.key] = it })
+            ParamControl(p, value = state.paramValues[p.key] ?: defaultValue(p), onChange = { state.updateParam(p.key, it) })
         }
-        error?.let { Text(it, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodyMedium) }
+        state.error?.let { Text(it, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodyMedium) }
     }
     Spacer(Modifier.height(16.dp))
     PrimaryButton(
-        text = stringResource(if (busy) Res.string.creating else Res.string.create_project),
-        onClick = ::create,
+        text = stringResource(if (state.busy) Res.string.creating else Res.string.create_project),
+        onClick = { state.create(onCreated) },
         modifier = Modifier.fillMaxWidth(),
     )
 }
@@ -336,7 +301,7 @@ private fun TemplateGlyph(iconId: String) {
     }
 }
 
-private fun defaultName(template: UiProjectTemplate): String = when {
+internal fun defaultName(template: UiProjectTemplate): String = when {
     template.id.contains("android-app") -> "My App"
     template.id.contains("android-library") -> "My Library"
     template.id.contains("console") -> "My App"
@@ -344,11 +309,11 @@ private fun defaultName(template: UiProjectTemplate): String = when {
     else -> "My Project"
 }
 
-private fun defaultValue(p: UiTemplateParam): String = when (p) {
+internal fun defaultValue(p: UiTemplateParam): String = when (p) {
     is UiTemplateParam.Text -> p.default
     is UiTemplateParam.Choice -> p.options.getOrNull(p.defaultIndex)?.value ?: p.options.firstOrNull()?.value ?: ""
     is UiTemplateParam.Toggle -> p.default.toString()
 }
 
-private fun slug(name: String): String =
+internal fun slug(name: String): String =
     name.trim().lowercase().replace(Regex("[^a-z0-9]+"), "-").trim('-')

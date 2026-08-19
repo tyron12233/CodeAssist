@@ -29,12 +29,9 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -85,8 +82,6 @@ import dev.ide.ui.icons.CaIcons
 import dev.ide.ui.platform.rememberNotificationPermissionController
 import dev.ide.ui.theme.Ca
 import dev.ide.ui.theme.Motion
-import kotlinx.coroutines.delay
-import kotlinx.coroutines.launch
 import org.jetbrains.compose.resources.stringResource
 
 private val WIDE_BREAKPOINT = 720.dp
@@ -100,8 +95,8 @@ private const val ACTION_BUILD_NOTIFICATIONS = "buildNotifications"
 /** The ads on/off toggle is injected UI-side onto the Privacy page and routed to the [dev.ide.ui.ads.AdController]
  *  (persisted under its own `ads.enabled` pref), not the backend settings store — ads are a host concern the
  *  backend doesn't know about. [PRIVACY_PAGE_ID] mirrors `BuiltInSettingsPages.PRIVACY`. */
-private const val PRIVACY_PAGE_ID = "privacy"
-private const val SHOW_ADS_KEY = "showAds"
+internal const val PRIVACY_PAGE_ID = "privacy"
+internal const val SHOW_ADS_KEY = "showAds"
 /** The "Manage ad consent" action injected onto the Privacy page when the host's UMP flow requires a privacy-
  *  options entry point (EEA/UK). Routed to [dev.ide.ui.ads.AdController.showPrivacyOptions], not the store. */
 private const val AD_PRIVACY_KEY = "adPrivacyOptions"
@@ -130,10 +125,6 @@ fun SettingsScreen(
     codeFont: FontFamily = FontFamily.Monospace,
     fileActions: FileActions = FileActions.None,
 ) {
-    // Bumped when a Choice/Toggle changes so pages re-fetch: some pages render conditionally on another
-    // control's value (e.g. Build Runtime hides the R8 heap slider in In-process mode). Sliders/text don't
-    // bump it, so a slider drag never triggers a costly per-step re-fetch.
-    var structuralRefresh by remember { mutableStateOf(0) }
     // The ads on/off control (moved off the picker's support card). Shown only where an ad network exists
     // (AdController.manageable, i.e. Android, never desktop) and prepended to the Privacy & Data page; its
     // writes route to the controller below, not the backend store.
@@ -146,7 +137,8 @@ fun SettingsScreen(
     // `ads?.privacyOptionsRequired` reads the host's observable consent state, so once UMP resolves and a
     // privacy-options entry becomes required, this recomputes and the "Manage ad consent" action appears.
     val privacyOptionsRequired = ads?.privacyOptionsRequired == true
-    val pages = remember(view, structuralRefresh, ads?.manageable, privacyOptionsRequired, showAdsTitle, showAdsDesc, adPrivacyTitle) {
+    val state = rememberSettingsScreenState(backend, ads)
+    val pages = remember(view, state.structuralRefresh, ads?.manageable, privacyOptionsRequired, showAdsTitle, showAdsDesc, adPrivacyTitle) {
         val base = backend.settings.settingsPages().filter {
             when (view) {
                 SettingsView.All -> true
@@ -168,44 +160,29 @@ fun SettingsScreen(
             }
         }
     }
-    // Local mirror of each control's value (keyed "pageId.controlKey"), seeded from the descriptors. Controls
-    // read/write this for instant feedback; each write also persists through the backend.
-    val values = remember {
-        mutableStateMapOf<String, String>().apply {
-            pages.forEach { page -> page.controls.forEach { c -> encodeValue(c)?.let { put("${page.id}.${c.key}", it) } } }
-        }
+    // Seed the value mirror from the descriptors on first composition (later writes are the source of truth).
+    remember(state) {
+        state.seed(buildMap { pages.forEach { page -> page.controls.forEach { c -> encodeValue(c)?.let { put("${page.id}.${c.key}", it) } } } })
     }
-    var toast by remember { mutableStateOf<String?>(null) }
-    val scope = rememberCoroutineScope()
-    val backupReadyMsg = stringResource(Res.string.settings_backup_ready)
-    val notifEnabledMsg = stringResource(Res.string.build_notif_enabled)
     // The build-notification permission re-request (Build Runtime page); the launcher lives in composition.
     val notifController = rememberNotificationPermissionController()
-    LaunchedEffect(toast) { if (toast != null) { delay(2400); toast = null } }
 
     val onSet: (String, String, String) -> Unit = { pageId, key, encoded ->
-        values["$pageId.$key"] = encoded
-        if (ads != null && pageId == PRIVACY_PAGE_ID && key == SHOW_ADS_KEY) {
-            // The injected ads toggle: persist through the controller (its own `ads.enabled` pref), not the store.
-            ads.updateAdsEnabled(encoded.toBooleanStrictOrNull() ?: true)
-        } else {
-            backend.settings.setSetting(pageId, key, encoded)
-            onSettingsChanged()
-        }
+        state.set(pageId, key, encoded, onSettingsChanged)
     }
     val onAction: (String, UiSettingControl.Action) -> Unit = { pageId, action ->
         when (action.key) {
             // The injected "Manage ad consent" action: reopen the host's UMP privacy-options form.
             AD_PRIVACY_KEY -> ads?.showPrivacyOptions()
             ACTION_VIEW_LOGS -> onOpenLogs()
-            ACTION_BACKUP -> scope.launch { backend.projects.backupProjects()?.let { fileActions.share(it) }; toast = backupReadyMsg }
+            ACTION_BACKUP -> state.backupProjects(fileActions::share)
             // Re-request the notification permission; if the OS won't re-prompt (permanently denied), route to
             // the app's notification settings so the user can still enable it. Isolated builds resume on the
             // next project open (same as toggling "Build in a separate process" — see BuildNotificationGate).
             ACTION_BUILD_NOTIFICATIONS -> notifController.request { granted ->
-                if (granted) toast = notifEnabledMsg else notifController.openSettings()
+                if (granted) state.show(SettingsToast.NotificationsEnabled) else notifController.openSettings()
             }
-            else -> scope.launch { backend.settings.invokeSettingAction(pageId, action.key)?.let { toast = it } }
+            else -> state.invokeAction(pageId, action)
         }
     }
 
@@ -218,13 +195,19 @@ fun SettingsScreen(
             } else {
                 BoxWithConstraints(Modifier.fillMaxSize()) {
                     if (maxWidth >= WIDE_BREAKPOINT) {
-                        WideLayout(backend, pages, values, codeFont, onSet, onAction) { structuralRefresh++ }
+                        WideLayout(backend, pages, state.values, codeFont, onSet, onAction, state::onStructuralChange)
                     } else {
-                        NarrowLayout(backend, pages, values, codeFont, onSet, onAction) { structuralRefresh++ }
+                        NarrowLayout(backend, pages, state.values, codeFont, onSet, onAction, state::onStructuralChange)
                     }
                 }
             }
-            ToastBar(toast, Modifier.align(Alignment.BottomCenter))
+            val toastText = when (val t = state.toast) {
+                null -> null
+                is SettingsToast.Message -> t.text
+                SettingsToast.BackupReady -> stringResource(Res.string.settings_backup_ready)
+                SettingsToast.NotificationsEnabled -> stringResource(Res.string.build_notif_enabled)
+            }
+            ToastBar(toastText, Modifier.align(Alignment.BottomCenter))
         }
     }
 }

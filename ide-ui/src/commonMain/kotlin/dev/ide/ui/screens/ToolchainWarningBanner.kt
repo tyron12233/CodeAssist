@@ -14,12 +14,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -41,7 +36,6 @@ import dev.ide.ui.generated.resources.toolchain_warning_working
 import dev.ide.ui.icons.CaIcons
 import dev.ide.ui.theme.Ca
 import dev.ide.ui.theme.Ide
-import kotlinx.coroutines.launch
 import org.jetbrains.compose.resources.stringResource
 
 /**
@@ -69,47 +63,9 @@ import org.jetbrains.compose.resources.stringResource
  */
 @Composable
 internal fun ToolchainWarningBanner(state: IdeUiState, compact: Boolean) {
-    val rootPath = state.backend.project.rootPath
-    val depsState by state.backend.deps.depsState.collectAsState()
-    var warnings by remember(rootPath) { mutableStateOf<List<UiToolchainWarning>>(emptyList()) }
-    var dismissed by remember(rootPath) { mutableStateOf(setOf<String>()) }
-    var expanded by remember(rootPath) { mutableStateOf(setOf<String>()) }
-    var listOpen by remember(rootPath) { mutableStateOf(false) }
-    var busyId by remember(rootPath) { mutableStateOf<String?>(null) }
-    var results by remember(rootPath) { mutableStateOf(mapOf<String, String>()) }
-    var epoch by remember(rootPath) { mutableStateOf(0) }
-    val scope = rememberCoroutineScope()
-
-    // Read on open, after an action, and once a dependency resolve settles (the versions may just have changed
-    // from the Dependencies screen, which is the other way this gets fixed).
-    LaunchedEffect(rootPath, epoch, depsState.resolving) {
-        if (!depsState.resolving) {
-            warnings = runCatching { state.backend.modules.toolchainWarnings() }.getOrDefault(emptyList())
-        }
-    }
-
-    val shown = warnings.filterNot { it.id in dismissed }
+    val warningState = rememberToolchainWarningState(state)
+    val shown = warningState.shown
     if (shown.isEmpty()) return
-
-    val onFix: (UiToolchainWarning) -> Unit = { w ->
-        busyId = w.id
-        scope.launch {
-            val r = state.backend.modules.fixToolchainWarning(w.moduleName, w.id)
-            results = results + (w.id to r.message)
-            busyId = null
-            epoch++
-            if (r.success) state.reanalyzeOpenFiles()
-        }
-    }
-    val onAccept: (UiToolchainWarning) -> Unit = { w ->
-        busyId = w.id
-        scope.launch {
-            val r = state.backend.modules.acceptToolchainWarning(w.moduleName, w.id)
-            results = results + (w.id to r.message)
-            busyId = null
-            epoch++
-        }
-    }
 
     Column(Modifier.fillMaxWidth().background(Ide.colors.warning.copy(alpha = 0.10f))) {
         // Several affected modules collapse behind one row: three full cards would fill a phone screen, and the
@@ -117,7 +73,7 @@ internal fun ToolchainWarningBanner(state: IdeUiState, compact: Boolean) {
         if (shown.size > 1) {
             Row(
                 Modifier.fillMaxWidth()
-                    .clickable { listOpen = !listOpen }
+                    .clickable(onClick = warningState::toggleList)
                     .padding(horizontal = 16.dp, vertical = 12.dp),
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
@@ -133,30 +89,30 @@ internal fun ToolchainWarningBanner(state: IdeUiState, compact: Boolean) {
                     modifier = Modifier.weight(1f),
                 )
                 Icon(
-                    if (listOpen) CaIcons.caretDown else CaIcons.caretRight,
-                    if (listOpen) stringResource(Res.string.hide_details) else stringResource(Res.string.show_details),
+                    if (warningState.listOpen) CaIcons.caretDown else CaIcons.caretRight,
+                    if (warningState.listOpen) stringResource(Res.string.hide_details) else stringResource(Res.string.show_details),
                     Modifier.size(14.dp), tint = Ide.colors.warning,
                 )
                 IconButtonCa(
                     CaIcons.close, stringResource(Res.string.dismiss),
-                    { dismissed = dismissed + shown.map { it.id } }, boxSize = 24, iconSize = 14,
+                    warningState::dismissAll, boxSize = 24, iconSize = 14,
                 )
             }
         }
-        AnimatedVisibility(shown.size == 1 || listOpen) {
+        AnimatedVisibility(shown.size == 1 || warningState.listOpen) {
             Column(Modifier.fillMaxWidth()) {
                 for (w in shown) {
                     WarningCard(
                         warning = w,
                         compact = compact,
-                        busy = busyId == w.id,
-                        detailExpanded = w.id in expanded,
-                        result = results[w.id],
+                        busy = warningState.busyId == w.id,
+                        detailExpanded = w.id in warningState.expanded,
+                        result = warningState.results[w.id],
                         indented = shown.size > 1,
-                        onToggleDetail = { expanded = if (w.id in expanded) expanded - w.id else expanded + w.id },
-                        onDismiss = { dismissed = dismissed + w.id },
-                        onFix = { onFix(w) },
-                        onAccept = { onAccept(w) },
+                        onToggleDetail = { warningState.toggleDetail(w.id) },
+                        onDismiss = { warningState.dismiss(w.id) },
+                        onFix = { warningState.fix(w) },
+                        onAccept = { warningState.accept(w) },
                     )
                 }
             }

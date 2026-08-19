@@ -6,6 +6,7 @@ import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.snapshotFlow
 import androidx.compose.runtime.snapshots.SnapshotStateMap
 import androidx.compose.ui.text.TextRange
 import dev.ide.ui.backend.IdeBackend
@@ -33,8 +34,14 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
+import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.collectLatest
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.drop
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import kotlin.time.Duration.Companion.milliseconds
 
 /**
  * Top-level screens, ordered by depth so the transition helper can infer direction: a move to a
@@ -159,6 +166,10 @@ class OpenFile(
     }
 }
 
+/** The open-tab session bits that, when any change, should reschedule the debounced tab save (so the persisted
+ *  session tracks the caret / scroll / view surface, not just which files are open). */
+private data class TabSessionKey(val path: String, val caret: Int, val scrollLine: Int, val viewMode: EditorViewMode)
+
 /** Placeholder root shown until the real tree finishes building off the main thread — renders as an empty pane. */
 private val EMPTY_TREE = TreeNode(id = "loading", name = "", kind = NodeKind.Workspace, filePath = null, iconId = "workspace")
 
@@ -216,6 +227,83 @@ class IdeUiState(
 
     /** Cancel in-flight async work (file opens). Call when this state leaves composition. */
     fun dispose() { scope.cancel() }
+
+    /**
+     * The per-project bridges between this state and the backend, running for as long as the caller's
+     * coroutine lives (the host launches one per project, so they all stop together when the project is
+     * swapped out): restore the last tab session and keep it persisted, publish the editor-lifecycle events
+     * plugins listen for, persist the file-tree expansion, and re-read files written outside the editor.
+     */
+    suspend fun runSessionEffects(): Unit = coroutineScope {
+        launch { restoreAndPersistTabs() }
+        launch { publishActiveEditor() }
+        launch { publishSelection() }
+        launch { persistTreeExpansion() }
+        launch { syncExternalWrites() }
+    }
+
+    // Reopen the tabs from the last session with this project; if there were none, land on a sensible first
+    // file so entering the editor shows real code. Then persist tab changes (debounced) so they reopen next
+    // launch: `drop(1)` skips the just-restored state, and `collectLatest` cancels the pending write when
+    // another tab change lands within the debounce window.
+    private suspend fun restoreAndPersistTabs() {
+        ensureTreeLoaded() // build the real file tree off the main thread before it's shown / walked
+        if (!restoreTabs()) {
+            defaultFile()?.let { node -> node.filePath?.let { open(it, node.name) } }
+        }
+        snapshotFlow {
+            // Re-emit when the tab set, the active tab, OR any tab's caret / scroll / view mode changes, so the
+            // persisted session records where the user is, not only which files are open.
+            openFiles.map {
+                TabSessionKey(it.path, it.session.selection.start, it.session.viewportTopLine, it.viewMode)
+            } to activeIndex
+        }.drop(1).collectLatest {
+            delay(600.milliseconds)
+            val snapshot = tabsSnapshot() // read the Compose session state on the main thread,
+            withContext(ioDispatcher) { backend.projects.saveOpenTabs(snapshot) } // then write off it
+        }
+    }
+
+    // Editor-lifecycle events for plugins: the engine republishes these on the message bus
+    // (IdeEventTopics.EDITOR) and they are no-ops when nothing subscribes. The focused file, whenever it
+    // changes (null once the last tab closes):
+    private suspend fun publishActiveEditor() {
+        snapshotFlow { active?.path }
+            .distinctUntilChanged()
+            .collect { backend.editor.onActiveEditorChanged(it) }
+    }
+
+    // The caret/selection, debounced so it fires on settle rather than on every keystroke (collectLatest
+    // cancels the pending delay when the selection moves again).
+    private suspend fun publishSelection() {
+        snapshotFlow {
+            active?.let { Triple(it.path, it.session.selection.start, it.session.selection.end) }
+        }.distinctUntilChanged().collectLatest { sel ->
+            if (sel == null) return@collectLatest
+            delay(150.milliseconds)
+            backend.editor.onSelectionChanged(sel.first, sel.second, sel.third)
+        }
+    }
+
+    // Persist the file-tree expansion (debounced) so the tree reopens the same way next launch, keyed per
+    // project + view mode. `drop(1)` skips the seeded initial state; `collectLatest` coalesces rapid toggles.
+    private suspend fun persistTreeExpansion() {
+        snapshotFlow { treeMode to expandedTreeSnapshot() }.drop(1).collectLatest { (mode, ids) ->
+            delay(300.milliseconds)
+            backend.files.saveExpandedTreeState(mode, ids.toList())
+        }
+    }
+
+    // External file writes (e.g. an agent edit, or an "Open with" import the UI didn't drive) re-read the tree
+    // AND re-sync any clean open editor tab whose file changed on disk.
+    private suspend fun syncExternalWrites() {
+        backend.files.fileSystemEpoch.collect { fsEpoch ->
+            if (fsEpoch > 0) {
+                refreshTree()
+                syncOpenTabsFromDisk()
+            }
+        }
+    }
 
     // ---- sidebar panels (the LEFT + RIGHT activity rails) ----
     // Both sides are a list of `SidebarPanel`s (built-in + plugin tool windows); the rail shows one icon per

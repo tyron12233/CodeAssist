@@ -24,12 +24,10 @@ import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -61,13 +59,11 @@ import dev.ide.ui.generated.resources.refresh
 import dev.ide.ui.generated.resources.share
 import dev.ide.ui.icons.CaIcons
 import dev.ide.ui.theme.Ca
-import kotlinx.coroutines.delay
-import kotlinx.coroutines.launch
 import org.jetbrains.compose.resources.StringResource
 import org.jetbrains.compose.resources.stringResource
 
 /** Which severities the Logs viewer shows. */
-private enum class LogFilter(val labelRes: StringResource, val keep: (String) -> Boolean) {
+internal enum class LogFilter(val labelRes: StringResource, val keep: (String) -> Boolean) {
     All(Res.string.logs_filter_all, { true }),
     Warnings(Res.string.logs_filter_warnings, { it == "WARN" || it == "ERROR" }),
     Errors(Res.string.logs_filter_errors, { it == "ERROR" }),
@@ -85,36 +81,9 @@ fun LogsScreen(
     fileActions: FileActions,
     modifier: Modifier = Modifier,
 ) {
-    var all by remember { mutableStateOf(backend.diagnostics.recentLogs()) }
-    var filter by remember { mutableStateOf(LogFilter.All) }
-    var query by remember { mutableStateOf("") }
-    var paused by remember { mutableStateOf(false) }
-    // The source (plugin id) to show, or null for all. Only surfaced when some record carries a source.
-    var sourceFilter by remember { mutableStateOf<String?>(null) }
-    val scope = rememberCoroutineScope()
+    val state = rememberLogsScreenState(backend)
     val clipboard = LocalClipboardManager.current
-
-    // Live tail: refresh from the ring buffer periodically while the sheet is open (cheap — a snapshot of at
-    // most a few hundred records), unless the user paused it (so they can read without the list shifting).
-    LaunchedEffect(paused) {
-        while (!paused) {
-            all = backend.diagnostics.recentLogs()
-            delay(1500)
-        }
-    }
-
-    val q = query.trim()
-    val sources = remember(all) { all.mapNotNull { it.source }.distinct().sorted() }
-    // Drop a stale selection if that plugin's records have aged out of the ring buffer.
-    if (sourceFilter != null && sourceFilter !in sources) sourceFilter = null
-    val shown = remember(all, filter, q, sourceFilter) {
-        all.asReversed().filter { e ->
-            filter.keep(e.level) &&
-                (sourceFilter == null || e.source == sourceFilter) &&
-                (q.isEmpty() || e.message.contains(q, true) || e.tag.contains(q, true) ||
-                    (e.source?.contains(q, true) == true) || (e.stackTrace?.contains(q, true) == true))
-        }
-    }
+    val shown = state.shown
 
     Column(modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)) {
         // Header: title + actions
@@ -127,15 +96,13 @@ fun LogsScreen(
             Text(stringResource(Res.string.logs_title), color = MaterialTheme.colorScheme.onSurface, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
             Text("${shown.size}", color = MaterialTheme.colorScheme.outline, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.padding(start = 4.dp))
             Box(Modifier.weight(1f))
-            HeaderAction(if (paused) CaIcons.play else CaIcons.stop, if (paused) stringResource(Res.string.logs_resume) else stringResource(Res.string.logs_pause), paused) { paused = !paused }
-            HeaderAction(CaIcons.refresh, stringResource(Res.string.refresh)) { all = backend.diagnostics.recentLogs() }
+            HeaderAction(if (state.paused) CaIcons.play else CaIcons.stop, if (state.paused) stringResource(Res.string.logs_resume) else stringResource(Res.string.logs_pause), state.paused) { state.togglePaused() }
+            HeaderAction(CaIcons.refresh, stringResource(Res.string.refresh)) { state.refresh() }
             HeaderAction(CaIcons.copy, stringResource(Res.string.logs_copy_all)) {
                 clipboard.setText(AnnotatedString(clipForClipboard(shown.joinToString("\n\n") { renderForCopy(it) })))
             }
             if (fileActions.canShare) {
-                HeaderAction(CaIcons.share, stringResource(Res.string.share)) {
-                    scope.launch { backend.diagnostics.exportLogs()?.let { fileActions.share(it) } }
-                }
+                HeaderAction(CaIcons.share, stringResource(Res.string.share)) { state.export(fileActions::share) }
             }
         }
 
@@ -150,10 +117,10 @@ fun LogsScreen(
         ) {
             Icon(CaIcons.search, null, Modifier.size(16.dp), tint = MaterialTheme.colorScheme.primary)
             Box(Modifier.weight(1f)) {
-                if (query.isEmpty()) Text(stringResource(Res.string.logs_filter_hint), color = MaterialTheme.colorScheme.outline, style = MaterialTheme.typography.bodyLarge)
+                if (state.query.isEmpty()) Text(stringResource(Res.string.logs_filter_hint), color = MaterialTheme.colorScheme.outline, style = MaterialTheme.typography.bodyLarge)
                 BasicTextField(
-                    value = query,
-                    onValueChange = { query = it },
+                    value = state.query,
+                    onValueChange = state::updateQuery,
                     singleLine = true,
                     textStyle = MaterialTheme.typography.bodyLarge.copy(color = MaterialTheme.colorScheme.onSurface),
                     cursorBrush = SolidColor(MaterialTheme.colorScheme.primary),
@@ -164,17 +131,19 @@ fun LogsScreen(
 
         // Severity filter chips
         Row(Modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = 2.dp), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-            LogFilter.entries.forEach { f -> FilterChip(stringResource(f.labelRes), f == filter) { filter = f } }
+            LogFilter.entries.forEach { f -> FilterChip(stringResource(f.labelRes), f == state.filter) { state.selectFilter(f) } }
         }
 
         // Per-plugin filter chips — only shown once some record carries a source (a plugin logged something).
-        if (sources.isNotEmpty()) {
+        if (state.sources.isNotEmpty()) {
             Row(
                 Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(horizontal = 14.dp, vertical = 2.dp),
                 horizontalArrangement = Arrangement.spacedBy(6.dp),
             ) {
-                FilterChip(stringResource(Res.string.logs_filter_all_plugins), sourceFilter == null) { sourceFilter = null }
-                sources.forEach { s -> FilterChip(s, sourceFilter == s) { sourceFilter = if (sourceFilter == s) null else s } }
+                FilterChip(stringResource(Res.string.logs_filter_all_plugins), state.activeSource == null) { state.selectSource(null) }
+                state.sources.forEach { s ->
+                    FilterChip(s, state.activeSource == s) { state.selectSource(if (state.activeSource == s) null else s) }
+                }
             }
         }
 
@@ -184,7 +153,7 @@ fun LogsScreen(
         if (shown.isEmpty()) {
             Box(Modifier.weight(1f).fillMaxWidth(), contentAlignment = Alignment.Center) {
                 Text(
-                    if (all.isEmpty()) stringResource(Res.string.logs_empty) else stringResource(Res.string.logs_no_match),
+                    if (state.all.isEmpty()) stringResource(Res.string.logs_empty) else stringResource(Res.string.logs_no_match),
                     color = MaterialTheme.colorScheme.outline,
                     style = MaterialTheme.typography.bodyMedium,
                 )

@@ -4,100 +4,46 @@ import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.safeContent
 import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.layout.windowInsetsPadding
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Surface
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.collectAsState
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
-import androidx.compose.runtime.setValue
-import androidx.compose.runtime.snapshotFlow
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Surface
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontFamily
-import dev.ide.ui.ads.AdController
 import dev.ide.ui.ads.BuildAdInterstitial
 import dev.ide.ui.ads.LocalAds
 import dev.ide.ui.backend.AdHost
 import dev.ide.ui.backend.FileActions
 import dev.ide.ui.backend.IdeBackend
-import dev.ide.ui.components.BetaInfo
+import dev.ide.ui.backend.UiAccent
 import dev.ide.ui.components.OnboardingSheet
 import dev.ide.ui.ext.UiPluginHost
 import dev.ide.ui.generated.resources.Res
 import dev.ide.ui.generated.resources.import_gradle_failed
 import dev.ide.ui.generated.resources.import_unrecognized
-import dev.ide.ui.generated.resources.settings_title
 import dev.ide.ui.navigation.ScreenHost
 import dev.ide.ui.platform.PlatformBackHandler
 import dev.ide.ui.platform.PlatformSystemBars
-import dev.ide.ui.platform.ioDispatcher
-import dev.ide.ui.screens.CreateProjectScreen
-import dev.ide.ui.screens.CodeStyleScreen
-import dev.ide.ui.screens.EditorScreen
-import dev.ide.ui.screens.ExportProjectScreen
-import dev.ide.ui.screens.HomeScreen
-import dev.ide.ui.screens.ImportPreviewScreen
-import dev.ide.ui.screens.LearnScreen
-import dev.ide.ui.screens.LessonPlayerScreen
-import dev.ide.ui.screens.LessonTrackScreen
-import dev.ide.ui.screens.ProjectsStoreScreen
-import dev.ide.ui.screens.StoreItemScreen
-import dev.ide.ui.screens.KeystoreCreateScreen
-import dev.ide.ui.screens.KeystoreImportScreen
-import dev.ide.ui.screens.KeystoreManagerScreen
-import dev.ide.ui.screens.ModuleConfigScreen
-import dev.ide.ui.screens.ModulesTab
-import dev.ide.ui.screens.ProjectPickerScreen
-import dev.ide.ui.screens.doImportGradle
-import dev.ide.ui.screens.RunScreen
-import dev.ide.ui.screens.PluginsScreen
-import dev.ide.ui.screens.SdkManagerScreen
-import dev.ide.ui.screens.StorageScreen
-import dev.ide.ui.screens.SettingsHubScreen
-import dev.ide.ui.screens.SettingsScreen
-import dev.ide.ui.screens.SettingsView
-import dev.ide.ui.theme.CaAccent
+import dev.ide.ui.screens.GradleImportModeDialog
 import dev.ide.ui.theme.CodeAssistTheme
 import dev.ide.ui.theme.rememberJetBrainsMono
-import kotlinx.coroutines.delay
-import kotlinx.coroutines.flow.collectLatest
-import kotlinx.coroutines.flow.distinctUntilChanged
-import kotlinx.coroutines.flow.drop
-import kotlinx.coroutines.launch
-import kotlinx.coroutines.withContext
 import org.jetbrains.compose.resources.stringResource
-import kotlin.time.Duration.Companion.milliseconds
-
-/** Preference key remembering the last author entered in the Export-project dialog (not per-project). */
-private const val EXPORT_AUTHOR_PREF = "export.author"
-
-/** App preference holding the workspace root of the project on screen when the app was last used, so a process
- *  kill (or a normal relaunch) resumes back into it instead of the picker. Blank = the picker was showing. */
-private const val LAST_PROJECT_PREF = "session.lastProject"
-
-/** App preference gating the resume-last-project behavior. Unset/anything-but-"false" = on (the default). */
-private const val REOPEN_LAST_PROJECT_PREF = "session.reopenLastProject"
-
-/** The open-tab session bits that, when any change, should reschedule the debounced tab save (so the persisted
- *  session tracks the caret / scroll / view surface, not just which files are open). */
-private data class TabSessionKey(val path: String, val caret: Int, val scrollLine: Int, val viewMode: EditorViewMode)
 
 /**
  * Root of the reusable IDE UI. Hosts pick the toolkit (Compose Desktop window, Android activity) and
  * supply an [IdeBackend] plus optional brand fonts and a [FileActions] bridge; the screens, theme,
  * navigation, and state are shared.
  *
- * Screens transition with a platform-differentiated feel ([ScreenHost]); the active project's UI state
- * is re-keyed on [IdeBackend.projectEpoch] so creating/opening a project rebuilds the tree + tabs. A
- * first-launch [OnboardingSheet] introduces the IDE over the picker.
+ * The shell's own state and the flows that drive it live in [CodeAssistAppState]; this body is the theme,
+ * the back gesture, the screen host ([AppNavGraph]), and the app-wide overlays. Screens transition with a
+ * platform-differentiated feel ([ScreenHost]); the active project's UI state is re-keyed on
+ * [IdeBackend.projectEpoch] so creating/opening a project rebuilds the tree and tabs. A first-launch
+ * [OnboardingSheet] introduces the IDE over the picker.
  */
 @Composable
 fun CodeAssistApp(
@@ -123,627 +69,99 @@ fun CodeAssistApp(
         UiPluginHost.ensureLoaded()
     }
 
-    // Persisted IDE settings drive the theme (and seed the editor's live prefs). Re-read after the Settings
-    // screen writes; appearance changes then take effect immediately.
-    var settings by remember { mutableStateOf(backend.settings.settings()) }
-    var screen by remember { mutableStateOf(Screen.Projects) }
-    // The home screen's selected bottom-nav tab (project picker / store / learn). Lives here, not in the
-    // per-project [IdeUiState], so it survives across the landing session and resets only on a full relaunch.
-    var homeTab by remember { mutableStateOf(HomeTab.Projects) }
-    // A template id to pre-select in the Create-Project flow when it's opened from a Store item (null = the
-    // plain New-Project gallery).
-    var createTemplateId by remember { mutableStateOf<String?>(null) }
-    // The Learn destination being viewed (a track's lesson list / the step player), plus the player's start
-    // step. Bumping [learnEpoch] on return re-reads progress so the Learn tab + track reflect just-finished work.
-    var currentTrackId by remember { mutableStateOf<String?>(null) }
-    var currentLessonId by remember { mutableStateOf<String?>(null) }
-    var lessonInitialStep by remember { mutableStateOf(0) }
-    var learnEpoch by remember { mutableStateOf(0) }
-    // The store item shown on the full-screen detail page (set when a card is tapped in the Explore tab).
-    var storeItem by remember { mutableStateOf<dev.ide.ui.backend.UiStoreItem?>(null) }
-    // The home-screen Projects Store + bottom nav is WIP and ships dark: it appears only when its feature flag
-    // is on (or the `feature.projectsStore` preference overrides it). Off ⇒ the picker shows on its own.
-    val storeEnabled = remember {
-        backend.settings.preference("feature.projectsStore")?.toBooleanStrictOrNull() ?: FeatureFlags.PROJECTS_STORE
-    }
-    // Ad gating + state, shared with every screen through [LocalAds]. Recreated only if the host swaps.
-    val adController = remember(backend, adHost) { AdController(backend, adHost) }
-    var configModule by remember { mutableStateOf<String?>(null) }
-    var modulesTab by remember { mutableStateOf(ModulesTab.Settings) }
-    var keystoreImportPath by remember { mutableStateOf<String?>(null) }
-    // Where the Settings & Tools hub returns on Back — the picker (opened with no project) or the editor.
-    var hubReturn by remember { mutableStateOf(Screen.Editor) }
-    // Where the Keystore Manager returns on Back — the hub (its normal entry) or the module Signing tab (the
-    // "manage keystores" cross-link from project signing).
-    var keystoreReturn by remember { mutableStateOf(Screen.Hub) }
-    // Whether the Keystore Manager was reached from a project context (the editor's hub or a module's Signing
-    // tab) rather than the picker's hub. Gates the "Assign to a build" row — assignment is per-project, so it's
-    // hidden when no project is open (and must never navigate into one). NOT `epoch > 0`: that stays true after
-    // a project is closed back to the picker, which is exactly when the row must not show.
-    var keystoreInProject by remember { mutableStateOf(false) }
-    var showMigration by remember { mutableStateOf(backend.settings.preference("migration.acknowledged") != "true") }
-    var showLegacyRecovery by remember { mutableStateOf(backend.settings.preference("legacy.recovery.seen") != "true") }
-    var showOnboarding by remember { mutableStateOf(backend.settings.preference("onboarding.seen") != "true") }
-    // Opt-in analytics: prompt only when collection is available and the user hasn't decided yet (null). The
-    // re-toggle lives in the editor's More menu (a settings surface), not permanently on the project picker.
-    var showAnalytics by remember { mutableStateOf(backend.diagnostics.analyticsAvailable() && backend.diagnostics.analyticsConsent() == null) }
-    // Bumped after a project is deleted so the picker re-reads the (now-smaller) on-disk project list.
-    var projectsRefresh by remember { mutableStateOf(0) }
-    // Project sharing (.caproj): the project whose Export dialog is open, and the picked package being
-    // previewed for import (path + read manifest/peek). Held here so they survive picker recompositions.
-    var exportTarget by remember { mutableStateOf<dev.ide.ui.backend.ProjectInfo?>(null) }
-    var importArchivePath by remember { mutableStateOf<String?>(null) }
-    var importPreview by remember { mutableStateOf<dev.ide.ui.backend.UiImportPreview?>(null) }
-    // Non-null while the "unrecognized file" dialog is up (a picked/opened file wasn't a readable .caproj).
-    var importError by remember { mutableStateOf<String?>(null) }
-    val importUnrecognizedMsg = stringResource(Res.string.import_unrecognized)
-    val importGradleFailedMsg = stringResource(Res.string.import_gradle_failed)
-    // True while a picked Gradle folder is being copied + imported (a blocking, non-cancellable operation).
-    var importBusy by remember { mutableStateOf(false) }
-    // The import-time "compatibility mode vs convert" chooser (shown after the folder pick request), and a
-    // one-shot carried into the freshly-opened editor's state when Convert was chosen.
-    var showImportModeChoice by remember { mutableStateOf(false) }
-    var pendingGradleConvert by remember { mutableStateOf(false) }
-    val scope = rememberCoroutineScope()
-
-    // Session resume across a process kill: the project that was on screen last run (captured up-front, before
-    // any effect runs, so the maintenance effect below can't clear it before the resume effect reads it) and
-    // whether resume is enabled (default on). [lastPersistedProject] mirrors the last value written so the
-    // maintenance effect writes only on an actual picker ⇆ project change; it starts at the picker sentinel so
-    // the brief "picker → resumed project" startup window never rewrites (and so can't clear) the on-disk pref.
-    val resumeProject = remember { backend.settings.preference(LAST_PROJECT_PREF)?.takeIf { it.isNotBlank() } }
-    val reopenLast = remember { backend.settings.preference(REOPEN_LAST_PROJECT_PREF)?.toBooleanStrictOrNull() != false }
-    var lastPersistedProject by remember { mutableStateOf("") }
-
-    // Pick a Gradle folder and import it (always in compatibility mode first). When [convert] was chosen at the
-    // mode prompt, flag the freshly-opened editor to run the convert flow once it's up (see EditorCenter).
-    val runGradleImport: (Boolean) -> Unit = { convert ->
-        doImportGradle(
-            fileActions = fileActions,
-            scope = scope,
-            onBusy = { importBusy = true },
-            import = { p -> backend.projects.importExternalProject(p) },
-        ) { result ->
-            importBusy = false
-            when {
-                result == null -> {} // cancelled — stay on the picker
-                result.success -> { if (convert) pendingGradleConvert = true; screen = Screen.Editor }
-                else -> importError = result.message.ifBlank { importGradleFailedMsg }
-            }
-        }
-    }
-
-    // Create a project backup zip and hand it to the host's share/save sheet.
-    val backupAndShare: suspend () -> Unit =
-        { backend.projects.backupProjects()?.let { fileActions.share(it) } }
+    val app = rememberCodeAssistAppState(backend, fileActions, adHost)
 
     // The active project changes (create/open) bump the epoch; re-key per-project state on it.
-    val epoch by backend.projects.projectEpoch.collectAsState()
-    val state = remember(backend, epoch) {
-        IdeUiState(backend, composePreviewHost, initialGradleConvertPrompt = pendingGradleConvert)
+    val state = remember(backend, app.epoch) {
+        IdeUiState(backend, composePreviewHost, initialGradleConvertPrompt = app.pendingGradleConvert)
     }
-    // Clear the one-shot after it's been baked into the (re-created) state, so navigating back to a project
+    // Clear the one-shot after it has been baked into the (re-created) state, so navigating back to a project
     // later never re-triggers the convert prompt.
-    LaunchedEffect(state) { if (pendingGradleConvert) pendingGradleConvert = false }
+    LaunchedEffect(state) { app.consumeGradleConvertPrompt() }
     // Cancel the state's async file-read scope when it's replaced (project/backend change) or leaves composition,
     // so a slow read for an abandoned project can't resolve against the new one.
     DisposableEffect(state) { onDispose { state.dispose() } }
-
-    // Reopen the tabs from the last session with this project; if there were none, land on a sensible first
-    // file so entering the editor shows real code. Then persist tab changes (debounced) so they reopen next
-    // launch — `drop(1)` skips the just-restored state, and `collectLatest` cancels the pending write when
-    // another tab change lands within the debounce window.
-    LaunchedEffect(state) {
-        state.ensureTreeLoaded() // build the real file tree off the main thread before it's shown / walked
-        if (!state.restoreTabs()) {
-            state.defaultFile()?.let { node -> node.filePath?.let { state.open(it, node.name) } }
-        }
-        snapshotFlow {
-            // Re-emit when the tab set, the active tab, OR any tab's caret / scroll / view mode changes, so the
-            // persisted session records where the user is — not only which files are open. `drop(1)` skips the
-            // just-restored state; `collectLatest` + the debounce coalesce a burst of edits/scrolls into one
-            // write once the user settles.
-            state.openFiles.map {
-                TabSessionKey(it.path, it.session.selection.start, it.session.viewportTopLine, it.viewMode)
-            } to state.activeIndex
-        }.drop(1).collectLatest {
-            delay(600.milliseconds)
-            val snapshot = state.tabsSnapshot() // read the Compose session state on the main thread…
-            withContext(ioDispatcher) { state.backend.projects.saveOpenTabs(snapshot) } // …write off it
-        }
-    }
-
-    // Editor-lifecycle events for plugins: the engine republishes these on the message bus
-    // (IdeEventTopics.EDITOR) and they are no-ops when nothing subscribes. The focused file, whenever it
-    // changes (null once the last tab closes):
-    LaunchedEffect(state) {
-        snapshotFlow { state.active?.path }
-            .distinctUntilChanged()
-            .collect { state.backend.editor.onActiveEditorChanged(it) }
-    }
-    // The caret/selection, debounced so it fires on settle rather than on every keystroke (collectLatest
-    // cancels the pending delay when the selection moves again).
-    LaunchedEffect(state) {
-        snapshotFlow {
-            state.active?.let { Triple(it.path, it.session.selection.start, it.session.selection.end) }
-        }.distinctUntilChanged().collectLatest { sel ->
-            if (sel == null) return@collectLatest
-            delay(150.milliseconds)
-            state.backend.editor.onSelectionChanged(sel.first, sel.second, sel.third)
-        }
-    }
-
-    // Persist the file-tree expansion (debounced) so the tree reopens the same way next launch — keyed per
-    // project + view mode. `drop(1)` skips the seeded initial state; `collectLatest` coalesces rapid toggles.
-    LaunchedEffect(state) {
-        snapshotFlow { state.treeMode to state.expandedTreeSnapshot() }.drop(1)
-            .collectLatest { (mode, ids) ->
-                delay(300.milliseconds)
-                state.backend.files.saveExpandedTreeState(mode, ids.toList())
-            }
-    }
-    // A successful create/open advances the epoch — land in the editor on the new project.
-    LaunchedEffect(epoch) { if (epoch > 0) screen = Screen.Editor }
-
-    // Resume the last project on a cold launch: reopen whatever project was on screen when the app was last
-    // used, so a background kill (or a normal relaunch) comes back into the editor instead of the picker.
-    // One-shot; opening bumps the epoch → the effect above lands in the editor and `restoreTabs()` reopens the
-    // tabs where the user left them. A deleted/missing project just falls through to the picker.
-    LaunchedEffect(Unit) {
-        val last = resumeProject
-        if (!reopenLast || last == null) return@LaunchedEffect
-        if (backend.projects.projectEpoch.value > 0) return@LaunchedEffect // already in a project
-        val exists = withContext(ioDispatcher) { backend.projects.projects().any { it.rootPath == last } }
-        if (exists) backend.projects.openProject(last)
-    }
-
-    // Track which project (if any) is on screen for the resume effect above: clear it on the picker (so quitting
-    // from the picker reopens to the picker), otherwise record the active project's root while any of its screens
-    // is shown (Editor, Settings, Run, Dependencies…). Compares against the in-memory mirror so it writes only on
-    // a real picker ⇆ project transition, never per navigation.
-    LaunchedEffect(screen, epoch) {
-        val target = when {
-            screen == Screen.Projects -> ""
-            epoch > 0 -> backend.project.rootPath
-            else -> return@LaunchedEffect
-        }
-        if (target != lastPersistedProject) {
-            lastPersistedProject = target
-            backend.settings.setPreference(LAST_PROJECT_PREF, target)
-        }
-    }
-
+    // Session restore/persistence, plugin editor events, and disk sync for the project on screen.
+    LaunchedEffect(state) { state.runSessionEffects() }
+    // Apply settings to the active project's live editor state whenever they change (or the project swaps).
+    LaunchedEffect(state, app.settings) { state.applySettings(app.settings) }
     // A `.caproj` handed in from outside the app ("Open with"): read its preview and open the import screen.
     // Keyed on the path (the host makes each hand-off a distinct path) so it fires once per inbound package.
-    LaunchedEffect(importPackagePath) {
-        val path = importPackagePath ?: return@LaunchedEffect
-        val preview = backend.projects.previewImportPackage(path)
-        if (preview != null) {
-            importArchivePath = path; importPreview = preview; screen = Screen.ImportProject
-        } else {
-            importError = importUnrecognizedMsg
-        }
-    }
-
-    // Starting a console run (a `run` task) opens a fresh interactive session — keyed on its id, jump to the
-    // full-screen Run terminal. Build/assemble tasks leave runConsole null and stay in the build console.
-    val runConsole by backend.build.runConsole.collectAsState()
-    LaunchedEffect(runConsole?.id, epoch) {
-        if (runConsole != null && screen == Screen.Editor) screen = Screen.Run
-    }
-
-    // External file writes (e.g. an agent edit, or an "Open with" import the UI didn't drive) re-read the tree
-    // AND re-sync any clean open editor tab whose file changed on disk.
-    val fsEpoch by backend.files.fileSystemEpoch.collectAsState()
-    LaunchedEffect(state, fsEpoch) {
-        if (fsEpoch > 0) {
-            state.refreshTree()
-            state.syncOpenTabsFromDisk()
-        }
-    }
+    LaunchedEffect(importPackagePath) { importPackagePath?.let { app.openImportPackage(it) } }
 
     // Theme + accent + code font come from settings; the Settings screen (and the quick toggle) update them
     // live. "system" follows the OS dark-mode signal.
-    val dark = when (settings.themeMode) {
-        "light" -> false
-        "system" -> isSystemInDarkTheme()
-        else -> true
-    }
+    val dark = isDarkTheme(app.settings, isSystemInDarkTheme())
     // Keep the system-bar icons legible against the app theme: dark icons in light mode, light icons in dark mode.
     // Reactive, so a theme toggle re-applies it (the host's one-time edge-to-edge setup can't follow the toggle).
     PlatformSystemBars(darkTheme = dark)
-
-
-
-    val accent = when (settings.accent) {
-        dev.ide.ui.backend.UiAccent.Teal -> CaAccent.Teal
-        dev.ide.ui.backend.UiAccent.Orange -> CaAccent.Orange
-        else -> CaAccent.Violet
+    val resolvedCodeFont = if (app.settings.codeFont == "monospace") FontFamily.Monospace else codeFont
+    // The import notice is raised as a reason by the state holder and localized here.
+    val importUnrecognizedMsg = stringResource(Res.string.import_unrecognized)
+    val importGradleFailedMsg = stringResource(Res.string.import_gradle_failed)
+    val importErrorMessage = when (val error = app.importError) {
+        null -> null
+        ImportError.Unrecognized -> importUnrecognizedMsg
+        is ImportError.GradleFailed -> error.message.ifBlank { importGradleFailedMsg }
     }
-    // A Custom accent seeds the whole expressive theme from the user's chosen color; a "Dynamic" accent
-    // follows the wallpaper; any preset applies its fixed palette (overriding wallpaper dynamic color).
-    val seedColor = if (settings.accent == dev.ide.ui.backend.UiAccent.Custom) {
-        androidx.compose.ui.graphics.Color(settings.customAccentColor)
-    } else null
-    val useDynamic = settings.accent == dev.ide.ui.backend.UiAccent.Dynamic
-    val resolvedCodeFont = if (settings.codeFont == "monospace") FontFamily.Monospace else codeFont
-    // Apply settings to the active project's live editor state whenever they change (or the project swaps).
-    LaunchedEffect(state, settings) { state.applySettings(settings) }
-    CodeAssistTheme(dark = dark, accent = accent, seedColor = seedColor, useDynamic = useDynamic, uiFont = uiFont, codeFont = resolvedCodeFont) {
+
+    CodeAssistTheme(
+        dark = dark,
+        accent = accentOf(app.settings),
+        // A Custom accent seeds the whole expressive theme from the user's chosen color; a "Dynamic" accent
+        // follows the wallpaper; any preset applies its fixed palette (overriding wallpaper dynamic color).
+        seedColor = seedColorOf(app.settings),
+        useDynamic = app.settings.accent == UiAccent.Dynamic,
+        uiFont = uiFont,
+        codeFont = resolvedCodeFont,
+    ) {
         // Route the system back gesture through in-app navigation instead of letting it close the app (#997).
         // Registered above the editor's own overlay handler, so an open sheet/dialog is closed first (the
-        // deeper handler wins); this one only fires for screen-level back: pop a sub-screen to the editor, the
-        // editor to the project picker, or dismiss the first-launch sheets. On the picker it stays disabled so
-        // back exits the app as usual.
-        PlatformBackHandler(enabled = screen != Screen.Projects || homeTab != HomeTab.Projects || showOnboarding || showMigration || showAnalytics) {
-            when {
-                showOnboarding -> {
-                    showOnboarding = false; backend.settings.setPreference("onboarding.seen", "true")
-                }
-
-                showMigration -> {
-                    showMigration = false; backend.settings.setPreference("migration.acknowledged", "true")
-                }
-
-                showAnalytics -> {
-                    showAnalytics = false; backend.diagnostics.setAnalyticsConsent(false)
-                }
-
-                // The keystore Create/Import sub-screens step back to their manager, not all the way out.
-                screen == Screen.KeystoreCreate || screen == Screen.KeystoreImport -> screen = Screen.KeystoreManager
-                // The hub's sub-screens step back to the hub; the keystore manager honours its entry origin.
-                screen == Screen.SdkManager || screen == Screen.Settings || screen == Screen.CodeStyle ||
-                    screen == Screen.EditorSymbols || screen == Screen.Plugins || screen == Screen.Storage -> screen = Screen.Hub
-                screen == Screen.KeystoreManager -> screen = keystoreReturn
-                // The hub returns to wherever it was opened from (picker or editor).
-                screen == Screen.Hub -> screen = hubReturn
-
-                screen == Screen.Run || screen == Screen.ModuleConfig -> screen = Screen.Editor
-
-                // The lesson player steps back to its track; the track steps back to the Learn tab (picker).
-                screen == Screen.LessonPlayer -> {
-                    learnEpoch++; screen = if (currentTrackId != null) Screen.LessonTrack else Screen.Projects
-                }
-                screen == Screen.LessonTrack -> { learnEpoch++; screen = Screen.Projects }
-                // The store item detail returns to the Explore tab (still selected on Projects).
-                screen == Screen.StoreItem -> screen = Screen.Projects
-
-                screen == Screen.CreateProject -> screen = Screen.Projects
-                screen == Screen.ImportProject -> { importPreview = null; importArchivePath = null; screen = Screen.Projects }
-                screen == Screen.ExportProject -> { exportTarget = null; screen = Screen.Projects }
-                screen == Screen.Editor -> screen = Screen.Projects
-                // On the home screen, a Store/Learn tab steps back to the project picker before exiting.
-                screen == Screen.Projects && homeTab != HomeTab.Projects -> homeTab = HomeTab.Projects
-                else -> {}
-            }
-        }
+        // deeper handler wins); this one only fires for screen-level back.
+        PlatformBackHandler(enabled = app.canNavigateBack, onBack = app::navigateBack)
         // The M3 background fills the whole window edge-to-edge (behind the system bars); content is
         // then inset by `safeDrawing`. On desktop these insets are empty, so this is a no-op there.
-        CompositionLocalProvider(LocalAds provides adController) {
-        // Occasional full-screen ad over a LONG build (Android only; inert on desktop / when ads are off).
-        // Renders nothing — it just observes the build state and asks the host to present an interstitial.
-        BuildAdInterstitial(backend, adController)
-        Surface(Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
-            Box(Modifier.fillMaxSize().windowInsetsPadding(WindowInsets.safeDrawing)) {
-                ScreenHost(screen, Modifier.fillMaxSize()) { s ->
-                    when (s) {
-                        Screen.Projects -> {
-                            val projects = remember(epoch, projectsRefresh) { backend.projects.projects() }
-                            val picker: @Composable () -> Unit = {
-                                    ProjectPickerScreen(
-                                        projects = projects,
-                                        onOpen = { p ->
-                                            scope.launch {
-                                                if (backend.projects.openProject(p.rootPath)) screen = Screen.Editor
-                                            }
-                                        },
-                                        onNewProject = { createTemplateId = null; screen = Screen.CreateProject },
-                                        onDeleteProject = { p -> scope.launch { backend.projects.deleteProject(p.rootPath); projectsRefresh++ } },
-                                        onImportProject = if (fileActions.canPickFile) ({
-                                            fileActions.pickFile(listOf("caproj")) { path ->
-                                                if (path != null) scope.launch {
-                                                    val preview = backend.projects.previewImportPackage(path)
-                                                    if (preview != null) {
-                                                        importArchivePath = path; importPreview = preview; screen = Screen.ImportProject
-                                                    } else {
-                                                        importError = importUnrecognizedMsg
-                                                    }
-                                                }
-                                            }
-                                        }) else null,
-                                        onImportGradle = if (fileActions.canPickDirectory) ({ showImportModeChoice = true }) else null,
-                                        onExportProject = if (fileActions.canShare || fileActions.canExport || fileActions.canReveal) ({ p -> exportTarget = p; screen = Screen.ExportProject }) else null,
-                                        onBackup = { scope.launch { backupAndShare() } },
-                                        onOpenHub = { hubReturn = Screen.Projects; screen = Screen.Hub },
-                                        onSubmitSuggestions = if (fileActions.canOpenUrl) {
-                                            { fileActions.openUrl(BetaInfo.FEEDBACK_URL) }
-                                        } else null,
-                                        onJoinDiscord = if (fileActions.canOpenUrl) {
-                                            { fileActions.openUrl(BetaInfo.DISCORD_URL) }
-                                        } else null,
-                                        onSponsor = if (fileActions.canOpenUrl) {
-                                            { fileActions.openUrl(BetaInfo.SPONSOR_URL) }
-                                        } else null,
-                                        onStarOnGitHub = if (fileActions.canOpenUrl) {
-                                            { fileActions.openUrl(BetaInfo.REPO_URL) }
-                                        } else null,
-                                        storagePath = backend.projects.storageRootPath(),
-                                        onOpenInFiles = if (fileActions.canReveal) {
-                                            { backend.projects.storageRootPath()?.let { fileActions.reveal(it) } }
-                                        } else null,
-                                        showLegacyRecovery = showLegacyRecovery,
-                                        onDismissLegacyRecovery = {
-                                            showLegacyRecovery = false
-                                            backend.settings.setPreference("legacy.recovery.seen", "true")
-                                        },
-                                        loadIcon = { backend.projects.projectIcon(it.rootPath) },
-                                    )
-                            }
-                            // Store + Learn tabs only when the WIP flag is on; otherwise the picker stands alone.
-                            if (storeEnabled) {
-                                HomeScreen(
-                                    tab = homeTab,
-                                    onSelectTab = { homeTab = it },
-                                    projectsContent = picker,
-                                    storeContent = {
-                                        ProjectsStoreScreen(
-                                            backend = backend,
-                                            onOpenItem = { item -> storeItem = item; screen = Screen.StoreItem },
-                                            onOpenHub = { hubReturn = Screen.Projects; screen = Screen.Hub },
-                                        )
-                                    },
-                                    learnContent = {
-                                        LearnScreen(
-                                            backend = backend,
-                                            epoch = learnEpoch,
-                                            onOpenTrack = { id -> currentTrackId = id; screen = Screen.LessonTrack },
-                                            onResume = { tId, lId, stepIdx ->
-                                                currentTrackId = tId; currentLessonId = lId
-                                                lessonInitialStep = stepIdx; screen = Screen.LessonPlayer
-                                            },
-                                            onOpenDocs = if (fileActions.canOpenUrl) {
-                                                { fileActions.openUrl(BetaInfo.REPO_URL) }
-                                            } else null,
-                                            onJoinDiscord = if (fileActions.canOpenUrl) {
-                                                { fileActions.openUrl(BetaInfo.DISCORD_URL) }
-                                            } else null,
-                                        )
-                                    },
-                                )
-                            } else {
-                                picker()
-                            }
-                        }
-
-                        Screen.CreateProject -> CreateProjectScreen(
-                            backend = backend,
-                            onCancel = { screen = Screen.Projects },
-                            onCreated = { screen = Screen.Editor },
-                            initialTemplateId = createTemplateId,
-                        )
-
-                        Screen.ImportProject -> {
-                            val preview = importPreview
-                            val path = importArchivePath
-                            if (preview != null && path != null) {
-                                ImportPreviewScreen(
-                                    backend = backend,
-                                    archivePath = path,
-                                    preview = preview,
-                                    onCancel = { importPreview = null; importArchivePath = null; screen = Screen.Projects },
-                                    onImported = { importPreview = null; importArchivePath = null; screen = Screen.Editor },
-                                )
-                            }
-                        }
-
-                        Screen.ExportProject -> {
-                            val target = exportTarget
-                            if (target != null) {
-                                ExportProjectScreen(
-                                    backend = backend,
-                                    project = target,
-                                    initialAuthor = backend.settings.preference(EXPORT_AUTHOR_PREF) ?: "",
-                                    onAuthorRemembered = { backend.settings.setPreference(EXPORT_AUTHOR_PREF, it) },
-                                    onReveal = if (fileActions.canReveal) ({ path -> fileActions.reveal(path) }) else null,
-                                    onSaveCopy = if (fileActions.canExport) ({ path -> fileActions.exportFile(path) }) else null,
-                                    onShare = if (fileActions.canShare) ({ path -> fileActions.share(path) }) else null,
-                                    onDone = { exportTarget = null; screen = Screen.Projects },
-                                )
-                            }
-                        }
-
-                        Screen.LessonTrack -> LessonTrackScreen(
-                            backend = backend,
-                            trackId = currentTrackId,
-                            epoch = learnEpoch,
-                            onOpenLesson = { id -> currentLessonId = id; lessonInitialStep = 0; screen = Screen.LessonPlayer },
-                            onBack = { learnEpoch++; screen = Screen.Projects },
-                        )
-
-                        Screen.LessonPlayer -> LessonPlayerScreen(
-                            backend = backend,
-                            lessonId = currentLessonId,
-                            initialStep = lessonInitialStep,
-                            inlayHintsEnabled = state.inlayHintsEnabled,
-                            host = state.composePreviewHost,
-                            onExit = {
-                                learnEpoch++
-                                screen = if (currentTrackId != null) Screen.LessonTrack else Screen.Projects
-                            },
-                        )
-
-                        Screen.StoreItem -> StoreItemScreen(
-                            backend = backend,
-                            item = storeItem,
-                            onBack = { screen = Screen.Projects },
-                            onCreateFromTemplate = { id -> createTemplateId = id; screen = Screen.CreateProject },
-                        )
-
-                        Screen.Editor -> EditorScreen(
-                            state = state,
-                            onToggleTheme = {
-                                // Quick toggle flips to the opposite of what's shown (an explicit light/dark,
-                                // stepping out of "system" if that was active).
-                                backend.settings.setSetting("appearance", "themeMode", if (dark) "light" else "dark")
-                                settings = backend.settings.settings()
-                            },
-                            onOpenHub = { hubReturn = Screen.Editor; screen = Screen.Hub },
-                            onOpenDependencies = { module ->
-                                configModule = module; modulesTab =
-                                ModulesTab.Dependencies; screen = Screen.ModuleConfig
-                            },
-                            onOpenModuleConfig = { module ->
-                                configModule = module; modulesTab = ModulesTab.Settings; screen =
-                                Screen.ModuleConfig
-                            },
-                            onCloseProject = { screen = Screen.Projects },
-                            onOpenRun = { screen = Screen.Run },
-                            fileActions = fileActions,
-                        )
-
-                        Screen.Run -> RunScreen(
-                            backend = state.backend,
-                            onBack = { screen = Screen.Editor },
-                            onOpenDiagnostic = { d ->
-                                d.file?.let { state.openAtLine(it, d.line, d.column); screen = Screen.Editor }
-                            },
-                        )
-
-                        Screen.ModuleConfig -> ModuleConfigScreen(
-                            backend = state.backend,
-                            initialModule = configModule,
-                            initialTab = modulesTab,
-                            onBack = { screen = Screen.Editor },
-                            onOpenKeystoreManager = { keystoreReturn = Screen.ModuleConfig; keystoreInProject = true; screen = Screen.KeystoreManager },
-                            codeFont = codeFont,
-                            fileActions = fileActions,
-                        )
-
-                        Screen.SdkManager -> SdkManagerScreen(
-                            backend = state.backend,
-                            onBack = { screen = Screen.Hub },
-                        )
-
-                        Screen.Plugins -> PluginsScreen(
-                            backend = state.backend,
-                            onBack = { screen = Screen.Hub },
-                        )
-
-                        Screen.Storage -> StorageScreen(
-                            backend = state.backend,
-                            onBack = { screen = Screen.Hub },
-                        )
-
-                        Screen.CodeStyle -> CodeStyleScreen(
-                            backend = state.backend,
-                            // The live formatter preview is engine-backed: available when the hub (hence Code
-                            // Style) was opened from the editor, not from the project picker.
-                            hasProject = hubReturn == Screen.Editor,
-                            onBack = { screen = Screen.Hub },
-                        )
-
-                        Screen.EditorSymbols -> dev.ide.ui.screens.SymbolMacroEditorScreen(
-                            state = state,
-                            onBack = { screen = Screen.Hub },
-                        )
-
-                        Screen.KeystoreManager -> KeystoreManagerScreen(
-                            backend = state.backend,
-                            onBack = { screen = keystoreReturn },
-                            onCreate = { screen = Screen.KeystoreCreate },
-                            onImport = { path -> keystoreImportPath = path; screen = Screen.KeystoreImport },
-                            // Signing assignment is per-project — only offered when the manager was opened from a
-                            // project context (the editor's hub or a module's Signing tab), never from the picker's
-                            // hub. So it stays hidden with no project open and can't navigate into one.
-                            onManageSigning = if (keystoreInProject) ({
-                                // Smart jump: one android-app → straight to its Signing tab; otherwise the module list.
-                                configModule = state.backend.signing.signableModules().singleOrNull()
-                                modulesTab = ModulesTab.Signing
-                                screen = Screen.ModuleConfig
-                            }) else null,
-                            fileActions = fileActions,
-                        )
-
-                        Screen.KeystoreCreate -> KeystoreCreateScreen(
-                            backend = state.backend,
-                            onBack = { screen = Screen.KeystoreManager },
-                            onDone = { screen = Screen.KeystoreManager },
-                        )
-
-                        Screen.KeystoreImport -> {
-                            val path = keystoreImportPath
-                            if (path == null) {
-                                screen = Screen.KeystoreManager
-                            } else {
-                                KeystoreImportScreen(
-                                    backend = state.backend,
-                                    path = path,
-                                    onBack = { screen = Screen.KeystoreManager },
-                                    onDone = { screen = Screen.KeystoreManager },
-                                )
-                            }
-                        }
-
-                        Screen.Hub -> SettingsHubScreen(
-                            onBack = { screen = hubReturn },
-                            onOpenGlobalSettings = { screen = Screen.Settings },
-                            onOpenCodeStyle = { screen = Screen.CodeStyle },
-                            onOpenSymbols = { screen = Screen.EditorSymbols },
-                            onOpenSdkManager = { screen = Screen.SdkManager },
-                            // The hub reached from the editor is a project context; from the picker it isn't.
-                            onOpenKeystoreManager = { keystoreReturn = Screen.Hub; keystoreInProject = hubReturn == Screen.Editor; screen = Screen.KeystoreManager },
-                            onOpenPlugins = { screen = Screen.Plugins },
-                            onOpenStorage = { screen = Screen.Storage },
-                        )
-
-                        // Settings — reached from the hub. With a project open (hub entered from the editor) the
-                        // project-scoped pages (dependency conflicts, inspections) merge in; from the picker only
-                        // the global app pages show.
-                        Screen.Settings -> SettingsScreen(
-                            backend = state.backend,
-                            onBack = { screen = Screen.Hub },
-                            onSettingsChanged = { settings = backend.settings.settings() },
-                            // The logs viewer is an editor overlay; only meaningful with a project open.
-                            onOpenLogs = { if (epoch > 0) { state.logsOpen = true; screen = Screen.Editor } },
-                            view = if (hubReturn == Screen.Editor) SettingsView.All else SettingsView.Global,
-                            title = stringResource(Res.string.settings_title),
-                            codeFont = codeFont,
-                            fileActions = fileActions,
-                        )
-                    }
+        CompositionLocalProvider(LocalAds provides app.adController) {
+            // Occasional full-screen ad over a LONG build (Android only; inert on desktop / when ads are off).
+            // Renders nothing — it just observes the build state and asks the host to present an interstitial.
+            BuildAdInterstitial(backend, app.adController)
+            Surface(Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
+                Box(Modifier.fillMaxSize().windowInsetsPadding(WindowInsets.safeDrawing)) {
+                    AppNavGraph(
+                        app = app,
+                        state = state,
+                        fileActions = fileActions,
+                        codeFont = codeFont,
+                        dark = dark,
+                        modifier = Modifier.fillMaxSize(),
+                    )
                 }
+                AppOverlays(
+                    backend = backend,
+                    state = state,
+                    fileActions = fileActions,
+                    onPicker = app.screen == Screen.Projects && app.homeTab == HomeTab.Projects,
+                    showMigration = app.showMigration,
+                    onBackup = app::backupAndShare,
+                    onDismissMigration = app::dismissMigration,
+                    showOnboarding = app.showOnboarding,
+                    // Final CTA: send the user straight into the Create-Project flow.
+                    onGetStarted = { app.createProject() },
+                    onFinishOnboarding = app::dismissOnboarding,
+                    showAnalytics = app.showAnalytics,
+                    onAllowAnalytics = { app.setAnalyticsConsent(true) },
+                    onDeclineAnalytics = { app.setAnalyticsConsent(false) },
+                    importError = importErrorMessage,
+                    onDismissImportError = app::dismissImportError,
+                    importBusy = app.importBusy,
+                )
+                GradleImportModeDialog(
+                    visible = app.showImportModeChoice,
+                    onCompat = { app.importGradleProject(convert = false) },
+                    onConvert = { app.importGradleProject(convert = true) },
+                    onDismiss = app::dismissImportModeChoice,
+                )
             }
-            AppOverlays(
-                backend = backend,
-                state = state,
-                fileActions = fileActions,
-                onPicker = screen == Screen.Projects && homeTab == HomeTab.Projects,
-                showMigration = showMigration,
-                onBackup = backupAndShare,
-                onDismissMigration = {
-                    showMigration = false
-                    backend.settings.setPreference("migration.acknowledged", "true")
-                },
-                showOnboarding = showOnboarding,
-                onGetStarted = { screen = Screen.CreateProject },
-                onFinishOnboarding = {
-                    showOnboarding = false
-                    backend.settings.setPreference("onboarding.seen", "true")
-                },
-                showAnalytics = showAnalytics,
-                onAllowAnalytics = { showAnalytics = false; backend.diagnostics.setAnalyticsConsent(true) },
-                onDeclineAnalytics = { showAnalytics = false; backend.diagnostics.setAnalyticsConsent(false) },
-                importError = importError,
-                onDismissImportError = { importError = null },
-                importBusy = importBusy,
-            )
-            dev.ide.ui.screens.GradleImportModeDialog(
-                visible = showImportModeChoice,
-                onCompat = { showImportModeChoice = false; runGradleImport(false) },
-                onConvert = { showImportModeChoice = false; runGradleImport(true) },
-                onDismiss = { showImportModeChoice = false },
-            )
-        }
         }
     }
 }
