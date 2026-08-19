@@ -26,6 +26,7 @@ import com.intellij.psi.PsiElement
 import dev.ide.lang.incremental.DocumentSnapshot
 import dev.ide.lang.kotlin.symbols.SourceIndexBuilder
 import org.jetbrains.kotlin.kdoc.psi.api.KDoc
+import org.jetbrains.kotlin.lexer.KtModifierKeywordToken
 import org.jetbrains.kotlin.lexer.KtTokens
 import org.jetbrains.kotlin.psi.KtBinaryExpression
 import org.jetbrains.kotlin.psi.KtBlockExpression
@@ -694,7 +695,16 @@ class KotlinCompletion(
      *  present (a bare name with no keywords typed yet → nothing to replace). */
     private fun declKeywordStart(decl: KtNamedDeclaration): Int? {
         val offsets = ArrayList<Int>(2)
-        decl.modifierList?.getModifier(KtTokens.OVERRIDE_KEYWORD)?.textRange?.startOffset?.let { offsets += it }
+        // EVERY modifier keyword already typed, not just `override`: the stub the user is accepting carries its
+        // own full modifier set, so a half-typed `suspend fun lo|` must have that `suspend` replaced too, or
+        // accepting yields `suspend override suspend fun load(…)`. Annotations are not modifier keywords, so
+        // they stay untouched (a hand-written `@Composable` above the member survives).
+        decl.modifierList?.let { list ->
+            for (token in KtTokens.MODIFIER_KEYWORDS.types) {
+                val kw = token as? KtModifierKeywordToken ?: continue
+                list.getModifier(kw)?.textRange?.startOffset?.let { offsets += it }
+            }
+        }
         when (decl) {
             is KtNamedFunction -> decl.funKeyword?.textRange?.startOffset?.let { offsets += it }
             is KtProperty -> decl.valOrVarKeyword?.textRange?.startOffset?.let { offsets += it }
