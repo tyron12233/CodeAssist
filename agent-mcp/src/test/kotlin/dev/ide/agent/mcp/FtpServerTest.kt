@@ -6,6 +6,7 @@ import java.io.OutputStreamWriter
 import java.net.Socket
 import java.nio.file.Files
 import java.nio.file.Path
+import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
@@ -64,6 +65,30 @@ class FtpServerTest {
 
         // QUIT
         assertEquals(221, client.cmd("QUIT"))
+    }
+
+    @AfterEach
+    fun tearDown() {
+        client.close()
+        server.close()
+    }
+
+    @Test
+    fun `passive transfers prefer the configured data port so an adb forward can reach them`() {
+        // A port nobody holds: bound to learn its number, then released. The point of the fixed port is
+        // that a client can forward it ahead of time, which an ephemeral one makes impossible.
+        val dataPort = java.net.ServerSocket(0).use { it.localPort }
+        FtpServer(tempDir, port = 0, passivePort = dataPort).start().use { fixed ->
+            RawFtpClient(fixed.boundPort).use { c ->
+                c.greetingCode
+                c.cmd("USER anonymous")
+                c.cmd("PASS x")
+                assertEquals(dataPort, c.passivePort())
+                // Stable across transfers: the previous listener is released before the next one binds,
+                // so the second PASV does not find the port taken and fall back to an ephemeral one.
+                assertEquals(dataPort, c.passivePort())
+            }
+        }
     }
 
     @Test
@@ -125,6 +150,9 @@ class FtpServerTest {
             lastReply = readReply()
             return bytes.toString(Charsets.UTF_8)
         }
+
+        /** The port the server advertises for the next passive transfer. */
+        fun passivePort(): Int = dataPort(cmdPASV())
 
         private fun cmdPASV(): String {
             writer.write("PASV\r\n")

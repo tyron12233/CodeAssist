@@ -67,6 +67,8 @@ fun main(args: Array<String>) {
                     |  --ftp [<port>]   Also serve an anonymous local FTP asset server (defaults to port
                     |                   ${'$'}{CodeAssistMcpServer.DEFAULT_FTP_PORT}) rooted at <project>/assets.
                     |                   Uploads land directly in the workspace for the agent to consume.
+                    |                   Passive transfers use the next port up, so an adb forward needs
+                    |                   both that port and the one after it.
                     |
                     |Serves the Model Context Protocol over stdin/stdout (stdio transport), or over HTTP
                     |when --http is given.

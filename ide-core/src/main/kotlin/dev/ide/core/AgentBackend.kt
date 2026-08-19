@@ -70,8 +70,11 @@ internal class AgentBackend(private val ctx: BackendContext) : AgentService {
             name = "ftp_server",
             description = "Start, stop, or query the local FTP asset server (anonymous, bound to " +
                 "127.0.0.1:${CodeAssistMcpServer.DEFAULT_FTP_PORT}). When running, files uploaded over FTP " +
-                "land in the open project's assets/ folder, reachable from a PC with \"adb forward tcp:" +
-                CodeAssistMcpServer.DEFAULT_FTP_PORT + " tcp:" + CodeAssistMcpServer.DEFAULT_FTP_PORT + "\". " +
+                "land in the open project's assets/ folder. To reach it from a PC, forward the control port " +
+                "and the passive port above it: \"adb forward tcp:" + CodeAssistMcpServer.DEFAULT_FTP_PORT +
+                " tcp:" + CodeAssistMcpServer.DEFAULT_FTP_PORT + "\" and \"adb forward tcp:" +
+                (CodeAssistMcpServer.DEFAULT_FTP_PORT + 1) + " tcp:" + (CodeAssistMcpServer.DEFAULT_FTP_PORT + 1) +
+                "\". Anyone else on the device can read and write those files too. " +
                 "action=status only reports the current state.",
             parameters = toolSchema {
                 string("action", "start, stop, or status", enum = listOf("start", "stop", "status"))

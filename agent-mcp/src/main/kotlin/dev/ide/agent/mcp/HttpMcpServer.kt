@@ -8,16 +8,17 @@ import io.modelcontextprotocol.spec.McpStreamableServerSession
 import io.modelcontextprotocol.spec.McpStreamableServerTransport
 import io.modelcontextprotocol.spec.McpStreamableServerTransportProvider
 import reactor.core.publisher.Mono
-import java.io.BufferedReader
+import java.io.BufferedInputStream
 import java.io.BufferedWriter
+import java.io.ByteArrayOutputStream
 import java.io.IOException
 import java.io.InputStream
-import java.io.InputStreamReader
 import java.io.OutputStream
 import java.io.OutputStreamWriter
 import java.net.InetSocketAddress
 import java.net.ServerSocket
 import java.net.Socket
+import java.net.URI
 import java.nio.charset.StandardCharsets
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.atomic.AtomicReference
@@ -25,8 +26,9 @@ import java.util.concurrent.atomic.AtomicReference
 /**
  * An [McpStreamableServerTransportProvider] that speaks MCP's Streamable HTTP transport over a plain
  * `java.net.ServerSocket` HTTP/1.1 server — no servlet container required, so it runs in-process in the IDE
- * (or any pure-JVM host) and is addressable from another machine, e.g. via `adb forward tcp:8765 tcp:8765`
- * followed by an opencode `remote` MCP server pointing at `http://127.0.0.1:8765/mcp`.
+ * (or any pure-JVM host). The listener is loopback-only; a desktop client reaches it through
+ * `adb forward tcp:8765 tcp:8765`, which dials the device's own 127.0.0.1, followed by an opencode
+ * `remote` MCP server pointing at `http://127.0.0.1:8765/mcp`.
  *
  * Sessions are created on the first `initialize` request and keyed by the `Mcp-Session-Id` the server
  * hands out; every later request/notification/response for a session is routed by that header, mirroring
@@ -201,7 +203,14 @@ internal class HttpResponse(
     val body: String = "",
 )
 
-/** Minimal HTTP/1.1 server: one thread per connection, `Connection: close`, no keep-alive. */
+/**
+ * Minimal HTTP/1.1 server: one thread per connection, `Connection: close`, no keep-alive.
+ *
+ * Bound to loopback only. The transport authenticates nobody and its tools can edit the open project, so
+ * the port must not be reachable off the device; `adb forward` needs nothing more than 127.0.0.1.
+ * [isLocal] then covers the one case loopback binding does not: a browser aimed at the port by a hostname
+ * the attacker rebinds to it.
+ */
 private class HttpServerSocket(
     private val provider: HttpStreamableServerTransportProvider,
 ) {
@@ -216,7 +225,7 @@ private class HttpServerSocket(
             check(serverSocket == null) { "HTTP server already bound to port $boundPort" }
             val server = ServerSocket()
             server.reuseAddress = true
-            server.bind(InetSocketAddress("0.0.0.0", port))
+            server.bind(InetSocketAddress(LOOPBACK, port))
             serverSocket = server
             acceptThread.start()
             return server.localPort
@@ -246,30 +255,60 @@ private class HttpServerSocket(
     private fun handle(client: Socket) {
         client.use {
             try {
+                // A peer that connects and then stalls would otherwise pin this thread for good.
+                it.soTimeout = READ_TIMEOUT_MS
                 val request = readRequest(it.getInputStream())
-                val response = when (request.method) {
-                    "POST" -> provider.handlePost(request.body, request.header("mcp-session-id"))
-                    "DELETE" -> provider.handleDelete(request.header("mcp-session-id"))
+                val response = when {
+                    !request.isLocal() -> HttpResponse(403, body = "Forbidden")
+                    request.method == "POST" -> provider.handlePost(request.body, request.header("mcp-session-id"))
+                    request.method == "DELETE" -> provider.handleDelete(request.header("mcp-session-id"))
                     else -> HttpResponse(405, body = "Method not allowed")
                 }
                 writeResponse(it.getOutputStream(), response)
+            } catch (e: RequestTooLargeException) {
+                runCatching { writeResponse(it.getOutputStream(), HttpResponse(413, body = "Payload too large")) }
             } catch (e: IOException) {
-                // client hung up; nothing to send
+                // client hung up, or the read timed out; nothing to send
             } catch (e: Exception) {
-                writeResponse(it.getOutputStream(), HttpResponse(500, body = "Internal error: ${e.message}"))
+                runCatching {
+                    writeResponse(it.getOutputStream(), HttpResponse(500, body = "Internal error: ${e.message}"))
+                }
             }
         }
     }
 
+    /**
+     * Whether the request came from this device. Loopback binding already keeps the network out, but a
+     * browser can be steered at 127.0.0.1 by a hostname the attacker rebinds to it, which is why the MCP
+     * Streamable HTTP transport asks servers to check these two headers. A native client (opencode, curl)
+     * sends no `Origin`, so only a present-and-foreign one is refused; a missing `Host` is likewise let
+     * through, since a browser always sends one.
+     */
+    private fun HttpRequest.isLocal(): Boolean {
+        val host = header("host")?.let {
+            if (it.startsWith("[")) it.substringAfter('[').substringBefore(']') else it.substringBefore(':')
+        }
+        if (host != null && host !in LOCAL_HOSTS) return false
+        val origin = header("origin") ?: return true
+        val originHost = runCatching { URI(origin).host }.getOrNull() ?: return false
+        return originHost.trim('[', ']') in LOCAL_HOSTS
+    }
+
+    /**
+     * Reads one request. The head is read byte-wise rather than through a `Reader` so the body can be taken
+     * as exactly `Content-Length` *bytes*: that header counts bytes, and decoding first left any body with
+     * a non-ASCII character (an emoji in an edit, an accented path) short by the difference and blocked the
+     * read until the socket timed out.
+     */
     private fun readRequest(input: InputStream): HttpRequest {
-        val reader = BufferedReader(InputStreamReader(input, StandardCharsets.UTF_8))
-        val requestLine = reader.readLine() ?: throw IOException("empty request")
+        val stream = BufferedInputStream(input)
+        val requestLine = readHeaderLine(stream) ?: throw IOException("empty request")
         val parts = requestLine.split(' ')
         val method = parts.getOrNull(0) ?: ""
         val path = parts.getOrNull(1) ?: "/"
         val headers = LinkedHashMap<String, String>()
         while (true) {
-            val line = reader.readLine() ?: break
+            val line = readHeaderLine(stream) ?: break
             if (line.isEmpty()) break
             val idx = line.indexOf(':')
             if (idx > 0) {
@@ -277,20 +316,37 @@ private class HttpServerSocket(
             }
         }
         val length = headers["content-length"]?.toIntOrNull() ?: 0
+        if (length > MAX_BODY_BYTES) throw RequestTooLargeException()
         val body = if (length > 0) {
-            val chars = CharArray(length)
+            val bytes = ByteArray(length)
             var read = 0
             while (read < length) {
-                val n = reader.read(chars, read, length - read)
+                val n = stream.read(bytes, read, length - read)
                 if (n < 0) break
                 read += n
             }
-            String(chars, 0, read)
+            String(bytes, 0, read, StandardCharsets.UTF_8)
         } else {
             ""
         }
         return HttpRequest(method, path, headers, body)
     }
+
+    /** Reads one CRLF- (or bare LF-) terminated head line as ISO-8859-1, HTTP's byte-per-char default. */
+    private fun readHeaderLine(input: InputStream): String? {
+        val line = ByteArrayOutputStream()
+        while (true) {
+            val b = input.read()
+            when {
+                b < 0 -> return if (line.size() == 0) null else decode(line)
+                b == '\n'.code -> return decode(line).removeSuffix("\r")
+                else -> line.write(b)
+            }
+        }
+    }
+
+    private fun decode(buffer: ByteArrayOutputStream): String =
+        String(buffer.toByteArray(), StandardCharsets.ISO_8859_1)
 
     private fun writeResponse(output: OutputStream, response: HttpResponse) {
         val writer = BufferedWriter(OutputStreamWriter(output, StandardCharsets.UTF_8))
@@ -308,12 +364,31 @@ private class HttpServerSocket(
         200 -> "OK"
         202 -> "Accepted"
         400 -> "Bad Request"
+        403 -> "Forbidden"
         404 -> "Not Found"
         405 -> "Method Not Allowed"
+        413 -> "Payload Too Large"
         500 -> "Internal Server Error"
         else -> "Error"
     }
+
+    private companion object {
+        /** The only address the listener binds: see the class doc for why it is not configurable. */
+        const val LOOPBACK = "127.0.0.1"
+
+        /** How long a connection may go without sending, so a stalled peer cannot hold its thread. */
+        const val READ_TIMEOUT_MS = 30_000
+
+        /** Ceiling on `Content-Length`, so a bogus header cannot allocate the IDE into an OOM. */
+        const val MAX_BODY_BYTES = 16 * 1024 * 1024
+
+        /** The hosts a request may claim and still count as local (see [isLocal]). */
+        val LOCAL_HOSTS = setOf("127.0.0.1", "localhost", "::1", "0:0:0:0:0:0:0:1")
+    }
 }
+
+/** Raised when a request declares a `Content-Length` past the server's body ceiling. */
+private class RequestTooLargeException : Exception()
 
 private class HttpRequest(
     val method: String,
