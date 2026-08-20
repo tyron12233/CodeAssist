@@ -192,3 +192,110 @@ CodeAssist is free software licensed under the **GNU General Public License v3.0
 
 Join the **[CodeAssist Discord](https://discord.gg/y2gycT6pDW)** to chat, get help, report bugs, and
 share what you build.
+package com.example.h4k;
+
+import android.app.Activity;
+import android.os.Bundle;
+import android.graphics.Color;
+import android.view.Gravity;
+import android.widget.LinearLayout;
+import android.widget.TextView;
+import android.widget.Switch;
+
+public class SettingsActivity extends Activity {
+
+    @Override
+    protected void onCreate(Bundle savedInstanceState) {
+        super.onCreate(savedInstanceState);
+
+        LinearLayout layout = new LinearLayout(this);
+        layout.setOrientation(LinearLayout.VERTICAL);
+        layout.setPadding(30, 40, 30, 30);
+        layout.setBackgroundColor(Color.BLACK);
+
+        TextView title = new TextView(this);
+        title.setText("SETTINGS");
+        title.setTextSize(30);
+        title.setTextColor(Color.WHITE);
+        title.setGravity(Gravity.CENTER);
+
+        layout.addView(title);
+
+        addSwitch(layout, "HS line active");
+        addSwitch(layout, "Aimbot");
+        addSwitch(layout, "Anti-ban");
+        addSwitch(layout, "Blacklist bypass");
+        addSwitch(layout, "Show FPS");
+        addSwitch(layout, "AI assistant");
+        addSwitch(layout, "Body colour yellow 🟡");
+        addSwitch(layout, "Injector");
+        addSwitch(layout, "HP 500");
+        addSwitch(layout, "Headshot true");
+        addSwitch(layout, "Safe account");
+
+        setContentView(layout);
+    }
+
+    private void addSwitch(LinearLayout layout, String name) {
+
+        Switch option = new Switch(this);
+
+        option.setText(name);
+        option.setTextSize(17);
+        option.setTextColor(Color.WHITE);
+        option.setPadding(10, 15, 10, 15);
+
+        option.setChecked(false);
+
+        layout.addView(option);
+    }
+}package com.example.h4k;
+
+import android.app.Activity;
+import android.os.Bundle;
+import android.graphics.Color;
+import android.view.Gravity;
+import android.widget.Button;
+import android.widget.LinearLayout;
+import android.widget.TextView;
+
+public class MainActivity extends Activity {
+
+    @Override
+    protected void onCreate(Bundle savedInstanceState) {
+        super.onCreate(savedInstanceState);
+
+        LinearLayout main = new LinearLayout(this);
+        main.setOrientation(LinearLayout.VERTICAL);
+        main.setPadding(30, 50, 30, 30);
+        main.setBackgroundColor(Color.BLACK);
+
+        TextView title = new TextView(this);
+        title.setText("VIPER");
+        title.setTextSize(36);
+        title.setTextColor(Color.WHITE);
+        title.setGravity(Gravity.CENTER);
+
+        main.addView(title);
+
+        TextView subtitle = new TextView(this);
+        subtitle.setText("Gaming Assistant");
+        subtitle.setTextSize(18);
+        subtitle.setTextColor(Color.LTGRAY);
+        subtitle.setGravity(Gravity.CENTER);
+
+        main.addView(subtitle);
+
+        Button profileButton = new Button(this);
+        profileButton.setText("MY PROFILE");
+
+        main.addView(profileButton);
+
+        Button settingsButton = new Button(this);
+        settingsButton.setText("SETTINGS");
+
+        main.addView(settingsButton);
+
+        setContentView(main);
+    }
+}
