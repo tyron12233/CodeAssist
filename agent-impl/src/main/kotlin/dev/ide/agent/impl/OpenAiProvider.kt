@@ -56,11 +56,15 @@ class OpenAiProvider(private val transport: LlmTransport) : LlmProvider {
         val base = config.baseUrl?.trimEnd('/') ?: DEFAULT_BASE
         val body = transport.get("$base/v1/models", mapOf("Authorization" to "Bearer ${config.apiKey}"), config.caCertificatePem)
         val data = AgentJson.parseToJsonElement(body).asObj()?.get("data").asArr() ?: return@runCatching models
-        data.mapNotNull { it.asObj()?.get("id").asStr() }
+        val filtered = data.mapNotNull { it.asObj()?.get("id").asStr() }
             .filter { it.startsWith("gpt") || it.startsWith("o1") || it.startsWith("o3") || it.startsWith("o4") || it.startsWith("chatgpt") }
             .sorted()
             .map { LlmModelInfo(it, it) }
-            .ifEmpty { models }
+        
+        // FIXED: Return all models for custom gateways (don't filter by gpt/o1/etc patterns)
+        // If we got results with the filter, use them (OpenAI official). Otherwise, return all found.
+        if (filtered.isNotEmpty()) filtered else data.map { LlmModelInfo(it.asObj()?.get("id").asStr() ?: "", it.asObj()?.get("id").asStr() ?: "") }
+                .ifEmpty { models }
     }.getOrDefault(models)
 
     private fun stream(sse: SseRequest): Flow<LlmStreamEvent> = flow {
